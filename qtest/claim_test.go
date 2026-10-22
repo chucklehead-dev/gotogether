@@ -107,3 +107,30 @@ func TestShrunkTo(t *testing.T) {
 		t.Errorf("an exploration: %v, want the claim refused", errs)
 	}
 }
+
+// Violates(...).At(action) wants the invariant to fail first after a step
+// of that action; At on anything but Violates is a mistake, said so.
+func TestViolatesAt(t *testing.T) {
+	rep := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Invariants: []validate.InvariantResult{
+		{Name: "exactlyOnce", Verdict: validate.Fail, Failure: &validate.Failure{Step: &qtrace.Step{Action: "perform"}}},
+	}}}}
+	for _, c := range []struct {
+		e  Expectation
+		ok bool
+	}{
+		{Violates("exactlyOnce"), true},
+		{Violates("exactlyOnce").At("perform"), true},
+		{Violates("exactlyOnce").At("ack"), false},
+		{Violates("other").At("perform"), false},
+	} {
+		if got := c.e.check(rep); got != c.ok {
+			t.Errorf("%s: %v, want %v", c.e, got, c.ok)
+		}
+	}
+	defer func() {
+		if msg := fmt.Sprint(recover()); !strings.Contains(msg, "narrows Violates(invariant) only") {
+			t.Errorf("Rejects(...).At: panic %q", msg)
+		}
+	}()
+	Rejects("cas").At("cas")
+}

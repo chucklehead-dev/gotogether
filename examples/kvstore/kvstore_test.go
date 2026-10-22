@@ -13,7 +13,6 @@ import (
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
-	"github.com/chucklehead-dev/gotogether/validate"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"hegel.dev/go/hegel"
@@ -51,11 +50,7 @@ func TestServiceUnderLoadConforms(t *testing.T) {
 // (the store's linearization index) puts them back in the store's order.
 func TestServiceSpansConform(t *testing.T) {
 	qtest.RequireQuint(t)
-	steps := loadSpans(t, kv.Faithful, 1)
-	rep := check(t, steps)
-	if !rep.OK() {
-		t.Fatalf("spans of the faithful service do not conform:\n%s", rep.Summary())
-	}
+	qtest.Validate(t, "kv.binding.yaml", loadSpans(t, kv.Faithful, 1)).Expect(t, qtest.Conforms())
 }
 
 // The stale-CAS race only shows under concurrency; its signature is a CAS
@@ -64,15 +59,11 @@ func TestServiceSpansConform(t *testing.T) {
 func TestStaleCASCaughtUnderLoad(t *testing.T) {
 	qtest.RequireQuint(t)
 	for attempt := uint64(1); attempt <= 5; attempt++ {
-		rep := check(t, loadSpans(t, kv.StaleCAS, attempt))
-		if rep.OK() {
+		run := qtest.Validate(t, "kv.binding.yaml", loadSpans(t, kv.StaleCAS, attempt))
+		if run.OK() {
 			continue // the race did not happen this time
 		}
-		f := rep.Actors[0].Failure
-		if f == nil || f.Kind != "disabled" || f.Step.Action != "cas" || f.Step.Outcome != "ok" {
-			t.Fatalf("want a successful CAS the model cannot take:\n%s", rep.Summary())
-		}
-		t.Logf("caught on load %d:\n%s", attempt, rep.Summary())
+		run.Expect(t, qtest.Rejects("cas"))
 		return
 	}
 	t.Fatal("five concurrent loads never exposed the stale CAS")
@@ -94,19 +85,6 @@ func loadSpans(t *testing.T, m kv.Mutation, seed uint64) []qtrace.Step {
 		t.Fatal(err)
 	}
 	return steps
-}
-
-func check(t *testing.T, steps []qtrace.Step) *validate.Report {
-	t.Helper()
-	c, err := validate.Cached("kv.binding.yaml", validate.Options{Dir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rep, err := c.Check(context.Background(), steps)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return rep
 }
 
 // ---- 2. the model drives the service ---------------------------------------
@@ -224,7 +202,8 @@ func TestHegelShrinksRevisionOnConflict(t *testing.T) {
 		cl := service(t, kv.RevisionOnConflict, nil)
 		hegel.RunStateful(tc, &machine{cl: cl, versions: hegel.NewPool[int64](tc)}, hegel.WithStatefulStepCount(10))
 	}, hegel.WithTestCases(30), hegel.WithSeed(11))
-	if last := v.Last(); len(v.Steps) != 1 || last.Action != "cas" || last.Outcome != "conflict" {
-		t.Fatalf("want a single failed CAS:\n%s", qhegel.Render(v.Steps))
+	v.Expect(t, qtest.Mismatch("cas"))
+	if len(v.Steps) != 1 { // shrunk to the failed CAS alone
+		t.Errorf("shrunk to %d steps, want the failed CAS alone:\n%s", len(v.Steps), qhegel.Render(v.Steps))
 	}
 }

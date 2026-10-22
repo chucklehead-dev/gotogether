@@ -4,14 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/otelio"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/validate"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -70,10 +68,6 @@ func TestOTelSpansConvertedAndChecked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	checker, err := validate.NewChecker("bank.binding.yaml", validate.Options{Dir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, m := range []Mutation{Faithful, LostDeposit} {
 		sr := tracetest.NewSpanRecorder()
 		tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
@@ -99,15 +93,10 @@ func TestOTelSpansConvertedAndChecked(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		rep, err := checker.Check(context.Background(), steps)
-		if err != nil {
-			t.Fatal(err)
+		want := qtest.Conforms()
+		if m == LostDeposit {
+			want = qtest.Mismatch("deposit") // the balance observed after it is not the model's
 		}
-		switch {
-		case m == Faithful && !rep.OK():
-			t.Errorf("faithful bank's spans do not conform:\n%s", rep.Summary())
-		case m == LostDeposit && (rep.OK() || !strings.Contains(rep.Summary(), "does not match what was observed")):
-			t.Errorf("LostDeposit's spans were not rejected:\n%s", rep.Summary())
-		}
+		qtest.Validate(t, "bank.binding.yaml", steps).Expect(t, want)
 	}
 }

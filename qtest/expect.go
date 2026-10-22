@@ -30,6 +30,8 @@ type Expectation struct {
 	// run, if set, judges the whole run, not its report: "" if it holds,
 	// else what the run showed (ShrunkTo's faults)
 	run func(*Run) string
+	// violates is Violates' invariant, for At
+	violates string
 }
 
 func (e Expectation) String() string { return e.desc }
@@ -37,7 +39,7 @@ func (e Expectation) String() string { return e.desc }
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
 func Conforms() Expectation {
-	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, nil}
+	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, nil, ""}
 }
 
 func failed(r *validate.Report, kind, action string) bool {
@@ -64,21 +66,40 @@ func Mismatch(action string) Expectation {
 
 // Violates: the run is a behaviour of the model, and the model's invariant
 // fails on it: a property the design (or this binding's view of it)
-// does not guarantee, seen in a real run.
+// does not guarantee, seen in a real run. At narrows it to the step it
+// first fails after.
 func Violates(invariant string) Expectation {
-	return Expectation{desc: fmt.Sprintf("a conforming run that violates %s", invariant), check: func(r *validate.Report) bool {
+	return violatesAt(invariant, "")
+}
+
+func violatesAt(invariant, action string) Expectation {
+	desc := fmt.Sprintf("a conforming run that violates %s", invariant)
+	if action != "" {
+		desc += " after " + aStep(action)
+	}
+	return Expectation{desc: desc, check: func(r *validate.Report) bool {
 		for _, a := range r.Actors {
 			if a.Conforms != validate.Pass {
 				continue
 			}
 			for _, inv := range a.Invariants {
-				if inv.Name == invariant && inv.Verdict == validate.Fail {
+				if inv.Name == invariant && inv.Verdict == validate.Fail &&
+					(action == "" || inv.Failure != nil && inv.Failure.Step != nil && inv.Failure.Step.Action == action) {
 					return true
 				}
 			}
 		}
 		return false
-	}, invariants: []string{invariant}}
+	}, invariants: []string{invariant}, actions: named(action), violates: invariant}
+}
+
+// At narrows Violates(invariant) to a run where the invariant first fails
+// after a step of action: Violates("exactlyOnce").At("perform").
+func (e Expectation) At(action string) Expectation {
+	if e.violates == "" {
+		panic(fmt.Sprintf("qtest: %s.At(%q): At narrows Violates(invariant) only; Rejects and Mismatch name their action already", e, action))
+	}
+	return violatesAt(e.violates, action)
 }
 
 // AnyOf: the report meets at least one of es.

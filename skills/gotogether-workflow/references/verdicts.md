@@ -44,6 +44,8 @@ seeds, not by hand.
   `qhegel.Shrink(t, sys, rates).Expect(t, ...)` (fails when nothing is found);
   with `qtest.ShrunkTo(n)` for how far it must shrink (at most n faults),
   never a hand count of `v.Faults()`;
+- where an invariant must first fail: `qtest.Violates("inv").At("action")`,
+  never a walk of the report's actors;
 - a trigger search: `qhegel.FindTrigger(t, sys, space).Expect(t, qload.SomeTrigger())`
   (or `NoTrigger()`);
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no

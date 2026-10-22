@@ -1,15 +1,15 @@
 package uniqueids
 
 import (
-	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom/hegelnet"
+	"fmt"
 	"math/rand/v2"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom/hegelnet"
 	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/validate"
 	"hegel.dev/go/hegel"
 )
 
@@ -52,9 +52,7 @@ const (
 func TestUniqueUnderPartitionAndRestart(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, b := range []string{spec, scheme} {
-		if run := check(t, b, Faithful); !run.OK() {
-			t.Fatalf("%s: faithful ids rejected:\n%s", b, run.Report.Summary())
-		}
+		check(t, b, Faithful).Expect(t, qtest.Conforms())
 	}
 }
 
@@ -74,17 +72,16 @@ func TestMutants(t *testing.T) {
 		{FixedIncarnation, true, true},
 	} {
 		for _, b := range []struct {
-			file   string
-			caught bool
-		}{{spec, c.spec}, {scheme, c.scheme}} {
-			run := check(t, b.file, c.m)
-			a := run.Report.Actors[0]
-			caught := a.Conforms == validate.Pass && a.Invariants[0].Verdict == validate.Fail
-			if caught != b.caught || a.Conforms != validate.Pass {
-				t.Errorf("mutant %d, %s: caught=%v, want %v\n%s", c.m, b.file, caught, b.caught, run.Report.Summary())
-			} else if caught {
-				t.Logf("mutant %d, %s: caught at %s", c.m, b.file, a.Invariants[0].Failure.Call)
-			}
+			file, invariant string
+			caught          bool
+		}{{spec, "idsUnique", c.spec}, {scheme, "incarnationsOwnedAndCounting", c.scheme}} {
+			t.Run(fmt.Sprintf("%d/%s", c.m, b.file), func(t *testing.T) {
+				want := qtest.Conforms() // the ids conform, and the invariant holds: not caught
+				if b.caught {
+					want = qtest.Violates(b.invariant)
+				}
+				check(t, b.file, c.m).Expect(t, want)
+			})
 		}
 	}
 }

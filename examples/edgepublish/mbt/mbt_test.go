@@ -2,7 +2,6 @@ package mbt
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // QUINT_MAX_SAMPLES (default 5) traces of QUINT_MAX_STEPS (default 30)
@@ -88,10 +87,6 @@ func TestModelTracesCatchManifestBeforeTable(t *testing.T) {
 // woven: `go run github.com/DataDog/orchestrion go test ./mbt/ -run RoundTrip`.
 func TestRoundTrip(t *testing.T) {
 	files := traces(t)
-	checker, err := validate.NewChecker("../binding.yaml", validate.Options{Backend: os.Getenv("QUINT_BACKEND"), Dir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, f := range files {
 		tr, err := itf.ReadFile(f)
 		if err != nil {
@@ -110,14 +105,6 @@ func TestRoundTrip(t *testing.T) {
 		if len(steps) == 0 {
 			t.Skip("no steps recorded: build with orchestrion to weave //quint:action")
 		}
-		rep, err := checker.Check(context.Background(), steps)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !rep.OK() {
-			t.Errorf("%s: recorded telemetry does not validate:\n%s", filepath.Base(f), rep.Summary())
-		} else {
-			t.Logf("%s: %d recorded steps validate against the model", filepath.Base(f), len(steps))
-		}
+		qtest.Validate(t, "../binding.yaml", steps).Expect(t, qtest.Conforms()) // QUINT_BACKEND chooses the backend
 	}
 }

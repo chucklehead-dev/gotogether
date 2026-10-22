@@ -74,7 +74,5 @@ func TestHegelCatchesUncapped(t *testing.T) {
 	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: budgetBinding, Opts: hegelOpts, AllowEmpty: true}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(tc, &machine{b: budget(retry.Uncapped)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(50))
-	if last := v.Last(); last.Action != "request" {
-		t.Errorf("shrunk run ends with %s, want the request that overfills the bucket:\n%s", last.Action, v.Summary)
-	}
+	v.Expect(t, qtest.Mismatch("request")) // the request that overfills the bucket: more tokens than the cap
 }

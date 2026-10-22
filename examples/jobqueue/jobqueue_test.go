@@ -76,13 +76,8 @@ func TestSlowWorkerConformsButRunsTwice(t *testing.T) {
 	run := qtest.Record(t, "jobqueue.binding.yaml", func(*qobs.Recorder) { slowWorker(newService(queue.Faithful)) })
 	run.Expect(t, qtest.Conforms())
 
-	once := qtest.Validate(t, "jobqueue.binding.yaml", run.Steps, qtest.Invariants("exactlyOnce"))
-	once.Expect(t, qtest.Violates("exactlyOnce"))
-	rep := once.Report
-	if inv := rep.Actors[0].Invariants[0]; inv.Failure.Step.Action != "perform" {
-		t.Fatalf("want exactlyOnce violated at a perform:\n%s", rep.Summary())
-	}
-	t.Logf("as designed:\n%s", rep.Summary())
+	qtest.Validate(t, "jobqueue.binding.yaml", run.Steps, qtest.Invariants("exactlyOnce")).
+		Expect(t, qtest.Violates("exactlyOnce").At("perform"))
 }
 
 // A restart loses the leases: an ack after it is stale, and the job is
@@ -199,7 +194,5 @@ func TestHegelShrinksAckAnyLease(t *testing.T) {
 	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "jobqueue.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		runMachine(tc, queue.AckAnyLease)
 	}, hegel.WithTestCases(60), hegel.WithSeed(5))
-	if last := v.Last(); last.Action != "ack" || last.Outcome != "ok" {
-		t.Fatalf("want the run to end in an accepted ack:\n%s", qhegel.Render(v.Steps))
-	}
+	v.Expect(t, qtest.Rejects("ack")) // an ack of a lease the job no longer has, accepted
 }
