@@ -1,0 +1,483 @@
+== github.com/chucklehead-dev/gotogether/binding
+func InstanceConstants(spec, instance string) (module string, constants []string, err error)
+func LintRecords(m *Model, recs []RecordCall) []string
+type Action struct{ ... }
+type Annotation struct{ ... }
+    func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
+    func ScanAnnotations(dir string) ([]Annotation, error)
+type Binding struct{ ... }
+    func Load(path string) (*Binding, error)
+type Call struct{ ... }
+type Generated struct{ ... }
+    func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, error)
+    func RenderModule(ms ModuleSpec, calls []Call, qntPath string) (*Generated, error)
+type GeneratedTests struct{ ... }
+type ITFMeta struct{ ... }
+    func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
+type Model struct{ ... }
+    func LoadModel(quint, spec, module string) (*Model, error)
+type ModuleSpec struct{ ... }
+type Param struct{ ... }
+type Plan struct{ ... }
+type RecordCall struct{ ... }
+    func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
+    func ScanRecords(dir string) ([]RecordCall, error)
+type TestSet int
+    const AllTests TestSet = iota ...
+
+== github.com/chucklehead-dev/gotogether/connect
+func Diff(want, got any) []string
+func FaultScript(tr *itf.Trace, faults FaultMap, opt ReplayOptions) (*qenv.Script, error)
+func MustPick[T any](s *Step, name string) T
+func OptPick[T any](s *Step, name string) (*T, error)
+func Pick[T any](s *Step, name string) (T, error)
+func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
+func Run(t testing.TB, c Config, newDriver func() Driver)
+func Skip(*Step) error
+func Test(t testing.TB, c Config, test string, newDriver func() Driver)
+type Config struct{ ... }
+    func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
+type Driver interface{ ... }
+type DriverFunc func(s *Step) error
+type Fault struct{ ... }
+type FaultMap map[string]func(s *Step) *Fault
+type Handler func(s *Step) error
+type QuintError struct{ ... }
+type ReplayOptions struct{ ... }
+type StateDriver interface{ ... }
+type Step struct{ ... }
+type StepChecker interface{ ... }
+type StepError struct{ ... }
+type Switch map[string]Handler
+type UnimplementedError struct{ ... }
+
+== github.com/chucklehead-dev/gotogether/convert
+type Rule struct{ ... }
+type Rules struct{ ... }
+    func Load(p string) (*Rules, error)
+    func Parse(b []byte) (*Rules, error)
+
+== github.com/chucklehead-dev/gotogether/input
+type File struct{ ... }
+    func Read(path string, format Format) (*File, error)
+type Format string
+    const OTLP Format = "otlp" ...
+    func Sniff(data []byte) Format
+
+== github.com/chucklehead-dev/gotogether/itf
+func Decode(v Value, out any) error
+func DecodeAs[T any](v Value) (T, error)
+type Kind int
+    const Invalid Kind = iota ...
+type Marshaler interface{ ... }
+type State struct{ ... }
+type Trace struct{ ... }
+    func Parse(b []byte) (*Trace, error)
+    func ReadFile(path string) (*Trace, error)
+type Unmarshaler interface{ ... }
+type Value struct{ ... }
+    func BoolOf(b bool) Value
+    func Encode(x any) (Value, error)
+    func Enum(tag string) Value
+    func FromGo(x any) (Value, error)
+    func IntOf(n int64) Value
+    func ListOf(es ...Value) Value
+    func MustEncode(x any) Value
+    func None() Value
+    func ParseQuint(src string) (Value, error)
+    func RecordOf(kv ...any) Value
+    func SetOf(es ...Value) Value
+    func Some(v Value) Value
+    func StrOf(s string) Value
+    func TupleOf(es ...Value) Value
+    func VariantOf(tag string, v Value) Value
+
+== github.com/chucklehead-dev/gotogether/otelio
+func Attrs(kvs []KeyValue) map[string]any
+func ReadSteps(r io.Reader) ([]qtrace.Step, error)
+func StepsFromSpans(spans []sdktrace.ReadOnlySpan) ([]qtrace.Step, error)
+func StepsFromTracesData(td *TracesData) ([]qtrace.Step, error)
+type AnyValue struct{ ... }
+type Event struct{ ... }
+type FileExporter struct{ ... }
+    func NewFileExporter(w io.Writer) *FileExporter
+type KeyValue struct{ ... }
+type Resource struct{ ... }
+type ResourceSpans struct{ ... }
+type Scope struct{ ... }
+type ScopeSpans struct{ ... }
+type Span struct{ ... }
+type Status struct{ ... }
+type TracesData struct{ ... }
+    func ReadTracesData(r io.Reader) ([]TracesData, error)
+    func SpansToTracesData(spans []sdktrace.ReadOnlySpan) TracesData
+type U64 int64
+
+== github.com/chucklehead-dev/gotogether/qcover
+func Hit(id int)
+func Register(bs []Block) int
+func WithCounts(ctx context.Context, c *Counts) context.Context
+type Block struct{ ... }
+    func Blocks() []Block
+type Counts struct{ ... }
+    var Default *Counts
+    func From(ctx context.Context) *Counts
+    func NewCounts() *Counts
+type Gap struct{ ... }
+    func Compare(sim *Summary, real *GoProfile) *Gap
+type GoBlock struct{ ... }
+type GoProfile struct{ ... }
+    func ParseGoCover(r io.Reader) (*GoProfile, error)
+    func ReadGoCover(dirs ...string) (*GoProfile, error)
+type StepCover struct{ ... }
+type Summary struct{ ... }
+    func Summarize(runs []*Counts) *Summary
+
+== github.com/chucklehead-dev/gotogether/qenv
+const BytesVersion = choice.BytesVersion
+var DefaultRates = choice.DefaultRates ...
+var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+var ErrConflict = errors.New("qenv: transaction conflict (serialization failure); retry")
+var ErrDeadlock = fmt.Errorf("%w: deadlock (lock waits form a cycle); lock rows in one order", ErrConflict)
+var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
+var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
+var ErrStuck = errors.New("qenv: stuck")
+var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
+var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
+func AddKey(ctx context.Context, key any, n int)
+func As[T any](c Chooser) (T, bool)
+func ContextOf(c Chooser) context.Context
+func Current() (context.Context, bool)
+func Daemon(ctx context.Context)
+func DeclareFaultSite(kind, site string)
+func EncodeChoices(choices []Choice, rates Rates) ([]byte, error)
+func EntropyOf(c Chooser) func(n int) []byte
+func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) error
+func Go(ctx context.Context, name string, fn func(ctx context.Context))
+func IsFault(kind string) bool
+func LockKey(ctx context.Context, key any)
+func Now(ctx context.Context) time.Time
+func RLockKey(ctx context.Context, key any)
+func RUnlockKey(ctx context.Context, key any)
+func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error
+func Sleep(ctx context.Context, d time.Duration)
+func TryLockKey(ctx context.Context, key any) bool
+func TryRLockKey(ctx context.Context, key any) bool
+func UnlockKey(ctx context.Context, key any)
+func Wait(ctx context.Context, ready func() bool)
+func WaitIdle(ctx context.Context, ready func() bool)
+func WaitKey(ctx context.Context, key any)
+func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool
+func Yield(ctx context.Context)
+type Bytes = choice.Bytes
+    func FromBytes(data []byte, rates Rates) *Bytes
+type Capacity struct{ ... }
+type Choice = choice.Choice
+type ChoiceLog = choice.ChoiceLog
+type Chooser = choice.Chooser
+    func Swarm(c Chooser, kinds ...string) Chooser
+    func WithContext(c Chooser, ctx context.Context) Chooser
+    func Without(c Chooser, kinds ...string) Chooser
+type Coverage struct{ ... }
+    func CoverageOf(runs [][]Choice) *Coverage
+type DB interface{ ... }
+type Delivery struct{ ... }
+type Entropy = choice.Entropy
+type FaultKind struct{ ... }
+    func DeclareFaults(name string, options ...string) FaultKind
+type InjectedError struct{ ... }
+type Isolation int
+    const Serializable Isolation = iota ...
+type KV struct{ ... }
+type Machine interface{ ... }
+type Nominal = choice.Nominal
+type PairCoverage struct{ ... }
+type Platform interface{ ... }
+type PointCoverage struct{ ... }
+type Process struct{ ... }
+    func ProcessOf(ctx context.Context) *Process
+type Queue struct{ ... }
+    func NewQueue(s *Sim, name string) *Queue
+type Rates = choice.Rates
+type Replayer = choice.Replayer
+    func Replay(choices []Choice) *Replayer
+type Script struct{ ... }
+type Scripted struct{ ... }
+type Seeded = choice.Seeded
+    func NewSeeded(seed uint64) *Seeded
+type Service[Req, Resp any] struct{ ... }
+    func NewService[Req, Resp any](s *Sim, name string, p *Process, ...) *Service[Req, Resp]
+type Signal struct{ ... }
+type Sim struct{ ... }
+    func From(ctx context.Context) *Sim
+    func New(c Chooser) *Sim
+    func NewNative(c Chooser, p Platform) *Sim
+type Store struct{ ... }
+    func NewStore(s *Sim, name string, iso Isolation) *Store
+type TimeProfile = profile.Profile
+    func NewTimeProfile() *TimeProfile
+type Txn interface{ ... }
+type Wrapper = choice.Wrapper
+
+== github.com/chucklehead-dev/gotogether/qenv/fault
+
+== github.com/chucklehead-dev/gotogether/qenv/weave
+func Add(wg *sync.WaitGroup, n int)
+func Done(wg *sync.WaitGroup)
+func Go(fn func()) func()
+func GroupGo(wg *sync.WaitGroup, f func())
+func MutexLock(m *sync.Mutex)
+func MutexTryLock(m *sync.Mutex) bool
+func MutexUnlock(m *sync.Mutex)
+func RLock(m *sync.RWMutex)
+func RUnlock(m *sync.RWMutex)
+func RWLock(m *sync.RWMutex)
+func RWTryLock(m *sync.RWMutex) bool
+func RWUnlock(m *sync.RWMutex)
+func TryRLock(m *sync.RWMutex) bool
+func Wait(wg *sync.WaitGroup)
+
+== github.com/chucklehead-dev/gotogether/qlint
+type Finding struct{ ... }
+    func Sim(dir string) ([]Finding, error)
+    func SimFile(fset *token.FileSet, f *ast.File) []Finding
+    func Woven(dir string) ([]Finding, error)
+    func WovenFile(fset *token.FileSet, f *ast.File) []Finding
+
+== github.com/chucklehead-dev/gotogether/qload
+const Window = 100 * time.Second
+func Count(sys Target, tr Trigger, n int) int
+func SimulateTrajectory(cfg SimConfig, from qmeta.State, times []float64, runs int) qmeta.Trajectory
+type Client struct{ ... }
+    func NewClient(s *qenv.Sim, rnd *rand.Rand, m *Metrics, sv *Server, cfg ClientConfig) *Client
+type ClientConfig struct{ ... }
+type Env struct{ ... }
+type Experiment struct{ ... }
+type Metrics struct{ ... }
+    func Simulate(cfg SimConfig) *Metrics
+type Point struct{ ... }
+type Recovery struct{ ... }
+    func Assess(x Experiment, goodput string, tr Trigger, within time.Duration, seed uint64) Recovery
+    func Mostly(sys Target, tr Trigger, n int) (bool, Recovery)
+    func Recovers(cfg SimConfig, base float64, tr Trigger, within time.Duration) Recovery
+    func Runs(sys Target, tr Trigger, n int) []Recovery
+type RecoveryClaim struct{ ... }
+    func Recovered() RecoveryClaim
+    func StaysDegraded() RecoveryClaim
+type Retrier interface{ ... }
+type Sample struct{ ... }
+type Series struct{ ... }
+type Server struct{ ... }
+    func NewServer(s *qenv.Sim, rnd *rand.Rand, m *Metrics, cfg ServerConfig) *Server
+type ServerConfig struct{ ... }
+type Shape func(t time.Duration) float64
+    func Constant(v float64) Shape
+    func Piecewise(tick time.Duration, scale float64, values ...float64) Shape
+    func Spike(base, peak float64, from, to time.Duration) Shape
+type SimConfig struct{ ... }
+type TB interface{ ... }
+type Target func(tr Trigger, seed uint64) Recovery
+    func Of(x Experiment, goodput string, within time.Duration) Target
+    func OfSimulation(cfg SimConfig, base float64, within time.Duration) Target
+type Trigger struct{ ... }
+type TriggerClaim struct{ ... }
+    func NoTrigger() TriggerClaim
+    func SomeTrigger() TriggerClaim
+type TriggerSpace struct{ ... }
+
+== github.com/chucklehead-dev/gotogether/qmeta
+type Band struct{ ... }
+type Chain struct{ ... }
+    func New(p Params) *Chain
+type Drift struct{ ... }
+type Healthy struct{ ... }
+type Observation struct{ ... }
+type Params struct{ ... }
+    func Calibrate(p Params, data []Trajectory) (Params, float64)
+    func CalibrateTimeout(p Params, data []Trajectory) (Params, float64)
+type Region struct{ ... }
+type RuleConfig struct{ ... }
+type Service struct{ ... }
+    func Measure(samples []time.Duration) Service
+type State struct{ ... }
+type State2 struct{ ... }
+type Trajectory struct{ ... }
+    func Trajectories(obs []Observation, times []float64, bucket int) []Trajectory
+type Transition struct{ ... }
+type Watch struct{ ... }
+
+== github.com/chucklehead-dev/gotogether/qmut
+func Cond(id int, c bool) bool
+func On(id int) bool
+func Pick(id int, orig, mutated bool) bool
+func Register(ms []Mutant) int
+func WithMutant(ctx context.Context, id int) context.Context
+func WithReach(ctx context.Context, r *Reach) context.Context
+type Mutant struct{ ... }
+    func Mutants() []Mutant
+type Reach struct{ ... }
+
+== github.com/chucklehead-dev/gotogether/qobs
+const ActionKey = "quint.action"
+func Attributes(s *qtrace.Step) []attribute.KeyValue
+func Escaped(mark int) (n int, since []string)
+func InstallGlobal(r *Recorder) (restore func(), err error)
+func Normalize(v any) any
+func Record(ctx context.Context, action string, err error, kv ...any)
+func SetDiscard(f func() bool)
+func SetGlobal(r *Recorder)
+func Strict() (release func())
+func Thread(ctx context.Context) context.Context
+func WithRecorder(ctx context.Context, r *Recorder) context.Context
+type JSONLSink struct{ ... }
+    func BufferedFileSink(path string) (*JSONLSink, error)
+    func FileSink(path string) (*JSONLSink, error)
+    func NewJSONLSink(w io.Writer) *JSONLSink
+type MemorySink struct{ ... }
+type OTelSink struct{ ... }
+    func NewOTelSink(tp trace.TracerProvider) *OTelSink
+type Option func(*Recorder)
+    func WithActor(a string) Option
+    func WithID(id string) Option
+    func WithProcess(p string) Option
+type Outcomer interface{ ... }
+type Recorder struct{ ... }
+    func From(ctx context.Context) *Recorder
+    func Global() *Recorder
+    func NewRecorder(sink Sink, opts ...Option) *Recorder
+type Sink interface{ ... }
+type SlogHandler struct{ ... }
+    func NewSlogHandler(next slog.Handler) *SlogHandler
+type Tee []Sink
+
+== github.com/chucklehead-dev/gotogether/qrole
+const MetricServeInflight = "quint.serve.inflight" ...
+const MetricSteps = "quint.steps"
+var Default = New()
+func Call(ctx context.Context, service string) func(err error)
+func Labels(on bool)
+func Operation(ctx context.Context, service string) func(err error)
+func Serve(ctx context.Context, name string) func(err error)
+func WithRoles(ctx context.Context, r *Roles) context.Context
+type MetricsSink struct{ ... }
+    func NewMetricsSink(meter metric.Meter, next qobs.Sink) (*MetricsSink, error)
+type Roles struct{ ... }
+    func From(ctx context.Context) *Roles
+    func New() *Roles
+
+== github.com/chucklehead-dev/gotogether/qrun
+var Task = NewKey[any]("task")
+func Current() (context.Context, bool)
+func Get[T any](ctx context.Context, k *Key[T]) (T, bool)
+func GoroutineID() int64
+func InContext[T any](ctx context.Context, k *Key[T]) (T, bool)
+func SetResolver(f func() (context.Context, bool))
+func Start(ctx context.Context) (end func())
+func With[T any](ctx context.Context, k *Key[T], v T) context.Context
+type Key[T any] struct{ ... }
+    func NewKey[T any](name string) *Key[T]
+
+== github.com/chucklehead-dev/gotogether/qsweep
+const MaxSpace = 1 << 21
+func Missing(factors []Factor, t int, allow func(Row) bool, rows []Row) ([]string, error)
+func Sequences(events []string, t int) [][]string
+type Factor struct{ ... }
+    func Bool(name string) Factor
+    func FaultKind(kind string) Factor
+    func Ints(name string, values ...int) Factor
+type Row struct{ ... }
+    func Cover(factors []Factor, t int, allow func(Row) bool) ([]Row, error)
+
+== github.com/chucklehead-dev/gotogether/qtest
+func RequireQuint(t testing.TB)
+func RowOf(c qenv.Chooser) (qsweep.Row, bool)
+type Claim interface{ ... }
+    func All(es ...Expectation) Claim
+    func None(es ...Expectation) Claim
+    func Some(es ...Expectation) Claim
+type Evidence struct{ ... }
+type Expectation struct{ ... }
+    func AnyOf(es ...Expectation) Expectation
+    func Conforms() Expectation
+    func Mismatch(action string) Expectation
+    func Rejects(action string) Expectation
+    func ShrunkTo(n int) Expectation
+    func Violates(invariant string) Expectation
+type Exploration struct{ ... }
+type ExploreConfig struct{ ... }
+type MutationClaim struct{ ... }
+    func NoSurvivors(equivalent ...string) MutationClaim
+type MutationReport struct{ ... }
+type Option func(*settings)
+    func Constants(m map[string]string) Option
+    func Global() Option
+    func Invariants(names ...string) Option
+    func Quint(o validate.Options) Option
+    func RecorderOptions(opts ...qobs.Option) Option
+    func SkipIfEmpty() Option
+type Reach struct{ ... }
+    func Reaches(kind string) Reach
+type Run struct{ ... }
+    func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), ...) *Run
+    func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
+type Settings struct{ ... }
+    func Resolve(t testing.TB, opts ...Option) Settings
+type SweepConfig struct{ ... }
+type SweepResult struct{ ... }
+type System struct{ ... }
+
+== github.com/chucklehead-dev/gotogether/qtrace
+const EventName = "quint.step" ...
+const KeyTime = "quint.time_unix_nano"
+func Fields(s string) []string
+func Key(steps []Step) string
+func Reconstruct(steps []Step) ([]*Trace, []Issue)
+func WriteJSONL(w io.Writer, steps []Step) error
+type Filter struct{ ... }
+type Issue struct{ ... }
+type Keyer struct{ ... }
+type Step struct{ ... }
+    func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
+    func ReadJSONL(r io.Reader) ([]Step, error)
+type Trace struct{ ... }
+
+== github.com/chucklehead-dev/gotogether/skills
+var DefaultTargets = []string{ ... }
+var Renamed = map[string]string{ ... }
+var Targets = map[string]string{ ... }
+func FS() fs.FS
+func Install(dir string, force bool) ([]string, error)
+func RemoveRenamed(dir string) ([]string, error)
+func TargetDirs(root string, names []string) ([]string, error)
+type Skill struct{ ... }
+    func List() ([]Skill, error)
+
+== github.com/chucklehead-dev/gotogether/sktrace
+func Applied(kinds ...string) func(Event) int
+func Quantiles(ds []time.Duration, n int) []time.Duration
+func Replicas(o Object) float64
+type Env struct{ ... }
+type Event struct{ ... }
+type Finding struct{ ... }
+type Lifecycle struct{ ... }
+type Object map[string]any
+type Trace struct{ ... }
+    func Read(r io.Reader) (*Trace, error)
+    func ReadFile(path string) (*Trace, error)
+
+== github.com/chucklehead-dev/gotogether/validate
+type Checker struct{ ... }
+    func Cached(bindingPath string, o Options) (*Checker, error)
+    func NewChecker(bindingPath string, opt Options) (*Checker, error)
+type Failure struct{ ... }
+type ITFOptions struct{ ... }
+type InvariantResult struct{ ... }
+type Options struct{ ... }
+type Report struct{ ... }
+type Result struct{ ... }
+    func Validate(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, ...) (*Result, error)
+    func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
+type ToolError struct{ ... }
+type Verdict string
+    const Pass Verdict = "pass" ...
+

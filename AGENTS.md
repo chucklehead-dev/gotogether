@@ -84,6 +84,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   github.com/chucklehead-dev/gotogether@<commit>` in that module (GOWORK=off)
   and push again; until then CI tests the module against the older core.
   Examples are not published and keep `replace => ../..`.
+  Tags, when the maintainer says: gosim (its own repository) first, then
+  the core, qweave, qhegel, qanalysis and qgosim, each module's tag
+  prefixed with its directory (`qhegel/v0.1.0`), and each module's
+  requirements moved from pseudo-versions to the tags.
+- The core's exported API is recorded in api/core.txt (`go doc -short`
+  of every package): a deliberate change regenerates it
+  (`GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/`) and adds a
+  CHANGELOG line.
 - The repository is a Go workspace (`go.work`, checked in): every module
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.

@@ -576,3 +576,9 @@ imports it.
 - **Conversion.** Converted spans cannot reveal lost spans.
 
 More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
+
+## License
+
+MIT (LICENSE). `examples/twophase/model` vendors Choreo, under the
+Apache License 2.0 (its `LICENSE.choreo`); the gosim fork is MIT, as
+upstream gosim.

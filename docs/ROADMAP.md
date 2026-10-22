@@ -87,7 +87,14 @@ Done when a fresh clone's quickstart passes as written.
   - The supported Go range is documented (gosim translates one release's
     standard library).
   - Examples stay untagged, with their `replace`.
-- **R4. Readiness.**
+- **R4. Readiness.** Done:
+  - LICENSE (MIT, The gotogether Authors);
+  - CHANGELOG.md;
+  - api/core.txt, the core's exported surface, kept by a test until tags
+    give apidiff a baseline;
+  - the tag order below, in AGENTS.
+
+  The plan as written:
   - A root LICENSE (MIT; gosim's MIT and attribution beside it).
   - A CHANGELOG.
   - An API review per package (`go doc`) and an apidiff baseline.
