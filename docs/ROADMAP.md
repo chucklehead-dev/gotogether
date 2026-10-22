@@ -489,7 +489,7 @@ X. R5 happens when the maintainer says.
     mentions (the Rust crate), and the analyzers' `quint*` names (they
     check `//quint:` directives).
   - The old names join TestSkillsAvoidDeprecated.
-- **M6. The old repository.** A final README commit pointing to
+- **M6. The old repository.** Done: its README says where it went. The session could not delete its gosim-fork branch (refused); the maintainer deletes it and archives the repository. A final README commit pointing to
   gotogether; the maintainer archives it. Its gosim-fork branch goes once
   M4 is green.
 - **W9. API leftovers.**
