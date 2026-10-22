@@ -247,9 +247,9 @@ func TestFindTrigger(t *testing.T) {
 		ok, _ := qload.Mostly(qload.OfSimulation(sim(base), base, 300*time.Second), qload.Trigger{}, 5)
 		t.Logf("%.1f req/s, no trigger: recovers in most runs: %v", base, ok)
 	}
-	t0 := time.Now()
+	t0 := time.Now() //qenv:ok times the search, outside any simulation
 	qhegel.FindTrigger(t, qload.OfSimulation(sim(9.5), 9.5, 300*time.Second), space, hegel.WithTestCases(40), hegel.WithSeed(1)).Expect(t, qload.SomeTrigger())
-	t.Logf("searched in %v", time.Since(t0))
+	t.Logf("searched in %v", time.Since(t0)) //qenv:ok
 	// at 8 req/s the system always recovers
 	qhegel.FindTrigger(t, qload.OfSimulation(sim(8), 8, 15*time.Minute), space, hegel.WithTestCases(30), hegel.WithSeed(1)).Expect(t, qload.NoTrigger())
 }
