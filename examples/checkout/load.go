@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/checkout/shop"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // LoadConfig is a load experiment on the shop: customers placing orders at

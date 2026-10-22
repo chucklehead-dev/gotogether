@@ -16,7 +16,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Errors. ErrConflict and ErrNotFound classify themselves for the model

@@ -2,8 +2,8 @@
 // module plugin named "quintgo". In .custom-gcl.yml:
 //
 //	plugins:
-//	  - module: github.com/casselc/quint-connect-go/qanalysis
-//	    import: github.com/casselc/quint-connect-go/qanalysis/golangci
+//	  - module: github.com/chucklehead-dev/gotogether/qanalysis
+//	    import: github.com/chucklehead-dev/gotogether/qanalysis/golangci
 //	    version: <version>
 //
 // and in .golangci.yml:
@@ -26,7 +26,7 @@ import (
 	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 
-	"github.com/casselc/quint-connect-go/qanalysis"
+	"github.com/chucklehead-dev/gotogether/qanalysis"
 )
 
 func init() { register.Plugin("quintgo", New) }

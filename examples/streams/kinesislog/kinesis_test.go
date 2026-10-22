@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/streams/kinesisfake"
-	"github.com/casselc/quint-connect-go/examples/streams/kinesislog"
-	"github.com/casselc/quint-connect-go/examples/streams/pipeline"
-	"github.com/casselc/quint-connect-go/examples/streams/tier"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/examples/streams/kinesisfake"
+	"github.com/chucklehead-dev/gotogether/examples/streams/kinesislog"
+	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 const binding = "../streams.binding.yaml"

@@ -20,8 +20,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis/types"
-	"github.com/casselc/quint-connect-go/examples/streams/pipeline"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Client is a Kinesis client for endpoint (the fake's URL, or "" for

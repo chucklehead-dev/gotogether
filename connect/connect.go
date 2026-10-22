@@ -45,7 +45,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/itf"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // Step is what a driver sees: the action the model took, its nondeterministic

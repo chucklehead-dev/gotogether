@@ -28,11 +28,11 @@ import (
 	"github.com/chucklehead-dev/gosim"
 	"github.com/chucklehead-dev/gosim/gosimruntime"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/broadcast"
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
-	"github.com/casselc/quint-connect-go/examples/gosim/broadcast/tcp"
-	"github.com/casselc/quint-connect-go/qgosim"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/broadcast"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/gosim/broadcast/tcp"
+	"github.com/chucklehead-dev/gotogether/qgosim"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 var ids = []string{"n0", "n1", "n2"}

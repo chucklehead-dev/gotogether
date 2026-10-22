@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qanalysis/actionmap"
-	"github.com/casselc/quint-connect-go/qcover"
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qanalysis/actionmap"
+	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 const fix = "example.com/actionmapfixture/shop"

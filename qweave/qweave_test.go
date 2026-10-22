@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qweave"
+	"github.com/chucklehead-dev/gotogether/qweave"
 )
 
 // qenv/weave's aspects (method-call join points, //qenv:go) and the

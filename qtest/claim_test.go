@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qtrace"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // Claims over runs: a bare expectation is about some run (Conforms about

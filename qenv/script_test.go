@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A script makes its faults where it says and no others: the third write

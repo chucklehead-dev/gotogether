@@ -12,14 +12,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/checkout/shop"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qgosim"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qgosim"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 const (
-	pkg     = "github.com/casselc/quint-connect-go/examples/gosim/checkout"
+	pkg     = "github.com/chucklehead-dev/gotogether/examples/gosim/checkout"
 	binding = "../../checkout/checkout.binding.yaml"
 )
 

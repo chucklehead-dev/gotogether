@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/qenv/internal/choice"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
 )
 
 // A fault point is a place in the code under test where a fault may

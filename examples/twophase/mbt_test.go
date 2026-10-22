@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/connect"
-	"github.com/casselc/quint-connect-go/examples/twophase"
-	"github.com/casselc/quint-connect-go/examples/twophase/tpc"
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/examples/twophase"
+	"github.com/chucklehead-dev/gotogether/examples/twophase/tpc"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // driver replays the Choreo model's named transitions on tpc's state

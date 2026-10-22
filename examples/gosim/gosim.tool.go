@@ -9,5 +9,5 @@
 package tools
 
 import (
-	_ "github.com/casselc/quint-connect-go/qobs"
+	_ "github.com/chucklehead-dev/gotogether/qobs"
 )

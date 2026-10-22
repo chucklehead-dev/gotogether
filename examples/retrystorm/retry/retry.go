@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Mutation selects a bug in the budget, for the tests that show which check

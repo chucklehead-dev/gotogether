@@ -35,7 +35,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Server is a gRPC server in a simulation. It implements

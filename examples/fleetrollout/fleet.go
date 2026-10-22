@@ -11,11 +11,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/fleetrollout/kubesim"
-	"github.com/casselc/quint-connect-go/examples/fleetrollout/rollout"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/kubesim"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/sktrace"
 )
 
 // Config of a simulated rollout.

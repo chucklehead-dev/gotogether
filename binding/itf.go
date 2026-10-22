@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // ITFMeta is what quintgo stores under "#meta"."quintgo" of a model-level

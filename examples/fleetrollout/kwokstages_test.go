@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/kwok/pkg/config"
 	"sigs.k8s.io/kwok/pkg/utils/lifecycle"
 
-	"github.com/casselc/quint-connect-go/examples/fleetrollout"
-	"github.com/casselc/quint-connect-go/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
+	"github.com/chucklehead-dev/gotogether/sktrace"
 )
 
 // The stages load with kwok's own config loader and match pods with its

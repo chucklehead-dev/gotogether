@@ -46,7 +46,7 @@ jobs:
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
         run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s ./examples/checkout/
       - name: code coverage by model step (checkout woven by qweave -cover)
-        run: go run -C qweave ./cmd/qweave -C .. -cover -coverpkg github.com/casselc/quint-connect-go/examples/checkout go test -count=1 -run TestCodeCoverage -v ./examples/checkout/
+        run: go run -C qweave ./cmd/qweave -C .. -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v ./examples/checkout/
       - name: test (typescript backend)
         run: QUINT_BACKEND=typescript go test -short -count=1 ./connect/ ./validate/ ./examples/bank/
       - name: example app demos

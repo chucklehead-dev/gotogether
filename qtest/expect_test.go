@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 func TestExpectations(t *testing.T) {

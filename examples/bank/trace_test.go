@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/convert"
-	"github.com/casselc/quint-connect-go/otelio"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/convert"
+	"github.com/chucklehead-dev/gotogether/otelio"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )

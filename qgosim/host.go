@@ -14,10 +14,10 @@ import (
 
 	"github.com/chucklehead-dev/gosim/metatesting"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtrace"
-	"github.com/casselc/quint-connect-go/qweave"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/qweave"
 )
 
 var weaving struct {

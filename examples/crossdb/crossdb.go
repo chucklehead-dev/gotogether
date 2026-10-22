@@ -33,11 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/casselc/quint-connect-go/examples/crossdb/apis/v1alpha1"
-	"github.com/casselc/quint-connect-go/examples/crossdb/dbaas"
-	"github.com/casselc/quint-connect-go/examples/crossdb/provider"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/apis/v1alpha1"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/dbaas"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/provider"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Scheme has the Kubernetes and dbaas types.

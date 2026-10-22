@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // A service whose only telemetry is its structured log: the records that

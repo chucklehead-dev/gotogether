@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/sktrace"
+	"github.com/chucklehead-dev/gotogether/sktrace"
 )
 
 func read(t *testing.T, name string) *sktrace.Trace {

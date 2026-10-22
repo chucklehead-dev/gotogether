@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 // Each sample's later states are averaged per cell; samples whose later

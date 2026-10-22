@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qmut"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qmut"
 )
 
 // Woven code calls Cond and Pick from a run's tasks: the run's mutant

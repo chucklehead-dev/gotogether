@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qsweep"
+	"github.com/chucklehead-dev/gotogether/qsweep"
 )
 
 func threes(n int) []qsweep.Factor {

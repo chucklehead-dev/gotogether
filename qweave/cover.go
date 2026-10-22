@@ -10,7 +10,7 @@ import (
 )
 
 // qcoverPath is the package woven blocks report to.
-const qcoverPath = "github.com/casselc/quint-connect-go/qcover"
+const qcoverPath = "github.com/chucklehead-dev/gotogether/qcover"
 
 // coverBlock is a block found for instrumentation.
 type coverBlock struct {

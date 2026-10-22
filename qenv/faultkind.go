@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/casselc/quint-connect-go/qenv/internal/choice"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
 )
 
 // A FaultKind is a kind of fault and its options' names, nominal (option

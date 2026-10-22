@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/quinthegel"
+	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 

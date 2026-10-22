@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // Generated is a Quint module that replays one observed trace.

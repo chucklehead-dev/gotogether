@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 // ControlPlane is the provider's load on the cloud API, abstracted for

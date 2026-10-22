@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 type buf struct{ bytes.Buffer }

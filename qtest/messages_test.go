@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // The messages for the traps of explorations: every run failing at its

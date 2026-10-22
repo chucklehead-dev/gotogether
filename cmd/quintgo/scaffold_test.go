@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/binding"
+	"github.com/chucklehead-dev/gotogether/binding"
 )
 
 // scaffold -system prints a test that compiles as it is, and whose

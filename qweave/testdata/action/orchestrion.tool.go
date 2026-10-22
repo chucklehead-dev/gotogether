@@ -2,4 +2,4 @@
 
 package tools
 
-import _ "github.com/casselc/quint-connect-go/qobs"
+import _ "github.com/chucklehead-dev/gotogether/qobs"

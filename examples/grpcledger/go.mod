@@ -1,9 +1,9 @@
-module github.com/casselc/quint-connect-go/examples/grpcledger
+module github.com/chucklehead-dev/gotogether/examples/grpcledger
 
 go 1.26.1
 
 require (
-	github.com/casselc/quint-connect-go v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.71.0
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
@@ -28,4 +28,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/casselc/quint-connect-go => ../..
+replace github.com/chucklehead-dev/gotogether => ../..

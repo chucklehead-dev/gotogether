@@ -20,10 +20,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/casselc/quint-connect-go/examples/crossdb"
-	"github.com/casselc/quint-connect-go/examples/crossdb/apis/v1alpha1"
-	"github.com/casselc/quint-connect-go/examples/crossdb/dbaas"
-	"github.com/casselc/quint-connect-go/examples/crossdb/provider"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/apis/v1alpha1"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/dbaas"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/provider"
 )
 
 func main() {

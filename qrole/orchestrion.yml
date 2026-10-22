@@ -2,11 +2,11 @@
 #
 # Load roles (qrole): a server's requests, a client's operations and their
 # attempts, measured where the code says (DESIGN.md §15.3). A project opts
-# in by importing github.com/casselc/quint-connect-go/qrole in its tool file
+# in by importing github.com/chucklehead-dev/gotogether/qrole in its tool file
 # and building with qweave (or Orchestrion). The annotated function takes
 # a context.Context; its final error result, if any, is the outcome.
 meta:
-  name: github.com/casselc/quint-connect-go/qrole
+  name: github.com/chucklehead-dev/gotogether/qrole
   description: Measure load roles (qmeta's queue and orbit) at annotated functions.
 
 aspects:
@@ -19,7 +19,7 @@ aspects:
       - prepend-statements:
           imports:
             context: context
-            quintqrole: github.com/casselc/quint-connect-go/qrole
+            quintqrole: github.com/chucklehead-dev/gotogether/qrole
           template: |-
             {{- $ctx := .Function.ArgumentOfType "context.Context" -}}
             {{- $err := .Function.ResultOfType "error" -}}
@@ -36,7 +36,7 @@ aspects:
       - prepend-statements:
           imports:
             context: context
-            quintqrole: github.com/casselc/quint-connect-go/qrole
+            quintqrole: github.com/chucklehead-dev/gotogether/qrole
           template: |-
             {{- $ctx := .Function.ArgumentOfType "context.Context" -}}
             {{- $err := .Function.ResultOfType "error" -}}
@@ -53,7 +53,7 @@ aspects:
       - prepend-statements:
           imports:
             context: context
-            quintqrole: github.com/casselc/quint-connect-go/qrole
+            quintqrole: github.com/chucklehead-dev/gotogether/qrole
           template: |-
             {{- $ctx := .Function.ArgumentOfType "context.Context" -}}
             {{- $err := .Function.ResultOfType "error" -}}

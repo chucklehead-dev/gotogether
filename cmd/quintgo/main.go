@@ -32,14 +32,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/casselc/quint-connect-go/binding"
-	"github.com/casselc/quint-connect-go/convert"
-	"github.com/casselc/quint-connect-go/load"
-	"github.com/casselc/quint-connect-go/otelio"
-	"github.com/casselc/quint-connect-go/qlint"
-	"github.com/casselc/quint-connect-go/qtrace"
-	"github.com/casselc/quint-connect-go/skills"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/convert"
+	"github.com/chucklehead-dev/gotogether/load"
+	"github.com/chucklehead-dev/gotogether/otelio"
+	"github.com/chucklehead-dev/gotogether/qlint"
+	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/skills"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 func main() {
@@ -666,8 +666,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // system deploys the application, with mutation injected (0: none), in a

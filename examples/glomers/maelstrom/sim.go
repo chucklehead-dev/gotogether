@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Sim is a deterministic in-process network of nodes, services and

@@ -24,8 +24,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/types/typeutil"
 
-	"github.com/casselc/quint-connect-go/binding"
-	"github.com/casselc/quint-connect-go/qlint"
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/qlint"
 )
 
 // All are the analyzers, for a multichecker.
@@ -38,7 +38,7 @@ var All = []*analysis.Analyzer{Sim, Weave, Action}
 var Sim = &analysis.Analyzer{
 	Name: "quintsim",
 	Doc:  "report code that escapes a qenv simulation (go statements, the wall clock, steps recorded with context.Background)",
-	URL:  "https://github.com/casselc/quint-connect-go/tree/main/qanalysis",
+	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run: func(pass *analysis.Pass) (any, error) {
 		return nil, report(pass, qlint.SimFile, true)
 	},
@@ -50,7 +50,7 @@ var Sim = &analysis.Analyzer{
 var Weave = &analysis.Analyzer{
 	Name: "quintweave",
 	Doc:  "report what qenv/weave cannot rewrite (unmarked go statements, sync method values, embedded sync types)",
-	URL:  "https://github.com/casselc/quint-connect-go/tree/main/qanalysis",
+	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run: func(pass *analysis.Pass) (any, error) {
 		return nil, report(pass, qlint.WovenFile, false)
 	},
@@ -79,7 +79,7 @@ func report(pass *analysis.Pass, check func(*token.FileSet, *ast.File) []qlint.F
 var Action = &analysis.Analyzer{
 	Name: "quintaction",
 	Doc:  "check //quint:action annotations: the action is named, expressions use only parameters, the receiver and named results, and (with -binding) the binding's model has the action and its fields are recorded, as it has every literal qobs.Record action",
-	URL:  "https://github.com/casselc/quint-connect-go/tree/main/qanalysis",
+	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run:  runAction,
 }
 
@@ -144,7 +144,7 @@ func checkRecords(pass *analysis.Pass, m *binding.Model, f *ast.File) {
 // isQobsRecord reports whether obj is qobs.Record or (*qobs.Recorder).Record.
 func isQobsRecord(obj types.Object) bool {
 	fn, ok := obj.(*types.Func)
-	return ok && fn.Name() == "Record" && fn.Pkg() != nil && fn.Pkg().Path() == "github.com/casselc/quint-connect-go/qobs"
+	return ok && fn.Name() == "Record" && fn.Pkg() != nil && fn.Pkg().Path() == "github.com/chucklehead-dev/gotogether/qobs"
 }
 
 // checkScope reports the names in a's expressions that are not in the

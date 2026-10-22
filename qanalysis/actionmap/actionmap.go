@@ -39,12 +39,12 @@ import (
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 
-	"github.com/casselc/quint-connect-go/binding"
-	"github.com/casselc/quint-connect-go/qcover"
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
-const recordFunc = "github.com/casselc/quint-connect-go/qobs.Record"
+const recordFunc = "github.com/chucklehead-dev/gotogether/qobs.Record"
 
 // A Map is each action's sites and the functions they reach.
 type Map struct {

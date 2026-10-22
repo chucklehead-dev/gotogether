@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // MemDB is the projection's store outside a simulation: an in-memory

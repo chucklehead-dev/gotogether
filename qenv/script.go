@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qenv/internal/choice"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Scripted fault is one fault a Script makes happen: at the first choice

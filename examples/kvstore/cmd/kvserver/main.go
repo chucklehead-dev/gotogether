@@ -22,9 +22,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/casselc/quint-connect-go/examples/kvstore/kv"
-	"github.com/casselc/quint-connect-go/otelio"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/kvstore/kv"
+	"github.com/chucklehead-dev/gotogether/otelio"
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"

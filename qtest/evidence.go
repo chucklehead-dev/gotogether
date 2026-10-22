@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/qcover"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // Evidence is what an exploration, a sweep or a mutation run shows, in one

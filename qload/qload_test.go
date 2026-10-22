@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qload"
+	"github.com/chucklehead-dev/gotogether/qload"
 )
 
 // The running example of Alvaro et al.: one server (10 requests/s, queue

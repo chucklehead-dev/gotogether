@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // The native runtime on the wall clock: the same doubles and processes as

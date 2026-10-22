@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/sktrace"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/sktrace"
 )
 
 // A production workload as the load: SimKube's scaling trace, a real

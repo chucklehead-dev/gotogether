@@ -11,8 +11,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/kafka"
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/kafka"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 )
 
 func main() {

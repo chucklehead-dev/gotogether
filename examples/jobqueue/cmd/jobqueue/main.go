@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/jobqueue/queue"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/jobqueue/queue"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 func main() {

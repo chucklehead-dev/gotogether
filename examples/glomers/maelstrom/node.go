@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // Message is a Maelstrom message.

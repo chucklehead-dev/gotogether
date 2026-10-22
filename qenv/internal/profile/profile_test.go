@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 func slowBackend(ctx context.Context) { qenv.Sleep(ctx, 900*time.Millisecond) }

@@ -5,7 +5,7 @@ package shop
 import (
 	"context"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Store is where a step takes effect.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/otelio"
+	"github.com/chucklehead-dev/gotogether/otelio"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/resource"

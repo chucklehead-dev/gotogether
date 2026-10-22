@@ -12,7 +12,7 @@ package main
 import (
 	"golang.org/x/tools/go/analysis/multichecker"
 
-	"github.com/casselc/quint-connect-go/qanalysis"
+	"github.com/chucklehead-dev/gotogether/qanalysis"
 )
 
 func main() { multichecker.Main(qanalysis.All...) }

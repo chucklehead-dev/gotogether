@@ -6,15 +6,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/checkout"
-	"github.com/casselc/quint-connect-go/qcover"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/checkout"
+	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // Which code each model step ran, and what conforming runs never ran. Run
 // woven: go run -C qweave ./cmd/qweave -C .. -cover -coverpkg
-// github.com/casselc/quint-connect-go/examples/checkout go test -run
+// github.com/chucklehead-dev/gotogether/examples/checkout go test -run
 // TestCodeCoverage ./examples/checkout/
 func TestCodeCoverage(t *testing.T) {
 	qtest.RequireQuint(t)

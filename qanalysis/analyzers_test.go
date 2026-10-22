@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/analysistest"
 
-	"github.com/casselc/quint-connect-go/qanalysis"
+	"github.com/chucklehead-dev/gotogether/qanalysis"
 )
 
 // The analyzers report what quintgo lint reports, at the same places

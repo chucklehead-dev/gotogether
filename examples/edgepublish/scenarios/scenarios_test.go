@@ -6,11 +6,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/mbt"
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/mbt"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // Each scenario, recorded directly (no OTel) and checked two ways: the

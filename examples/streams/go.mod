@@ -1,11 +1,11 @@
-module github.com/casselc/quint-connect-go/examples/streams
+module github.com/chucklehead-dev/gotogether/examples/streams
 
 go 1.26.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/service/kinesis v1.56.6
-	github.com/casselc/quint-connect-go v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
 	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20261020234411-c06330b92452
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0
@@ -27,4 +27,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/casselc/quint-connect-go => ../..
+replace github.com/chucklehead-dev/gotogether => ../..

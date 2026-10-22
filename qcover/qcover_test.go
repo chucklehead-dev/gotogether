@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qcover"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Two tasks interleave, each running its own blocks between its steps:

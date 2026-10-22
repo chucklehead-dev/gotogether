@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // The scheduler's self-check under frequent crashes: a task killed while it

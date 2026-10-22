@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/checkout"
-	"github.com/casselc/quint-connect-go/examples/checkout/shop"
-	"github.com/casselc/quint-connect-go/examples/retrystorm/retry"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/checkout"
+	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
+	"github.com/chucklehead-dev/gotogether/examples/retrystorm/retry"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // dip is the trigger: the provider serves three times slower for a minute.

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 // The chain assumes exponential service. A measured service time with the

@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qrun"
+	"github.com/chucklehead-dev/gotogether/qrun"
 )
 
 // A Mutant is one woven change.

@@ -36,8 +36,8 @@ import (
 	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
 	"sigs.k8s.io/multicluster-runtime/providers/clusters"
 
-	"github.com/casselc/quint-connect-go/examples/fleetrollout/rollout"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 type members map[string]string

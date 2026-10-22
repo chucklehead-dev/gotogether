@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/checkout"
-	"github.com/casselc/quint-connect-go/examples/checkout/shop"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qsweep"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/checkout"
+	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qsweep"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // The shop's parameter space: isolation level, orders and stock, and which

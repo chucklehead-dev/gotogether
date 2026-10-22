@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/quinthegel"
+	"github.com/chucklehead-dev/gotogether/quinthegel"
 
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 	"hegel.dev/go/hegel"
 )
 

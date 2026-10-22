@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Log records with quint.action are steps; their attributes are the

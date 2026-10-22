@@ -30,9 +30,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/streams/pipeline"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 var (

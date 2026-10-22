@@ -14,14 +14,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/casselc/quint-connect-go/examples/streams"
-	"github.com/casselc/quint-connect-go/examples/streams/kafkalog"
-	"github.com/casselc/quint-connect-go/examples/streams/kinesisfake"
-	"github.com/casselc/quint-connect-go/examples/streams/kinesislog"
-	"github.com/casselc/quint-connect-go/examples/streams/pipeline"
-	"github.com/casselc/quint-connect-go/examples/streams/tier"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/streams"
+	"github.com/chucklehead-dev/gotogether/examples/streams/kafkalog"
+	"github.com/chucklehead-dev/gotogether/examples/streams/kinesisfake"
+	"github.com/chucklehead-dev/gotogether/examples/streams/kinesislog"
+	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/twmb/franz-go/pkg/kfake"
 )
 

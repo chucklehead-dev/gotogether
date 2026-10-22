@@ -23,7 +23,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Shape is a load shape: a rate (requests per second) or a factor, as a

@@ -39,7 +39,7 @@ func NewServer(store *Store, tp trace.TracerProvider) *Server {
 	if tp == nil {
 		tp = noop.NewTracerProvider()
 	}
-	return &Server{Store: store, tracer: tp.Tracer("github.com/casselc/quint-connect-go/examples/kvstore")}
+	return &Server{Store: store, tracer: tp.Tracer("github.com/chucklehead-dev/gotogether/examples/kvstore")}
 }
 
 // Handler returns the HTTP handler.

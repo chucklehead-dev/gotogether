@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/binding"
-	"github.com/casselc/quint-connect-go/itf"
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // ITFOptions says what to check a model-level ITF trace against. Every field

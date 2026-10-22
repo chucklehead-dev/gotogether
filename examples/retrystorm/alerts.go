@@ -6,11 +6,11 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/retrystorm/retry"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qmeta"
-	"github.com/casselc/quint-connect-go/qrole"
+	"github.com/chucklehead-dev/gotogether/examples/retrystorm/retry"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qmeta"
+	"github.com/chucklehead-dev/gotogether/qrole"
 )
 
 // The application of the alert tier: a server and clients that retry with

@@ -14,28 +14,28 @@ import (
 // every package that imports qenv (simulatedPackages), so a new double or
 // example is checked without being listed.
 var simulated = []string{
-	"github.com/casselc/quint-connect-go/qenv",
-	"github.com/casselc/quint-connect-go/qobs",
-	"github.com/casselc/quint-connect-go/qtrace",
-	"github.com/casselc/quint-connect-go/qload",
-	"github.com/casselc/quint-connect-go/qmeta",
-	"github.com/casselc/quint-connect-go/qrole",
-	"github.com/casselc/quint-connect-go/qrun",
-	"github.com/casselc/quint-connect-go/qcover",
-	"github.com/casselc/quint-connect-go/qenv/fault",
-	"github.com/casselc/quint-connect-go/qmut",
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom",
-	"github.com/casselc/quint-connect-go/examples/glomers/broadcast",
-	"github.com/casselc/quint-connect-go/examples/checkout",
-	"github.com/casselc/quint-connect-go/examples/retrystorm",
+	"github.com/chucklehead-dev/gotogether/qenv",
+	"github.com/chucklehead-dev/gotogether/qobs",
+	"github.com/chucklehead-dev/gotogether/qtrace",
+	"github.com/chucklehead-dev/gotogether/qload",
+	"github.com/chucklehead-dev/gotogether/qmeta",
+	"github.com/chucklehead-dev/gotogether/qrole",
+	"github.com/chucklehead-dev/gotogether/qrun",
+	"github.com/chucklehead-dev/gotogether/qcover",
+	"github.com/chucklehead-dev/gotogether/qenv/fault",
+	"github.com/chucklehead-dev/gotogether/qmut",
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom",
+	"github.com/chucklehead-dev/gotogether/examples/glomers/broadcast",
+	"github.com/chucklehead-dev/gotogether/examples/checkout",
+	"github.com/chucklehead-dev/gotogether/examples/retrystorm",
 }
 
 // hostSide import qenv but run outside any simulation: the Hegel adapters.
 var hostSide = map[string]bool{
-	"github.com/casselc/quint-connect-go/quinthegel": true,
+	"github.com/chucklehead-dev/gotogether/quinthegel": true,
 }
 
-const module = "github.com/casselc/quint-connect-go"
+const module = "github.com/chucklehead-dev/gotogether"
 
 // simulatedPackages is simulated and every package of the module that
 // imports qenv, but the host-side ones.

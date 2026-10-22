@@ -18,7 +18,7 @@ package qrole
 
 import (
 	"context"
-	"github.com/casselc/quint-connect-go/qrun"
+	"github.com/chucklehead-dev/gotogether/qrun"
 	"runtime/pprof"
 	"sort"
 	"sync"

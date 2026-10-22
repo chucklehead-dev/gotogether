@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 const account = "../validate/testdata/account.yaml"

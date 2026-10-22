@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 )
 
 // Service is the KV service the nodes use.

@@ -10,9 +10,9 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/retrystorm/retry"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/examples/retrystorm/retry"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 // The system of the papers' running example: one server at 10 requests/s,

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Counter embeds its lock: c.Lock() is a promoted call.

@@ -474,7 +474,7 @@ X. R5 happens when the maintainer says.
   - Remove fetch-gosim.sh, its `REF`, the `.gosim-fork` replace, CI's
     fork checkout, and the "fetch first" notes.
   - simdeps fails if anything but qgosim and examples/gosim imports gosim.
-- **M5a. The module path.** `github.com/casselc/quint-connect-go` becomes
+- **M5a. The module path.** Done. `github.com/chucklehead-dev/gotogether` becomes
   `github.com/chucklehead-dev/gotogether`, by script.
 - **M5b. Every other name.**
   - The CLI (`cmd/gotogether`).

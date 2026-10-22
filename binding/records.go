@@ -13,7 +13,7 @@ import (
 )
 
 // qobsPath is the import path of the recording package.
-const qobsPath = "github.com/casselc/quint-connect-go/qobs"
+const qobsPath = "github.com/chucklehead-dev/gotogether/qobs"
 
 // RecordCall is an explicit qobs.Record or Recorder.Record call whose
 // action is a string literal, found in Go source.

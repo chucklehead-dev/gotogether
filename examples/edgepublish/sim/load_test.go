@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/sim"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/sim"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 var dip = qload.Trigger{Slowdown: 3, Duration: time.Minute}

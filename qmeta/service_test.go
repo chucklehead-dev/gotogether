@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 // Exponential samples fit the chain's assumption; constant ones do not; the

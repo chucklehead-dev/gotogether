@@ -1,10 +1,10 @@
-module github.com/casselc/quint-connect-go/qgosim
+module github.com/chucklehead-dev/gotogether/qgosim
 
 go 1.26.1
 
 require (
-	github.com/casselc/quint-connect-go v0.0.0
-	github.com/casselc/quint-connect-go/qweave v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/qweave v0.0.0
 	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
 )
 
@@ -68,6 +68,6 @@ require (
 )
 
 replace (
-	github.com/casselc/quint-connect-go => ../
-	github.com/casselc/quint-connect-go/qweave => ../qweave
+	github.com/chucklehead-dev/gotogether => ../
+	github.com/chucklehead-dev/gotogether/qweave => ../qweave
 )

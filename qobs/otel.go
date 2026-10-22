@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -21,7 +21,7 @@ type OTelSink struct{ Tracer trace.Tracer }
 
 // NewOTelSink returns a sink on tp's "quintgo" tracer.
 func NewOTelSink(tp trace.TracerProvider) *OTelSink {
-	return &OTelSink{Tracer: tp.Tracer("github.com/casselc/quint-connect-go/qobs")}
+	return &OTelSink{Tracer: tp.Tracer("github.com/chucklehead-dev/gotogether/qobs")}
 }
 
 func (o *OTelSink) Record(ctx context.Context, s *qtrace.Step) {

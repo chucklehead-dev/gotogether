@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qlint"
+	"github.com/chucklehead-dev/gotogether/qlint"
 )
 
 // Lint finds what escapes a simulation, in files that import qenv (tests
@@ -25,8 +25,8 @@ import (
 	"context"
 	clock "time"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 func run(s *qenv.Sim) {
@@ -50,7 +50,7 @@ func serve() { go func() {}(); _ = time.Now() }
 import (
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 var _ = qenv.Nominal{}

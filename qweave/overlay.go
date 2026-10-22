@@ -44,7 +44,7 @@ type Config struct {
 	Mutate bool
 }
 
-const toolkit = "github.com/casselc/quint-connect-go"
+const toolkit = "github.com/chucklehead-dev/gotogether"
 
 // covers reports whether Cover instruments the package path.
 func (c Config) covers(path string, main bool) bool {

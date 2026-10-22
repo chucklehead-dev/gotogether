@@ -14,11 +14,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/examples/retrystorm"
-	"github.com/casselc/quint-connect-go/examples/retrystorm/retry"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qmeta"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/retrystorm"
+	"github.com/chucklehead-dev/gotogether/examples/retrystorm/retry"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qmeta"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 func main() {

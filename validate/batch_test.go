@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // CheckBatch gives the same verdicts as Check, at the same steps, with far

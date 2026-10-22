@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 type simReq struct {

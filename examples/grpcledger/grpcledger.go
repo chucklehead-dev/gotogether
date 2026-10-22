@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledger"
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledgerpb"
-	"github.com/casselc/quint-connect-go/examples/grpcledger/simgrpc"
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledgerpb"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/simgrpc"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Initial is every account's opening balance (the binding's INITIAL).

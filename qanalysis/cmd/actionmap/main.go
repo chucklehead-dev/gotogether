@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/casselc/quint-connect-go/qanalysis/actionmap"
-	"github.com/casselc/quint-connect-go/qcover"
+	"github.com/chucklehead-dev/gotogether/qanalysis/actionmap"
+	"github.com/chucklehead-dev/gotogether/qcover"
 )
 
 func main() {

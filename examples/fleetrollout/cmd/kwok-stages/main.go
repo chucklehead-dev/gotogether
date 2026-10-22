@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/casselc/quint-connect-go/examples/fleetrollout"
-	"github.com/casselc/quint-connect-go/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
+	"github.com/chucklehead-dev/gotogether/sktrace"
 )
 
 func main() {

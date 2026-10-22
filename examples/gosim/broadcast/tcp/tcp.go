@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 )
 
 // Transport sends a node's messages. Like Maelstrom's network it may lose

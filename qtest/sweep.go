@@ -3,9 +3,9 @@ package qtest
 import (
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qrun"
-	"github.com/casselc/quint-connect-go/qsweep"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qrun"
+	"github.com/chucklehead-dev/gotogether/qsweep"
 )
 
 // A SweepConfig explores a parameter space by covering rows (qsweep.Cover):

@@ -1,4 +1,4 @@
-module github.com/casselc/quint-connect-go/qweave
+module github.com/chucklehead-dev/gotogether/qweave
 
 go 1.26.1
 

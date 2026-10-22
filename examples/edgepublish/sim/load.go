@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/publisher"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qload"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // LoadConfig is the publisher under load: requests reach the collector at

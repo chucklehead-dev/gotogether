@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A parameter with no template is the step field of its name, converted by

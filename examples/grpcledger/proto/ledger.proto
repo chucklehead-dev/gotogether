@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package ledger.v1;
 
-option go_package = "github.com/casselc/quint-connect-go/examples/grpcledger/ledgerpb";
+option go_package = "github.com/chucklehead-dev/gotogether/examples/grpcledger/ledgerpb";
 
 // Ledger moves money between accounts. Transfer is idempotent by key: a
 // client retries a transfer whose response it did not get with the same

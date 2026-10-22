@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qmeta"
+	"github.com/chucklehead-dev/gotogether/qmeta"
 )
 
 // SimulateTrajectory averages runs simulations of cfg (with constant load, from the

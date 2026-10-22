@@ -2,13 +2,13 @@ package weave_test
 
 import (
 	"context"
-	"github.com/casselc/quint-connect-go/quinthegel"
+	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qenv/weave"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/weave"
 	"hegel.dev/go/hegel"
 )
 

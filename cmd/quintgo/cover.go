@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/qcover"
+	"github.com/chucklehead-dev/gotogether/qcover"
 )
 
 // runCover reads a real environment's coverage (GOCOVERDIRs of binaries

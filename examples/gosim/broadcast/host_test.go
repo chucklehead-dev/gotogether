@@ -16,15 +16,15 @@ import (
 
 	"hegel.dev/go/hegel"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qgosim"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/qtrace"
-	"github.com/casselc/quint-connect-go/quinthegel"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qgosim"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/quinthegel"
 )
 
 const (
-	clusterPkg = "github.com/casselc/quint-connect-go/examples/gosim/broadcast/cluster"
+	clusterPkg = "github.com/chucklehead-dev/gotogether/examples/gosim/broadcast/cluster"
 	binding    = "../../glomers/broadcast/broadcast.binding.yaml"
 )
 

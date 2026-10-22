@@ -1,9 +1,9 @@
-module github.com/casselc/quint-connect-go/examples/crossdb
+module github.com/chucklehead-dev/gotogether/examples/crossdb
 
 go 1.26.1
 
 require (
-	github.com/casselc/quint-connect-go v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
 	github.com/crossplane/crossplane-runtime/v2 v2.4.2
 	github.com/crossplane/crossplane/apis/v2 v2.3.4
 	golang.org/x/time v0.15.0
@@ -98,4 +98,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/casselc/quint-connect-go => ../..
+replace github.com/chucklehead-dev/gotogether => ../..

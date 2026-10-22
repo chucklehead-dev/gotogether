@@ -21,7 +21,7 @@ func TestLintRecords(t *testing.T) {
 import (
 	"context"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 func pay(ctx context.Context) {

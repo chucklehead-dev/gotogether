@@ -53,9 +53,9 @@ against its protocol model (see `examples/edgepublish`).
 ## Install
 
 ```sh
-go get github.com/casselc/quint-connect-go@latest     # Go ≥ 1.26.1 (hegel-go's minimum)
+go get github.com/chucklehead-dev/gotogether@latest     # Go ≥ 1.26.1 (hegel-go's minimum)
 npm install -g @informalsystems/quint                 # quint ≥ 0.32 on PATH
-go install github.com/casselc/quint-connect-go/cmd/quintgo@latest   # optional CLI
+go install github.com/chucklehead-dev/gotogether/cmd/quintgo@latest   # optional CLI
 ```
 
 Quint's Rust backend is the default. If quint cannot download its

@@ -8,6 +8,6 @@ package tools
 
 import (
 	_ "github.com/DataDog/orchestrion"
-	_ "github.com/casselc/quint-connect-go/qenv/weave"
-	_ "github.com/casselc/quint-connect-go/qobs"
+	_ "github.com/chucklehead-dev/gotogether/qenv/weave"
+	_ "github.com/chucklehead-dev/gotogether/qobs"
 )

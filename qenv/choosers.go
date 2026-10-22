@@ -3,8 +3,8 @@ package qenv
 import (
 	"context"
 
-	"github.com/casselc/quint-connect-go/qenv/internal/choice"
-	"github.com/casselc/quint-connect-go/qenv/internal/profile"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/profile"
 )
 
 // The choosers, implemented in qenv/internal/choice, and the profile.

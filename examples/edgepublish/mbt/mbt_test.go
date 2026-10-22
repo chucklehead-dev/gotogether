@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/connect"
-	"github.com/casselc/quint-connect-go/examples/edgepublish/publisher"
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // QUINT_MAX_SAMPLES (default 5) traces of QUINT_MAX_STEPS (default 30)

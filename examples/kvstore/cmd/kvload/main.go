@@ -13,7 +13,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/examples/kvstore/kv"
+	"github.com/chucklehead-dev/gotogether/examples/kvstore/kv"
 )
 
 func main() {

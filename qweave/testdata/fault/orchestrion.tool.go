@@ -2,4 +2,4 @@
 
 package tools
 
-import _ "github.com/casselc/quint-connect-go/qenv/fault"
+import _ "github.com/chucklehead-dev/gotogether/qenv/fault"

@@ -9,7 +9,7 @@ point:
 func (s *Store) Write(ctx context.Context, k, v string) error
 ```
 
-- Weave with qweave, with `_ "github.com/casselc/quint-connect-go/qenv/fault"`
+- Weave with qweave, with `_ "github.com/chucklehead-dev/gotogether/qenv/fault"`
   in the tool file. Or call `qenv.FaultPoint(ctx, "store.write", true,
   ErrUnavailable)` at the top yourself.
 - In a simulation the entry becomes a fault choice of kind `store.write`.

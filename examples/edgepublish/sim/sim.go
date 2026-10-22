@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/publisher"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Config of a simulated run.

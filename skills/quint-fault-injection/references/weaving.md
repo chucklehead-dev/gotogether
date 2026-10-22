@@ -3,7 +3,7 @@
 If the code uses `sync.Mutex`, `sync.RWMutex`, `sync.WaitGroup` or `go`
 statements and you want it unchanged (a stand-in that must track the
 real code, or the real code), weave it:
-- add `_ "github.com/casselc/quint-connect-go/qenv/weave"` to the
+- add `_ "github.com/chucklehead-dev/gotogether/qenv/weave"` to the
   project's `orchestrion.tool.go`. Then test with qweave (`qweave go test
   ./...`, from the qweave module in this repository), or with
   Orchestrion (`go run github.com/DataDog/orchestrion go test ./...`);

@@ -26,7 +26,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Go is a go statement marked //qenv:go: in a simulation, fn runs as a new

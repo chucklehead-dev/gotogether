@@ -1,15 +1,15 @@
 package uniqueids
 
 import (
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom/hegelnet"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom/hegelnet"
 	"math/rand/v2"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/quinthegel"
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/quinthegel"
+	"github.com/chucklehead-dev/gotogether/validate"
 	"hegel.dev/go/hegel"
 )
 

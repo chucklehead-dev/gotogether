@@ -17,7 +17,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/qweave"
+	"github.com/chucklehead-dev/gotogether/qweave"
 )
 
 func main() { os.Exit(run()) }

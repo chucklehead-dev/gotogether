@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/connect"
-	"github.com/casselc/quint-connect-go/itf"
+	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/itf"
 	"hegel.dev/go/hegel"
 )
 

@@ -16,8 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledger"
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledgerpb"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledgerpb"
 )
 
 // RealConfig serves the ledger for real: a grpc.Server instrumented with

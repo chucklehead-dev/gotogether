@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qcover"
+	"github.com/chucklehead-dev/gotogether/qcover"
 )
 
 // A real environment's binary, built with -cover, ran retry; the

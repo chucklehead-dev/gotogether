@@ -16,9 +16,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/binding"
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // Options configures a validation run.

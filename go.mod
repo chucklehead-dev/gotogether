@@ -1,4 +1,4 @@
-module github.com/casselc/quint-connect-go
+module github.com/chucklehead-dev/gotogether
 
 go 1.26.1
 

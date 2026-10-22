@@ -1,16 +1,16 @@
-module github.com/casselc/quint-connect-go/examples/gosim
+module github.com/chucklehead-dev/gotogether/examples/gosim
 
 go 1.26.1
 
 require (
-	github.com/casselc/quint-connect-go v0.0.0
-	github.com/casselc/quint-connect-go/examples/edgepublish v0.0.0
-	github.com/casselc/quint-connect-go/qgosim v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/examples/edgepublish v0.0.0
+	github.com/chucklehead-dev/gotogether/qgosim v0.0.0
 	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
 	hegel.dev/go/hegel v0.9.27
 )
 
-require github.com/casselc/quint-connect-go/qweave v0.0.0 // indirect
+require github.com/chucklehead-dev/gotogether/qweave v0.0.0 // indirect
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
@@ -73,8 +73,8 @@ require (
 )
 
 replace (
-	github.com/casselc/quint-connect-go => ../..
-	github.com/casselc/quint-connect-go/examples/edgepublish => ../edgepublish
-	github.com/casselc/quint-connect-go/qgosim => ../../qgosim
-	github.com/casselc/quint-connect-go/qweave => ../../qweave
+	github.com/chucklehead-dev/gotogether => ../..
+	github.com/chucklehead-dev/gotogether/examples/edgepublish => ../edgepublish
+	github.com/chucklehead-dev/gotogether/qgosim => ../../qgosim
+	github.com/chucklehead-dev/gotogether/qweave => ../../qweave
 )

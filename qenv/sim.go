@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv/internal/choice"
-	"github.com/casselc/quint-connect-go/qrun"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
+	"github.com/chucklehead-dev/gotogether/qrun"
 )
 
 // Sim runs tasks one at a time. A task runs until it reaches a seam (Yield,

@@ -6,10 +6,10 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/checkout"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/checkout"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // The shop on qenv's native runtime inside a testing/synctest bubble:

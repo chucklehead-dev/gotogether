@@ -8,7 +8,7 @@ import (
 
 	"hegel.dev/go/hegel"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 )
 
 // Network is a Hegel state machine fragment that schedules a Sim: embed it

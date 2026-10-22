@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/streams/pipeline"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Config of a run.

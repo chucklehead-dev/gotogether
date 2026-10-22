@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // ErrStaleLease: the ack's lease expired, or was lost in a restart; the job

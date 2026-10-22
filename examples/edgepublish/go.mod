@@ -1,10 +1,10 @@
-module github.com/casselc/quint-connect-go/examples/edgepublish
+module github.com/chucklehead-dev/gotogether/examples/edgepublish
 
 go 1.26.1
 
 require (
 	github.com/DataDog/orchestrion v1.13.1
-	github.com/casselc/quint-connect-go v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
 )
@@ -123,4 +123,4 @@ require (
 	hegel.dev/go/hegel v0.9.27 // indirect
 )
 
-replace github.com/casselc/quint-connect-go => ../..
+replace github.com/chucklehead-dev/gotogether => ../..

@@ -1,9 +1,9 @@
-module github.com/casselc/quint-connect-go/examples/fleetrollout
+module github.com/chucklehead-dev/gotogether/examples/fleetrollout
 
 go 1.26.1
 
 require (
-	github.com/casselc/quint-connect-go v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0
 	hegel.dev/go/hegel v0.9.27
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
@@ -110,4 +110,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/casselc/quint-connect-go => ../..
+replace github.com/chucklehead-dev/gotogether => ../..

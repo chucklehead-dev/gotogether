@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/fleetrollout"
-	"github.com/casselc/quint-connect-go/examples/fleetrollout/rollout"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
+	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/sktrace"
 )
 
 // production is SimKube's scaling trace: a real cluster's Deployments

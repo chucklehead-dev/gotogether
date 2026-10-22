@@ -24,7 +24,7 @@ func TestScanRecords(t *testing.T) {
 import (
 	"context"
 
-	obs "github.com/casselc/quint-connect-go/qobs"
+	obs "github.com/chucklehead-dev/gotogether/qobs"
 )
 
 const settle = "settle"
@@ -45,8 +45,8 @@ import (
 
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 func record(ctx context.Context) { qobs.Record(ctx, "transfer", nil) }
@@ -92,7 +92,7 @@ func bankModel() *Model {
 func TestLintRecords(t *testing.T) {
 	src := `package app
 
-import "github.com/casselc/quint-connect-go/qobs"
+import "github.com/chucklehead-dev/gotogether/qobs"
 
 func f() {
 	qobs.Record(nil, "deposit", nil)

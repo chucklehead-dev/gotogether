@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 const binding = "twophase.binding.yaml"

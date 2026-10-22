@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A parameter whose field the step lacks says which field, what the step

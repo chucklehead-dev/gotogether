@@ -4,7 +4,7 @@
 # its entry a fault choice of a qenv simulation, and declares the point for
 # coverage. Results are named for the advice if they are not.
 meta:
-  name: github.com/casselc/quint-connect-go/qenv/fault
+  name: github.com/chucklehead-dev/gotogether/qenv/fault
   description: Inject a function's own errors, or a crash, at //quint:fault points in qenv simulations.
 
 aspects:
@@ -16,7 +16,7 @@ aspects:
       - prepend-statements:
           imports:
             context: context
-            quintqenv: github.com/casselc/quint-connect-go/qenv
+            quintqenv: github.com/chucklehead-dev/gotogether/qenv
           template: |-
             {{- $ctx := .Function.ArgumentOfType "context.Context" -}}
             {{- $err := .Function.ResultOfType "error" -}}
@@ -37,7 +37,7 @@ aspects:
             {{- end }}
       - inject-declarations:
           imports:
-            quintqenv: github.com/casselc/quint-connect-go/qenv
+            quintqenv: github.com/chucklehead-dev/gotogether/qenv
           template: |-
             {{- $kind := "" -}}
             {{- range .DirectiveArgs "quint:fault" }}{{ if eq .Key "kind" }}{{ $kind = .Value }}{{ end }}{{ end -}}

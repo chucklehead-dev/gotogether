@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/publisher"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
 )
 
 // clock is a manually advanced clock, so generation rotation is deterministic.

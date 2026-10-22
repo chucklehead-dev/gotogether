@@ -8,11 +8,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qanalysis/actionmap"
-	"github.com/casselc/quint-connect-go/qcover"
+	"github.com/chucklehead-dev/gotogether/qanalysis/actionmap"
+	"github.com/chucklehead-dev/gotogether/qcover"
 )
 
-const ck = "github.com/casselc/quint-connect-go/examples/checkout"
+const ck = "github.com/chucklehead-dev/gotogether/examples/checkout"
 
 // Every action checkout records has a site: Record calls in OnCommit
 // closures are found, by the declaration that holds them.

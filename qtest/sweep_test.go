@@ -3,9 +3,9 @@ package qtest
 import (
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qsweep"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qsweep"
 )
 
 // A System's own Run serves a sweep: with no run function, the row is in

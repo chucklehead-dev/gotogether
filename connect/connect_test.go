@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/itf"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // bank is the implementation under test.

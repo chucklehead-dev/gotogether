@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/itf"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // Config says how to generate traces and how to read them. The zero value

@@ -5,12 +5,12 @@ import (
 
 	"hegel.dev/go/hegel"
 
-	"github.com/casselc/quint-connect-go/examples/grpcledger"
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledger"
-	"github.com/casselc/quint-connect-go/qenv"
-	"github.com/casselc/quint-connect-go/qsweep"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/quinthegel"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qsweep"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/quinthegel"
 )
 
 const binding = "ledger.binding.yaml"

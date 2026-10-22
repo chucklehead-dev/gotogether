@@ -19,7 +19,7 @@ both kinds of code:
   is no fault. Record with qobs into `qgosim.Sink()`.
 - **code annotated with `//quint:action`**: add a `gosim.tool.go`
   (`//go:build tools`) to the module that imports
-  `github.com/casselc/quint-connect-go/qobs`. The translator then weaves
+  `github.com/chucklehead-dev/gotogether/qobs`. The translator then weaves
   qobs's aspects, as `orchestrion go test` would. Leave qenv/weave out:
   gosim simulates locks and goroutines itself, so code that needed weaving
   on qenv's scheduler runs as it is (examples/gosim/edgepublish).

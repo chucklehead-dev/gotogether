@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/publisher"
-	"github.com/casselc/quint-connect-go/examples/edgepublish/sim"
-	"github.com/casselc/quint-connect-go/qgosim"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/sim"
+	"github.com/chucklehead-dev/gotogether/qgosim"
 )
 
 func env(key string) int {

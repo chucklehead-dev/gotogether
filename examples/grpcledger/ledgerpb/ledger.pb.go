@@ -261,7 +261,7 @@ const file_ledger_proto_rawDesc = "" +
 	"\x06amount\x18\x01 \x01(\x03R\x06amount2\x8f\x01\n" +
 	"\x06Ledger\x12C\n" +
 	"\bTransfer\x12\x1a.ledger.v1.TransferRequest\x1a\x1b.ledger.v1.TransferResponse\x12@\n" +
-	"\aBalance\x12\x19.ledger.v1.BalanceRequest\x1a\x1a.ledger.v1.BalanceResponseBBZ@github.com/casselc/quint-connect-go/examples/grpcledger/ledgerpbb\x06proto3"
+	"\aBalance\x12\x19.ledger.v1.BalanceRequest\x1a\x1a.ledger.v1.BalanceResponseBBZ@github.com/chucklehead-dev/gotogether/examples/grpcledger/ledgerpbb\x06proto3"
 
 var (
 	file_ledger_proto_rawDescOnce sync.Once

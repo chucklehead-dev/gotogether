@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -67,7 +67,7 @@ type Option func(*Bank)
 
 // WithTracer emits an OTel span per operation.
 func WithTracer(tp trace.TracerProvider) Option {
-	return func(b *Bank) { b.tracer = tp.Tracer("github.com/casselc/quint-connect-go/examples/bank") }
+	return func(b *Bank) { b.tracer = tp.Tracer("github.com/chucklehead-dev/gotogether/examples/bank") }
 }
 
 // WithMutation injects a bug.

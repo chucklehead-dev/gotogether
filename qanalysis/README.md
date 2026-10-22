@@ -14,7 +14,7 @@ The first two wrap package `qlint`, so the CLI and the analyzers find the
 same things.
 
 ```sh
-go install github.com/casselc/quint-connect-go/qanalysis/cmd/quintvet@latest
+go install github.com/chucklehead-dev/gotogether/qanalysis/cmd/quintvet@latest
 quintvet ./...                                           # all three
 quintvet -quintweave=false -quintaction.binding app.binding.yaml ./...
 go vet -vettool=$(which quintvet) -quintweave=false ./... # per package, with go vet
@@ -44,7 +44,7 @@ stops at other packages' functions. With qcover's per-step coverage
 
 ```sh
 QUINTGO_KEEP=/tmp/k go run -C qweave ./cmd/qweave -C .. -cover \
-  -coverpkg github.com/casselc/quint-connect-go/examples/checkout \
+  -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout \
   go test -run '^TestCodeCoverage$' ./examples/checkout/
 cd qanalysis && go run ./cmd/actionmap -C .. -coverage /tmp/k/checkout-coverage.json ./examples/checkout/...
 ```

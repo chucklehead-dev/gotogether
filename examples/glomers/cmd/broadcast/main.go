@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/broadcast"
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/broadcast"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 )
 
 func main() {

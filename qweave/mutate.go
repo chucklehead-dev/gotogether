@@ -10,7 +10,7 @@ import (
 )
 
 // qmutPath is the package woven mutants ask whether they are on.
-const qmutPath = "github.com/casselc/quint-connect-go/qmut"
+const qmutPath = "github.com/chucklehead-dev/gotogether/qmut"
 
 type mutant struct {
 	line int

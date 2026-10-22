@@ -14,8 +14,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/crossdb/dbaas"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/dbaas"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 func main() {

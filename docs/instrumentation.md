@@ -126,7 +126,7 @@ Everything else is generic.
 4. **Annotate** one function per model step. If a step is inline, extract it
    into a function, making its return the moment the step takes effect. Add
    `orchestrion.tool.go` importing `github.com/DataDog/orchestrion` and
-   `github.com/casselc/quint-connect-go/qobs`.
+   `github.com/chucklehead-dev/gotogether/qobs`.
 5. **Lint:** `quintgo lint -binding binding.yaml -src ./your/pkg`. This checks
    the binding against `quint typecheck`'s view of the model, and that every
    field a template uses is recorded by the annotation.

@@ -16,7 +16,7 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Chooser makes the environment's choices. Choose returns an index in

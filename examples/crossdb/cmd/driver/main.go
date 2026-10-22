@@ -24,9 +24,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/casselc/quint-connect-go/examples/crossdb"
-	"github.com/casselc/quint-connect-go/examples/crossdb/apis/v1alpha1"
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/apis/v1alpha1"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 var appDatabase = schema.GroupVersionKind{Group: "platform.example.org", Version: "v1alpha1", Kind: "AppDatabase"}

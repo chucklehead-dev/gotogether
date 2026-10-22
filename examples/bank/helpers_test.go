@@ -1,5 +1,5 @@
 package bank
 
-import "github.com/casselc/quint-connect-go/itf"
+import "github.com/chucklehead-dev/gotogether/itf"
 
 func readTrace(path string) (*itf.Trace, error) { return itf.ReadFile(path) }

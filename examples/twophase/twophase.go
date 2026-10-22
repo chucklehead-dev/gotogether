@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casselc/quint-connect-go/examples/twophase/tpc"
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/examples/twophase/tpc"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Config of a deployment.

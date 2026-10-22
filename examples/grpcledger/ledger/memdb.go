@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // MemDB is an in-memory qenv.DB for running the server for real: one

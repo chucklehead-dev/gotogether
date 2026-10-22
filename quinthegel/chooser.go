@@ -5,7 +5,7 @@ import (
 
 	"hegel.dev/go/hegel"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // ChoiceSource makes a qenv simulation's choices from a Hegel test case, so Hegel

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qrole"
+	"github.com/chucklehead-dev/gotogether/qrole"
 )
 
 // Woven, the annotations count: each operation is two attempts, the first

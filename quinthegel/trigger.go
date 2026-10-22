@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/casselc/quint-connect-go/qload"
+	"github.com/chucklehead-dev/gotogether/qload"
 	"hegel.dev/go/hegel"
 )
 

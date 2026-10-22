@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/validate"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // RequireQuint skips the test when the quint CLI is not installed.

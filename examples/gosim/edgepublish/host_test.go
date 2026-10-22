@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/examples/edgepublish/publisher"
-	"github.com/casselc/quint-connect-go/qgosim"
-	"github.com/casselc/quint-connect-go/qtest"
+	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
+	"github.com/chucklehead-dev/gotogether/qgosim"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 const (
-	pkg     = "github.com/casselc/quint-connect-go/examples/gosim/edgepublish"
+	pkg     = "github.com/chucklehead-dev/gotogether/examples/gosim/edgepublish"
 	binding = "../../edgepublish/binding.yaml"
 )
 

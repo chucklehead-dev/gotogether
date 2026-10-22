@@ -3,7 +3,7 @@ package simapp
 import (
 	"time"
 
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Tests are checked, as by quintgo lint -sim: a System's Run closure

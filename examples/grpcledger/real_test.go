@@ -7,12 +7,12 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/casselc/quint-connect-go/convert"
-	"github.com/casselc/quint-connect-go/examples/grpcledger"
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledger"
-	"github.com/casselc/quint-connect-go/otelio"
-	"github.com/casselc/quint-connect-go/qtest"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/convert"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
+	"github.com/chucklehead-dev/gotogether/otelio"
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // realSteps serves the ledger for real, runs a concurrent load with the

@@ -7,7 +7,7 @@ files (`orchestrion.yml`) of the packages a module's tool file imports
 annotations work under qweave, Orchestrion and gosim:
 
 ```sh
-go install github.com/casselc/quint-connect-go/qweave/cmd/qweave@latest   # or go run from this module
+go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest   # or go run from this module
 qweave go test ./...                 # weave the module's package graph, then go test -overlay
 qweave -v go build ./cmd/server      # list what was woven and what was skipped
 ```

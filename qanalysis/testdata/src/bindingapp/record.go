@@ -3,7 +3,7 @@ package bindingapp
 import (
 	"context"
 
-	"github.com/casselc/quint-connect-go/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // ledger has its own Record, which is not a step.

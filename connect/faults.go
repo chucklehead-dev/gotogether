@@ -1,8 +1,8 @@
 package connect
 
 import (
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // A Fault is what a model step stands for in a qenv simulation: a fault

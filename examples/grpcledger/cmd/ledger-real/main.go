@@ -13,9 +13,9 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/casselc/quint-connect-go/examples/grpcledger"
-	"github.com/casselc/quint-connect-go/examples/grpcledger/ledger"
-	"github.com/casselc/quint-connect-go/otelio"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger"
+	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
+	"github.com/chucklehead-dev/gotogether/otelio"
 )
 
 func main() {

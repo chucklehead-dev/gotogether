@@ -15,13 +15,13 @@ package qcover
 import (
 	"context"
 	"fmt"
-	"github.com/casselc/quint-connect-go/qrun"
+	"github.com/chucklehead-dev/gotogether/qrun"
 	"sort"
 	"strings"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qobs"
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A Block is a straight-line run of statements.

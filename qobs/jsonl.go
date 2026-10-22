@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/casselc/quint-connect-go/qtrace"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // JSONLSink writes each step as one line of the native step log: a flat

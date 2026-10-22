@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/qmut"
+	"github.com/chucklehead-dev/gotogether/qmut"
 )
 
 // NoSurvivors names each unmarked survivor with its mark, and each mark

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/casselc/quint-connect-go/connect"
-	"github.com/casselc/quint-connect-go/itf"
-	"github.com/casselc/quint-connect-go/qenv"
+	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // A System is an application bound to its model: the binding, the options

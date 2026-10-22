@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 )
 
 // Mutation injects a bug.

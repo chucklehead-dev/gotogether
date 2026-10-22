@@ -40,8 +40,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/casselc/quint-connect-go/examples/crossdb/apis/v1alpha1"
-	"github.com/casselc/quint-connect-go/examples/crossdb/dbaas"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/apis/v1alpha1"
+	"github.com/chucklehead-dev/gotogether/examples/crossdb/dbaas"
 )
 
 // Mutation injects a bug.
