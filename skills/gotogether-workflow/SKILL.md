@@ -106,7 +106,7 @@ test). Write step logs (`qobs.FileSink`) or OTel span events, and
 validate them:
 
 ```sh
-gotogether validate -noitf -binding m.binding.yaml logs/*.jsonl
+gotogether validate -binding m.binding.yaml logs/*.jsonl
 ```
 
 The model can be wrong about the environment (gotogether-patterns
@@ -136,8 +136,8 @@ deliberately and say why in the commit and the README.
 - `go test -short ./...`: scripted scenarios, mutants, `Batched` Hegel
   runs (about a minute).
 - `go test ./...`: adds the `FindViolation` shrinking tests.
-- A separate job runs the real environment and validates its logs, with
-  `-noitf`. Keep it in CI so model drift shows up.
+- A separate job runs the real environment and validates its logs
+  (`gotogether validate`). Keep it in CI so model drift shows up.
 - Install quint and its Rust evaluator in CI (`ci/install-quint.sh`).
   Tests that need quint start with `qtest.RequireQuint(t)`, so they skip
   without it.

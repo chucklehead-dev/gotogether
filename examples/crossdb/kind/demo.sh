@@ -47,6 +47,6 @@ kill "$server" 2>/dev/null || true
 wait 2>/dev/null || true
 [[ $status -eq 0 ]] || { echo "driver failed"; exit 2; }
 
-"$out/gotogether" validate -noitf -binding crossdb.binding.yaml "$out/cloud.jsonl" "$out/driver.jsonl" || status=$?
+"$out/gotogether" validate -binding crossdb.binding.yaml "$out/cloud.jsonl" "$out/driver.jsonl" || status=$?
 echo "step logs and logs in $out"
 exit $status

@@ -35,7 +35,7 @@ gotogether scaffold -spec model.qnt -module M -out m.binding.yaml      # a bindi
 gotogether scaffold -system -binding m.binding.yaml -pkg app -out system_test.go   # a qtest.System test to fill in
 gotogether lint -binding m.binding.yaml -src .     # binding vs model, annotations vs binding
 gotogether lint -sim .                             # code that escapes a simulation
-gotogether validate -noitf -binding m.binding.yaml run.jsonl
+gotogether validate -binding m.binding.yaml run.jsonl
 ```
 
 The smallest simulated example is `examples/hello` (a counter, a lossy

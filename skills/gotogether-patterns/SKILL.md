@@ -149,7 +149,8 @@ says when a real run hit the design's limit.
 - **Cost.** Cost per step is roughly the state size times the invariants'
   work. For long runs:
   - prefer ghosts to scans (4) and bounded mechanism state (6);
-  - pass `-noitf` when you don't need the ITF of a conforming run.
+  - leave out `-itf` (the default) unless you need the ITF of a
+    conforming run.
 
   Measured on a 2841-step log, the four unique-id models take 64 s, 20 s,
   21 s and 7 s (README of examples/glomers).

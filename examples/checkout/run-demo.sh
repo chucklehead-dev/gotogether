@@ -12,7 +12,7 @@ for iso in ${ISOLATIONS:-serializable snapshot read-committed}; do
   echo "== $iso ${MUTATION:+(mutation $MUTATION)}"
   "$out/checkout-sim" -seeds "${SEEDS:-30}" -isolation "$iso" -mutation "${MUTATION:-}" -crash-rate "${CRASH_RATE:-0.05}" -out "$out/$iso"
   # one actor per seed: the report lists each run's verdict
-  if "$out/gotogether" validate -noitf -binding checkout.binding.yaml "$out/$iso"/*.jsonl > "$out/$iso.report"; then
+  if "$out/gotogether" validate -binding checkout.binding.yaml "$out/$iso"/*.jsonl > "$out/$iso.report"; then
     echo "all runs conform"
   else
     status=1

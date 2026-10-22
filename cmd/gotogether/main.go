@@ -86,7 +86,7 @@ func usage() {
                    [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
-                   [-convert rules.yaml] [-invariants a,b] [-noitf] FILE...
+                   [-convert rules.yaml] [-invariants a,b] [-itf] FILE...
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
   gotogether cover    -covdir D1,D2 [-sim summary.json]     a real environment's coverage (binaries built with -cover),
                    against a simulation's (qcover.Summary JSON): what ran only for real, only simulated
@@ -358,8 +358,12 @@ func runValidate(args []string) (int, error) {
 	verbose := fset.Bool("v", false, "print quint's output")
 	conv := fset.String("convert", "", "convert OTLP/JSON spans with this rule file (see gotogether convert)")
 	invs := fset.String("invariants", "", "comma-separated model invariants to check instead of the binding's")
-	noITF := fset.Bool("noitf", false, "do not write the ITF of conforming runs (faster for models with a large state)")
+	withITF := fset.Bool("itf", false, "also write the ITF of conforming runs, the model's state at every step (slow for models with a large state); failing runs always get theirs")
+	noITF := fset.Bool("noitf", false, "gone: no ITF for conforming runs is the default")
 	fset.Parse(args)
+	if *noITF {
+		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
+	}
 	rules, err := loadRules(*conv)
 	if err != nil {
 		return 2, err
@@ -367,7 +371,7 @@ func runValidate(args []string) (int, error) {
 	if fset.NArg() == 0 {
 		usage()
 	}
-	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: *noITF}
+	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: !*withITF}
 	var b *binding.Binding
 	if *bpath != "" {
 		if b, err = binding.Load(*bpath); err != nil {

@@ -40,9 +40,9 @@ for c in ${@:-echo uniqueids broadcast gcounter kafka}; do
   [ "$c" = kafka ] && continue
   for b in "$c"/*.binding.yaml; do
     [ -f "$b" ] && ls "$steps"/*.jsonl >/dev/null 2>&1 || continue
-    echo "--- gotogether validate -noitf -binding $b ($(cat "$steps"/*.jsonl | wc -l) steps)"
+    echo "--- gotogether validate -binding $b ($(cat "$steps"/*.jsonl | wc -l) steps)"
     v=$(basename "$b" .yaml)
-    "$OUT/bin/gotogether" validate -noitf -binding "$b" -dir "$OUT/v-$v" "$steps"/*.jsonl > "$OUT/$v.validate" || status=1
+    "$OUT/bin/gotogether" validate -binding "$b" -dir "$OUT/v-$v" "$steps"/*.jsonl > "$OUT/$v.validate" || status=1
     grep -E 'issue|conformance|invariant|step [0-9]+ |quint:|RESULT' "$OUT/$v.validate"
   done
 done

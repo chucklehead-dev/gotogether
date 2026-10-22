@@ -9,7 +9,7 @@ go build -o "$out/twophase-sim" ./cmd/twophase-sim
 go build -o "$out/gotogether" ../../cmd/gotogether
 echo "== two-phase commit ${MUTATION:+(mutation $MUTATION)}"
 "$out/twophase-sim" -seeds "${SEEDS:-30}" -mutation "${MUTATION:-}" -out "$out/runs"
-if "$out/gotogether" validate -noitf -binding twophase.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then
+if "$out/gotogether" validate -binding twophase.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then
   echo "all runs conform"
 else
   awk '/^actor/{if(b~/FAIL/)print b; b=$0; next}{b=b"\n"$0}END{if(b~/FAIL/)print b}' "$out/report" |

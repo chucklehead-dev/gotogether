@@ -107,7 +107,7 @@ to tell that a new id repeats an old one, something must remember the old
 ones. What it costs is a different question. Here are four models,
 measured on the same 2841-step Maelstrom log:
 
-| Model | Check | Original tool | Now | `-noitf` |
+| Model | Check | Original tool | Now, with ITF (`-itf`) | Now, without (the default) |
 |---|---|---|---|---|
 | a count per id, invariant "every count is 1" | scans every id in every state: quadratic | 152 s | 64 s | 19 s |
 | a set of ids, a repeat is a step the model cannot take | constant per step | 49 s | 20 s | 11 s |
@@ -121,8 +121,8 @@ Two things changed the numbers:
 - **The tool**, for every model. A replay now runs once, with every
   check fused; the per-invariant replays only run when that fails, to
   locate the failure. The ITF of a conforming run, which holds the full
-  state at every step, is optional (`-noitf`, `validate.Options.NoITF`;
-  Hegel's checks never write it).
+  state at every step, is optional, and off by default (`-itf` writes it,
+  `validate.Options.NoITF`; Hegel's checks never write it).
 
 Avoiding the growing state takes knowledge of how the ids are made. The
 scheme model checks *why* ids are unique: each incarnation belongs to one

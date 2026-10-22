@@ -4,7 +4,7 @@
 ```sh
 GOTOGETHER_SALT=$SECRET gotogether steps -actors 'checkout-*' -since 2026-10-01T00:00:00Z \
   -pseudonymize account,customer -binding app.binding.yaml -out clean.jsonl spans.jsonl
-gotogether validate -noitf -binding app.binding.yaml clean.jsonl
+gotogether validate -binding app.binding.yaml clean.jsonl
 ```
 
 - `-binding` keeps only the fields the binding reads, and drops error

@@ -40,8 +40,8 @@ A newcomer's first hour, and docs that stay true:
   - An empty run is a named Explore error, not a hand-written guard.
 - **Wording.** Reports reworded. The examples' own hand-written
   assertions become claims.
-- **Validate.** `gotogether validate` writes no ITF by default: `-noitf`
-  goes and `-itf` asks for it.
+- **Validate.** Done: `gotogether validate` writes no ITF by default;
+  `-itf` asks for it, and `-noitf` fails saying so.
 - **Stale strings.** `Sweep.Expect` and the free `qtest.Explore`, gone
   from docs and skills.
 - **A stale-docs gate.** The deprecated-identifier test also reads

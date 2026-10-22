@@ -15,7 +15,7 @@ for backend in ${BACKENDS:-sim kafka kinesis}; do
   echo "== $backend ${MUTATION:+(mutation $MUTATION)}"
   "$out/streams-demo" -backend "$backend" -runs "$runs" -mutation "${MUTATION:-}" -out "$out/$backend"
   # one actor per run: the report lists each run's verdict
-  if "$out/gotogether" validate -noitf -binding streams.binding.yaml "$out/$backend"/*.jsonl > "$out/$backend.report"; then
+  if "$out/gotogether" validate -binding streams.binding.yaml "$out/$backend"/*.jsonl > "$out/$backend.report"; then
     echo "all runs conform"
   else
     status=1

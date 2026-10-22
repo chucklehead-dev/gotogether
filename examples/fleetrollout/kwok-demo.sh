@@ -61,7 +61,7 @@ kill "$pid"; wait "$pid" 2>/dev/null || true
 "$out/fleet-controller" "${args[@]}" -verify -steps "$out/steps-verify.jsonl"
 
 status=0
-"$out/gotogether" validate -noitf -binding fleet.binding.yaml "$out"/steps-*.jsonl || status=$?
+"$out/gotogether" validate -binding fleet.binding.yaml "$out"/steps-*.jsonl || status=$?
 echo "step logs in $out"
 if [[ -z "${KEEP:-}" ]]; then
   for m in "${members[@]}"; do kwokctl delete cluster --name "$prefix-$m" >/dev/null 2>&1 || true; done

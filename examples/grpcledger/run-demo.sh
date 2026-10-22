@@ -14,7 +14,7 @@ status=0
 for seed in $(seq 1 "${SEEDS:-3}"); do
   echo "== load $seed ${MUTATION:+(mutation $MUTATION)}"
   "$out/ledger-real" -seed "$seed" -mutation "${MUTATION:-}" -out "$out/spans$seed.json"
-  if "$out/gotogether" validate -noitf -binding ledger.binding.yaml -convert ledger.convert.yaml "$out/spans$seed.json" > "$out/report$seed"; then
+  if "$out/gotogether" validate -binding ledger.binding.yaml -convert ledger.convert.yaml "$out/spans$seed.json" > "$out/report$seed"; then
     echo "conforms"
   else
     status=1

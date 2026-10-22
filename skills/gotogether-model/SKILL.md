@@ -77,9 +77,9 @@ the state and on how invariants are written:
   bounded. Pair it with a property test of the encoding's injectivity
   (a pure function), and keep the spec-level model for short runs
   (examples/glomers/uniqueids).
-- **Big states.** Pass `gotogether validate -noitf` (or
-  `validate.Options{NoITF: true}`) when you don't need the ITF of a
-  conforming run: it holds the full state at every step.
+- **Big states.** `gotogether validate` writes no ITF for a conforming
+  run (it holds the full state at every step); `-itf` asks for it. In
+  code, `validate.Options{NoITF: true}`.
 
 ## Choreo models
 

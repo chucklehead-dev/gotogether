@@ -188,7 +188,7 @@ timing of production, generate pod Stages from a SimKube trace (`go run
 `kwokctl create cluster --config stages.yaml`; fleetrollout's `TRACE=`),
 from the same quantiles as the simulated `PodTimes`. Write step logs and
 check them:
-`gotogether validate -noitf -binding app.binding.yaml logs/*.jsonl`.
+`gotogether validate -binding app.binding.yaml logs/*.jsonl`.
 - A new process is a restart (`restart:` in the binding).
 - A final fresh read of every component, then `settle`, makes eventual
   properties meaningful there too.
