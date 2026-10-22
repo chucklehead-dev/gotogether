@@ -13,8 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: R1 → R4 → X (in its own order below); R5 when the maintainer
-says.
+Order: R4 → X (in its own order below); R5 when the maintainer says.
 
 ## W8. First hour and docs
 
@@ -63,7 +62,20 @@ Done when a fresh clone's quickstart passes as written.
 
 ## Release readiness (R)
 
-- **R1. Modules that can be consumed.**
+- **R1. Modules that can be consumed.** Done (R1a–f):
+  - every example is a module, and go.work ties them for development;
+  - qhegel is a module, and the core needs no Hegel: a qobs-only program
+    has neither hegel nor purego in its go.sum;
+  - the published modules require pushed commits, with no `replace`;
+  - CI tests each module with `GOWORK=off`, and installs the commands at
+    the pushed commit;
+  - `load` is `input`.
+
+  Not checked here: golangci-lint's custom build of the plugin (no
+  golangci-lint in this environment). The plugin's doc names the
+  version to use.
+
+  The plan as written:
   - A go.work for development, and no `replace` in published modules:
     `go install …@version` refuses them, and a dependency's replace is
     ignored.

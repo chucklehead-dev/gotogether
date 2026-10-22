@@ -77,6 +77,30 @@ jobs:
           MUTATION=no-dedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
 
+  consumable:
+    # what a user gets: the commands install at this commit, and a program
+    # that records steps pulls in no Hegel
+    runs-on: ubuntu-latest
+    env:
+      GOPROXY: direct
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.1
+      - name: go install the commands at this commit
+        run: |
+          for c in cmd/gotogether qweave/cmd/qweave qanalysis/cmd/quintvet; do
+            go install github.com/chucklehead-dev/gotogether/$c@${{ github.sha }}
+          done
+      - name: a program that only records steps depends on no Hegel
+        run: |
+          mkdir user && cd user
+          go mod init example.com/user
+          printf 'package main\n\nimport "github.com/chucklehead-dev/gotogether/qobs"\n\nfunc main() { qobs.SetGlobal(nil) }\n' > main.go
+          go get github.com/chucklehead-dev/gotogether@${{ github.sha }}
+          go mod tidy && go build .
+          if grep -E 'hegel|purego' go.mod go.sum; then echo "the core pulls in Hegel"; exit 1; fi
+
   edgepublish:
     runs-on: ubuntu-latest
     defaults:

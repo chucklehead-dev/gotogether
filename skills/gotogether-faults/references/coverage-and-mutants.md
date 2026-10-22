@@ -3,7 +3,7 @@
 ## Which code each step ran: `qweave -cover`
 
 ```sh
-go run -C path/to/qweave ./cmd/qweave -C . -cover [-coverpkg your/module/pkg] go test -run TestX ./...
+qweave -cover [-coverpkg your/module/pkg] go test -run TestX ./...   # go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest
 ```
 
 ```go
@@ -58,7 +58,7 @@ unsaid.
 ## What the model constrains: mutants (`qweave -mutate`, `System.Mutate`)
 
 ```sh
-go run -C path/to/qweave ./cmd/qweave -C . -mutate -coverpkg your/module/pkg go test -run TestMutation ./...
+qweave -mutate -coverpkg your/module/pkg go test -run TestMutation ./...
 ```
 
 ```go

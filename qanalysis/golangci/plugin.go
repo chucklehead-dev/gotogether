@@ -4,7 +4,7 @@
 //	plugins:
 //	  - module: github.com/chucklehead-dev/gotogether/qanalysis
 //	    import: github.com/chucklehead-dev/gotogether/qanalysis/golangci
-//	    version: <version>
+//	    version: <version>   # a tag, or a commit's pseudo-version until tags
 //
 // and in .golangci.yml:
 //

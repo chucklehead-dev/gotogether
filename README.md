@@ -85,6 +85,10 @@ go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the C
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 ```
 
+Go: 1.26.x. The core needs 1.26.1 (hegel-go's minimum); the gosim fork
+translates one release's standard library, 1.26's, and says so under
+another. Until the first tags, `@latest` is the newest commit.
+
 Quint's Rust backend is the default. If quint cannot download its
 evaluator, run `ci/install-quint.sh` from a clone, or set
 `QUINT_BACKEND=typescript`. hegel-go embeds its engine, so it needs no
