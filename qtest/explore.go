@@ -71,7 +71,9 @@ func (x *Exploration) Failing() []*Run {
 type ExploreConfig struct {
 	// Seeds is the number of runs, with seeds 1..Seeds (default 50).
 	// GOTOGETHER_SEED=n in the environment runs seed n alone, as a failure's
-	// report says to reproduce it.
+	// report says to reproduce it. GOTOGETHER_SEEDS=n and
+	// GOTOGETHER_SEED_OFFSET=k widen the sample (a nightly run): n seeds
+	// from k+1, unless Chooser makes the runs (a script per trace).
 	Seeds int
 	// Rates are the fault rates (default qenv.DefaultRates). Fuzz and
 	// qhegel.Shrink take rates as an argument instead: nothing else here
@@ -91,6 +93,19 @@ type ExploreConfig struct {
 	// Chooser, if set, makes each seed's chooser instead of a seeded one
 	// at Rates: a Script per seed, a Replay of a recorded run, a swarm.
 	Chooser func(seed uint64) qenv.Chooser
+}
+
+// envUint reads a count from the environment: 0 when unset.
+func envUint(name string) (uint64, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseUint(v, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s=%q: want a number", name, v)
+	}
+	return n, nil
 }
 
 func empty(runs []*Run) bool {
@@ -119,9 +134,23 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	woven := len(qcover.Blocks()) > 0
 	defer qobs.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
 	mark, _ := qobs.Escaped(0)
-	seeds := make([]uint64, cfg.Seeds)
+	// a nightly run widens the sample: GOTOGETHER_SEEDS=n runs n seeds,
+	// GOTOGETHER_SEED_OFFSET=k starts them after k (fresh seeds each night);
+	// a failure's report names its seed, which GOTOGETHER_SEED replays
+	n, offset := cfg.Seeds, uint64(0)
+	if v, err := envUint("GOTOGETHER_SEEDS"); err != nil {
+		t.Fatalf("gotogether: %v", err)
+	} else if v > 0 && cfg.Chooser == nil {
+		n = int(v)
+	}
+	if v, err := envUint("GOTOGETHER_SEED_OFFSET"); err != nil {
+		t.Fatalf("gotogether: %v", err)
+	} else if cfg.Chooser == nil {
+		offset = v
+	}
+	seeds := make([]uint64, n)
 	for i := range seeds {
-		seeds[i] = uint64(i + 1)
+		seeds[i] = offset + uint64(i+1)
 	}
 	if v := os.Getenv("GOTOGETHER_SEED"); v != "" {
 		n, err := strconv.ParseUint(v, 10, 64)

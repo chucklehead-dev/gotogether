@@ -23,8 +23,11 @@ var lossy = qenv.Rates{Default: 0.2}
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).Expect(t, qtest.Conforms(),
-		// and the faults happened: a pass with no duplicates says nothing of dedupe
-		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.5))
+		// and the faults happened: a pass with no duplicates says nothing of
+		// dedupe. Measured, 56% of runs fault a request (2000 seeds); the bar
+		// is well under it, so a window of fresh seeds (a nightly run) does
+		// not fail it by chance, and a change that stops the faults does
+		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3))
 }
 
 // Without dedupe a retried request is counted again: the model has no

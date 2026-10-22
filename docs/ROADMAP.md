@@ -126,7 +126,22 @@ after W. A green suite today proves less than it looks:
 
 The track, in order:
 
-- **X1. Hygiene (S).** `go test -race -short` on the packages that are
+- **X1. Hygiene (S).** Done, but two parts:
+  - **Done.**
+    - `-race` in CI on the recorder, the validator, the native runtime
+      and the real tiers (none found).
+    - qenv's tests fail on goroutines left behind (`leak_test.go`).
+    - A nightly workflow: 500 fresh seeds a night per example
+      (`GOTOGETHER_SEEDS`, `GOTOGETHER_SEED_OFFSET` by date), and 30
+      minutes of fuzzing whose finds are uploaded.
+  - **Its first run's finding.** hello's anti-vacuity bar wanted request
+    faults in half the runs, against a measured 56%. It held for seeds
+    1–30 and failed for 1001–1060. It is now 30%: well under the rate,
+    and still failing if the faults stop.
+  - **Left.** Hegel unseeded at night (the tests pin `WithSeed`), and
+    turning a failure into a corpus entry: both with X8's corpus.
+
+  The plan as written: `go test -race -short` on the packages that are
   not simulated (qobs, qtrace, validate, qrun, qenv's native tests,
   kvstore, grpcledger, streams' real tiers). A leak check in qenv's
   TestMain from `runtime.Stack` (no goleak: the core takes no new

@@ -56,6 +56,8 @@ jobs:
         run: |
           go build -C qanalysis -o "$RUNNER_TEMP/quintvet" ./cmd/quintvet
           "$RUNNER_TEMP/quintvet" -quintweave=false ./...
+      - name: the race detector on what runs real goroutines
+        run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest' ./qenv/
       - name: test (qenv self-checks)
         run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
@@ -273,7 +275,9 @@ jobs:
           go vet ./...
           go run -C ../.. ./cmd/gotogether lint -sim examples/grpcledger
       - name: test (simulated through simgrpc, and a real grpc.Server)
-        run: go test -count=1 -timeout 30m ./...
+        run: |
+          go test -count=1 -timeout 30m ./...
+          go test -race -short -count=1 ./...
       - name: demo (real server, otelgrpc spans converted and validated)
         run: |
           ./run-demo.sh
@@ -303,6 +307,7 @@ jobs:
       - name: test (simulated log with GOTOGETHER_CHECK, Kafka on kfake, Kinesis on a fake endpoint)
         run: |
           GOTOGETHER_CHECK=1 go test -short -count=1 ./...
+          go test -race -short -count=1 ./kafkalog/ ./kinesislog/
           go test -count=1 -timeout 30m ./...
       - name: fuzzing the faithful pipeline
         run: go test -run '^$' -fuzz FuzzFaithful -fuzztime 30s .

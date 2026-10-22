@@ -98,7 +98,7 @@ func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).Expect(t, qtest.Conforms(),
 		// ...
-		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.5))
+		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3))
 }
 
 func TestNoDedupeCountsRetries(t *testing.T) {

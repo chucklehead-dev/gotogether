@@ -99,6 +99,7 @@ Python and no server.
 | Variable | What it does |
 |---|---|
 | `GOTOGETHER_SEED=n` | runs an exploration's seed n alone (a failing run's report prints the command) |
+| `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
 | `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
 | `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step |

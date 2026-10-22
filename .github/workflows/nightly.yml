@@ -1,0 +1,73 @@
+name: nightly
+
+# CI re-checks the same seeds on every push; this widens the sample each
+# night: fresh seeds (an offset by date), more of them, and longer fuzzing.
+# A failure's report names its seed (GOTOGETHER_SEED=n replays it) or its
+# fuzz input (testdata/fuzz): commit it as a regression once fixed.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QUINT_VERSION: 0.33.0
+  GOWORK: "off"
+  GOTOGETHER_SEEDS: "500"
+
+jobs:
+  fresh-seeds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [bank, checkout, glomers, hello, jobqueue, kvstore, retrystorm, twophase, crossdb, grpcledger, streams]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: explorations at fresh seeds
+        working-directory: examples/${{ matrix.example }}
+        run: |
+          export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
+          echo "seeds $((GOTOGETHER_SEED_OFFSET + 1))..$((GOTOGETHER_SEED_OFFSET + GOTOGETHER_SEEDS))"
+          go test -count=1 -timeout 280m ./...
+
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: examples/checkout
+          - dir: examples/streams
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: fuzz for half an hour
+        working-directory: ${{ matrix.dir }}
+        run: go test -run '^$' -fuzz FuzzFaithful -fuzztime 30m .
+      - name: keep what it found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus-${{ strategy.job-index }}
+          path: ${{ matrix.dir }}/testdata/fuzz
