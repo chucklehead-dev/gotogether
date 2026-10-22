@@ -49,6 +49,7 @@ qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspect
 cmd/gotogether/  CLI
 skills/       agent skills, the source of truth (embedded by package skills;
               symlinked into .agents/skills and .claude/skills, checked by skills_test.go)
+examples/*            each example is a module of its own (unpublished, replace => ../..); the root module is the toolkit
 examples/glomers      Gossip Glomers on a Maelstrom runtime + simulator (maelstrom/); per-challenge model, impl, binding, mutants;
                       cmd/* run under real Maelstrom (maelstrom.sh)
 examples/kvstore      app: HTTP KV service with CAS (kvserver, kvload); concurrency, span conversion
@@ -84,7 +85,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   skip without it.
 - `go vet ./... && gofmt -l .`: both must be clean.
 - `go test -short ./...` takes ~1 min. `go test ./...` adds the
-  shrinking-against-the-model tests, ~3–4 min.
+  shrinking-against-the-model tests, ~3–4 min. Both cover the root
+  module only: every example is a module, tested in its directory (`cd
+  examples/hello && go test ./...`; CI loops over them).
 - edgepublish (its own module):
   ```sh
   cd examples/edgepublish

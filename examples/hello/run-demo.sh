@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 out=$(mktemp -d)
 go build -o "$out/hello-sim" ./cmd/hello-sim
-go build -o "$out/gotogether" ../../cmd/gotogether
+(cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
 echo "== hello ${MUTATION:+(mutation $MUTATION)}"
 "$out/hello-sim" -seeds "${SEEDS:-20}" -mutation "${MUTATION:-}" -out "$out/runs"
 if "$out/gotogether" validate -binding hello.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then

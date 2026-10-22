@@ -32,6 +32,13 @@ jobs:
         run: go vet ./...
       - name: test
         run: go test -count=1 -timeout 30m ./...
+      - name: the examples, each its own module
+        run: |
+          for m in bank checkout glomers hello jobqueue kvstore retrystorm twophase; do
+            echo "::group::examples/$m"
+            (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go test -count=1 -timeout 30m ./...) || exit 1
+            echo "::endgroup::"
+          done
       - name: simulation code stays in the simulation
         run: go run ./cmd/gotogether lint -sim .
       - name: qanalysis (analyzers, static action map)
@@ -46,11 +53,14 @@ jobs:
       - name: test (qenv self-checks)
         run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
-        run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s ./examples/checkout/
+        working-directory: examples/checkout
+        run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s .
       - name: code coverage by model step (checkout woven by qweave -cover)
-        run: go run -C qweave ./cmd/qweave -C .. -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v ./examples/checkout/
+        run: go run -C qweave ./cmd/qweave -C ../examples/checkout -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v .
       - name: test (typescript backend)
-        run: QUINT_BACKEND=typescript go test -short -count=1 ./connect/ ./validate/ ./examples/bank/
+        run: |
+          QUINT_BACKEND=typescript go test -short -count=1 ./connect/ ./validate/
+          (cd examples/bank && QUINT_BACKEND=typescript go test -short -count=1 .)
       - name: example app demos
         run: |
           examples/kvstore/run-demo.sh

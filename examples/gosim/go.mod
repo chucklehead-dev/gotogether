@@ -3,10 +3,12 @@ module github.com/chucklehead-dev/gotogether/examples/gosim
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0
-	github.com/chucklehead-dev/gotogether/examples/edgepublish v0.0.0
-	github.com/chucklehead-dev/gotogether/qgosim v0.0.0
 	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
+	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/examples/checkout v0.0.0
+	github.com/chucklehead-dev/gotogether/examples/edgepublish v0.0.0
+	github.com/chucklehead-dev/gotogether/examples/glomers v0.0.0
+	github.com/chucklehead-dev/gotogether/qgosim v0.0.0
 	hegel.dev/go/hegel v0.9.27
 )
 
@@ -74,7 +76,10 @@ require (
 
 replace (
 	github.com/chucklehead-dev/gotogether => ../..
+	github.com/chucklehead-dev/gotogether/examples/checkout => ../checkout
 	github.com/chucklehead-dev/gotogether/examples/edgepublish => ../edgepublish
+	github.com/chucklehead-dev/gotogether/examples/glomers => ../glomers
+	github.com/chucklehead-dev/gotogether/examples/retrystorm => ../retrystorm
 	github.com/chucklehead-dev/gotogether/qgosim => ../../qgosim
 	github.com/chucklehead-dev/gotogether/qweave => ../../qweave
 )

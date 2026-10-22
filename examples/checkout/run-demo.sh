@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 out=$(mktemp -d)
 go build -o "$out/checkout-sim" ./cmd/checkout-sim
-go build -o "$out/gotogether" ../../cmd/gotogether
+(cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
 status=0
 for iso in ${ISOLATIONS:-serializable snapshot read-committed}; do
   echo "== $iso ${MUTATION:+(mutation $MUTATION)}"

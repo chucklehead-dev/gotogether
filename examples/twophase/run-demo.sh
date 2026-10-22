@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 out=$(mktemp -d)
 go build -o "$out/twophase-sim" ./cmd/twophase-sim
-go build -o "$out/gotogether" ../../cmd/gotogether
+(cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
 echo "== two-phase commit ${MUTATION:+(mutation $MUTATION)}"
 "$out/twophase-sim" -seeds "${SEEDS:-30}" -mutation "${MUTATION:-}" -out "$out/runs"
 if "$out/gotogether" validate -binding twophase.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then

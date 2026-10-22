@@ -17,7 +17,7 @@ const ck = "github.com/chucklehead-dev/gotogether/examples/checkout"
 // Every action checkout records has a site: Record calls in OnCommit
 // closures are found, by the declaration that holds them.
 func TestCheckoutStatic(t *testing.T) {
-	m, err := actionmap.Static("../..", "./examples/checkout/...")
+	m, err := actionmap.Static("../../examples/checkout", "./...")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func TestCheckoutCompare(t *testing.T) {
 		t.Skip("quint not on PATH")
 	}
 	keep := t.TempDir()
-	cmd := exec.Command("go", "run", "-C", "qweave", "./cmd/qweave", "-C", "..", "-cover", "-coverpkg", ck,
-		"go", "test", "-count=1", "-run", "^TestCodeCoverage$", "./examples/checkout/")
+	cmd := exec.Command("go", "run", "-C", "qweave", "./cmd/qweave", "-C", "../examples/checkout", "-cover", "-coverpkg", ck,
+		"go", "test", "-count=1", "-run", "^TestCodeCoverage$", ".")
 	cmd.Dir = "../.."
 	cmd.Env = append(os.Environ(), "GOTOGETHER_KEEP="+keep)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -66,7 +66,7 @@ func TestCheckoutCompare(t *testing.T) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		t.Fatal(err)
 	}
-	m, err := actionmap.Static("../..", "./examples/checkout/...")
+	m, err := actionmap.Static("../../examples/checkout", "./...")
 	if err != nil {
 		t.Fatal(err)
 	}

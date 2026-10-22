@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -37,13 +38,35 @@ var hostSide = map[string]bool{
 
 const module = "github.com/chucklehead-dev/gotogether"
 
-// simulatedPackages is simulated and every package of the module that
-// imports qenv, but the host-side ones.
-func simulatedPackages(t *testing.T) []string {
-	out, err := exec.Command("go", "list", "-json", module+"/...").Output()
+// golist runs go list in the repository's workspace (go.work), whatever
+// GOWORK says: the simulated packages span modules (the examples are
+// modules of their own), and only the workspace sees them all.
+func golist(t *testing.T, args ...string) []byte {
+	t.Helper()
+	ws, err := filepath.Abs("../../go.work")
 	if err != nil {
 		t.Fatal(err)
 	}
+	cmd := exec.Command("go", append([]string{"list"}, args...)...)
+	cmd.Env = append(os.Environ(), "GOWORK="+ws)
+	out, err := cmd.Output()
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			t.Fatalf("go list %v: %v\n%s", args, err, ee.Stderr)
+		}
+		t.Fatal(err)
+	}
+	return out
+}
+
+// simulatedPackages is simulated and every package of the workspace's
+// modules that imports qenv, but the host-side ones.
+func simulatedPackages(t *testing.T) []string {
+	var patterns []string
+	for _, m := range strings.Fields(string(golist(t, "-m"))) {
+		patterns = append(patterns, m+"/...")
+	}
+	out := golist(t, append([]string{"-e", "-json"}, patterns...)...)
 	seen := map[string]bool{}
 	all := append([]string(nil), simulated...)
 	for _, p := range all {
@@ -93,10 +116,7 @@ func native(p pkg) string {
 
 func TestSimulatedPackagesHaveNoNativeDeps(t *testing.T) {
 	roots := simulatedPackages(t)
-	out, err := exec.Command("go", append([]string{"list", "-deps", "-json"}, roots...)...).Output()
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := golist(t, append([]string{"-deps", "-json"}, roots...)...)
 	pkgs := map[string]pkg{}
 	dec := json.NewDecoder(strings.NewReader(string(out)))
 	for {
