@@ -109,6 +109,15 @@ the ID. The faithful provider's answer:
   time (`Sim.ToVirtual`) and handed back in real time (`Sim.ToReal`). The
   first version translated Update but not Patch, which double-translated
   the timestamps. The tests caught it as dates in 2025.
+- **One real stamp, one virtual stamp.** The translation first converted
+  each way at the moment of the call, to whole seconds. A stamp the
+  reconciler wrote back unchanged moved by the virtual time of its calls
+  to the cloud (7 s a reconcile, in the test), and a create's pending and
+  succeeded stamps were often the same wall-clock second, converted to two
+  virtual times. Succeeded could then fall before pending, which reads as
+  an incomplete create, and the reconciler stopped. Each real stamp now
+  maps to one virtual stamp, kept to the nanosecond (`stamps`,
+  `TestStampsRoundTrip`).
 - **One thread per goroutine.** The driver first recorded every
   goroutine's steps as one thread, so wall-clock order contradicted
   program order, and validation reported a cycle.

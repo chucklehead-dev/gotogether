@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
@@ -85,6 +86,7 @@ func kubeAPI(s *qenv.Sim, raw client.WithWatch) client.Client {
 		}
 		return nil
 	}
+	st := &stamps{s: s, virtual: map[string]string{}}
 	return interceptor.NewClient(raw, interceptor.Funcs{
 		Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			qenv.Yield(ctx)
@@ -92,7 +94,7 @@ func kubeAPI(s *qenv.Sim, raw client.WithWatch) client.Client {
 				return ErrUnavailable
 			}
 			err := cl.Get(ctx, key, obj, opts...)
-			retime(obj, s.ToReal)
+			st.toReal(obj)
 			return err
 		},
 		List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
@@ -100,29 +102,29 @@ func kubeAPI(s *qenv.Sim, raw client.WithWatch) client.Client {
 			err := cl.List(ctx, list, opts...)
 			if l, ok := list.(*v1alpha1.DatabaseList); ok {
 				for i := range l.Items {
-					retime(&l.Items[i], s.ToReal)
+					st.toReal(&l.Items[i])
 				}
 			}
 			return err
 		},
 		Create: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
 			return write(ctx, func() error {
-				retime(obj, s.ToVirtual)
-				defer retime(obj, s.ToReal)
+				st.toVirtual(obj)
+				defer st.toReal(obj)
 				return cl.Create(ctx, obj, opts...)
 			})
 		},
 		Update: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
 			return write(ctx, func() error {
-				retime(obj, s.ToVirtual)
-				defer retime(obj, s.ToReal)
+				st.toVirtual(obj)
+				defer st.toReal(obj)
 				return cl.Update(ctx, obj, opts...)
 			})
 		},
 		Patch: func(ctx context.Context, cl client.WithWatch, obj client.Object, p client.Patch, opts ...client.PatchOption) error {
 			return write(ctx, func() error {
-				retime(obj, s.ToVirtual)
-				defer retime(obj, s.ToReal)
+				st.toVirtual(obj)
+				defer st.toReal(obj)
 				return cl.Patch(ctx, obj, p, opts...)
 			})
 		},
@@ -136,15 +138,57 @@ func kubeAPI(s *qenv.Sim, raw client.WithWatch) client.Client {
 // the real clock and compares with it.
 var timeAnnotations = []string{meta.AnnotationKeyExternalCreatePending, meta.AnnotationKeyExternalCreateSucceeded, meta.AnnotationKeyExternalCreateFailed}
 
-// retime translates crossplane-runtime's timestamps at the API seam: they
+// stamps translates crossplane-runtime's timestamps at the API seam: they
 // are stored in virtual time and handed to the reconciler in real time, so
-// its grace periods measure virtual time.
-func retime(obj client.Object, to func(time.Time) time.Time) {
+// its grace periods measure virtual time. One real stamp is one virtual
+// stamp, whenever it is converted:
+//   - A stamp the reconciler writes back as it was handed out is the
+//     stored one again. Converted both ways, it would move by the virtual
+//     time less the real time between the read and the write: a
+//     create-pending stamp seeming newer or older than it is.
+//   - crossplane-runtime writes whole wall-clock seconds, so a create's
+//     pending and succeeded stamps are often the same string. Converted
+//     at two real instants they would be two virtual times, succeeded
+//     possibly before pending: an incomplete create, which the reconciler
+//     refuses to go past.
+//
+// Virtual stamps keep their fraction of a second (RFC3339Nano, which
+// crossplane-runtime's RFC 3339 parse accepts).
+type stamps struct {
+	s       *qenv.Sim
+	mu      sync.Mutex
+	virtual map[string]string // a real stamp (handed out or written) -> its virtual one
+}
+
+func (c *stamps) toReal(obj client.Object) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.each(obj, func(v string, t time.Time) string {
+		r := c.s.ToReal(t).Format(time.RFC3339Nano)
+		c.virtual[r] = v
+		return r
+	})
+}
+
+func (c *stamps) toVirtual(obj client.Object) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.each(obj, func(v string, t time.Time) string {
+		if stored, ok := c.virtual[v]; ok {
+			return stored
+		}
+		vt := c.s.ToVirtual(t).Format(time.RFC3339Nano)
+		c.virtual[v] = vt
+		return vt
+	})
+}
+
+func (c *stamps) each(obj client.Object, to func(string, time.Time) string) {
 	a := obj.GetAnnotations()
 	for _, k := range timeAnnotations {
 		if v, ok := a[k]; ok {
-			if t, err := time.Parse(time.RFC3339, v); err == nil {
-				a[k] = to(t).Format(time.RFC3339)
+			if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+				a[k] = to(v, t)
 			}
 		}
 	}
