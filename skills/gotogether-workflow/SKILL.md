@@ -35,9 +35,9 @@ template for them.
 ## 3. Bind and lint
 
 ```sh
-gotogether scaffold -spec model/m.qnt -module m > m.binding.yaml   # parameters default to same-named fields
+gotogether scaffold -spec model/m.qnt -module m -out m.binding.yaml   # parameters default to same-named fields
 gotogether lint -binding m.binding.yaml -src ./pkg
-gotogether scaffold -system -binding m.binding.yaml -pkg m > system_test.go   # a System test: fill in Run, then a mutant
+gotogether scaffold -system -binding m.binding.yaml -pkg m -out system_test.go   # a System test: fill in Run, then a mutant
 ```
 
 Add only what isn't a same-named field:

@@ -1,8 +1,8 @@
 // Command gotogether checks Go programs against Quint models from their
 // telemetry.
 //
-//	gotogether scaffold -spec model.qnt -module M          print a binding skeleton for M
-//	gotogether scaffold -system -binding b.yaml [-pkg p]   print a qtest.System test for the binding
+//	gotogether scaffold -spec model.qnt -module M          a binding skeleton for M (-out FILE: written there)
+//	gotogether scaffold -system -binding b.yaml [-pkg p]   a qtest.System test for the binding (-out FILE)
 //	gotogether lint     -binding b.yaml [-src DIR]         check a binding (and annotations, literal Record actions) against the model
 //	gotogether lint     -sim DIR                           check simulation code for goroutines, wall-clock time and steps that escape it
 //	gotogether lint     -weave DIR                         check code woven by qenv/weave for go statements and method values it cannot rewrite
@@ -27,6 +27,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,8 +78,8 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  gotogether scaffold -spec model.qnt -module M
-  gotogether scaffold -system -binding b.yaml [-pkg p]
+  gotogether scaffold -spec model.qnt -module M [-out m.binding.yaml]
+  gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
   gotogether lint     -binding b.yaml [-src DIR] [-sim DIR]
   gotogether lint     -sim DIR | -weave DIR
   gotogether steps    [-actors a,b] [-actions a,b] [-since T] [-until T] [-pseudonymize f,g] [-binding b.yaml]
@@ -106,7 +107,13 @@ func scaffold(args []string) error {
 	bpath := fset.String("binding", "", "binding file (with -system)")
 	pkg := fset.String("pkg", "app", "package of the test (with -system)")
 	quint := fset.String("quint", "quint", "quint binary")
+	out := fset.String("out", "", "write to this file (not overwritten) instead of standard output")
 	fset.Parse(args)
+	w, done, err := output(*out)
+	if err != nil {
+		return err
+	}
+	defer done()
 	if *system {
 		if *bpath == "" {
 			return fmt.Errorf("scaffold -system needs -binding (write one first: gotogether scaffold -spec model.qnt -module M)")
@@ -119,7 +126,7 @@ func scaffold(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Print(systemTest(*pkg, *bpath, b, m))
+		fmt.Fprint(w, systemTest(*pkg, *bpath, b, m))
 		return nil
 	}
 	if *spec == "" || *module == "" {
@@ -129,28 +136,28 @@ func scaffold(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\nconstants:\n", *module, *spec, *module)
+	fmt.Fprintf(w, "# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\nconstants:\n", *module, *spec, *module)
 	for _, c := range sortedKeys(m.Consts) {
-		fmt.Printf("  %s: ''   # %s\n", c, m.Consts[c])
+		fmt.Fprintf(w, "  %s: ''   # %s\n", c, m.Consts[c])
 	}
-	fmt.Printf("\nintern: {}      # arg: actor|process, for opaque ids the model names by small integers\n")
-	fmt.Printf("outcomes: {}    # ok/error/<custom> -> Quint expression, used as {{.outcome}}\n")
-	fmt.Printf("restart: ''     # parameterless action inserted when an actor's process changes\n\nactions:\n")
+	fmt.Fprintf(w, "\nintern: {}      # arg: actor|process, for opaque ids the model names by small integers\n")
+	fmt.Fprintf(w, "outcomes: {}    # ok/error/<custom> -> Quint expression, used as {{.outcome}}\n")
+	fmt.Fprintf(w, "restart: ''     # parameterless action inserted when an actor's process changes\n\nactions:\n")
 	for _, a := range m.ActionNames() {
 		if a == "init" || a == "step" {
 			continue // the state machine itself, not steps
 		}
-		fmt.Printf("  %s:   # %s\n", a, m.Signature(a))
+		fmt.Fprintf(w, "  %s:   # %s\n", a, m.Signature(a))
 		if ps := m.Actions[a]; len(ps) > 0 {
 			// the defaults, commented out: uncomment to map a field differently
-			fmt.Printf("    args:   # default: the step field of the same name\n")
+			fmt.Fprintf(w, "    args:   # default: the step field of the same name\n")
 			for _, p := range ps {
-				fmt.Printf("      # %s: '%s'   # %s\n", p.Name, p.DefaultTemplate(), p.Type)
+				fmt.Fprintf(w, "      # %s: '%s'   # %s\n", p.Name, p.DefaultTemplate(), p.Type)
 			}
 		}
-		fmt.Printf("    # expect: ''  # Quint bool over the post-state, from observed .obs.<name>\n")
+		fmt.Fprintf(w, "    # expect: ''  # Quint bool over the post-state, from observed .obs.<name>\n")
 	}
-	fmt.Printf("\ninvariants: []  # vals of %s: %s\n", *module, strings.Join(sortedKeys(m.Vals), ", "))
+	fmt.Fprintf(w, "\ninvariants: []  # vals of %s: %s\n", *module, strings.Join(sortedKeys(m.Vals), ", "))
 	return nil
 }
 
@@ -628,6 +635,24 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
+// output is the file at path, created (an existing one is not
+// overwritten: a scaffold is filled in by hand), or standard output.
+func output(path string) (w io.Writer, done func(), err error) {
+	if path == "" {
+		return os.Stdout, func() {}, nil
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scaffold: %v (a scaffold never overwrites: remove it or pick another -out)", err)
+	}
+	return f, func() {
+		if err := f.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "gotogether:", err)
+		}
+		fmt.Fprintln(os.Stderr, "wrote", path)
+	}, nil
+}
+
 // systemTest is a qtest.System test for the binding: a Run that deploys
 // nothing yet, one commented qobs.Record per bound or modelled action with
 // the fields the binding reads, a conformance test that fails until steps
@@ -677,10 +702,19 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-// system deploys the application, with mutation injected (0: none), in a
-// simulation made from c. Every workflow runs it: Explore (seeds),
-// qhegel.Shrink (Hegel), Sweep, Fuzz, Mutate.
-func system(mutation int) qtest.System {
+// Mutation is a bug the application can be built with, to show that the
+// checks catch it: Faithful is none.
+type Mutation int
+
+const (
+	Faithful Mutation = iota
+	Mutant            // name it for the bug it injects
+)
+
+// system deploys the application, with mutation m, in a simulation made
+// from c. Every workflow runs it: Explore (seeds), qhegel.Shrink (Hegel),
+// Sweep, Fuzz, Mutate.
+func system(m Mutation) qtest.System {
 	return qtest.System{Binding: %[2]q, Run: func(c qenv.Chooser) error {
 		s := qenv.New(c)
 		defer s.Close()
@@ -698,11 +732,8 @@ func system(mutation int) qtest.System {
 // The faithful application conforms through every seed's faults.
 func TestConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(0).Explore(t, qtest.ExploreConfig{Seeds: 30})
-	if len(x.Runs[0].Steps) == 0 {
-		t.Fatal("scaffold: Run records no steps yet: deploy the application in it and record its steps")
-	}
-	x.Expect(t, qtest.Conforms())
+	// until Run records steps, the exploration fails saying so
+	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
 }
 
 // A mutant must be caught, and how: say which check fails (Rejects,
@@ -710,8 +741,8 @@ func TestConforms(t *testing.T) {
 // fail proves nothing.
 func TestMutantIsCaught(t *testing.T) {
 	qtest.RequireQuint(t)
-	t.Skip("scaffold: inject a bug with system(1), state how it shows, and remove this line")
-	system(1).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
+	t.Skip("scaffold: inject a bug as Mutant, state how it shows, and remove this line")
+	system(Mutant).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
 }
 `, pkg, bpath, rec.String(), claim)
 }

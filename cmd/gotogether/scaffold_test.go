@@ -45,10 +45,28 @@ func TestScaffoldSystem(t *testing.T) {
 	cmd := exec.Command("go", "test", "-count=1", "-v", ".")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
-	if err == nil || !strings.Contains(string(out), "Run records no steps yet") {
-		t.Fatalf("want TestConforms to fail asking for steps, got (%v):\n%s", err, out)
+	if err == nil || !strings.Contains(string(out), "recorded a step") {
+		t.Fatalf("want TestConforms to fail saying no run recorded a step, got (%v):\n%s", err, out)
 	}
 	if !strings.Contains(string(out), "--- SKIP: TestMutantIsCaught") {
 		t.Fatalf("want it built and the mutant test skipped:\n%s", out)
+	}
+}
+
+// -out writes the scaffold to a file, and never over one: a scaffold is
+// filled in by hand.
+func TestScaffoldOut(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "system_test.go")
+	w, done, err := output(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = w.Write([]byte("package app\n"))
+	done()
+	if _, _, err := output(path); err == nil || !strings.Contains(err.Error(), "never overwrites") {
+		t.Errorf("a second scaffold to %s: %v, want it refused", path, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "package app\n" {
+		t.Errorf("the file holds %q", b)
 	}
 }

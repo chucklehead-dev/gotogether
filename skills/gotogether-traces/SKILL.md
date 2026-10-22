@@ -39,7 +39,7 @@ and the sinks.
 ## 2. Write the binding
 
 ```sh
-gotogether scaffold -spec model/bank.qnt -module bank > bank.binding.yaml
+gotogether scaffold -spec model/bank.qnt -module bank -out bank.binding.yaml
 ```
 
 ```yaml

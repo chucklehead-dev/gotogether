@@ -117,7 +117,7 @@ quint run model.qnt --main design --mbt --max-steps 5 --n-traces 1 --out-itf /tm
 # look at mbt::actionTaken and mbt::nondetPicks in /tmp/t.itf.json: every action
 # named, every parameter picked under its own name
 quint test model.qnt --main design                          # named `run ...Test` scenarios
-gotogether scaffold -spec model.qnt -module M                  # binding skeleton; parameters default to same-named step fields
+gotogether scaffold -spec model.qnt -module M -out m.binding.yaml   # binding skeleton; parameters default to same-named step fields
 ```
 
 Backends: `--backend rust` (default, fast) or `--backend typescript`.

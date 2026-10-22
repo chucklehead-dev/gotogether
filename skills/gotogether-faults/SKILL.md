@@ -82,7 +82,7 @@ qobs.Record(s.Context(), "settle", nil)
 - **Workload choices** (cancel or not, when) are schedule choices:
   `s.Choose("sched.client.cancel", 10)`.
 - **Start from a scaffold:** `gotogether scaffold -system -binding
-  app.binding.yaml -pkg app` prints a System test whose Run deploys
+  app.binding.yaml -pkg app -out system_test.go` writes a System test whose Run deploys
   nothing yet, a commented `qobs.Record` per action with the fields the
   binding reads, a conformance test that fails until steps are recorded,
   and a mutant test to fill in. `examples/hello` is the smallest one

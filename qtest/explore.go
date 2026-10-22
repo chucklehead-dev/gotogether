@@ -93,6 +93,15 @@ type ExploreConfig struct {
 	Chooser func(seed uint64) qenv.Chooser
 }
 
+func empty(runs []*Run) bool {
+	for _, r := range runs {
+		if len(r.Steps) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // explore runs the scenario once per seed and checks every run (System.Explore):
 // a run that fails to run (rather than to conform) fails t, naming its seed.
 func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(c qenv.Chooser) error) *Exploration {
@@ -179,6 +188,16 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		// a scenario failed t (t.Fatal from a run's goroutine ends only
 		// that run)
 		t.FailNow()
+	}
+	if empty(x.Runs) {
+		// an empty run conforms to any model: every run empty is a system
+		// that records nothing yet (or an unwoven build), not a pass
+		if c.SkipIfEmpty {
+			t.Skipf("gotogether: no run recorded a step (SkipIfEmpty)")
+		}
+		t.Fatalf("gotogether: no run of %d recorded a step: the system's Run deploys nothing that records yet. "+
+			"Record each model step where it takes effect (qobs.Record with the run's context, //quint:action, a double), "+
+			"or, for a build that may not be woven, give the System qtest.SkipIfEmpty()", len(x.Runs))
 	}
 	o := c.Options
 	o.Dir, o.NoITF = filepath.Join(c.Dir, "quint"), true
