@@ -1,0 +1,14 @@
+go 1.26.1
+
+use (
+	.
+	./examples/crossdb
+	./examples/edgepublish
+	./examples/fleetrollout
+	./examples/gosim
+	./examples/grpcledger
+	./examples/streams
+	./qanalysis
+	./qgosim
+	./qweave
+)

@@ -10,6 +10,8 @@ permissions:
 
 env:
   QUINT_VERSION: 0.33.0
+  # every module is tested on its own go.mod: go.work is for development
+  GOWORK: "off"
 
 jobs:
   test:
