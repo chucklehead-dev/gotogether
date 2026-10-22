@@ -1,7 +1,7 @@
-// Package load reads any of gotogether's trace inputs, detecting the format:
+// Package input reads any of gotogether's trace inputs, detecting the format:
 // OTLP/JSON (spans carrying quint.step events), the native step log (JSONL
 // of qtrace steps), or a model-level ITF trace.
-package load
+package input
 
 import (
 	"bytes"
@@ -42,16 +42,16 @@ func Sniff(data []byte) Format {
 	return Unknown
 }
 
-// Input is one file's contents: steps (OTLP, step log) or an ITF trace.
-type Input struct {
+// File is one file's contents: steps (OTLP, step log) or an ITF trace.
+type File struct {
 	Path   string
 	Format Format
 	Steps  []qtrace.Step
 	ITF    *itf.Trace
 }
 
-// File reads path. format may be "" or "auto" to detect it.
-func File(path string, format Format) (*Input, error) {
+// Read reads path. format may be "" or "auto" to detect it.
+func Read(path string, format Format) (*File, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func File(path string, format Format) (*Input, error) {
 	if format == "" || format == "auto" {
 		format = Sniff(data)
 	}
-	in := &Input{Path: path, Format: format}
+	in := &File{Path: path, Format: format}
 	switch format {
 	case OTLP:
 		in.Steps, err = otelio.ReadSteps(bytes.NewReader(data))

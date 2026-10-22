@@ -30,7 +30,7 @@ or `qhegel`, §10 before changing `qenv`, and §11 before changing
 connect/      MBT runtime (quint-connect parity); testdata/bank.qnt
 qhegel/       separate module: Hegel integration, and the core's Hegel-checked properties (qenv_test.go); testdata/bank.yaml
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
-qobs/ qtrace/ otelio/ convert/ load/   recording, schema/reconstruction, OTLP, span conversion, input sniffing
+qobs/ qtrace/ otelio/ convert/ input/  recording, schema/reconstruction, OTLP, span conversion, reading any trace input
 binding/ validate/ qtest/              binding YAML, quint-test-based validator, test helpers (Expect, Explore)
 qenv/         deterministic simulation: scheduler, virtual time, processes; Store, Queue, Service doubles;
               internal/choice (choosers, byte rule, rates) and internal/profile (virtual-time pprof), qenv's API

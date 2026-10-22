@@ -35,7 +35,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/convert"
-	"github.com/chucklehead-dev/gotogether/load"
+	"github.com/chucklehead-dev/gotogether/input"
 	"github.com/chucklehead-dev/gotogether/otelio"
 	"github.com/chucklehead-dev/gotogether/qlint"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -257,11 +257,11 @@ func readSteps(files []string, rules *convert.Rules) ([]qtrace.Step, error) {
 				continue
 			}
 		}
-		in, err := load.File(f, load.Unknown)
+		in, err := input.Read(f, input.Unknown)
 		if err != nil {
 			return nil, err
 		}
-		if in.Format == load.ITF {
+		if in.Format == input.ITF {
 			return nil, fmt.Errorf("%s is an ITF trace, not recorded steps", f)
 		}
 		all = append(all, in.Steps...)
@@ -379,7 +379,7 @@ func runValidate(args []string) (int, error) {
 		}
 	}
 	var steps []qtrace.Step
-	var itfs []*load.Input
+	var itfs []*input.File
 	for _, f := range fset.Args() {
 		if rules != nil {
 			cs, ok, err := convertFile(f, rules)
@@ -392,13 +392,13 @@ func runValidate(args []string) (int, error) {
 				continue
 			}
 		}
-		in, err := load.File(f, load.Format(*format))
+		in, err := input.Read(f, input.Format(*format))
 		if err != nil {
 			return 2, err
 		}
-		fmt.Printf("input %s: %s\n", f, map[load.Format]string{load.OTLP: "OTLP/JSON spans", load.StepLog: "native step log",
-			load.ITF: "model-level ITF", load.Unknown: "empty"}[in.Format])
-		if in.Format == load.ITF {
+		fmt.Printf("input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
+			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
+		if in.Format == input.ITF {
 			itfs = append(itfs, in)
 		} else {
 			steps = append(steps, in.Steps...)
@@ -514,7 +514,7 @@ func convertFile(path string, rules *convert.Rules) ([]qtrace.Step, bool, error)
 	if err != nil {
 		return nil, false, err
 	}
-	if load.Sniff(data) != load.OTLP {
+	if input.Sniff(data) != input.OTLP {
 		return nil, false, nil
 	}
 	tds, err := otelio.ReadTracesData(bytes.NewReader(data))

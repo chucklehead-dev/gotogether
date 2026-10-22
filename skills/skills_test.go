@@ -108,6 +108,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"Recovery.Judge", "the Recovery Recovers or Assess returns"},
 		{"CheckRuns", "Checker.CheckBatch"},
 		{"-noitf", "nothing: no ITF is the default (-itf writes it)"},
+		{"gotogether/load", "gotogether/input (input.Read)"},
 		{"Exploration.Coverage", "Exploration.Evidence().Faults"},
 		{"Exploration.CodeCoverage", "Exploration.Evidence().Code"},
 		{"Recorder.Env", "qhegel.Case.Env"},

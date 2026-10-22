@@ -483,7 +483,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qrun` | a run's state (`Key[T]`), from the context or the goroutine's run |
 | `qlint` | the simulation and weaving lints (`gotogether lint -sim`, `-weave`) |
 | `sktrace` | SimKube traces: events, lifecycles, rates and gauges as load shapes, pod lifetimes; `Lint` |
-| `load` | reads OTLP/JSON, a step log or ITF, detected by content |
+| `input` | reads a trace input (`Read`): OTLP/JSON, a step log or ITF, detected by content |
 | `skills` | the agent skills below, embedded, and their install |
 | `cmd/gotogether` | the CLI: `scaffold`, `lint`, `steps`, `validate`, `itf`, `convert`, `cover`, `skills` |
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
