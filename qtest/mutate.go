@@ -63,7 +63,8 @@ func (c MutationClaim) marked(m qmut.Mutant) bool {
 
 // Expect fails t unless the mutation run meets the claim, naming each
 // surviving mutant and how to mark it, and each mark that matched no
-// survivor (stale after the code moved).
+// survivor (stale after the code moved). One claim: NoSurvivors names
+// every equivalent mutant at once.
 func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
 	t.Helper()
 	var survived []string

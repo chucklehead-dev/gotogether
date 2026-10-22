@@ -19,7 +19,7 @@ type Recovery struct {
 	// Goodput (per second) over the Window before the trigger, and over the
 	// Window after the check window.
 	Before, After float64
-	// Baseline, if set, is the healthy goodput Judge compares After with,
+	// Baseline, if set, is the healthy goodput the verdict compares After with,
 	// instead of Before (Experiment.Healthy).
 	Baseline float64
 	// Offered is the open-loop load (per second) before the trigger, if
@@ -61,7 +61,8 @@ func (c RecoveryClaim) String() string {
 }
 
 // Expect fails t unless the run shows what c claims, naming the trigger
-// and the goodputs:
+// and the goodputs. It takes one claim, unlike an exploration's Expect: the
+// two exclude each other.
 //
 //	qload.Assess(x, "markPaid", spike, time.Minute, 1).Expect(t, qload.Recovered())
 func (r Recovery) Expect(t TB, c RecoveryClaim) {
@@ -135,15 +136,15 @@ func Recovers(cfg SimConfig, base float64, tr Trigger, within time.Duration) Rec
 	r := Recovery{Trigger: tr, Metrics: m, Offered: base, Baseline: base, Err: m.Err,
 		Before: m.Mean(tr.Start-Window, tr.Start, goodput),
 		After:  m.Mean(end+within, cfg.Horizon, goodput)}
-	r.Judge()
+	r.judge()
 	return r
 }
 
-// Judge sets Recovered from Before and After: goodput back to at least 90%
+// judge sets Recovered from Before and After: goodput back to at least 90%
 // of what it was, give or take two standard errors of the difference
 // (counts over a Window are roughly Poisson). Without the tolerance a
 // healthy run at a few requests per second fails one time in ten.
-func (r *Recovery) Judge() {
+func (r *Recovery) judge() {
 	if r.Err != nil {
 		r.Recovered = false
 		return
@@ -176,7 +177,7 @@ func Assess(x Experiment, goodput string, tr Trigger, within time.Duration, seed
 	r := Recovery{Trigger: tr, Series: series, Baseline: x.Healthy, Offered: x.Rate, Err: series.Err,
 		Before: series.Rate(goodput, tr.Start-Window, tr.Start),
 		After:  series.Rate(goodput, after, after+Window)}
-	r.Judge()
+	r.judge()
 	return r
 }
 

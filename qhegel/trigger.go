@@ -19,7 +19,7 @@ type TriggerSearch struct {
 // Expect states what the search should find: qload.SomeTrigger (one that
 // breaks the system) or qload.NoTrigger (none in the space). It fails t
 // with the shrunk trigger's run when one was not expected, and returns
-// the run.
+// the run. One claim: the two exclude each other.
 func (s *TriggerSearch) Expect(t testing.TB, c qload.TriggerClaim) *qload.Recovery {
 	t.Helper()
 	found := c.WantsTrigger()
