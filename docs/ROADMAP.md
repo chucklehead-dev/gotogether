@@ -492,7 +492,22 @@ X. R5 happens when the maintainer says.
 - **M6. The old repository.** Done: its README says where it went. The session could not delete its gosim-fork branch (refused); the maintainer deletes it and archives the repository. A final README commit pointing to
   gotogether; the maintainer archives it. Its gosim-fork branch goes once
   M4 is green.
-- **W9. API leftovers.**
+- **W9. API leftovers.** Done (W9a–f). Decided rather than changed:
+  - `Expect` stays single-claim where the claims exclude each other
+    (Recovery, TriggerSearch, MutationReport).
+  - `qload.TB` stays: qload does not import testing.
+  - `Settings`/`Resolve` stay exported, for qhegel as its own module.
+  - The three ways to install a global recorder are documented, one job
+    each.
+  - `AllowEmpty` and `SkipIfEmpty` are two things.
+  - Rates are an argument where nothing else applies.
+  - `QUINT_SEED`/`QUINT_VERBOSE` stay, for parity with quint-connect.
+  - `CommitFaults` stays opt-in, now tested.
+
+  Found on the way: crossdb's stamps moved on every write-back, and split
+  a create's pending and succeeded stamps (W9e).
+
+  The plan as written:
   - qhegel:
     - `NewRecorder` → `NewCase`; `Case.Choices()` → `Recorded()`.
     - FindViolation gets a config without the Mode and Rounds it

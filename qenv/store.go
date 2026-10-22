@@ -84,7 +84,13 @@ type Store struct {
 	Name string
 	Iso  Isolation
 	// CommitFaults enables the fault kind "store.commit": a commit that is applied
-	// but reported as ErrUnknownOutcome.
+	// but reported as ErrUnknownOutcome, a connection lost after the
+	// database committed. Off by default, unlike qenv.Service's crash
+	// window: a service's lost response is what every caller of a remote
+	// call must handle, where an unknown commit is the database driver's
+	// rarer case, and code with nothing to do about it (no way to read
+	// its own write back) would fail every exploration. Turn it on for
+	// code that claims to handle it.
 	CommitFaults bool
 
 	sim   *Sim
