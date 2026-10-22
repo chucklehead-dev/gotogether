@@ -48,7 +48,7 @@ type Sim struct {
 	// 100 ms period would give the fast ones no crash at all.
 	NemesisEvery time.Duration
 	// Check makes the scheduler verify its own invariants at every step
-	// and panic on a violation (also on with QENV_CHECK=1). For tests of
+	// and panic on a violation (also on with GOTOGETHER_CHECK=1). For tests of
 	// qenv and of code that extends it; it costs O(tasks) per step.
 	Check bool
 
@@ -141,7 +141,7 @@ func New(c Chooser) *Sim {
 		base = rc // the run it is created in (qrun.Start, an enclosing simulation)
 	}
 	s := &Sim{c: c, base: base, now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
-		Check: os.Getenv("QENV_CHECK") == "1", creator: goid()}
+		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid()}
 	own(s.creator, s, nil)
 	live.Add(1)
 	return s

@@ -36,7 +36,7 @@ examples/glomers/maelstrom.sh                # under real Maelstrom (Java 11+, g
     message body. Maelstrom rejects extra keys in replies to clients and
     services, so those don't carry it.
   - Under Maelstrom each node writes its own step log
-    (`$QUINT_STEPS_DIR/<node>.jsonl`). `gotogether validate` merges the logs
+    (`$GOTOGETHER_STEPS_DIR/<node>.jsonl`). `gotogether validate` merges the logs
     by those clocks, so a delivery is ordered after its send.
 - **`Sim`** is a deterministic in-process network. Nothing happens unless
   the test says so:

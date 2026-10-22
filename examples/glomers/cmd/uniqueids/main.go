@@ -1,7 +1,7 @@
-// Command uniqueids is challenge 2 under Maelstrom. With $QUINT_STEPS_DIR
+// Command uniqueids is challenge 2 under Maelstrom. With $GOTOGETHER_STEPS_DIR
 // set, each node writes its model steps to <dir>/<node>.jsonl:
 //
-//	QUINT_STEPS_DIR=/tmp/steps maelstrom test -w unique-ids --bin uniqueids --time-limit 30 --rate 1000 \
+//	GOTOGETHER_STEPS_DIR=/tmp/steps maelstrom test -w unique-ids --bin uniqueids --time-limit 30 --rate 1000 \
 //	    --node-count 3 --availability total --nemesis partition
 //	gotogether validate -binding ../../uniqueids/uniqueids.binding.yaml /tmp/steps/*.jsonl
 package main

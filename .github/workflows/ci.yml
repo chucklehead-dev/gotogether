@@ -42,7 +42,7 @@ jobs:
           go build -C qanalysis -o "$RUNNER_TEMP/quintvet" ./cmd/quintvet
           "$RUNNER_TEMP/quintvet" -quintweave=false ./...
       - name: test (qenv self-checks)
-        run: QENV_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
+        run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
         run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s ./examples/checkout/
       - name: code coverage by model step (checkout woven by qweave -cover)
@@ -258,9 +258,9 @@ jobs:
           test -z "$(gofmt -l . | tee /dev/stderr)"
           go vet ./...
           go run -C ../.. ./cmd/gotogether lint -sim examples/streams
-      - name: test (simulated log with QENV_CHECK, Kafka on kfake, Kinesis on a fake endpoint)
+      - name: test (simulated log with GOTOGETHER_CHECK, Kafka on kfake, Kinesis on a fake endpoint)
         run: |
-          QENV_CHECK=1 go test -short -count=1 ./...
+          GOTOGETHER_CHECK=1 go test -short -count=1 ./...
           go test -count=1 -timeout 30m ./...
       - name: fuzzing the faithful pipeline
         run: go test -run '^$' -fuzz FuzzFaithful -fuzztime 30s .

@@ -364,7 +364,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   object must be one of its tasks (call `Close` from a task, not from the
   test goroutine). Woven calls look up the goroutine (about 1 µs), so
   weave test builds only.
-- Run qenv's tests, and tests of new doubles, with `QENV_CHECK=1`: the
+- Run qenv's tests, and tests of new doubles, with `GOTOGETHER_CHECK=1`: the
   scheduler checks its invariants at every step. CI does.
 - A recovery verdict needs a healthy baseline (`Experiment.Healthy`):
   without one `Assess` returns `Recovery.Err`, since a system already

@@ -1033,7 +1033,7 @@ the same workarounds kept appearing in examples. They are now in the core.
 - **Crashes per virtual second** (`Sim.NemesisEvery`). Load multiplies
   scheduling steps per second, so a per-step crash rate turns into a
   crash storm. Experiments with faults use one crash choice per second.
-- **The scheduler checks itself.** `Sim.Check` (or `QENV_CHECK=1`)
+- **The scheduler checks itself.** `Sim.Check` (or `GOTOGETHER_CHECK=1`)
   verifies, at every step, that:
   - the run queue agrees with the queued flags;
   - no task is both queued and waiting;
@@ -2090,7 +2090,7 @@ and found 30 inputs reaching new code. The cache also deduplicates
 identical runs within one exploration. CI fuzzes the faithful shop for 60
 s.
 
-**Found on the way.** The scheduler's self-check (`QENV_CHECK=1`) failed
+**Found on the way.** The scheduler's self-check (`GOTOGETHER_CHECK=1`) failed
 on a test with frequent crashes: "task is past its deadline and not
 runnable". A task killed while it waits keeps its deadline and rightly
 never runs again. The check excluded killed tasks in its timer clause but

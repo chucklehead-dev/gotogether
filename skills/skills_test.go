@@ -110,6 +110,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"quint" + "hegel", "qhegel"},
 		{"quint-connect" + "-go", "gotogether"},
 		{"casselc/" + "quint", "chucklehead-dev/gotogether"},
+		{"QENV_" + "CHECK", "GOTOGETHER_CHECK"},
+		{"QUINT_" + "STEPS_DIR", "GOTOGETHER_STEPS_DIR"},
 	}
 	for old, now := range Renamed {
 		deprecated = append(deprecated, struct{ text, instead string }{old + "`", now + "`"},

@@ -1,8 +1,8 @@
 // Command broadcast is challenge 3 (3a-3e) under Maelstrom, gossiping on a
-// spanning tree of fan-out 4. With $QUINT_STEPS_DIR set, each node writes
+// spanning tree of fan-out 4. With $GOTOGETHER_STEPS_DIR set, each node writes
 // its model steps to <dir>/<node>.jsonl:
 //
-//	QUINT_STEPS_DIR=/tmp/steps maelstrom test -w broadcast --bin broadcast --node-count 5 --time-limit 20 \
+//	GOTOGETHER_STEPS_DIR=/tmp/steps maelstrom test -w broadcast --bin broadcast --node-count 5 --time-limit 20 \
 //	    --rate 10 --nemesis partition
 //	gotogether validate -binding ../../broadcast/broadcast.binding.yaml /tmp/steps/*.jsonl
 package main

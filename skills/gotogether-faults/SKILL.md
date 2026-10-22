@@ -158,7 +158,7 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   one option list: `qenv.Faults` panics if a second declaration differs.
   `qenv.FaultPoint` declares its own (its errors' names, `crash`).
 - **Extending qenv** (a new double, a scheduler change): run its tests
-  with `QENV_CHECK=1` (or `s.Check = true`). The scheduler then verifies
+  with `GOTOGETHER_CHECK=1` (or `s.Check = true`). The scheduler then verifies
   its own invariants at every step. `TestSchedulerSemantics` states its
   semantics as a Hegel property over random programs.
 - **Profiles:** run each property under every contract you might run

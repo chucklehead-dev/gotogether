@@ -2,7 +2,7 @@
 //
 //	maelstrom test -w g-counter --bin gcounter --node-count 3 --rate 100 --time-limit 20 --nemesis partition
 //
-// With $QUINT_STEPS_DIR set, each node writes its model steps to
+// With $GOTOGETHER_STEPS_DIR set, each node writes its model steps to
 // <dir>/<node>.jsonl:
 //
 //	gotogether validate -binding ../../gcounter/gcounter.binding.yaml /tmp/steps/*.jsonl

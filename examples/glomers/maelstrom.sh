@@ -35,7 +35,7 @@ for c in ${@:-echo uniqueids broadcast gcounter kafka}; do
     *) echo "unknown challenge $c"; exit 2 ;;
   esac
   echo "=== $c: maelstrom test ${args[*]}"
-  (cd "$OUT" && QUINT_STEPS_DIR="$steps" "$MAELSTROM" test --bin "$OUT/bin/$c" "${args[@]}" 2>&1 | tail -1) | tee "$OUT/$c.result"
+  (cd "$OUT" && GOTOGETHER_STEPS_DIR="$steps" "$MAELSTROM" test --bin "$OUT/bin/$c" "${args[@]}" 2>&1 | tail -1) | tee "$OUT/$c.result"
   grep -q "Everything looks good" "$OUT/$c.result" || status=1
   [ "$c" = kafka ] && continue
   for b in "$c"/*.binding.yaml; do
