@@ -1,6 +1,31 @@
 # gotogether
 
-Test Go code against [Quint](https://quint-lang.org) specifications.
+Test Go code against [Quint](https://quint-lang.org) specifications: the
+model drives the code, judges what it did, or both, in tests, in a
+simulated environment full of faults, and in production.
+
+## Quickstart
+
+```sh
+git clone https://github.com/chucklehead-dev/gotogether && cd gotogether
+npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.26.1
+cd examples/hello && go test -v .         # under a minute, most of it building
+```
+
+That ran [examples/hello](examples/hello): a counter behind a network
+that loses and duplicates messages, a client that retries, and one bug (a
+counter that forgets to dedupe). Its tests:
+- explore 30 seeded runs of the faithful counter, every one checked by a
+  Quint model (`hello.qnt`), through the faults;
+- show that the bug is caught, and only when a fault makes the client
+  retry;
+- let Hegel shrink the bug's failure to the one fault it needs.
+
+Read `hello.go` and `hello_test.go` (130 lines together), then pick a
+workflow from the table below. Agents start from the `gotogether-start`
+skill (`gotogether skills install`).
+
+## What it does
 
 gotogether is the Go counterpart of
 [quint-connect](https://github.com/quint-co/quint-connect) (model-based
@@ -22,15 +47,15 @@ testing, where Quint traces drive the implementation). It adds:
   smallest trigger.
 
 ```
-                     ┌──────────── one Quint model ────────────┐
-  connect            │  quint run --mbt ──► traces ──► Driver   │  the model drives Go (quint-connect)
-  qhegel.VaryTraces  │  traces + Hegel draws ──► Driver         │  the model drives, Hegel varies the details
-  qhegel.Test    │  Hegel rules ──► Go ──► steps ──► model  │  Hegel drives Go, the model judges and shrinks
-  qobs/convert/      │  running Go ──► steps / OTel / spans     │  the code reports, the model checks
-  validate           │        ──► binding ──► quint test        │  (tests, CI, staging, production)
-  qenv + qtest.      │  Go in a simulated environment, faults   │  Hegel or seeds choose schedules and faults,
-  Explore            │  chosen ──► steps ──► model              │  the model judges every run
-                     └──────────────────────────────────────────┘
+                    ┌────────────── one Quint model ──────────────┐
+ connect            │ quint run --mbt ──► traces ──► Driver       │ the model drives Go (quint-connect)
+ qhegel.VaryTraces  │ traces + Hegel draws ──► Driver             │ the model drives, Hegel varies the details
+ qhegel.Test        │ Hegel rules ──► Go ──► steps ──► model      │ Hegel drives Go, the model judges and shrinks
+ qobs, convert,     │ running Go ──► steps, OTel, spans           │ the code reports, the model checks
+ validate           │   ──► binding ──► quint test                │ (tests, CI, staging, production)
+ qenv,              │ Go in a simulated environment, faults       │ seeds or Hegel choose schedules and faults,
+ System.Explore     │   chosen ──► steps ──► model                │ the model judges every run
+                    └─────────────────────────────────────────────┘
 ```
 
 **Which tool for which question** (the `gotogether-start` skill has the same
@@ -46,22 +71,36 @@ table for agents):
 | Does it recover after a spike or a slow dependency? | `qmeta`, `qload`, `qhegel.FindTrigger`, alert rules from the chain |
 | My model is in Choreo | named transitions over `choreo::step_with`, then any of the above ([examples/twophase](examples/twophase)) |
 
-Status: early (v0.x). The API may change. It is migrated from the
-spike in casselc/observability, where it checks an OTel exporter
-against its protocol model (see `examples/edgepublish`).
+Status: early, not yet released: the API may change. It grew out of a
+spike in casselc/observability, where it checks an OTel exporter against
+its protocol model (`examples/edgepublish`).
 
 ## Install
 
 ```sh
-go get github.com/chucklehead-dev/gotogether@latest     # Go ≥ 1.26.1 (hegel-go's minimum)
-npm install -g @informalsystems/quint                 # quint ≥ 0.32 on PATH
-go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # optional CLI
+go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.1 (hegel-go's minimum)
+npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
+go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills
+go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 ```
 
 Quint's Rust backend is the default. If quint cannot download its
-evaluator, either run `ci/install-quint.sh` or set
+evaluator, run `ci/install-quint.sh` from a clone, or set
 `QUINT_BACKEND=typescript`. hegel-go embeds its engine, so it needs no
 Python and no server.
+
+## Environment variables
+
+| Variable | What it does |
+|---|---|
+| `GOTOGETHER_SEED=n` | runs an exploration's seed n alone (a failing run's report prints the command) |
+| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
+| `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
+| `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step |
+| `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |
+| `GOTOGETHER_STEPS_DIR` | where the Glomers nodes write their step logs under Maelstrom |
+| `QUINT_BACKEND` | `rust` or `typescript`, for connect, validate and qtest alike |
+| `QUINT_BIN`, `QUINT_SEED`, `QUINT_VERBOSE`, `QUINT_MAX_SAMPLES`, `QUINT_MAX_STEPS` | connect's `quint run`, as in quint-connect |
 
 ## 1. The model drives Go (`connect`, like quint-connect)
 
@@ -488,6 +527,8 @@ examples/crossdb/kind/demo.sh                   # kind + Crossplane; MUTATION=no
 ## Agent skills and guidance
 
 The skills in [`skills/`](skills) teach a coding agent this toolkit:
+- `gotogether-start`: start here. Which tool for which question, a
+  glossary, the first hour, and which skill to load next;
 - `gotogether-model`: model conventions;
 - `gotogether-mbt`: drivers;
 - `gotogether-traces`: instrumentation, bindings and verdicts;

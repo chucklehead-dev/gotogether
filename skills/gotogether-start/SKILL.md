@@ -27,6 +27,49 @@ references when the task needs them.
 | I am starting a component or an example, or setting up CI | the end-to-end workflow and triage | gotogether-workflow |
 | A test failed: whose bug is it? | the verdict table and triage | gotogether-workflow (its verdicts reference) |
 
+## The first hour
+
+1. Run the smallest example: `cd examples/hello && go test -v .` (from a
+   clone, with quint on PATH).
+2. Read it, in this order: `model/hello.qnt` (what may happen),
+   `hello.binding.yaml` (recorded steps to the model's actions),
+   `hello.go` (the system, written against qenv's seams), `hello_test.go`
+   (the system explored by seeds, a mutant caught, Hegel shrinking it).
+3. For your component, write the model first and simulate its
+   invariants (`quint run --invariant`): gotogether-model.
+4. Scaffold a binding and a System test, then record each model step
+   where it takes effect, until the faithful system conforms.
+5. Add a mutant and state how it is caught (`Rejects`, `Mismatch`,
+   `Violates`). A check no mutant can fail proves nothing.
+6. Let Hegel shrink the mutant's failure (`qhegel.Shrink`), and carry the
+   model to the real environment (`gotogether validate`).
+
+## Glossary
+
+- **Model**: the Quint spec, the ground truth. A failing check means
+  fixing the code or, deliberately, the model.
+- **Step**: one model action the code took, recorded with its arguments,
+  its outcome and observations (`obs.<name>`) where it took effect.
+- **Binding**: YAML mapping recorded steps to the model's actions, their
+  arguments and expected post-states.
+- **Run**: one execution's steps; with qenv, also the choices that made
+  it (replayable).
+- **System**: an application bound to its model (`qtest.System`): every
+  workflow (Explore, Sweep, Fuzz, Mutate, Shrink) runs its `Run`.
+- **Chooser**: what makes every choice of a simulated run: schedules,
+  faults, delays. Seeded, Hegel's, a replay, a script.
+- **Fault kind**: a named fault a double declares (`rpc.counter.request`:
+  `drop`, `duplicate`). Option 0 of every choice is nominal: no fault, so
+  shrinking removes faults.
+- **Seam**: an interface the code uses for its environment (`qenv.DB`, a
+  service, `qenv.Now`), so a double can stand in for it.
+- **Claim**: what a test expects of its runs: `Conforms`, `Rejects`
+  (a step the model cannot take), `Mismatch` (a state the model did not
+  expect), `Violates` (an invariant), over runs `Some`, `All`, `None`.
+- **Mutant**: the system with a bug on purpose, to show a check can fail.
+- **Weaving**: rewriting code at build time (`qweave`, Orchestrion) to
+  record steps or simulate `sync` without changing the source.
+
 ## First commands
 
 ```sh
