@@ -153,7 +153,7 @@ Everything else is generic.
 | | |
 |---|---|
 | `qtest.Record(t, binding, scenario).Expect(t, qtest.Conforms())` | record a scenario in a test and check it; `qtest.Validate` takes steps recorded elsewhere; `.Expect(t, qtest.Mismatch("deposit"))` states how a mutant must show up |
-| `validate.NewChecker(binding, opts)`, `.Check(ctx, steps)`, `.CheckRuns(ctx, runs, n)` | the library entry points |
+| `validate.NewChecker(binding, opts)`, `.Check(ctx, steps)`, `.CheckBatch(ctx, runs, n)` | the library entry points |
 | `validate.ValidateITF(ctx, trace, ITFOptions{...})` | a model-level ITF, including raw `quint run --mbt` output |
 | `gotogether validate [-binding b.yaml] [-convert r.yaml] FILE...` | from files (OTLP/JSON, step log or ITF, detected by content); exit 0 conforms, 1 violation, 2 error |
 | `gotogether steps FILE...`, `gotogether itf -binding b.yaml -out DIR FILE...` | look at the reconstructed order; write model-level ITF |

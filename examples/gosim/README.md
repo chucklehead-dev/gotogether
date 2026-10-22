@@ -57,12 +57,12 @@ module of its own that runs on gosim's runtime. Hegel cannot run in there
 | `broadcast.TestReplayIsDeterministic` | `qenv.ChoiceLog`, then `qenv.Replay` | none | identical steps from the same ~5500 choices |
 | `broadcast.TestReadOwnOnlyRejected` | `qenv.NewSeeded` | `ReadOwnOnly` | `qtest.Mismatch("read")` |
 | `broadcast.TestHegelFindsNoRetry` (not `-short`) | `qhegel.Choices` | `NoRetry` | `qhegel.FindViolation`: `convergedWhenSettled`, shrunk to gossip lost to an isolated node |
-| `edgepublish.TestExploredRunsConformOnGosim` | `qtest.Explore`, crashes of the exporter's machine | none | conforms |
-| `edgepublish.TestInvariantsHoldWithoutAmbiguousWritesOnGosim` | `qtest.Explore` | none, no ambiguous writes | conforms, invariants hold |
-| `edgepublish.TestMutantsOnGosim` | `qtest.Explore`, no crashes | `ManifestBeforeTable` | `qtest.Rejects("writeManifest")` |
+| `edgepublish.TestExploredRunsConformOnGosim` | `System.Explore`, crashes of the exporter's machine | none | conforms |
+| `edgepublish.TestInvariantsHoldWithoutAmbiguousWritesOnGosim` | `System.Explore` | none, no ambiguous writes | conforms, invariants hold |
+| `edgepublish.TestMutantsOnGosim` | `System.Explore`, no crashes | `ManifestBeforeTable` | `qtest.Rejects("writeManifest")` |
 | | | `NoRotationLock` | a rotation or write the model rejects (29 of 30 runs) |
-| `checkout.TestFaithfulConformsOnGosim` | `qtest.Explore`, crashes 1 in 20 | none, at each isolation level | conforms |
-| `checkout.TestMutantsOnGosim` | `qtest.Explore` | `LockWithoutWrite` at snapshot isolation | a ship or cancel the model rejects (write skew) |
+| `checkout.TestFaithfulConformsOnGosim` | `System.Explore`, crashes 1 in 20 | none, at each isolation level | conforms |
+| `checkout.TestMutantsOnGosim` | `System.Explore` | `LockWithoutWrite` at snapshot isolation | a ship or cancel the model rejects (write skew) |
 | | | `NoIdempotencyKey` | `chargedAtMostOnce` or `settledCorrectly` violated |
 
 ## What it showed

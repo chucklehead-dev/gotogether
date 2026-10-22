@@ -81,7 +81,7 @@ document the gap (as glomers does for the scheme model).
   own fault rules, so Hegel schedules losses, partitions, timers and
   restarts. For services with stores, queues and remote calls, deploy
   them into a `qenv` simulation (the gotogether-faults skill). Then
-  explore seeds with `qtest.Explore`, and shrink with `qhegel.Choices`.
+  explore seeds with `System.Explore`, and shrink with `qhegel.Choices`.
 
 State what a set of runs must show with claims:
 - an expectation alone is about some run (`Conforms()` about every run);

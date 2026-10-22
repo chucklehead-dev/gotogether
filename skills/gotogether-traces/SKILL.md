@@ -87,7 +87,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
 
   On a miss, the failure message is the report.
 - In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use
-  `CheckRuns` for many runs in parallel.
+  `CheckBatch` for many runs in one quint process per chunk.
 - From files: `gotogether validate -binding b.yaml FILE...`. FILE may be
   OTLP/JSON, a step log or ITF, detected by content. Add
   `-convert rules.yaml` for plain app spans. Exit status: 0 OK,

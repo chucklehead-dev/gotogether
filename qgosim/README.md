@@ -18,7 +18,7 @@ match (Go 1.26); gosim names the fix under another.
 - On the host:
   - `Run(t, pkg, test, chooser, env...)` runs a simulated test and
     returns its steps;
-  - `Scenario` is the same, for `qtest.Explore`.
+  - `Scenario` is the same, for `System.Explore`.
 
 The fork:
 - ports gosim to Go 1.26;

@@ -13,7 +13,7 @@ its load behaviour in a fifth:
   judges, or the model drives and Hegel varies.
 - **Trace validation** (`qobs`, `qtrace`, `otelio`, `convert`, `binding`,
   `validate`, `qtest`): recorded runs are checked by the model.
-- **Simulated environments** (`qenv`, `qtest.Explore`): the system runs
+- **Simulated environments** (`qenv`, `System.Explore`): the system runs
   deterministically against fault-injecting doubles, every choice made by
   Hegel or a seed, every run checked by the model.
 - **Metastability** (`qload`, `qmeta`): whether a system recovers after a
@@ -143,10 +143,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   `skills/<name>/references/*.md`, linked from its SKILL.md with when to
   read each; verdicts and expectations are in
   `gotogether-workflow/references/verdicts.md`. `skills_test.go`
-  checks every link resolves, and fails on removed identifiers
-  (qtest.Check, RecordAndCheck, qtest.Explore(binding), SweepExplore,
-  Explored, the free qtest.Expect, DurableFileSink, `step [i]`): when
-  removing an API, add it to `TestSkillsAvoidDeprecated`.
+  checks every link resolves, and fails on removed identifiers and old
+  names in the skills, README.md, AGENTS.md and the examples' READMEs
+  (`TestSkillsAvoidDeprecated` lists them): when removing an API, add it
+  there.
 - Skills live in `skills/<name>/SKILL.md`, never directly in `.agents/` or
   `.claude/`, which only hold symlinks to them. Add a symlink in both when
   adding a skill (`skills_test.go` checks it). A skill's front-matter
@@ -311,7 +311,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   per step (`DefaultRates` 1 in 200), not per operation. Under load that
   means far more crashes per second: set `Sim.NemesisEvery`
   (`qload.Experiment` does when it injects faults).
-- Simulated runs record into their own recorder. `qtest.Explore` runs
+- Simulated runs record into their own recorder. `System.Explore` runs
   seeds in parallel, each with a recorder in the chooser's context
   (`qenv.WithContext`, `qobs.WithRecorder`). A step without it in its
   context finds its run through its goroutine: qenv registers each
@@ -347,7 +347,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - A task killed by a crash stays frozen while the simulation runs (no
   deferred code runs), and unwinds at `Close`. Steps recorded while it
   unwinds (`//quint:action` records on return) are not in the run: they
-  go to `Recorder.Interrupted`, and `qtest.Explore` reports them with a
+  go to `Recorder.Interrupted`, and `System.Explore` reports them with a
   failing run (`qobs.SetDiscard`). A task that crashes its own process
   stops in `Crash`; restart from an `OnCrash` hook.
 - A step recorded by the caller on return describes what the caller saw.

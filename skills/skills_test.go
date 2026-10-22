@@ -87,7 +87,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qtest.RecordAndCheck", "qtest.Record(...).Expect"},
 		{"qtest.Explore(", "qtest.System{...}.Explore"},
 		{"qtest.SweepExplore", "System.Sweep"},
-		{"Explored", "qtest.Run"},
+		{"qtest.Explored", "qtest.Run"},
 		{"qtest.Expect(", "Run.Expect (qtest.Validate(...).Expect)"},
 		{"DurableFileSink", "qobs.FileSink (durable)"},
 		{"qenv.Recorder", "qenv.ChoiceLog"},
@@ -103,6 +103,14 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"x.Coverage()", "x.Evidence().Faults"},
 		{"x.CodeCoverage()", "x.Evidence().Code"},
 		{"step [", `"step N" (reports number steps from 1)`},
+		{"Sweep.Expect", "SweepConfig.Expect"},
+		{"ExploreConfig.Opts", "System.Opts"},
+		{"Recovery.Judge", "the Recovery Recovers or Assess returns"},
+		{"CheckRuns", "Checker.CheckBatch"},
+		{"Exploration.Coverage", "Exploration.Evidence().Faults"},
+		{"Exploration.CodeCoverage", "Exploration.Evidence().Code"},
+		{"Recorder.Env", "qhegel.Case.Env"},
+		{"Swept", "qtest.SweepResult"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},
@@ -117,19 +125,39 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		deprecated = append(deprecated, struct{ text, instead string }{old + "`", now + "`"},
 			struct{ text, instead string }{old + "/", now + "/"})
 	}
-	_ = fs.WalkDir(FS(), ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
-			return err
-		}
-		b, _ := fs.ReadFile(FS(), p)
+	check := func(p string, b []byte) {
 		for _, dep := range deprecated {
 			if strings.Contains(string(b), dep.text) {
 				t.Errorf("%s mentions %s, which is gone: use %s", p, dep.text, dep.instead)
 			}
 		}
+		// the free function: qtest.ExploreConfig is fine
+		if freeExplore.Match(b) {
+			t.Errorf("%s mentions qtest.Explore, which is gone: use System.Explore (qtest.System{...}.Explore)", p)
+		}
+	}
+	_ = fs.WalkDir(FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return err
+		}
+		b, _ := fs.ReadFile(FS(), p)
+		check(p, b)
 		return nil
 	})
+	// the docs a user reads first; DESIGN.md and HISTORY.md are records,
+	// in the names of their time
+	docs, _ := filepath.Glob("../examples/*/README.md")
+	docs = append(docs, "../README.md", "../AGENTS.md", "../qgosim/README.md", "../docs/instrumentation.md")
+	for _, p := range docs {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check(strings.TrimPrefix(p, "../"), b)
+	}
 }
+
+var freeExplore = regexp.MustCompile(`qtest\.Explore\b[^C]`)
 
 // Every new name is a skill, and an old install is removed only where its
 // SKILL.md names it.
