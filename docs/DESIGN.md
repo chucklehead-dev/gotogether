@@ -458,40 +458,8 @@ The stand-in's binding should then apply unchanged.
 
 ## 8. Roadmap
 
-1. **Now (this spike):**
-   - generic core: schema, recorder, OTLP I/O, reconstructor, binding with
-     lint and scaffold, `quint test`-based validator, ITF, connect;
-   - Orchestrion aspects;
-   - the edgePublish binding;
-   - demo scenarios, MBT and round-trip tests;
-   - direct emission (§6b): step log, model-level ITF, `ValidateITF`
-     (including `quint run --mbt` traces), `qtest`.
-2. **Real exporter:** the five edits above, behind the Orchestrion build
-   only. Run the collector's own tests woven, and validate their telemetry
-   (`Checker` from `go test`). PBT/state-machine tests can feed
-   `Checker.Check` directly.
-3. **Hidden nondeterminism:** an Apalache mode (step-indexed module; error
-   outcomes as `any {…}`), or S3 observation as a second recorder.
-4. **Consumer side:**
-   - a recorder in the central consumer;
-   - `traceparent` in manifests, so each claim is linked to its manifest write;
-   - multi-actor merge into one model instance.
-5. **Live operation:**
-   - a collector processor or connector that tails `quint.step` events;
-   - validation in windows, seeded from the last conforming state;
-   - alerting on disabled, state or invariant verdicts and on gaps.
-   Budget ~7 µs per step (measured) on the hot path. A push is 4 steps,
-   against S3 PUTs measured in milliseconds.
-6. **Direct emission:** a Quint evaluator for picks (or `quint` evaluating
-   the binding's defs), so model-level ITF can take operator calls; and a
-   streaming ITF writer for long simulations. Today the ITF is built at the
-   end, from buffered steps.
-7. **Tooling:**
-   - statement-level `//quint:step`;
-   - `gotogether lint` also checking annotation expression types against
-     `quint typecheck` parameter types;
-   - a writer-only `step` in edgePublish for denser MBT traces;
-   - the Rust evaluator backend for speed.
+The spike's roadmap is done. What came after is in docs/HISTORY.md; what
+is open, in docs/ROADMAP.md.
 
 ## 9. After the move: quint-connect parity, Hegel, conversion
 
@@ -1828,7 +1796,7 @@ run conforms.
 
 The fault coverage of §15.11 says which faults runs tried. This says which
 code they ran, step by step, so coverage can be read against the model
-(docs/ROADMAP.md A1).
+(docs/HISTORY.md, A1).
 
 **Why weave, not Go's `-cover`.**
 - Go's counters are global to the process: runs in parallel (Explore's

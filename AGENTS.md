@@ -69,7 +69,7 @@ examples/edgepublish  separate module (Orchestrion); the spike's real-world case
                       sim/: the publisher, unchanged, in qenv by weaving (qweave go test ./sim/, as CI does)
 examples/gosim        separate module; on gosim via qgosim: broadcast/ (Glomers node over TCP), checkout/ (the saga on
                       qenv's native runtime); simulated tests //go:build sim, host tests make the choices (DESIGN §14, §15.1)
-docs/         DESIGN.md, instrumentation.md
+docs/         DESIGN.md (why), ROADMAP.md (what is open), HISTORY.md (what is done, and the reviews), instrumentation.md
 ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API rate limits)
 ```
 

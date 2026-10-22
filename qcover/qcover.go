@@ -1,6 +1,6 @@
 // Package qcover measures which code each model step ran: block coverage
 // attributed to steps, so a run's coverage can be read against the model
-// (DESIGN.md §17, docs/ROADMAP.md A1).
+// (DESIGN.md §17, docs/HISTORY.md, A1).
 //
 // Code is instrumented by qweave (`qweave -cover go test ./...`): each
 // block of the root module's packages calls Hit on entry and the file
