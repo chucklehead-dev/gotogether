@@ -6,6 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/service/kinesis v1.56.6
 	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20261020234411-c06330b92452
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0
@@ -28,3 +29,5 @@ require (
 )
 
 replace github.com/chucklehead-dev/gotogether => ../..
+
+replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel

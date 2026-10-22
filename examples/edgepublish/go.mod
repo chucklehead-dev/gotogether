@@ -5,8 +5,10 @@ go 1.26.1
 require (
 	github.com/DataDog/orchestrion v1.13.1
 	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
+	hegel.dev/go/hegel v0.9.27
 )
 
 require (
@@ -120,7 +122,8 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260831171406-18b4a7587f8a // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	hegel.dev/go/hegel v0.9.27 // indirect
 )
 
 replace github.com/chucklehead-dev/gotogether => ../..
+
+replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel

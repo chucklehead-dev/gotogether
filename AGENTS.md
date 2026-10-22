@@ -28,7 +28,7 @@ or `qhegel`, §10 before changing `qenv`, and §11 before changing
 
 ```
 connect/      MBT runtime (quint-connect parity); testdata/bank.qnt
-qhegel/   Hegel integration; testdata/bank.yaml
+qhegel/       separate module: Hegel integration, and the core's Hegel-checked properties (qenv_test.go); testdata/bank.yaml
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
 qobs/ qtrace/ otelio/ convert/ load/   recording, schema/reconstruction, OTLP, span conversion, input sniffing
 binding/ validate/ qtest/              binding YAML, quint-test-based validator, test helpers (Expect, Explore)
@@ -128,8 +128,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   picks, the field, and the fix (see `connect`'s "anonymous action" and
   "no mbt::actionTaken" errors). Tests assert on these messages, so keep
   them stable.
-- Keep the core free of heavy dependencies: OTel, yaml.v3 and hegel only.
-  Orchestrion stays in examples.
+- Keep the core free of heavy dependencies: OTel and yaml.v3 only. Hegel
+  (and purego, which it loads) is qhegel's, a module of its own, so a
+  program that records steps does not depend on it; a core test that
+  needs Hegel lives in qhegel's module. Orchestrion stays in examples.
 - Any `//quint:action` expression may only use parameters, the receiver
   and named results. Methods called only from annotations (like
   `Publisher.actor`) look unused to linters: mark them, don't delete them.

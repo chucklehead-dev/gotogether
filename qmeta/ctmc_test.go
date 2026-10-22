@@ -5,11 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/qhegel"
-
 	"github.com/chucklehead-dev/gotogether/qload"
 	"github.com/chucklehead-dev/gotogether/qmeta"
-	"hegel.dev/go/hegel"
 )
 
 func example(lambda float64) *qmeta.Chain {
@@ -62,24 +59,4 @@ func TestSVG(t *testing.T) {
 	if err := example(9.5).SVG(&b, 5, 4); err != nil || !strings.Contains(b.String(), "<line") {
 		t.Fatalf("%v", err)
 	}
-}
-
-// Hegel finds the smallest stressor that leaves the paper's example
-// (9.5 req/s against 10) stuck, and none at 8 req/s that the system does
-// not recover from within 15 minutes (from a full queue the chain predicts
-// about 8).
-func TestFindTrigger(t *testing.T) {
-	if testing.Short() {
-		t.Skip("searches hundreds of simulated runs")
-	}
-	space := qload.TriggerSpace{MaxExtraRate: 15, MaxDuration: 300 * time.Second, Seeds: 3}
-	for _, base := range []float64{8, 9, 9.5} {
-		ok, _ := qload.Mostly(qload.OfSimulation(sim(base), base, 300*time.Second), qload.Trigger{}, 5)
-		t.Logf("%.1f req/s, no trigger: recovers in most runs: %v", base, ok)
-	}
-	t0 := time.Now()
-	qhegel.FindTrigger(t, qload.OfSimulation(sim(9.5), 9.5, 300*time.Second), space, hegel.WithTestCases(40), hegel.WithSeed(1)).Expect(t, qload.SomeTrigger())
-	t.Logf("searched in %v", time.Since(t0))
-	// at 8 req/s the system always recovers
-	qhegel.FindTrigger(t, qload.OfSimulation(sim(8), 8, 15*time.Minute), space, hegel.WithTestCases(30), hegel.WithSeed(1)).Expect(t, qload.NoTrigger())
 }

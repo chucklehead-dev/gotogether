@@ -2,75 +2,13 @@ package weave_test
 
 import (
 	"context"
-	"github.com/chucklehead-dev/gotogether/qhegel"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qenv/weave"
-	"hegel.dev/go/hegel"
 )
-
-// What woven code calls, called directly: inside a simulation a real
-// sync.RWMutex excludes as sync's does, under any schedule Hegel picks, with
-// a waiting writer blocking new readers; a WaitGroup waits for tasks started
-// by Go; outside a simulation the real methods run.
-func TestWovenSyncInSimulation(t *testing.T) {
-	hegel.Test(t, func(ht *hegel.T) {
-		s := qenv.New(qhegel.Choices(ht))
-		s.Check = true
-		defer s.Close()
-		var mu sync.RWMutex
-		var wg sync.WaitGroup
-		readers, writers, done := 0, 0, 0
-		for i := range 4 {
-			s.Spawn("task", func(ctx context.Context) {
-				for range 3 {
-					if i%2 == 0 {
-						weave.RWLock(&mu)
-						writers++
-						if writers != 1 || readers != 0 {
-							ht.Fatalf("writer with %d writers, %d readers", writers, readers)
-						}
-						qenv.Sleep(ctx, time.Millisecond)
-						writers--
-						weave.RWUnlock(&mu)
-					} else {
-						weave.RLock(&mu)
-						readers++
-						if writers != 0 {
-							ht.Fatalf("reader with a writer")
-						}
-						qenv.Sleep(ctx, time.Millisecond)
-						readers--
-						weave.RUnlock(&mu)
-					}
-				}
-				weave.Add(&wg, 1)
-				go weave.Go(func() { defer weave.Done(&wg); done++ })() //qenv:ok what weaving makes of a //qenv:go statement
-			})
-		}
-		s.Spawn("waiter", func(ctx context.Context) {
-			qenv.Sleep(ctx, time.Second)
-			weave.Wait(&wg)
-			if done != 4 {
-				ht.Fatalf("Wait returned with %d of 4 done", done)
-			}
-		})
-		if err := s.Run(time.Minute); err != nil {
-			ht.Fatal(err)
-		}
-	}, hegel.WithTestCases(100))
-
-	// outside: the real mutex
-	var mu sync.Mutex
-	weave.MutexLock(&mu)
-	if mu.TryLock() {
-		t.Fatal("outside a simulation, MutexLock did not take the real mutex")
-	}
-	weave.MutexUnlock(&mu)
-}
 
 // A waiting writer blocks new readers, as with sync.RWMutex: a reader that
 // arrives while a writer waits gets the lock after the writer.

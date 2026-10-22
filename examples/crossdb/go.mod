@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	github.com/crossplane/crossplane-runtime/v2 v2.4.2
 	github.com/crossplane/crossplane/apis/v2 v2.3.4
 	golang.org/x/time v0.15.0
@@ -99,3 +100,5 @@ require (
 )
 
 replace github.com/chucklehead-dev/gotogether => ../..
+
+replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel

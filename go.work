@@ -18,5 +18,6 @@ use (
 	./examples/twophase
 	./qanalysis
 	./qgosim
+	./qhegel
 	./qweave
 )

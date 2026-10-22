@@ -8,6 +8,7 @@ replace github.com/chucklehead-dev/gotogether => ../..
 
 require (
 	github.com/chucklehead-dev/gotogether/examples/retrystorm v0.0.0
+	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	hegel.dev/go/hegel v0.9.27
 )
 
@@ -21,3 +22,5 @@ require (
 )
 
 replace github.com/chucklehead-dev/gotogether/examples/retrystorm => ../retrystorm
+
+replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel

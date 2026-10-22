@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/qhegel"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"hegel.dev/go/hegel"
 )
 
 // Two read-modify-write increments of one counter, run concurrently.
@@ -196,25 +193,6 @@ type forced struct{ faults map[string]int }
 
 func (f *forced) Choose(kind string, n int) int { return f.faults[kind] }
 
-// Hegel finds the lost update under read committed and shrinks the
-// schedule; the faithful (FOR UPDATE) version passes.
-func TestHegelFindsLostUpdate(t *testing.T) {
-	check := func(forUpdate bool) error {
-		return hegel.Run(func(tc hegel.TestCase) {
-			st := run(t, qhegel.Choices(tc), qenv.ReadCommitted, func(s *qenv.Sim, st *qenv.Store) { increments(s, st, forUpdate) })
-			if lostUpdate(st) {
-				tc.Errorf("lost update")
-			}
-		}, hegel.WithTestCases(100), hegel.WithDatabase(""))
-	}
-	if err := check(false); err == nil {
-		t.Fatalf("want a lost update, got %v", err)
-	}
-	if err := check(true); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // A timestamp taken from the real clock, translated to virtual time, ages
 // with the simulation: time.Since of its translation back measures virtual
 // time.
@@ -364,91 +342,6 @@ func TestServiceCapacity(t *testing.T) {
 			t.Errorf("shed=%v: %d calls served, %d shed; want %d served", shed, svc.Calls, svc.Shed, wantCalls)
 		}
 	}
-}
-
-// The scheduler's semantics, as a property over random programs: tasks
-// sleep, yield, wait on Signals with timeouts and notify them, under a
-// Hegel-chosen schedule, with the scheduler checking its own invariants.
-//   - a Sleep lasts exactly its duration, a Yield no time;
-//   - a Wait that reports a Notify ends at the time of a Notify of its
-//     Signal made while it waited; one that reports none lasts its timeout;
-//   - the same choices replay the same run.
-func TestSchedulerSemantics(t *testing.T) {
-	type op struct {
-		kind       int // 0 sleep, 1 yield, 2 wait, 3 notify
-		sig        int
-		d          time.Duration
-		start, end time.Duration
-		notified   bool
-	}
-	run := func(c qenv.Chooser, progs [][]op) ([][]op, map[int][]time.Duration) {
-		s := qenv.New(c)
-		s.Check = true
-		defer s.Close()
-		sigs := []*qenv.Signal{{}, {}}
-		notifies := map[int][]time.Duration{}
-		out := make([][]op, len(progs))
-		for i, prog := range progs {
-			out[i] = append([]op(nil), prog...)
-			s.Spawn("task", func(ctx context.Context) {
-				for j := range out[i] {
-					o := &out[i][j]
-					o.start = s.Elapsed()
-					switch o.kind {
-					case 0:
-						qenv.Sleep(ctx, o.d)
-					case 1:
-						qenv.Yield(ctx)
-					case 2:
-						o.notified = sigs[o.sig].Wait(ctx, qenv.Now(ctx).Add(o.d))
-					case 3:
-						notifies[o.sig] = append(notifies[o.sig], s.Elapsed())
-						sigs[o.sig].Notify()
-					}
-					o.end = s.Elapsed()
-				}
-			})
-		}
-		if err := s.Run(time.Hour); err != nil {
-			t.Fatal(err)
-		}
-		return out, notifies
-	}
-	hegel.Test(t, func(ht *hegel.T) {
-		progs := make([][]op, hegel.Draw(ht, hegel.Integers(1, 4)))
-		for i := range progs {
-			for range hegel.Draw(ht, hegel.Integers(1, 6)) {
-				progs[i] = append(progs[i], op{kind: hegel.Draw(ht, hegel.Integers(0, 3)), sig: hegel.Draw(ht, hegel.Integers(0, 1)),
-					d: time.Duration(hegel.Draw(ht, hegel.Integers(0, 5))) * time.Second})
-			}
-		}
-		rec := &qenv.ChoiceLog{C: qhegel.Choices(ht)}
-		got, notifies := run(rec, progs)
-		for _, prog := range got {
-			for _, o := range prog {
-				switch {
-				case o.kind == 0 && o.end-o.start != o.d:
-					ht.Fatalf("Sleep(%v) lasted %v", o.d, o.end-o.start)
-				case o.kind == 1 && o.end != o.start:
-					ht.Fatalf("Yield took %v", o.end-o.start)
-				case o.kind == 2 && !o.notified && o.end-o.start != o.d:
-					ht.Fatalf("Wait(%v) timed out after %v", o.d, o.end-o.start)
-				case o.kind == 2 && o.notified:
-					ok := false
-					for _, n := range notifies[o.sig] {
-						ok = ok || (n == o.end && n >= o.start)
-					}
-					if !ok {
-						ht.Fatalf("Wait from %v reported a Notify at %v; notifies of signal %d: %v", o.start, o.end, o.sig, notifies[o.sig])
-					}
-				}
-			}
-		}
-		again, _ := run(qenv.Replay(rec.Choices), progs)
-		if !reflect.DeepEqual(got, again) {
-			ht.Fatalf("replay differs:\n%v\n%v", got, again)
-		}
-	}, hegel.WithTestCases(200))
 }
 
 // With NemesisEvery, a nemesis is a choice once per period of virtual

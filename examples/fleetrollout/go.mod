@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	hegel.dev/go/hegel v0.9.27
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
@@ -111,3 +112,5 @@ require (
 )
 
 replace github.com/chucklehead-dev/gotogether => ../..
+
+replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel

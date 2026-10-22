@@ -78,7 +78,8 @@ its protocol model (`examples/edgepublish`).
 ## Install
 
 ```sh
-go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.1 (hegel-go's minimum)
+go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.1
+go get github.com/chucklehead-dev/gotogether/qhegel@latest               # Hegel, in tests (its own module: the core needs no Hegel)
 npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
 go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
@@ -461,7 +462,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | Package | What it is |
 |---|---|
 | `connect` | the model drives Go: `Run`, `Test`, `Switch`, `Pick[T]`, `StateDriver`, `GenerateRun`; `FaultScript` (a trace's faults imposed on a whole program in qenv) |
-| `qhegel` | Hegel and the model: `Test` (modes `Each`, `After`, `Batched`, `Off`), `FindViolation` (an expected failure, shrunk), `Shrink` (a `qtest.System` under Hegel), `NewCase`, `Choices` (qenv's choices from a test case), `VaryTraces`, `FindTrigger` |
+| `qhegel` (module) | Hegel and the model: `Test` (modes `Each`, `After`, `Batched`, `Off`), `FindViolation` (an expected failure, shrunk), `Shrink` (a `qtest.System` under Hegel), `NewCase`, `Choices` (qenv's choices from a test case), `VaryTraces`, `FindTrigger` |
 | `itf` | ITF traces: `Parse`, `Decode`/`Encode` (Go ⇄ Quint values), `ParseQuint` (Quint literals) |
 | `qobs` | the recorder: `Record`, `Thread`, `WithRecorder`, `SlogHandler`; sinks `MemorySink`, `FileSink` (durable), `BufferedFileSink`, `JSONLSink`, `OTelSink`, `Tee`; `SetGlobal` for a program, `InstallGlobal` for a test's run; `Strict`, `Escaped`; `orchestrion.yml` |
 | `qtrace` | the step schema, `Reconstruct` (order, gaps, restarts), step logs, `Filter` (select and pseudonymize) |
