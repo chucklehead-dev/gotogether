@@ -76,6 +76,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 
 ## Requirements and commands
 
+- The published modules (the core, qhegel, qweave, qanalysis, qgosim)
+  have no `replace`: `go install …@version` refuses one, and a
+  dependency's is ignored. They require each other at pushed commits
+  (pseudo-versions, until tags). A change to the core that another
+  published module needs: push it, then `go get
+  github.com/chucklehead-dev/gotogether@<commit>` in that module (GOWORK=off)
+  and push again; until then CI tests the module against the older core.
+  Examples are not published and keep `replace => ../..`.
 - The repository is a Go workspace (`go.work`, checked in): every module
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.

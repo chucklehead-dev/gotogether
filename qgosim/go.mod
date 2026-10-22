@@ -3,9 +3,9 @@ module github.com/chucklehead-dev/gotogether/qgosim
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0
-	github.com/chucklehead-dev/gotogether/qweave v0.0.0
 	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
+	github.com/chucklehead-dev/gotogether v0.0.0-20261022230230-4a796ef518cd
+	github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261022230230-4a796ef518cd
 )
 
 require (
@@ -65,9 +65,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	mvdan.cc/gofumpt v0.7.0 // indirect
 	mvdan.cc/sh/v3 v3.10.0 // indirect
-)
-
-replace (
-	github.com/chucklehead-dev/gotogether => ../
-	github.com/chucklehead-dev/gotogether/qweave => ../qweave
 )

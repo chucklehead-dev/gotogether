@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qhegel
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether v0.0.0-20261022230230-4a796ef518cd
 	hegel.dev/go/hegel v0.9.27
 )
 
@@ -15,5 +15,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/chucklehead-dev/gotogether => ../
