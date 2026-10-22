@@ -73,8 +73,11 @@ type ExploreConfig struct {
 	// GOTOGETHER_SEED=n in the environment runs seed n alone, as a failure's
 	// report says to reproduce it.
 	Seeds int
-	Rates qenv.Rates // fault rates (default qenv.DefaultRates)
-	Opts  []Option   // artifacts, quint options
+	// Rates are the fault rates (default qenv.DefaultRates). Fuzz and
+	// qhegel.Shrink take rates as an argument instead: nothing else here
+	// applies to them.
+	Rates qenv.Rates
+	opts  []Option // the System's, and a sweep row's (System.Opts configures)
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
 	// the chooser's context (qenv.WithContext), so the scenario must build
@@ -103,7 +106,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	if cfg.Parallel <= 0 {
 		cfg.Parallel = runtime.GOMAXPROCS(0)
 	}
-	c := config(t, cfg.Opts)
+	c := config(t, cfg.opts)
 	woven := len(qcover.Blocks()) > 0
 	defer qobs.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
 	mark, _ := qobs.Escaped(0)

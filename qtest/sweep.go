@@ -71,10 +71,10 @@ func sweep(t *testing.T, bindingPath string, sw SweepConfig, scenario func(c qen
 		t.Run(row.String(), func(t *testing.T) {
 			xc := sw.Explore
 			if cs := row.Constants(); len(cs) > 0 {
-				xc.Opts = append(append([]Option(nil), xc.Opts...), Constants(cs))
+				xc.opts = append(append([]Option(nil), xc.opts...), Constants(cs))
 			}
 			if sw.Opts != nil {
-				xc.Opts = append(append([]Option(nil), xc.Opts...), sw.Opts(row)...)
+				xc.opts = append(append([]Option(nil), xc.opts...), sw.Opts(row)...)
 			}
 			off := row.FaultsOff()
 			x := explore(t, bindingPath, xc, func(c qenv.Chooser) error {

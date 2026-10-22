@@ -140,17 +140,21 @@ func (r *Recorder) Add(steps ...qtrace.Step) {
 var global atomic.Pointer[Recorder]
 
 // SetGlobal installs the recorder used by the package-level Record (and so by
-// woven //quint:action advice). nil turns recording off.
+// woven //quint:action advice), for a program's lifetime: a main that
+// records its steps to a sink. nil turns recording off. Tests install one
+// for a run with qtest.Global() (InstallGlobal, which refuses a second and
+// restores what was there), and a Hegel case with qhegel's Case.Install.
 func SetGlobal(r *Recorder) { global.Store(r) }
 
-// Global returns the installed recorder, or nil.
+// Global returns the installed recorder, or nil (unrelated to the option
+// qtest.Global, which installs one for a test's run).
 func Global() *Recorder { return global.Load() }
 
 // installed is the recorder InstallGlobal put in place, while it is.
 var installed atomic.Pointer[Recorder]
 
 // InstallGlobal installs r as the global recorder for a test's run
-// (qtest.Global, qhegel's Config.Global): the steps of goroutines no
+// (qtest.Global, in a System's or qhegel's Opts): the steps of goroutines no
 // run can follow (a server's, a cluster's) go to it. A second install
 // while one is in place fails: the two runs would take each other's
 // steps, so tests that install it must not run in parallel. restore puts

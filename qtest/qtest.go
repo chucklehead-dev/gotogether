@@ -282,7 +282,8 @@ func firstOr(msgs []string) string {
 
 // Settings are a list of Options resolved for a test, for packages that
 // build their checks on qtest's (qhegel). Configure with Options;
-// Settings only read them.
+// Settings only read them. They are exported, not internal, because such a
+// package may be another module (qhegel is to be one).
 type Settings struct{ s settings }
 
 // Resolve applies opts for t: the artifacts' directory defaults to

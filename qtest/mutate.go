@@ -126,7 +126,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 	if len(all) == 0 {
 		t.Skip("no mutants woven: run with qweave -mutate")
 	}
-	cfg.Opts = s.opts(cfg.Opts...)
+	cfg.opts = s.opts(cfg.opts...)
 	reach := &qmut.Reach{}
 	base := explore(t, s.Binding, cfg, func(c qenv.Chooser) error {
 		return s.Run(qenv.WithContext(c, qmut.WithReach(qenv.ContextOf(c), reach)))

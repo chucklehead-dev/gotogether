@@ -48,7 +48,7 @@ func (s System) opts(more ...Option) []Option {
 // expectations with Exploration.Expect.
 func (s System) Explore(t testing.TB, cfg ExploreConfig) *Exploration {
 	t.Helper()
-	cfg.Opts = s.opts(cfg.Opts...)
+	cfg.opts = s.opts(cfg.opts...)
 	return explore(t, s.Binding, cfg, s.Run)
 }
 
@@ -97,7 +97,7 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults connect.
 // workflow. A row's FaultKind factors that are off are off in the chooser.
 func (s System) Sweep(t *testing.T, sw SweepConfig) *SweepResult {
 	t.Helper()
-	sw.Explore.Opts = s.opts(sw.Explore.Opts...)
+	sw.Explore.opts = s.opts(sw.Explore.opts...)
 	return sweep(t, s.Binding, sw, s.Run)
 }
 

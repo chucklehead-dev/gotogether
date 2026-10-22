@@ -13,7 +13,9 @@ The final `error` is the outcome. An error can classify itself with a
 **Record at the moment the step takes effect**, while holding the lock that
 orders it, and before spawning work that depends on it.
 
-Sinks (`qobs.NewRecorder(sink)`, installed with `qobs.SetGlobal`):
+Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with
+`qobs.SetGlobal`; a test gets one per run from qtest, and `qtest.Global()`
+installs it globally for goroutines the run starts):
 - `MemorySink` for tests;
 - `FileSink("steps.jsonl")` for a native step log;
 - `NewOTelSink(tp)` for span events. Use a TracerProvider that never
