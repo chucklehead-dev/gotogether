@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/casselc/quint-connect-go v0.0.0
 	github.com/casselc/quint-connect-go/qweave v0.0.0
-	github.com/jellevandenhooff/gosim v0.0.0
+	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
 )
 
 require (
@@ -70,6 +70,4 @@ require (
 replace (
 	github.com/casselc/quint-connect-go => ../
 	github.com/casselc/quint-connect-go/qweave => ../qweave
-	// The fork: ./fetch-gosim.sh puts it there.
-	github.com/jellevandenhooff/gosim => ./.gosim-fork
 )

@@ -454,12 +454,12 @@ Every commit leaves every module building and its tests green. Order:
 M0 → M1 → M2 → M3 → M4 → M5a → M5b → M6 → W9 → R0 → W8 → R1 → R4 →
 X. R5 happens when the maintainer says.
 
-- **M0. Hygiene.**
+- **M0. Hygiene.** Done.
   - Remove the stale agent worktrees and their branches.
   - Summarize W in REVIEW.md, whose third-review tables were left empty.
-- **M1. The gosim repo's history.** chucklehead-dev/gosim's main
+- **M1. The gosim repo's history.** Done. chucklehead-dev/gosim's main
   fast-forwards from upstream ffd3a61 to the fork's tip (ac6b9b2).
-- **M2. The fork, a module of its own.**
+- **M2. The fork, a module of its own.** Done.
   - One scripted top commit sets the module path to
     `github.com/chucklehead-dev/gosim`. It also changes
     `internal/gosimtool`'s `Module`, which is written into translated
@@ -468,9 +468,9 @@ X. R5 happens when the maintainer says.
   - The MIT license and attribution stay.
   - Minimal CI.
   - Required by pseudo-version until R5.
-- **M3. History to chucklehead-dev/gotogether.** Push main only:
+- **M3. History to chucklehead-dev/gotogether.** Done. Push main only:
   gosim-fork lives in its own repo now. `origin` is repointed.
-- **M4. qgosim on the gosim module.**
+- **M4. qgosim on the gosim module.** Done.
   - Remove fetch-gosim.sh, its `REF`, the `.gosim-fork` replace, CI's
     fork checkout, and the "fetch first" notes.
   - simdeps fails if anything but qgosim and examples/gosim imports gosim.

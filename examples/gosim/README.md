@@ -27,7 +27,6 @@ checked against the system's Quint model with its usual binding.
   tests.
 
 ```sh
-../../qgosim/fetch-gosim.sh   # clones the fork (branch gosim-fork) into qgosim/.gosim-fork
 go test -short ./...          # FULL: go test ./... (adds the Hegel test, ~5 min)
 ./run-demo.sh
 ```

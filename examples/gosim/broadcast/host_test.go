@@ -7,8 +7,7 @@
 // to be checked against ../../glomers/model/broadcast.qnt with the Glomers
 // binding, as for the qenv-free Maelstrom simulator.
 //
-// Run ../../../qgosim/fetch-gosim.sh first. The gosim test binary is built
-// on demand (gosim build-tests ./cluster) the first time a test needs it.
+// The gosim test binary is built on demand (gosim build-tests ./cluster) the first time a test needs it.
 package broadcast_test
 
 import (

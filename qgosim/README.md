@@ -3,17 +3,11 @@
 Runs qenv deployments, and whole programs, in
 [gosim](https://github.com/jellevandenhooff/gosim), with every choice made
 by a qenv `Chooser` in the test process (DESIGN.md §14 and §15.1). It is a
-module of its own because it depends on gosim. The fork is the
-`gosim-fork` branch of this repository (upstream's history plus our
-commits; its FORK.md says what they change), until it gets a repository of
-its own:
-
-```sh
-./fetch-gosim.sh    # clones the branch into .gosim-fork, at the commit qgosim pins
-```
-
-A module using it replaces `github.com/jellevandenhooff/gosim` with that
-directory (see [../examples/gosim/go.mod](../examples/gosim/go.mod)).
+module of its own because it depends on gosim: the fork,
+[github.com/chucklehead-dev/gosim](https://github.com/chucklehead-dev/gosim)
+(upstream's history plus our commits; its FORK.md says what they change),
+an ordinary module requirement. It needs the Go release the fork's hooks
+match (Go 1.26); gosim names the fix under another.
 
 - In the simulation (`//go:build sim`):
   - `New` returns a native `*qenv.Sim` whose choices are the host's,

@@ -3,6 +3,7 @@ package simdeps_test
 import (
 	"encoding/json"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -135,4 +136,25 @@ func find(pkgs map[string]pkg, p string, seen map[string]bool) []string {
 		}
 	}
 	return nil
+}
+
+// gosimUsers are the only modules that may require the gosim fork: what
+// runs in gosim is translated, so the fork stays out of everything a
+// simulation or a host imports by way of the core.
+var gosimUsers = map[string]bool{"qgosim/go.mod": true, "examples/gosim/go.mod": true}
+
+func TestOnlyQgosimRequiresGosim(t *testing.T) {
+	out, err := exec.Command("git", "-C", "../..", "ls-files", "go.mod", "**/go.mod").Output()
+	if err != nil {
+		t.Skipf("no git checkout: %v", err)
+	}
+	for _, f := range strings.Fields(string(out)) {
+		data, err := os.ReadFile("../../" + f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "github.com/chucklehead-dev/gosim ") && !gosimUsers[f] {
+			t.Errorf("%s requires the gosim fork: only qgosim and examples/gosim may. Move the code that needs gosim into qgosim.", f)
+		}
+	}
 }

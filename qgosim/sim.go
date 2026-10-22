@@ -5,8 +5,8 @@ package qgosim
 import (
 	"context"
 
-	"github.com/jellevandenhooff/gosim"
-	"github.com/jellevandenhooff/gosim/gosimruntime"
+	"github.com/chucklehead-dev/gosim"
+	"github.com/chucklehead-dev/gosim/gosimruntime"
 
 	"github.com/casselc/quint-connect-go/qenv"
 	"github.com/casselc/quint-connect-go/qobs"

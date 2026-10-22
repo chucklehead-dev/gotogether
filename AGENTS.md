@@ -36,7 +36,7 @@ qenv/         deterministic simulation: scheduler, virtual time, processes; Stor
               internal/choice (choosers, byte rule, rates) and internal/profile (virtual-time pprof), qenv's API
 qenv/weave/   Orchestrion aspects: sync locks, wait groups and //qenv:go goroutines simulated inside qenv, real outside
 qenv/fault/   the //quint:fault aspect: fault points (qenv.FaultPoint) with the function's own errors, declared for coverage
-qgosim/       separate module: qenv and whole programs in gosim (the fork: branch gosim-fork, ./fetch-gosim.sh)
+qgosim/       separate module: qenv and whole programs in gosim (on the fork, module github.com/chucklehead-dev/gosim)
 qweave/       separate module: weaves Orchestrion aspects with types into a go -overlay (cmd/qweave); also gosim's
 qload/ qmeta/ load simulation (open/closed-loop clients, servers, triggers, the recovery property); CTMC, alert rules (qmeta imports nothing of the module)
 qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's state found from its context or goroutine
@@ -88,9 +88,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   go test ./...
   go run github.com/DataDog/orchestrion go test ./mbt/ ./scenarios/   # woven
   ```
-- gosim (qgosim and examples/gosim, their own modules): `qgosim/fetch-gosim.sh
-  && cd examples/gosim && go test -short ./...` (the first run translates
-  the standard library, about a minute). Check the simulated side with
+- gosim (qgosim and examples/gosim, their own modules): `cd examples/gosim
+  && go test -short ./...` (the first run translates the standard
+  library, about a minute). Check the simulated side with
   `go vet -tags sim`.
 - qanalysis (its own module): `cd qanalysis && go test ./...` (the checkout
   comparison weaves and explores checkout: skipped with -short, needs quint).
@@ -431,10 +431,12 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   `testing/synctest` bubble leaves none behind (the bubble panics if one
   remains). A task blocked outside a seam (a real lock, a channel) would
   hang Close: keep tasks' waits in qenv's seams.
-- The gosim fork is the `gosim-fork` branch of this repository: upstream
-  history plus our commits, its `FORK.md` saying what they change.
-  `qgosim/fetch-gosim.sh` pins the commit qgosim needs (`REF`): change the
-  fork there, push the branch, then bump `REF`. Choosers with entropy
+- The gosim fork is its own module, github.com/chucklehead-dev/gosim:
+  upstream history plus our commits, its `FORK.md` saying what they
+  change. Change the fork there, push, then bump qgosim's and
+  examples/gosim's requirement (`go get github.com/chucklehead-dev/gosim@<commit>`).
+  It translates one Go release's standard library (Go 1.26) and refuses
+  another. Choosers with entropy
   (`qenv.EntropyOf`: Seeded, quinthegel.Choices, a ChoiceLog or Replay of
   them) hand gosim bytes in chunks for every choice but faults. A chooser
   without it (a plain wrapper) falls back to one round trip per choice,

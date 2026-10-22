@@ -1,6 +1,6 @@
 // Package qgosim runs qenv deployments, and whole programs, in gosim
-// (https://github.com/jellevandenhooff/gosim), on a patched gosim
-// (./fetch-gosim.sh), with every choice made by a qenv Chooser in the test
+// (https://github.com/jellevandenhooff/gosim), on its fork
+// github.com/chucklehead-dev/gosim, with every choice made by a qenv Chooser in the test
 // process (DESIGN.md §14, §15.1).
 //
 // A simulated test is an ordinary gosim test in a package of its own,

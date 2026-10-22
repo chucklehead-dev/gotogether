@@ -2,7 +2,7 @@
 
 When channels, `select`, the standard library's own goroutines, TCP or the
 disk matter, run the code in gosim. Use package qgosim, its own module, on
-a patched gosim fetched by `qgosim/fetch-gosim.sh`; examples/gosim shows
+the patched gosim it requires (github.com/chucklehead-dev/gosim); examples/gosim shows
 both kinds of code:
 - **a qenv deployment, unchanged**: in a simulated test, `checkout.RunOn(qgosim.New(), cfg)`.
   `qgosim.New` is qenv's native runtime (`qenv.NewNative`):

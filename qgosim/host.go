@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jellevandenhooff/gosim/metatesting"
+	"github.com/chucklehead-dev/gosim/metatesting"
 
 	"github.com/casselc/quint-connect-go/qenv"
 	"github.com/casselc/quint-connect-go/qobs"

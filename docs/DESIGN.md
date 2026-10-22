@@ -1514,13 +1514,13 @@ scheduler, phase 0's chunked choices are the next thing to do.
 
 ### 15.7 Phase 0 as built
 
-**Where the fork lives.** Until it has a repository, the fork is the
-`gosim-fork` branch of this one. The branch has no history in common
-with main: it is upstream's history plus our commits, and its FORK.md
-says what they change. Keeping upstream's history makes our changes
-ordinary commits, which rebase onto a newer gosim.
-`qgosim/fetch-gosim.sh` pins the commit qgosim was built against. CI
-checks the branch out next to qgosim and moves it to that commit.
+**Where the fork lives.** The fork is its own repository and module,
+github.com/chucklehead-dev/gosim (it was first a `gosim-fork` branch of
+this one, fetched by a script at a pinned commit). It is upstream's
+history plus our commits, and its FORK.md says what they change. Keeping
+upstream's history makes our changes ordinary commits, which rebase onto
+a newer gosim; the module path is one scripted commit on top. qgosim
+requires it like any module, at the commit it was built against.
 
 **Entropy.** A chooser that implements `qenv.Entropy` hands out bytes.
 `qenv.EntropyOf` finds that capability through `WithContext`,

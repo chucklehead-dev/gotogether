@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jellevandenhooff/gosim"
-	"github.com/jellevandenhooff/gosim/gosimruntime"
+	"github.com/chucklehead-dev/gosim"
+	"github.com/chucklehead-dev/gosim/gosimruntime"
 
 	"github.com/casselc/quint-connect-go/examples/glomers/broadcast"
 	"github.com/casselc/quint-connect-go/examples/glomers/maelstrom"

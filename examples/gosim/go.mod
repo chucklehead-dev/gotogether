@@ -6,7 +6,7 @@ require (
 	github.com/casselc/quint-connect-go v0.0.0
 	github.com/casselc/quint-connect-go/examples/edgepublish v0.0.0
 	github.com/casselc/quint-connect-go/qgosim v0.0.0
-	github.com/jellevandenhooff/gosim v0.0.0
+	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
 	hegel.dev/go/hegel v0.9.27
 )
 
@@ -77,6 +77,4 @@ replace (
 	github.com/casselc/quint-connect-go/examples/edgepublish => ../edgepublish
 	github.com/casselc/quint-connect-go/qgosim => ../../qgosim
 	github.com/casselc/quint-connect-go/qweave => ../../qweave
-	// The fork: ../../qgosim/fetch-gosim.sh puts it there.
-	github.com/jellevandenhooff/gosim => ../../qgosim/.gosim-fork
 )
