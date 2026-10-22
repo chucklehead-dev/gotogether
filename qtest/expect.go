@@ -27,6 +27,9 @@ type Expectation struct {
 	// the actions and invariants it names, checked against the model: a
 	// misspelled name would make None(...) hold vacuously
 	actions, invariants []string
+	// run, if set, judges the whole run, not its report: "" if it holds,
+	// else what the run showed (ShrunkTo's faults)
+	run func(*Run) string
 }
 
 func (e Expectation) String() string { return e.desc }
@@ -34,7 +37,7 @@ func (e Expectation) String() string { return e.desc }
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
 func Conforms() Expectation {
-	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil}
+	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, nil}
 }
 
 func failed(r *validate.Report, kind, action string) bool {
@@ -267,6 +270,23 @@ func expectReport(t testing.TB, r *validate.Report, es ...Expectation) {
 	}
 }
 
+// ShrunkTo claims the run has at most n faults: what Hegel's shrinking of
+// a failure must reach, with the claim on its verdict.
+//
+//	qhegel.Shrink(t, sys, rates).Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+//
+// It is a claim on one run (a Violation, a Run with its choices), not on
+// an exploration.
+func ShrunkTo(n int) Expectation {
+	return Expectation{desc: fmt.Sprintf("a run shrunk to at most %d fault(s)", n), check: func(*validate.Report) bool { return true },
+		run: func(r *Run) string {
+			if f := r.Faults(); len(f) > n {
+				return fmt.Sprintf("%d faults: %v", len(f), f)
+			}
+			return ""
+		}}
+}
+
 // Expect fails t unless the run's report meets every expectation,
 // printing the report and naming the run's step log and model-level ITF
 // (Record's and Validate's). It is how a test states what a mutant must
@@ -289,6 +309,13 @@ func (r *Run) Expect(t testing.TB, es ...Expectation) {
 		}
 	}
 	expectReport(t, r.Report, es...)
+	for _, e := range es {
+		if e.run != nil {
+			if got := e.run(r); got != "" {
+				t.Fatalf("gotogether: want %s, got %s", e, got)
+			}
+		}
+	}
 }
 
 func keysOf[V any](m map[string]V) []string {

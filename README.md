@@ -234,24 +234,47 @@ Option 0 of every choice is nominal, so shrinking removes faults.
 
 The smallest case is [examples/hello](examples/hello): a counter behind
 a network that loses and duplicates messages, a client that retries, and
-a mutant that forgets to dedupe:
+a mutant that forgets to dedupe. The deployment (`Counter.Add` records
+`apply(id)`, or `replay(id)` for a request it has seen; `Send` retries
+until it hears back):
 
+<!-- from examples/hello/hello.go -->
 ```go
 func Run(c qenv.Chooser, m Mutation) error {
 	s := qenv.New(c)
 	defer s.Close()
 	counter := &Counter{Mutation: m, seen: map[int]bool{}}
-	svc := qenv.NewService(s, "counter", nil, counter.Add) // Add records apply(id) or replay(id)
+	svc := qenv.NewService(s, "counter", nil, counter.Add)
+	var err error
 	s.Spawn("client", func(ctx context.Context) {
-		for id := 1; id <= Requests; id++ {
-			Send(ctx, svc, id, 100*time.Millisecond) // retries until it hears back
+		for id := 1; id <= Requests && err == nil; id++ {
+			err = Send(ctx, svc, id, 100*time.Millisecond)
 		}
 	})
-	return s.Run(time.Minute)
+	if rerr := s.Run(time.Minute); rerr != nil {
+		return rerr
+	}
+	return err
+}
+```
+
+and its tests: the system bound to the model, explored by seeds, and shrunk
+by Hegel to the one fault the bug needs:
+
+<!-- from examples/hello/hello_test.go -->
+```go
+func system(m Mutation) qtest.System {
+	return qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
 }
 
-sys := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, NoDedupe) }}
-sys.Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Some(qtest.Rejects("apply")))
+// lossy loses or duplicates one message in five.
+var lossy = qenv.Rates{Default: 0.2}
+
+	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).
+		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
+	// ...
+	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
+		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
 ```
 
 A bigger system deploys more doubles the same way:
@@ -407,7 +430,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |
 | `validate` | replay with `quint test`: `Checker` (`Check`, `CheckBatch`), `Cached`, `ValidateITF`; structured verdicts |
-| `qtest` | tests that check against the model: `System` (`Explore`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
+| `qtest` | tests that check against the model: `System` (`Explore`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
 | `qenv` | deterministic simulation: scheduler, virtual time, crashable processes, choosers (`NewSeeded`, `Replay`, `Script`, `Swarm`, `FromBytes`); doubles `Store` (isolation levels), `Queue`, `Service` (with `Capacity`); `DeclareFaults`, `FaultPoint`, `CoverageOf`; `NewNative` (the same on goroutines, for gosim); `TimeProfile` |
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `qenv/fault` | the `//quint:fault` aspect: a function's entry a fault choice, with its own errors |

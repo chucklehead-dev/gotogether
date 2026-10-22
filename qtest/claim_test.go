@@ -80,3 +80,30 @@ func TestReachesWantsTheBareKind(t *testing.T) {
 	Reaches("fault.rpc.x")
 	t.Error("a prefixed kind was accepted")
 }
+
+// ShrunkTo judges a run's faults, and refuses an exploration, where it
+// would hold for nothing.
+func TestShrunkTo(t *testing.T) {
+	expect := func(f func(t testing.TB)) []string {
+		ft := &failTB{TB: t}
+		done := make(chan struct{})
+		go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+			defer close(done)
+			f(ft)
+		}()
+		<-done
+		return ft.errs
+	}
+	fault := qenv.Choice{Kind: "fault.rpc.x.request", N: 3, Value: 1}
+	run := &Run{Report: &validate.Report{}, Choices: []qenv.Choice{fault, {Kind: "sched.task", N: 2, Value: 1}, fault}}
+	if errs := expect(func(t testing.TB) { run.Expect(t, ShrunkTo(2)) }); len(errs) != 0 {
+		t.Errorf("two faults, ShrunkTo(2): %v", errs)
+	}
+	if errs := expect(func(t testing.TB) { run.Expect(t, ShrunkTo(1)) }); len(errs) != 1 || !strings.Contains(errs[0], "2 faults") {
+		t.Errorf("two faults, ShrunkTo(1): %v, want a failure naming them", errs)
+	}
+	x := &Exploration{Runs: []*Run{run}}
+	if errs := expect(func(t testing.TB) { x.Expect(t, ShrunkTo(5)) }); len(errs) != 1 || !strings.Contains(errs[0], "claim on one run") {
+		t.Errorf("an exploration: %v, want the claim refused", errs)
+	}
+}

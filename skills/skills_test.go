@@ -194,3 +194,62 @@ func TestRemoveRenamed(t *testing.T) {
 		t.Error("a skill that only shares an old name was removed")
 	}
 }
+
+// A code block marked <!-- from PATH --> copies PATH (from the repository's
+// root): its lines appear there, in order ("// ..." stands for lines left
+// out). A copy that drifted from the code it shows is a newcomer's red test.
+func TestSnippetsMatchSource(t *testing.T) {
+	docs, _ := filepath.Glob("../examples/*/README.md")
+	docs = append(docs, "../README.md")
+	_ = fs.WalkDir(FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".md") {
+			docs = append(docs, p)
+		}
+		return err
+	})
+	marked := 0
+	for _, doc := range docs {
+		var b []byte
+		var err error
+		if strings.HasPrefix(doc, "../") {
+			b, err = os.ReadFile(doc)
+		} else {
+			b, err = fs.ReadFile(FS(), doc)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range snippet.FindAllStringSubmatch(string(b), -1) {
+			marked++
+			src, err := os.ReadFile(filepath.Join("..", m[1]))
+			if err != nil {
+				t.Errorf("%s copies %s, which does not exist", doc, m[1])
+				continue
+			}
+			var lines []string
+			for _, l := range strings.Split(string(src), "\n") {
+				lines = append(lines, strings.TrimSpace(l))
+			}
+			at := 0
+			for _, l := range strings.Split(m[2], "\n") {
+				l = strings.TrimSpace(l)
+				if l == "" || l == "// ..." {
+					continue
+				}
+				for at < len(lines) && lines[at] != l {
+					at++
+				}
+				if at == len(lines) {
+					t.Errorf("%s copies %s, but %q is not there (after the lines before it): copy it again", strings.TrimPrefix(doc, "../"), m[1], l)
+					break
+				}
+				at++
+			}
+		}
+	}
+	if marked == 0 {
+		t.Fatal("no marked snippets found: the marker's form changed")
+	}
+}
+
+var snippet = regexp.MustCompile("(?s)<!-- from (\\S+) -->\\s*```go\\n(.*?)```")

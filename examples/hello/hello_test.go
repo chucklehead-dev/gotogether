@@ -48,10 +48,7 @@ func TestHegelShrinks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	v := qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1))
-	v.Expect(t, qtest.Rejects("apply"))
-	if f := v.Faults(); len(f) != 1 {
-		t.Errorf("shrunk to faults %v, want one", f)
-	}
+	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
+		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
 	qhegel.Shrink(t, system(Faithful), lossy, hegel.WithTestCases(20)).Expect(t, qtest.Conforms()) // nothing to find, at lossy's rates too
 }

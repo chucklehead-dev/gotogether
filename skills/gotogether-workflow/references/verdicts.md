@@ -42,7 +42,10 @@ seeds, not by hand.
 - an exploration or sweep row: `x.Expect(t, claims...)`, `SweepConfig.Expect(row)`;
 - Hegel: `qhegel.FindViolation(...).Expect(t, ...)`,
   `qhegel.Shrink(t, sys, rates).Expect(t, ...)` (fails when nothing is found);
-- a trigger search: `qhegel.FindTrigger(t, sys, space).Expect(t, found)`;
+  with `qtest.ShrunkTo(n)` for how far it must shrink (at most n faults),
+  never a hand count of `v.Faults()`;
+- a trigger search: `qhegel.FindTrigger(t, sys, space).Expect(t, qload.SomeTrigger())`
+  (or `NoTrigger()`);
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no
   expectation type: assert `err != nil` for a mutant (examples/bank's
   `TestModelDrivenCatchesOnlyDivergence`).

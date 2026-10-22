@@ -320,6 +320,11 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		case quantified:
 			es = c.es
 		}
+		for _, e := range es {
+			if e.run != nil {
+				t.Fatalf("gotogether: %s is a claim on one run (a shrunk Violation, a Run), not on an exploration: use it with that run's Expect", e)
+			}
+		}
 		if u := unknownNames(es, x.actions, invariants); len(u) > 0 {
 			t.Fatalf("gotogether: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
 		}

@@ -42,16 +42,34 @@ The smallest simulated example is `examples/hello` (a counter, a lossy
 network, a retrying client, one mutant): read it before the bigger ones.
 Its shape is every simulated test's:
 
+<!-- from examples/hello/hello_test.go -->
 ```go
 func system(m Mutation) qtest.System {
 	return qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
 }
 
-func TestNoDedupe(t *testing.T) {
+// lossy loses or duplicates one message in five.
+var lossy = qenv.Rates{Default: 0.2}
+
+func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Some(qtest.Rejects("apply")))
-	qhegel.Shrink(t, system(NoDedupe), lossy).Expect(t, qtest.Rejects("apply")) // Hegel, shrunk to one fault
-	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).Expect(t, qtest.Conforms(),
+		// ...
+		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.5))
+}
+
+func TestNoDedupeCountsRetries(t *testing.T) {
+	qtest.RequireQuint(t)
+	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).
+		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
+	// ...
+}
+
+func TestHegelShrinks(t *testing.T) {
+	// ...
+	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
+		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+	// ...
 }
 ```
 
