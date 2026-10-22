@@ -2,7 +2,7 @@
 
 This is the design record of the `quintgo` spike, which started in
 casselc/observability (`quintgo/`, against the otel-chdb models) and moved
-here as quint-connect-go. Sections 1–8 are the spike's research and
+here as quint-connect-go, now gotogether. Sections 1–8 are the spike's research and
 decisions, lightly edited for the new layout (the edgePublish model is
 vendored in `examples/edgepublish/model`). Section 9 covers what was added
 in the move: quint-connect parity for `connect`, the Hegel integration,
@@ -73,7 +73,7 @@ they observe. PObserve runs post hoc, on logs, in test and in production. Its
 monitors are hand-written P `spec` machines that watch events; they do not
 replay the system model.
 
-What quintgo keeps from it:
+What gotogether keeps from it:
 - partition keys: `quint.actor`;
 - post-hoc checking of real telemetry.
 
@@ -105,9 +105,9 @@ ourselves.
 
 What makes it "generated from the model" is not advice generation. The
 aspect needs nothing model-specific. The model drives:
-- `quintgo scaffold`: a binding skeleton, with every action's signature taken
+- `gotogether scaffold`: a binding skeleton, with every action's signature taken
   from `quint typecheck`;
-- `quintgo lint`: the binding against the model (action names, parameter
+- `gotogether lint`: the binding against the model (action names, parameter
   names, constants, invariants), and the Go annotations against the binding
   (every field a template uses must be recorded).
 
@@ -354,9 +354,9 @@ both are verified with the same verdicts as the OTel path.
   writes, per state:
   - `mbt::actionTaken`;
   - `mbt::nondetPicks`: each parameter as `Some(value)`;
-  - `quintgo::expect`: the binding's rendered post-state check;
+  - `gotogether::expect`: the binding's rendered post-state check;
   - `obs::<name>`: the observed projections.
-  `#meta.quintgo` names the spec, module, constants, defs and invariants, so
+  `#meta.gotogether` names the spec, module, constants, defs and invariants, so
   the file validates with no binding at hand.
 - Turning a template into a pick needs a *value*, not an expression. Without
   a Quint evaluator in Go, argument templates must render to Quint literals.
@@ -365,10 +365,10 @@ both are verified with the same verdicts as the OTel path.
   The edgePublish binding moved from `px(...)` to literal records for this.
   Its expects still use `px`.
 - Validating an ITF replays `.then(action(picks…))`, matching picks to
-  parameters by name. After each step it checks `quintgo::expect` and
+  parameters by name. After each step it checks `gotogether::expect` and
   equality for **every model variable the state carries**. So the same code
   validates three kinds of trace:
-  - a quintgo-emitted ITF (no model variables; expects only);
+  - a gotogether-emitted ITF (no model variables; expects only);
   - the enriched ITF of an earlier validation (full model state at every
     step);
   - raw `quint run --mbt` output (`-instance currentDesign`: its constants
@@ -488,7 +488,7 @@ The stand-in's binding should then apply unchanged.
    end, from buffered steps.
 7. **Tooling:**
    - statement-level `//quint:step`;
-   - `quintgo lint` also checking annotation expression types against
+   - `gotogether lint` also checking annotation expression types against
      `quint typecheck` parameter types;
    - a writer-only `step` in edgePublish for denser MBT traces;
    - the Rust evaluator backend for speed.
@@ -524,7 +524,7 @@ a first path element that still carries its qualifier is matched too.
 `NondetPath` reads the action and its picks from a sum-type variable, as
 quint-connect's `Config.nondet` does.
 
-### 9.2 Hegel (`quinthegel`)
+### 9.2 Hegel (`qhegel`)
 
 hegel-go (v0.9.x) runs its engine in-process (libhegel, through purego),
 with no Python and no server. Its stateful API discovers `Rule*` and
@@ -647,7 +647,7 @@ like this:
 
 Hegel needs a verdict for each test case before it moves on, and its
 shrinker is sequential, so a failing case cannot wait for a batch.
-`quinthegel`'s `Batched` mode splits the work instead:
+`qhegel`'s `Batched` mode splits the work instead:
 1. **Generate.** `hegel.WithPhases(PhaseGenerate)` and a fixed seed;
    cases are recorded, not checked.
 2. **Check in bulk** (`CaseChecker.Prefetch`, which fills the verdict
@@ -760,7 +760,7 @@ status lags. The conventions:
   (`Rates`, matched by prefix). Any other kind is a schedule choice,
   uniform under a seed.
 - **Backends.**
-  - `quinthegel.Choices(tc)` draws entropy in fixed-size byte chunks: a run makes
+  - `qhegel.Choices(tc)` draws entropy in fixed-size byte chunks: a run makes
     hundreds of choices, and a draw per choice made a shrinking test 20x
     slower.
   - `NewSeeded(seed)` gives random runs, Maelstrom- or Jepsen-style.
@@ -811,7 +811,7 @@ Steps are recorded where effects happen:
 `qtest.Explore` runs a scenario over many seeds and checks every run in
 one `CheckBatch`. `Exploration.Expect` states either that all conform, or
 that some failing run shows the expected verdict.
-`quinthegel.FindViolation` with `quinthegel.Choices` shrinks a failure to the
+`qhegel.FindViolation` with `qhegel.Choices` shrinks a failure to the
 interleaving and faults it needs. In examples/checkout that took 11 quint
 checks; the verdict cache answered the other 599 candidates.
 
@@ -886,7 +886,7 @@ it, and this is their pipeline, with each tier checking the next:
 | CTMC over (queue, orbit) | `qmeta.New`, `HittingTimes`, `Field`/`SVG` | ~0.1–1 s per configuration | where the tipping point is; how policies rank |
 | calibration | `qmeta.Calibrate` (simulated trajectories) | seconds | the chain's rates, so its numbers mean something |
 | simulation | `qload.Simulate`, `qmeta.Recovers` | ~0.1–0.5 s per run of 20 simulated minutes | does this policy, this code, recover from this trigger |
-| trigger search | `quinthegel.FindTrigger` (Hegel) | ~1 min | the smallest trigger that breaks it, shrunk |
+| trigger search | `qhegel.FindTrigger` (Hegel) | ~1 min | the smallest trigger that breaks it, shrunk |
 | the real system | (load tests) | hours | confirms the one trigger the search found |
 
 ### 11.1 Recovery as the property
@@ -990,7 +990,7 @@ the same workarounds kept appearing in examples. They are now in the core.
   `qtest.Explore` gives each seed its own recorder and runs seeds in
   parallel, and `qmeta.Runs`, `Count` and `Mostly` run a trigger's seeds
   in parallel. A Hegel test records the same way
-  (`quinthegel.Case.Context`). The global recorder remains for real
+  (`qhegel.Case.Context`). The global recorder remains for real
   processes and woven code.
 
   At first, a step recorded through `context.Background()` inside a
@@ -1005,7 +1005,7 @@ the same workarounds kept appearing in examples. They are now in the core.
   cost nothing measurable in the checkout load tests. What remains, a
   step from a goroutine started with `go`, is made loud: Explore and
   Experiment runs are strict (`qobs.Strict`), and such a step panics with
-  the fix. It is also caught before running, by `quintgo lint -sim`,
+  the fix. It is also caught before running, by `gotogether lint -sim`,
   which flags `go` statements, wall-clock calls and background-context
   steps in files that import qenv, and runs in CI. A compile-time
   guarantee (a context type only qenv can make) was rejected: code under
@@ -1044,7 +1044,7 @@ the same workarounds kept appearing in examples. They are now in the core.
   `TestSchedulerSemantics` states the scheduler's semantics as a Hegel
   property over random programs. It fails within a second on the `Signal`
   bug of §11.3, reintroduced. CI runs qenv's tests with the checks on.
-- **Constants per check** (`qtest.Constants`, `quinthegel.Config.Constants`,
+- **Constants per check** (`qtest.Constants`, `qhegel.Config.Constants`,
   `validate.Checker.WithConstants`). One binding serves runs of any size.
   Checkout's load runs had needed a copy of the binding with a different
   stock.
@@ -1104,7 +1104,7 @@ goroutine. Outside a simulation it returns the function unchanged.
   method-call join point compares the receiver expression's type, not
   the method's. A probe confirmed this, through a nested struct too.
 
-`quintgo lint -weave` reports all three by name, without type information
+`gotogether lint -weave` reports all three by name, without type information
 (it flags the embedding, not each call). The edgepublish stand-in needed
 the first two fixes; the lint flags both on the original code.
 
@@ -1204,7 +1204,7 @@ two halves:
   `metatesting.MetaT.RunWith` serves a qenv `Chooser`.
 
 A Hegel abort is a panic from inside `Choose`. It stops the binary, and
-the next run starts a fresh one. `quinthegel.Case.Add` takes the
+the next run starts a fresh one. `qhegel.Case.Add` takes the
 emitted steps, so `FindViolation` judges and shrinks gosim runs as it
 does qenv's.
 
@@ -1226,7 +1226,7 @@ Hegel network driver is excluded from `sim` builds.
 - A choice round trip to the host is about 50 µs. A cluster run takes
   350 ms with qenv choosing and 60 ms on gosim's own seed. Eight in ten
   choices are the scheduler's. Handing the simulation entropy in chunks,
-  as `quinthegel.Choices` already draws it, would remove most of the round
+  as `qhegel.Choices` already draws it, would remove most of the round
   trips. Fault choices would still go to the host one by one, for their
   rates and notes.
 - The first build translates the standard library and every dependency,
@@ -1351,7 +1351,7 @@ is syntactic, which caused the escapes §13 lists:
   `qenv/weave` covers channels on qenv's fast runtime, the case §13
   left undone.
 
-Then `quintgo lint -weave` has nothing left to report.
+Then `gotogether lint -weave` has nothing left to report.
 
 The weaver lives in its own module, with gosim's translator, because it
 depends on `dst` and `x/tools`; core stays light. The fork needs a home
@@ -1482,8 +1482,8 @@ double, process and example runs on it unchanged:
 - **Settle.** It turns fault choices nominal. It cannot make gosim's
   schedule canonical.
 - **Hegel stays out of the simulated packages.** The Hegel adapters
-  moved out of the packages a simulation runs, into quinthegel:
-  `quinthegel.Choices` (once `qenv.Hegel`), `FindTrigger` and
+  moved out of the packages a simulation runs, into qhegel:
+  `qhegel.Choices` (once `qenv.Hegel`), `FindTrigger` and
   `SearchTrigger` (once in qmeta). The Glomers network driver moved to
   `maelstrom/hegelnet`. Build tags had hidden the dependency instead,
   and the first gosim translation found each one late.
@@ -1525,7 +1525,7 @@ requires it like any module, at the commit it was built against.
 **Entropy.** A chooser that implements `qenv.Entropy` hands out bytes.
 `qenv.EntropyOf` finds that capability through `WithContext`,
 `Recorder` and `Replay`. The test binary then makes every choice but
-faults from 512-byte chunks, by the same rule as `quinthegel.Choices`: a
+faults from 512-byte chunks, by the same rule as `qhegel.Choices`: a
 byte, two above 256 options, modulo n.
 - Faults still go to the host one by one, for their rates and their
   notes on the test case.
@@ -1920,7 +1920,7 @@ conforms, names the fault kinds no run faulted: the usual reason a bug
 did not show. No call site passed several expectations meaning "one run
 with all", so the change broke no test.
 
-`quinthegel.Violation` now carries the shrunk run's full report: the
+`qhegel.Violation` now carries the shrunk run's full report: the
 shrunk run is checked once more, since cached verdicts keep only their
 summary. With `Violation.Expect`, the four tests that matched strings in
 summaries state their verdicts like the rest (`Rejects("rotateGen")`,
@@ -1942,10 +1942,10 @@ after, what fault-to-action coverage will build on. A Script with no
 `Progress` waits on the same count, so `FaultScript`'s callers set
 nothing.
 
-**`quinthegel.Case.Env(c)`** is the chooser a test case's simulation
+**`qhegel.Case.Env(c)`** is the chooser a test case's simulation
 runs on: `c`'s choices recorded into the case's recorder, the recorder in
 the chooser's context. It replaces
-`qenv.WithContext(quinthegel.Choices(tc), rec.Context(ctx))`. The shrunk
+`qenv.WithContext(qhegel.Choices(tc), rec.Context(ctx))`. The shrunk
 `Violation` carries its `Choices`. Checkout's write-skew test replays
 them with `qenv.Replay`: the same steps, rejected the same way, with no
 Hegel in the run.
@@ -1975,7 +1975,7 @@ not a verdict.
 - `sys.FollowTraces(t, trace, faults)` generates the model's traces,
   scripts each one's faults, runs the system on each script, and fails a
   run whose script did not complete (`Remaining`), the P6 message.
-- `quinthegel.Shrink(t, sys, rates)` lives in quinthegel, which imports qtest:
+- `qhegel.Shrink(t, sys, rates)` lives in qhegel, which imports qtest:
   Hegel stays out of qtest. It is FindViolation over `sys.Run` on
   `rec.Env(Choices(tc))`.
 
@@ -1985,7 +1985,7 @@ replay of its shrunk write skew is an exploration of one seed whose
 chooser is `qenv.Replay(v.Choices)`.
 
 Left for later: one `Run` type for exploration runs, Violations and
-qgosim's, and `quintgo scaffold` printing a System skeleton.
+qgosim's, and `gotogether scaffold` printing a System skeleton.
 
 ## 21. Production workloads from SimKube traces (`sktrace`, D1–D2)
 
@@ -2066,7 +2066,7 @@ would time out less.
 **One byte rule (`qenv.Bytes`).** A schedule choice is a byte modulo n.
 A fault is nominal when its byte is below 256 × (1 − rate), and otherwise
 1 plus a byte modulo n − 1. Past the end of the stream every choice is
-nominal. The rule lived in quinthegel's chooser and, in another form, in
+nominal. The rule lived in qhegel's chooser and, in another form, in
 the gosim fork. It is now qenv's: Hegel's chooser is the rule over Hegel's
 draws, and `FromBytes` is the rule over a fixed input. `EncodeChoices`
 inverts it: a recorded run, or a shrunk Hegel failure's choices, becomes
@@ -2212,7 +2212,7 @@ session; each now has its message where the trap shows:
 - runs whose Script never made all its faults list them, in the run's
   report and in "all N runs conform; want ..." (`Explored.Unscripted`);
 - every failing run's report ends with how to reproduce it:
-  `QUINTGO_SEED=17 go test -run '^TestX$'`, and Explore runs that seed
+  `GOTOGETHER_SEED=17 go test -run '^TestX$'`, and Explore runs that seed
   alone when the variable is set;
 - a recovery judged against goodput far below the offered load says the
   baseline was unhealthy (`Recovery.Warning`, in its `String`);
@@ -2230,7 +2230,7 @@ waits until a sweep's rows are checked in one batch.
 **One recovery API (P4).** `qmeta.System` is the one interface: a qload
 simulation (`OfSimulation`) or an application (`Of`), run with `Runs`,
 `Count` and `Mostly`. `RecoversMostly` and `SearchTrigger` are gone, and
-`quinthegel.FindTrigger(t, sys, space)` takes any System and returns a
+`qhegel.FindTrigger(t, sys, space)` takes any System and returns a
 `TriggerSearch` judged by `Expect(t, found)`, as FindViolation's result
 is. `MaxExtraRate` no longer defaults to the base rate (the System does
 not know it): set it.
@@ -2279,7 +2279,7 @@ of its own.
 The review's other parts of P8 wait: coverage gaps as expectations
 (`Reaches`, `NoSurvivors`) need a decision on what a test may demand of
 chance (a pair of kinds is reached in most seeds, not all), and a JSON
-form next to `QUINTGO_KEEP` needs the reports' types to marshal.
+form next to `GOTOGETHER_KEEP` needs the reports' types to marshal.
 
 ## 30. Choreo models (examples/twophase)
 
@@ -2324,10 +2324,10 @@ What the example taught:
 
 ## 31. Analyzers and the static action map (C1, C5)
 
-**Analyzers (C1).** `quintgo lint -sim` and `-weave` were directory
+**Analyzers (C1).** `gotogether lint -sim` and `-weave` were directory
 walks; the analyzers wrap the same per-file checks (`qlint.SimFile`,
 `WovenFile`), so the CLI and quintvet agree finding for finding, and
-`quintgo lint` stays std-only. x/tools went into a new module,
+`gotogether lint` stays std-only. x/tools went into a new module,
 qanalysis, not qweave: qweave is a build tool with no dependency on the
 core, the analyzers need the core's binding and lint packages, and a
 golangci-lint plugin is a dependency of its own that a weaver should not
@@ -2346,12 +2346,12 @@ and `(*qobs.Recorder).Record` call must be one of the model's
 is the binding package's (`binding.RecordsOf`, syntax only, so the CLI
 shares it); the analyzer confirms each call is qobs's by type, which the
 CLI approximates by skipping calls on other imported packages. quintsim
-checks test files, like `quintgo lint -sim`: a System's `Run` closure is
+checks test files, like `gotogether lint -sim`: a System's `Run` closure is
 test code, and a `go` statement there escapes the run as surely as one
 in the library.
 
 gopls cannot load third-party analyzers; editors get them through
-golangci-lint (the module plugin `quintgo`) or `go vet -vettool`.
+golangci-lint (the module plugin `gotogether`) or `go vet -vettool`.
 
 **Static action map (C5).** A1 says which code each step ran; the map
 says which code each action can run. Sites are `//quint:action`
@@ -2384,18 +2384,18 @@ position join for little gain over A1's never-run list.
 Eight skills had grown to 1,500 lines, the fault-injection one to 411:
 an agent loading it for a first exploration read weaving, gosim, sweeps,
 fuzzing, coverage and mutants too. Now:
-- `quint-start` is the entry: a question-to-tool table naming the skill
+- `gotogether-start` is the entry: a question-to-tool table naming the skill
   to load next (and the same table heads the README);
-- quint-fault-injection keeps the workflow (seams, recording, deploy,
+- gotogether-faults keeps the workflow (seams, recording, deploy,
   explore and shrink, the real environment) in 202 lines, and its
   mechanics are references loaded when the task needs them
   (`references/fuzzing.md`, `fault-points.md`, `coverage-and-mutants.md`,
   `sweeps.md`, `weaving.md`, `gosim.md`, `workloads.md`);
 - verdicts, expectations and claims over runs are one reference
-  (`quint-verification-workflow/references/verdicts.md`) the other skills
+  (`gotogether-workflow/references/verdicts.md`) the other skills
   link to, instead of each restating them.
 
-`quintgo skills install` installs the references with the skills, and a
+`gotogether skills install` installs the references with the skills, and a
 test checks every relative link between them resolves among the
 installed files.
 
@@ -2435,7 +2435,7 @@ covdata textfmt`, and `Compare` matches a simulation's blocks (by file
 and line; Go's files are import paths, qcover's module-relative) over the
 files the binaries contain. Code that ran for real and in no simulated
 run is where the simulation's verdicts are silent: the doubles never take
-that path. `quintgo cover -covdir ... -sim summary.json` prints both lists.
+that path. `gotogether cover -covdir ... -sim summary.json` prints both lists.
 
 **C2.** The review's advice held: qenv's native runtime with no platform
 (`NewNative(c, nil)`) waits with `time.Sleep`, `time.AfterFunc` and a
@@ -2469,7 +2469,7 @@ trace, so selecting by actor keeps whole runs) and sanitizes:
 - pseudonyms for chosen fields: a salted SHA-256 prefix, the same for the
   same value, so the binding's interning and the model's comparisons
   mean what they did. Unsalted pseudonyms of guessable values (account
-  names) are reversible; the CLI warns without `QUINTGO_SALT`;
+  names) are reversible; the CLI warns without `GOTOGETHER_SALT`;
 - minimizing: with a binding, every argument and observation the binding
   does not read is dropped, and error texts with them
   (`Binding.UsedFields`, the same field analysis the annotation lint
@@ -2477,8 +2477,8 @@ trace, so selecting by actor keeps whole runs) and sanitizes:
 
 A model constant listing concrete identifiers must list their pseudonyms
 (`Filter.Pseudonym`), as examples/bank's `TestSanitizedRunConforms`
-does; interning the field avoids the question. `quintgo steps -out`
-applies a filter and writes a step log for `quintgo validate`.
+does; interning the field avoids the question. `gotogether steps -out`
+applies a filter and writes a step log for `gotogether validate`.
 
 ## 37. Scenario lint, measured pod times, dead code and untried error paths (D5, D3, A1)
 
@@ -2547,7 +2547,7 @@ At the commit, the server stamps its own span with the step
 (`ledger.action`, fields, `ledger.seq` for commit order). The convert
 rules (`ledger.convert.yaml`) then make the spans the steps, which is how a
 production gRPC service would be checked from traces it already exports.
-`quintgo validate -convert` checks them from the command line
+`gotogether validate -convert` checks them from the command line
 (`run-demo.sh`).
 
 What the example found:

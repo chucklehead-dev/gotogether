@@ -20,10 +20,10 @@ MUTATION=forget-done ./run-demo.sh     # acks not journaled: a done job is lease
 ```
 
 ```
-$ quintgo validate -binding jobqueue.binding.yaml steps.jsonl
+$ gotogether validate -binding jobqueue.binding.yaml steps.jsonl
   conformance: PASS
   invariant doneImpliesPerformed: PASS
-$ quintgo validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl
+$ gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl
   conformance: PASS
   invariant exactlyOnce: FAIL
     violated after step 59

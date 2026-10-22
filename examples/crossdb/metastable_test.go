@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qload"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 
 	"github.com/chucklehead-dev/gotogether/qmeta"
 	"hegel.dev/go/hegel"
@@ -60,7 +60,7 @@ func TestControlPlaneTrigger(t *testing.T) {
 	}{{FixedRequeue, qload.SomeTrigger()}, {CrossplaneDefaults, qload.NoTrigger()}} {
 		t.Run(c.r.Name, func(t *testing.T) {
 			sys := qload.OfSimulation(DefaultControlPlane(c.r).Config(), 0, 5*time.Minute)
-			quinthegel.FindTrigger(t, sys, space, hegel.WithTestCases(25)).Expect(t, c.want)
+			qhegel.FindTrigger(t, sys, space, hegel.WithTestCases(25)).Expect(t, c.want)
 		})
 	}
 }

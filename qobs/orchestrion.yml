@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://datadoghq.dev/orchestrion/schema.json
 #
-# Generic quintgo aspects. A project opts in by importing
+# Generic gotogether aspects. A project opts in by importing
 # github.com/chucklehead-dev/gotogether/qobs in its orchestrion.tool.go
 # and building with `orchestrion go build` / `orchestrion go test`. A plain
 # `go build` ignores the directives: the program is unchanged.

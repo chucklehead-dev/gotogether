@@ -12,7 +12,7 @@
 // so annotated code built with `orchestrion go test` records into it.
 // Every run leaves a native step log, a model-level ITF per actor, and the
 // generated Quint modules in the run's directory (t.TempDir(), or
-// $QUINTGO_KEEP/<test name> to keep them).
+// $GOTOGETHER_KEEP/<test name> to keep them).
 package qtest
 
 import (
@@ -34,7 +34,7 @@ import (
 // a System's).
 type settings struct {
 	Options     validate.Options // quint binary, backend (default $QUINT_BACKEND, else rust)
-	Dir         string           // artifacts; default $QUINTGO_KEEP/<test> or t.TempDir()
+	Dir         string           // artifacts; default $GOTOGETHER_KEEP/<test> or t.TempDir()
 	Recorder    []qobs.Option    // e.g. qobs.WithActor("acct-1")
 	SkipIfEmpty bool             // skip (not fail) when nothing was recorded, e.g. an unwoven build
 	// Constants override the binding's (validate.Checker.WithConstants).
@@ -47,12 +47,12 @@ type settings struct {
 }
 
 // An Option configures a check: Record's, Validate's, a System's
-// workflows (System.Opts) and quinthegel's.
+// workflows (System.Opts) and qhegel's.
 type Option func(*settings)
 
 // Quint sets how quint runs: its binary and backend (the default backend
 // is $QUINT_BACKEND, else rust). Its Dir is ignored: artifacts go to
-// $QUINTGO_KEEP/<test>, else a temporary directory.
+// $GOTOGETHER_KEEP/<test>, else a temporary directory.
 func Quint(o validate.Options) Option { return func(c *settings) { c.Options = o } }
 
 // RecorderOptions configure the run's recorder, e.g. qobs.WithActor("acct-1").
@@ -100,12 +100,12 @@ func checkerFor(t testing.TB, bindingPath string, o validate.Options, c settings
 	var err error
 	if len(c.Constants) > 0 {
 		if ch, err = ch.WithConstants(c.Constants); err != nil {
-			t.Fatalf("quintgo: %v", err)
+			t.Fatalf("gotogether: %v", err)
 		}
 	}
 	if c.Invariants != nil {
 		if ch, err = ch.WithInvariants(c.Invariants...); err != nil {
-			t.Fatalf("quintgo: %v", err)
+			t.Fatalf("gotogether: %v", err)
 		}
 	}
 	return ch
@@ -146,7 +146,7 @@ func checker(t testing.TB, bindingPath string, o validate.Options) *validate.Che
 	t.Helper()
 	c, err := validate.Cached(bindingPath, o) // typechecks the model and lints the binding once
 	if err != nil {
-		t.Fatalf("quintgo: %v", err)
+		t.Fatalf("gotogether: %v", err)
 	}
 	return c
 }
@@ -157,7 +157,7 @@ func config(t testing.TB, opts []Option) settings {
 		o(&c)
 	}
 	if c.Dir == "" {
-		if keep := os.Getenv("QUINTGO_KEEP"); keep != "" {
+		if keep := os.Getenv("GOTOGETHER_KEEP"); keep != "" {
 			c.Dir = filepath.Join(keep, strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
 		} else {
 			c.Dir = t.TempDir()
@@ -193,7 +193,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	if c.Global {
 		if restore, err = qobs.InstallGlobal(rec); err != nil {
 			end()
-			t.Fatalf("quintgo: %v", err)
+			t.Fatalf("gotogether: %v", err)
 		}
 	}
 	mark, _ := qobs.Escaped(0)
@@ -205,23 +205,23 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 		scenario(rec)
 	}()
 	if err := file.Close(); err != nil {
-		t.Fatalf("quintgo: step log: %v", err)
+		t.Fatalf("gotogether: step log: %v", err)
 	}
 	if n, msgs := qobs.Escaped(mark); n > mark && !c.Global {
 		// a verdict on a run missing steps would only mislead
-		t.Fatalf("quintgo: %d steps were recorded from goroutines outside the scenario's run (the first: %s); "+
+		t.Fatalf("gotogether: %d steps were recorded from goroutines outside the scenario's run (the first: %s); "+
 			"record through the scenario's context (rec's: qobs.WithRecorder), or pass qtest.Global() for goroutines "+
 			"the scenario starts", n-mark, firstOr(msgs))
 	}
 	for _, is := range rec.Issues() {
-		t.Errorf("quintgo: recording: %s", is)
+		t.Errorf("gotogether: recording: %s", is)
 	}
 	run.Steps = mem.Steps()
 	if len(run.Steps) == 0 {
 		if c.SkipIfEmpty {
-			t.Skip("quintgo: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
+			t.Skip("gotogether: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
 		}
-		t.Fatal("quintgo: the scenario recorded no steps")
+		t.Fatal("gotogether: the scenario recorded no steps")
 	}
 	return check(t, bindingPath, run, c)
 }
@@ -260,13 +260,13 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 			}
 		}
 	} else {
-		t.Logf("quintgo: no model-level ITF: %v", err)
+		t.Logf("gotogether: no model-level ITF: %v", err)
 	}
 	cc := *ch // per run: its own output directory
 	cc.Options.Dir = o.Dir
 	rep, err := cc.Check(context.Background(), run.Steps)
 	if err != nil {
-		t.Fatalf("quintgo: %v", err)
+		t.Fatalf("gotogether: %v", err)
 	}
 	run.Report = rep
 	return run
@@ -281,12 +281,12 @@ func firstOr(msgs []string) string {
 }
 
 // Settings are a list of Options resolved for a test, for packages that
-// build their checks on qtest's (quinthegel). Configure with Options;
+// build their checks on qtest's (qhegel). Configure with Options;
 // Settings only read them.
 type Settings struct{ s settings }
 
 // Resolve applies opts for t: the artifacts' directory defaults to
-// $QUINTGO_KEEP/<test>, else a temporary directory.
+// $GOTOGETHER_KEEP/<test>, else a temporary directory.
 func Resolve(t testing.TB, opts ...Option) Settings { return Settings{config(t, opts)} }
 
 // Dir is where the check's artifacts go (generated modules, step logs).

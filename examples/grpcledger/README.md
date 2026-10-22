@@ -48,13 +48,13 @@ client on return. A transfer whose response was lost still happened.
 | `TestMutants` | simulated | the table above: `NoDedupe` conforms without faults and is caught with them; the others need none |
 | `TestNoDedupeSweep` | simulated | pairwise over {conn, request, response, crash}: the bug shows in every row with duplicated requests, lost responses or crashes (one can fall after the commit), and in no row with only refused connections |
 | `TestCrashWindow` | simulated, crashes only | a crash can fall after the commit (qenv.Service's crash window), so crashes alone expose `NoDedupe`; the faithful ledger conforms |
-| `TestShrinkDoubleApply` | simulated, Hegel | shrinks `NoDedupe` to one duplicated request (`quinthegel.Shrink`), replayable from its choices |
+| `TestShrinkDoubleApply` | simulated, Hegel | shrinks `NoDedupe` to one duplicated request (`qhegel.Shrink`), replayable from its choices |
 | `TestRealSpansConform` | real | a concurrent load with refused calls and lost responses: the otelgrpc spans conform |
 | `TestRealMutants` | real | `NoDedupe` (lost responses) and `NoFundsCheck` caught from spans |
 
 `go test -short ./...` runs a fifth of the seeds and skips the sweep and
 the shrink (about 80 s, most of it quint). `./run-demo.sh` serves the
-ledger for real and validates its spans with `quintgo validate -convert`
+ledger for real and validates its spans with `gotogether validate -convert`
 (`MUTATION=no-dedupe` to see a failure).
 
 ## What the simulation found in this example

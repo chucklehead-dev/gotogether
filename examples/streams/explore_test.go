@@ -6,9 +6,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/streams"
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qsweep"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -21,12 +21,12 @@ func TestHegelShrinksReorder(t *testing.T) {
 		t.Skip("shrinking against the model")
 	}
 	sys := system(streams.Config{Mutation: pipeline.NonIdempotentProducer})
-	v := quinthegel.Shrink(t, sys, faulty, hegel.WithTestCases(100), hegel.WithSeed(1))
+	v := qhegel.Shrink(t, sys, faulty, hegel.WithTestCases(100), hegel.WithSeed(1))
 	v.Expect(t, qtest.Violates("perKeyOrder"))
 	t.Logf("shrunk to %d steps; %s", len(v.Steps), v.Report.Summary())
 
 	replay := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.Replay(v.Choices) }})
-	if got, want := quinthegel.Render(replay.Runs[0].Steps), quinthegel.Render(v.Steps); got != want {
+	if got, want := qhegel.Render(replay.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the replayed run differs:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}
 	replay.Expect(t, qtest.Violates("perKeyOrder"))

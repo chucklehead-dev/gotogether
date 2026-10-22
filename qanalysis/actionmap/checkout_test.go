@@ -54,7 +54,7 @@ func TestCheckoutCompare(t *testing.T) {
 	cmd := exec.Command("go", "run", "-C", "qweave", "./cmd/qweave", "-C", "..", "-cover", "-coverpkg", ck,
 		"go", "test", "-count=1", "-run", "^TestCodeCoverage$", "./examples/checkout/")
 	cmd.Dir = "../.."
-	cmd.Env = append(os.Environ(), "QUINTGO_KEEP="+keep)
+	cmd.Env = append(os.Environ(), "GOTOGETHER_KEEP="+keep)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

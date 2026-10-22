@@ -6,8 +6,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
 	"github.com/chucklehead-dev/gotogether/examples/edgepublish/sim"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -91,12 +91,12 @@ func TestHegelShrinksNoRotationLock(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}
-	v := quinthegel.FindViolation(t, quinthegel.Config{Binding: binding}, func(tc hegel.TestCase, rec *quinthegel.Case) {
-		c := rec.Env(quinthegel.Choices(tc))
+	v := qhegel.FindViolation(t, qhegel.Config{Binding: binding}, func(tc hegel.TestCase, rec *qhegel.Case) {
+		c := rec.Env(qhegel.Choices(tc))
 		if err := sim.Run(c, sim.Config{Mutation: publisher.NoRotationLock, NoCrashes: true, NoAmbiguous: true, Requests: 4}); err != nil {
 			tc.Errorf("%v", err)
 		}
 	}, hegel.WithTestCases(80))
 	v.Expect(t, qtest.Rejects("rotateGen"))
-	t.Logf("shrunk to %d steps:\n%s", len(v.Steps), quinthegel.Render(v.Steps))
+	t.Logf("shrunk to %d steps:\n%s", len(v.Steps), qhegel.Render(v.Steps))
 }

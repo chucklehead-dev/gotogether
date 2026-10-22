@@ -43,10 +43,10 @@ resends its decision until each participant answers.
 | `TestChoreoBinding` | validation of recorded steps | a choreo model binds like any other: a run conforms, an early commit is rejected |
 | `TestFaithfulConforms` | `System.Explore`, 60 seeds, crashes and message faults | every run conforms; `Evidence` lists the faults reached |
 | `TestMutants` | `System.Explore` with and without faults | `EarlyCommit` is rejected at `decideCommit` without faults; `ImpatientParticipant` (rejected at `abort`) and `VolatileDecision` (rejected at `decideAbort`) conform without faults and fail with them |
-| `TestHegelShrinksImpatience` | `quinthegel.Shrink` | the impatient participant's failure, shrunk to a few steps and the crashes it needs |
+| `TestHegelShrinksImpatience` | `qhegel.Shrink` | the impatient participant's failure, shrunk to a few steps and the crashes it needs |
 | `TestModelDrivesTransitions` | `connect.Run` | the model's traces drive `tpc`'s transitions, every node's stage compared with `choreo::s.system` |
 | `TestModelDrivenMutants` | `connect.Replay` | the model's traces catch `EarlyCommit` at its first prepare, and never ask for the impatient abort |
 
 `./run-demo.sh` simulates 30 seeds and validates their step logs with
-`quintgo validate`; `MUTATION=early-commit | impatient | volatile-decision`
+`gotogether validate`; `MUTATION=early-commit | impatient | volatile-decision`
 injects a bug.

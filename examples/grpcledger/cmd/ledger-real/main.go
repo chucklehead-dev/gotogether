@@ -1,7 +1,7 @@
 // Command ledger-real serves the ledger for real (a grpc.Server with
 // otelgrpc, an injecting client interceptor), runs a concurrent load, and
 // writes the server's spans as OTLP/JSON, for
-// `quintgo validate -convert ledger.convert.yaml`: a production service's
+// `gotogether validate -convert ledger.convert.yaml`: a production service's
 // check, from the spans it already exports.
 package main
 

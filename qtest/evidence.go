@@ -30,8 +30,8 @@ type Evidence struct {
 }
 
 // WriteJSON writes the evidence to path as JSON, for tools that read a
-// run's report (quintgo cover, actionmap). Explorations write theirs under
-// QUINTGO_KEEP (evidence.json in the test's directory).
+// run's report (gotogether cover, actionmap). Explorations write theirs under
+// GOTOGETHER_KEEP (evidence.json in the test's directory).
 func (e *Evidence) WriteJSON(path string) error {
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {

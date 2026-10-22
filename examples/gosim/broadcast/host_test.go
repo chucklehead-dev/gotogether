@@ -18,9 +18,9 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qgosim"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 )
 
 const (
@@ -87,8 +87,8 @@ func TestHegelFindsNoRetry(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}
-	v := quinthegel.FindViolation(t, quinthegel.Config{Binding: binding, Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, rec *quinthegel.Case) {
-		c := quinthegel.Choices(tc)
+	v := qhegel.FindViolation(t, qhegel.Config{Binding: binding, Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, rec *qhegel.Case) {
+		c := qhegel.Choices(tc)
 		c.Rates.Kinds = map[string]float64{"partition": 0.3}
 		rec.Add(run(t, c, "NoRetry")...)
 	}, hegel.WithTestCases(60), hegel.WithSeed(1))

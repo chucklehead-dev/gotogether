@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -103,8 +103,8 @@ func (m *machine) RuleRead(tc hegel.TestCase) {
 // rounds are checked in bulk.
 func TestHegelSchedules(t *testing.T) {
 	qtest.RequireQuint(t)
-	quinthegel.Test(t, quinthegel.Config{Binding: "gcounter.binding.yaml", Mode: quinthegel.Batched, Opts: []qtest.Option{qtest.Global()}, Rounds: 2},
-		func(ht *hegel.T, _ *quinthegel.Case) {
+	qhegel.Test(t, qhegel.Config{Binding: "gcounter.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, Rounds: 2},
+		func(ht *hegel.T, _ *qhegel.Case) {
 			s := cluster(Faithful)
 			hegel.RunStateful(ht, &machine{Network: hegelnet.Network{Sim: s, Faults: true}}, hegel.WithStatefulStepCount(25))
 			finish(s)

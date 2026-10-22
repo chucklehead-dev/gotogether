@@ -31,7 +31,7 @@ jobs:
       - name: test
         run: go test -count=1 -timeout 30m ./...
       - name: simulation code stays in the simulation
-        run: go run ./cmd/quintgo lint -sim .
+        run: go run ./cmd/gotogether lint -sim .
       - name: qanalysis (analyzers, static action map)
         working-directory: qanalysis
         run: |
@@ -84,7 +84,7 @@ jobs:
       - name: the publisher in a simulation (qenv/weave's aspects, woven by qweave)
         run: go run -C ../../qweave ./cmd/qweave -C "$PWD" go test -short -timeout 20m -count=1 ./sim/
       - name: what weaving cannot rewrite
-        run: (cd ../.. && go run ./cmd/quintgo lint -weave examples/edgepublish/publisher)
+        run: (cd ../.. && go run ./cmd/gotogether lint -weave examples/edgepublish/publisher)
       - name: demo
         run: OUT=$RUNNER_TEMP/demo ./run-demo.sh
 
@@ -143,7 +143,7 @@ jobs:
         run: |
           ci/install-quint.sh
           sudo apt-get update -q && sudo apt-get install -y gnuplot-nox
-      - name: Gossip Glomers under Maelstrom, step logs checked by quintgo
+      - name: Gossip Glomers under Maelstrom, step logs checked by gotogether
         run: OUT=$RUNNER_TEMP/maelstrom examples/glomers/maelstrom.sh
 
   fleetrollout:
@@ -229,7 +229,7 @@ jobs:
         run: |
           test -z "$(gofmt -l . | tee /dev/stderr)"
           go vet ./...
-          go run -C ../.. ./cmd/quintgo lint -sim examples/grpcledger
+          go run -C ../.. ./cmd/gotogether lint -sim examples/grpcledger
       - name: test (simulated through simgrpc, and a real grpc.Server)
         run: go test -count=1 -timeout 30m ./...
       - name: demo (real server, otelgrpc spans converted and validated)
@@ -257,7 +257,7 @@ jobs:
         run: |
           test -z "$(gofmt -l . | tee /dev/stderr)"
           go vet ./...
-          go run -C ../.. ./cmd/quintgo lint -sim examples/streams
+          go run -C ../.. ./cmd/gotogether lint -sim examples/streams
       - name: test (simulated log with QENV_CHECK, Kafka on kfake, Kinesis on a fake endpoint)
         run: |
           QENV_CHECK=1 go test -short -count=1 ./...

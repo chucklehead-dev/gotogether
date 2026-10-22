@@ -7,8 +7,8 @@
 // writes the server's ordinary OTel spans as OTLP/JSON, as a collector's
 // file exporter would. Stop it with SIGINT/SIGTERM to flush both, then
 //
-//	quintgo validate -binding kv.binding.yaml steps.jsonl
-//	quintgo validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl
+//	gotogether validate -binding kv.binding.yaml steps.jsonl
+//	gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl
 package main
 
 import (

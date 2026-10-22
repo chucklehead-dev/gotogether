@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/examples/jobqueue/queue"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -183,8 +183,8 @@ func runMachine(tc hegel.TestCase, mut queue.Mutation) {
 // the test, in parallel).
 func TestHegelRunsConform(t *testing.T) {
 	qtest.RequireQuint(t)
-	quinthegel.Test(t, quinthegel.Config{Binding: "jobqueue.binding.yaml", Mode: quinthegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
-		func(ht *hegel.T, _ *quinthegel.Case) { runMachine(ht, queue.Faithful) },
+	qhegel.Test(t, qhegel.Config{Binding: "jobqueue.binding.yaml", Mode: qhegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
+		func(ht *hegel.T, _ *qhegel.Case) { runMachine(ht, queue.Faithful) },
 		hegel.WithTestCases(40), hegel.WithDatabase(""))
 }
 
@@ -196,10 +196,10 @@ func TestHegelShrinksAckAnyLease(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint dozens of times")
 	}
-	v := quinthegel.FindViolation(t, quinthegel.Config{Binding: "jobqueue.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *quinthegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.Config{Binding: "jobqueue.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		runMachine(tc, queue.AckAnyLease)
 	}, hegel.WithTestCases(60), hegel.WithSeed(5))
 	if last := v.Last(); last.Action != "ack" || last.Outcome != "ok" {
-		t.Fatalf("want the run to end in an accepted ack:\n%s", quinthegel.Render(v.Steps))
+		t.Fatalf("want the run to end in an accepted ack:\n%s", qhegel.Render(v.Steps))
 	}
 }

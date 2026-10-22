@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Model is what quintgo needs to know about a Quint module: its actions with
+// Model is what gotogether needs to know about a Quint module: its actions with
 // their parameter names and types, its vals (candidate invariants), its vars
 // and consts. It is read from `quint typecheck --out`, so it is always the
 // model's own view of itself.
@@ -76,7 +76,7 @@ func LoadModel(quint, spec, module string) (*Model, error) {
 	if quint == "" {
 		quint = "quint"
 	}
-	tmp, err := os.CreateTemp("", "quintgo-typecheck-*.json")
+	tmp, err := os.CreateTemp("", "gotogether-typecheck-*.json")
 	if err != nil {
 		return nil, err
 	}

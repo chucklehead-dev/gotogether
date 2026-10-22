@@ -10,7 +10,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
-// ITFMeta is what quintgo stores under "#meta"."quintgo" of a model-level
+// ITFMeta is what gotogether stores under "#meta"."gotogether" of a model-level
 // trace, so the trace can be validated without the binding.
 type ITFMeta struct {
 	Spec       string            `json:"spec"` // absolute path when written
@@ -28,7 +28,7 @@ type ITFMeta struct {
 //
 //	"mbt::actionTaken"  the model action
 //	"mbt::nondetPicks"  its arguments by parameter name, as Some(value)
-//	"quintgo::expect"   the binding's post-state check, rendered (a Quint bool)
+//	"gotogether::expect"   the binding's post-state check, rendered (a Quint bool)
 //	"obs::<name>"       the observed projections recorded with the step
 //
 // It holds no model variables: those only exist once Quint replays it (see
@@ -63,8 +63,8 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 			"mbt::nondetPicks": picks,
 		}
 		if c.Expect != "" {
-			st["quintgo::expect"] = c.Expect
-			varSet["quintgo::expect"] = true
+			st["gotogether::expect"] = c.Expect
+			varSet["gotogether::expect"] = true
 		}
 		if c.Step != nil {
 			for k, x := range c.Step.Obs {
@@ -87,9 +87,9 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 		"#meta": map[string]any{
 			"format":             "ITF",
 			"format-description": "https://apalache-mc.org/docs/adr/015adr-trace.html",
-			"source":             "quintgo",
-			"description":        fmt.Sprintf("observed trace of actor %q, emitted by quintgo on %s", p.Actor, time.Now().UTC().Format(time.RFC3339)),
-			"quintgo": ITFMeta{Spec: b.SpecPath(), Module: b.Module, Constants: p.Constants, Defs: b.Defs,
+			"source":             "gotogether",
+			"description":        fmt.Sprintf("observed trace of actor %q, emitted by gotogether on %s", p.Actor, time.Now().UTC().Format(time.RFC3339)),
+			"gotogether": ITFMeta{Spec: b.SpecPath(), Module: b.Module, Constants: p.Constants, Defs: b.Defs,
 				Invariants: b.Invariants, Actor: p.Actor, Processes: p.Processes},
 		},
 		"vars":   vars,
@@ -114,9 +114,9 @@ func (b *Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.I
 	return out, issues, nil
 }
 
-// ReadITFMeta returns the quintgo section of a trace's #meta, if any.
+// ReadITFMeta returns the gotogether section of a trace's #meta, if any.
 func ReadITFMeta(meta map[string]any) (*ITFMeta, bool) {
-	raw, ok := meta["quintgo"]
+	raw, ok := meta["gotogether"]
 	if !ok {
 		return nil, false
 	}

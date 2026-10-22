@@ -13,7 +13,7 @@
 // Per-request randomness (arrivals, service times) comes from a seeded
 // generator, not the Chooser: a run has tens of thousands of requests.
 // What a search should vary (the stressor) is a parameter, which Hegel can
-// draw and shrink (see quinthegel and qmeta).
+// draw and shrink (see qhegel and qmeta).
 package qload
 
 import (

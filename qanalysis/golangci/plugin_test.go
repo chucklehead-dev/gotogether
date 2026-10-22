@@ -8,7 +8,7 @@ import (
 
 // The plugin registers, picks analyzers by name and rejects unknown ones.
 func TestPlugin(t *testing.T) {
-	newPlugin, err := register.GetPlugin("quintgo")
+	newPlugin, err := register.GetPlugin("gotogether")
 	if err != nil {
 		t.Fatal(err)
 	}

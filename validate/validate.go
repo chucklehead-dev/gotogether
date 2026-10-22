@@ -138,7 +138,7 @@ func (opt Options) resolve() (Options, error) {
 		opt.Backend = "rust"
 	}
 	if opt.Dir == "" {
-		d, err := os.MkdirTemp("", "quintgo-")
+		d, err := os.MkdirTemp("", "gotogether-")
 		if err != nil {
 			return opt, err
 		}

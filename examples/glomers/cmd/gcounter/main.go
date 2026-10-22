@@ -5,7 +5,7 @@
 // With $QUINT_STEPS_DIR set, each node writes its model steps to
 // <dir>/<node>.jsonl:
 //
-//	quintgo validate -binding ../../gcounter/gcounter.binding.yaml /tmp/steps/*.jsonl
+//	gotogether validate -binding ../../gcounter/gcounter.binding.yaml /tmp/steps/*.jsonl
 package main
 
 import (

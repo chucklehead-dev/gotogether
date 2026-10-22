@@ -75,7 +75,7 @@ func (r Recovery) Expect(t TB, c RecoveryClaim) {
 }
 
 // A TriggerClaim is what a trigger search must find: SomeTrigger or
-// NoTrigger (quinthegel.FindTrigger).
+// NoTrigger (qhegel.FindTrigger).
 type TriggerClaim struct{ some bool }
 
 // SomeTrigger claims some trigger in the space leaves the system degraded:
@@ -185,7 +185,7 @@ func Of(x Experiment, goodput string, within time.Duration) Target {
 	return func(tr Trigger, seed uint64) Recovery { return Assess(x, goodput, tr, within, seed) }
 }
 
-// TriggerSpace bounds the triggers quinthegel.FindTrigger draws.
+// TriggerSpace bounds the triggers qhegel.FindTrigger draws.
 type TriggerSpace struct {
 	MaxExtraRate float64       // default 0 (no extra load)
 	MaxSlowdown  float64       // default 1 (no capacity triggers)

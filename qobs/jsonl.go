@@ -12,7 +12,7 @@ import (
 
 // JSONLSink writes each step as one line of the native step log: a flat
 // JSON object with the same keys as the OTel attributes (see qtrace), no
-// OTel involved. `quintgo validate` reads it like OTLP/JSON.
+// OTel involved. `gotogether validate` reads it like OTLP/JSON.
 type JSONLSink struct {
 	mu  sync.Mutex
 	w   io.Writer

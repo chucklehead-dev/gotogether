@@ -1,6 +1,6 @@
 // Command twophase-sim runs two-phase commit in simulated environments,
 // one per seed, and writes each run's model steps to <out>/seed<N>.jsonl
-// for `quintgo validate` against the Choreo model.
+// for `gotogether validate` against the Choreo model.
 //
 //	twophase-sim -seeds 20 -mutation impatient -out /tmp/runs
 package main

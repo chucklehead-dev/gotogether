@@ -1,5 +1,5 @@
 // Package golangci registers qanalysis's analyzers as a golangci-lint
-// module plugin named "quintgo". In .custom-gcl.yml:
+// module plugin named "gotogether". In .custom-gcl.yml:
 //
 //	plugins:
 //	  - module: github.com/chucklehead-dev/gotogether/qanalysis
@@ -9,10 +9,10 @@
 // and in .golangci.yml:
 //
 //	linters:
-//	  enable: [quintgo]
+//	  enable: [gotogether]
 //	  settings:
 //	    custom:
-//	      quintgo:
+//	      gotogether:
 //	        type: module
 //	        settings:
 //	          analyzers: [quintsim, quintaction]   # default: all three
@@ -29,7 +29,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qanalysis"
 )
 
-func init() { register.Plugin("quintgo", New) }
+func init() { register.Plugin("gotogether", New) }
 
 // Settings are the plugin's settings in .golangci.yml.
 type Settings struct {
@@ -68,7 +68,7 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	for _, name := range p.s.Analyzers {
 		i := slices.IndexFunc(qanalysis.All, func(a *analysis.Analyzer) bool { return a.Name == name })
 		if i < 0 {
-			return nil, fmt.Errorf("quintgo: no analyzer %q (have quintsim, quintweave, quintaction)", name)
+			return nil, fmt.Errorf("gotogether: no analyzer %q (have quintsim, quintweave, quintaction)", name)
 		}
 		out = append(out, qanalysis.All[i])
 	}

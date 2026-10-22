@@ -20,7 +20,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-// OTLP/JSON, only the parts quintgo reads and writes.
+// OTLP/JSON, only the parts gotogether reads and writes.
 type (
 	TracesData struct {
 		ResourceSpans []ResourceSpans `json:"resourceSpans"`

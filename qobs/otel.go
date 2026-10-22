@@ -19,7 +19,7 @@ import (
 // dense) but cannot fill.
 type OTelSink struct{ Tracer trace.Tracer }
 
-// NewOTelSink returns a sink on tp's "quintgo" tracer.
+// NewOTelSink returns a sink on tp's "gotogether" tracer.
 func NewOTelSink(tp trace.TracerProvider) *OTelSink {
 	return &OTelSink{Tracer: tp.Tracer("github.com/chucklehead-dev/gotogether/qobs")}
 }

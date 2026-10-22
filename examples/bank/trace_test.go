@@ -43,7 +43,7 @@ func payday(b *Bank) {
 // records a run and checks it: every step a transition of the model, the
 // reported balances the model's, noOverdraft in every state. The step log
 // and a model-level ITF of the run are left in the test's directory
-// ($QUINTGO_KEEP keeps them).
+// ($GOTOGETHER_KEEP keeps them).
 func TestRecordedRunConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { payday(New(accounts)) }, qtest.Global()).Expect(t, qtest.Conforms())
@@ -63,7 +63,7 @@ func TestRecordedRunCatchesLostDeposit(t *testing.T) {
 // The OTLP/JSON file is what a collector's file exporter would write; the
 // CLI checks it the same way:
 //
-//	quintgo validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl
+//	gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl
 func TestOTelSpansConvertedAndChecked(t *testing.T) {
 	qtest.RequireQuint(t)
 	rules, err := convert.Load("bank.convert.yaml")

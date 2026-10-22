@@ -27,7 +27,7 @@ func TestCodeCoverage(t *testing.T) {
 	t.Log(x.Evidence().Code)
 	// kept for qanalysis/actionmap, which reads it against the code each
 	// action reaches statically
-	if k := os.Getenv("QUINTGO_KEEP"); k != "" {
+	if k := os.Getenv("GOTOGETHER_KEEP"); k != "" {
 		b, err := json.Marshal(x.Evidence().Code)
 		if err == nil {
 			err = os.WriteFile(filepath.Join(k, "checkout-coverage.json"), b, 0o644)

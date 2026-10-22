@@ -1,4 +1,4 @@
-// Package convert turns telemetry that was not written for quintgo, an
+// Package convert turns telemetry that was not written for gotogether, an
 // application's ordinary OpenTelemetry spans and span events, into model
 // steps (qtrace.Step), so existing traces can be checked against a Quint
 // model without new instrumentation. A YAML rule file says which spans are

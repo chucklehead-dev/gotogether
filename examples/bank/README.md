@@ -1,6 +1,6 @@
 # examples/bank
 
-Every workflow of quint-connect-go on one small system. `bank.go` is an
+Every workflow of gotogether on one small system. `bank.go` is an
 in-memory bank with deposits, withdrawals and transfers. `model/bank.qnt`
 is its Quint model, and `Mutation`s inject bugs. Each test file shows
 which tests catch which bug.
@@ -30,5 +30,5 @@ QUINT_SEED=0x1234 QUINT_VERBOSE=1 go test ./examples/bank/ -run ModelDrives -v
 The same checks from the CLI, on a file of the bank's spans:
 
 ```sh
-quintgo validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl
+gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl
 ```

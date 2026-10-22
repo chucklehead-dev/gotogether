@@ -1,14 +1,14 @@
 # qanalysis
 
-quint-connect-go's checks as `golang.org/x/tools/go/analysis` passes, and
+gotogether's checks as `golang.org/x/tools/go/analysis` passes, and
 the static action map. Its own module: the core depends only on OTel,
 yaml.v3 and Hegel.
 
 | Analyzer | Reports | Same as |
 |---|---|---|
-| `quintsim` | in files importing qenv: `go` statements, the wall clock, steps recorded with `context.Background()` | `quintgo lint -sim` |
-| `quintweave` | unmarked `go` statements, sync method values, embedded sync types (for packages woven by qenv/weave) | `quintgo lint -weave` |
-| `quintaction` | `//quint:action` without `action:`; expressions using locals (only parameters, the receiver and named results are in scope on return); with `-binding`: actions not in the model, fields the binding uses but the annotation does not record | `quintgo lint -binding -src` |
+| `quintsim` | in files importing qenv: `go` statements, the wall clock, steps recorded with `context.Background()` | `gotogether lint -sim` |
+| `quintweave` | unmarked `go` statements, sync method values, embedded sync types (for packages woven by qenv/weave) | `gotogether lint -weave` |
+| `quintaction` | `//quint:action` without `action:`; expressions using locals (only parameters, the receiver and named results are in scope on return); with `-binding`: actions not in the model, fields the binding uses but the annotation does not record | `gotogether lint -binding -src` |
 
 The first two wrap package `qlint`, so the CLI and the analyzers find the
 same things.
@@ -20,7 +20,7 @@ quintvet -quintweave=false -quintaction.binding app.binding.yaml ./...
 go vet -vettool=$(which quintvet) -quintweave=false ./... # per package, with go vet
 ```
 
-**golangci-lint**: a module plugin named `quintgo` (package `golangci`;
+**golangci-lint**: a module plugin named `gotogether` (package `golangci`;
 settings `analyzers`, `binding`, `quint`). See the package doc for
 `.custom-gcl.yml` and `.golangci.yml`.
 
@@ -43,7 +43,7 @@ stops at other packages' functions. With qcover's per-step coverage
   setup that ran before a task's first step.
 
 ```sh
-QUINTGO_KEEP=/tmp/k go run -C qweave ./cmd/qweave -C .. -cover \
+GOTOGETHER_KEEP=/tmp/k go run -C qweave ./cmd/qweave -C .. -cover \
   -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout \
   go test -run '^TestCodeCoverage$' ./examples/checkout/
 cd qanalysis && go run ./cmd/actionmap -C .. -coverage /tmp/k/checkout-coverage.json ./examples/checkout/...

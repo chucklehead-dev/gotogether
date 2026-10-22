@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the woven demo and the quintgo CLI, lint the binding, then run every
+# Build the woven demo and the gotogether CLI, lint the binding, then run every
 # scenario. Each run emits its model steps three ways, and each is validated
 # against edgePublish.qnt:
 #   spans.jsonl   OTLP/JSON through the OTel SDK      -> reconstructed, replayed
@@ -14,14 +14,14 @@ OUT=${OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
 export QUINT_BACKEND=${QUINT_BACKEND:-rust}
 echo "# output in $OUT"
-(cd ../.. && go build -o "$OUT/quintgo" ./cmd/quintgo) || exit 2
+(cd ../.. && go build -o "$OUT/gotogether" ./cmd/gotogether) || exit 2
 go run github.com/DataDog/orchestrion go build -o "$OUT/demo" ./cmd/demo || exit 2
-echo; echo "\$ quintgo lint -binding binding.yaml -src publisher"
-"$OUT/quintgo" lint -binding binding.yaml -src publisher || exit 2
+echo; echo "\$ gotogether lint -binding binding.yaml -src publisher"
+"$OUT/gotogether" lint -binding binding.yaml -src publisher || exit 2
 
 verdict() { # file -> one line: conformance, failing step, invariants, exit status
   local name=$1; shift
-  local out; out=$("$OUT/quintgo" validate "$@" 2>&1); local rc=$?
+  local out; out=$("$OUT/gotogether" validate "$@" 2>&1); local rc=$?
   [ -n "${VERBOSE:-}" ] && echo "$out"
   printf '  %-9s %-28s exit %d  %s\n' "$name" "$(grep -m1 -o 'input .*: [a-zA-Z/ -]*$' <<<"$out" | sed 's/^input [^:]*: //')" "$rc" \
     "$(grep -E 'conformance:|invariant .*: (FAIL|PASS)|step [0-9]+ |violated after' <<<"$out" | sed -E 's/^ +//; s/ is not a transition.*/ disabled/; s/the model.s state does not match.*/state mismatch/' | paste -sd ';' -)"

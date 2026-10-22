@@ -8,7 +8,7 @@
 #   GLOMERS_MUTATION=n                 run a package's Mutation n instead of the faithful node
 #
 # Needs Java 11+, gnuplot and quint. Maelstrom checks the challenge's own
-# properties; quintgo checks each node's model steps, merged by their
+# properties; gotogether checks each node's model steps, merged by their
 # Lamport clocks. (kafka's model steps include lin-kv's own operations,
 # which only the in-process Sim records, so it is checked by Maelstrom only.)
 set -uo pipefail
@@ -21,7 +21,7 @@ if [ -z "${MAELSTROM:-}" ]; then
   fi
   MAELSTROM=$OUT/maelstrom/maelstrom
 fi
-(cd ../.. && go build -o "$OUT/bin/quintgo" ./cmd/quintgo) || exit 2
+(cd ../.. && go build -o "$OUT/bin/gotogether" ./cmd/gotogether) || exit 2
 status=0
 for c in ${@:-echo uniqueids broadcast gcounter kafka}; do
   go build -o "$OUT/bin/$c" "./cmd/$c" || exit 2
@@ -40,9 +40,9 @@ for c in ${@:-echo uniqueids broadcast gcounter kafka}; do
   [ "$c" = kafka ] && continue
   for b in "$c"/*.binding.yaml; do
     [ -f "$b" ] && ls "$steps"/*.jsonl >/dev/null 2>&1 || continue
-    echo "--- quintgo validate -noitf -binding $b ($(cat "$steps"/*.jsonl | wc -l) steps)"
+    echo "--- gotogether validate -noitf -binding $b ($(cat "$steps"/*.jsonl | wc -l) steps)"
     v=$(basename "$b" .yaml)
-    "$OUT/bin/quintgo" validate -noitf -binding "$b" -dir "$OUT/v-$v" "$steps"/*.jsonl > "$OUT/$v.validate" || status=1
+    "$OUT/bin/gotogether" validate -noitf -binding "$b" -dir "$OUT/v-$v" "$steps"/*.jsonl > "$OUT/$v.validate" || status=1
     grep -E 'issue|conformance|invariant|step [0-9]+ |quint:|RESULT' "$OUT/$v.validate"
   done
 done

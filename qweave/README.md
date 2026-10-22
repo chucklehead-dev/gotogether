@@ -45,7 +45,7 @@ weaves:
 - **promoted calls.** `c.Lock()` on `struct{ sync.Mutex }` matches the
   embedded field's type, and the advice is applied to `(c).Mutex`.
 
-`quintgo lint -weave` reports both, but they are a problem only under
+`gotogether lint -weave` reports both, but they are a problem only under
 Orchestrion.
 
 **Instrumenting the main module.** Two flags weave the main module's own

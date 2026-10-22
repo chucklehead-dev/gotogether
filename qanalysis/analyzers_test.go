@@ -10,7 +10,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qanalysis"
 )
 
-// The analyzers report what quintgo lint reports, at the same places
+// The analyzers report what gotogether lint reports, at the same places
 // (qlint's own test has the same fixtures).
 func TestSim(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), qanalysis.Sim, "simapp")

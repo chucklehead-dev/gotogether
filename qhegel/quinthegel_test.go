@@ -1,0 +1,145 @@
+package qhegel_test
+
+import (
+	"errors"
+	"os/exec"
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/qhegel"
+	"hegel.dev/go/hegel"
+)
+
+// bank is the system under test. With buggy set, a transfer to oneself
+// double-credits (the model forbids src == dst; the bug is that the
+// implementation accepts it).
+type bank struct {
+	bal   map[string]int
+	buggy bool
+}
+
+func (b *bank) deposit(a string, n int) { b.bal[a] += n }
+func (b *bank) withdraw(a string, n int) error {
+	if b.bal[a] < n {
+		return errors.New("insufficient funds")
+	}
+	b.bal[a] -= n
+	return nil
+}
+func (b *bank) transfer(src, dst string, n int) error {
+	if src == dst && !b.buggy {
+		return errors.New("same account")
+	}
+	if err := b.withdraw(src, n); err != nil {
+		return err
+	}
+	b.bal[dst] += n
+	return nil
+}
+
+var accounts = []string{"alice", "bob"}
+
+// bankMachine is a Hegel state machine over the bank; every rule records
+// the model step it performed, with the balances it observed afterwards.
+type bankMachine struct {
+	b   *bank
+	rec *qhegel.Case
+}
+
+func (m *bankMachine) obs() []any {
+	return []any{"obs.alice", m.b.bal["alice"], "obs.bob", m.b.bal["bob"]}
+}
+
+func (m *bankMachine) RuleDeposit(tc hegel.TestCase) {
+	a, n := hegel.Draw(tc, hegel.SampledFrom(accounts)), hegel.Draw(tc, hegel.Integers(1, 5))
+	m.b.deposit(a, n)
+	m.rec.Step("deposit", nil, append([]any{"account", a, "amount", n}, m.obs()...)...)
+}
+
+func (m *bankMachine) RuleWithdraw(tc hegel.TestCase) {
+	a, n := hegel.Draw(tc, hegel.SampledFrom(accounts)), hegel.Draw(tc, hegel.Integers(1, 5))
+	err := m.b.withdraw(a, n)
+	m.rec.Step("withdraw", err, append([]any{"account", a, "amount", n}, m.obs()...)...)
+}
+
+func (m *bankMachine) RuleTransfer(tc hegel.TestCase) {
+	src, dst := hegel.Draw(tc, hegel.SampledFrom(accounts)), hegel.Draw(tc, hegel.SampledFrom(accounts))
+	n := hegel.Draw(tc, hegel.Integers(1, 5))
+	err := m.b.transfer(src, dst, n)
+	m.rec.Step("transfer", err, append([]any{"src", src, "dst", dst, "amount", n}, m.obs()...)...)
+}
+
+func (m *bankMachine) InvariantNonNegative(tc hegel.TestCase) {
+	for a, v := range m.b.bal {
+		if v < 0 {
+			tc.Errorf("%s is overdrawn: %d", a, v)
+		}
+	}
+}
+
+func needQuint(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+}
+
+func run(buggy bool) func(ht *hegel.T, rec *qhegel.Case) {
+	return func(ht *hegel.T, rec *qhegel.Case) {
+		m := &bankMachine{b: &bank{bal: map[string]int{"alice": 0, "bob": 0}, buggy: buggy}, rec: rec}
+		hegel.RunStateful(ht, m, hegel.WithStatefulStepCount(8))
+	}
+}
+
+func TestStateMachineConformsEach(t *testing.T) {
+	needQuint(t)
+	qhegel.Test(t, qhegel.Config{Binding: "testdata/bank.yaml", Mode: qhegel.Each}, run(false),
+		hegel.WithTestCases(5), hegel.WithDatabase(""))
+}
+
+func TestStateMachineConformsAfter(t *testing.T) {
+	needQuint(t)
+	qhegel.Test(t, qhegel.Config{Binding: "testdata/bank.yaml", Mode: qhegel.After}, run(false),
+		hegel.WithTestCases(20), hegel.WithDatabase(""))
+}
+
+// The bug is invisible to the machine's own invariant (no balance goes
+// negative) but the model rejects the self-transfer: Hegel shrinks the run
+// to the one step the model cannot take.
+func TestStateMachineBugShrinks(t *testing.T) {
+	needQuint(t)
+	if testing.Short() {
+		t.Skip("shrinking against the model runs quint ~130 times (~1.5 min)")
+	}
+	v := qhegel.FindViolation(t, qhegel.Config{Binding: "testdata/bank.yaml"}, func(tc hegel.TestCase, rec *qhegel.Case) {
+		m := &bankMachine{b: &bank{bal: map[string]int{"alice": 0, "bob": 0}, buggy: true}, rec: rec}
+		hegel.RunStateful(tc, m, hegel.WithStatefulStepCount(8))
+	}, hegel.WithTestCases(40), hegel.WithSeed(7))
+	if v.Last().Action != "transfer" || len(v.Steps) > 2 {
+		t.Fatalf("not shrunk to a self-transfer:\n%s", qhegel.Render(v.Steps))
+	}
+}
+
+// Model-driven: Quint's traces drive the bank inside Hegel, which picks the
+// trace and the prefix.
+func TestReplayTraces(t *testing.T) {
+	needQuint(t)
+	traces := qhegel.Traces(t, connect.Config{Spec: "../connect/testdata/bank.qnt", MaxSamples: 20, MaxSteps: 10, Seed: "0x2a"})
+	hegel.Test(t, func(ht *hegel.T) {
+		qhegel.VaryTraces(ht, traces, func(tc hegel.TestCase) connect.Driver {
+			b := &bank{bal: map[string]int{"alice": 0, "bob": 0}}
+			return connect.Switch{
+				"init": connect.Skip,
+				"deposit": func(s *connect.Step) error {
+					b.deposit(connect.MustPick[string](s, "account"), connect.MustPick[int](s, "amount"))
+					return nil
+				},
+				"withdraw": func(s *connect.Step) error {
+					return b.withdraw(connect.MustPick[string](s, "account"), connect.MustPick[int](s, "amount"))
+				},
+				"transfer": func(s *connect.Step) error {
+					return b.transfer(connect.MustPick[string](s, "src"), connect.MustPick[string](s, "dst"), connect.MustPick[int](s, "amount"))
+				},
+			}
+		}, qhegel.VaryOptions{Prefix: true})
+	}, hegel.WithTestCases(30), hegel.WithDatabase(""))
+}

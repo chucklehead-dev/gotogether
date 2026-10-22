@@ -110,7 +110,7 @@ func (b *Bytes) Entropy(n int) []byte {
 
 // EncodeChoices is the byte stream from which Bytes, at the given rates,
 // makes the recorded choices again: a recorded run, or a shrunk Hegel
-// failure (quinthegel.Violation.Choices), as a fuzz corpus entry. A fault
+// failure (qhegel.Violation.Choices), as a fuzz corpus entry. A fault
 // of a kind whose rate is 0 cannot be encoded, and neither can entropy
 // chunks; both are reported. The bytes start with a header naming the
 // byte rule's version (BytesVersion).

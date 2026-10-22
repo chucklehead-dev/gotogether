@@ -22,7 +22,7 @@ and the step logs they write there are checked against the same models.
 ```sh
 go test ./examples/glomers/... -short        # sim, scripted and Hegel-scheduled runs (~2 min)
 go test ./examples/glomers/... -run Shrink   # + Hegel shrinking a mutant against the model
-examples/glomers/maelstrom.sh                # under real Maelstrom (Java 11+, gnuplot), then quintgo on the step logs
+examples/glomers/maelstrom.sh                # under real Maelstrom (Java 11+, gnuplot), then gotogether on the step logs
 ```
 
 ## How it fits together
@@ -36,7 +36,7 @@ examples/glomers/maelstrom.sh                # under real Maelstrom (Java 11+, g
     message body. Maelstrom rejects extra keys in replies to clients and
     services, so those don't carry it.
   - Under Maelstrom each node writes its own step log
-    (`$QUINT_STEPS_DIR/<node>.jsonl`). `quintgo validate` merges the logs
+    (`$QUINT_STEPS_DIR/<node>.jsonl`). `gotogether validate` merges the logs
     by those clocks, so a delivery is ordered after its send.
 - **`Sim`** is a deterministic in-process network. Nothing happens unless
   the test says so:

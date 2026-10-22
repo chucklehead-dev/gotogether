@@ -1,4 +1,4 @@
-# quintgo binding: how steps observed from the edgepublish stand-in (or the
+# gotogether binding: how steps observed from the edgepublish stand-in (or the
 # real chdbexporter, once annotated the same way) become calls of the actions
 # of model/edgePublish.qnt (vendored from casselc/observability otel-chdb/model).
 #

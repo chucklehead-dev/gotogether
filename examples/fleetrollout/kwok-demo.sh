@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 members=(m1 m2 m3)
 out=$(mktemp -d)
 go build -o "$out/fleet-controller" ./cmd/fleet-controller
-(cd ../.. && go build -o "$out/quintgo" ./cmd/quintgo)
+(cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
 
 # Clusters timed by a trace are named apart, so KEEP's reuse never mixes
 # them with kwok's default (immediate) pod stages.
@@ -61,7 +61,7 @@ kill "$pid"; wait "$pid" 2>/dev/null || true
 "$out/fleet-controller" "${args[@]}" -verify -steps "$out/steps-verify.jsonl"
 
 status=0
-"$out/quintgo" validate -noitf -binding fleet.binding.yaml "$out"/steps-*.jsonl || status=$?
+"$out/gotogether" validate -noitf -binding fleet.binding.yaml "$out"/steps-*.jsonl || status=$?
 echo "step logs in $out"
 if [[ -z "${KEEP:-}" ]]; then
   for m in "${members[@]}"; do kwokctl delete cluster --name "$prefix-$m" >/dev/null 2>&1 || true; done

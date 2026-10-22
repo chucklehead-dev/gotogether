@@ -53,7 +53,7 @@ say which code they ran, and what the model says about it.
 
 ## C. Go tooling
 
-- **C1. Analyzers.** `quintgo lint -sim` and `-weave` as
+- **C1. Analyzers.** `gotogether lint -sim` and `-weave` as
   `golang.org/x/tools/go/analysis` passes (gopls, golangci-lint), and a
   new one checking `//quint:action` arguments against the binding.
 - **C2. `testing/synctest` as a runtime.** Real goroutines and channels
@@ -83,7 +83,7 @@ determinism, faults or oracle: a source of workloads, not a replacement.
   kubesim status lag drawn from a trace's lifetime index (a chooser kind,
   option 0 nominal).
 - **D4. Sanitizing and selecting step logs** before validation, for
-  production OTLP (a `quintgo` subcommand or `convert` rules).
+  production OTLP (a `gotogether` subcommand or `convert` rules).
 - **D5. Scenario lint**: a scenario's dependencies exist before a run.
 
 ## U. Unification
@@ -125,9 +125,9 @@ the rest, each after the U items it depends on.
   waiting on the run's recorder, `Recorder.Env`, `Violation.Choices`
   replayable.
 - U4 (P1): `qtest.System` (DESIGN §20): Explore, Sweep, FollowTraces,
-  `quinthegel.Shrink`; `Run` returns an error; `ExploreConfig.Chooser`.
+  `qhegel.Shrink`; `Run` returns an error; `ExploreConfig.Chooser`.
   Next in it: one `Run` type across explorations, Violations and qgosim;
-  P3 (Check vs Validate); `quintgo scaffold` printing a System.
+  P3 (Check vs Validate); `gotogether scaffold` printing a System.
 - D1–D2: done (DESIGN §21): `sktrace`, `qload.Piecewise`, retrystorm under
   a production scale-up, fleetrollout under a replayed workload (and the
   model's `scale` for other writers).
@@ -143,7 +143,7 @@ the rest, each after the U items it depends on.
   in the binding), and that refused orders record no step (a model change,
   open).
 - U6: done (DESIGN §27): trap messages (constants at step 1, unscripted
-  faults, `QUINTGO_SEED`, unhealthy baselines, λ ≥ capacity); factors
+  faults, `GOTOGETHER_SEED`, unhealthy baselines, λ ≥ capacity); factors
   naming their model constants; one `FindTrigger` over `qmeta.System`
   with `Expect`.
 - U7: done (DESIGN §28): the chain's v is the hindsight orbit, qrole's the
@@ -156,14 +156,14 @@ the rest, each after the U items it depends on.
   transitions; no toolkit change needed.
 - C1, C5: done (DESIGN §31): qlint, qanalysis (quintvet, golangci plugin,
   quintaction), actionmap comparing static reach with A1's coverage.
-- U8 (P7): done (DESIGN §32): `quint-start`, references on demand, one
+- U8 (P7): done (DESIGN §32): `gotogether-start`, references on demand, one
   verdicts reference.
 - B3, B4: done (DESIGN §33): `qmeta.Watch`; `qenv.Profile` (pprof,
   hand-encoded, no dependency).
 - C2: done (DESIGN §34): `NewNative(c, nil)` in a synctest bubble, as is.
-- C3: done (DESIGN §34): `qcover.ReadGoCover`, `Compare`, `quintgo cover`.
+- C3: done (DESIGN §34): `qcover.ReadGoCover`, `Compare`, `gotogether cover`.
 - C4: done (DESIGN §35): `qobs.SlogHandler`.
-- D4: done (DESIGN §36): `qtrace.Filter`, `quintgo steps -out`.
+- D4: done (DESIGN §36): `qtrace.Filter`, `gotogether steps -out`.
 - D5, D3: done (DESIGN §37): `sktrace.Lint`; `Lifetimes`, `Quantiles`,
   kubesim `PodTimes`. KWOK Stages from a trace: deferred (no kwok here).
 - A1's classifications: done (DESIGN §37): `actionmap` `Dead`,
@@ -200,7 +200,7 @@ names what it needs.
   *Done:* `qenv.Daemon`, `qenv.WaitIdle` (Queue.Receive, simlog's Poll);
   the scheduler only (the native runtime runs in real time).
 - **V3. Runs without a simulation: `qrun.Start`.** It registers the
-  goroutine; `qtest.Record` and `quinthegel.Recorder` use it instead of
+  goroutine; `qtest.Record` and `qhegel.Recorder` use it instead of
   `qobs.SetGlobal`; `qobs.Strict` becomes a run key; `qenv.New` inherits
   `qrun.Current()`, and `qenv.WithContext` is deprecated (S2's rest).
   *Done, in part:* `qrun.Start`, used by Record and Install alongside the
@@ -211,7 +211,7 @@ names what it needs.
   gosim) carries its run, which a goroutine registration cannot.
 - **V4. One run record** (S4's rest; needs V3). `qtest.Run{Seed, Steps,
   Choices, Faults(), Interrupted, Unscripted, Code, Err, Report}` for
-  `Exploration.Runs`, `quinthegel.Violation` (embeds it) and qgosim;
+  `Exploration.Runs`, `qhegel.Violation` (embeds it) and qgosim;
   `qgosim.Scenario` returns `func(qenv.Chooser) error`, so a gosim run is
   a `qtest.System`; `System.Sweep` takes the System's own `Run`, the row in
   the chooser's context. *Done:* `qtest.Run` is every workflow's record
@@ -221,12 +221,12 @@ names what it needs.
 - **V5. One entry point** (P3's rest; needs V4). `qtest.Check`,
   `RecordAndCheck`, `qtest.Explore(binding, …)`, `SweepExplore`
   deprecated for `Validate`/`Record` + `.Expect` and `qtest.System`;
-  README §3, quint-metastability, quint-trace-validation and
+  README §3, gotogether-metastability, gotogether-traces and
   instrumentation.md updated. `Explore`, `Sweep`, `FollowTraces`, `Mutate`
   take `testing.TB`; `Fuzz` takes an `ExploreConfig`. *Done,* but `Sweep`
   keeps `*testing.T` (a subtest per row needs `t.Run`); every in-repo
   caller moved to Record/Validate + Expect or a System.
-- **V6. First hour.** `quintgo scaffold -system` prints a runnable System
+- **V6. First hour.** `gotogether scaffold -system` prints a runnable System
   test with a mutant claim; `examples/hello` (one service, one retry, one
   dedupe mutant, under 150 lines) is the README's first simulated
   example; examples/bank gains a System test. *Done:* scaffold -system
@@ -247,7 +247,7 @@ names what it needs.
   exploration.
 - **V8. Quiet Hegel, and claiming nothing found.** `FindViolation` and
   `Shrink` default to Hegel's quiet verbosity and no reproduction blob
-  for an expected failure (`QUINTGO_VERBOSE=1` restores them);
+  for an expected failure (`GOTOGETHER_VERBOSE=1` restores them);
   `Shrink(...).Expect(t, qtest.Conforms())` states that Hegel finds
   nothing, as `FindTrigger(...).Expect(t, false)` does. *Done:* Hegel's
   os.Stdout is captured while it runs (it has no other output) and shown
@@ -255,13 +255,13 @@ names what it needs.
 - **V9. Small duplicates, second pass.** One directive parser (a golden
   table binding and qweave both run); `qobs.Attributes` from
   `qtrace.Step.Attributes`; one checker cache and steps key for qtest and
-  quinthegel; simdeps lists qmut, qenv/weave and examples/twophase, or
+  qhegel; simdeps lists qmut, qenv/weave and examples/twophase, or
   derives its list from qenv's importers. *Done:* binding splits
   directives as qweave does (it split `f(a, b)` in two), one table both
   test; `qobs.Attributes` is `Step.Attributes` as OTel attributes;
-  `validate.Cached` and `qtrace.Key`/`Keyer` serve qtest and quinthegel
+  `validate.Cached` and `qtrace.Key`/`Keyer` serve qtest and qhegel
   (qtest's cache handed a later test an earlier one's Dir and NoITF);
-  simdeps adds every importer of qenv but quinthegel.
+  simdeps adds every importer of qenv but qhegel.
 - **V10. Package boundaries.** `qobs.OTelSink` to `otelio` (qobs and qenv
   OTel-free: smaller gosim translations); qmeta keeps the chain and
   `Recovery`, `Recovers`, `Assess`, `Of`, `OfSimulation`, `System`,
@@ -296,19 +296,19 @@ names what it needs.
 - **V13. Evidence, completed** (P8's rest, P2/P4/P6's leftovers). Names
   the kinds and untried pairs and explains "one way"; `System.Mutate`
   returns Evidence; `Evidence` and `qcover.Summary` as JSON under
-  `QUINTGO_KEEP` (what `quintgo cover -sim` and actionmap read); claims
+  `GOTOGETHER_KEEP` (what `gotogether cover -sim` and actionmap read); claims
   over chance (`qtest.Reaches(kind).InAtLeast(0.8)`, `NoSurvivors()`
   with marked equivalents); `Recovery.Expect`; `qmeta.Healthy{MaxU}`
   giving the predicate and the PromQL; `Experiment.Healthy` unset an
   error. *Done:* the report names untried and one-way pairs; Mutate's
   report has the baseline (`Evidence()`) and `Expect(t, NoSurvivors(...))`;
-  `evidence.json` under QUINTGO_KEEP (the readers are later work);
+  `evidence.json` under GOTOGETHER_KEEP (the readers are later work);
   `Reaches(kind).Faulted().InAtLeast(p)`; `qload.Recovery.Expect` and
   `Err`; `qmeta.Healthy` and `HealthyRegion`.
-- **V14. Lints that see more.** `quintgo lint -sim` includes `_test.go`
+- **V14. Lints that see more.** `gotogether lint -sim` includes `_test.go`
   (System `Run` closures live there); quintaction checks literal action
   names in `qobs.Record` against the binding. *Done:* lint -sim scans
-  tests; literal Record actions are checked by `quintgo lint -binding
+  tests; literal Record actions are checked by `gotogether lint -binding
   -src` and quintaction, with a did-you-mean.
 - **V15. Smaller fixes from the gotchas.** `FileSink` durable by default
   (the buffered one renamed); a thread used from two goroutines fails at
@@ -318,13 +318,13 @@ names what it needs.
   deprecated); `Recorder.Issues` (a Thread from two goroutines), which
   fails the run; real waits outside a simulation; qweave first in the
   docs (CI already wove edgepublish's sim with it).
-- **V16. P7, finished.** quint-metastability, quint-trace-validation and
-  quint-hegel split into references; quint-start rows for gosim, weaving,
+- **V16. P7, finished.** gotogether-metastability, gotogether-traces and
+  gotogether-hegel split into references; gotogether-start rows for gosim, weaving,
   Kubernetes controllers and fuzzing, with a ten-line System snippet; the
   `v.Summary` advice removed; a skills test that fails on deprecated
   identifiers. *Done:* the three skills split into references
   (simulation, experiment, alerts; emitting, binding, production-logs,
-  patterns; modes, pitfalls); quint-start's new rows and System snippet;
+  patterns; modes, pitfalls); gotogether-start's new rows and System snippet;
   `v.Summary` advice gone; `TestSkillsAvoidDeprecated`.
 - **V17. Models.** Refusals as steps in checkout (DESIGN §26's open item),
   with the model action and the mutants it kills. *Done:* `refuse(order,
@@ -369,11 +369,11 @@ recorder opt-in.
   and Swarm match at dots; a tool error names the first seed, not a map's;
   `Shrink` runs the System's Opts and the exploration's rates; the shrunk
   run's faults and a replay hint in Hegel's log; qload keeps `Sim.Run`'s
-  error; `Recovers` judges against the offered load; `quinthegel.Config.Parallel`
+  error; `Recovers` judges against the offered load; `qhegel.Config.Parallel`
   (ignored) gone. Done, but `Shrink` with Opts and rates, which needs W4's
   `System.Rates` and goes with it; `Mostly`'s tie (half recovering counts
   as recovering) is documented, not changed.
-- **W2. The global recorder opt-in.** `qtest.Record` and quinthegel install
+- **W2. The global recorder opt-in.** `qtest.Record` and qhegel install
   it only with `qtest.Global()`; installs restore by identity and a second
   concurrent one fails; with no default global, an escaped step means one. Done
   (`qobs.InstallGlobal`; Record is strict and names `qtest.Global()` when a
@@ -383,16 +383,16 @@ recorder opt-in.
   `Sim.Fault`, `qobs.InContext`, `KeepIn`, `ReplayFiles`, `CheckRuns`,
   `GenerateTest`, the free `qtest.Expect`); qenv/choice and qenv/profile
   internal, qenv the API. Done. `Sim.Fault`, `GenerateTest`, `DeclaredFaults`,
-  `FaultOptions` and quinthegel's `CaseChecker`/`CheckCase`/`Verdict` are
+  `FaultOptions` and qhegel's `CaseChecker`/`CheckCase`/`Verdict` are
   unexported; qenv's aliases of the internal choosers carry their own
   doc comments.
 - **W4. One way to configure.** qtest's Options only (Config unexported,
   every option documented, `WithOptions` → `Quint`); `System{Binding, Run,
-  Opts}`; quinthegel takes `[]qtest.Option`; `ExploreConfig.Coverage` and
+  Opts}`; qhegel takes `[]qtest.Option`; `ExploreConfig.Coverage` and
   `Verdicts` automatic; `Fuzz(f, rates)`; one way to sweep (the System's
-  Run with RowOf). Done: `qtest.Settings`/`Resolve` let quinthegel read the
+  Run with RowOf). Done: `qtest.Settings`/`Resolve` let qhegel read the
   options (`Config.Opts`; `Validate`, `Keep`, `Recorder`, `Global`,
-  `Constants` gone, as is `quinthegel.Checker`); `Shrink(t, sys, rates)`
+  `Constants` gone, as is `qhegel.Checker`); `Shrink(t, sys, rates)`
   applies the System's Opts at the exploration's rates; verdicts are
   cached for the test binary (`Exploration.Cached`); `qsweep.FaultKind`
   factors are turned off by the sweep. FindViolation keeps `Config`
@@ -402,12 +402,12 @@ recorder opt-in.
   `Chain.Expect` → `Mean`, Evidence the one coverage accessor, recovery
   and trigger claims by name, and the rest. Done: also `qload.Config` → `SimConfig`,
   `qenv.Profile` → `TimeProfile`, `DeclareFault` → `DeclareFaultSite`,
-  `qenv.Tx` unexported, `qrun.In` → `InContext`, quinthegel's `Recorder`
+  `qenv.Tx` unexported, `qrun.In` → `InContext`, qhegel's `Recorder`
   → `Case`, `Chooser` → `Choices`, `EnvChooser` → `ChoiceSource`,
   `Replay` → `VaryTraces`, `qtest.Sweep`/`Swept` → `SweepConfig`/
   `SweepResult`, `Evidence.Failing` → `FailingBy`; claims
   `qload.Recovered`/`StaysDegraded`, `SomeTrigger`/`NoTrigger`;
-  `QUINTGO_BACKEND` gone (validate read only it, so CI's typescript step
+  `GOTOGETHER_BACKEND` gone (validate read only it, so CI's typescript step
   never reached validate). `qenv.Current` stays: unlike `qrun.Current` it
   is a simulation task's context only, which woven sync needs.
 - **W6. The `fault.` prefix out** of everything users type or read; it
@@ -425,10 +425,10 @@ recorder opt-in.
   (streams) to 80 s (checkout) of virtual time, so a 100 ms default
   period gave streams no crash chance and hello one, and no one period
   fits. `NemesisEvery` stays opt-in for load runs (qload sets it).
-- **W8. First hour and docs.** A quickstart in README; quint-start in the
+- **W8. First hour and docs.** A quickstart in README; gotogether-start in the
   skill list, with a glossary and a first-hour path; qweave's install;
   scaffold fixes; report wording; skills corrected; the examples' own
-  hand-written assertions as claims; `quintgo validate` writes no ITF by
+  hand-written assertions as claims; `gotogether validate` writes no ITF by
   default. Extended after the fourth review (below).
 
 ## The move, and what the fourth review adds (M, W9, R)
@@ -474,9 +474,9 @@ X. R5 happens when the maintainer says.
   - Remove fetch-gosim.sh, its `REF`, the `.gosim-fork` replace, CI's
     fork checkout, and the "fetch first" notes.
   - simdeps fails if anything but qgosim and examples/gosim imports gosim.
-- **M5a. The module path.** Done. `github.com/chucklehead-dev/gotogether` becomes
+- **M5a. The module path.** Done. `github.com/casselc/quint-connect-go` becomes
   `github.com/chucklehead-dev/gotogether`, by script.
-- **M5b. Every other name.**
+- **M5b. Every other name.** Done.
   - The CLI (`cmd/gotogether`).
   - `QUINTGO_*` → `GOTOGETHER_*`.
   - Wire names: `#meta.quintgo`, `"source"`, `quintgo::expect`, the OTel
@@ -493,7 +493,7 @@ X. R5 happens when the maintainer says.
   gotogether; the maintainer archives it. Its gosim-fork branch goes once
   M4 is green.
 - **W9. API leftovers.**
-  - quinthegel:
+  - qhegel:
     - `NewRecorder` → `NewCase`; `Case.Choices()` → `Recorded()`.
     - FindViolation gets a config without the Mode and Rounds it
       ignores.
@@ -564,7 +564,7 @@ The X track follows, unchanged except:
 Dropped on purpose:
 - REVIEW S2's embeddable `qenv.Layer`: `qenv.As` and Wrapper cover the
   chain.
-- REVIEW P2's `Together` and `quinthegel.Want`: `Violation.Expect`
+- REVIEW P2's `Together` and `qhegel.Want`: `Violation.Expect`
   superseded them.
 - Renaming the CLI's subcommands.
 - Rewriting history to drop a5cc809's 15 MB test binary: .git is 26 MB,
@@ -650,11 +650,11 @@ The track, in order:
   (`ExploreConfig.Corpus`: saved runs replay first, a failing one is
   written with its reproduce line); one example's mutation test ending in
   `NoSurvivors`, and `Reaches`/`Exercised` in checkout's conforming
-  tests; `FollowTraces` in the README and quint-start's table; qload
+  tests; `FollowTraces` in the README and gotogether-start's table; qload
   monotonicity (more capacity never recovers worse) as self-tests.
 
 Deferred: online streaming verification (resuming quint from a checkpoint
-is unsound for nondeterministic models; `quintgo validate -follow` over
+is unsound for nondeterministic models; `gotogether validate -follow` over
 rolling windows from `init` if wanted), differential runs (the model is
 already the common oracle), DPOR.
 

@@ -43,7 +43,7 @@ sink, _ := qobs.FileSink("steps.jsonl"); qobs.SetGlobal(qobs.NewRecorder(sink)) 
 With Orchestrion, an annotation on a function records a step when the
 function returns (see "The annotation" below). Spans the application
 already emits can be converted instead, with a rule file (package
-`convert`, `quintgo convert`, `quintgo validate -convert`):
+`convert`, `gotogether convert`, `gotogether validate -convert`):
 
 ```yaml
 rules:
@@ -57,10 +57,10 @@ rules:
 
 | | OTel spans | Native step log | Model-level ITF |
 |---|---|---|---|
-| What the app writes | `quint.step` span events (`qobs.OTelSink`) | one JSON object per step, the same keys (`qobs.JSONLSink` / `FileSink`) | the binding applied in-process: `mbt::actionTaken`, `mbt::nondetPicks`, `quintgo::expect`, `obs::*` (`binding.StepsToITF`, `demo -itf`, `qtest`) |
+| What the app writes | `quint.step` span events (`qobs.OTelSink`) | one JSON object per step, the same keys (`qobs.JSONLSink` / `FileSink`) | the binding applied in-process: `mbt::actionTaken`, `mbt::nondetPicks`, `gotogether::expect`, `obs::*` (`binding.StepsToITF`, `demo -itf`, `qtest`) |
 | Needs | an OTel SDK and pipeline; spans never sampled out | a writable file or `io.Writer` | the binding file, and argument templates that render to Quint literals |
 | Terms | implementation (ids, errors) | implementation | model (interned ids, model values) |
-| Check with | `quintgo validate -binding b.yaml spans.jsonl` | `quintgo validate -binding b.yaml steps.jsonl` | `quintgo validate trace.itf.json` (the trace names its model; no binding) |
+| Check with | `gotogether validate -binding b.yaml spans.jsonl` | `gotogether validate -binding b.yaml steps.jsonl` | `gotogether validate trace.itf.json` (the trace names its model; no binding) |
 | Rebind later? | yes: same telemetry, another binding or design | yes | no: the abstraction is baked in |
 | Use for | production and staging: live telemetry, cross-process, alongside the app's own traces | tests, simulations, CI, deterministic replays, anything without OTel | handing traces to Quint tooling (the ITF viewer, trace tools); comparing with `quint run --mbt` traces; archiving a checked trace; driving the implementation again through `connect` |
 
@@ -70,7 +70,7 @@ with the model's full state at every step and `mbt::nondetPicks`, i.e. the
 shape of `quint run --mbt`. `connect.Replay` replays such a trace on the
 implementation: `scenarios.TestScenarios` replays each observed conforming
 trace through the MBT driver. `validate.ValidateITF` also takes plain `quint
-run --mbt` output (`quintgo validate -spec M.qnt -module M -instance
+run --mbt` output (`gotogether validate -spec M.qnt -module M -instance
 currentDesign trace.itf.json`) and compares every model variable in the
 trace with the model's state after each step.
 
@@ -110,7 +110,7 @@ Everything else is generic.
    processes can restart; invariants as `val`s. Values the model picks
    itself are checked with `expect`, not passed as arguments.
 2. **Scaffold the binding:**
-   `quintgo scaffold -spec model.qnt -module M > binding.yaml`. It lists every
+   `gotogether scaffold -spec model.qnt -module M > binding.yaml`. It lists every
    constant, and every action with its parameter names and types.
 3. **Fill it in:**
    - `constants`: Quint expressions, which may use `set "arg"`, `max "arg"`,
@@ -127,7 +127,7 @@ Everything else is generic.
    into a function, making its return the moment the step takes effect. Add
    `orchestrion.tool.go` importing `github.com/DataDog/orchestrion` and
    `github.com/chucklehead-dev/gotogether/qobs`.
-5. **Lint:** `quintgo lint -binding binding.yaml -src ./your/pkg`. This checks
+5. **Lint:** `gotogether lint -binding binding.yaml -src ./your/pkg`. This checks
    the binding against `quint typecheck`'s view of the model, and that every
    field a template uses is recorded by the annotation.
 6. **Emit.** Build with `orchestrion go build`, then install a recorder at
@@ -142,7 +142,7 @@ Everything else is generic.
    For ITF emitted in-process, write argument templates as Quint literals:
    records, `Set(...)` and constructors, not calls of model operators.
    `expect` may use any Quint.
-7. **Validate.** Run `quintgo validate [-binding binding.yaml] FILE...`, where
+7. **Validate.** Run `gotogether validate [-binding binding.yaml] FILE...`, where
    FILE is detected by content. In tests, use `validate.Checker`,
    `validate.ValidateITF` or `qtest`.
 8. **Optional MBT:** write a `connect.Driver` (a `connect.Switch` of handlers), and put a gate at the
@@ -155,8 +155,8 @@ Everything else is generic.
 | `qtest.Record(t, binding, scenario).Expect(t, qtest.Conforms())` | record a scenario in a test and check it; `qtest.Validate` takes steps recorded elsewhere; `.Expect(t, qtest.Mismatch("deposit"))` states how a mutant must show up |
 | `validate.NewChecker(binding, opts)`, `.Check(ctx, steps)`, `.CheckRuns(ctx, runs, n)` | the library entry points |
 | `validate.ValidateITF(ctx, trace, ITFOptions{...})` | a model-level ITF, including raw `quint run --mbt` output |
-| `quintgo validate [-binding b.yaml] [-convert r.yaml] FILE...` | from files (OTLP/JSON, step log or ITF, detected by content); exit 0 conforms, 1 violation, 2 error |
-| `quintgo steps FILE...`, `quintgo itf -binding b.yaml -out DIR FILE...` | look at the reconstructed order; write model-level ITF |
+| `gotogether validate [-binding b.yaml] [-convert r.yaml] FILE...` | from files (OTLP/JSON, step log or ITF, detected by content); exit 0 conforms, 1 violation, 2 error |
+| `gotogether steps FILE...`, `gotogether itf -binding b.yaml -out DIR FILE...` | look at the reconstructed order; write model-level ITF |
 
 ## Limitations (details in [DESIGN.md](DESIGN.md) §5)
 
@@ -169,7 +169,7 @@ Everything else is generic.
 - Two limits of the model-level ITF:
   - its argument templates must render to Quint literals, so operator calls
     cannot be arguments there (they still work on the other paths);
-  - it names its model by absolute path in `#meta.quintgo.spec`. Pass
+  - it names its model by absolute path in `#meta.gotogether.spec`. Pass
     `-spec` to validate it on another machine.
 - `-instance` expects an instance module shaped as a single
   `import M(...).*`; its constants are read from the source text.

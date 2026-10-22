@@ -24,7 +24,7 @@ const (
 	Ambiguous              // write lands, error reported (a timeout after the PUT was applied)
 )
 
-// ErrFailed and the ambiguous error classify themselves for quintgo
+// ErrFailed and the ambiguous error classify themselves for gotogether
 // (qobs.Outcomer), so the recorded outcome says whether the write landed.
 // That is ground truth only a test double has; see the README on
 // observability.

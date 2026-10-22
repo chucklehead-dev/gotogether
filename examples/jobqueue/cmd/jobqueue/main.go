@@ -3,8 +3,8 @@
 // queue half-way through, recording the model steps:
 //
 //	jobqueue -jobs 30 -workers 3 -steps steps.jsonl
-//	quintgo validate -binding jobqueue.binding.yaml steps.jsonl                          # conforms
-//	quintgo validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl  # where a job ran twice
+//	gotogether validate -binding jobqueue.binding.yaml steps.jsonl                          # conforms
+//	gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl  # where a job ran twice
 package main
 
 import (

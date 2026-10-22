@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 OUT=${OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
 echo "# output in $OUT"
-(cd ../.. && go build -o "$OUT/quintgo" ./cmd/quintgo) || exit 2
+(cd ../.. && go build -o "$OUT/gotogether" ./cmd/gotogether) || exit 2
 go build -o "$OUT/kvserver" ./cmd/kvserver || exit 2
 go build -o "$OUT/kvload" ./cmd/kvload || exit 2
 
@@ -18,7 +18,7 @@ for _ in $(seq 50); do curl -s -o /dev/null 127.0.0.1:18080/kv/a && break; sleep
 "$OUT/kvload" -addr 127.0.0.1:18080 -clients 8 -ops 50 -keys a,b || { kill $srv; exit 2; }
 kill -INT $srv; wait $srv
 
-echo; echo "\$ quintgo validate -binding kv.binding.yaml steps.jsonl"
-"$OUT/quintgo" validate -binding kv.binding.yaml -dir "$OUT/v-steps" "$OUT/steps.jsonl" | grep -E 'input|conformance|invariant|step [0-9]+ |quint:|expect:|observed:|obs:|RESULT'
-echo; echo "\$ quintgo validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl"
-"$OUT/quintgo" validate -binding kv.binding.yaml -convert kv.convert.yaml -dir "$OUT/v-spans" "$OUT/spans.jsonl" | grep -E 'input|conformance|invariant|step [0-9]+ |quint:|expect:|observed:|obs:|RESULT'
+echo; echo "\$ gotogether validate -binding kv.binding.yaml steps.jsonl"
+"$OUT/gotogether" validate -binding kv.binding.yaml -dir "$OUT/v-steps" "$OUT/steps.jsonl" | grep -E 'input|conformance|invariant|step [0-9]+ |quint:|expect:|observed:|obs:|RESULT'
+echo; echo "\$ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl"
+"$OUT/gotogether" validate -binding kv.binding.yaml -convert kv.convert.yaml -dir "$OUT/v-spans" "$OUT/spans.jsonl" | grep -E 'input|conformance|invariant|step [0-9]+ |quint:|expect:|observed:|obs:|RESULT'

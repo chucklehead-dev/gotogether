@@ -255,14 +255,14 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 func expectReport(t testing.TB, r *validate.Report, es ...Expectation) {
 	t.Helper()
 	if r == nil {
-		t.Fatalf("quintgo: no report")
+		t.Fatalf("gotogether: no report")
 	}
 	if u := unknownNames(es, nil, reportInvariants(r)); len(u) > 0 {
-		t.Fatalf("quintgo: the expectation names %s: a misspelled name never matches", strings.Join(u, "; "))
+		t.Fatalf("gotogether: the expectation names %s: a misspelled name never matches", strings.Join(u, "; "))
 	}
 	for _, e := range es {
 		if !e.check(r) {
-			t.Fatalf("quintgo: want %s, got:\n%s", e, r.Summary())
+			t.Fatalf("gotogether: want %s, got:\n%s", e, r.Summary())
 		}
 	}
 }
@@ -283,7 +283,7 @@ func (r *Run) Expect(t testing.TB, es ...Expectation) {
 				for _, k := range keysOf(r.ITF) {
 					itfs = append(itfs, r.ITF[k])
 				}
-				t.Fatalf("quintgo: want %s, got:\n%s  step log: %s\n  model-level ITF: %s",
+				t.Fatalf("gotogether: want %s, got:\n%s  step log: %s\n  model-level ITF: %s",
 					e, r.Report.Summary(), r.StepLog, strings.Join(itfs, ", "))
 			}
 		}

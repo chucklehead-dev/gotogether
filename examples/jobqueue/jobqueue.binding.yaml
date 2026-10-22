@@ -23,5 +23,5 @@ actions:
 # What the design guarantees. exactlyOnce is not among them (an
 # at-least-once queue performs a job twice when a lease expires while its
 # worker is still working); check it explicitly to see when that happens:
-#   quintgo validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl
+#   gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl
 invariants: [doneImpliesPerformed]

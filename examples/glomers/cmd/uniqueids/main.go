@@ -3,7 +3,7 @@
 //
 //	QUINT_STEPS_DIR=/tmp/steps maelstrom test -w unique-ids --bin uniqueids --time-limit 30 --rate 1000 \
 //	    --node-count 3 --availability total --nemesis partition
-//	quintgo validate -binding ../../uniqueids/uniqueids.binding.yaml /tmp/steps/*.jsonl
+//	gotogether validate -binding ../../uniqueids/uniqueids.binding.yaml /tmp/steps/*.jsonl
 package main
 
 import (

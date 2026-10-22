@@ -71,7 +71,7 @@ Steps are recorded where they take effect:
 go test -short ./...                      # quick; skips shrinking and the sweep
 go test ./...                             # all
 go test -fuzz FuzzFaithful -fuzztime 60s .
-./run-demo.sh                             # every backend, checked with quintgo validate
+./run-demo.sh                             # every backend, checked with gotogether validate
 MUTATION=no-dedupe BACKENDS=sim ./run-demo.sh
 ```
 

@@ -355,7 +355,7 @@ func Barrier(nodes ...*Node) int64 {
 
 // StepLogFromEnv opens a step log for a node run by Maelstrom, when
 // $QUINT_STEPS_DIR is set: <dir>/<node id>.jsonl, one recorder per node.
-// quintgo merges the nodes' logs, ordering them by the Lamport clock.
+// gotogether merges the nodes' logs, ordering them by the Lamport clock.
 func StepLogFromEnv(n *Node) {
 	dir := os.Getenv("QUINT_STEPS_DIR")
 	if dir == "" {

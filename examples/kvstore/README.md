@@ -23,7 +23,7 @@ MUTATION=revision-on-conflict ./run-demo.sh
 ```
 
 ```
-$ quintgo validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl      (MUTATION=stale-cas)
+$ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl      (MUTATION=stale-cas)
   conformance: FAIL
     step 112 is not a transition of the model from the state reached
       quint:    cas("a", 39, "y", Ok)
@@ -37,8 +37,8 @@ Or by hand:
 go run ./cmd/kvserver -addr 127.0.0.1:8080 -steps steps.jsonl -spans spans.jsonl &
 go run ./cmd/kvload -addr 127.0.0.1:8080 -clients 8 -ops 100
 kill -INT %1
-quintgo validate -binding kv.binding.yaml steps.jsonl                              # the model steps
-quintgo validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl     # the plain spans
+gotogether validate -binding kv.binding.yaml steps.jsonl                              # the model steps
+gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl     # the plain spans
 ```
 
 ## What it shows

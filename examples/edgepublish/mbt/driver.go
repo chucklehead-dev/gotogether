@@ -1,6 +1,6 @@
 // Package mbt drives the stand-in publisher from edgePublish.qnt traces
 // (model-based testing: capability 1). It is the per-project half of
-// quintgo/connect, the Go analogue of a quint-connect Driver:
+// gotogether/connect, the Go analogue of a quint-connect Driver:
 //
 //   - every store write blocks in a gate until the driver decides its fate,
 //     so the model's interleaving of pushes, S3 outcomes, rotations and

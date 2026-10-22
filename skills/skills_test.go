@@ -91,9 +91,9 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qtest.Expect(", "Run.Expect (qtest.Validate(...).Expect)"},
 		{"DurableFileSink", "qobs.FileSink (durable)"},
 		{"qenv.Recorder", "qenv.ChoiceLog"},
-		{"quinthegel.Recorder", "quinthegel.Case"},
-		{"quinthegel.Chooser", "quinthegel.Choices"},
-		{"quinthegel.Replay", "quinthegel.VaryTraces"},
+		{"qhegel.Recorder", "qhegel.Case"},
+		{"qhegel.Chooser", "qhegel.Choices"},
+		{"qhegel.Replay", "qhegel.VaryTraces"},
 		{"qenv.Faults(", "qenv.DeclareFaults("},
 		{"qload.System", "qload.Target"},
 		{"Chain.Expect", "Chain.Mean"},
@@ -102,6 +102,17 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"x.Coverage()", "x.Evidence().Faults"},
 		{"x.CodeCoverage()", "x.Evidence().Code"},
 		{"step [", `"step N" (reports number steps from 1)`},
+		// the project's old names, spelled in pieces so a rename script
+		// that rewrites them cannot rewrite these
+		{"quint" + "go", "gotogether"},
+		{"QUINT" + "GO_", "GOTOGETHER_"},
+		{"quint" + "hegel", "qhegel"},
+		{"quint-connect" + "-go", "gotogether"},
+		{"casselc/" + "quint", "chucklehead-dev/gotogether"},
+	}
+	for old, now := range Renamed {
+		deprecated = append(deprecated, struct{ text, instead string }{old + "`", now + "`"},
+			struct{ text, instead string }{old + "/", now + "/"})
 	}
 	_ = fs.WalkDir(FS(), ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
@@ -115,4 +126,40 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// Every new name is a skill, and an old install is removed only where its
+// SKILL.md names it.
+func TestRemoveRenamed(t *testing.T) {
+	have := map[string]bool{}
+	list, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range list {
+		have[s.Name] = true
+	}
+	for old, now := range Renamed {
+		if !have[now] {
+			t.Errorf("Renamed[%q] = %q, which is not a skill", old, now)
+		}
+	}
+	dir := t.TempDir()
+	write := func(name, front string) {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name, "SKILL.md"), []byte("---\nname: "+front+"\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("quint-start", "quint-start")
+	write("quint-hegel", "someone-elses")
+	removed, err := RemoveRenamed(dir)
+	if err != nil || len(removed) != 1 || filepath.Base(removed[0]) != "quint-start" {
+		t.Fatalf("removed %v, %v; want quint-start alone", removed, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "quint-hegel")); err != nil {
+		t.Error("a skill that only shares an old name was removed")
+	}
 }

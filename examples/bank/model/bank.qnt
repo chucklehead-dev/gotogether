@@ -9,7 +9,7 @@
 //   - `step` picks each parameter with a `nondet` named exactly like the
 //     parameter it feeds, so `quint run --mbt` picks line up with them;
 //   - properties are boolean `val`s, checked by `quint run --invariant`
-//     on the design and by quintgo on recorded runs of the code.
+//     on the design and by gotogether on recorded runs of the code.
 module bank {
   const ACCOUNTS: Set[str]
   const MAX_AMOUNT: int

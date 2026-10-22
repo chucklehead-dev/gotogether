@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -48,10 +48,10 @@ func TestHegelShrinks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	v := quinthegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1))
+	v := qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1))
 	v.Expect(t, qtest.Rejects("apply"))
 	if f := v.Faults(); len(f) != 1 {
 		t.Errorf("shrunk to faults %v, want one", f)
 	}
-	quinthegel.Shrink(t, system(Faithful), lossy, hegel.WithTestCases(20)).Expect(t, qtest.Conforms()) // nothing to find, at lossy's rates too
+	qhegel.Shrink(t, system(Faithful), lossy, hegel.WithTestCases(20)).Expect(t, qtest.Conforms()) // nothing to find, at lossy's rates too
 }

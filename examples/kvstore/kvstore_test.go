@@ -9,10 +9,10 @@ import (
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/examples/kvstore/kv"
 	"github.com/chucklehead-dev/gotogether/otelio"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"github.com/chucklehead-dev/gotogether/validate"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -205,8 +205,8 @@ func (m *machine) RuleGet(tc hegel.TestCase) {
 // each case's recorder (Global) and the runs are checked after the test.
 func TestHegelDrivesService(t *testing.T) {
 	qtest.RequireQuint(t)
-	quinthegel.Test(t, quinthegel.Config{Binding: "kv.binding.yaml", Mode: quinthegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
-		func(ht *hegel.T, _ *quinthegel.Case) {
+	qhegel.Test(t, qhegel.Config{Binding: "kv.binding.yaml", Mode: qhegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
+		func(ht *hegel.T, _ *qhegel.Case) {
 			hegel.RunStateful(ht, &machine{cl: service(ht, kv.Faithful, nil), versions: hegel.NewPool[int64](ht)},
 				hegel.WithStatefulStepCount(15))
 		}, hegel.WithTestCases(30), hegel.WithDatabase(""))
@@ -220,11 +220,11 @@ func TestHegelShrinksRevisionOnConflict(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint dozens of times")
 	}
-	v := quinthegel.FindViolation(t, quinthegel.Config{Binding: "kv.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *quinthegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.Config{Binding: "kv.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		cl := service(t, kv.RevisionOnConflict, nil)
 		hegel.RunStateful(tc, &machine{cl: cl, versions: hegel.NewPool[int64](tc)}, hegel.WithStatefulStepCount(10))
 	}, hegel.WithTestCases(30), hegel.WithSeed(11))
 	if last := v.Last(); len(v.Steps) != 1 || last.Action != "cas" || last.Outcome != "conflict" {
-		t.Fatalf("want a single failed CAS:\n%s", quinthegel.Render(v.Steps))
+		t.Fatalf("want a single failed CAS:\n%s", qhegel.Render(v.Steps))
 	}
 }

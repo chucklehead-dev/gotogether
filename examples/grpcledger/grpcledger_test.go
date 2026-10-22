@@ -8,9 +8,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/grpcledger"
 	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qsweep"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 )
 
 const binding = "ledger.binding.yaml"
@@ -121,7 +121,7 @@ func TestShrinkDoubleApply(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	v := quinthegel.Shrink(t, system(grpcledger.Config{Mutation: ledger.NoDedupe}), crashy, hegel.WithTestCases(200))
+	v := qhegel.Shrink(t, system(grpcledger.Config{Mutation: ledger.NoDedupe}), crashy, hegel.WithTestCases(200))
 	v.Expect(t, reapplied)
 	t.Logf("shrunk: %d steps, faults %v\n%s", len(v.Steps), (&qenv.ChoiceLog{Choices: v.Choices}).Faults(), v.Summary)
 }

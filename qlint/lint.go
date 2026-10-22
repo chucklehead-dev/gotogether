@@ -1,5 +1,5 @@
 // Package qlint finds code that escapes a qenv simulation or its weaving
-// (quintgo lint -sim, -weave; the analyzers of the qanalysis module wrap
+// (gotogether lint -sim, -weave; the analyzers of the qanalysis module wrap
 // SimFile and WovenFile). It is apart from qenv so that gosim, which
 // translates everything a simulated package imports, does not translate
 // go/ast and go/parser with it.

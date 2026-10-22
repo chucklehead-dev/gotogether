@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/quinthegel"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 
 	"github.com/chucklehead-dev/gotogether/qload"
 	"github.com/chucklehead-dev/gotogether/qmeta"
@@ -78,8 +78,8 @@ func TestFindTrigger(t *testing.T) {
 		t.Logf("%.1f req/s, no trigger: recovers in most runs: %v", base, ok)
 	}
 	t0 := time.Now()
-	quinthegel.FindTrigger(t, qload.OfSimulation(sim(9.5), 9.5, 300*time.Second), space, hegel.WithTestCases(40), hegel.WithSeed(1)).Expect(t, qload.SomeTrigger())
+	qhegel.FindTrigger(t, qload.OfSimulation(sim(9.5), 9.5, 300*time.Second), space, hegel.WithTestCases(40), hegel.WithSeed(1)).Expect(t, qload.SomeTrigger())
 	t.Logf("searched in %v", time.Since(t0))
 	// at 8 req/s the system always recovers
-	quinthegel.FindTrigger(t, qload.OfSimulation(sim(8), 8, 15*time.Minute), space, hegel.WithTestCases(30), hegel.WithSeed(1)).Expect(t, qload.NoTrigger())
+	qhegel.FindTrigger(t, qload.OfSimulation(sim(8), 8, 15*time.Minute), space, hegel.WithTestCases(30), hegel.WithSeed(1)).Expect(t, qload.NoTrigger())
 }

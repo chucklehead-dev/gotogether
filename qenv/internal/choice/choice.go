@@ -137,7 +137,7 @@ func (Nominal) Choose(string, int) int { return 0 }
 // through qgosim) bytes from which to make its own choices other than
 // faults: one call per chunk rather than one per choice. A byte (two above
 // 256 options) modulo the number of options is the choice, so a zero byte
-// is option 0, as quinthegel's Hegel chooser makes choices.
+// is option 0, as qhegel's Hegel chooser makes choices.
 type Entropy interface {
 	Entropy(n int) []byte
 }

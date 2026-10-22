@@ -6,8 +6,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/crossdb"
 	"github.com/chucklehead-dev/gotogether/examples/crossdb/provider"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -72,8 +72,8 @@ func TestHegelShrinksDuplicate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}
-	quinthegel.FindViolation(t, quinthegel.Config{Binding: binding, Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *quinthegel.Case) {
-		if err := crossdb.Run(quinthegel.Choices(tc), crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true, Resources: 2}); err != nil {
+	qhegel.FindViolation(t, qhegel.Config{Binding: binding, Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
+		if err := crossdb.Run(qhegel.Choices(tc), crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true, Resources: 2}); err != nil {
 			tc.Errorf("%v", err)
 		}
 	}, hegel.WithTestCases(50), hegel.WithSeed(1))

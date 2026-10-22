@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -98,8 +98,8 @@ func (m *machine) RuleList(tc hegel.TestCase) {
 
 func TestHegelSchedules(t *testing.T) {
 	qtest.RequireQuint(t)
-	quinthegel.Test(t, quinthegel.Config{Binding: "kafka.binding.yaml", Mode: quinthegel.Batched, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true, Rounds: 2},
-		func(ht *hegel.T, _ *quinthegel.Case) {
+	qhegel.Test(t, qhegel.Config{Binding: "kafka.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true, Rounds: 2},
+		func(ht *hegel.T, _ *qhegel.Case) {
 			s := cluster(Faithful)
 			hegel.RunStateful(ht, &machine{Network: hegelnet.Network{Sim: s, NoTimers: true}}, hegel.WithStatefulStepCount(20))
 			s.Run(nil, 100000)

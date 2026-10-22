@@ -1,8 +1,8 @@
-# quint-connect-go
+# gotogether
 
 Test Go code against [Quint](https://quint-lang.org) specifications.
 
-quint-connect-go is the Go counterpart of
+gotogether is the Go counterpart of
 [quint-connect](https://github.com/quint-co/quint-connect) (model-based
 testing, where Quint traces drive the implementation). It adds:
 - **property-based and state-machine testing with
@@ -24,8 +24,8 @@ testing, where Quint traces drive the implementation). It adds:
 ```
                      ┌──────────── one Quint model ────────────┐
   connect            │  quint run --mbt ──► traces ──► Driver   │  the model drives Go (quint-connect)
-  quinthegel.VaryTraces  │  traces + Hegel draws ──► Driver         │  the model drives, Hegel varies the details
-  quinthegel.Test    │  Hegel rules ──► Go ──► steps ──► model  │  Hegel drives Go, the model judges and shrinks
+  qhegel.VaryTraces  │  traces + Hegel draws ──► Driver         │  the model drives, Hegel varies the details
+  qhegel.Test    │  Hegel rules ──► Go ──► steps ──► model  │  Hegel drives Go, the model judges and shrinks
   qobs/convert/      │  running Go ──► steps / OTel / spans     │  the code reports, the model checks
   validate           │        ──► binding ──► quint test        │  (tests, CI, staging, production)
   qenv + qtest.      │  Go in a simulated environment, faults   │  Hegel or seeds choose schedules and faults,
@@ -33,17 +33,17 @@ testing, where Quint traces drive the implementation). It adds:
                      └──────────────────────────────────────────┘
 ```
 
-**Which tool for which question** (the `quint-start` skill has the same
+**Which tool for which question** (the `gotogether-start` skill has the same
 table for agents):
 
 | Question | Tool |
 |---|---|
 | Does my code do what the model's traces do? | `connect.Run`: the model drives the code |
-| Does the code accept inputs the model forbids? | `quinthegel.Test`, `FindViolation`: Hegel drives, the model judges |
-| Do runs of the real system conform? | `qobs`, `//quint:action`, `convert` (OTel spans), a binding, `quintgo validate` |
-| Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` and `qtest.System`: `Explore`, `Sweep`, `Fuzz`, `quinthegel.Shrink` |
+| Does the code accept inputs the model forbids? | `qhegel.Test`, `FindViolation`: Hegel drives, the model judges |
+| Do runs of the real system conform? | `qobs`, `//quint:action`, `convert` (OTel spans), a binding, `gotogether validate` |
+| Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` and `qtest.System`: `Explore`, `Sweep`, `Fuzz`, `qhegel.Shrink` |
 | What did no run reach? What does the model not constrain? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `Exploration.Evidence` |
-| Does it recover after a spike or a slow dependency? | `qmeta`, `qload`, `quinthegel.FindTrigger`, alert rules from the chain |
+| Does it recover after a spike or a slow dependency? | `qmeta`, `qload`, `qhegel.FindTrigger`, alert rules from the chain |
 | My model is in Choreo | named transitions over `choreo::step_with`, then any of the above ([examples/twophase](examples/twophase)) |
 
 Status: early (v0.x). The API may change. It is migrated from the
@@ -55,7 +55,7 @@ against its protocol model (see `examples/edgepublish`).
 ```sh
 go get github.com/chucklehead-dev/gotogether@latest     # Go ≥ 1.26.1 (hegel-go's minimum)
 npm install -g @informalsystems/quint                 # quint ≥ 0.32 on PATH
-go install github.com/chucklehead-dev/gotogether/cmd/quintgo@latest   # optional CLI
+go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # optional CLI
 ```
 
 Quint's Rust backend is the default. If quint cannot download its
@@ -91,7 +91,7 @@ A divergence fails with the step, its picks, the model's next state, the
 differing fields (`.Balances[bob]: model 16, implementation 17`), and
 `reproduce with QUINT_SEED=0x…`.
 
-| quint-connect (Rust) | quint-connect-go |
+| quint-connect (Rust) | gotogether |
 |---|---|
 | `#[quint_run(spec, main, init, step, max_samples, max_steps, seed)]` | `connect.Run(t, connect.Config{...}, newDriver)` |
 | `#[quint_test(spec, test, ...)]` | `connect.Test(t, cfg, "testName", newDriver)` |
@@ -102,10 +102,10 @@ differing fields (`.Balances[bob]: model 16, implementation 17`), and
 | `QUINT_SEED`, `QUINT_VERBOSE` (compile time) | the same, read at run time, plus `QUINT_MAX_SAMPLES`, `QUINT_MAX_STEPS`, `QUINT_BACKEND`, `QUINT_BIN` |
 
 Each trace gets a fresh driver. See
-[skills/quint-mbt-driver](skills/quint-mbt-driver/SKILL.md) for the TDD
+[skills/gotogether-mbt](skills/gotogether-mbt/SKILL.md) for the TDD
 loop.
 
-## 2. Hegel and the model (`quinthegel`)
+## 2. Hegel and the model (`qhegel`)
 
 **Hegel drives, the model judges.**
 1. A Hegel state machine calls the code with drawn inputs, invalid ones
@@ -126,14 +126,14 @@ func (m *machine) RuleTransfer(tc hegel.TestCase) {
 }
 
 func TestBankAgainstModel(t *testing.T) {
-	quinthegel.Test(t, quinthegel.Config{Binding: "bank.binding.yaml", Mode: quinthegel.Each, Opts: []qtest.Option{qtest.Global()}},
-		func(ht *hegel.T, _ *quinthegel.Case) {
+	qhegel.Test(t, qhegel.Config{Binding: "bank.binding.yaml", Mode: qhegel.Each, Opts: []qtest.Option{qtest.Global()}},
+		func(ht *hegel.T, _ *qhegel.Case) {
 			hegel.RunStateful(ht, &machine{bank: bank.New(accounts)}, hegel.WithStatefulStepCount(12))
 		}, hegel.WithTestCases(30))
 }
 ```
 
-Modes, measured on the same 40-case state machine (`quinthegel/modes_test.go`):
+Modes, measured on the same 40-case state machine (`qhegel/modes_test.go`):
 
 | Mode | How | All runs pass | A run fails |
 |---|---|---|---|
@@ -154,13 +154,13 @@ Model-driven tests cannot: the model never asks for a disabled step. In
 trace and keeps every balance non-negative, yet Hegel and the model shrink
 it to `deposit(bob, 1); transfer(bob, bob, 1)` in about 50 quint checks.
 
-**The model drives, Hegel varies.** `quinthegel.VaryTraces` replays Quint
+**The model drives, Hegel varies.** `qhegel.VaryTraces` replays Quint
 traces inside a Hegel test. Hegel picks the trace and the prefix, and the
 driver draws what the model abstracts (payloads, timing, interleaved
 invalid requests). Failures shrink to the simplest trace and the simplest
 details.
 
-See [skills/quint-hegel](skills/quint-hegel/SKILL.md) and
+See [skills/gotogether-hegel](skills/gotogether-hegel/SKILL.md) and
 [DESIGN.md §9.2](docs/DESIGN.md).
 
 ## 3. The code reports, the model checks (`qobs`, `convert`, `validate`)
@@ -199,8 +199,8 @@ qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { payday(bank.New(acco
 ```
 
 ```sh
-quintgo validate -binding bank.binding.yaml steps.jsonl                          # step log, OTLP/JSON or ITF
-quintgo validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl   # an app's plain spans
+gotogether validate -binding bank.binding.yaml steps.jsonl                          # step log, OTLP/JSON or ITF
+gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl   # an app's plain spans
 ```
 
 ```
@@ -217,7 +217,7 @@ Reconstruction orders steps from many recorders. It uses dense sequence
 numbers (so a lost step is reported), program-order threads, domain
 clocks, and process incarnations, which become the model's restart
 action. See [docs/instrumentation.md](docs/instrumentation.md) and
-[skills/quint-trace-validation](skills/quint-trace-validation/SKILL.md).
+[skills/gotogether-traces](skills/gotogether-traces/SKILL.md).
 
 ## 4. Simulated environments and fault injection (`qenv`)
 
@@ -225,7 +225,7 @@ A fault is a choice the environment's contract allows. A response can be
 lost after the request took effect, a message redelivered, a read served
 from a snapshot. `qenv` runs the system's tasks one at a time and switches
 between them only at seams. One `Chooser` makes every choice:
-- `quinthegel.Choices(tc)`: Hegel explores and shrinks;
+- `qhegel.Choices(tc)`: Hegel explores and shrinks;
 - `qenv.NewSeeded(seed)`: random runs at per-kind fault rates;
 - `qenv.Replay`: repeats a recorded run;
 - `qenv.Nominal`: no faults.
@@ -277,12 +277,12 @@ sys := qtest.System{Binding: "checkout.binding.yaml", Run: func(c qenv.Chooser) 
 }}
 skew := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
 sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, skew)     // seeds, checked in one batch
-quinthegel.Shrink(t, sys, qenv.DefaultRates, hegel.WithTestCases(50)).Expect(t, skew)  // Hegel, shrunk to its interleaving
+qhegel.Shrink(t, sys, qenv.DefaultRates, hegel.WithTestCases(50)).Expect(t, skew)  // Hegel, shrunk to its interleaving
 ```
 
 A `qtest.System` binds an application to its model once; `Explore`,
 `Sweep` (covering arrays), `FollowTraces` (a model's traces' faults) and
-`quinthegel.Shrink` all run it.
+`qhegel.Shrink` all run it.
 
 Seeds run in parallel, each recording into its own recorder. The
 recorder travels in the chooser's context (`qenv.WithContext`) to every
@@ -291,11 +291,11 @@ task of the simulation. A step recorded without it, for example with
 simulation each of its goroutines belongs to (its tasks, and the goroutine
 that created it). During such runs recording is strict (`qobs.Strict`): a
 step with nowhere to go fails the exploration, naming the fix, rather than vanish. That
-happens only for a goroutine started with `go`, which `quintgo lint -sim
+happens only for a goroutine started with `go`, which `gotogether lint -sim
 DIR` flags, along with wall-clock time. Tests are checked too (a
 System's `Run` closure lives in one); mark a deliberate real goroutine or
 clock read `//qenv:ok <why>`. A Hegel test records the same way,
-with `rec.Env(quinthegel.Choices(tc))`, which also records the run's
+with `rec.Env(qhegel.Choices(tc))`, which also records the run's
 choices: `qenv.Replay(v.Choices)` repeats a shrunk failure outside Hegel.
 
 Code you cannot rewrite against seams (plain `sync.Mutex`,
@@ -308,7 +308,7 @@ the real ones outside it, and a `go` statement marked `//qenv:go` starts a
 simulation task. qweave reads the same aspect files as Orchestrion, with
 types. It also weaves what Orchestrion misses: method values
 (`return mu.RUnlock`) and calls promoted through an embedded lock.
-`quintgo lint -weave DIR` lists what Orchestrion would miss.
+`gotogether lint -weave DIR` lists what Orchestrion would miss.
 [examples/edgepublish](examples/edgepublish) runs its publisher this way.
 
 A whole program, standard library and network included, can run in
@@ -328,8 +328,8 @@ edgepublish publisher, unwoven by qenv/weave, each with its model checks
 (DESIGN.md §14, §15.1, §15.8).
 
 Each seeded run is checked in one quint batch, and the failing seed's
-faults and step log are reported. `quinthegel.FindViolation` with
-`quinthegel.Choices` shrinks a failure to the interleaving and faults it needs.
+faults and step log are reported. `qhegel.FindViolation` with
+`qhegel.Choices` shrinks a failure to the interleaving and faults it needs.
 See [examples/checkout](examples/checkout) (a saga at three isolation
 levels) and [examples/fleetrollout](examples/fleetrollout) (a
 multicluster-runtime controller, simulated and on real kwok clusters).
@@ -339,7 +339,7 @@ multicluster-runtime controller, simulated and on real kwok clusters).
 Some failures are not wrong answers but a state the system cannot leave.
 A spike fills a queue, requests time out, and their retries keep the
 queue full after the spike has passed. Isaacs et al. (HotOS '25) and
-Alvaro et al. (2025) analyse these in tiers. quint-connect-go has each
+Alvaro et al. (2025) analyse these in tiers. gotogether has each
 tier:
 - `qmeta`: a CTMC over (queue length, requests waiting to retry). It
   draws the field (`Chain.SVG`) and gives expected recovery times
@@ -362,7 +362,7 @@ tier:
   from in time become a Prometheus alerting rule over the same gauges,
   with the policy it assumes in its annotations. `qrole.MetricsSink`
   counts every model step by outcome.
-- `quinthegel.FindTrigger` (any `qload.Target`: a qload simulation,
+- `qhegel.FindTrigger` (any `qload.Target`: a qload simulation,
   `qload.OfSimulation`, or an application, `qload.Of(experiment)`): Hegel searches
   transient triggers (extra load, a slowdown, a duration) for one after
   which goodput does not recover, and shrinks it. Seeds of a trigger run
@@ -371,7 +371,7 @@ tier:
 ```go
 c := qmeta.New(qmeta.Params{Lambda: 9, Mu: 10, Timeout: 9, Retries: 3, Queue: 100})
 h := c.HittingTimes(func(s qmeta.State) bool { return s.U <= 10 })   // seconds to drain, per state
-r := quinthegel.FindTrigger(t, qload.OfSimulation(cfg, 9, 5*time.Minute), qload.TriggerSpace{MaxExtraRate: 10}).Expect(t, qload.SomeTrigger())
+r := qhegel.FindTrigger(t, qload.OfSimulation(cfg, 9, 5*time.Minute), qload.TriggerSpace{MaxExtraRate: 10}).Expect(t, qload.SomeTrigger())
 // r.Trigger: "+1.0 req/s for 3m36s" tips immediate retries into a storm
 ```
 
@@ -399,32 +399,32 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | Package | |
 |---|---|
 | `connect` | MBT driver runtime: `Run`, `Test`, `Replay`, `Switch`, `Pick[T]`, `StateDriver`, `GenerateRun`; `FaultScript` (a trace's faults imposed on a whole program in qenv) |
-| `quinthegel` | Hegel integration: `Test` (modes `Batched`/`Each`/`After`/`Off`), `FindViolation` (expected failures, shrunk), `Recorder`, `Replay`, `Traces`; the Hegel adapters of other packages: `Chooser` (qenv's choices from a test case), `FindTrigger` (qmeta's trigger search, `.Expect(t, found)`) ; `Shrink(t, sys)` (a `qtest.System` under Hegel, its failure replayable from `Violation.Choices`) |
+| `qhegel` | Hegel integration: `Test` (modes `Batched`/`Each`/`After`/`Off`), `FindViolation` (expected failures, shrunk), `Recorder`, `Replay`, `Traces`; the Hegel adapters of other packages: `Chooser` (qenv's choices from a test case), `FindTrigger` (qmeta's trigger search, `.Expect(t, found)`) ; `Shrink(t, sys)` (a `qtest.System` under Hegel, its failure replayable from `Violation.Choices`) |
 | `itf` | ITF traces: `Parse`, `Value`, `Decode`/`Encode` (Go ⇄ Quint values), `ParseQuint` (Quint literals) |
 | `qobs` | runtime recorder: `Record`, `SlogHandler` (log records with `quint.action` as steps), `Thread`, `WithRecorder` (a context's own recorder, so runs in parallel record apart), a run's state found from its context or goroutine (`qrun`), `Strict` (a step with nowhere to go is logged, `Escaped`, and fails the exploration); sinks `MemorySink`, `FileSink` (durable: a killed process loses no step)/`BufferedFileSink`/`JSONLSink`, `OTelSink`, `Tee`; `orchestrion.yml` |
-| `qtrace` | the step schema, `Reconstruct` (ordering, gaps, restarts), step log I/O; `Filter` (select actors, actions and a window; pseudonymize identifiers; keep only what the binding reads: `quintgo steps -out`) |
+| `qtrace` | the step schema, `Reconstruct` (ordering, gaps, restarts), step log I/O; `Filter` (select actors, actions and a window; pseudonymize identifiers; keep only what the binding reads: `gotogether steps -out`) |
 | `otelio` | OTLP/JSON file exporter and reader; SDK spans to steps |
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, annotation scan, plan, Quint module and ITF generation; `ScanRecords`/`LintRecords`: literal `qobs.Record` actions checked against the model |
 | `validate` | replay with `quint test`: `Checker.Check`, `CheckRuns`, `ValidateITF`, structured verdicts |
 | `qtest` | record-then-check inside a Go test; `Expect` with `Conforms`/`Rejects`/`Mismatch`/`Violates`/`AnyOf`; `Explore` (seeded simulated runs, in parallel, checked in bulk); `Validate` for steps recorded elsewhere; `Constants` (another instance of the binding's model); `RequireQuint` ; `System.Sweep` (a covering array of configurations, each row explored, expectations per row) ; claims over runs (`Some`, `All`, `None`: an expectation alone is about some run, `Conforms` about every run) ; `System` (an app bound to its model: `Explore`, `Sweep`, `FollowTraces`) ; `System.Fuzz` (Go's coverage-guided fuzzer, each input a run's choices, verdicts cached by steps) ; `Evidence` (one report of an exploration or sweep: verdicts by reason, faults, rows, code, mutants) ; `System.Mutate` (each mutant woven by `qweave -mutate` explored; survivors are code the model does not constrain: `MutationReport`) |
-| `qenv` | deterministic simulated environments: scheduler, virtual time, crashable processes, choosers (seeded, replay, swarm; Hegel's is `quinthegel.Choices`), a native runtime (`NewNative`: the same doubles on goroutines and `time`, for gosim), `Store` (isolation levels), `Queue`, `Service` (RPC, with optional `Capacity`: workers, queue, service times, shedding); `WithContext` (what every task's context carries, e.g. the run's recorder); crashes per virtual second (`NemesisEvery`); scheduler self-checks (`Check`, `QENV_CHECK=1`); what escapes a simulation (`go` statements, the wall clock) is `qlint`'s (`quintgo lint -sim`) ; fault points (`FaultPoint`, `//quint:fault` via `qenv/fault`), fault coverage (`CoverageOf`, `qtest.Exploration.Coverage`), `Script` (exactly the faults it is given) ; `Without` (fault kinds off for a run); pair and order coverage of faults (`Coverage.Pairs`, `Untried`, `OneWay`) ; `Bytes`/`FromBytes` (choices from a byte stream, the rule Hegel's chooser and fuzzing share) and `EncodeChoices` (a recorded run as bytes: a fuzz corpus entry) ; fault kinds declared by name (`Faults`, `Sim.FaultOf`, `Only`), so coverage and scripts name options |
+| `qenv` | deterministic simulated environments: scheduler, virtual time, crashable processes, choosers (seeded, replay, swarm; Hegel's is `qhegel.Choices`), a native runtime (`NewNative`: the same doubles on goroutines and `time`, for gosim), `Store` (isolation levels), `Queue`, `Service` (RPC, with optional `Capacity`: workers, queue, service times, shedding); `WithContext` (what every task's context carries, e.g. the run's recorder); crashes per virtual second (`NemesisEvery`); scheduler self-checks (`Check`, `QENV_CHECK=1`); what escapes a simulation (`go` statements, the wall clock) is `qlint`'s (`gotogether lint -sim`) ; fault points (`FaultPoint`, `//quint:fault` via `qenv/fault`), fault coverage (`CoverageOf`, `qtest.Exploration.Coverage`), `Script` (exactly the faults it is given) ; `Without` (fault kinds off for a run); pair and order coverage of faults (`Coverage.Pairs`, `Untried`, `OneWay`) ; `Bytes`/`FromBytes` (choices from a byte stream, the rule Hegel's chooser and fuzzing share) and `EncodeChoices` (a recorded run as bytes: a fuzz corpus entry) ; fault kinds declared by name (`Faults`, `Sim.FaultOf`, `Only`), so coverage and scripts name options |
 | `qenv/weave` | Orchestrion aspects and the functions they call: `sync` locks and wait groups, and `//qenv:go` goroutines, simulated inside a qenv simulation and real outside |
 | `qenv/fault` | the aspect of `//quint:fault`: a function's entry becomes a fault choice (its package's own errors, or a crash) in a simulation, declared for coverage; woven by qweave |
-| `qload` | load on qenv: `Experiment` (an application under open- or closed-loop load, goodput from its model steps, probes, seeded streams, `Trigger`s); the recovery property (`Recovers`, `Assess`, `Mostly`; judged against the healthy goodput within the counts' noise) and `System`/`TriggerSpace` for Hegel's trigger search (`quinthegel.FindTrigger`); `SimulateTrajectory` (simulated trajectories for `qmeta.Calibrate`); `Simulate` (an abstract server and clients with timeouts, retries, backoff, budgets or a `Retrier` under test) ; `Piecewise` (a measured shape, e.g. a production trace's) |
+| `qload` | load on qenv: `Experiment` (an application under open- or closed-loop load, goodput from its model steps, probes, seeded streams, `Trigger`s); the recovery property (`Recovers`, `Assess`, `Mostly`; judged against the healthy goodput within the counts' noise) and `System`/`TriggerSpace` for Hegel's trigger search (`qhegel.FindTrigger`); `SimulateTrajectory` (simulated trajectories for `qmeta.Calibrate`); `Simulate` (an abstract server and clients with timeouts, retries, backoff, budgets or a `Retrier` under test) ; `Piecewise` (a measured shape, e.g. a production trace's) |
 | `qrole` | load roles: `//quint:serve`, `//quint:operation`, `//quint:call` (woven by its aspects, or `Serve`/`Operation`/`Call`) measure a server's requests (u) and the orbit (v); OTel gauges (`Instrument`) ; pprof labels per role (`Labels(true)`: profiles split by server and service) |
 | `qmeta` | metastability: a CTMC (`Field`/`SVG`, `HittingTimes`, `RecoveryWithin`, `Expect`/`MeanAll`, `Calibrate`/`CalibrateTimeout` from observed series via `Trajectories`), alerts (`Region`: states unlikely to recover in time; `Rules`: a Prometheus rule group over qrole's metrics); it depends on nothing in the module (the simulations that test it are qload's); `Watch` (the runtime's flight recorder written out when the running system enters the alert region) ; measured service times (`Measure`: μ, the coefficient of variation, `Exponential`, `Draw` for simulations) |
-| `qcover` | code coverage by model step: blocks woven by `qweave -cover`, attributed to each task's next step; `Summarize` (never run, run by no step, outcomes that ran the same code); `Exploration.CodeCoverage` (collected whenever the code is woven) ; a real environment's coverage (binaries built with `-cover`: `ReadGoCover`, `quintgo cover`) against a simulation's (`Compare`: what ran only for real, only simulated) |
+| `qcover` | code coverage by model step: blocks woven by `qweave -cover`, attributed to each task's next step; `Summarize` (never run, run by no step, outcomes that ran the same code); `Exploration.CodeCoverage` (collected whenever the code is woven) ; a real environment's coverage (binaries built with `-cover`: `ReadGoCover`, `gotogether cover`) against a simulation's (`Compare`: what ran only for real, only simulated) |
 | `qenv.TimeProfile` | where a simulation's virtual time goes: each wait at a seam weighted by the virtual time it took, by stack, in pprof's format (`Sim.Profile`, `go tool pprof`) |
 | `qmut` | mutant schemata: `qweave -mutate` weaves negated conditions, moved comparison boundaries and dropped calls into one build, each behind a switch; a run turns one on (`WithMutant`) and notes which it reached (`Reach`) |
-| `qlint` | the simulation and weaving lints (`quintgo lint -sim`, tests included; `-weave`), per file for the analyzers |
+| `qlint` | the simulation and weaving lints (`gotogether lint -sim`, tests included; `-weave`), per file for the analyzers |
 | `qanalysis` | separate module: go/analysis passes `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, `go vet -vettool`, a golangci-lint module plugin); `actionmap`: each action's statically reachable code compared with its steps' coverage (`cmd/actionmap`) |
 | `qrun` | a run's state (`Key[T]`, `Get`): from the context, else the goroutine's run; what qobs, qrole and qcover look up |
 | `sktrace` | SimKube traces (format v3, no dependencies): a real cluster's objects over time (`Events`, `Lifecycles`), as rates, gauges (`Gauge`, `Replicas`) and pod starts, for `qload.Piecewise` load shapes and replayed workloads; `Lint` (a trace's dependencies, namespaces, kinds and owners, against a target before a replay); `Lifetimes`, `Quantiles` (measured pod times as a delay's options: kubesim's `PodTimes`) |
 | `qsweep` | covering arrays: `Cover` (every t-way combination of factor values, with constraints), `Missing`, `Sequences` (every order of t events); `Factor.Constant` (a factor that is a model constant: each row checked with its value) |
 | `load` | read OTLP/JSON, a step log or ITF, detected by content |
 | `skills` | the agent skills below, embedded; install targets |
-| `cmd/quintgo` | CLI: `scaffold` (a binding; `-system`: a `qtest.System` test for it), `lint` (`-sim DIR`: simulation code; `-weave DIR`: woven code), `steps`, `validate`, `itf`, `convert`, `skills` |
+| `cmd/gotogether` | CLI: `scaffold` (a binding; `-system`: a `qtest.System` test for it), `lint` (`-sim DIR`: simulation code; `-weave DIR`: woven code), `steps`, `validate`, `itf`, `convert`, `skills` |
 
 ## Example apps
 
@@ -450,7 +450,7 @@ which bug.
 | [`examples/gosim`](examples/gosim) | the Glomers broadcast node over real TCP on three gosim machines, and the checkout saga's deployment on qenv's native runtime, both unchanged (own module, `qgosim`) | whole-program simulation whose every choice (schedule, `select`, map order, faults) comes from a qenv `Chooser` in the test process; runs checked against the same models and bindings; exact replay; `qtest.Explore` over parallel gosim binaries; Hegel shrinking fire-and-forget gossip's lost value; a mutant's second symptom that gosim's schedules reach |
 
 ```sh
-examples/glomers/maelstrom.sh                   # under real Maelstrom, then quintgo on the nodes' step logs
+examples/glomers/maelstrom.sh                   # under real Maelstrom, then gotogether on the nodes' step logs
 examples/kvstore/run-demo.sh                    # MUTATION=stale-cas | revision-on-conflict
 examples/jobqueue/run-demo.sh                   # MUTATION=ack-any-lease | forget-done
 examples/grpcledger/run-demo.sh                 # a real grpc.Server, otelgrpc spans converted; MUTATION=no-dedupe | no-funds-check
@@ -464,19 +464,19 @@ examples/crossdb/kind/demo.sh                   # kind + Crossplane; MUTATION=no
 ## Agent skills and guidance
 
 The skills in [`skills/`](skills) teach a coding agent this toolkit:
-- `quint-model-for-go`: model conventions;
-- `quint-mbt-driver`: drivers;
-- `quint-trace-validation`: instrumentation, bindings and verdicts;
-- `quint-hegel`: Hegel + Quint;
-- `quint-modeling-patterns`: what to put in the model: the requirement
+- `gotogether-model`: model conventions;
+- `gotogether-mbt`: drivers;
+- `gotogether-traces`: instrumentation, bindings and verdicts;
+- `gotogether-hegel`: Hegel + Quint;
+- `gotogether-patterns`: what to put in the model: the requirement
   rather than one solution, the environment's real guarantees,
   linearization points, ghost variables, settle-conditioned properties,
   mechanism models with a lemma;
-- `quint-verification-workflow`: the order of work (model, simulate,
+- `gotogether-workflow`: the order of work (model, simulate,
   record, bind, mutants, Hegel, real environment) and triage of verdicts;
-- `quint-fault-injection`: seams, `qenv` deployments, contract profiles,
-  `qtest.Explore`, shrinking with `quinthegel.Choices`, and the real environment;
-- `quint-metastability`: retry storms and other metastable failures: the
+- `gotogether-faults`: seams, `qenv` deployments, contract profiles,
+  `qtest.Explore`, shrinking with `qhegel.Choices`, and the real environment;
+- `gotogether-metastability`: retry storms and other metastable failures: the
   CTMC, the load simulation, trigger search, mitigations.
 
 They are in the [Agent Skills](https://agentskills.io) format, one
@@ -486,9 +486,9 @@ Cursor, VS Code/Copilot, Codex and others, and `.claude/skills/` for Claude
 Code. Install them into your own project, or for your user:
 
 ```sh
-quintgo skills install                     # .agents/skills and .claude/skills
-quintgo skills install -target all         # also .github/skills and .cursor/skills
-quintgo skills install -user               # under $HOME instead of the project
+gotogether skills install                     # .agents/skills and .claude/skills
+gotogether skills install -target all         # also .github/skills and .cursor/skills
+gotogether skills install -user               # under $HOME instead of the project
 ```
 
 Repository guidance for agents is in [AGENTS.md](AGENTS.md); `CLAUDE.md`

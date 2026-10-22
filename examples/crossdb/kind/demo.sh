@@ -9,14 +9,14 @@
 #   KILL=1      kill -9 the provider every 2-6 s while the driver runs, and restart it
 #   N=4 SEED=1  AppDatabases, and the driver's seed
 #
-# Exit status: 0 conforms, 1 violation (quintgo's).
+# Exit status: 0 conforms, 1 violation (gotogether's).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 kind/setup.sh
 cluster=${CLUSTER:-crossdb}
 out=$(mktemp -d)
 for c in dbaas-server provider driver; do go build -o "$out/$c" "./cmd/$c"; done
-(cd ../.. && go build -o "$out/quintgo" ./cmd/quintgo)
+(cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
 kind get kubeconfig --name "$cluster" > "$out/kubeconfig"
 export KUBECONFIG="$out/kubeconfig"
 "$out/driver" -cleanup
@@ -47,6 +47,6 @@ kill "$server" 2>/dev/null || true
 wait 2>/dev/null || true
 [[ $status -eq 0 ]] || { echo "driver failed"; exit 2; }
 
-"$out/quintgo" validate -noitf -binding crossdb.binding.yaml "$out/cloud.jsonl" "$out/driver.jsonl" || status=$?
+"$out/gotogether" validate -noitf -binding crossdb.binding.yaml "$out/cloud.jsonl" "$out/driver.jsonl" || status=$?
 echo "step logs and logs in $out"
 exit $status

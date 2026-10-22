@@ -86,10 +86,10 @@ func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
 		}
 	}
 	if len(survived) > 0 {
-		t.Errorf("quintgo: %d mutants survived every run: code the model does not constrain, or a check missing:\n%s", len(survived), strings.Join(survived, "\n"))
+		t.Errorf("gotogether: %d mutants survived every run: code the model does not constrain, or a check missing:\n%s", len(survived), strings.Join(survived, "\n"))
 	}
 	if len(stale) > 0 {
-		t.Errorf("quintgo: marked equivalent but no survivor there (killed now, or the code moved): %s", strings.Join(stale, ", "))
+		t.Errorf("gotogether: marked equivalent but no survivor there (killed now, or the code moved): %s", strings.Join(stale, ", "))
 	}
 }
 

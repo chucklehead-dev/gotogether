@@ -1,4 +1,4 @@
-// Package qobs is the runtime half of quintgo: it records model steps from a
+// Package qobs is the runtime half of gotogether: it records model steps from a
 // running Go program. It is what the //quint:action Orchestrion aspect calls,
 // and it can be called directly.
 //
@@ -150,7 +150,7 @@ func Global() *Recorder { return global.Load() }
 var installed atomic.Pointer[Recorder]
 
 // InstallGlobal installs r as the global recorder for a test's run
-// (qtest.Global, quinthegel's Config.Global): the steps of goroutines no
+// (qtest.Global, qhegel's Config.Global): the steps of goroutines no
 // run can follow (a server's, a cluster's) go to it. A second install
 // while one is in place fails: the two runs would take each other's
 // steps, so tests that install it must not run in parallel. restore puts
@@ -163,7 +163,7 @@ func InstallGlobal(r *Recorder) (restore func(), err error) {
 	}
 	if !installed.CompareAndSwap(nil, r) {
 		return nil, errors.New("qobs: another run's global recorder is installed: runs that install one (qtest.Global, " +
-			"quinthegel's Config.Global) must not run in parallel; drop t.Parallel, or record through the run's context")
+			"qhegel's Config.Global) must not run in parallel; drop t.Parallel, or record through the run's context")
 	}
 	prev := global.Swap(r)
 	var once sync.Once

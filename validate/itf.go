@@ -12,7 +12,7 @@ import (
 )
 
 // ITFOptions says what to check a model-level ITF trace against. Every field
-// is optional when the trace was written by quintgo (its #meta names the
+// is optional when the trace was written by gotogether (its #meta names the
 // spec, module, constants, defs and invariants); set them to validate a
 // trace from elsewhere, e.g. `quint run --mbt`.
 type ITFOptions struct {
@@ -30,9 +30,9 @@ type ITFOptions struct {
 // ValidateITF replays a model-level ITF trace in Quint: each state's
 // mbt::actionTaken is called with its mbt::nondetPicks as arguments (picks
 // are matched to parameters by name). After each step it checks
-//   - quintgo::expect, the observed projection the binding rendered, and
+//   - gotogether::expect, the observed projection the binding rendered, and
 //   - every model variable the state carries (equality), so a trace from
-//     `quint run --mbt`, or one quintgo validated earlier, is checked state
+//     `quint run --mbt`, or one gotogether validated earlier, is checked state
 //     by state;
 //
 // and it checks the invariants in every state.
@@ -63,7 +63,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		}
 	}
 	if opt.Instance == "" && len(meta.Constants) == 0 && opt.Binding == nil {
-		return nil, fmt.Errorf("no constants for %s: validate against an instance module (Instance) or a quintgo-written trace", module)
+		return nil, fmt.Errorf("no constants for %s: validate against an instance module (Instance) or a gotogether-written trace", module)
 	}
 	o, err := opt.Options.resolve()
 	if err != nil {
@@ -122,7 +122,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 			c.Quint += "(" + strings.Join(vals, ", ") + ")"
 		}
 		var checks []string
-		if e, ok := st.Extra["quintgo::expect"]; ok && e.Kind == itf.Str {
+		if e, ok := st.Extra["gotogether::expect"]; ok && e.Kind == itf.Str {
 			checks = append(checks, e.S)
 		}
 		checks = append(checks, varCheck(st)...)

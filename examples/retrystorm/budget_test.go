@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/retrystorm/retry"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -52,16 +52,16 @@ func (m *machine) RuleRetries(tc hegel.TestCase) {
 	}
 }
 
-func hegelCfg() quinthegel.Config {
-	return quinthegel.Config{Binding: "retrystorm.binding.yaml", Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true}
+func hegelCfg() qhegel.Config {
+	return qhegel.Config{Binding: "retrystorm.binding.yaml", Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true}
 }
 
 // Hegel drives the faithful budget; every run satisfies the model.
 func TestHegelBudgetConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := hegelCfg()
-	cfg.Mode = quinthegel.After
-	quinthegel.Test(t, cfg, func(ht *hegel.T, _ *quinthegel.Case) {
+	cfg.Mode = qhegel.After
+	qhegel.Test(t, cfg, func(ht *hegel.T, _ *qhegel.Case) {
 		hegel.RunStateful(ht, &machine{b: budget(retry.Faithful)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(20), hegel.WithDatabase(""))
 }
@@ -73,7 +73,7 @@ func TestHegelCatchesUncapped(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~100 times")
 	}
-	v := quinthegel.FindViolation(t, hegelCfg(), func(tc hegel.TestCase, _ *quinthegel.Case) {
+	v := qhegel.FindViolation(t, hegelCfg(), func(tc hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(tc, &machine{b: budget(retry.Uncapped)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(50))
 	if last := v.Last(); last.Action != "request" {

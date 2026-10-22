@@ -70,7 +70,7 @@ func (x *Exploration) Failing() []*Run {
 // ExploreConfig configures Explore.
 type ExploreConfig struct {
 	// Seeds is the number of runs, with seeds 1..Seeds (default 50).
-	// QUINTGO_SEED=n in the environment runs seed n alone, as a failure's
+	// GOTOGETHER_SEED=n in the environment runs seed n alone, as a failure's
 	// report says to reproduce it.
 	Seeds int
 	Rates qenv.Rates // fault rates (default qenv.DefaultRates)
@@ -111,10 +111,10 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = uint64(i + 1)
 	}
-	if v := os.Getenv("QUINTGO_SEED"); v != "" {
+	if v := os.Getenv("GOTOGETHER_SEED"); v != "" {
 		n, err := strconv.ParseUint(v, 10, 64)
 		if err != nil {
-			t.Fatalf("quintgo: QUINTGO_SEED=%q: want a seed number", v)
+			t.Fatalf("gotogether: GOTOGETHER_SEED=%q: want a seed number", v)
 		}
 		seeds = []uint64{n}
 	}
@@ -150,7 +150,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				err = chooserErr(ch)
 			}
 			if is := r.Issues(); err == nil && len(is) > 0 {
-				err = fmt.Errorf("quintgo: recording: %s", strings.Join(is, "; "))
+				err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
 			}
 			x.Runs[i] = &Run{Seed: seed, Steps: mem.Steps(), Choices: rec.Choices, Interrupted: r.Interrupted(), Code: code, Err: err}
 			if sc, ok := qenv.As[*qenv.Script](ch); ok {
@@ -161,15 +161,15 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	}
 	wg.Wait()
 	if n, msgs := qobs.Escaped(mark); n > mark {
-		t.Errorf("quintgo: %d steps were recorded from outside the runs while they ran (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
+		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
 	for i, r := range x.Runs {
 		if r == nil { // the scenario failed t from its goroutine before the run ended
-			t.Errorf("quintgo: seed %d did not finish: the scenario failed the test (above)", seeds[i])
+			t.Errorf("gotogether: seed %d did not finish: the scenario failed the test (above)", seeds[i])
 			continue
 		}
 		if r.Err != nil {
-			t.Errorf("quintgo: seed %d did not run: %v", r.Seed, r.Err)
+			t.Errorf("gotogether: seed %d did not run: %v", r.Seed, r.Err)
 		}
 	}
 	if t.Failed() {
@@ -229,16 +229,16 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				continue
 			}
 			if errs[j] != nil {
-				t.Fatalf("quintgo: seed %d: %v", x.Runs[i].Seed, errs[j])
+				t.Fatalf("gotogether: seed %d: %v", x.Runs[i].Seed, errs[j])
 			}
 			x.Runs[i].Report = reps[j]
 			verdicts.put(keys[i], reps[j])
 		}
 	}
-	if os.Getenv("QUINTGO_KEEP") != "" {
-		// the report, for tools that read a kept run (quintgo cover, actionmap)
+	if os.Getenv("GOTOGETHER_KEEP") != "" {
+		// the report, for tools that read a kept run (gotogether cover, actionmap)
 		if err := x.Evidence().WriteJSON(filepath.Join(c.Dir, "evidence.json")); err != nil {
-			t.Logf("quintgo: evidence.json: %v", err)
+			t.Logf("gotogether: evidence.json: %v", err)
 		}
 	}
 	return x
@@ -318,7 +318,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			es = c.es
 		}
 		if u := unknownNames(es, x.actions, invariants); len(u) > 0 {
-			t.Fatalf("quintgo: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
+			t.Fatalf("gotogether: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
 		}
 	}
 	bad := len(x.Failing())
@@ -327,7 +327,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		if rc, ok := c.(runsClaim); ok {
 			if msg := rc.judgeRuns(x.Runs); msg != "" {
 				failedAny = true
-				t.Errorf("quintgo: %s", msg)
+				t.Errorf("gotogether: %s", msg)
 			}
 			continue
 		}
@@ -338,23 +338,23 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		case j.ok && j.show >= 0 && !every:
 			r := x.Runs[j.show]
 			if !r.Report.OK() {
-				t.Logf("quintgo: %d of %d runs violate the model; seed %d shows %s:\n%s", bad, len(x.Runs), r.Seed, describeClaim(c), x.describe(t, r))
+				t.Logf("gotogether: %d of %d runs violate the model; seed %d shows %s:\n%s", bad, len(x.Runs), r.Seed, describeClaim(c), x.describe(t, r))
 			}
 		case j.ok:
 		case j.show >= 0:
 			failedAny = true
 			if every {
-				t.Errorf("quintgo: want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show]))
+				t.Errorf("gotogether: want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show]))
 			} else {
-				t.Errorf("quintgo: want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show]))
+				t.Errorf("gotogether: want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show]))
 			}
 		case bad == 0:
 			failedAny = true
-			t.Errorf("quintgo: all %d runs conform; want %s%s%s", len(x.Runs), c, x.unfaulted(), x.unscripted())
+			t.Errorf("gotogether: all %d runs conform; want %s%s%s", len(x.Runs), c, x.unfaulted(), x.unscripted())
 		default:
 			failedAny = true
 			first := x.Failing()[0]
-			t.Errorf("quintgo: %d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, first))
+			t.Errorf("gotogether: %d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, first))
 		}
 	}
 	if failedAny {
@@ -466,7 +466,7 @@ func (x *Exploration) describe(t testing.TB, r *Run) string {
 		f.Close()
 	}
 	if x.test != "" {
-		fmt.Fprintf(&b, "  reproduce: QUINTGO_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
+		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
 	}
 	return b.String()
 }

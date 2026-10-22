@@ -233,7 +233,7 @@ type RuleConfig struct {
 	// boundary, coarsened to fire only inside it (Bands).
 	Step int
 	// Headroom, if set, is noted in the rule: the smallest trigger found
-	// to tip the system (quinthegel.FindTrigger).
+	// to tip the system (qhegel.FindTrigger).
 	Headroom string
 }
 
@@ -278,7 +278,7 @@ func (r *Region) Rules(cfg RuleConfig, healthy string) string {
 	}
 	p := r.Chain.P
 	var b strings.Builder
-	fmt.Fprintf(&b, "groups:\n  - name: quint-metastability\n    rules:\n      - alert: %s\n", cfg.Alert)
+	fmt.Fprintf(&b, "groups:\n  - name: gotogether-metastability\n    rules:\n      - alert: %s\n", cfg.Alert)
 	fmt.Fprintf(&b, "        expr: |\n          %s\n", strings.ReplaceAll(expr, "\n        ", "\n          "))
 	fmt.Fprintf(&b, "        for: %s\n", cfg.For)
 	fmt.Fprintf(&b, "        labels:\n          server: %q\n", cfg.Server)

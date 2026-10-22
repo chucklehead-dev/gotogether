@@ -35,7 +35,7 @@ A line-of-business app checked against its model under fault injection.
 
 ```sh
 go test ./examples/checkout/...                 # explorations of every case below, Hegel shrinking (~2 min)
-examples/checkout/run-demo.sh                   # simulate, write step logs, quintgo validate them
+examples/checkout/run-demo.sh                   # simulate, write step logs, gotogether validate them
 MUTATION=lock-without-write ISOLATIONS=snapshot examples/checkout/run-demo.sh
 ```
 
@@ -79,7 +79,7 @@ It is not a bug under PostgreSQL's default, READ COMMITTED.
   more than one way.
 - **Hegel cost.** A run makes about 850 choices. Drawing each one from
   Hegel put most of a shrinking test's 300 s into Hegel calls.
-  `quinthegel.Choices` now draws entropy in 512-byte chunks, where a zero byte is
+  `qhegel.Choices` now draws entropy in 512-byte chunks, where a zero byte is
   the nominal option. Hegel shrinks the bytes toward zeros, which means
   fewer faults and the canonical schedule. The same test takes 16 s.
 

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qload"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 
 	"hegel.dev/go/hegel"
 )
@@ -72,7 +72,7 @@ func TestFindTrigger(t *testing.T) {
 	}{{Policies[0], 9, qload.SomeTrigger()}, {Policies[1], 8, qload.SomeTrigger()}, {Policies[2], 9, qload.NoTrigger()}, {Policies[3], 9, qload.NoTrigger()}} {
 		t.Run(c.p.Name, func(t *testing.T) {
 			sys := qload.OfSimulation(c.p.Config(c.lam), c.lam, 5*time.Minute)
-			quinthegel.FindTrigger(t, sys, space, hegel.WithTestCases(30), hegel.WithSeed(1)).Expect(t, c.want)
+			qhegel.FindTrigger(t, sys, space, hegel.WithTestCases(30), hegel.WithSeed(1)).Expect(t, c.want)
 		})
 	}
 }

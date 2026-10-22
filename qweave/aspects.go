@@ -7,7 +7,7 @@
 //
 // It reads the aspect files of the packages a module's tool file imports
 // (gosim.tool.go or orchestrion.tool.go) and supports the join points and
-// advice quint-connect-go's aspects use:
+// advice gotogether's aspects use:
 //   - join points: function-body (with a directive), method-call (receiver,
 //     name, value-only or pointer-only), function-call, function (a
 //     function literal), directive (on the enclosing statement),

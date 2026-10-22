@@ -1,4 +1,4 @@
-// Command quintvet runs quint-connect-go's analyzers (qanalysis): quintsim,
+// Command quintvet runs gotogether's analyzers (qanalysis): quintsim,
 // quintweave and quintaction. Standalone:
 //
 //	quintvet ./...                                      # all three

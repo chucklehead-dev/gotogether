@@ -6,8 +6,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/checkout"
 	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -29,13 +29,13 @@ func TestShrunkFailureAsCorpus(t *testing.T) {
 		t.Skip("shrinking against the model")
 	}
 	sys := system(checkout.Config{Isolation: qenv.SnapshotIsolation, Mutation: shop.LockWithoutWrite})
-	v := quinthegel.Shrink(t, sys, qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1))
+	v := qhegel.Shrink(t, sys, qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1))
 	data, err := qenv.EncodeChoices(v.Choices, qenv.DefaultRates)
 	if err != nil {
 		t.Fatal(err)
 	}
 	x := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, qenv.DefaultRates) }})
-	if got, want := quinthegel.Render(x.Runs[0].Steps), quinthegel.Render(v.Steps); got != want {
+	if got, want := qhegel.Render(x.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the corpus entry runs differently:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}
 	x.Expect(t, qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel")))

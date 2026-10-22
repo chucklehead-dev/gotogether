@@ -32,7 +32,7 @@ var simulated = []string{
 
 // hostSide import qenv but run outside any simulation: the Hegel adapters.
 var hostSide = map[string]bool{
-	"github.com/chucklehead-dev/gotogether/quinthegel": true,
+	"github.com/chucklehead-dev/gotogether/qhegel": true,
 }
 
 const module = "github.com/chucklehead-dev/gotogether"
@@ -115,7 +115,7 @@ func TestSimulatedPackagesHaveNoNativeDeps(t *testing.T) {
 		if chain := find(pkgs, root, map[string]bool{}); chain != nil {
 			why := native(pkgs[chain[len(chain)-1]])
 			t.Errorf("%s depends on %s, which a simulation cannot run: %s.\n"+
-				"Move the code that needs it out of the simulated packages (Hegel adapters go in quinthegel).",
+				"Move the code that needs it out of the simulated packages (Hegel adapters go in qhegel).",
 				root, why, strings.Join(chain, " -> "))
 		}
 	}

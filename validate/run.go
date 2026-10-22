@@ -41,7 +41,7 @@ var cached sync.Map // absolute binding path, quint, backend -> *Checker
 // Cached is NewChecker once per binding, quint binary and backend in a
 // process (the model is typechecked and the binding linted once), with
 // o's other options (Dir, NoITF) on the copy it returns: qtest and
-// quinthegel share it.
+// qhegel share it.
 func Cached(bindingPath string, o Options) (*Checker, error) {
 	abs, err := filepath.Abs(bindingPath)
 	if err != nil {

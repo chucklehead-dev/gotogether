@@ -1,10 +1,10 @@
-// Package qanalysis has quint-connect-go's checks as go/analysis passes:
+// Package qanalysis has gotogether's checks as go/analysis passes:
 // what escapes a qenv simulation (Sim), what qenv/weave cannot rewrite
 // (Weave), and //quint:action annotations against their binding (Action).
 // They run in a multichecker (cmd/quintvet, also usable as `go vet
 // -vettool`) and in golangci-lint as a module plugin (package golangci).
 //
-// Sim and Weave wrap the checks of `quintgo lint -sim` and `-weave`
+// Sim and Weave wrap the checks of `gotogether lint -sim` and `-weave`
 // (package qlint), so the CLI and the analyzers report the same findings.
 // This is its own module because the core keeps to OTel, yaml.v3 and
 // Hegel, and x/tools is none of them.
@@ -33,7 +33,7 @@ var All = []*analysis.Analyzer{Sim, Weave, Action}
 
 // Sim reports code in files that import qenv that escapes the simulation:
 // go statements, the wall clock, steps recorded with a background context
-// (qlint.SimFile). Test files are checked, as by `quintgo lint -sim`: a
+// (qlint.SimFile). Test files are checked, as by `gotogether lint -sim`: a
 // System's Run closure lives in one.
 var Sim = &analysis.Analyzer{
 	Name: "quintsim",
@@ -128,7 +128,7 @@ func runAction(pass *analysis.Pass) (any, error) {
 }
 
 // checkRecords reports the literal actions of f's qobs.Record and
-// Recorder.Record calls that model lacks. The scan is quintgo lint's
+// Recorder.Record calls that model lacks. The scan is gotogether lint's
 // (binding.RecordsOf); types confirm each call is qobs's.
 func checkRecords(pass *analysis.Pass, m *binding.Model, f *ast.File) {
 	for _, r := range binding.RecordsOf(pass.Fset, f) {

@@ -6,8 +6,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/twophase"
 	"github.com/chucklehead-dev/gotogether/examples/twophase/tpc"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -79,7 +79,7 @@ func TestHegelShrinksImpatience(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	v := quinthegel.Shrink(t, system(twophase.Config{Mutation: tpc.ImpatientParticipant}), crashy, hegel.WithTestCases(100))
+	v := qhegel.Shrink(t, system(twophase.Config{Mutation: tpc.ImpatientParticipant}), crashy, hegel.WithTestCases(100))
 	v.Expect(t, qtest.Rejects("abort"))
 	t.Logf("shrunk to %d steps, faults %v", len(v.Steps), (&qenv.ChoiceLog{Choices: v.Choices}).Faults())
 }

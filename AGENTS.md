@@ -1,15 +1,15 @@
-# AGENTS.md: working on quint-connect-go
+# AGENTS.md: working on gotogether
 
 Guidance for coding agents (and humans) changing this repository. If you
 are *using* the toolkit in another project, the skills in `skills/` are
-for you (`quintgo skills install`).
+for you (`gotogether skills install`).
 
 ## What this is
 
 A Go toolkit for checking Go code against Quint models in four ways, and
 its load behaviour in a fifth:
 - **MBT** (`connect`): Quint traces drive the code.
-- **Hegel integration** (`quinthegel`): Hegel drives and the model
+- **Hegel integration** (`qhegel`): Hegel drives and the model
   judges, or the model drives and Hegel varies.
 - **Trace validation** (`qobs`, `qtrace`, `otelio`, `convert`, `binding`,
   `validate`, `qtest`): recorded runs are checked by the model.
@@ -21,14 +21,14 @@ its load behaviour in a fifth:
   confirms it, and Hegel shrinks the smallest trigger.
 
 The design record is `docs/DESIGN.md`. Read §9 before changing `connect`
-or `quinthegel`, §10 before changing `qenv`, and §11 before changing
+or `qhegel`, §10 before changing `qenv`, and §11 before changing
 `qload` or `qmeta`.
 
 ## Layout
 
 ```
 connect/      MBT runtime (quint-connect parity); testdata/bank.qnt
-quinthegel/   Hegel integration; testdata/bank.yaml
+qhegel/   Hegel integration; testdata/bank.yaml
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
 qobs/ qtrace/ otelio/ convert/ load/   recording, schema/reconstruction, OTLP, span conversion, input sniffing
 binding/ validate/ qtest/              binding YAML, quint-test-based validator, test helpers (Expect, Explore)
@@ -40,13 +40,13 @@ qgosim/       separate module: qenv and whole programs in gosim (on the fork, mo
 qweave/       separate module: weaves Orchestrion aspects with types into a go -overlay (cmd/qweave); also gosim's
 qload/ qmeta/ load simulation (open/closed-loop clients, servers, triggers, the recovery property); CTMC, alert rules (qmeta imports nothing of the module)
 qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's state found from its context or goroutine
-qlint/        simulation and weaving lints (quintgo lint -sim, -weave); per file for qanalysis
+qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
 qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin), static action map (cmd/actionmap)
 qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per run; qtest's System.Mutate explores each
 sktrace/      SimKube traces (msgpack v3, own decoder): production workloads as load shapes and replayed writes
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
 qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspects in orchestrion.yml): u and v as gauges
-cmd/quintgo/  CLI
+cmd/gotogether/  CLI
 skills/       agent skills, the source of truth (embedded by package skills;
               symlinked into .agents/skills and .claude/skills, checked by skills_test.go)
 examples/glomers      Gossip Glomers on a Maelstrom runtime + simulator (maelstrom/); per-challenge model, impl, binding, mutants;
@@ -107,9 +107,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - Backend: `QUINT_BACKEND=rust|typescript`, for connect, validate and
   qtest alike (unset: rust for validation, quint's own default for
   connect's `quint run`).
-  `QUINTGO_KEEP=/dir` keeps generated modules and traces from qtest and
-  quinthegel. `QUINTGO_SEED=n` runs an exploration's seed n alone (each
-  failing run's report prints the command). `QUINTGO_VERBOSE=1` shows
+  `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
+  qhegel. `GOTOGETHER_SEED=n` runs an exploration's seed n alone (each
+  failing run's report prints the command). `GOTOGETHER_VERBOSE=1` shows
   Hegel's output for expected failures (FindViolation and Shrink capture
   os.Stdout while Hegel runs, since Hegel writes nowhere else).
 
@@ -142,7 +142,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - A skill's mechanics (how to weave, gosim, sweeps, coverage) go in
   `skills/<name>/references/*.md`, linked from its SKILL.md with when to
   read each; verdicts and expectations are in
-  `quint-verification-workflow/references/verdicts.md`. `skills_test.go`
+  `gotogether-workflow/references/verdicts.md`. `skills_test.go`
   checks every link resolves, and fails on removed identifiers
   (qtest.Check, RecordAndCheck, qtest.Explore(binding), SweepExplore,
   Explored, the free qtest.Expect, DurableFileSink, `step [i]`): when
@@ -156,7 +156,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   mutant, and a README with the table of tests. Its row goes in the
   README's example table. State expected verdicts with `qtest.Expect`
   (`Rejects`, `Mismatch`, `Violates`; over runs, `Some`, `All`, `None`)
-  and expected Hegel failures with `quinthegel.FindViolation(...).Expect`,
+  and expected Hegel failures with `qhegel.FindViolation(...).Expect`,
   not by hand: no string matching on summaries, no walks of reports.
   Bindings give templates only where a parameter is not the same-named
   step field.
@@ -226,10 +226,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   for records) calls `qenv.Daemon(ctx)`; a double's receive uses
   `qenv.WaitIdle`. The native runtime runs in real time and cannot tell.
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
-  (`qtest.Record`, `quinthegel.Case.Install`), and `qenv.New` inherits
+  (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record
   (the run is strict) unless it is given `qtest.Global()` (in
-  quinthegel's `Config.Opts` too), which installs the global recorder for
+  qhegel's `Config.Opts` too), which installs the global recorder for
   them (`qobs.InstallGlobal`). A second install while one is in place fails,
   so such tests must not run in parallel; a restore puts back the
   previous recorder only if its own is still installed.
@@ -303,7 +303,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - Option 0 of every qenv choice is nominal (no fault, canonical order).
   Keep that convention in new doubles: it is what makes Hegel's shrinking
   remove faults.
-- `quinthegel.Choices` draws 512-byte chunks (`hegel.Binary(n, n)`), not
+- `qhegel.Choices` draws 512-byte chunks (`hegel.Binary(n, n)`), not
   one draw per choice: per-choice draws made a shrinking test 20x slower. A task's
   panic is re-raised by `Sim.Run` with its original value, because Hegel
   aborts a test case by panicking from whichever goroutine draws.
@@ -321,14 +321,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   the exploration (`qobs.Escaped`; `Series.Escaped` for an Experiment).
   It once panicked, on a goroutine nothing could recover, killing the
   test binary.
-  `quintgo lint -sim .` (in CI) flags `go` statements and wall-clock
+  `gotogether lint -sim .` (in CI) flags `go` statements and wall-clock
   calls in files that import qenv, tests included; `//qenv:ok` exempts a
   line (give the reason after it).
 - `//quint:action` arguments split on spaces outside quotes and brackets
   (`obs.balance:b.Balance(ctx, acct)` is one): binding's lint and qweave
   share the rule, tested on `binding/testdata/directives.json`. Change
   both with the table.
-- `quintgo lint -binding -src` and quintaction (`-binding`) check literal
+- `gotogether lint -binding -src` and quintaction (`-binding`) check literal
   actions passed to `qobs.Record` and `Recorder.Record`, in files that
   import qobs. An action through a constant or variable is not seen, and
   a call on another imported package's `Record` (qtest's) is skipped by
@@ -357,7 +357,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - Woven code (`qenv/weave`): weaving rewrites calls of `sync` methods in
   the root module and `//qenv:go` go statements. A method value
   (`return st.mu.RUnlock`) or an unmarked `go` escapes, so check with
-  `quintgo lint -weave DIR`. So does a promoted call through an embedded
+  `gotogether lint -weave DIR`. So does a promoted call through an embedded
   `sync.Mutex` (`t.Lock()` on `struct{ sync.Mutex }`): Orchestrion
   matches the receiver's type, so name the field. The lint flags the
   embedding. Inside a simulation, every user of a woven
@@ -406,14 +406,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - Controllers are closed loops (`ClientConfig.Population`). An open-loop
   abstraction double-counts a failing object's polls and finds storms
   that cannot happen.
-- quinthegel's case checker (`caseChecker`): prefix reuse is only sound for one actor with
+- qhegel's case checker (`caseChecker`): prefix reuse is only sound for one actor with
   no `order.*` keys, where the recording order is the reconstructed order,
   and with equal instance constants. Keep those guards.
 - gosim (`qgosim`, `examples/gosim`) translates everything the simulated
   package imports: keep Hegel and other native code out of it. Hegel
-  adapters live in quinthegel (`Chooser`, `FindTrigger`), and the Glomers one in `maelstrom/hegelnet`, never
+  adapters live in qhegel (`Chooser`, `FindTrigger`), and the Glomers one in `maelstrom/hegelnet`, never
   next to code a simulation runs. `internal/simdeps` fails if qenv, qobs,
-  qtrace, qload, qmeta, any package that imports qenv (quinthegel aside)
+  qtrace, qload, qmeta, any package that imports qenv (qhegel aside)
   or a simulated example depends on Hegel, purego or cgo, and names the
   import chain. It writes the
   translation into the module's `.gosim/`, which `gofmt -l .` at the root
@@ -437,7 +437,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   examples/gosim's requirement (`go get github.com/chucklehead-dev/gosim@<commit>`).
   It translates one Go release's standard library (Go 1.26) and refuses
   another. Choosers with entropy
-  (`qenv.EntropyOf`: Seeded, quinthegel.Choices, a ChoiceLog or Replay of
+  (`qenv.EntropyOf`: Seeded, qhegel.Choices, a ChoiceLog or Replay of
   them) hand gosim bytes in chunks for every choice but faults. A chooser
   without it (a plain wrapper) falls back to one round trip per choice,
   about 9 times slower.
@@ -447,7 +447,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   same overlay (`GOSIM_OVERLAY`). For gosim, the module's `gosim.tool.go`
   (else `orchestrion.tool.go`) names them: list qobs for `//quint:action`,
   never qenv/weave (gosim simulates sync itself). qweave weaves method
-  values and promoted calls that Orchestrion misses; `quintgo lint -weave`
+  values and promoted calls that Orchestrion misses; `gotogether lint -weave`
   is about Orchestrion builds. A new join point or advice goes in
   `qweave/weave.go`, with a fixture test. On the native runtime with a
   Platform, qenv takes no lock across user code (gosim is cooperative):

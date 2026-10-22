@@ -1,9 +1,9 @@
 // Package bank is the system under test of the examples: a small in-memory
-// bank, checked against model/bank.qnt every way quint-connect-go supports:
+// bank, checked against model/bank.qnt every way gotogether supports:
 //
 //	mbt_test.go     the model drives the code (connect.Run): random model
 //	                traces are replayed on the bank, states compared per step
-//	hegel_test.go   Hegel drives the code (quinthegel): state-machine tests
+//	hegel_test.go   Hegel drives the code (qhegel): state-machine tests
 //	                whose runs the model must accept; model traces replayed
 //	                inside Hegel, with Hegel drawing the concrete details
 //	trace_test.go   the code reports what it did: model steps recorded with

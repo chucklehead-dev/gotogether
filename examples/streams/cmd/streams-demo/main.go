@@ -1,5 +1,5 @@
 // Command streams-demo runs the pipeline and writes each run's model steps
-// to <out>/<backend>-<N>.jsonl for `quintgo validate`: simulated runs, one
+// to <out>/<backend>-<N>.jsonl for `gotogether validate`: simulated runs, one
 // per seed, or runs on an in-process Kafka cluster (kfake) or a fake
 // Kinesis endpoint through the real clients.
 //

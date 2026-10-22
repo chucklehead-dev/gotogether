@@ -7,8 +7,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/checkout"
 	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
@@ -89,11 +89,11 @@ func TestHegelShrinksWriteSkew(t *testing.T) {
 	}
 	sys := system(checkout.Config{Isolation: qenv.SnapshotIsolation, Mutation: shop.LockWithoutWrite})
 	skew := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
-	v := quinthegel.Shrink(t, sys, crashy, hegel.WithTestCases(50), hegel.WithSeed(1))
+	v := qhegel.Shrink(t, sys, crashy, hegel.WithTestCases(50), hegel.WithSeed(1))
 	v.Expect(t, skew)
 
 	replay := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.Replay(v.Choices) }})
-	if got, want := quinthegel.Render(replay.Runs[0].Steps), quinthegel.Render(v.Steps); got != want {
+	if got, want := qhegel.Render(replay.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the replayed run differs:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}
 	replay.Expect(t, skew)
@@ -102,8 +102,8 @@ func TestHegelShrinksWriteSkew(t *testing.T) {
 // Hegel explores the faithful shop under snapshot isolation, in batches.
 func TestHegelFaithful(t *testing.T) {
 	qtest.RequireQuint(t)
-	quinthegel.Test(t, quinthegel.Config{Binding: binding, Mode: quinthegel.Batched}, func(ht *hegel.T, rec *quinthegel.Case) {
-		if _, err := checkout.Run(rec.Env(quinthegel.Choices(ht)), checkout.Config{Isolation: qenv.SnapshotIsolation}); err != nil {
+	qhegel.Test(t, qhegel.Config{Binding: binding, Mode: qhegel.Batched}, func(ht *hegel.T, rec *qhegel.Case) {
+		if _, err := checkout.Run(rec.Env(qhegel.Choices(ht)), checkout.Config{Isolation: qenv.SnapshotIsolation}); err != nil {
 			ht.Fatalf("%v", err)
 		}
 	}, hegel.WithTestCases(30))

@@ -1,4 +1,4 @@
-// Package load reads any of quintgo's trace inputs, detecting the format:
+// Package load reads any of gotogether's trace inputs, detecting the format:
 // OTLP/JSON (spans carrying quint.step events), the native step log (JSONL
 // of qtrace steps), or a model-level ITF trace.
 package load
@@ -21,7 +21,7 @@ type Format string
 const (
 	OTLP    Format = "otlp"  // OTLP/JSON TracesData lines
 	StepLog Format = "steps" // native step log (qobs.JSONLSink)
-	ITF     Format = "itf"   // model-level ITF (quintgo, or quint run --mbt)
+	ITF     Format = "itf"   // model-level ITF (gotogether, or quint run --mbt)
 	Unknown Format = ""
 )
 

@@ -1,4 +1,4 @@
-// A second, unrelated model: quintgo's core must work for it with only a
+// A second, unrelated model: gotogether's core must work for it with only a
 // binding. An account that must never be overdrawn.
 module account {
   const LIMIT: int

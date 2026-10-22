@@ -2,7 +2,7 @@
 // examples/retrystorm: per retry policy, the CTMC's field and predicted
 // recovery time, and a simulated run through a load spike. With -steps it
 // also writes the retry budget's steps over the Burst scenario, for
-// quintgo validate.
+// gotogether validate.
 package main
 
 import (

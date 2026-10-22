@@ -4,7 +4,7 @@
 //
 //	QUINT_STEPS_DIR=/tmp/steps maelstrom test -w broadcast --bin broadcast --node-count 5 --time-limit 20 \
 //	    --rate 10 --nemesis partition
-//	quintgo validate -binding ../../broadcast/broadcast.binding.yaml /tmp/steps/*.jsonl
+//	gotogether validate -binding ../../broadcast/broadcast.binding.yaml /tmp/steps/*.jsonl
 package main
 
 import (

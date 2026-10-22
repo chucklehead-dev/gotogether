@@ -1,6 +1,6 @@
 // Command checkout-sim runs the shop in simulated environments, one per
 // seed, and writes each run's model steps to <out>/seed<N>.jsonl for
-// `quintgo validate`.
+// `gotogether validate`.
 //
 //	checkout-sim -seeds 20 -isolation snapshot -mutation lock-without-write -out /tmp/runs
 package main

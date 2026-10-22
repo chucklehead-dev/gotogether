@@ -1,6 +1,6 @@
 // Command hello-sim runs the counter and its client in simulated
 // environments, one per seed, and writes each run's model steps to
-// <out>/seed<N>.jsonl for `quintgo validate`.
+// <out>/seed<N>.jsonl for `gotogether validate`.
 //
 //	hello-sim -seeds 20 -mutation no-dedupe -out /tmp/runs
 package main

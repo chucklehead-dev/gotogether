@@ -29,7 +29,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	reports, errs = make([]*Report, len(runs)), make([]error, len(runs))
 	base := c.Options.Dir
 	if base == "" {
-		d, err := os.MkdirTemp("", "quintgo-batch-")
+		d, err := os.MkdirTemp("", "gotogether-batch-")
 		if err != nil {
 			for i := range errs {
 				errs[i] = err

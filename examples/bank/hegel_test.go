@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/quinthegel"
 	"hegel.dev/go/hegel"
 )
 
 // machine is a Hegel state machine over the bank. Its rules call the
 // bank's API with drawn arguments (invalid ones included); the bank's own
-// qobs.Record calls report the model steps; quinthegel checks the run.
+// qobs.Record calls report the model steps; qhegel checks the run.
 type machine struct{ bank *Bank }
 
 var (
@@ -43,12 +43,12 @@ func (m *machine) InvariantNoOverdraft(tc hegel.TestCase) {
 	}
 }
 
-func cfg(mode quinthegel.Mode) quinthegel.Config {
-	return quinthegel.Config{Binding: "bank.binding.yaml", Mode: mode, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true}
+func cfg(mode qhegel.Mode) qhegel.Config {
+	return qhegel.Config{Binding: "bank.binding.yaml", Mode: mode, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true}
 }
 
-func runMachine(m Mutation) func(*hegel.T, *quinthegel.Case) {
-	return func(ht *hegel.T, _ *quinthegel.Case) {
+func runMachine(m Mutation) func(*hegel.T, *qhegel.Case) {
+	return func(ht *hegel.T, _ *qhegel.Case) {
 		hegel.RunStateful(ht, &machine{bank: New(accounts, WithMutation(m))}, hegel.WithStatefulStepCount(12))
 	}
 }
@@ -58,7 +58,7 @@ func runMachine(m Mutation) func(*hegel.T, *quinthegel.Case) {
 // checked after the test, in parallel (After).
 func TestHegelRunsConformToModel(t *testing.T) {
 	qtest.RequireQuint(t)
-	quinthegel.Test(t, cfg(quinthegel.After), runMachine(Faithful), hegel.WithTestCases(40), hegel.WithDatabase(""))
+	qhegel.Test(t, cfg(qhegel.After), runMachine(Faithful), hegel.WithTestCases(40), hegel.WithDatabase(""))
 }
 
 // The same machine against the SelfTransfer mutant, with each run checked
@@ -70,7 +70,7 @@ func TestHegelCatchesSelfTransfer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~100 times")
 	}
-	v := quinthegel.FindViolation(t, quinthegel.Config{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *quinthegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.Config{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(tc, &machine{bank: New(accounts, WithMutation(SelfTransfer))}, hegel.WithStatefulStepCount(12))
 	}, hegel.WithTestCases(50), hegel.WithSeed(3))
 	var self bool
@@ -78,7 +78,7 @@ func TestHegelCatchesSelfTransfer(t *testing.T) {
 		self = self || (s.Action == "transfer" && s.Outcome == "ok" && s.Args["src"] == s.Args["dst"])
 	}
 	if !self {
-		t.Fatalf("the shrunk run has no successful self-transfer:\n%s", quinthegel.Render(v.Steps))
+		t.Fatalf("the shrunk run has no successful self-transfer:\n%s", qhegel.Render(v.Steps))
 	}
 }
 
@@ -89,12 +89,12 @@ func TestHegelCatchesSelfTransfer(t *testing.T) {
 // with the model after every step.
 func TestHegelVariesModelTraces(t *testing.T) {
 	qtest.RequireQuint(t)
-	traces := quinthegel.Traces(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 20, Seed: "0xb4"})
+	traces := qhegel.Traces(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 20, Seed: "0xb4"})
 	hegel.Test(t, func(ht *hegel.T) {
-		quinthegel.VaryTraces(ht, traces, func(tc hegel.TestCase) connect.Driver {
+		qhegel.VaryTraces(ht, traces, func(tc hegel.TestCase) connect.Driver {
 			d := &driver{}
 			return &noisyDriver{driver: d, tc: tc}
-		}, quinthegel.VaryOptions{Prefix: true})
+		}, qhegel.VaryOptions{Prefix: true})
 	}, hegel.WithTestCases(50), hegel.WithDatabase(""))
 }
 

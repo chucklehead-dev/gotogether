@@ -1,6 +1,6 @@
-// Package skills embeds quint-connect-go's agent skills (Agent Skills
+// Package skills embeds gotogether's agent skills (Agent Skills
 // format: one directory per skill with a SKILL.md), so they can be
-// installed into any project with `quintgo skills install`. By default
+// installed into any project with `gotogether skills install`. By default
 // they go to the vendor-neutral .agents/skills, which Cursor, VS Code /
 // Copilot, Codex and others read, and to .claude/skills for Claude Code.
 package skills
@@ -131,4 +131,40 @@ func Install(dir string, force bool) ([]string, error) {
 		return nil
 	})
 	return written, err
+}
+
+// Renamed maps the names skills were installed under before the project
+// became gotogether to their names now.
+var Renamed = map[string]string{
+	"quint-start":                 "gotogether-start",
+	"quint-model-for-go":          "gotogether-model",
+	"quint-modeling-patterns":     "gotogether-patterns",
+	"quint-mbt-driver":            "gotogether-mbt",
+	"quint-hegel":                 "gotogether-hegel",
+	"quint-trace-validation":      "gotogether-traces",
+	"quint-fault-injection":       "gotogether-faults",
+	"quint-metastability":         "gotogether-metastability",
+	"quint-verification-workflow": "gotogether-workflow",
+}
+
+// RemoveRenamed removes the skills an earlier install wrote to dir under
+// their old names (Renamed), so an agent does not see each skill twice.
+// A directory is removed only if its SKILL.md names itself by the old name:
+// a skill of someone else's that happens to share it stays. It returns the
+// directories removed.
+func RemoveRenamed(dir string) ([]string, error) {
+	var removed []string
+	for old := range Renamed {
+		d := filepath.Join(dir, old)
+		b, err := os.ReadFile(filepath.Join(d, "SKILL.md"))
+		if err != nil || frontMatter(string(b), "name") != old {
+			continue
+		}
+		if err := os.RemoveAll(d); err != nil {
+			return removed, err
+		}
+		removed = append(removed, d)
+	}
+	sort.Strings(removed)
+	return removed, nil
 }

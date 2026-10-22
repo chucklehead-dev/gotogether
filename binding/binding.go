@@ -1,6 +1,6 @@
-// Package binding is the declarative, per-project half of quintgo: a YAML
+// Package binding is the declarative, per-project half of gotogether: a YAML
 // file that says how observed steps become calls of a Quint model's actions.
-// It holds no Go code, so applying quintgo to a new project means writing
+// It holds no Go code, so applying gotogether to a new project means writing
 // annotations and one binding file (see the README's "applying to a new
 // project").
 package binding

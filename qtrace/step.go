@@ -1,4 +1,4 @@
-// Package qtrace is the model-agnostic core of quintgo: the telemetry schema
+// Package qtrace is the model-agnostic core of gotogether: the telemetry schema
 // every instrumented program emits, the Step it decodes to, and the
 // reconstruction of an ordered, per-actor trace from an unordered bag of
 // steps collected from live telemetry.

@@ -58,8 +58,8 @@ type State struct {
 	Vars   map[string]Value
 	Action string           // mbt::actionTaken
 	Picks  map[string]Value // mbt::nondetPicks, with Some(v) unwrapped and None dropped
-	// Extra holds quintgo's annotations, which are not model variables:
-	// "quintgo::expect" (a Quint boolean over the post-state) and observed
+	// Extra holds gotogether's annotations, which are not model variables:
+	// "gotogether::expect" (a Quint boolean over the post-state) and observed
 	// projections "obs::<name>". Keys keep their prefix.
 	Extra map[string]Value
 	Meta  map[string]any // the state's #meta
@@ -89,7 +89,7 @@ func Parse(b []byte) (*Trace, error) {
 			switch {
 			case k == "#meta":
 				_ = json.Unmarshal(v, &s.Meta)
-			case strings.HasPrefix(k, "quintgo::") || strings.HasPrefix(k, "obs::"):
+			case strings.HasPrefix(k, "gotogether::") || strings.HasPrefix(k, "obs::"):
 				val, err := decode(v)
 				if err != nil {
 					return nil, fmt.Errorf("state %d %s: %w", i, k, err)

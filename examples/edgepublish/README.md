@@ -31,7 +31,7 @@ run-demo.sh        everything above, from the CLI
 
 ```sh
 cd examples/edgepublish
-OUT=/tmp/quintgo-demo ./run-demo.sh                                  # 5 scenarios x 3 trace paths
+OUT=/tmp/gotogether-demo ./run-demo.sh                                  # 5 scenarios x 3 trace paths
 go test ./mbt/ -v                                                    # model traces drive Go
 go run github.com/DataDog/orchestrion go test ./mbt/ -run RoundTrip -v
 go run github.com/DataDog/orchestrion go test ./scenarios/ -v        # direct emission, both checks, replay
@@ -40,15 +40,15 @@ go run github.com/DataDog/orchestrion go test ./scenarios/ -v        # direct em
 Step by step, what `run-demo.sh` does:
 
 ```sh
-(cd ../.. && go build -o /tmp/q/quintgo ./cmd/quintgo)
+(cd ../.. && go build -o /tmp/q/gotogether ./cmd/gotogether)
 go run github.com/DataDog/orchestrion go build -o /tmp/q/demo ./cmd/demo   # weaves //quint:action
-/tmp/q/quintgo lint -binding binding.yaml -src publisher
+/tmp/q/gotogether lint -binding binding.yaml -src publisher
 /tmp/q/demo -scenario happy -out /tmp/q/spans.jsonl -steps /tmp/q/steps.jsonl -itf /tmp/q/itf -binding binding.yaml
-/tmp/q/quintgo steps /tmp/q/steps.jsonl                                    # the reconstructed order (any format)
-/tmp/q/quintgo validate -binding binding.yaml /tmp/q/spans.jsonl   # OTel path
-/tmp/q/quintgo validate -binding binding.yaml /tmp/q/steps.jsonl   # native step log
-/tmp/q/quintgo validate /tmp/q/itf/edge-1_traces.itf.json          # model-level ITF: no binding needed
-/tmp/q/quintgo itf -binding binding.yaml -out /tmp/q/itf2 /tmp/q/spans.jsonl           # any recorded steps -> model-level ITF
+/tmp/q/gotogether steps /tmp/q/steps.jsonl                                    # the reconstructed order (any format)
+/tmp/q/gotogether validate -binding binding.yaml /tmp/q/spans.jsonl   # OTel path
+/tmp/q/gotogether validate -binding binding.yaml /tmp/q/steps.jsonl   # native step log
+/tmp/q/gotogether validate /tmp/q/itf/edge-1_traces.itf.json          # model-level ITF: no binding needed
+/tmp/q/gotogether itf -binding binding.yaml -out /tmp/q/itf2 /tmp/q/spans.jsonl           # any recorded steps -> model-level ITF
 ```
 
 Scenarios and actual results (`validate` exits 0 or 1):
@@ -59,7 +59,7 @@ Scenarios and actual results (`validate` exits 0 or 1):
 | `rotation-race` | a push is held in its table insert while the clock moves on; the next push must wait for rotation | **PASS** |
 | `ambiguous-seal` | a manifest PUT lands but reports failure; the retry commits again; the seal counts 1 of 2 | conforms, but `sealMatchesManifests` fails after step 16 and `committedNoDuplicatePayload` after step 8: the model's known finding F1/F3, now seen in running code |
 | `manifest-first` | MUTANT: the manifest is written before the table insert | **FAIL** at step 2: `writeManifest(px(1, 1, 1, 1, ParquetDone), Ok)` is not a transition (QNT513) |
-| `no-lock` | MUTANT: the push drops the shared lock before its writes | **FAIL** at step 2: `rotateGen` is not enabled while a push is in flight; `quintgo steps` shows batch 1 committed into generation 1 after its `sealGen` |
+| `no-lock` | MUTANT: the push drops the shared lock before its writes | **FAIL** at step 2: `rotateGen` is not enabled while a push is in flight; `gotogether steps` shows batch 1 committed into generation 1 after its `sealGen` |
 
 ```
 === scenario manifest-first
@@ -99,7 +99,7 @@ started with `go`. Built with Orchestrion and `qenv/weave` in
 - the seal's goroutine (marked `//qenv:go`) is a simulation task.
 
 So the publisher runs as written, its interleavings chosen by a seed or by
-Hegel. Two changes were needed, both flagged by `quintgo lint -weave`:
+Hegel. Two changes were needed, both flagged by `gotogether lint -weave`:
 - the `//qenv:go` comment on the go statement;
 - `acquire` returns its unlock as a function literal calling `RUnlock`,
   not the method value `st.mu.RUnlock`, because weaving rewrites calls.
