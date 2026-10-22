@@ -13,12 +13,24 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: W8 → R1 → R4 → X (in its own order below); R5 when the maintainer
+Order: R1 → R4 → X (in its own order below); R5 when the maintainer
 says.
 
 ## W8. First hour and docs
 
-A newcomer's first hour, and docs that stay true:
+Done (W8a–g):
+- a stale-docs gate over README, AGENTS and the examples' READMEs;
+- the hello snippets checked against their source (`TestSnippetsMatchSource`);
+- `qtest.ShrunkTo` and `Violates(...).At`, which replaced the examples'
+  hand-written checks;
+- the scaffold's `-out`, its typed `Mutation`, and empty explorations
+  that fail;
+- `validate` without ITF by default;
+- the quickstart, passing from a fresh clone;
+- the start skill's first hour and glossary;
+- an unchecked invariant explained in reports.
+
+The plan as written:
 - **The quickstart.**
   - A 15-line quickstart first in README: install, `cd examples/hello &&
     go test .`, then the hello test.

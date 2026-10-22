@@ -479,7 +479,11 @@ func (r *Result) Summary() string {
 		fmt.Fprintf(&b, "%s", f.describe("    "))
 	}
 	for _, i := range r.Invariants {
-		fmt.Fprintf(&b, "  invariant %s: %s\n", i.Name, strings.ToUpper(string(i.Verdict)))
+		v := strings.ToUpper(string(i.Verdict))
+		if i.Verdict == NotEvaluated {
+			v = "not checked: the run does not conform, so the model's states after the failure are not the run's"
+		}
+		fmt.Fprintf(&b, "  invariant %s: %s\n", i.Name, v)
 		if i.Failure != nil {
 			fmt.Fprintf(&b, "%s", i.Failure.describe("    "))
 		}
