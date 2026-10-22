@@ -125,7 +125,7 @@ func TestHegelShrinksNoRetry(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}
-	v := qhegel.FindViolation(t, qhegel.Config{Binding: "broadcast.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "broadcast.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		scenario(tc, NoRetry, 20)
 	}, hegel.WithTestCases(40), hegel.WithSeed(2))
 	v.Expect(t, qtest.Violates("convergedWhenSettled"))

@@ -70,7 +70,7 @@ func TestHegelCatchesSelfTransfer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~100 times")
 	}
-	v := qhegel.FindViolation(t, qhegel.Config{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(tc, &machine{bank: New(accounts, WithMutation(SelfTransfer))}, hegel.WithStatefulStepCount(12))
 	}, hegel.WithTestCases(50), hegel.WithSeed(3))
 	var self bool

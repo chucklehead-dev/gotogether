@@ -52,16 +52,14 @@ func (m *machine) RuleRetries(tc hegel.TestCase) {
 	}
 }
 
-func hegelCfg() qhegel.Config {
-	return qhegel.Config{Binding: "retrystorm.binding.yaml", Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true}
-}
+const budgetBinding = "retrystorm.binding.yaml"
+
+var hegelOpts = []qtest.Option{qtest.Global()}
 
 // Hegel drives the faithful budget; every run satisfies the model.
 func TestHegelBudgetConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	cfg := hegelCfg()
-	cfg.Mode = qhegel.After
-	qhegel.Test(t, cfg, func(ht *hegel.T, _ *qhegel.Case) {
+	qhegel.Test(t, qhegel.Config{Binding: budgetBinding, Mode: qhegel.After, Opts: hegelOpts, AllowEmpty: true}, func(ht *hegel.T, _ *qhegel.Case) {
 		hegel.RunStateful(ht, &machine{b: budget(retry.Faithful)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(20), hegel.WithDatabase(""))
 }
@@ -73,7 +71,7 @@ func TestHegelCatchesUncapped(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~100 times")
 	}
-	v := qhegel.FindViolation(t, hegelCfg(), func(tc hegel.TestCase, _ *qhegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: budgetBinding, Opts: hegelOpts, AllowEmpty: true}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(tc, &machine{b: budget(retry.Uncapped)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(50))
 	if last := v.Last(); last.Action != "request" {

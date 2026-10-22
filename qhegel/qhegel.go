@@ -56,9 +56,9 @@ type Case struct {
 	env *qenv.ChoiceLog // Env's
 }
 
-// NewRecorder returns a recorder for the test case tc. opts configure the
+// NewCase returns the recording of the test case tc. opts configure the
 // underlying qobs.Recorder (e.g. qobs.WithActor).
-func NewRecorder(tc hegel.TestCase, opts ...qobs.Option) *Case {
+func NewCase(tc hegel.TestCase, opts ...qobs.Option) *Case {
 	mem := &qobs.MemorySink{}
 	r := &Case{tc: tc, mem: mem}
 	r.Recorder = qobs.NewRecorder(qobs.Tee{mem, noteSink{r}}, opts...)
@@ -86,23 +86,21 @@ func (r *Case) Step(action string, err error, kv ...any) {
 // Steps returns what was recorded so far.
 func (r *Case) Steps() []qtrace.Step { return r.mem.Steps() }
 
-// Add appends steps recorded elsewhere, as they are: by another process,
-// or inside a simulation that reports its steps to the test (gosim's).
-// Like recorded steps, they are noted on the test case.
-func (r *Case) Add(steps ...qtrace.Step) { r.Recorder.Add(steps...) }
-
 // Env is the chooser a simulation of this test case runs on: c's choices
-// (usually Choices(tc)), recorded into r (Choices), with r in its context,
-// so the run's steps and its choices are both r's. A shrunk failure's
+// (usually Choices(tc)), recorded into r (Recorded), with r in its context,
+// so the run's steps and its choices are both r's. Steps recorded elsewhere
+// (by another process, or a simulation that reports its steps to the test,
+// as gosim's does) are added with the Recorder's Add, and noted on the test
+// case like the rest. A shrunk failure's
 // choices then replay it (qenv.Replay(v.Choices)), outside Hegel.
 func (r *Case) Env(c qenv.Chooser) qenv.Chooser {
 	r.env = &qenv.ChoiceLog{C: c}
 	return qenv.WithContext(r.env, r.Context(context.Background()))
 }
 
-// Choices are the choices made through Env, aligned to the steps
+// Recorded returns the choices made through Env, aligned to the steps
 // (Choice.Step).
-func (r *Case) Choices() []qenv.Choice {
+func (r *Case) Recorded() []qenv.Choice {
 	if r.env == nil {
 		return nil
 	}
@@ -212,7 +210,7 @@ type Config struct {
 //	qhegel.Test(t, qhegel.Config{Binding: "testdata/bank.yaml"}, func(ht *hegel.T, rec *qhegel.Case) {
 //		hegel.RunStateful(ht, &bankMachine{bank: NewBank(), rec: rec})
 //	}, hegel.WithTestCases(30))
-func Test(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts ...hegel.Option) {
+func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...hegel.Option) {
 	t.Helper()
 	if cfg.Mode == Batched {
 		batched(t, cfg, body, opts)
@@ -237,7 +235,7 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts ...h
 		opts = append([]hegel.Option{hegel.SuppressHealthCheck(hegel.TooSlow)}, opts...)
 	}
 	hegel.Test(t, func(ht *hegel.T) {
-		rec := NewRecorder(ht, set.Recorder()...)
+		rec := NewCase(ht, set.Recorder()...)
 		defer rec.begin(ht, set.Global())()
 		body(ht, rec)
 		steps := rec.Steps()
@@ -321,7 +319,7 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 	}
 	start := time.Now() //qenv:ok the rounds' real time budget
 	record := func(ht *hegel.T) []qtrace.Step {
-		rec := NewRecorder(ht, set.Recorder()...)
+		rec := NewCase(ht, set.Recorder()...)
 		defer rec.begin(ht, set.Global())()
 		body(ht, rec)
 		steps := rec.Steps()

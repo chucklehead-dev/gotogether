@@ -196,7 +196,7 @@ func TestHegelShrinksAckAnyLease(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint dozens of times")
 	}
-	v := qhegel.FindViolation(t, qhegel.Config{Binding: "jobqueue.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "jobqueue.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		runMachine(tc, queue.AckAnyLease)
 	}, hegel.WithTestCases(60), hegel.WithSeed(5))
 	if last := v.Last(); last.Action != "ack" || last.Outcome != "ok" {

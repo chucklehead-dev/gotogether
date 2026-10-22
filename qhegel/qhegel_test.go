@@ -110,7 +110,7 @@ func TestStateMachineBugShrinks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~130 times (~1.5 min)")
 	}
-	v := qhegel.FindViolation(t, qhegel.Config{Binding: "testdata/bank.yaml"}, func(tc hegel.TestCase, rec *qhegel.Case) {
+	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "testdata/bank.yaml"}, func(tc hegel.TestCase, rec *qhegel.Case) {
 		m := &bankMachine{b: &bank{bal: map[string]int{"alice": 0, "bob": 0}, buggy: true}, rec: rec}
 		hegel.RunStateful(tc, m, hegel.WithStatefulStepCount(8))
 	}, hegel.WithTestCases(40), hegel.WithSeed(7))

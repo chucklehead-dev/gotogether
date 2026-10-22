@@ -53,7 +53,7 @@ func TestBankAgainstModel(t *testing.T) {
   cache, lets Hegel shrink, fails the test if every case passes, and
   returns the shrunk run; state how it must show with `Expect`:
   ```go
-  v := qhegel.FindViolation(t, qhegel.Config{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}},
+  v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}},
   	func(tc hegel.TestCase, _ *qhegel.Case) {
   		hegel.RunStateful(tc, &machine{bank: New(accounts, WithMutation(SelfTransfer))})
   	}, hegel.WithTestCases(50), hegel.WithSeed(3))

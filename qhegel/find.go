@@ -32,13 +32,27 @@ type Violation struct {
 	expected bool // Expect was called
 }
 
+// ViolationConfig is what FindViolation checks the cases against: Config's
+// fields that mean something for a search that expects a violation, which
+// checks every case as it runs (Config's Mode and rounds do not apply).
+type ViolationConfig struct {
+	// Binding is the path of the binding file (see Config.Binding).
+	Binding string
+	// Opts configure the checks as qtest's do (see Config.Opts).
+	Opts []qtest.Option
+	// AllowEmpty accepts test cases that record no steps (a case that drew
+	// no operations), as Config.AllowEmpty does; qtest.SkipIfEmpty, for a
+	// whole test that recorded nothing, is another matter.
+	AllowEmpty bool
+}
+
 // FindViolation runs Hegel expecting the model to reject some test case:
 // a mutant, or a bug being reproduced. Every case is checked as it runs
 // (Each mode, with the verdict cache), so Hegel shrinks the failure to its
 // smallest run. It fails t when every case satisfies the model, and returns
 // the shrunk run for the test to assert on:
 //
-//	v := qhegel.FindViolation(t, qhegel.Config{Binding: "bank.binding.yaml"},
+//	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "bank.binding.yaml"},
 //		func(tc hegel.TestCase, rec *qhegel.Case) {
 //			hegel.RunStateful(tc, &machine{bank: New(accounts, WithMutation(SelfTransfer))})
 //		}, hegel.WithTestCases(50), hegel.WithSeed(3))
@@ -48,13 +62,13 @@ type Violation struct {
 // nothing), any other expectation fails, and without Expect the test
 // fails at its end.
 //
-// cfg.Mode is ignored. hegel.Test cannot express an expected failure, so
+// hegel.Test cannot express an expected failure, so
 // this uses hegel.Run, with no example database (a later WithDatabase in
 // opts wins) and Hegel's "too slow" health check off: every case runs quint.
 // Hegel runs quiet, without the reproduction blob of the failure it is
 // expected to find (GOTOGETHER_VERBOSE=1 shows both); the shrunk run is
 // logged.
-func FindViolation(t testing.TB, cfg Config, body func(tc hegel.TestCase, rec *Case), opts ...hegel.Option) *Violation {
+func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation {
 	t.Helper()
 	set := qtest.Resolve(t, cfg.Opts...)
 	c := set.Checker(t, cfg.Binding)
@@ -82,7 +96,7 @@ func FindViolation(t testing.TB, cfg Config, body func(tc hegel.TestCase, rec *C
 	func() {
 		defer func() { out = hegelOut.stop() }() // also when a case's t.Fatal ends the goroutine
 		err = hegel.Run(func(tc hegel.TestCase) {
-			rec := NewRecorder(tc, set.Recorder()...)
+			rec := NewCase(tc, set.Recorder()...)
 			defer rec.begin(tc, set.Global())()
 			body(tc, rec)
 			steps := rec.Steps()
@@ -97,7 +111,7 @@ func FindViolation(t testing.TB, cfg Config, body func(tc hegel.TestCase, rec *C
 			if !v.OK {
 				// Hegel replays the shrunk case last, so the last failure is it
 				mu.Lock()
-				found = &Violation{Run: qtest.Run{Steps: steps, Choices: rec.Choices()}, Summary: v.Summary}
+				found = &Violation{Run: qtest.Run{Steps: steps, Choices: rec.Recorded()}, Summary: v.Summary}
 				mu.Unlock()
 				tc.Errorf("qhegel: the run does not satisfy the model:\n%s", v.Summary)
 			}
@@ -183,7 +197,7 @@ func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Opti
 	if rates.Default == 0 && rates.Kinds == nil {
 		rates = qenv.DefaultRates
 	}
-	return FindViolation(t, Config{Binding: sys.Binding, Opts: sys.Opts}, func(tc hegel.TestCase, rec *Case) {
+	return FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
 		if err := sys.Run(rec.Env(c)); err != nil {

@@ -13,7 +13,7 @@ import (
 // own steps unchanged: their recorder, sequence number and order keys.
 func TestRecorderAdd(t *testing.T) {
 	hegel.Test(t, func(ht *hegel.T) {
-		rec := qhegel.NewRecorder(ht)
+		rec := qhegel.NewCase(ht)
 		rec.Step("deposit", nil, "acct", "a", "amount", 1)
 		mem := &qobs.MemorySink{}
 		qobs.NewRecorder(mem, qobs.WithID("n1")).Record(context.Background(), "withdraw", nil, "acct", "a", "amount", 1, "order.lamport", 7)
