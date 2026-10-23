@@ -1,9 +1,12 @@
 package connect
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -216,5 +219,25 @@ func TestCompareRefusesFieldsThatCompareNothing(t *testing.T) {
 	}
 	if d, err := compare(model, projection{Balance: 999}); err != nil || len(d) != 1 {
 		t.Errorf("a projection: %v %v", d, err)
+	}
+}
+
+// A Dir kept from an earlier run holds its traces: they are removed
+// before quint writes, not replayed with the new ones.
+func TestGenerateRunDropsStaleTraces(t *testing.T) {
+	needQuint(t)
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "run_99.itf.json")
+	if err := os.WriteFile(stale, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, _, err := GenerateRun(context.Background(), Config{Spec: "testdata/bank.qnt", Dir: dir, MaxSamples: 1, MaxSteps: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if f == stale {
+			t.Fatalf("the earlier run's trace is replayed: %v", files)
+		}
 	}
 }

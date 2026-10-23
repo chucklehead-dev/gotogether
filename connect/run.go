@@ -177,6 +177,14 @@ func generateTest(ctx context.Context, c Config, test string) ([]string, Config,
 }
 
 func quint(ctx context.Context, c Config, args []string, prefix string) ([]string, error) {
+	// a Dir kept from an earlier run holds its traces under the same
+	// names, more of them or of an older spec: they would be replayed too
+	stale, _ := filepath.Glob(filepath.Join(c.Dir, prefix+"*.itf.json"))
+	for _, f := range stale {
+		if err := os.Remove(f); err != nil {
+			return nil, fmt.Errorf("removing an earlier run's trace: %w", err)
+		}
+	}
 	if c.Backend != "" {
 		args = append(args, "--backend", c.Backend)
 	}
