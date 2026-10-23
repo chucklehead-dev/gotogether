@@ -457,7 +457,12 @@ starts, and the review's findings are fixed first.
   cleared per test (a rerun appends duplicates); explorations numbered
   and labelled faithful or mutant (mutants now count toward "taken");
   `evidence -strict` on hello and checkout in CI.
-- **Y11. The core's Hegel properties against the current core.** qhegel
+- **Y11. The core's Hegel properties against the current core. Done:**
+  qhegel's qenv_test.go is `internal/hegelprops`, an unpublished module
+  replacing the core and qhegel with the checkout, in CI with
+  GOTOGETHER_CHECK. qgosim's own tests stay on its pinned core;
+  examples/gosim (replace => ../..) runs qgosim on the current one. The
+  finding: qhegel
   and qgosim pin the core before X, and CI runs them GOWORK=off: none of
   X's qenv changes reached qhegel's core-property tests. Move those to an
   unpublished module with `replace`, or add a workspace job.

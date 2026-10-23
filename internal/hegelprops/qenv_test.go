@@ -1,8 +1,10 @@
-package qhegel_test
+package hegelprops_test
 
-// The core's properties that Hegel checks: they live here, in qhegel's
-// module, so the core's own tests need no Hegel (and its users' modules
-// none of its dependencies).
+// The core's properties that Hegel checks. They live in a module of their
+// own, so the core's own tests need no Hegel (and its users' modules none
+// of its dependencies), and an unpublished one, which replaces the core
+// and qhegel with this checkout: they test the core as it is, where
+// qhegel's own tests run against the core qhegel requires.
 
 import (
 	"context"

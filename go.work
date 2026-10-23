@@ -17,6 +17,7 @@ use (
 	./examples/retrystorm
 	./examples/streams
 	./examples/twophase
+	./internal/hegelprops
 	./qanalysis
 	./qgosim
 	./qhegel
