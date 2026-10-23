@@ -164,11 +164,12 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
 
   Kinds are as fault coverage prints them, matched exactly; a crash is
   `nemesis.crash.<process>`. A misnamed one fails the exploration with
-  the fix (`Script.Misnamed`). A fault that never fired is listed as
-  "scripted faults that never happened": the run never reached a choice
-  of its kind after `After` steps. For random faults, a kind never
-  faulted is listed as "never faulted"; `x.Evidence().Faults` and its
-  `Unreached` say which kinds the runs reached.
+  the fix (`Script.Misnamed`). A fault a run never made fails it too,
+  whatever the claims ("scripted faults never happened"; `Run.Unscripted`
+  lists them): the run never reached a choice of its kind after `After`
+  steps. For random faults, a kind never faulted is listed as "never
+  faulted" when a claim fails; `x.Evidence().Faults` and its `Unreached`
+  say which kinds the runs reached.
 - **Batching:** every seeded run is checked in one quint batch. On a
   miss, the report names the seed, its faults and its step log.
 - **Parallel seeds:** seeds run in parallel (`ExploreConfig.Parallel`,

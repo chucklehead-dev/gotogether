@@ -977,10 +977,13 @@ func (x *Exploration) unscripted() string {
 // unknownScripted fails t for each scripted fault that cannot happen as
 // written (qenv.Script.Misnamed: a kind no double declared, an option its
 // kind lacks): it never fires, and the claim it was for fails as if the
-// code had survived it.
+// code had survived it. A well-named fault some run never made fails it
+// too.
 func (x *Exploration) unknownScripted(t testing.TB) {
 	t.Helper()
 	seen := map[string]bool{}
+	n, misnamed := 0, false
+	var first *Run
 	for _, r := range x.Runs {
 		if r == nil {
 			continue
@@ -988,9 +991,23 @@ func (x *Exploration) unknownScripted(t testing.TB) {
 		for _, m := range r.misnamed {
 			if !seen[m] {
 				seen[m] = true
+				misnamed = true
 				t.Errorf("gotogether: %s", m)
 			}
 		}
+		if len(r.Unscripted) > 0 {
+			if n++; first == nil {
+				first = r
+			}
+		}
+	}
+	// a run that did not make its script's faults did not test what the
+	// script says, whatever the claims: a crash "after step 3" of a run of
+	// two steps once passed without crashing
+	if n > 0 && !misnamed {
+		t.Errorf("gotogether: in %d of %d runs scripted faults never happened (%s's: %v): a run never reached a choice of the fault's kind "+
+			"after its After steps, or after the faults it Follows, or an earlier fault of its kind; lower After, or script a fault the run reaches "+
+			"(Run.Unscripted lists them)", n, len(x.Runs), x.nameOf(first), first.Unscripted)
 	}
 }
 
