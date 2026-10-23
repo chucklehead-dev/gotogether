@@ -380,15 +380,6 @@ func runValidate(args []string) (int, error) {
 	if fset.NArg() == 0 {
 		usage()
 	}
-	if *dir == "" { // one root for every actor's and input's modules, named in the output
-		d, err := os.MkdirTemp("", "gotogether-validate-")
-		if err != nil {
-			return 2, err
-		}
-		*dir = d
-	}
-	fmt.Printf("modules and ITF: %s\n", *dir)
-	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: !*withITF}
 	var b *binding.Binding
 	if *bpath != "" {
 		if b, err = binding.Load(*bpath); err != nil {
@@ -424,6 +415,15 @@ func runValidate(args []string) (int, error) {
 			steps = append(steps, in.Steps...)
 		}
 	}
+	if *dir == "" { // one root for every actor's and input's modules, named in the output
+		d, err := os.MkdirTemp("", "gotogether-validate-")
+		if err != nil {
+			return 2, err
+		}
+		*dir = d
+	}
+	fmt.Printf("artifacts (generated modules, failing runs' ITF): %s\n", *dir)
+	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: !*withITF}
 	ok := true
 	var results []*validate.Result // every actor's and ITF's, for the result line
 	if len(steps) > 0 || len(itfs) == 0 {
@@ -470,7 +470,7 @@ func runValidate(args []string) (int, error) {
 		results = append(results, r)
 	}
 	if ok {
-		fmt.Printf("RESULT: PASS (%s conform to the model and satisfy the invariants)\n", plural(len(results), "trace"))
+		fmt.Printf("RESULT: PASS (%s)\n", passSummary(results))
 		return 0, nil
 	}
 	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results))
@@ -478,7 +478,7 @@ func runValidate(args []string) (int, error) {
 }
 
 // failSummary says how many of results fail and why, in the claims' words
-// (validate.Result.Reason): "2 of 5 traces: 1 rejects replay, 1 mismatch
+// (validate.Result.Reason): "2 of 5 actors: 1 rejects replay, 1 mismatch
 // after apply".
 func failSummary(results []*validate.Result) string {
 	by := map[string]int{}
@@ -500,7 +500,31 @@ func failSummary(results []*validate.Result) string {
 	if len(results) == 0 {
 		return "nothing was checked"
 	}
-	return fmt.Sprintf("%d of %s: %s", bad, plural(len(results), "trace"), strings.Join(whys, ", "))
+	return fmt.Sprintf("%d of %s: %s", bad, plural(len(results), "actor"), strings.Join(whys, ", "))
+}
+
+// passSummary says what passing results showed: "3 actors conform to the
+// model and satisfy its 2 invariants", the invariants only if any were
+// checked.
+func passSummary(results []*validate.Result) string {
+	invs := map[string]bool{}
+	for _, r := range results {
+		for _, i := range r.Invariants {
+			invs[i.Name] = true
+		}
+	}
+	conform, satisfy := "conform", "satisfy"
+	if len(results) == 1 {
+		conform, satisfy = "conforms", "satisfies"
+	}
+	s := fmt.Sprintf("%s %s to the model", plural(len(results), "actor"), conform)
+	switch len(invs) {
+	case 0:
+		return s + " (no invariant checked)"
+	case 1:
+		return fmt.Sprintf("%s and %s its invariant", s, satisfy)
+	}
+	return fmt.Sprintf("%s and %s its %d invariants", s, satisfy, len(invs))
 }
 
 func plural(n int, what string) string {

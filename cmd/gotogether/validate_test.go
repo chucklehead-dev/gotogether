@@ -49,7 +49,25 @@ func TestValidateResultLine(t *testing.T) {
 	if err != nil || code != 1 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}
-	if want := "RESULT: FAIL (2 of 3 traces: 1 mismatch after deposit, 1 rejects withdraw)"; !strings.Contains(string(out), want) {
+	if want := "RESULT: FAIL (2 of 3 actors: 1 mismatch after deposit, 1 rejects withdraw)"; !strings.Contains(string(out), want) {
 		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+	// a passing run says which invariants it checked, if any
+	f, err = os.Create(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := qtrace.WriteJSONL(f, steps[:1]); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	r, w, _ = os.Pipe()
+	os.Stdout = w
+	code, err = runValidate([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), log})
+	os.Stdout = stdout
+	w.Close()
+	out, _ = io.ReadAll(r)
+	if want := "RESULT: PASS (1 actor conforms to the model and satisfies its 2 invariants)"; err != nil || code != 0 || !strings.Contains(string(out), want) {
+		t.Errorf("exit %d, %v; output lacks %q:\n%s", code, err, want, out)
 	}
 }

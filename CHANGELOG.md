@@ -30,16 +30,20 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
-- A scripted fault (`qenv.Scripted`) whose kind covers nothing declared,
-  or whose `Name` is no option of its kind, fails the exploration; it
-  never fired, and the claim it was for failed as if the code survived
-  it.
-- `gotogether validate` ends `RESULT: PASS (n traces ...)` or `RESULT:
-  FAIL (2 of 3 traces: 1 mismatch after deposit, 1 rejects withdraw)`,
-  in the claims' words (`validate.Result.Reason`), where it said
-  `VIOLATION` for any failure; it names its one artifacts directory, a
-  step's source names its file (`run.jsonl line 5`), and an input of no
-  known shape is refused with its keys and the shapes wanted.
+- `qenv.Script.Misnamed` says which scripted faults cannot happen as
+  written (a kind no double declared, matched exactly: no prefix, no
+  nemesis family; an option the kind lacks; the nominal option; a Follows
+  of no other fault), and an exploration fails on each; it never fired,
+  and the claim it was for failed as if the code survived it. Script no
+  longer panics in the run on them.
+- `gotogether validate` ends `RESULT: PASS (3 actors conform to the
+  model and satisfy its 2 invariants)` or `RESULT: FAIL (2 of 3 actors: 1
+  mismatch after deposit, 1 rejects withdraw)`, in the claims' words
+  (`validate.Result.Reason`), where it said `VIOLATION` for any failure;
+  it names its one artifacts directory, a step log's step names its file
+  and line (`Step.Source` `runs/a.jsonl:5`, `input.Read`), and an input of
+  no known shape is refused with its keys and a step log's
+  (`input.StepLogExample`).
 - A state mismatch's report prints the binding's expect as written
   (`binding.Call.ExpectTemplate`, `validate.Failure.ExpectTemplate`)
   under the rendered one, and the model's state after the step in a

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -435,7 +434,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
-		run.Unscripted, run.scripted = sc.Remaining(), true
+		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
 	return run
 }
@@ -833,7 +832,12 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 	case j.show >= 0:
 		return claimVerdict{say: func(t testing.TB) string {
 			if every {
-				return fmt.Sprintf("want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
+				why := ""
+				if rs := x.failingReasons(); rs != "" {
+					why = " (of the runs that fail: " + rs + ")"
+				}
+				return fmt.Sprintf("want %s in every run; %d of %d runs do not have it%s%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs),
+					why, x.atStart(), x.describe(t, x.Runs[j.show], true))
 			}
 			return fmt.Sprintf("want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
 		}}
@@ -858,11 +862,19 @@ func (x *Exploration) failingWords() string {
 	if len(reasons) == 1 {
 		return fmt.Sprintf("%d of %d runs %s", bad, e.Runs, runsDo(reasons[0]))
 	}
+	return fmt.Sprintf("%d of %d runs fail: %s", bad, e.Runs, x.failingReasons())
+}
+
+// failingReasons counts the failing runs by reason: "21 reject apply, 2
+// violate exactlyOnce".
+func (x *Exploration) failingReasons() string {
+	e := evidenceOf(x.Runs)
+	reasons := keysOf(e.FailingBy)
 	parts := make([]string, len(reasons))
 	for i, r := range reasons {
 		parts[i] = fmt.Sprintf("%d %s", e.FailingBy[r], runsDo(r))
 	}
-	return fmt.Sprintf("%d of %d runs fail: %s", bad, e.Runs, strings.Join(parts, ", "))
+	return strings.Join(parts, ", ")
 }
 
 // runsDo is what runs failing for reason r do, as a verb: "rejects apply"
@@ -873,8 +885,13 @@ func runsDo(r string) string {
 			return strings.Replace(r, "s ", " ", 1)
 		}
 	}
-	if strings.HasPrefix(r, "mismatch") {
+	switch {
+	case strings.HasPrefix(r, "mismatch"):
 		return "show a " + r
+	case r == "issue":
+		return "have a reconstruction issue (a gap, a cycle, an overlap)"
+	case strings.HasPrefix(r, "evaluation error"):
+		return "hit an " + r
 	}
 	return "have " + r
 }
@@ -957,9 +974,10 @@ func (x *Exploration) unscripted() string {
 		"or after the faults it Follows, or an earlier fault of its kind)", n, len(x.Runs), first)
 }
 
-// unknownScripted fails t for each scripted fault that names no declared
-// kind or nemesis, or an option its kind lacks: it never fires, and the
-// claim it was for fails as if the code had survived it.
+// unknownScripted fails t for each scripted fault that cannot happen as
+// written (qenv.Script.Misnamed: a kind no double declared, an option its
+// kind lacks): it never fires, and the claim it was for fails as if the
+// code had survived it.
 func (x *Exploration) unknownScripted(t testing.TB) {
 	t.Helper()
 	seen := map[string]bool{}
@@ -967,18 +985,10 @@ func (x *Exploration) unknownScripted(t testing.TB) {
 		if r == nil {
 			continue
 		}
-		for _, s := range r.Unscripted { // a misnamed fault never fires: it is always left
-			if seen[s.String()] {
-				continue
-			}
-			seen[s.String()] = true
-			if !qenv.KnownFault(s.Kind) {
-				t.Errorf("gotogether: scripted fault %s: its kind %q covers no fault kind or nemesis the system declared, so it never happens: "+
-					"name it as fault coverage prints it (\"rpc.<service>.response\", \"nemesis.crash.<process>\")", s, s.Kind)
-				continue
-			}
-			if opts := qenv.FaultOptions(s.Kind); s.Name != "" && opts != nil && !slices.Contains(opts, s.Name) {
-				t.Errorf("gotogether: scripted fault %s: %s has no option %q; its options: %s", s, s.Kind, s.Name, strings.Join(opts, ", "))
+		for _, m := range r.misnamed {
+			if !seen[m] {
+				seen[m] = true
+				t.Errorf("gotogether: %s", m)
 			}
 		}
 	}

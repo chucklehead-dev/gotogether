@@ -91,6 +91,22 @@ type Failure struct {
 	// invariant (StateAfter). Variables as quint reports them.
 	State      map[string]itf.Value
 	StateAfter bool
+	// noState says why State is empty, where the report would show it
+	noState string
+}
+
+// failures are r's failures: its conformance's and its invariants'.
+func (r *Result) failures() []*Failure {
+	var out []*Failure
+	if r.Failure != nil {
+		out = append(out, r.Failure)
+	}
+	for _, i := range r.Invariants {
+		if i.Failure != nil {
+			out = append(out, i.Failure)
+		}
+	}
+	return out
 }
 
 type InvariantResult struct {
@@ -258,6 +274,13 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 	pattern := filepath.Join(opt.Dir, file+"_{test}.itf.json")
 	for j, i := range detailed {
 		errs[i] = fill(gs[j], out, qnt, pattern, ms.Invariants, res[i])
+		if withITF.Backend == "typescript" { // its failing tests write no ITF: say so where the state would be
+			for _, f := range res[i].failures() {
+				if f.State == nil {
+					f.noState = "not reported: the TypeScript backend writes no ITF for a failing test (QUINT_BACKEND=rust shows it)"
+				}
+			}
+		}
 	}
 	return errs
 }
@@ -478,8 +501,9 @@ func sanitize(s string) string {
 
 // Reason says why the result is not OK, in the claims' words: "rejects
 // apply" (a step the model cannot take), "mismatch after apply" (the
-// state after it differs), "violates I", "no verdict (linearize budget)",
-// or "issue" (a reconstruction error); "" when it is OK.
+// state after it differs), "violates I", "evaluation error at apply"
+// (quint failed on the step), "no verdict (linearize budget)", or "issue"
+// (a reconstruction error: a gap, a cycle, an overlap); "" when it is OK.
 func (r *Result) Reason() string {
 	switch {
 	case r.OK():
@@ -488,11 +512,16 @@ func (r *Result) Reason() string {
 		return "no verdict (linearize budget)"
 	case r.Conforms != Pass:
 		action := "a step"
-		if r.Failure != nil && r.Failure.Step != nil {
-			action = r.Failure.Step.Action
+		if f := r.Failure; f != nil && f.Step != nil {
+			action = f.Step.Action
+		} else if f != nil && f.Call != "" { // an inferred step (a restart): the model's call
+			action, _, _ = strings.Cut(f.Call, "(")
 		}
-		if r.Failure != nil && r.Failure.Kind == "state" {
+		switch {
+		case r.Failure != nil && r.Failure.Kind == "state":
 			return "mismatch after " + action
+		case r.Failure != nil && r.Failure.Kind == "error":
+			return "evaluation error at " + action // quint could not evaluate the step, not a verdict on it
 		}
 		return "rejects " + action
 	}
@@ -591,6 +620,9 @@ func (f *Failure) describe(pfx string) string {
 		// quint's own message only where the report has no reading of it:
 		// a disabled step, a state mismatch and an invariant are said above
 		fmt.Fprintf(&b, "%s  %s\n", pfx, f.Quint)
+	}
+	if f.noState != "" && f.Kind != "error" {
+		fmt.Fprintf(&b, "%s  model state: %s\n", pfx, f.noState)
 	}
 	if len(f.State) > 0 {
 		when := "before the step"
