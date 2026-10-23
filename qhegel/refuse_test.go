@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"hegel.dev/go/hegel"
@@ -35,6 +36,23 @@ func TestRefusesLinearize(t *testing.T) {
 	}()
 	<-done
 	if !strings.Contains(f.msg, "Linearize() does nothing in qhegel.FindViolation") {
+		t.Errorf("got %q", f.msg)
+	}
+}
+
+// Shrink's replays are an exploration's runs: what an exploration ignores
+// (Global) it refuses before the search, where the replays would have
+// failed quietly and left the violation unshrunk.
+func TestShrinkRefusesGlobal(t *testing.T) {
+	f := &fatalTB{TB: t}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.Global()}, Run: func(qenv.Chooser) error { return nil }}
+		qhegel.Shrink(f, sys, qenv.Rates{})
+	}()
+	<-done
+	if !strings.Contains(f.msg, "Global() does nothing in qhegel.Shrink") {
 		t.Errorf("got %q", f.msg)
 	}
 }

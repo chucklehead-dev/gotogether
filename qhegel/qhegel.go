@@ -189,6 +189,8 @@ type Config struct {
 	// tests). Artifacts (generated modules, step logs, ITF) go to
 	// $GOTOGETHER_KEEP/<test>, else a temporary directory: a failing run's
 	// module is a Quint regression test of it (`quint test` it).
+	// Linearize and SkipIfEmpty do nothing to a case and are refused, as
+	// Constants, Invariants and Quint are with Mode Off.
 	Opts []qtest.Option
 	// AllowEmpty accepts test cases that record no steps.
 	AllowEmpty bool
@@ -217,7 +219,10 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		return
 	}
 	set := qtest.Resolve(t, cfg.Opts...)
-	refuse(t, set, "qhegel.Test")
+	refuse(t, set, "qhegel.Test", false)
+	if cfg.Mode == Off {
+		set.Refuse(t, "qhegel.Test (Mode Off)", "with Mode Off no case is checked against the model", "Constants", "Invariants", "Quint")
+	}
 	var checker *validate.Checker
 	var cc *caseChecker
 	if cfg.Mode != Off {
@@ -308,7 +313,7 @@ func Render(steps []qtrace.Step) string {
 func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts []hegel.Option) {
 	t.Helper()
 	set := qtest.Resolve(t, cfg.Opts...)
-	refuse(t, set, "qhegel.Test (Batched)")
+	refuse(t, set, "qhegel.Test (Batched)", false)
 	c := set.Checker(t, cfg.Binding)
 	cc := newCaseChecker(c)
 	rounds := cfg.Rounds
@@ -397,8 +402,10 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 // steps are checked in the order the case recorded them (Linearize is
 // Record's and Validate's), and a case that records nothing is a case
 // that took no step, not an unwoven build (SkipIfEmpty is Record's).
-func refuse(t testing.TB, set qtest.Settings, workflow string) {
+func refuse(t testing.TB, set qtest.Settings, workflow string, shrink bool) {
 	t.Helper()
 	set.Refuse(t, workflow, "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's", "Linearize", "LinearizeBudget")
-	set.Refuse(t, workflow, "it is qtest.Record's, for an unwoven build that records nothing", "SkipIfEmpty")
+	if !shrink { // Shrink honours a System's SkipIfEmpty itself
+		set.Refuse(t, workflow, "it is qtest.Record's and explorations' (and Shrink's), for an unwoven build that records nothing", "SkipIfEmpty")
+	}
 }

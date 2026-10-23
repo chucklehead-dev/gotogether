@@ -47,6 +47,10 @@ type ViolationConfig struct {
 	// no operations), as Config.AllowEmpty does; qtest.SkipIfEmpty, for a
 	// whole test that recorded nothing, is another matter.
 	AllowEmpty bool
+
+	// shrink is Shrink's: its Opts are a System's, which may carry
+	// SkipIfEmpty (honoured by Shrink itself)
+	shrink bool
 }
 
 // FindViolation runs Hegel expecting the model to reject some test case:
@@ -74,7 +78,7 @@ type ViolationConfig struct {
 func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation {
 	t.Helper()
 	set := qtest.Resolve(t, cfg.Opts...)
-	refuse(t, set, "qhegel.FindViolation")
+	refuse(t, set, "qhegel.FindViolation", cfg.shrink)
 	c := set.Checker(t, cfg.Binding)
 	c.Options.NoITF = true
 	var err error
@@ -204,7 +208,16 @@ func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Opti
 	if rates.Default == 0 && rates.Kinds == nil {
 		rates = qenv.DefaultRates
 	}
-	v := FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, func(tc hegel.TestCase, rec *Case) {
+	// its replays are an exploration's runs: what an exploration ignores,
+	// it refuses now, before the search, not in a replay that fails quietly
+	set := qtest.Resolve(t, sys.Opts...)
+	set.RefuseExploration(t, "qhegel.Shrink (its replays are an exploration's runs)")
+	if set.SkipIfEmpty() {
+		// an unwoven build records nothing: one nominal run says so, and
+		// skips the test as an exploration does
+		sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Replay: true, Chooser: func(uint64) qenv.Chooser { return qenv.Nominal{} }})
+	}
+	v := FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts, shrink: true}, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
 		if err := sys.Run(rec.Env(c)); err != nil {
