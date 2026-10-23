@@ -152,9 +152,8 @@ func simulate(args []string) (int, error) {
 		case violated:
 			code = 1
 			fmt.Printf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model\n", inv)
-		default:
-			code = 1
-			fmt.Printf("  FAIL    %s: not classified; no trace violates it: add it to simulate.holds\n", inv)
+		default: // held: not wrong, only unsaid
+			fmt.Printf("  holds   %s (unclassified: add it to simulate.holds to keep it so)\n", inv)
 		}
 	}
 	return code, nil

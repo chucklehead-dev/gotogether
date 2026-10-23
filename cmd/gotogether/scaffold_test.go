@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,4 +72,65 @@ func TestScaffoldOut(t *testing.T) {
 	if b, _ := os.ReadFile(path); string(b) != "package app\n" {
 		t.Errorf("the file holds %q", b)
 	}
+}
+
+// A scaffolded binding is checked as written: lint refuses its empty
+// constants with the fix (they once linted and failed in quint's parser),
+// it checks every boolean val and classifies them for simulate, and once
+// its constants are set it lints and simulates.
+func TestScaffoldBindingChecks(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+	dir := t.TempDir()
+	spec, err := filepath.Abs("../../validate/testdata/account.qnt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "account.binding.yaml")
+	if err := scaffold([]string{"-spec", spec, "-module", "account", "-out", p}); err != nil {
+		t.Fatal(err)
+	}
+	src, _ := os.ReadFile(p)
+	for _, want := range []string{"invariants: [nonNegative, underLimit]", "simulate:", "holds: [nonNegative, underLimit]"} {
+		if !strings.Contains(string(src), want) {
+			t.Errorf("the skeleton lacks %q:\n%s", want, src)
+		}
+	}
+	code, out := capture(t, func() (int, error) { return lint([]string{"-binding", p}) })
+	if code != 1 || !strings.Contains(out, "constant LIMIT: no value (type int): give it a Quint expression (LIMIT: '3')") {
+		t.Errorf("lint of the skeleton: exit %d:\n%s", code, out)
+	}
+	set := strings.Replace(string(src), "LIMIT: ''", "LIMIT: '100'", 1)
+	if err := os.WriteFile(p, []byte(set), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := capture(t, func() (int, error) { return lint([]string{"-binding", p}) }); code != 0 {
+		t.Errorf("lint with LIMIT set: exit %d:\n%s", code, out)
+	}
+	// underLimit can fail in the model (deposits have no cap): simulate
+	// says to move it to allows, which is the classification's point
+	code, out = capture(t, func() (int, error) { return simulate([]string{"-binding", p, "-samples", "100"}) })
+	if code != 1 || !strings.Contains(out, "underLimit") || strings.Contains(out, "FAIL    nonNegative") {
+		t.Errorf("simulate: exit %d:\n%s", code, out)
+	}
+}
+
+// capture runs f with its standard output captured.
+func capture(t *testing.T, f func() (int, error)) (int, string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = w
+	code, err := f()
+	os.Stdout = stdout
+	w.Close()
+	out, _ := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	return code, string(out)
 }

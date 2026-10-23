@@ -166,7 +166,13 @@ func scaffold(args []string) error {
 		}
 		fmt.Fprintf(w, "    # expect: ''  # Quint bool over the post-state, from observed .obs.<name>\n")
 	}
-	fmt.Fprintf(w, "\ninvariants: []  # vals of %s: %s\n", *module, strings.Join(sortedKeys(m.Vals), ", "))
+	// every boolean val, checked and classified, so the skeleton checks
+	// what the model says: drop a val that is no invariant
+	vals := strings.Join(sortedKeys(m.Vals), ", ")
+	fmt.Fprintf(w, "\ninvariants: [%s]  # the boolean vals of %s: drop those that are not invariants\n", vals, *module)
+	fmt.Fprintf(w, "\nsimulate:        # gotogether simulate: what the model alone does with each invariant\n")
+	fmt.Fprintf(w, "  holds: [%s]   # the model guarantees them (no trace violates them)\n", vals)
+	fmt.Fprintf(w, "  allows: []      # move here those the model lets fail: requirements on the code, which must prevent it\n")
 	return nil
 }
 

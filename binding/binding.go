@@ -180,9 +180,10 @@ func (b *Binding) Lint(m *Model) []string {
 			errs = append(errs, fmt.Sprintf("invariant %s: not a val of %s", inv, m.Module))
 		}
 	}
-	for c := range m.Consts {
-		if _, ok := b.Constants[c]; !ok {
-			errs = append(errs, fmt.Sprintf("constant %s: no value (type %s)", c, m.Consts[c]))
+	for _, c := range sortedNames(m.Consts) {
+		if v, ok := b.Constants[c]; !ok || strings.TrimSpace(v) == "" {
+			// an empty one (scaffold's '') once linted and failed in quint's parser
+			errs = append(errs, fmt.Sprintf("constant %s: no value (type %s): give it a Quint expression (%s: '3')", c, m.Consts[c], c))
 		}
 	}
 	for c := range b.Constants {
