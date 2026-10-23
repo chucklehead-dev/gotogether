@@ -144,6 +144,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 		off = off.Set(k, 1)
 	}
 	c := config(t, s.opts())
+	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
 	woven := len(qcover.Blocks()) > 0
 	defer qobs.Strict()()
 	mark, _ := qobs.Escaped(0)

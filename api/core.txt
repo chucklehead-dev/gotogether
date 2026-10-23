@@ -1241,6 +1241,7 @@ type Settings struct
     method (Settings) Dir() string
     method (Settings) Global() bool
     method (Settings) Recorder() []qobs.Option
+    method (Settings) Refuse(t testing.TB, workflow, why string, options ...string)
 type SweepConfig struct
     field Factors []qsweep.Factor
     field Strength int

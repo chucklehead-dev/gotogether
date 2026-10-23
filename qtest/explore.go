@@ -245,6 +245,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		cfg.Parallel = runtime.GOMAXPROCS(0)
 	}
 	c := config(t, cfg.opts)
+	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
 	woven := len(qcover.Blocks()) > 0
 	defer qobs.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
 	mark, _ := qobs.Escaped(0)

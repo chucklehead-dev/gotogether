@@ -170,3 +170,33 @@ func TestUnknownRatesKey(t *testing.T) {
 		t.Errorf("errors: %q", f.errs)
 	}
 }
+
+// An option a workflow ignores fails it, saying why and what to do: an
+// exploration records each run on its own (Global) and checks it in its
+// recorded order (Linearize); Validate records nothing.
+func TestIgnoredOptionsRefused(t *testing.T) {
+	RequireQuint(t)
+	for _, c := range []struct {
+		run  func(f *failTB)
+		want string
+	}{
+		{func(f *failTB) {
+			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{Global()}}.Explore(f, ExploreConfig{Seeds: 1})
+		}, "Global() does nothing in an exploration"},
+		{func(f *failTB) {
+			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{Linearize()}}.Exhaust(f, Bound{Faults: 0})
+		}, "Linearize() does nothing in an exploration"},
+		{func(f *failTB) { Validate(f, "../validate/testdata/account.yaml", nil, SkipIfEmpty()) }, "SkipIfEmpty() does nothing in Validate"},
+	} {
+		f := &failTB{TB: t}
+		done := make(chan struct{})
+		go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+			defer close(done)
+			c.run(f)
+		}()
+		<-done
+		if len(f.errs) == 0 || !strings.Contains(f.errs[0], c.want) || !strings.Contains(f.errs[0], "Drop it") {
+			t.Errorf("want %q, got %q", c.want, f.errs)
+		}
+	}
+}

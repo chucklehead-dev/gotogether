@@ -30,8 +30,9 @@ const DefaultLinearizeBudget = 200
 // strong evidence of a bug: the actor fails as that order does. One that
 // ran out of its budget (DefaultLinearizeBudget orders, LinearizeBudget)
 // first is no verdict: the actor's conformance is n/a, which Conforms
-// fails and Rejects and Mismatch do not match.
-func Linearize() Option { return func(c *settings) { c.Linearize = true } }
+// fails and Rejects and Mismatch do not match. It is Record's and
+// Validate's: an exploration and qhegel's cases refuse it.
+func Linearize() Option { return option("Linearize", func(c *settings) { c.Linearize = true }) }
 
 // LinearizeBudget is Linearize with a budget of n orders per actor (at
 // least 1): a run whose search ran out of DefaultLinearizeBudget's says
@@ -40,7 +41,7 @@ func LinearizeBudget(n int) Option {
 	if n < 1 {
 		panic(fmt.Sprintf("qtest: LinearizeBudget(%d): the budget is a number of orders to check, at least 1", n))
 	}
-	return func(c *settings) { c.Linearize, c.linearizeBudget = true, n }
+	return option("LinearizeBudget", func(c *settings) { c.Linearize, c.linearizeBudget = true, n })
 }
 
 // linearize orders each actor's steps by the search, checking candidate

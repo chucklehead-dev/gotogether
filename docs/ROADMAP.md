@@ -434,7 +434,11 @@ starts, and the review's findings are fixed first.
   alias. The finding: api/core.txt was `go doc
   -short`, which lists no method or field: none of X's API reached the
   diff. Build it from go/types; record the published sub-modules too.
-- **Y9. An option a workflow ignores fails.** `Linearize()` and `Global()`
+- **Y9. An option a workflow ignores fails. Done:** each Option records
+  its name; explorations refuse Global and Linearize, Validate refuses
+  Global, RecorderOptions and SkipIfEmpty, qhegel's cases refuse
+  Linearize and SkipIfEmpty (`Settings.Refuse`), each naming why. The
+  finding: `Linearize()` and `Global()`
   in a System's or qhegel's Opts do nothing in Explore, Exhaust or
   Shrink, silently.
 - **Y10. Evidence as a format.** A format field and one reader (cover and
