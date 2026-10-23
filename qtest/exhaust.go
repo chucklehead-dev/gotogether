@@ -2,7 +2,6 @@ package qtest
 
 import (
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -130,9 +129,8 @@ func (f *forcing) Err() error {
 // no partial-order reduction: two schedules that only reorder independent
 // tasks are both run, and both checked unless their steps are the same. A
 // choice's options all count alike: a task among ten other than the
-// oldest is one delay, a crash of any process one fault.
-//
-// State that nothing was cut short with Complete.
+// oldest is one delay, a crash of any process one fault. A search MaxRuns
+// cuts short fails the test unless the bound is Partial.
 func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	t.Helper()
 	if b.MaxRuns <= 0 {
@@ -150,7 +148,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	defer qobs.Strict()()
 	mark, _ := qobs.Escaped(0)
 	x := &Exploration{test: t.Name(), id: nextExploration(t), search: &search{bound: b}, tempDir: c.tempDir}
-	x.dir = filepath.Join(c.Dir, fmt.Sprintf("x%d", x.id))
+	x.dir = exploreDir(t, c.Dir, x.id)
 	run := func(ds []deviation) *Run {
 		f := &forcing{ds: ds}
 		r := runOne(c, woven, f, s.Run)

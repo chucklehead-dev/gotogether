@@ -64,16 +64,9 @@ func evidence(args []string) (int, error) {
 	return 0, nil
 }
 
-// isEvidence reports whether name is an exploration's evidence file:
-// evidence.json, or evidence-N.json for a test's later explorations.
-func isEvidence(name string) bool {
-	if name == "evidence.json" {
-		return true
-	}
-	n, ok := strings.CutPrefix(name, "evidence-")
-	n, ok2 := strings.CutSuffix(n, ".json")
-	return ok && ok2 && n != "" && strings.Trim(n, "0123456789") == ""
-}
+// isEvidence reports whether name is an exploration's evidence file (one
+// per exploration, in its own directory).
+func isEvidence(name string) bool { return name == "evidence.json" }
 
 // suiteReport is the suite's evidence: a line per test, then what no test
 // tried, and how many such gaps there are.

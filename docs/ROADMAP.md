@@ -195,8 +195,8 @@ The track, in order:
     edgepublish's duplicate payload, which sampling at 30 finds; 8 are
     enough.
   - **Readers of `evidence.json`, done.** Evidence names its test and
-    model; a test's later explorations write `evidence-2.json` and on
-    (each overwrote the last). `gotogether evidence DIR` reports a suite:
+    model; each exploration writes its own, in its own directory (they
+    overwrote each other; Y2's review gave each exploration a directory). `gotogether evidence DIR` reports a suite:
     each exploration's verdicts, then what no test tried (a model action,
     a declared fault point, a kind never faulted); `-strict` fails on a
     gap. `gotogether cover -sim` and actionmap read an evidence.json

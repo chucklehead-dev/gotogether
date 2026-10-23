@@ -37,7 +37,7 @@ func TestSuiteReport(t *testing.T) {
 	if gaps != 3 {
 		t.Errorf("%d gaps, want 3 (del, disk.crash, queue.ack):\n%s", gaps, report)
 	}
-	for name, want := range map[string]bool{"evidence.json": true, "evidence-12.json": true, "evidence-.json": false, "evidence-x.json": false, "other.json": false} {
+	for name, want := range map[string]bool{"evidence.json": true, "evidence-2.json": false, "other.json": false} {
 		if isEvidence(name) != want {
 			t.Errorf("isEvidence(%q) = %v", name, !want)
 		}

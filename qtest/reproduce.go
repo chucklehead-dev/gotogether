@@ -56,7 +56,7 @@ func nextExploration(t testing.TB) int {
 			defer explorations.mu.Unlock()
 			delete(explorations.n, name)
 			if v := os.Getenv("GOTOGETHER_RUN"); v != "" && !tr.matched {
-				if s, err := parseRunSpec(v); err == nil && strings.HasPrefix(s.ref, name+"#") && !strings.Contains(s.ref[len(name)+1:], "/") {
+				if s, err := parseRunSpec(v); err == nil && refTest(s.ref) == name {
 					t.Errorf("gotogether: GOTOGETHER_RUN names %s, but %s ran %d explorations: the run is not reproduced (the test changed, or the line is from another -count iteration)", s.ref, name, tr.n)
 				}
 			}
@@ -64,6 +64,27 @@ func nextExploration(t testing.TB) int {
 	}
 	tr.n++
 	return tr.n
+}
+
+// refTest is the test an exploration's ref names: what precedes its
+// number ("TestX/a#01" of "TestX/a#01#2": Go suffixes repeated subtest
+// names with #NN, and a fuzz seed input is "seed#N").
+func refTest(ref string) string {
+	i := strings.LastIndex(ref, "#")
+	if i < 0 || i == len(ref)-1 || strings.Trim(ref[i+1:], "0123456789") != "" {
+		return ""
+	}
+	return ref[:i]
+}
+
+// exploreDir is exploration id's artifact directory under the test's,
+// made now: a step log written into it must not fail for want of it.
+func exploreDir(t testing.TB, dir string, id int) string {
+	d := filepath.Join(dir, fmt.Sprintf("x%d", id))
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		t.Fatalf("gotogether: %v", err)
+	}
+	return d
 }
 
 // matched notes that GOTOGETHER_RUN named one of test's explorations.
@@ -129,7 +150,7 @@ func parseRunSpec(v string) (runSpec, error) {
 // reproduce is how to run r alone.
 func (x *Exploration) reproduce(r *Run) string {
 	if x.fuzz { // the run is the fuzz input's, which Go saves and names
-		return fmt.Sprintf("go test -run '^%s$' (Go saved the failing input under testdata/fuzz/%s and prints its file)", strings.ReplaceAll(x.test, "/", "$/^"), strings.SplitN(x.test, "/", 2)[0])
+		return fmt.Sprintf("go test -run '^%s$' (a fuzz input: the fuzzer saves a new failing one under testdata/fuzz/%s and prints its file; a seed input is the test's f.Add)", strings.ReplaceAll(x.test, "/", "$/^"), strings.SplitN(x.test, "/", 2)[0])
 	}
 	var what string
 	switch {

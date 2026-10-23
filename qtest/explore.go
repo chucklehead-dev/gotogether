@@ -237,7 +237,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		seeds[i] = offset + uint64(i+1)
 	}
 	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz}
-	x.dir = filepath.Join(c.Dir, fmt.Sprintf("x%d", x.id)) // a test's explorations do not share files
+	x.dir = exploreDir(t, c.Dir, x.id)
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
 		x.alone = &spec
@@ -514,16 +514,10 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		}
 	}
 	if os.Getenv("GOTOGETHER_KEEP") != "" {
-		// the report, for tools that read a kept run (gotogether cover, actionmap)
-		// a test's later explorations get files of their own
-		path := filepath.Join(c.Dir, "evidence.json")
-		for n := 2; ; n++ {
-			if _, err := os.Stat(path); err != nil {
-				break
-			}
-			path = filepath.Join(c.Dir, fmt.Sprintf("evidence-%d.json", n))
-		}
-		if err := x.Evidence().WriteJSON(path); err != nil {
+		// the report, for tools that read a kept run (gotogether evidence,
+		// cover, actionmap): in the exploration's own directory, so a rerun
+		// replaces it
+		if err := x.Evidence().WriteJSON(filepath.Join(x.dir, "evidence.json")); err != nil {
 			t.Logf("gotogether: evidence.json: %v", err)
 		}
 	}
@@ -767,7 +761,7 @@ func describeAll(es []Expectation) string {
 // also saves it to the corpus.
 func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	if save || x.alone != nil {
-		x.recheck(r)
+		x.recheck(t, r)
 	}
 	var b strings.Builder
 	if x.search != nil {
@@ -809,7 +803,7 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 // report came from the verdict cache with a module written by another
 // exploration (another test's directory may be gone), so a failure's
 // report points at a module that is there. The verdict is the same.
-func (x *Exploration) recheck(r *Run) {
+func (x *Exploration) recheck(t testing.TB, r *Run) {
 	if x.checker == nil || x.dir == "" || r.Report == nil {
 		return
 	}
@@ -829,8 +823,12 @@ func (x *Exploration) recheck(r *Run) {
 	defer x.mu.Unlock()
 	// the same verdict, or the old report stands (a backend may word a
 	// failure otherwise; it may not judge otherwise)
-	if err == nil && rep.OK() == r.Report.OK() && reason(rep) == reason(r.Report) {
+	switch {
+	case err != nil:
+	case rep.OK() == r.Report.OK() && reason(rep) == reason(r.Report):
 		r.Report = rep
+	default: // a cache key or a backend at fault: say so, keep the verdict the claim was judged by
+		t.Logf("gotogether: %s checked again judges otherwise (%s, not %s): the verdict cache or a backend is wrong; the report below is the one judged", x.nameOf(r), reason(rep), reason(r.Report))
 	}
 }
 

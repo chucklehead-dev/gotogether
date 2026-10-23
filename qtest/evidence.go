@@ -40,7 +40,7 @@ type Evidence struct {
 // WriteJSON writes the evidence to path as JSON, for tools that read a
 // run's report (gotogether evidence, cover, actionmap). Explorations write
 // theirs under GOTOGETHER_KEEP: evidence.json in the test's directory, and
-// evidence-2.json and on for a test's later explorations.
+// one per exploration, in its own directory (x1, x2, ...).
 func (e *Evidence) WriteJSON(path string) error {
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
@@ -66,7 +66,7 @@ func ReadEvidence(path string) (*Evidence, error) {
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
-	e.Test, e.Spec = x.test, x.model
+	e.Test, e.Spec = x.ref(), x.model
 	e.Faults = x.faultCoverage()
 	if x.actions != nil {
 		e.Model = modelCoverage(x.Runs, x.actions)

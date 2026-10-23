@@ -82,8 +82,8 @@ Added to the core since api/core.txt was first recorded:
   `-verify N` checks every trace of up to N steps with quint verify
   (Apalache) instead of sampling.
 - `gotogether evidence DIR`: a suite's explorations, from the evidence.json
-  each writes under GOTOGETHER_KEEP (a test's later ones evidence-2.json
-  and on), and what no test tried; `-strict` fails on a gap. Evidence
+  each writes under GOTOGETHER_KEEP (one per exploration, in its own
+  directory, named by its TestX#N), and what no test tried; `-strict` fails on a gap. Evidence
   names its `Test` and `Spec`; `qtest.ReadEvidence`, `qcover.ReadSummary`
   (a Summary or an evidence.json, read by `gotogether cover -sim`).
 

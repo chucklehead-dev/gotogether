@@ -134,6 +134,19 @@ func TestRunNumbering(t *testing.T) {
 		t.Error("the count outlived its test: a -count=2 rerun would number from 3")
 	}
 
+	// a repeated subtest's run (a#01) is not the first one's (a)
+	t.Run("a", func(t *testing.T) { sys.Explore(t, ExploreConfig{Seeds: 2}) })
+	t.Setenv("GOTOGETHER_RUN", t.Name()+"/a#01#1:seed=1")
+	t.Run("a", func(t *testing.T) {
+		if x := sys.Explore(t, ExploreConfig{Seeds: 2}); len(x.Runs) != 1 {
+			t.Errorf("a#01 ran %d runs, want seed 1 alone", len(x.Runs))
+		}
+	})
+	t.Run("a", func(t *testing.T) { // a#02: not named, so in full and unfailed
+		sys.Explore(t, ExploreConfig{Seeds: 2})
+	})
+	os.Unsetenv("GOTOGETHER_RUN")
+
 	f := &failTB{}
 	t.Run("unmatched", func(t *testing.T) {
 		t.Setenv("GOTOGETHER_RUN", t.Name()+"#5:seed=1")
@@ -142,5 +155,18 @@ func TestRunNumbering(t *testing.T) {
 	})
 	if len(f.errs) == 0 || !strings.Contains(f.errs[0], "but "+t.Name()+"/unmatched ran 1 explorations") {
 		t.Errorf("errors %q", f.errs)
+	}
+}
+
+// refTest takes the exploration's number off a ref, whatever '#' the
+// test's own name has: Go suffixes a repeated subtest #01, a fuzz seed
+// input is seed#N.
+func TestRefTest(t *testing.T) {
+	for ref, want := range map[string]string{
+		"TestX#2": "TestX", "TestX/a#01#1": "TestX/a#01", "FuzzX/seed#0#3": "FuzzX/seed#0", "TestX": "", "TestX#": "", "TestX#a": "",
+	} {
+		if got := refTest(ref); got != want {
+			t.Errorf("refTest(%q) = %q, want %q", ref, got, want)
+		}
 	}
 }
