@@ -109,7 +109,7 @@ func replayQuietly(t testing.TB, sys qtest.System, cs []qenv.Choice) *qtest.Run 
 	done := make(chan struct{})
 	go func() { //qenv:ok the replay runs outside any simulation; Goexit ends it on a failure
 		defer close(done)
-		x := sys.Explore(q, qtest.ExploreConfig{Seeds: 1, Parallel: 1, Chooser: func(uint64) qenv.Chooser { return newByKind(cs) }})
+		x := sys.Explore(q, qtest.ExploreConfig{Seeds: 1, Parallel: 1, Replay: true, Chooser: func(uint64) qenv.Chooser { return newByKind(cs) }})
 		if !q.failed && len(x.Runs) == 1 {
 			r = x.Runs[0]
 		}

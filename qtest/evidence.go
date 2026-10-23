@@ -300,10 +300,10 @@ func countNot(taken map[string]int) int {
 // role is what the exploration was (Evidence.Role).
 func (x *Exploration) role() string {
 	switch {
+	case x.replay: // a replay of a mutant's failure too: it repeats a run counted where it was found
+		return RoleReplay
 	case x.mutant || x.mutation != "":
 		return RoleMutant
-	case x.replay:
-		return RoleReplay
 	}
 	return RoleFaithful
 }
