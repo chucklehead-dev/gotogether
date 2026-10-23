@@ -50,7 +50,12 @@ func TestInMemoryProgress(t *testing.T) {
 		Explore(t, qtest.ExploreConfig{Seeds: 15, Rates: noKubeFaults}).Expect(t, qtest.Conforms())
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress}).
 		Explore(t, qtest.ExploreConfig{Seeds: 20, Rates: noKubeFaults}).Expect(t, qtest.Violates("withinBudget"))
-	explore(t, fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}, 20).Expect(t, qtest.Violates("withinBudget"))
+	// a lost patch response alone puts it over budget in 6.5% of runs at
+	// the default rates (20 seeds missed it at fresh seeds a quarter of
+	// the time), 13.5% with the API's faults at 0.15: 40 seeds miss it
+	// with probability 0.3%
+	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).
+		Explore(t, qtest.ExploreConfig{Seeds: 40, Rates: qenv.DefaultRates.Set("kube.request", 0.15)}).Expect(t, qtest.Violates("withinBudget"))
 }
 
 // Hegel shrinks the restart bug to the faults it needs: a crash.

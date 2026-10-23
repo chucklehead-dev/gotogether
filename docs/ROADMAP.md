@@ -137,7 +137,12 @@ The track, in order:
   - **Its first run's finding.** hello's anti-vacuity bar wanted request
     faults in half the runs, against a measured 56%. It held for seeds
     1–30 and failed for 1001–1060. It is now 30%: well under the rate,
-    and still failing if the faults stop.
+    and still failing if the faults stop. A sweep of every example at
+    seeds 1001 on found two more: checkout's sweep met every pair of
+    fault kinds only at its seeds (its rates are now 3x), and
+    fleetrollout's in-memory-progress mutant went over budget through a
+    lost response alone in 6.5% of runs, which 20 seeds miss a quarter
+    of the time (now 40 seeds at a higher API fault rate).
   - **Left.** Hegel unseeded at night (the tests pin `WithSeed`), and
     turning a failure into a corpus entry: both with X8's corpus.
 
