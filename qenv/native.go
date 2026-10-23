@@ -50,12 +50,13 @@ type Machine interface {
 }
 
 type native struct {
-	mu     sync.Mutex
-	cond   *sync.Cond
-	plat   Platform
-	closed chan struct{}
-	nemOn  bool // the nemesis task is running
-	coop   bool // a Platform's cooperative runtime: no lock, ccond below
+	monoStart time.Time // with its monotonic reading: Mono's origin without a Platform
+	mu        sync.Mutex
+	cond      *sync.Cond
+	plat      Platform
+	closed    chan struct{}
+	nemOn     bool // the nemesis task is running
+	coop      bool // a Platform's cooperative runtime: no lock, ccond below
 	// ccond is the waits' condition on a cooperative runtime (nopLocker):
 	// Broadcast wakes them all in one step of the runtime
 	ccond *sync.Cond
@@ -99,6 +100,7 @@ func NewNative(c Chooser, p Platform) *Sim {
 	s.nat = n
 	s.now = nativeNow()
 	s.start = s.now
+	n.monoStart = time.Now() //qenv:ok the host's monotonic origin, for Mono in real time
 	if !n.coop {
 		n.mu.Lock()
 	}

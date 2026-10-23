@@ -86,7 +86,8 @@ func Sim(dir string) ([]Finding, error) {
 const qenvPath = "github.com/chucklehead-dev/gotogether/qenv"
 
 var wallClock = map[string]string{
-	"Now": "qenv.Now(ctx) or Sim.Now", "Since": "qenv.Now(ctx).Sub(t)", "Until": "t.Sub(qenv.Now(ctx))",
+	"Now": "qenv.Now(ctx) or Sim.Now", "Since": "qenv.Since(ctx, m) on a qenv.Mono(ctx) reading (Now(ctx).Sub is wall arithmetic, which a clock jump moves)",
+	"Until": "qenv.WaitFor(ctx, ready, d), or an interval on qenv.Mono(ctx)",
 	"Sleep": "qenv.Sleep(ctx, d)", "After": "qenv.Sleep, or a Signal with a deadline", "AfterFunc": "qenv.Go with qenv.Sleep",
 	"Tick": "a loop with qenv.Sleep", "NewTimer": "qenv.Sleep, or a Signal with a deadline", "NewTicker": "a loop with qenv.Sleep",
 }

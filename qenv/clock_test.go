@@ -3,6 +3,7 @@ package qenv_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -159,7 +160,7 @@ func TestClocksChecked(t *testing.T) {
 		defer s.Close()
 		f(s)
 	}
-	for _, d := range []float64{1, 1.5, -0.1} {
+	for _, d := range []float64{1, 1.5, -0.1, math.NaN()} {
 		panics("in [0, 1)", func(s *qenv.Sim) {
 			s.Clocks = qenv.Clocks{Drift: d}
 			s.Process("node", false, func(context.Context) {})
@@ -183,7 +184,7 @@ func TestClockDriftTimesCalls(t *testing.T) {
 	for seed := uint64(1); seed <= 10; seed++ {
 		s := clocked(seed, qenv.Clocks{Drift: 0.5}, 0)
 		svc := qenv.NewService(s, "slow", nil, func(ctx context.Context, n int) (int, error) {
-			qenv.Sleep(ctx, 10*time.Second) // a server of no process: true time
+			qenv.Sleep(ctx, 10*time.Second) // longer than the call's timeout, drifting or not
 			return n, nil
 		})
 		var call, wait time.Duration

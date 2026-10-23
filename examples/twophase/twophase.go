@@ -142,14 +142,14 @@ func (d *Deployment) runParticipant(ctx context.Context, p *tpc.Participant) {
 	if p.Stage(ctx) != tpc.Prepared {
 		return
 	}
-	since := qenv.Now(ctx)
+	since := qenv.Mono(ctx) // patience is an interval: the monotonic clock
 	for p.Stage(ctx) == tpc.Prepared {
 		st, err := d.votes.Call(ctx, vote{p.Node}, CallTimeout)
 		if err == nil && st != tpc.Working {
 			_ = p.Decide(ctx, st == tpc.Committed)
 			return
 		}
-		if qenv.Now(ctx).Sub(since) > Patience {
+		if qenv.Since(ctx, since) > Patience {
 			if ok, _ := p.AbortPrepared(ctx); ok {
 				return
 			}

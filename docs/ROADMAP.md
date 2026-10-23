@@ -387,8 +387,8 @@ starts, and the review's findings are fixed first.
   judged twice (`Expect`, and `Mutate`'s `meets`, which already differ).
   One judgment for both. `Exercised` counts each option and each nemesis
   by name (one crash of one process now exercises every nemesis, drop
-  covers duplicate); Rates gets `nemesis.crash` and `nemesis.partition`
-  (partitions now dilute crashes unseen). `NotVacuous` fails when an
+  covers duplicate); Rates gets `nemesis.crash`, `nemesis.partition` and
+  `nemesis.jump` (partitions and clock jumps now dilute crashes unseen). `NotVacuous` fails when an
   antecedent cannot be evaluated and says when no invariant has one.
   Linearize out of budget is inconclusive, which `Rejects` does not match.
 - **Y7. Sim's shape, before names freeze.** Sim's eleven config fields

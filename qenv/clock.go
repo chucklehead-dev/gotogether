@@ -34,7 +34,11 @@ import (
 //
 // Skew and drift are fault choices at their kinds' rates (Rates), like any
 // fault: at DefaultRates about one process in twenty gets one. Raise the
-// rate to have every process drift (Rates.Set("clock.drift", 1)).
+// rate to have every process drift (Rates.Set("clock.drift", 1)). Jumps
+// are nemeses, at the nemesis rate crashes share (DefaultRates: one step
+// in 200): a process that may crash and jump has three nemeses, so its
+// crashes come a third as often, and raising the rate for jumps raises
+// it for crashes.
 var (
 	clockSkew  = DeclareFaults("clock.skew", "ahead", "behind")
 	clockDrift = DeclareFaults("clock.drift", "fast", "slow")
@@ -59,7 +63,7 @@ type Clocks struct {
 // created before a change would have other faults than its peers).
 func (s *Sim) clocksFor() Clocks {
 	c := s.Clocks
-	if c.Drift < 0 || c.Drift >= 1 {
+	if !(c.Drift >= 0 && c.Drift < 1) { // NaN too
 		panic(fmt.Sprintf("qenv: Sim.Clocks.Drift is %v: it is a fraction of true time a clock gains or loses, in [0, 1) (0.01: 10 ms a second); a slow clock at 1 or more would stop or run backwards", c.Drift))
 	}
 	if c.Skew < 0 || c.Jump < 0 {
@@ -156,6 +160,11 @@ func Mono(ctx context.Context) time.Duration {
 	s := t.sim
 	now := s.Now()
 	m := now.Sub(s.start)
+	if s.nat != nil && !s.nat.coop {
+		// the native runtime in real time: its times carry no monotonic
+		// reading (nativeNow), so measure on the host's own
+		m = time.Since(s.nat.monoStart) //qenv:ok the host's monotonic clock, in real time
+	}
 	if t.proc != nil {
 		m += t.proc.drift(now)
 	}

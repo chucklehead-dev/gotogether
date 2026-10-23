@@ -30,7 +30,7 @@ tests with `GOTOGETHER_KEEP=dir` and pass an exploration's evidence.json
 (or a summary written from `x.Evidence().Code`):
 
 ```sh
-gotogether cover -covdir run1,run2 -sim keep/TestFaithful/evidence.json
+gotogether cover -covdir run1,run2 -sim keep/TestFaithful/x1/evidence.json
 ```
 
 ## What no test of the suite tried

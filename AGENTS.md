@@ -112,8 +112,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   go run github.com/DataDog/orchestrion go test ./mbt/ ./scenarios/   # woven
   ```
 - gosim (qgosim and examples/gosim, their own modules): `cd examples/gosim
-  && go test -short ./...` (the first run translates the standard
-  library, about a minute). Check the simulated side with
+  && GOWORK=off go test -p 1 -short ./...`, as CI runs it (the first run
+  translates the standard library, about a minute). In the workspace
+  (GOWORK unset) gosim's translation cannot find the module's packages
+  and every test fails with "package translated/... is not in std". Check the simulated side with
   `go vet -tags sim`.
 - qanalysis (its own module): `cd qanalysis && go test ./...` (the checkout
   comparison weaves and explores checkout: skipped with -short, needs quint).

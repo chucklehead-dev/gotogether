@@ -101,7 +101,10 @@ qobs.Record(s.Context(), "settle", nil)
   Drift: 0.05}` before creating processes; a zero field leaves its fault
   out. A skew ("clock.skew") and a drift ("clock.drift") are chosen per
   process at their rates (raise them: `Rates.Set("clock.drift", 1)`); a
-  jump is a nemesis (`jump.forward.<p>`, `jump.back.<p>`). Skew and jumps
+  jump is a nemesis (`jump.forward.<p>`, `jump.back.<p>`), at the
+  nemesis rate crashes share: raise it for jumps (`Rates.Set("nemesis",
+  0.05)`: at DefaultRates a lease's wall-clock bug showed in 7 runs of
+  100) and crashes come as often. Skew and jumps
   move only the wall clock; a drift moves both, with the process's sleeps,
   call timeouts and `qenv.WaitFor`. Deadlines given to `WaitUntil` and
   `Signal.Wait` are true time. examples/lease shows each fault breaking
