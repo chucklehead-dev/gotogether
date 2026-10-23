@@ -66,6 +66,8 @@ jobs:
         run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest' ./qenv/
       - name: test (qenv self-checks)
         run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
+      - name: the store's histories against its isolation levels (GOTOGETHER_CHECK)
+        run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 ./...) || exit 1; done
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
         working-directory: examples/checkout
         run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s .
@@ -284,6 +286,7 @@ jobs:
         run: |
           go test -count=1 -timeout 30m ./...
           go test -race -short -count=1 ./...
+          GOTOGETHER_CHECK=1 go test -short -count=1 ./...
       - name: demo (real server, otelgrpc spans converted and validated)
         run: |
           ./run-demo.sh

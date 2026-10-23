@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/qenv/internal/history"
 )
 
 // Isolation is a store's contract for concurrent transactions.
@@ -94,11 +96,14 @@ type Store struct {
 	CommitFaults bool
 
 	sim   *Sim
+	hist  *history.History // under Sim.Check: the committed history, checked against Iso
 	rows  map[string][]version
 	seq   int64
 	locks map[string]*tx
 	open  map[*tx]bool
 	txs   int64
+
+	noValidation bool // tests only: a store that keeps no level, for the history check to catch
 }
 
 type version struct {
@@ -110,6 +115,9 @@ type version struct {
 // NewStore returns an empty store in s.
 func NewStore(s *Sim, name string, iso Isolation) *Store {
 	st := &Store{Name: name, Iso: iso, sim: s, rows: map[string][]version{}, locks: map[string]*tx{}, open: map[*tx]bool{}}
+	if s.Check {
+		st.hist = history.New([...]int{history.Serializable, history.SnapshotIsolation, history.ReadCommitted}[iso])
+	}
 	s.OnCrash(func(p *Process) {
 		var txs []*tx
 		for tx := range st.open {
@@ -139,6 +147,9 @@ type tx struct {
 	locked []string
 	hooks  []func()
 	done   bool
+	// under Check: what the transaction read, for the history
+	seen    []history.Read
+	scanned []history.Scan
 	// waiting is the key whose lock the transaction waits for ("": none)
 	waiting string
 }
@@ -183,7 +194,15 @@ func (tx *tx) Get(key string) (any, bool) {
 	}
 	tx.reads[key] = true
 	v, ok := tx.visible(key)
+	tx.saw(key, v.seq)
 	return v.val, ok
+}
+
+// saw records a read of key's version seq for the history (Check).
+func (tx *tx) saw(key string, seq int64) {
+	if tx.st.hist != nil {
+		tx.seen = append(tx.seen, history.Read{Key: key, Version: history.Version(seq)})
+	}
 }
 
 // GetForUpdate locks key until the transaction ends, waiting for another
@@ -225,6 +244,7 @@ func (tx *tx) GetForUpdate(key string) (any, bool, error) {
 		return nil, false, ErrConflict
 	}
 	vs := tx.st.rows[key]
+	tx.saw(key, tx.st.latest(key))
 	if len(vs) == 0 || vs[len(vs)-1].deleted {
 		return nil, false, nil
 	}
@@ -264,6 +284,13 @@ func (tx *tx) Scan(prefix string) []KV {
 	tx.check()
 	Yield(tx.ctx)
 	tx.scans = append(tx.scans, prefix)
+	if tx.st.hist != nil {
+		limit := tx.snap
+		if tx.st.Iso == ReadCommitted {
+			limit = tx.st.seq
+		}
+		tx.scanned = append(tx.scanned, history.Scan{Prefix: prefix, Limit: history.Version(limit)})
+	}
 	keys := map[string]bool{}
 	for k := range tx.st.rows {
 		if strings.HasPrefix(k, prefix) {
@@ -322,7 +349,7 @@ func (tx *tx) Commit() error {
 	if tx.done {
 		return ErrConflict
 	}
-	if st.Iso != ReadCommitted {
+	if st.Iso != ReadCommitted && !st.noValidation {
 		for _, k := range tx.order {
 			if st.latest(k) > tx.snap {
 				tx.end()
@@ -330,7 +357,7 @@ func (tx *tx) Commit() error {
 			}
 		}
 	}
-	if st.Iso == Serializable {
+	if st.Iso == Serializable && !st.noValidation {
 		for k := range tx.reads {
 			if st.latest(k) > tx.snap {
 				tx.end()
@@ -346,11 +373,18 @@ func (tx *tx) Commit() error {
 			}
 		}
 	}
+	var commit int64
 	if len(tx.order) > 0 {
 		st.seq++
+		commit = st.seq
 		for _, k := range tx.order {
 			w := tx.writes[k]
 			st.rows[k] = append(st.rows[k], version{seq: st.seq, val: w.val, deleted: w.deleted})
+		}
+	}
+	if st.hist != nil {
+		if err := st.hist.Commit(history.Txn{ID: tx.id, Commit: history.Version(commit), Reads: tx.seen, Scans: tx.scanned, Writes: tx.order}); err != nil {
+			panic(fmt.Sprintf("qenv: store %s (%s) committed a history its level forbids: %v (GOTOGETHER_CHECK)", st.Name, st.Iso, err))
 		}
 	}
 	tx.end()
@@ -428,6 +462,9 @@ func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) erro
 func (st *Store) Load(key string, val any) {
 	st.seq++
 	st.rows[key] = append(st.rows[key], version{seq: st.seq, val: val})
+	if st.hist != nil {
+		st.hist.Load(key, history.Version(st.seq))
+	}
 }
 
 // storeCommit is a commit applied whose outcome the client never learns.

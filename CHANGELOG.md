@@ -35,6 +35,8 @@ Added to the core since api/core.txt was first recorded:
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and
   `qtrace.Linearize` search the orders operations' intervals allow.
+- Under `GOTOGETHER_CHECK=1` every `qenv.Store` checks each commit's
+  dependency cycles against its isolation level (G1a, G1c, G-single, G2).
 - CheckBatch replays a chunk of several traces with quint's TypeScript
   backend unless one was chosen ($QUINT_BACKEND, Options.Backend): Rust
   starts an evaluator per test.

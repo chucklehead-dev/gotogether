@@ -392,7 +392,11 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   test goroutine). Woven calls look up the goroutine (about 1 µs), so
   weave test builds only.
 - Run qenv's tests, and tests of new doubles, with `GOTOGETHER_CHECK=1`: the
-  scheduler checks its invariants at every step. CI does.
+  scheduler checks its invariants at every step, and every `Store` checks
+  each commit's dependency cycles against its isolation level
+  (`qenv/internal/history`: G1a, G1c, G-single, G2). CI does, and runs
+  the store's examples so too. A change to the store's validation that
+  lets a forbidden cycle commit panics there, naming the cycle.
 - A recovery verdict needs a healthy baseline (`Experiment.Healthy`):
   without one `Assess` returns `Recovery.Err`, since a system already
   collapsed before the trigger would "recover" to its collapsed goodput.

@@ -1035,6 +1035,19 @@ the same workarounds kept appearing in examples. They are now in the core.
   `TestSchedulerSemantics` states the scheduler's semantics as a Hegel
   property over random programs. It fails within a second on the `Signal`
   bug of §11.3, reintroduced. CI runs qenv's tests with the checks on.
+- **The store checks its own histories.** Under the same switch, every
+  `Store` keeps its committed history (each transaction's versions read,
+  scans with their snapshot, and writes) and checks each commit against
+  its level in Adya's terms (`qenv/internal/history`): the commit's ww,
+  wr and rw dependencies, and the cycle through it with the fewest rw
+  edges. No rw edge (G1c) or a dirty read (G1a) breaks every level, one
+  (G-single: a lost update, read skew) breaks snapshot isolation, any
+  cycle breaks serializability; write skew (two rw edges) is snapshot
+  isolation's. TestIsolationAnomalies shows each level's anomalies can
+  happen; this shows those it forbids never do. A store with its
+  validation turned off is caught at the commit that closes the cycle
+  (`TestHistoryCatchesBrokenLevel`), and checkout's, twophase's,
+  grpcledger's and streams' runs pass it.
 - **Constants per check** (`qtest.Constants`, `qhegel.Config.Constants`,
   `validate.Checker.WithConstants`). One binding serves runs of any size.
   Checkout's load runs had needed a copy of the binding with a different

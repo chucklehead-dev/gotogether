@@ -216,11 +216,17 @@ The track, in order:
     an IR built in Go for the Rust evaluator, a project of its own. `//quint:action` could note the invocation on
     entry. grpcledger's spans carry their start already; its convert
     rules order by its own index, so nothing there needed it.
-- **X5. The doubles' contracts (M).** Under `GOTOGETHER_CHECK=1`, Store emits
-  read and write sets with commit versions and a checker
-  (`qenv/internal/history`, Elle-style) fails on cycles the level forbids
-  (G0, G1c, G-single, G2): soundness next to TestIsolationAnomalies'
-  completeness. Reusable on a real database tier.
+- **X5. The doubles' contracts (M).** Done for the store. Under
+  `GOTOGETHER_CHECK=1` each `Store` keeps its committed history and
+  checks every commit (`qenv/internal/history`, Adya's dependencies):
+  G1a and G1c break every level, G-single snapshot isolation, any cycle
+  serializability. A store with its validation off is caught (G-single
+  for a lost update under SI, G2 for write skew under serializability);
+  the working store passes qenv's tests and the store's examples, which
+  CI now runs with the check.
+  - **Left.** The queue's and the services' contracts (at-least-once,
+    redelivery after a lost ack) as history checks too; the checker
+    public, for a real database tier's recorded transactions.
 - **X6. Clock faults (M).** Per-process skew and jumps (`clock.skew`,
   `clock.jump`; option 0 none), applied in `qenv.Now` by the task's
   process; profiles and `ToVirtual`/`ToReal` stay global. Targets:
