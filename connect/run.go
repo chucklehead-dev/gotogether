@@ -40,7 +40,7 @@ type Config struct {
 	Quint   string   // the quint binary (default $QUINT_BIN, else "quint")
 	Backend string   // --backend (default $QUINT_BACKEND, else quint's own default)
 	Args    []string // extra arguments for quint, e.g. --invariant
-	Dir     string   // where traces are written (default a temp dir; t.TempDir() in Run and Test)
+	Dir     string   // where traces are written (default a temp dir; t.TempDir() in Run and Test); one run's: its earlier traces are removed
 
 	// How to read the traces (see ReplayOptions).
 	StatePath  []string

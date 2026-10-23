@@ -197,8 +197,9 @@ actors (OTLP/JSON files, or in-memory SDK spans).
 5. **Incarnations.** Processes are numbered in order of first appearance.
    A process change becomes the binding's `restart` action (`crash` for
    edgePublish), the step a dead process cannot report. If the steps of two
-   incarnations interleave, that is an `overlap` issue: two writers alive at
-   once, which the model does not allow. The round trip in §6 caught a driver
+   incarnations interleave, that is an `overlap` error: two writers alive at
+   once, which the model does not allow (it was a warning, and the old
+   incarnation's step replayed as a third boot). The round trip in §6 caught a driver
    bug this way.
 6. **Missing information.**
    - A missing step: a gap, reported.

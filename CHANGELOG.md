@@ -30,6 +30,13 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- Two incarnations of a process overlapping (an old one acting after its
+  successor started) is an `error overlap` issue, not a warning: a run
+  that passed with it fails. Fence the old incarnation, or order the
+  steps with a domain clock.
+- A Queue's broker process that is down is unreachable, and its crash
+  drops its consumers' connections; held messages come back oldest first.
+- `connect.Config.Dir` is one run's: its earlier traces are removed.
 - `itf.DecodeProjection`, which connect's state check decodes with: a
   StateDriver's state type with an unexported field, or a field the
   model's record lacks (a misspelling), fails the check instead of
