@@ -161,7 +161,7 @@ func TestProcessClockTranslation(t *testing.T) {
 	if p.ClockOffset() == 0 {
 		t.Fatal("no skew chosen")
 	}
-	real := time.Now()
+	real := time.Now() //qenv:ok a real timestamp, as a library would read one
 	v := p.ToVirtual(real)
 	if got := v.Sub(s.ToVirtual(real)); (got - p.ClockOffset()).Abs() > time.Millisecond {
 		t.Errorf("the process's view is %v off true virtual time, want its offset %v", got, p.ClockOffset())
