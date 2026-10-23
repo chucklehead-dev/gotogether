@@ -289,6 +289,10 @@ The track, in order:
     publisher or consumer cut off waits for the heal, and a consumer's cut
     drops its connection, its unacknowledged messages redelivered and its
     acknowledgements lost (as a broker that times out a connection does).
+    A nemesis's cut heals by itself after `Sim.PartitionLength`: checkout
+    under partitions (`Config.Partitions`) was first stuck, its relay
+    waiting on a cut no scheduling step would come to heal. It conforms,
+    the cuts redelivering in about half its runs.
   - **Left.** jobqueue's journal on a Disk (jobqueue is not on qenv);
     partitions for the store and the logs.
 - **X8. Smaller claims and corpora.**
