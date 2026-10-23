@@ -216,6 +216,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	for i := range ids {
 		ids[i] = uint64(i + 1)
 	}
+	unknownKinds(t, "Bound.Without kind", b.Without)
 	x.finish(t, s.Binding, c, mark, ids)
 	if x.search.left > 0 && !b.Partial && x.alone == nil {
 		t.Errorf("gotogether: %s: the search stopped at MaxRuns (%d runs) with at least %d runs within its bound left, "+

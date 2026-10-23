@@ -169,6 +169,17 @@ func TestUnknownRatesKey(t *testing.T) {
 	if !strings.Contains(strings.Join(f.errs, "\n"), `ExploreConfig.Rates key "queue.ack" covers no fault kind`) {
 		t.Errorf("errors: %q", f.errs)
 	}
+	// so does a Bound.Without kind, which would leave the kind on
+	f = &failTB{TB: t}
+	done = make(chan struct{})
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		System{Binding: "../validate/testdata/account.yaml", Run: race}.Exhaust(f, Bound{Faults: 0, Without: []string{"queue.ack"}})
+	}()
+	<-done
+	if !strings.Contains(strings.Join(f.errs, "\n"), `Bound.Without kind "queue.ack" covers no fault kind`) {
+		t.Errorf("errors: %q", f.errs)
+	}
 }
 
 // An option a workflow ignores fails it, saying why and what to do: an
