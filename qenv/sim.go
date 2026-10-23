@@ -64,6 +64,8 @@ type Sim struct {
 	nextNem   time.Time       // with NemesisEvery: when the next nemesis choice is due
 	lastNow   time.Time       // Check: time never goes backwards
 	creator   int64           // the goroutine that created it (owners)
+	ended     []int64         // its ended tasks' goroutines (owners.ended), under owners' lock
+	forgotten bool            // closed: ended tasks are no longer kept, under owners' lock
 	now       time.Time
 	start     time.Time
 	tasks     []*task   // every task, in creation order (task id-1)
@@ -1109,6 +1111,7 @@ func (s *Sim) Close() {
 		return
 	}
 	s.closed = true
+	defer forget(s)
 	defer disown(s.creator, s)
 	defer live.Add(-1)
 	if s.nat != nil {

@@ -12,6 +12,7 @@ import (
 // the chooser (RowOf), and the Run deposits the row's amount. Past LIMIT
 // (100) the row violates underLimit, below it the row conforms.
 func TestSweepWithTheSystemsRun(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
 		row, ok := RowOf(c)
@@ -35,6 +36,7 @@ func TestSweepWithTheSystemsRun(t *testing.T) {
 // off: the run's fault happens in every run of the "on" row (rate 1) and
 // in none of the "off" row.
 func TestSweepFaultKinds(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	kind := qenv.DeclareFaults("test.sweep", "unavailable")
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {

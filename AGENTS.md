@@ -394,7 +394,13 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   (`internal/hooks.Strict`), so a step from a goroutine started with `go` fails
   the exploration (`hooks.Escaped`; `Series.Escaped` for an Experiment).
   It once panicked, on a goroutine nothing could recover, killing the
-  test binary.
+  test binary. A step from a goroutine one of a run's tasks started (its
+  stack's "created by ... in goroutine N", a task's id kept until its
+  simulation closes) fails that run alone (`hooks.WithEscapes`); any
+  other escape is logged process-wide, where every strict run running
+  sees it. So qtest's tests run in parallel, except those that touch
+  process-wide state (Setenv, a global recorder, the process-wide log):
+  keep `t.Parallel()` out of those.
   `gotogether lint -sim .` (in CI) flags `go` statements and wall-clock
   calls in files that import qenv, tests included; `//qenv:ok` exempts a
   line (give the reason after it).

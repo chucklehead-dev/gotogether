@@ -16,6 +16,7 @@ import (
 // every run); several are judged one by one; Some(a, b) wants one run
 // with both; None wants no run with either.
 func TestClaims(t *testing.T) {
+	t.Parallel()
 	// three runs: one shows a, one shows a and b, one shows neither
 	a := Expectation{desc: "a", check: func(r *validate.Report) bool { return len(r.Issues) == 1 || len(r.Issues) == 3 }}
 	b := Expectation{desc: "b", check: func(r *validate.Report) bool { return len(r.Issues) == 3 }}
@@ -49,6 +50,7 @@ func TestClaims(t *testing.T) {
 // A Reach is judged over the runs' choices: how many runs reached (or
 // faulted) the kind, against the share wanted.
 func TestReach(t *testing.T) {
+	t.Parallel()
 	runs := []*Run{
 		{Choices: []qenv.Choice{{Kind: "fault.rpc.x.request", N: 3, Value: 0}}},
 		{Choices: []qenv.Choice{{Kind: "fault.rpc.x.request", N: 3, Value: 2}}},
@@ -74,6 +76,7 @@ func TestReach(t *testing.T) {
 // Reaches names a kind as reports print it; the chooser's "fault." prefix
 // fails with the fix rather than being read two ways.
 func TestReachesWantsTheBareKind(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if msg := fmt.Sprint(recover()); !strings.Contains(msg, `("rpc.x")`) {
 			t.Errorf("panic %q, want the bare kind", msg)
@@ -86,6 +89,7 @@ func TestReachesWantsTheBareKind(t *testing.T) {
 // ShrunkTo judges a run's faults, and refuses an exploration, where it
 // would hold for nothing.
 func TestShrunkTo(t *testing.T) {
+	t.Parallel()
 	expect := func(f func(t testing.TB)) []string {
 		ft := &failTB{TB: t}
 		done := make(chan struct{})
@@ -112,6 +116,7 @@ func TestShrunkTo(t *testing.T) {
 // Violates(...).At(action) wants the invariant to fail first after a step
 // of that action; At on anything but Violates is a mistake, said so.
 func TestViolatesAt(t *testing.T) {
+	t.Parallel()
 	rep := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Invariants: []validate.InvariantResult{
 		{Name: "exactlyOnce", Verdict: validate.Fail, Failure: &validate.Failure{Step: &qtrace.Step{Action: "perform"}}},
 	}}}}
@@ -140,6 +145,7 @@ func TestViolatesAt(t *testing.T) {
 // took: up to a step the model could not take, through a step whose state
 // did not match.
 func TestTakesAndExercised(t *testing.T) {
+	t.Parallel()
 	call := func(a string) binding.Call { return binding.Call{Action: a} }
 	ok := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
 		Calls: []binding.Call{call("init"), call("apply"), call("replay")}}}},
@@ -173,6 +179,7 @@ func TestTakesAndExercised(t *testing.T) {
 // choice offered, and each nemesis a run enabled by name; an exception
 // covers the names below it.
 func TestExercisedByName(t *testing.T) {
+	t.Parallel()
 	qenv.DeclareFaults("test.exercised", "drop", "duplicate", "never")
 	qenv.DeclareFaults("test.unmet", "lost")
 	actions := map[string]bool{"init": true}
@@ -204,6 +211,7 @@ func TestExercisedByName(t *testing.T) {
 // every fault off) is judged by what was declared: prefixes, kinds,
 // options and nemeses no run met are known, a misspelling is not.
 func TestExercisedExceptionsOfAnEmptyRow(t *testing.T) {
+	t.Parallel()
 	qenv.DeclareFaults("test.row.queue", "lost")
 	s := qenv.New(qenv.Nominal{})
 	s.Process("rowproc", true, func(context.Context) {}) // registers nemesis crash.rowproc

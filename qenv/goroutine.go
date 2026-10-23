@@ -18,6 +18,11 @@ import (
 var owners struct {
 	sync.Mutex
 	m map[int64][]owner // a stack: a goroutine may create a simulation inside another's lifetime
+	// ended holds the contexts of tasks whose goroutines have exited,
+	// until their simulation closes: a goroutine a task started with `go`
+	// often outlives it, and its escaped steps still belong to the run
+	// (hooks.SetCreatorRun). Go never reuses a goroutine id.
+	ended map[int64]context.Context
 }
 
 // owner is a goroutine's simulation, and its task if it runs one (nil for
@@ -33,6 +38,19 @@ var live atomic.Int64
 
 func init() {
 	owners.m = map[int64][]owner{}
+	owners.ended = map[int64]context.Context{}
+	hooks.SetCreatorRun(func(id int64) (context.Context, bool) {
+		owners.Lock()
+		defer owners.Unlock()
+		if st := owners.m[id]; len(st) > 0 {
+			if o := st[len(st)-1]; o.t != nil {
+				return o.t.ctx, true
+			}
+			return st[len(st)-1].s.base, true // the goroutine that created the simulation
+		}
+		ctx, ok := owners.ended[id]
+		return ctx, ok
+	})
 	hooks.SetDiscard(func() bool {
 		if live.Load() == 0 {
 			return false
@@ -82,6 +100,10 @@ func disown(id int64, s *Sim) {
 	st := owners.m[id]
 	for i := len(st) - 1; i >= 0; i-- {
 		if st[i].s == s {
+			if t := st[i].t; t != nil && !s.forgotten {
+				owners.ended[id] = t.ctx
+				s.ended = append(s.ended, id)
+			}
 			st = append(st[:i], st[i+1:]...)
 			break
 		}
@@ -100,4 +122,16 @@ func ownerOf(id int64) (owner, bool) {
 		return st[len(st)-1], true
 	}
 	return owner{}, false
+}
+
+// forget drops s's ended tasks (owners.ended): once it closes, a step from
+// a goroutine they started is no run's.
+func forget(s *Sim) {
+	owners.Lock()
+	defer owners.Unlock()
+	s.forgotten = true
+	for _, id := range s.ended {
+		delete(owners.ended, id)
+	}
+	s.ended = nil
 }

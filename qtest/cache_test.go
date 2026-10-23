@@ -19,6 +19,7 @@ func overdraw(c qenv.Chooser) error {
 // shared by every exploration (as a sweep's rows share them) keep them
 // apart.
 func TestVerdictCacheKeysTheInstance(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	cfg := ExploreConfig{Seeds: 1}
 	System{Binding: "../validate/testdata/account.yaml", Run: overdraw}.Explore(t, cfg).Expect(t, Violates("underLimit"))
@@ -33,6 +34,7 @@ func TestVerdictCacheKeysTheInstance(t *testing.T) {
 // A claim naming an invariant or action the model does not have fails at
 // once: None(Violates("underLimt")) would otherwise hold for nothing.
 func TestClaimNamesAreChecked(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	x := System{Binding: "../validate/testdata/account.yaml", Run: overdraw}.Explore(t, ExploreConfig{Seeds: 1})
 	for _, c := range []Claim{None(Violates("underLimt")), Rejects("depositt")} {

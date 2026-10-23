@@ -59,8 +59,21 @@ var escaped struct {
 
 const maxEscaped = 1000
 
-// Escape logs a step that escaped a strict run, with its message.
+// Escape logs a step that escaped a strict run, with its message: to the
+// run of the goroutine that started the step's goroutine, if that run
+// keeps an escape log (WithEscapes), else process-wide (Escaped), where
+// every strict run running sees it.
 func Escape(msg string) {
+	if f := creatorRun.Load(); f != nil {
+		if id, ok := creatorID(); ok {
+			if ctx, ok := (*f)(id); ok {
+				if e, ok := ctx.Value(escapesKey{}).(*Escapes); ok {
+					e.add(msg)
+					return
+				}
+			}
+		}
+	}
 	escaped.Lock()
 	defer escaped.Unlock()
 	escaped.n++
@@ -85,6 +98,78 @@ func Escaped(mark int) (n int, since []string) {
 			" kept): a goroutine started with `go` is outside the simulation; start it with qenv.Go"}
 	}
 	return escaped.n, since
+}
+
+// Escapes is one run's log of the steps that escaped it: recorded from a
+// goroutine one of its tasks started with `go`, which no run owns.
+type Escapes struct {
+	mu   sync.Mutex
+	n    int
+	msgs []string // the first maxEscaped
+}
+
+func (e *Escapes) add(msg string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.n++
+	if len(e.msgs) < maxEscaped {
+		e.msgs = append(e.msgs, msg)
+	}
+}
+
+// Steps returns how many steps escaped the run, and the first one's
+// message.
+func (e *Escapes) Steps() (n int, first string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.msgs) > 0 {
+		first = e.msgs[0]
+	}
+	return e.n, first
+}
+
+type escapesKey struct{}
+
+// WithEscapes returns ctx logging the steps that escape the run it is the
+// context of into e (Escape): a run that keeps its own log is not told of
+// other runs' escapes, nor they of its own.
+func WithEscapes(ctx context.Context, e *Escapes) context.Context {
+	return context.WithValue(ctx, escapesKey{}, e)
+}
+
+var creatorRun atomic.Pointer[func(int64) (context.Context, bool)]
+
+// SetCreatorRun installs how a goroutine's run context is found by its
+// id, for the goroutine that started an escaped step's: qenv returns the
+// context of a simulation's task (running or ended, until the simulation
+// closes), or of the simulation's creator.
+func SetCreatorRun(f func(id int64) (context.Context, bool)) { creatorRun.Store(&f) }
+
+// creatorID is the id of the goroutine that started the calling one, from
+// the last line of its stack ("created by f in goroutine 7"): false for
+// the main goroutine, or a stack too deep to read whole.
+func creatorID() (int64, bool) {
+	buf := make([]byte, 64<<10)
+	n := runtime.Stack(buf, false)
+	if n == len(buf) {
+		return 0, false // truncated: its last line is gone
+	}
+	b := buf[:n]
+	const in = " in goroutine "
+	i := bytes.LastIndex(b, []byte("\ncreated by "))
+	if i < 0 {
+		return 0, false
+	}
+	line := b[i+1:]
+	if j := bytes.IndexByte(line, '\n'); j >= 0 {
+		line = line[:j]
+	}
+	k := bytes.LastIndex(line, []byte(in))
+	if k < 0 {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(string(line[k+len(in):]), 10, 64)
+	return id, err == nil
 }
 
 // KnownFault reports whether a name users give (a Rates key, a sweep's

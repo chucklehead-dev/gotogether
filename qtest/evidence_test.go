@@ -12,6 +12,7 @@ import (
 // One report for an exploration: verdicts by reason, faults reached and
 // faulted, pairs of kinds together.
 func TestEvidence(t *testing.T) {
+	t.Parallel()
 	ok := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass}}}
 	violates := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
 		Invariants: []validate.InvariantResult{{Name: "chargedAtMostOnce", Verdict: validate.Fail}}}}}

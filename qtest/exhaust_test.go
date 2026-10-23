@@ -15,6 +15,7 @@ import (
 // in each other option, and from a run with deviations only the choices
 // after its last, within the bound and the kinds left on.
 func TestChildren(t *testing.T) {
+	t.Parallel()
 	choices := []qenv.Choice{{Kind: "sched.task", N: 2}, {Kind: "fault.rpc.x", N: 3}, {Kind: "sched.task", N: 3}}
 	b := Bound{Delays: 1, Faults: 1}
 	none := qenv.Rates{Kinds: map[string]float64{}}
@@ -34,6 +35,7 @@ func TestChildren(t *testing.T) {
 }
 
 func TestParseSchedule(t *testing.T) {
+	t.Parallel()
 	ds := []deviation{{3, 1}, {17, 2}}
 	if got, err := parseSchedule(schedule(ds)); err != nil || !reflect.DeepEqual(got, ds) {
 		t.Errorf("round trip: %v, %v", got, err)
@@ -103,6 +105,7 @@ func TestExhaust(t *testing.T) {
 // unless the bound accepts a sample (Partial); its Evidence says it is
 // truncated either way.
 func TestExhaustTruncated(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	f := &failTB{TB: t}
@@ -130,6 +133,7 @@ func TestExhaustTruncated(t *testing.T) {
 // satisfies, in the claims' words, without the paths of files the test's
 // end removes: its conformance FAIL once read as the test's.
 func TestExpectedFailureLogged(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	log := &logTB{TB: t}
 	System{Binding: "../validate/testdata/account.yaml", Run: race}.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))

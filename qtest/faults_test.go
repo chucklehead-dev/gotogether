@@ -70,6 +70,7 @@ var journalTraces = connect.Config{Spec: "testdata/journal.qnt", MaxSamples: 8, 
 // makes every other step itself, and every run follows its trace and
 // conforms to the model.
 func TestFaultScriptDrivesProgram(t *testing.T) {
+	t.Parallel()
 	qtest.RequireQuint(t)
 	x := journalSystem(false).FollowTraces(t, journalTraces, journalFaults)
 	x.Expect(t, qtest.Conforms())
@@ -82,6 +83,7 @@ func TestFaultScriptDrivesProgram(t *testing.T) {
 // The mutant that keeps its count in memory follows the same traces, and
 // the model rejects its restart: the trace's crash is what exposes it.
 func TestFaultScriptCatchesForgetfulRestart(t *testing.T) {
+	t.Parallel()
 	qtest.RequireQuint(t)
 	journalSystem(true).FollowTraces(t, journalTraces, journalFaults).Expect(t, qtest.Mismatch("restart"))
 }

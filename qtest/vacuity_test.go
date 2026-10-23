@@ -12,6 +12,7 @@ import (
 // passedWhenOpen for nothing: its antecedent never held, and NotVacuous
 // says so. Runs that pass witness it.
 func TestVacuity(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	scenario := func(pass bool) func(qenv.Chooser) error {
 		return func(c qenv.Chooser) error {
@@ -53,6 +54,7 @@ func TestVacuity(t *testing.T) {
 // NotVacuous fails when it cannot judge: no invariant has an antecedent,
 // or one quint cannot evaluate. Either way it would hold for nothing.
 func TestNotVacuousCannotJudge(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	run := func(c qenv.Chooser) error {
 		ctx := qenv.ContextOf(c)

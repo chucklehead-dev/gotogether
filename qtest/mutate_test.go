@@ -10,6 +10,7 @@ import (
 // NoSurvivors names each unmarked survivor with its mark, and each mark
 // that matched no survivor.
 func TestNoSurvivors(t *testing.T) {
+	t.Parallel()
 	dropAck := qmut.Mutant{ID: 1, File: "/src/shop/pay.go", Line: 42, Func: "example.com/shop.(Payer).Pay", Op: "drop call", Code: "ack()"}
 	boundary := qmut.Mutant{ID: 2, File: "/src/shop/retry.go", Line: 7, Func: "example.com/shop.retry", Op: "<= for <", Code: "n < 3"}
 	rep := &MutationReport{Survived: []qmut.Mutant{dropAck, boundary}}

@@ -14,6 +14,7 @@ import (
 // in recording order the model cannot take it, and Linearize finds the
 // order the intervals allow, the deposit first.
 func TestLinearizeOption(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) } // units beyond qtrace.RealTimeSlack
 	steps := []qtrace.Step{
@@ -48,6 +49,7 @@ func TestLinearizeOption(t *testing.T) {
 // checked as recorded: the order checked is re-sequenced onto one thread,
 // where the gap once vanished.
 func TestLinearizeKeepsGaps(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	steps := []qtrace.Step{
 		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Time: time.Unix(1, 0),

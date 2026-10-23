@@ -12,6 +12,7 @@ import (
 )
 
 func TestExpectations(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	rec := func(ops ...any) func(*qobs.Recorder) {
 		return func(r *qobs.Recorder) {
@@ -36,6 +37,7 @@ func TestExpectations(t *testing.T) {
 // a row lock the account never goes negative; without one, under read
 // committed, some interleaving overdraws it.
 func TestExplore(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	b := "../validate/testdata/account.yaml"
 	scenario := func(lock bool) func(qenv.Chooser) error {
@@ -77,6 +79,7 @@ func TestExplore(t *testing.T) {
 
 // One binding, two instances: Constants overrides the binding's LIMIT.
 func TestConstants(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	b := "../validate/testdata/account.yaml"
 	steps := Record(t, b, func(rec *qobs.Recorder) {
@@ -95,6 +98,7 @@ func TestConstants(t *testing.T) {
 // Runs with the same steps share one verdict: ten seeds of a run that
 // makes no choices are checked once, though each has its own recorder ids.
 func TestVerdictCache(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	x := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
 		s := qenv.New(c)

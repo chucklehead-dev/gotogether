@@ -12,6 +12,7 @@ import (
 // first step names the constants, and faults a script never made are
 // listed.
 func TestTrapMessages(t *testing.T) {
+	t.Parallel()
 	failAt := func(i int) *validate.Report {
 		return &validate.Report{Actors: []*validate.Result{{Conforms: validate.Fail, Failure: &validate.Failure{Index: i}}}}
 	}
@@ -33,6 +34,7 @@ func TestTrapMessages(t *testing.T) {
 // once however many runs met it: it never fires, and the claim it was for
 // once failed as if the code had survived it, with advice about rates.
 func TestUnknownScriptedFault(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	f := &failTB{TB: t}
 	done := make(chan struct{})
@@ -53,6 +55,7 @@ func TestUnknownScriptedFault(t *testing.T) {
 // claims hold: a crash "after step 300" of a shorter run once passed
 // without crashing.
 func TestScriptedFaultNeverMade(t *testing.T) {
+	t.Parallel()
 	f := &failTB{TB: t}
 	x := &Exploration{Runs: []*Run{{scripted: true}, {scripted: true, seed: 2, Unscripted: []qenv.Scripted{{Kind: "nemesis.crash.payments", After: 300}}}}}
 	x.unknownScripted(f)

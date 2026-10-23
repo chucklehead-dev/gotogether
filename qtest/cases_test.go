@@ -20,6 +20,7 @@ func (later) Choose(kind string, n int) int {
 // Judge runs a system once and checks it, outside any exploration: the
 // test's explorations keep their numbers.
 func TestJudge(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	if r := sys.Judge(t, qenv.Nominal{}); r.Err != nil || !r.OK() {
@@ -37,6 +38,7 @@ func TestJudge(t *testing.T) {
 // CheckCases refuses what a check of cases ignores, and with no binding
 // what only a check of the model uses.
 func TestCheckCasesRefuses(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		binding string
 		opt     Option
@@ -61,6 +63,7 @@ func TestCheckCasesRefuses(t *testing.T) {
 
 // A run's ID is how GOTOGETHER_RUN names it after its exploration.
 func TestRunID(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		r    Run
 		want string

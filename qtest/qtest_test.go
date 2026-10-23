@@ -26,6 +26,7 @@ func needQuint(t *testing.T) {
 
 // A deterministic simulation that emits its own trace: no OTel anywhere.
 func TestRecord(t *testing.T) {
+	t.Parallel()
 	needQuint(t)
 	ctx := context.Background()
 	r := Record(t, account, func(rec *qobs.Recorder) {
@@ -61,6 +62,7 @@ func TestRecord(t *testing.T) {
 }
 
 func TestRecordReportsTheBrokenStep(t *testing.T) {
+	t.Parallel()
 	needQuint(t)
 	ctx := context.Background()
 	r := Record(t, account, func(rec *qobs.Recorder) {

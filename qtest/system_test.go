@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // failTB records failures instead of failing the test, and stops like t.
@@ -36,6 +38,7 @@ func (f *failTB) Logf(format string, args ...any) {
 // A system whose Run fails fails the exploration, naming the seed, before
 // any run is checked.
 func TestSystemRunError(t *testing.T) {
+	t.Parallel()
 	f := &failTB{TB: t}
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
 		return errors.New("no database")
@@ -51,10 +54,60 @@ func TestSystemRunError(t *testing.T) {
 	}
 }
 
+// A step from a goroutine one of a run's tasks started with `go` fails
+// that run, by name, and is not logged process-wide, where a test in
+// parallel would see it: whether the task is still running (seed 1) or
+// has ended (seed 2: its simulation is still open).
+func TestEscapedStepFailsItsRun(t *testing.T) {
+	f := &failTB{TB: t}
+	mark, _ := hooks.Escaped(0)
+	runs := 0 // seeds run in order (Parallel: 1)
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		gate, done := make(chan struct{}), make(chan struct{})
+		runs++
+		ended := runs == 2
+		s.Spawn("client", func(ctx context.Context) {
+			go func() { //qenv:ok the escape under test
+				defer close(done)
+				<-gate
+				qobs.Record(context.Background(), "deposit", nil, "amount", 10, "obs.balance", 10) //qenv:ok the escape under test
+			}()
+			if !ended {
+				close(gate)
+				<-done //qenv:ok the goroutine records while its task runs
+			}
+		})
+		err := s.Run(time.Second)
+		if ended {
+			close(gate)
+			<-done
+		}
+		return err
+	}}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		sys.Explore(f, ExploreConfig{Seeds: 2, Parallel: 1})
+	}()
+	<-done
+	all := strings.Join(f.errs, "\n")
+	for _, seed := range []string{"seed 1", "seed 2"} {
+		if !strings.Contains(all, seed+" did not run: gotogether: 1 steps were recorded from goroutines the run's tasks started with `go`") {
+			t.Errorf("%s: errors %q, want the run failed for its escaped step", seed, f.errs)
+		}
+	}
+	if n, msgs := hooks.Escaped(mark); n != mark {
+		t.Errorf("the run's escapes were logged process-wide too: %v", msgs)
+	}
+}
+
 // A scenario that fails the test from its run's goroutine (t.Fatal in
 // Run) fails the exploration with its seed, instead of a nil run
 // crashing it.
 func TestScenarioFatal(t *testing.T) {
+	t.Parallel()
 	f := &failTB{TB: t}
 	done := make(chan struct{})
 	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
@@ -74,6 +127,7 @@ func TestScenarioFatal(t *testing.T) {
 // exploration names the run, keeps it in the corpus, and shows the task's
 // stack, where the panic happened.
 func TestRunPanic(t *testing.T) {
+	t.Parallel()
 	f := &failTB{TB: t}
 	corpus := t.TempDir()
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
@@ -128,6 +182,7 @@ func TestRunPanic(t *testing.T) {
 // A scenario that recovers a task's panic and then panics with another
 // value is reported with its own stack, not the task's earlier one.
 func TestRunPanicNotTheTasks(t *testing.T) {
+	t.Parallel()
 	f := &failTB{TB: t}
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
 		func() {
@@ -158,6 +213,7 @@ func panicInTask() { panic("the store's history check failed") }
 // since: the queues' old shared one) fails the exploration with the fix,
 // rather than set no rate, silently.
 func TestUnknownRatesKey(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	f := &failTB{TB: t}
 	done := make(chan struct{})

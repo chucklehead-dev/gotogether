@@ -33,6 +33,7 @@ func sender(c qenv.Chooser) error {
 // has them, and the sender's recorded sends are checked against the
 // model. FollowTraces fails a run that does not take its trace's faults.
 func TestFollowTraces(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	sys := System{Binding: "testdata/flaky.yaml", Run: sender}
 	x := sys.FollowTraces(t, connect.Config{Spec: "testdata/flaky.qnt", MaxSamples: 8, MaxSteps: 6, Seed: "7"},

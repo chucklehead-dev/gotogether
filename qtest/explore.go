@@ -402,7 +402,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	r := qobs.NewRecorder(sink, c.Recorder...)
 	var task hooks.TaskPanic
-	ctx = hooks.WithPanicStack(ctx, &task)
+	var esc hooks.Escapes // steps from goroutines its tasks started with `go`: this run's, not a parallel test's
+	ctx = hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
@@ -424,6 +425,9 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	if is := r.Issues(); err == nil && len(is) > 0 {
 		err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
+	}
+	if n, first := esc.Steps(); err == nil && n > 0 {
+		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
 	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
@@ -472,7 +476,8 @@ func (x *Exploration) nameOf(r *Run) string { return x.name(r.seed, r.corpus) }
 func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, ids []uint64) {
 	t.Helper()
 	if n, msgs := hooks.Escaped(mark); n > mark {
-		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
+		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (from a goroutine no run's task started, "+
+			"or after its run closed: a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
 	x.unknownScripted(t)
 	for i, r := range x.Runs {

@@ -71,6 +71,7 @@ func TestOldReproduceVariables(t *testing.T) {
 // A failing claim's report points at files that outlive the test: its
 // t.TempDir() is removed when the test ends, so they are copied out.
 func TestFailureFilesKept(t *testing.T) {
+	t.Parallel()
 	RequireQuint(t)
 	var errs []string
 	var x *Exploration
@@ -162,6 +163,7 @@ func TestRunNumbering(t *testing.T) {
 // test's own name has: Go suffixes a repeated subtest #01, a fuzz seed
 // input is seed#N.
 func TestRefTest(t *testing.T) {
+	t.Parallel()
 	for ref, want := range map[string]string{
 		"TestX#2": "TestX", "TestX/a#01#1": "TestX/a#01", "FuzzX/seed#0#3": "FuzzX/seed#0", "TestX": "", "TestX#": "", "TestX#a": "",
 	} {

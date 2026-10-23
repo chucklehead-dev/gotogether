@@ -44,6 +44,7 @@ func TestEvidenceDir(t *testing.T) {
 // A package's directory under GOTOGETHER_EVIDENCE is its path in its
 // module: two packages' tests of one name do not share one.
 func TestPkgDir(t *testing.T) {
+	t.Parallel()
 	if pkgDir() != "qtest" {
 		t.Errorf("pkgDir() = %q, want qtest", pkgDir())
 	}
