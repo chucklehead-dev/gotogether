@@ -279,8 +279,9 @@ The track, in order:
     `FollowTraces` is in the README's and gotogether-start's tables, and
     has the test it lacked (qtest's flaky sender: a trace's losses as the
     network's drops).
-  - **Left.** qload monotonicity (more capacity never recovers worse) as
-    self-tests.
+  - qload's self-test `TestMoreCapacityNeverRecoversWorse`: of a
+    spike's runs, the share that drains never falls as the server's rate
+    grows (0 of 8 at 9/s, 3 at 10/s, 8 from 11/s).
 
 Deferred: online streaming verification (resuming quint from a checkpoint
 is unsound for nondeterministic models; `gotogether validate -follow` over

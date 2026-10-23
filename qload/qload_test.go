@@ -95,3 +95,33 @@ func TestTwoOrbits(t *testing.T) {
 		}
 	}
 }
+
+// More capacity never recovers worse: of the same spike's runs, the
+// share whose queue has drained long after it never falls as the
+// server's rate grows. A self-test of the simulation (a server that got
+// worse with capacity would be modelling something else), by count over
+// seeds: one seed's draws differ between rates.
+func TestMoreCapacityNeverRecoversWorse(t *testing.T) {
+	if testing.Short() {
+		t.Skip("simulates 1000 s, many times")
+	}
+	prev := -1
+	for _, rate := range []float64{9, 10, 11, 12, 14, 18} {
+		drained := 0
+		for seed := uint64(1); seed <= 8; seed++ {
+			cfg := example(9.5)
+			cfg.Server.ServiceRate, cfg.Seed = rate, seed
+			if qload.Simulate(cfg).Mean(800*time.Second, 1000*time.Second, queue) < 20 {
+				drained++
+			}
+		}
+		t.Logf("service rate %g/s: %d of 8 runs drained after the spike", rate, drained)
+		if drained < prev {
+			t.Errorf("service rate %g/s drained %d runs of 8, fewer than the %d of a slower server", rate, drained, prev)
+		}
+		prev = drained
+	}
+	if prev != 8 {
+		t.Errorf("the fastest server drained %d runs of 8", prev)
+	}
+}
