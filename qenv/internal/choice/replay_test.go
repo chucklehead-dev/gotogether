@@ -92,8 +92,10 @@ func TestChoiceString(t *testing.T) {
 // refused, not encoded as a 0 that replays as a fault.
 func TestEncodeRefusesNominalAboveLastByte(t *testing.T) {
 	nominal := []Choice{{Kind: "fault.x", N: 2, Value: 0}}
-	if _, err := EncodeChoices(nominal, Rates{Default: 0.998}); err == nil || !strings.Contains(err.Error(), "no byte is nominal") {
-		t.Fatalf("rate 0.998: %v", err)
+	for _, r := range []float64{0.998, 1, 1.5} {
+		if _, err := EncodeChoices(nominal, Rates{Default: r}); err == nil || !strings.Contains(err.Error(), "no byte is nominal") {
+			t.Fatalf("rate %g: %v", r, err)
+		}
 	}
 	data, err := EncodeChoices(nominal, Rates{Default: 0.99})
 	if err != nil {

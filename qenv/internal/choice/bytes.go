@@ -128,7 +128,7 @@ func EncodeChoices(choices []Choice, rates Rates) ([]byte, error) {
 			}
 		case c.Value == 0:
 			// a byte below 256 × (1 − rate) is nominal: above 255/256 none is
-			if r := rates.Of(c.Kind); int(256*(1-r)) == 0 {
+			if r := rates.Of(c.Kind); int(256*(1-r)) <= 0 {
 				return nil, fmt.Errorf("qenv: nominal %s at rate %g cannot be encoded (no byte is nominal above 255/256): lower its rate", c.Kind, r)
 			}
 			out = append(out, 0)
