@@ -230,7 +230,7 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   (`qenv.Scripted{Kind: "db.request", Name: "lostResponse"}`), which
   waits for a choice that offers it, and coverage lists options by name,
   as do recorded runs (`db.request=lostResponse`). A kind has
-  one option list: `qenv.Faults` panics if a second declaration differs.
+  one option list: `qenv.DeclareFaults` panics if a second declaration differs.
   `qenv.FaultPoint` declares its own (its errors' names, `crash`).
 - **Extending qenv** (a new double, a scheduler change): run its tests
   with `GOTOGETHER_CHECK=1` (or `s.Check = true`). The scheduler then verifies

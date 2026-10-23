@@ -733,6 +733,49 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	if failedAny {
 		t.FailNow()
 	}
+	t.Logf("gotogether: %s", x.summary())
+}
+
+// summary is a passing exploration's evidence in one line: what its runs
+// showed and what they tried (Evidence has the rest; the vacuity search,
+// which runs quint, only if a claim asked for it).
+func (x *Exploration) summary() string {
+	e := evidenceOf(x.Runs)
+	line := fmt.Sprintf("%s: %d runs, %d conform", x.ref(), e.Runs, e.Conform)
+	for _, r := range keysOf(e.FailingBy) {
+		line += fmt.Sprintf(", %d %s", e.FailingBy[r], r)
+	}
+	if x.actions != nil {
+		m := modelCoverage(x.Runs, x.actions)
+		taken := 0
+		for _, n := range m.Taken {
+			if n > 0 {
+				taken++
+			}
+		}
+		line += fmt.Sprintf("; actions taken %d of %d", taken, taken+len(m.Never))
+	}
+	cov := x.faultCoverage()
+	faulted, reached := 0, 0
+	for _, p := range cov.Points {
+		if p.Reached > 0 {
+			reached++
+			if p.Faulted() > 0 {
+				faulted++
+			}
+		}
+	}
+	line += fmt.Sprintf("; fault kinds faulted %d of %d reached", faulted, reached)
+	if x.vacuity != nil && len(x.vacuity.found) > 0 {
+		line += fmt.Sprintf("; %d invariants held vacuously", len(x.vacuity.found))
+	}
+	if x.search != nil {
+		line += fmt.Sprintf("; search of %d delays, %d faults", x.search.bound.Delays, x.search.bound.Faults)
+		if x.search.left > 0 {
+			line += fmt.Sprintf(", %d runs left (truncated)", x.search.left)
+		}
+	}
+	return line
 }
 
 // reports are the runs' reports, in order.

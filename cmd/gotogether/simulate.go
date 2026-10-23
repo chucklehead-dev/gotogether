@@ -131,7 +131,7 @@ func simulate(args []string) (int, error) {
 		case holds[inv] && !violated && *verify > 0:
 			fmt.Printf("  holds   %s: no trace of up to %d steps violates it\n", inv, *verify)
 		case holds[inv] && !violated:
-			fmt.Printf("  holds   %s: no trace violates it\n", inv)
+			fmt.Printf("  holds   %s: none of %d sampled traces of up to %d steps violates it\n", inv, *samples, *steps)
 		case allows[inv] && violated:
 			fmt.Printf("  allows  %s: a trace violates it (the code must not)\n", inv)
 		case holds[inv]:
@@ -139,11 +139,15 @@ func simulate(args []string) (int, error) {
 			fmt.Printf("  FAIL    %s: the model should guarantee it, and a trace violates it:\n%s\n", inv, out)
 		case allows[inv] && *verify > 0:
 			code = 1
+			raise := "Raise -verify"
+			if capped != "" { // the binding caps the depth: a deeper search is the binding's to allow
+				raise = "Raise the binding's simulate.verifySteps if quint verify finishes deeper, run without -verify for longer sampled traces"
+			}
 			fmt.Printf("  FAIL    %s: the model should allow its violation, and no trace of up to %d steps violates it: "+
-				"checking the code against it proves nothing. Raise -verify, or move it to simulate.holds\n", inv, *verify)
+				"checking the code against it proves nothing. %s, or move it to simulate.holds\n", inv, *verify, raise)
 		case allows[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should allow its violation, and no trace of %d violates it: "+
+			fmt.Printf("  FAIL    %s: the model should allow its violation, and none of %d sampled traces violates it: "+
 				"checking the code against it proves nothing. Raise -samples or -steps, or move it to simulate.holds\n", inv, *samples)
 		case violated:
 			code = 1

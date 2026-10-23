@@ -848,14 +848,17 @@ with steps from two processes merged by a wall-clock domain clock.
 
 ### 10.7 Not yet
 
-- **Contract conformance of the doubles.** Each double should be checked
-  against a Quint model of its contract, in both directions: everything it
-  does is allowed, and everything allowed it can do. Today the store's
-  profiles are tested by their anomalies (`TestIsolationAnomalies`).
-- **More doubles.** Clocks with skew, disks (lost fsync, torn writes),
-  partitions between named processes.
-- **Coverage.** Which contract choices and fault combinations a set of
-  runs actually exercised, to steer exploration.
+- **Contract conformance of the doubles, in both directions.** Every
+  `Store` checks each commit's dependency cycles against its level and
+  every `Queue` its contract under `GOTOGETHER_CHECK` (§42): what a double
+  does is allowed. That everything allowed it can do is still argued by
+  the anomaly tests (`TestIsolationAnomalies`), not checked.
+- **Machines.** Clocks, disks and partitions are per process (§42); a
+  machine grouping processes that share a clock, a disk and a network
+  link is not modelled.
+- **Steering by coverage.** Fault coverage (`Coverage`, `Exercised`) says
+  which choices runs made; exploration does not yet steer toward the
+  ones they did not.
 - **Go's own scheduler.** Goroutines that bypass `qenv.Go` run
   uncontrolled, and a run that depends on them is not reproducible.
   Replay detects this but cannot prevent it.
@@ -2724,3 +2727,96 @@ and fails too. On the metastability side, `Assess` without a healthy
 goodput is an error, not a verdict, and `qmeta.Healthy` is one value for
 the region's predicate and the rules' description and PromQL, where a
 func and a hand-written string could drift.
+
+## 42. Exhaustive schedules, real time, contracts, clocks, disks, partitions (X)
+
+**Exhaust (X3).** A seeded exploration samples; `System.Exhaust(t,
+Bound{Delays, Faults})` enumerates every run within a bound: every way of
+deviating from the canonical schedule at most `Delays` times and from
+nominal at most `Faults` times, fewest deviations first (delay-bounded
+scheduling, as in CHESS and Coyote, over qenv's choices). A run is named
+by its deviations (`Run.Schedule`, "17:1,40:2"), so `GOTOGETHER_RUN`
+reruns exactly it. A search `MaxRuns` cuts short fails unless
+`Bound.Partial` says a sample is what the test wants (Y3): a forgotten
+claim once turned a sample into what read as a proof. `Evidence.Search`
+records the bound and what was left.
+
+**Real time (X4).** A client records an operation when it returns, with
+when it was invoked (`qobs.Record`'s `invoked`, a span's start), so a
+step has an interval, not a point. `Reconstruct` orders steps by their
+keys and reports an order the keys force that real time contradicts;
+`qtrace.Linearize` searches the orders the intervals allow for one the
+model accepts (guided: from the failing step, every single move
+constraints allow, keeping the one that gets furthest). `qtest.Linearize`
+checks a history so; finding none is strong evidence of a bug, a budget
+running out is no verdict at all (Y6: n/a, which Rejects does not match).
+
+**Contracts (X5).** A double is only as good as its contract. Under
+`GOTOGETHER_CHECK` every `Store` keeps the history of its transactions
+and checks, at each commit, the dependency cycles its isolation level
+forbids (G1a, G1c, G-single, G2: Adya's phenomena, as Elle checks them);
+a change to the store's validation that lets one commit panics there,
+naming the cycle. Every `Queue` checks after each operation that no
+message is lost, none is delivered after its acknowledgement, and an
+Ordered queue's first deliveries are in order.
+
+**Clocks (X6, Y4).** A process has two clocks, as a Go program does: the
+wall clock (`qenv.Now`: skewed per process, jumping by nemesis, drifting)
+and the monotonic one (`qenv.Mono`, `Since`, `WaitFor`: drift only),
+which `time.Since` of two `time.Now` readings uses. The first version had
+one clock that jumps, so "a lease timed on the holder's own clock breaks
+on one jump" was the model's claim, not Go's; examples/lease now shows
+each fault breaking the variant that trusts it (a skew, absolute
+expiries; a jump, intervals on the wall clock; a drift past the margin,
+intervals on the monotonic one) and fencing surviving all. Jumps are
+nemeses, not choices at every read, so reading the clock makes no choice.
+
+**Disks and partitions (X7, Y7).** `qenv.Disk` is a machine's disk:
+writes reach the OS at once and the disk on `Sync`; a crash of its
+process is a fault point (`disk.<name>.crash`: nominal keeps every write,
+`powerLoss` the synced ones, `tornWrite` part of the last). It is what
+tells "written" from "durable", which `FileSink` (one write per step) and
+`SyncedFileSink` (an fsync per step) differ in. The network
+(`Sim.Net()`) cuts and heals links between processes, by hand or by a
+nemesis (`PartitionNemesis`), which a `Service` call and a `Queue` whose
+broker runs in a process (`NewQueue(s, name, p)`) see; a nemesis's cut
+heals by itself after `CutLength`, since a network every task waits on
+would otherwise never heal (a nemesis acts only at a scheduling step).
+
+**Vacuity (X2).** An invariant `A implies B` holds in runs where `A`
+never does, for nothing. `binding.Model.Antecedents` finds `A`, a binding
+may name it, and `NotVacuous` fails when no run that passed witnessed
+it, when one cannot be evaluated, or when no invariant has one (Y6).
+
+**Corpus (X8, Y5).** A failing run's choices are saved and replayed
+before the seeds, so a regression stays found whatever the seeds are. An
+entry records its format and the exploration that saved it, which alone
+replays it; one whose replay diverges is stale, with the seed that finds
+its run again, and one no exploration replayed fails the test.
+
+**Verify (X2).** `gotogether simulate -verify N` runs Apalache to depth
+N on each invariant: "no trace of up to N steps violates it" where
+sampling said only "none of the sampled traces". A binding caps N for a
+model whose depth Apalache cannot reach in time (`simulate.verifySteps`)
+or skips it (`verifySkip`: Choreo's recursion).
+
+## 43. After the fifth review (ROADMAP Y1–Y12)
+
+The fifth review read the X track as a user would, and found claims that
+said more than they proved. The fixes share one rule: what a test does
+not check, it says, and a name that matches nothing fails.
+- A run's panic is a failing run, named and kept (Y1); a run reproduces
+  alone, as its report prints it (`GOTOGETHER_RUN`, Y2); a truncated
+  search fails (Y3); corpus entries say what they are (Y5).
+- Claims are judged once (`Exploration.verdict`, for Expect and Mutate),
+  `Exercised` counts each option and nemesis by name, nemesis families
+  each have a rate, and `NotVacuous` and `Linearize` say when they cannot
+  judge (Y6).
+- Doubles take their process at construction and name their fault kinds
+  after themselves; a Rates key, a sweep's FaultKind or an exception
+  naming nothing declared fails (`KnownFault`, Y7). An option a workflow
+  ignores fails (Y9).
+- The API record lists fields, methods and values for every published
+  module (Y8); evidence is a format with a role, so a suite's gaps count
+  the system as it is, not its mutants (Y10); the core's Hegel
+  properties test the current core (Y11).

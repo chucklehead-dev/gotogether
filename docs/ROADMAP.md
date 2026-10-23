@@ -466,7 +466,15 @@ starts, and the review's findings are fixed first.
   and qgosim pin the core before X, and CI runs them GOWORK=off: none of
   X's qenv changes reached qhegel's core-property tests. Move those to an
   unpublished module with `replace`, or add a workspace job.
-- **Y12. Docs.** A DESIGN section for X (exhaust, linearize, clocks,
+- **Y12. Docs. Done:** DESIGN §42 (the X track) and §43 (this one),
+  §10.7 brought up to date; `qenv.Faults` gone from AGENTS and the
+  faults skill (the gate matches it in backquotes now); README's tables
+  (clocks, the network, Disk, SyncedFileSink, nemesis families,
+  `evidence`, `-verify`, CHECK's checks); `scaffold -system` claims
+  `Exercised()` (and `NotVacuous()` where an invariant has an
+  antecedent) and names its mutant; `simulate` says "none of N sampled
+  traces" and, when the binding caps `-verify`, says to raise the cap;
+  a passing Expect logs a one-line summary. The finding: a DESIGN section for X (exhaust, linearize, clocks,
   disk, partitions, the history and contract checks, vacuity, corpus,
   verify), and §10.7's "partitions not yet". Stale `qenv.Faults` in
   AGENTS and the faults skill (the docs gate matches only `Faults(`).

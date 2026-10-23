@@ -28,6 +28,8 @@ func TestScaffoldSystem(t *testing.T) {
 	for _, want := range []string{
 		`qobs.Record(ctx, "deposit", err, "account", account, "amount", amount, "obs.balance", observedBalance)`,
 		`qtest.Some(qtest.Violates("noOverdraft"))`,
+		`Expect(t, qtest.Conforms(), qtest.Exercised())`, // and what the runs exercised
+		`s.Mutant = "Mutant"`, // a mutant is not the application in the evidence
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("missing %s in:\n%s", want, src)

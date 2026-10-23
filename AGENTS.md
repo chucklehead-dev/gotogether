@@ -305,7 +305,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   kind: the errors' FaultName or text, and `crash`, nominal outside a
   process). A Script's or a trace's option numbers depend on that order:
   keep it. One kind has one option list: two sites of a kind with other
-  errors panic in `qenv.Faults`; give them their own kinds. A scripted crash is a
+  errors panic in `qenv.DeclareFaults`; give them their own kinds. A scripted crash is a
   nemesis by name (`nemesis.crash.<process>`): the scheduler asks a
   chooser with `ChooseNemesis` instead of choosing among enabled
   nemeses by index, which no trace can name.

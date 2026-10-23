@@ -96,6 +96,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qhegel.Replay", "qhegel.VaryTraces"},
 		{"qhegel.NewRecorder", "qhegel.NewCase"},
 		{"qenv.Faults(", "qenv.DeclareFaults("},
+		{"`qenv.Faults`", "`qenv.DeclareFaults`"},
 		{"qload.System", "qload.Target"},
 		{"Chain.Expect", "Chain.Mean"},
 		{".Expect(t, true)", "a named claim (qload.SomeTrigger, qload.Recovered)"},

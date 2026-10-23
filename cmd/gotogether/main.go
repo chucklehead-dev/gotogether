@@ -706,6 +706,15 @@ func systemTest(pkg, bpath string, b *binding.Binding, m *binding.Model) string 
 	if len(b.Invariants) > 0 {
 		claim = fmt.Sprintf("qtest.Some(qtest.Violates(%q))", b.Invariants[0])
 	}
+	// what the faithful runs must also show: every action taken and fault
+	// faulted, and (when an invariant has an antecedent) none held vacuously
+	faithful := "qtest.Conforms(), qtest.Exercised()"
+	for _, inv := range b.Invariants {
+		if b.Antecedents[inv] != "" || m.Antecedents[inv] != "" {
+			faithful += ", qtest.NotVacuous()"
+			break
+		}
+	}
 	return fmt.Sprintf(`package %[1]s
 
 import (
@@ -730,7 +739,7 @@ const (
 // from c. Every workflow runs it: Explore (seeds), qhegel.Shrink (Hegel),
 // Sweep, Fuzz, Mutate.
 func system(m Mutation) qtest.System {
-	return qtest.System{Binding: %[2]q, Run: func(c qenv.Chooser) error {
+	s := qtest.System{Binding: %[2]q, Run: func(c qenv.Chooser) error {
 		s := qenv.New(c)
 		defer s.Close()
 		// Deploy the application here: its services (qenv.NewService),
@@ -742,13 +751,19 @@ func system(m Mutation) qtest.System {
 %[3]s		})
 		return s.Run(time.Minute) // a task waiting forever is an error (qenv.ErrStuck)
 	}}
+	if m != Faithful {
+		s.Mutant = "Mutant" // its runs are not the application's: a suite's evidence leaves them out
+	}
+	return s
 }
 
-// The faithful application conforms through every seed's faults.
+// The faithful application conforms through every seed's faults, and the
+// runs exercise what the model and the environment offer: a check of
+// actions never taken or faults never injected says nothing of them.
 func TestConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	// until Run records steps, the exploration fails saying so
-	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[5]s)
 }
 
 // A mutant must be caught, and how: say which check fails (Rejects,
@@ -759,5 +774,5 @@ func TestMutantIsCaught(t *testing.T) {
 	t.Skip("scaffold: inject a bug as Mutant, state how it shows, and remove this line")
 	system(Mutant).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
 }
-`, pkg, bpath, rec.String(), claim)
+`, pkg, bpath, rec.String(), claim, faithful)
 }
