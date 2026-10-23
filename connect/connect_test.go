@@ -215,10 +215,17 @@ func TestCompareRefusesFieldsThatCompareNothing(t *testing.T) {
 	}
 	type projection struct {
 		Balance int64
-		Note    string `itf:"-"`
+		Note    string `itf:"-"` // left out: not compared either
 	}
-	if d, err := compare(model, projection{Balance: 999}); err != nil || len(d) != 1 {
+	if d, err := compare(model, projection{Balance: 999, Note: "cached"}); err != nil || len(d) != 1 || !strings.Contains(d[0], ".Balance") {
 		t.Errorf("a projection: %v %v", d, err)
+	}
+	type pair struct {
+		A int64
+		b int64
+	}
+	if _, err := compare(itf.TupleOf(itf.IntOf(1), itf.IntOf(2)), pair{1, 99}); err == nil || !strings.Contains(err.Error(), "field b of connect.pair is unexported") {
+		t.Errorf("a tuple's unexported field: %v", err)
 	}
 }
 

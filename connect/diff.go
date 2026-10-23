@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"reflect"
 	"sort"
+	"strings"
 )
 
 // maxDiff bounds the number of differences reported.
@@ -20,6 +21,17 @@ func Diff(want, got any) []string {
 		out = append(out[:maxDiff], fmt.Sprintf("... and %d more", len(out)-maxDiff))
 	}
 	return out
+}
+
+// skipped reports whether f is tagged out of decoding (`itf:"-"`, or
+// `json:"-"` without an itf tag, as itf.Decode reads them): it holds the
+// zero value in the model's state, so comparing it would fail falsely.
+func skipped(f reflect.StructField) bool {
+	tag, ok := f.Tag.Lookup("itf")
+	if !ok {
+		tag = f.Tag.Get("json")
+	}
+	return strings.Split(tag, ",")[0] == "-"
 }
 
 func show(v reflect.Value) string {
@@ -84,7 +96,7 @@ func diff(a, b reflect.Value, path string, out *[]string) {
 	case reflect.Struct:
 		t := a.Type()
 		for i := 0; i < t.NumField(); i++ {
-			if !t.Field(i).IsExported() {
+			if !t.Field(i).IsExported() || skipped(t.Field(i)) {
 				continue
 			}
 			diff(a.Field(i), b.Field(i), path+"."+t.Field(i).Name, out)

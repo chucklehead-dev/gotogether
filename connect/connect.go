@@ -29,7 +29,7 @@
 //	#[quint_test(spec, test, main, max_samples, seed)]                   connect.Test(t, Config{...}, "testName", newDriver)
 //	impl Driver { fn step(&mut self, &Step) }                            Driver.Step(*Step) error
 //	switch!(step { init => ..., A(x, y?) => ... })                       connect.Switch{"init": ..., "A": ...} with Pick/OptPick
-//	impl State<D> (serde Deserialize + PartialEq)                        StateDriver.State() (any, error), decoded with itf.Decode
+//	impl State<D> (serde Deserialize + PartialEq)                        StateDriver.State() (any, error), decoded with itf.DecodeProjection
 //	Config { state: &[...], nondet: &[...] }                             Config.StatePath, Config.NondetPath
 //	QUINT_SEED, QUINT_VERBOSE (compile time)                             QUINT_SEED, QUINT_VERBOSE, ... (read at run time)
 //

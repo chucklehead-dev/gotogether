@@ -367,6 +367,13 @@ func norm(s string) string {
 
 func (d decoder) decodeStruct(v Value, rv reflect.Value, path string) error {
 	t := rv.Type()
+	if d.strict { // a record's, a tuple's or a variant's: never decoded, never compared
+		for i := 0; i < t.NumField(); i++ {
+			if f := t.Field(i); !f.IsExported() {
+				return derr(path, "field %s of %s is unexported, so it is never compared: export it, or leave it out of the type", f.Name, t)
+			}
+		}
+	}
 	fields := structFields(t)
 	isTuple := false
 	for _, f := range fields {
@@ -392,13 +399,6 @@ func (d decoder) decodeStruct(v Value, rv reflect.Value, path string) error {
 		}
 		return nil
 	case v.Kind == Record:
-		if d.strict {
-			for i := 0; i < t.NumField(); i++ {
-				if f := t.Field(i); !f.IsExported() {
-					return derr(path, "field %s of %s is unexported, so it is never compared: export it, or leave it out of the type", f.Name, t)
-				}
-			}
-		}
 		byName := map[string]string{}
 		for name := range v.Fields {
 			byName[norm(name)] = name
