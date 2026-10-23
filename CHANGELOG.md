@@ -29,8 +29,9 @@ Added to the core since api/core.txt was first recorded:
   claims that an exploration's runs took the model's actions and faulted
   what they reached; `Evidence.Model` lists the actions never taken.
 - `System.Exhaust(t, qtest.Bound{Delays, Faults})`: every run within the
-  bound, fewest deviations first, as an Exploration; `qtest.Complete()`,
-  `Evidence.Search` and `Run.Schedule`.
+  bound, fewest deviations first, as an Exploration; a search `MaxRuns`
+  cuts short fails unless `Bound.Partial`; `Evidence.Search` and
+  `Run.Schedule`.
 - `GOTOGETHER_RUN='TestX#2:seed=17'` (or `:schedule=`, `:corpus=`) runs
   one run of one exploration alone, as a failing run's report prints it,
   judged by the claims about every run only; it replaces

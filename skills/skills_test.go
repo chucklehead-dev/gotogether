@@ -115,6 +115,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"Swept", "qtest.SweepResult"},
 		{"GOTOGETHER_SEED=", "GOTOGETHER_RUN='TestX#1:seed=n'"},
 		{"`GOTOGETHER_SEED`", "`GOTOGETHER_RUN`"},
+		{"qtest.Complete()", "nothing: a search MaxRuns cuts short fails unless Bound.Partial"},
 		{"GOTOGETHER_SCHEDULE", "GOTOGETHER_RUN='TestX#1:schedule=...'"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these

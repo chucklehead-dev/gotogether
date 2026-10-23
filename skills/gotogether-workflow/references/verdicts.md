@@ -34,7 +34,6 @@ together (`Exploration.Expect`):
 | `qtest.Reaches("kind").Faulted().InAtLeast(p)` | a share p of the runs reach a fault point of the kind (and fault it) |
 | `qtest.Takes("action").InAtLeast(p)` | a share p of the runs take the model action (up to a failing step) |
 | `qtest.NotVacuous()` | every invariant's antecedent (`A` of `A implies B`, or the binding's `antecedents`) held in some run where it passed; `Evidence` lists the vacuous ones |
-| `qtest.Complete()` | an exhaustive search (`System.Exhaust`) ran every run within its bound: `MaxRuns` did not cut it short |
 | `qtest.Exercised(except...)` | every model action is taken in some run and every reached fault kind faulted in some run, but those named |
 
 `Takes` and `Exercised` say the runs exercised what the model and the

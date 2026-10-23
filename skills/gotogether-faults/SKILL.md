@@ -155,8 +155,8 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   Faults: 1})` runs every run that strays from the nominal one in at most
   that many choices (a delay: a task other than the oldest; a fault, a
   crash among them), fewest first, checked as an exploration's runs are.
-  Claim `qtest.Complete()` so a search `MaxRuns` (default 1000) cut short
-  fails. One fault is often enough: checkout's DualWrite window, which
+  A search `MaxRuns` (default 1000) cuts short fails the test, naming
+  how many runs it left; `Bound.Partial` accepts a sample instead. One fault is often enough: checkout's DualWrite window, which
   seeds find only at ten times the crash rate, and streams' reorder show
   in a complete one-fault search. Runs with the same steps are checked
   once, so thousands of runs cost a few quint checks; a failing run's

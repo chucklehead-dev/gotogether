@@ -405,7 +405,6 @@ func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 type Bound struct{ ... }
 type Claim interface{ ... }
     func All(es ...Expectation) Claim
-    func Complete() Claim
     func None(es ...Expectation) Claim
     func NotVacuous() Claim
     func Some(es ...Expectation) Claim

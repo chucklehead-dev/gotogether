@@ -357,7 +357,8 @@ starts, and the review's findings are fixed first.
   collision); a reproduction judges per-run claims only and says which it
   did not judge. A failing run's artifacts are kept where the report
   points (today under `t.TempDir()`, deleted when the test ends).
-- **Y3. A truncated search fails.** `Exhaust` cut short by MaxRuns passes
+- **Y3. A truncated search fails. Done** (`Bound.Partial`; `Complete()`
+  removed). `Exhaust` cut short by MaxRuns passed
   unless the test also claims `Complete()`. Truncation fails by default;
   `Bound.Partial` opts into a sample.
 - **Y4. Go's clocks.** `qenv.Now` is a wall clock with skew and jumps,

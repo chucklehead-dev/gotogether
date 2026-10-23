@@ -182,7 +182,7 @@ func (x *Exploration) meets(claims []Claim) bool {
 			continue
 		}
 		switch c.(type) {
-		case completeClaim, vacuityClaim:
+		case vacuityClaim:
 			continue
 		}
 		if !c.judge(reps).ok {

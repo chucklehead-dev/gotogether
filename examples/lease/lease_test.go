@@ -69,8 +69,8 @@ func TestAbsoluteExpiryBrokenBySkew(t *testing.T) {
 func TestOneClockJumpIsEnough(t *testing.T) {
 	qtest.RequireQuint(t)
 	one := qtest.Bound{Faults: 1, Without: []string{"rpc", "clock.skew"}}
-	system(NoFencing, true).Exhaust(t, one).Expect(t, qtest.Violates("noStaleWrite"), qtest.Complete())
-	system(Faithful, true).Exhaust(t, one).Expect(t, qtest.Conforms(), qtest.Complete())
+	system(NoFencing, true).Exhaust(t, one).Expect(t, qtest.Violates("noStaleWrite"))
+	system(Faithful, true).Exhaust(t, one).Expect(t, qtest.Conforms())
 }
 
 // Drift breaks what skew cannot: a lease timed on the holder's own clock.

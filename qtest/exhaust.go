@@ -13,7 +13,6 @@ import (
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A Bound limits an exhaustive search (System.Exhaust) to the runs that
@@ -30,9 +29,14 @@ type Bound struct {
 	// Without are fault kinds that stay nominal, as reports print them
 	// ("nemesis", "rpc.payments"), as in qenv.Without.
 	Without []string
-	// MaxRuns stops the search after this many runs (default 1000); the
-	// exploration is then truncated (Complete fails, Evidence says so).
+	// MaxRuns stops the search after this many runs (default 1000). A
+	// search it cuts short fails the test, naming how many runs it left,
+	// unless Partial.
 	MaxRuns int
+	// Partial accepts a search MaxRuns cuts short: a sample of the runs
+	// within the bound, the fewest deviations first, which Evidence calls
+	// truncated. Its passing claims are then about the runs it got to.
+	Partial bool
 	// Parallel runs this many at once (default GOMAXPROCS).
 	Parallel int
 }
@@ -214,6 +218,10 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 		ids[i] = uint64(i + 1)
 	}
 	x.finish(t, s.Binding, c, mark, ids)
+	if x.search.left > 0 && !b.Partial && x.alone == nil {
+		t.Errorf("gotogether: %s: the search stopped at MaxRuns (%d runs) with at least %d runs within its bound left, "+
+			"so it proves nothing of them: raise MaxRuns, or lower Delays or Faults, or set Bound.Partial to accept a sample", x.ref(), len(x.Runs), x.search.left)
+	}
 	return x
 }
 
@@ -251,28 +259,6 @@ func children(ds []deviation, choices []qenv.Choice, b Bound, off qenv.Rates) []
 		}
 	}
 	return out
-}
-
-// Complete is the claim that an exhaustive search (System.Exhaust) ran
-// every run within its bound: MaxRuns did not cut it short. Without it, a
-// truncated search's passing claims are about the runs it got to.
-func Complete() Claim { return completeClaim{} }
-
-type completeClaim struct{}
-
-func (completeClaim) String() string { return "a complete search" }
-
-func (completeClaim) judge([]*validate.Report) judgment { return judgment{ok: true, show: -1} }
-
-// incomplete says why an exploration is not a complete search, or "".
-func (x *Exploration) incomplete() string {
-	switch {
-	case x.search == nil:
-		return "Complete is a claim on an exhaustive search (System.Exhaust), not on seeded runs"
-	case x.search.left > 0:
-		return fmt.Sprintf("the search stopped at MaxRuns (%d runs) with at least %d runs within its bound left: raise MaxRuns, or lower Delays or Faults", len(x.Runs), x.search.left)
-	}
-	return ""
 }
 
 // A Search is an exhaustive search's extent, in its Evidence.

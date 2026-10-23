@@ -49,8 +49,8 @@ func TestNoDedupeCountsRetries(t *testing.T) {
 // single fault finds.
 func TestExhaustive(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).Exhaust(t, qtest.Bound{Delays: 2, Faults: 2}).Expect(t, qtest.Conforms(), qtest.Complete())
-	system(NoDedupe).Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"), qtest.Complete())
+	system(Faithful).Exhaust(t, qtest.Bound{Delays: 2, Faults: 2}).Expect(t, qtest.Conforms())
+	system(NoDedupe).Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"))
 }
 
 // Hegel makes every choice of the same System and shrinks NoDedupe's

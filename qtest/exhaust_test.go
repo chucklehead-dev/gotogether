@@ -71,12 +71,12 @@ func TestExhaust(t *testing.T) {
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	x := sys.Exhaust(t, Bound{})
-	x.Expect(t, Conforms(), Complete())
+	x.Expect(t, Conforms())
 	if len(x.Runs) != 1 {
 		t.Errorf("%d runs with no deviation, want the nominal one", len(x.Runs))
 	}
 	x = sys.Exhaust(t, Bound{Delays: 1})
-	x.Expect(t, Rejects("withdraw"), Some(Conforms()), Complete())
+	x.Expect(t, Rejects("withdraw"), Some(Conforms()))
 	if e := x.Evidence().String(); !strings.Contains(e, "search    complete: every run within 1 delays and 0 faults") {
 		t.Errorf("evidence:\n%s", e)
 	}
@@ -85,13 +85,13 @@ func TestExhaust(t *testing.T) {
 	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:schedule="+bad.Schedule)
 	again := sys.Exhaust(t, Bound{Delays: 1})
 	log := &logTB{TB: t}
-	again.Expect(log, All(Rejects("withdraw")), Complete())
+	again.Expect(log, All(Rejects("withdraw")), Some(Conforms()))
 	if len(again.Runs) != 1 || again.Runs[0].Schedule != bad.Schedule {
 		t.Errorf("GOTOGETHER_RUN schedule=%s ran %d runs", bad.Schedule, len(again.Runs))
 	}
-	// one run is not a search: Complete is not judged, and the evidence
-	// does not claim one
-	if !strings.Contains(log.logs, "not judged on one run (about the runs it leaves out): a complete search") {
+	// one run is not a search: claims about other runs are not judged,
+	// and the evidence claims no complete search
+	if !strings.Contains(log.logs, "not judged on one run (about the runs it leaves out): conformance") {
 		t.Errorf("logs: %s", log.logs)
 	}
 	if sr := again.Evidence().Search; sr == nil || sr.Complete {
@@ -99,25 +99,29 @@ func TestExhaust(t *testing.T) {
 	}
 }
 
-// A search MaxRuns cut short is not complete, and Complete says how to
-// finish it; Complete on seeded runs is a mistake.
+// A search MaxRuns cuts short fails the test, saying how to finish it,
+// unless the bound accepts a sample (Partial); its Evidence says it is
+// truncated either way.
 func TestExhaustTruncated(t *testing.T) {
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
-	x := sys.Exhaust(t, Bound{Delays: 1, MaxRuns: 1})
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	var x *Exploration
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		x = sys.Exhaust(f, Bound{Delays: 1, MaxRuns: 1})
+	}()
+	<-done
+	if !f.failed || !strings.Contains(strings.Join(f.errs, "\n"), "the search stopped at MaxRuns (1 runs) with at least") ||
+		!strings.Contains(strings.Join(f.errs, "\n"), "set Bound.Partial to accept a sample") {
+		t.Errorf("a truncated search: %q", f.errs)
+	}
 	if e := x.Evidence(); e.Search == nil || e.Search.Complete || e.Search.Left == 0 {
 		t.Errorf("search %+v, want truncated", e.Search)
 	}
-	for _, x := range []*Exploration{x, sys.Explore(t, ExploreConfig{Seeds: 1})} {
-		f := &failTB{TB: t}
-		done := make(chan struct{})
-		go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
-			defer close(done)
-			x.Expect(f, Complete())
-		}()
-		<-done
-		if !f.failed || !strings.Contains(strings.Join(f.errs, "\n"), "want a complete search") {
-			t.Errorf("Complete: %q", f.errs)
-		}
+	sample := sys.Exhaust(t, Bound{Delays: 1, MaxRuns: 1, Partial: true}) // t: passes
+	if e := sample.Evidence(); e.Search.Complete || e.Search.Left == 0 {
+		t.Errorf("a partial search's evidence: %+v", e.Search)
 	}
 }

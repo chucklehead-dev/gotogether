@@ -645,13 +645,6 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			}
 			continue
 		}
-		if _, ok := c.(completeClaim); ok {
-			if msg := x.incomplete(); msg != "" {
-				failedAny = true
-				t.Errorf("gotogether: want %s; %s", c, msg)
-			}
-			continue
-		}
 		if rc, ok := c.(runsClaim); ok {
 			if msg := rc.judgeRuns(x.Runs, x.actions); msg != "" {
 				failedAny = true
