@@ -31,8 +31,9 @@ func pairOf(a, b *Process) [2]string {
 	return p
 }
 
-// A Network is a simulation's network between its processes (Sim.Net):
-// which pairs are cut, and the nemesis that cuts and heals them.
+// A Network is a simulation's network between its processes: which pairs
+// are cut, and the nemesis that cuts and heals them. Obtain it with
+// Sim.Net; a Network of no simulation does nothing useful.
 type Network struct {
 	// CutLength is how long a cut the nemesis makes (PartitionNemesis)
 	// lasts at most (default DefaultPartitionLength); its heal nemesis may
@@ -53,14 +54,17 @@ func (n *Network) Partition(a, b *Process) {
 	if n.cuts == nil {
 		n.cuts = map[[2]string]bool{}
 	}
-	if a == b || n.cuts[pairOf(a, b)] {
+	if a == b {
 		return
 	}
-	n.cuts[pairOf(a, b)] = true
 	if n.gen == nil {
 		n.gen = map[[2]string]int{}
 	}
-	n.gen[pairOf(a, b)]++
+	n.gen[pairOf(a, b)]++ // a cut already made by the nemesis now lasts until Heal: its healer's generation is past
+	if n.cuts[pairOf(a, b)] {
+		return
+	}
+	n.cuts[pairOf(a, b)] = true
 	for _, h := range n.onCut {
 		h(a, b)
 	}

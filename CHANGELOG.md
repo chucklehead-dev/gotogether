@@ -83,7 +83,9 @@ Added to the core since api/core.txt was first recorded:
   to forget); a nemesis's cut heals by itself after `CutLength`.
 - Fault kinds per instance: `queue.<name>.ack`, `store.<name>.commit`,
   `disk.<name>.crash`, as `rpc.<name>.*` (`"queue"` covers every queue's;
-  `"queue.ack"` matches none). `Process.Spawn` starts a task in a
+  `"queue.ack"` matches none, and an exploration whose Rates key, or a
+  sweep whose FaultKind, covers no kind declared fails, naming it:
+  `qenv.KnownFault`). `Process.Spawn` starts a task in a
   process from outside it. The new fault models run on the native
   runtime (`TestNativeFaultModels`).
 - `qobs.SyncedFileSink`, `qobs.NewSyncedJSONLSink`: an fsync per step.

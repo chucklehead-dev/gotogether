@@ -12,7 +12,8 @@ import (
 // a coverage report and a script name an option the same way.
 var registry struct {
 	sync.Mutex
-	kinds map[string]*kind
+	kinds   map[string]*kind
+	nemeses map[string]bool // nemeses registered by name ("crash.payments")
 }
 
 type kind struct {
@@ -45,6 +46,44 @@ func Declare(name string, options ...string) {
 		panic(fmt.Sprintf("qenv: fault kind %s declared with options %v, then %v", strings.TrimPrefix(name, "fault."), k.options, options))
 	}
 	k.options, k.named = append([]string(nil), options...), true
+}
+
+// DeclareNemesis registers a nemesis's name, as a declaration names a
+// kind's options: Known then knows it.
+func DeclareNemesis(name string) {
+	registry.Lock()
+	defer registry.Unlock()
+	if registry.nemeses == nil {
+		registry.nemeses = map[string]bool{}
+	}
+	registry.nemeses[name] = true
+}
+
+// Known reports whether name (as reports print it) covers anything this
+// process declared: a fault kind, one of its options (kind.option), a
+// nemesis (nemesis.<name>), or a prefix of any of them at a dot
+// ("queue" of "queue.payments.ack"). A name that covers nothing matches
+// nothing wherever it is given (a misspelling, a renamed kind).
+func Known(name string) bool {
+	registry.Lock()
+	defer registry.Unlock()
+	covers := func(x string) bool { return x == name || strings.HasPrefix(x, name+".") }
+	for k, v := range registry.kinds {
+		if covers(k) {
+			return true
+		}
+		for _, o := range v.options {
+			if covers(k + "." + o) {
+				return true
+			}
+		}
+	}
+	for n := range registry.nemeses {
+		if covers("nemesis." + n) {
+			return true
+		}
+	}
+	return false
 }
 
 // Options are a declared kind's option names (with or without the

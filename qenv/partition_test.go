@@ -151,7 +151,7 @@ func TestQueuePartition(t *testing.T) {
 	}
 }
 
-// A cut heals by itself after PartitionLength: a publisher waiting on a
+// A cut heals by itself after Network.CutLength: a publisher waiting on a
 // cut, with nothing else to run, would otherwise wait forever, since a
 // nemesis acts only at a scheduling step (the run was stuck). The heal
 // nemesis may end a cut sooner.
@@ -299,5 +299,30 @@ func TestProcessSpawn(t *testing.T) {
 	}
 	if !errors.Is(err, qenv.ErrTimeout) || ran {
 		t.Errorf("the spawned task's call: %v (want a timeout across the cut); the long task ran after the crash: %v", err, ran)
+	}
+}
+
+// A cut made by hand over one the nemesis made lasts until Heal: the
+// nemesis's healer does not end it.
+func TestManualCutOverNemesis(t *testing.T) {
+	sc := &qenv.Script{Faults: []qenv.Scripted{{Kind: "nemesis.partition.a.b"}}}
+	s := qenv.New(sc)
+	defer s.Close()
+	a := s.Process("a", false, func(context.Context) {})
+	b := s.Process("b", false, func(context.Context) {})
+	s.Net().CutLength = 10 * time.Millisecond
+	s.Net().PartitionNemesis(a, b)
+	cutAfter := false
+	s.Spawn("driver", func(ctx context.Context) {
+		qenv.WaitUntil(ctx, func() bool { return s.Net().Partitioned(a, b) }, s.Now().Add(time.Second))
+		s.Net().Partition(a, b) // by hand, over the nemesis's
+		qenv.Sleep(ctx, 50*time.Millisecond)
+		cutAfter = s.Net().Partitioned(a, b)
+	})
+	if err := s.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if !cutAfter {
+		t.Error("the nemesis's healer ended a cut made by hand")
 	}
 }

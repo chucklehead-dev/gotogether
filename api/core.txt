@@ -159,6 +159,7 @@ func FaultOptions(kind string) []string
 func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) error
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
 func IsFault(kind string) bool
+func KnownFault(name string) bool
 func LockKey(ctx context.Context, key any)
 func Mono(ctx context.Context) time.Duration
 func Now(ctx context.Context) time.Time

@@ -43,7 +43,7 @@ type Capacity struct {
 //     was processed, the ambiguous failure that makes retries dangerous.
 //
 // A request to a crashed process is lost, and so is a request or a
-// response across a partition (Sim.Partition, Sim.Partitions).
+// response across a partition (Sim.Net).
 type Service[Req, Resp any] struct {
 	Name    string
 	Proc    *Process

@@ -193,51 +193,116 @@ func TestNativeMono(t *testing.T) {
 	}
 }
 
-// The fault models added after the native runtime run on it too: a
-// process's clocks skew, jump and drift, the network's nemesis cuts and
-// heals links between processes, and a machine's crash takes its disk's
-// unsynced writes.
+// The fault models added after the native runtime run on it too, each
+// seen doing what it does: a wall clock skewed and jumping, a drifting
+// clock's sleep lasting less true time, a cut the partition nemesis made
+// failing a call across it, and a crash taking the unsynced writes of
+// its machine's disk. Real time, so each run is a few milliseconds and the
+// nemesis is considered every millisecond.
 func TestNativeFaultModels(t *testing.T) {
-	cut, jumped, lostWrites := 0, 0, 0
-	for seed := uint64(1); seed <= 10; seed++ {
+	native := func(seed uint64, rates qenv.Rates) *qenv.Sim {
 		c := qenv.NewSeeded(seed)
-		c.Rates = qenv.NoFaults.Set("nemesis", 0.2).Set("clock", 1).Set("disk", 1)
+		c.Rates = rates
 		s := qenv.NewNative(c, nil)
-		s.Clocks = qenv.Clocks{Skew: time.Second, Jump: time.Second, Drift: 0.1}
-		s.Net().CutLength = 2 * time.Millisecond
-		s.Log = func(line string) {
-			if strings.Contains(line, "nemesis partition.") {
-				cut++
+		s.NemesisEvery = time.Millisecond
+		return s
+	}
+	t.Run("skew and jumps", func(t *testing.T) {
+		skewed, jumped := 0, 0
+		for seed := uint64(1); seed <= 10; seed++ {
+			s := native(seed, qenv.NoFaults.Set("clock.skew", 0.5).Set("nemesis", 0.5))
+			s.Clocks = qenv.Clocks{Skew: time.Second, Jump: 10 * time.Second}
+			node := s.Process("node", false, func(ctx context.Context) {
+				for range 20 {
+					qenv.Sleep(ctx, time.Millisecond)
+				}
+			})
+			if err := s.Run(200 * time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			o := node.ClockOffset() // the skew (±1 s) plus jumps of 10 s
+			if (o % (10 * time.Second)).Abs() == time.Second {
+				skewed++
+			}
+			if o.Abs() >= 9*time.Second {
+				jumped++
+			}
+			s.Close()
+		}
+		if skewed == 0 || jumped == 0 {
+			t.Errorf("over 10 runs: %d clocks skewed, %d jumped: want both", skewed, jumped)
+		}
+	})
+	t.Run("drift", func(t *testing.T) {
+		fast := false
+		for seed := uint64(1); seed <= 10 && !fast; seed++ {
+			s := native(seed, qenv.NoFaults.Set("clock.drift", 1))
+			s.Clocks = qenv.Clocks{Drift: 0.5}
+			var took time.Duration
+			s.Process("node", false, func(ctx context.Context) {
+				start := time.Now() //qenv:ok true time, to see the drift
+				qenv.Sleep(ctx, 30*time.Millisecond)
+				took = time.Since(start) //qenv:ok true time, to see the drift
+			})
+			if err := s.Run(200 * time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			fast = took < 25*time.Millisecond // a fast clock's 30 ms are 20 ms; a slow machine only lengthens it
+			s.Close()
+		}
+		if !fast {
+			t.Error("no 30 ms sleep on a clock 50% fast lasted under 25 ms of true time")
+		}
+	})
+	t.Run("partitions", func(t *testing.T) {
+		across := 0
+		for seed := uint64(1); seed <= 10; seed++ {
+			s := native(seed, qenv.NoFaults.Set("nemesis", 0.2))
+			s.Net().CutLength = 3 * time.Millisecond
+			server := s.Process("server", false, func(context.Context) {})
+			svc := qenv.NewService(s, "echo", server, func(ctx context.Context, n int) (int, error) { return n, nil })
+			var node *qenv.Process
+			node = s.Process("node", false, func(ctx context.Context) {
+				for i := range 20 {
+					cut := s.Net().Partitioned(node, server)
+					if _, err := svc.Call(ctx, i, time.Millisecond); errors.Is(err, qenv.ErrTimeout) && cut {
+						across++
+					}
+					qenv.Sleep(ctx, time.Millisecond)
+				}
+			})
+			s.Net().PartitionNemesis(node, server)
+			if err := s.Run(200 * time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			s.Close()
+		}
+		if across == 0 {
+			t.Error("over 10 runs, no call made across a cut timed out")
+		}
+	})
+	t.Run("disk", func(t *testing.T) {
+		for _, rate := range []float64{0, 1} {
+			s := native(1, qenv.NoFaults.Set("disk", rate))
+			var disk *qenv.Disk
+			var node *qenv.Process
+			node = s.Process("node", false, func(ctx context.Context) {
+				f := disk.Create("log")
+				_, _ = f.Write([]byte("synced\n"))
+				_ = f.Sync()
+				_, _ = f.Write([]byte("unsynced\n"))
+				node.Crash()
+			})
+			disk = qenv.NewDisk(s, "node", node)
+			if err := s.Run(200 * time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			data, _ := disk.ReadFile("log")
+			s.Close()
+			kept := strings.Contains(string(data), "unsynced")
+			if !node.Down() || !strings.HasPrefix(string(data), "synced\n") || kept != (rate == 0) {
+				t.Errorf("disk faults at rate %v: down %v, the file %q", rate, node.Down(), data)
 			}
 		}
-		server := s.Process("server", false, func(context.Context) {})
-		svc := qenv.NewService(s, "echo", server, func(ctx context.Context, n int) (int, error) { return n, nil })
-		var disk *qenv.Disk
-		var node *qenv.Process
-		node = s.Process("node", false, func(ctx context.Context) {
-			f := disk.Create("log")
-			_, _ = f.Write([]byte("synced\n"))
-			_ = f.Sync()
-			for i := range 20 {
-				_, _ = svc.Call(ctx, i, time.Millisecond)
-			}
-			_, _ = f.Write([]byte("unsynced\n"))
-			node.Crash()
-		})
-		disk = qenv.NewDisk(s, "node", node)
-		s.Net().PartitionNemesis(node, server)
-		if err := s.Run(100 * time.Millisecond); err != nil { // real time: the calls take 20 ms at most
-			t.Fatal(err)
-		}
-		if o := node.ClockOffset(); o != 0 && o != time.Second && o != -time.Second {
-			jumped++
-		}
-		if data, _ := disk.ReadFile("log"); !strings.Contains(string(data), "unsynced") {
-			lostWrites++
-		}
-		s.Close()
-	}
-	if cut == 0 || jumped == 0 || lostWrites == 0 {
-		t.Errorf("over 10 native runs: %d cuts, %d processes' clocks jumped, %d disks lost their unsynced writes: want each", cut, jumped, lostWrites)
-	}
+	})
 }

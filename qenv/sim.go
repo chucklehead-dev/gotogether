@@ -735,6 +735,7 @@ func (s *Sim) OnCrash(h func(*Process)) { s.onCrash = append(s.onCrash, h) }
 // kind's rate ("nemesis.crash"; "nemesis" covers every family), so one
 // family's nemeses do not dilute another's.
 func (s *Sim) Nemesis(name string, enabled func() bool, do func()) {
+	choice.DeclareNemesis(name)
 	s.nemeses = append(s.nemeses, &nemesis{name: name, family: nemesisFamily(name), enabled: enabled, do: do})
 }
 

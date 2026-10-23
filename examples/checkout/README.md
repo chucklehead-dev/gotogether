@@ -56,7 +56,8 @@ The faithful shop also conforms with its broker partitioned from the
 relay and the consumers (`Config.Partitions`,
 `TestFaithfulConformsUnderPartitions`): a publish waits out a cut, and a
 consumer cut off has its events redelivered (20 redeliveries in 16 of 40
-runs with every other fault off, none without the cuts),
+runs with every other fault and crashes off, measured apart from the
+test, which runs with every fault; none without the cuts),
 which the shop already survives.
 
 A table like this answers "harness quirk or real bug?" for each finding.

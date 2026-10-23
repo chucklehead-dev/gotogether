@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -197,5 +198,23 @@ func TestExercisedByName(t *testing.T) {
 		if c.want == "" && msg != "" || c.want != "" && !strings.Contains(msg, c.want) {
 			t.Errorf("%s: %q, want %q", c.claim, msg, c.want)
 		}
+	}
+}
+
+// An exception list shared by runs that reached nothing (a sweep row with
+// every fault off) is judged by what was declared: prefixes, kinds,
+// options and nemeses no run met are known, a misspelling is not.
+func TestExercisedExceptionsOfAnEmptyRow(t *testing.T) {
+	qenv.DeclareFaults("test.row.queue", "lost")
+	s := qenv.New(qenv.Nominal{})
+	s.Process("rowproc", true, func(context.Context) {}) // registers nemesis crash.rowproc
+	s.Close()
+	empty := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "init"}}}}}}
+	actions := map[string]bool{"init": true}
+	if msg := Exercised("test.row", "test.row.queue.lost", "nemesis", "nemesis.crash.rowproc").judgeRuns([]*Run{empty}, actions); msg != "" {
+		t.Errorf("declared exceptions refused: %s", msg)
+	}
+	if msg := Exercised("test.rwo").judgeRuns([]*Run{empty}, actions); !strings.Contains(msg, "test.rwo (excepted, but neither") {
+		t.Errorf("a misspelling: %q", msg)
 	}
 }

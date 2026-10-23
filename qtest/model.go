@@ -2,7 +2,6 @@ package qtest
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 
@@ -172,10 +171,7 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 		for _, r := range known {
 			ok = ok || r == x || strings.HasPrefix(r, x+".")
 		}
-		if i := strings.LastIndex(x, "."); !ok && i > 0 { // a declared kind, or one of its options, no run met
-			ok = len(qenv.FaultOptions(x)) > 0 || slices.Contains(qenv.FaultOptions(x[:i]), x[i+1:])
-		}
-		known := ok
+		known := ok || qenv.KnownFault(x) // declared, though no run met it (a sweep row with it off)
 		if !known {
 			missing = append(missing, x+" (excepted, but neither a model action, a declared fault kind or option, nor a nemesis a run enabled: misspelled?)")
 		}
@@ -198,7 +194,7 @@ type unexercised struct{ name, what string }
 // row with a kind off), and those the runs reached and never took. A
 // declared kind's options count by name, those a choice offered; a kind
 // of no declaration (its options unnamed) as a whole; a nemesis by name.
-// A heal is not wanted: a cut heals by itself (PartitionLength), so its
+// A heal is not wanted: a cut heals by itself (Network.CutLength), so its
 // nemesis rarely fires, and healing is the partition's end, not a fault.
 func exercisedFaults(runs []*Run) (known []string, never []unexercised) {
 	offers := map[string]int{} // a kind's most options at one choice: a call of a prefix (Only) offers fewer

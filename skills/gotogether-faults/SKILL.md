@@ -79,7 +79,9 @@ qobs.Record(s.Context(), "settle", nil)
   missed Notify). Return the error from your `Run`; a task that may wait
   forever by design (a server loop) calls `qenv.Daemon(ctx)`, and a
   double's own receive waits with `qenv.WaitIdle`.
-- **Disks:** `qenv.NewDisk(s, "disk", p)` is process p's machine's disk:
+- **Disks:** `qenv.NewDisk(s, p.Name, p)` is process p's machine's disk
+  (name each double uniquely in a simulation: two of one name share their
+  fault kind, so neither can be faulted alone):
   writes reach the OS at once and the disk on `File.Sync`. When p crashes
   the fault kind "disk.<name>.crash" decides: nominal (the process died,
   the OS kept every write), "powerLoss" (only synced writes) or

@@ -13,7 +13,7 @@ import (
 //     consumer crashed holding the message;
 //   - reordering, unless Ordered: which pending message is delivered next
 //     is a schedule choice;
-//   - with Proc set, partitions (Sim.Partition, Sim.Partitions): a
+//   - with a broker process (NewQueue), partitions (Sim.Net): a
 //     publisher or consumer cut off from the broker waits until it heals,
 //     and a consumer's cut drops its connection, so the messages it holds
 //     are redelivered and its later acknowledgements are lost.

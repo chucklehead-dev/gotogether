@@ -327,9 +327,11 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   `queue.<name>.ack`, `store.<name>.commit`, `disk.<name>.crash`), and a
   double that a partition reaches takes its process at construction
   (`NewService`, `NewQueue`, `NewDisk`): a field set later was forgotten
-  and silently kept partitions out. A Rates key naming no kind matches
-  nothing, silently (the queues' old shared kind, after the rename): name
-  the kinds as coverage prints them.
+  and silently kept partitions out. A name that covers nothing declared
+  (`qenv.KnownFault`: the process's registry of kinds, options and
+  nemeses) matches nothing: an exploration fails on such a Rates key, a
+  sweep on such a FaultKind, Exercised on such an exception. Name each
+  double uniquely in a simulation: two of one name share their kind.
 - A double declares its fault kinds by name (`qenv.DeclareFaults("kube.request",
   "unavailable", "lostResponse")`) and chooses with `Sim.FaultOf`, which
   returns the option's name. A call that cannot fail in some options takes

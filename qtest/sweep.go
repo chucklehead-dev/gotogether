@@ -85,6 +85,7 @@ func sweep(t *testing.T, bindingPath string, sw SweepConfig, scenario func(c qen
 				return scenario(c)
 			})
 			s.Runs[i] = x
+			unknownKinds(t, "qsweep.FaultKind", off)
 			want := []Claim{Conforms()}
 			if sw.Expect != nil {
 				want = sw.Expect(row)

@@ -29,7 +29,7 @@ type Config struct {
 	NoCrashes bool
 	// Partitions gives the queues a broker of its own and makes every link
 	// between it, the relay and the consumers a nemesis (qenv's
-	// Sim.Partitions): a publish waits out a cut, and a consumer cut off
+	// Network.PartitionNemesis): a publish waits out a cut, and a consumer cut off
 	// has its unacknowledged events redelivered. Off, the deployment has no
 	// broker process and makes the same choices as before it existed.
 	Partitions bool

@@ -17,25 +17,25 @@ func TestSuiteReport(t *testing.T) {
 	es := []*qtest.Evidence{
 		{Test: "TestA", Spec: m, Runs: 2, Conform: 2,
 			Model:  &qtest.ModelCoverage{Taken: map[string]int{"put": 2}, Never: []string{"get", "del"}},
-			Faults: &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "rpc.db", Runs: 2, Injected: []int{3, 1}}, {Kind: "disk.crash", Sites: []string{"a.go:1"}}}}},
+			Faults: &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "rpc.db", Runs: 2, Injected: []int{3, 1}}, {Kind: "disk.node.crash", Sites: []string{"a.go:1"}}}}},
 		{Test: "TestB", Spec: m, Runs: 3, Conform: 1, FailingBy: map[string]int{"violates inv": 2},
 			Model:  &qtest.ModelCoverage{Taken: map[string]int{"get": 1}, Never: []string{"put", "del"}},
-			Faults: &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "queue.ack", Runs: 3, Injected: []int{5}}}}},
+			Faults: &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "queue.jobs.ack", Runs: 3, Injected: []int{5}}}}},
 	}
 	report, gaps := suiteReport(es)
 	for _, want := range []string{
 		"TestB: 3 runs, 1 conform, 2 violates inv",
 		"suite: 2 explorations, 5 runs",
 		"model/m.qnt:m: no test took del",
-		"declared and reached by no test: disk.crash",
-		"reached and never faulted by any test: queue.ack",
+		"declared and reached by no test: disk.node.crash",
+		"reached and never faulted by any test: queue.jobs.ack",
 	} {
 		if !strings.Contains(report, want) {
 			t.Errorf("missing %q in:\n%s", want, report)
 		}
 	}
 	if gaps != 3 {
-		t.Errorf("%d gaps, want 3 (del, disk.crash, queue.ack):\n%s", gaps, report)
+		t.Errorf("%d gaps, want 3 (del, disk.node.crash, queue.jobs.ack):\n%s", gaps, report)
 	}
 	for name, want := range map[string]bool{"evidence.json": true, "evidence-2.json": false, "other.json": false} {
 		if isEvidence(name) != want {

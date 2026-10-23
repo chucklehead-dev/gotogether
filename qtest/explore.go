@@ -356,8 +356,24 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}()
 	}
 	wg.Wait()
+	unknownKinds(t, "ExploreConfig.Rates key", keysOf(cfg.Rates.Kinds))
 	x.finish(t, bindingPath, c, mark, ids)
 	return x
+}
+
+// unknownKinds fails t for each name that covers no fault kind, option or
+// nemesis declared by the time the runs are over (the doubles declare
+// theirs as they are made): it would match nothing, silently. "nemesis"
+// is every simulation's default key, so a system with no nemesis is not
+// told so.
+func unknownKinds(t testing.TB, what string, names []string) {
+	t.Helper()
+	for _, k := range names {
+		if k != "nemesis" && !qenv.KnownFault(k) {
+			t.Errorf("gotogether: %s %q covers no fault kind, option or nemesis the system declared, so it matches nothing: "+
+				"name a kind as fault coverage prints it (a double's carry its name: \"queue.<name>.ack\"), or a prefix of one (\"queue\")", what, k)
+		}
+	}
 }
 
 // A RunPanic is a run that panicked (Run.Err): a task's panic, which

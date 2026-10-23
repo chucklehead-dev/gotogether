@@ -153,3 +153,20 @@ func TestRunPanicNotTheTasks(t *testing.T) {
 
 // panicInTask is a named frame for the stack to show.
 func panicInTask() { panic("the store's history check failed") }
+
+// A Rates key that covers nothing declared (a misspelling, a kind renamed
+// since: the queues' old shared one) fails the exploration with the fix,
+// rather than set no rate, silently.
+func TestUnknownRatesKey(t *testing.T) {
+	RequireQuint(t)
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		System{Binding: "../validate/testdata/account.yaml", Run: race}.Explore(f, ExploreConfig{Seeds: 1, Rates: qenv.DefaultRates.Set("queue.ack", 0.5)})
+	}()
+	<-done
+	if !strings.Contains(strings.Join(f.errs, "\n"), `ExploreConfig.Rates key "queue.ack" covers no fault kind`) {
+		t.Errorf("errors: %q", f.errs)
+	}
+}
