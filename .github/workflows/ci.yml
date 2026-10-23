@@ -15,6 +15,12 @@ env:
 
 jobs:
   test:
+    # one job ran every part in turn: its parts run side by side
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [core, hegel, examples, tools]
+    name: test (${{ matrix.part }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,24 +33,50 @@ jobs:
       - name: Install quint
         run: ci/install-quint.sh
       - name: gofmt
+        if: matrix.part == 'core'
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - name: vet
+        if: matrix.part == 'core'
         run: go vet ./...
       - name: test
+        if: matrix.part == 'core'
         run: go test -count=1 -timeout 30m ./...
+      - name: every module tidy on its own go.mod
+        if: matrix.part == 'core'
+        run: |
+          for m in $(git ls-files '*go.mod' | xargs -n1 dirname | grep -v testdata); do
+            (cd "$m" && go mod tidy -diff) || { echo "::error::$m: go mod tidy"; exit 1; }
+          done
+      - name: simulation code stays in the simulation
+        if: matrix.part == 'core'
+        run: go run ./cmd/gotogether lint -sim .
+      - name: the race detector on what runs real goroutines
+        if: matrix.part == 'core'
+        run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest' ./qenv/
+      - name: test (qenv self-checks)
+        if: matrix.part == 'core'
+        run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
+      - name: test (typescript backend)
+        if: matrix.part == 'core'
+        run: |
+          QUINT_BACKEND=typescript go test -short -count=1 ./connect/ ./validate/
+          (cd examples/bank && QUINT_BACKEND=typescript go test -short -count=1 .)
       - name: qhegel (its own module, so the core needs no Hegel)
+        if: matrix.part == 'hegel'
         working-directory: qhegel
         run: |
           test -z "$(gofmt -l . | tee /dev/stderr)"
           go vet ./...
           go test -count=1 -timeout 30m ./...
       - name: the core's Hegel properties, on this checkout's core (internal/hegelprops replaces it)
+        if: matrix.part == 'hegel'
         working-directory: internal/hegelprops
         run: |
           test -z "$(gofmt -l . | tee /dev/stderr)"
           go vet ./...
           GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m ./...
       - name: the examples, each its own module
+        if: matrix.part == 'examples'
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
@@ -57,41 +89,11 @@ jobs:
           for m in hello checkout; do
             "$RUNNER_TEMP/gotogether" evidence -strict "$RUNNER_TEMP/evidence/$m" || exit 1
           done
-      - name: every model on its own (gotogether simulate)
-        run: |
-          go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
-          for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u); do
-            "$RUNNER_TEMP/gotogether" simulate -binding "$b" || exit 1
-          done
-      - name: simulation code stays in the simulation
-        run: go run ./cmd/gotogether lint -sim .
-      - name: qanalysis (analyzers, static action map)
-        working-directory: qanalysis
-        run: |
-          go vet ./...
-          go test -count=1 ./...
-      - name: quintvet on the core
-        run: |
-          go build -C qanalysis -o "$RUNNER_TEMP/quintvet" ./cmd/quintvet
-          "$RUNNER_TEMP/quintvet" -quintweave=false ./...
-      - name: the race detector on what runs real goroutines
-        run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest' ./qenv/
-      - name: test (qenv self-checks)
-        run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
       - name: the store's histories against its isolation levels (GOTOGETHER_CHECK)
+        if: matrix.part == 'examples'
         run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 ./...) || exit 1; done
-      - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
-        working-directory: examples/checkout
-        run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s .
-      - name: mutation testing (hello woven by qweave -mutate; no survivors but the marked)
-        run: go run -C qweave ./cmd/qweave -C ../examples/hello -mutate -coverpkg github.com/chucklehead-dev/gotogether/examples/hello go test -count=1 -run TestMutationOfTheCounter -v .
-      - name: code coverage by model step (checkout woven by qweave -cover)
-        run: go run -C qweave ./cmd/qweave -C ../examples/checkout -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v .
-      - name: test (typescript backend)
-        run: |
-          QUINT_BACKEND=typescript go test -short -count=1 ./connect/ ./validate/
-          (cd examples/bank && QUINT_BACKEND=typescript go test -short -count=1 .)
       - name: example app demos
+        if: matrix.part == 'examples'
         run: |
           examples/kvstore/run-demo.sh
           examples/jobqueue/run-demo.sh
@@ -103,6 +105,60 @@ jobs:
           MUTATION=no-fencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
           MUTATION=no-dedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
+
+      - name: every model on its own (gotogether simulate)
+        if: matrix.part == 'tools'
+        run: |
+          go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
+          for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u); do
+            "$RUNNER_TEMP/gotogether" simulate -binding "$b" || exit 1
+          done
+      - name: qanalysis (analyzers, static action map)
+        if: matrix.part == 'tools'
+        working-directory: qanalysis
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+      - name: quintvet on the core
+        if: matrix.part == 'tools'
+        run: |
+          go build -C qanalysis -o "$RUNNER_TEMP/quintvet" ./cmd/quintvet
+          "$RUNNER_TEMP/quintvet" -quintweave=false ./...
+      - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
+        if: matrix.part == 'tools'
+        working-directory: examples/checkout
+        run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s .
+      - name: mutation testing (hello woven by qweave -mutate; no survivors but the marked)
+        if: matrix.part == 'tools'
+        run: go run -C qweave ./cmd/qweave -C ../examples/hello -mutate -coverpkg github.com/chucklehead-dev/gotogether/examples/hello go test -count=1 -run TestMutationOfTheCounter -v .
+      - name: code coverage by model step (checkout woven by qweave -cover)
+        if: matrix.part == 'tools'
+        run: go run -C qweave ./cmd/qweave -C ../examples/checkout -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v .
+
+  workspace:
+    # the published modules on the core as it is in this checkout (go.work),
+    # not at the commit they pin: a change to the core that breaks qhegel,
+    # qweave, qanalysis or qgosim fails here, before the bump
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: vet and test each published module in the workspace
+        run: |
+          for m in qhegel qweave qanalysis qgosim; do
+            echo "::group::$m"
+            (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
+            echo "::endgroup::"
+          done
 
   consumable:
     # what a user gets: the commands install at this commit, and a program
