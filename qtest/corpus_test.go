@@ -153,7 +153,32 @@ func TestCorpusOrphan(t *testing.T) {
 		f.TB = t
 		System{Binding: "../validate/testdata/account.yaml", Run: race}.Explore(f, ExploreConfig{Seeds: 2, Corpus: dir})
 	})
-	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "orphan.json was saved by TestCorpusOrphan/x#3, which this run of TestCorpusOrphan/x did not replay (it ran 1 explorations)") {
-		t.Errorf("errors: %s", all)
+	// under -short it is noted, not failed: a full run's exploration the
+	// short one never reaches is no orphan
+	said := f.errs
+	if testing.Short() {
+		said = f.logs
+	}
+	if all := strings.Join(said, "\n"); !strings.Contains(all, "orphan.json was saved by TestCorpusOrphan/x#3, which this run of TestCorpusOrphan/x did not replay (it ran 1 explorations)") {
+		t.Errorf("errors: %q, logs: %q", f.errs, f.logs)
+	}
+}
+
+// A test that failed may not have reached the exploration that saved an
+// entry: no orphan is reported then.
+func TestCorpusOrphanAfterFailure(t *testing.T) {
+	RequireQuint(t)
+	t.Setenv("GOTOGETHER_KEEP", t.TempDir())
+	dir := t.TempDir()
+	f := &failTB{}
+	t.Run("x", func(t *testing.T) {
+		b, _ := json.Marshal(corpusEntry{Format: corpusFormat, Exploration: t.Name() + "#2", Seed: 3})
+		_ = os.WriteFile(filepath.Join(dir, "later.json"), b, 0o644)
+		f.TB = t
+		System{Binding: "../validate/testdata/account.yaml", Run: race}.Explore(f, ExploreConfig{Seeds: 2, Corpus: dir})
+		f.Errorf("the test failed before its second exploration")
+	})
+	if len(f.errs) != 1 || len(f.logs) > 0 && strings.Contains(strings.Join(f.logs, ""), "later.json") {
+		t.Errorf("errors %q, logs %q: want the test's own failure only", f.errs, f.logs)
 	}
 }

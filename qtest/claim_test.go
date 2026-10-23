@@ -174,13 +174,14 @@ func TestTakesAndExercised(t *testing.T) {
 // covers the names below it.
 func TestExercisedByName(t *testing.T) {
 	qenv.DeclareFaults("test.exercised", "drop", "duplicate", "never")
+	qenv.DeclareFaults("test.unmet", "lost")
 	actions := map[string]bool{"init": true}
 	took := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "init"}}}}},
 		Choices: []qenv.Choice{
 			{Kind: "fault.test.exercised", N: 3, Value: 1},                 // drop; "never" (option 3) is never offered
 			{Kind: "fault.nemesis.crash", N: 3, Value: 1, Name: "crash.a"}, // crash.b enabled, never fired
 		},
-		Nemeses: []string{"crash.a", "crash.b"}}
+		Nemeses: []string{"crash.a", "crash.b", "heal.a.b"}} // a heal need not fire
 	for _, c := range []struct {
 		claim Exercise
 		want  string // in the message, or "" for a pass
@@ -188,7 +189,9 @@ func TestExercisedByName(t *testing.T) {
 		{Exercised(), "fault test.exercised option duplicate (reached, never taken); nemesis crash.b (enabled, never fired)"},
 		{Exercised("test.exercised.duplicate", "nemesis.crash.b"), ""},
 		{Exercised("test.exercised", "nemesis.crash"), ""},
-		{Exercised("test.exercised.never", "test.exercised.duplicate", "nemesis"), "test.exercised.never (excepted, but neither"},
+		{Exercised("test.exercised.never", "test.exercised.duplicate", "nemesis"), ""}, // a declared option no choice offered is known
+		{Exercised("test.exercised.nope", "test.exercised.duplicate", "nemesis"), "test.exercised.nope (excepted, but neither"},
+		{Exercised("test.unmet", "test.exercised.duplicate", "nemesis"), ""}, // a declared kind no run met
 	} {
 		msg := c.claim.judgeRuns([]*Run{took}, actions)
 		if c.want == "" && msg != "" || c.want != "" && !strings.Contains(msg, c.want) {

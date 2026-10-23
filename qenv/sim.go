@@ -1025,6 +1025,11 @@ func (s *Sim) maybeNemesis() {
 		}
 		kind := "fault.nemesis." + f
 		k := 0
+		// the logs the choice reaches: a wrapper outside one (Without, a
+		// Swarm) may answer a family it turns off without asking it, and
+		// that log saw no choice, nor any nemesis offered
+		before := map[*ChoiceLog]int{}
+		eachLog(s.c, func(r *ChoiceLog) { before[r] = len(r.Choices) })
 		if by == nil {
 			k = s.Choose(kind, len(ns)+1)
 		} else if i := slices.Index(ns, picked); i >= 0 {
@@ -1033,6 +1038,8 @@ func (s *Sim) maybeNemesis() {
 		eachLog(s.c, func(r *ChoiceLog) {
 			if by != nil { // the script chose: record it as the choices it stands for
 				r.Took(kind, len(ns)+1, k)
+			} else if len(r.Choices) == before[r] {
+				return
 			}
 			r.Offer(names)
 			if k > 0 {

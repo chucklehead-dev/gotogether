@@ -57,7 +57,9 @@ func nextExploration(t testing.TB) int {
 			explorations.mu.Lock()
 			defer explorations.mu.Unlock()
 			delete(explorations.n, name)
-			if !tr.matched { // a run reproduced alone replays only its own
+			// a run reproduced alone replays only its own; a test that failed
+			// or skipped may not have reached its later explorations
+			if !tr.matched && !t.Failed() && !t.Skipped() {
 				orphans(t, name, tr)
 			}
 			if v := os.Getenv("GOTOGETHER_RUN"); v != "" && !tr.matched {
@@ -124,8 +126,12 @@ func orphans(t testing.TB, test string, tr *testRuns) {
 			if json.Unmarshal(b, &e) != nil || refTest(e.Exploration) != test || refs[e.Exploration] {
 				continue
 			}
-			t.Errorf("gotogether: corpus entry %s was saved by %s, which this run of %s did not replay (it ran %d explorations): "+
-				"its regression is not guarded. The test's explorations changed: set the entry's \"exploration\" to the one it belongs to, or delete it", f, e.Exploration, test, tr.n)
+			report := t.Errorf
+			if testing.Short() { // an exploration only a full run reaches is no orphan
+				report = t.Logf
+			}
+			report("gotogether: corpus entry %s was saved by %s, which this run of %s did not replay (it ran %d explorations): "+
+				"its regression is not guarded. If the test's explorations changed, set the entry's \"exploration\" to the one it belongs to, or delete it", f, e.Exploration, test, tr.n)
 		}
 	}
 }

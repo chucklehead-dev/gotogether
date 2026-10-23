@@ -333,12 +333,13 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				rp := qenv.Replay(corpusRuns[k].Choices)
 				r := runOne(c, woven, rp, scenario)
 				r.Corpus, r.savedFrom = corpusPaths[k], corpusRuns[k].Seed
-				if n := len(corpusRuns[k].Choices); r.diverged == nil && rp.Left() > 0 {
-					// the run took another, shorter path: it no longer reaches what it saved
+				if n := len(corpusRuns[k].Choices); r.diverged == nil && r.Err == nil && rp.Left() > 0 {
+					// the run took another, shorter path to a clean end: it no
+					// longer reaches what it saved. One that failed or panicked
+					// first ended by its failure, which is the entry's run not
+					// running, not staleness.
 					r.diverged = fmt.Errorf("the run ended after %d of the entry's %d choices", n-rp.Left(), n)
-					if r.Err == nil {
-						r.Err = r.diverged
-					}
+					r.Err = r.diverged
 				}
 				x.Runs[i] = r
 				return

@@ -28,13 +28,18 @@ Added to the core since api/core.txt was first recorded:
 - `qtest.Takes(action).InAtLeast(p)` and `qtest.Exercised(except...)`:
   claims that an exploration's runs took the model's actions, each option
   of the fault kinds they reached and each nemesis they enabled, by name
-  (`Run.Nemeses`, `qenv.ChoiceLog.Nemeses`); `Evidence.Model` lists the
+  (`Run.Nemeses`, `qenv.ChoiceLog.Nemeses`; a heal is not wanted);
+  `qenv.FaultOptions` names a declared kind's options; `Evidence.Model` lists the
   actions never taken. `Expect` and `System.Mutate` judge a claim by one
   verdict, so NotVacuous kills mutants too.
 - Nemeses are chosen per family (`fault.nemesis.crash`, `.partition`,
   `.jump`, a double's own), each at its rate: Rates keys
   `nemesis.crash`, `nemesis.partition`, `nemesis.jump` (`nemesis` covers
-  them). A crash-only run's choices are unchanged; one with partitions or
+  them). A crash-only run draws the same values as before, but its
+  choices' kind is renamed (`fault.nemesis` to `fault.nemesis.crash`), as
+  is its coverage point (`Coverage.Point("nemesis.crash")`): a corpus
+  entry or a recorded run with crashes no longer replays and fails as
+  stale, with the seed that finds its run again. One with partitions or
   jumps takes other choices than before.
 - `System.Exhaust(t, qtest.Bound{Delays, Faults})`: every run within the
   bound, fewest deviations first, as an Exploration; a search `MaxRuns`
@@ -68,7 +73,7 @@ Added to the core since api/core.txt was first recorded:
   when it cannot judge (no antecedent, or one quint cannot evaluate).
 - `qtest.LinearizeBudget(n)` and `DefaultLinearizeBudget`: a search that
   runs out of its budget is no verdict (conformance n/a), not a
-  rejection.
+  rejection. `qtrace.Linearize` returns whether the budget cut it short.
 - `qenv.Disk` (writes, fsync, and a crash's "disk.crash" fault: lost or
   torn unsynced writes) and partitions between processes for
   `qenv.Service` (`Sim.Partition`, `Heal`, `Partitions` as nemeses) and

@@ -249,3 +249,29 @@ func TestNemesisFamilies(t *testing.T) {
 		t.Errorf("the script's run replayed with %d cuts, %d of %d choices", cuts, len(again.Choices), len(log.Choices))
 	}
 }
+
+// A family a wrapper turns off reaches no log inside it: no choice, and no
+// nemesis offered.
+func TestNemesisOffWrapped(t *testing.T) {
+	log := &qenv.ChoiceLog{C: qenv.NewSeeded(1)}
+	s := qenv.New(qenv.Without(log, "nemesis.partition"))
+	defer s.Close()
+	a := s.Process("a", true, func(ctx context.Context) {
+		for range 20 {
+			qenv.Yield(ctx)
+		}
+	})
+	b := s.Process("b", false, func(context.Context) {})
+	s.Partitions(a, b)
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range log.Choices {
+		if c.Kind == "fault.nemesis.partition" {
+			t.Fatalf("a partition choice reached the log: %v", c)
+		}
+	}
+	if strings.Join(log.Nemeses, " ") != "crash.a" {
+		t.Errorf("offered %v, want crash.a only", log.Nemeses)
+	}
+}

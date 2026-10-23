@@ -42,6 +42,11 @@ func TestVacuity(t *testing.T) {
 	if !f.failed || !strings.Contains(strings.Join(f.errs, "\n"), "held vacuously: passedWhenOpen") {
 		t.Errorf("NotVacuous on idle runs: %q", f.errs)
 	}
+	// Mutate judges a mutant's exploration by the same verdict: these runs
+	// would kill it
+	if idle.meets([]Claim{Conforms(), NotVacuous()}) || !idle.meets([]Claim{Conforms()}) {
+		t.Error("meets judged NotVacuous otherwise than Expect")
+	}
 	System{Binding: "testdata/gate.yaml", Run: scenario(true)}.Explore(t, ExploreConfig{Seeds: 3}).Expect(t, Conforms(), NotVacuous())
 }
 

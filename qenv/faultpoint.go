@@ -79,6 +79,11 @@ func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) err
 // the points no run reached.
 func DeclareFaultSite(kind, site string) { choice.DeclareSite(kind, site) }
 
+// FaultOptions are a declared kind's option names (DeclareFaults, a fault
+// point's), in their order, nominal not among them; nil for a kind never
+// declared. The kind is as reports print it ("rpc.payments.response").
+func FaultOptions(kind string) []string { return choice.Options("fault." + kind) }
+
 // PointCoverage is what runs did at one fault kind.
 type PointCoverage struct {
 	Kind    string

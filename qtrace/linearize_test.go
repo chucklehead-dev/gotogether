@@ -46,7 +46,7 @@ func TestLinearizeOverlap(t *testing.T) {
 	if f := register([][]Step{steps}); f[0] != -1 {
 		t.Fatal("the steps as given should conform")
 	}
-	o, ok, tried := Linearize(steps, 10, register)
+	o, ok, tried, _ := Linearize(steps, 10, register)
 	if !ok || o[0].Action != "write" || tried != 2 {
 		t.Errorf("ok %v after %d orders: %v", ok, tried, o)
 	}
@@ -59,9 +59,13 @@ func TestLinearizeOverlap(t *testing.T) {
 // real time forbids every order that would explain it.
 func TestLinearizeStale(t *testing.T) {
 	steps := []Step{op("a", 1, "write", 1, 0, 2), op("b", 1, "read", 0, 3, 4), op("a", 2, "write", 2, 3, 8)}
-	o, ok, _ := Linearize(steps, 10, register)
-	if ok {
-		t.Errorf("a stale read linearized: %v", o)
+	o, ok, _, cut := Linearize(steps, 10, register)
+	if ok || cut {
+		t.Errorf("a stale read linearized, or the search was cut short with room left: %v (cut %v)", o, cut)
+	}
+	// with room for the first order only, the search is cut short
+	if _, ok, _, cut := Linearize(steps, 1, register); ok || !cut {
+		t.Errorf("a budget of 1: ok %v cut %v, want a search cut short", ok, cut)
 	}
 }
 
@@ -72,7 +76,7 @@ func TestLinearizeTwoWindows(t *testing.T) {
 		op("a", 1, "write", 1, 0, 10), op("b", 1, "read", 1, 1, 5),
 		op("a", 2, "write", 2, 20, 30), op("b", 2, "read", 2, 21, 25),
 	}
-	if _, ok, tried := Linearize(steps, 20, register); !ok || tried > 6 {
+	if _, ok, tried, _ := Linearize(steps, 20, register); !ok || tried > 6 {
 		t.Errorf("ok %v after %d orders", ok, tried)
 	}
 }

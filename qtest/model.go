@@ -2,9 +2,11 @@ package qtest
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -159,19 +161,23 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 			missing = append(missing, "action "+a+" (never taken)")
 		}
 	}
-	reached, never := exercisedFaults(runs)
+	known, never := exercisedFaults(runs)
 	for _, n := range never {
 		if !e.excepted(n.name) {
 			missing = append(missing, n.what)
 		}
 	}
 	for x := range e.except {
-		known := actions[x]
-		for _, r := range reached {
-			known = known || r == x || strings.HasPrefix(r, x+".")
+		ok := actions[x]
+		for _, r := range known {
+			ok = ok || r == x || strings.HasPrefix(r, x+".")
 		}
+		if i := strings.LastIndex(x, "."); !ok && i > 0 { // a declared kind, or one of its options, no run met
+			ok = len(qenv.FaultOptions(x)) > 0 || slices.Contains(qenv.FaultOptions(x[:i]), x[i+1:])
+		}
+		known := ok
 		if !known {
-			missing = append(missing, x+" (excepted, but neither a model action nor a fault kind, option or nemesis the runs reached: misspelled?)")
+			missing = append(missing, x+" (excepted, but neither a model action, a declared fault kind or option, nor a nemesis a run enabled: misspelled?)")
 		}
 	}
 	if len(missing) > 0 {
@@ -186,11 +192,15 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 // took: its name as Exercised excepts it, and what the claim says of it.
 type unexercised struct{ name, what string }
 
-// exercisedFaults are the names of the fault kinds, options and nemeses
-// the runs reached, and those of them never taken. A declared kind's
-// options count by name, those a choice offered; a kind of no declaration (its options unnamed)
-// as a whole; a nemesis by name, offered or fired.
-func exercisedFaults(runs []*Run) (reached []string, never []unexercised) {
+// exercisedFaults are the names an exception may give (every fault kind
+// declared or met, each declared option, each nemesis a run enabled:
+// known, so that one exception list serves runs that reach less, a sweep
+// row with a kind off), and those the runs reached and never took. A
+// declared kind's options count by name, those a choice offered; a kind
+// of no declaration (its options unnamed) as a whole; a nemesis by name.
+// A heal is not wanted: a cut heals by itself (PartitionLength), so its
+// nemesis rarely fires, and healing is the partition's end, not a fault.
+func exercisedFaults(runs []*Run) (known []string, never []unexercised) {
 	offers := map[string]int{} // a kind's most options at one choice: a call of a prefix (Only) offers fewer
 	for _, r := range runs {
 		for _, c := range r.Choices {
@@ -200,10 +210,16 @@ func exercisedFaults(runs []*Run) (reached []string, never []unexercised) {
 		}
 	}
 	for _, p := range (&Exploration{Runs: runs}).faultCoverage().Points {
-		if strings.HasPrefix(p.Kind, "nemesis.") || p.Reached == 0 {
-			continue // nemeses by name, below; a declared kind no run reached is Unreached's
+		if strings.HasPrefix(p.Kind, "nemesis.") {
+			continue // by name, below
 		}
-		reached = append(reached, p.Kind)
+		known = append(known, p.Kind)
+		for _, name := range p.Names {
+			known = append(known, p.Kind+"."+name)
+		}
+		if p.Reached == 0 {
+			continue // a declared kind no run reached is Unreached's
+		}
 		if len(p.Names) == 0 {
 			if p.Faulted() == 0 {
 				never = append(never, unexercised{p.Kind, "fault " + p.Kind + " (reached, never faulted)"})
@@ -214,7 +230,6 @@ func exercisedFaults(runs []*Run) (reached []string, never []unexercised) {
 			if i+1 >= offers[p.Kind] {
 				break // no choice offered it
 			}
-			reached = append(reached, p.Kind+"."+name)
 			if i+1 >= len(p.Injected) || p.Injected[i+1] == 0 {
 				never = append(never, unexercised{p.Kind + "." + name, "fault " + p.Kind + " option " + name + " (reached, never taken)"})
 			}
@@ -237,12 +252,12 @@ func exercisedFaults(runs []*Run) (reached []string, never []unexercised) {
 		}
 	}
 	for _, n := range offered {
-		reached = append(reached, "nemesis."+n)
-		if !fired[n] {
+		known = append(known, "nemesis."+n)
+		if !fired[n] && !strings.HasPrefix(n, "heal.") {
 			never = append(never, unexercised{"nemesis." + n, "nemesis " + n + " (enabled, never fired)"})
 		}
 	}
-	return reached, never
+	return known, never
 }
 
 func takenList(m *ModelCoverage) string {

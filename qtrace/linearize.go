@@ -75,10 +75,13 @@ const moveWindow = 32
 // none is strong evidence of a bug, not a proof.
 //
 // It returns the order that conformed, or that got furthest, whether one
-// conformed, and how many orders it checked.
-func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int) {
+// conformed, how many orders it checked, and whether the budget cut the
+// search short (cut: it stopped with moves left that might have got
+// further). A search that found none and was not cut stopped because no
+// move got further: the stronger evidence.
+func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
 	if len(steps) == 0 {
-		return nil, true, 0
+		return nil, true, 0, false
 	}
 	ns := build(steps)
 	var issues []Issue
@@ -118,6 +121,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	cur := at
 	f := check([][]Step{render(cur)})[0]
 	tried = 1
+	stopped := false // no move left, or none got further
 	for f >= 0 && tried < budget {
 		var cands [][]int
 		add := func(c []int) {
@@ -154,8 +158,10 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 			add(c)
 		}
 		if len(cands) == 0 {
+			stopped = true
 			break
 		}
+		all := len(cands)
 		if room := budget - tried; len(cands) > room {
 			cands = cands[:room]
 		}
@@ -168,16 +174,20 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		bi, bf := -1, f
 		for i, fi := range fs {
 			if fi < 0 {
-				return orders[i], true, tried
+				return orders[i], true, tried, false
 			}
 			if fi > bf {
 				bi, bf = i, fi
 			}
 		}
-		if bi < 0 {
+		if bi < 0 && len(cands) == all {
+			stopped = true
 			break // no move gets further
+		}
+		if bi < 0 {
+			break // none of the moves the budget left room for got further
 		}
 		cur, f = cands[bi], bf
 	}
-	return render(cur), f < 0, tried
+	return render(cur), f < 0, tried, f >= 0 && !stopped
 }

@@ -124,6 +124,9 @@ func reason(rep *validate.Report) string {
 		if a.OK() {
 			continue
 		}
+		if a.Conforms == validate.NotEvaluated {
+			return "no verdict (linearize budget)"
+		}
 		if a.Conforms != validate.Pass {
 			action := "a step"
 			if a.Failure != nil && a.Failure.Step != nil {

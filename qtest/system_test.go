@@ -16,6 +16,7 @@ import (
 type failTB struct {
 	testing.TB
 	errs   []string
+	logs   []string
 	failed bool
 }
 
@@ -24,11 +25,13 @@ func (f *failTB) Errorf(format string, a ...any) {
 	f.errs = append(f.errs, fmt.Sprintf(format, a...))
 	f.failed = true
 }
-func (f *failTB) Fatalf(format string, a ...any)  { f.Errorf(format, a...); runtime.Goexit() }
-func (f *failTB) Fatal(a ...any)                  { f.Errorf("%s", fmt.Sprint(a...)); runtime.Goexit() }
-func (f *failTB) FailNow()                        { f.failed = true; runtime.Goexit() }
-func (f *failTB) Failed() bool                    { return f.failed }
-func (f *failTB) Logf(format string, args ...any) {}
+func (f *failTB) Fatalf(format string, a ...any) { f.Errorf(format, a...); runtime.Goexit() }
+func (f *failTB) Fatal(a ...any)                 { f.Errorf("%s", fmt.Sprint(a...)); runtime.Goexit() }
+func (f *failTB) FailNow()                       { f.failed = true; runtime.Goexit() }
+func (f *failTB) Failed() bool                   { return f.failed }
+func (f *failTB) Logf(format string, args ...any) {
+	f.logs = append(f.logs, fmt.Sprintf(format, args...))
+}
 
 // A system whose Run fails fails the exploration, naming the seed, before
 // any run is checked.

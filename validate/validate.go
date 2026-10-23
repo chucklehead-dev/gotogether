@@ -476,11 +476,17 @@ func (r *Result) Summary() string {
 	}
 	fmt.Fprintf(&b, "  conformance: %s\n", strings.ToUpper(string(r.Conforms)))
 	if f := r.Failure; f != nil {
+		if r.Conforms == NotEvaluated { // a search cut short (qtest.Linearize): its furthest order, not a verdict
+			fmt.Fprintf(&b, "    no verdict: the order checked is the one that got furthest, where it failed:\n")
+		}
 		fmt.Fprintf(&b, "%s", f.describe("    "))
 	}
 	for _, i := range r.Invariants {
 		v := strings.ToUpper(string(i.Verdict))
-		if i.Verdict == NotEvaluated {
+		switch {
+		case i.Verdict == NotEvaluated && r.Conforms == NotEvaluated:
+			v = "not checked: the run's conformance has no verdict"
+		case i.Verdict == NotEvaluated:
 			v = "not checked: the run does not conform, so the model's states after the failure are not the run's"
 		}
 		fmt.Fprintf(&b, "  invariant %s: %s\n", i.Name, v)

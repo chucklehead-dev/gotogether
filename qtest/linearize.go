@@ -74,11 +74,11 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 			}
 			return fs
 		}
-		o, ok, tried := qtrace.Linearize(byActor[actor], budget, check)
+		o, ok, tried, cut := qtrace.Linearize(byActor[actor], budget, check)
 		switch {
 		case ok:
 			issues = append(issues, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried)})
-		case tried >= budget:
+		case cut:
 			undecided[actor] = true
 			issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no order of its %d steps conformed in the %d orders of the budget, and the search had moves left: "+
 				"no verdict (conformance n/a). Raise the budget (qtest.LinearizeBudget(%d)), or record its steps where they take effect", a, len(o), tried, 4*budget)})

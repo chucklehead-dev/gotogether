@@ -66,7 +66,7 @@ func (x *Exploration) vacuityVerdict() claimVerdict {
 	}
 	switch {
 	case v.err != nil:
-		return fail(fmt.Sprintf("the antecedents could not be evaluated, so no verdict: %v. Fix the antecedent (the binding's antecedents, or the invariant's `A implies B`)", v.err))
+		return fail(fmt.Sprintf("the antecedents could not be evaluated, so no verdict: %v. If quint names the antecedent, fix it (the binding's antecedents, or the invariant's `A implies B`); otherwise quint itself failed (a crash, a timeout): run the test again", v.err))
 	case v.antecedent == 0:
 		return fail("no invariant the runs check has an antecedent (a val `A implies B`, or the binding's antecedents), so the claim would hold for nothing: name one in the binding, or drop the claim")
 	case len(v.found) > 0:

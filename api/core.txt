@@ -155,6 +155,7 @@ func Daemon(ctx context.Context)
 func DeclareFaultSite(kind, site string)
 func EncodeChoices(choices []Choice, rates Rates) ([]byte, error)
 func EntropyOf(c Chooser) func(n int) []byte
+func FaultOptions(kind string) []string
 func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) error
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
 func IsFault(kind string) bool
@@ -467,7 +468,7 @@ type Issue struct{ ... }
 type Keyer struct{ ... }
 type Step struct{ ... }
     func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
-    func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int)
+    func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
     func ReadJSONL(r io.Reader) ([]Step, error)
 type TornTail struct{ ... }
 type Trace struct{ ... }

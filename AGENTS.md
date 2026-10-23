@@ -352,7 +352,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   name's first segment, a heal a partition's) is its own choice,
   `fault.nemesis.<family>`, at its own rate, considered in turn until one
   acts: one family's nemeses do not dilute another's. A Script's pick by
-  name is recorded as those choices, so its run replays.
+  name is recorded as those choices, so its run replays; it bypasses a
+  Without or Swarm around it, which turns its nemeses off only for other
+  choosers. A family a wrapper answers reaches no ChoiceLog inside it:
+  `ChoiceLog.Nemeses` lists only what a log was offered.
 - Simulated runs record into their own recorder. `System.Explore` runs
   seeds in parallel, each with a recorder in the chooser's context
   (`qenv.WithContext`, `qobs.WithRecorder`). A step without it in its
