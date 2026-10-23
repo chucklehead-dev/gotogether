@@ -524,7 +524,6 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qsweep` | covering arrays: `Cover`, `Missing`, `Sequences`, `Factor.Constant` |
 | `qrun` | a run's state (`Key[T]`), from the context or the goroutine's run |
 | `qlint` | the simulation and weaving lints (`gotogether lint -sim`, `-weave`) |
-| `sktrace` | SimKube traces: events, lifecycles, rates and gauges as load shapes, pod lifetimes; `Lint` |
 | `input` | reads a trace input (`Read`): OTLP/JSON, a step log or ITF, detected by content |
 | `skills` | the agent skills below, embedded, and their install |
 | `cmd/gotogether` | the CLI: `scaffold`, `lint`, `simulate` (the model alone: which invariants it guarantees, which the code must; `-verify N`, Apalache to depth N), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-strict` for CI), `skills` |

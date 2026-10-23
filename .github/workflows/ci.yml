@@ -47,7 +47,7 @@ jobs:
       - name: the examples, each its own module
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
-          for m in bank checkout glomers hello jobqueue kvstore lease retrystorm twophase; do
+          for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
               GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -count=1 -timeout 30m ./...) || exit 1
@@ -245,8 +245,8 @@ jobs:
           if KEEP=1 MUTATION=ignore-observed-generation ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
           if KILL=1 MUTATION=in-memory-progress ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
           # pods timed by a production trace (kwok Stages from its lifetimes), on clusters of their own
-          TRACE=../../sktrace/testdata/cronjob.sktrace KEEP=1 ./kwok-demo.sh
-          if TRACE=../../sktrace/testdata/cronjob.sktrace MUTATION=ignore-observed-generation ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
+          TRACE=../sktrace/testdata/cronjob.sktrace KEEP=1 ./kwok-demo.sh
+          if TRACE=../sktrace/testdata/cronjob.sktrace MUTATION=ignore-observed-generation ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
 
   crossdb:
     runs-on: ubuntu-latest

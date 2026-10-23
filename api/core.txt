@@ -1346,53 +1346,6 @@ var DefaultTargets = []string{"agents", "claude"}
 var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-for-go": "gotogether-model", "quint-modeling-patterns": "gotogether-patterns", "quint-mbt-driver": "gotogether-mbt", "quint-hegel": "gotogether-hegel", "quint-trace-validation": "gotogether-traces", "quint-fault-injection": "gotogether-faults", "quint-metastability": "gotogether-metastability", "quint-verification-workflow": "gotogether-workflow"}
 var Targets = map[string]string{…}
 
-== github.com/chucklehead-dev/gotogether/sktrace
-func Applied(kinds ...string) func(Event) int
-func Quantiles(ds []time.Duration, n int) []time.Duration
-func Read(r io.Reader) (*Trace, error)
-func ReadFile(path string) (*Trace, error)
-func Replicas(o Object) float64
-type Env struct
-    field Kinds []string
-    field Namespaces []string
-type Event struct
-    field TS int64
-    field Applied []Object
-    field Deleted []Object
-type Finding struct
-    field At time.Duration
-    field Object string
-    field What string
-    field Fix string
-    method (Finding) String() string
-type Lifecycle struct
-    field GVK string
-    field Owner string
-    field Mtime int64
-    field Start int64
-    field End int64
-    method (Lifecycle) Duration() time.Duration
-type Object map[string]any
-    method (Object) APIVersion() string
-    method (Object) GVK() string
-    method (Object) Key() string
-    method (Object) Kind() string
-    method (Object) Name() string
-    method (Object) Namespace() string
-type Trace struct
-    field Version int
-    field Config map[string]any
-    field Events []Event
-    field Lifecycles []Lifecycle
-    method (*Trace) End() time.Time
-    method (*Trace) Gauge(tick time.Duration, value func(Object) float64) []float64
-    method (*Trace) Lifetimes(gvk string) []time.Duration
-    method (*Trace) Lint(env Env) []Finding
-    method (*Trace) Offset(e Event) time.Duration
-    method (*Trace) Rates(tick time.Duration, count func(Event) int) []float64
-    method (*Trace) Start() time.Time
-    method (*Trace) Starts(tick time.Duration) []float64
-
 == github.com/chucklehead-dev/gotogether/validate
 const Fail Verdict = "fail"
 const NotEvaluated Verdict = "n/a"

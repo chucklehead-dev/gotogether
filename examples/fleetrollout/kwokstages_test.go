@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/kwok/pkg/utils/lifecycle"
 
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 // The stages load with kwok's own config loader and match pods with its
@@ -22,7 +22,7 @@ import (
 // times, a running Job's pod one of its run times, and a deleted pod goes
 // at once. kwok-demo.sh (TRACE=) runs them on real clusters.
 func TestKwokStagesFromTrace(t *testing.T) {
-	tr, err := sktrace.ReadFile("../../sktrace/testdata/cronjob.sktrace")
+	tr, err := sktrace.ReadFile("../sktrace/testdata/cronjob.sktrace")
 	if err != nil {
 		t.Fatal(err)
 	}

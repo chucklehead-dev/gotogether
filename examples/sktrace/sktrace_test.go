@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 func read(t *testing.T, name string) *sktrace.Trace {

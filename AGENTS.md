@@ -44,13 +44,14 @@ qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's stat
 qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
 qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin), static action map (cmd/actionmap)
 qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per run; qtest's System.Mutate explores each
-sktrace/      SimKube traces (msgpack v3, own decoder): production workloads as load shapes and replayed writes
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
 qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspects in orchestrion.yml): u and v as gauges
 cmd/gotogether/  CLI
 skills/       agent skills, the source of truth (embedded by package skills;
               symlinked into .agents/skills and .claude/skills, checked by skills_test.go)
 examples/*            each example is a module of its own (unpublished, replace => ../..); the root module is the toolkit
+examples/sktrace      unpublished library module: SimKube traces (msgpack v3, own decoder), production workloads
+                      as load shapes and replayed writes; fleetrollout and retrystorm use it
 examples/glomers      Gossip Glomers on a Maelstrom runtime + simulator (maelstrom/); per-challenge model, impl, binding, mutants;
                       cmd/* run under real Maelstrom (maelstrom.sh)
 examples/kvstore      app: HTTP KV service with CAS (kvserver, kvload); concurrency, span conversion

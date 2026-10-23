@@ -7,14 +7,14 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 // production is SimKube's scaling trace: a real cluster's Deployments
 // scaled up and down over 19 minutes.
 func production(t *testing.T) *sktrace.Trace {
 	t.Helper()
-	tr, err := sktrace.ReadFile("../../sktrace/testdata/dsb-scaling.sktrace")
+	tr, err := sktrace.ReadFile("../sktrace/testdata/dsb-scaling.sktrace")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestRolloutUnderProductionWorkload(t *testing.T) {
 // still caught.
 func TestRolloutWithMeasuredPodTimes(t *testing.T) {
 	qtest.RequireQuint(t)
-	tr, err := sktrace.ReadFile("../../sktrace/testdata/cronjob.sktrace")
+	tr, err := sktrace.ReadFile("../sktrace/testdata/cronjob.sktrace")
 	if err != nil {
 		t.Fatal(err)
 	}

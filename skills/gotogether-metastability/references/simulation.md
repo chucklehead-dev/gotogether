@@ -47,7 +47,8 @@ quint.serve=api`).
 
 ## A production workload as the load
 
-A SimKube trace (`sktrace.ReadFile`) is a real cluster's objects over
+A SimKube trace (`sktrace.ReadFile`, examples/sktrace: a library of the
+examples, not the core's) is a real cluster's objects over
 time. Its rates (`Rates`, `Starts`) or a gauge (`Gauge(tick,
 sktrace.Replicas)`) become a load shape: `qload.Piecewise(time.Minute,
 0.2, replicas...)` is 0.2 requests/s per desired replica, minute by

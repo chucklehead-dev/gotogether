@@ -2,7 +2,7 @@
 // production trace's lifetimes (fleetrollout.KwokStagesFromTrace), for
 // `kwokctl create cluster --config`:
 //
-//	kwok-stages -trace ../../sktrace/testdata/cronjob.sktrace -speed 10 > stages.yaml
+//	kwok-stages -trace ../sktrace/testdata/cronjob.sktrace -speed 10 > stages.yaml
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 func main() {

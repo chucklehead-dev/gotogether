@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qload"
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 // A production workload as the load: SimKube's scaling trace, a real
@@ -16,7 +16,7 @@ import (
 // and the budgets do in all three: the spike the policies were compared
 // on was synthetic, this one is a cluster's own.
 func TestProductionScaleUp(t *testing.T) {
-	tr, err := sktrace.ReadFile("../../sktrace/testdata/dsb-scaling.sktrace")
+	tr, err := sktrace.ReadFile("../sktrace/testdata/dsb-scaling.sktrace")
 	if err != nil {
 		t.Fatal(err)
 	}

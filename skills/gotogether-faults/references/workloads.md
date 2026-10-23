@@ -8,6 +8,10 @@ usually shows the model has no step for the environment's other writers.
 Add one, deliberately (fleet.qnt `scale`), and explore with the workload
 on.
 
+The traces are read by examples/sktrace, a library module of the
+examples (not the core's API: copy it, or `go get` it with the
+repository).
+
 Before a replay, lint the trace against the target:
 `tr.Lint(sktrace.Env{Namespaces: []string{"dsb"}, Kinds: []string{"apps/v1.Deployment"}})`
 lists the namespaces to create first, kinds the target does not serve,

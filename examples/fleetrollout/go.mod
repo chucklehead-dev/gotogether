@@ -25,6 +25,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chucklehead-dev/gotogether/examples/sktrace v0.0.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
@@ -114,3 +115,5 @@ require (
 replace github.com/chucklehead-dev/gotogether => ../..
 
 replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel
+
+replace github.com/chucklehead-dev/gotogether/examples/sktrace => ../sktrace

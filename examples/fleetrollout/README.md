@@ -36,7 +36,7 @@ go test ./...                                                        # in this m
 ./kwok-demo.sh                                                       # the real controller on three kwok clusters
 MUTATION=ignore-observed-generation ./kwok-demo.sh
 KILL=1 MUTATION=in-memory-progress ./kwok-demo.sh
-TRACE=../../sktrace/testdata/cronjob.sktrace ./kwok-demo.sh          # pods timed by a production trace
+TRACE=../sktrace/testdata/cronjob.sktrace ./kwok-demo.sh          # pods timed by a production trace
 ```
 
 kwok's binary runtime needs no Docker. It downloads etcd and the

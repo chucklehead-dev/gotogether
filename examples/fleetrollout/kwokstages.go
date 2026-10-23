@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 // KwokStages are kwok Stage resources (kwok.x-k8s.io/v1alpha1) for pods,

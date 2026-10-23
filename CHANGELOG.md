@@ -30,6 +30,9 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- `sktrace` leaves the core: SimKube's trace format is not the core's to
+  freeze. It is examples/sktrace, an unpublished module fleetrollout and
+  retrystorm use (`github.com/chucklehead-dev/gotogether/examples/sktrace`).
 - Plumbing out of the public API, into the core's internal packages:
   `qobs.Strict`, `Escaped`, `SetDiscard`; `qrun.SetResolver`,
   `GoroutineID`, `Task`; `qenv.Current`, `TaskPanic`, `WithPanicStack`

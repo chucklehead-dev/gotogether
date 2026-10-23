@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chucklehead-dev/gotogether/examples/sktrace v0.0.0
 	github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8 // indirect
 	go.opentelemetry.io/otel v1.46.0 // indirect
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
@@ -21,3 +22,5 @@ require (
 replace github.com/chucklehead-dev/gotogether => ../..
 
 replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel
+
+replace github.com/chucklehead-dev/gotogether/examples/sktrace => ../sktrace

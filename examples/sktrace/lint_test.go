@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chucklehead-dev/gotogether/sktrace"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 func obj(kind, ns, name string, owner ...string) sktrace.Object {
