@@ -743,7 +743,7 @@ func (x *Exploration) summary() string {
 	e := evidenceOf(x.Runs)
 	line := fmt.Sprintf("%s: %d runs, %d conform", x.ref(), e.Runs, e.Conform)
 	for _, r := range keysOf(e.FailingBy) {
-		line += fmt.Sprintf(", %d %s", e.FailingBy[r], r)
+		line += fmt.Sprintf(", %d %s", e.FailingBy[r], runsDo(r))
 	}
 	if x.actions != nil {
 		m := modelCoverage(x.Runs, x.actions)
@@ -822,7 +822,9 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 			return claimVerdict{ok: true}
 		}
 		return claimVerdict{ok: true, log: func(t testing.TB) string {
-			return fmt.Sprintf("%d of %d runs violate the model; %s shows %s:\n%s", bad, len(x.Runs), x.nameOf(r), describeClaim(c), x.describe(t, r, false))
+			// an expected failure: said as the claim it satisfies, so its
+			// conformance FAIL does not read as the test's
+			return fmt.Sprintf("as expected, %s: %s; the first:\n%s", c, x.failingWords(), indent(x.describe(t, r, false), "    "))
 		}}
 	case j.ok:
 		return claimVerdict{ok: true}
@@ -839,9 +841,40 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 		}}
 	default:
 		return claimVerdict{say: func(t testing.TB) string {
-			return fmt.Sprintf("%d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, x.Failing()[0], true))
+			return fmt.Sprintf("%s, none as %s%s; the first:\n%s", x.failingWords(), c, x.atStart(), x.describe(t, x.Failing()[0], true))
 		}}
 	}
+}
+
+// failingWords says how the failing runs fail, in the claims' words:
+// "21 of 30 runs reject apply", or with several reasons "23 of 30 runs
+// fail: 21 reject apply, 2 violate exactlyOnce".
+func (x *Exploration) failingWords() string {
+	e := evidenceOf(x.Runs)
+	bad := e.Runs - e.Conform
+	reasons := keysOf(e.FailingBy)
+	if len(reasons) == 1 {
+		return fmt.Sprintf("%d of %d runs %s", bad, e.Runs, runsDo(reasons[0]))
+	}
+	parts := make([]string, len(reasons))
+	for i, r := range reasons {
+		parts[i] = fmt.Sprintf("%d %s", e.FailingBy[r], runsDo(r))
+	}
+	return fmt.Sprintf("%d of %d runs fail: %s", bad, e.Runs, strings.Join(parts, ", "))
+}
+
+// runsDo is what runs failing for reason r do, as a verb: "rejects apply"
+// (Evidence.FailingBy's) is "reject apply".
+func runsDo(r string) string {
+	for _, v := range []string{"rejects ", "violates "} {
+		if strings.HasPrefix(r, v) {
+			return strings.Replace(r, "s ", " ", 1)
+		}
+	}
+	if strings.HasPrefix(r, "mismatch") {
+		return "show a " + r
+	}
+	return "have " + r
 }
 
 // describeClaim names what a failing All or None was about.
@@ -927,7 +960,7 @@ func describeAll(es []Expectation) string {
 // describe prints a run for a message; save, for a claim that failed,
 // also saves it to the corpus.
 func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
-	if save || x.alone != nil {
+	if save || x.alone != nil || os.Getenv("GOTOGETHER_KEEP") != "" { // a report whose paths are kept
 		x.recheck(t, r)
 	}
 	var b strings.Builder
@@ -948,6 +981,16 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 			fmt.Fprintf(&b, "    %s %v (process %s)\n", s.Action, s.Args, s.Process)
 		}
 	}
+	if !save && x.alone == nil && os.Getenv("GOTOGETHER_KEEP") == "" {
+		// a passing claim's example: its files are in the test's temporary
+		// directory, gone when it ends, so its paths would lead nowhere
+		head := withoutPaths(b.String())
+		b.Reset()
+		b.WriteString(head)
+		b.WriteString(x.keep(r, save))
+		b.WriteString("  (its files are not kept: GOTOGETHER_KEEP=dir keeps them)\n")
+		return b.String()
+	}
 	dir := x.dir // kept with the exploration's other artifacts (keepFiles)
 	if dir == "" {
 		dir = t.TempDir()
@@ -961,9 +1004,33 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	}
 	b.WriteString(x.keep(r, save))
 	if !save && x.alone == nil {
-		return b.String() // a passing claim's example: nothing to keep
+		return b.String() // a passing claim's example, kept under GOTOGETHER_KEEP
 	}
 	return x.keepFiles(b.String())
+}
+
+// withoutPaths drops a report's lines naming its files (module, itf).
+func withoutPaths(s string) string {
+	var b strings.Builder
+	for _, l := range strings.SplitAfter(s, "\n") {
+		if t := strings.TrimSpace(l); strings.HasPrefix(t, "module: ") || strings.HasPrefix(t, "itf: ") {
+			continue
+		}
+		b.WriteString(l)
+	}
+	return b.String()
+}
+
+// indent prefixes every non-empty line of s with pfx.
+func indent(s, pfx string) string {
+	var b strings.Builder
+	for _, l := range strings.SplitAfter(s, "\n") {
+		if strings.TrimSpace(l) != "" {
+			b.WriteString(pfx)
+		}
+		b.WriteString(l)
+	}
+	return b.String()
 }
 
 // recheck checks r again into the exploration's own directory when its

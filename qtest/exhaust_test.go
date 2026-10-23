@@ -125,3 +125,23 @@ func TestExhaustTruncated(t *testing.T) {
 		t.Errorf("a partial search's evidence: %+v", e.Search)
 	}
 }
+
+// A passing claim met by a failing run logs the run as the claim it
+// satisfies, in the claims' words, without the paths of files the test's
+// end removes: its conformance FAIL once read as the test's.
+func TestExpectedFailureLogged(t *testing.T) {
+	RequireQuint(t)
+	log := &logTB{TB: t}
+	System{Binding: "../validate/testdata/account.yaml", Run: race}.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))
+	for _, want := range []string{"as expected, a withdraw step the model cannot take: 1 of 2 runs reject withdraw; the first:",
+		"    schedule ", "its files are not kept: GOTOGETHER_KEEP=dir keeps them", "1 conform, 1 reject withdraw"} {
+		if !strings.Contains(log.logs, want) {
+			t.Errorf("logs lack %q:\n%s", want, log.logs)
+		}
+	}
+	for _, path := range []string{"module: ", "step log: "} {
+		if strings.Contains(log.logs, path) {
+			t.Errorf("logs name a %s:\n%s", path, log.logs)
+		}
+	}
+}

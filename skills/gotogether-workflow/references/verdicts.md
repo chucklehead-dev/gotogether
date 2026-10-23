@@ -67,7 +67,10 @@ The failure names the run: its seed, its faults, the report, the step
 log, and `reproduce: GOTOGETHER_RUN='TestX#2:seed=n' go test -run '^TestX$'`:
 the run in its exploration (`#2`, the test's second), or an exhaustive
 search's schedule (`:schedule=17:1`, the choices it made otherwise). The
-paths it prints outlive the test. Run alone, only the claims about every
+paths a failing claim prints outlive the test. A passing claim satisfied
+by failing runs (`Some(Rejects(...))`) logs its first example headed `as
+expected, <claim>:`, without paths: its files are not kept
+(`GOTOGETHER_KEEP=dir` keeps them). Run alone, only the claims about every
 run are judged. Two traps
 have their own message: every run failing at step 1 (the binding's
 constants do not match the scenario's: `qtest.Constants`, or a sweep
