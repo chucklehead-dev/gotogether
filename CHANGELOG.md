@@ -30,6 +30,9 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- `qtest.NoSurvivors` marks an equivalent mutant by function, change and
+  code (`"(Counter).Add: drop call: qobs.Record(...)"`), as a survivor's
+  report now prints it: a line added above no longer moves the mark.
 - `qenv.Script.Misnamed` says which scripted faults cannot happen as
   written (a kind no double declared, matched exactly: no prefix, no
   nemesis family; an option the kind lacks; the nominal option; a Follows

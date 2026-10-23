@@ -47,14 +47,33 @@ type MutationClaim struct {
 // NoSurvivors claims every reached mutant is killed, but those marked
 // equivalent: a mutant the environment makes harmless (a dropped ack that
 // is redelivered, a retry's boundary) survives by right. Mark one by its
-// position, "file.go:42", or by its position and operator, "file.go:42
-// drop call", as the report prints it.
+// function, change and code, as a survivor's report prints it, which
+// stays put when the code around it moves:
+//
+//	qtest.NoSurvivors("(Counter).Add: drop call: qobs.Record(ctx, \"replay\", nil, ...")
+//
+// or by its position, "file.go:42", or position and change, "file.go:42
+// drop call", which a line added above it moves.
 func NoSurvivors(equivalent ...string) MutationClaim { return MutationClaim{equivalent} }
 
-func (c MutationClaim) marked(m qmut.Mutant) bool {
+// markOf is a mutant's mark by function, change and code.
+func markOf(m qmut.Mutant) string {
+	fn := m.Func[strings.LastIndex(m.Func, "/")+1:] // the package's path out
+	if _, f, ok := strings.Cut(fn, "."); ok {
+		fn = f // and its name
+	}
+	return fmt.Sprintf("%s: %s: %s", fn, m.Op, m.Code)
+}
+
+// marks reports whether mark e names m.
+func marks(e string, m qmut.Mutant) bool {
 	pos := fmt.Sprintf("%s:%d", filepath.Base(m.File), m.Line)
+	return e == pos || e == pos+" "+m.Op || e == markOf(m)
+}
+
+func (c MutationClaim) marked(m qmut.Mutant) bool {
 	for _, e := range c.equivalent {
-		if e == pos || e == pos+" "+m.Op {
+		if marks(e, m) {
 			return true
 		}
 	}
@@ -63,7 +82,7 @@ func (c MutationClaim) marked(m qmut.Mutant) bool {
 
 // Expect fails t unless the mutation run meets the claim, naming each
 // surviving mutant and how to mark it, and each mark that matched no
-// survivor (stale after the code moved). One claim: NoSurvivors names
+// survivor (stale after the code changed). One claim: NoSurvivors names
 // every equivalent mutant at once.
 func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
 	t.Helper()
@@ -72,13 +91,13 @@ func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
 	for _, m := range r.Survived {
 		if c.marked(m) {
 			for _, e := range c.equivalent {
-				if e == fmt.Sprintf("%s:%d", filepath.Base(m.File), m.Line) || e == fmt.Sprintf("%s:%d %s", filepath.Base(m.File), m.Line, m.Op) {
+				if marks(e, m) {
 					used[e] = true
 				}
 			}
 			continue
 		}
-		survived = append(survived, fmt.Sprintf("  %s (if it is equivalent, mark it: NoSurvivors(%q))", m, fmt.Sprintf("%s:%d", filepath.Base(m.File), m.Line)))
+		survived = append(survived, fmt.Sprintf("  %s (if it is equivalent, mark it: NoSurvivors(%q))", m, markOf(m)))
 	}
 	var stale []string
 	for _, e := range c.equivalent {
@@ -90,7 +109,7 @@ func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
 		t.Errorf("gotogether: %d mutants survived every run: code the model does not constrain, or a check missing:\n%s", len(survived), strings.Join(survived, "\n"))
 	}
 	if len(stale) > 0 {
-		t.Errorf("gotogether: marked equivalent but no survivor there (killed now, or the code moved): %s", strings.Join(stale, ", "))
+		t.Errorf("gotogether: marked equivalent but no survivor there (killed now, or the code changed): %s", strings.Join(stale, ", "))
 	}
 }
 

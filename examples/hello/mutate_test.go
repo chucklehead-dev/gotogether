@@ -21,8 +21,9 @@ func TestMutationOfTheCounter(t *testing.T) {
 	// that loses the step (or the requests it needs) is killed by that
 	done := qtest.Takes("done").InAtLeast(0.9)
 	system(Faithful).Mutate(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}, done).Expect(t, qtest.NoSurvivors(
-		"hello.go:42", // the replay step unrecorded: a replay changes nothing the model sees
-		"hello.go:55", // one more retry: the run differs only if ten attempts all fail
-		"hello.go:79", // the run's error check negated: it differs only if the client gave up
+		// the replay step unrecorded: a replay changes nothing the model sees
+		`(Counter).Add: drop call: qobs.Record(ctx, "replay", nil, "id", id, "obs.count", c....`,
+		"Send: <= for <: attempt < 10", // one more retry: the run differs only if ten attempts all fail
+		"Run: negate if: rerr != nil",  // the run's error check negated: it differs only if the client gave up
 	))
 }
