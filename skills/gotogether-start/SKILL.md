@@ -15,7 +15,7 @@ references when the task needs them.
 | Does my code do what the model's traces do? | `connect.Run` (model drives the code, state compared) | gotogether-mbt |
 | Does the code accept inputs the model forbids? | Hegel drives, the model judges (`qhegel.Test`, `FindViolation`) | gotogether-hegel |
 | Do runs of the real system (tests, staging, production) conform? | record steps (`qobs`, `//quint:action`, OTel spans, `convert`), bind, `gotogether validate` | gotogether-traces |
-| Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` simulation, `qtest.System` (`Explore`, `Sweep`, `Fuzz`), `qhegel.Shrink` | gotogether-faults |
+| Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` simulation, `qtest.System` (`Explore`, `Exhaust`, `Sweep`, `Fuzz`), `qhegel.Shrink` | gotogether-faults |
 | Which code did no run reach, and does the model constrain the code that ran? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `x.Evidence()` | gotogether-faults (its coverage reference) |
 | Does it recover after a load spike or a slow dependency? | `qmeta` chain, `qload` simulation, `qhegel.FindTrigger`, alert rules | gotogether-metastability |
 | My system is an HTTP server, a gRPC service, or Kafka/Kinesis consumers and publishers | the seams and examples: kvstore, grpcledger (`simgrpc`), streams (a simulated log, kfake) | gotogether-faults (its services reference) |

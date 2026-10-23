@@ -31,6 +31,7 @@ type Exploration struct {
 	constants map[string]string // the instance checked against, for messages
 	test      string            // the test's name, for reproducing a seed
 	actions   map[string]bool   // the model's, for checking claims' names
+	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -160,7 +161,6 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		seeds = []uint64{n}
 	}
 	x := &Exploration{Runs: make([]*Run, len(seeds)), test: t.Name()}
-	runs := make([][]qtrace.Step, len(seeds))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, cfg.Parallel)
 	for i, seed := range seeds {
@@ -168,7 +168,6 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		sem <- struct{}{}
 		go func() { //qenv:ok runs seeds side by side, each its own simulation
 			defer func() { <-sem; wg.Done() }()
-			mem := &qobs.MemorySink{}
 			var ch qenv.Chooser
 			if cfg.Chooser != nil {
 				ch = cfg.Chooser(seed)
@@ -177,40 +176,66 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				s.Rates = cfg.Rates
 				ch = s
 			}
-			rec := &qenv.ChoiceLog{C: ch}
-			var sink qobs.Sink = mem
-			ctx := context.Background()
-			var code *qcover.Counts
-			if woven { // the code is woven with qweave -cover: count it by step
-				code = qcover.NewCounts()
-				ctx, sink = qcover.WithCounts(ctx, code), code.Sink(mem)
-			}
-			r := qobs.NewRecorder(sink, c.Recorder...)
-			err := scenario(qenv.WithContext(rec, qobs.WithRecorder(ctx, r)))
-			if err == nil {
-				err = chooserErr(ch)
-			}
-			if is := r.Issues(); err == nil && len(is) > 0 {
-				err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
-			}
-			x.Runs[i] = &Run{Seed: seed, Steps: mem.Steps(), Choices: rec.Choices, Interrupted: r.Interrupted(), Code: code, Err: err}
-			if sc, ok := qenv.As[*qenv.Script](ch); ok {
-				x.Runs[i].Unscripted = sc.Remaining()
-			}
-			runs[i] = mem.Steps()
+			x.Runs[i] = runOne(c, woven, ch, scenario)
+			x.Runs[i].Seed = seed
 		}()
 	}
 	wg.Wait()
+	x.finish(t, bindingPath, c, mark, seeds)
+	return x
+}
+
+// runOne runs the scenario once on ch, recording its steps into a recorder
+// of its own (carried by the chooser's context) and its choices.
+func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Chooser) error) *Run {
+	mem := &qobs.MemorySink{}
+	rec := &qenv.ChoiceLog{C: ch}
+	var sink qobs.Sink = mem
+	ctx := context.Background()
+	var code *qcover.Counts
+	if woven { // the code is woven with qweave -cover: count it by step
+		code = qcover.NewCounts()
+		ctx, sink = qcover.WithCounts(ctx, code), code.Sink(mem)
+	}
+	r := qobs.NewRecorder(sink, c.Recorder...)
+	err := scenario(qenv.WithContext(rec, qobs.WithRecorder(ctx, r)))
+	if err == nil {
+		err = chooserErr(ch)
+	}
+	if is := r.Issues(); err == nil && len(is) > 0 {
+		err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
+	}
+	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Interrupted: r.Interrupted(), Code: code, Err: err}
+	if sc, ok := qenv.As[*qenv.Script](ch); ok {
+		run.Unscripted = sc.Remaining()
+	}
+	return run
+}
+
+// name is how messages name a run: its seed, or an exhaustive search's
+// schedule.
+func (x *Exploration) name(id uint64) string {
+	if x.search != nil {
+		return fmt.Sprintf("schedule %d", id)
+	}
+	return fmt.Sprintf("seed %d", id)
+}
+
+// finish checks the runs, made with ids (seeds, schedules), against the
+// model: a run that failed to run (rather than to conform) fails t,
+// naming it.
+func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, ids []uint64) {
+	t.Helper()
 	if n, msgs := qobs.Escaped(mark); n > mark {
 		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
 	for i, r := range x.Runs {
 		if r == nil { // the scenario failed t from its goroutine before the run ended
-			t.Errorf("gotogether: seed %d did not finish: the scenario failed the test (above)", seeds[i])
+			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i]))
 			continue
 		}
 		if r.Err != nil {
-			t.Errorf("gotogether: seed %d did not run: %v", r.Seed, r.Err)
+			t.Errorf("gotogether: %s did not run: %v", x.name(r.Seed), r.Err)
 		}
 	}
 	if t.Failed() {
@@ -252,6 +277,10 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	cc.Options = o
 	// runs already judged (same steps) take their verdict from the cache,
 	// and runs of the batch with the same steps are checked once
+	runs := make([][]qtrace.Step, len(x.Runs))
+	for i, r := range x.Runs {
+		runs[i] = r.Steps
+	}
 	keys := make([]string, len(runs))
 	var todo [][]qtrace.Step
 	first := map[string]int{} // key -> index in todo
@@ -280,7 +309,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				continue
 			}
 			if errs[j] != nil {
-				t.Fatalf("gotogether: seed %d: %v", x.Runs[i].Seed, errs[j])
+				t.Fatalf("gotogether: %s: %v", x.name(x.Runs[i].Seed), errs[j])
 			}
 			x.Runs[i].Report = reps[j]
 			verdicts.put(keys[i], reps[j])
@@ -292,7 +321,6 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			t.Logf("gotogether: evidence.json: %v", err)
 		}
 	}
-	return x
 }
 
 // verdicts keeps the model's verdicts by instance and steps, for the test
@@ -380,6 +408,13 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	bad := len(x.Failing())
 	failedAny := false
 	for _, c := range claims {
+		if _, ok := c.(completeClaim); ok {
+			if msg := x.incomplete(); msg != "" {
+				failedAny = true
+				t.Errorf("gotogether: want %s; %s", c, msg)
+			}
+			continue
+		}
 		if rc, ok := c.(runsClaim); ok {
 			if msg := rc.judgeRuns(x.Runs, x.actions); msg != "" {
 				failedAny = true
@@ -394,7 +429,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		case j.ok && j.show >= 0 && !every:
 			r := x.Runs[j.show]
 			if !r.Report.OK() {
-				t.Logf("gotogether: %d of %d runs violate the model; seed %d shows %s:\n%s", bad, len(x.Runs), r.Seed, describeClaim(c), x.describe(t, r))
+				t.Logf("gotogether: %d of %d runs violate the model; %s shows %s:\n%s", bad, len(x.Runs), x.name(r.Seed), describeClaim(c), x.describe(t, r))
 			}
 		case j.ok:
 		case j.show >= 0:
@@ -500,7 +535,11 @@ func describeAll(es []Expectation) string {
 
 func (x *Exploration) describe(t testing.TB, r *Run) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "seed %d, faults %v\n%s", r.Seed, r.Faults(), r.Report.Summary())
+	if x.search != nil {
+		fmt.Fprintf(&b, "%s, made otherwise %v\n%s", x.name(r.Seed), r.deviations(), r.Report.Summary())
+	} else {
+		fmt.Fprintf(&b, "%s, faults %v\n%s", x.name(r.Seed), r.Faults(), r.Report.Summary())
+	}
 	if len(r.Steps) == 0 {
 		fmt.Fprintf(&b, "  the run recorded no steps: its tasks never reached a step (a deadlock, a wait no one ends: print Sim.Tasks() before Close), or it records into another recorder\n")
 	}
@@ -514,14 +553,16 @@ func (x *Exploration) describe(t testing.TB, r *Run) string {
 		}
 	}
 	dir := t.TempDir()
-	p := filepath.Join(dir, fmt.Sprintf("seed%d.steps.jsonl", r.Seed))
+	p := filepath.Join(dir, strings.ReplaceAll(x.name(r.Seed), " ", "")+".steps.jsonl")
 	if f, err := os.Create(p); err == nil {
 		if qtrace.WriteJSONL(f, r.Steps) == nil {
 			fmt.Fprintf(&b, "  step log: %s\n", p)
 		}
 		f.Close()
 	}
-	if x.test != "" {
+	if x.test != "" && x.search != nil {
+		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SCHEDULE=%q go test -run '^%s$'\n", r.Schedule, strings.ReplaceAll(x.test, "/", "$/^"))
+	} else if x.test != "" {
 		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
 	}
 	return b.String()
@@ -532,6 +573,9 @@ func (x *Exploration) describe(t testing.TB, r *Run) string {
 func chooserErr(c qenv.Chooser) error {
 	if r, ok := qenv.As[*qenv.Replayer](c); ok && r.Err() != nil {
 		return r.Err()
+	}
+	if f, ok := qenv.As[*forcing](c); ok && f.Err() != nil {
+		return f.Err()
 	}
 	if b, ok := qenv.As[*qenv.Bytes](c); ok && b.Err() != nil {
 		return b.Err()

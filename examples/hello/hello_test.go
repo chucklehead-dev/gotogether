@@ -43,6 +43,16 @@ func TestNoDedupeCountsRetries(t *testing.T) {
 	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 5, Rates: qenv.NoFaults}).Expect(t, qtest.Conforms())
 }
 
+// Every run within two delays and two faults, not a sample: the faithful
+// counter conforms in all 921 (quint checks 21: the rest repeat their
+// steps), and NoDedupe's bug needs one fault, which the search of every
+// single fault finds.
+func TestExhaustive(t *testing.T) {
+	qtest.RequireQuint(t)
+	system(Faithful).Exhaust(t, qtest.Bound{Delays: 2, Faults: 2}).Expect(t, qtest.Conforms(), qtest.Complete())
+	system(NoDedupe).Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"), qtest.Complete())
+}
+
 // Hegel makes every choice of the same System and shrinks NoDedupe's
 // failure to the one fault it needs (a duplicated request, or a lost
 // response and its retry); in the faithful counter it finds nothing. It

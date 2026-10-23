@@ -60,6 +60,7 @@ Steps are recorded where they take effect:
 |---|---|
 | `TestFaithfulConforms` | 80 seeded runs with every fault kind: all conform; `Evidence` shows every kind and pair faulted |
 | `TestMutants` | each mutant violates the property in its row |
+| `TestExhaustiveOneFault` | every run with one fault (`System.Exhaust`, 435): faithful conforms in all, `no-dedupe` and `non-idempotent-producer` caught; the search complete |
 | `TestPlainTestSeesOnlyOffByOne` | a test of the projection on the nominal run sees one bug of four |
 | `TestHegelShrinksReorder` | Hegel shrinks the reorder to its faults; the shrunk choices replay it step for step |
 | `TestFaithfulSweep` | pairwise rows of partitions × consumers × fault kinds on/off: all conform |

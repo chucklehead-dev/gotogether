@@ -26,6 +26,7 @@ type Evidence struct {
 	Faults    *qenv.Coverage  `json:"faults,omitempty"`
 	Model     *ModelCoverage  `json:"model,omitempty"`   // the model's actions the runs took (nil: no model)
 	Rows      int             `json:"rows,omitempty"`    // a sweep's rows (0: not a sweep)
+	Search    *Search         `json:"search,omitempty"`  // an exhaustive search's extent (nil: seeded runs)
 	Code      *qcover.Summary `json:"code,omitempty"`    // when the code is woven with qweave -cover (nil: not)
 	Mutants   *MutationReport `json:"mutants,omitempty"` // from System.Mutate, if set
 }
@@ -50,6 +51,9 @@ func (x *Exploration) Evidence() *Evidence {
 	}
 	if x.hasCode() {
 		e.Code = x.codeCoverage()
+	}
+	if x.search != nil {
+		e.Search = &Search{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0, Left: x.search.left}
 	}
 	return e
 }
@@ -122,6 +126,11 @@ func (e *Evidence) String() string {
 	fmt.Fprintf(&b, "evidence: %d runs", e.Runs)
 	if e.Rows > 0 {
 		fmt.Fprintf(&b, ", %d rows", e.Rows)
+	}
+	if sr := e.Search; sr != nil && sr.Complete {
+		fmt.Fprintf(&b, "\n  search    complete: every run within %d delays and %d faults", sr.Delays, sr.Faults)
+	} else if sr != nil {
+		fmt.Fprintf(&b, "\n  search    truncated: at least %d runs within %d delays and %d faults left (MaxRuns)", sr.Left, sr.Delays, sr.Faults)
 	}
 	fmt.Fprintf(&b, "\n  verdicts  %d conform", e.Conform)
 	reasons := make([]string, 0, len(e.FailingBy))

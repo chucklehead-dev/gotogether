@@ -79,6 +79,21 @@ func TestMutants(t *testing.T) {
 	}
 }
 
+// Every run with one fault, not a sample: the faithful shop conforms in
+// all 2828, each fault at each point it can happen (a crash at every
+// scheduling step among them). DualWrite's one-step window, which seeds
+// find only at ten times the crash rate, is among them: the search needs
+// no rate.
+func TestExhaustiveOneFault(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("thousands of runs")
+	}
+	system(checkout.Config{}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).Expect(t, qtest.Conforms(), qtest.Complete())
+	system(checkout.Config{Mutation: shop.DualWrite}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).
+		Expect(t, qtest.Violates("settledCorrectly"), qtest.Complete())
+}
+
 // Hegel makes every choice of the environment and shrinks a write skew to
 // the interleaving and faults it needs. The shrunk run's choices replay it
 // outside Hegel, step for step: a regression test needs no Hegel.

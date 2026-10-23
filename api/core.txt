@@ -392,8 +392,10 @@ type Row struct{ ... }
 == github.com/chucklehead-dev/gotogether/qtest
 func RequireQuint(t testing.TB)
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
+type Bound struct{ ... }
 type Claim interface{ ... }
     func All(es ...Expectation) Claim
+    func Complete() Claim
     func None(es ...Expectation) Claim
     func Some(es ...Expectation) Claim
 type Evidence struct{ ... }
@@ -424,6 +426,7 @@ type Reach struct{ ... }
 type Run struct{ ... }
     func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), ...) *Run
     func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
+type Search struct{ ... }
 type Settings struct{ ... }
     func Resolve(t testing.TB, opts ...Option) Settings
 type SweepConfig struct{ ... }

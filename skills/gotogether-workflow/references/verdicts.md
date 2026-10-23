@@ -33,6 +33,7 @@ together (`Exploration.Expect`):
 | `qtest.None(a)` | no run shows it |
 | `qtest.Reaches("kind").Faulted().InAtLeast(p)` | a share p of the runs reach a fault point of the kind (and fault it) |
 | `qtest.Takes("action").InAtLeast(p)` | a share p of the runs take the model action (up to a failing step) |
+| `qtest.Complete()` | an exhaustive search (`System.Exhaust`) ran every run within its bound: `MaxRuns` did not cut it short |
 | `qtest.Exercised(except...)` | every model action is taken in some run and every reached fault kind faulted in some run, but those named |
 
 `Takes` and `Exercised` say the runs exercised what the model and the
@@ -62,7 +63,9 @@ seeds, not by hand.
 ## When it fails
 
 The failure names the run: its seed, its faults, the report, the step
-log, and `reproduce: GOTOGETHER_SEED=n go test -run '^TestX$'`. Two traps
+log, and `reproduce: GOTOGETHER_SEED=n go test -run '^TestX$'` (an
+exhaustive search's: its schedule, `GOTOGETHER_SCHEDULE="17:1"`, and the
+choices it made otherwise). Two traps
 have their own message: every run failing at step 1 (the binding's
 constants do not match the scenario's: `qtest.Constants`, or a sweep
 factor's `.Constant`), and "all runs conform" listing the fault kinds

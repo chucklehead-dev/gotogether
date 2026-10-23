@@ -177,19 +177,22 @@ The track, in order:
     and the report says which held vacuously in every run. Readers of
     `evidence.json`: `gotogether cover -sim` and actionmap (V13's later
     work).
-- **X3. Bounded exhaustive schedules (M; after W7).** A stateless,
-  delay-bounded DFS chooser (`qenv/internal/choice`): option 0 is the
-  oldest task or nominal, so a non-zero schedule choice is a delay and a
-  non-zero fault choice a fault, and "≤ k delays, ≤ f faults" falls out
-  of the protocol. `System.Exhaust(t, qtest.Bound{Delays, Faults,
-  MaxRuns})` returns an Exploration (the same claims and Evidence);
-  `Complete()` fails a search MaxRuns cut short, and Evidence says
-  "complete: N schedules" or "truncated". The verdict cache makes
-  schedules with the same steps cost a Go run, not a quint check. Wide
-  value choices (`sched.wait`'s durations) count against the bound or
-  stay nominal: document which. No DPOR (it needs every seam's
-  footprint). Targets: checkout's `DualWrite` at f=1, hello's dedupe and
-  streams' reorder at k≤2.
+- **X3. Bounded exhaustive schedules (M).** Done. `System.Exhaust(t,
+  qtest.Bound{Delays, Faults, Without, MaxRuns})` runs every run within
+  the bound breadth first by deviations, replaying each from the start
+  (stateless; no entropy, so gosim asks per choice), and returns an
+  Exploration: the same claims and Evidence, a `search` line, and
+  `qtest.Complete()`. A run is named by its schedule (`17:1,40:2`, the
+  choices made otherwise), which `GOTOGETHER_SCHEDULE` runs alone. Every
+  option of a choice counts alike; no DPOR.
+  - **Its findings.** The verdict cache makes it cheap: hello's 921 runs
+    within 2 delays and 2 faults are 21 quint checks. One fault is the
+    useful bound for the larger examples: checkout's 2828 one-fault runs
+    conform, and DualWrite's window, which seeds find only at ten times
+    the crash rate, shows with no rate to tune; streams' 435 catch
+    `no-dedupe` and the reorder. Streams at one delay and one fault is
+    over 40,000 runs: delays need DPOR, or a bound on which tasks may be
+    delayed, before they scale past toy systems.
 - **X4. Real-time order (S–M).** Clients record invoke and complete
   times; if A completed before B was invoked, A's step must precede B's
   (`qtrace`, an issue with a fix, no quint). Then, for overlapping

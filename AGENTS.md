@@ -131,7 +131,8 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   connect's `quint run`).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_SEED=n` runs an exploration's seed n alone (each
-  failing run's report prints the command). `GOTOGETHER_VERBOSE=1` shows
+  failing run's report prints the command); `GOTOGETHER_SCHEDULE="i:v,..."`
+  runs one run of an exhaustive search alone. `GOTOGETHER_VERBOSE=1` shows
   Hegel's output for expected failures (FindViolation and Shrink capture
   os.Stdout while Hegel runs, since Hegel writes nowhere else).
 

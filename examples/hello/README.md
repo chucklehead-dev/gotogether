@@ -18,6 +18,7 @@ back; a model that says every request counts once. The whole system is
 |---|---|---|---|
 | `TestFaithfulConforms` | none | 30 seeds, one message fault in five | every run conforms |
 | `TestNoDedupeCountsRetries` | `NoDedupe`: a retried or duplicated request is counted again | the same exploration | some run's `apply` is rejected (the model has no second apply of a request); with no faults every run conforms: no retry, no bug |
+| `TestExhaustive` | none, then `NoDedupe` | every run within 2 delays and 2 faults (`System.Exhaust`), then within 1 fault | all 921 conform, the search complete; one fault is enough for a rejected `apply` |
 | `TestHegelShrinks` | `NoDedupe`, then none | Hegel makes every choice (`qhegel.Shrink`) | shrunk to one fault and a rejected `apply`; in the faithful counter Hegel finds nothing (`Expect(t, qtest.Conforms())`) |
 
 The bug needs a fault to show: a lost response makes the client retry,

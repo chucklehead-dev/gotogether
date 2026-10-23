@@ -42,6 +42,20 @@ func TestFaithfulConforms(t *testing.T) {
 	t.Log(x.Evidence())
 }
 
+// Every run with one fault, not a sample (435 of them): the faithful
+// pipeline conforms in each, and the two bugs that need a fault show in
+// some: a redelivery applied twice, a retried record behind the next.
+func TestExhaustiveOneFault(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("hundreds of runs, three times")
+	}
+	one := qtest.Bound{Faults: 1}
+	system(streams.Config{}).Exhaust(t, one).Expect(t, qtest.Conforms(), qtest.Complete())
+	system(streams.Config{Mutation: pipeline.NoDedupe}).Exhaust(t, one).Expect(t, qtest.Violates("appliedAtMostOnce"), qtest.Complete())
+	system(streams.Config{Mutation: pipeline.NonIdempotentProducer}).Exhaust(t, one).Expect(t, qtest.Violates("perKeyOrder"), qtest.Complete())
+}
+
 // Which check catches which bug. Each mutant runs with the faults that
 // make its bug possible; the model names the property it breaks.
 func TestMutants(t *testing.T) {

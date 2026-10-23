@@ -28,6 +28,9 @@ Added to the core since api/core.txt was first recorded:
 - `qtest.Takes(action).InAtLeast(p)` and `qtest.Exercised(except...)`:
   claims that an exploration's runs took the model's actions and faulted
   what they reached; `Evidence.Model` lists the actions never taken.
+- `System.Exhaust(t, qtest.Bound{Delays, Faults})`: every run within the
+  bound, fewest deviations first, as an Exploration; `qtest.Complete()`,
+  `Evidence.Search`, `Run.Schedule` and `GOTOGETHER_SCHEDULE`.
 - `gotogether simulate -binding`: the model's simulation against each
   invariant the binding's new `simulate` section (`binding.Simulation`)
   says it guarantees (`holds`) or lets the code break (`allows`).

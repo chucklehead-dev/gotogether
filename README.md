@@ -99,6 +99,7 @@ Python and no server.
 | Variable | What it does |
 |---|---|
 | `GOTOGETHER_SEED=n` | runs an exploration's seed n alone (a failing run's report prints the command) |
+| `GOTOGETHER_SCHEDULE="i:v,..."` | runs one run of an exhaustive search (`System.Exhaust`) alone: the choices it made otherwise, as its report prints them |
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
 | `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
@@ -475,7 +476,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |
 | `validate` | replay with `quint test`: `Checker` (`Check`, `CheckBatch`), `Cached`, `ValidateITF`; structured verdicts |
-| `qtest` | tests that check against the model: `System` (`Explore`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes`, `Exercised`; `Violates(...).At`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
+| `qtest` | tests that check against the model: `System` (`Explore`, `Exhaust`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes`, `Exercised`, `Complete`; `Violates(...).At`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
 | `qenv` | deterministic simulation: scheduler, virtual time, crashable processes, choosers (`NewSeeded`, `Replay`, `Script`, `Swarm`, `FromBytes`); doubles `Store` (isolation levels), `Queue`, `Service` (with `Capacity`); `DeclareFaults`, `FaultPoint`, `CoverageOf`; `NewNative` (the same on goroutines, for gosim); `TimeProfile` |
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `qenv/fault` | the `//quint:fault` aspect: a function's entry a fault choice, with its own errors |

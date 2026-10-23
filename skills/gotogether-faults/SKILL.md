@@ -98,7 +98,7 @@ sys.Explore(t, qtest.ExploreConfig{Seeds: 100, Rates: rates}).Expect(t, qtest.Vi
 qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("chargedAtMostOnce"))
 ```
 
-- **One System, every workflow:** `sys.Explore` (seeds), `sys.Sweep`
+- **One System, every workflow:** `sys.Explore` (seeds), `sys.Exhaust` (every run within a bound), `sys.Sweep`
   (covering rows), `sys.FollowTraces` (a model's traces' faults),
   `qhegel.Shrink` (Hegel), all from the same `Run`. `Run` returns an
   error when the system could not run, which fails the test and names
@@ -124,6 +124,18 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
 - **Other instances:** `qtest.Constants(map[string]string{"STOCK":
   "1000"})` checks against the model with other constants, so one
   binding serves runs of every size.
+- **Every run, not a sample:** `sys.Exhaust(t, qtest.Bound{Delays: 2,
+  Faults: 1})` runs every run that strays from the nominal one in at most
+  that many choices (a delay: a task other than the oldest; a fault, a
+  crash among them), fewest first, checked as an exploration's runs are.
+  Claim `qtest.Complete()` so a search `MaxRuns` (default 1000) cut short
+  fails. One fault is often enough: checkout's DualWrite window, which
+  seeds find only at ten times the crash rate, and streams' reorder show
+  in a complete one-fault search. Runs with the same steps are checked
+  once, so thousands of runs cost a few quint checks; a failing run's
+  report gives `GOTOGETHER_SCHEDULE="17:1"`, which runs it alone. No
+  partial-order reduction: two delays on a system with many tasks is
+  tens of thousands of runs, so start at one fault.
 - **Reproducing a seed:** a failing run's report ends with
   `reproduce: GOTOGETHER_SEED=17 go test -run '^TestX$'`; with GOTOGETHER_SEED
   set, an exploration runs that seed alone. A run whose Script never made

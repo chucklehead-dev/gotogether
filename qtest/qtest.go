@@ -116,9 +116,13 @@ func checkerFor(t testing.TB, bindingPath string, o validate.Options, c settings
 // value for is zero (Record makes no choices; an exploration writes no
 // step log).
 type Run struct {
-	Seed    uint64 // an exploration's seed
-	Steps   []qtrace.Step
-	Choices []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
+	Seed uint64 // an exploration's seed, or an exhaustive search's run number
+	// Schedule is an exhaustive search's run (System.Exhaust): the choices
+	// it made otherwise than nominal, as choice:option pairs ("17:1,40:2").
+	// GOTOGETHER_SCHEDULE runs it alone.
+	Schedule string
+	Steps    []qtrace.Step
+	Choices  []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
 	// Interrupted are steps of work a crash or the end of the run cut off
 	// (qobs.Recorder.Interrupted): not in Steps, not checked; reported with
 	// a failing run.
