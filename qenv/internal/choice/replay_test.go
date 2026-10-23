@@ -87,3 +87,19 @@ func TestChoiceString(t *testing.T) {
 		}
 	}
 }
+
+// Above a rate of 255/256 no byte is nominal: a nominal choice there is
+// refused, not encoded as a 0 that replays as a fault.
+func TestEncodeRefusesNominalAboveLastByte(t *testing.T) {
+	nominal := []Choice{{Kind: "fault.x", N: 2, Value: 0}}
+	if _, err := EncodeChoices(nominal, Rates{Default: 0.998}); err == nil || !strings.Contains(err.Error(), "no byte is nominal") {
+		t.Fatalf("rate 0.998: %v", err)
+	}
+	data, err := EncodeChoices(nominal, Rates{Default: 0.99})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := FromBytes(data, Rates{Default: 0.99}); b.Choose("fault.x", 2) != 0 {
+		t.Fatal("nominal at 0.99 replays as a fault")
+	}
+}
