@@ -143,8 +143,12 @@ The track, in order:
     fleetrollout's in-memory-progress mutant went over budget through a
     lost response alone in 6.5% of runs, which 20 seeds miss a quarter
     of the time (now 40 seeds at a higher API fault rate).
-  - **Left.** Hegel unseeded at night (the tests pin `WithSeed`), and
-    turning a failure into a corpus entry: both with X8's corpus.
+  - **Left, then done with X8.** Hegel unseeded at night
+    (`GOTOGETHER_HEGEL_SEED=random`) and a failure as a corpus entry
+    (`GOTOGETHER_CORPUS`, uploaded). The first unseeded run failed
+    hello's `ShrunkTo(1)` at 3 seeds of 10: Hegel's shrinking had kept a
+    fault the failure did not need. Shrink now removes such faults
+    itself, and 10 seeds of 10 end at one.
 
   The plan as written: `go test -race -short` on the packages that are
   not simulated (qobs, qtrace, validate, qrun, qenv's native tests,
@@ -260,12 +264,15 @@ The track, in order:
     `Heal`, and `Partitions`, a nemesis per link); `Settle` heals them.
   - **Left.** jobqueue's journal on a Disk (jobqueue is not on qenv);
     partitions for `Queue` and the other doubles.
-- **X8. Smaller claims and corpora.** An exploration corpus
-  (`ExploreConfig.Corpus`: saved runs replay first, a failing one is
-  written with its reproduce line); one example's mutation test ending in
-  `NoSurvivors`, and `Reaches`/`Exercised` in checkout's conforming
-  tests; `FollowTraces` in the README and gotogether-start's table; qload
-  monotonicity (more capacity never recovers worse) as self-tests.
+- **X8. Smaller claims and corpora.**
+  - **Done.** `ExploreConfig.Corpus`: saved runs (choices as JSON)
+    replay before the seeds, and a failed claim saves the run it shows;
+    `GOTOGETHER_CORPUS` for every exploration. Shrink's own pass over
+    faults (above, X1).
+  - **Left.** One example's mutation test ending in `NoSurvivors`;
+    `Reaches`/`Exercised` in checkout's conforming tests; `FollowTraces`
+    in the README and gotogether-start's table; qload monotonicity (more
+    capacity never recovers worse) as self-tests.
 
 Deferred: online streaming verification (resuming quint from a checkpoint
 is unsound for nondeterministic models; `gotogether validate -follow` over

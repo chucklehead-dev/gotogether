@@ -153,6 +153,11 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   report gives `GOTOGETHER_SCHEDULE="17:1"`, which runs it alone. No
   partial-order reduction: two delays on a system with many tasks is
   tens of thousands of runs, so start at one fault.
+- **A corpus of failures:** `ExploreConfig{Corpus: "testdata/corpus/TestX"}`
+  replays the saved runs there before the seeds, and a failed claim saves
+  the run it shows there (its choices, as JSON): commit it, and the bug
+  stays found whatever the seeds become. `GOTOGETHER_CORPUS=dir` gives
+  every exploration `dir/<test>` (the nightly run uploads it).
 - **Reproducing a seed:** a failing run's report ends with
   `reproduce: GOTOGETHER_SEED=17 go test -run '^TestX$'`; with GOTOGETHER_SEED
   set, an exploration runs that seed alone. A run whose Script never made

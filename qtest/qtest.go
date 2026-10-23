@@ -123,8 +123,11 @@ type Run struct {
 	// it made otherwise than nominal, as choice:option pairs ("17:1,40:2").
 	// GOTOGETHER_SCHEDULE runs it alone.
 	Schedule string
-	Steps    []qtrace.Step
-	Choices  []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
+	// Corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
+	// or "" for a seeded run.
+	Corpus  string
+	Steps   []qtrace.Step
+	Choices []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
 	// Interrupted are steps of work a crash or the end of the run cut off
 	// (qobs.Recorder.Interrupted): not in Steps, not checked; reported with
 	// a failing run.

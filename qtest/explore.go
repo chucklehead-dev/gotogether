@@ -2,6 +2,9 @@ package qtest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,6 +36,7 @@ type Exploration struct {
 	actions   map[string]bool   // the model's, for checking claims' names
 	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
 	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
+	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
 	vacuity   *[]Vacuity        // computed once (Vacuous)
 }
 
@@ -96,6 +100,66 @@ type ExploreConfig struct {
 	// Chooser, if set, makes each seed's chooser instead of a seeded one
 	// at Rates: a Script per seed, a Replay of a recorded run, a swarm.
 	Chooser func(seed uint64) qenv.Chooser
+	// Corpus is a directory of saved runs (their choices, as JSON),
+	// replayed before the seeds: a run that once failed, kept as a
+	// regression. When a claim fails, the run it shows is saved there.
+	// GOTOGETHER_CORPUS=dir gives every exploration dir/<test name> (a
+	// nightly run collecting what it finds).
+	Corpus string
+}
+
+// A corpusEntry is a saved run: its choices replay it (qenv.Replay).
+type corpusEntry struct {
+	Test    string        `json:"test"`
+	Seed    uint64        `json:"seed,omitempty"`
+	Choices []qenv.Choice `json:"choices"`
+}
+
+// corpusDir is the exploration's corpus directory, or "".
+func corpusDir(t testing.TB, cfg ExploreConfig) string {
+	if cfg.Corpus != "" {
+		return cfg.Corpus
+	}
+	if d := os.Getenv("GOTOGETHER_CORPUS"); d != "" {
+		return filepath.Join(d, strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
+	}
+	return ""
+}
+
+// readCorpus reads the entries of dir, sorted by name.
+func readCorpus(dir string) (paths []string, entries [][]qenv.Choice, err error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	sort.Strings(files)
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		var e corpusEntry
+		if err := json.Unmarshal(b, &e); err != nil {
+			return nil, nil, fmt.Errorf("corpus entry %s: %w", f, err)
+		}
+		paths, entries = append(paths, f), append(entries, e.Choices)
+	}
+	return paths, entries, nil
+}
+
+// save writes r's choices to the corpus, named by their hash, and
+// returns the file.
+func (x *Exploration) save(r *Run) (string, error) {
+	b, err := json.MarshalIndent(corpusEntry{Test: x.test, Seed: r.Seed, Choices: r.Choices}, "", " ")
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256(b)
+	if err := os.MkdirAll(x.corpus, 0o755); err != nil {
+		return "", err
+	}
+	p := filepath.Join(x.corpus, hex.EncodeToString(h[:6])+".json")
+	return p, os.WriteFile(p, append(b, '\n'), 0o644)
 }
 
 // envUint reads a count from the environment: 0 when unset.
@@ -162,7 +226,22 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}
 		seeds = []uint64{n}
 	}
-	x := &Exploration{Runs: make([]*Run, len(seeds)), test: t.Name()}
+	x := &Exploration{Runs: make([]*Run, len(seeds)), test: t.Name(), corpus: corpusDir(t, cfg)}
+	// the corpus's runs, after the seeds' (their numbers stay the same)
+	var corpusPaths []string
+	var corpusRuns [][]qenv.Choice
+	if x.corpus != "" && os.Getenv("GOTOGETHER_SEED") == "" {
+		var err error
+		if corpusPaths, corpusRuns, err = readCorpus(x.corpus); err != nil {
+			t.Fatalf("gotogether: %v", err)
+		}
+	}
+	x.Runs = append(x.Runs, make([]*Run, len(corpusRuns))...)
+	ids := append([]uint64(nil), seeds...)
+	for range corpusRuns {
+		ids = append(ids, 0)
+		seeds = append(seeds, 0)
+	}
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, cfg.Parallel)
 	for i, seed := range seeds {
@@ -171,6 +250,12 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		go func() { //qenv:ok runs seeds side by side, each its own simulation
 			defer func() { <-sem; wg.Done() }()
 			var ch qenv.Chooser
+			if k := i - (len(seeds) - len(corpusRuns)); k >= 0 {
+				ch = qenv.Replay(corpusRuns[k])
+				x.Runs[i] = runOne(c, woven, ch, scenario)
+				x.Runs[i].Corpus = corpusPaths[k]
+				return
+			}
 			if cfg.Chooser != nil {
 				ch = cfg.Chooser(seed)
 			} else {
@@ -183,7 +268,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}()
 	}
 	wg.Wait()
-	x.finish(t, bindingPath, c, mark, seeds)
+	x.finish(t, bindingPath, c, mark, ids)
 	return x
 }
 
@@ -216,12 +301,18 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 
 // name is how messages name a run: its seed, or an exhaustive search's
 // schedule.
-func (x *Exploration) name(id uint64) string {
-	if x.search != nil {
+func (x *Exploration) name(id uint64, corpus string) string {
+	switch {
+	case corpus != "":
+		return "corpus entry " + filepath.Base(corpus)
+	case x.search != nil:
 		return fmt.Sprintf("schedule %d", id)
 	}
 	return fmt.Sprintf("seed %d", id)
 }
+
+// nameOf is how messages name run r.
+func (x *Exploration) nameOf(r *Run) string { return x.name(r.Seed, r.Corpus) }
 
 // finish checks the runs, made with ids (seeds, schedules), against the
 // model: a run that failed to run (rather than to conform) fails t,
@@ -233,11 +324,11 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	}
 	for i, r := range x.Runs {
 		if r == nil { // the scenario failed t from its goroutine before the run ended
-			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i]))
+			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i], ""))
 			continue
 		}
 		if r.Err != nil {
-			t.Errorf("gotogether: %s did not run: %v", x.name(r.Seed), r.Err)
+			t.Errorf("gotogether: %s did not run: %v", x.nameOf(r), r.Err)
 		}
 	}
 	if t.Failed() {
@@ -312,7 +403,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 				continue
 			}
 			if errs[j] != nil {
-				t.Fatalf("gotogether: %s: %v", x.name(x.Runs[i].Seed), errs[j])
+				t.Fatalf("gotogether: %s: %v", x.nameOf(x.Runs[i]), errs[j])
 			}
 			x.Runs[i].Report = reps[j]
 			verdicts.put(keys[i], reps[j])
@@ -443,15 +534,15 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		case j.ok && j.show >= 0 && !every:
 			r := x.Runs[j.show]
 			if !r.Report.OK() {
-				t.Logf("gotogether: %d of %d runs violate the model; %s shows %s:\n%s", bad, len(x.Runs), x.name(r.Seed), describeClaim(c), x.describe(t, r))
+				t.Logf("gotogether: %d of %d runs violate the model; %s shows %s:\n%s", bad, len(x.Runs), x.nameOf(r), describeClaim(c), x.describe(t, r, false))
 			}
 		case j.ok:
 		case j.show >= 0:
 			failedAny = true
 			if every {
-				t.Errorf("gotogether: want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show]))
+				t.Errorf("gotogether: want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
 			} else {
-				t.Errorf("gotogether: want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show]))
+				t.Errorf("gotogether: want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
 			}
 		case bad == 0:
 			failedAny = true
@@ -459,7 +550,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		default:
 			failedAny = true
 			first := x.Failing()[0]
-			t.Errorf("gotogether: %d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, first))
+			t.Errorf("gotogether: %d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, first, true))
 		}
 	}
 	if failedAny {
@@ -547,12 +638,14 @@ func describeAll(es []Expectation) string {
 	return strings.Join(s, " and ")
 }
 
-func (x *Exploration) describe(t testing.TB, r *Run) string {
+// describe prints a run for a message; save, for a claim that failed,
+// also saves it to the corpus.
+func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	var b strings.Builder
 	if x.search != nil {
-		fmt.Fprintf(&b, "%s, made otherwise %v\n%s", x.name(r.Seed), r.deviations(), r.Report.Summary())
+		fmt.Fprintf(&b, "%s, made otherwise %v\n%s", x.nameOf(r), r.deviations(), r.Report.Summary())
 	} else {
-		fmt.Fprintf(&b, "%s, faults %v\n%s", x.name(r.Seed), r.Faults(), r.Report.Summary())
+		fmt.Fprintf(&b, "%s, faults %v\n%s", x.nameOf(r), r.Faults(), r.Report.Summary())
 	}
 	if len(r.Steps) == 0 {
 		fmt.Fprintf(&b, "  the run recorded no steps: its tasks never reached a step (a deadlock, a wait no one ends: print Sim.Tasks() before Close), or it records into another recorder\n")
@@ -567,12 +660,19 @@ func (x *Exploration) describe(t testing.TB, r *Run) string {
 		}
 	}
 	dir := t.TempDir()
-	p := filepath.Join(dir, strings.ReplaceAll(x.name(r.Seed), " ", "")+".steps.jsonl")
+	p := filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r))+".steps.jsonl")
 	if f, err := os.Create(p); err == nil {
 		if qtrace.WriteJSONL(f, r.Steps) == nil {
 			fmt.Fprintf(&b, "  step log: %s\n", p)
 		}
 		f.Close()
+	}
+	if save && x.corpus != "" && r.Corpus == "" && len(r.Choices) > 0 {
+		if p, err := x.save(r); err == nil {
+			fmt.Fprintf(&b, "  saved to the corpus: %s (replayed before the seeds from now on; commit it as a regression)\n", p)
+		} else {
+			fmt.Fprintf(&b, "  not saved to the corpus: %v\n", err)
+		}
 	}
 	if x.test != "" && x.search != nil {
 		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SCHEDULE=%q go test -run '^%s$'\n", r.Schedule, strings.ReplaceAll(x.test, "/", "$/^"))

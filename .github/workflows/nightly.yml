@@ -3,7 +3,8 @@ name: nightly
 # CI re-checks the same seeds on every push; this widens the sample each
 # night: fresh seeds (an offset by date), more of them, and longer fuzzing.
 # A failure's report names its seed (GOTOGETHER_SEED=n replays it) or its
-# fuzz input (testdata/fuzz): commit it as a regression once fixed.
+# fuzz input (testdata/fuzz), and its run is kept as a corpus entry (the
+# artifact): commit it as a regression once fixed.
 
 on:
   schedule:
@@ -17,6 +18,9 @@ env:
   QUINT_VERSION: 0.33.0
   GOWORK: "off"
   GOTOGETHER_SEEDS: "500"
+  # Hegel searches at a fresh seed, logged (GOTOGETHER_HEGEL_SEED=<it>
+  # replays one)
+  GOTOGETHER_HEGEL_SEED: random
 
 jobs:
   fresh-seeds:
@@ -41,7 +45,13 @@ jobs:
         run: |
           export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
           echo "seeds $((GOTOGETHER_SEED_OFFSET + 1))..$((GOTOGETHER_SEED_OFFSET + GOTOGETHER_SEEDS))"
-          go test -count=1 -timeout 280m ./...
+          GOTOGETHER_CORPUS=$RUNNER_TEMP/corpus go test -count=1 -timeout 280m ./...
+      - name: keep the failing runs (each a corpus entry; commit under a test's ExploreConfig.Corpus)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-${{ matrix.example }}
+          path: ${{ runner.temp }}/corpus
 
   fuzz:
     runs-on: ubuntu-latest

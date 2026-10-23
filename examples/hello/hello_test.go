@@ -56,9 +56,10 @@ func TestExhaustive(t *testing.T) {
 // Hegel makes every choice of the same System and shrinks NoDedupe's
 // failure to the one fault it needs (a duplicated request, or a lost
 // response and its retry); in the faithful counter it finds nothing. It
-// draws at the default rates: at lossy's (a fault at one choice in five)
-// its shrinking stopped at two faults. The search is seeded: an unseeded one
-// sometimes stopped at three.
+// draws at the default rates. Hegel's shrinking alone stopped at two
+// faults for 3 seeds of 10 (a lost response and a dropped request, where
+// the response is enough); Shrink's own pass then removes each fault the
+// failure does not need, and every seed tried ends at one.
 func TestHegelShrinks(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {

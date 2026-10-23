@@ -66,6 +66,11 @@ func TestBankAgainstModel(t *testing.T) {
   (`GOTOGETHER_VERBOSE=1` shows them always). A System shrinks the same way:
   `qhegel.Shrink(t, sys, rates).Expect(t, qtest.Rejects("apply"))`, and
   `.Expect(t, qtest.Conforms())` states that Hegel finds nothing.
+  After Hegel, Shrink removes each fault the failure does not need
+  (replayed with the rest kept, kept if it fails the same way): Hegel's
+  own shrinking can stop with one too many, so `qtest.ShrunkTo(n)` holds
+  for any seed, not only the test's. `GOTOGETHER_HEGEL_SEED=random` (the
+  nightly run) searches at a fresh seed and logs it.
 
 ## Model drives, Hegel varies
 

@@ -2,8 +2,11 @@ package qhegel
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/binary"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -85,6 +88,9 @@ func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCas
 		base = append(base, hegel.WithVerbosity(hegel.VerbosityQuiet), hegel.WithReproductionBlob(false))
 	}
 	opts = append(base, opts...)
+	if s, ok := seedFromEnv(t); ok {
+		opts = append(opts, hegel.WithSeed(s)) // after the test's own: a nightly run's fresh seed wins
+	}
 	var hegelOut *captured
 	if quiet {
 		// Hegel replays the failure it is expected to find on os.Stdout
@@ -197,13 +203,17 @@ func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Opti
 	if rates.Default == 0 && rates.Kinds == nil {
 		rates = qenv.DefaultRates
 	}
-	return FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, func(tc hegel.TestCase, rec *Case) {
+	v := FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
 		if err := sys.Run(rec.Env(c)); err != nil {
 			tc.Errorf("qhegel: the system did not run: %v", err)
 		}
 	}, opts...)
+	if v.found {
+		minimize(t, sys, v)
+	}
+	return v
 }
 
 // stdoutMu serializes the redirections of os.Stdout: one Hegel run's at a
@@ -247,4 +257,29 @@ func (c *captured) stop() string {
 	out := <-c.done
 	stdoutMu.Unlock()
 	return out
+}
+
+// seedFromEnv is GOTOGETHER_HEGEL_SEED's seed: a number, or "random" for
+// a fresh one each run (a nightly run's), logged so a failure can be
+// replayed with GOTOGETHER_HEGEL_SEED=<it>. Tests pin their seeds
+// (hegel.WithSeed) so CI sees the same search every push; this widens it.
+func seedFromEnv(t testing.TB) (int64, bool) {
+	v := os.Getenv("GOTOGETHER_HEGEL_SEED")
+	if v == "" {
+		return 0, false
+	}
+	var s int64
+	if v == "random" {
+		var b [8]byte
+		_, _ = crand.Read(b[:])
+		s = int64(binary.LittleEndian.Uint64(b[:]) >> 1)
+	} else {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			t.Fatalf("qhegel: GOTOGETHER_HEGEL_SEED=%q: want a number or random", v)
+		}
+		s = n
+	}
+	t.Logf("qhegel: Hegel's seed %d (GOTOGETHER_HEGEL_SEED=%d replays this search)", s, s)
+	return s, true
 }

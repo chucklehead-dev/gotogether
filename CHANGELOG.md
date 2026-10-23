@@ -35,6 +35,11 @@ Added to the core since api/core.txt was first recorded:
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and
   `qtrace.Linearize` search the orders operations' intervals allow.
+- `ExploreConfig.Corpus` (and `GOTOGETHER_CORPUS`): saved runs replayed
+  before the seeds, a failed claim's run saved; `Run.Corpus`.
+- qhegel: `Shrink` removes the faults the shrunk failure does not need
+  (Hegel's shrinking stopped at a local minimum); `GOTOGETHER_HEGEL_SEED`
+  overrides a search's seed.
 - Vacuity: `binding.Model.Antecedents` (A of each `A implies B`
   invariant), a binding's `antecedents`, `Exploration.Vacuous`,
   `Evidence.Vacuous` and the claim `qtest.NotVacuous()`.
