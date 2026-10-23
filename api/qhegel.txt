@@ -8,7 +8,7 @@ func FindTrigger(t testing.TB, sys qload.Target, space qload.TriggerSpace, opts 
 func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation
 func NewCase(tc hegel.TestCase, opts ...qobs.Option) *Case
 func Render(steps []qtrace.Step) string
-func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Option) *Violation
+func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation
 func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...hegel.Option)
 func Traces(t testing.TB, c connect.Config) []*itf.Trace
 func VaryTraces(tc hegel.TestCase, traces []*itf.Trace, newDriver func(tc hegel.TestCase) connect.Driver, opt VaryOptions)
@@ -46,7 +46,7 @@ type Violation struct
     field Summary string
     field QuintRuns int64
     field CacheHits int64
-    method (*Violation) Expect(t testing.TB, es ...qtest.Expectation)
+    method (*Violation) Expect(t testing.TB, es ...qtest.RunClaim)
     method (*Violation) Last() qtrace.Step
 type ViolationConfig struct
     field Binding string

@@ -6,6 +6,8 @@ github.com/chucklehead-dev/gotogether v0.0.0-20261023165247-5c2e84330aeb h1:JC3f
 github.com/chucklehead-dev/gotogether v0.0.0-20261023165247-5c2e84330aeb/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
 github.com/chucklehead-dev/gotogether v0.0.0-20261023221032-dfd63702ef71 h1:oy0tnXZdXB9SooBUEc1gjaAqh21aArLb/BoWQpm6/HY=
 github.com/chucklehead-dev/gotogether v0.0.0-20261023221032-dfd63702ef71/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
+github.com/chucklehead-dev/gotogether v0.0.0-20261023223720-b144e4463384 h1:Gr5s3hle/CzkgobCPrWkGCmg5SdA/doQcV5k83UyzVo=
+github.com/chucklehead-dev/gotogether v0.0.0-20261023223720-b144e4463384/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
 github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8 h1:l5iZODQBpef/JRTKyr32A+0uzYmtNhglAg42fFgK3+0=
 github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8/go.mod h1:DCHPP08djqhNSoTfImcnHYQRZmd0qhakvrozqaEYhGQ=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

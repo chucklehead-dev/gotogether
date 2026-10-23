@@ -54,7 +54,7 @@ func TestShrinkRefusesGlobal(t *testing.T) {
 	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Fatalf
 		defer close(done)
 		sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.Global()}, Run: func(qenv.Chooser) error { return nil }}
-		qhegel.Shrink(f, sys, qenv.Rates{})
+		qhegel.Shrink(f, sys)
 	}()
 	<-done
 	if !strings.Contains(f.msg, "Global() does nothing in qhegel.Shrink") {
@@ -71,7 +71,7 @@ func TestShrinkSkipsWhenEmpty(t *testing.T) {
 	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Skip
 		defer close(done)
 		sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.SkipIfEmpty()}, Run: func(qenv.Chooser) error { return nil }}
-		qhegel.Shrink(f, sys, qenv.Rates{})
+		qhegel.Shrink(f, sys)
 	}()
 	<-done
 	if !strings.HasPrefix(f.msg, "skip: ") || !strings.Contains(f.msg, "recorded no step") {

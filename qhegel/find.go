@@ -175,7 +175,7 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 // found must look like, stated as for an exploration.
 //
 // Expect(t, qtest.Conforms()) wants no violation: Hegel found nothing.
-func (v *Violation) Expect(t testing.TB, es ...qtest.Expectation) {
+func (v *Violation) Expect(t testing.TB, es ...qtest.RunClaim) {
 	t.Helper()
 	v.expected = true
 	if !v.found {
@@ -201,14 +201,15 @@ func (v *Violation) Last() qtrace.Step {
 
 // Shrink runs Hegel against the system, expecting the model to reject
 // some test case, and shrinks it (FindViolation): every choice of the
-// system's environment is Hegel's (Choices) at rates (zero rates:
-// qenv.DefaultRates; give it the exploration's to shrink what it found),
-// recorded with the run's steps (Case.Env), so the shrunk Violation
-// replays outside Hegel. The system's Opts apply, as in its explorations.
+// system's environment is Hegel's (Choices) at the system's Rates, as its
+// explorations' (sys.WithRates for others), recorded with the run's steps
+// (Case.Env), so the shrunk Violation replays outside Hegel. The system's
+// Opts apply, as in its explorations.
 //
-//	qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Rejects("ship"))
-func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Option) *Violation {
+//	qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Rejects("ship"))
+func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	t.Helper()
+	rates := sys.Rates
 	if rates.Default == 0 && rates.Kinds == nil {
 		rates = qenv.DefaultRates
 	}
