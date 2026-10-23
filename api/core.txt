@@ -1480,6 +1480,7 @@ type Result struct
     field Calls []binding.Call
     field Output string
     method (*Result) OK() bool
+    method (*Result) Reason() string
     method (*Result) Summary() string
 type ToolError struct
     field Module string

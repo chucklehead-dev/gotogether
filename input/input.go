@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/itf"
@@ -78,10 +80,35 @@ func Read(path string, format Format) (*File, error) {
 		if strings.TrimSpace(string(data)) == "" {
 			return in, nil // an empty file holds no steps
 		}
-		return nil, fmt.Errorf("%s: not OTLP/JSON, a step log or ITF", path)
+		return nil, fmt.Errorf("%s: not OTLP/JSON, a step log or ITF (its first value %s). Want one of: "+
+			"a step log, one object per line with %q, %q and the step's arguments and \"obs.<name>\" observations at the top level "+
+			"(qobs.JSONLSink writes it: {%q:\"deposit\",%q:1,%q:\"r\",\"amount\":5,\"obs.balance\":5}); "+
+			"OTLP/JSON with \"resourceSpans\"; or ITF with \"states\"", path, firstKeys(data),
+			qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s (%s): %w", path, format, err)
 	}
+	// a step's source names its file, for a report over several inputs
+	for i := range in.Steps {
+		if s := &in.Steps[i]; s.Source != "" {
+			s.Source = filepath.Base(path) + " " + s.Source
+		}
+	}
 	return in, nil
+}
+
+// firstKeys describes the keys of data's first JSON object, or says it has
+// none.
+func firstKeys(data []byte) string {
+	var first map[string]json.RawMessage
+	if json.NewDecoder(bytes.NewReader(data)).Decode(&first) != nil {
+		return "is not a JSON object"
+	}
+	keys := make([]string, 0, len(first))
+	for k := range first {
+		keys = append(keys, fmt.Sprintf("%q", k))
+	}
+	sort.Strings(keys)
+	return "has the keys " + strings.Join(keys, ", ")
 }

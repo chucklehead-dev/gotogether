@@ -30,6 +30,12 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- `gotogether validate` ends `RESULT: PASS (n traces ...)` or `RESULT:
+  FAIL (2 of 3 traces: 1 mismatch after deposit, 1 rejects withdraw)`,
+  in the claims' words (`validate.Result.Reason`), where it said
+  `VIOLATION` for any failure; it names its one artifacts directory, a
+  step's source names its file (`run.jsonl line 5`), and an input of no
+  known shape is refused with its keys and the shapes wanted.
 - A state mismatch's report prints the binding's expect as written
   (`binding.Call.ExpectTemplate`, `validate.Failure.ExpectTemplate`)
   under the rendered one, and the model's state after the step in a

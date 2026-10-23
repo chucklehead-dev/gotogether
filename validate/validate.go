@@ -476,6 +476,34 @@ func sanitize(s string) string {
 	}, s)
 }
 
+// Reason says why the result is not OK, in the claims' words: "rejects
+// apply" (a step the model cannot take), "mismatch after apply" (the
+// state after it differs), "violates I", "no verdict (linearize budget)",
+// or "issue" (a reconstruction error); "" when it is OK.
+func (r *Result) Reason() string {
+	switch {
+	case r.OK():
+		return ""
+	case r.Conforms == NotEvaluated:
+		return "no verdict (linearize budget)"
+	case r.Conforms != Pass:
+		action := "a step"
+		if r.Failure != nil && r.Failure.Step != nil {
+			action = r.Failure.Step.Action
+		}
+		if r.Failure != nil && r.Failure.Kind == "state" {
+			return "mismatch after " + action
+		}
+		return "rejects " + action
+	}
+	for _, inv := range r.Invariants {
+		if inv.Verdict != Pass {
+			return "violates " + inv.Name
+		}
+	}
+	return "issue"
+}
+
 // Summary renders a result for humans.
 func (r *Result) Summary() string {
 	var b strings.Builder

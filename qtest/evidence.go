@@ -175,28 +175,9 @@ func evidenceOf(runs []*Run) *Evidence {
 // reason names why a run failed, by its first failing actor.
 func reason(rep *validate.Report) string {
 	for _, a := range rep.Actors {
-		if a.OK() {
-			continue
+		if r := a.Reason(); r != "" {
+			return r
 		}
-		if a.Conforms == validate.NotEvaluated {
-			return "no verdict (linearize budget)"
-		}
-		if a.Conforms != validate.Pass {
-			action := "a step"
-			if a.Failure != nil && a.Failure.Step != nil {
-				action = a.Failure.Step.Action
-			}
-			if a.Failure != nil && a.Failure.Kind == "state" {
-				return "mismatch after " + action
-			}
-			return "rejects " + action
-		}
-		for _, inv := range a.Invariants {
-			if inv.Verdict != validate.Pass {
-				return "violates " + inv.Name
-			}
-		}
-		return "issue"
 	}
 	return "issue"
 }

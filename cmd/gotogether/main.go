@@ -30,6 +30,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -355,7 +356,7 @@ func steps(args []string) error {
 func runValidate(args []string) (int, error) {
 	fset := flag.NewFlagSet("validate", flag.ExitOnError)
 	bpath := fset.String("binding", "", "binding file (optional for ITF written by gotogether)")
-	dir := fset.String("dir", "", "where to write generated modules and ITF (default: a temp dir)")
+	dir := fset.String("dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
 	backend := fset.String("backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
 	quint := fset.String("quint", "quint", "quint binary")
 	format := fset.String("format", "auto", "input format: auto, otlp, steps (native step log) or itf")
@@ -379,6 +380,14 @@ func runValidate(args []string) (int, error) {
 	if fset.NArg() == 0 {
 		usage()
 	}
+	if *dir == "" { // one root for every actor's and input's modules, named in the output
+		d, err := os.MkdirTemp("", "gotogether-validate-")
+		if err != nil {
+			return 2, err
+		}
+		*dir = d
+	}
+	fmt.Printf("modules and ITF: %s\n", *dir)
 	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: !*withITF}
 	var b *binding.Binding
 	if *bpath != "" {
@@ -416,6 +425,7 @@ func runValidate(args []string) (int, error) {
 		}
 	}
 	ok := true
+	var results []*validate.Result // every actor's and ITF's, for the result line
 	if len(steps) > 0 || len(itfs) == 0 {
 		if *bpath == "" {
 			return 2, fmt.Errorf("recorded steps need -binding")
@@ -440,10 +450,11 @@ func runValidate(args []string) (int, error) {
 			}
 		}
 		ok = ok && rep.OK()
+		results = append(results, rep.Actors...)
 	}
 	for i, in := range itfs {
 		o := opts
-		if o.Dir != "" && len(itfs) > 1 {
+		if len(itfs) > 1 {
 			o.Dir = fmt.Sprintf("%s/itf%d", o.Dir, i)
 		}
 		r, err := validate.ValidateITF(context.Background(), in.ITF, validate.ITFOptions{Options: o, Binding: b,
@@ -456,13 +467,47 @@ func runValidate(args []string) (int, error) {
 			fmt.Println(r.Output)
 		}
 		ok = ok && r.OK()
+		results = append(results, r)
 	}
 	if ok {
-		fmt.Println("RESULT: trace conforms to the model and satisfies the invariants")
+		fmt.Printf("RESULT: PASS (%s conform to the model and satisfy the invariants)\n", plural(len(results), "trace"))
 		return 0, nil
 	}
-	fmt.Println("RESULT: VIOLATION")
+	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results))
 	return 1, nil
+}
+
+// failSummary says how many of results fail and why, in the claims' words
+// (validate.Result.Reason): "2 of 5 traces: 1 rejects replay, 1 mismatch
+// after apply".
+func failSummary(results []*validate.Result) string {
+	by := map[string]int{}
+	bad := 0
+	for _, r := range results {
+		if why := r.Reason(); why != "" {
+			by[why]++
+			bad++
+		}
+	}
+	whys := make([]string, 0, len(by))
+	for w := range by {
+		whys = append(whys, w)
+	}
+	sort.Strings(whys)
+	for i, w := range whys {
+		whys[i] = fmt.Sprintf("%d %s", by[w], w)
+	}
+	if len(results) == 0 {
+		return "nothing was checked"
+	}
+	return fmt.Sprintf("%d of %s: %s", bad, plural(len(results), "trace"), strings.Join(whys, ", "))
+}
+
+func plural(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }
 
 // toITF writes one model-level ITF per actor from recorded steps.
