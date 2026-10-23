@@ -60,6 +60,12 @@ type Sim struct {
 	// ClockSkew and ClockJump size the clock faults (defaults
 	// DefaultClockSkew, DefaultClockJump).
 	ClockSkew, ClockJump time.Duration
+	// ClockDrift, with ClockFaults, makes each process's clock run fast or
+	// slow by this fraction of true time (fault kind "clock.drift": 0.01
+	// gains or loses 10 ms a second), its sleeps with it. Zero, the
+	// default, chooses no drift, so runs recorded without it keep their
+	// choices.
+	ClockDrift float64
 
 	c         Chooser
 	base      context.Context // every task's context derives from it
@@ -578,6 +584,7 @@ func Sleep(ctx context.Context, d time.Duration) {
 		}
 		return
 	}
+	d = t.drifted(d)
 	if t.sim.nat != nil {
 		t.sleepNative(d)
 		return
@@ -600,6 +607,8 @@ type Process struct {
 	machine     Machine       // native, with a Platform: the process's machine
 	queue       chan func()   // native, with a Platform: tasks to start there
 	clock       time.Duration // its clock's offset from true time (ClockFaults)
+	rate        float64       // its clock's drift: + fast, - slow (ClockDrift)
+	born        time.Time     // when its clock started drifting
 }
 
 // ID is the process name and incarnation, e.g. "payments#2".

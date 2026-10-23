@@ -21,6 +21,7 @@ func main() {
 	seeds := flag.Int("seeds", 20, "runs, with seeds 1..N")
 	mut := flag.String("mutation", "", "no-fencing | absolute-expiry")
 	clocks := flag.Bool("clocks", false, "clock faults: skews and jumps")
+	drift := flag.Float64("drift", 0, "with -clocks, clocks run fast or slow by this fraction (0.25: 15 s a minute)")
 	out := flag.String("out", "runs", "directory for the step logs")
 	flag.Parse()
 	m, ok := map[string]lease.Mutation{"": lease.Faithful, "no-fencing": lease.NoFencing, "absolute-expiry": lease.AbsoluteExpiry}[*mut]
@@ -36,9 +37,9 @@ func main() {
 			fail(err)
 		}
 		c := qenv.NewSeeded(uint64(seed))
-		c.Rates = qenv.DefaultRates.Set("clock.skew", 0.5)
+		c.Rates = qenv.DefaultRates.Set("clock.skew", 0.5).Set("clock.drift", 1)
 		rec := qobs.NewRecorder(sink, qobs.WithActor(fmt.Sprintf("seed%d", seed)))
-		if _, err := lease.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), m, *clocks); err != nil {
+		if _, err := lease.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), m, lease.Clocks{Faults: *clocks, Drift: *drift}); err != nil {
 			fail(err)
 		}
 		if err := sink.Close(); err != nil {

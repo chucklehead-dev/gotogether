@@ -251,8 +251,13 @@ The track, in order:
   a lease timed on the holder's own clock is immune to skew and broken
   by one jump; comparing the lock's expiry with the holder's clock is
   broken by skew alone; fencing at the store survives both.
-  - **Left.** Clock drift (rates, not offsets), and `ToVirtual`/`ToReal`
-    per process for libraries that read the real clock.
+  - Drift: `Sim.ClockDrift` makes each clock run fast or slow by a
+    fraction ("clock.drift"), and its process's sleeps with it. It breaks
+    what skew cannot, a lease timed on the holder's own clock: lease's
+    NoFencing conforms at 2% and fails at 25% (43% of runs), the margin
+    left after a pause covering about 5%.
+  - **Left.** `ToVirtual`/`ToReal` per process for libraries that read the
+    real clock.
 - **X7. Storage faults and partitions (M).** Done but the journal.
   - `qenv.Disk`: writes reach the OS at once and the disk on `Sync`; the
     crash of its process is a fault point ("disk.crash": nominal keeps

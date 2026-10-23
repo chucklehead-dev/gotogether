@@ -6,7 +6,8 @@ store's: once it has accepted a write of some epoch, it accepts none of
 an older one, so a holder whose lease ended cannot overwrite its
 successor. The model knows nothing of time. The code keeps time with
 `qenv.Now`, which reads the clock of the process it runs in: with
-`Sim.ClockFaults` each process's clock starts skewed and may jump.
+`Sim.ClockFaults` each process's clock starts skewed and may jump, and
+with `Sim.ClockDrift` it runs fast or slow, its sleeps with it.
 
 | file | what it is |
 |---|---|
@@ -23,6 +24,7 @@ successor. The model knows nothing of time. The code keeps time with
 | `TestNoFencingSafeWithTrueClocks` | `NoFencing`: the store accepts every write; the holder stops a margin before its lease ends, timed on its own clock | true | every run conforms: a test without clock faults passes the bug |
 | `TestNoFencingBrokenByAClockJump` | `NoFencing` | jumps only | `Violates("noStaleWrite")` (37% of runs): the holder's clock went back, or the lock's forward |
 | `TestAbsoluteExpiryBrokenBySkew` | `AbsoluteExpiry`: the holder compares the lock's expiry time with its own clock | true, then skews only | conforms, then `Violates("noStaleWrite")` (36%); `NoFencing` conforms under the same skews: timing a lease on one clock is immune to skew |
+| `TestNoFencingBrokenByDrift` | `NoFencing`, then faithful | drift only, at 2%, then 25% | conforms at 2% (the margin left after a pause covers about 5%), `Violates("noStaleWrite")` at 25% (43% of runs): a slow clock under-measures the lease; the fenced store conforms at 25% |
 | `TestOneClockJumpIsEnough` | `NoFencing`, then faithful | every run with one jump (`System.Exhaust`, 209 runs) | one jump breaks `NoFencing`; the fenced store survives each, the search complete |
 
 The lesson is Kleppmann's: a lease checked against a clock is a
@@ -38,4 +40,5 @@ go test .                                      # needs quint on PATH
 MUTATION=no-fencing ./run-demo.sh              # still conforms: the clocks are true
 MUTATION=no-fencing CLOCKS=1 ./run-demo.sh     # a stale write after a clock fault
 MUTATION=absolute-expiry CLOCKS=1 ./run-demo.sh
+MUTATION=no-fencing CLOCKS=1 DRIFT=0.25 ./run-demo.sh   # skew and drift: the slow holder overstays
 ```

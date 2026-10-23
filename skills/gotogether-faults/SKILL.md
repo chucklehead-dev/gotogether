@@ -94,10 +94,14 @@ qobs.Record(s.Context(), "settle", nil)
 - **Clocks:** `qenv.Now(ctx)` reads the clock of the task's process.
   With `s.ClockFaults = true` (set before creating processes) each
   process's clock starts skewed ("clock.skew") and may jump at a read
-  ("clock.jump"); sleeps and timers keep true time. Turn it on for code
+  ("clock.jump"); sleeps and timers keep true time. `s.ClockDrift = 0.05`
+  also makes each clock run fast or slow by 5% ("clock.drift"), and its
+  sleeps with it: the fault that breaks an interval timed on one clock,
+  which skew cannot. Turn them on for code
   whose safety reads a clock (leases, expiry, timestamps compared across
   processes): examples/lease shows a lease without fencing that passes
-  every run with true clocks and fails after one jump.
+  every run with true clocks and fails after one jump, or under a drift
+  larger than its margin.
 - **Workload choices** (cancel or not, when) are schedule choices:
   `s.Choose("sched.client.cancel", 10)`.
 - **Start from a scaffold:** `gotogether scaffold -system -binding

@@ -109,12 +109,21 @@ type Deployment struct {
 	Store *Store
 }
 
-// Run deploys the system on c, with clock faults if clocks, and runs it
-// for 10 s of virtual time.
-func Run(c qenv.Chooser, m Mutation, clocks bool) (*Deployment, error) {
+// Clocks are the clock faults a run has.
+type Clocks struct {
+	// Faults skews and jumps the processes' clocks (Sim.ClockFaults).
+	Faults bool
+	// Drift, with Faults, makes them run fast or slow by this fraction
+	// (Sim.ClockDrift).
+	Drift float64
+}
+
+// Run deploys the system on c with clocks' faults, and runs it for 10 s
+// of virtual time.
+func Run(c qenv.Chooser, m Mutation, clocks Clocks) (*Deployment, error) {
 	s := qenv.New(c)
 	defer s.Close()
-	s.ClockFaults = clocks
+	s.ClockFaults, s.ClockDrift = clocks.Faults, clocks.Drift
 	d := &Deployment{Lock: &Lock{}, Store: &Store{Mutation: m}}
 	lock := qenv.NewService(s, "lock", nil, d.Lock.acquire)
 	store := qenv.NewService(s, "store", nil, d.Store.write)

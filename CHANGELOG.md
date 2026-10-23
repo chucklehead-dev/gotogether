@@ -55,7 +55,8 @@ Added to the core since api/core.txt was first recorded:
   a `*qtrace.TornTail`; `input.File.Torn`.
 - Clock faults: `Sim.ClockFaults` gives each process a clock that starts
   skewed and may jump ("clock.skew", "clock.jump"), read by `qenv.Now`;
-  `Process.ClockOffset`. examples/lease.
+  `Process.ClockOffset`; `Sim.ClockDrift`, clocks that run fast or slow
+  ("clock.drift"), their sleeps with them. examples/lease.
 - Under `GOTOGETHER_CHECK=1` every `qenv.Store` checks each commit's
   dependency cycles against its isolation level (G1a, G1c, G-single, G2),
   and every `qenv.Queue` its at-least-once contract after each operation.

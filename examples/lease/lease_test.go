@@ -11,7 +11,10 @@ const binding = "lease.binding.yaml"
 
 // system is the lock, the store and the holders with mutation m, with
 // clock faults if clocks.
-func system(m Mutation, clocks bool) qtest.System {
+func system(m Mutation, clocks bool) qtest.System { return drifting(m, Clocks{Faults: clocks}) }
+
+// drifting is system with clocks' faults.
+func drifting(m Mutation, clocks Clocks) qtest.System {
 	return qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
 		_, err := Run(c, m, clocks)
 		return err
@@ -23,6 +26,8 @@ func system(m Mutation, clocks bool) qtest.System {
 var (
 	jumps = qenv.DefaultRates.Set("clock.skew", 0)
 	skews = qenv.DefaultRates.Set("clock.jump", 0).Set("clock.skew", 0.5)
+	// every holder's clock fast or slow, never skewed or jumping
+	drifts = qenv.DefaultRates.Set("clock.jump", 0).Set("clock.skew", 0).Set("clock.drift", 1)
 )
 
 // The fenced store keeps the requirement whatever the clocks do: skewed,
@@ -66,4 +71,18 @@ func TestOneClockJumpIsEnough(t *testing.T) {
 	one := qtest.Bound{Faults: 1, Without: []string{"rpc", "clock.skew"}}
 	system(NoFencing, true).Exhaust(t, one).Expect(t, qtest.Violates("noStaleWrite"), qtest.Complete())
 	system(Faithful, true).Exhaust(t, one).Expect(t, qtest.Conforms(), qtest.Complete())
+}
+
+// Drift breaks what skew cannot: a lease timed on the holder's own clock.
+// A slow clock under-measures it, so a holder writes past its lease's end
+// once the drift eats what is left of its margin after a pause (300 ms
+// less 200, over the 1.7 s it times: about 5%). Measured, of 100 runs: 0
+// at 2%, 1 at 5%, 12 at 10%, 43 at 25%. The fenced store conforms at any
+// drift.
+func TestNoFencingBrokenByDrift(t *testing.T) {
+	qtest.RequireQuint(t)
+	x := qtest.ExploreConfig{Seeds: 30, Rates: drifts}
+	drifting(NoFencing, Clocks{Faults: true, Drift: 0.02}).Explore(t, x).Expect(t, qtest.Conforms())
+	drifting(NoFencing, Clocks{Faults: true, Drift: 0.25}).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"))
+	drifting(Faithful, Clocks{Faults: true, Drift: 0.25}).Explore(t, x).Expect(t, qtest.Conforms())
 }
