@@ -238,8 +238,9 @@ func From(ctx context.Context) *Recorder {
 // action is the model's action; a key is one of its parameters
 // ("account", "amount"), or "obs.<name>", what the code observed after
 // the step (the binding's expect compares it with the model's state); a
-// non-nil err makes the step's outcome "error". Recorder.Record lists the
-// other keys (actor, process, thread, order.<d>, invoked, when).
+// non-nil err makes the step's outcome "error" (an "outcome" key names
+// another). Recorder.Record lists the other keys (actor, process, thread,
+// outcome, order.<d>, invoked, when).
 func Record(ctx context.Context, action string, err error, kv ...any) {
 	if r := From(ctx); r != nil {
 		r.Record(ctx, action, err, kv...)

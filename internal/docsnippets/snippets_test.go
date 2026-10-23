@@ -2,7 +2,9 @@
 // the README, the skills, the examples' READMEs and docs/ parses, and
 // every name it takes from one of the toolkit's packages (qtest.System,
 // qenv.Rates) is one that package exports. A renamed or removed API in a
-// snippet once lived on until a reader tried it.
+// snippet once lived on until a reader tried it. Methods and fields are
+// not checked (that needs the snippets type-checked), nor code outside
+// fences: TestSkillsAvoidDeprecated's list covers prose.
 package docsnippets
 
 import (
@@ -27,6 +29,7 @@ var packages = map[string]string{
 	"otelio": "otelio", "qcover": "qcover", "qenv": "qenv", "qhegel": "qhegel", "qload": "qload",
 	"qmeta": "qmeta", "qmut": "qmut", "qobs": "qobs", "qrole": "qrole", "qrun": "qrun", "qsweep": "qsweep",
 	"qtest": "qtest", "qtrace": "qtrace", "sktrace": "sktrace", "validate": "validate",
+	"qgosim": "qgosim", "qweave": "qweave", "qlint": "qlint",
 }
 
 // docs are the files whose snippets are checked: HISTORY's and ROADMAP's
@@ -51,7 +54,41 @@ func docs(t *testing.T) []string {
 	return out
 }
 
-var fenced = regexp.MustCompile("(?s)```go\n(.*?)```")
+var fenced = regexp.MustCompile("(?s)```(?:go|golang)\n(.*?)```")
+
+// locals are the names a snippet declares itself (a variable named input
+// or binding shadows the package): not the package's names.
+func locals(f *ast.File) map[string]bool {
+	out := map[string]bool{}
+	ast.Inspect(f, func(x ast.Node) bool {
+		switch x := x.(type) {
+		case *ast.AssignStmt:
+			if x.Tok == token.DEFINE {
+				for _, l := range x.Lhs {
+					if id, ok := l.(*ast.Ident); ok {
+						out[id.Name] = true
+					}
+				}
+			}
+		case *ast.ValueSpec:
+			for _, n := range x.Names {
+				out[n.Name] = true
+			}
+		case *ast.Field:
+			for _, n := range x.Names {
+				out[n.Name] = true
+			}
+		case *ast.RangeStmt:
+			for _, e := range []ast.Expr{x.Key, x.Value} {
+				if id, ok := e.(*ast.Ident); ok {
+					out[id.Name] = true
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
 
 // parse parses a snippet as a file, as declarations, or as statements;
 // its error is that of the form its first word says it is.
@@ -130,13 +167,14 @@ func TestSnippets(t *testing.T) {
 				continue
 			}
 			var missing []string
+			mine := locals(f)
 			ast.Inspect(f, func(x ast.Node) bool {
 				sel, ok := x.(*ast.SelectorExpr)
 				if !ok {
 					return true
 				}
 				id, ok := sel.X.(*ast.Ident)
-				if !ok || packages[id.Name] == "" {
+				if !ok || packages[id.Name] == "" || mine[id.Name] {
 					return true
 				}
 				if apis[id.Name] == nil {

@@ -32,13 +32,18 @@ Added to the core since api/core.txt was first recorded:
 
 - `qtest.NoSurvivors` marks an equivalent mutant by function, change and
   code (`"(Counter).Add: drop call: qobs.Record(...)"`), as a survivor's
-  report now prints it: a line added above no longer moves the mark.
+  report now prints it: a line added above no longer moves the mark. A
+  mark of that form naming two mutants (two `if err != nil` in one
+  function) fails, asking for the position.
 - `qenv.Script.Misnamed` says which scripted faults cannot happen as
   written (a kind no double declared, matched exactly: no prefix, no
   nemesis family; an option the kind lacks; the nominal option; a Follows
   of no other fault), and an exploration fails on each; it never fired,
   and the claim it was for failed as if the code survived it. Script no
-  longer panics in the run on them.
+  longer panics in the run on them. A well-named scripted fault a run
+  never made (`Run.Unscripted`) fails the exploration too, whatever its
+  claims: a crash "after step 300" of a shorter run passed without
+  crashing.
 - `gotogether validate` ends `RESULT: PASS (3 actors conform to the
   model and satisfy its 2 invariants)` or `RESULT: FAIL (2 of 3 actors: 1
   mismatch after deposit, 1 rejects withdraw)`, in the claims' words
