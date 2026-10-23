@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: R4 → X (in its own order below) → Y; R5 when the maintainer says.
+Order: R4 → X (in its own order below) → Y → Z (to decide); R5 when the maintainer says.
 
 ## W8. First hour and docs
 
@@ -491,6 +491,104 @@ it; simulate's and evidence's logic as library calls
 disks, clocks and partitions; bare expectations' arity (`Conforms` every
 run, the rest some) and contradictory pairs; "run 3" not "schedule 3";
 `Reaches` by prefix as Rates are.
+
+## Sixth review: whole product (Z)
+
+From four reviews of the whole product after Y (HISTORY, "Sixth
+review"): architecture and maintainability, correctness, a newcomer's
+usability and docs, missing features and lessons learned. Not yet
+decided with the maintainer; ordered as proposed, bugs first.
+
+- **Z1. Silent wrong answers (S each; confirmed by probes).**
+  - A crash of a `Service` with `Capacity` leaks its workers for good
+    (`release` is deferred, and a killed task runs no deferred code):
+    after a restart the service never serves, and a load experiment
+    with crashes reports the simulator's collapse as the system's.
+  - A `Store` commit waiting on a row lock is invisible to deadlock
+    detection, and a multi-key commit can apply under another
+    transaction's FOR UPDATE lock (a lost update correct code cannot
+    prevent).
+  - `Linearize` renumbers the order it checks, so a lost step's gap
+    error disappears.
+  - connect's state check compares nothing for a state struct of
+    unexported fields, and a misspelled field compares as zero.
+  - A process's old incarnation acting after its successor (split brain)
+    validates as restarts, with only a warning.
+  - `EncodeChoices` at a fault rate above 255/256 encodes a nominal
+    choice that replays as a fault.
+  - To check: `ErrStuck` only when no timer exists (any timer turns a
+    stall into a quiet run); the verdict cache's key leaves out fields a
+    template or an issue reads; `Bound.Without` names unchecked; a
+    Queue's broker crashing changes nothing.
+- **Z2. Reports a user can act on (S–M).** A Mismatch in an exploration
+  prints the expectation with the observation filled in (`expect: count
+  == 3` over `obs: count=3`), hiding the model's value: print the model's
+  state and the template. A passing claim's expected failures read as
+  `conformance: FAIL` blocks with paths to deleted files: head them with
+  the claim they satisfy. One vocabulary for verdicts (Rejects, Mismatch,
+  Violates) in reports and the CLI. A misnamed `Scripted.Kind` fails;
+  advice that names the old strict script order goes. validate names the
+  file and the expected shapes, and sums up.
+- **Z3. The newcomer's path (S–M).** A glossary after Quickstart (actor,
+  step, binding, double, nemesis, nominal, claim, evidence, corpus) and
+  the README's order (workflows before the environment table). A scaffold
+  that validates as it lints (no empty constants, an invariant listed or
+  a reason, a `simulate:` section). Using the toolkit outside this
+  repository (go get, skills install without examples/). A "crash X at
+  this point" recipe in the faults skill. CLI help with a purpose and an
+  example per command, `help` exit 0, `version`. godoc for aliases of
+  internal types (`go doc qenv.Rates` shows nothing), qtest's package doc
+  leading with System, qobs.Record's keys. Every Go snippet in the docs
+  compiles (a test), which also retires most of the deny-list. hello's
+  mutation test not pinned to line numbers.
+- **Z4. The API before tags (S–M).** One primitive between qtest and
+  qhegel (`System.Judge(t, chooser) *Run` or similar) in place of
+  `Settings`, `Resolve`, `ExploreConfig.Replay` and Shrink's fake TB; a
+  claim recognised by type, not its description. About 35 identifiers
+  that are plumbing (qobs Strict/Escaped/SetDiscard, qrun's hooks, qenv's
+  LockKey functions for weave) or have no caller (Swarm, FaultOptions,
+  qcover.Default/From, itf's RecordOf/TupleOf/SetOf, the untested sinks)
+  move to an internal hook package or go. sktrace leaves the core (two
+  examples use it); connect's fault scripts move next to FollowTraces.
+  KnownFault unexported, its check scoped to the run. Workflow shapes:
+  Rates in one place, `Sweep` on testing.TB, `SweepResult.Expect`,
+  `Run`'s identity in one field, `Signal.Wait` on a duration. qweave's
+  and qanalysis's x/tools aligned (or merged, now or never). Considered:
+  typed options, making an ignored option a compile error rather than
+  Y9's refusal.
+- **Z5. Maintainability (S–M).** Strict/Escaped scoped to the run's
+  recorder, so qtest's tests run in parallel (1m23s → ~30s estimated); a
+  CI matrix for the serial job; a workspace-mode CI job so sub-modules
+  meet the current core. ROADMAP's done items to HISTORY, AGENTS'
+  histories to HISTORY (5.1k words loaded every session), the README's
+  package table checked against api/*.txt, Go doc comments under the docs
+  gate. Later: one exploration engine fed by run sources (Explore and
+  Exhaust repeat their setup, Exploration has seven mode flags), one
+  verdict method per claim, one memoizing checker for qtest and qhegel,
+  qload's two recovery worlds made one.
+- **Z6. A more faithful environment (S each).** Message delay in
+  `Service`: a request is never late and a duplicate arrives at once, so
+  "a late original overwrites the retry's result" cannot happen. Pause
+  and gray-failure (slow, alive) nemeses. Disk errors on fsync, read
+  corruption, ENOSPC. A duplicate double name panics. A determinism
+  self-check (a seed run twice compares choices and steps) and lint for
+  map ranges, math/rand and multi-case select in simulated code. A
+  double's contract checked the other way too: it can do what its
+  contract allows (X5 checks only that it does no more).
+- **Z7. Liveness (S, then M).** Settle reports whether it settled (it
+  returns nil when its time runs out with work pending) and a
+  `Settles()` claim. Then obligations: a binding names a model def of
+  pending work and `Eventually(...)` is judged in virtual time across
+  the workflows; a mode where faults continue outside a chosen quorum
+  (VOPR's); a fair scheduler for settle and liveness windows; steps
+  recorded at invocation so a trace says "invoked, never completed".
+- **Z8. Search and scale (M–L).** PCT as a chooser; a footprint-based
+  reduction for Exhaust (the doubles know what each seam touches);
+  Linearize per key (Porcupine's partitioning); exploration steered by
+  coverage or model state; the history checker public, for real
+  databases (an Elle-style workload); trace validation with unobserved
+  or ambiguous steps (Jepsen's `:info`, hidden actions: the validator
+  searches their resolutions). Online validation stays deferred.
 
 ## Dropped on purpose
 

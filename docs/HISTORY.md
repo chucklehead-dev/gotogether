@@ -831,3 +831,26 @@ around them short. Their findings are ROADMAP's Y track:
 - qhegel's core-property tests pinned to a pre-X core (Y11);
 - DESIGN without the X track, README tables behind (Y12).
 
+
+### Sixth review (after Y)
+
+Four reviews of the whole product: architecture and maintainability,
+correctness (silent wrong answers, by probe), a newcomer's usability and
+docs, missing features and lessons learned. Their findings are ROADMAP's
+Z track. What they found:
+- the layering holds, and the core is large: 37k lines, 511 top-level
+  identifiers in api/core.txt, a qtest–qhegel seam of exports that exist
+  for one caller, about 35 identifiers that are plumbing or have none;
+- seven bugs where a check could be wrong without saying so, among them
+  a crashed Capacity service that never serves again, a commit's lock
+  wait invisible to deadlock detection, and Linearize hiding lost steps;
+- a newcomer's first passing run that reads as failures, a Mismatch
+  report that hides the model's value, a scaffold that lints and then
+  fails to validate, and no word on using the toolkit outside this
+  repository;
+- of the recurring mistakes (a check that holds for nothing, a name that
+  matches nothing, an option ignored, an environment kinder than its
+  contract), the first three are now mostly prevented by structure, the
+  last only partly (X5 checks one direction);
+- liveness is the largest gap: Settle cannot say it settled, and nothing
+  states "eventually" outside the settle pattern.
