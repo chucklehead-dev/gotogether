@@ -79,6 +79,13 @@ qobs.Record(s.Context(), "settle", nil)
   missed Notify). Return the error from your `Run`; a task that may wait
   forever by design (a server loop) calls `qenv.Daemon(ctx)`, and a
   double's own receive waits with `qenv.WaitIdle`.
+- **Clocks:** `qenv.Now(ctx)` reads the clock of the task's process.
+  With `s.ClockFaults = true` (set before creating processes) each
+  process's clock starts skewed ("clock.skew") and may jump at a read
+  ("clock.jump"); sleeps and timers keep true time. Turn it on for code
+  whose safety reads a clock (leases, expiry, timestamps compared across
+  processes): examples/lease shows a lease without fencing that passes
+  every run with true clocks and fails after one jump.
 - **Workload choices** (cancel or not, when) are schedule choices:
   `s.Choose("sched.client.cancel", 10)`.
 - **Start from a scaffold:** `gotogether scaffold -system -binding

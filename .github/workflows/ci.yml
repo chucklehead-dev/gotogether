@@ -40,7 +40,7 @@ jobs:
           go test -count=1 -timeout 30m ./...
       - name: the examples, each its own module
         run: |
-          for m in bank checkout glomers hello jobqueue kvstore retrystorm twophase; do
+          for m in bank checkout glomers hello jobqueue kvstore lease retrystorm twophase; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go test -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
@@ -84,6 +84,8 @@ jobs:
           SEEDS=15 examples/checkout/run-demo.sh
           examples/twophase/run-demo.sh
           examples/hello/run-demo.sh
+          examples/lease/run-demo.sh
+          MUTATION=no-fencing CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
           MUTATION=no-dedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
 

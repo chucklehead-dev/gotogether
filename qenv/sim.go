@@ -51,6 +51,15 @@ type Sim struct {
 	// and panic on a violation (also on with GOTOGETHER_CHECK=1). For tests of
 	// qenv and of code that extends it; it costs O(tasks) per step.
 	Check bool
+	// ClockFaults gives each process a clock of its own, read by Now: it
+	// starts skewed and may jump (fault kinds "clock.skew" and
+	// "clock.jump", clock.go). Off by default: code that keeps time with
+	// Now for liveness only is unaffected either way, and runs recorded
+	// before it make the same choices. Set it before creating processes.
+	ClockFaults bool
+	// ClockSkew and ClockJump size the clock faults (defaults
+	// DefaultClockSkew, DefaultClockJump).
+	ClockSkew, ClockJump time.Duration
 
 	c         Chooser
 	base      context.Context // every task's context derives from it
@@ -546,10 +555,12 @@ func (g *Signal) Notify() {
 	g.waiters = g.waiters[:0]
 }
 
-// Now is the virtual time in a simulation, else the real time.
+// Now is the time on the clock of ctx's process in a simulation: the
+// virtual time, off by the process's clock faults with Sim.ClockFaults.
+// Outside a simulation it is the real time.
 func Now(ctx context.Context) time.Time {
 	if t := taskOf(ctx); t != nil {
-		return t.sim.Now()
+		return t.sim.clockOf(t)
 	}
 	return time.Now()
 }
@@ -584,8 +595,9 @@ type Process struct {
 	sim         *Sim
 	start       func(ctx context.Context)
 	down        bool
-	machine     Machine     // native, with a Platform: the process's machine
-	queue       chan func() // native, with a Platform: tasks to start there
+	machine     Machine       // native, with a Platform: the process's machine
+	queue       chan func()   // native, with a Platform: tasks to start there
+	clock       time.Duration // its clock's offset from true time (ClockFaults)
 }
 
 // ID is the process name and incarnation, e.g. "payments#2".
@@ -600,6 +612,7 @@ func (p *Process) Down() bool { return p.down }
 func (s *Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process {
 	p := &Process{Name: name, Incarnation: 1, sim: s, start: start}
 	s.procs = append(s.procs, p)
+	s.skewProcess(p)
 	if s.nat != nil && s.nat.plat != nil {
 		p.queue = make(chan func(), spawnQueue)
 		p.machine = s.nat.plat.Machine(name, s.machineMain(p))

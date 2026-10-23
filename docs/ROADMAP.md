@@ -227,11 +227,20 @@ The track, in order:
   - **Left.** The queue's and the services' contracts (at-least-once,
     redelivery after a lost ack) as history checks too; the checker
     public, for a real database tier's recorded transactions.
-- **X6. Clock faults (M).** Per-process skew and jumps (`clock.skew`,
-  `clock.jump`; option 0 none), applied in `qenv.Now` by the task's
-  process; profiles and `ToVirtual`/`ToReal` stay global. Targets:
-  streams' fencing, crossdb's grace period, jobqueue's leases (moved onto
-  qenv).
+- **X6. Clock faults (M).** Done. `Sim.ClockFaults` gives each process
+  a clock of its own, read by `qenv.Now`: skewed from its creation
+  ("clock.skew": ahead or behind by `ClockSkew`) and jumping at a read
+  ("clock.jump": by `ClockJump`). True time (sleeps, timers, `Sim.Now`)
+  is unchanged; off by default, so recorded runs keep their choices.
+  examples/lease is the target the roadmap's candidates were not: none
+  of streams, crossdb or jobqueue keeps its safety on a clock (streams
+  fences by generation; crossdb's stamps go through the global
+  ToVirtual; jobqueue's leases are the queue's one clock). Its findings:
+  a lease timed on the holder's own clock is immune to skew and broken
+  by one jump; comparing the lock's expiry with the holder's clock is
+  broken by skew alone; fencing at the store survives both.
+  - **Left.** Clock drift (rates, not offsets), and `ToVirtual`/`ToReal`
+    per process for libraries that read the real clock.
 - **X7. Storage faults and partitions (M).** A `qenv.Disk` double (lost
   writes not synced, a torn last record, rollback on crash), first
   against the toolkit's own `qobs.FileSink`, then jobqueue's journal;

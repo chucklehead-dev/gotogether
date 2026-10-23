@@ -13,6 +13,7 @@ use (
 	./examples/hello
 	./examples/jobqueue
 	./examples/kvstore
+	./examples/lease
 	./examples/retrystorm
 	./examples/streams
 	./examples/twophase

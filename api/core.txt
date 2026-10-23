@@ -135,6 +135,7 @@ type Summary struct{ ... }
     func Summarize(runs []*Counts) *Summary
 
 == github.com/chucklehead-dev/gotogether/qenv
+const DefaultClockSkew = time.Second ...
 const BytesVersion = choice.BytesVersion
 var DefaultRates = choice.DefaultRates ...
 var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
