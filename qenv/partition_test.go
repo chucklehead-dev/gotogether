@@ -397,3 +397,33 @@ func TestQueueBrokerCrash(t *testing.T) {
 		t.Errorf("the publish to a down broker returned after %v, want once it restarted (1s)", publishedAt)
 	}
 }
+
+// An Ordered queue redelivers the messages a dropped connection held
+// oldest first, as a FIFO broker does: they came back last first.
+func TestOrderedRedeliveryAfterBrokerCrash(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	broker := s.Process("broker", true, func(context.Context) {})
+	q := qenv.NewQueue(s, "jobs", broker)
+	q.Ordered = true
+	var got []any
+	s.Process("consumer", false, func(ctx context.Context) {
+		q.Publish(ctx, "a")
+		q.Publish(ctx, "b")
+		q.Receive(ctx)
+		q.Receive(ctx)
+		broker.Crash()
+		broker.Restart()
+		for i := 0; i < 2; i++ {
+			d := q.Receive(ctx)
+			got = append(got, d.Body)
+			d.Ack(ctx)
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(got) != "[a b]" {
+		t.Errorf("redelivered %v, want [a b]", got)
+	}
+}

@@ -66,12 +66,7 @@ func NewQueue(s *Sim, name string, p *Process) *Queue {
 			q.drop(c)
 			return
 		}
-		for _, d := range q.heldIn() {
-			delete(q.held, d)
-			if !q.forget {
-				q.requeue(d)
-			}
-		}
+		q.putBack(q.heldIn())
 		q.check("the broker's crash")
 	})
 	s.net.OnCut(func(a, b *Process) {
@@ -86,22 +81,27 @@ func NewQueue(s *Sim, name string, p *Process) *Queue {
 	return q
 }
 
-// drop requeues the messages p holds (by id, each to the front: the last
-// first).
+// drop requeues the messages p holds, at the front, oldest first.
 func (q *Queue) drop(p *Process) {
 	var back []*Delivery
 	for _, d := range q.heldIn() {
 		if q.held[d] == p {
 			back = append(back, d)
-			delete(q.held, d)
 		}
 	}
-	for _, d := range back {
-		if !q.forget {
-			q.requeue(d)
-		}
-	}
+	q.putBack(back)
 	q.check("dropping " + p.Name + "'s deliveries")
+}
+
+// putBack requeues held deliveries ds (in id order) at the front, oldest
+// first, as a FIFO broker redelivers them.
+func (q *Queue) putBack(ds []*Delivery) {
+	for i := len(ds) - 1; i >= 0; i-- {
+		delete(q.held, ds[i])
+		if !q.forget {
+			q.requeue(ds[i])
+		}
+	}
 }
 
 // check verifies the queue's contract under Sim.Check, after op: every
