@@ -57,10 +57,6 @@ type Sim struct {
 	// and a drift, each left out when zero, as by default. Set them before
 	// creating processes; a change after panics.
 	Clocks Clocks
-	// PartitionLength is how long a cut made by a Partitions nemesis lasts
-	// at most (default DefaultPartitionLength); its heal nemesis may end it
-	// sooner. Cuts made with Partition last until Heal.
-	PartitionLength time.Duration
 
 	c         Chooser
 	base      context.Context // every task's context derives from it
@@ -76,10 +72,8 @@ type Sim struct {
 	nextID    int
 	back      chan struct{}
 	procs     []*Process
-	cuts      map[[2]string]bool // partitioned pairs of processes, by name
-	clocksSet *Clocks            // Clocks as the first process saw them
-	onCut     []func(a, b *Process)
-	cutGen    map[[2]string]int // per pair, the cuts made: a healer heals only its own
+	net       Network // the network between processes (Net)
+	clocksSet *Clocks // Clocks as the first process saw them
 	nemeses   []*nemesis
 	onCrash   []func(*Process)
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)
@@ -167,6 +161,7 @@ func New(c Chooser) *Sim {
 	}
 	s := &Sim{c: c, base: base, now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
 		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid()}
+	s.net.sim = s
 	own(s.creator, s, nil)
 	live.Add(1)
 	return s
@@ -275,6 +270,18 @@ func Go(ctx context.Context, name string, fn func(ctx context.Context)) {
 // Spawn starts a task outside any process (a client, a test driver).
 func (s *Sim) Spawn(name string, fn func(ctx context.Context)) {
 	s.spawn(s.base, name, nil, fn)
+}
+
+// Spawn starts a task in process p, from outside it (a test driver giving
+// a node work): it belongs to p's current incarnation, as a task p's own
+// code starts with Go does, so a crash kills it and partitions cut it
+// off. A process that is down has no incarnation to start it in: it
+// panics.
+func (p *Process) Spawn(name string, fn func(ctx context.Context)) {
+	if p.down {
+		panic(fmt.Sprintf("qenv: %s.Spawn(%q): the process is down; spawn from an OnCrash hook after Restart, or from its start function", p.Name, name))
+	}
+	p.sim.spawn(p.sim.base, p.Name+"."+name, p, fn)
 }
 
 func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx context.Context)) {
@@ -845,7 +852,7 @@ func (s *Sim) Run(d time.Duration) error {
 // what happened before it, and a settle draws nothing from the Chooser.
 func (s *Sim) Settle(d time.Duration) error {
 	s.faultsOff, s.settling = true, true
-	s.cuts = nil // a whole network to recover on
+	s.net.healAll() // a whole network to recover on
 	defer func() { s.settling = false }()
 	return s.Run(d)
 }

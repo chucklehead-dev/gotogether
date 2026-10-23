@@ -407,7 +407,17 @@ starts, and the review's findings are fixed first.
   `nemesis.jump` (partitions and clock jumps now dilute crashes unseen). `NotVacuous` fails when an
   antecedent cannot be evaluated and says when no invariant has one.
   Linearize out of budget is inconclusive, which `Rejects` does not match.
-- **Y7. Sim's shape, before names freeze.** Sim's eleven config fields
+- **Y7. Sim's shape, before names freeze. Done:** the network is
+  `Sim.Net()`, a `Network` (Partition, Heal, Partitioned, OnCut,
+  PartitionNemesis, CutLength); `Process.Spawn`; `NewQueue(s, name, p)`;
+  per-instance kinds (`queue.<name>.ack`, `store.<name>.commit`,
+  `disk.<name>.crash` with `powerLoss`, `tornWrite`); the new fault
+  models on the native runtime (`TestNativeFaultModels`). Not done, on
+  purpose: a process for `NewStore` (no network reaches a store in any
+  example; a store across a cut is a Service in front of it, as crossdb's
+  cloud is), and a panic for a Rates key that matches no kind (kinds are
+  declared as doubles are made, after the rates are given).
+  The finding: Sim's eleven config fields
   and the network state: `Sim.Net` (Partition, Heal, Partitioned, the
   nemesis renamed `PartitionNemesis`, an exported `OnCut`, the cut
   length), the clocks as Y4's value, `Process.Spawn` exported. Every

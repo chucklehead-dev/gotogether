@@ -15,7 +15,7 @@ import (
 func TestCommitFaults(t *testing.T) {
 	run := func(faults bool) (err error, applied, hooked bool) {
 		c := qenv.NewSeeded(1)
-		c.Rates = qenv.Rates{Kinds: map[string]float64{"store.commit": 1}}
+		c.Rates = qenv.Rates{Kinds: map[string]float64{"store.db.commit": 1}}
 		s := qenv.New(c)
 		defer s.Close()
 		st := qenv.NewStore(s, "db", qenv.Serializable)

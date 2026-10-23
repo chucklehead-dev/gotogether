@@ -61,7 +61,7 @@ shrinking removes faults.
 s := qenv.New(chooser)
 defer s.Close()
 db := qenv.NewStore(s, "shop", cfg.Isolation)
-q := qenv.NewQueue(s, "payments")
+q := qenv.NewQueue(s, "payments", nil)                           // its broker of no process: no partition reaches it
 provider := qenv.NewService(s, "provider", nil, p.Handle)          // its own process, never crashes
 api := s.Process("api", true, func(context.Context) {})              // crashable; handlers run in it
 s.Process("payments", true, func(ctx context.Context) { app.RunPayments(ctx, inbox{q}) })
@@ -81,18 +81,24 @@ qobs.Record(s.Context(), "settle", nil)
   double's own receive waits with `qenv.WaitIdle`.
 - **Disks:** `qenv.NewDisk(s, "disk", p)` is process p's machine's disk:
   writes reach the OS at once and the disk on `File.Sync`. When p crashes
-  the fault kind "disk.crash" decides: nominal (the process died, the OS
-  kept every write), "lost" (power loss: only synced writes) or "torn"
-  (power loss mid-write: part of the last one). Write a journal or a
+  the fault kind "disk.<name>.crash" decides: nominal (the process died,
+  the OS kept every write), "powerLoss" (only synced writes) or
+  "tornWrite" (power loss mid-write: part of the last one). Write a journal or a
   step log through it to see what an fsync buys.
-- **Partitions:** `s.Partitions(a, b, ...)` makes every link between
-  those processes a nemesis (cut, later healed): a `Service` call across a
-  cut loses its request and its response, for as long as it lasts. A
-  `Queue` with its broker's process (`q.Proc`) is partitioned too: a
-  client cut off waits, and a consumer's cut redelivers what it holds.
-  A nemesis's cut heals by itself after `s.PartitionLength` (default
-  1 s): a run whose every task waits on a cut would otherwise be stuck.
-  `s.Partition(a, b)` and `s.Heal` script one; `Settle` heals them all.
+- **Partitions:** `s.Net().PartitionNemesis(a, b, ...)` makes every link
+  between those processes a nemesis (cut, later healed): a `Service` call
+  across a cut loses its request and its response, for as long as it
+  lasts. A `Queue` whose broker runs in a process (`qenv.NewQueue(s, name,
+  broker)`) is partitioned too: a client cut off waits, and a consumer's
+  cut redelivers what it holds. A nemesis's cut heals by itself after
+  `s.Net().CutLength` (default 1 s): a run whose every task waits on a cut
+  would otherwise be stuck. `s.Net().Partition(a, b)` and `Heal` script
+  one, `OnCut` hooks a double's dropped connections; `Settle` heals them
+  all. `p.Spawn(name, fn)` starts a task in process p from outside it.
+- **Fault kinds per instance:** a double's kinds carry its name, as
+  `rpc.<name>.request` does: `queue.<name>.ack`, `store.<name>.commit`,
+  `disk.<name>.crash`. `"queue"` (in Rates, Without, a sweep) still covers
+  every queue's.
 - **Clocks:** a process has two, as a Go program does. `qenv.Now(ctx)`
   is its wall clock; `qenv.Mono(ctx)` and `qenv.Since(ctx, m)` its
   monotonic clock, what `time.Since` measures (a `time.Time` from Now

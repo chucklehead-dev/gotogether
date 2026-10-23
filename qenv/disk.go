@@ -5,18 +5,13 @@ import (
 	"sort"
 )
 
-// diskCrash is what a machine's crash does to its disk's writes not yet
-// synced: nominal, the process died and the OS kept them (its page
-// cache); "lost", the machine lost power and they are gone; "torn", it
-// lost power during the last of them, which reached the disk only in
-// part.
-var diskCrash = DeclareFaults("disk.crash", "lost", "torn")
-
 // Disk is a machine's disk: files whose writes reach the OS at once and
 // the disk only when synced (File.Sync, fsync). A crash of the process it
-// belongs to is a fault point ("disk.crash"): a process crash keeps every
-// write, a power loss keeps only the synced ones, and a torn write keeps
-// part of the last one. It is the double that tells "written" from
+// belongs to is a fault point ("disk.<name>.crash"): nominal, the process
+// died and the OS kept its writes not yet synced (its page cache);
+// "powerLoss", the machine lost power and they are gone; "tornWrite", it
+// lost power during the last of them, which reached the disk only in
+// part. It is the double that tells "written" from
 // "durable": a log that never syncs survives every process crash and
 // loses its tail to the first power loss.
 //
@@ -26,6 +21,7 @@ type Disk struct {
 	sim   *Sim
 	proc  *Process
 	files map[string]*diskFile
+	fault FaultKind // "disk.<name>.crash"
 }
 
 type diskFile struct {
@@ -36,7 +32,8 @@ type diskFile struct {
 
 // NewDisk returns an empty disk of process p's machine.
 func NewDisk(s *Sim, name string, p *Process) *Disk {
-	d := &Disk{Name: name, sim: s, proc: p, files: map[string]*diskFile{}}
+	d := &Disk{Name: name, sim: s, proc: p, files: map[string]*diskFile{},
+		fault: DeclareFaults("disk."+name+".crash", "powerLoss", "tornWrite")}
 	s.OnCrash(func(c *Process) {
 		if c == d.proc {
 			d.crash()
@@ -46,7 +43,7 @@ func NewDisk(s *Sim, name string, p *Process) *Disk {
 }
 
 func (d *Disk) crash() {
-	fault := d.sim.FaultOf(diskCrash)
+	fault := d.sim.FaultOf(d.fault)
 	names := make([]string, 0, len(d.files))
 	for n := range d.files {
 		names = append(names, n)
@@ -55,9 +52,9 @@ func (d *Disk) crash() {
 	for _, n := range names {
 		f := d.files[n]
 		switch fault {
-		case "lost":
+		case "powerLoss":
 			f.data = f.data[:f.synced]
-		case "torn":
+		case "tornWrite":
 			if k := len(f.starts); k > 0 {
 				last := f.starts[k-1]
 				f.data = f.data[:last+(len(f.data)-last)/2]

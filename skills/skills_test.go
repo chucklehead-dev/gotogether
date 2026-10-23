@@ -117,6 +117,15 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"`GOTOGETHER_SEED`", "`GOTOGETHER_RUN`"},
 		{"qtest.Complete()", "nothing: a search MaxRuns cuts short fails unless Bound.Partial"},
 		{"GOTOGETHER_SCHEDULE", "GOTOGETHER_RUN='TestX#1:schedule=...'"},
+		{"s.Partitions(", "s.Net().PartitionNemesis("},
+		{"s.Partition(", "s.Net().Partition("},
+		{"s.Heal(", "s.Net().Heal("},
+		{"PartitionLength", "Network.CutLength"},
+		{"q.Proc", "qenv.NewQueue(s, name, p)"},
+		{"Queue.Proc", "qenv.NewQueue(s, name, p)"},
+		{`"queue.ack"`, `"queue.<name>.ack" ("queue" covers them)`},
+		{`"store.commit"`, `"store.<name>.commit"`},
+		{`"disk.crash"`, `"disk.<name>.crash"`},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

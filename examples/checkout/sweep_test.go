@@ -19,7 +19,7 @@ var space = []qsweep.Factor{
 	qsweep.Ints("orders", 2, 3, 4),
 	qsweep.Ints("stock", 1, 2, 3).Constant("STOCK"), // the model's instance follows the row's
 	qsweep.Bool("crash"),
-	qsweep.FaultKind("queue.ack"),
+	qsweep.FaultKind("queue"), // both queues' lost acknowledgements
 	qsweep.FaultKind("rpc.api"),
 	qsweep.FaultKind("rpc.provider"),
 }
@@ -94,7 +94,7 @@ func TestFaultOrders(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
-	kinds := []string{"nemesis.crash.payments", "queue.ack", "rpc.api.request", "rpc.api.response", "rpc.provider.request", "rpc.provider.response"}
+	kinds := []string{"nemesis.crash.payments", "queue.payments.ack", "rpc.api.request", "rpc.api.response", "rpc.provider.request", "rpc.provider.response"}
 	var runs [][]qenv.Choice
 	var impossible []string
 	for _, a := range kinds {

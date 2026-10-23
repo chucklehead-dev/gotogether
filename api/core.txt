@@ -202,6 +202,7 @@ type Isolation int
     const Serializable Isolation = iota ...
 type KV struct{ ... }
 type Machine interface{ ... }
+type Network struct{ ... }
 type Nominal = choice.Nominal
 type PairCoverage struct{ ... }
 type Platform interface{ ... }
@@ -209,7 +210,7 @@ type PointCoverage struct{ ... }
 type Process struct{ ... }
     func ProcessOf(ctx context.Context) *Process
 type Queue struct{ ... }
-    func NewQueue(s *Sim, name string) *Queue
+    func NewQueue(s *Sim, name string, p *Process) *Queue
 type Rates = choice.Rates
 type Replayer = choice.Replayer
     func Replay(choices []Choice) *Replayer

@@ -74,11 +74,18 @@ Added to the core since api/core.txt was first recorded:
 - `qtest.LinearizeBudget(n)` and `DefaultLinearizeBudget`: a search that
   runs out of its budget is no verdict (conformance n/a), not a
   rejection. `qtrace.Linearize` returns whether the budget cut it short.
-- `qenv.Disk` (writes, fsync, and a crash's "disk.crash" fault: lost or
-  torn unsynced writes) and partitions between processes for
-  `qenv.Service` (`Sim.Partition`, `Heal`, `Partitions` as nemeses) and
-  for a `qenv.Queue` with a broker process (`Queue.Proc`); a nemesis's
-  cut heals by itself after `Sim.PartitionLength`.
+- `qenv.Disk` (writes, fsync, and a crash's "disk.<name>.crash" fault:
+  `powerLoss` or `tornWrite` of unsynced writes) and partitions between
+  processes, on the simulation's `Network` (`Sim.Net()`: `Partition`,
+  `Heal`, `Partitioned`, `OnCut`, `PartitionNemesis`, `CutLength`), for
+  `qenv.Service` and for a `qenv.Queue` whose broker runs in a process
+  (`NewQueue(s, name, p)`: a broker given at construction, not a field
+  to forget); a nemesis's cut heals by itself after `CutLength`.
+- Fault kinds per instance: `queue.<name>.ack`, `store.<name>.commit`,
+  `disk.<name>.crash`, as `rpc.<name>.*` (`"queue"` covers every queue's;
+  `"queue.ack"` matches none). `Process.Spawn` starts a task in a
+  process from outside it. The new fault models run on the native
+  runtime (`TestNativeFaultModels`).
 - `qobs.SyncedFileSink`, `qobs.NewSyncedJSONLSink`: an fsync per step.
   `qtrace.ReadJSONL` keeps the steps before a torn last line and returns
   a `*qtrace.TornTail`; `input.File.Torn`.

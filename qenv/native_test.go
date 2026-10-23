@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,7 +38,7 @@ func TestNativeIncrements(t *testing.T) {
 func TestNativeCrashReleasesAndRedelivers(t *testing.T) {
 	s := qenv.NewNative(qenv.Nominal{}, nil)
 	st := qenv.NewStore(s, "db", qenv.ReadCommitted)
-	q := qenv.NewQueue(s, "jobs")
+	q := qenv.NewQueue(s, "jobs", nil)
 	crashNext := true
 	s.OnCrash(func(p *qenv.Process) { p.Restart() })
 	var p *qenv.Process
@@ -189,5 +190,54 @@ func TestNativeMono(t *testing.T) {
 	s.Close()
 	if took < 50*time.Millisecond || took > time.Second {
 		t.Errorf("Mono measured %v across a 50ms sleep", took)
+	}
+}
+
+// The fault models added after the native runtime run on it too: a
+// process's clocks skew, jump and drift, the network's nemesis cuts and
+// heals links between processes, and a machine's crash takes its disk's
+// unsynced writes.
+func TestNativeFaultModels(t *testing.T) {
+	cut, jumped, lostWrites := 0, 0, 0
+	for seed := uint64(1); seed <= 10; seed++ {
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults.Set("nemesis", 0.2).Set("clock", 1).Set("disk", 1)
+		s := qenv.NewNative(c, nil)
+		s.Clocks = qenv.Clocks{Skew: time.Second, Jump: time.Second, Drift: 0.1}
+		s.Net().CutLength = 2 * time.Millisecond
+		s.Log = func(line string) {
+			if strings.Contains(line, "nemesis partition.") {
+				cut++
+			}
+		}
+		server := s.Process("server", false, func(context.Context) {})
+		svc := qenv.NewService(s, "echo", server, func(ctx context.Context, n int) (int, error) { return n, nil })
+		var disk *qenv.Disk
+		var node *qenv.Process
+		node = s.Process("node", false, func(ctx context.Context) {
+			f := disk.Create("log")
+			_, _ = f.Write([]byte("synced\n"))
+			_ = f.Sync()
+			for i := range 20 {
+				_, _ = svc.Call(ctx, i, time.Millisecond)
+			}
+			_, _ = f.Write([]byte("unsynced\n"))
+			node.Crash()
+		})
+		disk = qenv.NewDisk(s, "node", node)
+		s.Net().PartitionNemesis(node, server)
+		if err := s.Run(100 * time.Millisecond); err != nil { // real time: the calls take 20 ms at most
+			t.Fatal(err)
+		}
+		if o := node.ClockOffset(); o != 0 && o != time.Second && o != -time.Second {
+			jumped++
+		}
+		if data, _ := disk.ReadFile("log"); !strings.Contains(string(data), "unsynced") {
+			lostWrites++
+		}
+		s.Close()
+	}
+	if cut == 0 || jumped == 0 || lostWrites == 0 {
+		t.Errorf("over 10 native runs: %d cuts, %d processes' clocks jumped, %d disks lost their unsynced writes: want each", cut, jumped, lostWrites)
 	}
 }

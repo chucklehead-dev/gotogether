@@ -31,7 +31,7 @@ func TestDaemonsAndReceivesAreNotStuck(t *testing.T) {
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()
 	var never qenv.Signal
-	q := qenv.NewQueue(s, "q")
+	q := qenv.NewQueue(s, "q", nil)
 	s.Spawn("server", func(ctx context.Context) {
 		qenv.Daemon(ctx)
 		never.Wait(ctx, time.Time{})

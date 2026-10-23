@@ -135,7 +135,7 @@ func TestCrashReleasesAndRedelivers(t *testing.T) {
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()
 	st := qenv.NewStore(s, "db", qenv.ReadCommitted)
-	q := qenv.NewQueue(s, "jobs")
+	q := qenv.NewQueue(s, "jobs", nil)
 	crashNext := true
 	s.OnCrash(func(p *qenv.Process) { p.Restart() }) // a supervisor
 	var p *qenv.Process

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +14,11 @@ import (
 )
 
 // crashAs makes every choice nominal but the disk's crash, which it makes
-// option opt (0 nominal, 1 lost, 2 torn).
+// option opt (0 nominal, 1 powerLoss, 2 tornWrite), whatever its name.
 type crashAs int
 
 func (c crashAs) Choose(kind string, n int) int {
-	if kind == "fault.disk.crash" {
+	if strings.HasPrefix(kind, "fault.disk.") && strings.HasSuffix(kind, ".crash") {
 		return int(c)
 	}
 	return 0

@@ -43,7 +43,7 @@ var ErrConflict = errors.New("qenv: transaction conflict (serialization failure)
 var ErrDeadlock = fmt.Errorf("%w: deadlock (lock waits form a cycle); lock rows in one order", ErrConflict)
 
 // ErrUnknownOutcome is returned by Commit when the connection is lost
-// during commit (fault kind "store.commit"): the transaction may or may
+// during commit (fault kind "store.<name>.commit"): the transaction may or may
 // not have committed, and the caller cannot tell.
 var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
 
@@ -85,7 +85,7 @@ type Txn interface {
 type Store struct {
 	Name string
 	Iso  Isolation
-	// CommitFaults enables the fault kind "store.commit": a commit that is applied
+	// CommitFaults enables the fault kind "store.<name>.commit": a commit that is applied
 	// but reported as ErrUnknownOutcome, a connection lost after the
 	// database committed. Off by default, unlike qenv.Service's crash
 	// window: a service's lost response is what every caller of a remote
@@ -103,7 +103,8 @@ type Store struct {
 	open  map[*tx]bool
 	txs   int64
 
-	noValidation bool // tests only: a store that keeps no level, for the history check to catch
+	commit       FaultKind // "store.<name>.commit"
+	noValidation bool      // tests only: a store that keeps no level, for the history check to catch
 }
 
 type version struct {
@@ -114,7 +115,8 @@ type version struct {
 
 // NewStore returns an empty store in s.
 func NewStore(s *Sim, name string, iso Isolation) *Store {
-	st := &Store{Name: name, Iso: iso, sim: s, rows: map[string][]version{}, locks: map[string]*tx{}, open: map[*tx]bool{}}
+	st := &Store{Name: name, Iso: iso, sim: s, rows: map[string][]version{}, locks: map[string]*tx{}, open: map[*tx]bool{},
+		commit: DeclareFaults("store."+name+".commit", "unknownOutcome")} // a commit applied whose outcome the client never learns
 	if s.Check {
 		st.hist = history.New([...]int{history.Serializable, history.SnapshotIsolation, history.ReadCommitted}[iso])
 	}
@@ -391,7 +393,7 @@ func (tx *tx) Commit() error {
 	for _, h := range tx.hooks {
 		h()
 	}
-	if st.CommitFaults && len(tx.order) > 0 && st.sim.FaultOf(storeCommit) == "unknownOutcome" {
+	if st.CommitFaults && len(tx.order) > 0 && st.sim.FaultOf(st.commit) == "unknownOutcome" {
 		return ErrUnknownOutcome
 	}
 	return nil
@@ -466,6 +468,3 @@ func (st *Store) Load(key string, val any) {
 		st.hist.Load(key, history.Version(st.seq))
 	}
 }
-
-// storeCommit is a commit applied whose outcome the client never learns.
-var storeCommit = DeclareFaults("store.commit", "unknownOutcome")

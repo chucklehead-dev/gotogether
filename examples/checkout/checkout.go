@@ -106,7 +106,11 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	provider := &shop.Provider{DB: d.Provider}
 	paySvc := qenv.NewService(s, "provider", nil, provider.Handle)
 	paySvc.Capacity = cfg.Provider
-	qPay, qShip := qenv.NewQueue(s, "payments"), qenv.NewQueue(s, "shipping")
+	var brokerProc *qenv.Process // with Partitions, the queues' broker, a process of its own
+	if cfg.Partitions {
+		brokerProc = s.Process("broker", false, func(context.Context) {})
+	}
+	qPay, qShip := qenv.NewQueue(s, "payments", brokerProc), qenv.NewQueue(s, "shipping", brokerProc)
 	d.PaySvc, d.PayQueue, d.ShipQueue = paySvc, qPay, qShip
 	d.Shop = &shop.Shop{DB: d.DB, Broker: broker{qPay, qShip}, Payments: payments{paySvc}, Mutation: cfg.Mutation,
 		PaymentWorkers: cfg.PaymentWorkers, PaymentRetry: cfg.PaymentRetry, RedeliveryDelay: cfg.RedeliveryDelay}
@@ -116,9 +120,7 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	pays := s.Process("payments", crash, func(ctx context.Context) { d.Shop.RunPayments(ctx, inbox{qPay}) })
 	ships := s.Process("shipping", crash, func(ctx context.Context) { d.Shop.RunShipping(ctx, inbox{qShip}) })
 	if cfg.Partitions {
-		broker := s.Process("broker", false, func(context.Context) {})
-		qPay.Proc, qShip.Proc = broker, broker
-		s.Partitions(broker, relay, pays, ships)
+		s.Net().PartitionNemesis(brokerProc, relay, pays, ships)
 	}
 	d.api = qenv.NewService(s, "api", api, func(ctx context.Context, r apiReq) (string, error) {
 		var err error

@@ -9,7 +9,7 @@ import (
 // Queue is an at-least-once message queue: a published message is
 // delivered until a consumer acknowledges it. Its contract allows, and its
 // faults produce:
-//   - redelivery: an acknowledgement is lost ("queue.ack"), or the
+//   - redelivery: an acknowledgement is lost ("queue.<name>.ack"), or the
 //     consumer crashed holding the message;
 //   - reordering, unless Ordered: which pending message is delivered next
 //     is a schedule choice;
@@ -25,12 +25,9 @@ type Queue struct {
 	// Ordered delivers the oldest pending message first (a single FIFO
 	// partition). Redelivered messages go back to the front.
 	Ordered bool
-	// Proc is the broker's process, if it has one: the network between it
-	// and its clients can be partitioned. Without one no partition reaches
-	// the queue.
-	Proc *Process
-
 	sim     *Sim
+	proc    *Process  // the broker's (NewQueue), or nil
+	ack     FaultKind // "queue.<name>.ack"
 	pending []*Delivery
 	held    map[*Delivery]*Process
 	next    int
@@ -48,21 +45,26 @@ type Delivery struct {
 	q           *Queue
 }
 
-// NewQueue returns an empty queue in s.
-func NewQueue(s *Sim, name string) *Queue {
-	q := &Queue{Name: name, sim: s, held: map[*Delivery]*Process{}}
+// NewQueue returns an empty queue in s whose broker runs in process p: the
+// network between it and its clients can be partitioned. With p nil the
+// broker is of no process, and no partition reaches the queue. Its lost
+// acknowledgements are the fault kind "queue.<name>.ack" ("queue" covers
+// every queue's).
+func NewQueue(s *Sim, name string, p *Process) *Queue {
+	q := &Queue{Name: name, sim: s, proc: p, held: map[*Delivery]*Process{},
+		ack: DeclareFaults("queue."+name+".ack", "lost")}
 	if s.Check {
 		q.acked = map[int]bool{}
 	}
 	// unacknowledged messages of a crashed consumer are redelivered, as
 	// are those of one whose connection a partition dropped
 	s.OnCrash(q.drop)
-	s.onCut = append(s.onCut, func(a, b *Process) {
+	s.net.OnCut(func(a, b *Process) {
 		switch {
-		case q.Proc == nil:
-		case a == q.Proc:
+		case q.proc == nil:
+		case a == q.proc:
 			q.drop(b)
-		case b == q.Proc:
+		case b == q.proc:
 			q.drop(a)
 		}
 	})
@@ -141,7 +143,7 @@ func sortedIDs(m map[int]bool) []int {
 // reaches reports whether the network lets the task of ctx reach the
 // broker.
 func (q *Queue) reaches(ctx context.Context) bool {
-	return q.Proc == nil || !q.sim.Partitioned(ProcessOf(ctx), q.Proc)
+	return q.proc == nil || !q.sim.net.Partitioned(ProcessOf(ctx), q.proc)
 }
 
 func (q *Queue) heldIn() []*Delivery {
@@ -189,11 +191,8 @@ func (q *Queue) Receive(ctx context.Context) *Delivery {
 	return d
 }
 
-// queueAck is a lost acknowledgement: the message is delivered again.
-var queueAck = DeclareFaults("queue.ack", "lost")
-
 // Ack acknowledges a delivery. The acknowledgement may be lost
-// ("queue.ack"): the message is then delivered again.
+// ("queue.<name>.ack"): the message is then delivered again.
 func (d *Delivery) Ack(ctx context.Context) {
 	Yield(ctx)
 	q := d.q
@@ -201,7 +200,7 @@ func (d *Delivery) Ack(ctx context.Context) {
 		return
 	}
 	delete(q.held, d)
-	if q.sim.FaultOf(queueAck) == "lost" {
+	if q.sim.FaultOf(q.ack) == "lost" {
 		q.requeue(d)
 	} else if q.acked != nil {
 		q.acked[d.ID] = true

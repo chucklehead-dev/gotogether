@@ -19,13 +19,13 @@ func consume(seed uint64, ordered, broken bool) (msg string) {
 		}
 	}()
 	c := qenv.NewSeeded(seed)
-	c.Rates = qenv.DefaultRates.Set("nemesis", 0.05).Set("queue.ack", 0.2)
+	c.Rates = qenv.DefaultRates.Set("nemesis", 0.05).Set("queue", 0.2)
 	s := qenv.New(c)
 	defer s.Close()
 	s.Check = true
 	broker := s.Process("broker", false, func(context.Context) {})
-	q := qenv.NewQueue(s, "jobs")
-	q.Ordered, q.Proc = ordered, broker
+	q := qenv.NewQueue(s, "jobs", broker)
+	q.Ordered = ordered
 	if broken {
 		qenv.BreakQueue(q)
 	}
@@ -53,7 +53,7 @@ func consume(seed uint64, ordered, broken bool) (msg string) {
 			q.Publish(ctx, i)
 		}
 	})
-	s.Partitions(append(procs, broker)...)
+	s.Net().PartitionNemesis(append(procs, broker)...)
 	if err := s.Run(time.Second); err != nil {
 		return err.Error()
 	}

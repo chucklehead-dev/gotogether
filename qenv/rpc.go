@@ -139,7 +139,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 		deliveries = 2
 	}
 	caller := ProcessOf(ctx)
-	if svc.Proc.Down() || s.Partitioned(caller, svc.Proc) {
+	if svc.Proc.Down() || s.net.Partitioned(caller, svc.Proc) {
 		deliveries = 0
 	}
 	deadline := s.Now().Add(caller.drifted(timeout)) // the caller's timer, on its clock
@@ -164,7 +164,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 			if !first {
 				return // the duplicate's response is dropped as a stray
 			}
-			if s.FaultOf(svc.response) == "lost" || s.Partitioned(caller, svc.Proc) {
+			if s.FaultOf(svc.response) == "lost" || s.net.Partitioned(caller, svc.Proc) {
 				return
 			}
 			res.resp, res.err, res.done = resp, err, true

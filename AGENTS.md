@@ -323,6 +323,13 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   (`qenv.Wrapper`): `New`, `ContextOf`, `EntropyOf` and nemeses by name
   look through the chain (`qenv.As[T]`). A wrapper without it hides the
   run's context and entropy.
+- A double's fault kinds carry its instance's name (`rpc.<name>.request`,
+  `queue.<name>.ack`, `store.<name>.commit`, `disk.<name>.crash`), and a
+  double that a partition reaches takes its process at construction
+  (`NewService`, `NewQueue`, `NewDisk`): a field set later was forgotten
+  and silently kept partitions out. A Rates key naming no kind matches
+  nothing, silently (the queues' old shared kind, after the rename): name
+  the kinds as coverage prints them.
 - A double declares its fault kinds by name (`qenv.DeclareFaults("kube.request",
   "unavailable", "lostResponse")`) and chooses with `Sim.FaultOf`, which
   returns the option's name. A call that cannot fail in some options takes

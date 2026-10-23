@@ -27,9 +27,9 @@ func TestPartition(t *testing.T) {
 			results = append(results, err)
 		}
 		call()
-		s.Partition(client, server)
+		s.Net().Partition(client, server)
 		call()
-		s.Heal(client, server)
+		s.Net().Heal(client, server)
 		call()
 	})
 	if err := s.Run(time.Minute); err != nil {
@@ -37,9 +37,9 @@ func TestPartition(t *testing.T) {
 	}
 	var outside error
 	s.Spawn("outsider", func(ctx context.Context) {
-		s.Partition(client, server)
+		s.Net().Partition(client, server)
 		_, outside = svc.Call(ctx, 1, 100*time.Millisecond)
-		s.Heal(client, server)
+		s.Net().Heal(client, server)
 	})
 	if err := s.Run(time.Minute); err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestPartitionsNemesisAndSettle(t *testing.T) {
 				}
 			}
 		})
-		s.Partitions(client, server)
+		s.Net().PartitionNemesis(client, server)
 		if err := s.Run(2 * time.Second); err != nil {
 			t.Fatal(err)
 		}
@@ -104,15 +104,14 @@ func TestQueuePartition(t *testing.T) {
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()
 	broker := s.Process("broker", false, func(context.Context) {})
-	q := qenv.NewQueue(s, "jobs")
-	q.Proc = broker
+	q := qenv.NewQueue(s, "jobs", broker)
 	var got []string
 	var consumer, publisher *qenv.Process
 	consumer = s.Process("consumer", false, func(ctx context.Context) {
 		d := q.Receive(ctx)
-		s.Partition(consumer, broker)
+		s.Net().Partition(consumer, broker)
 		d.Ack(ctx) // lost: the cut dropped the connection
-		s.Heal(consumer, broker)
+		s.Net().Heal(consumer, broker)
 		for i := 0; i < 2; i++ {
 			d := q.Receive(ctx)
 			got = append(got, fmt.Sprintf("%v redelivered=%v", d.Body, d.Redelivered))
@@ -122,10 +121,10 @@ func TestQueuePartition(t *testing.T) {
 	var publishedAt time.Duration
 	publisher = s.Process("publisher", false, func(ctx context.Context) {
 		q.Publish(ctx, "a")
-		s.Partition(publisher, broker)
+		s.Net().Partition(publisher, broker)
 		qenv.Go(ctx, "healer", func(ctx context.Context) {
 			qenv.Sleep(ctx, time.Second)
-			s.Heal(publisher, broker)
+			s.Net().Heal(publisher, broker)
 		})
 		start := s.Now()
 		q.Publish(ctx, "b")
@@ -144,8 +143,8 @@ func TestQueuePartition(t *testing.T) {
 		t.Errorf("%d pending, %d in flight", q.Pending(), q.InFlight())
 	}
 
-	free := qenv.NewQueue(s, "free")
-	s.Partition(publisher, broker)
+	free := qenv.NewQueue(s, "free", nil)
+	s.Net().Partition(publisher, broker)
 	s.Spawn("on a cut network", func(ctx context.Context) { free.Publish(ctx, "c") })
 	if err := s.Run(time.Minute); err != nil || free.Pending() != 1 {
 		t.Errorf("a queue with no broker process was partitioned: %v, %d pending", err, free.Pending())
@@ -162,10 +161,9 @@ func TestPartitionsHealByThemselves(t *testing.T) {
 		c := qenv.NewSeeded(seed)
 		c.Rates = qenv.NoFaults.Set("nemesis", 0.5)
 		s := qenv.New(c)
-		s.PartitionLength = 3 * time.Second
+		s.Net().CutLength = 3 * time.Second
 		broker := s.Process("broker", false, func(context.Context) {})
-		q := qenv.NewQueue(s, "jobs")
-		q.Proc = broker
+		q := qenv.NewQueue(s, "jobs", broker)
 		var took time.Duration
 		pub := s.Process("publisher", false, func(ctx context.Context) {
 			start := s.Now()
@@ -174,7 +172,7 @@ func TestPartitionsHealByThemselves(t *testing.T) {
 			}
 			took = s.Now().Sub(start)
 		})
-		s.Partitions(pub, broker)
+		s.Net().PartitionNemesis(pub, broker)
 		if err := s.Run(time.Minute); err != nil {
 			t.Fatalf("seed %d: %v", seed, err)
 		}
@@ -185,7 +183,7 @@ func TestPartitionsHealByThemselves(t *testing.T) {
 		if took > 0 {
 			waited++
 		}
-		if took > 5*s.PartitionLength {
+		if took > 5*s.Net().CutLength {
 			t.Errorf("seed %d: publishing took %v, beyond a cut's length per message", seed, took)
 		}
 	}
@@ -209,7 +207,7 @@ func TestNemesisFamilies(t *testing.T) {
 			}
 		})
 		b := s.Process("b", false, func(context.Context) {})
-		s.Partitions(a, b)
+		s.Net().PartitionNemesis(a, b)
 		cuts := 0
 		s.Log = func(line string) {
 			if strings.Contains(line, "nemesis partition.") {
@@ -262,7 +260,7 @@ func TestNemesisOffWrapped(t *testing.T) {
 		}
 	})
 	b := s.Process("b", false, func(context.Context) {})
-	s.Partitions(a, b)
+	s.Net().PartitionNemesis(a, b)
 	if err := s.Run(time.Minute); err != nil {
 		t.Fatal(err)
 	}
@@ -273,5 +271,33 @@ func TestNemesisOffWrapped(t *testing.T) {
 	}
 	if strings.Join(log.Nemeses, " ") != "crash.a" {
 		t.Errorf("offered %v, want crash.a only", log.Nemeses)
+	}
+}
+
+// A task spawned into a process from outside is the process's: a cut
+// reaches it, and a crash kills it.
+func TestProcessSpawn(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	server := s.Process("server", false, func(context.Context) {})
+	svc := qenv.NewService(s, "echo", server, func(ctx context.Context, n int) (int, error) { return n, nil })
+	node := s.Process("node", true, func(context.Context) {})
+	s.Net().Partition(node, server)
+	var err error
+	node.Spawn("work", func(ctx context.Context) { _, err = svc.Call(ctx, 1, 10*time.Millisecond) })
+	ran := false
+	node.Spawn("long", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Second)
+		ran = true
+	})
+	s.Spawn("crasher", func(ctx context.Context) {
+		qenv.Sleep(ctx, 100*time.Millisecond)
+		node.Crash()
+	})
+	if runErr := s.Run(time.Minute); runErr != nil {
+		t.Fatal(runErr)
+	}
+	if !errors.Is(err, qenv.ErrTimeout) || ran {
+		t.Errorf("the spawned task's call: %v (want a timeout across the cut); the long task ran after the crash: %v", err, ran)
 	}
 }
