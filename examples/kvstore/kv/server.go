@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -132,7 +134,9 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	if IsNotFound(err) {
 		span.SetAttributes(attribute.Int64("kv.revision", res.Revision), attribute.Int64("kv.op", res.Op), attribute.String("kv.outcome", "ok"))
 		span.End()
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(res) // the revision the read saw: a client that records it needs it
 		return
 	}
 	finish(span, w, res, err)
@@ -142,6 +146,28 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 type Client struct {
 	Base string // e.g. http://127.0.0.1:8080
 	HTTP *http.Client
+	// Record makes the client record each operation as a model step when
+	// it returns, with the time it was invoked ("invoked"), as a client
+	// that cannot see the store's lock would (a Jepsen-style history):
+	// concurrent operations return in another order than the store applied
+	// them, and qtest.Linearize finds an order their intervals allow. An
+	// operation whose request failed is not recorded: it may or may not
+	// have happened.
+	Record bool
+}
+
+// recorded records an operation that returned, invoked at start.
+func (c *Client) recorded(ctx context.Context, start time.Time, action string, res Result, err error, kv ...any) (Result, error) {
+	if !c.Record || err != nil && !IsConflict(err) && !IsNotFound(err) {
+		return res, err
+	}
+	stepErr := err
+	if action == "read" {
+		stepErr = nil // a miss is a successful read: it returned "not found"
+		kv = append(kv, "obs.found", res.Found, "obs.value", res.Entry.Value, "obs.version", res.Entry.Version)
+	}
+	qobs.Record(ctx, action, stepErr, append(kv, "invoked", start, "obs.revision", res.Revision)...)
+	return res, err
 }
 
 func (c *Client) do(ctx context.Context, method, key, query, value string) (Result, error) {
@@ -174,14 +200,22 @@ func (c *Client) do(ctx context.Context, method, key, query, value string) (Resu
 
 // Put, CAS, Delete and Get call the server.
 func (c *Client) Put(ctx context.Context, key, value string) (Result, error) {
-	return c.do(ctx, http.MethodPut, key, "", value)
+	start := time.Now()
+	res, err := c.do(ctx, http.MethodPut, key, "", value)
+	return c.recorded(ctx, start, "write", res, err, "key", key, "value", value)
 }
 func (c *Client) CAS(ctx context.Context, key string, expected int64, value string) (Result, error) {
-	return c.do(ctx, http.MethodPost, key, "?expect="+strconv.FormatInt(expected, 10), value)
+	start := time.Now()
+	res, err := c.do(ctx, http.MethodPost, key, "?expect="+strconv.FormatInt(expected, 10), value)
+	return c.recorded(ctx, start, "cas", res, err, "key", key, "expected", expected, "value", value)
 }
 func (c *Client) Delete(ctx context.Context, key string) (Result, error) {
-	return c.do(ctx, http.MethodDelete, key, "", "")
+	start := time.Now()
+	res, err := c.do(ctx, http.MethodDelete, key, "", "")
+	return c.recorded(ctx, start, "del", res, err, "key", key)
 }
 func (c *Client) Get(ctx context.Context, key string) (Result, error) {
-	return c.do(ctx, http.MethodGet, key, "", "")
+	start := time.Now()
+	res, err := c.do(ctx, http.MethodGet, key, "", "")
+	return c.recorded(ctx, start, "read", res, err, "key", key)
 }

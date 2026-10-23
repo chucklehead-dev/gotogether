@@ -251,14 +251,15 @@ func (rs *Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error) {
 						type occ struct {
 							attrs map[string]any
 							t     time.Time
+							inv   time.Time // a span's start: the operation's real-time interval
 						}
 						var occs []occ
 						if ru.Event == "" {
-							occs = []occ{{map[string]any{}, time.Unix(0, int64(sp.EndTimeUnixNano))}}
+							occs = []occ{{map[string]any{}, time.Unix(0, int64(sp.EndTimeUnixNano)), time.Unix(0, int64(sp.StartTimeUnixNano))}}
 						} else {
 							for _, ev := range sp.Events {
 								if ev.Name == ru.Event {
-									occs = append(occs, occ{otelio.Attrs(ev.Attributes), time.Unix(0, int64(ev.TimeUnixNano))})
+									occs = append(occs, occ{attrs: otelio.Attrs(ev.Attributes), t: time.Unix(0, int64(ev.TimeUnixNano))})
 								}
 							}
 						}
@@ -277,6 +278,9 @@ func (rs *Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error) {
 								continue
 							}
 							s, rec, err := rs.step(ru, c, o.t)
+							if sp.StartTimeUnixNano > 0 && !o.inv.IsZero() {
+								s.Invoked = o.inv
+							}
 							if err != nil {
 								return nil, fmt.Errorf("span %s (%s), rule %s: %w", sp.SpanID, sp.Name, ru.Action, err)
 							}

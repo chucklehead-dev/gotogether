@@ -418,6 +418,7 @@ type Option func(*settings)
     func Constants(m map[string]string) Option
     func Global() Option
     func Invariants(names ...string) Option
+    func Linearize() Option
     func Quint(o validate.Options) Option
     func RecorderOptions(opts ...qobs.Option) Option
     func SkipIfEmpty() Option
@@ -447,6 +448,7 @@ type Issue struct{ ... }
 type Keyer struct{ ... }
 type Step struct{ ... }
     func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
+    func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int)
     func ReadJSONL(r io.Reader) ([]Step, error)
 type Trace struct{ ... }
 

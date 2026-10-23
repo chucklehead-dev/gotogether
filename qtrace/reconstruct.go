@@ -144,6 +144,34 @@ func edge(ns []*node, from, to int) { ns[from].succ = append(ns[from].succ, to);
 
 func order(actor string, steps []Step) *Trace {
 	t := &Trace{Actor: actor}
+	ns := build(steps)
+	for _, i := range kahn(ns, &t.Issues) {
+		t.Steps = append(t.Steps, ns[i].s)
+	}
+	t.Issues = append(t.Issues, realTime(t.Steps)...)
+	// Incarnations: in order of first appearance; interleaving means two
+	// incarnations of one actor were alive at once.
+	seenP := map[string]bool{}
+	cur := ""
+	for _, s := range t.Steps {
+		if s.Process == cur {
+			continue
+		}
+		if seenP[s.Process] {
+			t.Issues = append(t.Issues, Issue{"warn", "overlap", fmt.Sprintf("process %s emitted %s after process %s had started: two incarnations of %s overlap", s.Process, s.Action, cur, actor)})
+		} else {
+			seenP[s.Process] = true
+			t.Processes = append(t.Processes, s.Process)
+		}
+		cur = s.Process
+	}
+	return t
+}
+
+// build makes the happens-before graph of one actor's steps: a node per
+// step, keyed by its recording time made monotone per recorder, with the
+// hard edges of program order and domain clocks.
+func build(steps []Step) []*node {
 	ns := make([]*node, len(steps))
 	for i, s := range steps {
 		ns[i] = &node{s: s, key: s.Time, idx: i}
@@ -200,7 +228,14 @@ func order(actor string, steps []Step) *Trace {
 			cur = append(cur, n)
 		}
 	}
-	// Kahn's algorithm, preferring recording order.
+	return ns
+}
+
+// kahn sorts the graph topologically, preferring recording order, and
+// breaks a cycle (reported in issues) at its earliest step. It returns the
+// nodes' indices in order.
+func kahn(ns []*node, issues *[]Issue) []int {
+	var out []int
 	q := &pq{}
 	for _, n := range ns {
 		if n.npred == 0 {
@@ -208,7 +243,7 @@ func order(actor string, steps []Step) *Trace {
 		}
 	}
 	done := make([]bool, len(ns))
-	for len(t.Steps) < len(ns) {
+	for len(out) < len(ns) {
 		if q.Len() == 0 {
 			// A cycle: the hard constraints contradict each other, which
 			// means the instrumentation's thread or order keys are wrong.
@@ -220,7 +255,7 @@ func order(actor string, steps []Step) *Trace {
 				}
 			}
 			sort.Slice(rest, func(i, j int) bool { return (pq{rest[i], rest[j]}).Less(0, 1) })
-			t.Issues = append(t.Issues, Issue{"error", "cycle", fmt.Sprintf("ordering constraints form a cycle at %s (seq %d); order keys contradict program order", rest[0].s.Action, rest[0].s.Seq)})
+			*issues = append(*issues, Issue{"error", "cycle", fmt.Sprintf("ordering constraints form a cycle at %s (seq %d); order keys contradict program order", rest[0].s.Action, rest[0].s.Seq)})
 			rest[0].npred = 0
 			heap.Push(q, rest[0])
 		}
@@ -229,7 +264,7 @@ func order(actor string, steps []Step) *Trace {
 			continue
 		}
 		done[n.idx] = true
-		t.Steps = append(t.Steps, n.s)
+		out = append(out, n.idx)
 		for _, s := range n.succ {
 			ns[s].npred--
 			if ns[s].npred == 0 && !done[s] {
@@ -237,23 +272,7 @@ func order(actor string, steps []Step) *Trace {
 			}
 		}
 	}
-	// Incarnations: in order of first appearance; interleaving means two
-	// incarnations of one actor were alive at once.
-	seenP := map[string]bool{}
-	cur := ""
-	for _, s := range t.Steps {
-		if s.Process == cur {
-			continue
-		}
-		if seenP[s.Process] {
-			t.Issues = append(t.Issues, Issue{"warn", "overlap", fmt.Sprintf("process %s emitted %s after process %s had started: two incarnations of %s overlap", s.Process, s.Action, cur, actor)})
-		} else {
-			seenP[s.Process] = true
-			t.Processes = append(t.Processes, s.Process)
-		}
-		cur = s.Process
-	}
-	return t
+	return out
 }
 
 func indexNul(s string) int {

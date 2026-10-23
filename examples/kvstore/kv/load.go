@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"sync"
+
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Load drives the server at base with concurrent random operations:
@@ -12,13 +14,28 @@ import (
 // compare-and-swaps with the version each client last saw (often stale),
 // deletes and reads. Seeded, but the interleaving is up to the scheduler.
 func Load(ctx context.Context, base string, clients, ops int, keys []string, seed uint64) error {
+	return load(ctx, Client{Base: base}, clients, ops, keys, seed)
+}
+
+// LoadRecorded is Load with clients that record their operations (Client.Record),
+// each client on a thread of its own (qobs.Thread): its operations are in
+// program order, and concurrent with every other client's.
+func LoadRecorded(ctx context.Context, base string, clients, ops int, keys []string, seed uint64) error {
+	return load(ctx, Client{Base: base, Record: true}, clients, ops, keys, seed)
+}
+
+func load(ctx context.Context, proto Client, clients, ops int, keys []string, seed uint64) error {
 	var wg sync.WaitGroup
 	errs := make(chan error, clients)
 	for c := 0; c < clients; c++ {
 		wg.Add(1)
 		go func(c int) {
 			defer wg.Done()
-			if err := client(ctx, &Client{Base: base}, ops, keys, rand.New(rand.NewPCG(seed, uint64(c)))); err != nil {
+			cl, ctx := proto, ctx
+			if cl.Record {
+				ctx = qobs.Thread(ctx)
+			}
+			if err := client(ctx, &cl, ops, keys, rand.New(rand.NewPCG(seed, uint64(c)))); err != nil {
 				errs <- fmt.Errorf("client %d: %w", c, err)
 			}
 		}(c)

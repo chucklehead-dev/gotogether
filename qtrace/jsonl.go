@@ -24,6 +24,9 @@ func (s *Step) Attributes() map[string]any {
 			m[k] = v
 		}
 	}
+	if !s.Invoked.IsZero() {
+		m[KeyInvoked] = s.Invoked.UnixNano()
+	}
 	for k, v := range s.Args {
 		m[PrefixArg+k] = v
 	}

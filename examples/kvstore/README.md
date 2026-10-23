@@ -20,6 +20,7 @@ Run it, put load on it, then check what it recorded:
 ./run-demo.sh                          # faithful: both checks pass
 MUTATION=stale-cas ./run-demo.sh       # a race: two CAS with the same expected version both win
 MUTATION=revision-on-conflict ./run-demo.sh
+MUTATION=stale-read ./run-demo.sh      # reads from a lagging snapshot
 ```
 
 ```
@@ -70,6 +71,8 @@ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.json
 | `TestServiceUnderLoadConforms` | 8 concurrent clients; recorded steps checked (`qtest`) | a concurrent run is a serial behaviour of the model |
 | `TestServiceSpansConform` | the same load; plain spans converted and checked | spans plus `kv.op` give the same verdict |
 | `TestStaleCASCaughtUnderLoad` | the race mutant under load | caught as a CAS the model cannot take |
+| `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |
+| `TestStaleReadNotLinearizable` | `StaleRead`: reads from a snapshot refreshed every fourth read, client-recorded | a read no order real time allows explains (`Mismatch("read")`) |
 | `TestModelDrivesService` | model traces drive the HTTP API (`connect.Run`) | store and revision match the model after every request |
 | `TestHegelDrivesService` | a Hegel state machine over HTTP; runs checked after the test | |
 | `TestHegelShrinksRevisionOnConflict` | the same machine against a mutant, checked per case | Hegel shrinks to one failed CAS |

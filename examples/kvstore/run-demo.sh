@@ -2,7 +2,7 @@
 # Run the kvstore service under concurrent load, then check what it recorded
 # against model/kv.qnt two ways: its model steps, and its plain OTel spans.
 #   OUT=dir       where binaries and recordings go (default: a temp dir)
-#   MUTATION=...  stale-cas | revision-on-conflict (default: none)
+#   MUTATION=...  stale-cas | revision-on-conflict | stale-read (default: none)
 set -uo pipefail
 cd "$(dirname "$0")"
 OUT=${OUT:-$(mktemp -d)}

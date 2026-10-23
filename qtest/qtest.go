@@ -44,6 +44,8 @@ type settings struct {
 	Invariants []string
 	// Global installs Record's recorder as the global one (Global).
 	Global bool
+	// Linearize checks steps in an order real time allows (Linearize).
+	Linearize bool
 }
 
 // An Option configures a check: Record's, Validate's, a System's
@@ -255,6 +257,17 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	o := c.Options
 	o.Dir = filepath.Join(c.Dir, "quint")
 	ch := checkerFor(t, bindingPath, o, c)
+	var found []qtrace.Issue
+	if c.Linearize { // the order checked, the step log's and the ITF's
+		// the search needs conformance only: without invariants each batch
+		// is one quint process, not two
+		lc, err := ch.WithInvariants()
+		if err != nil {
+			t.Fatalf("gotogether: %v", err)
+		}
+		lc.Options.Dir = filepath.Join(o.Dir, "linearize")
+		run.Steps, found = linearize(t, lc, run.Steps)
+	}
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {
 		for actor, data := range itfs {
@@ -272,6 +285,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}
+	rep.Issues = append(rep.Issues, found...)
 	run.Report = rep
 	return run
 }

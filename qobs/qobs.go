@@ -297,6 +297,9 @@ func Thread(ctx context.Context) context.Context {
 //	"when"        "ok" | "error": record only if err is nil / non-nil
 //	"obs.<name>"  an observed projection of the state after the step
 //	"order.<d>"   a domain logical clock (see qtrace.Reconstruct)
+//	"invoked"     a time.Time: when the operation began (qtrace.Step.Invoked),
+//	              for a step recorded where it returned, not where it took
+//	              effect (a client's); qtest.Linearize orders by it
 //	anything else an argument of the action (quint.arg.<key>)
 //
 // Values are normalised to string, int64, bool or float64.
@@ -337,6 +340,10 @@ func (r *Recorder) step(ctx context.Context, action string, err error, kv []any)
 	}
 	for i := 0; i+1 < len(kv); i += 2 {
 		k, _ := kv[i].(string)
+		if t, ok := kv[i+1].(time.Time); ok && k == "invoked" {
+			s.Invoked = t
+			continue
+		}
 		v := Normalize(kv[i+1])
 		switch {
 		case k == "when":

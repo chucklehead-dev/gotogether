@@ -31,6 +31,10 @@ Added to the core since api/core.txt was first recorded:
 - `System.Exhaust(t, qtest.Bound{Delays, Faults})`: every run within the
   bound, fewest deviations first, as an Exploration; `qtest.Complete()`,
   `Evidence.Search`, `Run.Schedule` and `GOTOGETHER_SCHEDULE`.
+- Real-time order: `qtrace.Step.Invoked` (`qobs.Record`'s `invoked`
+  key, a converted span's start); Reconstruct reports an order its keys
+  force that real time contradicts; `qtest.Linearize()` and
+  `qtrace.Linearize` search the orders operations' intervals allow.
 - `gotogether simulate -binding`: the model's simulation against each
   invariant the binding's new `simulate` section (`binding.Simulation`)
   says it guarantees (`holds`) or lets the code break (`allows`).

@@ -87,6 +87,52 @@ func loadSpans(t *testing.T, m kv.Mutation, seed uint64) []qtrace.Step {
 	return steps
 }
 
+// clientHistory runs a recording load (kv.LoadRecorded): what clients
+// that cannot see the store's lock record, each operation when it returns
+// with the time it was invoked. The store's own steps go nowhere: its
+// handlers' contexts carry no recorder.
+func clientHistory(t *testing.T, m kv.Mutation, seed uint64) []qtrace.Step {
+	t.Helper()
+	mem := &qobs.MemorySink{}
+	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(mem, qobs.WithActor("kv")))
+	cl := service(t, m, nil)
+	if err := kv.LoadRecorded(ctx, cl.Base, 4, 8, []string{"a", "b"}, seed); err != nil {
+		t.Fatal(err)
+	}
+	return mem.Steps()
+}
+
+// A client's history of the faithful service: concurrent operations
+// return in another order than the store applied them, and checked in
+// that order the history is rejected (every load tried). Linearize finds
+// an order the operations' intervals allow that the model accepts.
+func TestClientHistoryLinearizes(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("searches orders, a quint check each")
+	}
+	qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.Faithful, 1), qtest.Linearize()).Expect(t, qtest.Conforms())
+}
+
+// A stale read (StaleRead: reads from a lagging snapshot) began after a
+// write returned and did not see it: no order real time allows explains
+// it, and the order that got furthest stops at a read.
+func TestStaleReadNotLinearizable(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("searches orders, a quint check each")
+	}
+	for seed := uint64(1); seed <= 5; seed++ {
+		run := qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.StaleRead, seed), qtest.Linearize())
+		if run.OK() {
+			continue // no read was stale this time
+		}
+		run.Expect(t, qtest.Mismatch("read"))
+		return
+	}
+	t.Fatal("five loads never read a stale snapshot")
+}
+
 // ---- 2. the model drives the service ---------------------------------------
 
 type driver struct {

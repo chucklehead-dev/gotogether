@@ -45,6 +45,13 @@ const (
 	// write gets a version the model does not expect. Any sequence of a
 	// failed CAS and a write exposes it.
 	RevisionOnConflict
+	// StaleRead serves reads from a snapshot refreshed on every fourth
+	// read, like a lagging replica: each read is consistent with some past
+	// state, so a history without invocation times has an order that
+	// explains it (it is serializable). One that knows when each read was
+	// invoked does not: a read that began after a write returned and did
+	// not see it is stale (not linearizable).
+	StaleRead
 )
 
 // Entry is a stored value and the revision that wrote it.
@@ -68,6 +75,10 @@ type Store struct {
 	revision int64
 	op       int64
 	mutation Mutation
+
+	snap    map[string]Entry // StaleRead's snapshot, at snapRev
+	snapRev int64
+	reads   int
 }
 
 // NewStore returns an empty store.
@@ -135,6 +146,22 @@ func (s *Store) Delete(ctx context.Context, key string) (Result, error) {
 func (s *Store) Get(ctx context.Context, key string) (Result, error) {
 	s.mu.Lock() // exclusive, so reads are linearized with writes and numbered
 	defer s.mu.Unlock()
+	if s.mutation == StaleRead {
+		if s.reads++; s.snap == nil || s.reads%4 == 0 {
+			s.snap, s.snapRev = make(map[string]Entry, len(s.data)), s.revision
+			for k, v := range s.data {
+				s.snap[k] = v
+			}
+		}
+		e, ok := s.snap[key]
+		var err error
+		if !ok {
+			err = ErrNotFound
+		}
+		s.op++
+		qobs.Record(ctx, "read", nil, "key", key, "obs.found", ok, "obs.value", e.Value, "obs.version", e.Version, "obs.revision", s.snapRev)
+		return Result{Revision: s.snapRev, Op: s.op, Entry: e, Found: ok}, err
+	}
 	e, ok := s.data[key]
 	var err error
 	if !ok {

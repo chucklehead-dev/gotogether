@@ -32,6 +32,11 @@ const (
 	KeyOutcome  = "quint.outcome"  // "ok", "error", or an error's own classification
 	KeyError    = "quint.error"    // error text, when the step failed
 
+	// KeyInvoked is when the operation the step completes was invoked (Unix
+	// nanoseconds): with the step's time, its real-time interval. A step
+	// whose operation completed before another's was invoked precedes it.
+	KeyInvoked = "quint.invoked_unix_nano"
+
 	PrefixArg   = "quint.arg."   // an observed parameter of the action
 	PrefixObs   = "quint.obs."   // an observed projection of the post-state
 	PrefixOrder = "quint.order." // a domain logical clock: steps carrying the same domain are ordered by its value
@@ -49,10 +54,14 @@ type Step struct {
 	Outcome  string
 	Error    string
 	Time     time.Time
-	Args     map[string]any // string, int64, bool or float64
-	Obs      map[string]any
-	Order    map[string]int64
-	Source   string // where it came from, for diagnostics (span id, file:line of a JSON record, ...)
+	// Invoked is when the operation was invoked, if known (KeyInvoked): the
+	// step took effect at some point between Invoked and Time. Zero:
+	// unknown, some time before Time (no real-time bound).
+	Invoked time.Time
+	Args    map[string]any // string, int64, bool or float64
+	Obs     map[string]any
+	Order   map[string]int64
+	Source  string // where it came from, for diagnostics (span id, file:line of a JSON record, ...)
 }
 
 // Get returns an argument or, with the "obs." prefix, an observation.
@@ -112,8 +121,15 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 		}
 		s.Seq = n
 	}
-	// args, obs and order keys only from the event itself (layer 0)
+	// args, obs, order keys and the invocation only from the event itself (layer 0)
 	if len(layers) > 0 {
+		if v, ok := layers[0][KeyInvoked]; ok {
+			n, err := toInt(v)
+			if err != nil {
+				return s, fmt.Errorf("%s: %s: %v", EventName, KeyInvoked, err)
+			}
+			s.Invoked = time.Unix(0, n)
+		}
 		for k, v := range layers[0] {
 			switch {
 			case strings.HasPrefix(k, PrefixArg):

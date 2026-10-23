@@ -35,7 +35,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	steps := flag.String("steps", "", "write model steps (native step log) here")
 	spans := flag.String("spans", "", "write OTel spans (OTLP/JSON) here")
-	mutation := flag.String("mutation", "", "inject a bug: stale-cas | revision-on-conflict")
+	mutation := flag.String("mutation", "", "inject a bug: stale-cas | revision-on-conflict | stale-read")
 	flag.Parse()
 
 	m := kv.Faithful
@@ -45,6 +45,8 @@ func main() {
 		m = kv.StaleCAS
 	case "revision-on-conflict":
 		m = kv.RevisionOnConflict
+	case "stale-read":
+		m = kv.StaleRead
 	default:
 		log.Fatalf("unknown mutation %q", *mutation)
 	}

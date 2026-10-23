@@ -193,12 +193,28 @@ The track, in order:
     `no-dedupe` and the reorder. Streams at one delay and one fault is
     over 40,000 runs: delays need DPOR, or a bound on which tasks may be
     delayed, before they scale past toy systems.
-- **X4. Real-time order (S–M).** Clients record invoke and complete
-  times; if A completed before B was invoked, A's step must precede B's
-  (`qtrace`, an issue with a fix, no quint). Then, for overlapping
-  steps, `Validate(..., qtest.Order(qtest.Linearize))` searches the
-  orders their intervals allow, the model as the sequential spec. Targets:
-  kvstore's real tier (a read path outside the lock), grpcledger's.
+- **X4. Real-time order (S–M).** Done.
+  - Steps carry when their operation was invoked (`Step.Invoked`:
+    `qobs.Record`'s `invoked`, a converted span's start). One whose
+    invocation is unknown has no real-time bound (it took effect some
+    time before it was recorded). Reconstruct reports an order its
+    thread or order keys force that real time contradicts.
+  - `qtest.Linearize()` (on Validate and Record; `qtrace.Linearize`
+    underneath) checks a client's history in an order the intervals
+    allow: a guided search of single moves around the failing step, kept
+    when they get further, checked in batches with conformance only. It
+    is not exhaustive: finding none is evidence, not proof.
+  - kvstore records a client history (`Client.Record`,
+    `kv.LoadRecorded`): in recording order the faithful service is
+    rejected in every load tried; Linearize finds an order (about 20
+    orders, 10–20 s for 32 steps). `StaleRead` (a lagging snapshot) is
+    caught as a read no order explains.
+  - **Left.** Every order tried replays from the start, so a few hundred
+    steps take minutes: starting a replay from the model's state at the
+    window (the failure's state is in the report) would make each try
+    the window's length. `//quint:action` could note the invocation on
+    entry. grpcledger's spans carry their start already; its convert
+    rules order by its own index, so nothing there needed it.
 - **X5. The doubles' contracts (M).** Under `GOTOGETHER_CHECK=1`, Store emits
   read and write sets with commit versions and a checker
   (`qenv/internal/history`, Elle-style) fails on cycles the level forbids
