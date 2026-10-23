@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: R4 → X (in its own order below) → Y → Z (to decide); R5 when the maintainer says.
+Order: R4 → X (in its own order below) → Y → Z; R5 when the maintainer says.
 
 ## W8. First hour and docs
 
@@ -496,8 +496,10 @@ run, the rest some) and contradictory pairs; "run 3" not "schedule 3";
 
 From four reviews of the whole product after Y (HISTORY, "Sixth
 review"): architecture and maintainability, correctness, a newcomer's
-usability and docs, missing features and lessons learned. Not yet
-decided with the maintainer; ordered as proposed, bugs first.
+usability and docs, missing features and lessons learned. Decided with
+the maintainer: all of Z1–Z8, breaking the API freely before tags. In
+order, bugs first; each item reviewed against its bullet before the
+next.
 
 - **Z1. Silent wrong answers (S each; confirmed by probes).**
   - A crash of a `Service` with `Capacity` leaks its workers for good
