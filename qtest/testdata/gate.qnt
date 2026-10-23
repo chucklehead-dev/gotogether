@@ -10,4 +10,5 @@ module gate {
   action step = any { open, pass }
 
   val passedWhenOpen = passes > 0 implies opened
+  val neverNegative = passes >= 0 // no antecedent
 }

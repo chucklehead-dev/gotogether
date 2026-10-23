@@ -232,8 +232,10 @@ func covers(prefix, kind string) bool {
 }
 
 // DefaultRates inject a fault at one fault choice in twenty, except a
-// nemesis (a crash, a partition), which is considered at every scheduling
-// step and so happens at one step in two hundred.
+// nemesis, which is considered at every scheduling step and so happens at
+// one step in two hundred, in each family ("nemesis.crash",
+// "nemesis.partition", "nemesis.jump", a double's own): "nemesis" covers
+// them all, and a family's own key sets it alone.
 var DefaultRates = Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.005}}
 
 // Seeded makes choices from a seeded generator: schedule choices uniformly,
@@ -272,6 +274,12 @@ func (s *Seeded) Entropy(n int) []byte {
 type ChoiceLog struct {
 	C       Chooser
 	Choices []Choice
+	// Nemeses are the nemeses the run's nemesis choices offered (enabled
+	// then), by name, in the order first offered: a nemesis never enabled
+	// is not in it, one enabled and never chosen is.
+	Nemeses []string
+
+	offered map[string]bool
 
 	steps *qobs.Recorder // the run's step recorder, found on the first choice
 }
@@ -285,6 +293,25 @@ func (r *ChoiceLog) Choose(kind string, n int) int {
 	}
 	r.Choices = append(r.Choices, c)
 	return v
+}
+
+// Took records a choice made without asking C (a nemesis a Script chose
+// by name, recorded as the family's choice it stands for).
+func (r *ChoiceLog) Took(kind string, n, v int) {
+	r.Choices = append(r.Choices, Choice{Kind: kind, N: n, Value: v, Step: r.progress()})
+}
+
+// Offer notes the nemeses a nemesis choice offered (Nemeses).
+func (r *ChoiceLog) Offer(names []string) {
+	if r.offered == nil {
+		r.offered = map[string]bool{}
+	}
+	for _, n := range names {
+		if !r.offered[n] {
+			r.offered[n] = true
+			r.Nemeses = append(r.Nemeses, n)
+		}
+	}
 }
 
 // Name names the last choice recorded (the nemesis the simulation chose:

@@ -9,7 +9,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qmut"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A MutationReport is what exploring the woven mutants found.
@@ -169,24 +168,11 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 }
 
 // meets reports whether the exploration meets every claim, without
-// failing anything: a mutant's, judged as the baseline was.
+// failing anything: a mutant's, judged as the baseline was (verdict).
 func (x *Exploration) meets(claims []Claim) bool {
-	reps := make([]*validate.Report, len(x.Runs))
-	for i, r := range x.Runs {
-		reps[i] = r.Report
-	}
+	reps := x.reports()
 	for _, c := range claims {
-		if rc, ok := c.(runsClaim); ok {
-			if rc.judgeRuns(x.Runs, x.actions) != "" {
-				return false
-			}
-			continue
-		}
-		switch c.(type) {
-		case vacuityClaim:
-			continue
-		}
-		if !c.judge(reps).ok {
+		if !x.verdict(c, reps).ok {
 			return false
 		}
 	}

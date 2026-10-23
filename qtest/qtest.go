@@ -47,6 +47,8 @@ type settings struct {
 	Global bool
 	// Linearize checks steps in an order real time allows (Linearize).
 	Linearize bool
+	// linearizeBudget is LinearizeBudget's (0: DefaultLinearizeBudget)
+	linearizeBudget int
 }
 
 // An Option configures a check: Record's, Validate's, a System's
@@ -129,6 +131,9 @@ type Run struct {
 	Corpus  string
 	Steps   []qtrace.Step
 	Choices []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
+	// Nemeses are the nemeses the run's nemesis choices offered, by name
+	// (qenv.ChoiceLog.Nemeses): Exercised wants each fired in some run.
+	Nemeses []string
 	// Interrupted are steps of work a crash or the end of the run cut off
 	// (qobs.Recorder.Interrupted): not in Steps, not checked; reported with
 	// a failing run.
@@ -267,6 +272,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	o.Dir = filepath.Join(c.Dir, "quint")
 	ch := checkerFor(t, bindingPath, o, c)
 	var found []qtrace.Issue
+	var undecided map[string]bool
 	if c.Linearize { // the order checked, the step log's and the ITF's
 		// the search needs conformance only: without invariants each batch
 		// is one quint process, not two
@@ -275,7 +281,11 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 			t.Fatalf("gotogether: %v", err)
 		}
 		lc.Options.Dir, lc.Options.NoITF = filepath.Join(o.Dir, "linearize"), true
-		run.Steps, found = linearize(t, lc, run.Steps)
+		budget := c.linearizeBudget
+		if budget == 0 {
+			budget = DefaultLinearizeBudget
+		}
+		run.Steps, found, undecided = linearize(t, lc, run.Steps, budget)
 	}
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {
@@ -295,6 +305,11 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 		t.Fatalf("gotogether: %v", err)
 	}
 	rep.Issues = append(rep.Issues, found...)
+	for _, a := range rep.Actors {
+		if undecided[a.Actor] && a.Conforms == validate.Fail {
+			a.Conforms = validate.NotEvaluated // the search ran out of budget: the order shown is not a verdict
+		}
+	}
 	run.Report = rep
 	return run
 }

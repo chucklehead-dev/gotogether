@@ -348,7 +348,11 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - A nemesis (crash) is considered at every scheduling step: its rate is
   per step (`DefaultRates` 1 in 200), not per operation. Under load that
   means far more crashes per second: set `Sim.NemesisEvery`
-  (`qload.Experiment` does when it injects faults).
+  (`qload.Experiment` does when it injects faults). Each family (the
+  name's first segment, a heal a partition's) is its own choice,
+  `fault.nemesis.<family>`, at its own rate, considered in turn until one
+  acts: one family's nemeses do not dilute another's. A Script's pick by
+  name is recorded as those choices, so its run replays.
 - Simulated runs record into their own recorder. `System.Explore` runs
   seeds in parallel, each with a recorder in the chooser's context
   (`qenv.WithContext`, `qobs.WithRecorder`). A step without it in its

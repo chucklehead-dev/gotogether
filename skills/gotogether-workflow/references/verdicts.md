@@ -33,14 +33,15 @@ together (`Exploration.Expect`):
 | `qtest.None(a)` | no run shows it |
 | `qtest.Reaches("kind").Faulted().InAtLeast(p)` | a share p of the runs reach a fault point of the kind (and fault it) |
 | `qtest.Takes("action").InAtLeast(p)` | a share p of the runs take the model action (up to a failing step) |
-| `qtest.NotVacuous()` | every invariant's antecedent (`A` of `A implies B`, or the binding's `antecedents`) held in some run where it passed; `Evidence` lists the vacuous ones |
-| `qtest.Exercised(except...)` | every model action is taken in some run and every reached fault kind faulted in some run, but those named |
+| `qtest.NotVacuous()` | every invariant's antecedent (`A` of `A implies B`, or the binding's `antecedents`) held in some run where it passed; `Evidence` lists the vacuous ones. It fails when it cannot judge: no invariant with an antecedent, or one quint cannot evaluate |
+| `qtest.Exercised(except...)` | every model action is taken, every option of every reached fault kind taken (by name, among those its choices offered: `drop` does not stand for `duplicate`), and every nemesis a run enabled fired (by name: `crash.a` does not stand for `crash.b`), each in some run, but those named; a name covers those below it (`"nemesis.partition"`, `"rpc.payments"`) |
 
 `Takes` and `Exercised` say the runs exercised what the model and the
 environment offer: an exploration whose runs never take `cancel` conforms
 about cancel vacuously. `Evidence` lists the actions never taken.
 
-Several claims are judged one by one. A bug that needs faults is "some
+Several claims are judged one by one, by one judgment: `System.Mutate`
+kills a mutant by exactly what would fail the test (NotVacuous included). A bug that needs faults is "some
 run", not "every run": the faults are chance. State the run's count by
 seeds, not by hand.
 

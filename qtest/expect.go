@@ -45,6 +45,9 @@ func Conforms() Expectation {
 func failed(r *validate.Report, kind, action string) bool {
 	for _, a := range r.Actors {
 		f := a.Failure
+		if a.Conforms == validate.NotEvaluated {
+			continue // no verdict (Linearize out of budget): not a rejection
+		}
 		if f != nil && f.Kind == kind && (action == "" || (f.Step != nil && f.Step.Action == action) || strings.HasPrefix(f.Call, action+"(") || f.Call == action) {
 			return true
 		}

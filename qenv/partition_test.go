@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,5 +191,61 @@ func TestPartitionsHealByThemselves(t *testing.T) {
 	}
 	if waited == 0 {
 		t.Error("no run's publisher waited on a cut")
+	}
+}
+
+// Each nemesis family is a choice of its own at its own rate: partitions
+// off ("nemesis.partition" 0) leave crashes as they were, and every
+// nemesis enabled at a choice is noted by name, fired or not. A Script's
+// pick by name is recorded as the family's choice, which replays.
+func TestNemesisFamilies(t *testing.T) {
+	run := func(c qenv.Chooser) (*qenv.ChoiceLog, int) {
+		log := &qenv.ChoiceLog{C: c}
+		s := qenv.New(log)
+		defer s.Close()
+		a := s.Process("a", true, func(ctx context.Context) {
+			for range 20 { // short enough to finish between crashes
+				qenv.Yield(ctx)
+			}
+		})
+		b := s.Process("b", false, func(context.Context) {})
+		s.Partitions(a, b)
+		cuts := 0
+		s.Log = func(line string) {
+			if strings.Contains(line, "nemesis partition.") {
+				cuts++
+			}
+		}
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		return log, cuts
+	}
+	c := qenv.NewSeeded(1)
+	c.Rates = qenv.NoFaults.Set("nemesis", 0.1).Set("nemesis.partition", 0)
+	log, cuts := run(c)
+	kinds := map[string]bool{}
+	crashes := 0
+	for _, ch := range log.Choices {
+		kinds[ch.Kind] = true
+		if ch.Kind == "fault.nemesis.crash" && ch.Value > 0 {
+			crashes++
+		}
+	}
+	if cuts != 0 || crashes == 0 || !kinds["fault.nemesis.partition"] || kinds["fault.nemesis"] {
+		t.Errorf("cuts %d, crashes %d, kinds %v", cuts, crashes, kinds)
+	}
+	if strings.Join(log.Nemeses, " ") != "crash.a partition.a.b" {
+		t.Errorf("offered %v", log.Nemeses)
+	}
+
+	sc := &qenv.Script{Faults: []qenv.Scripted{{Kind: "nemesis.partition.a.b"}}}
+	log, cuts = run(sc)
+	if cuts != 1 {
+		t.Fatalf("the scripted partition: %d cuts", cuts)
+	}
+	again, cuts := run(qenv.Replay(log.Choices))
+	if cuts != 1 || len(again.Choices) != len(log.Choices) {
+		t.Errorf("the script's run replayed with %d cuts, %d of %d choices", cuts, len(again.Choices), len(log.Choices))
 	}
 }

@@ -168,3 +168,31 @@ func TestTakesAndExercised(t *testing.T) {
 		t.Errorf("model coverage %+v, want apply once and cancel never", m)
 	}
 }
+
+// Exercised counts each option of a declared kind by name, among those a
+// choice offered, and each nemesis a run enabled by name; an exception
+// covers the names below it.
+func TestExercisedByName(t *testing.T) {
+	qenv.DeclareFaults("test.exercised", "drop", "duplicate", "never")
+	actions := map[string]bool{"init": true}
+	took := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "init"}}}}},
+		Choices: []qenv.Choice{
+			{Kind: "fault.test.exercised", N: 3, Value: 1},                 // drop; "never" (option 3) is never offered
+			{Kind: "fault.nemesis.crash", N: 3, Value: 1, Name: "crash.a"}, // crash.b enabled, never fired
+		},
+		Nemeses: []string{"crash.a", "crash.b"}}
+	for _, c := range []struct {
+		claim Exercise
+		want  string // in the message, or "" for a pass
+	}{
+		{Exercised(), "fault test.exercised option duplicate (reached, never taken); nemesis crash.b (enabled, never fired)"},
+		{Exercised("test.exercised.duplicate", "nemesis.crash.b"), ""},
+		{Exercised("test.exercised", "nemesis.crash"), ""},
+		{Exercised("test.exercised.never", "test.exercised.duplicate", "nemesis"), "test.exercised.never (excepted, but neither"},
+	} {
+		msg := c.claim.judgeRuns([]*Run{took}, actions)
+		if c.want == "" && msg != "" || c.want != "" && !strings.Contains(msg, c.want) {
+			t.Errorf("%s: %q, want %q", c.claim, msg, c.want)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -31,19 +32,57 @@ const witnessChunk = 8
 // antecedent (Model.Antecedents, or the binding's antecedents) never held
 // in any run where the invariant passed. The runs are checked for a
 // witness in chunks, stopping when every antecedent has one.
+//
+// An antecedent quint cannot evaluate gives no verdict: Vacuous returns
+// nil, and NotVacuous fails with the error.
 func (x *Exploration) Vacuous() []Vacuity {
-	if x.vacuity != nil {
-		return *x.vacuity
-	}
-	out := x.findVacuous()
-	x.vacuity = &out
-	return out
+	return x.vacuous().found
 }
 
-func (x *Exploration) findVacuous() []Vacuity {
+// vacuityResult is what the search for vacuous invariants found: the
+// vacuous ones, the antecedents it judged, and why it could not judge
+// them (err).
+type vacuityResult struct {
+	found      []Vacuity
+	antecedent int
+	err        error
+}
+
+func (x *Exploration) vacuous() vacuityResult {
+	if x.vacuity == nil {
+		v := x.findVacuous()
+		x.vacuity = &v
+	}
+	return *x.vacuity
+}
+
+// vacuityVerdict is NotVacuous's verdict: it fails when an invariant held
+// vacuously, when an antecedent cannot be evaluated, and when no
+// invariant has one (it would hold for nothing).
+func (x *Exploration) vacuityVerdict() claimVerdict {
+	v := x.vacuous()
+	fail := func(msg string) claimVerdict {
+		return claimVerdict{say: func(testing.TB) string { return fmt.Sprintf("want %s; %s", vacuityClaim{}, msg) }}
+	}
+	switch {
+	case v.err != nil:
+		return fail(fmt.Sprintf("the antecedents could not be evaluated, so no verdict: %v. Fix the antecedent (the binding's antecedents, or the invariant's `A implies B`)", v.err))
+	case v.antecedent == 0:
+		return fail("no invariant the runs check has an antecedent (a val `A implies B`, or the binding's antecedents), so the claim would hold for nothing: name one in the binding, or drop the claim")
+	case len(v.found) > 0:
+		var d []string
+		for _, f := range v.found {
+			d = append(d, f.String())
+		}
+		return fail(fmt.Sprintf("held vacuously: %s (the runs never reached what the invariant is about: widen the scenario, or raise its faults)", strings.Join(d, "; ")))
+	}
+	return claimVerdict{ok: true}
+}
+
+func (x *Exploration) findVacuous() vacuityResult {
 	ch := x.checker
 	if ch == nil || ch.Model == nil {
-		return nil
+		return vacuityResult{err: fmt.Errorf("the exploration has no model to evaluate antecedents with")}
 	}
 	ante := map[string]string{}
 	for _, inv := range ch.Binding.Invariants {
@@ -54,7 +93,7 @@ func (x *Exploration) findVacuous() []Vacuity {
 		}
 	}
 	if len(ante) == 0 {
-		return nil
+		return vacuityResult{}
 	}
 	invs := make([]string, 0, len(ante))
 	for inv := range ante {
@@ -116,7 +155,7 @@ func (x *Exploration) findVacuous() []Vacuity {
 		reps, errs := wc.CheckBatch(context.Background(), runs, 0)
 		for j := range chunk {
 			if errs[j] != nil {
-				return nil // an antecedent quint cannot evaluate: no verdict, rather than a wrong one
+				return vacuityResult{antecedent: len(invs), err: errs[j]} // no verdict, rather than a wrong one
 			}
 			for _, a := range reps[j].Actors {
 				for _, ir := range a.Invariants {
@@ -133,13 +172,14 @@ func (x *Exploration) findVacuous() []Vacuity {
 			out = append(out, Vacuity{Invariant: inv, Antecedent: ante[inv], Runs: len(passed[inv])})
 		}
 	}
-	return out
+	return vacuityResult{found: out, antecedent: len(invs)}
 }
 
 // NotVacuous is the claim that no invariant held vacuously: each one's
 // antecedent held in some run where the invariant was checked. Without
 // it, an exploration whose runs never settle conforms to `settled
-// implies ...` for nothing.
+// implies ...` for nothing. It fails when it cannot judge: an antecedent
+// quint cannot evaluate, or no invariant with one.
 func NotVacuous() Claim { return vacuityClaim{} }
 
 type vacuityClaim struct{}

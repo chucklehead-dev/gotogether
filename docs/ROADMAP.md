@@ -392,7 +392,14 @@ starts, and the review's findings are fixed first.
   BytesVersion, gosim version, a hash of the declared kinds and Sim's
   settings), keyed by exploration, not by test; a stale entry is reported
   as stale, with the fix. Then choose defaults on their merits.
-- **Y6. Claims that say what they prove.** Claims are a closed switch,
+- **Y6. Claims that say what they prove. Done:** one verdict
+  (`Exploration.verdict`) for `Expect` and `Mutate`'s `meets`, so
+  NotVacuous kills mutants too; `Exercised` by option name (among those a
+  choice offered) and by nemesis name (`Run.Nemeses`); nemeses chosen per
+  family, each at its rate; NotVacuous fails when it cannot judge;
+  Linearize out of budget is n/a (`LinearizeBudget`). Claims stay a
+  closed set: a user's own claim is a test of its own over `x.Runs`.
+  The finding: claims are a closed switch,
   judged twice (`Expect`, and `Mutate`'s `meets`, which already differ).
   One judgment for both. `Exercised` counts each option and each nemesis
   by name (one crash of one process now exercises every nemesis, drop

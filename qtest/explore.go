@@ -50,7 +50,7 @@ type Exploration struct {
 	mutant    bool              // its corpus runs are a baseline's, under a mutant (corpusOf)
 	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
 	mu        sync.Mutex        // guards recheck's report swaps
-	vacuity   *[]Vacuity        // computed once (Vacuous)
+	vacuity   *vacuityResult    // computed once (Vacuous)
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -408,7 +408,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if is := r.Issues(); err == nil && len(is) > 0 {
 		err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
 	}
-	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
+	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted = sc.Remaining()
 	}
@@ -638,10 +638,8 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	if len(claims) == 0 {
 		claims = []Claim{Conforms()}
 	}
-	reps := make([]*validate.Report, len(x.Runs))
 	invariants := map[string]bool{}
-	for i, r := range x.Runs {
-		reps[i] = r.Report
+	for _, r := range x.Runs {
 		for k := range reportInvariants(r.Report) {
 			invariants[k] = true
 		}
@@ -686,55 +684,82 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		}
 		claims = judged
 	}
-	bad := len(x.Failing())
+	reps := x.reports()
 	failedAny := false
 	for _, c := range claims {
-		if _, ok := c.(vacuityClaim); ok {
-			if vs := x.Vacuous(); len(vs) > 0 {
-				failedAny = true
-				var d []string
-				for _, v := range vs {
-					d = append(d, v.String())
-				}
-				t.Errorf("gotogether: want %s; held vacuously: %s (the runs never reached what the invariant is about: widen the scenario, or raise its faults)", vacuityClaim{}, strings.Join(d, "; "))
-			}
-			continue
+		v := x.verdict(c, reps)
+		if v.log != nil {
+			t.Logf("gotogether: %s", v.log(t))
 		}
-		if rc, ok := c.(runsClaim); ok {
-			if msg := rc.judgeRuns(x.Runs, x.actions); msg != "" {
-				failedAny = true
-				t.Errorf("gotogether: %s", msg)
-			}
-			continue
-		}
-		j := c.judge(reps)
-		q, isQ := c.(quantified)
-		every := !isQ && c.(Expectation).every || isQ && q.kind == "all"
-		switch {
-		case j.ok && j.show >= 0 && !every:
-			r := x.Runs[j.show]
-			if !r.Report.OK() {
-				t.Logf("gotogether: %d of %d runs violate the model; %s shows %s:\n%s", bad, len(x.Runs), x.nameOf(r), describeClaim(c), x.describe(t, r, false))
-			}
-		case j.ok:
-		case j.show >= 0:
+		if !v.ok {
 			failedAny = true
-			if every {
-				t.Errorf("gotogether: want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
-			} else {
-				t.Errorf("gotogether: want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
-			}
-		case bad == 0:
-			failedAny = true
-			t.Errorf("gotogether: all %d runs conform; want %s%s%s", len(x.Runs), c, x.unfaulted(), x.unscripted())
-		default:
-			failedAny = true
-			first := x.Failing()[0]
-			t.Errorf("gotogether: %d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, first, true))
+			t.Errorf("gotogether: %s", v.say(t))
 		}
 	}
 	if failedAny {
 		t.FailNow()
+	}
+}
+
+// reports are the runs' reports, in order.
+func (x *Exploration) reports() []*validate.Report {
+	reps := make([]*validate.Report, len(x.Runs))
+	for i, r := range x.Runs {
+		reps[i] = r.Report
+	}
+	return reps
+}
+
+// A claimVerdict is a claim's judgment of an exploration: whether it holds,
+// what Expect says when it does not (say), and what it notes when it
+// holds by a run that violates the model (log). Both are given the test
+// to describe the run they show with.
+type claimVerdict struct {
+	ok       bool
+	say, log func(t testing.TB) string
+}
+
+// verdict judges claim c of the exploration: the one judgment both Expect
+// and Mutate's meets use, so a mutant is killed by exactly what fails a
+// test.
+func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
+	if _, ok := c.(vacuityClaim); ok {
+		return x.vacuityVerdict()
+	}
+	if rc, ok := c.(runsClaim); ok {
+		msg := rc.judgeRuns(x.Runs, x.actions)
+		return claimVerdict{ok: msg == "", say: func(testing.TB) string { return msg }}
+	}
+	bad := len(x.Failing())
+	j := c.judge(reps)
+	q, isQ := c.(quantified)
+	every := !isQ && c.(Expectation).every || isQ && q.kind == "all"
+	switch {
+	case j.ok && j.show >= 0 && !every:
+		r := x.Runs[j.show]
+		if r.Report.OK() {
+			return claimVerdict{ok: true}
+		}
+		return claimVerdict{ok: true, log: func(t testing.TB) string {
+			return fmt.Sprintf("%d of %d runs violate the model; %s shows %s:\n%s", bad, len(x.Runs), x.nameOf(r), describeClaim(c), x.describe(t, r, false))
+		}}
+	case j.ok:
+		return claimVerdict{ok: true}
+	case j.show >= 0:
+		return claimVerdict{say: func(t testing.TB) string {
+			if every {
+				return fmt.Sprintf("want %s in every run; %d of %d runs do not have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
+			}
+			return fmt.Sprintf("want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
+		}}
+	case bad == 0:
+		return claimVerdict{say: func(testing.TB) string {
+			return fmt.Sprintf("all %d runs conform; want %s%s%s", len(x.Runs), c, x.unfaulted(), x.unscripted())
+		}}
+	default:
+		return claimVerdict{say: func(t testing.TB) string {
+			return fmt.Sprintf("%d of %d runs violate the model, none as %s%s; the first:\n%s", bad, len(x.Runs), c, x.atStart(), x.describe(t, x.Failing()[0], true))
+		}}
 	}
 }
 

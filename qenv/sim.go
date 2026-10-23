@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -138,8 +139,19 @@ func (h *timerHeap) Pop() any {
 
 type nemesis struct {
 	name    string
+	family  string // its choice's: "fault.nemesis.<family>" (nemesisFamily)
 	enabled func() bool
 	do      func()
+}
+
+// nemesisFamily is the family a nemesis is chosen in: its name's first
+// segment ("crash.payments": crash), a heal with the partitions it ends.
+func nemesisFamily(name string) string {
+	f, _, _ := strings.Cut(name, ".")
+	if f == "heal" {
+		return "partition"
+	}
+	return f
 }
 
 // Epoch is the virtual time a simulation starts at.
@@ -710,10 +722,13 @@ func (p *Process) Restart() {
 func (s *Sim) OnCrash(h func(*Process)) { s.onCrash = append(s.onCrash, h) }
 
 // Nemesis registers a fault the scheduler may inject at any step while
-// enabled holds (a crash, a partition). The choice is "fault.nemesis",
-// among the enabled ones; its rate is that kind's.
+// enabled holds (a crash, a partition). Its family is its name's first
+// segment ("crash.payments": crash; a heal is a partition's): the choice is
+// "fault.nemesis.<family>", among the family's enabled nemeses, at that
+// kind's rate ("nemesis.crash"; "nemesis" covers every family), so one
+// family's nemeses do not dilute another's.
 func (s *Sim) Nemesis(name string, enabled func() bool, do func()) {
-	s.nemeses = append(s.nemeses, &nemesis{name: name, enabled: enabled, do: do})
+	s.nemeses = append(s.nemeses, &nemesis{name: name, family: nemesisFamily(name), enabled: enabled, do: do})
 }
 
 // ---- running -----------------------------------------------------------------
@@ -970,36 +985,81 @@ func (s *Sim) selfCheck() {
 	s.lastNow = s.now
 }
 
+// maybeNemesis considers the enabled nemeses: one choice per family, in the
+// order the families' first enabled nemeses were registered, until one
+// acts (at most one a step). A chooser that picks nemeses by name (Script)
+// picks among all of them, and its pick is recorded as those choices.
 func (s *Sim) maybeNemesis() {
-	var on []*nemesis
+	var fams []string
+	on := map[string][]*nemesis{}
 	for _, n := range s.nemeses {
 		if n.enabled() {
-			on = append(on, n)
+			if on[n.family] == nil {
+				fams = append(fams, n.family)
+			}
+			on[n.family] = append(on[n.family], n)
 		}
 	}
-	if len(on) == 0 {
+	if len(fams) == 0 || s.settling || s.faultsOff {
 		return
 	}
-	k := 0
-	if by := nemesisOf(s.c); by != nil {
-		if !s.settling && !s.faultsOff {
-			names := make([]string, len(on))
-			for i, n := range on {
-				names[i] = n.name
+	var picked *nemesis
+	by := nemesisOf(s.c)
+	if by != nil {
+		var all []*nemesis
+		var names []string
+		for _, f := range fams {
+			for _, n := range on[f] {
+				all, names = append(all, n), append(names, n.name)
 			}
-			k = by(names)
 		}
-	} else {
-		k = s.Choose("fault.nemesis", len(on)+1)
-		if r, ok := As[*ChoiceLog](s.c); ok && k > 0 {
-			r.Name(on[k-1].name) // which nemesis, not its index among those enabled then
+		if k := by(names); k > 0 {
+			picked = all[k-1]
 		}
 	}
-	if k > 0 {
-		if s.Log != nil {
-			s.Log(fmt.Sprintf("%v nemesis %s", s.Elapsed(), on[k-1].name))
+	for _, f := range fams {
+		ns := on[f]
+		names := make([]string, len(ns))
+		for i, n := range ns {
+			names[i] = n.name
 		}
-		on[k-1].do()
+		kind := "fault.nemesis." + f
+		k := 0
+		if by == nil {
+			k = s.Choose(kind, len(ns)+1)
+		} else if i := slices.Index(ns, picked); i >= 0 {
+			k = i + 1
+		}
+		eachLog(s.c, func(r *ChoiceLog) {
+			if by != nil { // the script chose: record it as the choices it stands for
+				r.Took(kind, len(ns)+1, k)
+			}
+			r.Offer(names)
+			if k > 0 {
+				r.Name(ns[k-1].name) // which nemesis, not its index among those enabled then
+			}
+		})
+		if k > 0 {
+			if s.Log != nil {
+				s.Log(fmt.Sprintf("%v nemesis %s", s.Elapsed(), ns[k-1].name))
+			}
+			ns[k-1].do()
+			return
+		}
+	}
+}
+
+// eachLog calls f with every ChoiceLog in c's chain of wrappers.
+func eachLog(c Chooser, f func(*ChoiceLog)) {
+	for c != nil {
+		if r, ok := c.(*ChoiceLog); ok {
+			f(r)
+		}
+		w, ok := c.(Wrapper)
+		if !ok {
+			return
+		}
+		c = w.Unwrap()
 	}
 }
 

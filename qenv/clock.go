@@ -35,10 +35,9 @@ import (
 // Skew and drift are fault choices at their kinds' rates (Rates), like any
 // fault: at DefaultRates about one process in twenty gets one. Raise the
 // rate to have every process drift (Rates.Set("clock.drift", 1)). Jumps
-// are nemeses, at the nemesis rate crashes share (DefaultRates: one step
-// in 200): a process that may crash and jump has three nemeses, so its
-// crashes come a third as often, and raising the rate for jumps raises
-// it for crashes.
+// are nemeses of their own family, "nemesis.jump" (DefaultRates: one step
+// in 200, as crashes), a choice apart from crashes: raise it alone with
+// Rates.Set("nemesis.jump", p), and crashes come as often as before.
 var (
 	clockSkew  = DeclareFaults("clock.skew", "ahead", "behind")
 	clockDrift = DeclareFaults("clock.drift", "fast", "slow")

@@ -64,7 +64,7 @@ func (s *Sim) Partitioned(a, b *Process) bool {
 // Partitions makes the network between every two of procs a nemesis: at
 // any step the scheduler may cut a link ("nemesis.partition.<a>.<b>" in a
 // Script) or heal one that is cut ("nemesis.heal.<a>.<b>"), at the
-// nemesis rate. A cut heals by itself after PartitionLength: a network
+// rate of the partition family ("nemesis.partition", heals included). A cut heals by itself after PartitionLength: a network
 // that every task waits on would otherwise never heal, since a nemesis
 // acts only at a scheduling step and none comes when nothing can run.
 // Settle heals them all.

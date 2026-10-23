@@ -403,6 +403,7 @@ type Row struct{ ... }
     func Cover(factors []Factor, t int, allow func(Row) bool) ([]Row, error)
 
 == github.com/chucklehead-dev/gotogether/qtest
+const DefaultLinearizeBudget = 200
 func RequireQuint(t testing.TB)
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 type Bound struct{ ... }
@@ -433,6 +434,7 @@ type Option func(*settings)
     func Global() Option
     func Invariants(names ...string) Option
     func Linearize() Option
+    func LinearizeBudget(n int) Option
     func Quint(o validate.Options) Option
     func RecorderOptions(opts ...qobs.Option) Option
     func SkipIfEmpty() Option

@@ -1,10 +1,13 @@
 package qtest
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A withdrawal that overlapped the deposit it depended on returned first:
@@ -20,6 +23,15 @@ func TestLinearizeOption(t *testing.T) {
 			Args: map[string]any{"amount": int64(50)}, Obs: map[string]any{"balance": int64(10)}},
 	}
 	Validate(t, "../validate/testdata/account.yaml", steps).Expect(t, Rejects("withdraw"))
+	// a budget of one order checks only the recording order: no verdict,
+	// which is not a rejection
+	short := Validate(t, "../validate/testdata/account.yaml", steps, LinearizeBudget(1))
+	if short.Report.OK() || short.Report.Actors[0].Conforms != validate.NotEvaluated || !strings.Contains(fmt.Sprint(short.Report.Issues), "LinearizeBudget(4)") {
+		t.Errorf("out of budget: %s %v", short.Report.Summary(), short.Report.Issues)
+	}
+	if Rejects("withdraw").check(short.Report) {
+		t.Error("Rejects matched a search that ran out of budget")
+	}
 	run := Validate(t, "../validate/testdata/account.yaml", steps, Linearize())
 	run.Expect(t, Conforms())
 	if run.Steps[0].Action != "deposit" {

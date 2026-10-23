@@ -1,0 +1,7 @@
+# gate.yaml with an invariant of no antecedent only: NotVacuous judges nothing
+spec: gate.qnt
+module: gate
+actions:
+  open: {}
+  pass: {}
+invariants: [neverNegative]

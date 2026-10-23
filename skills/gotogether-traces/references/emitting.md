@@ -23,8 +23,12 @@ correct code (examples/kvstore's client history, every load tried). The
 search tries the orders the operations' intervals allow (an operation
 that returned before another began precedes it) and reports the one that
 conformed, or the one that got furthest: a stale read shows as a
-`Mismatch` no order explains. Each order tried is a quint replay from
-the start, so keep such histories to tens of steps. Converted spans
+`Mismatch` no order explains. A search that runs out of its budget
+(200 orders; `qtest.LinearizeBudget(n)`) before it stops is no verdict:
+the actor's conformance is n/a, which `Conforms` fails and `Rejects` and
+`Mismatch` do not match, and the report says to raise it. Each order
+tried is a quint replay from the start, so keep such histories to tens
+of steps. Converted spans
 carry their start as the invocation.
 
 Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with

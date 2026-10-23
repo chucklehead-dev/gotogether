@@ -1,0 +1,9 @@
+# gate.yaml with an antecedent quint cannot evaluate (a list is no bool)
+spec: gate.qnt
+module: gate
+actions:
+  open: {}
+  pass: {}
+invariants: [passedWhenOpen]
+antecedents:
+  passedWhenOpen: "List(1)"

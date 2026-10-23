@@ -99,14 +99,19 @@ func (k Take) judgeRuns(runs []*Run, actions map[string]bool) string {
 	return ""
 }
 
-// An Exercise is the claim Exercised: every model action taken, and every
-// fault kind the runs reached faulted, in some run, but those it excepts.
+// An Exercise is the claim Exercised: every model action taken, every
+// option of every fault kind the runs reached taken, and every nemesis
+// they enabled fired, in some run, but those it excepts.
 type Exercise struct{ except map[string]bool }
 
 // Exercised claims that the runs exercised everything: every model action
-// was taken and every fault kind they reached was faulted, in some run.
-// except names the actions and kinds not expected (a recovery path the
-// workload never needs), each a decision the test states.
+// was taken, every option of every fault kind they reached was taken
+// (each by name: a drop does not stand for a duplicate), and every nemesis
+// a run enabled fired (each by name: one process's crash does not stand
+// for another's), in some run. except names the actions, kinds, options
+// ("rpc.payments.lostResponse") and nemeses ("nemesis.crash.payments")
+// not expected, a name covering those below it ("nemesis.partition"):
+// each a decision the test states.
 func Exercised(except ...string) Exercise {
 	e := Exercise{except: map[string]bool{}}
 	for _, x := range except {
@@ -119,18 +124,30 @@ func Exercised(except ...string) Exercise {
 }
 
 func (e Exercise) String() string {
+	const all = "every model action taken, every fault option taken and every nemesis fired"
 	if len(e.except) == 0 {
-		return "every model action taken and every fault kind faulted"
+		return all
 	}
 	var ex []string
 	for x := range e.except {
 		ex = append(ex, x)
 	}
 	sort.Strings(ex)
-	return "every model action taken and every fault kind faulted, but " + strings.Join(ex, ", ")
+	return all + ", but " + strings.Join(ex, ", ")
 }
 
 func (e Exercise) judge([]*validate.Report) judgment { return judgment{show: -1} }
+
+// excepted reports whether the except list covers name: name itself, or a
+// prefix of it at a dot.
+func (e Exercise) excepted(name string) bool {
+	for x := range e.except {
+		if name == x || strings.HasPrefix(name, x+".") {
+			return true
+		}
+	}
+	return false
+}
 
 func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 	if actions == nil {
@@ -138,18 +155,23 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 	}
 	var missing []string
 	for _, a := range modelCoverage(runs, actions).Never {
-		if !e.except[a] {
+		if !e.excepted(a) {
 			missing = append(missing, "action "+a+" (never taken)")
 		}
 	}
-	for _, p := range (&Exploration{Runs: runs}).faultCoverage().Points {
-		if p.Faulted() == 0 && !e.except[p.Kind] {
-			missing = append(missing, "fault "+p.Kind+" (reached, never faulted)")
+	reached, never := exercisedFaults(runs)
+	for _, n := range never {
+		if !e.excepted(n.name) {
+			missing = append(missing, n.what)
 		}
 	}
 	for x := range e.except {
-		if !actions[x] && !reachedKind(runs, x) {
-			missing = append(missing, x+" (excepted, but neither a model action nor a kind the runs reached: misspelled?)")
+		known := actions[x]
+		for _, r := range reached {
+			known = known || r == x || strings.HasPrefix(r, x+".")
+		}
+		if !known {
+			missing = append(missing, x+" (excepted, but neither a model action nor a fault kind, option or nemesis the runs reached: misspelled?)")
 		}
 	}
 	if len(missing) > 0 {
@@ -160,13 +182,67 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 	return ""
 }
 
-func reachedKind(runs []*Run, kind string) bool {
-	for _, p := range (&Exploration{Runs: runs}).faultCoverage().Points {
-		if p.Kind == kind {
-			return true
+// unexercised is a fault option or nemesis the runs reached and never
+// took: its name as Exercised excepts it, and what the claim says of it.
+type unexercised struct{ name, what string }
+
+// exercisedFaults are the names of the fault kinds, options and nemeses
+// the runs reached, and those of them never taken. A declared kind's
+// options count by name, those a choice offered; a kind of no declaration (its options unnamed)
+// as a whole; a nemesis by name, offered or fired.
+func exercisedFaults(runs []*Run) (reached []string, never []unexercised) {
+	offers := map[string]int{} // a kind's most options at one choice: a call of a prefix (Only) offers fewer
+	for _, r := range runs {
+		for _, c := range r.Choices {
+			if k := strings.TrimPrefix(c.Kind, "fault."); k != c.Kind {
+				offers[k] = max(offers[k], c.N)
+			}
 		}
 	}
-	return false
+	for _, p := range (&Exploration{Runs: runs}).faultCoverage().Points {
+		if strings.HasPrefix(p.Kind, "nemesis.") || p.Reached == 0 {
+			continue // nemeses by name, below; a declared kind no run reached is Unreached's
+		}
+		reached = append(reached, p.Kind)
+		if len(p.Names) == 0 {
+			if p.Faulted() == 0 {
+				never = append(never, unexercised{p.Kind, "fault " + p.Kind + " (reached, never faulted)"})
+			}
+			continue
+		}
+		for i, name := range p.Names {
+			if i+1 >= offers[p.Kind] {
+				break // no choice offered it
+			}
+			reached = append(reached, p.Kind+"."+name)
+			if i+1 >= len(p.Injected) || p.Injected[i+1] == 0 {
+				never = append(never, unexercised{p.Kind + "." + name, "fault " + p.Kind + " option " + name + " (reached, never taken)"})
+			}
+		}
+	}
+	fired := map[string]bool{}
+	var offered []string
+	seen := map[string]bool{}
+	for _, r := range runs {
+		for _, c := range r.Choices {
+			if strings.HasPrefix(c.Kind, "fault.nemesis") && c.Value > 0 && c.Name != "" {
+				fired[c.Name] = true
+			}
+		}
+		for _, n := range r.Nemeses {
+			if !seen[n] {
+				seen[n] = true
+				offered = append(offered, n)
+			}
+		}
+	}
+	for _, n := range offered {
+		reached = append(reached, "nemesis."+n)
+		if !fired[n] {
+			never = append(never, unexercised{"nemesis." + n, "nemesis " + n + " (enabled, never fired)"})
+		}
+	}
+	return reached, never
 }
 
 func takenList(m *ModelCoverage) string {

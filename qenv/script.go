@@ -132,7 +132,7 @@ func (s *Script) Choose(kind string, n int) int {
 
 // ChooseNemesis picks a nemesis by name among the enabled ones: the
 // scripted one if it is due, else none (0); the scheduler asks it instead
-// of choosing "fault.nemesis" by index.
+// of choosing in each family ("fault.nemesis.crash") by index.
 func (s *Script) ChooseNemesis(enabled []string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -170,25 +170,10 @@ func (s *Script) Remaining() []Scripted {
 type nemesisChooser interface{ ChooseNemesis(enabled []string) int }
 
 // nemesisOf returns c's choice of a nemesis by name, through the wrappers
-// of this package (a Recorder records it as "fault.nemesis"), or nil.
+// of this package, or nil.
 func nemesisOf(c Chooser) func(enabled []string) int {
 	for c != nil {
-		switch x := c.(type) {
-		case *ChoiceLog: // records the choice it passes on
-			by := nemesisOf(x.C)
-			if by == nil {
-				return nil
-			}
-			return func(enabled []string) int {
-				v := by(enabled)
-				c := Choice{Kind: "fault.nemesis", N: len(enabled) + 1, Value: v}
-				if v > 0 {
-					c.Name = enabled[v-1]
-				}
-				x.Choices = append(x.Choices, c)
-				return v
-			}
-		case nemesisChooser:
+		if x, ok := c.(nemesisChooser); ok {
 			return x.ChooseNemesis
 		}
 		w, ok := c.(Wrapper)

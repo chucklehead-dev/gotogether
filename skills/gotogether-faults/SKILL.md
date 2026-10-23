@@ -101,10 +101,10 @@ qobs.Record(s.Context(), "settle", nil)
   Drift: 0.05}` before creating processes; a zero field leaves its fault
   out. A skew ("clock.skew") and a drift ("clock.drift") are chosen per
   process at their rates (raise them: `Rates.Set("clock.drift", 1)`); a
-  jump is a nemesis (`jump.forward.<p>`, `jump.back.<p>`), at the
-  nemesis rate crashes share: raise it for jumps (`Rates.Set("nemesis",
-  0.05)`: at DefaultRates a lease's wall-clock bug showed in 7 runs of
-  100) and crashes come as often. Skew and jumps
+  jump is a nemesis (`jump.forward.<p>`, `jump.back.<p>`) of its own
+  family, at its own rate: raise it alone with `Rates.Set("nemesis.jump",
+  0.05)` (at DefaultRates a lease's wall-clock bug showed in 7 runs of
+  100), and crashes come as often as before. Skew and jumps
   move only the wall clock; a drift moves both, with the process's sleeps,
   call timeouts and `qenv.WaitFor`. Deadlines given to `WaitUntil` and
   `Signal.Wait` are true time. examples/lease shows each fault breaking
@@ -192,8 +192,12 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   are there after the test. A run whose Script never made
   all its faults lists them ("scripted faults that never happened").
 - **Rates:**
-  - A nemesis (crash) is considered at every scheduling step, so its rate
-    is per step (default 1 in 200). Under load, steps per second grow a
+  - A nemesis is considered at every scheduling step, so its rate is per
+    step (default 1 in 200). Each family is a choice of its own at its
+    own rate (`nemesis.crash`, `nemesis.partition` with its heals,
+    `nemesis.jump`, a double's own such as simlog's `nemesis.rebalance`):
+    `"nemesis"` sets them all, a family's key one alone, and adding
+    partitions no longer makes crashes rarer. Under load, steps per second grow a
     hundredfold, and so would crashes. Set `s.NemesisEvery = time.Second`
     to make the rate per virtual second (`qload.Experiment` does this
     when it injects faults).
