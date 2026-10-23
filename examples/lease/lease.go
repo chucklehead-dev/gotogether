@@ -1,15 +1,19 @@
 // Package lease is a lock that grants leases and the store it guards,
 // checked under clock faults. A holder measures its lease on its own
-// clock and stops writing a margin before it ends; the store refuses a
-// write of an epoch older than one it has accepted (a fencing token). The
-// requirement (model/lease.qnt) is the store's: no write of an older
-// epoch after a newer one.
+// monotonic clock (qenv.Mono and Since, as time.Since does) and stops
+// writing a margin before it ends; the store refuses a write of an epoch
+// older than one it has accepted (a fencing token). The requirement
+// (model/lease.qnt) is the store's: no write of an older epoch after a
+// newer one.
 //
 // The mutants trust clocks instead. NoFencing's store accepts every
 // write: correct while clocks are true, since the holder's margin covers
-// its pauses, and broken by a clock that jumps (the holder's back, or the
-// lock's forward). AbsoluteExpiry also compares the lock's expiry time
-// with the holder's own clock: broken by a skew alone.
+// its pauses, and still under skews and jumps, which a monotonic clock
+// does not see; broken by a drift larger than the margin. WallInterval
+// times the lease on the wall clock (Now().Sub, as a time that lost its
+// monotonic reading would): broken by a jump. AbsoluteExpiry compares the
+// lock's expiry time with the holder's own wall clock: broken by a skew
+// alone.
 package lease
 
 import (
@@ -33,6 +37,9 @@ const (
 	// AbsoluteExpiry: as NoFencing, and the holder compares the lock's
 	// expiry time with its own clock instead of timing its lease itself.
 	AbsoluteExpiry
+	// WallInterval: as NoFencing, and the holder times its lease on its
+	// wall clock (Now().Sub) instead of its monotonic one.
+	WallInterval
 )
 
 // Timing.
@@ -58,24 +65,25 @@ func (staleErr) QuintOutcome() string { return "stale" }
 type Lock struct {
 	epoch   int
 	holder  string
-	expires time.Time
+	expires time.Duration // on the lock's monotonic clock, as Go's time.Now().Before compares two readings
 }
 
-// Grant is a lease: its epoch, and when it ends on the lock's clock.
+// Grant is a lease: its epoch, and when it ends on the lock's wall clock
+// (which only AbsoluteExpiry reads).
 type Grant struct {
 	Epoch   int
 	Expires time.Time
 }
 
 func (l *Lock) acquire(ctx context.Context, h string) (Grant, error) {
-	now := qenv.Now(ctx) // the lock's clock
-	if l.holder != "" && now.Before(l.expires) {
+	now := qenv.Mono(ctx) // the lock's monotonic clock
+	if l.holder != "" && now < l.expires {
 		return Grant{}, errors.New("lease: held")
 	}
 	l.epoch++
-	l.holder, l.expires = h, now.Add(TTL)
+	l.holder, l.expires = h, now+TTL
 	qobs.Record(ctx, "grant", nil, "h", h, "e", l.epoch)
-	return Grant{l.epoch, l.expires}, nil
+	return Grant{l.epoch, qenv.Now(ctx).Add(TTL)}, nil
 }
 
 // Store keeps the latest value, and the newest epoch it has accepted.
@@ -109,21 +117,12 @@ type Deployment struct {
 	Store *Store
 }
 
-// Clocks are the clock faults a run has.
-type Clocks struct {
-	// Faults skews and jumps the processes' clocks (Sim.ClockFaults).
-	Faults bool
-	// Drift, with Faults, makes them run fast or slow by this fraction
-	// (Sim.ClockDrift).
-	Drift float64
-}
-
-// Run deploys the system on c with clocks' faults, and runs it for 10 s
-// of virtual time.
-func Run(c qenv.Chooser, m Mutation, clocks Clocks) (*Deployment, error) {
+// Run deploys the system on c with the holders' clock faults, and runs it
+// for 10 s of virtual time.
+func Run(c qenv.Chooser, m Mutation, clocks qenv.Clocks) (*Deployment, error) {
 	s := qenv.New(c)
 	defer s.Close()
-	s.ClockFaults, s.ClockDrift = clocks.Faults, clocks.Drift
+	s.Clocks = clocks
 	d := &Deployment{Lock: &Lock{}, Store: &Store{Mutation: m}}
 	lock := qenv.NewService(s, "lock", nil, d.Lock.acquire)
 	store := qenv.NewService(s, "store", nil, d.Store.write)
@@ -131,17 +130,20 @@ func Run(c qenv.Chooser, m Mutation, clocks Clocks) (*Deployment, error) {
 		s.Process(h, false, func(ctx context.Context) {
 			qenv.Daemon(ctx)
 			for n := 0; ; n++ {
-				start := qenv.Now(ctx) // the holder's clock, before it asks
+				start, wall := qenv.Mono(ctx), qenv.Now(ctx) // the holder's clocks, before it asks
 				g, err := lock.Call(ctx, h, time.Second)
 				if err != nil {
 					qenv.Sleep(ctx, 500*time.Millisecond)
 					continue
 				}
 				valid := func() bool {
-					if m == AbsoluteExpiry {
+					switch m {
+					case AbsoluteExpiry:
 						return qenv.Now(ctx).Before(g.Expires.Add(-Margin))
+					case WallInterval:
+						return qenv.Now(ctx).Sub(wall) < TTL-Margin
 					}
-					return qenv.Now(ctx).Sub(start) < TTL-Margin
+					return qenv.Since(ctx, start) < TTL-Margin
 				}
 				for i := 0; valid(); i++ {
 					qenv.Sleep(ctx, time.Duration(s.Choose("sched.pause."+h, 3))*Pause)

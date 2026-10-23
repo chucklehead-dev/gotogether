@@ -136,7 +136,6 @@ type Summary struct{ ... }
     func Summarize(runs []*Counts) *Summary
 
 == github.com/chucklehead-dev/gotogether/qenv
-const DefaultClockSkew = time.Second ...
 const BytesVersion = choice.BytesVersion
 const DefaultPartitionLength = time.Second
 var DefaultRates = choice.DefaultRates ...
@@ -160,15 +159,18 @@ func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) err
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
 func IsFault(kind string) bool
 func LockKey(ctx context.Context, key any)
+func Mono(ctx context.Context) time.Duration
 func Now(ctx context.Context) time.Time
 func RLockKey(ctx context.Context, key any)
 func RUnlockKey(ctx context.Context, key any)
 func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error
+func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
 func TryLockKey(ctx context.Context, key any) bool
 func TryRLockKey(ctx context.Context, key any) bool
 func UnlockKey(ctx context.Context, key any)
 func Wait(ctx context.Context, ready func() bool)
+func WaitFor(ctx context.Context, ready func() bool, d time.Duration) bool
 func WaitIdle(ctx context.Context, ready func() bool)
 func WaitKey(ctx context.Context, key any)
 func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool
@@ -183,6 +185,7 @@ type Chooser = choice.Chooser
     func Swarm(c Chooser, kinds ...string) Chooser
     func WithContext(c Chooser, ctx context.Context) Chooser
     func Without(c Chooser, kinds ...string) Chooser
+type Clocks struct{ ... }
 type Coverage struct{ ... }
     func CoverageOf(runs [][]Choice) *Coverage
 type DB interface{ ... }

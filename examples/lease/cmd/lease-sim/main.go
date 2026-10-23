@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/examples/lease"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -19,14 +20,18 @@ import (
 
 func main() {
 	seeds := flag.Int("seeds", 20, "runs, with seeds 1..N")
-	mut := flag.String("mutation", "", "no-fencing | absolute-expiry")
-	clocks := flag.Bool("clocks", false, "clock faults: skews and jumps")
-	drift := flag.Float64("drift", 0, "with -clocks, clocks run fast or slow by this fraction (0.25: 15 s a minute)")
+	mut := flag.String("mutation", "", "no-fencing | wall-interval | absolute-expiry")
+	clocks := flag.Bool("clocks", false, "clock faults: skews (1 s) and jumps (5 s)")
+	drift := flag.Float64("drift", 0, "clocks run fast or slow by this fraction (0.25: 15 s a minute)")
 	out := flag.String("out", "runs", "directory for the step logs")
 	flag.Parse()
-	m, ok := map[string]lease.Mutation{"": lease.Faithful, "no-fencing": lease.NoFencing, "absolute-expiry": lease.AbsoluteExpiry}[*mut]
+	m, ok := map[string]lease.Mutation{"": lease.Faithful, "no-fencing": lease.NoFencing, "wall-interval": lease.WallInterval, "absolute-expiry": lease.AbsoluteExpiry}[*mut]
 	if !ok {
-		fail(fmt.Errorf("unknown mutation %q (want no-fencing or absolute-expiry)", *mut))
+		fail(fmt.Errorf("unknown mutation %q (want no-fencing, wall-interval or absolute-expiry)", *mut))
+	}
+	cl := qenv.Clocks{Drift: *drift}
+	if *clocks {
+		cl.Skew, cl.Jump = time.Second, 5*time.Second
 	}
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		fail(err)
@@ -37,9 +42,9 @@ func main() {
 			fail(err)
 		}
 		c := qenv.NewSeeded(uint64(seed))
-		c.Rates = qenv.DefaultRates.Set("clock.skew", 0.5).Set("clock.drift", 1)
+		c.Rates = qenv.DefaultRates.Set("clock.skew", 0.5).Set("clock.drift", 1).Set("nemesis", 0.05) // as the tests': a jump in most runs
 		rec := qobs.NewRecorder(sink, qobs.WithActor(fmt.Sprintf("seed%d", seed)))
-		if _, err := lease.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), m, lease.Clocks{Faults: *clocks, Drift: *drift}); err != nil {
+		if _, err := lease.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), m, cl); err != nil {
 			fail(err)
 		}
 		if err := sink.Close(); err != nil {

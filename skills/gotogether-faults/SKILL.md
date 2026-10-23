@@ -93,17 +93,21 @@ qobs.Record(s.Context(), "settle", nil)
   A nemesis's cut heals by itself after `s.PartitionLength` (default
   1 s): a run whose every task waits on a cut would otherwise be stuck.
   `s.Partition(a, b)` and `s.Heal` script one; `Settle` heals them all.
-- **Clocks:** `qenv.Now(ctx)` reads the clock of the task's process.
-  With `s.ClockFaults = true` (set before creating processes) each
-  process's clock starts skewed ("clock.skew") and may jump at a read
-  ("clock.jump"); sleeps and timers keep true time. `s.ClockDrift = 0.05`
-  also makes each clock run fast or slow by 5% ("clock.drift"), and its
-  sleeps with it: the fault that breaks an interval timed on one clock,
-  which skew cannot. Turn them on for code
-  whose safety reads a clock (leases, expiry, timestamps compared across
-  processes): examples/lease shows a lease without fencing that passes
-  every run with true clocks and fails after one jump, or under a drift
-  larger than its margin.
+- **Clocks:** a process has two, as a Go program does. `qenv.Now(ctx)`
+  is its wall clock; `qenv.Mono(ctx)` and `qenv.Since(ctx, m)` its
+  monotonic clock, what `time.Since` measures (a `time.Time` from Now
+  carries no monotonic reading, so `Now().Sub` is wall arithmetic). Set
+  `s.Clocks = qenv.Clocks{Skew: time.Second, Jump: 5 * time.Second,
+  Drift: 0.05}` before creating processes; a zero field leaves its fault
+  out. A skew ("clock.skew") and a drift ("clock.drift") are chosen per
+  process at their rates (raise them: `Rates.Set("clock.drift", 1)`); a
+  jump is a nemesis (`jump.forward.<p>`, `jump.back.<p>`). Skew and jumps
+  move only the wall clock; a drift moves both, with the process's sleeps,
+  call timeouts and `qenv.WaitFor`. Deadlines given to `WaitUntil` and
+  `Signal.Wait` are true time. examples/lease shows each fault breaking
+  the code that trusts it: a cross-machine comparison by a skew, a
+  wall-clock interval by a jump, a monotonic one by a drift past its
+  margin.
 - **Workload choices** (cancel or not, when) are schedule choices:
   `s.Choose("sched.client.cancel", 10)`.
 - **Start from a scaffold:** `gotogether scaffold -system -binding

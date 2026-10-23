@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Simulate the lock, the store and its holders, then check the step logs
 # against the model with gotogether.
-#   MUTATION=no-fencing | absolute-expiry   the store without fencing
+#   MUTATION=no-fencing | wall-interval | absolute-expiry   the store without fencing
 #   CLOCKS=1                                clock faults (skews, jumps)
-#   DRIFT=0.25                              with CLOCKS, clocks run fast or slow by this fraction
-# Without CLOCKS every variant conforms: only a clock fault shows the bug.
+#   DRIFT=0.25                              clocks run fast or slow by this fraction
+# With true clocks every variant conforms: only a clock fault shows the bug,
+# and only the one each variant trusts (NoFencing: drift; wall-interval: a
+# jump; absolute-expiry: a skew).
 set -euo pipefail
 cd "$(dirname "$0")"
 out=$(mktemp -d)

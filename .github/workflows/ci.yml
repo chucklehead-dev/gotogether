@@ -87,7 +87,7 @@ jobs:
           examples/twophase/run-demo.sh
           examples/hello/run-demo.sh
           examples/lease/run-demo.sh
-          MUTATION=no-fencing CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
+          MUTATION=wall-interval CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
           MUTATION=no-dedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
 

@@ -52,22 +52,10 @@ type Sim struct {
 	// and panic on a violation (also on with GOTOGETHER_CHECK=1). For tests of
 	// qenv and of code that extends it; it costs O(tasks) per step.
 	Check bool
-	// ClockFaults gives each process a clock of its own, read by Now: it
-	// starts skewed and may jump (fault kinds "clock.skew" and
-	// "clock.jump", clock.go). Off by default: code that keeps time with
-	// Now for liveness only is unaffected either way, and runs recorded
-	// before it make the same choices. Set it before creating processes.
-	ClockFaults bool
-	// ClockSkew and ClockJump size the clock faults (defaults
-	// DefaultClockSkew, DefaultClockJump).
-	ClockSkew, ClockJump time.Duration
-	// ClockDrift, with ClockFaults, makes each process's clock run fast or
-	// slow by this fraction of true time (fault kind "clock.drift": 0.01
-	// gains or loses 10 ms a second; less than 1), its sleeps and call
-	// timeouts with it. Zero, the
-	// default, chooses no drift, so runs recorded without it keep their
-	// choices.
-	ClockDrift float64
+	// Clocks are the processes' clock faults (clock.go): a skew, jumps
+	// and a drift, each left out when zero, as by default. Set them before
+	// creating processes; a change after panics.
+	Clocks Clocks
 	// PartitionLength is how long a cut made by a Partitions nemesis lasts
 	// at most (default DefaultPartitionLength); its heal nemesis may end it
 	// sooner. Cuts made with Partition last until Heal.
@@ -88,6 +76,7 @@ type Sim struct {
 	back      chan struct{}
 	procs     []*Process
 	cuts      map[[2]string]bool // partitioned pairs of processes, by name
+	clocksSet *Clocks            // Clocks as the first process saw them
 	onCut     []func(a, b *Process)
 	cutGen    map[[2]string]int // per pair, the cuts made: a healer heals only its own
 	nemeses   []*nemesis
@@ -467,7 +456,8 @@ func Wait(ctx context.Context, ready func() bool) {
 }
 
 // WaitUntil blocks until ready holds or the virtual time reaches deadline
-// (zero: no deadline). It reports whether ready held. Outside a
+// (zero: no deadline): the simulation's true time (Sim.Now), not a
+// process's clock; WaitFor waits an interval on the caller's clock. It reports whether ready held. Outside a
 // simulation the deadline is real time, as in Wait.
 func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool {
 	t := taskOf(ctx)
@@ -518,7 +508,8 @@ type waiter struct {
 }
 
 // Wait blocks until Notify or the virtual time reaches deadline (zero:
-// none). It reports whether Notify woke it. Outside a simulation it waits
+// none): the simulation's true time (Sim.Now), not a process's clock. It
+// reports whether Notify woke it. Outside a simulation it waits
 // in real time (the deadline too) or until ctx is done.
 func (g *Signal) Wait(ctx context.Context, deadline time.Time) bool {
 	t := taskOf(ctx)
@@ -570,9 +561,11 @@ func (g *Signal) Notify() {
 	g.waiters = g.waiters[:0]
 }
 
-// Now is the time on the clock of ctx's process in a simulation: the
-// virtual time, off by the process's clock faults with Sim.ClockFaults.
-// Outside a simulation it is the real time.
+// Now is the time on the wall clock of ctx's process in a simulation: the
+// virtual time, off by the process's clock faults (Sim.Clocks). A Time it
+// returns carries no monotonic reading, so Now(ctx).Sub is wall
+// arithmetic, which a jump moves: time intervals with Mono and Since, as
+// time.Since does in Go. Outside a simulation it is the real time.
 func Now(ctx context.Context) time.Time {
 	if t := taskOf(ctx); t != nil {
 		return t.sim.clockOf(t)
@@ -613,8 +606,8 @@ type Process struct {
 	down        bool
 	machine     Machine       // native, with a Platform: the process's machine
 	queue       chan func()   // native, with a Platform: tasks to start there
-	clock       time.Duration // its clock's offset from true time (ClockFaults)
-	rate        float64       // its clock's drift: + fast, - slow (ClockDrift)
+	clock       time.Duration // its wall clock's skew and jumps (Clocks)
+	rate        float64       // its clocks' drift: + fast, - slow (Clocks.Drift)
 	born        time.Time     // when its clock started drifting
 }
 
@@ -630,7 +623,7 @@ func (p *Process) Down() bool { return p.down }
 func (s *Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process {
 	p := &Process{Name: name, Incarnation: 1, sim: s, start: start}
 	s.procs = append(s.procs, p)
-	s.skewProcess(p)
+	s.clockProcess(p)
 	if s.nat != nil && s.nat.plat != nil {
 		p.queue = make(chan func(), spawnQueue)
 		p.machine = s.nat.plat.Machine(name, s.machineMain(p))
@@ -781,6 +774,9 @@ var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
 // A panic in a task is re-raised here, with its own value (PanicStack has
 // the task's stack).
 func (s *Sim) Run(d time.Duration) error {
+	if s.clocksSet != nil {
+		s.clocksFor() // Clocks changed after the first process: panics
+	}
 	if s.nat != nil {
 		return s.runNative(d)
 	}

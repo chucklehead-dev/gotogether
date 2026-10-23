@@ -361,7 +361,10 @@ starts, and the review's findings are fixed first.
   removed). `Exhaust` cut short by MaxRuns passed
   unless the test also claims `Complete()`. Truncation fails by default;
   `Bound.Partial` opts into a sample.
-- **Y4. Go's clocks.** `qenv.Now` is a wall clock with skew and jumps,
+- **Y4. Go's clocks. Done** (`Sim.Clocks`, `qenv.Mono`/`Since`/`WaitFor`,
+  jumps as nemeses; lease's lock and holders time on the monotonic clock,
+  and its jump finding is now `WallInterval`'s). `qenv.Now` was a wall
+  clock with skew and jumps,
   and `Now().Sub` is wall arithmetic, but Go's `time.Since` uses the
   monotonic reading an NTP step does not move: lease's "one jump breaks a
   lease timed on the holder's own clock" is the model's, not Go's. A

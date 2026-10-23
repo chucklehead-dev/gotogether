@@ -62,11 +62,11 @@ Added to the core since api/core.txt was first recorded:
 - `qobs.SyncedFileSink`, `qobs.NewSyncedJSONLSink`: an fsync per step.
   `qtrace.ReadJSONL` keeps the steps before a torn last line and returns
   a `*qtrace.TornTail`; `input.File.Torn`.
-- Clock faults: `Sim.ClockFaults` gives each process a clock that starts
-  skewed and may jump ("clock.skew", "clock.jump"), read by `qenv.Now`;
-  `Process.ClockOffset`; `Sim.ClockDrift`, clocks that run fast or slow
-  ("clock.drift"), their sleeps with them; `Process.ToVirtual`/`ToReal`
-  for a library's real-clock times on a process's clock. examples/lease.
+- Clock faults: `Sim.Clocks{Skew, Jump, Drift}`. A process has a wall
+  clock (`qenv.Now`: skewed, jumping by a nemesis) and a monotonic one
+  (`qenv.Mono`, `qenv.Since`: what `time.Since` measures; a drift moves
+  both); `qenv.WaitFor`, `Process.ClockOffset`, `Process.ToVirtual`/`ToReal`.
+  examples/lease.
 - A run that panics fails as a run (`qtest.RunPanic`, with the task's
   stack through `qenv.WithPanicStack`), named, kept in the corpus and
   with its reproduce line; it used to end the test binary.

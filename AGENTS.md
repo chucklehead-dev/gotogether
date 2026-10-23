@@ -59,7 +59,7 @@ examples/grpcledger   separate module: gRPC ledger; simgrpc (any generated gRPC 
 examples/streams      separate module: outbox publisher + consumers on Kafka (franz-go, kfake), Kinesis (AWS SDK,
                       kinesisfake) and a simulated log (simlog: partitions, idempotent producer, group, fencing); one binding
 examples/hello        app: the smallest simulated system (a counter, a lossy network, a retrying client); start here
-examples/lease        app: a lease lock and the store it guards under clock faults (Sim.ClockFaults); fencing vs clocks
+examples/lease        app: a lease lock and the store it guards under clock faults (Sim.Clocks); fencing vs clocks, wall vs monotonic
 examples/twophase     app: two-phase commit on qenv against a Choreo model (vendored choreo.qnt); named transitions, connect and Explore
 examples/checkout     app: checkout saga on qenv (isolation levels, outbox, idempotency, crashes); cmd/checkout-sim; under load (load.go)
 examples/fleetrollout separate module: multicluster-runtime controller, simulated (kubesim) and on kwok (kwok-demo.sh;

@@ -532,7 +532,7 @@ examples/jobqueue/run-demo.sh                   # MUTATION=ack-any-lease | forge
 examples/grpcledger/run-demo.sh                 # a real grpc.Server, otelgrpc spans converted; MUTATION=no-dedupe | no-funds-check
 examples/streams/run-demo.sh                    # Kafka (kfake), Kinesis (fake endpoint), simulated log; MUTATION=commit-first | no-dedupe | ...
 examples/twophase/run-demo.sh                   # MUTATION=early-commit | impatient | volatile-decision
-examples/lease/run-demo.sh                      # MUTATION=no-fencing | absolute-expiry, CLOCKS=1 for clock faults
+examples/lease/run-demo.sh                      # MUTATION=no-fencing | wall-interval | absolute-expiry, CLOCKS=1 for skews and jumps, DRIFT=0.25
 examples/checkout/run-demo.sh                   # MUTATION=no-locks | lock-without-write | no-idempotency-key | dual-write
 examples/fleetrollout/kwok-demo.sh              # MUTATION=ignore-observed-generation | in-memory-progress, KILL=1
 examples/crossdb/kind/demo.sh                   # kind + Crossplane; MUTATION=no-client-token | generated-external-name | password-from-create, DROP=0.3, KILL=1
