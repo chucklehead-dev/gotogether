@@ -30,6 +30,17 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- One seam between qtest and a package that makes runs its own way
+  (qhegel): `qtest.CheckCases(t, workflow, binding, opts...)` and
+  `System.CheckCases` give a `CaseCheck` (the checker, how each case
+  records), refusing what such a check ignores; `System.Judge(t,
+  chooser)` runs and checks one run outside any exploration (Shrink's
+  replays and its nominal run, sharing explorations' verdicts); and
+  `Expectation.Holds(*Run)` judges a claim by its type. They replace
+  `qtest.Settings` and `Resolve`, `ExploreConfig.Replay`, and qhegel's
+  fake test and its string match on a claim's description, which
+  misjudged `AnyOf(Conforms(), ...)` when Hegel found nothing.
+  `qhegel.CheckAll` is unexported.
 - `qenv.KnownFault` is internal: a process-wide query of what is
   declared would freeze that scope in the API. The workflows still fail
   a Rates key, a sweep's FaultKind or an exception that covers nothing.
@@ -96,8 +107,6 @@ Added to the core since api/core.txt was first recorded:
   `Evidence.Model` lists the
   actions never taken. `Expect` and `System.Mutate` judge a claim by one
   verdict, so NotVacuous kills mutants too.
-- `qtest.Settings.RefuseExploration` and `Settings.SkipIfEmpty`, for a
-  package building on qtest's workflows (qhegel.Shrink).
 - Evidence is a format (`Evidence.Format`, `qtest.EvidenceFormat`
   `gotogether.evidence/2`, whose qenv.Coverage keys are lower case,
   `IsEvidence`) with a role (faithful, mutant, replay: `System.Mutant`,
@@ -107,7 +116,7 @@ Added to the core since api/core.txt was first recorded:
   faithful explorations only.
 - An option a workflow ignores fails it, saying why: `Global()` or
   `Linearize()` in a System's Opts, `SkipIfEmpty()` in Validate,
-  `Linearize()` in qhegel's Opts (`qtest.Settings.Refuse`).
+  `Linearize()` in qhegel's Opts.
 - Nemeses are chosen per family (`fault.nemesis.crash`, `.partition`,
   `.jump`, a double's own), each at its rate: Rates keys
   `nemesis.crash`, `nemesis.partition`, `nemesis.jump` (`nemesis` covers

@@ -22,7 +22,7 @@ type Evidence struct {
 	Format string `json:"format"`
 	// Role is what the exploration was: "faithful" (the system as it
 	// is), "mutant" (a System.Mutant's, or Mutate's with a mutant on),
-	// "replay" (a found failure replayed, ExploreConfig.Replay). A suite's
+	// "replay" (one run reproduced alone, GOTOGETHER_RUN). A suite's
 	// evidence counts what the faithful ones tried: a mutant takes paths
 	// the system does not.
 	Role string `json:"role"`
@@ -294,7 +294,7 @@ func countNot(taken map[string]int) int {
 // role is what the exploration was (Evidence.Role).
 func (x *Exploration) role() string {
 	switch {
-	case x.replay || x.alone != nil: // a replay of a mutant's failure too, and a run reproduced alone: each repeats a run counted where it was found
+	case x.alone != nil: // a run reproduced alone: it repeats a run counted where it was found
 		return RoleReplay
 	case x.mutant || x.mutation != "":
 		return RoleMutant

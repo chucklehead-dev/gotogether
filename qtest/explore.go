@@ -49,7 +49,6 @@ type Exploration struct {
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
 	emptyOK   bool              // ExploreConfig.emptyOK
 	mutant    bool              // its corpus runs are a baseline's, under a mutant (corpusOf)
-	replay    bool              // ExploreConfig.Replay
 	mutation  string            // System.Mutant
 	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
 	mu        sync.Mutex        // guards recheck's report swaps
@@ -134,10 +133,6 @@ type ExploreConfig struct {
 	// how to find its run again. GOTOGETHER_CORPUS=dir gives every
 	// exploration dir/<test name> (a nightly run collecting what it finds).
 	Corpus string
-	// Replay marks the exploration as a replay of a failure found
-	// elsewhere (qhegel.Shrink's): its evidence's role is "replay", which
-	// a suite's report does not count as what it tried.
-	Replay bool
 }
 
 // corpusFormat names a corpus entry's format: an entry of another is
@@ -274,7 +269,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = offset + uint64(i+1)
 	}
-	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz, mutant: cfg.corpusOf != "", replay: cfg.Replay, mutation: c.mutant}
+	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz, mutant: cfg.corpusOf != "", mutation: c.mutant}
 	x.dir = exploreDir(t, c.Dir, x.id)
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
@@ -538,68 +533,16 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	}
 	o := c.Options
 	o.Dir, o.NoITF = filepath.Join(x.dir, "quint"), true
-	ch := checkerFor(t, bindingPath, o, c)
-	x.constants = map[string]string{}
-	for k, v := range ch.Binding.Constants {
-		x.constants[k] = v
-	}
-	for k, v := range c.Constants {
-		x.constants[k] = v
-	}
-	x.model = ch.Binding.SpecPath() + ":" + ch.Binding.Module
-	if ch.Model != nil {
+	cc, inst, constants := instanceChecker(t, bindingPath, o, c)
+	x.constants, x.checker = constants, cc
+	x.model = cc.Binding.SpecPath() + ":" + cc.Binding.Module
+	if cc.Model != nil {
 		x.actions = map[string]bool{}
-		for a := range ch.Model.Actions {
+		for a := range cc.Model.Actions {
 			x.actions[a] = true
 		}
 	}
-	// a verdict is of steps against one instance: the binding, its
-	// constants (a sweep's rows set their own) and the invariants checked
-	var inst strings.Builder
-	fmt.Fprintf(&inst, "%s|%v|%v\n", bindingPath, sortedKV(x.constants), c.Invariants)
-	cc := *ch
-	cc.Options = o
-	x.checker = &cc
-	// runs already judged (same steps) take their verdict from the cache,
-	// and runs of the batch with the same steps are checked once
-	runs := make([][]qtrace.Step, len(x.Runs))
-	for i, r := range x.Runs {
-		runs[i] = r.Steps
-	}
-	keys := make([]string, len(runs))
-	var todo [][]qtrace.Step
-	first := map[string]int{} // key -> index in todo
-	at := map[int]int{}       // run -> index in todo
-	for i, steps := range runs {
-		keys[i] = inst.String() + qtrace.Key(steps)
-		if rep, ok := verdicts.get(keys[i]); ok {
-			x.Runs[i].Report = rep
-			x.Cached++
-			continue
-		}
-		if j, ok := first[keys[i]]; ok {
-			at[i] = j
-			x.Cached++
-			continue
-		}
-		first[keys[i]] = len(todo)
-		at[i] = len(todo)
-		todo = append(todo, steps)
-	}
-	if len(todo) > 0 {
-		reps, errs := cc.CheckBatch(context.Background(), todo, 0)
-		for i := range x.Runs { // in seed order: an error names the first seed it hit
-			j, ok := at[i]
-			if !ok {
-				continue
-			}
-			if errs[j] != nil {
-				t.Fatalf("gotogether: %s: %v", x.nameOf(x.Runs[i]), errs[j])
-			}
-			x.Runs[i].Report = reps[j]
-			verdicts.put(keys[i], reps[j])
-		}
-	}
+	x.Cached = judge(t, cc, inst, x.Runs, func(r *Run) string { return x.nameOf(r) })
 	// the report, for tools that read it (gotogether evidence, cover,
 	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's
 	// own directory; each test's are cleared at its first exploration
@@ -618,6 +561,71 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			t.Logf("gotogether: evidence.json: %v", err)
 		}
 	}
+}
+
+// instanceChecker is the binding's checker for the options' instance
+// (constants, invariants), with its modules in o.Dir, and the instance's
+// key and constants: a verdict is of steps against one instance, the
+// binding, its constants (a sweep's rows set their own) and the
+// invariants checked.
+func instanceChecker(t testing.TB, bindingPath string, o validate.Options, c settings) (*validate.Checker, string, map[string]string) {
+	t.Helper()
+	ch := checkerFor(t, bindingPath, o, c)
+	constants := map[string]string{}
+	for k, v := range ch.Binding.Constants {
+		constants[k] = v
+	}
+	for k, v := range c.Constants {
+		constants[k] = v
+	}
+	cc := *ch
+	cc.Options = o
+	return &cc, fmt.Sprintf("%s|%v|%v\n", bindingPath, sortedKV(constants), c.Invariants), constants
+}
+
+// judge checks runs against the model with cc, filling their Reports:
+// runs already judged against the instance inst (the same steps) take
+// their verdict from the cache, and runs with the same steps are checked
+// once. It returns how many were not checked again. A run quint could
+// not check fails t, named by name.
+func judge(t testing.TB, cc *validate.Checker, inst string, runs []*Run, name func(*Run) string) (cached int) {
+	t.Helper()
+	keys := make([]string, len(runs))
+	var todo [][]qtrace.Step
+	first := map[string]int{} // key -> index in todo
+	at := map[int]int{}       // run -> index in todo
+	for i, r := range runs {
+		keys[i] = inst + qtrace.Key(r.Steps)
+		if rep, ok := verdicts.get(keys[i]); ok {
+			r.Report = rep
+			cached++
+			continue
+		}
+		if j, ok := first[keys[i]]; ok {
+			at[i] = j
+			cached++
+			continue
+		}
+		first[keys[i]] = len(todo)
+		at[i] = len(todo)
+		todo = append(todo, r.Steps)
+	}
+	if len(todo) == 0 {
+		return cached
+	}
+	reps, errs := cc.CheckBatch(context.Background(), todo, 0)
+	for i, r := range runs { // in order: an error names the first run it hit
+		j, ok := at[i]
+		if !ok {
+			continue
+		}
+		if errs[j] != nil {
+			t.Fatalf("gotogether: %s: %v", name(r), errs[j])
+		}
+		r.Report = reps[j]
+		verdicts.put(keys[i], reps[j])
+	}
+	return cached
 }
 
 // verdicts keeps the model's verdicts by instance and steps, for the test

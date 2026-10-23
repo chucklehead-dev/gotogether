@@ -1097,6 +1097,7 @@ const RoleMutant = "mutant"
 const RoleReplay = "replay"
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
+func CheckCases(t testing.TB, workflow, bindingPath string, opts ...Option) CaseCheck
 func Conforms() Expectation
 func Constants(m map[string]string) Option
 func Exercised(except ...string) Exercise
@@ -1117,7 +1118,6 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 func RecorderOptions(opts ...qobs.Option) Option
 func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
-func Resolve(t testing.TB, opts ...Option) Settings
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 func ShrunkTo(n int) Expectation
 func SkipIfEmpty() Option
@@ -1132,6 +1132,10 @@ type Bound struct
     field MaxRuns int
     field Partial bool
     field Parallel int
+type CaseCheck struct
+    field Checker *validate.Checker
+    field Recorder []qobs.Option
+    field Global bool
 type Claim interface
     judge(reports []*validate.Report) judgment
     String() string
@@ -1158,6 +1162,7 @@ type Exercise struct
     method (Exercise) String() string
 type Expectation struct
     method (Expectation) At(action string) Expectation
+    method (Expectation) Holds(r *Run) bool
     method (Expectation) String() string
 type Exploration struct
     field Runs []*Run
@@ -1172,7 +1177,6 @@ type ExploreConfig struct
     field Parallel int
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
-    field Replay bool
 type Fault struct
     field Kind string
     field Option int
@@ -1224,14 +1228,6 @@ type Search struct
     field Faults int `json:"faults"`
     field Complete bool `json:"complete"`
     field Left int `json:"left,omitempty"`
-type Settings struct
-    method (Settings) Checker(t testing.TB, bindingPath string) *validate.Checker
-    method (Settings) Dir() string
-    method (Settings) Global() bool
-    method (Settings) Recorder() []qobs.Option
-    method (Settings) Refuse(t testing.TB, workflow, why string, options ...string)
-    method (Settings) RefuseExploration(t testing.TB, workflow string)
-    method (Settings) SkipIfEmpty() bool
 type SweepConfig struct
     field Factors []qsweep.Factor
     field Strength int
@@ -1248,10 +1244,12 @@ type System struct
     field Opts []Option
     field Run func(c qenv.Chooser) error
     field Mutant string
+    method (System) CheckCases(t testing.TB, workflow string) CaseCheck
     method (System) Exhaust(t testing.TB, b Bound) *Exploration
     method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
     method (System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration
     method (System) Fuzz(f *testing.F, rates qenv.Rates, seeds ...[]byte)
+    method (System) Judge(t testing.TB, ch qenv.Chooser) *Run
     method (System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport
     method (System) Sweep(t *testing.T, sw SweepConfig) *SweepResult
 type Take struct

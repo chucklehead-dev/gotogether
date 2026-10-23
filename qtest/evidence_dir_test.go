@@ -22,9 +22,9 @@ func TestEvidenceDir(t *testing.T) {
 	mutant := nominal
 	mutant.corpusOf = t.Name() + "#1" // as Mutate's mutant explorations are
 	sys.Explore(t, mutant)
-	replay := nominal
-	replay.Replay = true
-	sys.Explore(t, replay)
+	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:seed=1") // a run reproduced alone is a replay
+	sys.Explore(t, ExploreConfig{Seeds: 1})
+	os.Unsetenv("GOTOGETHER_RUN") // t.Setenv restores it at the end
 	for n, role := range map[string]string{"x1.json": RoleFaithful, "x2.json": RoleMutant, "x3.json": RoleReplay} {
 		e, err := ReadEvidence(filepath.Join(dir, pkgDir(), t.Name(), n)) // pkgDir: qtest, the package
 		if err != nil || e.Role != role || e.Format != EvidenceFormat {

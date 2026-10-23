@@ -102,7 +102,12 @@ var (
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	whyLinearize = "its runs are checked in the order they were recorded; Linearize is Record's and Validate's, " +
 		"for steps recorded where an operation was invoked and returned"
-	exploreIgnores  = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize}
+	exploreIgnores = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize}
+	whyCaseOrder   = "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's"
+	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder,
+		"SkipIfEmpty": "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
+	whyUnchecked    = "no case is checked against the model"
+	uncheckedIgnore = map[string]string{"Constants": whyUnchecked, "Invariants": whyUnchecked, "Quint": whyUnchecked}
 	validateIgnores = map[string]string{
 		"Global":          "Validate checks steps already recorded: there is no recorder to install",
 		"RecorderOptions": "Validate checks steps already recorded: there is no recorder to configure",
@@ -387,61 +392,4 @@ func firstOr(msgs []string) string {
 		return "not kept"
 	}
 	return msgs[0]
-}
-
-// Settings are a list of Options resolved for a test, for packages that
-// build their checks on qtest's (qhegel). Configure with Options;
-// Settings only read them. They are exported, not internal, because such a
-// package may be another module (qhegel is to be one).
-type Settings struct{ s settings }
-
-// Resolve applies opts for t: the artifacts' directory defaults to
-// $GOTOGETHER_KEEP/<test>, else a temporary directory.
-func Resolve(t testing.TB, opts ...Option) Settings { return Settings{config(t, opts)} }
-
-// Dir is where the check's artifacts go (generated modules, step logs).
-func (s Settings) Dir() string { return s.s.Dir }
-
-// Recorder are the recorder's options (RecorderOptions).
-func (s Settings) Recorder() []qobs.Option { return s.s.Recorder }
-
-// Global reports whether the run's recorder is installed globally (Global).
-func (s Settings) Global() bool { return s.s.Global }
-
-// SkipIfEmpty reports whether the test skips when nothing was recorded
-// (SkipIfEmpty).
-func (s Settings) SkipIfEmpty() bool { return s.s.SkipIfEmpty }
-
-// RefuseExploration fails t for each option given that an exploration
-// ignores, as Explore does: for a workflow whose runs are an exploration's
-// (qhegel.Shrink's replays), so it refuses them before its search rather
-// than after.
-func (s Settings) RefuseExploration(t testing.TB, workflow string) {
-	t.Helper()
-	s.s.refuse(t, workflow, exploreIgnores)
-}
-
-// Refuse fails t for each of the named options given (by their function's
-// name: "Linearize") that workflow ignores, saying why: an option that
-// does nothing, silently, reads as a check the test does not make.
-func (s Settings) Refuse(t testing.TB, workflow, why string, options ...string) {
-	t.Helper()
-	ignored := map[string]string{}
-	for _, o := range options {
-		ignored[o] = why
-	}
-	s.s.refuse(t, workflow, ignored)
-}
-
-// Checker is the binding's checker (cached per binding) with the
-// options' constants, invariants and quint options, its modules in
-// Dir()/quint.
-func (s Settings) Checker(t testing.TB, bindingPath string) *validate.Checker {
-	t.Helper()
-	o := s.s.Options
-	o.Dir = filepath.Join(s.s.Dir, "quint")
-	ch := checkerFor(t, bindingPath, o, s.s)
-	cc := *ch
-	cc.Options = o
-	return &cc
 }

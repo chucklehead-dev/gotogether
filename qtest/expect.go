@@ -36,6 +36,11 @@ type Expectation struct {
 
 func (e Expectation) String() string { return e.desc }
 
+// Holds reports whether the expectation holds of run r: the one judgment
+// Run.Expect makes, for a package judging runs it made (qhegel's
+// Violation, whose "nothing found" is a conforming run).
+func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.check(r.Report) }
+
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
 func Conforms() Expectation {
