@@ -27,7 +27,10 @@ func TestFaithfulConforms(t *testing.T) {
 		// dedupe. Measured, 56% of runs fault a request (2000 seeds); the bar
 		// is well under it, so a window of fresh seeds (a nightly run) does
 		// not fail it by chance, and a change that stops the faults does
-		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3))
+		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
+		// and every model action was taken (a replay of a seen request),
+		// every fault kind faulted: nothing the model allows went untried
+		qtest.Exercised())
 }
 
 // Without dedupe a retried request is counted again: the model has no

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -63,7 +64,7 @@ func TestReach(t *testing.T) {
 		{Reaches("rpc.x.request").Faulted(), true},
 		{Reaches("rpc.y.request"), false},
 	} {
-		if msg := c.r.judgeRuns(runs); (msg == "") != c.ok {
+		if msg := c.r.judgeRuns(runs, nil); (msg == "") != c.ok {
 			t.Errorf("%v: %q", c.r, msg)
 		}
 	}
@@ -133,4 +134,37 @@ func TestViolatesAt(t *testing.T) {
 		}
 	}()
 	Rejects("cas").At("cas")
+}
+
+// Takes and Exercised are judged on the model actions the runs' replays
+// took: up to a step the model could not take, through a step whose state
+// did not match.
+func TestTakesAndExercised(t *testing.T) {
+	call := func(a string) binding.Call { return binding.Call{Action: a} }
+	ok := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
+		Calls: []binding.Call{call("init"), call("apply"), call("replay")}}}},
+		Choices: []qenv.Choice{{Kind: "fault.rpc.x.request", N: 3, Value: 1}}}
+	rejected := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Fail,
+		Failure: &validate.Failure{Kind: "disabled", Index: 1}, Calls: []binding.Call{call("init"), call("cancel")}}}}}
+	model := map[string]bool{"init": true, "step": true, "apply": true, "replay": true, "cancel": true}
+	for _, c := range []struct {
+		claim runsClaim
+		runs  []*Run
+		ok    bool
+	}{
+		{Takes("apply"), []*Run{ok}, true},
+		{Takes("cancel"), []*Run{ok, rejected}, false}, // rejected: not taken
+		{Takes("apply").InAtLeast(0.6), []*Run{ok, rejected}, false},
+		{Takes("refund"), []*Run{ok}, false},       // no such action
+		{Exercised(), []*Run{ok, rejected}, false}, // cancel never taken
+		{Exercised("cancel"), []*Run{ok, rejected}, true},
+		{Exercised("cancel", "nope"), []*Run{ok, rejected}, false}, // a misspelled exception
+	} {
+		if msg := c.claim.judgeRuns(c.runs, model); (msg == "") != c.ok {
+			t.Errorf("%s: %q", c.claim, msg)
+		}
+	}
+	if m := modelCoverage([]*Run{ok, rejected}, model); m.Taken["apply"] != 1 || len(m.Never) != 1 || m.Never[0] != "cancel" {
+		t.Errorf("model coverage %+v, want apply once and cancel never", m)
+	}
 }

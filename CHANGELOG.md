@@ -23,5 +23,14 @@ The first release. What a user meets, by module:
 - **qgosim**: qenv and whole programs in gosim, on the fork
   `github.com/chucklehead-dev/gosim`.
 
+Added to the core since api/core.txt was first recorded:
+
+- `qtest.Takes(action).InAtLeast(p)` and `qtest.Exercised(except...)`:
+  claims that an exploration's runs took the model's actions and faulted
+  what they reached; `Evidence.Model` lists the actions never taken.
+- `gotogether simulate -binding`: the model's simulation against each
+  invariant the binding's new `simulate` section (`binding.Simulation`)
+  says it guarantees (`holds`) or lets the code break (`allows`).
+
 Before this, the project was quint-connect-go
 (github.com/casselc/quint-connect-go); docs/HISTORY.md has the path here.

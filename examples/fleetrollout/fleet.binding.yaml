@@ -14,3 +14,7 @@ actions:
   scale: {}
   settle: {}
 invariants: [withinBudget, rolledOutWhenSettled]
+
+# The model on its own (gotogether simulate).
+simulate:
+  skip: "a replay-only model: its actions take observed resource versions and generations"

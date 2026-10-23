@@ -39,7 +39,10 @@ code (`connect`), Hegel-driven Go runs are judged by the model
    `-instance bankDesign` must be a single `import M(...).*`.
 5. **Properties are boolean `val`s** (`val noOverdraft = ...`). They are
    `quint run --invariant` targets for the design, and `invariants:` of the
-   binding for recorded runs.
+   binding for recorded runs. The binding's `simulate` section says which
+   the model guarantees (`holds`) and which are requirements on the code
+   the model lets a bad implementation break (`allows`); `gotogether
+   simulate -binding` checks both (gotogether-workflow §1).
 6. **Restarts.** If the process can crash and restart, give the model one
    parameterless action for it (`action crash = ...`); the binding's
    `restart: crash` inserts it where the recorded process identity changes.
@@ -113,6 +116,7 @@ def stage(n: Node): Stage = choreo::s.system.get(n).stage   // for bindings: cho
 ```sh
 quint typecheck model.qnt                                   # always first
 quint run model.qnt --main design --invariant prop --max-steps 30 --max-samples 1000
+gotogether simulate -binding m.binding.yaml                 # every invariant, holds or allows, once the binding exists
 quint run model.qnt --main design --mbt --max-steps 5 --n-traces 1 --out-itf /tmp/t.itf.json
 # look at mbt::actionTaken and mbt::nondetPicks in /tmp/t.itf.json: every action
 # named, every parameter picked under its own name

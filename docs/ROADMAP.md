@@ -149,18 +149,29 @@ The track, in order:
   `-fuzztime 30m`, Hegel unseeded) whose failures become corpus entries
   (`EncodeChoices`, recording the gosim module version next to
   `BytesVersion`: translated runs depend on it).
-- **X2. Model coverage and anti-vacuity (S, then M).** Exploration counts
-  each run's actions and outcomes and names the model's actions no run
-  took: a `model` line in Evidence; `Takes(action)` (the twin of
-  `Reaches` for a model action, with `InAtLeast`); `Exercised()`, every
-  model action taken and every declared fault kind faulted in some run,
-  exceptions named with a reason. A CI step runs `quint run --invariant`
-  on every example model; `quint verify` (Apalache) nightly on the small
-  ones, outside `go test`. Then vacuity: an invariant's antecedent (from
-  a top-level `implies`, or declared in the binding) gets a witness def
-  in the rendered module, and the report says which held vacuously in
-  every run. Readers of `evidence.json`, which the model coverage writes:
-  `gotogether cover -sim` and actionmap (V13's later work).
+- **X2. Model coverage and anti-vacuity (S, then M).** Stage 1 done:
+  - **Done.**
+    - Evidence's `model` line: the model's actions each run took (up to
+      its failure) and those no run took.
+    - `Takes(action).InAtLeast(p)`, the twin of `Reaches` for a model
+      action; `Exercised(except...)`, every model action taken and every
+      reached fault kind faulted in some run (hello's faithful test).
+    - `gotogether simulate -binding`, on every binding in CI.
+  - **Its finding.** A binding's invariants are of two kinds. Some the
+    model guarantees (`holds`: no simulated trace violates them). Others
+    are requirements on the code that the model lets a bad
+    implementation break (checkout's `chargedAtMostOnce`, streams' four,
+    edgepublish's known F1/F3): `allows`, where a simulation that never
+    violates one means checking the code against it is vacuous. The
+    binding's `simulate` section says which; replay-only models (no
+    `step`: gcounter, kafka, fleetrollout, the uniqueids scheme) say
+    `skip` and why.
+  - **Left.** `quint verify` (Apalache) nightly on the small models.
+    Vacuity: an invariant's antecedent (from a top-level `implies`, or
+    declared in the binding) gets a witness def in the rendered module,
+    and the report says which held vacuously in every run. Readers of
+    `evidence.json`: `gotogether cover -sim` and actionmap (V13's later
+    work).
 - **X3. Bounded exhaustive schedules (M; after W7).** A stateless,
   delay-bounded DFS chooser (`qenv/internal/choice`): option 0 is the
   oldest task or nominal, so a non-zero schedule choice is a delay and a

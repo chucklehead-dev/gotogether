@@ -8,3 +8,7 @@ constants:
 actions:
   generate: {}
 invariants: [incarnationsOwnedAndCounting]
+
+# The model on its own (gotogether simulate).
+simulate:
+  skip: "a replay-only model: generate takes the observed incarnation and counter"

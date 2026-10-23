@@ -22,6 +22,7 @@ type Plan struct{ ... }
 type RecordCall struct{ ... }
     func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
     func ScanRecords(dir string) ([]RecordCall, error)
+type Simulation struct{ ... }
 type TestSet int
     const AllTests TestSet = iota ...
 
@@ -396,6 +397,8 @@ type Claim interface{ ... }
     func None(es ...Expectation) Claim
     func Some(es ...Expectation) Claim
 type Evidence struct{ ... }
+type Exercise struct{ ... }
+    func Exercised(except ...string) Exercise
 type Expectation struct{ ... }
     func AnyOf(es ...Expectation) Expectation
     func Conforms() Expectation
@@ -405,6 +408,7 @@ type Expectation struct{ ... }
     func Violates(invariant string) Expectation
 type Exploration struct{ ... }
 type ExploreConfig struct{ ... }
+type ModelCoverage struct{ ... }
 type MutationClaim struct{ ... }
     func NoSurvivors(equivalent ...string) MutationClaim
 type MutationReport struct{ ... }
@@ -425,6 +429,8 @@ type Settings struct{ ... }
 type SweepConfig struct{ ... }
 type SweepResult struct{ ... }
 type System struct{ ... }
+type Take struct{ ... }
+    func Takes(action string) Take
 
 == github.com/chucklehead-dev/gotogether/qtrace
 const EventName = "quint.step" ...

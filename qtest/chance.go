@@ -9,10 +9,11 @@ import (
 )
 
 // runsClaim is a claim about the runs themselves (their choices), not
-// their verdicts: judgeRuns says why it fails ("": it holds).
+// their verdicts: judgeRuns says why it fails ("": it holds). actions are
+// the model's (nil: unknown).
 type runsClaim interface {
 	Claim
-	judgeRuns(runs []*Run) string
+	judgeRuns(runs []*Run, actions map[string]bool) string
 }
 
 // A Reach is a claim that runs reached a fault kind: made a choice of it,
@@ -56,7 +57,7 @@ func (r Reach) String() string {
 // judge is never called: an exploration judges a Reach over its runs.
 func (r Reach) judge([]*validate.Report) judgment { return judgment{show: -1} }
 
-func (r Reach) judgeRuns(runs []*Run) string {
+func (r Reach) judgeRuns(runs []*Run, _ map[string]bool) string {
 	n := 0
 	for _, run := range runs {
 		for _, c := range run.Choices {

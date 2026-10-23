@@ -14,3 +14,9 @@ actions:
     expect: 'seen.get({{.node}}) == {{ toSet .obs.values }}'
   settle: {}
 invariants: [noInvention, convergedWhenSettled]
+
+# The model on its own (gotogether simulate): which invariants the design
+# guarantees, which it allows to fail and the code must not.
+simulate:
+  constants: {NODES: 'Set("n0", "n1", "n2")', VALUES: 'Set(1, 2, 3)'}
+  holds: [noInvention, convergedWhenSettled]

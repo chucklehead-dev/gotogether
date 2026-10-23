@@ -381,7 +381,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	failedAny := false
 	for _, c := range claims {
 		if rc, ok := c.(runsClaim); ok {
-			if msg := rc.judgeRuns(x.Runs); msg != "" {
+			if msg := rc.judgeRuns(x.Runs, x.actions); msg != "" {
 				failedAny = true
 				t.Errorf("gotogether: %s", msg)
 			}

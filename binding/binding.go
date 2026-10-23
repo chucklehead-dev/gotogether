@@ -46,8 +46,33 @@ type Binding struct {
 	Actions map[string]Action `yaml:"actions"`
 	// Invariants are vals of the model checked in every observed state.
 	Invariants []string `yaml:"invariants"`
+	// Simulate says what the model alone does with its invariants
+	// (`gotogether simulate`): which it guarantees, which it allows to fail.
+	Simulate *Simulation `yaml:"simulate"`
 
 	Dir string `yaml:"-"` // directory of the binding file
+}
+
+// Simulation is how the model runs on its own (`quint run`), and what it
+// must show there. An invariant a binding checks is either a property of
+// the design, which the model guarantees, or a requirement on the code,
+// which the model allows to fail (a provider can be charged twice; the
+// code must not do it). Each of the binding's invariants is in one list.
+type Simulation struct {
+	// Constants override the binding's for the simulation: those that are
+	// templates over a run (`{{ set "node" }}`) need a value here.
+	Constants map[string]string `yaml:"constants"`
+	// Holds are the invariants the model guarantees: no trace violates them.
+	Holds []string `yaml:"holds"`
+	// Allows are the invariants the model allows to fail: some trace must
+	// violate each, or checking the code against it proves nothing.
+	Allows []string `yaml:"allows"`
+	// Steps and Samples bound the run (default 30 and 1000).
+	Steps   int `yaml:"steps"`
+	Samples int `yaml:"samples"`
+	// Skip, if set, says why the model is not run on its own: a replay-only
+	// model, whose actions take observed values, has no step to simulate.
+	Skip string `yaml:"skip"`
 }
 
 // Action says how to call one model action from an observed step.

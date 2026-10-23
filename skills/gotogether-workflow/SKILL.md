@@ -14,14 +14,29 @@ gotogether-traces, gotogether-mbt and gotogether-hegel.
 
 ```sh
 quint typecheck model/m.qnt
-quint run model/m.qnt --main design --invariant prop --max-steps 30 --max-samples 2000
+gotogether simulate -binding m.binding.yaml   # every invariant in the binding's simulate section
 ```
 
-- Every property must hold in simulation before any code exists. A
-  property that fails here is a design bug, or a wrong property.
-- Also check that each property *can* fail. Temporarily break the model
-  (drop a guard), or write a `run` test that reaches a violating state.
-  A property that never fails checks nothing.
+The binding's `simulate` section sorts its invariants in two:
+- `holds`: what the design guarantees. No trace of the model's own
+  simulation may violate it. One that fails is a design bug, or a wrong
+  property.
+- `allows`: a requirement on the code that the model lets a bad
+  implementation break (at most once, per-key order). Some trace must
+  violate it, or checking the code against it is vacuous.
+
+```yaml
+simulate:
+  constants: {MAX_AMOUNT: '5'}   # the binding's constants, where they are templates
+  holds: [noOverdraft]
+  allows: [chargedAtMostOnce]
+```
+
+A model with no `step` (replay only) says `skip: <why>`. The command
+exits 1 on a misclassified invariant, naming it and the fix.
+- Also check that each `holds` property *can* fail. Temporarily break
+  the model (drop a guard), or write a `run` test that reaches a
+  violating state. A property that never fails checks nothing.
 - Add `run ...Test` scenarios for the behaviours you care about, so the
   model has regression tests of its own.
 
@@ -133,6 +148,8 @@ deliberately and say why in the commit and the README.
 
 ## CI layout
 
+- `gotogether simulate -binding` for every binding: the models on their
+  own, before any code runs.
 - `go test -short ./...`: scripted scenarios, mutants, `Batched` Hegel
   runs (about a minute).
 - `go test ./...`: adds the `FindViolation` shrinking tests.

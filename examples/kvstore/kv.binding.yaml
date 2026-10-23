@@ -31,3 +31,9 @@ actions:
        else not(store.keys().contains({{.key}})))
 
 invariants: [versionsAreRevisions, versionsUnique]
+
+# The model on its own (gotogether simulate): which invariants the design
+# guarantees, which it allows to fail and the code must not.
+simulate:
+  constants: {KEYS: 'Set("a", "b")', VALUES: 'Set("x", "y")'}
+  holds: [versionsAreRevisions, versionsUnique]

@@ -31,6 +31,13 @@ together (`Exploration.Expect`):
 | `qtest.Some(a, b)` | one run shows both |
 | `qtest.All(a)` | every run shows it |
 | `qtest.None(a)` | no run shows it |
+| `qtest.Reaches("kind").Faulted().InAtLeast(p)` | a share p of the runs reach a fault point of the kind (and fault it) |
+| `qtest.Takes("action").InAtLeast(p)` | a share p of the runs take the model action (up to a failing step) |
+| `qtest.Exercised(except...)` | every model action is taken in some run and every reached fault kind faulted in some run, but those named |
+
+`Takes` and `Exercised` say the runs exercised what the model and the
+environment offer: an exploration whose runs never take `cancel` conforms
+about cancel vacuously. `Evidence` lists the actions never taken.
 
 Several claims are judged one by one. A bug that needs faults is "some
 run", not "every run": the faults are chance. State the run's count by

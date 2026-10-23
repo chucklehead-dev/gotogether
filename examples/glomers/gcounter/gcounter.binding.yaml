@@ -11,3 +11,7 @@ actions:
   read:    {}
   settle: {}
 invariants: [noOvercount, countsEveryAdd]
+
+# The model on its own (gotogether simulate).
+simulate:
+  skip: "a replay-only model: its actions take observed values (a read's value, a gossiped vector), with no step to pick them"

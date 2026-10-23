@@ -66,6 +66,8 @@ func main() {
 		err = runSkills(os.Args[2:])
 	case "cover":
 		err = runCover(os.Args[2:])
+	case "simulate":
+		code, err = simulate(os.Args[2:])
 	default:
 		usage()
 	}
@@ -80,6 +82,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   gotogether scaffold -spec model.qnt -module M [-out m.binding.yaml]
   gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
+  gotogether simulate -binding b.yaml [-steps n] [-samples n] [-const N=e] [-seed s]   the model alone, with the binding's invariants
   gotogether lint     -binding b.yaml [-src DIR] [-sim DIR]
   gotogether lint     -sim DIR | -weave DIR
   gotogether steps    [-actors a,b] [-actions a,b] [-since T] [-until T] [-pseudonymize f,g] [-binding b.yaml]

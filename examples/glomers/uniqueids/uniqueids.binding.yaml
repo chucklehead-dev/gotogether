@@ -6,3 +6,9 @@ constants:
 actions:
   generate: {}
 invariants: [idsUnique]
+
+# The model on its own (gotogether simulate): which invariants the design
+# guarantees, which it allows to fail and the code must not.
+simulate:
+  constants: {NODES: 'Set("n0", "n1", "n2")'}
+  allows: [idsUnique]

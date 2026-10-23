@@ -24,6 +24,7 @@ type Evidence struct {
 	// (step the model cannot take)", "mismatch after a", "issue".
 	FailingBy map[string]int  `json:"failing"`
 	Faults    *qenv.Coverage  `json:"faults,omitempty"`
+	Model     *ModelCoverage  `json:"model,omitempty"`   // the model's actions the runs took (nil: no model)
 	Rows      int             `json:"rows,omitempty"`    // a sweep's rows (0: not a sweep)
 	Code      *qcover.Summary `json:"code,omitempty"`    // when the code is woven with qweave -cover (nil: not)
 	Mutants   *MutationReport `json:"mutants,omitempty"` // from System.Mutate, if set
@@ -44,6 +45,9 @@ func (e *Evidence) WriteJSON(path string) error {
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
 	e.Faults = x.faultCoverage()
+	if x.actions != nil {
+		e.Model = modelCoverage(x.Runs, x.actions)
+	}
 	if x.hasCode() {
 		e.Code = x.codeCoverage()
 	}
@@ -56,6 +60,9 @@ func (s *SweepResult) Evidence() *Evidence {
 	for _, x := range s.Runs {
 		if x != nil {
 			all.Runs = append(all.Runs, x.Runs...)
+			if all.actions == nil {
+				all.actions = x.actions
+			}
 		}
 	}
 	e := all.Evidence()
@@ -126,6 +133,13 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, " · %d %s", e.FailingBy[r], r)
 	}
 	b.WriteByte('\n')
+	if m := e.Model; m != nil {
+		fmt.Fprintf(&b, "  model     %d of %d actions taken", len(m.Taken)-countNot(m.Taken), len(m.Taken)-countNot(m.Taken)+len(m.Never))
+		if len(m.Never) > 0 {
+			fmt.Fprintf(&b, "; never: %s", strings.Join(m.Never, ", "))
+		}
+		b.WriteByte('\n')
+	}
 	if c := e.Faults; c != nil {
 		faulted := 0
 		for _, p := range c.Points {
@@ -190,4 +204,16 @@ func kinds(ps []*qenv.PointCoverage) string {
 		ks = append(ks, p.Kind)
 	}
 	return strings.Join(ks, ", ")
+}
+
+// countNot counts the actions of taken that are not the model's own
+// (init, step): replays take init, which no workflow asks about.
+func countNot(taken map[string]int) int {
+	n := 0
+	for _, a := range []string{"init", "step"} {
+		if taken[a] > 0 {
+			n++
+		}
+	}
+	return n
 }

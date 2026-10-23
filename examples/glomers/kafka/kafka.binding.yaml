@@ -23,3 +23,7 @@ actions:
     expect: 'orNone(commits, {{.key}}) >= {{.obs.offset}}'
   settle: {}
 invariants: [sentAtItsOffset, offsetsUnique, commitsInLog]
+
+# The model on its own (gotogether simulate).
+simulate:
+  skip: "a replay-only model: its actions take the values the nodes observed in the KV services"

@@ -36,7 +36,8 @@ references when the task needs them.
    `hello.go` (the system, written against qenv's seams), `hello_test.go`
    (the system explored by seeds, a mutant caught, Hegel shrinking it).
 3. For your component, write the model first and simulate its
-   invariants (`quint run --invariant`): gotogether-model.
+   invariants (`gotogether simulate -binding`, `quint run --invariant`
+   before a binding exists): gotogether-model.
 4. Scaffold a binding and a System test, then record each model step
    where it takes effect, until the faithful system conforms.
 5. Add a mutant and state how it is caught (`Rejects`, `Mismatch`,
@@ -98,7 +99,9 @@ func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).Expect(t, qtest.Conforms(),
 		// ...
-		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3))
+		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
+		// ...
+		qtest.Exercised())
 }
 
 func TestNoDedupeCountsRetries(t *testing.T) {

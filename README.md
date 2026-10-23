@@ -475,7 +475,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |
 | `validate` | replay with `quint test`: `Checker` (`Check`, `CheckBatch`), `Cached`, `ValidateITF`; structured verdicts |
-| `qtest` | tests that check against the model: `System` (`Explore`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`; `Violates(...).At`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
+| `qtest` | tests that check against the model: `System` (`Explore`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes`, `Exercised`; `Violates(...).At`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
 | `qenv` | deterministic simulation: scheduler, virtual time, crashable processes, choosers (`NewSeeded`, `Replay`, `Script`, `Swarm`, `FromBytes`); doubles `Store` (isolation levels), `Queue`, `Service` (with `Capacity`); `DeclareFaults`, `FaultPoint`, `CoverageOf`; `NewNative` (the same on goroutines, for gosim); `TimeProfile` |
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `qenv/fault` | the `//quint:fault` aspect: a function's entry a fault choice, with its own errors |
@@ -490,7 +490,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `sktrace` | SimKube traces: events, lifecycles, rates and gauges as load shapes, pod lifetimes; `Lint` |
 | `input` | reads a trace input (`Read`): OTLP/JSON, a step log or ITF, detected by content |
 | `skills` | the agent skills below, embedded, and their install |
-| `cmd/gotogether` | the CLI: `scaffold`, `lint`, `steps`, `validate`, `itf`, `convert`, `cover`, `skills` |
+| `cmd/gotogether` | the CLI: `scaffold`, `lint`, `simulate` (the model alone: which invariants it guarantees, which the code must), `steps`, `validate`, `itf`, `convert`, `cover`, `skills` |
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |
 | `qgosim` (module) | qenv and whole programs in gosim (the fork, `github.com/chucklehead-dev/gosim`) |
