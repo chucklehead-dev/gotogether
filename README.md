@@ -348,11 +348,15 @@ func system(m Mutation) qtest.System {
 // lossy loses or duplicates one message in five.
 var lossy = qenv.Rates{Default: 0.2}
 
+func TestNoDedupeCountsRetries(t *testing.T) {
 	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).
 		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
-	// ...
+}
+
+func TestHegelShrinks(t *testing.T) {
 	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
 		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+}
 ```
 
 A bigger system deploys more doubles the same way:

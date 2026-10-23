@@ -78,7 +78,7 @@ trace with the model's state after each step.
 
 ```go
 //quint:action action:writeTable actor:p.actor() process:p.epoch payload:b.payload batch:b.id gen:b.gen.id
-func (p *Publisher) insertTable(ctx context.Context, b *batch, rows []byte) error { ... }
+func (p *Publisher) insertTable(ctx context.Context, b *batch, rows []byte) error { /* ... */ }
 ```
 
 - Each `key:<Go expression>` is evaluated when the function returns. It may

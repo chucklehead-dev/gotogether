@@ -191,7 +191,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   checks every link resolves, and fails on removed identifiers and old
   names in the skills, README.md, AGENTS.md and the examples' READMEs
   (`TestSkillsAvoidDeprecated` lists them): when removing an API, add it
-  there.
+  there. Every fenced go block of the docs (HISTORY and ROADMAP aside)
+  parses, and names only what the toolkit's packages export
+  (`internal/docsnippets`): write elided code as `/* ... */`.
 - Skills live in `skills/<name>/SKILL.md`, never directly in `.agents/` or
   `.claude/`, which only hold symlinks to them. Add a symlink in both when
   adding a skill (`skills_test.go` checks it). A skill's front-matter

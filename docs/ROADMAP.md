@@ -529,18 +529,19 @@ next.
   directory and each step's file, and refuses an unknown shape with its
   keys and the shapes wanted; the skills say `.Expect(t, claims...)`, not
   a `qtest.Expect` that does not exist.
-- **Z3. The newcomer's path (S–M).** A glossary after Quickstart (actor,
-  step, binding, double, nemesis, nominal, claim, evidence, corpus) and
-  the README's order (workflows before the environment table). A scaffold
-  that validates as it lints (no empty constants, an invariant listed or
-  a reason, a `simulate:` section). Using the toolkit outside this
-  repository (go get, skills install without examples/). A "crash X at
-  this point" recipe in the faults skill. CLI help with a purpose and an
-  example per command, `help` exit 0, `version`. godoc for aliases of
-  internal types (`go doc qenv.Rates` shows nothing), qtest's package doc
-  leading with System, qobs.Record's keys. Every Go snippet in the docs
-  compiles (a test), which also retires most of the deny-list. hello's
-  mutation test not pinned to line numbers.
+- **Z3. The newcomer's path. Done:** a glossary after Quickstart, whose
+  second paragraph says what ran; the environment variables at the end;
+  "a module of your own" in Install, and the installed skills say where
+  examples/ lives. A scaffold that checks what the model says (lint
+  refuses an empty constant; every boolean val listed and classified for
+  simulate; an unclassified invariant that held holds). The faults
+  skill's "this fault, at this point" (a scripted crash) and why a fault
+  never fired. CLI help that says where to start, each command's purpose
+  and example, `help` exit 0, `version`. godoc for the choosers' aliases,
+  qtest's package doc opening with System, qobs.Record's keys. Every
+  fenced go block parses and names only exported APIs
+  (`internal/docsnippets`); the deny-list stays for prose. hello's
+  equivalent mutants marked by function and code.
 - **Z4. The API before tags (S–M).** One primitive between qtest and
   qhegel (`System.Judge(t, chooser) *Run` or similar) in place of
   `Settings`, `Resolve`, `ExploreConfig.Replay` and Shrink's fake TB; a

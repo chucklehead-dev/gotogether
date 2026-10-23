@@ -11,7 +11,7 @@ sys := qtest.System{Binding: "app.binding.yaml", Run: func(c qenv.Chooser) error
 	return app.Run(c, cfgOf(row))
 }}
 sys.Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 20},
-	Expect: func(r qsweep.Row) []qtest.Claim { ... }}) // nil: Conforms
+	Expect: func(r qsweep.Row) []qtest.Claim { /* ... */ }}) // nil: Conforms
 ```
 
 - The System's own `Run` serves the sweep: it reads the row from its
