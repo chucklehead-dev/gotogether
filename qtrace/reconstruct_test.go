@@ -63,12 +63,14 @@ func TestGapsAndDuplicates(t *testing.T) {
 	}
 }
 
+// An incarnation that acts after its successor started (a zombie) is an
+// error: replayed as restarts, the split brain once validated.
 func TestProcessesAndOverlap(t *testing.T) {
 	a, b, c := st("x", 1, "", 0), st("y", 2, "", 0), st("z", 3, "", 0)
 	a.Process, b.Process, c.Process = "p1", "p2", "p1"
 	traces, _ := Reconstruct([]Step{a, b, c})
 	tr := traces[0]
-	if strings.Join(tr.Processes, ",") != "p1,p2" || len(tr.Issues) != 1 || tr.Issues[0].Kind != "overlap" {
+	if strings.Join(tr.Processes, ",") != "p1,p2" || len(tr.Issues) != 1 || tr.Issues[0].Kind != "overlap" || tr.Issues[0].Severity != "error" {
 		t.Fatalf("processes %v issues %v", tr.Processes, tr.Issues)
 	}
 }

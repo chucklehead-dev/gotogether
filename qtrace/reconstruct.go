@@ -158,7 +158,10 @@ func order(actor string, steps []Step) *Trace {
 			continue
 		}
 		if seenP[s.Process] {
-			t.Issues = append(t.Issues, Issue{"warn", "overlap", fmt.Sprintf("process %s emitted %s after process %s had started: two incarnations of %s overlap", s.Process, s.Action, cur, actor)})
+			// an error, not a warning: replayed, the old incarnation's
+			// step is a third boot of the process, and the run passed
+			t.Issues = append(t.Issues, Issue{"error", "overlap", fmt.Sprintf("process %s emitted %s after process %s had started: two incarnations of %s overlap "+
+				"(a split brain, or the recorders' clocks disagree), and the model has one at a time. Fence the old incarnation, or order the steps with a domain clock", s.Process, s.Action, cur, actor)})
 		} else {
 			seenP[s.Process] = true
 			t.Processes = append(t.Processes, s.Process)
