@@ -90,6 +90,8 @@ qobs.Record(s.Context(), "settle", nil)
   cut loses its request and its response, for as long as it lasts. A
   `Queue` with its broker's process (`q.Proc`) is partitioned too: a
   client cut off waits, and a consumer's cut redelivers what it holds.
+  A nemesis's cut heals by itself after `s.PartitionLength` (default
+  1 s): a run whose every task waits on a cut would otherwise be stuck.
   `s.Partition(a, b)` and `s.Heal` script one; `Settle` heals them all.
 - **Clocks:** `qenv.Now(ctx)` reads the clock of the task's process.
   With `s.ClockFaults = true` (set before creating processes) each

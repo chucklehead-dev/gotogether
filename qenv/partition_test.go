@@ -150,3 +150,45 @@ func TestQueuePartition(t *testing.T) {
 		t.Errorf("a queue with no broker process was partitioned: %v, %d pending", err, free.Pending())
 	}
 }
+
+// A cut heals by itself after PartitionLength: a publisher waiting on a
+// cut, with nothing else to run, would otherwise wait forever, since a
+// nemesis acts only at a scheduling step (the run was stuck). The heal
+// nemesis may end a cut sooner.
+func TestPartitionsHealByThemselves(t *testing.T) {
+	waited := 0
+	for seed := uint64(1); seed <= 20; seed++ {
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults.Set("nemesis", 0.5)
+		s := qenv.New(c)
+		s.PartitionLength = 3 * time.Second
+		broker := s.Process("broker", false, func(context.Context) {})
+		q := qenv.NewQueue(s, "jobs")
+		q.Proc = broker
+		var took time.Duration
+		pub := s.Process("publisher", false, func(ctx context.Context) {
+			start := s.Now()
+			for i := 0; i < 5; i++ {
+				q.Publish(ctx, i)
+			}
+			took = s.Now().Sub(start)
+		})
+		s.Partitions(pub, broker)
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatalf("seed %d: %v", seed, err)
+		}
+		s.Close()
+		if q.Published != 5 {
+			t.Fatalf("seed %d: %d of 5 published", seed, q.Published)
+		}
+		if took > 0 {
+			waited++
+		}
+		if took > 5*s.PartitionLength {
+			t.Errorf("seed %d: publishing took %v, beyond a cut's length per message", seed, took)
+		}
+	}
+	if waited == 0 {
+		t.Error("no run's publisher waited on a cut")
+	}
+}

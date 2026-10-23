@@ -49,7 +49,8 @@ Added to the core since api/core.txt was first recorded:
 - `qenv.Disk` (writes, fsync, and a crash's "disk.crash" fault: lost or
   torn unsynced writes) and partitions between processes for
   `qenv.Service` (`Sim.Partition`, `Heal`, `Partitions` as nemeses) and
-  for a `qenv.Queue` with a broker process (`Queue.Proc`).
+  for a `qenv.Queue` with a broker process (`Queue.Proc`); a nemesis's
+  cut heals by itself after `Sim.PartitionLength`.
 - `qobs.SyncedFileSink`, `qobs.NewSyncedJSONLSink`: an fsync per step.
   `qtrace.ReadJSONL` keeps the steps before a torn last line and returns
   a `*qtrace.TornTail`; `input.File.Torn`.

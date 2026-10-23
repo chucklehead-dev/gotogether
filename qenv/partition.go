@@ -1,6 +1,15 @@
 package qenv
 
-import "sort"
+import (
+	"context"
+	"fmt"
+	"sort"
+	"time"
+)
+
+// DefaultPartitionLength is how long a nemesis's cut lasts at most
+// (Sim.PartitionLength).
+const DefaultPartitionLength = time.Second
 
 // Partitions. Two processes are partitioned when the network between
 // them drops everything: a Service call from one to the other loses its
@@ -31,6 +40,10 @@ func (s *Sim) Partition(a, b *Process) {
 		return
 	}
 	s.cuts[pairOf(a, b)] = true
+	if s.cutGen == nil {
+		s.cutGen = map[[2]string]int{}
+	}
+	s.cutGen[pairOf(a, b)]++
 	for _, h := range s.onCut {
 		h(a, b)
 	}
@@ -51,13 +64,28 @@ func (s *Sim) Partitioned(a, b *Process) bool {
 // Partitions makes the network between every two of procs a nemesis: at
 // any step the scheduler may cut a link ("nemesis.partition.<a>.<b>" in a
 // Script) or heal one that is cut ("nemesis.heal.<a>.<b>"), at the
-// nemesis rate. Settle heals them all.
+// nemesis rate. A cut heals by itself after PartitionLength: a network
+// that every task waits on would otherwise never heal, since a nemesis
+// acts only at a scheduling step and none comes when nothing can run.
+// Settle heals them all.
 func (s *Sim) Partitions(procs ...*Process) {
 	sorted := append([]*Process(nil), procs...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 	for i, a := range sorted {
 		for _, b := range sorted[i+1:] {
-			s.Nemesis("partition."+a.Name+"."+b.Name, func() bool { return !s.Partitioned(a, b) }, func() { s.Partition(a, b) })
+			s.Nemesis("partition."+a.Name+"."+b.Name, func() bool { return !s.Partitioned(a, b) }, func() {
+				s.Partition(a, b)
+				gen, d := s.cutGen[pairOf(a, b)], s.PartitionLength
+				if d == 0 {
+					d = DefaultPartitionLength
+				}
+				s.Spawn(fmt.Sprintf("heal %s-%s", a.Name, b.Name), func(ctx context.Context) {
+					Sleep(ctx, d)
+					if s.cutGen[pairOf(a, b)] == gen && s.Partitioned(a, b) {
+						s.Heal(a, b)
+					}
+				})
+			})
 			s.Nemesis("heal."+a.Name+"."+b.Name, func() bool { return s.Partitioned(a, b) }, func() { s.Heal(a, b) })
 		}
 	}

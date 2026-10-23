@@ -67,6 +67,10 @@ type Sim struct {
 	// default, chooses no drift, so runs recorded without it keep their
 	// choices.
 	ClockDrift float64
+	// PartitionLength is how long a cut made by a Partitions nemesis lasts
+	// at most (default DefaultPartitionLength); its heal nemesis may end it
+	// sooner. Cuts made with Partition last until Heal.
+	PartitionLength time.Duration
 
 	c         Chooser
 	base      context.Context // every task's context derives from it
@@ -84,6 +88,7 @@ type Sim struct {
 	procs     []*Process
 	cuts      map[[2]string]bool // partitioned pairs of processes, by name
 	onCut     []func(a, b *Process)
+	cutGen    map[[2]string]int // per pair, the cuts made: a healer heals only its own
 	nemeses   []*nemesis
 	onCrash   []func(*Process)
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)
