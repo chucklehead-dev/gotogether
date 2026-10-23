@@ -47,8 +47,8 @@ func TestSweepFaultKinds(t *testing.T) {
 		qobs.Record(s.Context(), "deposit", nil, "amount", 10, "obs.balance", balance)
 		return nil
 	}}
-	sys.Sweep(t, SweepConfig{Factors: []qsweep.Factor{qsweep.FaultKind("test.sweep")},
-		Explore: ExploreConfig{Seeds: 3, Rates: qenv.Rates{Default: 1}},
+	sys.WithRates(qenv.Rates{Default: 1}).Sweep(t, SweepConfig{Factors: []qsweep.Factor{qsweep.FaultKind("test.sweep")},
+		Explore: ExploreConfig{Seeds: 3},
 		Expect: func(row qsweep.Row) []Claim {
 			if row.On("test.sweep") {
 				return []Claim{All(Mismatch("deposit"))}

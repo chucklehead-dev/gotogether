@@ -629,7 +629,7 @@ type Service[Req, Resp any] struct
     method (*Service[Req, Resp]) InSystem() int
 type Signal struct
     method (*Signal) Notify()
-    method (*Signal) Wait(ctx context.Context, deadline time.Time) bool
+    method (*Signal) Wait(ctx context.Context, d time.Duration) bool
 type Sim struct
     field MaxSteps int
     field Log func(string)
@@ -1119,7 +1119,7 @@ func RecorderOptions(opts ...qobs.Option) Option
 func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
-func ShrunkTo(n int) Expectation
+func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option
 func Some(es ...Expectation) Claim
 func Takes(action string) Take
@@ -1173,7 +1173,6 @@ type Exploration struct
     method (*Exploration) Vacuous() []Vacuity
 type ExploreConfig struct
     field Seeds int
-    field Rates qenv.Rates
     field Parallel int
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
@@ -1193,7 +1192,7 @@ type MutationReport struct
     field Survived []qmut.Mutant
     field Baseline *Exploration `json:"-"`
     method (*MutationReport) Evidence() *Evidence
-    method (*MutationReport) Expect(t testing.TB, c MutationClaim)
+    method (*MutationReport) Expect(t testing.TB, cs ...MutationClaim)
     method (*MutationReport) Score() float64
     method (*MutationReport) String() string
 type Option func(*settings)
@@ -1202,9 +1201,6 @@ type Reach struct
     method (Reach) InAtLeast(share float64) Reach
     method (Reach) String() string
 type Run struct
-    field Seed uint64
-    field Schedule string
-    field Corpus string
     field Steps []qtrace.Step
     field Choices []qenv.Choice
     field Nemeses []string
@@ -1215,9 +1211,13 @@ type Run struct
     field Report *validate.Report
     field StepLog string
     field ITF map[string]string
-    method (*Run) Expect(t testing.TB, es ...Expectation)
+    method (*Run) Expect(t testing.TB, cs ...RunClaim)
     method (*Run) Faults() []qenv.Choice
+    method (*Run) ID() string
     method (*Run) OK() bool
+type RunClaim interface
+    Holds(r *Run) bool
+    String() string
 type RunPanic struct
     field Value any
     field Stack string
@@ -1242,16 +1242,18 @@ type SweepResult struct
 type System struct
     field Binding string
     field Opts []Option
+    field Rates qenv.Rates
     field Run func(c qenv.Chooser) error
     field Mutant string
     method (System) CheckCases(t testing.TB, workflow string) CaseCheck
     method (System) Exhaust(t testing.TB, b Bound) *Exploration
     method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
     method (System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration
-    method (System) Fuzz(f *testing.F, rates qenv.Rates, seeds ...[]byte)
+    method (System) Fuzz(f *testing.F, seeds ...[]byte)
     method (System) Judge(t testing.TB, ch qenv.Chooser) *Run
     method (System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport
     method (System) Sweep(t *testing.T, sw SweepConfig) *SweepResult
+    method (System) WithRates(r qenv.Rates) System
 type Take struct
     method (Take) InAtLeast(share float64) Take
     method (Take) String() string

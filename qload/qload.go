@@ -120,7 +120,7 @@ func (sv *Server) worker(ctx context.Context) {
 	qenv.Daemon(ctx) // waits for work forever when there is none
 	for {
 		for len(sv.queue) == 0 {
-			sv.work.Wait(ctx, time.Time{})
+			sv.work.Wait(ctx, 0)
 		}
 		j := sv.queue[0]
 		sv.queue = sv.queue[1:]
@@ -256,7 +256,7 @@ func (c *Client) requestFrom(ctx context.Context, first int) {
 	for attempt := first; ; attempt++ {
 		began := c.sim.Elapsed()
 		j := c.sv.submit()
-		if j != nil && (j.done || j.sig.Wait(ctx, c.sim.Now().Add(c.cfg.Timeout))) {
+		if j != nil && (j.done || j.sig.Wait(ctx, c.cfg.Timeout)) {
 			c.m.successes++
 			c.m.latencies = append(c.m.latencies, c.sim.Now().Sub(start))
 			return

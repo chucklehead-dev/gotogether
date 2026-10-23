@@ -542,21 +542,22 @@ next.
   fenced go block parses and names only exported APIs
   (`internal/docsnippets`); the deny-list stays for prose. hello's
   equivalent mutants marked by function and code.
-- **Z4. The API before tags (S–M).** One primitive between qtest and
-  qhegel (`System.Judge(t, chooser) *Run` or similar) in place of
-  `Settings`, `Resolve`, `ExploreConfig.Replay` and Shrink's fake TB; a
-  claim recognised by type, not its description. About 35 identifiers
-  that are plumbing (qobs Strict/Escaped/SetDiscard, qrun's hooks, qenv's
-  LockKey functions for weave) or have no caller (Swarm, FaultOptions,
-  qcover.Default/From, itf's RecordOf/TupleOf/SetOf, the untested sinks)
-  move to an internal hook package or go. sktrace leaves the core (two
-  examples use it); connect's fault scripts move next to FollowTraces.
-  KnownFault unexported, its check scoped to the run. Workflow shapes:
-  Rates in one place, `Sweep` on testing.TB, `SweepResult.Expect`,
-  `Run`'s identity in one field, `Signal.Wait` on a duration. qweave's
-  and qanalysis's x/tools aligned (or merged, now or never). Considered:
-  typed options, making an ignored option a compile error rather than
-  Y9's refusal.
+- **Z4. The API before tags. Done:** one seam between qtest and qhegel
+  (`qtest.CheckCases`, `System.CheckCases`, `System.Judge`,
+  `Expectation.Holds`) in place of Settings, Resolve,
+  ExploreConfig.Replay and Shrink's fake TB, claims judged by type; the
+  core's plumbing in internal/hooks, internal/runkeys and
+  qenv/internal/keyed, dead exports cut, the sinks by durability, Swarm
+  tested; sktrace an examples library; connect's fault scripts in qtest;
+  KnownFault internal (a run-scoped check is not possible while woven
+  fault points declare at init); Rates on the System, ShrunkTo a
+  RunClaim, Signal.Wait on a duration, Run.ID, MutationReport.Expect
+  variadic; qweave on qanalysis's x/tools. Decided against: typed
+  options (CheckCases keeps every refusal in qtest, in one place, and a
+  split would make users learn three option types for a mistake the
+  refusals already name), merging qweave and qanalysis (a go -overlay
+  tool and vet/golangci passes have different users; their x/tools now
+  match), and Sweep on testing.TB (it needs t.Run).
 - **Z5. Maintainability (S–M).** Strict/Escaped scoped to the run's
   recorder, so qtest's tests run in parallel (1m23s → ~30s estimated); a
   CI matrix for the serial job; a workspace-mode CI job so sub-modules

@@ -19,19 +19,19 @@ func TestRunAlone(t *testing.T) {
 	first := sys.Explore(t, ExploreConfig{Seeds: 20})
 	first.Expect(t, Rejects("withdraw"), Some(Conforms()))
 	bad := first.Failing()[0]
-	if want := fmt.Sprintf("GOTOGETHER_RUN='%s#1:seed=%d'", t.Name(), bad.Seed); !strings.Contains(first.reproduce(bad), want) {
+	if want := fmt.Sprintf("GOTOGETHER_RUN='%s#1:seed=%d'", t.Name(), bad.seed); !strings.Contains(first.reproduce(bad), want) {
 		t.Fatalf("reproduce line %q, want %s", first.reproduce(bad), want)
 	}
 
-	t.Setenv("GOTOGETHER_RUN", fmt.Sprintf("%s#3:seed=%d", t.Name(), bad.Seed))
+	t.Setenv("GOTOGETHER_RUN", fmt.Sprintf("%s#3:seed=%d", t.Name(), bad.seed))
 	other := sys.Explore(t, ExploreConfig{Seeds: 20}) // #2: not named, so every seed
 	if len(other.Runs) != 20 {
 		t.Errorf("an exploration GOTOGETHER_RUN does not name ran %d runs, want 20", len(other.Runs))
 	}
 	log := &logTB{TB: t}
 	alone := sys.Explore(t, ExploreConfig{Seeds: 20}) // #3, as named
-	if len(alone.Runs) != 1 || alone.Runs[0].Seed != bad.Seed {
-		t.Fatalf("ran %d runs (seed %d), want seed %d alone", len(alone.Runs), alone.Runs[0].Seed, bad.Seed)
+	if len(alone.Runs) != 1 || alone.Runs[0].seed != bad.seed {
+		t.Fatalf("ran %d runs (seed %d), want seed %d alone", len(alone.Runs), alone.Runs[0].seed, bad.seed)
 	}
 	// Some(Conforms()) is about other runs: not judged, and so not failed
 	alone.Expect(log, All(Rejects("withdraw")), Some(Conforms()))

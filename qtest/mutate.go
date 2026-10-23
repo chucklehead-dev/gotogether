@@ -80,12 +80,16 @@ func (c MutationClaim) marked(m qmut.Mutant) bool {
 	return false
 }
 
-// Expect fails t unless the mutation run meets the claim, naming each
+// Expect fails t unless the mutation run meets every claim, naming each
 // surviving mutant and how to mark it, and each mark that matched no
-// survivor (stale after the code changed). One claim: NoSurvivors names
-// every equivalent mutant at once.
-func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
+// survivor (stale after the code changed). NoSurvivors names every
+// equivalent mutant at once; several are one with all their marks.
+func (r *MutationReport) Expect(t testing.TB, cs ...MutationClaim) {
 	t.Helper()
+	var c MutationClaim
+	for _, x := range cs {
+		c.equivalent = append(c.equivalent, x.equivalent...)
+	}
 	// a mark by function and code names every mutant of that text in the
 	// function (two "if err != nil" in one): one marked equivalent would
 	// excuse the other, and any later one alike, so it must be one
@@ -163,7 +167,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 	if len(all) == 0 {
 		t.Skip("no mutants woven: run with qweave -mutate")
 	}
-	cfg.opts = s.opts(cfg.opts...)
+	cfg.opts, cfg.rates = s.opts(cfg.opts...), s.rates()
 	reach := &qmut.Reach{}
 	base := explore(t, s.Binding, cfg, func(c qenv.Chooser) error {
 		return s.Run(qenv.WithContext(c, qmut.WithReach(qenv.ContextOf(c), reach)))

@@ -58,3 +58,20 @@ func TestCheckCasesRefuses(t *testing.T) {
 		}
 	}
 }
+
+// A run's ID is how GOTOGETHER_RUN names it after its exploration.
+func TestRunID(t *testing.T) {
+	for _, c := range []struct {
+		r    Run
+		want string
+	}{
+		{Run{seed: 17}, "seed=17"},
+		{Run{seed: 3, schedule: "17:1"}, "schedule=17:1"},
+		{Run{seed: 1, corpus: "f.json"}, "corpus=f.json"},
+		{Run{}, ""},
+	} {
+		if got := c.r.ID(); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.r, got, c.want)
+		}
+	}
+}

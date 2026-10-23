@@ -37,7 +37,7 @@ var faulty = qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.05}
 // rewound fetches, evictions mid-batch and consumer crashes.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(streams.Config{}).Explore(t, qtest.ExploreConfig{Seeds: seeds(80), Rates: faulty})
+	x := system(streams.Config{}).WithRates(faulty).Explore(t, qtest.ExploreConfig{Seeds: seeds(80)})
 	x.Expect(t, qtest.Conforms(), qtest.NotVacuous())
 	t.Log(x.Evidence())
 }
@@ -80,7 +80,7 @@ func TestMutants(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.m.String(), func(t *testing.T) {
-			system(streams.Config{Mutation: c.m}).Explore(t, qtest.ExploreConfig{Seeds: seeds(c.seeds), Rates: c.rates}).Expect(t, c.want)
+			system(streams.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(c.seeds)}).Expect(t, c.want)
 		})
 	}
 }

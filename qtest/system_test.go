@@ -163,10 +163,10 @@ func TestUnknownRatesKey(t *testing.T) {
 	done := make(chan struct{})
 	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
 		defer close(done)
-		System{Binding: "../validate/testdata/account.yaml", Run: race}.Explore(f, ExploreConfig{Seeds: 1, Rates: qenv.DefaultRates.Set("queue.ack", 0.5)})
+		System{Binding: "../validate/testdata/account.yaml", Run: race, Rates: qenv.DefaultRates.Set("queue.ack", 0.5)}.Explore(f, ExploreConfig{Seeds: 1})
 	}()
 	<-done
-	if !strings.Contains(strings.Join(f.errs, "\n"), `ExploreConfig.Rates key "queue.ack" covers no fault kind`) {
+	if !strings.Contains(strings.Join(f.errs, "\n"), `System.Rates key "queue.ack" covers no fault kind`) {
 		t.Errorf("errors: %q", f.errs)
 	}
 	// so does a Bound.Without kind, which would leave the kind on

@@ -57,7 +57,7 @@ func TestFaithfulSweep(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
-	sw := sweepSystem(shop.Faithful).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 20, Rates: sweepRates}})
+	sw := sweepSystem(shop.Faithful).WithRates(sweepRates).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 20}})
 	t.Log(sw.Evidence())
 	if u := sw.Evidence().Faults.Untried(); len(u) > 0 {
 		t.Errorf("fault kinds never together: %v", u)
@@ -78,7 +78,7 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 	// commit (qenv.Service's window), the double charge needs a lost
 	// provider response at the right moment, in 2 runs of 100 at crashy's
 	// rates and 13 of 100 at this one
-	sweepSystem(shop.NoIdempotencyKey).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 30, Rates: crashy.Set("rpc.provider", 0.25)},
+	sweepSystem(shop.NoIdempotencyKey).WithRates(crashy.Set("rpc.provider", 0.25)).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 30},
 		Expect: func(row qsweep.Row) []qtest.Claim {
 			if row.On("rpc.provider") {
 				return []qtest.Claim{qtest.Violates("chargedAtMostOnce")}

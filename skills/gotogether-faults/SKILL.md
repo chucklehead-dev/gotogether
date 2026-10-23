@@ -114,8 +114,8 @@ qobs.Record(s.Context(), "settle", nil)
   0.05)` (at DefaultRates a lease's wall-clock bug showed in 7 runs of
   100), and crashes come as often as before. Skew and jumps
   move only the wall clock; a drift moves both, with the process's sleeps,
-  call timeouts and `qenv.WaitFor`. Deadlines given to
-  `Signal.Wait` are true time. examples/lease shows each fault breaking
+  call timeouts and `qenv.WaitFor`. A `Signal.Wait`'s limit is
+  true time. examples/lease shows each fault breaking
   the code that trusts it: a cross-machine comparison by a skew, a
   wall-clock interval by a jump, a monotonic one by a drift past its
   margin.
@@ -134,8 +134,9 @@ qobs.Record(s.Context(), "settle", nil)
 
 ```go
 sys := qtest.System{Binding: "app.binding.yaml", Run: func(c qenv.Chooser) error { return app.Run(c, cfg) }}
-sys.Explore(t, qtest.ExploreConfig{Seeds: 100, Rates: rates}).Expect(t, qtest.Violates("chargedAtMostOnce")) // or Conforms(), Some/All/None(...)
-qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("chargedAtMostOnce"))
+sys.Rates = rates // the environment's fault rates, for every workflow (sys.WithRates(r): a copy at others)
+sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, qtest.Violates("chargedAtMostOnce")) // or Conforms(), Some/All/None(...)
+qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("chargedAtMostOnce"))
 ```
 
 - **One System, every workflow:** `sys.Explore` (seeds), `sys.Exhaust` (every run within a bound), `sys.Sweep`

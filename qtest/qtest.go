@@ -32,6 +32,7 @@ package qtest
 
 import (
 	"context"
+	"fmt"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
@@ -181,19 +182,34 @@ func checkerFor(t testing.TB, bindingPath string, o validate.Options, c settings
 	return ch
 }
 
+// ID is the run's identity in its exploration, as GOTOGETHER_RUN names it
+// after the exploration ("seed=17", "schedule=17:1", "corpus=<file>"),
+// or "" for a run of no exploration (Record's, Validate's, Judge's).
+func (r *Run) ID() string {
+	switch {
+	case r.corpus != "":
+		return "corpus=" + r.corpus
+	case r.schedule != "":
+		return "schedule=" + r.schedule
+	case r.seed != 0:
+		return fmt.Sprintf("seed=%d", r.seed)
+	}
+	return ""
+}
+
 // Run is one checked run, whichever workflow made it: Record's, one seed of
 // an Exploration, a Hegel Violation (embedded). A field a workflow has no
 // value for is zero (Record makes no choices; an exploration writes no
 // step log).
 type Run struct {
-	Seed uint64 // an exploration's seed, or an exhaustive search's run number
-	// Schedule is an exhaustive search's run (System.Exhaust): the choices
+	seed uint64 // an exploration's seed, or an exhaustive search's run number
+	// schedule is an exhaustive search's run (System.Exhaust): the choices
 	// it made otherwise than nominal, as choice:option pairs ("17:1,40:2").
 	// GOTOGETHER_RUN runs it alone.
-	Schedule string
-	// Corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
+	schedule string
+	// corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
 	// or "" for a seeded run.
-	Corpus  string
+	corpus  string
 	Steps   []qtrace.Step
 	Choices []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
 	// Nemeses are the nemeses the run's nemesis choices offered, by name

@@ -27,9 +27,6 @@ type Expectation struct {
 	// the actions and invariants it names, checked against the model: a
 	// misspelled name would make None(...) hold vacuously
 	actions, invariants []string
-	// run, if set, judges the whole run, not its report: "" if it holds,
-	// else what the run showed (ShrunkTo's faults)
-	run func(*Run) string
 	// violates is Violates' invariant, for At
 	violates string
 }
@@ -44,7 +41,7 @@ func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.check(r.Re
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
 func Conforms() Expectation {
-	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, nil, ""}
+	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, ""}
 }
 
 func failed(r *validate.Report, kind, action string) bool {
@@ -299,32 +296,42 @@ func expectReport(t testing.TB, r *validate.Report, es ...Expectation) {
 	}
 }
 
+// A RunClaim is what a test expects of one run (Run.Expect, a qhegel
+// Violation's): an Expectation, or a claim only one run can have
+// (ShrunkTo), which an exploration's Expect does not take.
+type RunClaim interface {
+	Holds(r *Run) bool
+	String() string
+}
+
 // ShrunkTo claims the run has at most n faults: what Hegel's shrinking of
 // a failure must reach, with the claim on its verdict.
 //
-//	qhegel.Shrink(t, sys, rates).Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+//	qhegel.Shrink(t, sys).Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
 //
 // It is a claim on one run (a Violation, a Run with its choices), not on
-// an exploration.
-func ShrunkTo(n int) Expectation {
-	return Expectation{desc: fmt.Sprintf("a run shrunk to at most %d fault(s)", n), check: func(*validate.Report) bool { return true },
-		run: func(r *Run) string {
-			if f := r.Faults(); len(f) > n {
-				return fmt.Sprintf("%d faults: %v", len(f), f)
-			}
-			return ""
-		}}
-}
+// an exploration: it is a RunClaim, not a Claim.
+func ShrunkTo(n int) RunClaim { return shrunkTo(n) }
 
-// Expect fails t unless the run's report meets every expectation,
-// printing the report and naming the run's step log and model-level ITF
-// (Record's and Validate's). It is how a test states what a mutant must
-// look like:
+type shrunkTo int
+
+func (n shrunkTo) Holds(r *Run) bool { return len(r.Faults()) <= int(n) }
+func (n shrunkTo) String() string    { return fmt.Sprintf("a run shrunk to at most %d fault(s)", int(n)) }
+
+// Expect fails t unless the run meets every claim: its report each
+// Expectation, its faults ShrunkTo. A failure prints the report and names
+// the run's step log and model-level ITF (Record's and Validate's). It is
+// how a test states what a mutant must look like:
 //
 //	qtest.Record(t, "bank.binding.yaml", payday).Expect(t, qtest.Conforms())
-//	qtest.Record(t, "bank.binding.yaml", scenarioWith(LostDeposit)).Expect(t, qtest.Mismatch("deposit"))
-func (r *Run) Expect(t testing.TB, es ...Expectation) {
+func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 	t.Helper()
+	var es []Expectation
+	for _, c := range cs {
+		if e, ok := c.(Expectation); ok {
+			es = append(es, e)
+		}
+	}
 	if r.Report != nil && r.StepLog != "" {
 		for _, e := range es {
 			if !e.check(r.Report) {
@@ -338,11 +345,9 @@ func (r *Run) Expect(t testing.TB, es ...Expectation) {
 		}
 	}
 	expectReport(t, r.Report, es...)
-	for _, e := range es {
-		if e.run != nil {
-			if got := e.run(r); got != "" {
-				t.Fatalf("gotogether: want %s, got %s", e, got)
-			}
+	for _, c := range cs {
+		if _, ok := c.(Expectation); !ok && !c.Holds(r) {
+			t.Fatalf("gotogether: want %s, got %d faults: %v", c, len(r.Faults()), r.Faults())
 		}
 	}
 }

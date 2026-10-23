@@ -13,9 +13,9 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/kubesim"
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 // Config of a simulated rollout.

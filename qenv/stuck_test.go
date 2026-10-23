@@ -18,7 +18,7 @@ func TestRunReportsStuckTasks(t *testing.T) {
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()
 	var never qenv.Signal
-	s.Spawn("waiter", func(ctx context.Context) { never.Wait(ctx, time.Time{}) })
+	s.Spawn("waiter", func(ctx context.Context) { never.Wait(ctx, 0) })
 	err := s.Run(time.Second)
 	if !errors.Is(err, qenv.ErrStuck) || !strings.Contains(err.Error(), "waiter") {
 		t.Fatalf("got %v, want ErrStuck naming waiter", err)
@@ -34,7 +34,7 @@ func TestDaemonsAndReceivesAreNotStuck(t *testing.T) {
 	q := qenv.NewQueue(s, "q", nil)
 	s.Spawn("server", func(ctx context.Context) {
 		qenv.Daemon(ctx)
-		never.Wait(ctx, time.Time{})
+		never.Wait(ctx, 0)
 	})
 	s.Spawn("consumer", func(ctx context.Context) { q.Receive(ctx) })
 	if err := s.Run(time.Second); err != nil {
@@ -56,7 +56,7 @@ func TestWaitOutsideASimulation(t *testing.T) {
 		mu.Unlock()
 		sig.Notify()
 	}()
-	if !sig.Wait(ctx, time.Now().Add(5*time.Second)) { //qenv:ok a real deadline
+	if !sig.Wait(ctx, 5*time.Second) {
 		t.Fatal("Signal.Wait: not notified")
 	}
 	qenv.Wait(ctx, func() bool { mu.Lock(); defer mu.Unlock(); return done })

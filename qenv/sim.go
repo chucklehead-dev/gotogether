@@ -530,14 +530,22 @@ type waiter struct {
 	gen int
 }
 
-// Wait blocks until Notify or the virtual time reaches deadline (zero:
-// none): the simulation's true time (Sim.Now), not a process's clock. It
-// reports whether Notify woke it. Outside a simulation it waits
-// in real time (the deadline too) or until ctx is done.
-func (g *Signal) Wait(ctx context.Context, deadline time.Time) bool {
+// Wait blocks until Notify or d has passed (0: no limit), in the
+// simulation's true time (Sim.Now), not a process's clock: WaitFor's
+// interval is the caller's clock's. It reports whether Notify woke it.
+// Outside a simulation it waits in real time or until ctx is done.
+func (g *Signal) Wait(ctx context.Context, d time.Duration) bool {
 	t := taskOf(ctx)
 	if t == nil {
+		var deadline time.Time
+		if d > 0 {
+			deadline = time.Now().Add(d) //qenv:ok the real wait's deadline, outside any simulation
+		}
 		return g.waitReal(ctx, deadline)
+	}
+	var deadline time.Time
+	if d > 0 {
+		deadline = t.sim.Now().Add(d)
 	}
 	g.waiters = append(g.waiters, waiter{t, t.gen})
 	t.wait(nil, deadline)

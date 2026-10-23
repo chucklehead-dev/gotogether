@@ -87,7 +87,7 @@ func (svc *Service[Req, Resp]) serve(ctx context.Context, deadline time.Time) (o
 		}
 		svc.waiting++
 		for svc.busy >= workers {
-			svc.free.Wait(ctx, time.Time{})
+			svc.free.Wait(ctx, 0)
 		}
 		svc.waiting--
 	}

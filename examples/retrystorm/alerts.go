@@ -41,7 +41,7 @@ func (s *Server) Handle(ctx context.Context, _ int) (_ int, err error) {
 		return 0, ErrRejected
 	}
 	for s.busy {
-		s.free.Wait(ctx, time.Time{})
+		s.free.Wait(ctx, 0)
 	}
 	s.busy = true
 	qenv.Sleep(ctx, time.Duration(s.rnd.ExpFloat64()/ServiceRate*float64(time.Second)))

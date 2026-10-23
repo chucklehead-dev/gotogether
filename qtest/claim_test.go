@@ -104,10 +104,9 @@ func TestShrunkTo(t *testing.T) {
 	if errs := expect(func(t testing.TB) { run.Expect(t, ShrunkTo(1)) }); len(errs) != 1 || !strings.Contains(errs[0], "2 faults") {
 		t.Errorf("two faults, ShrunkTo(1): %v, want a failure naming them", errs)
 	}
-	x := &Exploration{Runs: []*Run{run}}
-	if errs := expect(func(t testing.TB) { x.Expect(t, ShrunkTo(5)) }); len(errs) != 1 || !strings.Contains(errs[0], "claim on one run") {
-		t.Errorf("an exploration: %v, want the claim refused", errs)
-	}
+	// an exploration's Expect does not take it: ShrunkTo is a RunClaim,
+	// not a Claim, which the compiler checks (it was refused at run time)
+	var _ RunClaim = ShrunkTo(1)
 }
 
 // Violates(...).At(action) wants the invariant to fail first after a step

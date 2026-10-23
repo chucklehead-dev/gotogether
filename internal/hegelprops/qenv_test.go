@@ -118,7 +118,7 @@ func TestSchedulerSemantics(t *testing.T) {
 					case 1:
 						qenv.Yield(ctx)
 					case 2:
-						o.notified = sigs[o.sig].Wait(ctx, qenv.Now(ctx).Add(o.d))
+						o.notified = sigs[o.sig].Wait(ctx, o.d)
 					case 3:
 						notifies[o.sig] = append(notifies[o.sig], s.Elapsed())
 						sigs[o.sig].Notify()

@@ -50,7 +50,7 @@ seeds, not by hand.
 - recorded steps: `qtest.Validate(t, binding, steps).Expect(t, ...)`;
 - an exploration or sweep row: `x.Expect(t, claims...)`, `SweepConfig.Expect(row)`;
 - Hegel: `qhegel.FindViolation(...).Expect(t, ...)`,
-  `qhegel.Shrink(t, sys, rates).Expect(t, ...)` (fails when nothing is found);
+  `qhegel.Shrink(t, sys).Expect(t, ...)` (fails when nothing is found);
   with `qtest.ShrunkTo(n)` for how far it must shrink (at most n faults),
   never a hand count of `v.Faults()`;
 - where an invariant must first fail: `qtest.Violates("inv").At("action")`,

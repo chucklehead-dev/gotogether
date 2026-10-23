@@ -35,9 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
+	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 )
 
 // ErrUnavailable is a request that failed in the network or the API

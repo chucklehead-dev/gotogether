@@ -205,12 +205,12 @@ func (x *Exploration) reproduce(r *Run) string {
 	}
 	var what string
 	switch {
-	case r.Corpus != "":
-		what = "corpus=" + filepath.Base(r.Corpus)
+	case r.corpus != "":
+		what = "corpus=" + filepath.Base(r.corpus)
 	case x.search != nil:
-		what = "schedule=" + r.Schedule
+		what = "schedule=" + r.schedule
 	default:
-		what = fmt.Sprintf("seed=%d", r.Seed)
+		what = fmt.Sprintf("seed=%d", r.seed)
 	}
 	return fmt.Sprintf("GOTOGETHER_RUN='%s:%s' go test -run '^%s$'", x.ref(), what, strings.ReplaceAll(x.test, "/", "$/^"))
 }

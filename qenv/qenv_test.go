@@ -250,7 +250,7 @@ func TestManyWaitersScale(t *testing.T) {
 	for i := range sigs {
 		sigs[i] = &qenv.Signal{}
 		s.Spawn("request", func(ctx context.Context) {
-			if sigs[i].Wait(ctx, qenv.Now(ctx).Add(time.Hour)) {
+			if sigs[i].Wait(ctx, time.Hour) {
 				answered++
 			}
 		})
@@ -284,7 +284,7 @@ func TestSignalTimeoutIsForgotten(t *testing.T) {
 	var sig qenv.Signal
 	var slept time.Duration
 	s.Spawn("waiter", func(ctx context.Context) {
-		if sig.Wait(ctx, s.Now().Add(time.Second)) {
+		if sig.Wait(ctx, time.Second) {
 			t.Error("woken before any Notify")
 		}
 		start := s.Elapsed()

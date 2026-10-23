@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/qload"
 	"github.com/chucklehead-dev/gotogether/examples/sktrace"
+	"github.com/chucklehead-dev/gotogether/qload"
 )
 
 // A production workload as the load: SimKube's scaling trace, a real

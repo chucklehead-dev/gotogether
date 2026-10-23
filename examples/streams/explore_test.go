@@ -21,7 +21,7 @@ func TestHegelShrinksReorder(t *testing.T) {
 		t.Skip("shrinking against the model")
 	}
 	sys := system(streams.Config{Mutation: pipeline.NonIdempotentProducer})
-	v := qhegel.Shrink(t, sys, faulty, hegel.WithTestCases(100), hegel.WithSeed(1))
+	v := qhegel.Shrink(t, sys.WithRates(faulty), hegel.WithTestCases(100), hegel.WithSeed(1))
 	v.Expect(t, qtest.Violates("perKeyOrder"))
 	t.Logf("shrunk to %d steps; %s", len(v.Steps), v.Report.Summary())
 
@@ -49,7 +49,7 @@ func TestFaithfulSweep(t *testing.T) {
 		_, err := streams.Run(c, streams.Config{Partitions: row.Int("partitions"), Consumers: row.Int("consumers")})
 		return err
 	}}
-	sw := sys.Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 10, Rates: faulty}})
+	sw := sys.WithRates(faulty).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 10}})
 	t.Log(sw.Evidence())
 }
 
@@ -58,5 +58,5 @@ func TestFaithfulSweep(t *testing.T) {
 // coverage, the model judging every run.
 func FuzzFaithful(f *testing.F) {
 	qtest.RequireQuint(f)
-	system(streams.Config{}).Fuzz(f, faulty)
+	system(streams.Config{}).WithRates(faulty).Fuzz(f)
 }

@@ -30,6 +30,15 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- Workflow shapes settled before tags: the environment's fault rates are
+  the System's (`System.Rates`, `WithRates`) for Explore, Sweep, Mutate,
+  Fuzz and qhegel.Shrink, where they were `ExploreConfig.Rates` and
+  positional arguments of Fuzz and Shrink; `ShrunkTo` is a `RunClaim`
+  (Run.Expect and a Violation's take it, an exploration's does not
+  compile with it); `MutationReport.Expect` takes several claims;
+  `Signal.Wait` takes a duration (0: no limit), as `WaitFor` does; a
+  run's identity is `Run.ID()` ("seed=17", "schedule=17:1",
+  "corpus=<file>"), its seed, schedule and corpus fields unexported.
 - One seam between qtest and a package that makes runs its own way
   (qhegel): `qtest.CheckCases(t, workflow, binding, opts...)` and
   `System.CheckCases` give a `CaseCheck` (the checker, how each case

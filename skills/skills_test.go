@@ -101,6 +101,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qenv.FaultOptions", "the coverage report's option names"},
 		{"connect.FaultMap", "qtest.FaultMap"},
 		{"qtest.Resolve", "qtest.CheckCases"},
+		{"ExploreConfig{Seeds: 30, Rates:", "System.Rates, or sys.WithRates(r)"},
 		{"qtest.Settings", "qtest.CheckCases' CaseCheck"},
 		{"qhegel.CheckAll", "qhegel.Test (Mode After)"},
 		{"qenv.KnownFault", "the workflows' own check of a fault name (internal)"},

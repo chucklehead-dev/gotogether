@@ -54,7 +54,7 @@ func TestUnknownScriptedFault(t *testing.T) {
 // without crashing.
 func TestScriptedFaultNeverMade(t *testing.T) {
 	f := &failTB{TB: t}
-	x := &Exploration{Runs: []*Run{{scripted: true}, {scripted: true, Seed: 2, Unscripted: []qenv.Scripted{{Kind: "nemesis.crash.payments", After: 300}}}}}
+	x := &Exploration{Runs: []*Run{{scripted: true}, {scripted: true, seed: 2, Unscripted: []qenv.Scripted{{Kind: "nemesis.crash.payments", After: 300}}}}}
 	x.unknownScripted(f)
 	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "in 1 of 2 runs scripted faults never happened (seed 2's: [nemesis.crash.payments=0 after 300 steps])") {
 		t.Errorf("errors: %s", all)

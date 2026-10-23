@@ -26,8 +26,8 @@ func system(cfg checkout.Config) qtest.System {
 	return s
 }
 
-func explore(t *testing.T, cfg checkout.Config, x qtest.ExploreConfig) *qtest.Exploration {
-	return system(cfg).Explore(t, x)
+func explore(t *testing.T, cfg checkout.Config, rates qenv.Rates, x qtest.ExploreConfig) *qtest.Exploration {
+	return system(cfg).WithRates(rates).Explore(t, x)
 }
 
 // crashy crashes a process at one scheduling step in twenty.
@@ -41,7 +41,7 @@ func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, iso := range levels {
 		t.Run(iso.String(), func(t *testing.T) {
-			explore(t, checkout.Config{Isolation: iso}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous(), qtest.Exercised())
+			explore(t, checkout.Config{Isolation: iso}, crashy, qtest.ExploreConfig{Seeds: 60}).Expect(t, qtest.Conforms(), qtest.NotVacuous(), qtest.Exercised())
 		})
 	}
 }
@@ -78,7 +78,7 @@ func TestMutants(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
-			explore(t, checkout.Config{Isolation: c.iso, Mutation: c.m}, qtest.ExploreConfig{Seeds: 100, Rates: c.rates}).Expect(t, c.want...)
+			explore(t, checkout.Config{Isolation: c.iso, Mutation: c.m}, c.rates, qtest.ExploreConfig{Seeds: 100}).Expect(t, c.want...)
 		})
 	}
 }
@@ -108,7 +108,7 @@ func TestHegelShrinksWriteSkew(t *testing.T) {
 	}
 	sys := system(checkout.Config{Isolation: qenv.SnapshotIsolation, Mutation: shop.LockWithoutWrite})
 	skew := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
-	v := qhegel.Shrink(t, sys, crashy, hegel.WithTestCases(50), hegel.WithSeed(1))
+	v := qhegel.Shrink(t, sys.WithRates(crashy), hegel.WithTestCases(50), hegel.WithSeed(1))
 	v.Expect(t, skew)
 
 	replay := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.Replay(v.Choices) }})
@@ -136,5 +136,5 @@ func TestHegelFaithful(t *testing.T) {
 // redelivery, stays correct under every fault.
 func TestFaithfulConformsUnderPartitions(t *testing.T) {
 	qtest.RequireQuint(t)
-	explore(t, checkout.Config{Isolation: qenv.Serializable, Partitions: true}, qtest.ExploreConfig{Seeds: 40, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
+	explore(t, checkout.Config{Isolation: qenv.Serializable, Partitions: true}, crashy, qtest.ExploreConfig{Seeds: 40}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }

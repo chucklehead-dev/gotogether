@@ -349,12 +349,12 @@ func system(m Mutation) qtest.System {
 var lossy = qenv.Rates{Default: 0.2}
 
 func TestNoDedupeCountsRetries(t *testing.T) {
-	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).
+	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
 		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
 }
 
 func TestHegelShrinks(t *testing.T) {
-	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
+	qhegel.Shrink(t, system(NoDedupe), hegel.WithTestCases(50), hegel.WithSeed(1)).
 		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
 }
 ```
@@ -382,7 +382,7 @@ sys := qtest.System{Binding: "checkout.binding.yaml", Run: func(c qenv.Chooser) 
 }}
 skew := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
 sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, skew)     // seeds, checked in one batch
-qhegel.Shrink(t, sys, qenv.DefaultRates, hegel.WithTestCases(50)).Expect(t, skew)  // Hegel, shrunk to its interleaving
+qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, skew)                    // Hegel, shrunk to its interleaving
 ```
 
 A `qtest.System` binds an application to its model once; `Explore`,

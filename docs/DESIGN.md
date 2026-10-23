@@ -1988,7 +1988,7 @@ not a verdict.
 - `sys.FollowTraces(t, trace, faults)` generates the model's traces,
   scripts each one's faults, runs the system on each script, and fails a
   run whose script did not complete (`Remaining`), the P6 message.
-- `qhegel.Shrink(t, sys, rates)` lives in qhegel, which imports qtest:
+- `qhegel.Shrink(t, sys)` lives in qhegel, which imports qtest:
   Hegel stays out of qtest. It is FindViolation over `sys.Run` on
   `rec.Env(Choices(tc))`.
 

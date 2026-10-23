@@ -64,7 +64,7 @@ func TestBankAgainstModel(t *testing.T) {
   runs quiet: the expected failure's replay, stack and reproduction blob
   are shown only if the outcome is not the expected one
   (`GOTOGETHER_VERBOSE=1` shows them always). A System shrinks the same way:
-  `qhegel.Shrink(t, sys, rates).Expect(t, qtest.Rejects("apply"))`, and
+  `qhegel.Shrink(t, sys).Expect(t, qtest.Rejects("apply"))`, and
   `.Expect(t, qtest.Conforms())` states that Hegel finds nothing.
   After Hegel, Shrink removes each fault the failure does not need
   (replayed with the rest kept, kept if it fails the same way): Hegel's

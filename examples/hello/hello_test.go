@@ -26,7 +26,7 @@ var lossy = qenv.Rates{Default: 0.2}
 // counts once.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).Expect(t, qtest.Conforms(),
+	system(Faithful).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
 		// and the faults happened: a pass with no duplicates says nothing of
 		// dedupe. Measured, 56% of runs fault a request (2000 seeds); the bar
 		// is well under it, so a window of fresh seeds (a nightly run) does
@@ -42,9 +42,9 @@ func TestFaithfulConforms(t *testing.T) {
 // With no faults there is no retry, and the bug is invisible.
 func TestNoDedupeCountsRetries(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).
+	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
 		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
-	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 5, Rates: qenv.NoFaults}).Expect(t, qtest.Conforms())
+	system(NoDedupe).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms())
 }
 
 // Every run within two delays and two faults, not a sample: the faithful
@@ -69,7 +69,7 @@ func TestHegelShrinks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
+	qhegel.Shrink(t, system(NoDedupe), hegel.WithTestCases(50), hegel.WithSeed(1)).
 		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
-	qhegel.Shrink(t, system(Faithful), lossy, hegel.WithTestCases(20)).Expect(t, qtest.Conforms()) // nothing to find, at lossy's rates too
+	qhegel.Shrink(t, system(Faithful).WithRates(lossy), hegel.WithTestCases(20)).Expect(t, qtest.Conforms()) // nothing to find, at lossy's rates too
 }

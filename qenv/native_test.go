@@ -106,7 +106,7 @@ func TestNativeWaits(t *testing.T) {
 		woke = true
 	})
 	s.Spawn("signalled", func(ctx context.Context) {
-		timedOut = !sig.Wait(ctx, qenv.Now(ctx).Add(time.Second))
+		timedOut = !sig.Wait(ctx, time.Second)
 	})
 	s.Spawn("setter", func(ctx context.Context) {
 		qenv.Sleep(ctx, 10*time.Millisecond)

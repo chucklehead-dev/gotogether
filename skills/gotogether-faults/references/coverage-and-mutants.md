@@ -83,7 +83,7 @@ qweave -mutate -coverpkg your/module/pkg go test -run TestMutation ./...
 ```
 
 ```go
-rep := sys.Mutate(t, qtest.ExploreConfig{Seeds: 20, Rates: crashy}) // skips unwoven
+rep := sys.WithRates(crashy).Mutate(t, qtest.ExploreConfig{Seeds: 20}) // skips unwoven
 t.Log(rep.Evidence()) // the baseline's verdicts and faults, with the mutants
 rep.Expect(t, qtest.NoSurvivors("(Payer).Pay: drop call: ack()")) // equivalent ones marked, as a survivor's report prints them
 ```

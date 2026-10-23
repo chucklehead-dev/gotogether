@@ -97,11 +97,8 @@ type ExploreConfig struct {
 	// GOTOGETHER_SEED_OFFSET=k widen the sample (a nightly run): n seeds
 	// from k+1, unless Chooser makes the runs (a script per trace).
 	Seeds int
-	// Rates are the fault rates (default qenv.DefaultRates). Fuzz and
-	// qhegel.Shrink take rates as an argument instead: nothing else here
-	// applies to them.
-	Rates qenv.Rates
-	opts  []Option // the System's, and a sweep row's (System.Opts configures)
+	opts  []Option   // the System's, and a sweep row's (System.Opts configures)
+	rates qenv.Rates // the System's Rates
 	// emptyOK returns runs that recorded nothing unchecked, rather than
 	// failing: a mutant's (Mutate), which the baseline's steps show is
 	// killed by it.
@@ -122,7 +119,7 @@ type ExploreConfig struct {
 	// hooks.Escaped).
 	Parallel int
 	// Chooser, if set, makes each seed's chooser instead of a seeded one
-	// at Rates: a Script per seed, a Replay of a recorded run, a swarm.
+	// at the System's Rates: a Script per seed, a Replay of a recorded run, a swarm.
 	Chooser func(seed uint64) qenv.Chooser
 	// Corpus is a directory of saved runs (their choices, as JSON),
 	// replayed before the seeds: a run that once failed, kept as a
@@ -199,7 +196,7 @@ func readCorpus(dir, ref string) (paths []string, entries []corpusEntry, err err
 // save writes r's choices to the corpus, named by their hash, and
 // returns the file.
 func (x *Exploration) save(r *Run) (string, error) {
-	b, err := json.MarshalIndent(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Seed: r.Seed, Choices: r.Choices}, "", " ")
+	b, err := json.MarshalIndent(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Seed: r.seed, Choices: r.Choices}, "", " ")
 	if err != nil {
 		return "", err
 	}
@@ -240,8 +237,8 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	if cfg.Seeds == 0 {
 		cfg.Seeds = 50
 	}
-	if cfg.Rates.Default == 0 && cfg.Rates.Kinds == nil {
-		cfg.Rates = qenv.DefaultRates
+	if cfg.rates.Default == 0 && cfg.rates.Kinds == nil {
+		cfg.rates = qenv.DefaultRates
 	}
 	if cfg.Parallel <= 0 {
 		cfg.Parallel = runtime.GOMAXPROCS(0)
@@ -335,7 +332,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			if k := i - (len(seeds) - len(corpusRuns)); k >= 0 {
 				rp := qenv.Replay(corpusRuns[k].Choices)
 				r := runOne(c, woven, rp, scenario)
-				r.Corpus, r.savedFrom = corpusPaths[k], corpusRuns[k].Seed
+				r.corpus, r.savedFrom = corpusPaths[k], corpusRuns[k].Seed
 				if n := len(corpusRuns[k].Choices); r.diverged == nil && r.Err == nil && rp.Left() > 0 {
 					// the run took another, shorter path to a clean end: it no
 					// longer reaches what it saved. One that failed or panicked
@@ -351,15 +348,15 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				ch = cfg.Chooser(seed)
 			} else {
 				s := qenv.NewSeeded(seed)
-				s.Rates = cfg.Rates
+				s.Rates = cfg.rates
 				ch = s
 			}
 			x.Runs[i] = runOne(c, woven, ch, scenario)
-			x.Runs[i].Seed = seed
+			x.Runs[i].seed = seed
 		}()
 	}
 	wg.Wait()
-	unknownKinds(t, "ExploreConfig.Rates key", keysOf(cfg.Rates.Kinds))
+	unknownKinds(t, "System.Rates key", keysOf(cfg.rates.Kinds))
 	x.finish(t, bindingPath, c, mark, ids)
 	return x
 }
@@ -439,7 +436,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 // (if save and there is one), and how to run it alone.
 func (x *Exploration) keep(r *Run, save bool) string {
 	var b strings.Builder
-	if save && x.corpus != "" && r.Corpus == "" && len(r.Choices) > 0 {
+	if save && x.corpus != "" && r.corpus == "" && len(r.Choices) > 0 {
 		if p, err := x.save(r); err == nil {
 			fmt.Fprintf(&b, "  saved to the corpus: %s (replayed before the seeds from now on; commit it as a regression)\n", p)
 		} else {
@@ -467,7 +464,7 @@ func (x *Exploration) name(id uint64, corpus string) string {
 }
 
 // nameOf is how messages name run r.
-func (x *Exploration) nameOf(r *Run) string { return x.name(r.Seed, r.Corpus) }
+func (x *Exploration) nameOf(r *Run) string { return x.name(r.seed, r.corpus) }
 
 // finish checks the runs, made with ids (seeds, schedules), against the
 // model: a run that failed to run (rather than to conform) fails t,
@@ -499,7 +496,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 					"fix the code it names below; %s\n%s  %s:\n%s", x.nameOf(r), p.Value, replays, x.keep(r, true), where, p.Stack)
 				continue
 			}
-			if r.Corpus != "" && r.diverged != nil {
+			if r.corpus != "" && r.diverged != nil {
 				if x.mutant {
 					continue // the mutant changed the run: its claims judge it
 				}
@@ -698,11 +695,6 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			es = []Expectation{c}
 		case quantified:
 			es = c.es
-		}
-		for _, e := range es {
-			if e.run != nil {
-				t.Fatalf("gotogether: %s is a claim on one run (a shrunk Violation, a Run), not on an exploration: use it with that run's Expect", e)
-			}
 		}
 		if u := unknownNames(es, x.actions, invariants); len(u) > 0 {
 			t.Fatalf("gotogether: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))

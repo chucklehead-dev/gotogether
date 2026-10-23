@@ -23,8 +23,8 @@ const (
 	binding = "../../checkout/checkout.binding.yaml"
 )
 
-func explore(t *testing.T, iso qenv.Isolation, m shop.Mutation, x qtest.ExploreConfig) *qtest.Exploration {
-	sys := qtest.System{Binding: binding, Run: qgosim.Scenario(t, pkg, "TestCheckout",
+func explore(t *testing.T, iso qenv.Isolation, m shop.Mutation, rates qenv.Rates, x qtest.ExploreConfig) *qtest.Exploration {
+	sys := qtest.System{Binding: binding, Rates: rates, Run: qgosim.Scenario(t, pkg, "TestCheckout",
 		fmt.Sprintf("CHECKOUT_ISOLATION=%d", iso), fmt.Sprintf("CHECKOUT_MUTATION=%d", m))}
 	return sys.Explore(t, x)
 }
@@ -39,7 +39,7 @@ func TestFaithfulConformsOnGosim(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted} {
 		t.Run(iso.String(), func(t *testing.T) {
-			explore(t, iso, shop.Faithful, qtest.ExploreConfig{Seeds: 8, Rates: crashy}).Expect(t, qtest.Conforms())
+			explore(t, iso, shop.Faithful, crashy, qtest.ExploreConfig{Seeds: 8}).Expect(t, qtest.Conforms())
 		})
 	}
 }
@@ -68,7 +68,7 @@ func TestMutantsOnGosim(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
-			explore(t, c.iso, c.m, qtest.ExploreConfig{Seeds: c.seeds, Rates: c.rates}).Expect(t, c.want)
+			explore(t, c.iso, c.m, c.rates, qtest.ExploreConfig{Seeds: c.seeds}).Expect(t, c.want)
 		})
 	}
 }

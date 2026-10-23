@@ -6,8 +6,8 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout"
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
-	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/examples/sktrace"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // production is SimKube's scaling trace: a real cluster's Deployments

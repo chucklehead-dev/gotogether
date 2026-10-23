@@ -110,7 +110,7 @@ var lossy = qenv.Rates{Default: 0.2}
 
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).Expect(t, qtest.Conforms(),
+	system(Faithful).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
 		// ...
 		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
 		// ...
@@ -119,14 +119,14 @@ func TestFaithfulConforms(t *testing.T) {
 
 func TestNoDedupeCountsRetries(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(NoDedupe).Explore(t, qtest.ExploreConfig{Seeds: 30, Rates: lossy}).
+	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
 		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
 	// ...
 }
 
 func TestHegelShrinks(t *testing.T) {
 	// ...
-	qhegel.Shrink(t, system(NoDedupe), qenv.DefaultRates, hegel.WithTestCases(50), hegel.WithSeed(1)).
+	qhegel.Shrink(t, system(NoDedupe), hegel.WithTestCases(50), hegel.WithSeed(1)).
 		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
 	// ...
 }

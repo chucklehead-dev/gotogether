@@ -44,7 +44,7 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02
 // answered once.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(grpcledger.Config{}).Explore(t, qtest.ExploreConfig{Seeds: seeds(60), Rates: crashy})
+	x := system(grpcledger.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: seeds(60)})
 	x.Expect(t, qtest.Conforms())
 	t.Log(x.Evidence())
 }
@@ -81,7 +81,7 @@ func TestMutants(t *testing.T) {
 			name = c.m.String() + "/nofaults"
 		}
 		t.Run(name, func(t *testing.T) {
-			system(grpcledger.Config{Mutation: c.m}).Explore(t, qtest.ExploreConfig{Seeds: seeds(40), Rates: c.rates}).Expect(t, c.want)
+			system(grpcledger.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(40)}).Expect(t, c.want)
 		})
 	}
 }
@@ -103,8 +103,8 @@ func TestNoDedupeSweep(t *testing.T) {
 		_, err := grpcledger.Run(c, grpcledger.Config{Mutation: ledger.NoDedupe, NoCrashes: !row.On("crash")})
 		return err
 	}}
-	sw := sys.Sweep(t, qtest.SweepConfig{Factors: space,
-		Explore: qtest.ExploreConfig{Seeds: 30, Rates: qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.02}}},
+	sw := sys.WithRates(qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.02}}).Sweep(t, qtest.SweepConfig{Factors: space,
+		Explore: qtest.ExploreConfig{Seeds: 30},
 		Expect: func(row qsweep.Row) []qtest.Claim {
 			if row.On("rpc.ledger.request") || row.On("rpc.ledger.response") || row.On("crash") {
 				return []qtest.Claim{reapplied}
@@ -121,7 +121,7 @@ func TestShrinkDoubleApply(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	v := qhegel.Shrink(t, system(grpcledger.Config{Mutation: ledger.NoDedupe}), crashy, hegel.WithTestCases(200))
+	v := qhegel.Shrink(t, system(grpcledger.Config{Mutation: ledger.NoDedupe}).WithRates(crashy), hegel.WithTestCases(200))
 	v.Expect(t, reapplied)
 	t.Logf("shrunk: %d steps, faults %v\n%s", len(v.Steps), (&qenv.ChoiceLog{Choices: v.Choices}).Faults(), v.Summary)
 }
@@ -133,10 +133,10 @@ func TestShrinkDoubleApply(t *testing.T) {
 func TestCrashWindow(t *testing.T) {
 	qtest.RequireQuint(t)
 	net := []string{"grpc.ledger.conn", "rpc.ledger.request", "rpc.ledger.response"}
-	crashes := qtest.ExploreConfig{Seeds: 30, Rates: qenv.Rates{Kinds: map[string]float64{"nemesis": 0.05}}}
+	crashes := qtest.ExploreConfig{Seeds: 30}
 	run := func(m ledger.Mutation) qtest.System {
 		cfg := grpcledger.Config{Mutation: m}
-		return qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
+		return qtest.System{Binding: binding, Rates: qenv.Rates{Kinds: map[string]float64{"nemesis": 0.05}}, Run: func(c qenv.Chooser) error {
 			_, err := grpcledger.Run(qenv.Without(c, net...), cfg)
 			return err
 		}}

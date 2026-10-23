@@ -153,7 +153,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	run := func(ds []deviation) *Run {
 		f := &forcing{ds: ds}
 		r := runOne(c, woven, f, s.Run)
-		r.Schedule = schedule(ds)
+		r.schedule = schedule(ds)
 		return r
 	}
 	if spec, ok := runSpecFor(t, x.ref()); ok {
@@ -166,7 +166,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 			t.Fatalf("gotogether: %v", err)
 		}
 		x.Runs = []*Run{run(ds)}
-		x.Runs[0].Seed = 1
+		x.Runs[0].seed = 1
 		x.finish(t, s.Binding, c, mark, []uint64{1})
 		return x
 	}
@@ -200,7 +200,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 			if r == nil {
 				break // the scenario failed t: finish says so
 			}
-			r.Seed = uint64(len(x.Runs) + 1)
+			r.seed = uint64(len(x.Runs) + 1)
 			x.Runs = append(x.Runs, r)
 			if r.Err == nil {
 				next = append(next, children(level[i], r.Choices, b, off)...)

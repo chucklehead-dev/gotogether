@@ -24,7 +24,7 @@ import (
 // sleeps, its Service calls' timeouts, WaitFor) last a correspondingly
 // shorter or longer true time.
 //
-// The simulation's own time (Sim.Now, deadlines given to
+// The simulation's own time (Sim.Now, the limit of a
 // Signal.Wait) stays true: a clock fault changes what a process believes,
 // not when things happen. Code that compares wall-clock times from two
 // processes (an expiry stamped by one, checked by another) is broken by a

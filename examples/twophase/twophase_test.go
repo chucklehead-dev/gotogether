@@ -36,7 +36,7 @@ var crashy = qenv.Rates{Default: 0.2, Kinds: map[string]float64{"nemesis": 0.05}
 // model, its invariants hold, and runs both commit and abort.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(twophase.Config{}).Explore(t, qtest.ExploreConfig{Seeds: seeds(60), Rates: crashy})
+	x := system(twophase.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: seeds(60)})
 	x.Expect(t, qtest.Conforms())
 	t.Log(x.Evidence())
 }
@@ -67,7 +67,7 @@ func TestMutants(t *testing.T) {
 			if testing.Short() && c.rates.Default > 1e-6 {
 				t.Skip("a bug that needs faults takes tens of seeds")
 			}
-			system(twophase.Config{Mutation: c.m}).Explore(t, qtest.ExploreConfig{Seeds: 60, Rates: c.rates}).Expect(t, c.want...)
+			system(twophase.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: 60}).Expect(t, c.want...)
 		})
 	}
 }
@@ -79,7 +79,7 @@ func TestHegelShrinksImpatience(t *testing.T) {
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	v := qhegel.Shrink(t, system(twophase.Config{Mutation: tpc.ImpatientParticipant}), crashy, hegel.WithTestCases(100))
+	v := qhegel.Shrink(t, system(twophase.Config{Mutation: tpc.ImpatientParticipant}).WithRates(crashy), hegel.WithTestCases(100))
 	v.Expect(t, qtest.Rejects("abort"))
 	t.Logf("shrunk to %d steps, faults %v", len(v.Steps), (&qenv.ChoiceLog{Choices: v.Choices}).Faults())
 }
