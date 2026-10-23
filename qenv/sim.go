@@ -76,6 +76,7 @@ type Sim struct {
 	back      chan struct{}
 	procs     []*Process
 	cuts      map[[2]string]bool // partitioned pairs of processes, by name
+	onCut     []func(a, b *Process)
 	nemeses   []*nemesis
 	onCrash   []func(*Process)
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)

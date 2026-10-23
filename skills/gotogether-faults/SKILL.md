@@ -87,7 +87,9 @@ qobs.Record(s.Context(), "settle", nil)
   step log through it to see what an fsync buys.
 - **Partitions:** `s.Partitions(a, b, ...)` makes every link between
   those processes a nemesis (cut, later healed): a `Service` call across a
-  cut loses its request and its response, for as long as it lasts.
+  cut loses its request and its response, for as long as it lasts. A
+  `Queue` with its broker's process (`q.Proc`) is partitioned too: a
+  client cut off waits, and a consumer's cut redelivers what it holds.
   `s.Partition(a, b)` and `s.Heal` script one; `Settle` heals them all.
 - **Clocks:** `qenv.Now(ctx)` reads the clock of the task's process.
   With `s.ClockFaults = true` (set before creating processes) each

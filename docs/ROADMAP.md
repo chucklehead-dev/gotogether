@@ -262,8 +262,12 @@ The track, in order:
     `*TornTail`, warned by validate); `SyncedFileSink` fsyncs each step.
   - Partitions between named processes for `Service` (`Sim.Partition`,
     `Heal`, and `Partitions`, a nemesis per link); `Settle` heals them.
+  - Partitions for a `Queue` with a broker process (`Queue.Proc`): a
+    publisher or consumer cut off waits for the heal, and a consumer's cut
+    drops its connection, its unacknowledged messages redelivered and its
+    acknowledgements lost (as a broker that times out a connection does).
   - **Left.** jobqueue's journal on a Disk (jobqueue is not on qenv);
-    partitions for `Queue` and the other doubles.
+    partitions for the store and the logs.
 - **X8. Smaller claims and corpora.**
   - **Done.** `ExploreConfig.Corpus`: saved runs (choices as JSON)
     replay before the seeds, and a failed claim saves the run it shows;

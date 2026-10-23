@@ -447,6 +447,7 @@ type Vacuity struct{ ... }
 == github.com/chucklehead-dev/gotogether/qtrace
 const EventName = "quint.step" ...
 const KeyTime = "quint.time_unix_nano"
+const RealTimeSlack = time.Millisecond
 func Fields(s string) []string
 func Key(steps []Step) string
 func Reconstruct(steps []Step) ([]*Trace, []Issue)

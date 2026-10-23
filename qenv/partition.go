@@ -4,7 +4,9 @@ import "sort"
 
 // Partitions. Two processes are partitioned when the network between
 // them drops everything: a Service call from one to the other loses its
-// request, and a response that would cross the cut is lost. Unlike the
+// request, and a response that would cross the cut is lost; a Queue's
+// client cut off from its broker (Queue.Proc) waits, and a consumer's
+// messages are redelivered. Unlike the
 // per-call faults ("rpc.<name>.request"), a partition lasts: every call
 // across it fails until it heals, which is what a node isolated from its
 // peers sees, and what a retry loop or a leader election must survive.
@@ -25,7 +27,13 @@ func (s *Sim) Partition(a, b *Process) {
 	if s.cuts == nil {
 		s.cuts = map[[2]string]bool{}
 	}
+	if a == b || s.cuts[pairOf(a, b)] {
+		return
+	}
 	s.cuts[pairOf(a, b)] = true
+	for _, h := range s.onCut {
+		h(a, b)
+	}
 }
 
 // Heal restores the network between a and b.

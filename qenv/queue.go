@@ -10,7 +10,11 @@ import (
 //   - redelivery: an acknowledgement is lost ("queue.ack"), or the
 //     consumer crashed holding the message;
 //   - reordering, unless Ordered: which pending message is delivered next
-//     is a schedule choice.
+//     is a schedule choice;
+//   - with Proc set, partitions (Sim.Partition, Sim.Partitions): a
+//     publisher or consumer cut off from the broker waits until it heals,
+//     and a consumer's cut drops its connection, so the messages it holds
+//     are redelivered and its later acknowledgements are lost.
 //
 // Consumers must therefore be idempotent, and must not rely on order
 // across messages.
@@ -19,6 +23,10 @@ type Queue struct {
 	// Ordered delivers the oldest pending message first (a single FIFO
 	// partition). Redelivered messages go back to the front.
 	Ordered bool
+	// Proc is the broker's process, if it has one: the network between it
+	// and its clients can be partitioned. Without one no partition reaches
+	// the queue.
+	Proc *Process
 
 	sim     *Sim
 	pending []*Delivery
@@ -39,21 +47,39 @@ type Delivery struct {
 // NewQueue returns an empty queue in s.
 func NewQueue(s *Sim, name string) *Queue {
 	q := &Queue{Name: name, sim: s, held: map[*Delivery]*Process{}}
-	s.OnCrash(func(p *Process) {
-		// unacknowledged messages of a crashed consumer are redelivered,
-		// in the order they were taken
-		var back []*Delivery
-		for _, d := range q.heldIn() {
-			if q.held[d] == p {
-				back = append(back, d)
-				delete(q.held, d)
-			}
-		}
-		for _, d := range back {
-			q.requeue(d)
+	// unacknowledged messages of a crashed consumer are redelivered, as
+	// are those of one whose connection a partition dropped
+	s.OnCrash(q.drop)
+	s.onCut = append(s.onCut, func(a, b *Process) {
+		switch {
+		case q.Proc == nil:
+		case a == q.Proc:
+			q.drop(b)
+		case b == q.Proc:
+			q.drop(a)
 		}
 	})
 	return q
+}
+
+// drop requeues the messages p holds, in the order they were taken.
+func (q *Queue) drop(p *Process) {
+	var back []*Delivery
+	for _, d := range q.heldIn() {
+		if q.held[d] == p {
+			back = append(back, d)
+			delete(q.held, d)
+		}
+	}
+	for _, d := range back {
+		q.requeue(d)
+	}
+}
+
+// reaches reports whether the network lets the task of ctx reach the
+// broker.
+func (q *Queue) reaches(ctx context.Context) bool {
+	return q.Proc == nil || !q.sim.Partitioned(ProcessOf(ctx), q.Proc)
 }
 
 func (q *Queue) heldIn() []*Delivery {
@@ -76,9 +102,11 @@ func (q *Queue) requeue(d *Delivery) {
 	q.pending = append([]*Delivery{r}, q.pending...)
 }
 
-// Publish enqueues a message.
+// Publish enqueues a message. Cut off from the broker, it waits until the
+// partition heals: the publisher retries until the broker confirms.
 func (q *Queue) Publish(ctx context.Context, body any) {
 	Yield(ctx)
+	Wait(ctx, func() bool { return q.reaches(ctx) })
 	q.next++
 	q.Published++
 	q.pending = append(q.pending, &Delivery{ID: q.next, Body: body, q: q})
@@ -86,7 +114,7 @@ func (q *Queue) Publish(ctx context.Context, body any) {
 
 // Receive waits for a message and takes it.
 func (q *Queue) Receive(ctx context.Context) *Delivery {
-	WaitIdle(ctx, func() bool { return len(q.pending) > 0 })
+	WaitIdle(ctx, func() bool { return len(q.pending) > 0 && q.reaches(ctx) })
 	i := 0
 	if !q.Ordered {
 		i = q.sim.Choose("sched.queue."+q.Name, len(q.pending))

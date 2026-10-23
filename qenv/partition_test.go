@@ -3,6 +3,7 @@ package qenv_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -91,5 +92,61 @@ func TestPartitionsNemesisAndSettle(t *testing.T) {
 	}
 	if cut == 0 {
 		t.Error("no run was ever partitioned")
+	}
+}
+
+// A queue's broker partitioned from a consumer drops the consumer's
+// connection: the message it holds is redelivered and its acknowledgement
+// is lost. A publisher cut off waits until the partition heals. A queue
+// with no broker process is never partitioned.
+func TestQueuePartition(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	broker := s.Process("broker", false, func(context.Context) {})
+	q := qenv.NewQueue(s, "jobs")
+	q.Proc = broker
+	var got []string
+	var consumer, publisher *qenv.Process
+	consumer = s.Process("consumer", false, func(ctx context.Context) {
+		d := q.Receive(ctx)
+		s.Partition(consumer, broker)
+		d.Ack(ctx) // lost: the cut dropped the connection
+		s.Heal(consumer, broker)
+		for i := 0; i < 2; i++ {
+			d := q.Receive(ctx)
+			got = append(got, fmt.Sprintf("%v redelivered=%v", d.Body, d.Redelivered))
+			d.Ack(ctx)
+		}
+	})
+	var publishedAt time.Duration
+	publisher = s.Process("publisher", false, func(ctx context.Context) {
+		q.Publish(ctx, "a")
+		s.Partition(publisher, broker)
+		qenv.Go(ctx, "healer", func(ctx context.Context) {
+			qenv.Sleep(ctx, time.Second)
+			s.Heal(publisher, broker)
+		})
+		start := s.Now()
+		q.Publish(ctx, "b")
+		publishedAt = s.Now().Sub(start)
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a redelivered=true", "b redelivered=false"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("deliveries %v, want %v", got, want)
+	}
+	if publishedAt != time.Second {
+		t.Errorf("the cut-off publish returned after %v, want once the partition healed (1s)", publishedAt)
+	}
+	if q.Pending() != 0 || q.InFlight() != 0 {
+		t.Errorf("%d pending, %d in flight", q.Pending(), q.InFlight())
+	}
+
+	free := qenv.NewQueue(s, "free")
+	s.Partition(publisher, broker)
+	s.Spawn("on a cut network", func(ctx context.Context) { free.Publish(ctx, "c") })
+	if err := s.Run(time.Minute); err != nil || free.Pending() != 1 {
+		t.Errorf("a queue with no broker process was partitioned: %v, %d pending", err, free.Pending())
 	}
 }
