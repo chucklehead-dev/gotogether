@@ -377,7 +377,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 func unknownKinds(t testing.TB, what string, names []string) {
 	t.Helper()
 	for _, k := range names {
-		if k != "nemesis" && !qenv.KnownFault(k) {
+		if k != "nemesis" && !hooks.KnownFault(k) {
 			t.Errorf("gotogether: %s %q covers no fault kind, option or nemesis the system declared, so it matches nothing: "+
 				"name a kind as fault coverage prints it (a double's carry its name: \"queue.<name>.ack\"), or a prefix of one (\"queue\")", what, k)
 		}

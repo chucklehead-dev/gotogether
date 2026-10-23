@@ -436,7 +436,6 @@ func From(ctx context.Context) *Sim
 func FromBytes(data []byte, rates Rates) *Bytes
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
 func IsFault(kind string) bool
-func KnownFault(name string) bool
 func Mono(ctx context.Context) time.Duration
 func New(c Chooser) *Sim
 func NewDisk(s *Sim, name string, p *Process) *Disk

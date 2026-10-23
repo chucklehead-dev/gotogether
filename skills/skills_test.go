@@ -100,6 +100,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qenv.WaitUntil", "qenv.WaitFor (a duration)"},
 		{"qenv.FaultOptions", "the coverage report's option names"},
 		{"connect.FaultMap", "qtest.FaultMap"},
+		{"qenv.KnownFault", "the workflows' own check of a fault name (internal)"},
 		{"connect.FaultScript", "qtest.FaultScript"},
 		{"connect.Fault{", "qtest.Fault{"},
 		{"qenv.Recorder", "qenv.ChoiceLog"},

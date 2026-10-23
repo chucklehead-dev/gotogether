@@ -87,6 +87,11 @@ func Escaped(mark int) (n int, since []string) {
 	return escaped.n, since
 }
 
+// KnownFault reports whether a name users give (a Rates key, a sweep's
+// FaultKind) covers a fault kind, option or nemesis this process declared
+// or chose, or a prefix of one: qenv installs it, qtest's workflows ask.
+var KnownFault = func(string) bool { return true }
+
 var resolver atomic.Pointer[func() (context.Context, bool)]
 
 // SetResolver installs how the calling goroutine's run context is found:

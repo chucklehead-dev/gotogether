@@ -175,7 +175,7 @@ func (s *Sim) Choose(kind string, n int) int {
 		return 0
 	}
 	if IsFault(kind) {
-		choice.Seen(kind) // a kind, declared or not (KnownFault)
+		choice.Seen(kind) // a kind, declared or not (hooks.KnownFault)
 	}
 	v := s.c.Choose(kind, n)
 	if v < 0 || v >= n {

@@ -30,6 +30,9 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- `qenv.KnownFault` is internal: a process-wide query of what is
+  declared would freeze that scope in the API. The workflows still fail
+  a Rates key, a sweep's FaultKind or an exception that covers nothing.
 - connect is model-based testing only: its fault scripts move next to
   FollowTraces, as `qtest.FaultMap`, `qtest.Fault` and
   `qtest.FaultScript`, and connect no longer links the simulator.

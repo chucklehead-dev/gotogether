@@ -345,7 +345,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   double that a partition reaches takes its process at construction
   (`NewService`, `NewQueue`, `NewDisk`): a field set later was forgotten
   and silently kept partitions out. A name that covers nothing declared
-  (`qenv.KnownFault`: the process's registry of kinds, options and
+  (`hooks.KnownFault`: the process's registry of kinds, options and
   nemeses) matches nothing: an exploration fails on such a Rates key, a
   sweep on such a FaultKind, Exercised on such an exception. Name each
   double uniquely in a simulation: two of one name share their kind.

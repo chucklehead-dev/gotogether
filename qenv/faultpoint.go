@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
 )
 
@@ -79,16 +80,16 @@ func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) err
 // the points no run reached.
 func DeclareFaultSite(kind, site string) { choice.DeclareSite(kind, site) }
 
-// KnownFault reports whether name, as reports print it, covers a fault
-// kind, an option (kind.option) or a nemesis (nemesis.<name>) this
-// process declared or a simulation chose, or is a prefix of one at a dot
-// ("queue"). The registry is the process's, so a name another test's
-// double declared is known too: a check that a name is not misspelled,
-// not that a run met it. It depends on what ran before it: a Rates key
-// for a kind only another test's system declares passes in the whole
-// suite and fails in `go test -run` of its own test, rightly (it covers
-// nothing there).
-func KnownFault(name string) bool { return choice.Known(name) }
+// The test workflows check that a name users give (a Rates key, a sweep's
+// FaultKind, an exception) covers something declared: a fault kind, an
+// option (kind.option) or a nemesis (nemesis.<name>) this process
+// declared or a simulation chose, or a prefix of one at a dot ("queue").
+// The registry is the process's, so a name another test's double
+// declared is known too: a check that a name is not misspelled, not that
+// a run met it. It is internal (hooks.KnownFault), not API: a run-scoped
+// check would need every declaration to name its run, and a woven fault
+// point declares its kind at init, before any run.
+func init() { hooks.KnownFault = choice.Known }
 
 // PointCoverage is what runs did at one fault kind.
 type PointCoverage struct {
