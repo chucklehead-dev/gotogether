@@ -149,7 +149,8 @@ deliberately and say why in the commit and the README.
 ## CI layout
 
 - `gotogether simulate -binding` for every binding: the models on their
-  own, before any code runs.
+  own, before any code runs. Nightly, `-verify N` makes it a bounded
+  proof (quint verify, Apalache) where the model is small enough.
 - `go test -short ./...`: scripted scenarios, mutants, `Batched` Hegel
   runs (about a minute).
 - `go test ./...`: adds the `FindViolation` shrinking tests.

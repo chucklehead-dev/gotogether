@@ -117,6 +117,7 @@ def stage(n: Node): Stage = choreo::s.system.get(n).stage   // for bindings: cho
 quint typecheck model.qnt                                   # always first
 quint run model.qnt --main design --invariant prop --max-steps 30 --max-samples 1000
 gotogether simulate -binding m.binding.yaml                 # every invariant, holds or allows, once the binding exists
+gotogether simulate -binding m.binding.yaml -verify 8       # the same, every trace of up to 8 steps (Apalache: Java)
 quint run model.qnt --main design --mbt --max-steps 5 --n-traces 1 --out-itf /tmp/t.itf.json
 # look at mbt::actionTaken and mbt::nondetPicks in /tmp/t.itf.json: every action
 # named, every parameter picked under its own name

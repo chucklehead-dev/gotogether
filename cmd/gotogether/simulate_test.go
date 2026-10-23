@@ -64,3 +64,18 @@ func must(s string, err error) string {
 	}
 	return s
 }
+
+// With -verify, Apalache checks every trace up to the bound: hello's
+// exactlyOnce holds in all of them, and lease's noStaleWrite has a
+// counterexample, as each binding says. It downloads Apalache on first
+// use, so it runs only with GOTOGETHER_VERIFY=1 (the nightly run).
+func TestSimulateVerify(t *testing.T) {
+	if os.Getenv("GOTOGETHER_VERIFY") != "1" {
+		t.Skip("GOTOGETHER_VERIFY=1 runs quint verify (Apalache, Java)")
+	}
+	for _, b := range []string{"../../examples/hello/hello.binding.yaml", "../../examples/lease/lease.binding.yaml"} {
+		if code, err := simulate([]string{"-binding", b, "-verify", "5"}); code != 0 || err != nil {
+			t.Errorf("%s: exit %d, %v", b, code, err)
+		}
+	}
+}

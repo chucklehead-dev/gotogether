@@ -19,6 +19,12 @@ import (
 // (a property of the design) has no violating trace; one it allows (a
 // requirement on the code) has one, or checking the code against it
 // proves nothing. An invariant in neither list fails, saying which it is.
+//
+// With -verify N, quint verify (Apalache) checks each invariant in every
+// trace of up to N steps instead of sampling: "holds" is then a bounded
+// proof, and "allows" a shortest counterexample. Models Apalache cannot
+// encode (a nondet over an infinite set, unbounded recursion) fail with
+// its error.
 func simulate(args []string) (int, error) {
 	fset := flag.NewFlagSet("simulate", flag.ExitOnError)
 	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
@@ -27,6 +33,7 @@ func simulate(args []string) (int, error) {
 	seed := fset.String("seed", "1", "quint run --seed: fixed, so the verdicts repeat")
 	consts := fset.String("const", "", "constants to set, NAME=expr,... (over the binding's and its simulate section's)")
 	invs := fset.String("invariants", "", "comma-separated invariants instead of the binding's (classified as the binding says)")
+	verify := fset.Int("verify", 0, "check each invariant in every trace of up to this many steps with quint verify (Apalache), instead of sampling with quint run")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
 	if *bpath == "" {
@@ -75,7 +82,11 @@ func simulate(args []string) (int, error) {
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		return 2, err
 	}
-	fmt.Printf("simulate %s: %s(%s), %d traces of %d steps, seed %s\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *samples, *steps, *seed)
+	if *verify > 0 {
+		fmt.Printf("simulate %s: %s(%s), every trace of up to %d steps (quint verify)\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *verify)
+	} else {
+		fmt.Printf("simulate %s: %s(%s), %d traces of %d steps, seed %s\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *samples, *steps, *seed)
+	}
 	holds, allows := set(sim.Holds), set(sim.Allows)
 	known := set(b.Invariants)
 	for _, n := range append(append([]string(nil), sim.Holds...), sim.Allows...) {
@@ -90,7 +101,9 @@ func simulate(args []string) (int, error) {
 	for _, inv := range invariants {
 		argv := []string{"run", "--main", "simulate", "--invariant", inv,
 			"--max-steps", fmt.Sprint(*steps), "--max-samples", fmt.Sprint(*samples), "--seed", *seed}
-		if be := os.Getenv("QUINT_BACKEND"); be != "" {
+		if *verify > 0 {
+			argv = []string{"verify", "--main", "simulate", "--invariant", inv, "--max-steps", fmt.Sprint(*verify)}
+		} else if be := os.Getenv("QUINT_BACKEND"); be != "" {
 			argv = append(argv, "--backend", be)
 		}
 		cmd := exec.Command(*quint, append(argv, file)...)
@@ -102,9 +115,11 @@ func simulate(args []string) (int, error) {
 				return 2, fmt.Errorf("simulate: %s has no step action to run on its own: add one that picks among its actions, "+
 					"or say why not (simulate.skip: a replay-only model)", b.Module)
 			}
-			return 2, fmt.Errorf("simulate: quint run --invariant %s: %v\n%s", inv, err, out)
+			return 2, fmt.Errorf("simulate: quint %s --invariant %s: %v\n%s", argv[0], inv, err, out)
 		}
 		switch {
+		case holds[inv] && !violated && *verify > 0:
+			fmt.Printf("  holds   %s: no trace of up to %d steps violates it\n", inv, *verify)
 		case holds[inv] && !violated:
 			fmt.Printf("  holds   %s: no trace violates it\n", inv)
 		case allows[inv] && violated:
@@ -112,6 +127,10 @@ func simulate(args []string) (int, error) {
 		case holds[inv]:
 			code = 1
 			fmt.Printf("  FAIL    %s: the model should guarantee it, and a trace violates it:\n%s\n", inv, out)
+		case allows[inv] && *verify > 0:
+			code = 1
+			fmt.Printf("  FAIL    %s: the model should allow its violation, and no trace of up to %d steps violates it: "+
+				"checking the code against it proves nothing. Raise -verify, or move it to simulate.holds\n", inv, *verify)
 		case allows[inv]:
 			code = 1
 			fmt.Printf("  FAIL    %s: the model should allow its violation, and no trace of %d violates it: "+

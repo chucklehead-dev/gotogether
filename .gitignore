@@ -6,3 +6,4 @@
 /gotogether
 .claude/worktrees/
 *.test
+_apalache-out/

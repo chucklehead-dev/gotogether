@@ -65,7 +65,9 @@ Added to the core since api/core.txt was first recorded:
   starts an evaluator per test.
 - `gotogether simulate -binding`: the model's simulation against each
   invariant the binding's new `simulate` section (`binding.Simulation`)
-  says it guarantees (`holds`) or lets the code break (`allows`).
+  says it guarantees (`holds`) or lets the code break (`allows`);
+  `-verify N` checks every trace of up to N steps with quint verify
+  (Apalache) instead of sampling.
 
 Before this, the project was quint-connect-go
 (github.com/casselc/quint-connect-go); docs/HISTORY.md has the path here.
