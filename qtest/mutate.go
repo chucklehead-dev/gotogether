@@ -86,6 +86,21 @@ func (c MutationClaim) marked(m qmut.Mutant) bool {
 // every equivalent mutant at once.
 func (r *MutationReport) Expect(t testing.TB, c MutationClaim) {
 	t.Helper()
+	// a mark by function and code names every mutant of that text in the
+	// function (two "if err != nil" in one): one marked equivalent would
+	// excuse the other, and any later one alike, so it must be one
+	all := append(append(append([]qmut.Mutant(nil), r.Survived...), r.Killed...), r.Unreached...)
+	for _, e := range c.equivalent {
+		var at []string
+		for _, m := range all {
+			if e == markOf(m) {
+				at = append(at, fmt.Sprintf("%s:%d", filepath.Base(m.File), m.Line))
+			}
+		}
+		if len(at) > 1 {
+			t.Errorf("gotogether: NoSurvivors(%q) names %d mutants (%s): mark the equivalent one by its position, %q", e, len(at), strings.Join(at, ", "), at[0])
+		}
+	}
 	var survived []string
 	used := map[string]bool{}
 	for _, m := range r.Survived {

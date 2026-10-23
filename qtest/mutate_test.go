@@ -31,4 +31,12 @@ func TestNoSurvivors(t *testing.T) {
 	if len(f.errs) != 0 {
 		t.Errorf("marked by function and code: %v", f.errs)
 	}
+	// a mark that names two mutants of one text is refused
+	twin := moved
+	twin.ID, twin.Line = 3, 60
+	f = &failTB{TB: t}
+	(&MutationReport{Survived: []qmut.Mutant{moved}, Killed: []qmut.Mutant{twin}}).Expect(f, NoSurvivors("(Payer).Pay: drop call: ack()"))
+	if len(f.errs) != 1 || !strings.Contains(f.errs[0], `names 2 mutants (pay.go:50, pay.go:60): mark the equivalent one by its position, "pay.go:50"`) {
+		t.Errorf("an ambiguous mark: %v", f.errs)
+	}
 }
