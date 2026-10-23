@@ -74,6 +74,7 @@ type ViolationConfig struct {
 func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation {
 	t.Helper()
 	set := qtest.Resolve(t, cfg.Opts...)
+	refuse(t, set, "qhegel.FindViolation")
 	c := set.Checker(t, cfg.Binding)
 	c.Options.NoITF = true
 	var err error
