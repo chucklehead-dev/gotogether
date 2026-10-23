@@ -99,8 +99,7 @@ Python and no server.
 
 | Variable | What it does |
 |---|---|
-| `GOTOGETHER_SEED=n` | runs an exploration's seed n alone (a failing run's report prints the command) |
-| `GOTOGETHER_SCHEDULE="i:v,..."` | runs one run of an exhaustive search (`System.Exhaust`) alone: the choices it made otherwise, as its report prints them |
+| `GOTOGETHER_RUN='TestX#2:seed=n'` | runs one run of one exploration alone (the test's second here), as a failing run's report prints it: `:seed=n`, `:schedule=i:v,...` (`System.Exhaust`) or `:corpus=<file>`; only claims about every run are judged |
 | `GOTOGETHER_CORPUS=dir` | every exploration replays and saves corpus entries under dir/<test> (ExploreConfig.Corpus) |
 | `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |

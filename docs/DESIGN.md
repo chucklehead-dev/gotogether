@@ -2221,8 +2221,9 @@ session; each now has its message where the trap shows:
 - runs whose Script never made all its faults list them, in the run's
   report and in "all N runs conform; want ..." (`Explored.Unscripted`);
 - every failing run's report ends with how to reproduce it:
-  `GOTOGETHER_SEED=17 go test -run '^TestX$'`, and Explore runs that seed
-  alone when the variable is set;
+  `GOTOGETHER_RUN='TestX#1:seed=17' go test -run '^TestX$'` (Y2; it was
+  `GOTOGETHER_SEED`, which every exploration of the test read), and that
+  exploration runs the seed alone;
 - a recovery judged against goodput far below the offered load says the
   baseline was unhealthy (`Recovery.Warning`, in its `String`);
 - a chain whose arrival rate is at or above capacity says so, and that a

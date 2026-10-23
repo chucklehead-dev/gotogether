@@ -160,7 +160,7 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   seeds find only at ten times the crash rate, and streams' reorder show
   in a complete one-fault search. Runs with the same steps are checked
   once, so thousands of runs cost a few quint checks; a failing run's
-  report gives `GOTOGETHER_SCHEDULE="17:1"`, which runs it alone. No
+  report gives `GOTOGETHER_RUN='TestX#1:schedule=17:1'`, which runs it alone. No
   partial-order reduction: two delays on a system with many tasks is
   tens of thousands of runs, so start at one fault.
 - **A corpus of failures:** `ExploreConfig{Corpus: "testdata/corpus/TestX"}`
@@ -168,9 +168,14 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   the run it shows there (its choices, as JSON): commit it, and the bug
   stays found whatever the seeds become. `GOTOGETHER_CORPUS=dir` gives
   every exploration `dir/<test>` (the nightly run uploads it).
-- **Reproducing a seed:** a failing run's report ends with
-  `reproduce: GOTOGETHER_SEED=17 go test -run '^TestX$'`; with GOTOGETHER_SEED
-  set, an exploration runs that seed alone. A run whose Script never made
+- **Reproducing a run:** a failing run's report ends with
+  `reproduce: GOTOGETHER_RUN='TestX#2:seed=17' go test -run '^TestX$'`:
+  that run alone in the test's second exploration (its others run as
+  usual), or `:schedule=...` (Exhaust), `:corpus=<file>`. A run alone is
+  judged only by the claims about every run (Conforms, All, None); the
+  rest are listed as not judged. A failure's files (step log, module) are
+  copied out of the test's temporary directory, so its report's paths
+  are there after the test. A run whose Script never made
   all its faults lists them ("scripted faults that never happened").
 - **Rates:**
   - A nemesis (crash) is considered at every scheduling step, so its rate

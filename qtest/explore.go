@@ -34,6 +34,12 @@ type Exploration struct {
 	Cached int
 
 	constants map[string]string // the instance checked against, for messages
+	id        int               // its number among its test's explorations (ref)
+	alone     *runSpec          // the run GOTOGETHER_RUN runs alone, if it names this exploration
+	dir       string            // its artifacts' directory
+	tempDir   bool              // dir is the test's t.TempDir()
+	kept      string            // where a failure's artifacts were copied out of it
+	keptOnce  sync.Once
 	model     string            // the binding's spec and module ("model/m.qnt:m"), for Evidence
 	test      string            // the test's name, for reproducing a seed
 	actions   map[string]bool   // the model's, for checking claims' names
@@ -81,8 +87,8 @@ func (x *Exploration) Failing() []*Run {
 // ExploreConfig configures Explore.
 type ExploreConfig struct {
 	// Seeds is the number of runs, with seeds 1..Seeds (default 50).
-	// GOTOGETHER_SEED=n in the environment runs seed n alone, as a failure's
-	// report says to reproduce it. GOTOGETHER_SEEDS=n and
+	// GOTOGETHER_RUN in the environment runs one exploration's run alone,
+	// as a failure's report says to reproduce it. GOTOGETHER_SEEDS=n and
 	// GOTOGETHER_SEED_OFFSET=k widen the sample (a nightly run): n seeds
 	// from k+1, unless Chooser makes the runs (a script per trace).
 	Seeds int
@@ -211,7 +217,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	mark, _ := qobs.Escaped(0)
 	// a nightly run widens the sample: GOTOGETHER_SEEDS=n runs n seeds,
 	// GOTOGETHER_SEED_OFFSET=k starts them after k (fresh seeds each night);
-	// a failure's report names its seed, which GOTOGETHER_SEED replays
+	// a failure's report names its run, which GOTOGETHER_RUN runs alone
 	n, offset := cfg.Seeds, uint64(0)
 	if v, err := envUint("GOTOGETHER_SEEDS"); err != nil {
 		t.Fatalf("gotogether: %v", err)
@@ -227,22 +233,43 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = offset + uint64(i+1)
 	}
-	if v := os.Getenv("GOTOGETHER_SEED"); v != "" {
-		n, err := strconv.ParseUint(v, 10, 64)
-		if err != nil {
-			t.Fatalf("gotogether: GOTOGETHER_SEED=%q: want a seed number", v)
+	x := &Exploration{test: t.Name(), id: nextExploration(t.Name()), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, dir: c.Dir, tempDir: c.tempDir}
+	spec, alone := runSpecFor(t, x.ref())
+	if alone {
+		x.alone = &spec
+		switch spec.kind {
+		case "seed":
+			n, _ := strconv.ParseUint(spec.value, 10, 64)
+			seeds = []uint64{n}
+		case "corpus":
+			seeds = nil
+		default:
+			t.Fatalf("gotogether: GOTOGETHER_RUN names a %s, but %s explores seeds: want :seed=<n> or :corpus=<file>", spec.kind, x.ref())
 		}
-		seeds = []uint64{n}
 	}
-	x := &Exploration{Runs: make([]*Run, len(seeds)), test: t.Name(), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK}
-	// the corpus's runs, after the seeds' (their numbers stay the same)
+	x.Runs = make([]*Run, len(seeds))
+	// the corpus's runs, after the seeds' (their numbers stay the same);
+	// a seed run alone runs no corpus entry
 	var corpusPaths []string
 	var corpusRuns [][]qenv.Choice
-	if x.corpus != "" && os.Getenv("GOTOGETHER_SEED") == "" {
+	if x.corpus != "" && (!alone || spec.kind == "corpus") {
 		var err error
 		if corpusPaths, corpusRuns, err = readCorpus(x.corpus); err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
+	}
+	if alone && spec.kind == "corpus" {
+		var ps []string
+		var rs [][]qenv.Choice
+		for i, p := range corpusPaths {
+			if filepath.Base(p) == spec.value {
+				ps, rs = append(ps, p), append(rs, corpusRuns[i])
+			}
+		}
+		if len(ps) == 0 {
+			t.Fatalf("gotogether: GOTOGETHER_RUN names corpus entry %s, which %s's corpus (%s) does not have", spec.value, x.ref(), x.corpus)
+		}
+		corpusPaths, corpusRuns = ps, rs
 	}
 	x.Runs = append(x.Runs, make([]*Run, len(corpusRuns))...)
 	ids := append([]uint64(nil), seeds...)
@@ -346,14 +373,8 @@ func (x *Exploration) keep(r *Run, save bool) string {
 			fmt.Fprintf(&b, "  not saved to the corpus: %v\n", err)
 		}
 	}
-	switch {
-	case x.test == "":
-	case r.Corpus != "": // GOTOGETHER_SEED would skip the corpus and run another seed
-		fmt.Fprintf(&b, "  reproduce: go test -run '^%s$' (the corpus replays %s before the seeds)\n", strings.ReplaceAll(x.test, "/", "$/^"), filepath.Base(r.Corpus))
-	case x.search != nil:
-		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SCHEDULE=%q go test -run '^%s$'\n", r.Schedule, strings.ReplaceAll(x.test, "/", "$/^"))
-	default:
-		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
+	if x.test != "" && x.alone == nil {
+		fmt.Fprintf(&b, "  reproduce: %s\n", x.reproduce(r))
 	}
 	return b.String()
 }
@@ -581,6 +602,26 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			t.Fatalf("gotogether: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
 		}
 	}
+	if x.alone != nil {
+		// one run: judged only by the claims that hold of every run
+		var judged []Claim
+		var not []string
+		for _, c := range claims {
+			if universal(c) {
+				judged = append(judged, c)
+			} else {
+				not = append(not, describeClaim(c))
+			}
+		}
+		msg := ""
+		if len(not) > 0 {
+			msg = "; not judged on one run (about the runs it leaves out): " + strings.Join(not, ", ")
+		}
+		if len(x.Runs) == 1 {
+			t.Logf("gotogether: %s alone (GOTOGETHER_RUN)%s:\n%s", x.alone, msg, x.describe(t, x.Runs[0], false))
+		}
+		claims = judged
+	}
 	bad := len(x.Failing())
 	failedAny := false
 	for _, c := range claims {
@@ -723,6 +764,9 @@ func describeAll(es []Expectation) string {
 // describe prints a run for a message; save, for a claim that failed,
 // also saves it to the corpus.
 func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
+	if save || x.alone != nil {
+		x.recheck(r)
+	}
 	var b strings.Builder
 	if x.search != nil {
 		fmt.Fprintf(&b, "%s, made otherwise %v\n%s", x.nameOf(r), r.deviations(), r.Report.Summary())
@@ -741,7 +785,10 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 			fmt.Fprintf(&b, "    %s %v (process %s)\n", s.Action, s.Args, s.Process)
 		}
 	}
-	dir := t.TempDir()
+	dir := x.dir // kept with the exploration's other artifacts (keepFiles)
+	if dir == "" {
+		dir = t.TempDir()
+	}
 	p := filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r))+".steps.jsonl")
 	if f, err := os.Create(p); err == nil {
 		if qtrace.WriteJSONL(f, r.Steps) == nil {
@@ -750,7 +797,34 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 		f.Close()
 	}
 	b.WriteString(x.keep(r, save))
-	return b.String()
+	if !save && x.alone == nil {
+		return b.String() // a passing claim's example: nothing to keep
+	}
+	return x.keepFiles(b.String())
+}
+
+// recheck checks r again into the exploration's own directory when its
+// report came from the verdict cache with a module written by another
+// exploration (another test's directory may be gone), so a failure's
+// report points at a module that is there. The verdict is the same.
+func (x *Exploration) recheck(r *Run) {
+	if x.checker == nil || x.dir == "" || r.Report == nil {
+		return
+	}
+	foreign := false
+	for _, a := range r.Report.Actors {
+		if a.Module != "" && !strings.HasPrefix(a.Module, x.dir+string(filepath.Separator)) {
+			foreign = true
+		}
+	}
+	if !foreign {
+		return
+	}
+	ch := *x.checker
+	ch.Options.Dir = filepath.Join(x.dir, "recheck", strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
+	if rep, err := ch.Check(context.Background(), r.Steps); err == nil {
+		r.Report = rep
+	}
 }
 
 // chooserErr is why a run's chooser could not make the choices it was

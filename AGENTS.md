@@ -133,9 +133,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   rust starts one evaluator per test; quint's own default for connect's
   `quint run`).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
-  qhegel. `GOTOGETHER_SEED=n` runs an exploration's seed n alone (each
-  failing run's report prints the command); `GOTOGETHER_SCHEDULE="i:v,..."`
-  runs one run of an exhaustive search alone. `GOTOGETHER_CORPUS=dir`
+  qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
+  `:corpus=<file>`) runs one run of one exploration alone, the test's
+  explorations numbered in order; each failing run's report prints it.
+  `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
   (both nightly). `GOTOGETHER_VERBOSE=1` shows

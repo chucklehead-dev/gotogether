@@ -35,6 +35,7 @@ import (
 type settings struct {
 	Options     validate.Options // quint binary, backend (default $QUINT_BACKEND, else rust)
 	Dir         string           // artifacts; default $GOTOGETHER_KEEP/<test> or t.TempDir()
+	tempDir     bool             // Dir is t.TempDir(), removed when the test ends
 	Recorder    []qobs.Option    // e.g. qobs.WithActor("acct-1")
 	SkipIfEmpty bool             // skip (not fail) when nothing was recorded, e.g. an unwoven build
 	// Constants override the binding's (validate.Checker.WithConstants).
@@ -121,7 +122,7 @@ type Run struct {
 	Seed uint64 // an exploration's seed, or an exhaustive search's run number
 	// Schedule is an exhaustive search's run (System.Exhaust): the choices
 	// it made otherwise than nominal, as choice:option pairs ("17:1,40:2").
-	// GOTOGETHER_SCHEDULE runs it alone.
+	// GOTOGETHER_RUN runs it alone.
 	Schedule string
 	// Corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
 	// or "" for a seeded run.
@@ -169,7 +170,7 @@ func config(t testing.TB, opts []Option) settings {
 		if keep := os.Getenv("GOTOGETHER_KEEP"); keep != "" {
 			c.Dir = filepath.Join(keep, strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
 		} else {
-			c.Dir = t.TempDir()
+			c.Dir, c.tempDir = t.TempDir(), true
 		}
 	}
 	return c

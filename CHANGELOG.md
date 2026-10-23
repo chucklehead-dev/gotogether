@@ -30,7 +30,14 @@ Added to the core since api/core.txt was first recorded:
   what they reached; `Evidence.Model` lists the actions never taken.
 - `System.Exhaust(t, qtest.Bound{Delays, Faults})`: every run within the
   bound, fewest deviations first, as an Exploration; `qtest.Complete()`,
-  `Evidence.Search`, `Run.Schedule` and `GOTOGETHER_SCHEDULE`.
+  `Evidence.Search` and `Run.Schedule`.
+- `GOTOGETHER_RUN='TestX#2:seed=17'` (or `:schedule=`, `:corpus=`) runs
+  one run of one exploration alone, as a failing run's report prints it,
+  judged by the claims about every run only; it replaces
+  `GOTOGETHER_SEED` and `GOTOGETHER_SCHEDULE`, which every exploration of
+  the test read. A failure's step log and module are copied out of the
+  test's temporary directory, and a cached verdict is checked again so
+  its module is there.
 - Real-time order: `qtrace.Step.Invoked` (`qobs.Record`'s `invoked`
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and

@@ -2,7 +2,7 @@ name: nightly
 
 # CI re-checks the same seeds on every push; this widens the sample each
 # night: fresh seeds (an offset by date), more of them, and longer fuzzing.
-# A failure's report names its seed (GOTOGETHER_SEED=n replays it) or its
+# A failure's report names its run (GOTOGETHER_RUN=... replays it) or its
 # fuzz input (testdata/fuzz), and its run is kept as a corpus entry (the
 # artifact): commit it as a regression once fixed.
 

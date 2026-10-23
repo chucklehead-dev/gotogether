@@ -2,7 +2,6 @@ package qtest
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"slices"
 	"strconv"
@@ -48,7 +47,7 @@ type search struct {
 // choice in its run, and the option taken.
 type deviation struct{ at, value int }
 
-// schedule is a run's deviations as GOTOGETHER_SCHEDULE gives them and
+// schedule is a run's deviations as GOTOGETHER_RUN's schedule= gives them and
 // reports print them: "17:1,40:2", "" for the nominal run.
 func schedule(ds []deviation) string {
 	parts := make([]string, len(ds))
@@ -68,7 +67,7 @@ func parseSchedule(s string) ([]deviation, error) {
 		at, err1 := strconv.Atoi(a)
 		value, err2 := strconv.Atoi(v)
 		if !ok || err1 != nil || err2 != nil || at < 0 || value < 1 || len(ds) > 0 && at <= ds[len(ds)-1].at {
-			return nil, fmt.Errorf("GOTOGETHER_SCHEDULE=%q: want choice:option pairs in increasing choice order, as a report's reproduce line gives them", s)
+			return nil, fmt.Errorf("GOTOGETHER_RUN's schedule %q: want choice:option pairs in increasing choice order, as a report's reproduce line gives them", s)
 		}
 		ds = append(ds, deviation{at, value})
 	}
@@ -118,7 +117,7 @@ func (f *forcing) Err() error {
 // Faults, each checked against the model like an exploration's runs (the
 // same claims and Evidence). Runs are told apart by their schedules, not
 // seeds: a failing run's report gives its schedule, which
-// GOTOGETHER_SCHEDULE runs alone. Runs with the same steps are checked by
+// GOTOGETHER_RUN runs alone. Runs with the same steps are checked by
 // quint once.
 //
 // The search is stateless: each run replays its schedule from the start,
@@ -145,15 +144,19 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	woven := len(qcover.Blocks()) > 0
 	defer qobs.Strict()()
 	mark, _ := qobs.Escaped(0)
-	x := &Exploration{test: t.Name(), search: &search{bound: b}}
+	x := &Exploration{test: t.Name(), id: nextExploration(t.Name()), search: &search{bound: b}, dir: c.Dir, tempDir: c.tempDir}
 	run := func(ds []deviation) *Run {
 		f := &forcing{ds: ds}
 		r := runOne(c, woven, f, s.Run)
 		r.Schedule = schedule(ds)
 		return r
 	}
-	if v, ok := os.LookupEnv("GOTOGETHER_SCHEDULE"); ok {
-		ds, err := parseSchedule(v)
+	if spec, ok := runSpecFor(t, x.ref()); ok {
+		if spec.kind != "schedule" {
+			t.Fatalf("gotogether: GOTOGETHER_RUN names a %s, but %s is an exhaustive search: want :schedule=<choices>", spec.kind, x.ref())
+		}
+		x.alone = &spec
+		ds, err := parseSchedule(spec.value)
 		if err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}

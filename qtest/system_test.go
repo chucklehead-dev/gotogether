@@ -92,7 +92,7 @@ func TestRunPanic(t *testing.T) {
 	<-done
 	all := strings.Join(f.errs, "\n")
 	if !strings.Contains(all, "panicked: the store's history check failed") || !strings.Contains(all, "panicInTask") ||
-		!strings.Contains(all, "saved to the corpus") || !strings.Contains(all, "reproduce: GOTOGETHER_SEED=") {
+		!strings.Contains(all, "saved to the corpus") || !strings.Contains(all, "reproduce: GOTOGETHER_RUN='TestRunPanic#1:seed=") {
 		t.Fatalf("errors: %s", all)
 	}
 	if !strings.Contains(all, "the task's stack") {
@@ -115,7 +115,7 @@ func TestRunPanic(t *testing.T) {
 	<-done
 	all = strings.Join(f.errs, "\n")
 	if !strings.Contains(all, "corpus entry ") || !strings.Contains(all, "panicked: the store's history check failed") ||
-		!strings.Contains(all, "(the corpus replays ") || strings.Contains(all, "GOTOGETHER_SEED=0") {
+		!strings.Contains(all, "GOTOGETHER_RUN='TestRunPanic#2:corpus=") || strings.Contains(all, "seed=0") {
 		t.Errorf("the corpus's replay: %s", all)
 	}
 }

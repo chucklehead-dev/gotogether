@@ -12,6 +12,7 @@ import (
 // exploration replays it before its seeds, so the failure stays found
 // whatever the seeds are.
 func TestCorpus(t *testing.T) {
+	t.Setenv("GOTOGETHER_KEEP", t.TempDir()) // its failures and runs alone are on purpose: keep nothing after it
 	RequireQuint(t)
 	dir := t.TempDir()
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}

@@ -347,7 +347,9 @@ starts, and the review's findings are fixed first.
   Sim.Check: they all report by panicking) kills the test binary with no
   seed, schedule or corpus entry. Recover it into `Run.Err` with the
   stack, name the run, save it; Hegel's path keeps the re-raise.
-- **Y2. Reproduce exactly what failed.** `GOTOGETHER_SEED` and
+- **Y2. Reproduce exactly what failed. Done** (`GOTOGETHER_RUN`, kept
+  failure files, a cached verdict re-checked into its exploration's
+  directory). `GOTOGETHER_SEED` and
   `GOTOGETHER_SCHEDULE` apply to every exploration of the test and judge
   claims over runs on one run (`Some(Conforms())` fails; `Complete()`
   passes). One variable scoped to the exploration that printed it

@@ -67,6 +67,7 @@ func race(c qenv.Chooser) error {
 // there was; one delay runs the withdrawal first, and the failing run's
 // schedule replays it alone.
 func TestExhaust(t *testing.T) {
+	t.Setenv("GOTOGETHER_KEEP", t.TempDir()) // its failures and runs alone are on purpose: keep nothing after it
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	x := sys.Exhaust(t, Bound{})
@@ -80,11 +81,12 @@ func TestExhaust(t *testing.T) {
 		t.Errorf("evidence:\n%s", e)
 	}
 	bad := x.Failing()[0]
-	t.Setenv("GOTOGETHER_SCHEDULE", bad.Schedule)
+	// the test's third exploration, run alone as a report names it
+	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:schedule="+bad.Schedule)
 	again := sys.Exhaust(t, Bound{Delays: 1})
-	again.Expect(t, All(Rejects("withdraw")))
+	again.Expect(t, All(Rejects("withdraw")), Complete())
 	if len(again.Runs) != 1 || again.Runs[0].Schedule != bad.Schedule {
-		t.Errorf("GOTOGETHER_SCHEDULE=%s ran %d runs", bad.Schedule, len(again.Runs))
+		t.Errorf("GOTOGETHER_RUN schedule=%s ran %d runs", bad.Schedule, len(again.Runs))
 	}
 }
 
