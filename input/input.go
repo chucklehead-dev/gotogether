@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -81,22 +80,29 @@ func Read(path string, format Format) (*File, error) {
 			return in, nil // an empty file holds no steps
 		}
 		return nil, fmt.Errorf("%s: not OTLP/JSON, a step log or ITF (its first value %s). Want one of: "+
-			"a step log, one object per line with %q, %q and the step's arguments and \"obs.<name>\" observations at the top level "+
-			"(qobs.JSONLSink writes it: {%q:\"deposit\",%q:1,%q:\"r\",\"amount\":5,\"obs.balance\":5}); "+
-			"OTLP/JSON with \"resourceSpans\"; or ITF with \"states\"", path, firstKeys(data),
-			qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder)
+			"a step log, one object per line with %q, %q, %q, the step's arguments as %q<parameter> and its observations as %q<name> "+
+			"(qobs.JSONLSink writes it), e.g. %s; OTLP/JSON with \"resourceSpans\"; or ITF with \"states\"",
+			path, firstKeys(data), qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder, qtrace.PrefixArg, qtrace.PrefixObs, StepLogExample)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s (%s): %w", path, format, err)
 	}
-	// a step's source names its file, for a report over several inputs
-	for i := range in.Steps {
-		if s := &in.Steps[i]; s.Source != "" {
-			s.Source = filepath.Base(path) + " " + s.Source
+	// a step log's step names its file and line (file:N), for a report
+	// over several inputs
+	if format == StepLog {
+		for i := range in.Steps {
+			if s := &in.Steps[i]; strings.HasPrefix(s.Source, "line ") {
+				s.Source = path + ":" + strings.TrimPrefix(s.Source, "line ")
+			}
 		}
 	}
 	return in, nil
 }
+
+// StepLogExample is one line of a step log: a deposit of 5 that left a
+// balance of 5, the first step of recorder r.
+var StepLogExample = fmt.Sprintf(`{%q:"deposit",%q:1,%q:"r",%q:5,%q:5}`,
+	qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder, qtrace.PrefixArg+"amount", qtrace.PrefixObs+"balance")
 
 // firstKeys describes the keys of data's first JSON object, or says it has
 // none.
