@@ -127,8 +127,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   `CA_BUNDLE=` for a TLS-intercepting proxy). CRD and deepcopy are generated:
   `go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 object crd paths=./apis/... output:crd:dir=./package/crds`.
 - Backend: `QUINT_BACKEND=rust|typescript`, for connect, validate and
-  qtest alike (unset: rust for validation, quint's own default for
-  connect's `quint run`).
+  qtest alike (unset: rust for a single validation, typescript for a
+  batch chunk of several traces, which it evaluates in one process where
+  rust starts one evaluator per test; quint's own default for connect's
+  `quint run`).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_SEED=n` runs an exploration's seed n alone (each
   failing run's report prints the command); `GOTOGETHER_SCHEDULE="i:v,..."`

@@ -210,9 +210,10 @@ The track, in order:
     orders, 10–20 s for 32 steps). `StaleRead` (a lagging snapshot) is
     caught as a read no order explains.
   - **Left.** Every order tried replays from the start, so a few hundred
-    steps take minutes: starting a replay from the model's state at the
-    window (the failure's state is in the report) would make each try
-    the window's length. `//quint:action` could note the invocation on
+    steps take minutes. A `quint repl` session per instance was tried and
+    was slower (DESIGN §9.7: quint's front end costs 10-40 ms per input);
+    batches now use the TypeScript backend. Starting from a state needs
+    an IR built in Go for the Rust evaluator, a project of its own. `//quint:action` could note the invocation on
     entry. grpcledger's spans carry their start already; its convert
     rules order by its own index, so nothing there needed it.
 - **X5. The doubles' contracts (M).** Under `GOTOGETHER_CHECK=1`, Store emits

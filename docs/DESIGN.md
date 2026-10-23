@@ -700,6 +700,29 @@ The model matters as much:
 After both: 64 s (19 s without ITF) for the original model, 21 s (11 s)
 for the ghost-flag model, 7 s for the scheme model.
 
+Batches of many short runs (explorations, sweeps, Hegel, Linearize's
+candidates) cost something else. With `--backend rust`, `quint test`
+starts one evaluator per test, one after another, each sent the whole
+compiled module as JSON (3.3 MB per test for a module of 40 short runs):
+40 tests took 14.6 s, against 4.6 s with the TypeScript backend, which
+evaluates them in its own process. CheckBatch therefore replays a chunk
+of several traces with TypeScript, unless a backend was chosen
+(checkout's, glomers' and streams' short suites: 20-55% faster), and a
+single long replay stays on Rust.
+
+Two ways around quint's front end were measured and dropped:
+- **A long-lived `quint repl` session per instance**, a replay sent as a
+  line per step. Each input costs 10-40 ms: the TypeScript front end
+  parses and typechecks it against the whole module, so a 90-step run
+  took 0.7 s, slower than in a batch. The verdicts matched.
+- **The Rust evaluator directly** (`quint_evaluator test-from-stdin`,
+  0.12 s per run): its input is the compiled syntax tree and lookup
+  table, and `quint compile --target json` costs as much as the front
+  end it would replace (6.6 s for the same 40 runs). Only an IR built in
+  Go from the binding's Quint text (a parser and name resolution of our
+  own) would avoid it; the evaluator's stdin protocols are internal and
+  pinned per quint release.
+
 ## 10. Simulated environments and fault injection (`qenv`)
 
 Maelstrom found the bugs no in-process check found in examples/glomers.

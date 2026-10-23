@@ -24,7 +24,7 @@ import (
 // Options configures a validation run.
 type Options struct {
 	Quint   string // quint binary; default "quint"
-	Backend string // quint test --backend; default $QUINT_BACKEND, else "rust"
+	Backend string // quint test --backend; default $QUINT_BACKEND, else "rust" (a CheckBatch chunk of several traces: "typescript")
 	Dir     string // where generated modules and ITF go; default a temp dir
 	// NoITF skips writing the ITF of conforming runs (Result.ITF stays
 	// empty). The ITF holds the model's full state at every step, which for

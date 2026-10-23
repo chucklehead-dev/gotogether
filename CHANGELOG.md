@@ -35,6 +35,9 @@ Added to the core since api/core.txt was first recorded:
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and
   `qtrace.Linearize` search the orders operations' intervals allow.
+- CheckBatch replays a chunk of several traces with quint's TypeScript
+  backend unless one was chosen ($QUINT_BACKEND, Options.Backend): Rust
+  starts an evaluator per test.
 - `gotogether simulate -binding`: the model's simulation against each
   invariant the binding's new `simulate` section (`binding.Simulation`)
   says it guarantees (`holds`) or lets the code break (`allows`).

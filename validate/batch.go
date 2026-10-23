@@ -40,6 +40,13 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	}
 	opt := c.Options
 	opt.Dir = base
+	// A chunk of several traces is replayed by quint's TypeScript backend
+	// unless a backend was chosen: with the Rust backend `quint test`
+	// starts one evaluator per test, one after another, each sent the whole
+	// module, while TypeScript evaluates them all in one process. Checkout's,
+	// glomers' and streams' suites ran 20-55% faster. A single long replay
+	// (Validate, a retry here) stays on Rust, which was faster for those.
+	chosen := opt.Backend != "" || os.Getenv("QUINT_BACKEND") != ""
 	opt, err := opt.resolve()
 	if err != nil {
 		for i := range errs {
@@ -118,7 +125,11 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				calls[i] = it.plan.Calls
 				results[i] = it.res
 			}
-			for i, err := range evaluate(ctx, ms, calls, name, opt, results) {
+			copt := opt
+			if !chosen && len(ch.items) > 1 {
+				copt.Backend = "typescript"
+			}
+			for i, err := range evaluate(ctx, ms, calls, name, copt, results) {
 				if err == nil {
 					continue
 				}
