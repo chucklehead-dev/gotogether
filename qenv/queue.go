@@ -2,6 +2,7 @@ package qenv
 
 import (
 	"context"
+	"fmt"
 )
 
 // Queue is an at-least-once message queue: a published message is
@@ -32,6 +33,8 @@ type Queue struct {
 	pending []*Delivery
 	held    map[*Delivery]*Process
 	next    int
+	acked   map[int]bool // under Sim.Check: the messages acknowledged
+	forget  bool         // a broken queue, for the check to catch (export_test.go)
 	// Published counts messages published, Redelivered redeliveries.
 	Published, Redelivered int
 }
@@ -47,6 +50,9 @@ type Delivery struct {
 // NewQueue returns an empty queue in s.
 func NewQueue(s *Sim, name string) *Queue {
 	q := &Queue{Name: name, sim: s, held: map[*Delivery]*Process{}}
+	if s.Check {
+		q.acked = map[int]bool{}
+	}
 	// unacknowledged messages of a crashed consumer are redelivered, as
 	// are those of one whose connection a partition dropped
 	s.OnCrash(q.drop)
@@ -72,7 +78,42 @@ func (q *Queue) drop(p *Process) {
 		}
 	}
 	for _, d := range back {
-		q.requeue(d)
+		if !q.forget {
+			q.requeue(d)
+		}
+	}
+	q.check("dropping " + p.Name + "'s deliveries")
+}
+
+// check verifies the queue's contract under Sim.Check, after op: every
+// message published and not acknowledged is pending or held (none lost),
+// none acknowledged is (none redelivered after its acknowledgement), and
+// an Ordered queue's first deliveries wait in publication order.
+func (q *Queue) check(op string) {
+	if q.acked == nil {
+		return
+	}
+	copies := map[int]int{}
+	last := 0
+	for _, d := range q.pending {
+		copies[d.ID]++
+		if q.Ordered && !d.Redelivered {
+			if d.ID < last {
+				panic(fmt.Sprintf("qenv: queue %s, after %s: message %d waits behind %d, though Ordered (GOTOGETHER_CHECK)", q.Name, op, d.ID, last))
+			}
+			last = d.ID
+		}
+	}
+	for d := range q.held {
+		copies[d.ID]++
+	}
+	for id := 1; id <= q.next; id++ {
+		switch {
+		case q.acked[id] && copies[id] > 0:
+			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d is delivered again after its acknowledgement (GOTOGETHER_CHECK)", q.Name, op, id))
+		case !q.acked[id] && copies[id] == 0:
+			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d was lost, neither acknowledged nor pending nor held (GOTOGETHER_CHECK)", q.Name, op, id))
+		}
 	}
 }
 
@@ -110,6 +151,7 @@ func (q *Queue) Publish(ctx context.Context, body any) {
 	q.next++
 	q.Published++
 	q.pending = append(q.pending, &Delivery{ID: q.next, Body: body, q: q})
+	q.check("a publish")
 }
 
 // Receive waits for a message and takes it.
@@ -122,6 +164,7 @@ func (q *Queue) Receive(ctx context.Context) *Delivery {
 	d := q.pending[i]
 	q.pending = append(q.pending[:i:i], q.pending[i+1:]...)
 	q.held[d] = ProcessOf(ctx)
+	q.check("a receive")
 	return d
 }
 
@@ -139,7 +182,10 @@ func (d *Delivery) Ack(ctx context.Context) {
 	delete(q.held, d)
 	if q.sim.FaultOf(queueAck) == "lost" {
 		q.requeue(d)
+	} else if q.acked != nil {
+		q.acked[d.ID] = true
 	}
+	q.check("an acknowledgement")
 }
 
 // Nack returns a delivery to the queue for redelivery.
@@ -149,6 +195,7 @@ func (d *Delivery) Nack(ctx context.Context) {
 		delete(d.q.held, d)
 		d.q.requeue(d)
 	}
+	d.q.check("a nack")
 }
 
 // Pending is the number of messages waiting for delivery.

@@ -57,7 +57,8 @@ Added to the core since api/core.txt was first recorded:
   skewed and may jump ("clock.skew", "clock.jump"), read by `qenv.Now`;
   `Process.ClockOffset`. examples/lease.
 - Under `GOTOGETHER_CHECK=1` every `qenv.Store` checks each commit's
-  dependency cycles against its isolation level (G1a, G1c, G-single, G2).
+  dependency cycles against its isolation level (G1a, G1c, G-single, G2),
+  and every `qenv.Queue` its at-least-once contract after each operation.
 - CheckBatch replays a chunk of several traces with quint's TypeScript
   backend unless one was chosen ($QUINT_BACKEND, Options.Backend): Rust
   starts an evaluator per test.

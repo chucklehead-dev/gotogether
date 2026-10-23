@@ -233,9 +233,12 @@ The track, in order:
   for a lost update under SI, G2 for write skew under serializability);
   the working store passes qenv's tests and the store's examples, which
   CI now runs with the check.
-  - **Left.** The queue's and the services' contracts (at-least-once,
-    redelivery after a lost ack) as history checks too; the checker
-    public, for a real database tier's recorded transactions.
+  - The queue's contract too, after every operation: no message lost,
+    none delivered after its acknowledgement, an Ordered queue's first
+    deliveries in order. A queue forgetting a crashed consumer's messages
+    is caught.
+  - **Left.** The services' contracts; the history checker public, for a
+    real database tier's recorded transactions.
 - **X6. Clock faults (M).** Done. `Sim.ClockFaults` gives each process
   a clock of its own, read by `qenv.Now`: skewed from its creation
   ("clock.skew": ahead or behind by `ClockSkew`) and jumping at a read

@@ -1047,7 +1047,12 @@ the same workarounds kept appearing in examples. They are now in the core.
   happen; this shows those it forbids never do. A store with its
   validation turned off is caught at the commit that closes the cycle
   (`TestHistoryCatchesBrokenLevel`), and checkout's, twophase's,
-  grpcledger's and streams' runs pass it.
+  grpcledger's and streams' runs pass it. A `Queue` checks its contract
+  after each operation: every message published and not acknowledged is
+  pending or held, none acknowledged is, and an Ordered queue's first
+  deliveries wait in publication order. A queue that forgets a crashed
+  consumer's messages is caught (`TestQueueContract`), through crashes,
+  lost acknowledgements, nacks and partitions.
 - **Constants per check** (`qtest.Constants`, `qhegel.Config.Constants`,
   `validate.Checker.WithConstants`). One binding serves runs of any size.
   Checkout's load runs had needed a copy of the binding with a different

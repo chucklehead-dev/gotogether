@@ -400,7 +400,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   each commit's dependency cycles against its isolation level
   (`qenv/internal/history`: G1a, G1c, G-single, G2). CI does, and runs
   the store's examples so too. A change to the store's validation that
-  lets a forbidden cycle commit panics there, naming the cycle.
+  lets a forbidden cycle commit panics there, naming the cycle. Every
+  `Queue` checks its contract after each operation: no message lost, none
+  delivered after its acknowledgement, an Ordered queue's first
+  deliveries in order.
 - A recovery verdict needs a healthy baseline (`Experiment.Healthy`):
   without one `Assess` returns `Recovery.Err`, since a system already
   collapsed before the trigger would "recover" to its collapsed goodput.
