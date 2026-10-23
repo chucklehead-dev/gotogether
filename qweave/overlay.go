@@ -199,6 +199,21 @@ func Weave(c Config) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	// a pattern the go command could not resolve (a directory outside the
+	// go.work in use, no module) loads as a package with a list error, which
+	// the visit below would skip as one that does not build: weaving nothing,
+	// silently
+	for _, p := range pkgs {
+		for _, e := range p.Errors {
+			if e.Kind == packages.ListError {
+				hint := ""
+				if strings.Contains(e.Msg, "go.work") {
+					hint = " (the directory is outside the go.work in use: add it with go work use, or run with GOWORK=off)"
+				}
+				return nil, fmt.Errorf("qweave: loading %s in %s: %v%s", strings.Join(patterns, " "), c.dir(), e, hint)
+			}
+		}
+	}
 	done := map[string]bool{}
 	var visitErr error
 	packages.Visit(pkgs, nil, func(p *packages.Package) {

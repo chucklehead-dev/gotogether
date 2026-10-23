@@ -227,3 +227,22 @@ func TestMutateFixtureRuns(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// A directory the go command cannot load (outside the go.work in use) is
+// an error naming the fix, not a weave of nothing: the go command's error
+// comes back as a package, which the weave once skipped as one that does
+// not build.
+func TestWeaveOutsideTheWorkspace(t *testing.T) {
+	core, err := filepath.Abs("..") // the aspects load; the fixture is not in it
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := filepath.Join(t.TempDir(), "go.work")
+	if err := os.WriteFile(work, []byte("go 1.26.1\n\nuse "+core+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = qweave.Weave(qweave.Config{Dir: "testdata/sync", Env: append(os.Environ(), "GOWORK="+work)})
+	if err == nil || !strings.Contains(err.Error(), "outside the go.work in use") {
+		t.Fatalf("err = %v, want the go.work named with the fix", err)
+	}
+}
