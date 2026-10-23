@@ -29,21 +29,22 @@ func TestTrapMessages(t *testing.T) {
 	}
 }
 
-// A scripted fault naming no declared kind, or an option its kind lacks,
-// fails the exploration: it never fires, and the claim it was for once
-// failed as if the code had survived it, with advice about rates.
+// A scripted fault that cannot happen as written fails the exploration,
+// once however many runs met it: it never fires, and the claim it was for
+// once failed as if the code had survived it, with advice about rates.
 func TestUnknownScriptedFault(t *testing.T) {
-	qenv.DeclareFaults("rpc.scripted.response", "lost")
+	RequireQuint(t)
 	f := &failTB{TB: t}
-	x := &Exploration{Runs: []*Run{{scripted: true, Unscripted: []qenv.Scripted{
-		{Kind: "rpc.scripted.respons", Option: 1, After: 2},
-		{Kind: "rpc.scripted.response", Name: "lots", After: 2},
-	}}}}
-	x.unknownScripted(f)
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		System{Binding: "../validate/testdata/account.yaml", Run: race}.Explore(f, ExploreConfig{Seeds: 2, Chooser: func(uint64) qenv.Chooser {
+			return &qenv.Script{Faults: []qenv.Scripted{{Kind: "nemesis.crash.depositr", After: 1}}}
+		}})
+	}()
+	<-done
 	all := strings.Join(f.errs, "\n")
-	for _, want := range []string{`its kind "rpc.scripted.respons" covers no fault kind or nemesis`, `rpc.scripted.response has no option "lots"; its options: lost`} {
-		if !strings.Contains(all, want) {
-			t.Errorf("errors lack %q:\n%s", want, all)
-		}
+	if strings.Count(all, `"nemesis.crash.depositr" is no fault kind or nemesis`) != 1 {
+		t.Errorf("errors: %s", all)
 	}
 }

@@ -355,7 +355,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - Users name fault kinds as reports print them, without the chooser's
   `fault.` prefix: Rates keys (`"nemesis"`, `"rpc.payments"`), `Without`,
   `Swarm`, `Reaches`, Script kinds. A prefixed one panics with the fix (it
-  once matched nothing, silently). The prefix stays in the Chooser
+  once matched nothing, silently); a Script's is reported after the run
+  by `Script.Misnamed`, with every other fault it cannot make (a Script
+  matches kinds exactly, and nemeses by their full name), and fails the
+  exploration. The prefix stays in the Chooser
   protocol (`Choose("fault.<kind>", n)`, a recorded `Choice.Kind`).
 - Option 0 of every qenv choice is nominal (no fault, canonical order).
   Keep that convention in new doubles: it is what makes Hegel's shrinking

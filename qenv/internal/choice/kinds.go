@@ -146,3 +146,81 @@ func Sites() map[string][]string {
 	}
 	return out
 }
+
+// Exact reports whether name (as reports print it) is a fault kind this
+// process declared or chose, or a nemesis by its full name
+// ("nemesis.crash.payments"): what a Script matches, where Known also
+// takes prefixes.
+func Exact(name string) bool {
+	registry.Lock()
+	defer registry.Unlock()
+	if n, ok := strings.CutPrefix(name, "nemesis."); ok {
+		// by its full name only: a family ("nemesis.crash") is a choice's
+		// kind, seen, but no nemesis a Script can name
+		return registry.nemeses[n]
+	}
+	if _, ok := registry.kinds[name]; ok {
+		return true
+	}
+	_, ok := seen.Load(name)
+	return ok
+}
+
+// Names are the fault kinds declared or chosen and the nemeses
+// ("nemesis.<name>"), sorted: what a misspelling is nearest to.
+func Names() []string {
+	registry.Lock()
+	defer registry.Unlock()
+	set := map[string]bool{}
+	for k := range registry.kinds {
+		set[k] = true
+	}
+	for n := range registry.nemeses {
+		set["nemesis."+n] = true
+	}
+	seen.Range(func(k, _ any) bool {
+		set[k.(string)] = true
+		return true
+	})
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// Nearest is the name of names nearest to name by edit distance, if one
+// is near enough to be a misspelling of it, else "".
+func Nearest(name string, names []string) string {
+	best, bestD := "", -1
+	for _, n := range names {
+		if d := editDistance(name, n); bestD < 0 || d < bestD {
+			best, bestD = n, d
+		}
+	}
+	if bestD >= 0 && bestD <= max(2, len(name)/4) {
+		return best
+	}
+	return ""
+}
+
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
+}

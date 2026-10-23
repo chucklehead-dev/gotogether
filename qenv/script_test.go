@@ -217,19 +217,48 @@ func TestScriptPartialOrder(t *testing.T) {
 	}
 }
 
-// A scripted kind written with the chooser's "fault." prefix fails with the
-// fix: it once never matched, and the fault silently never happened.
-func TestScriptPrefixedKind(t *testing.T) {
-	sc := &qenv.Script{Faults: []qenv.Scripted{{Kind: "fault.test.prefixed", Option: 1}}}
+// A scripted fault that cannot happen as written is named after the run,
+// with the fix: a prefix, a kind a Script does not match exactly (a
+// prefix of one, an option's name, a nemesis's family), an option its kind
+// lacks, the nominal option, a follow of no other fault. Each once never
+// happened silently, or panicked in the run as if the system were at fault.
+func TestScriptMisnamed(t *testing.T) {
+	faults := []qenv.Scripted{
+		{Kind: "fault.test.misnamed", Option: 1},
+		{Kind: "test", Option: 1},
+		{Kind: "test.misnamed.unavailable", Option: 1},
+		{Kind: "test.misnamd", Option: 1},
+		{Kind: "nemesis.crash", After: 1},
+		{Kind: "test.misnamed", Name: "lots"},
+		{Kind: "test.misnamed", Option: 9},
+		{Kind: "test.misnamed"},
+		{Kind: "test.misnamed", Option: 1, Follows: []int{99}},
+		{Kind: "nemesis.crash.writer", After: 1},
+	}
+	sc := &qenv.Script{Faults: faults}
 	s := qenv.New(sc)
-	s.Spawn("writer", func(ctx context.Context) { _ = qenv.FaultPoint(ctx, "test.prefixed", false, errUnavailable) })
-	defer func() {
-		r := recover()
-		s.Close()
-		if msg := fmt.Sprint(r); !strings.Contains(msg, `name it without the "fault." prefix ("test.prefixed")`) {
-			t.Errorf("panic %q, want the kind without its prefix", msg)
+	s.Process("writer", true, func(ctx context.Context) { _ = qenv.FaultPoint(ctx, "test.misnamed", false, errUnavailable) })
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	all := strings.Join(sc.Misnamed(), "\n")
+	for _, want := range []string{
+		`script fault 0 (fault.test.misnamed=1 after 0 steps): name its kind without the "fault." prefix ("test.misnamed")`,
+		`script fault 1 (test=1 after 0 steps): "test" is no fault kind or nemesis`,
+		`script fault 2 (test.misnamed.unavailable=1 after 0 steps): "test.misnamed.unavailable" is no fault kind`,
+		`"test.misnamd" is no fault kind or nemesis the system declared, so it never happens (did you mean test.misnamed?)`,
+		`script fault 4 (nemesis.crash=0 after 1 steps): "nemesis.crash" is no fault kind or nemesis`,
+		`test.misnamed has no option "lots"; its options: unavailable`,
+		`test.misnamed has options unavailable; option 9 is none of them`,
+		`script fault 7 (test.misnamed=0 after 0 steps): option 0 is nominal`,
+		`script fault 8 (test.misnamed=1 after 0 steps): follows 99, which is not another fault of the script`,
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("Misnamed lacks %q:\n%s", want, all)
 		}
-	}()
-	_ = s.Run(time.Minute)
-	t.Error("a prefixed kind ran")
+	}
+	if strings.Contains(all, "script fault 9") {
+		t.Errorf("a nemesis by its full name is misnamed:\n%s", all)
+	}
 }

@@ -64,19 +64,12 @@ func (s *Script) due(kind string) int {
 		s.done = make([]bool, len(s.Faults))
 	}
 	for i, f := range s.Faults {
-		if strings.HasPrefix(f.Kind, "fault.") {
-			panic(fmt.Sprintf("qenv: script fault %d: kind %q: name it without the \"fault.\" prefix (%q), as reports print it",
-				i, f.Kind, strings.TrimPrefix(f.Kind, "fault.")))
-		}
 		if f.Kind != kind || s.done[i] {
-			continue
+			continue // a misnamed fault matches no kind: Misnamed says so
 		}
 		for _, j := range f.Follows {
-			if j < 0 || j >= len(s.Faults) || j == i {
-				panic(fmt.Sprintf("qenv: script fault %d (%v) follows %d, which is not another fault of the script", i, f, j))
-			}
-			if !s.done[j] {
-				return -1
+			if j < 0 || j >= len(s.Faults) || j == i || !s.done[j] {
+				return -1 // a follow of no other fault never happens: Misnamed
 			}
 		}
 		if f.After > 0 && s.progress() < f.After {
@@ -116,12 +109,9 @@ func (s *Script) Choose(kind string, n int) int {
 	v := f.Option
 	if f.Name != "" {
 		v = slices.Index(choice.Options(k), f.Name) + 1
-		if v == 0 {
-			panic(fmt.Sprintf("qenv: script fault %v: %s has no option %q (its options: %v)", f, kind, f.Name, choice.Options(k)))
-		}
 	}
 	if v <= 0 {
-		panic(fmt.Sprintf("qenv: script fault %v: option %d is nominal; script the fault's option, from 1", f, v))
+		return 0 // no option, or the nominal one: Misnamed says so, and it stays Remaining
 	}
 	if v >= n {
 		return 0 // this choice does not offer the option (a read of a kind whose write can lose its response): wait for one that does
@@ -151,6 +141,52 @@ func (s *Script) Entropy(n int) []byte {
 		return e(n)
 	}
 	return make([]byte, n)
+}
+
+// Misnamed says what is wrong with each scripted fault that cannot
+// happen as written: a kind no double or fault point declared (a Script
+// matches kinds exactly; "rpc.payments" is no kind, "nemesis.crash" no
+// nemesis), the "fault." prefix, an option its kind lacks or the nominal
+// one, a Follows of no other fault. Ask it after a run: kinds are declared
+// as the doubles are made. A misnamed fault never happens and stays in
+// Remaining, where it would read as a run that never came to it.
+func (s *Script) Misnamed() []string {
+	var out []string
+	names := choice.Names()
+	for i, f := range s.Faults {
+		bad := func(format string, a ...any) {
+			out = append(out, fmt.Sprintf("script fault %d (%v): ", i, f)+fmt.Sprintf(format, a...))
+		}
+		for _, j := range f.Follows {
+			if j < 0 || j >= len(s.Faults) || j == i {
+				bad("follows %d, which is not another fault of the script", j)
+			}
+		}
+		switch {
+		case strings.HasPrefix(f.Kind, "fault."):
+			bad("name its kind without the \"fault.\" prefix (%q), as reports print it", strings.TrimPrefix(f.Kind, "fault."))
+			continue
+		case !choice.Exact(f.Kind):
+			msg := fmt.Sprintf("%q is no fault kind or nemesis the system declared, so it never happens", f.Kind)
+			if near := choice.Nearest(f.Kind, names); near != "" {
+				msg += fmt.Sprintf(" (did you mean %s?)", near)
+			}
+			bad("%s: name a kind as fault coverage prints it (\"rpc.<service>.response\"), a nemesis as \"nemesis.crash.<process>\"", msg)
+			continue
+		case strings.HasPrefix(f.Kind, "nemesis."):
+			continue // chosen by name: Option and Name do not apply
+		}
+		opts := choice.Options(f.Kind)
+		switch {
+		case f.Name != "" && opts != nil && !slices.Contains(opts, f.Name):
+			bad("%s has no option %q; its options: %s", f.Kind, f.Name, strings.Join(opts, ", "))
+		case f.Name == "" && f.Option <= 0:
+			bad("option %d is nominal; script the fault's option, from 1 (or its Name)", f.Option)
+		case f.Name == "" && opts != nil && f.Option > len(opts)+1: // a fault point's crash follows its declared options
+			bad("%s has options %s; option %d is none of them", f.Kind, strings.Join(opts, ", "), f.Option)
+		}
+	}
+	return out
 }
 
 // Remaining are the scripted faults that have not happened.
