@@ -30,11 +30,11 @@ func TestShrunkFailureAsCorpus(t *testing.T) {
 	}
 	sys := system(checkout.Config{Isolation: qenv.SnapshotIsolation, Mutation: shop.LockWithoutWrite})
 	v := qhegel.Shrink(t, sys, hegel.WithTestCases(50), hegel.WithSeed(1))
-	data, err := qenv.EncodeChoices(v.Choices, qenv.DefaultRates)
+	data, err := qenv.EncodeChoices(v.Choices, sys.FaultRates())
 	if err != nil {
 		t.Fatal(err)
 	}
-	x := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, qenv.DefaultRates) }})
+	x := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, sys.FaultRates()) }})
 	if got, want := qhegel.Render(x.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the corpus entry runs differently:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}

@@ -56,8 +56,11 @@ func (s System) WithRates(r qenv.Rates) System {
 	return s
 }
 
-// rates are the system's Rates, zero being qenv.DefaultRates.
-func (s System) rates() qenv.Rates {
+// FaultRates are the rates the system's workflows draw faults at: its
+// Rates, or qenv.DefaultRates when they are zero. Encode a shrunk failure
+// for the fuzz corpus at them: qenv.EncodeChoices(v.Choices,
+// sys.FaultRates()).
+func (s System) FaultRates() qenv.Rates {
 	if s.Rates.Default == 0 && s.Rates.Kinds == nil {
 		return qenv.DefaultRates
 	}
@@ -81,7 +84,7 @@ func (s System) opts(more ...Option) []Option {
 // expectations with Exploration.Expect.
 func (s System) Explore(t testing.TB, cfg ExploreConfig) *Exploration {
 	t.Helper()
-	cfg.opts, cfg.rates = s.opts(cfg.opts...), s.rates()
+	cfg.opts, cfg.rates = s.opts(cfg.opts...), s.FaultRates()
 	return explore(t, s.Binding, cfg, s.Run)
 }
 
@@ -135,7 +138,7 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap
 // the chooser.
 func (s System) Sweep(t *testing.T, sw SweepConfig) *SweepResult {
 	t.Helper()
-	sw.Explore.opts, sw.Explore.rates = s.opts(sw.Explore.opts...), s.rates()
+	sw.Explore.opts, sw.Explore.rates = s.opts(sw.Explore.opts...), s.FaultRates()
 	return sweep(t, s.Binding, sw, s.Run)
 }
 
@@ -144,7 +147,7 @@ func (s System) Sweep(t *testing.T, sw SweepConfig) *SweepResult {
 // Rates: schedules, faults), the model the oracle. Without -fuzz, go test
 // runs the seeds and the corpus in testdata/fuzz as regression tests. Seed
 // it with runs worth keeping: a shrunk Hegel failure, once fixed, is
-// qenv.EncodeChoices(v.Choices, sys.Rates). The empty input, every choice
+// qenv.EncodeChoices(v.Choices, sys.FaultRates()). The empty input, every choice
 // nominal, is always a seed. Inputs that repeat a run's steps take its
 // verdict without quint.
 //
@@ -155,7 +158,7 @@ func (s System) Fuzz(f *testing.F, seeds ...[]byte) {
 	for _, sd := range seeds {
 		f.Add(sd)
 	}
-	rates := s.rates()
+	rates := s.FaultRates()
 	f.Fuzz(func(t *testing.T, data []byte) {
 		s.Explore(t, ExploreConfig{Seeds: 1, Parallel: 1, fuzz: true,
 			Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, rates) }}).Expect(t, Conforms())

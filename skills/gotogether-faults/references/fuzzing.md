@@ -13,4 +13,4 @@ func FuzzShop(f *testing.F) { sys.Fuzz(f) }   // sys is a qtest.System, at its R
   inputs repeat a run's model-level steps. On checkout, that took the
   fuzzer from 16 runs in 90 s to 14,633.
 - Keep a shrunk Hegel failure, once fixed, as a seed:
-  `sys.Fuzz(f, must(qenv.EncodeChoices(v.Choices, sys.Rates)))`.
+  `sys.Fuzz(f, must(qenv.EncodeChoices(v.Choices, sys.FaultRates())))`.

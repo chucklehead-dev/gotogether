@@ -66,8 +66,9 @@ func TestRunID(t *testing.T) {
 		want string
 	}{
 		{Run{seed: 17}, "seed=17"},
-		{Run{seed: 3, schedule: "17:1"}, "schedule=17:1"},
-		{Run{seed: 1, corpus: "f.json"}, "corpus=f.json"},
+		{Run{seed: 3, schedule: "17:1", exhaustive: true}, "schedule=17:1"},
+		{Run{seed: 1, exhaustive: true}, "schedule="}, // an exhaustive search's nominal run
+		{Run{seed: 1, corpus: "/tmp/corpus/TestX/f.json"}, "corpus=f.json"},
 		{Run{}, ""},
 	} {
 		if got := c.r.ID(); got != c.want {

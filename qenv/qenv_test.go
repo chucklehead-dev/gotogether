@@ -303,6 +303,30 @@ func TestSignalTimeoutIsForgotten(t *testing.T) {
 	}
 }
 
+// A negative wait has passed already: it times out at once, in a
+// simulation and outside one, instead of waiting without limit.
+func TestSignalNegativeWait(t *testing.T) {
+	var sig qenv.Signal
+	if sig.Wait(context.Background(), -time.Second) {
+		t.Error("woken outside a simulation with no Notify")
+	}
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	var at time.Duration = -1
+	s.Spawn("waiter", func(ctx context.Context) {
+		if sig.Wait(ctx, -time.Second) {
+			t.Error("woken with no Notify")
+		}
+		at = s.Elapsed()
+	})
+	if err := s.Run(0); err != nil {
+		t.Fatal(err)
+	}
+	if at != 0 {
+		t.Errorf("returned at %v, want at once", at)
+	}
+}
+
 // A service with Capacity queues calls for its workers, rejects calls
 // over its queue, and keeps serving calls whose caller gave up, unless it
 // sheds them.

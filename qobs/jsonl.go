@@ -3,6 +3,7 @@ package qobs
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -20,7 +21,8 @@ type JSONLSink struct {
 	c   io.Closer     // FileSink's file
 	err error
 	// sync: Sync the writer after each step (Synced)
-	sync bool
+	sync   bool
+	closed bool // Close was called: a later step is an error, not lost in a buffer
 }
 
 // Durability is how much of a step log survives its writer's end.
@@ -51,6 +53,11 @@ const (
 // syncs w if it has a Sync method, as *os.File and qenv.File have).
 func NewJSONLSink(w io.Writer, d Durability) *JSONLSink {
 	j := &JSONLSink{w: w, sync: d == Synced}
+	if _, ok := w.(interface{ Sync() error }); d == Synced && !ok {
+		// a sync that cannot happen, silently, would claim a durability
+		// the log does not have
+		j.err = fmt.Errorf("qobs: a Synced step log needs a writer with a Sync method (%T has none): give it the *os.File, or another durability", w)
+	}
 	if d == Buffered {
 		j.buf = bufio.NewWriterSize(w, 64*1024)
 		j.w = j.buf
@@ -86,6 +93,12 @@ func (j *JSONLSink) Record(_ context.Context, s *qtrace.Step) {
 	b, err := s.MarshalLine()
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if j.closed {
+		if j.err == nil {
+			j.err = fmt.Errorf("qobs: step %s recorded after the step log was closed", s.Action)
+		}
+		return
+	}
 	if err == nil {
 		_, err = j.w.Write(b)
 	}
@@ -104,6 +117,7 @@ func (j *JSONLSink) Err() error { j.mu.Lock(); defer j.mu.Unlock(); return j.err
 func (j *JSONLSink) Close() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	j.closed = true
 	if j.buf != nil {
 		if err := j.buf.Flush(); err != nil && j.err == nil {
 			j.err = err

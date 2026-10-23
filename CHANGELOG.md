@@ -39,6 +39,14 @@ Added to the core since api/core.txt was first recorded:
   `Signal.Wait` takes a duration (0: no limit), as `WaitFor` does; a
   run's identity is `Run.ID()` ("seed=17", "schedule=17:1",
   "corpus=<file>"), its seed, schedule and corpus fields unexported.
+  `System.FaultRates()` is the rates its workflows draw at (its Rates, or
+  DefaultRates when zero): encode a shrunk failure for the fuzz corpus at
+  them. `System.Judge` fails on steps recorded outside the run and on a
+  Rates key that covers nothing, as an exploration does, and no longer
+  skips an empty run (`CaseCheck.SkipIfEmpty` says whether the caller
+  should). A negative `Signal.Wait` duration times out at once. A
+  `Synced` step log on a writer without `Sync`, and a step recorded
+  after `Close`, are the sink's error, not silently less durable or lost.
 - One seam between qtest and a package that makes runs its own way
   (qhegel): `qtest.CheckCases(t, workflow, binding, opts...)` and
   `System.CheckCases` give a `CaseCheck` (the checker, how each case

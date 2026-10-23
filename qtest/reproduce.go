@@ -203,16 +203,7 @@ func (x *Exploration) reproduce(r *Run) string {
 	if x.fuzz { // the run is the fuzz input's, which Go saves and names
 		return fmt.Sprintf("go test -run '^%s$' (a fuzz input: the fuzzer saves a new failing one under testdata/fuzz/%s and prints its file; a seed input is the test's f.Add)", strings.ReplaceAll(x.test, "/", "$/^"), strings.SplitN(x.test, "/", 2)[0])
 	}
-	var what string
-	switch {
-	case r.corpus != "":
-		what = "corpus=" + filepath.Base(r.corpus)
-	case x.search != nil:
-		what = "schedule=" + r.schedule
-	default:
-		what = fmt.Sprintf("seed=%d", r.seed)
-	}
-	return fmt.Sprintf("GOTOGETHER_RUN='%s:%s' go test -run '^%s$'", x.ref(), what, strings.ReplaceAll(x.test, "/", "$/^"))
+	return fmt.Sprintf("GOTOGETHER_RUN='%s:%s' go test -run '^%s$'", x.ref(), r.ID(), strings.ReplaceAll(x.test, "/", "$/^"))
 }
 
 // universal reports whether c holds of every run, so a run alone can be

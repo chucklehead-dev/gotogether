@@ -557,7 +557,14 @@ next.
   split would make users learn three option types for a mistake the
   refusals already name), merging qweave and qanalysis (a go -overlay
   tool and vet/golangci passes have different users; their x/tools now
-  match), and Sweep on testing.TB (it needs t.Run).
+  match), and Sweep on testing.TB (it needs t.Run). Kept as they are,
+  reviewed: `TriggerSearch.Expect` returning the `*Recovery` (the trigger
+  is the search's answer); no `SweepResult.Expect` (a row's claims run in
+  its subtest, where its failure is named); `Bound.Parallel` (Exhaust
+  takes no ExploreConfig); itf's `RecordOf`, `TupleOf` and `SetOf` (a
+  driver's expected state is written with them); qrun public (an app's
+  own per-run state is a `qrun.Key`); `validate.Cached` (a test binary
+  that builds its own checkers typechecks each binding's model once).
 - **Z5. Maintainability (S–M).** Strict/Escaped scoped to the run's
   recorder, so qtest's tests run in parallel (1m23s → ~30s estimated); a
   CI matrix for the serial job; a workspace-mode CI job so sub-modules

@@ -188,8 +188,8 @@ func checkerFor(t testing.TB, bindingPath string, o validate.Options, c settings
 func (r *Run) ID() string {
 	switch {
 	case r.corpus != "":
-		return "corpus=" + r.corpus
-	case r.schedule != "":
+		return "corpus=" + filepath.Base(r.corpus) // as GOTOGETHER_RUN matches it
+	case r.exhaustive:
 		return "schedule=" + r.schedule
 	case r.seed != 0:
 		return fmt.Sprintf("seed=%d", r.seed)
@@ -207,6 +207,9 @@ type Run struct {
 	// it made otherwise than nominal, as choice:option pairs ("17:1,40:2").
 	// GOTOGETHER_RUN runs it alone.
 	schedule string
+	// exhaustive is a run of an exhaustive search, whose schedule names
+	// it ("" for the nominal one)
+	exhaustive bool
 	// corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
 	// or "" for a seeded run.
 	corpus  string

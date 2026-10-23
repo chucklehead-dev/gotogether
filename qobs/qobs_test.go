@@ -90,3 +90,18 @@ func TestInstallGlobal(t *testing.T) {
 		t.Errorf("steps a %v, b %v", a.Steps(), b.Steps())
 	}
 }
+
+// A Synced log over a writer that cannot sync says so, and a step after
+// Close is an error: both were lost silently.
+func TestSinkErrors(t *testing.T) {
+	var b strings.Builder
+	if err := NewJSONLSink(&b, Synced).Err(); err == nil || !strings.Contains(err.Error(), "needs a writer with a Sync method") {
+		t.Errorf("Synced over a Builder: %v", err)
+	}
+	sink := NewJSONLSink(&b, Buffered)
+	sink.Close()
+	NewRecorder(sink).Record(context.Background(), "deposit", nil)
+	if err := sink.Err(); err == nil || !strings.Contains(err.Error(), "after the step log was closed") {
+		t.Errorf("a step after Close: %v", err)
+	}
+}

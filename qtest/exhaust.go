@@ -153,7 +153,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	run := func(ds []deviation) *Run {
 		f := &forcing{ds: ds}
 		r := runOne(c, woven, f, s.Run)
-		r.schedule = schedule(ds)
+		r.schedule, r.exhaustive = schedule(ds), true
 		return r
 	}
 	if spec, ok := runSpecFor(t, x.ref()); ok {

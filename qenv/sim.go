@@ -530,7 +530,8 @@ type waiter struct {
 	gen int
 }
 
-// Wait blocks until Notify or d has passed (0: no limit), in the
+// Wait blocks until Notify or d has passed (0: no limit; a negative d has
+// passed already, as for time.After, and times out at once), in the
 // simulation's true time (Sim.Now), not a process's clock: WaitFor's
 // interval is the caller's clock's. It reports whether Notify woke it.
 // Outside a simulation it waits in real time or until ctx is done.
@@ -538,14 +539,14 @@ func (g *Signal) Wait(ctx context.Context, d time.Duration) bool {
 	t := taskOf(ctx)
 	if t == nil {
 		var deadline time.Time
-		if d > 0 {
-			deadline = time.Now().Add(d) //qenv:ok the real wait's deadline, outside any simulation
+		if d != 0 {
+			deadline = time.Now().Add(max(d, 0)) //qenv:ok the real wait's deadline, outside any simulation
 		}
 		return g.waitReal(ctx, deadline)
 	}
 	var deadline time.Time
-	if d > 0 {
-		deadline = t.sim.Now().Add(d)
+	if d != 0 {
+		deadline = t.sim.Now().Add(max(d, 0))
 	}
 	g.waiters = append(g.waiters, waiter{t, t.gen})
 	t.wait(nil, deadline)

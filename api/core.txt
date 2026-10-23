@@ -1136,6 +1136,7 @@ type CaseCheck struct
     field Checker *validate.Checker
     field Recorder []qobs.Option
     field Global bool
+    field SkipIfEmpty bool
 type Claim interface
     judge(reports []*validate.Report) judgment
     String() string
@@ -1248,6 +1249,7 @@ type System struct
     method (System) CheckCases(t testing.TB, workflow string) CaseCheck
     method (System) Exhaust(t testing.TB, b Bound) *Exploration
     method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
+    method (System) FaultRates() qenv.Rates
     method (System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration
     method (System) Fuzz(f *testing.F, seeds ...[]byte)
     method (System) Judge(t testing.TB, ch qenv.Chooser) *Run
