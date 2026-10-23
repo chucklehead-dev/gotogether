@@ -27,6 +27,12 @@ type Config struct {
 	Orders, Stock int
 	// NoCrashes keeps every process up.
 	NoCrashes bool
+	// Partitions gives the queues a broker of its own and makes every link
+	// between it, the relay and the consumers a nemesis (qenv's
+	// Sim.Partitions): a publish waits out a cut, and a consumer cut off
+	// has its unacknowledged events redelivered. Off, the deployment has no
+	// broker process and makes the same choices as before it existed.
+	Partitions bool
 
 	// For load experiments (load.go): the provider's capacity (nil:
 	// unlimited, instant), and the shop's payment design.
@@ -106,9 +112,14 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 		PaymentWorkers: cfg.PaymentWorkers, PaymentRetry: cfg.PaymentRetry, RedeliveryDelay: cfg.RedeliveryDelay}
 	crash := !cfg.NoCrashes
 	api := s.Process("api", crash, func(context.Context) {})
-	s.Process("relay", crash, d.Shop.RunRelay)
-	s.Process("payments", crash, func(ctx context.Context) { d.Shop.RunPayments(ctx, inbox{qPay}) })
-	s.Process("shipping", crash, func(ctx context.Context) { d.Shop.RunShipping(ctx, inbox{qShip}) })
+	relay := s.Process("relay", crash, d.Shop.RunRelay)
+	pays := s.Process("payments", crash, func(ctx context.Context) { d.Shop.RunPayments(ctx, inbox{qPay}) })
+	ships := s.Process("shipping", crash, func(ctx context.Context) { d.Shop.RunShipping(ctx, inbox{qShip}) })
+	if cfg.Partitions {
+		broker := s.Process("broker", false, func(context.Context) {})
+		qPay.Proc, qShip.Proc = broker, broker
+		s.Partitions(broker, relay, pays, ships)
+	}
 	d.api = qenv.NewService(s, "api", api, func(ctx context.Context, r apiReq) (string, error) {
 		var err error
 		switch r.Op {

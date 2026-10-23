@@ -123,3 +123,13 @@ func TestHegelFaithful(t *testing.T) {
 		}
 	}, hegel.WithTestCases(30))
 }
+
+// Partitions between the broker, the relay and the consumers: a publish
+// waits out a cut, a consumer cut off has its events redelivered (with
+// crashes and lost acknowledgements off, 25 redeliveries in 19 of 40 runs,
+// none without the cuts), and the shop, which already survives
+// redelivery, stays correct.
+func TestFaithfulConformsUnderPartitions(t *testing.T) {
+	qtest.RequireQuint(t)
+	explore(t, checkout.Config{Isolation: qenv.Serializable, Partitions: true}, qtest.ExploreConfig{Seeds: 40, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
+}

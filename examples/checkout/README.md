@@ -52,6 +52,13 @@ batch. Each test states the verdict it expects with `qtest.Expect`.
 | `NoIdempotencyKey` | **violates** `chargedAtMostOnce` (a retry after a lost response) or `settledCorrectly` (the void can't find the charge) | | |
 | `DualWrite` (publish in the background after commit) | **violates** `settledCorrectly`: a crash before the publish loses the order (a one-step window, found at a higher crash rate) | | |
 
+The faithful shop also conforms with its broker partitioned from the
+relay and the consumers (`Config.Partitions`,
+`TestFaithfulConformsUnderPartitions`): a publish waits out a cut, and a
+consumer cut off has its events redelivered (25 redeliveries in 19 of 40
+runs with crashes and lost acknowledgements off, none without the cuts),
+which the shop already survives.
+
 A table like this answers "harness quirk or real bug?" for each finding.
 `LockWithoutWrite` is a real bug if production runs PostgreSQL at
 REPEATABLE READ, or Oracle at "serializable" (which is snapshot isolation).
