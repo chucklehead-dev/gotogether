@@ -13,10 +13,12 @@ import (
 //     consumer crashed holding the message;
 //   - reordering, unless Ordered: which pending message is delivered next
 //     is a schedule choice;
-//   - with a broker process (NewQueue), partitions (Sim.Net): a
-//     publisher or consumer cut off from the broker waits until it heals,
-//     and a consumer's cut drops its connection, so the messages it holds
-//     are redelivered and its later acknowledgements are lost.
+//   - with a broker process (NewQueue), partitions (Sim.Net) and the
+//     broker's crash: a publisher or consumer cut off from the broker, or
+//     whose broker is down, waits until it heals or restarts, and a
+//     consumer's cut or the broker's crash drops its connection, so the
+//     messages it holds are redelivered and its later acknowledgements are
+//     lost. The broker keeps its messages across a crash (a durable queue).
 //
 // Consumers must therefore be idempotent, and must not rely on order
 // across messages.
@@ -57,8 +59,21 @@ func NewQueue(s *Sim, name string, p *Process) *Queue {
 		q.acked = map[int]bool{}
 	}
 	// unacknowledged messages of a crashed consumer are redelivered, as
-	// are those of one whose connection a partition dropped
-	s.OnCrash(q.drop)
+	// are those of one whose connection a partition or the broker's crash
+	// dropped
+	s.OnCrash(func(c *Process) {
+		if c != q.proc {
+			q.drop(c)
+			return
+		}
+		for _, d := range q.heldIn() {
+			delete(q.held, d)
+			if !q.forget {
+				q.requeue(d)
+			}
+		}
+		q.check("the broker's crash")
+	})
 	s.net.OnCut(func(a, b *Process) {
 		switch {
 		case q.proc == nil:
@@ -140,10 +155,10 @@ func sortedIDs(m map[int]bool) []int {
 	return ids
 }
 
-// reaches reports whether the network lets the task of ctx reach the
-// broker.
+// reaches reports whether the task of ctx can reach the broker: it is up,
+// and the network lets it.
 func (q *Queue) reaches(ctx context.Context) bool {
-	return q.proc == nil || !q.sim.net.Partitioned(ProcessOf(ctx), q.proc)
+	return q.proc == nil || !q.proc.Down() && !q.sim.net.Partitioned(ProcessOf(ctx), q.proc)
 }
 
 func (q *Queue) heldIn() []*Delivery {

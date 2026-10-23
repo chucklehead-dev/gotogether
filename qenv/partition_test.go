@@ -357,3 +357,43 @@ func TestHealNemesisSparesHandCuts(t *testing.T) {
 		}
 	}
 }
+
+// A queue's broker that crashes drops its consumers' connections, as a
+// partition does: the message a consumer holds is redelivered and its
+// acknowledgement lost. While it is down a publish waits for its restart,
+// and the messages it had are kept. A down broker once served on.
+func TestQueueBrokerCrash(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	broker := s.Process("broker", true, func(context.Context) {})
+	q := qenv.NewQueue(s, "jobs", broker)
+	var got []string
+	var publishedAt time.Duration
+	s.Process("consumer", false, func(ctx context.Context) {
+		d := q.Receive(ctx)
+		broker.Crash()
+		qenv.Go(ctx, "operator", func(ctx context.Context) {
+			qenv.Sleep(ctx, time.Second)
+			broker.Restart()
+		})
+		d.Ack(ctx) // lost: the crash dropped the connection
+		start := s.Now()
+		q.Publish(ctx, "b")
+		publishedAt = s.Now().Sub(start)
+		for i := 0; i < 2; i++ {
+			d := q.Receive(ctx)
+			got = append(got, fmt.Sprintf("%v redelivered=%v", d.Body, d.Redelivered))
+			d.Ack(ctx)
+		}
+	})
+	s.Spawn("publisher", func(ctx context.Context) { q.Publish(ctx, "a") })
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a redelivered=true", "b redelivered=false"}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("deliveries %v, want %v", got, want)
+	}
+	if publishedAt != time.Second {
+		t.Errorf("the publish to a down broker returned after %v, want once it restarted (1s)", publishedAt)
+	}
+}
