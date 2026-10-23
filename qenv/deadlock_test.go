@@ -54,9 +54,15 @@ func TestStoreDetectsDeadlock(t *testing.T) {
 // A commit's wait for a lock is a lock wait the deadlock check sees: T2
 // commits a write of a, locked by T1, while holding b; T1 then locks b.
 // The check once followed only GetForUpdate's waits, and both waited
-// forever.
+// forever. On the native runtime too, where a waiter re-reads its locks
+// only when woken: the check follows its keys, not a key it saw.
 func TestStoreDetectsDeadlockThroughCommit(t *testing.T) {
-	s := qenv.New(qenv.Nominal{})
+	t.Run("scheduler", func(t *testing.T) { deadlockThroughCommit(t, qenv.New(qenv.Nominal{}), time.Minute) })
+	// the native runtime's Run lasts its whole time, in real time
+	t.Run("native", func(t *testing.T) { deadlockThroughCommit(t, qenv.NewNative(qenv.Nominal{}, nil), time.Second) })
+}
+
+func deadlockThroughCommit(t *testing.T, s *qenv.Sim, d time.Duration) {
 	st := qenv.NewStore(s, "db", qenv.Serializable)
 	st.Load("a", 10)
 	st.Load("b", 10)
@@ -84,7 +90,7 @@ func TestStoreDetectsDeadlockThroughCommit(t *testing.T) {
 		tx.Put("a", 1)
 		t2 = tx.Commit()
 	})
-	if err := s.Run(time.Minute); err != nil {
+	if err := s.Run(d); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()

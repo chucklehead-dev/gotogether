@@ -239,8 +239,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   to commit: return nil from it and the error after `qenv.Retry`
   (checkout's `PlaceOrder`). An error rolls back and drops the hook.
 - `qenv.Store` detects lock-wait cycles: the transaction whose
-  `GetForUpdate` would close one aborts with `ErrDeadlock` (an
-  ErrConflict). `qenv.Service` lets a crash fall between the handler's
+  `GetForUpdate` or `Commit` would close one aborts with `ErrDeadlock`
+  (an ErrConflict). A commit waits until every key it writes is unlocked
+  at once (waiting key by key let it write under another's lock), and the
+  check follows each waiter's keys as they are now, not a key it saw. `qenv.Service` lets a crash fall between the handler's
   return and the response's delivery (the effect committed, the caller
   never told) unless `NoCrashWindow` is set; the window is a scheduling
   point, so choices recorded before it was the default do not replay.

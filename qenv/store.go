@@ -152,8 +152,9 @@ type tx struct {
 	// under Check: what the transaction read, for the history
 	seen    []history.Read
 	scanned []history.Scan
-	// waiting is the key whose lock the transaction waits for ("": none)
-	waiting string
+	// waitKeys are the keys whose locks the transaction waits for (nil:
+	// none): the deadlock check follows the one still locked
+	waitKeys []string
 }
 
 // Begin starts a transaction.
@@ -333,41 +334,42 @@ func (tx *tx) blocker(keys []string) string {
 }
 
 // lockWait waits until no other transaction holds a lock on any of keys.
-// The key it waits on is tx.waiting, which the deadlock check follows: the
-// owner waits for a lock whose owner waits ...; if the chain comes back to
-// tx, waiting would never end, and tx aborts with ErrDeadlock. A commit's
-// wait is a lock wait as GetForUpdate's is (it was invisible to the check).
+// The deadlock check follows the chain of waits: the owner of a key tx
+// would wait for waits for a key whose owner waits ...; if the chain comes
+// back to tx, waiting would never end, and tx aborts with ErrDeadlock. A
+// link is the key a waiter's keys still have locked, computed when the
+// chain is followed, not when the waiter last looked: on the native
+// runtime a waiter looks only when woken, and a key it saw locked may be
+// free. A commit's wait is a lock wait as GetForUpdate's is (it was
+// invisible to the check). Waiting for every key at once lets lockers
+// that take keys one at a time pass a commit, which may wait long; it is
+// what makes the commit's writes atomic.
 func (tx *tx) lockWait(keys []string) error {
 	k := tx.blocker(keys)
 	if k == "" {
 		return nil
 	}
-	for o, n := tx.st.locks[k], 0; o != nil && n <= len(tx.st.open); o, n = tx.st.locks[o.waiting], n+1 {
+	for o, n := tx.st.locks[k], 0; o != nil && n <= len(tx.st.open); n++ {
 		if o == tx {
 			tx.Rollback()
 			return ErrDeadlock
 		}
-		if o.waiting == "" {
+		next := o.blocker(o.waitKeys)
+		if next == "" {
 			break
 		}
+		o = tx.st.locks[next]
 	}
-	tx.waiting = k
-	Wait(tx.ctx, func() bool {
-		// the key it waits on is the one still locked, for the check of a
-		// transaction that comes to wait on tx
-		if b := tx.blocker(keys); b != "" {
-			tx.waiting = b
-			return false
-		}
-		return true
-	})
-	tx.waiting = ""
+	tx.waitKeys = keys
+	Wait(tx.ctx, func() bool { return tx.blocker(keys) == "" })
+	tx.waitKeys = nil
 	return nil
 }
 
 // Commit applies the writes, or aborts with ErrConflict as the isolation
-// level requires. Writes to a key another transaction has locked wait for
-// that lock first. With CommitFaults, a commit may be applied and still
+// level requires. Writes to keys another transaction has locked wait until
+// none is locked, and a wait that would close a cycle of lock waits aborts
+// with ErrDeadlock, as GetForUpdate's does. With CommitFaults, a commit may be applied and still
 // return ErrUnknownOutcome.
 func (tx *tx) Commit() error {
 	tx.check()
