@@ -47,7 +47,10 @@ Added to the core since api/core.txt was first recorded:
   mutant is killed by failing; a mutant whose runs record nothing is
   killed. examples/hello's mutation test ends in `NoSurvivors`.
 - `ExploreConfig.Corpus` (and `GOTOGETHER_CORPUS`): saved runs replayed
-  before the seeds, a failed claim's run saved; `Run.Corpus`.
+  before the seeds, a failed claim's run saved; `Run.Corpus`. An entry
+  (format `gotogether.run/1`) names the exploration that saved it, which
+  alone replays it; one that no longer replays fails as stale, with the
+  seed that finds its run again.
 - qhegel: `Shrink` removes the faults the shrunk failure does not need
   (Hegel's shrinking stopped at a local minimum); `GOTOGETHER_HEGEL_SEED`
   overrides a search's seed.

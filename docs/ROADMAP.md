@@ -376,7 +376,16 @@ starts, and the review's findings are fixed first.
   processes jumps but no skew). Say that skew and drift are per-process
   fault choices at their rates, not every process. lease's claims redone
   on the monotonic reading.
-- **Y5. Run files that say what they are.** A corpus entry records no
+- **Y5. Run files that say what they are. Done** for the corpus: an
+  entry records its format (`gotogether.run/1`) and the exploration that
+  saved it, which alone replays it; an unknown format is refused with the
+  fix, and an entry that no longer replays fails as stale with the seed
+  that finds its run again. Not done, on purpose: a hash of the fault
+  model (a new double's kinds would make every entry stale; replay
+  already detects a divergence exactly) and the gosim version (replay
+  detects that too). The defaults stay opt-in on their merits: a fault
+  a test did not ask for changes what every existing test checks.
+  The finding: a corpus entry recorded no
   format, byte rule, gosim version or fault model, so a refactor turns it
   into a red test reported as a failure, and every new fault kind has had
   to stay opt-in to keep old choices. One run file with a header (format,

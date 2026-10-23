@@ -173,8 +173,13 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
 - **A corpus of failures:** `ExploreConfig{Corpus: "testdata/corpus/TestX"}`
   replays the saved runs there before the seeds, and a failed claim saves
   the run it shows there (its choices, as JSON): commit it, and the bug
-  stays found whatever the seeds become. `GOTOGETHER_CORPUS=dir` gives
-  every exploration `dir/<test>` (the nightly run uploads it).
+  stays found whatever the seeds become. An entry names the exploration
+  that saved it (`TestX#2`), which alone replays it, so a test's
+  explorations can share the directory. An entry that no longer replays
+  (the code or its faults changed) fails as stale, with the seed that
+  finds its run again: delete it once the bug is fixed.
+  `GOTOGETHER_CORPUS=dir` gives every exploration `dir/<test>` (the
+  nightly run uploads it).
 - **Reproducing a run:** a failing run's report ends with
   `reproduce: GOTOGETHER_RUN='TestX#2:seed=17' go test -run '^TestX$'`:
   that run alone in the test's second exploration (its others run as

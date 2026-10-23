@@ -119,17 +119,28 @@ type ExploreConfig struct {
 	Chooser func(seed uint64) qenv.Chooser
 	// Corpus is a directory of saved runs (their choices, as JSON),
 	// replayed before the seeds: a run that once failed, kept as a
-	// regression. When a claim fails, the run it shows is saved there.
-	// GOTOGETHER_CORPUS=dir gives every exploration dir/<test name> (a
-	// nightly run collecting what it finds).
+	// regression. When a claim fails, the run it shows is saved there. An
+	// entry names the exploration that saved it (TestX#2), which alone
+	// replays it, so a test's explorations may share the directory; one
+	// that no longer replays (the code changed) fails as stale, saying
+	// how to find its run again. GOTOGETHER_CORPUS=dir gives every
+	// exploration dir/<test name> (a nightly run collecting what it finds).
 	Corpus string
 }
 
-// A corpusEntry is a saved run: its choices replay it (qenv.Replay).
+// corpusFormat names a corpus entry's format: an entry of another is
+// refused with the fix, never replayed as something else.
+const corpusFormat = "gotogether.run/1"
+
+// A corpusEntry is a saved run: its choices replay it (qenv.Replay). It
+// names the exploration that saved it (TestX#2), which alone replays it,
+// so a test's explorations can share a directory, and the seed it came
+// from, which finds it again when it no longer replays.
 type corpusEntry struct {
-	Test    string        `json:"test"`
-	Seed    uint64        `json:"seed,omitempty"`
-	Choices []qenv.Choice `json:"choices"`
+	Format      string        `json:"format"`
+	Exploration string        `json:"exploration"`
+	Seed        uint64        `json:"seed,omitempty"`
+	Choices     []qenv.Choice `json:"choices"`
 }
 
 // corpusDir is the exploration's corpus directory, or "".
@@ -143,8 +154,9 @@ func corpusDir(t testing.TB, cfg ExploreConfig) string {
 	return ""
 }
 
-// readCorpus reads the entries of dir, sorted by name.
-func readCorpus(dir string) (paths []string, entries [][]qenv.Choice, err error) {
+// readCorpus reads the entries of dir that exploration ref saved, sorted
+// by name.
+func readCorpus(dir, ref string) (paths []string, entries []corpusEntry, err error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
 		return nil, nil, err
@@ -159,7 +171,13 @@ func readCorpus(dir string) (paths []string, entries [][]qenv.Choice, err error)
 		if err := json.Unmarshal(b, &e); err != nil {
 			return nil, nil, fmt.Errorf("corpus entry %s: %w", f, err)
 		}
-		paths, entries = append(paths, f), append(entries, e.Choices)
+		if e.Format != corpusFormat {
+			return nil, nil, fmt.Errorf("corpus entry %s has format %q, not %q: it was written by another version of gotogether and cannot be replayed; delete it (its run is found again from seed %d of %s)", f, e.Format, corpusFormat, e.Seed, e.Exploration)
+		}
+		if e.Exploration != ref {
+			continue // another exploration's, in a shared directory
+		}
+		paths, entries = append(paths, f), append(entries, e)
 	}
 	return paths, entries, nil
 }
@@ -167,7 +185,7 @@ func readCorpus(dir string) (paths []string, entries [][]qenv.Choice, err error)
 // save writes r's choices to the corpus, named by their hash, and
 // returns the file.
 func (x *Exploration) save(r *Run) (string, error) {
-	b, err := json.MarshalIndent(corpusEntry{Test: x.test, Seed: r.Seed, Choices: r.Choices}, "", " ")
+	b, err := json.MarshalIndent(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Seed: r.Seed, Choices: r.Choices}, "", " ")
 	if err != nil {
 		return "", err
 	}
@@ -258,16 +276,16 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	// the corpus's runs, after the seeds' (their numbers stay the same);
 	// a seed run alone runs no corpus entry
 	var corpusPaths []string
-	var corpusRuns [][]qenv.Choice
+	var corpusRuns []corpusEntry
 	if x.corpus != "" && (!alone || spec.kind == "corpus") {
 		var err error
-		if corpusPaths, corpusRuns, err = readCorpus(x.corpus); err != nil {
+		if corpusPaths, corpusRuns, err = readCorpus(x.corpus, x.ref()); err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
 	}
 	if alone && spec.kind == "corpus" {
 		var ps []string
-		var rs [][]qenv.Choice
+		var rs []corpusEntry
 		for i, p := range corpusPaths {
 			if filepath.Base(p) == spec.value {
 				ps, rs = append(ps, p), append(rs, corpusRuns[i])
@@ -293,9 +311,9 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			defer func() { <-sem; wg.Done() }()
 			var ch qenv.Chooser
 			if k := i - (len(seeds) - len(corpusRuns)); k >= 0 {
-				ch = qenv.Replay(corpusRuns[k])
+				ch = qenv.Replay(corpusRuns[k].Choices)
 				x.Runs[i] = runOne(c, woven, ch, scenario)
-				x.Runs[i].Corpus = corpusPaths[k]
+				x.Runs[i].Corpus, x.Runs[i].savedFrom = corpusPaths[k], corpusRuns[k].Seed
 				return
 			}
 			if cfg.Chooser != nil {
@@ -426,6 +444,13 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 				t.Errorf("gotogether: %s panicked: %v\n"+
 					"  a qenv self-check (GOTOGETHER_CHECK: the store's history, a queue's contract, the scheduler's invariants) or a bug in the system: "+
 					"fix the code it names below; the run replays exactly as recorded\n%s  %s:\n%s", x.nameOf(r), p.Value, x.keep(r, true), where, p.Stack)
+				continue
+			}
+			if r.Corpus != "" { // its replay diverged: the entry, not the run, is at fault
+				t.Errorf("gotogether: %s is stale: %v\n"+
+					"  the code or its fault model changed since it was saved, so its choices no longer replay the run they saved. "+
+					"If the bug it caught is fixed, delete it; to find the run again, run the seed it came from: GOTOGETHER_RUN='%s:seed=%d' go test -run '^%s$'",
+					x.nameOf(r), r.Err, x.ref(), r.savedFrom, strings.ReplaceAll(x.test, "/", "$/^"))
 				continue
 			}
 			t.Errorf("gotogether: %s did not run: %v", x.nameOf(r), r.Err)

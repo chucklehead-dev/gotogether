@@ -138,6 +138,8 @@ type Run struct {
 	Unscripted []qenv.Scripted
 	// Code is the run's code coverage, when the code is woven (qweave -cover).
 	Code *qcover.Counts
+	// savedFrom is a corpus entry's seed, the run it was saved from
+	savedFrom uint64
 	// Err is the scenario's error: the run did not run to its end
 	// (System.Run's error).
 	Err     error
