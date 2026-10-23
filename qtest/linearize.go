@@ -3,7 +3,6 @@ package qtest
 import (
 	"context"
 	"fmt"
-	"sort"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -46,20 +45,21 @@ func LinearizeBudget(n int) Option {
 
 // linearize orders each actor's steps by the search, checking candidate
 // orders with ch in batches, at most budget per actor. undecided are the
-// actors whose search ran out of it.
-func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool) {
+// actors whose search ran out of it. kept are the issues of each actor's
+// steps as recorded that no order removes (a gap: steps were lost; a
+// cycle: their constraints contradict each other), for its result: the
+// order checked is re-sequenced onto one thread, where neither shows.
+func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue) {
 	t.Helper()
-	byActor := map[string][]qtrace.Step{}
-	for _, s := range steps {
-		byActor[s.Actor] = append(byActor[s.Actor], s) // as the report names it ("" for no actor)
-	}
-	actors := make([]string, 0, len(byActor))
-	for a := range byActor {
-		actors = append(actors, a)
-	}
-	sort.Strings(actors)
-	undecided = map[string]bool{}
-	for _, actor := range actors {
+	traces, issues := qtrace.Reconstruct(steps) // deduplicated, gaps found across actors
+	undecided, kept = map[string]bool{}, map[string][]qtrace.Issue{}
+	for _, tr := range traces {
+		actor := tr.Actor // as the report names it ("" for no actor)
+		for _, i := range tr.Issues {
+			if i.Kind == "gap" || i.Kind == "cycle" {
+				kept[actor] = append(kept[actor], i)
+			}
+		}
 		a := actor // as messages name it
 		if a == "" {
 			a = "default"
@@ -75,7 +75,7 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 			}
 			return fs
 		}
-		o, ok, tried, cut := qtrace.Linearize(byActor[actor], budget, check)
+		o, ok, tried, cut := qtrace.Linearize(tr.Steps, budget, check)
 		switch {
 		case ok:
 			issues = append(issues, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried)})
@@ -89,7 +89,7 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 		}
 		out = append(out, o...)
 	}
-	return out, issues, undecided
+	return out, issues, undecided, kept
 }
 
 // failedAt is the index of the first step of a one-actor order the model

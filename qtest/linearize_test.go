@@ -43,3 +43,20 @@ func TestLinearizeOption(t *testing.T) {
 	steps[1].Obs["balance"] = int64(-50)
 	Validate(t, "../validate/testdata/account.yaml", steps, Linearize()).Expect(t, Mismatch("withdraw"))
 }
+
+// Steps lost from a recorder fail a linearized run as they fail one
+// checked as recorded: the order checked is re-sequenced onto one thread,
+// where the gap once vanished.
+func TestLinearizeKeepsGaps(t *testing.T) {
+	RequireQuint(t)
+	steps := []qtrace.Step{
+		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Time: time.Unix(1, 0),
+			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(60)}},
+		{Action: "deposit", Recorder: "a", Seq: 3, Thread: "a", Time: time.Unix(3, 0),
+			Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(70)}},
+	}
+	run := Validate(t, "../validate/testdata/account.yaml", steps, Linearize())
+	if run.Report.OK() || !strings.Contains(fmt.Sprint(run.Report.Actors[0].Issues), "missing seq [2]") {
+		t.Fatalf("a gap passed: %s", run.Report.Summary())
+	}
+}

@@ -318,6 +318,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	ch := checkerFor(t, bindingPath, o, c)
 	var found []qtrace.Issue
 	var undecided map[string]bool
+	var kept map[string][]qtrace.Issue
 	if c.Linearize { // the order checked, the step log's and the ITF's
 		// the search needs conformance only: without invariants each batch
 		// is one quint process, not two
@@ -330,7 +331,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 		if budget == 0 {
 			budget = DefaultLinearizeBudget
 		}
-		run.Steps, found, undecided = linearize(t, lc, run.Steps, budget)
+		run.Steps, found, undecided, kept = linearize(t, lc, run.Steps, budget)
 	}
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {
@@ -351,6 +352,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	}
 	rep.Issues = append(rep.Issues, found...)
 	for _, a := range rep.Actors {
+		a.Issues = append(a.Issues, kept[a.Actor]...)
 		if undecided[a.Actor] && a.Conforms == validate.Fail {
 			a.Conforms = validate.NotEvaluated // the search ran out of budget: the order shown is not a verdict
 		}

@@ -67,6 +67,8 @@ const moveWindow = 32
 // check gets candidate orders, each re-sequenced onto one thread of one
 // recorder ("linearized:<actor>") so that Reconstruct keeps it, and
 // returns for each the index of its first step the model rejects, or -1.
+// Re-sequenced, an order hides its steps' own issues (a gap, a cycle):
+// they are Reconstruct's, and the caller reports them with the verdict.
 // The search starts from Reconstruct's order and, while an order fails,
 // tries every single move the constraints allow around the failing step
 // (it, earlier; a later step, before it), keeping the move that gets
