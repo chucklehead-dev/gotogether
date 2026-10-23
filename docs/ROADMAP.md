@@ -336,7 +336,9 @@ Most of X's machinery is sound; what it left is about trust: a check that
 panics loses its run, a reproduce line that judges something else, claims
 and options that pass for less than they say, and a clock model that is
 not Go's. Decided with the maintainer: all of it, the breaking changes (Y4, Y5,
-Y7) included. Order: Y1–Y9 before a tag, Y10–Y12 soon after.
+Y7) included. Order: Y1–Y9 before a tag, Y10–Y12 soon after. Each item
+gets a review of its commit against its bullet here before the next
+starts, and the review's findings are fixed first.
 
 - **Y1. A run that panics is a failing run.** `runOne` has no recover:
   a task's panic (the store's history check, the queue's contract check,

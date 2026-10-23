@@ -166,7 +166,7 @@ func (s *Sim) spawnNative(t *task, fn func(ctx context.Context)) {
 		defer func() {
 			if r := recover(); r != nil {
 				if _, ok := r.(killed); !ok {
-					s.panicked, s.stack = r, debug.Stack()
+					s.notePanic(r, debug.Stack())
 					if s.Log != nil {
 						s.Log(fmt.Sprintf("task %s panicked: %v\n%s", t.name, r, s.stack))
 					}

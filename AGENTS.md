@@ -337,7 +337,11 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - `qhegel.Choices` draws 512-byte chunks (`hegel.Binary(n, n)`), not
   one draw per choice: per-choice draws made a shrinking test 20x slower. A task's
   panic is re-raised by `Sim.Run` with its original value, because Hegel
-  aborts a test case by panicking from whichever goroutine draws.
+  aborts a test case by panicking from whichever goroutine draws. qtest's
+  explorations recover it (`runOne`) into the run's `*RunPanic` with the
+  task's stack (`qenv.WithPanicStack`): a self-check's panic is a failing
+  run, named and kept, not the test binary's end. qhegel's own runs do
+  not go through `runOne`, so Hegel's aborts reach Hegel.
 - A nemesis (crash) is considered at every scheduling step: its rate is
   per step (`DefaultRates` 1 in 200), not per operation. Under load that
   means far more crashes per second: set `Sim.NemesisEvery`

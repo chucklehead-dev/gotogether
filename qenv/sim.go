@@ -299,7 +299,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 				if _, ok := r.(killed); !ok {
 					// re-raised by Run with its own value: a test
 					// framework's abort (Hegel's) must reach it intact
-					t.sim.panicked, t.sim.stack = r, debug.Stack()
+					t.sim.notePanic(r, debug.Stack())
 					if t.sim.Log != nil {
 						t.sim.Log(fmt.Sprintf("task %s panicked: %v\n%s", t.name, r, t.sim.stack))
 					}
@@ -1003,6 +1003,25 @@ func (s *Sim) maybeNemesis() {
 			s.Log(fmt.Sprintf("%v nemesis %s", s.Elapsed(), on[k-1].name))
 		}
 		on[k-1].do()
+	}
+}
+
+// panicKey carries where a run wants a task's panic stack (WithPanicStack).
+var panicKey = qrun.NewKey[*string]("panicStack")
+
+// WithPanicStack returns ctx asking simulations created with it (their
+// chooser's context) to write a panicking task's stack into *dst before
+// Run re-raises the panic: the stack where the panic happened, which a
+// recover around Run cannot see. qtest's explorations use it.
+func WithPanicStack(ctx context.Context, dst *string) context.Context {
+	return qrun.With(ctx, panicKey, dst)
+}
+
+// notePanic records a task's panic for Run to re-raise, and its stack.
+func (s *Sim) notePanic(r any, stack []byte) {
+	s.panicked, s.stack = r, stack
+	if dst, ok := qrun.InContext(s.base, panicKey); ok {
+		*dst = string(stack)
 	}
 }
 

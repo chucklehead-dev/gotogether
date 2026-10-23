@@ -1,11 +1,13 @@
 package qtest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
@@ -64,3 +66,41 @@ func TestScenarioFatal(t *testing.T) {
 		t.Fatalf("errors: %v", f.errs)
 	}
 }
+
+// A task's panic is its run's failure, not the test binary's end: the
+// exploration names the run, keeps it in the corpus, and shows the task's
+// stack, where the panic happened.
+func TestRunPanic(t *testing.T) {
+	f := &failTB{TB: t}
+	corpus := t.TempDir()
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		s.Spawn("checker", func(ctx context.Context) {
+			qenv.Yield(ctx)
+			if s.Choose("sched.which", 2) == 1 {
+				panicInTask()
+			}
+		})
+		return s.Run(time.Second)
+	}}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		sys.Explore(f, ExploreConfig{Seeds: 20, Parallel: 4, Corpus: corpus})
+	}()
+	<-done
+	all := strings.Join(f.errs, "\n")
+	if !strings.Contains(all, "panicked: the store's history check failed") || !strings.Contains(all, "panicInTask") ||
+		!strings.Contains(all, "saved to the corpus") || !strings.Contains(all, "reproduce: GOTOGETHER_SEED=") {
+		t.Fatalf("errors: %s", all)
+	}
+	// the exploration stops after naming the runs that did not run (as
+	// for a Run error): every panicking run is named, the rest ran
+	if n := strings.Count(all, "panicked:"); n == 0 || n == 20 {
+		t.Errorf("%d of 20 runs reported as panicked, want some: %s", n, all)
+	}
+}
+
+// panicInTask is a named frame for the stack to show.
+func panicInTask() { panic("the store's history check failed") }

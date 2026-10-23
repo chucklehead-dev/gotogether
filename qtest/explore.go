@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -278,6 +280,16 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	return x
 }
 
+// A RunPanic is a run that panicked (Run.Err): a task's panic, which
+// Sim.Run re-raised (a self-check under GOTOGETHER_CHECK, a bug in the
+// system), or the scenario's own.
+type RunPanic struct {
+	Value any
+	Stack string // the panicking task's, when a simulation recorded it
+}
+
+func (p *RunPanic) Error() string { return fmt.Sprintf("panic: %v", p.Value) }
+
 // runOne runs the scenario once on ch, recording its steps into a recorder
 // of its own (carried by the chooser's context) and its choices.
 func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Chooser) error) *Run {
@@ -291,7 +303,22 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		ctx, sink = qcover.WithCounts(ctx, code), code.Sink(mem)
 	}
 	r := qobs.NewRecorder(sink, c.Recorder...)
-	err := scenario(qenv.WithContext(rec, qobs.WithRecorder(ctx, r)))
+	var stack string
+	ctx = qenv.WithPanicStack(ctx, &stack)
+	err := func() (err error) {
+		defer func() {
+			// a task's panic, re-raised by Sim.Run: the store's, the
+			// queue's and the scheduler's self-checks report so. It is the
+			// run's failure, not the test binary's end.
+			if p := recover(); p != nil {
+				if stack == "" {
+					stack = string(debug.Stack())
+				}
+				err = &RunPanic{Value: p, Stack: stack}
+			}
+		}()
+		return scenario(qenv.WithContext(rec, qobs.WithRecorder(ctx, r)))
+	}()
 	if err == nil {
 		err = chooserErr(ch)
 	}
@@ -303,6 +330,25 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		run.Unscripted = sc.Remaining()
 	}
 	return run
+}
+
+// keep is a failing run's last lines: where it was saved in the corpus
+// (if save and there is one), and how to run it alone.
+func (x *Exploration) keep(r *Run, save bool) string {
+	var b strings.Builder
+	if save && x.corpus != "" && r.Corpus == "" && len(r.Choices) > 0 {
+		if p, err := x.save(r); err == nil {
+			fmt.Fprintf(&b, "  saved to the corpus: %s (replayed before the seeds from now on; commit it as a regression)\n", p)
+		} else {
+			fmt.Fprintf(&b, "  not saved to the corpus: %v\n", err)
+		}
+	}
+	if x.test != "" && x.search != nil {
+		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SCHEDULE=%q go test -run '^%s$'\n", r.Schedule, strings.ReplaceAll(x.test, "/", "$/^"))
+	} else if x.test != "" {
+		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
+	}
+	return b.String()
 }
 
 // name is how messages name a run: its seed, or an exhaustive search's
@@ -334,6 +380,11 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			continue
 		}
 		if r.Err != nil {
+			var p *RunPanic
+			if errors.As(r.Err, &p) { // a self-check's finding, or a bug: keep the run
+				t.Errorf("gotogether: %s panicked: %v\n%s", x.nameOf(r), p.Value, x.keep(r, true)+"  the task's stack:\n"+p.Stack)
+				continue
+			}
 			t.Errorf("gotogether: %s did not run: %v", x.nameOf(r), r.Err)
 		}
 	}
@@ -685,18 +736,7 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 		}
 		f.Close()
 	}
-	if save && x.corpus != "" && r.Corpus == "" && len(r.Choices) > 0 {
-		if p, err := x.save(r); err == nil {
-			fmt.Fprintf(&b, "  saved to the corpus: %s (replayed before the seeds from now on; commit it as a regression)\n", p)
-		} else {
-			fmt.Fprintf(&b, "  not saved to the corpus: %v\n", err)
-		}
-	}
-	if x.test != "" && x.search != nil {
-		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SCHEDULE=%q go test -run '^%s$'\n", r.Schedule, strings.ReplaceAll(x.test, "/", "$/^"))
-	} else if x.test != "" {
-		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
-	}
+	b.WriteString(x.keep(r, save))
 	return b.String()
 }
 

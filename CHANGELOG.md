@@ -59,6 +59,9 @@ Added to the core since api/core.txt was first recorded:
   `Process.ClockOffset`; `Sim.ClockDrift`, clocks that run fast or slow
   ("clock.drift"), their sleeps with them; `Process.ToVirtual`/`ToReal`
   for a library's real-clock times on a process's clock. examples/lease.
+- A run that panics fails as a run (`qtest.RunPanic`, with the task's
+  stack through `qenv.WithPanicStack`), named, kept in the corpus and
+  with its reproduce line; it used to end the test binary.
 - Under `GOTOGETHER_CHECK=1` every `qenv.Store` checks each commit's
   dependency cycles against its isolation level (G1a, G1c, G-single, G2),
   and every `qenv.Queue` its at-least-once contract after each operation.

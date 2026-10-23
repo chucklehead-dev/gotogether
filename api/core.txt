@@ -172,6 +172,7 @@ func Wait(ctx context.Context, ready func() bool)
 func WaitIdle(ctx context.Context, ready func() bool)
 func WaitKey(ctx context.Context, key any)
 func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool
+func WithPanicStack(ctx context.Context, dst *string) context.Context
 func Yield(ctx context.Context)
 type Bytes = choice.Bytes
     func FromBytes(data []byte, rates Rates) *Bytes
@@ -437,6 +438,7 @@ type Reach struct{ ... }
 type Run struct{ ... }
     func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), ...) *Run
     func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
+type RunPanic struct{ ... }
 type Search struct{ ... }
 type Settings struct{ ... }
     func Resolve(t testing.TB, opts ...Option) Settings
