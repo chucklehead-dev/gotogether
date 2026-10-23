@@ -27,7 +27,7 @@ func (emitter) Write(p []byte) (int, error) { gosimruntime.Emit(string(p)); retu
 // Sink is a qobs sink sending each step to the host, which returns them
 // from Run. A step is sent when it is recorded, so a machine's crash loses
 // none.
-func Sink() qobs.Sink { return qobs.NewJSONLSink(emitter{}) }
+func Sink() qobs.Sink { return qobs.NewJSONLSink(emitter{}, qobs.PerStep) }
 
 // New returns a native qenv simulation in gosim: its choices are the host's
 // (Chooser), its processes run on gosim machines (Platform), and its

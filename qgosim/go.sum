@@ -25,6 +25,8 @@ github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291 h1:DvcMPcI4w
 github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291/go.mod h1:+koXM0aoNcZJ528MVgPc/+kYFezTerAZmpmBqseu77o=
 github.com/chucklehead-dev/gotogether v0.0.0-20261022230230-4a796ef518cd h1:fidl7jd/1dfEhme0j82TII4PTLZAgvTnqtp+9kgtuWU=
 github.com/chucklehead-dev/gotogether v0.0.0-20261022230230-4a796ef518cd/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
+github.com/chucklehead-dev/gotogether v0.0.0-20261023214715-8337e001e897 h1:lcvU1zDLL6qdhR/fvmQuCU3jNjhjB2eozy25eV9/W/g=
+github.com/chucklehead-dev/gotogether v0.0.0-20261023214715-8337e001e897/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
 github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261022230230-4a796ef518cd h1:gF6gkUrdSOFz/oEdf+P6928F00QxGHvGIWlEkW7SUy4=
 github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261022230230-4a796ef518cd/go.mod h1:D3kgkBTnSOYYYJ8kUS5mjpFeNLGh5mRAK554CgyMmsw=
 github.com/cloudflare/circl v1.5.0 h1:hxIWksrX6XN5a1L2TI/h53AGPhNHoUBo+TD1ms9+pys=
