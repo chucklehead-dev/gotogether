@@ -1,15 +1,15 @@
 // Command actionmap prints the code each model action statically reaches
 // from where its steps are recorded (qanalysis/actionmap) and, with
-// -coverage, compares it with the code its steps ran: a qcover.Summary as
-// JSON (examples/checkout's TestCodeCoverage writes one under
-// $GOTOGETHER_KEEP when woven with qweave -cover). It lists dead functions
+// -coverage, compares it with the code its steps ran: an exploration's
+// evidence.json, which explorations woven with qweave -cover write under
+// $GOTOGETHER_KEEP (or a qcover.Summary as JSON, which examples/checkout's
+// TestCodeCoverage writes). It lists dead functions
 // first: the ones no root (main, init, exported API) reaches.
 //
-//	actionmap [-C dir] [-coverage summary.json] packages...
+//	actionmap [-C dir] [-coverage evidence.json] packages...
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -20,10 +20,10 @@ import (
 
 func main() {
 	dir := flag.String("C", ".", "directory to load the packages from")
-	cov := flag.String("coverage", "", "qcover.Summary JSON to compare with")
+	cov := flag.String("coverage", "", "an evidence.json or qcover.Summary JSON to compare with")
 	flag.Parse()
 	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: actionmap [-C dir] [-coverage summary.json] packages...")
+		fmt.Fprintln(os.Stderr, "usage: actionmap [-C dir] [-coverage evidence.json] packages...")
 		os.Exit(2)
 	}
 	m, err := actionmap.Static(*dir, flag.Args()...)
@@ -40,15 +40,10 @@ func main() {
 		}
 		return
 	}
-	b, err := os.ReadFile(*cov)
+	s, err := qcover.ReadSummary(*cov)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	var s qcover.Summary
-	if err := json.Unmarshal(b, &s); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", *cov, err)
-		os.Exit(1)
-	}
-	fmt.Print(actionmap.Report(actionmap.Compare(m, &s)))
+	fmt.Print(actionmap.Report(actionmap.Compare(m, s)))
 }
