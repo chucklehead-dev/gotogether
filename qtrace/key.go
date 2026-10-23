@@ -6,14 +6,20 @@ import "fmt"
 // runs whose keys are equal get the same verdict from the same instance.
 // Recorders, processes and threads are numbered by first appearance, so
 // runs that differ only in their generated ids (an incarnation's process
-// name, a span id) share a key; the sequence numbers are left out, the
-// steps' order is the key's.
+// name, a span id) share a key. Everything else a verdict can depend on
+// is in it: the sequence numbers (gaps; a template's .seq), the error, and
+// the times when the step has an invocation time (real-time order), not
+// otherwise, so runs that differ only in their virtual delays share one.
 type Keyer struct{ ids map[string]int }
 
 // Step is the key of the next step.
 func (k *Keyer) Step(s *Step) string {
-	return fmt.Sprintf("%s|r%d|p%d|t%d|%s|%s|%v|%v;", s.Actor, k.id("r", s.Recorder), k.id("p", s.Process), k.id("t", s.Thread),
-		s.Outcome, s.String(), s.Obs, s.Order)
+	var times string
+	if !s.Invoked.IsZero() {
+		times = fmt.Sprintf("|%d-%d", s.Invoked.UnixNano(), s.Time.UnixNano())
+	}
+	return fmt.Sprintf("%s|r%d|p%d|t%d|#%d|%s|%q|%s|%v|%v%s;", s.Actor, k.id("r", s.Recorder), k.id("p", s.Process), k.id("t", s.Thread),
+		s.Seq, s.Outcome, s.Error, s.String(), s.Obs, s.Order, times)
 }
 
 func (k *Keyer) id(kind, name string) int {
