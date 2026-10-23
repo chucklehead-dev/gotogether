@@ -65,6 +65,15 @@ func must(s string, err error) string {
 	return s
 }
 
+// A binding's verifySkip says why -verify leaves its model out, with no
+// quint run at all (the quint binary given does not exist).
+func TestSimulateVerifySkip(t *testing.T) {
+	code, err := simulate([]string{"-binding", "../../examples/twophase/twophase.binding.yaml", "-verify", "8", "-quint", "/nonexistent/quint"})
+	if code != 0 || err != nil {
+		t.Errorf("twophase -verify: exit %d, %v; want a skip", code, err)
+	}
+}
+
 // With -verify, Apalache checks every trace up to the bound: hello's
 // exactlyOnce holds in all of them, and lease's noStaleWrite has a
 // counterexample, as each binding says. It downloads Apalache on first

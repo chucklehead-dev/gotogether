@@ -20,3 +20,4 @@ invariants: [noInvention, convergedWhenSettled]
 simulate:
   constants: {NODES: 'Set("n0", "n1", "n2")', VALUES: 'Set(1, 2, 3)'}
   holds: [noInvention, convergedWhenSettled]
+  verifySteps: 6 # Apalache: 32 s at 6 steps, past 8 minutes at 8

@@ -80,6 +80,14 @@ type Simulation struct {
 	// Skip, if set, says why the model is not run on its own: a replay-only
 	// model, whose actions take observed values, has no step to simulate.
 	Skip string `yaml:"skip"`
+	// VerifySteps caps `gotogether simulate -verify` for this model:
+	// Apalache's cost grows steeply with depth, and differently by model
+	// (0: no cap).
+	VerifySteps int `yaml:"verifySteps"`
+	// VerifySkip, if set, says why -verify skips the model: one Apalache
+	// cannot encode, or one too slow at any useful depth. Its sampling
+	// stands.
+	VerifySkip string `yaml:"verifySkip"`
 }
 
 // Action says how to call one model action from an observed step.

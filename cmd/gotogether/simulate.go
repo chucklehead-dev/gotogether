@@ -22,9 +22,11 @@ import (
 //
 // With -verify N, quint verify (Apalache) checks each invariant in every
 // trace of up to N steps instead of sampling: "holds" is then a bounded
-// proof, and "allows" a shortest counterexample. Models Apalache cannot
-// encode (a nondet over an infinite set, unbounded recursion) fail with
-// its error.
+// proof, and "allows" a shortest counterexample. The binding's
+// simulate.verifySteps caps N for its model, and simulate.verifySkip
+// says why a model is not verified (one Apalache cannot encode, a
+// nondet over an infinite set or Choreo's recursion, fails with its
+// error without it).
 func simulate(args []string) (int, error) {
 	fset := flag.NewFlagSet("simulate", flag.ExitOnError)
 	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
@@ -50,6 +52,14 @@ func simulate(args []string) (int, error) {
 	if sim.Skip != "" {
 		fmt.Printf("simulate %s: skipped: %s\n", *bpath, sim.Skip)
 		return 0, nil
+	}
+	capped := ""
+	if *verify > 0 && sim.VerifySkip != "" {
+		fmt.Printf("simulate %s: not verified: %s\n", *bpath, sim.VerifySkip)
+		return 0, nil
+	}
+	if *verify > sim.VerifySteps && sim.VerifySteps > 0 {
+		*verify, capped = sim.VerifySteps, ", the binding's verifySteps"
 	}
 	overrides := []string{}
 	for _, k := range sortedKeys(sim.Constants) {
@@ -83,7 +93,7 @@ func simulate(args []string) (int, error) {
 		return 2, err
 	}
 	if *verify > 0 {
-		fmt.Printf("simulate %s: %s(%s), every trace of up to %d steps (quint verify)\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *verify)
+		fmt.Printf("simulate %s: %s(%s), every trace of up to %d steps (quint verify%s)\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *verify, capped)
 	} else {
 		fmt.Printf("simulate %s: %s(%s), %d traces of %d steps, seed %s\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *samples, *steps, *seed)
 	}

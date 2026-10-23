@@ -21,3 +21,4 @@ invariants: [conservation, nonNegative]
 # guarantees, which it allows to fail and the code must not.
 simulate:
   holds: [conservation, nonNegative]
+  verifySkip: Apalache did not finish 6 steps in 10 minutes (measured; sampling stands)

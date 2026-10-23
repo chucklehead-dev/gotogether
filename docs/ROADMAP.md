@@ -185,9 +185,11 @@ The track, in order:
     their runs settle.
   - **`quint verify`, done.** `gotogether simulate -verify N` checks each
     invariant over every trace of up to N steps (Apalache), classified as
-    the binding says; the nightly runs it at 8 on every binding but
-    grpcledger (not done in 10 minutes) and twophase (Choreo's recursion
-    is beyond Apalache). Its finding: 6 steps were too few for
+    the binding says; the nightly runs it at 8 on every binding, capped by
+    a binding's `simulate.verifySteps` (Apalache's cost climbs steeply
+    with depth: broadcast takes 32 s at 6 steps and over 8 minutes at 8)
+    or skipped with its `verifySkip` (grpcledger, not done in 10
+    minutes; twophase, Choreo's recursion beyond Apalache). Its finding: 6 steps were too few for
     edgepublish's duplicate payload, which sampling at 30 finds; 8 are
     enough.
   - **Readers of `evidence.json`, done.** Evidence names its test and

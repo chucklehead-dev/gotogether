@@ -84,9 +84,10 @@ jobs:
 
   # Every model on its own, every trace of up to 8 steps (quint verify,
   # Apalache): a bounded proof of what the binding says each invariant
-  # holds, a counterexample for what it allows. Not grpcledger (Apalache
-  # does not finish in 10 minutes) nor twophase (Choreo's recursion is
-  # beyond Apalache's encoding): their sampling in CI stands.
+  # holds, a counterexample for what it allows. A binding's
+  # simulate.verifySteps caps the depth for its model, and verifySkip
+  # leaves a model out with the reason (grpcledger, twophase); their
+  # sampling in CI stands.
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -108,6 +109,6 @@ jobs:
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
-          for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u | grep -v -e grpcledger -e twophase); do
+          for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u); do
             "$RUNNER_TEMP/gotogether" simulate -binding "$b" -verify 8 || exit 1
           done

@@ -23,3 +23,4 @@ invariants: [consistency, commitIsDecided]
 # guarantees, which it allows to fail and the code must not.
 simulate:
   holds: [consistency, commitIsDecided]
+  verifySkip: Choreo's recursive step is beyond Apalache's encoding (a recursive substitution that does not end)
