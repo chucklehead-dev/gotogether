@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,5 +92,68 @@ func TestCorpusStaleAndForeign(t *testing.T) {
 	errs := strings.Join(explore(stale), "\n")
 	if !strings.Contains(errs, "corpus entry stale.json is stale") || !strings.Contains(errs, "GOTOGETHER_RUN='"+t.Name()+"#1:seed=3'") {
 		t.Errorf("a stale entry: %s", errs)
+	}
+}
+
+// An entry that replays exactly and then fails (a regression the
+// scenario reports) did not run, and is not stale; one whose run ends
+// before its choices do took another path, and is.
+func TestCorpusStaleOnlyOnDivergence(t *testing.T) {
+	RequireQuint(t)
+	t.Setenv("GOTOGETHER_KEEP", t.TempDir())
+	dir := t.TempDir()
+	run := func(scenario func(qenv.Chooser) error) string {
+		rerun(t)
+		f := &failTB{TB: t}
+		done := make(chan struct{})
+		go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+			defer close(done)
+			System{Binding: "../validate/testdata/account.yaml", Run: scenario}.Explore(f, ExploreConfig{Seeds: 20, Corpus: dir}).Expect(f, Conforms())
+		}()
+		<-done
+		return strings.Join(f.errs, "\n")
+	}
+	run(race) // saves a failing run
+	saved, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	if len(saved) == 0 {
+		t.Fatal("nothing saved")
+	}
+	errs := run(func(c qenv.Chooser) error {
+		if err := race(c); err != nil {
+			return err
+		}
+		return errors.New("a regression")
+	})
+	if !strings.Contains(errs, filepath.Base(saved[0])+" did not run: a regression") || strings.Contains(errs, "is stale") {
+		t.Errorf("an exact replay that fails: %s", errs)
+	}
+	// the entry with choices its run never asks for
+	b, _ := os.ReadFile(saved[0])
+	var e corpusEntry
+	_ = json.Unmarshal(b, &e)
+	e.Choices = append(e.Choices, qenv.Choice{Kind: "sched", N: 2, Value: 1})
+	b, _ = json.Marshal(e)
+	_ = os.WriteFile(saved[0], b, 0o644)
+	if errs := run(race); !strings.Contains(errs, "is stale: the run ended after") {
+		t.Errorf("a replay that ends early: %s", errs)
+	}
+}
+
+// An entry an exploration of the test saved, which no exploration of this
+// run replayed (the explorations changed), fails the test when it ends,
+// rather than stop guarding its regression silently.
+func TestCorpusOrphan(t *testing.T) {
+	RequireQuint(t)
+	t.Setenv("GOTOGETHER_KEEP", t.TempDir())
+	dir := t.TempDir()
+	f := &failTB{}
+	t.Run("x", func(t *testing.T) {
+		b, _ := json.Marshal(corpusEntry{Format: corpusFormat, Exploration: t.Name() + "#3", Seed: 3})
+		_ = os.WriteFile(filepath.Join(dir, "orphan.json"), b, 0o644)
+		f.TB = t
+		System{Binding: "../validate/testdata/account.yaml", Run: race}.Explore(f, ExploreConfig{Seeds: 2, Corpus: dir})
+	})
+	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "orphan.json was saved by TestCorpusOrphan/x#3, which this run of TestCorpusOrphan/x did not replay (it ran 1 explorations)") {
+		t.Errorf("errors: %s", all)
 	}
 }

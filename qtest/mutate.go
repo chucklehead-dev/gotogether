@@ -145,6 +145,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 		var broke atomic.Bool
 		mcfg := cfg
 		mcfg.emptyOK = true
+		mcfg.corpusOf = base.ref() // the baseline's regressions are the mutants' too
 		x := explore(t, s.Binding, mcfg, func(c qenv.Chooser) (err error) {
 			defer func() {
 				if r := recover(); r != nil {

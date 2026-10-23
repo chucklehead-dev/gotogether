@@ -172,3 +172,22 @@ func TestEntropyRecordsAndReplays(t *testing.T) {
 		t.Fatal("Nominal has no entropy")
 	}
 }
+
+// Without a Platform the native runtime runs in real time, and Mono is
+// the host's monotonic clock: a sleep's interval, not wall arithmetic.
+func TestNativeMono(t *testing.T) {
+	s := qenv.NewNative(qenv.NewSeeded(1), nil)
+	var took time.Duration
+	s.Spawn("sleeper", func(ctx context.Context) {
+		m := qenv.Mono(ctx)
+		qenv.Sleep(ctx, 50*time.Millisecond)
+		took = qenv.Since(ctx, m)
+	})
+	if err := s.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if took < 50*time.Millisecond || took > time.Second {
+		t.Errorf("Mono measured %v across a 50ms sleep", took)
+	}
+}

@@ -339,6 +339,10 @@ type Replayer struct {
 // Err is the divergence, or nil if the run asked for the recorded choices.
 func (r *Replayer) Err() error { return r.err }
 
+// Left is how many recorded choices the run has not asked for: a run that
+// ended before them took another path (the code changed since).
+func (r *Replayer) Left() int { return len(r.cs) - r.i }
+
 // Choose implements Chooser.
 func (r *Replayer) Choose(kind string, n int) int {
 	if r.err != nil || r.i >= len(r.cs) {

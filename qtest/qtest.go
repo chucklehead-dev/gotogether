@@ -140,6 +140,9 @@ type Run struct {
 	Code *qcover.Counts
 	// savedFrom is a corpus entry's seed, the run it was saved from
 	savedFrom uint64
+	// diverged is why the run's replay stopped repeating its choices (a
+	// corpus entry the code no longer follows), apart from Err
+	diverged error
 	// Err is the scenario's error: the run did not run to its end
 	// (System.Run's error).
 	Err     error

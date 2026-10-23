@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -34,7 +35,8 @@ var explorations struct {
 
 type testRuns struct {
 	n       int
-	matched bool // GOTOGETHER_RUN named one of them
+	matched bool                       // GOTOGETHER_RUN named one of them
+	corpus  map[string]map[string]bool // corpus dir -> the explorations that replayed its entries
 }
 
 // nextExploration numbers t's next exploration. When t ends, a
@@ -55,6 +57,9 @@ func nextExploration(t testing.TB) int {
 			explorations.mu.Lock()
 			defer explorations.mu.Unlock()
 			delete(explorations.n, name)
+			if !tr.matched { // a run reproduced alone replays only its own
+				orphans(t, name, tr)
+			}
 			if v := os.Getenv("GOTOGETHER_RUN"); v != "" && !tr.matched {
 				if s, err := parseRunSpec(v); err == nil && refTest(s.ref) == name {
 					t.Errorf("gotogether: GOTOGETHER_RUN names %s, but %s ran %d explorations: the run is not reproduced (the test changed, or the line is from another -count iteration)", s.ref, name, tr.n)
@@ -85,6 +90,44 @@ func exploreDir(t testing.TB, dir string, id int) string {
 		t.Fatalf("gotogether: %v", err)
 	}
 	return d
+}
+
+// noteCorpus notes that exploration ref of test replayed dir's entries.
+func noteCorpus(test, dir, ref string) {
+	explorations.mu.Lock()
+	defer explorations.mu.Unlock()
+	if tr := explorations.n[test]; tr != nil {
+		if tr.corpus == nil {
+			tr.corpus = map[string]map[string]bool{}
+		}
+		if tr.corpus[dir] == nil {
+			tr.corpus[dir] = map[string]bool{}
+		}
+		tr.corpus[dir][ref] = true
+	}
+}
+
+// orphans fails the test for the entries in the corpus directories it
+// replayed that an exploration of it saved but none of this run's
+// replayed: the test's explorations changed (one added before, renamed,
+// a Sweep row's name), and the regression would otherwise stop being
+// guarded, silently.
+func orphans(t testing.TB, test string, tr *testRuns) {
+	for dir, refs := range tr.corpus {
+		files, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+		for _, f := range files {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			var e corpusEntry
+			if json.Unmarshal(b, &e) != nil || refTest(e.Exploration) != test || refs[e.Exploration] {
+				continue
+			}
+			t.Errorf("gotogether: corpus entry %s was saved by %s, which this run of %s did not replay (it ran %d explorations): "+
+				"its regression is not guarded. The test's explorations changed: set the entry's \"exploration\" to the one it belongs to, or delete it", f, e.Exploration, test, tr.n)
+		}
+	}
 }
 
 // matched notes that GOTOGETHER_RUN named one of test's explorations.

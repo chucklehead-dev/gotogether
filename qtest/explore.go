@@ -47,6 +47,7 @@ type Exploration struct {
 	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
 	emptyOK   bool              // ExploreConfig.emptyOK
+	mutant    bool              // its corpus runs are a baseline's, under a mutant (corpusOf)
 	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
 	mu        sync.Mutex        // guards recheck's report swaps
 	vacuity   *[]Vacuity        // computed once (Vacuous)
@@ -104,6 +105,10 @@ type ExploreConfig struct {
 	// killed by it.
 	emptyOK bool
 	fuzz    bool // System.Fuzz: the run is the fuzz input's
+	// corpusOf is the exploration whose corpus entries these runs replay
+	// (a mutant's: its baseline's), else its own; with it a replay that
+	// diverges is the mutant's doing, not a stale entry
+	corpusOf string
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
 	// the chooser's context (qenv.WithContext), so the scenario must build
@@ -167,17 +172,24 @@ func readCorpus(dir, ref string) (paths []string, entries []corpusEntry, err err
 		if err != nil {
 			return nil, nil, err
 		}
-		var e corpusEntry
+		var e struct {
+			corpusEntry
+			Test string `json:"test"` // before the format: the test alone
+		}
 		if err := json.Unmarshal(b, &e); err != nil {
 			return nil, nil, fmt.Errorf("corpus entry %s: %w", f, err)
 		}
 		if e.Format != corpusFormat {
-			return nil, nil, fmt.Errorf("corpus entry %s has format %q, not %q: it was written by another version of gotogether and cannot be replayed; delete it (its run is found again from seed %d of %s)", f, e.Format, corpusFormat, e.Seed, e.Exploration)
+			from := e.Exploration
+			if from == "" {
+				from = e.Test
+			}
+			return nil, nil, fmt.Errorf("corpus entry %s has format %q, not %q: it was written by another version of gotogether and cannot be replayed; delete it (seed %d of %s may find its run again)", f, e.Format, corpusFormat, e.Seed, from)
 		}
 		if e.Exploration != ref {
 			continue // another exploration's, in a shared directory
 		}
-		paths, entries = append(paths, f), append(entries, e)
+		paths, entries = append(paths, f), append(entries, e.corpusEntry)
 	}
 	return paths, entries, nil
 }
@@ -254,7 +266,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = offset + uint64(i+1)
 	}
-	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz}
+	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz, mutant: cfg.corpusOf != ""}
 	x.dir = exploreDir(t, c.Dir, x.id)
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
@@ -278,9 +290,16 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	var corpusPaths []string
 	var corpusRuns []corpusEntry
 	if x.corpus != "" && (!alone || spec.kind == "corpus") {
+		ref := x.ref()
+		if cfg.corpusOf != "" { // a mutant's exploration replays its baseline's entries
+			ref = cfg.corpusOf
+		}
 		var err error
-		if corpusPaths, corpusRuns, err = readCorpus(x.corpus, x.ref()); err != nil {
+		if corpusPaths, corpusRuns, err = readCorpus(x.corpus, ref); err != nil {
 			t.Fatalf("gotogether: %v", err)
+		}
+		if !alone {
+			noteCorpus(t.Name(), x.corpus, ref)
 		}
 	}
 	if alone && spec.kind == "corpus" {
@@ -292,7 +311,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			}
 		}
 		if len(ps) == 0 {
-			t.Fatalf("gotogether: GOTOGETHER_RUN names corpus entry %s, which %s's corpus (%s) does not have", spec.value, x.ref(), x.corpus)
+			t.Fatalf("gotogether: GOTOGETHER_RUN names corpus entry %s, which is not one of %s's in %s (an entry belongs to the exploration its \"exploration\" names)", spec.value, x.ref(), x.corpus)
 		}
 		corpusPaths, corpusRuns = ps, rs
 	}
@@ -311,9 +330,17 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			defer func() { <-sem; wg.Done() }()
 			var ch qenv.Chooser
 			if k := i - (len(seeds) - len(corpusRuns)); k >= 0 {
-				ch = qenv.Replay(corpusRuns[k].Choices)
-				x.Runs[i] = runOne(c, woven, ch, scenario)
-				x.Runs[i].Corpus, x.Runs[i].savedFrom = corpusPaths[k], corpusRuns[k].Seed
+				rp := qenv.Replay(corpusRuns[k].Choices)
+				r := runOne(c, woven, rp, scenario)
+				r.Corpus, r.savedFrom = corpusPaths[k], corpusRuns[k].Seed
+				if n := len(corpusRuns[k].Choices); r.diverged == nil && rp.Left() > 0 {
+					// the run took another, shorter path: it no longer reaches what it saved
+					r.diverged = fmt.Errorf("the run ended after %d of the entry's %d choices", n-rp.Left(), n)
+					if r.Err == nil {
+						r.Err = r.diverged
+					}
+				}
+				x.Runs[i] = r
 				return
 			}
 			if cfg.Chooser != nil {
@@ -374,13 +401,14 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		}()
 		return scenario(qenv.WithContext(rec, qobs.WithRecorder(ctx, r)))
 	}()
+	cerr := chooserErr(ch)
 	if err == nil {
-		err = chooserErr(ch)
+		err = cerr
 	}
 	if is := r.Issues(); err == nil && len(is) > 0 {
 		err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
 	}
-	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Interrupted: r.Interrupted(), Code: code, Err: err}
+	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted = sc.Remaining()
 	}
@@ -441,16 +469,24 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 				if p.InTask {
 					where = "the task's stack"
 				}
+				replays := "the run replays exactly as recorded"
+				if r.diverged != nil {
+					replays = fmt.Sprintf("but its replay diverged first (%v): the entry may be stale, and the panic the changed code's", r.diverged)
+				}
 				t.Errorf("gotogether: %s panicked: %v\n"+
 					"  a qenv self-check (GOTOGETHER_CHECK: the store's history, a queue's contract, the scheduler's invariants) or a bug in the system: "+
-					"fix the code it names below; the run replays exactly as recorded\n%s  %s:\n%s", x.nameOf(r), p.Value, x.keep(r, true), where, p.Stack)
+					"fix the code it names below; %s\n%s  %s:\n%s", x.nameOf(r), p.Value, replays, x.keep(r, true), where, p.Stack)
 				continue
 			}
-			if r.Corpus != "" { // its replay diverged: the entry, not the run, is at fault
+			if r.Corpus != "" && r.diverged != nil {
+				if x.mutant {
+					continue // the mutant changed the run: its claims judge it
+				}
+				// the entry, not the run, is at fault
 				t.Errorf("gotogether: %s is stale: %v\n"+
 					"  the code or its fault model changed since it was saved, so its choices no longer replay the run they saved. "+
-					"If the bug it caught is fixed, delete it; to find the run again, run the seed it came from: GOTOGETHER_RUN='%s:seed=%d' go test -run '^%s$'",
-					x.nameOf(r), r.Err, x.ref(), r.savedFrom, strings.ReplaceAll(x.test, "/", "$/^"))
+					"If the bug it caught is fixed, delete it; the seed it came from may find a similar run: GOTOGETHER_RUN='%s:seed=%d' go test -run '^%s$'",
+					x.nameOf(r), r.diverged, x.ref(), r.savedFrom, strings.ReplaceAll(x.test, "/", "$/^"))
 				continue
 			}
 			t.Errorf("gotogether: %s did not run: %v", x.nameOf(r), r.Err)
