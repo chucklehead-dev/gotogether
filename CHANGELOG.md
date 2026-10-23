@@ -35,6 +35,9 @@ Added to the core since api/core.txt was first recorded:
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and
   `qtrace.Linearize` search the orders operations' intervals allow.
+- Vacuity: `binding.Model.Antecedents` (A of each `A implies B`
+  invariant), a binding's `antecedents`, `Exploration.Vacuous`,
+  `Evidence.Vacuous` and the claim `qtest.NotVacuous()`.
 - `qenv.Disk` (writes, fsync, and a crash's "disk.crash" fault: lost or
   torn unsynced writes) and partitions between processes for
   `qenv.Service` (`Sim.Partition`, `Heal`, `Partitions` as nemeses).

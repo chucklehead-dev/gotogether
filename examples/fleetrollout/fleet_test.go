@@ -29,7 +29,7 @@ func explore(t *testing.T, cfg fleetrollout.Config, seeds int) *qtest.Exploratio
 // through lost requests and responses, status lag and its own crashes.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	explore(t, fleetrollout.Config{}, 30).Expect(t, qtest.Conforms())
+	explore(t, fleetrollout.Config{}, 30).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
 // Trusting a status written for the previous generation: the next

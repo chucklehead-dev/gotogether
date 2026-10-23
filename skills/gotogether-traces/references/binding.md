@@ -10,6 +10,10 @@ Rules:
 - A failed step whose templates ignore `{{.outcome}}` must be mapped in
   the action's `outcomes` (`skip`, or `call` to replay it as a success).
   The tool refuses to guess.
+- An invariant `A implies B` is vacuous in a run where A never holds;
+  explorations find A in the model and `qtest.NotVacuous()` fails when no
+  run met it. For another form, name the antecedent:
+  `antecedents: { doneImpliesPerformed: 'jobs.keys().exists(j => jobs.get(j) == Done)' }`.
 - To also emit a model-level ITF in-process, write argument templates as
   Quint literals (no operator calls). `expect` may be any Quint boolean.
 

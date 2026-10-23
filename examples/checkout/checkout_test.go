@@ -37,7 +37,7 @@ func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, iso := range levels {
 		t.Run(iso.String(), func(t *testing.T) {
-			explore(t, checkout.Config{Isolation: iso}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms())
+			explore(t, checkout.Config{Isolation: iso}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 		})
 	}
 }
@@ -89,7 +89,7 @@ func TestExhaustiveOneFault(t *testing.T) {
 	if testing.Short() {
 		t.Skip("thousands of runs")
 	}
-	system(checkout.Config{}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).Expect(t, qtest.Conforms(), qtest.Complete())
+	system(checkout.Config{}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).Expect(t, qtest.Conforms(), qtest.Complete(), qtest.NotVacuous())
 	system(checkout.Config{Mutation: shop.DualWrite}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).
 		Expect(t, qtest.Violates("settledCorrectly"), qtest.Complete())
 }

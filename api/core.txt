@@ -403,6 +403,7 @@ type Claim interface{ ... }
     func All(es ...Expectation) Claim
     func Complete() Claim
     func None(es ...Expectation) Claim
+    func NotVacuous() Claim
     func Some(es ...Expectation) Claim
 type Evidence struct{ ... }
 type Exercise struct{ ... }
@@ -441,6 +442,7 @@ type SweepResult struct{ ... }
 type System struct{ ... }
 type Take struct{ ... }
     func Takes(action string) Take
+type Vacuity struct{ ... }
 
 == github.com/chucklehead-dev/gotogether/qtrace
 const EventName = "quint.step" ...

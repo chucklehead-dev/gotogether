@@ -171,12 +171,17 @@ The track, in order:
     binding's `simulate` section says which; replay-only models (no
     `step`: gcounter, kafka, fleetrollout, the uniqueids scheme) say
     `skip` and why.
+  - **Vacuity, done.** An invariant's antecedent (A of a top-level
+    `A implies B`, read from the typechecked model, or the binding's
+    `antecedents`) is looked for after an exploration: its negation is
+    checked as an invariant on the runs where the invariant passed, in
+    chunks of 8, stopping at the first witness. `Exploration.Vacuous`,
+    the Evidence line and `qtest.NotVacuous()`. checkout's, streams',
+    crossdb's and fleetrollout's faithful explorations claim it and pass:
+    their runs settle.
   - **Left.** `quint verify` (Apalache) nightly on the small models.
-    Vacuity: an invariant's antecedent (from a top-level `implies`, or
-    declared in the binding) gets a witness def in the rendered module,
-    and the report says which held vacuously in every run. Readers of
-    `evidence.json`: `gotogether cover -sim` and actionmap (V13's later
-    work).
+    Readers of `evidence.json`: `gotogether cover -sim` and actionmap
+    (V13's later work).
 - **X3. Bounded exhaustive schedules (M).** Done. `System.Exhaust(t,
   qtest.Bound{Delays, Faults, Without, MaxRuns})` runs every run within
   the bound breadth first by deviations, replaying each from the start

@@ -32,6 +32,8 @@ type Exploration struct {
 	test      string            // the test's name, for reproducing a seed
 	actions   map[string]bool   // the model's, for checking claims' names
 	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
+	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
+	vacuity   *[]Vacuity        // computed once (Vacuous)
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -275,6 +277,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	fmt.Fprintf(&inst, "%s|%v|%v\n", bindingPath, sortedKV(x.constants), c.Invariants)
 	cc := *ch
 	cc.Options = o
+	x.checker = &cc
 	// runs already judged (same steps) take their verdict from the cache,
 	// and runs of the batch with the same steps are checked once
 	runs := make([][]qtrace.Step, len(x.Runs))
@@ -408,6 +411,17 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	bad := len(x.Failing())
 	failedAny := false
 	for _, c := range claims {
+		if _, ok := c.(vacuityClaim); ok {
+			if vs := x.Vacuous(); len(vs) > 0 {
+				failedAny = true
+				var d []string
+				for _, v := range vs {
+					d = append(d, v.String())
+				}
+				t.Errorf("gotogether: want %s; held vacuously: %s (the runs never reached what the invariant is about: widen the scenario, or raise its faults)", vacuityClaim{}, strings.Join(d, "; "))
+			}
+			continue
+		}
 		if _, ok := c.(completeClaim); ok {
 			if msg := x.incomplete(); msg != "" {
 				failedAny = true

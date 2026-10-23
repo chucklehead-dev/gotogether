@@ -42,6 +42,13 @@ type Binding struct {
 	Restart string `yaml:"restart"`
 	// Defs is Quint text added to the generated module (helpers for templates).
 	Defs string `yaml:"defs"`
+	// Antecedents name, per invariant, the condition under which it says
+	// something (Quint over the model's state): where it never holds, the
+	// invariant holds vacuously. An invariant `A implies B` has A without
+	// saying so (Model.Antecedents); give one for any other form, such as
+	// `xs.forall(x => P(x) implies Q(x))`, whose antecedent is
+	// `xs.exists(x => P(x))`.
+	Antecedents map[string]string `yaml:"antecedents"`
 	// Actions maps a model action to the templates that build its call.
 	Actions map[string]Action `yaml:"actions"`
 	// Invariants are vals of the model checked in every observed state.

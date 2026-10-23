@@ -26,7 +26,7 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02
 // that open them.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	explore(t, crossdb.Config{}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms())
+	explore(t, crossdb.Config{}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
 // The cloud's ID as the external name. Correct while nothing fails. A

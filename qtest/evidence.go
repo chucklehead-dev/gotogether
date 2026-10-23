@@ -27,6 +27,7 @@ type Evidence struct {
 	Model     *ModelCoverage  `json:"model,omitempty"`   // the model's actions the runs took (nil: no model)
 	Rows      int             `json:"rows,omitempty"`    // a sweep's rows (0: not a sweep)
 	Search    *Search         `json:"search,omitempty"`  // an exhaustive search's extent (nil: seeded runs)
+	Vacuous   []Vacuity       `json:"vacuous,omitempty"` // invariants that held only because their antecedent never did
 	Code      *qcover.Summary `json:"code,omitempty"`    // when the code is woven with qweave -cover (nil: not)
 	Mutants   *MutationReport `json:"mutants,omitempty"` // from System.Mutate, if set
 }
@@ -52,6 +53,7 @@ func (x *Exploration) Evidence() *Evidence {
 	if x.hasCode() {
 		e.Code = x.codeCoverage()
 	}
+	e.Vacuous = x.Vacuous()
 	if x.search != nil {
 		e.Search = &Search{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0, Left: x.search.left}
 	}
@@ -142,6 +144,9 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, " · %d %s", e.FailingBy[r], r)
 	}
 	b.WriteByte('\n')
+	for _, v := range e.Vacuous {
+		fmt.Fprintf(&b, "  vacuity   %s\n", v)
+	}
 	if m := e.Model; m != nil {
 		fmt.Fprintf(&b, "  model     %d of %d actions taken", len(m.Taken)-countNot(m.Taken), len(m.Taken)-countNot(m.Taken)+len(m.Never))
 		if len(m.Never) > 0 {

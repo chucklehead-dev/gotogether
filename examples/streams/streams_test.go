@@ -38,7 +38,7 @@ var faulty = qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.05}
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	x := system(streams.Config{}).Explore(t, qtest.ExploreConfig{Seeds: seeds(80), Rates: faulty})
-	x.Expect(t, qtest.Conforms())
+	x.Expect(t, qtest.Conforms(), qtest.NotVacuous())
 	t.Log(x.Evidence())
 }
 
@@ -51,7 +51,7 @@ func TestExhaustiveOneFault(t *testing.T) {
 		t.Skip("hundreds of runs, three times")
 	}
 	one := qtest.Bound{Faults: 1}
-	system(streams.Config{}).Exhaust(t, one).Expect(t, qtest.Conforms(), qtest.Complete())
+	system(streams.Config{}).Exhaust(t, one).Expect(t, qtest.Conforms(), qtest.Complete(), qtest.NotVacuous())
 	system(streams.Config{Mutation: pipeline.NoDedupe}).Exhaust(t, one).Expect(t, qtest.Violates("appliedAtMostOnce"), qtest.Complete())
 	system(streams.Config{Mutation: pipeline.NonIdempotentProducer}).Exhaust(t, one).Expect(t, qtest.Violates("perKeyOrder"), qtest.Complete())
 }

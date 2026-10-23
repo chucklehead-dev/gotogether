@@ -1,0 +1,6 @@
+spec: gate.qnt
+module: gate
+actions:
+  open: {}
+  pass: {}
+invariants: [passedWhenOpen]

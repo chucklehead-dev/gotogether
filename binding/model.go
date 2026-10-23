@@ -18,8 +18,11 @@ type Model struct {
 	Module  string
 	Actions map[string][]Param
 	Vals    map[string]bool
-	Vars    []string
-	Consts  map[string]string // name -> type
+	// Antecedents are the boolean vals of the form `A implies B`, with A
+	// as Quint text: where A never holds, the val holds vacuously.
+	Antecedents map[string]string
+	Vars        []string
+	Consts      map[string]string // name -> type
 }
 
 // Param is an action parameter. Shape is the kind of its resolved type
@@ -110,6 +113,7 @@ type tcDecl struct {
 	Name      string          `json:"name"`
 	Qualifier string          `json:"qualifier"`
 	Expr      *tcExpr         `json:"expr"`
+	RawExpr   json.RawMessage `json:"-"`
 	Type      json.RawMessage `json:"typeAnnotation"`
 	Def       json.RawMessage `json:"type"` // of a typedef
 }
@@ -129,6 +133,23 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 	if err := json.Unmarshal(b, &tc); err != nil {
 		return nil, err
 	}
+	// each declaration's expression as JSON too, for the antecedents
+	var raw struct {
+		Modules []struct {
+			Declarations []struct {
+				Expr json.RawMessage `json:"expr"`
+			} `json:"declarations"`
+		} `json:"modules"`
+	}
+	if json.Unmarshal(b, &raw) == nil && len(raw.Modules) == len(tc.Modules) {
+		for i := range tc.Modules {
+			for j := range tc.Modules[i].Declarations {
+				if j < len(raw.Modules[i].Declarations) {
+					tc.Modules[i].Declarations[j].RawExpr = raw.Modules[i].Declarations[j].Expr
+				}
+			}
+		}
+	}
 	// type aliases, from every module: a parameter's Shape looks through them
 	aliases := map[string]json.RawMessage{}
 	for _, mod := range tc.Modules {
@@ -142,7 +163,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 		if mod.Name != module {
 			continue
 		}
-		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}}
+		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}}
 		for _, d := range mod.Declarations {
 			switch {
 			case d.Kind == "var":
@@ -180,6 +201,9 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 				if d.Expr != nil && d.Expr.Kind != "lambda" {
 					if t, ok := tc.Types[string(d.ID)]; ok && renderType(t.Type) == "bool" {
 						m.Vals[d.Name] = true
+						if a, ok := antecedent(d.RawExpr); ok {
+							m.Antecedents[d.Name] = a
+						}
 					}
 				}
 			}
@@ -254,4 +278,83 @@ func firstArg(a []json.RawMessage) json.RawMessage {
 		return nil
 	}
 	return a[0]
+}
+
+// antecedent is A of a val `A implies B`, rendered as Quint, if the
+// val's expression is one and A is made of what renderIR prints.
+func antecedent(raw json.RawMessage) (string, bool) {
+	var e irExpr
+	if json.Unmarshal(raw, &e) != nil || e.Kind != "app" || e.Opcode != "implies" || len(e.Args) != 2 {
+		return "", false
+	}
+	return renderIR(e.Args[0])
+}
+
+type irExpr struct {
+	Kind   string            `json:"kind"`
+	Name   string            `json:"name"`
+	Opcode string            `json:"opcode"`
+	Args   []json.RawMessage `json:"args"`
+	Value  json.RawMessage   `json:"value"`
+	Params []struct {
+		Name string `json:"name"`
+	} `json:"params"`
+	Expr json.RawMessage `json:"expr"`
+}
+
+// infix are the built-in operators written between their arguments.
+var infix = map[string]string{"eq": "==", "neq": "!=", "ilt": "<", "ilte": "<=", "igt": ">", "igte": ">=",
+	"iadd": "+", "isub": "-", "imul": "*", "idiv": "/", "imod": "%", "and": "and", "or": "or", "implies": "implies", "iff": "iff"}
+
+// renderIR prints a Quint expression from its JSON IR: names, literals,
+// operator applications (infix where Quint writes them so, else
+// op(args)) and lambdas. Anything else (let-in, nondet) is not printed.
+func renderIR(raw json.RawMessage) (string, bool) {
+	var e irExpr
+	if json.Unmarshal(raw, &e) != nil {
+		return "", false
+	}
+	switch e.Kind {
+	case "name":
+		return e.Name, e.Name != ""
+	case "bool", "int":
+		return string(e.Value), len(e.Value) > 0
+	case "str":
+		var s string
+		if json.Unmarshal(e.Value, &s) != nil {
+			return "", false
+		}
+		return fmt.Sprintf("%q", s), true
+	case "lambda":
+		body, ok := renderIR(e.Expr)
+		if !ok || len(e.Params) == 0 {
+			return "", false
+		}
+		names := make([]string, len(e.Params))
+		for i, p := range e.Params {
+			names[i] = p.Name
+		}
+		ps := names[0]
+		if len(names) > 1 {
+			ps = "(" + strings.Join(names, ", ") + ")"
+		}
+		return "(" + ps + " => " + body + ")", true
+	case "app":
+		args := make([]string, len(e.Args))
+		for i, a := range e.Args {
+			s, ok := renderIR(a)
+			if !ok {
+				return "", false
+			}
+			args[i] = s
+		}
+		if op, ok := infix[e.Opcode]; ok && len(args) >= 2 {
+			return "(" + strings.Join(args, " "+op+" ") + ")", true
+		}
+		if e.Opcode == "not" && len(args) == 1 {
+			return "not(" + args[0] + ")", true
+		}
+		return e.Opcode + "(" + strings.Join(args, ", ") + ")", e.Opcode != ""
+	}
+	return "", false
 }
