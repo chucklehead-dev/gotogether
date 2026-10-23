@@ -1,0 +1,5 @@
+spec: flaky.qnt
+module: flaky
+actions:
+  send: {}
+invariants: [atMostThree]

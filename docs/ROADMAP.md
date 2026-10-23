@@ -274,9 +274,13 @@ The track, in order:
     survived (nothing said it finished), now killed by a `done` action
     and `Mutate`'s new claims (`Takes("done")`); three are marked
     equivalent with their reasons.
-  - **Left.** `Reaches`/`Exercised` in checkout's conforming tests; `FollowTraces`
-    in the README and gotogether-start's table; qload monotonicity (more
-    capacity never recovers worse) as self-tests.
+  - **Done.** checkout's faithful exploration at every level claims
+    `Exercised()` and `NotVacuous()` (holding at fresh seed offsets).
+    `FollowTraces` is in the README's and gotogether-start's tables, and
+    has the test it lacked (qtest's flaky sender: a trace's losses as the
+    network's drops).
+  - **Left.** qload monotonicity (more capacity never recovers worse) as
+    self-tests.
 
 Deferred: online streaming verification (resuming quint from a checkpoint
 is unsound for nondeterministic models; `gotogether validate -follow` over

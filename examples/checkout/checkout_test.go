@@ -37,7 +37,7 @@ func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, iso := range levels {
 		t.Run(iso.String(), func(t *testing.T) {
-			explore(t, checkout.Config{Isolation: iso}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
+			explore(t, checkout.Config{Isolation: iso}, qtest.ExploreConfig{Seeds: 60, Rates: crashy}).Expect(t, qtest.Conforms(), qtest.NotVacuous(), qtest.Exercised())
 		})
 	}
 }
