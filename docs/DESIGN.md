@@ -1750,7 +1750,7 @@ from the simulation:
 is given, in order, and no others. Each waits for the steps before it in
 the trace (`Progress`, the run's recorded steps). The schedule is
 nominal, or a base chooser's.
-- `connect.FaultScript(trace, FaultMap)` reads one from a trace: each
+- `qtest.FaultScript(trace, FaultMap)` reads one from a trace: each
   mapped action is a fault kind and option, or a crash
   (`nemesis.crash.<process>`).
 - The trace then drives a whole program through its environment, not

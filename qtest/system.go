@@ -64,13 +64,13 @@ func (s System) Explore(t testing.TB, cfg ExploreConfig) *Exploration {
 }
 
 // FollowTraces drives the whole system through each of the model's traces'
-// faults (connect.FaultScript): the trace's mapped actions are imposed as
+// faults (FaultScript): the trace's mapped actions are imposed as
 // faults in its order, the system makes every other step itself, and its
 // recorded run is checked against the model. A run that cannot follow its
 // trace (a scripted fault it never came to) fails the test with the
 // faults left. trace configures `quint run` (Dir defaults to a temporary
 // directory).
-func (s System) FollowTraces(t testing.TB, trace connect.Config, faults connect.FaultMap) *Exploration {
+func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration {
 	t.Helper()
 	if trace.Dir == "" {
 		trace.Dir = t.TempDir()
@@ -85,7 +85,7 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults connect.
 		if err != nil {
 			t.Fatal(err)
 		}
-		if scripts[i], err = connect.FaultScript(tr, faults, connect.ReplayOptions{Trace: i, StatePath: trace.StatePath, NondetPath: trace.NondetPath}); err != nil {
+		if scripts[i], err = FaultScript(tr, faults, connect.ReplayOptions{Trace: i, StatePath: trace.StatePath, NondetPath: trace.NondetPath}); err != nil {
 			t.Fatal(err)
 		}
 	}

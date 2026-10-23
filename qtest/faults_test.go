@@ -1,4 +1,4 @@
-package connect_test
+package qtest_test
 
 import (
 	"context"
@@ -42,12 +42,12 @@ func (j *journal) run(ctx context.Context, p **qenv.Process) {
 	}
 }
 
-var journalFaults = connect.FaultMap{
-	"writeFail": func(*connect.Step) *connect.Fault {
-		return &connect.Fault{Kind: "journal.write", Option: 1, Recorded: true}
+var journalFaults = qtest.FaultMap{
+	"writeFail": func(*connect.Step) *qtest.Fault {
+		return &qtest.Fault{Kind: "journal.write", Option: 1, Recorded: true}
 	},
-	"restart": func(*connect.Step) *connect.Fault {
-		return &connect.Fault{Kind: "nemesis.crash.writer", Recorded: true}
+	"restart": func(*connect.Step) *qtest.Fault {
+		return &qtest.Fault{Kind: "nemesis.crash.writer", Recorded: true}
 	},
 }
 

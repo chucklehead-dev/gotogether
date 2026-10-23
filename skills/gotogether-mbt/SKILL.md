@@ -91,16 +91,16 @@ Mapping from quint-connect: `#[quint_run]` → `connect.Run`; `#[quint_test]`
   at the effect seam (each write blocks until the handler of that model step
   releases it). See `examples/edgepublish/mbt`.
 
-## Driving a whole program through its faults (`connect.FaultScript`)
+## Driving a whole program through its faults (`qtest.FaultScript`)
 
 A driver calls the code once per step. For a program that runs by
 itself (a process with its own loop), let the trace choose only the
 environment: its failures and crashes.
 
 ```go
-faults := connect.FaultMap{
-	"writeFail": func(*connect.Step) *connect.Fault { return &connect.Fault{Kind: "journal.write", Option: 1, Recorded: true} },
-	"restart":   func(*connect.Step) *connect.Fault { return &connect.Fault{Kind: "nemesis.crash.writer", Recorded: true} },
+faults := qtest.FaultMap{
+	"writeFail": func(*connect.Step) *qtest.Fault { return &qtest.Fault{Kind: "journal.write", Option: 1, Recorded: true} },
+	"restart":   func(*connect.Step) *qtest.Fault { return &qtest.Fault{Kind: "nemesis.crash.writer", Recorded: true} },
 }
 sys := qtest.System{Binding: "journal.binding.yaml", Run: func(c qenv.Chooser) error {
 	s := qenv.New(c); defer s.Close()
@@ -111,7 +111,7 @@ sys.FollowTraces(t, connect.Config{Spec: "journal.qnt", MaxSamples: 8}, faults).
 ```
 
 `FollowTraces` generates the traces, scripts each one's faults
-(`connect.FaultScript`), runs the system on the script, fails a run that
+(`qtest.FaultScript`), runs the system on the script, fails a run that
 could not follow its trace (`Script.Remaining`), and checks every run.
 
 - Each mapped step is a fault: a fault point's or a double's kind and

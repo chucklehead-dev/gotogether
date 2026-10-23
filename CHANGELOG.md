@@ -30,6 +30,9 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- connect is model-based testing only: its fault scripts move next to
+  FollowTraces, as `qtest.FaultMap`, `qtest.Fault` and
+  `qtest.FaultScript`, and connect no longer links the simulator.
 - `sktrace` leaves the core: SimKube's trace format is not the core's to
   freeze. It is examples/sktrace, an unpublished module fleetrollout and
   retrystorm use (`github.com/chucklehead-dev/gotogether/examples/sktrace`).

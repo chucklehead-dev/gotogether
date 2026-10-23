@@ -332,7 +332,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   equivalent under the environment (dropped acks, retries' boundaries)
   survive by right: read the report, do not assert a score.
 - A Script's faults are in a partial order: each kind's in order, other
-  kinds independent unless a fault `Follows` them (connect.FaultScript
+  kinds independent unless a fault `Follows` them (qtest.FaultScript
   chains a trace's faults; an ordered pair says b follows a). It was a
   strict order, where a fault of a phase that had passed (checkout's API
   faults happen only while orders are placed) blocked every later one.

@@ -1,6 +1,7 @@
-package connect
+package qtest
 
 import (
+	"github.com/chucklehead-dev/gotogether/connect"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
@@ -14,30 +15,30 @@ import (
 type Fault struct {
 	Kind   string
 	Option int
-	// Name names the option instead, for a declared kind (qenv.Faults).
+	// Name names the option instead, for a declared kind (qenv.DeclareFaults).
 	Name     string
 	Recorded bool
 }
 
 // FaultMap maps the model's fault actions to their faults; a nil result
 // means the step is not a fault after all.
-type FaultMap map[string]func(s *Step) *Fault
+type FaultMap map[string]func(s *connect.Step) *Fault
 
 // FaultScript reads a trace's faults into a qenv.Script: the trace drives
 // a whole program, not through a driver but through its environment. The
 // script makes the trace's faults, in order, each after the steps that
 // precede it, and no others; the program makes every other step itself,
 // and its recorded steps are then checked against the model
-// (qtest.Validate). A run that cannot follow the trace leaves faults in
+// (System.FollowTraces does it). A run that cannot follow the trace leaves faults in
 // Script.Remaining, or records steps the model rejects.
 //
 // The script waits on the run's own step recorder (the one in the
 // simulation's context); give it a Base chooser for the schedule if it
 // should not be the nominal one.
-func FaultScript(tr *itf.Trace, faults FaultMap, opt ReplayOptions) (*qenv.Script, error) {
+func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qenv.Script, error) {
 	sc := &qenv.Script{}
 	recorded := 0
-	err := Replay(tr, DriverFunc(func(s *Step) error {
+	err := connect.Replay(tr, connect.DriverFunc(func(s *connect.Step) error {
 		if s.Index == 0 {
 			return nil
 		}

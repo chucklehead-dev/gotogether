@@ -36,7 +36,7 @@ func TestFollowTraces(t *testing.T) {
 	RequireQuint(t)
 	sys := System{Binding: "testdata/flaky.yaml", Run: sender}
 	x := sys.FollowTraces(t, connect.Config{Spec: "testdata/flaky.qnt", MaxSamples: 8, MaxSteps: 6, Seed: "7"},
-		connect.FaultMap{"lose": func(*connect.Step) *connect.Fault { return &connect.Fault{Kind: "net.lose", Name: "drop"} }})
+		FaultMap{"lose": func(*connect.Step) *Fault { return &Fault{Kind: "net.lose", Name: "drop"} }})
 	x.Expect(t, Conforms())
 	drops := 0
 	for _, r := range x.Runs {
@@ -54,7 +54,7 @@ func TestFollowTracesAlone(t *testing.T) {
 	RequireQuint(t)
 	sys := System{Binding: "testdata/flaky.yaml", Run: sender}
 	cfg := connect.Config{Spec: "testdata/flaky.qnt", MaxSamples: 8, MaxSteps: 6, Seed: "7"}
-	lose := connect.FaultMap{"lose": func(*connect.Step) *connect.Fault { return &connect.Fault{Kind: "net.lose", Name: "drop"} }}
+	lose := FaultMap{"lose": func(*connect.Step) *Fault { return &Fault{Kind: "net.lose", Name: "drop"} }}
 	t.Setenv("GOTOGETHER_RUN", t.Name()+"#1:seed=3")
 	x := sys.FollowTraces(t, cfg, lose)
 	if len(x.Runs) != 1 || x.Runs[0].Seed != 3 {

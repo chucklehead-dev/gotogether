@@ -40,7 +40,7 @@ func (s Scripted) String() string {
 // Script is a Chooser that makes exactly the faults it is given, in their
 // partial order (each kind's in order, others as Follows says), and no
 // others: a model trace's crashes and failures imposed on the program
-// (connect.FaultScript), while the program does the rest. Every
+// (qtest.FaultScript), while the program does the rest. Every
 // other fault choice is nominal, and non-fault choices are Base's (nil:
 // nominal, the canonical schedule).
 //

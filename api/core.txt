@@ -127,7 +127,6 @@ type Simulation struct
 type TestSet int
 
 == github.com/chucklehead-dev/gotogether/connect
-func FaultScript(tr *itf.Trace, faults FaultMap, opt ReplayOptions) (*qenv.Script, error)
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
 func MustPick[T any](s *Step, name string) T
 func OptPick[T any](s *Step, name string) (*T, error)
@@ -156,12 +155,6 @@ type Driver interface
     Step(s *Step) error
 type DriverFunc func(s *Step) error
     method (DriverFunc) Step(s *Step) error
-type Fault struct
-    field Kind string
-    field Option int
-    field Name string
-    field Recorded bool
-type FaultMap map[string]func(s *Step) *Fault
 type Handler func(s *Step) error
 type QuintError struct
     field Args []string
@@ -1108,6 +1101,7 @@ func AnyOf(es ...Expectation) Expectation
 func Conforms() Expectation
 func Constants(m map[string]string) Option
 func Exercised(except ...string) Exercise
+func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qenv.Script, error)
 func Global() Option
 func Invariants(names ...string) Option
 func IsEvidence(path string) bool
@@ -1180,6 +1174,12 @@ type ExploreConfig struct
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
     field Replay bool
+type Fault struct
+    field Kind string
+    field Option int
+    field Name string
+    field Recorded bool
+type FaultMap map[string]func(s *connect.Step) *Fault
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
@@ -1251,7 +1251,7 @@ type System struct
     field Mutant string
     method (System) Exhaust(t testing.TB, b Bound) *Exploration
     method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
-    method (System) FollowTraces(t testing.TB, trace connect.Config, faults connect.FaultMap) *Exploration
+    method (System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration
     method (System) Fuzz(f *testing.F, rates qenv.Rates, seeds ...[]byte)
     method (System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport
     method (System) Sweep(t *testing.T, sw SweepConfig) *SweepResult
