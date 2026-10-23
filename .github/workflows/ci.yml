@@ -40,10 +40,16 @@ jobs:
           go test -count=1 -timeout 30m ./...
       - name: the examples, each its own module
         run: |
+          go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm twophase; do
             echo "::group::examples/$m"
-            (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go test -count=1 -timeout 30m ./...) || exit 1
+            (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
+              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
+          done
+          # what no faithful exploration of the example tried fails: an action, a fault point, a kind
+          for m in hello checkout; do
+            "$RUNNER_TEMP/gotogether" evidence -strict "$RUNNER_TEMP/evidence/$m" || exit 1
           done
       - name: every model on its own (gotogether simulate)
         run: |
