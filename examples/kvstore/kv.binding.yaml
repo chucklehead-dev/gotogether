@@ -37,3 +37,4 @@ invariants: [versionsAreRevisions, versionsUnique]
 simulate:
   constants: {KEYS: 'Set("a", "b")', VALUES: 'Set("x", "y")'}
   holds: [versionsAreRevisions, versionsUnique]
+  verifySteps: 7 # Apalache: 144 s at 7 steps, past 4 minutes at 8

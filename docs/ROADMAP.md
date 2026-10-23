@@ -189,7 +189,9 @@ The track, in order:
     a binding's `simulate.verifySteps` (Apalache's cost climbs steeply
     with depth: broadcast takes 32 s at 6 steps and over 8 minutes at 8)
     or skipped with its `verifySkip` (grpcledger, not done in 10
-    minutes; twophase, Choreo's recursion beyond Apalache). Its finding: 6 steps were too few for
+    minutes; twophase, Choreo's recursion beyond Apalache). Broadcast is capped
+    at 6 steps and kvstore at 7; the other twelve take 8, the whole pass
+    about 10 minutes. Its finding: 6 steps were too few for
     edgepublish's duplicate payload, which sampling at 30 finds; 8 are
     enough.
   - **Readers of `evidence.json`, done.** Evidence names its test and
