@@ -50,3 +50,96 @@ func TestStoreDetectsDeadlock(t *testing.T) {
 		t.Fatalf("%d deadlocks, %d committed; want 1 and 2", deadlocks, committed)
 	}
 }
+
+// A commit's wait for a lock is a lock wait the deadlock check sees: T2
+// commits a write of a, locked by T1, while holding b; T1 then locks b.
+// The check once followed only GetForUpdate's waits, and both waited
+// forever.
+func TestStoreDetectsDeadlockThroughCommit(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	st := qenv.NewStore(s, "db", qenv.Serializable)
+	st.Load("a", 10)
+	st.Load("b", 10)
+	var t1, t2 error
+	s.Spawn("t1", func(ctx context.Context) {
+		tx := st.Begin(ctx)
+		if _, _, err := tx.GetForUpdate("a"); err != nil {
+			t1 = err
+			return
+		}
+		qenv.Sleep(ctx, 20*time.Millisecond) // t2 is waiting in its commit
+		if _, _, err := tx.GetForUpdate("b"); err != nil {
+			t1 = err
+			return
+		}
+		t1 = tx.Commit()
+	})
+	s.Spawn("t2", func(ctx context.Context) {
+		tx := st.Begin(ctx)
+		if _, _, err := tx.GetForUpdate("b"); err != nil {
+			t2 = err
+			return
+		}
+		qenv.Sleep(ctx, 10*time.Millisecond) // t1 holds a
+		tx.Put("a", 1)
+		t2 = tx.Commit()
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if !errors.Is(t1, qenv.ErrDeadlock) || t2 != nil {
+		t.Fatalf("t1: %v, t2: %v; want t1 a deadlock and t2 committed", t1, t2)
+	}
+}
+
+// A commit writes every key at once, when none is locked: waiting for each
+// in turn let another transaction lock a key already waited for, and the
+// commit wrote under its lock, a lost update at ReadCommitted.
+func TestCommitWaitsForAllLocks(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	st := qenv.NewStore(s, "db", qenv.ReadCommitted)
+	st.Load("a", 10)
+	st.Load("b", 10)
+	s.Spawn("holder", func(ctx context.Context) { // holds b until 20ms
+		tx := st.Begin(ctx)
+		if _, _, err := tx.GetForUpdate("b"); err != nil {
+			t.Error(err)
+			return
+		}
+		qenv.Sleep(ctx, 20*time.Millisecond)
+		if err := tx.Commit(); err != nil {
+			t.Error(err)
+		}
+	})
+	s.Spawn("writer", func(ctx context.Context) { // writes a and b, waits for b
+		qenv.Sleep(ctx, 5*time.Millisecond)
+		tx := st.Begin(ctx)
+		tx.Put("a", 100)
+		tx.Put("b", 1)
+		if err := tx.Commit(); err != nil {
+			t.Error(err)
+		}
+	})
+	s.Spawn("incrementer", func(ctx context.Context) { // locks a at 10ms until 40ms
+		qenv.Sleep(ctx, 10*time.Millisecond)
+		tx := st.Begin(ctx)
+		v, _, err := tx.GetForUpdate("a")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		qenv.Sleep(ctx, 30*time.Millisecond)
+		tx.Put("a", v.(int)+1)
+		if err := tx.Commit(); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if a, _ := st.Read("a"); a != 100 {
+		t.Fatalf("a = %v, want 100: the writer's commit came first and was lost", a)
+	}
+}

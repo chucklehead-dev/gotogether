@@ -214,21 +214,8 @@ func (tx *tx) saw(key string, seq int64) {
 func (tx *tx) GetForUpdate(key string) (any, bool, error) {
 	tx.check()
 	Yield(tx.ctx)
-	if owner := tx.st.locks[key]; owner != nil && owner != tx {
-		// the owner waits for a lock whose owner waits ...: if the chain
-		// comes back to tx, waiting would never end
-		for o, n := owner, 0; o != nil && n <= len(tx.st.open); o, n = tx.st.locks[o.waiting], n+1 {
-			if o == tx {
-				tx.Rollback()
-				return nil, false, ErrDeadlock
-			}
-			if o.waiting == "" {
-				break
-			}
-		}
-		tx.waiting = key
-		Wait(tx.ctx, func() bool { return tx.st.locks[key] == nil })
-		tx.waiting = ""
+	if err := tx.lockWait([]string{key}); err != nil {
+		return nil, false, err
 	}
 	if tx.done {
 		return nil, false, ErrConflict
@@ -335,6 +322,49 @@ func (st *Store) latest(key string) int64 {
 	return 0
 }
 
+// blocker is the first of keys another transaction has locked, or "".
+func (tx *tx) blocker(keys []string) string {
+	for _, k := range keys {
+		if owner := tx.st.locks[k]; owner != nil && owner != tx {
+			return k
+		}
+	}
+	return ""
+}
+
+// lockWait waits until no other transaction holds a lock on any of keys.
+// The key it waits on is tx.waiting, which the deadlock check follows: the
+// owner waits for a lock whose owner waits ...; if the chain comes back to
+// tx, waiting would never end, and tx aborts with ErrDeadlock. A commit's
+// wait is a lock wait as GetForUpdate's is (it was invisible to the check).
+func (tx *tx) lockWait(keys []string) error {
+	k := tx.blocker(keys)
+	if k == "" {
+		return nil
+	}
+	for o, n := tx.st.locks[k], 0; o != nil && n <= len(tx.st.open); o, n = tx.st.locks[o.waiting], n+1 {
+		if o == tx {
+			tx.Rollback()
+			return ErrDeadlock
+		}
+		if o.waiting == "" {
+			break
+		}
+	}
+	tx.waiting = k
+	Wait(tx.ctx, func() bool {
+		// the key it waits on is the one still locked, for the check of a
+		// transaction that comes to wait on tx
+		if b := tx.blocker(keys); b != "" {
+			tx.waiting = b
+			return false
+		}
+		return true
+	})
+	tx.waiting = ""
+	return nil
+}
+
 // Commit applies the writes, or aborts with ErrConflict as the isolation
 // level requires. Writes to a key another transaction has locked wait for
 // that lock first. With CommitFaults, a commit may be applied and still
@@ -343,10 +373,11 @@ func (tx *tx) Commit() error {
 	tx.check()
 	Yield(tx.ctx)
 	st := tx.st
-	for _, k := range tx.order {
-		if owner := st.locks[k]; owner != nil && owner != tx {
-			Wait(tx.ctx, func() bool { return st.locks[k] == nil })
-		}
+	// every written key free at once, then validated and applied in that
+	// same step: waiting for each in turn let another transaction lock a
+	// key already waited for, and the commit wrote under its lock
+	if err := tx.lockWait(tx.order); err != nil {
+		return err
 	}
 	if tx.done {
 		return ErrConflict
