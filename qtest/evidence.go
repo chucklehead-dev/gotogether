@@ -49,8 +49,8 @@ type Evidence struct {
 
 // WriteJSON writes the evidence to path as JSON, for tools that read a
 // run's report (gotogether evidence, cover, actionmap). Explorations write
-// theirs under GOTOGETHER_KEEP: evidence.json in the test's directory, and
-// one per exploration, in its own directory (x1, x2, ...).
+// theirs under GOTOGETHER_EVIDENCE (dir/<package>/<test>/x<N>.json), else
+// in a kept exploration's directory (GOTOGETHER_KEEP/<test>/x<N>/evidence.json).
 func (e *Evidence) WriteJSON(path string) error {
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
@@ -60,7 +60,8 @@ func (e *Evidence) WriteJSON(path string) error {
 }
 
 // EvidenceFormat is the format WriteJSON writes and ReadEvidence reads.
-// Bump it when a field's meaning changes, so old files are refused, not
+// Bump it when a field's name or meaning changes (qenv.Coverage's and
+// qcover.Summary's, which it embeds, too), so old files are refused, not
 // misread.
 const EvidenceFormat = "gotogether.evidence/1"
 
@@ -93,14 +94,23 @@ func ReadEvidence(path string) (*Evidence, error) {
 // format version: what a tool walking a directory reads, and skips the
 // rest (ITF traces, corpus entries, summaries).
 func IsEvidence(path string) bool {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
-	var head struct {
-		Format string `json:"format"`
+	defer f.Close()
+	// the format is WriteJSON's first key: read it alone, not a whole ITF
+	// trace beside it
+	d := json.NewDecoder(f)
+	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
+		return false
 	}
-	return json.Unmarshal(b, &head) == nil && strings.HasPrefix(head.Format, "gotogether.evidence/")
+	key, err := d.Token()
+	if err != nil || key != "format" {
+		return false
+	}
+	var format string
+	return d.Decode(&format) == nil && strings.HasPrefix(format, "gotogether.evidence/")
 }
 
 // Evidence is the exploration's report.
@@ -300,7 +310,7 @@ func countNot(taken map[string]int) int {
 // role is what the exploration was (Evidence.Role).
 func (x *Exploration) role() string {
 	switch {
-	case x.replay: // a replay of a mutant's failure too: it repeats a run counted where it was found
+	case x.replay || x.alone != nil: // a replay of a mutant's failure too, and a run reproduced alone: each repeats a run counted where it was found
 		return RoleReplay
 	case x.mutant || x.mutation != "":
 		return RoleMutant

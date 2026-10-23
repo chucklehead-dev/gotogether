@@ -30,14 +30,14 @@ tests with `GOTOGETHER_EVIDENCE=dir` and pass an exploration's evidence
 (or a summary written from `x.Evidence().Code`):
 
 ```sh
-gotogether cover -covdir run1,run2 -sim evidence/TestFaithful/x1.json
+gotogether cover -covdir run1,run2 -sim evidence/_/TestFaithful/x1.json
 ```
 
 ## What no test of the suite tried
 
 Each exploration's Evidence says what its own runs left out; a suite's
 tests may cover each other. Run them with `GOTOGETHER_EVIDENCE=dir`
-(each exploration writes `dir/<test>/x<N>.json`, its format and role in
+(each exploration writes `dir/<package>/<test>/x<N>.json`, its format and role in
 it; a test's first exploration clears what earlier runs left), then
 
 ```sh

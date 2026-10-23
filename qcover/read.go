@@ -22,7 +22,7 @@ func ReadSummary(path string) (*Summary, error) {
 		Code   json.RawMessage `json:"code"`
 	}
 	if err := json.Unmarshal(b, &e); err != nil {
-		return nil, fmt.Errorf("%s: %w (want a qcover.Summary or an evidence.json as JSON)", path, err)
+		return nil, fmt.Errorf("%s: %w (want a qcover.Summary or an exploration's evidence as JSON)", path, err)
 	}
 	if strings.HasPrefix(e.Format, "gotogether.evidence/") {
 		if len(e.Code) == 0 || string(e.Code) == "null" {
@@ -32,7 +32,7 @@ func ReadSummary(path string) (*Summary, error) {
 	}
 	var s Summary
 	if err := json.Unmarshal(b, &s); err != nil {
-		return nil, fmt.Errorf("%s: %w (want a qcover.Summary or an evidence.json as JSON)", path, err)
+		return nil, fmt.Errorf("%s: %w (want a qcover.Summary or an exploration's evidence as JSON)", path, err)
 	}
 	return &s, nil
 }

@@ -272,7 +272,7 @@ func (r *reader) parse(dir string) (*parsed, error) {
 							}
 							switch {
 							case i < len(s.Values):
-								line += " = " + expr(fset, s.Values[i]) // a value's change changes the API
+								line += " = " + value(fset, s.Values[i]) // a value's change changes the API
 							case d.Tok == token.CONST && implicitVal != nil:
 								line += fmt.Sprintf(" = %s (spec %d of its group)", expr(fset, implicitVal), k) // iota's value is its place
 							}
@@ -389,4 +389,23 @@ func expr(fset *token.FileSet, e ast.Node) string {
 	var b bytes.Buffer
 	_ = printer.Fprint(&b, fset, e)
 	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// value prints a constant's or variable's value, its type but not its body
+// for a function literal or a composite one: an analyzer's Run, a table of
+// names, are implementation, and a change to them is not one to the API.
+func value(fset *token.FileSet, e ast.Expr) string {
+	switch v := e.(type) {
+	case *ast.FuncLit:
+		return expr(fset, v.Type) + " {…}"
+	case *ast.CompositeLit:
+		if v.Type != nil {
+			return expr(fset, v.Type) + "{…}"
+		}
+	case *ast.UnaryExpr:
+		if c, ok := v.X.(*ast.CompositeLit); ok && v.Op == token.AND && c.Type != nil {
+			return "&" + expr(fset, c.Type) + "{…}"
+		}
+	}
+	return expr(fset, e)
 }

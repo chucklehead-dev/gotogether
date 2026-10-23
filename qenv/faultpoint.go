@@ -97,14 +97,14 @@ func KnownFault(name string) bool { return choice.Known(name) }
 
 // PointCoverage is what runs did at one fault kind.
 type PointCoverage struct {
-	Kind    string
-	Sites   []string // where it is declared (none: a double's own fault)
-	Runs    int      // runs that reached it
-	Reached int      // times it was reached, over all runs
+	Kind    string   `json:"kind"`
+	Sites   []string `json:"sites,omitempty"` // where it is declared (none: a double's own fault)
+	Runs    int      `json:"runs"`            // runs that reached it
+	Reached int      `json:"reached"`         // times it was reached, over all runs
 	// Injected counts each option taken (index 0: nominal).
-	Injected []int
-	// Names are the options' names, for a declared kind (Faults).
-	Names []string
+	Injected []int `json:"injected"`
+	// Names are the options' names, for a declared kind (DeclareFaults).
+	Names []string `json:"names,omitempty"`
 }
 
 // Faulted is how often a fault (any option but nominal) was taken.
@@ -121,9 +121,12 @@ func (p *PointCoverage) Faulted() int {
 // A Coverage is the fault coverage of a set of runs: for each fault kind,
 // declared (DeclareFault) or met (a double's), how often runs reached it
 // and which of its options they took.
+//
+// Its JSON is part of qtest's evidence format (qtest.EvidenceFormat): a
+// change to a field's name or meaning bumps that format.
 type Coverage struct {
-	Runs   int
-	Points []*PointCoverage // by kind
+	Runs   int              `json:"runs"`
+	Points []*PointCoverage `json:"points"` // by kind
 	// faulted are each run's faulted kinds, in the order of their first
 	// fault (Pairs)
 	faulted [][]string

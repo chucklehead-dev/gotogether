@@ -448,7 +448,7 @@ starts, and the review's findings are fixed first.
 - **Y10. Evidence as a format. Done:** `Evidence.Format`
   (`gotogether.evidence/1`) refused when other, and read by format
   (qcover, `gotogether evidence`) rather than by a key or a file name;
-  `GOTOGETHER_EVIDENCE` (dir/<test>/x<N>.json), cleared per test, and
+  `GOTOGETHER_EVIDENCE` (dir/<package>/<test>/x<N>.json), cleared per test, and
   KEEP's x<N>/evidence.json cleared likewise; `Evidence.Role` (faithful,
   mutant: Mutate's or `System.Mutant`, replay: `ExploreConfig.Replay`,
   qhegel's), gaps counting faithful only; `evidence -strict` on hello

@@ -86,7 +86,7 @@ func usage() {
   gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
   gotogether simulate -binding b.yaml [-steps n] [-samples n] [-const N=e] [-seed s] [-verify n]
                    the model alone, with the binding's invariants (-verify: every trace of up to n steps, by Apalache)
-  gotogether evidence [-strict] [DIR|evidence.json ...]   a suite's explorations (their evidence.json under GOTOGETHER_KEEP):
+  gotogether evidence [-strict] [DIR|FILE ...]            a suite's explorations (their evidence under GOTOGETHER_EVIDENCE):
                    each test's verdicts, and the model actions and fault kinds no test tried
   gotogether lint     -binding b.yaml [-src DIR] [-sim DIR]
   gotogether lint     -sim DIR | -weave DIR
@@ -96,8 +96,8 @@ func usage() {
                    [-spec M.qnt -module M -instance I] [-novars]
                    [-convert rules.yaml] [-invariants a,b] [-itf] FILE...
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
-  gotogether cover    -covdir D1,D2 [-sim evidence.json]    a real environment's coverage (binaries built with -cover),
-                   against a simulation's (an evidence.json, or qcover.Summary JSON): what ran only for real, only simulated
+  gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
+                   against a simulation's (an exploration's evidence, or qcover.Summary JSON): what ran only for real, only simulated
   gotogether convert  -rules r.yaml [-out steps.jsonl] FILE...   an app's OTLP/JSON spans -> step log (see package convert)
 
   gotogether skills   [list | install [-target agents,claude,github,cursor|all] [-user] [-dir DIR] [-force]]

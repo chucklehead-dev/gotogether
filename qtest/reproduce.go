@@ -277,13 +277,44 @@ func copyTree(src, dst string) error {
 }
 
 // evidenceDir is where test's explorations write their evidence under
-// GOTOGETHER_EVIDENCE, or "".
+// GOTOGETHER_EVIDENCE, or "": dir/<package>/<test>, since go test runs a
+// module's packages side by side and two may have a test of one name.
 func evidenceDir(test string) string {
 	root := os.Getenv("GOTOGETHER_EVIDENCE")
 	if root == "" {
 		return ""
 	}
-	return filepath.Join(root, safeName(test))
+	return filepath.Join(root, pkgDir(), safeName(test))
+}
+
+var pkgOnce struct {
+	sync.Once
+	dir string
+}
+
+// pkgDir names the test binary's package as a directory: its directory
+// relative to its module's root (go test runs a test in its package's
+// directory), "_" for the root, slashes as "_".
+func pkgDir() string {
+	pkgOnce.Do(func() {
+		pkgOnce.dir = "_"
+		wd, err := os.Getwd()
+		if err != nil {
+			return
+		}
+		for dir := wd; ; dir = filepath.Dir(dir) {
+			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+				if rel, err := filepath.Rel(dir, wd); err == nil && rel != "." {
+					pkgOnce.dir = strings.ReplaceAll(filepath.ToSlash(rel), "/", "_")
+				}
+				return
+			}
+			if filepath.Dir(dir) == dir {
+				return
+			}
+		}
+	})
+	return pkgOnce.dir
 }
 
 // clearEvidence removes the evidence earlier runs of test wrote: under

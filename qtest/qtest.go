@@ -83,14 +83,14 @@ func (c settings) refuse(t testing.TB, workflow string, ignored map[string]strin
 // records nothing.
 var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
-		"or record through the run's context); Global is Record's, for goroutines no run can follow"
+		"or record through the run's context); Global is Record's and qhegel's cases', for goroutines no run can follow"
 	whyLinearize = "its runs are checked in the order they were recorded; Linearize is Record's and Validate's, " +
 		"for steps recorded where an operation was invoked and returned"
 	exploreIgnores  = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize}
 	validateIgnores = map[string]string{
 		"Global":          "Validate checks steps already recorded: there is no recorder to install",
 		"RecorderOptions": "Validate checks steps already recorded: there is no recorder to configure",
-		"SkipIfEmpty":     "it is Record's, for an unwoven build that records nothing; skip on len(steps) == 0 instead",
+		"SkipIfEmpty":     "it is Record's and explorations', for an unwoven build that records nothing; skip on len(steps) == 0 instead",
 	}
 )
 
@@ -385,6 +385,19 @@ func (s Settings) Recorder() []qobs.Option { return s.s.Recorder }
 
 // Global reports whether the run's recorder is installed globally (Global).
 func (s Settings) Global() bool { return s.s.Global }
+
+// SkipIfEmpty reports whether the test skips when nothing was recorded
+// (SkipIfEmpty).
+func (s Settings) SkipIfEmpty() bool { return s.s.SkipIfEmpty }
+
+// RefuseExploration fails t for each option given that an exploration
+// ignores, as Explore does: for a workflow whose runs are an exploration's
+// (qhegel.Shrink's replays), so it refuses them before its search rather
+// than after.
+func (s Settings) RefuseExploration(t testing.TB, workflow string) {
+	t.Helper()
+	s.s.refuse(t, workflow, exploreIgnores)
+}
 
 // Refuse fails t for each of the named options given (by their function's
 // name: "Linearize") that workflow ignores, saying why: an option that

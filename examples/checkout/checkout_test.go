@@ -21,7 +21,7 @@ func system(cfg checkout.Config) qtest.System {
 		return err
 	}}
 	if cfg.Mutation != shop.Faithful {
-		s.Mutant = fmt.Sprintf("shop.Mutation(%d)", cfg.Mutation) // its runs are not the shop's: the suite's evidence leaves them out
+		s.Mutant = cfg.Mutation.String() // its runs are not the shop's: the suite's evidence leaves them out
 	}
 	return s
 }

@@ -63,6 +63,15 @@ const (
 	DualWrite
 )
 
+// String is the mutation's name, as its constant's.
+func (m Mutation) String() string {
+	names := []string{"Faithful", "NoLocks", "LockWithoutWrite", "NoIdempotencyKey", "DualWrite"}
+	if m >= 0 && int(m) < len(names) {
+		return names[m]
+	}
+	return fmt.Sprintf("Mutation(%d)", int(m))
+}
+
 // Event is a message between services.
 type Event struct {
 	Type  string // placed, cancelled, paid

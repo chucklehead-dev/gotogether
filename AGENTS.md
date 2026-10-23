@@ -145,7 +145,8 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   explorations numbered in order; each failing run's report prints it.
   `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
   (`gotogether.evidence/1`, with its role: faithful, mutant, replay) as
-  dir/<test>/x<N>.json, cleared per test; a System's `Mutant` marks a
+  dir/<package>/<test>/x<N>.json (the package as its directory in its
+  module, `_` the root), cleared per test, a run alone a replay; a System's `Mutant` marks a
   config's mutation so the suite's gaps leave it out.
   `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;

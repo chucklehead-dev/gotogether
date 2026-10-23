@@ -40,7 +40,7 @@ Added to the core since api/core.txt was first recorded:
 - Evidence is a format (`Evidence.Format`, `qtest.EvidenceFormat`,
   `IsEvidence`) with a role (faithful, mutant, replay: `System.Mutant`,
   `ExploreConfig.Replay`); `GOTOGETHER_EVIDENCE=dir` writes it as
-  dir/<test>/x<N>.json, cleared per test; `gotogether evidence` and
+  dir/<package>/<test>/x<N>.json, cleared per test; `gotogether evidence` and
   `qcover.ReadSummary` read by format, and the suite's gaps count
   faithful explorations only.
 - An option a workflow ignores fails it, saying why: `Global()` or

@@ -12,7 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-// evidence reads the evidence.json every exploration writes under
+// evidence reads the evidence every exploration writes under
 // GOTOGETHER_KEEP and reports the suite as a whole: what each test's runs
 // showed, and what no test showed. A model action no test took, a fault
 // point no test reached, a fault kind no test injected: each test's own

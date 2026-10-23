@@ -145,6 +145,8 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 		mcfg := cfg
 		mcfg.emptyOK = true
 		mcfg.corpusOf = base.ref() // the baseline's regressions are the mutants' too
+		mut := m.String()
+		mcfg.opts = append(append([]Option(nil), mcfg.opts...), func(c *settings) { c.mutant = mut }) // its evidence names it
 		x := explore(t, s.Binding, mcfg, func(c qenv.Chooser) (err error) {
 			defer func() {
 				if r := recover(); r != nil {

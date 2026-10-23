@@ -14,7 +14,7 @@ import (
 func runCover(args []string) error {
 	fset := flag.NewFlagSet("cover", flag.ExitOnError)
 	covdir := fset.String("covdir", "", "comma-separated GOCOVERDIRs of the real environment's runs")
-	sim := fset.String("sim", "", "a simulation's coverage: an exploration's evidence.json (under GOTOGETHER_KEEP) or a qcover.Summary as JSON")
+	sim := fset.String("sim", "", "a simulation's coverage: an exploration's evidence (under GOTOGETHER_EVIDENCE) or a qcover.Summary as JSON")
 	fset.Parse(args)
 	if *covdir == "" {
 		return fmt.Errorf("cover needs -covdir")

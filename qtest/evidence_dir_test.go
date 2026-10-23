@@ -26,17 +26,25 @@ func TestEvidenceDir(t *testing.T) {
 	replay.Replay = true
 	sys.Explore(t, replay)
 	for n, role := range map[string]string{"x1.json": RoleFaithful, "x2.json": RoleMutant, "x3.json": RoleReplay} {
-		e, err := ReadEvidence(filepath.Join(dir, t.Name(), n))
+		e, err := ReadEvidence(filepath.Join(dir, pkgDir(), t.Name(), n)) // pkgDir: qtest, the package
 		if err != nil || e.Role != role || e.Format != EvidenceFormat {
 			t.Errorf("%s: %+v %v, want role %s", n, e, err, role)
 		}
 	}
 	rerun(t) // the next run of the test, with one exploration
 	sys.Explore(t, nominal)
-	if _, err := os.Stat(filepath.Join(dir, t.Name(), "x2.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, pkgDir(), t.Name(), "x2.json")); !os.IsNotExist(err) {
 		t.Errorf("a stale x2.json survived the rerun: %v", err)
 	}
-	if !IsEvidence(filepath.Join(dir, t.Name(), "x1.json")) {
+	if !IsEvidence(filepath.Join(dir, pkgDir(), t.Name(), "x1.json")) {
 		t.Error("the rerun's x1.json is not evidence")
+	}
+}
+
+// A package's directory under GOTOGETHER_EVIDENCE is its path in its
+// module: two packages' tests of one name do not share one.
+func TestPkgDir(t *testing.T) {
+	if pkgDir() != "qtest" {
+		t.Errorf("pkgDir() = %q, want qtest", pkgDir())
 	}
 }

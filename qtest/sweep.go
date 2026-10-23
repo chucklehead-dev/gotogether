@@ -41,6 +41,9 @@ type SweepResult struct {
 func (s *SweepResult) faultCoverage() *qenv.Coverage {
 	var runs [][]qenv.Choice
 	for _, x := range s.Runs {
+		if x == nil { // a row that never ran (filtered by -run, or a Fatal before)
+			continue
+		}
 		for _, r := range x.Runs {
 			runs = append(runs, r.Choices)
 		}

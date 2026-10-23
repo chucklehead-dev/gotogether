@@ -2,7 +2,6 @@ package checkout_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/checkout"
@@ -39,7 +38,7 @@ var isoOf = map[string]qenv.Isolation{"ser": qenv.Serializable, "si": qenv.Snaps
 func sweepSystem(m shop.Mutation) qtest.System {
 	mutant := ""
 	if m != shop.Faithful {
-		mutant = fmt.Sprintf("shop.Mutation(%d)", m)
+		mutant = m.String()
 	}
 	return qtest.System{Binding: binding, Mutant: mutant, Run: func(c qenv.Chooser) error {
 		row, _ := qtest.RowOf(c)

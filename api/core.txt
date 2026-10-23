@@ -517,8 +517,8 @@ type Clocks struct
     field Jump time.Duration
     field Drift float64
 type Coverage struct
-    field Runs int
-    field Points []*PointCoverage
+    field Runs int `json:"runs"`
+    field Points []*PointCoverage `json:"points"`
     method (*Coverage) OneWay() []PairCoverage
     method (*Coverage) Pairs() []PairCoverage
     method (*Coverage) Point(kind string) *PointCoverage
@@ -580,12 +580,12 @@ type PairCoverage struct
 type Platform interface
     Machine(name string, main func()) Machine
 type PointCoverage struct
-    field Kind string
-    field Sites []string
-    field Runs int
-    field Reached int
-    field Injected []int
-    field Names []string
+    field Kind string `json:"kind"`
+    field Sites []string `json:"sites,omitempty"`
+    field Runs int `json:"runs"`
+    field Reached int `json:"reached"`
+    field Injected []int `json:"injected"`
+    field Names []string `json:"names,omitempty"`
     method (*PointCoverage) Faulted() int
 type Process struct
     field Name string
@@ -1252,6 +1252,8 @@ type Settings struct
     method (Settings) Global() bool
     method (Settings) Recorder() []qobs.Option
     method (Settings) Refuse(t testing.TB, workflow, why string, options ...string)
+    method (Settings) RefuseExploration(t testing.TB, workflow string)
+    method (Settings) SkipIfEmpty() bool
 type SweepConfig struct
     field Factors []qsweep.Factor
     field Strength int
@@ -1362,9 +1364,9 @@ func TargetDirs(root string, names []string) ([]string, error)
 type Skill struct
     field Name string
     field Description string
-var DefaultTargets = []string{"agents", "claude"}
-var Renamed = map[string]string{ "quint-start": "gotogether-start", "quint-model-for-go": "gotogether-model", "quint-modeling-patterns": "gotogether-patterns", "quint-mbt-driver": "gotogether-mbt", "quint-hegel": "gotogether-hegel", "quint-trace-validation": "gotogether-traces", "quint-fault-injection": "gotogether-faults", "quint-metastability": "gotogether-metastability", "quint-verification-workflow": "gotogether-workflow", }
-var Targets = map[string]string{ "agents": filepath.Join(".agents", "skills"), "claude": filepath.Join(".claude", "skills"), "github": filepath.Join(".github", "skills"), "cursor": filepath.Join(".cursor", "skills"), }
+var DefaultTargets = []string{…}
+var Renamed = map[string]string{…}
+var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/sktrace
 func Applied(kinds ...string) func(Event) int
