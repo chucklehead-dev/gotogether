@@ -209,16 +209,15 @@ func (v *Violation) Last() qtrace.Step {
 //	qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Rejects("ship"))
 func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	t.Helper()
-	rates := sys.Rates
-	if rates.Default == 0 && rates.Kinds == nil {
-		rates = qenv.DefaultRates
-	}
+	rates := sys.FaultRates()
 	// its replays are an exploration's runs: what an exploration ignores,
 	// it refuses now, before the search, not in a replay that fails
 	// quietly; the nominal run first, which skips an unwoven build that
 	// records nothing (qtest.SkipIfEmpty), as an exploration does
 	cases := sys.CheckCases(t, "qhegel.Shrink (its replays are an exploration's runs)")
-	sys.Judge(t, qenv.Nominal{})
+	if r := sys.Judge(t, qenv.Nominal{}); r.Err == nil && len(r.Steps) == 0 && cases.SkipIfEmpty {
+		t.Skip("qhegel: the system recorded no step on its nominal run (qtest.SkipIfEmpty): an unwoven build?")
+	}
 	v := findViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, cases, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
