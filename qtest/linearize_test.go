@@ -12,7 +12,7 @@ import (
 // order the intervals allow, the deposit first.
 func TestLinearizeOption(t *testing.T) {
 	RequireQuint(t)
-	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * time.Millisecond) }
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) } // units beyond qtrace.RealTimeSlack
 	steps := []qtrace.Step{
 		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Invoked: at(0), Time: at(10),
 			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(60)}},

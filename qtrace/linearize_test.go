@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// op is a register operation over [from, to] in milliseconds, from a
-// client recorder of its own.
+// op is a register operation over [from, to] in units of 10 ms (each
+// beyond RealTimeSlack), from a client recorder of its own.
 func op(client string, seq uint64, action string, v int64, from, to int) Step {
-	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * time.Millisecond) }
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
 	s := Step{Action: action, Recorder: client, Seq: seq, Thread: client, Actor: "r", Process: "p",
 		Invoked: at(from), Time: at(to), Args: map[string]any{}, Obs: map[string]any{}}
 	if action == "write" {

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // realTime reports the steps an order puts before a step that completed
@@ -28,7 +29,7 @@ func realTime(steps []Step) []Issue {
 			out = append(out, Issue{"warn", "realtime", fmt.Sprintf("%s (seq %d) was invoked after it completed: its invocation time is from another clock, or is not when it began", s.Action, s.Seq)})
 			continue
 		}
-		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && steps[j].Time.Before(s.Invoked) {
+		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && steps[j].Time.Add(RealTimeSlack).Before(s.Invoked) {
 			a := &steps[j]
 			out = append(out, Issue{"error", "realtime", fmt.Sprintf("%s (seq %d) completed before %s (seq %d) was invoked, but the order puts it after: "+
 				"the thread or order keys contradict real time (a step recorded before its effect, an order key from another clock)", a.Action, a.Seq, s.Action, s.Seq)})
@@ -39,6 +40,17 @@ func realTime(steps []Step) []Issue {
 	}
 	return out
 }
+
+// RealTimeSlack is how much later than another's end a step's invocation
+// must be for real time to order them. Recorded times are approximate:
+// OpenTelemetry's SDK writes a span's end as its start's wall-clock time
+// plus the monotonic time since, so one span's start and another's end
+// come from different clocks, and spans of a correct service were seen
+// to "end before" ones that took effect before them by up to a few
+// microseconds (kvstore's, under CI's load). Steps closer than this are
+// concurrent; machines whose clocks differ by more need their own order
+// keys.
+const RealTimeSlack = time.Millisecond
 
 // moveWindow bounds how far a move takes a step: concurrent operations
 // are near each other in recording order.
@@ -81,7 +93,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	// whose invocation is unknown has no real-time bound)
 	after := func(a, b int) bool {
 		inv := ns[b].s.Invoked
-		return !inv.IsZero() && ns[a].s.Time.Before(inv)
+		return !inv.IsZero() && ns[a].s.Time.Add(RealTimeSlack).Before(inv)
 	}
 	mustPrecede := func(a, b int) bool { return hard[[2]int{a, b}] || after(a, b) }
 	actor := steps[0].Actor
