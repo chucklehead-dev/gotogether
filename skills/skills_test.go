@@ -114,6 +114,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"Recorder.Env", "qhegel.Case.Env"},
 		{"Swept", "qtest.SweepResult"},
 		{"GOTOGETHER_SEED=", "GOTOGETHER_RUN='TestX#1:seed=n'"},
+		{"`GOTOGETHER_SEED`", "`GOTOGETHER_RUN`"},
 		{"GOTOGETHER_SCHEDULE", "GOTOGETHER_RUN='TestX#1:schedule=...'"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these

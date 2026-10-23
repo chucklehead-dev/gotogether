@@ -108,3 +108,39 @@ func TestFailureFilesKept(t *testing.T) {
 		}
 	}
 }
+
+// A test's explorations are numbered from 1 in each run of the test
+// (-count, each fuzz input: the count ends with the test), and a
+// GOTOGETHER_RUN that names the test but none of its explorations fails
+// it rather than run them all in full.
+func TestRunNumbering(t *testing.T) {
+	RequireQuint(t)
+	t.Setenv("GOTOGETHER_KEEP", t.TempDir())
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
+	t.Run("iter", func(t *testing.T) {
+		a := sys.Explore(t, ExploreConfig{Seeds: 2})
+		b := sys.Explore(t, ExploreConfig{Seeds: 2})
+		if a.ref() != t.Name()+"#1" || b.ref() != t.Name()+"#2" {
+			t.Errorf("refs %s, %s", a.ref(), b.ref())
+		}
+		if a.dir == b.dir { // under GOTOGETHER_KEEP the second overwrote the first's step logs
+			t.Errorf("both explorations write to %s", a.dir)
+		}
+	})
+	explorations.mu.Lock()
+	_, kept := explorations.n[t.Name()+"/iter"]
+	explorations.mu.Unlock()
+	if kept {
+		t.Error("the count outlived its test: a -count=2 rerun would number from 3")
+	}
+
+	f := &failTB{}
+	t.Run("unmatched", func(t *testing.T) {
+		t.Setenv("GOTOGETHER_RUN", t.Name()+"#5:seed=1")
+		f.TB = t
+		sys.Explore(f, ExploreConfig{Seeds: 2})
+	})
+	if len(f.errs) == 0 || !strings.Contains(f.errs[0], "but "+t.Name()+"/unmatched ran 1 explorations") {
+		t.Errorf("errors %q", f.errs)
+	}
+}

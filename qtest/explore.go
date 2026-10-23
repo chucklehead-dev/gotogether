@@ -47,6 +47,8 @@ type Exploration struct {
 	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
 	emptyOK   bool              // ExploreConfig.emptyOK
+	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
+	mu        sync.Mutex        // guards recheck's report swaps
 	vacuity   *[]Vacuity        // computed once (Vacuous)
 }
 
@@ -101,6 +103,7 @@ type ExploreConfig struct {
 	// failing: a mutant's (Mutate), which the baseline's steps show is
 	// killed by it.
 	emptyOK bool
+	fuzz    bool // System.Fuzz: the run is the fuzz input's
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
 	// the chooser's context (qenv.WithContext), so the scenario must build
@@ -233,13 +236,17 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = offset + uint64(i+1)
 	}
-	x := &Exploration{test: t.Name(), id: nextExploration(t.Name()), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, dir: c.Dir, tempDir: c.tempDir}
+	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz}
+	x.dir = filepath.Join(c.Dir, fmt.Sprintf("x%d", x.id)) // a test's explorations do not share files
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
 		x.alone = &spec
 		switch spec.kind {
 		case "seed":
 			n, _ := strconv.ParseUint(spec.value, 10, 64)
+			if cfg.Chooser != nil && (n < 1 || n > uint64(cfg.Seeds)) { // the runs are the Chooser's, 1..Seeds
+				t.Fatalf("gotogether: GOTOGETHER_RUN names seed %d, but %s has seeds 1..%d", n, x.ref(), cfg.Seeds)
+			}
 			seeds = []uint64{n}
 		case "corpus":
 			seeds = nil
@@ -383,6 +390,8 @@ func (x *Exploration) keep(r *Run, save bool) string {
 // schedule.
 func (x *Exploration) name(id uint64, corpus string) string {
 	switch {
+	case x.alone != nil:
+		return x.alone.String()
 	case corpus != "":
 		return "corpus entry " + filepath.Base(corpus)
 	case x.search != nil:
@@ -441,7 +450,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			"or, for a build that may not be woven, give the System qtest.SkipIfEmpty()", len(x.Runs))
 	}
 	o := c.Options
-	o.Dir, o.NoITF = filepath.Join(c.Dir, "quint"), true
+	o.Dir, o.NoITF = filepath.Join(x.dir, "quint"), true
 	ch := checkerFor(t, bindingPath, o, c)
 	x.constants = map[string]string{}
 	for k, v := range ch.Binding.Constants {
@@ -822,7 +831,12 @@ func (x *Exploration) recheck(r *Run) {
 	}
 	ch := *x.checker
 	ch.Options.Dir = filepath.Join(x.dir, "recheck", strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
-	if rep, err := ch.Check(context.Background(), r.Steps); err == nil {
+	rep, err := ch.Check(context.Background(), r.Steps)
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	// the same verdict, or the old report stands (a backend may word a
+	// failure otherwise; it may not judge otherwise)
+	if err == nil && rep.OK() == r.Report.OK() && reason(rep) == reason(r.Report) {
 		r.Report = rep
 	}
 }

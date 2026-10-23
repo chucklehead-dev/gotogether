@@ -79,10 +79,13 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults connect.
 		}
 	}
 	x := s.Explore(t, ExploreConfig{Seeds: len(files), Chooser: func(seed uint64) qenv.Chooser { return scripts[seed-1] }})
-	for i, sc := range scripts {
-		if r := sc.Remaining(); len(r) > 0 {
+	for _, r := range x.Runs { // the traces that ran (one, run alone)
+		if r.Corpus != "" || r.Seed < 1 || int(r.Seed) > len(scripts) {
+			continue
+		}
+		if rest := scripts[r.Seed-1].Remaining(); len(rest) > 0 {
 			t.Errorf("gotogether: trace %d: scripted faults never happened: %v (the run did not follow its trace: "+
-				"the fault's kind never came up after the steps before it)", i, r)
+				"the fault's kind never came up after the steps before it)", r.Seed-1, rest)
 		}
 	}
 	if t.Failed() {
@@ -121,7 +124,7 @@ func (s System) Fuzz(f *testing.F, rates qenv.Rates, seeds ...[]byte) {
 		rates = qenv.DefaultRates
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		s.Explore(t, ExploreConfig{Seeds: 1, Parallel: 1,
+		s.Explore(t, ExploreConfig{Seeds: 1, Parallel: 1, fuzz: true,
 			Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, rates) }}).Expect(t, Conforms())
 	})
 }

@@ -84,9 +84,18 @@ func TestExhaust(t *testing.T) {
 	// the test's third exploration, run alone as a report names it
 	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:schedule="+bad.Schedule)
 	again := sys.Exhaust(t, Bound{Delays: 1})
-	again.Expect(t, All(Rejects("withdraw")), Complete())
+	log := &logTB{TB: t}
+	again.Expect(log, All(Rejects("withdraw")), Complete())
 	if len(again.Runs) != 1 || again.Runs[0].Schedule != bad.Schedule {
 		t.Errorf("GOTOGETHER_RUN schedule=%s ran %d runs", bad.Schedule, len(again.Runs))
+	}
+	// one run is not a search: Complete is not judged, and the evidence
+	// does not claim one
+	if !strings.Contains(log.logs, "not judged on one run (about the runs it leaves out): a complete search") {
+		t.Errorf("logs: %s", log.logs)
+	}
+	if sr := again.Evidence().Search; sr == nil || sr.Complete {
+		t.Errorf("a run alone's evidence claims a complete search: %+v", sr)
 	}
 }
 

@@ -76,7 +76,7 @@ func (x *Exploration) Evidence() *Evidence {
 	}
 	e.Vacuous = x.Vacuous()
 	if x.search != nil {
-		e.Search = &Search{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0, Left: x.search.left}
+		e.Search = &Search{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0 && x.alone == nil, Left: x.search.left}
 	}
 	return e
 }

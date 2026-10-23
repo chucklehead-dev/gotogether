@@ -124,7 +124,12 @@ type quietTB struct {
 	failed bool
 }
 
-func (q *quietTB) Helper()               {}
+func (q *quietTB) Helper() {}
+
+// Name keeps a replay's exploration out of the test's numbering, so the
+// numbers its own explorations' reproduce lines print do not depend on
+// how many replays Shrink made.
+func (q *quietTB) Name() string          { return q.TB.Name() + "/qhegel-replay" }
 func (q *quietTB) Log(...any)            {}
 func (q *quietTB) Logf(string, ...any)   {}
 func (q *quietTB) Error(...any)          { q.failed = true }

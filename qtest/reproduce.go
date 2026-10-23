@@ -23,20 +23,56 @@ import (
 // coverage, a complete search) are about the runs it left out, so they
 // are listed as not judged rather than passed or failed.
 
-// explorations numbers each test's explorations in the order they start.
+// explorations numbers each test's explorations in the order they start,
+// from 1 in each run of the test (-count, each fuzz input): the count
+// ends with the test. Explorations started from goroutines of one test
+// are numbered in the order they happen to start.
 var explorations struct {
 	mu sync.Mutex
-	n  map[string]int
+	n  map[string]*testRuns
 }
 
-func nextExploration(test string) int {
+type testRuns struct {
+	n       int
+	matched bool // GOTOGETHER_RUN named one of them
+}
+
+// nextExploration numbers t's next exploration. When t ends, a
+// GOTOGETHER_RUN that names t but none of its explorations fails it: it
+// would otherwise have run every exploration in full, silently.
+func nextExploration(t testing.TB) int {
 	explorations.mu.Lock()
 	defer explorations.mu.Unlock()
 	if explorations.n == nil {
-		explorations.n = map[string]int{}
+		explorations.n = map[string]*testRuns{}
 	}
-	explorations.n[test]++
-	return explorations.n[test]
+	name := t.Name()
+	tr := explorations.n[name]
+	if tr == nil {
+		tr = &testRuns{}
+		explorations.n[name] = tr
+		t.Cleanup(func() {
+			explorations.mu.Lock()
+			defer explorations.mu.Unlock()
+			delete(explorations.n, name)
+			if v := os.Getenv("GOTOGETHER_RUN"); v != "" && !tr.matched {
+				if s, err := parseRunSpec(v); err == nil && strings.HasPrefix(s.ref, name+"#") && !strings.Contains(s.ref[len(name)+1:], "/") {
+					t.Errorf("gotogether: GOTOGETHER_RUN names %s, but %s ran %d explorations: the run is not reproduced (the test changed, or the line is from another -count iteration)", s.ref, name, tr.n)
+				}
+			}
+		})
+	}
+	tr.n++
+	return tr.n
+}
+
+// matched notes that GOTOGETHER_RUN named one of test's explorations.
+func matched(test string) {
+	explorations.mu.Lock()
+	defer explorations.mu.Unlock()
+	if tr := explorations.n[test]; tr != nil {
+		tr.matched = true
+	}
 }
 
 // ref is how a reproduce line names the exploration: "TestShop#2".
@@ -56,7 +92,7 @@ func (s runSpec) String() string { return s.kind + " " + s.value }
 func runSpecFor(t testing.TB, ref string) (runSpec, bool) {
 	t.Helper()
 	for _, old := range []string{"GOTOGETHER_SEED", "GOTOGETHER_SCHEDULE"} {
-		if v, ok := os.LookupEnv(old); ok {
+		if v := os.Getenv(old); v != "" {
 			t.Fatalf("gotogether: %s=%q is no longer read: a report's reproduce line names the exploration too, e.g. GOTOGETHER_RUN='%s:seed=17' (or :schedule=..., :corpus=...)", old, v, ref)
 		}
 	}
@@ -68,7 +104,11 @@ func runSpecFor(t testing.TB, ref string) (runSpec, bool) {
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}
-	return spec, spec.ref == ref
+	if spec.ref != ref {
+		return spec, false
+	}
+	matched(t.Name())
+	return spec, true
 }
 
 func parseRunSpec(v string) (runSpec, error) {
@@ -88,6 +128,9 @@ func parseRunSpec(v string) (runSpec, error) {
 
 // reproduce is how to run r alone.
 func (x *Exploration) reproduce(r *Run) string {
+	if x.fuzz { // the run is the fuzz input's, which Go saves and names
+		return fmt.Sprintf("go test -run '^%s$' (Go saved the failing input under testdata/fuzz/%s and prints its file)", strings.ReplaceAll(x.test, "/", "$/^"), strings.SplitN(x.test, "/", 2)[0])
+	}
 	var what string
 	switch {
 	case r.Corpus != "":
@@ -101,7 +144,9 @@ func (x *Exploration) reproduce(r *Run) string {
 }
 
 // universal reports whether c holds of every run, so a run alone can be
-// judged by it.
+// judged by it. Claims over a share of runs (Reaches, Takes) are not
+// judged, even at InAtLeast(1): they are written about the runs as a
+// whole.
 func universal(c Claim) bool {
 	switch c := c.(type) {
 	case Expectation:

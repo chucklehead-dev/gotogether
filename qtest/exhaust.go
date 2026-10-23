@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -144,7 +145,8 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	woven := len(qcover.Blocks()) > 0
 	defer qobs.Strict()()
 	mark, _ := qobs.Escaped(0)
-	x := &Exploration{test: t.Name(), id: nextExploration(t.Name()), search: &search{bound: b}, dir: c.Dir, tempDir: c.tempDir}
+	x := &Exploration{test: t.Name(), id: nextExploration(t), search: &search{bound: b}, tempDir: c.tempDir}
+	x.dir = filepath.Join(c.Dir, fmt.Sprintf("x%d", x.id))
 	run := func(ds []deviation) *Run {
 		f := &forcing{ds: ds}
 		r := runOne(c, woven, f, s.Run)

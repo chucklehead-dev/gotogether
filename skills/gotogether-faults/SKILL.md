@@ -173,7 +173,9 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   that run alone in the test's second exploration (its others run as
   usual), or `:schedule=...` (Exhaust), `:corpus=<file>`. A run alone is
   judged only by the claims about every run (Conforms, All, None); the
-  rest are listed as not judged. A failure's files (step log, module) are
+  rest are listed as not judged. The numbers restart in every run of the
+  test (`-count`); a line that names no exploration of the test fails
+  it. A fuzz input's report points at Go's saved input instead. A failure's files (step log, module) are
   copied out of the test's temporary directory, so its report's paths
   are there after the test. A run whose Script never made
   all its faults lists them ("scripted faults that never happened").

@@ -353,7 +353,7 @@ starts, and the review's findings are fixed first.
   `GOTOGETHER_SCHEDULE` apply to every exploration of the test and judge
   claims over runs on one run (`Some(Conforms())` fails; `Complete()`
   passes). One variable scoped to the exploration that printed it
-  (`GOTOGETHER_RUN=TestX#2:seed:17`, also ending the SEED/SEEDS
+  (`GOTOGETHER_RUN='TestX#2:seed=17'`, also ending the SEED/SEEDS
   collision); a reproduction judges per-run claims only and says which it
   did not judge. A failing run's artifacts are kept where the report
   points (today under `t.TempDir()`, deleted when the test ends).
