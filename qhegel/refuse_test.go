@@ -23,13 +23,17 @@ func (f *fatalTB) Fatalf(format string, a ...any) {
 	f.msg = fmt.Sprintf(format, a...)
 	runtime.Goexit()
 }
+func (f *fatalTB) Skip(a ...any) {
+	f.msg = "skip: " + fmt.Sprint(a...)
+	runtime.Goexit()
+}
 
 // Linearize in a case's options does nothing (a case is checked in the
 // order it recorded): FindViolation refuses it, naming why.
 func TestRefusesLinearize(t *testing.T) {
 	f := &fatalTB{TB: t}
 	done := make(chan struct{})
-	go func() {
+	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Fatalf
 		defer close(done)
 		qhegel.FindViolation(f, qhegel.ViolationConfig{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.Linearize()}},
 			func(hegel.TestCase, *qhegel.Case) {})
@@ -46,13 +50,30 @@ func TestRefusesLinearize(t *testing.T) {
 func TestShrinkRefusesGlobal(t *testing.T) {
 	f := &fatalTB{TB: t}
 	done := make(chan struct{})
-	go func() {
+	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Fatalf
 		defer close(done)
 		sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.Global()}, Run: func(qenv.Chooser) error { return nil }}
 		qhegel.Shrink(f, sys, qenv.Rates{})
 	}()
 	<-done
 	if !strings.Contains(f.msg, "Global() does nothing in qhegel.Shrink") {
+		t.Errorf("got %q", f.msg)
+	}
+}
+
+// Shrink honours a System's SkipIfEmpty: a system that records nothing
+// (an unwoven build) skips the test, before any search and without an
+// exploration of its own (which would renumber the test's).
+func TestShrinkSkipsWhenEmpty(t *testing.T) {
+	f := &fatalTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Skip
+		defer close(done)
+		sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.SkipIfEmpty()}, Run: func(qenv.Chooser) error { return nil }}
+		qhegel.Shrink(f, sys, qenv.Rates{})
+	}()
+	<-done
+	if !strings.HasPrefix(f.msg, "skip: ") || !strings.Contains(f.msg, "recorded no step") {
 		t.Errorf("got %q", f.msg)
 	}
 }

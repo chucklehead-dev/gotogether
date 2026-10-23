@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"hegel.dev/go/hegel"
@@ -212,10 +213,9 @@ func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Opti
 	// it refuses now, before the search, not in a replay that fails quietly
 	set := qtest.Resolve(t, sys.Opts...)
 	set.RefuseExploration(t, "qhegel.Shrink (its replays are an exploration's runs)")
-	if set.SkipIfEmpty() {
-		// an unwoven build records nothing: one nominal run says so, and
-		// skips the test as an exploration does
-		sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Replay: true, Chooser: func(uint64) qenv.Chooser { return qenv.Nominal{} }})
+	if set.SkipIfEmpty() && recordsNothing(sys) {
+		// an unwoven build records nothing: skipped, as an exploration does
+		t.Skip("qhegel: the system recorded no step on its nominal run (qtest.SkipIfEmpty): an unwoven build?")
 	}
 	v := FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts, shrink: true}, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
@@ -296,4 +296,15 @@ func seedFromEnv(t testing.TB) (int64, bool) {
 	}
 	t.Logf("qhegel: Hegel's seed %d (GOTOGETHER_HEGEL_SEED=%d replays this search)", s, s)
 	return s, true
+}
+
+// recordsNothing runs sys once on the nominal schedule, recording into a
+// recorder of its own (an exploration's would number the test's
+// explorations, write evidence and run quint), and reports whether it
+// recorded no step.
+func recordsNothing(sys qtest.System) bool {
+	mem := &qobs.MemorySink{}
+	rec := qobs.NewRecorder(mem)
+	_ = sys.Run(qenv.WithContext(qenv.Nominal{}, qobs.WithRecorder(context.Background(), rec)))
+	return len(mem.Steps()) == 0
 }
