@@ -1,7 +1,6 @@
 package qtrace
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,46 +61,77 @@ func WriteJSONL(w io.Writer, steps []Step) error {
 	return nil
 }
 
+// A TornTail is a step log whose last line was cut off: the writer
+// stopped in the middle of it (a machine that lost power before the line
+// reached the disk). The steps before it are good; the cut one is lost,
+// and with it any step after it that was never written.
+type TornTail struct {
+	Line int    // the cut line's number
+	Text string // what of it was written
+}
+
+func (e *TornTail) Error() string {
+	return fmt.Sprintf("line %d: the log ends in the middle of a step (%d bytes, no newline): the writer stopped while writing it; the steps before it are kept", e.Line, len(e.Text))
+}
+
 // ReadJSONL reads a native step log: one flat JSON object of schema keys
-// per line. Blank lines are skipped.
+// per line. Blank lines are skipped. A last line that is cut off (no
+// newline, not a whole object) does not lose the log: ReadJSONL returns
+// the steps before it with a *TornTail error, which a caller may report
+// and go on.
 func ReadJSONL(r io.Reader) ([]Step, error) {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(string(data), "\n")
 	var out []Step
-	for n := 1; sc.Scan(); n++ {
-		line := strings.TrimSpace(sc.Text())
+	for i, raw := range lines {
+		n := i + 1
+		line := strings.TrimSpace(raw)
 		if line == "" {
 			continue
 		}
-		dec := json.NewDecoder(strings.NewReader(line))
-		dec.UseNumber()
-		var raw map[string]any
-		if err := dec.Decode(&raw); err != nil {
-			return nil, fmt.Errorf("line %d: %w", n, err)
-		}
-		attrs := map[string]any{}
-		for k, v := range raw {
-			if num, ok := v.(json.Number); ok {
-				if i, err := num.Int64(); err == nil {
-					attrs[k] = i
-				} else if f, err := num.Float64(); err == nil {
-					attrs[k] = f
-				}
-				continue
-			}
-			attrs[k] = v
-		}
-		var ts time.Time
-		if ns, ok := attrs[KeyTime].(int64); ok {
-			ts = time.Unix(0, ns)
-		}
-		delete(attrs, KeyTime)
-		s, err := FromAttributes(ts, attrs)
+		s, err := parseLine(line, n)
 		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", n, err)
+			if i == len(lines)-1 { // no newline after it: the writer stopped here
+				return out, &TornTail{Line: n, Text: raw}
+			}
+			return nil, err
 		}
-		s.Source = fmt.Sprintf("line %d", n)
 		out = append(out, s)
 	}
-	return out, sc.Err()
+	return out, nil
+}
+
+func parseLine(line string, n int) (Step, error) {
+	dec := json.NewDecoder(strings.NewReader(line))
+	dec.UseNumber()
+	var raw map[string]any
+	if err := dec.Decode(&raw); err != nil {
+		return Step{}, fmt.Errorf("line %d: %w", n, err)
+	}
+	attrs := map[string]any{}
+	for k, v := range raw {
+		if num, ok := v.(json.Number); ok {
+			if i, err := num.Int64(); err == nil {
+				attrs[k] = i
+			} else if f, err := num.Float64(); err == nil {
+				attrs[k] = f
+			}
+			continue
+		}
+		attrs[k] = v
+	}
+	var ts time.Time
+	if ns, ok := attrs[KeyTime].(int64); ok {
+		ts = time.Unix(0, ns)
+	}
+	delete(attrs, KeyTime)
+	s, err := FromAttributes(ts, attrs)
+	if err != nil {
+		return Step{}, fmt.Errorf("line %d: %w", n, err)
+	}
+	s.Source = fmt.Sprintf("line %d", n)
+	return s, nil
 }

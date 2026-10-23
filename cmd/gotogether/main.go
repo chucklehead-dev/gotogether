@@ -401,6 +401,9 @@ func runValidate(args []string) (int, error) {
 		}
 		fmt.Printf("input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
 			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
+		if in.Torn != nil {
+			fmt.Printf("  warning: %v\n", in.Torn)
+		}
 		if in.Format == input.ITF {
 			itfs = append(itfs, in)
 		} else {

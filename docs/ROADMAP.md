@@ -241,10 +241,20 @@ The track, in order:
   broken by skew alone; fencing at the store survives both.
   - **Left.** Clock drift (rates, not offsets), and `ToVirtual`/`ToReal`
     per process for libraries that read the real clock.
-- **X7. Storage faults and partitions (M).** A `qenv.Disk` double (lost
-  writes not synced, a torn last record, rollback on crash), first
-  against the toolkit's own `qobs.FileSink`, then jobqueue's journal;
-  partitions between named processes in `Service`.
+- **X7. Storage faults and partitions (M).** Done but the journal.
+  - `qenv.Disk`: writes reach the OS at once and the disk on `Sync`; the
+    crash of its process is a fault point ("disk.crash": nominal keeps
+    every write, "lost" the synced ones, "torn" part of the last).
+  - Against the toolkit's own `qobs.FileSink` it found what its doc
+    claimed too broadly: one write per step survives a killed process,
+    not a power loss, which loses the last steps and tears the line
+    being written, and a torn last line made `ReadJSONL` reject the
+    whole log. `ReadJSONL` now keeps the steps before it (a
+    `*TornTail`, warned by validate); `SyncedFileSink` fsyncs each step.
+  - Partitions between named processes for `Service` (`Sim.Partition`,
+    `Heal`, and `Partitions`, a nemesis per link); `Settle` heals them.
+  - **Left.** jobqueue's journal on a Disk (jobqueue is not on qenv);
+    partitions for `Queue` and the other doubles.
 - **X8. Smaller claims and corpora.** An exploration corpus
   (`ExploreConfig.Corpus`: saved runs replay first, a failing one is
   written with its reproduce line); one example's mutation test ending in

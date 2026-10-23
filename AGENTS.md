@@ -409,9 +409,13 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - One thread per goroutine when recording with a domain clock: a thread
   asserts program order, and goroutines sharing one contradict it
   (`issue: error cycle`).
-- `FileSink` is durable (one write per step); `BufferedFileSink` buffers,
-  and a killed process loses its last steps, undetectably: use it only
-  where nothing crashes.
+- `FileSink` survives a killed process (one write per step, no buffer),
+  not a power loss: the OS may not have written the last steps back, and
+  the line being written can be torn (`qenv.Disk` shows both).
+  `SyncedFileSink` fsyncs each step. `BufferedFileSink` buffers, and a
+  killed process loses its last steps, undetectably: use it only where
+  nothing crashes. `qtrace.ReadJSONL` keeps the steps before a torn last
+  line and returns a `*TornTail` (input.File.Torn; validate warns).
 - A `qenv.Signal` waiter is tagged with the task's wait generation; a
   timed-out wait must not be woken by a later `Notify` (it once shortened
   the next sleep). Keep the tag when touching the scheduler.

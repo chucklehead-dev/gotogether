@@ -42,7 +42,8 @@ type Capacity struct {
 //   - "rpc.<name>.response": 1 loses the response after the request
 //     was processed, the ambiguous failure that makes retries dangerous.
 //
-// A request to a crashed process is lost.
+// A request to a crashed process is lost, and so is a request or a
+// response across a partition (Sim.Partition, Sim.Partitions).
 type Service[Req, Resp any] struct {
 	Name    string
 	Proc    *Process
@@ -137,7 +138,8 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 	case "duplicate":
 		deliveries = 2
 	}
-	if svc.Proc.Down() {
+	caller := ProcessOf(ctx)
+	if svc.Proc.Down() || s.Partitioned(caller, svc.Proc) {
 		deliveries = 0
 	}
 	deadline := s.Now().Add(timeout)
@@ -162,7 +164,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 			if !first {
 				return // the duplicate's response is dropped as a stray
 			}
-			if s.FaultOf(svc.response) == "lost" {
+			if s.FaultOf(svc.response) == "lost" || s.Partitioned(caller, svc.Proc) {
 				return
 			}
 			res.resp, res.err, res.done = resp, err, true

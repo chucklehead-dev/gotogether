@@ -75,6 +75,7 @@ type Sim struct {
 	nextID    int
 	back      chan struct{}
 	procs     []*Process
+	cuts      map[[2]string]bool // partitioned pairs of processes, by name
 	nemeses   []*nemesis
 	onCrash   []func(*Process)
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)
@@ -816,6 +817,7 @@ func (s *Sim) Run(d time.Duration) error {
 // what happened before it, and a settle draws nothing from the Chooser.
 func (s *Sim) Settle(d time.Duration) error {
 	s.faultsOff, s.settling = true, true
+	s.cuts = nil // a whole network to recover on
 	defer func() { s.settling = false }()
 	return s.Run(d)
 }

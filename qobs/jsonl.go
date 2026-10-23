@@ -19,6 +19,8 @@ type JSONLSink struct {
 	buf *bufio.Writer // FileSink only
 	c   io.Closer
 	err error
+	// sync: Sync the writer after each step (SyncedFileSink)
+	sync bool
 }
 
 // NewJSONLSink writes the step log to w.
@@ -29,13 +31,39 @@ func NewJSONLSink(w io.Writer) *JSONLSink { return &JSONLSink{w: w} }
 // at least) when Record returns, so a process that is killed loses none.
 // Steps lost at the end of a log cannot be detected (no later sequence
 // number reveals the gap), which is why it is the default;
-// BufferedFileSink is faster where nothing crashes.
+// BufferedFileSink is faster where nothing crashes. The OS writes the
+// file back in its own time: a machine that loses power can lose the
+// last steps and tear the line being written (SyncedFileSink).
 func FileSink(path string) (*JSONLSink, error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
 	return &JSONLSink{w: f, c: f}, nil
+}
+
+// SyncedFileSink is FileSink with an fsync after every step: a step is on
+// the disk when Record returns, so it survives the machine losing power,
+// not only the process being killed. FileSink's steps reach the OS at
+// once and the disk when the OS writes them back: a power loss can take
+// the last ones, and tear the line being written (qtrace.ReadJSONL keeps
+// the steps before a torn last line, and says so). An fsync costs a disk
+// round trip per step.
+func SyncedFileSink(path string) (*JSONLSink, error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, err
+	}
+	return &JSONLSink{w: f, c: f, sync: true}, nil
+}
+
+// NewSyncedJSONLSink writes the step log to w and syncs it after every
+// step (w's Sync method, as *os.File and qenv.File have).
+func NewSyncedJSONLSink(w interface {
+	io.Writer
+	Sync() error
+}) *JSONLSink {
+	return &JSONLSink{w: w, sync: true}
 }
 
 // BufferedFileSink creates (truncating) a buffered step log file: fewer
@@ -68,6 +96,9 @@ func (j *JSONLSink) Record(_ context.Context, s *qtrace.Step) {
 	defer j.mu.Unlock()
 	if err == nil {
 		_, err = j.w.Write(b)
+	}
+	if s, ok := j.w.(interface{ Sync() error }); ok && err == nil && j.sync {
+		err = s.Sync()
 	}
 	if err != nil && j.err == nil {
 		j.err = err

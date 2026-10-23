@@ -6,6 +6,7 @@ package input
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -48,6 +49,9 @@ type File struct {
 	Format Format
 	Steps  []qtrace.Step
 	ITF    *itf.Trace
+	// Torn is a step log whose last line was cut off: Steps are those
+	// before it (qtrace.ReadJSONL).
+	Torn *qtrace.TornTail
 }
 
 // Read reads path. format may be "" or "auto" to detect it.
@@ -65,6 +69,9 @@ func Read(path string, format Format) (*File, error) {
 		in.Steps, err = otelio.ReadSteps(bytes.NewReader(data))
 	case StepLog:
 		in.Steps, err = qtrace.ReadJSONL(bytes.NewReader(data))
+		if errors.As(err, &in.Torn) {
+			err = nil
+		}
 	case ITF:
 		in.ITF, err = itf.Parse(data)
 	default:

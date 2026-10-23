@@ -35,6 +35,12 @@ Added to the core since api/core.txt was first recorded:
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and
   `qtrace.Linearize` search the orders operations' intervals allow.
+- `qenv.Disk` (writes, fsync, and a crash's "disk.crash" fault: lost or
+  torn unsynced writes) and partitions between processes for
+  `qenv.Service` (`Sim.Partition`, `Heal`, `Partitions` as nemeses).
+- `qobs.SyncedFileSink`, `qobs.NewSyncedJSONLSink`: an fsync per step.
+  `qtrace.ReadJSONL` keeps the steps before a torn last line and returns
+  a `*qtrace.TornTail`; `input.File.Torn`.
 - Clock faults: `Sim.ClockFaults` gives each process a clock that starts
   skewed and may jump ("clock.skew", "clock.jump"), read by `qenv.Now`;
   `Process.ClockOffset`. examples/lease.

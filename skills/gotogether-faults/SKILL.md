@@ -79,6 +79,16 @@ qobs.Record(s.Context(), "settle", nil)
   missed Notify). Return the error from your `Run`; a task that may wait
   forever by design (a server loop) calls `qenv.Daemon(ctx)`, and a
   double's own receive waits with `qenv.WaitIdle`.
+- **Disks:** `qenv.NewDisk(s, "disk", p)` is process p's machine's disk:
+  writes reach the OS at once and the disk on `File.Sync`. When p crashes
+  the fault kind "disk.crash" decides: nominal (the process died, the OS
+  kept every write), "lost" (power loss: only synced writes) or "torn"
+  (power loss mid-write: part of the last one). Write a journal or a
+  step log through it to see what an fsync buys.
+- **Partitions:** `s.Partitions(a, b, ...)` makes every link between
+  those processes a nemesis (cut, later healed): a `Service` call across a
+  cut loses its request and its response, for as long as it lasts.
+  `s.Partition(a, b)` and `s.Heal` script one; `Settle` heals them all.
 - **Clocks:** `qenv.Now(ctx)` reads the clock of the task's process.
   With `s.ClockFaults = true` (set before creating processes) each
   process's clock starts skewed ("clock.skew") and may jump at a read
