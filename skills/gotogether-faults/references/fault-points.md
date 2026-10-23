@@ -18,7 +18,7 @@ func (s *Store) Write(ctx context.Context, k, v string) error
   `crash:true` adds a crash of the process there, restarted as the
   nemesis restarts it. With no error named, the fault is a
   `*qenv.InjectedError`. Outside a simulation the call returns nil.
-- Rates apply as to any fault kind (`Kinds: {"store": 0.2}`), and
+- Rates apply as to any fault kind (`qenv.DefaultRates.Set("store", 0.2)`), and
   shrinking removes the faults the failure does not need.
 - **Coverage.** `x := sys.Explore(t, cfg); t.Log(x.Evidence().Faults)`; claim it
   with `x.Expect(t, qtest.Reaches("store.shop.commit").Faulted().InAtLeast(0.5))`

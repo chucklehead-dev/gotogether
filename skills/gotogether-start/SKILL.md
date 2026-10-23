@@ -30,8 +30,16 @@ references when the task needs them.
 
 ## The first hour
 
-1. Run the smallest example: `cd examples/hello && go test -v .` (from a
-   clone, with quint on PATH).
+The `examples/...` paths in these skills are in the gotogether repository
+(https://github.com/chucklehead-dev/gotogether/tree/main/examples), not in
+your project: clone it to read and run them. In your own module, `go get
+github.com/chucklehead-dev/gotogether@latest` (and `.../qhegel@latest`
+for Hegel) and start from `gotogether scaffold`; the examples' `replace`
+lines are only for working inside the repository.
+
+1. Run the smallest example: `git clone
+   https://github.com/chucklehead-dev/gotogether && cd
+   gotogether/examples/hello && go test -v .` (with quint on PATH).
 2. Read it, in this order: `model/hello.qnt` (what may happen),
    `hello.binding.yaml` (recorded steps to the model's actions),
    `hello.go` (the system, written against qenv's seams), `hello_test.go`

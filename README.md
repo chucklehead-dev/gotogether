@@ -12,18 +12,47 @@ npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.26.1
 cd examples/hello && go test -v .         # under a minute, most of it building
 ```
 
-That ran [examples/hello](examples/hello): a counter behind a network
-that loses and duplicates messages, a client that retries, and one bug (a
-counter that forgets to dedupe). Its tests:
-- explore 30 seeded runs of the faithful counter, every one checked by a
-  Quint model (`hello.qnt`), through the faults;
-- show that the bug is caught, and only when a fault makes the client
-  retry;
-- let Hegel shrink the bug's failure to the one fault it needs.
+That ran [examples/hello](examples/hello): a counter behind a simulated
+network that loses and duplicates messages, and a client that retries.
+Each test runs the system many times under different faults (a *seed*
+picks them) and checks every run against a Quint model
+(`model/hello.qnt`). One test plants a bug (a *mutant*: the counter
+forgets to dedupe) and expects the model to reject a step: its output's
+`as expected` blocks are those failures, not the test's.
+[Hegel](https://hegel.dev), a property-based tester, then shrinks that
+failure to the single fault it needs.
 
 Read `hello.go` and `hello_test.go` (130 lines together), then pick a
 workflow from the table below. Agents start from the `gotogether-start`
 skill (`gotogether skills install`).
+
+### Words
+
+- **Model**: a Quint specification of what the system may do; the
+  ground truth.
+- **Step**: one model action the code took, recorded with its arguments
+  and what the code observed (`qobs.Record(ctx, "deposit", err, "amount",
+  5, "obs.balance", 35)`).
+- **Actor**: one sequence of steps checked as one run of the model (a
+  process, a node; `qobs.WithActor`). Reports begin `actor <name>:`.
+- **Binding**: a YAML file mapping recorded steps to the model's
+  actions, constants and invariants (`gotogether scaffold` writes one).
+- **Double**: a simulated dependency (Store, Queue, Service, Disk) that
+  fails as its contract allows.
+- **Nominal**: a choice's no-fault option (option 0); a run with every
+  choice nominal is the canonical one.
+- **Nemesis**: a fault that acts on its own rather than at a call: a
+  process crash, a network partition, a clock jump.
+- **Exploration**: one `Explore`, `Exhaust` or `Sweep` call; a test's
+  are numbered `TestX#1`, `#2`.
+- **Claim**: what a test expects of its runs (`Conforms`, `Rejects`,
+  `Mismatch`, `Violates`; over runs `Some`, `All`, `None`), given to
+  `.Expect(t, claims...)`. Its outcome on a run is a verdict.
+- **Mutant**: a planted bug a test expects the checks to catch.
+- **Evidence**: what an exploration reached (the model's actions, fault
+  kinds and options, code).
+- **Corpus**: saved failing runs, replayed before the seeds.
+- **Sweep**: configurations chosen by a covering array.
 
 ## What it does
 
@@ -86,6 +115,16 @@ go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the C
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 ```
 
+In a module of your own (the examples' `replace` lines are for working
+inside this repository):
+
+```sh
+go mod init example.com/app
+go get github.com/chucklehead-dev/gotogether@latest github.com/chucklehead-dev/gotogether/qhegel@latest
+gotogether scaffold -spec model/app.qnt -module app -out app.binding.yaml   # then set its constants
+gotogether scaffold -system -binding app.binding.yaml -pkg app -out system_test.go
+```
+
 Go: 1.26.x. The core needs 1.26.1 (hegel-go's minimum); the gosim fork
 translates one release's standard library, 1.26's, and says so under
 another. Until the first tags, `@latest` is the newest commit.
@@ -94,23 +133,6 @@ Quint's Rust backend is the default. If quint cannot download its
 evaluator, run `ci/install-quint.sh` from a clone, or set
 `QUINT_BACKEND=typescript`. hegel-go embeds its engine, so it needs no
 Python and no server.
-
-## Environment variables
-
-| Variable | What it does |
-|---|---|
-| `GOTOGETHER_RUN='TestX#2:seed=n'` | runs one run of one exploration alone (the test's second here), as a failing run's report prints it: `:seed=n`, `:schedule=i:v,...` (`System.Exhaust`) or `:corpus=<file>`; only claims about every run are judged |
-| `GOTOGETHER_CORPUS=dir` | every exploration replays and saves corpus entries under dir/<test> (ExploreConfig.Corpus) |
-| `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
-| `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
-| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
-| `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`) |
-| `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
-| `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step, every `Store` each commit's dependency cycles against its isolation level, every `Queue` its contract after each operation |
-| `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |
-| `GOTOGETHER_STEPS_DIR` | where the Glomers nodes write their step logs under Maelstrom |
-| `QUINT_BACKEND` | `rust` or `typescript`, for connect, validate and qtest alike |
-| `QUINT_BIN`, `QUINT_SEED`, `QUINT_VERBOSE`, `QUINT_MAX_SAMPLES`, `QUINT_MAX_STEPS` | connect's `quint run`, as in quint-connect |
 
 ## 1. The model drives Go (`connect`, like quint-connect)
 
@@ -590,6 +612,23 @@ imports it.
 - **Conversion.** Converted spans cannot reveal lost spans.
 
 More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
+
+## Environment variables
+
+| Variable | What it does |
+|---|---|
+| `GOTOGETHER_RUN='TestX#2:seed=n'` | runs one run of one exploration alone (the test's second here), as a failing run's report prints it: `:seed=n`, `:schedule=i:v,...` (`System.Exhaust`) or `:corpus=<file>`; only claims about every run are judged |
+| `GOTOGETHER_CORPUS=dir` | every exploration replays and saves corpus entries under dir/<test> (ExploreConfig.Corpus) |
+| `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
+| `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
+| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
+| `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`) |
+| `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
+| `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step, every `Store` each commit's dependency cycles against its isolation level, every `Queue` its contract after each operation |
+| `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |
+| `GOTOGETHER_STEPS_DIR` | where the Glomers nodes write their step logs under Maelstrom |
+| `QUINT_BACKEND` | `rust` or `typescript`, for connect, validate and qtest alike |
+| `QUINT_BIN`, `QUINT_SEED`, `QUINT_VERBOSE`, `QUINT_MAX_SAMPLES`, `QUINT_MAX_STEPS` | connect's `quint run`, as in quint-connect |
 
 ## License
 

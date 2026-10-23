@@ -148,6 +148,27 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   panics (a `GOTOGETHER_CHECK` self-check, a bug) fails as that run,
   with the panicking task's stack, kept in the corpus if there is one.
 
+- **This fault, at this point:** a `qenv.Script` makes exactly the faults
+  it names, once the run has taken `After` steps, and no others: crash
+  process payments after its third step, or lose the provider's response
+  to the second charge.
+
+  ```go
+  sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser {
+      return &qenv.Script{Faults: []qenv.Scripted{
+          {Kind: "nemesis.crash.payments", After: 3},
+          {Kind: "rpc.provider.response", Name: "lost", After: 5},
+      }}
+  }}).Expect(t, qtest.Conforms())
+  ```
+
+  Kinds are as fault coverage prints them, matched exactly; a crash is
+  `nemesis.crash.<process>`. A misnamed one fails the exploration with
+  the fix (`Script.Misnamed`). A fault that never fired is listed as
+  "scripted faults that never happened": the run never reached a choice
+  of its kind after `After` steps. For random faults, a kind never
+  faulted is listed as "never faulted"; `x.Evidence().Faults` and its
+  `Unreached` say which kinds the runs reached.
 - **Batching:** every seeded run is checked in one quint batch. On a
   miss, the report names the seed, its faults and its step log.
 - **Parallel seeds:** seeds run in parallel (`ExploreConfig.Parallel`,
@@ -213,8 +234,8 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
     `qenv.DefaultRates.Set("nemesis", 0.05)` (a kind as reports print
     it; `Set` returns a copy). `qenv.NoFaults` runs the schedule's
     choices only (a zero `Rates` is the default rates).
-  - Turn whole kinds off with `{"kube": 0}`, or per run with
-    `qenv.Swarm`.
+  - Turn whole kinds off with `qenv.DefaultRates.Set("kube", 0)`, or per
+    run with `qenv.Swarm`.
 - **Shrinking:**
   `qhegel.FindViolation(t, cfg, func(tc, rec) { app.Run(rec.Env(qhegel.Choices(tc)), cfg) })`
   shrinks a failure to the interleaving and faults it needs; faults
