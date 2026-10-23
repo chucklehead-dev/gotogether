@@ -293,8 +293,14 @@ The track, in order:
     under partitions (`Config.Partitions`) was first stuck, its relay
     waiting on a cut no scheduling step would come to heal. It conforms,
     the cuts redelivering in about half its runs.
-  - **Left.** jobqueue's journal on a Disk (jobqueue is not on qenv);
-    partitions for the store and the logs.
+  - **Not needed: partitions for the store and the logs.** What a cut
+    does to them is already a fault of theirs: streams' simlog evicts a
+    consumer at any step (a session timeout: the group moves on, the
+    partitions are read again from their commits, the old member's
+    commits fenced) and loses produce and commit requests or their
+    acknowledgements; the store loses commits' responses (its commit
+    faults). A partition would be the same faults under another name.
+  - **Left.** jobqueue's journal on a Disk (jobqueue is not on qenv).
 - **X8. Smaller claims and corpora.**
   - **Done.** `ExploreConfig.Corpus`: saved runs (choices as JSON)
     replay before the seeds, and a failed claim saves the run it shows;
