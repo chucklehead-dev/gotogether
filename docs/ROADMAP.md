@@ -427,7 +427,11 @@ starts, and the review's findings are fixed first.
   as `rpc.<name>` is; prefixes keep `queue` matching all); disk's options
   `powerLoss`, `tornWrite`. The new fault models tested on the native
   runtime, or refused there.
-- **Y8. The API record sees methods and fields.** api/core.txt is `go doc
+- **Y8. The API record sees methods and fields. Done:** api/<module>.txt
+  for the core, qhegel, qweave, qanalysis and qgosim, read with go/ast
+  (the core takes no x/tools for go/types): fields, methods, interface
+  methods, a const group's type, an internal type's API through its
+  alias. The finding: api/core.txt was `go doc
   -short`, which lists no method or field: none of X's API reached the
   diff. Build it from go/types; record the published sub-modules too.
 - **Y9. An option a workflow ignores fails.** `Linearize()` and `Global()`

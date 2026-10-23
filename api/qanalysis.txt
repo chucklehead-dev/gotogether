@@ -1,0 +1,37 @@
+== github.com/chucklehead-dev/gotogether/qanalysis
+var Action
+var All
+var Sim
+var Weave
+
+== github.com/chucklehead-dev/gotogether/qanalysis/actionmap
+func Compare(m *Map, s *qcover.Summary) []Gap
+func Name(fn *ssa.Function) string
+func Report(gaps []Gap) string
+func Static(dir string, patterns ...string) (*Map, error)
+func UntriedErrorPaths(m *Map, s *qcover.Summary, cov *qenv.Coverage) []ErrorPath
+type ErrorPath struct
+    field Kind string
+    field Site string
+    field Caller string
+    field Blocks []qcover.Block
+type Gap struct
+    field Action string
+    field Sites []string
+    field NotRun []string
+    field ByOthers []string
+    field Unreachable []string
+type Map struct
+    field Sites map[string][]string
+    field Reach map[string]map[string]bool
+    field Callers map[string]map[string]bool
+    field Dead []string
+    method (*Map) Actions() []string
+
+== github.com/chucklehead-dev/gotogether/qanalysis/golangci
+func New(conf any) (register.LinterPlugin, error)
+type Settings struct
+    field Analyzers []string
+    field Binding string
+    field Quint string
+

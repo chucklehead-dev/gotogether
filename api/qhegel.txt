@@ -1,0 +1,56 @@
+== github.com/chucklehead-dev/gotogether/qhegel
+const After Mode
+const Batched Mode
+const Each Mode
+const Off Mode
+func CheckAll(t testing.TB, c *validate.Checker, runs [][]qtrace.Step) []*validate.Report
+func Choices(tc hegel.TestCase) *ChoiceSource
+func FindTrigger(t testing.TB, sys qload.Target, space qload.TriggerSpace, opts ...hegel.Option) *TriggerSearch
+func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation
+func NewCase(tc hegel.TestCase, opts ...qobs.Option) *Case
+func Render(steps []qtrace.Step) string
+func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Option) *Violation
+func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...hegel.Option)
+func Traces(t testing.TB, c connect.Config) []*itf.Trace
+func VaryTraces(tc hegel.TestCase, traces []*itf.Trace, newDriver func(tc hegel.TestCase) connect.Driver, opt VaryOptions)
+type Case struct
+    embed *qobs.Recorder
+    method (*Case) Context(ctx context.Context) context.Context
+    method (*Case) Env(c qenv.Chooser) qenv.Chooser
+    method (*Case) Install(global bool) (restore func(), err error)
+    method (*Case) Recorded() []qenv.Choice
+    method (*Case) Step(action string, err error, kv ...any)
+    method (*Case) Steps() []qtrace.Step
+type ChoiceSource struct
+    field Rates qenv.Rates
+    field Chunk int
+    method (*ChoiceSource) Choose(kind string, n int) int
+    method (*ChoiceSource) Entropy(n int) []byte
+type Config struct
+    field Binding string
+    field Mode Mode
+    field Opts []qtest.Option
+    field AllowEmpty bool
+    field Rounds int
+    field Budget time.Duration
+    field Seed int64
+type Mode int
+type TriggerSearch struct
+    field Found *qload.Recovery
+    field Runs int
+    method (*TriggerSearch) Expect(t testing.TB, c qload.TriggerClaim) *qload.Recovery
+type VaryOptions struct
+    embed connect.ReplayOptions
+    field Prefix bool
+type Violation struct
+    embed qtest.Run
+    field Summary string
+    field QuintRuns int64
+    field CacheHits int64
+    method (*Violation) Expect(t testing.TB, es ...qtest.Expectation)
+    method (*Violation) Last() qtrace.Step
+type ViolationConfig struct
+    field Binding string
+    field Opts []qtest.Option
+    field AllowEmpty bool
+

@@ -1,34 +1,134 @@
 == github.com/chucklehead-dev/gotogether/binding
+const AllTests TestSet
+const DetailTests TestSet
+const FastTests TestSet
+func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
-type Action struct{ ... }
-type Annotation struct{ ... }
-    func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
-    func ScanAnnotations(dir string) ([]Annotation, error)
-type Binding struct{ ... }
-    func Load(path string) (*Binding, error)
-type Call struct{ ... }
-type Generated struct{ ... }
-    func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, error)
-    func RenderModule(ms ModuleSpec, calls []Call, qntPath string) (*Generated, error)
-type GeneratedTests struct{ ... }
-type ITFMeta struct{ ... }
-    func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
-type Model struct{ ... }
-    func LoadModel(quint, spec, module string) (*Model, error)
-type ModuleSpec struct{ ... }
-type Param struct{ ... }
-type Plan struct{ ... }
-type RecordCall struct{ ... }
-    func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
-    func ScanRecords(dir string) ([]RecordCall, error)
-type Simulation struct{ ... }
+func Load(path string) (*Binding, error)
+func LoadModel(quint, spec, module string) (*Model, error)
+func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
+func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
+func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, error)
+func RenderModule(ms ModuleSpec, calls []Call, qntPath string) (*Generated, error)
+func ScanAnnotations(dir string) ([]Annotation, error)
+func ScanRecords(dir string) ([]RecordCall, error)
+type Action struct
+    field Args map[string]string
+    field Expect string
+    field Outcomes map[string]string
+    method (Action) Fields(ps ...Param) []string
+    method (Action) Template(p Param) string
+type Annotation struct
+    field Pos string
+    field At token.Pos
+    field Decl *ast.FuncDecl
+    field Func string
+    field Action string
+    field Keys map[string]string
+type Binding struct
+    field Spec string
+    field Module string
+    field Constants map[string]string
+    field Intern map[string]string
+    field Outcomes map[string]string
+    field Restart string
+    field Defs string
+    field Antecedents map[string]string
+    field Actions map[string]Action
+    field Invariants []string
+    field Simulate *Simulation
+    field Dir string
+    method (*Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generated, error)
+    method (*Binding) Lint(m *Model) []string
+    method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
+    method (*Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (errs, warns []string)
+    method (*Binding) ModuleSpec(p *Plan) ModuleSpec
+    method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
+    method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
+    method (*Binding) Skips(s *qtrace.Step) bool
+    method (*Binding) SpecPath() string
+    method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
+    method (*Binding) UsedFields(m *Model) map[string][]string
+type Call struct
+    field Quint string
+    field Expect string
+    field Step *qtrace.Step
+    field Inferred string
+    field Action string
+    field Args map[string]string
+    field Note string
+type Generated struct
+    field Module string
+    field Text string
+    field LineStep map[int]int
+    field Calls []Call
+    field Tests GeneratedTests
+type GeneratedTests struct
+    field Conforms string
+    field Invariants map[string]string
+    field All string
+type ITFMeta struct
+    field Spec string
+    field Module string
+    field Constants map[string]string
+    field Defs string
+    field Invariants []string
+    field Actor string
+    field Processes []string
+type Model struct
+    field Module string
+    field Actions map[string][]Param
+    field Vals map[string]bool
+    field Antecedents map[string]string
+    field Vars []string
+    field Consts map[string]string
+    method (*Model) ActionNames() []string
+    method (*Model) Signature(action string) string
+type ModuleSpec struct
+    field Spec string
+    field Module string
+    field Constants []string
+    field Instance string
+    field Defs string
+    field Invariants []string
+    field InitExpect string
+    field Header []string
+    field Tests TestSet
+type Param struct
+    field Name string
+    field Type string
+    field Shape string
+    method (Param) DefaultTemplate() string
+type Plan struct
+    field Actor string
+    field Processes []string
+    field ObservedSteps int
+    field Constants map[string]string
+    field Calls []Call
+    method (*Plan) ConstantList() []string
+type RecordCall struct
+    field Pos string
+    field At token.Pos
+    field Call *ast.CallExpr
+    field Func string
+    field Action string
+    field Method bool
+type Simulation struct
+    field Constants map[string]string
+    field Holds []string
+    field Allows []string
+    field Steps int
+    field Samples int
+    field Skip string
+    field VerifySteps int
+    field VerifySkip string
 type TestSet int
-    const AllTests TestSet = iota ...
 
 == github.com/chucklehead-dev/gotogether/connect
 func Diff(want, got any) []string
 func FaultScript(tr *itf.Trace, faults FaultMap, opt ReplayOptions) (*qenv.Script, error)
+func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
 func MustPick[T any](s *Step, name string) T
 func OptPick[T any](s *Step, name string) (*T, error)
 func Pick[T any](s *Step, name string) (T, error)
@@ -36,138 +136,336 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
 func Run(t testing.TB, c Config, newDriver func() Driver)
 func Skip(*Step) error
 func Test(t testing.TB, c Config, test string, newDriver func() Driver)
-type Config struct{ ... }
-    func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
-type Driver interface{ ... }
+type Config struct
+    field Spec string
+    field Main string
+    field Init string
+    field StepName string
+    field MaxSteps int
+    field MaxSamples int
+    field Seed string
+    field Quint string
+    field Backend string
+    field Args []string
+    field Dir string
+    field StatePath []string
+    field NondetPath []string
+    field Verbose int
+    method (Config) FromEnv() Config
+type Driver interface
+    Step(s *Step) error
 type DriverFunc func(s *Step) error
-type Fault struct{ ... }
+    method (DriverFunc) Step(s *Step) error
+type Fault struct
+    field Kind string
+    field Option int
+    field Name string
+    field Recorded bool
 type FaultMap map[string]func(s *Step) *Fault
 type Handler func(s *Step) error
-type QuintError struct{ ... }
-type ReplayOptions struct{ ... }
-type StateDriver interface{ ... }
-type Step struct{ ... }
-type StepChecker interface{ ... }
-type StepError struct{ ... }
+type QuintError struct
+    field Args []string
+    field Output string
+    field Err error
+    method (*QuintError) Error() string
+    method (*QuintError) Unwrap() error
+type ReplayOptions struct
+    field StatePath []string
+    field NondetPath []string
+    field Trace int
+    field OnStep func(s *Step)
+type StateDriver interface
+    embed Driver
+    State() (any, error)
+type Step struct
+    field Trace int
+    field Index int
+    field Action string
+    field Picks map[string]itf.Value
+    field Before map[string]itf.Value
+    field After map[string]itf.Value
+    field State itf.Value
+    method (*Step) Get(path ...string) itf.Value
+    method (*Step) Has(name string) bool
+    method (*Step) Pick(name string) itf.Value
+    method (*Step) String() string
+type StepChecker interface
+    embed Driver
+    CheckStep(s *Step) error
+type StepError struct
+    field Trace int
+    field Step *Step
+    field Kind string
+    field Err error
+    field Diff []string
+    method (*StepError) Error() string
+    method (*StepError) Unwrap() error
 type Switch map[string]Handler
-type UnimplementedError struct{ ... }
+    method (Switch) Step(s *Step) error
+type UnimplementedError struct
+    field Action string
+    field Picks string
+    method (*UnimplementedError) Error() string
 
 == github.com/chucklehead-dev/gotogether/convert
-type Rule struct{ ... }
-type Rules struct{ ... }
-    func Load(p string) (*Rules, error)
-    func Parse(b []byte) (*Rules, error)
+func Load(p string) (*Rules, error)
+func Parse(b []byte) (*Rules, error)
+type Rule struct
+    field Span string
+    field Event string
+    field Where map[string]string
+    field Action string
+    field Actor string
+    field Process string
+    field Thread string
+    field Outcome string
+    field Args map[string]string
+    field Obs map[string]string
+    field Order map[string]string
+    field Drop bool
+type Rules struct
+    field Recorder string
+    field Actor string
+    field Process string
+    field Thread string
+    field Rules []Rule
+    method (*Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error)
 
 == github.com/chucklehead-dev/gotogether/input
-type File struct{ ... }
-    func Read(path string, format Format) (*File, error)
+const ITF Format
+const OTLP Format
+const StepLog Format
+const Unknown Format
+func Read(path string, format Format) (*File, error)
+func Sniff(data []byte) Format
+type File struct
+    field Path string
+    field Format Format
+    field Steps []qtrace.Step
+    field ITF *itf.Trace
+    field Torn *qtrace.TornTail
 type Format string
-    const OTLP Format = "otlp" ...
-    func Sniff(data []byte) Format
 
 == github.com/chucklehead-dev/gotogether/itf
+const Bool Kind
+const Int Kind
+const Invalid Kind
+const List Kind
+const Map Kind
+const Record Kind
+const Set Kind
+const Str Kind
+const Tuple Kind
+const Variant Kind
+func BoolOf(b bool) Value
 func Decode(v Value, out any) error
 func DecodeAs[T any](v Value) (T, error)
+func Encode(x any) (Value, error)
+func Enum(tag string) Value
+func FromGo(x any) (Value, error)
+func IntOf(n int64) Value
+func ListOf(es ...Value) Value
+func MustEncode(x any) Value
+func None() Value
+func Parse(b []byte) (*Trace, error)
+func ParseQuint(src string) (Value, error)
+func ReadFile(path string) (*Trace, error)
+func RecordOf(kv ...any) Value
+func SetOf(es ...Value) Value
+func Some(v Value) Value
+func StrOf(s string) Value
+func TupleOf(es ...Value) Value
+func VariantOf(tag string, v Value) Value
 type Kind int
-    const Invalid Kind = iota ...
-type Marshaler interface{ ... }
-type State struct{ ... }
-type Trace struct{ ... }
-    func Parse(b []byte) (*Trace, error)
-    func ReadFile(path string) (*Trace, error)
-type Unmarshaler interface{ ... }
-type Value struct{ ... }
-    func BoolOf(b bool) Value
-    func Encode(x any) (Value, error)
-    func Enum(tag string) Value
-    func FromGo(x any) (Value, error)
-    func IntOf(n int64) Value
-    func ListOf(es ...Value) Value
-    func MustEncode(x any) Value
-    func None() Value
-    func ParseQuint(src string) (Value, error)
-    func RecordOf(kv ...any) Value
-    func SetOf(es ...Value) Value
-    func Some(v Value) Value
-    func StrOf(s string) Value
-    func TupleOf(es ...Value) Value
-    func VariantOf(tag string, v Value) Value
+type Marshaler interface
+    MarshalITF() (Value, error)
+type State struct
+    field Index int
+    field Vars map[string]Value
+    field Action string
+    field Picks map[string]Value
+    field Extra map[string]Value
+    field Meta map[string]any
+type Trace struct
+    field Meta map[string]any
+    field Vars []string
+    field States []State
+type Unmarshaler interface
+    UnmarshalITF(v Value) error
+type Value struct
+    field Kind Kind
+    field I *big.Int
+    field B bool
+    field S string
+    field Elems []Value
+    field Pairs [][2]Value
+    field Fields map[string]Value
+    field Tag string
+    field Inner *Value
+    method (Value) Equal(w Value) bool
+    method (Value) Get(field string) Value
+    method (Value) Go() any
+    method (Value) Int64() int64
+    method (Value) Lookup(key Value) (Value, bool)
+    method (Value) MarshalJSON() ([]byte, error)
+    method (Value) Quint() string
+    method (Value) String() string
 
 == github.com/chucklehead-dev/gotogether/otelio
 func Attrs(kvs []KeyValue) map[string]any
+func NewFileExporter(w io.Writer) *FileExporter
 func ReadSteps(r io.Reader) ([]qtrace.Step, error)
+func ReadTracesData(r io.Reader) ([]TracesData, error)
+func SpansToTracesData(spans []sdktrace.ReadOnlySpan) TracesData
 func StepsFromSpans(spans []sdktrace.ReadOnlySpan) ([]qtrace.Step, error)
 func StepsFromTracesData(td *TracesData) ([]qtrace.Step, error)
-type AnyValue struct{ ... }
-type Event struct{ ... }
-type FileExporter struct{ ... }
-    func NewFileExporter(w io.Writer) *FileExporter
-type KeyValue struct{ ... }
-type Resource struct{ ... }
-type ResourceSpans struct{ ... }
-type Scope struct{ ... }
-type ScopeSpans struct{ ... }
-type Span struct{ ... }
-type Status struct{ ... }
-type TracesData struct{ ... }
-    func ReadTracesData(r io.Reader) ([]TracesData, error)
-    func SpansToTracesData(spans []sdktrace.ReadOnlySpan) TracesData
+type AnyValue struct
+    field StringValue *string
+    field IntValue *U64
+    field BoolValue *bool
+    field DoubleValue *float64
+    method (AnyValue) Go() any
+type Event struct
+    field TimeUnixNano U64
+    field Name string
+    field Attributes []KeyValue
+type FileExporter struct
+    method (*FileExporter) ExportSpans(_ context.Context, spans []sdktrace.ReadOnlySpan) error
+    method (*FileExporter) Shutdown(context.Context) error
+type KeyValue struct
+    field Key string
+    field Value AnyValue
+type Resource struct
+    field Attributes []KeyValue
+type ResourceSpans struct
+    field Resource Resource
+    field ScopeSpans []ScopeSpans
+type Scope struct
+    field Name string
+type ScopeSpans struct
+    field Scope Scope
+    field Spans []Span
+type Span struct
+    field TraceID string
+    field SpanID string
+    field ParentSpanID string
+    field Name string
+    field StartTimeUnixNano U64
+    field EndTimeUnixNano U64
+    field Attributes []KeyValue
+    field Events []Event
+    field Status *Status
+    field Kind any
+type Status struct
+    field Code any
+    field Message string
+    method (*Status) IsError() bool
+type TracesData struct
+    field ResourceSpans []ResourceSpans
 type U64 int64
+    method (*U64) UnmarshalJSON(b []byte) error
+    method (U64) MarshalJSON() ([]byte, error)
 
 == github.com/chucklehead-dev/gotogether/qcover
+func Blocks() []Block
+func Compare(sim *Summary, real *GoProfile) *Gap
+func From(ctx context.Context) *Counts
 func Hit(id int)
+func NewCounts() *Counts
+func ParseGoCover(r io.Reader) (*GoProfile, error)
+func ReadGoCover(dirs ...string) (*GoProfile, error)
+func ReadSummary(path string) (*Summary, error)
 func Register(bs []Block) int
+func Summarize(runs []*Counts) *Summary
 func WithCounts(ctx context.Context, c *Counts) context.Context
-type Block struct{ ... }
-    func Blocks() []Block
-type Counts struct{ ... }
-    var Default *Counts
-    func From(ctx context.Context) *Counts
-    func NewCounts() *Counts
-type Gap struct{ ... }
-    func Compare(sim *Summary, real *GoProfile) *Gap
-type GoBlock struct{ ... }
-type GoProfile struct{ ... }
-    func ParseGoCover(r io.Reader) (*GoProfile, error)
-    func ReadGoCover(dirs ...string) (*GoProfile, error)
-type StepCover struct{ ... }
-type Summary struct{ ... }
-    func ReadSummary(path string) (*Summary, error)
-    func Summarize(runs []*Counts) *Summary
+type Block struct
+    field File string
+    field Line int
+    field Col int
+    field EndLine int
+    field Func string
+    field Stmts int
+    field ID int
+    method (Block) Pos() string
+type Counts struct
+    method (*Counts) Hits() map[int]int
+    method (*Counts) Sink(next qobs.Sink) qobs.Sink
+    method (*Counts) Steps() []StepCover
+    method (*Counts) Unattributed() []int
+type Gap struct
+    field RealOnly []Block
+    field SimOnly []Block
+    method (*Gap) String() string
+type GoBlock struct
+    field File string
+    field Line int
+    field Col int
+    field EndLine int
+    field EndCol int
+    field Stmts int
+    field Count int
+type GoProfile struct
+    field Blocks []GoBlock
+    method (*GoProfile) Ratio() float64
+type StepCover struct
+    field Action string
+    field Outcome string
+    field Blocks []int
+type Summary struct
+    field Runs int
+    field Blocks []Block
+    field Hit map[int]int
+    field ByStep map[string]map[int]bool
+    field OnlyOff map[int]bool
+    method (*Summary) Actions(id int) []string
+    method (*Summary) Indistinct() [][2]string
+    method (*Summary) Ratio() float64
+    method (*Summary) String() string
+    method (*Summary) Uncovered() []Block
+var Default *Counts
 
 == github.com/chucklehead-dev/gotogether/qenv
 const BytesVersion = choice.BytesVersion
 const DefaultPartitionLength = time.Second
-var DefaultRates = choice.DefaultRates ...
-var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-var ErrConflict = errors.New("qenv: transaction conflict (serialization failure); retry")
-var ErrDeadlock = fmt.Errorf("%w: deadlock (lock waits form a cycle); lock rows in one order", ErrConflict)
-var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
-var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
-var ErrStuck = errors.New("qenv: stuck")
-var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
-var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
+const ReadCommitted Isolation
+const Serializable Isolation
+const SnapshotIsolation Isolation
 func AddKey(ctx context.Context, key any, n int)
 func As[T any](c Chooser) (T, bool)
 func ContextOf(c Chooser) context.Context
+func CoverageOf(runs [][]Choice) *Coverage
 func Current() (context.Context, bool)
 func Daemon(ctx context.Context)
 func DeclareFaultSite(kind, site string)
+func DeclareFaults(name string, options ...string) FaultKind
 func EncodeChoices(choices []Choice, rates Rates) ([]byte, error)
 func EntropyOf(c Chooser) func(n int) []byte
 func FaultOptions(kind string) []string
 func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) error
+func From(ctx context.Context) *Sim
+func FromBytes(data []byte, rates Rates) *Bytes
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
 func IsFault(kind string) bool
 func KnownFault(name string) bool
 func LockKey(ctx context.Context, key any)
 func Mono(ctx context.Context) time.Duration
+func New(c Chooser) *Sim
+func NewDisk(s *Sim, name string, p *Process) *Disk
+func NewNative(c Chooser, p Platform) *Sim
+func NewQueue(s *Sim, name string, p *Process) *Queue
+func NewSeeded(seed uint64) *Seeded
+func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx context.Context, req Req) (Resp, error)) *Service[Req, Resp]
+func NewStore(s *Sim, name string, iso Isolation) *Store
+func NewTimeProfile() *TimeProfile
 func Now(ctx context.Context) time.Time
+func ProcessOf(ctx context.Context) *Process
 func RLockKey(ctx context.Context, key any)
 func RUnlockKey(ctx context.Context, key any)
+func Replay(choices []Choice) *Replayer
 func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error
 func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
+func Swarm(c Chooser, kinds ...string) Chooser
 func TryLockKey(ctx context.Context, key any) bool
 func TryRLockKey(ctx context.Context, key any) bool
 func UnlockKey(ctx context.Context, key any)
@@ -176,65 +474,243 @@ func WaitFor(ctx context.Context, ready func() bool, d time.Duration) bool
 func WaitIdle(ctx context.Context, ready func() bool)
 func WaitKey(ctx context.Context, key any)
 func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool
+func WithContext(c Chooser, ctx context.Context) Chooser
 func WithPanicStack(ctx context.Context, dst *TaskPanic) context.Context
+func Without(c Chooser, kinds ...string) Chooser
 func Yield(ctx context.Context)
 type Bytes = choice.Bytes
-    func FromBytes(data []byte, rates Rates) *Bytes
-type Capacity struct{ ... }
+    field Next func(n int) []byte
+    field Rates Rates
+    field Chunk int
+    field OnFault func(kind string, v int)
+    method (*Bytes) Choose(kind string, n int) int
+    method (*Bytes) Entropy(n int) []byte
+    method (*Bytes) Err() error
+type Capacity struct
+    field Workers int
+    field Queue int
+    field Time func() time.Duration
+    field Slowdown func(elapsed time.Duration) float64
+    field Shed bool
 type Choice = choice.Choice
+    field Kind string
+    field N int
+    field Value int
+    field Bytes []byte
+    field Step int
+    field Name string
+    method (Choice) String() string
 type ChoiceLog = choice.ChoiceLog
+    field C Chooser
+    field Choices []Choice
+    field Nemeses []string
+    method (*ChoiceLog) Choose(kind string, n int) int
+    method (*ChoiceLog) Faults() []Choice
+    method (*ChoiceLog) Name(name string)
+    method (*ChoiceLog) Offer(names []string)
+    method (*ChoiceLog) Took(kind string, n, v int)
+    method (*ChoiceLog) Unwrap() Chooser
 type Chooser = choice.Chooser
-    func Swarm(c Chooser, kinds ...string) Chooser
-    func WithContext(c Chooser, ctx context.Context) Chooser
-    func Without(c Chooser, kinds ...string) Chooser
-type Clocks struct{ ... }
-type Coverage struct{ ... }
-    func CoverageOf(runs [][]Choice) *Coverage
-type DB interface{ ... }
-type Delivery struct{ ... }
-type Disk struct{ ... }
-    func NewDisk(s *Sim, name string, p *Process) *Disk
+    Choose(kind string, n int) int
+type Clocks struct
+    field Skew time.Duration
+    field Jump time.Duration
+    field Drift float64
+type Coverage struct
+    field Runs int
+    field Points []*PointCoverage
+    method (*Coverage) OneWay() []PairCoverage
+    method (*Coverage) Pairs() []PairCoverage
+    method (*Coverage) Point(kind string) *PointCoverage
+    method (*Coverage) String() string
+    method (*Coverage) Unfaulted() []*PointCoverage
+    method (*Coverage) Unreached() []*PointCoverage
+    method (*Coverage) Untried() []PairCoverage
+type DB interface
+    Begin(ctx context.Context) Txn
+type Delivery struct
+    field ID int
+    field Body any
+    field Redelivered bool
+    method (*Delivery) Ack(ctx context.Context)
+    method (*Delivery) Nack(ctx context.Context)
+type Disk struct
+    field Name string
+    method (*Disk) Append(name string) *File
+    method (*Disk) Create(name string) *File
+    method (*Disk) Durable(name string) []byte
+    method (*Disk) ReadFile(name string) ([]byte, bool)
 type Entropy = choice.Entropy
-type FaultKind struct{ ... }
-    func DeclareFaults(name string, options ...string) FaultKind
-type File struct{ ... }
-type InjectedError struct{ ... }
+    Entropy(n int) []byte
+type FaultKind struct
+    field Name string
+    field Options []string
+    method (FaultKind) Only(options ...string) FaultKind
+type File struct
+    method (*File) Close() error
+    method (*File) Sync() error
+    method (*File) Write(b []byte) (int, error)
+type InjectedError struct
+    field Kind string
+    method (*InjectedError) Error() string
+    method (*InjectedError) FaultName() string
 type Isolation int
-    const Serializable Isolation = iota ...
-type KV struct{ ... }
-type Machine interface{ ... }
-type Network struct{ ... }
+    method (Isolation) String() string
+type KV struct
+    field Key string
+    field Val any
+type Machine interface
+    Crash()
+    Restart()
+type Network struct
+    field CutLength time.Duration
+    method (*Network) Heal(a, b *Process)
+    method (*Network) OnCut(h func(a, b *Process))
+    method (*Network) Partition(a, b *Process)
+    method (*Network) PartitionNemesis(procs ...*Process)
+    method (*Network) Partitioned(a, b *Process) bool
 type Nominal = choice.Nominal
-type PairCoverage struct{ ... }
-type Platform interface{ ... }
-type PointCoverage struct{ ... }
-type Process struct{ ... }
-    func ProcessOf(ctx context.Context) *Process
-type Queue struct{ ... }
-    func NewQueue(s *Sim, name string, p *Process) *Queue
+    method (Nominal) Choose(string, int) int
+type PairCoverage struct
+    field A string
+    field B string
+    field Together int
+    field AFirst int
+    field BFirst int
+type Platform interface
+    Machine(name string, main func()) Machine
+type PointCoverage struct
+    field Kind string
+    field Sites []string
+    field Runs int
+    field Reached int
+    field Injected []int
+    field Names []string
+    method (*PointCoverage) Faulted() int
+type Process struct
+    field Name string
+    field Incarnation int
+    method (*Process) ClockOffset() time.Duration
+    method (*Process) Crash()
+    method (*Process) Down() bool
+    method (*Process) ID() string
+    method (*Process) Restart()
+    method (*Process) Spawn(name string, fn func(ctx context.Context))
+    method (*Process) ToReal(virtual time.Time) time.Time
+    method (*Process) ToVirtual(real time.Time) time.Time
+type Queue struct
+    field Name string
+    field Ordered bool
+    field Published int
+    field Redelivered int
+    method (*Queue) InFlight() int
+    method (*Queue) Pending() int
+    method (*Queue) Publish(ctx context.Context, body any)
+    method (*Queue) Receive(ctx context.Context) *Delivery
 type Rates = choice.Rates
+    field Default float64
+    field Kinds map[string]float64
+    method (Rates) Of(kind string) float64
+    method (Rates) Set(kind string, p float64) Rates
 type Replayer = choice.Replayer
-    func Replay(choices []Choice) *Replayer
-type Script struct{ ... }
-type Scripted struct{ ... }
+    method (*Replayer) Choose(kind string, n int) int
+    method (*Replayer) Err() error
+    method (*Replayer) Left() int
+type Script struct
+    field Faults []Scripted
+    field Base Chooser
+    field Progress func() int
+    method (*Script) Choose(kind string, n int) int
+    method (*Script) ChooseNemesis(enabled []string) int
+    method (*Script) Entropy(n int) []byte
+    method (*Script) Remaining() []Scripted
+    method (*Script) Unwrap() Chooser
+type Scripted struct
+    field Kind string
+    field Option int
+    field Name string
+    field After int
+    field Follows []int
+    method (Scripted) String() string
 type Seeded = choice.Seeded
-    func NewSeeded(seed uint64) *Seeded
-type Service[Req, Resp any] struct{ ... }
-    func NewService[Req, Resp any](s *Sim, name string, p *Process, ...) *Service[Req, Resp]
-type Signal struct{ ... }
-type Sim struct{ ... }
-    func From(ctx context.Context) *Sim
-    func New(c Chooser) *Sim
-    func NewNative(c Chooser, p Platform) *Sim
-type Store struct{ ... }
-    func NewStore(s *Sim, name string, iso Isolation) *Store
-type TaskPanic struct{ ... }
+    field Rates Rates
+    method (*Seeded) Choose(kind string, n int) int
+    method (*Seeded) Entropy(n int) []byte
+type Service[Req, Resp any] struct
+    field Name string
+    field Proc *Process
+    field Calls int
+    field Capacity *Capacity
+    field NoCrashWindow bool
+    field Rejected int
+    field Shed int
+    method (*Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.Duration) (Resp, error)
+    method (*Service[Req, Resp]) InSystem() int
+type Signal struct
+    method (*Signal) Notify()
+    method (*Signal) Wait(ctx context.Context, deadline time.Time) bool
+type Sim struct
+    field MaxSteps int
+    field Log func(string)
+    field Profile *TimeProfile
+    field NemesisEvery time.Duration
+    field Check bool
+    field Clocks Clocks
+    method (*Sim) Choose(kind string, n int) int
+    method (*Sim) Close()
+    method (*Sim) Context() context.Context
+    method (*Sim) Elapsed() time.Duration
+    method (*Sim) FaultOf(k FaultKind) string
+    method (*Sim) Nemesis(name string, enabled func() bool, do func())
+    method (*Sim) Net() *Network
+    method (*Sim) Now() time.Time
+    method (*Sim) OnCrash(h func(*Process))
+    method (*Sim) PanicStack() string
+    method (*Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process
+    method (*Sim) Run(d time.Duration) error
+    method (*Sim) Settle(d time.Duration) error
+    method (*Sim) Spawn(name string, fn func(ctx context.Context))
+    method (*Sim) Tasks() string
+    method (*Sim) ToReal(virtual time.Time) time.Time
+    method (*Sim) ToVirtual(real time.Time) time.Time
+type Store struct
+    field Name string
+    field Iso Isolation
+    field CommitFaults bool
+    method (*Store) Begin(ctx context.Context) Txn
+    method (*Store) Keys(prefix string) []string
+    method (*Store) Load(key string, val any)
+    method (*Store) Read(key string) (any, bool)
+type TaskPanic struct
+    field Value any
+    field Stack string
+    method (*TaskPanic) Is(v any) bool
 type TimeProfile = profile.Profile
-    func NewTimeProfile() *TimeProfile
-type Txn interface{ ... }
+    method (*Profile) Total() time.Duration
+    method (*Profile) Waited(task string, start time.Time, now func() time.Time) func()
+    method (*Profile) WriteTo(w io.Writer) (int64, error)
+type Txn interface
+    Get(key string) (any, bool)
+    GetForUpdate(key string) (any, bool, error)
+    Put(key string, val any)
+    Delete(key string)
+    Scan(prefix string) []KV
+    Commit() error
+    Rollback()
+    OnCommit(fn func())
 type Wrapper = choice.Wrapper
-
-== github.com/chucklehead-dev/gotogether/qenv/fault
+    embed Chooser
+    Unwrap() Chooser
+var DefaultRates
+var Epoch
+var ErrConflict
+var ErrDeadlock
+var ErrMaxSteps
+var ErrOverloaded
+var ErrStuck
+var ErrTimeout
+var ErrUnknownOutcome
+var NoFaults
 
 == github.com/chucklehead-dev/gotogether/qenv/weave
 func Add(wg *sync.WaitGroup, n int)
@@ -253,265 +729,745 @@ func TryRLock(m *sync.RWMutex) bool
 func Wait(wg *sync.WaitGroup)
 
 == github.com/chucklehead-dev/gotogether/qlint
-type Finding struct{ ... }
-    func Sim(dir string) ([]Finding, error)
-    func SimFile(fset *token.FileSet, f *ast.File) []Finding
-    func Woven(dir string) ([]Finding, error)
-    func WovenFile(fset *token.FileSet, f *ast.File) []Finding
+func Sim(dir string) ([]Finding, error)
+func SimFile(fset *token.FileSet, f *ast.File) []Finding
+func Woven(dir string) ([]Finding, error)
+func WovenFile(fset *token.FileSet, f *ast.File) []Finding
+type Finding struct
+    field Pos string
+    field What string
+    field Fix string
+    field At token.Pos
+    method (Finding) String() string
 
 == github.com/chucklehead-dev/gotogether/qload
 const Window = 100 * time.Second
+func Assess(x Experiment, goodput string, tr Trigger, within time.Duration, seed uint64) Recovery
+func Constant(v float64) Shape
 func Count(sys Target, tr Trigger, n int) int
+func Mostly(sys Target, tr Trigger, n int) (bool, Recovery)
+func NewClient(s *qenv.Sim, rnd *rand.Rand, m *Metrics, sv *Server, cfg ClientConfig) *Client
+func NewServer(s *qenv.Sim, rnd *rand.Rand, m *Metrics, cfg ServerConfig) *Server
+func NoTrigger() TriggerClaim
+func Of(x Experiment, goodput string, within time.Duration) Target
+func OfSimulation(cfg SimConfig, base float64, within time.Duration) Target
+func Piecewise(tick time.Duration, scale float64, values ...float64) Shape
+func Recovered() RecoveryClaim
+func Recovers(cfg SimConfig, base float64, tr Trigger, within time.Duration) Recovery
+func Runs(sys Target, tr Trigger, n int) []Recovery
+func Simulate(cfg SimConfig) *Metrics
 func SimulateTrajectory(cfg SimConfig, from qmeta.State, times []float64, runs int) qmeta.Trajectory
-type Client struct{ ... }
-    func NewClient(s *qenv.Sim, rnd *rand.Rand, m *Metrics, sv *Server, cfg ClientConfig) *Client
-type ClientConfig struct{ ... }
-type Env struct{ ... }
-type Experiment struct{ ... }
-type Metrics struct{ ... }
-    func Simulate(cfg SimConfig) *Metrics
-type Point struct{ ... }
-type Recovery struct{ ... }
-    func Assess(x Experiment, goodput string, tr Trigger, within time.Duration, seed uint64) Recovery
-    func Mostly(sys Target, tr Trigger, n int) (bool, Recovery)
-    func Recovers(cfg SimConfig, base float64, tr Trigger, within time.Duration) Recovery
-    func Runs(sys Target, tr Trigger, n int) []Recovery
-type RecoveryClaim struct{ ... }
-    func Recovered() RecoveryClaim
-    func StaysDegraded() RecoveryClaim
-type Retrier interface{ ... }
-type Sample struct{ ... }
-type Series struct{ ... }
-type Server struct{ ... }
-    func NewServer(s *qenv.Sim, rnd *rand.Rand, m *Metrics, cfg ServerConfig) *Server
-type ServerConfig struct{ ... }
+func SomeTrigger() TriggerClaim
+func Spike(base, peak float64, from, to time.Duration) Shape
+func StaysDegraded() RecoveryClaim
+type Client struct
+type ClientConfig struct
+    field Name string
+    field Rate Shape
+    field Population int
+    field Think time.Duration
+    field Timeout time.Duration
+    field Retries int
+    field Backoff func(n int, r *rand.Rand) time.Duration
+    field RetryBudget float64
+    field Retrier func(rnd *rand.Rand) Retrier
+type Env struct
+    field Sim *qenv.Sim
+    field Trigger Trigger
+    method (*Env) Probe(name string, f func() int)
+    method (*Env) Rand(stream string) *rand.Rand
+type Experiment struct
+    field Deploy func(env *Env) func(ctx context.Context, i int)
+    field Rate float64
+    field Healthy float64
+    field Population int
+    field Think time.Duration
+    field Faults qenv.Rates
+    field Chooser func(seed uint64) qenv.Chooser
+    field NemesisEvery time.Duration
+    field Tick time.Duration
+    field Sink qobs.Sink
+    field Actor string
+    method (Experiment) Run(seed uint64, tr Trigger, horizon time.Duration) *Series
+type Metrics struct
+    field Samples []Sample
+    field Err error
+    method (*Metrics) Mean(from, to time.Duration, f func(Sample) float64) float64
+type Point struct
+    field T time.Duration
+    field Steps map[string]int
+    field Probes map[string]int
+type Recovery struct
+    field Trigger Trigger
+    field Recovered bool
+    field Before float64
+    field After float64
+    field Baseline float64
+    field Offered float64
+    field Metrics *Metrics
+    field Series *Series
+    field Err error
+    method (Recovery) Expect(t TB, c RecoveryClaim)
+    method (Recovery) String() string
+    method (Recovery) Warning() string
+type RecoveryClaim struct
+    method (RecoveryClaim) String() string
+type Retrier interface
+    Request(now time.Time)
+    Retry(n int, now time.Time) (wait time.Duration, ok bool)
+type Sample struct
+    field T time.Duration
+    field Queue int
+    field Orbit int
+    field Waiting int
+    field Arrivals int
+    field Retries int
+    field Successes int
+    field Timeouts int
+    field Rejected int
+    field Failed int
+    field Completions int
+    field P99 time.Duration
+type Series struct
+    field Tick time.Duration
+    field Points []Point
+    field Escaped []string
+    field Err error
+    method (*Series) Count(action string, from, to time.Duration) int
+    method (*Series) Last(probe string) int
+    method (*Series) Rate(action string, from, to time.Duration) float64
+type Server struct
+    method (*Server) InSystem() int
+type ServerConfig struct
+    field Name string
+    field Workers int
+    field QueueCap int
+    field ServiceRate float64
+    field Service func(r *rand.Rand) time.Duration
+    field Slowdown Shape
 type Shape func(t time.Duration) float64
-    func Constant(v float64) Shape
-    func Piecewise(tick time.Duration, scale float64, values ...float64) Shape
-    func Spike(base, peak float64, from, to time.Duration) Shape
-type SimConfig struct{ ... }
-type TB interface{ ... }
+type SimConfig struct
+    field Server ServerConfig
+    field Client ClientConfig
+    field Horizon time.Duration
+    field Tick time.Duration
+    field Seed uint64
+    field Initial struct{ Queue, Orbit int }
+type TB interface
+    Helper()
+    Fatalf(format string, args ...any)
 type Target func(tr Trigger, seed uint64) Recovery
-    func Of(x Experiment, goodput string, within time.Duration) Target
-    func OfSimulation(cfg SimConfig, base float64, within time.Duration) Target
-type Trigger struct{ ... }
-type TriggerClaim struct{ ... }
-    func NoTrigger() TriggerClaim
-    func SomeTrigger() TriggerClaim
-type TriggerSpace struct{ ... }
+type Trigger struct
+    field Start time.Duration
+    field Duration time.Duration
+    field ExtraRate float64
+    field Slowdown float64
+    method (Trigger) Active(t time.Duration) bool
+    method (Trigger) End() time.Duration
+    method (Trigger) Factor() Shape
+    method (Trigger) Rate(base float64) Shape
+    method (Trigger) String() string
+type TriggerClaim struct
+    method (TriggerClaim) WantsTrigger() bool
+type TriggerSpace struct
+    field MaxExtraRate float64
+    field MaxSlowdown float64
+    field MaxDuration time.Duration
+    field Start time.Duration
+    field Seeds int
 
 == github.com/chucklehead-dev/gotogether/qmeta
-type Band struct{ ... }
-type Chain struct{ ... }
-    func New(p Params) *Chain
-type Drift struct{ ... }
-type Healthy struct{ ... }
-type Observation struct{ ... }
-type Params struct{ ... }
-    func Calibrate(p Params, data []Trajectory) (Params, float64)
-    func CalibrateTimeout(p Params, data []Trajectory) (Params, float64)
-type Region struct{ ... }
-type RuleConfig struct{ ... }
-type Service struct{ ... }
-    func Measure(samples []time.Duration) Service
-type State struct{ ... }
-type State2 struct{ ... }
-type Trajectory struct{ ... }
-    func Trajectories(obs []Observation, times []float64, bucket int) []Trajectory
-type Transition struct{ ... }
-type Watch struct{ ... }
+func Calibrate(p Params, data []Trajectory) (Params, float64)
+func CalibrateTimeout(p Params, data []Trajectory) (Params, float64)
+func Measure(samples []time.Duration) Service
+func New(p Params) *Chain
+func Trajectories(obs []Observation, times []float64, bucket int) []Trajectory
+type Band struct
+    field ULo int
+    field UHi int
+    field VMin int
+type Chain struct
+    field P Params
+    field N int
+    field V int
+    method (*Chain) Clamp(s State) State
+    method (*Chain) Field(stepU, stepV int) []Drift
+    method (*Chain) HealthyRegion(h Healthy, bound float64) *Region
+    method (*Chain) HittingTimes(target func(State) bool) []float64
+    method (*Chain) Index(s State) int
+    method (*Chain) Loss(data []Trajectory) float64
+    method (*Chain) Mean(from State, times []float64) []State2
+    method (*Chain) MeanAll(times []float64) [][]State2
+    method (*Chain) Out(s State) []Transition
+    method (*Chain) RecoveryWithin(healthy func(State) bool, t float64) []float64
+    method (*Chain) Region(healthy func(State) bool, bound float64) *Region
+    method (*Chain) SVG(w io.Writer, stepU, stepV int) error
+    method (*Chain) States() int
+type Drift struct
+    embed State
+    field DU float64
+    field DV float64
+type Healthy struct
+    field MaxU int
+    method (Healthy) Contains(s State) bool
+    method (Healthy) PromQL(cfg RuleConfig) string
+    method (Healthy) String() string
+type Observation struct
+    field T float64
+    field U int
+    field V int
+type Params struct
+    field Lambda float64
+    field Mu float64
+    field Workers int
+    field Timeout float64
+    field Retries int
+    field Queue int
+    field Orbit int
+    field Backoff float64
+    field RetryBudget float64
+    field RetryRate float64
+    method (Params) Warning() string
+type Region struct
+    field Chain *Chain
+    field Bound float64
+    field Healthy *Healthy
+    field MinV []int
+    method (*Region) Bands(step int) []Band
+    method (*Region) Contains(s State) bool
+    method (*Region) Holes() int
+    method (*Region) Recovered(s State) float64
+    method (*Region) Recovery(s State) float64
+    method (*Region) Rules(cfg RuleConfig, healthy string) string
+type RuleConfig struct
+    field Alert string
+    field Server string
+    field Service string
+    field For string
+    field Queue string
+    field Orbit string
+    field Step int
+    field Headroom string
+type Service struct
+    field Samples []time.Duration
+    field Mean time.Duration
+    field CV float64
+    method (Service) Draw(rnd *rand.Rand) time.Duration
+    method (Service) Exponential() bool
+    method (Service) Mu() float64
+type State struct
+    field U int
+    field V int
+    method (State) String() string
+type State2 struct
+    field U float64
+    field V float64
+type Trajectory struct
+    field From State
+    field Times []float64
+    field Mean []State2
+type Transition struct
+    field To State
+    field Rate float64
+type Watch struct
+    field Region *Region
+    field State func() State
+    field For int
+    field Gap time.Duration
+    field Snapshot func(s State) (io.WriteCloser, error)
+    field Recorder trace.FlightRecorderConfig
+    field Taken int
+    method (*Watch) Observe(now time.Time) (bool, error)
+    method (*Watch) Run(ctx context.Context, every time.Duration) error
+    method (*Watch) Start() error
+    method (*Watch) Stop()
 
 == github.com/chucklehead-dev/gotogether/qmut
 func Cond(id int, c bool) bool
+func Mutants() []Mutant
 func On(id int) bool
 func Pick(id int, orig, mutated bool) bool
 func Register(ms []Mutant) int
 func WithMutant(ctx context.Context, id int) context.Context
 func WithReach(ctx context.Context, r *Reach) context.Context
-type Mutant struct{ ... }
-    func Mutants() []Mutant
-type Reach struct{ ... }
+type Mutant struct
+    field ID int
+    field File string
+    field Line int
+    field Func string
+    field Op string
+    field Code string
+    method (Mutant) String() string
+type Reach struct
+    method (*Reach) Reached(id int) bool
 
 == github.com/chucklehead-dev/gotogether/qobs
 const ActionKey = "quint.action"
 func Attributes(s *qtrace.Step) []attribute.KeyValue
+func BufferedFileSink(path string) (*JSONLSink, error)
 func Escaped(mark int) (n int, since []string)
+func FileSink(path string) (*JSONLSink, error)
+func From(ctx context.Context) *Recorder
+func Global() *Recorder
 func InstallGlobal(r *Recorder) (restore func(), err error)
+func NewJSONLSink(w io.Writer) *JSONLSink
+func NewOTelSink(tp trace.TracerProvider) *OTelSink
+func NewRecorder(sink Sink, opts ...Option) *Recorder
+func NewSlogHandler(next slog.Handler) *SlogHandler
+func NewSyncedJSONLSink(w interface { io.Writer Sync() error }) *JSONLSink
 func Normalize(v any) any
 func Record(ctx context.Context, action string, err error, kv ...any)
 func SetDiscard(f func() bool)
 func SetGlobal(r *Recorder)
 func Strict() (release func())
+func SyncedFileSink(path string) (*JSONLSink, error)
 func Thread(ctx context.Context) context.Context
+func WithActor(a string) Option
+func WithID(id string) Option
+func WithProcess(p string) Option
 func WithRecorder(ctx context.Context, r *Recorder) context.Context
-type JSONLSink struct{ ... }
-    func BufferedFileSink(path string) (*JSONLSink, error)
-    func FileSink(path string) (*JSONLSink, error)
-    func NewJSONLSink(w io.Writer) *JSONLSink
-    func NewSyncedJSONLSink(w interface{ ... }) *JSONLSink
-    func SyncedFileSink(path string) (*JSONLSink, error)
-type MemorySink struct{ ... }
-type OTelSink struct{ ... }
-    func NewOTelSink(tp trace.TracerProvider) *OTelSink
+type JSONLSink struct
+    method (*JSONLSink) Close() error
+    method (*JSONLSink) Err() error
+    method (*JSONLSink) Flush() error
+    method (*JSONLSink) Record(_ context.Context, s *qtrace.Step)
+type MemorySink struct
+    method (*MemorySink) Record(_ context.Context, s *qtrace.Step)
+    method (*MemorySink) Reset()
+    method (*MemorySink) Steps() []qtrace.Step
+type OTelSink struct
+    field Tracer trace.Tracer
+    method (*OTelSink) Record(ctx context.Context, s *qtrace.Step)
 type Option func(*Recorder)
-    func WithActor(a string) Option
-    func WithID(id string) Option
-    func WithProcess(p string) Option
-type Outcomer interface{ ... }
-type Recorder struct{ ... }
-    func From(ctx context.Context) *Recorder
-    func Global() *Recorder
-    func NewRecorder(sink Sink, opts ...Option) *Recorder
-type Sink interface{ ... }
-type SlogHandler struct{ ... }
-    func NewSlogHandler(next slog.Handler) *SlogHandler
+type Outcomer interface
+    QuintOutcome() string
+type Recorder struct
+    method (*Recorder) Add(steps ...qtrace.Step)
+    method (*Recorder) Count() int
+    method (*Recorder) ID() string
+    method (*Recorder) Interrupted() []qtrace.Step
+    method (*Recorder) Issues() []string
+    method (*Recorder) Record(ctx context.Context, action string, err error, kv ...any)
+type Sink interface
+    Record(ctx context.Context, s *qtrace.Step)
+type SlogHandler struct
+    field Next slog.Handler
+    method (*SlogHandler) Enabled(context.Context, slog.Level) bool
+    method (*SlogHandler) Handle(ctx context.Context, r slog.Record) error
+    method (*SlogHandler) WithAttrs(as []slog.Attr) slog.Handler
+    method (*SlogHandler) WithGroup(name string) slog.Handler
 type Tee []Sink
+    method (Tee) Record(ctx context.Context, s *qtrace.Step)
 
 == github.com/chucklehead-dev/gotogether/qrole
-const MetricServeInflight = "quint.serve.inflight" ...
+const MetricAttempts = "quint.call.attempts"
+const MetricOrbit = "quint.orbit"
+const MetricServeInflight = "quint.serve.inflight"
+const MetricServed = "quint.serve.requests"
 const MetricSteps = "quint.steps"
-var Default = New()
 func Call(ctx context.Context, service string) func(err error)
+func From(ctx context.Context) *Roles
 func Labels(on bool)
+func New() *Roles
+func NewMetricsSink(meter metric.Meter, next qobs.Sink) (*MetricsSink, error)
 func Operation(ctx context.Context, service string) func(err error)
 func Serve(ctx context.Context, name string) func(err error)
 func WithRoles(ctx context.Context, r *Roles) context.Context
-type MetricsSink struct{ ... }
-    func NewMetricsSink(meter metric.Meter, next qobs.Sink) (*MetricsSink, error)
-type Roles struct{ ... }
-    func From(ctx context.Context) *Roles
-    func New() *Roles
+type MetricsSink struct
+    field Next qobs.Sink
+    method (*MetricsSink) Record(ctx context.Context, s *qtrace.Step)
+type Roles struct
+    method (*Roles) Attempts(service string) (ok, failed int)
+    method (*Roles) Instrument(meter metric.Meter) error
+    method (*Roles) Orbit(service string) int
+    method (*Roles) Queue(name string) int
+    method (*Roles) Served(name string) (ok, failed int)
+var Default
 
 == github.com/chucklehead-dev/gotogether/qrun
-var Task = NewKey[any]("task")
 func Current() (context.Context, bool)
 func Get[T any](ctx context.Context, k *Key[T]) (T, bool)
 func GoroutineID() int64
 func InContext[T any](ctx context.Context, k *Key[T]) (T, bool)
+func NewKey[T any](name string) *Key[T]
 func SetResolver(f func() (context.Context, bool))
 func Start(ctx context.Context) (end func())
 func With[T any](ctx context.Context, k *Key[T], v T) context.Context
-type Key[T any] struct{ ... }
-    func NewKey[T any](name string) *Key[T]
+type Key[T any] struct
+    method (*Key[T]) String() string
+var Task
 
 == github.com/chucklehead-dev/gotogether/qsweep
 const MaxSpace = 1 << 21
+func Bool(name string) Factor
+func Cover(factors []Factor, t int, allow func(Row) bool) ([]Row, error)
+func FaultKind(kind string) Factor
+func Ints(name string, values ...int) Factor
 func Missing(factors []Factor, t int, allow func(Row) bool, rows []Row) ([]string, error)
 func Sequences(events []string, t int) [][]string
-type Factor struct{ ... }
-    func Bool(name string) Factor
-    func FaultKind(kind string) Factor
-    func Ints(name string, values ...int) Factor
-type Row struct{ ... }
-    func Cover(factors []Factor, t int, allow func(Row) bool) ([]Row, error)
+type Factor struct
+    field Name string
+    field Values []string
+    field Model string
+    field Fault bool
+    method (Factor) Constant(name string) Factor
+type Row struct
+    method (Row) Constants() map[string]string
+    method (Row) FaultsOff() []string
+    method (Row) Get(name string) string
+    method (Row) Int(name string) int
+    method (Row) On(name string) bool
+    method (Row) String() string
 
 == github.com/chucklehead-dev/gotogether/qtest
 const DefaultLinearizeBudget = 200
+func All(es ...Expectation) Claim
+func AnyOf(es ...Expectation) Expectation
+func Conforms() Expectation
+func Constants(m map[string]string) Option
+func Exercised(except ...string) Exercise
+func Global() Option
+func Invariants(names ...string) Option
+func Linearize() Option
+func LinearizeBudget(n int) Option
+func Mismatch(action string) Expectation
+func NoSurvivors(equivalent ...string) MutationClaim
+func None(es ...Expectation) Claim
+func NotVacuous() Claim
+func Quint(o validate.Options) Option
+func Reaches(kind string) Reach
+func ReadEvidence(path string) (*Evidence, error)
+func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), opts ...Option) *Run
+func RecorderOptions(opts ...qobs.Option) Option
+func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
+func Resolve(t testing.TB, opts ...Option) Settings
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
-type Bound struct{ ... }
-type Claim interface{ ... }
-    func All(es ...Expectation) Claim
-    func None(es ...Expectation) Claim
-    func NotVacuous() Claim
-    func Some(es ...Expectation) Claim
-type Evidence struct{ ... }
-    func ReadEvidence(path string) (*Evidence, error)
-type Exercise struct{ ... }
-    func Exercised(except ...string) Exercise
-type Expectation struct{ ... }
-    func AnyOf(es ...Expectation) Expectation
-    func Conforms() Expectation
-    func Mismatch(action string) Expectation
-    func Rejects(action string) Expectation
-    func ShrunkTo(n int) Expectation
-    func Violates(invariant string) Expectation
-type Exploration struct{ ... }
-type ExploreConfig struct{ ... }
-type ModelCoverage struct{ ... }
-type MutationClaim struct{ ... }
-    func NoSurvivors(equivalent ...string) MutationClaim
-type MutationReport struct{ ... }
+func ShrunkTo(n int) Expectation
+func SkipIfEmpty() Option
+func Some(es ...Expectation) Claim
+func Takes(action string) Take
+func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
+func Violates(invariant string) Expectation
+type Bound struct
+    field Delays int
+    field Faults int
+    field Without []string
+    field MaxRuns int
+    field Partial bool
+    field Parallel int
+type Claim interface
+    String() string
+type Evidence struct
+    field Test string
+    field Spec string
+    field Runs int
+    field Conform int
+    field FailingBy map[string]int
+    field Faults *qenv.Coverage
+    field Model *ModelCoverage
+    field Rows int
+    field Search *Search
+    field Vacuous []Vacuity
+    field Code *qcover.Summary
+    field Mutants *MutationReport
+    method (*Evidence) String() string
+    method (*Evidence) WriteJSON(path string) error
+type Exercise struct
+    method (Exercise) String() string
+type Expectation struct
+    method (Expectation) At(action string) Expectation
+    method (Expectation) String() string
+type Exploration struct
+    field Runs []*Run
+    field Cached int
+    method (*Exploration) Evidence() *Evidence
+    method (*Exploration) Expect(t testing.TB, claims ...Claim)
+    method (*Exploration) Failing() []*Run
+    method (*Exploration) Vacuous() []Vacuity
+type ExploreConfig struct
+    field Seeds int
+    field Rates qenv.Rates
+    field Parallel int
+    field Chooser func(seed uint64) qenv.Chooser
+    field Corpus string
+type ModelCoverage struct
+    field Taken map[string]int
+    field Never []string
+type MutationClaim struct
+type MutationReport struct
+    field Unreached []qmut.Mutant
+    field Killed []qmut.Mutant
+    field Survived []qmut.Mutant
+    field Baseline *Exploration
+    method (*MutationReport) Evidence() *Evidence
+    method (*MutationReport) Expect(t testing.TB, c MutationClaim)
+    method (*MutationReport) Score() float64
+    method (*MutationReport) String() string
 type Option func(*settings)
-    func Constants(m map[string]string) Option
-    func Global() Option
-    func Invariants(names ...string) Option
-    func Linearize() Option
-    func LinearizeBudget(n int) Option
-    func Quint(o validate.Options) Option
-    func RecorderOptions(opts ...qobs.Option) Option
-    func SkipIfEmpty() Option
-type Reach struct{ ... }
-    func Reaches(kind string) Reach
-type Run struct{ ... }
-    func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), ...) *Run
-    func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
-type RunPanic struct{ ... }
-type Search struct{ ... }
-type Settings struct{ ... }
-    func Resolve(t testing.TB, opts ...Option) Settings
-type SweepConfig struct{ ... }
-type SweepResult struct{ ... }
-type System struct{ ... }
-type Take struct{ ... }
-    func Takes(action string) Take
-type Vacuity struct{ ... }
+type Reach struct
+    method (Reach) Faulted() Reach
+    method (Reach) InAtLeast(share float64) Reach
+    method (Reach) String() string
+type Run struct
+    field Seed uint64
+    field Schedule string
+    field Corpus string
+    field Steps []qtrace.Step
+    field Choices []qenv.Choice
+    field Nemeses []string
+    field Interrupted []qtrace.Step
+    field Unscripted []qenv.Scripted
+    field Code *qcover.Counts
+    field Err error
+    field Report *validate.Report
+    field StepLog string
+    field ITF map[string]string
+    method (*Run) Expect(t testing.TB, es ...Expectation)
+    method (*Run) Faults() []qenv.Choice
+    method (*Run) OK() bool
+type RunPanic struct
+    field Value any
+    field Stack string
+    field InTask bool
+    method (*RunPanic) Error() string
+type Search struct
+    field Delays int
+    field Faults int
+    field Complete bool
+    field Left int
+type Settings struct
+    method (Settings) Checker(t testing.TB, bindingPath string) *validate.Checker
+    method (Settings) Dir() string
+    method (Settings) Global() bool
+    method (Settings) Recorder() []qobs.Option
+type SweepConfig struct
+    field Factors []qsweep.Factor
+    field Strength int
+    field Allow func(qsweep.Row) bool
+    field Explore ExploreConfig
+    field Opts func(qsweep.Row) []Option
+    field Expect func(qsweep.Row) []Claim
+type SweepResult struct
+    field Rows []qsweep.Row
+    field Runs []*Exploration
+    method (*SweepResult) Evidence() *Evidence
+type System struct
+    field Binding string
+    field Opts []Option
+    field Run func(c qenv.Chooser) error
+    method (System) Exhaust(t testing.TB, b Bound) *Exploration
+    method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
+    method (System) FollowTraces(t testing.TB, trace connect.Config, faults connect.FaultMap) *Exploration
+    method (System) Fuzz(f *testing.F, rates qenv.Rates, seeds ...[]byte)
+    method (System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport
+    method (System) Sweep(t *testing.T, sw SweepConfig) *SweepResult
+type Take struct
+    method (Take) InAtLeast(share float64) Take
+    method (Take) String() string
+type Vacuity struct
+    field Invariant string
+    field Antecedent string
+    field Runs int
+    method (Vacuity) String() string
 
 == github.com/chucklehead-dev/gotogether/qtrace
-const EventName = "quint.step" ...
+const EventName = "quint.step"
+const KeyAction = "quint.action"
+const KeyActor = "quint.actor"
+const KeyError = "quint.error"
+const KeyInvoked = "quint.invoked_unix_nano"
+const KeyOutcome = "quint.outcome"
+const KeyProcess = "quint.process"
+const KeyRecorder = "quint.recorder"
+const KeySeq = "quint.seq"
+const KeyThread = "quint.thread"
 const KeyTime = "quint.time_unix_nano"
+const PrefixArg = "quint.arg."
+const PrefixObs = "quint.obs."
+const PrefixOrder = "quint.order."
 const RealTimeSlack = time.Millisecond
+const SpanName = "quint "
 func Fields(s string) []string
+func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func Key(steps []Step) string
+func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
+func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
 func WriteJSONL(w io.Writer, steps []Step) error
-type Filter struct{ ... }
-type Issue struct{ ... }
-type Keyer struct{ ... }
-type Step struct{ ... }
-    func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
-    func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
-    func ReadJSONL(r io.Reader) ([]Step, error)
-type TornTail struct{ ... }
-type Trace struct{ ... }
+type Filter struct
+    field Actors []string
+    field Actions []string
+    field Since time.Time
+    field Until time.Time
+    field Pseudonymize []string
+    field Salt string
+    field Keep map[string][]string
+    method (Filter) Apply(steps []Step) []Step
+    method (Filter) Pseudonym(v string) string
+type Issue struct
+    field Severity string
+    field Kind string
+    field Msg string
+    method (Issue) String() string
+type Keyer struct
+    method (*Keyer) Step(s *Step) string
+type Step struct
+    field Action string
+    field Seq uint64
+    field Recorder string
+    field Actor string
+    field Process string
+    field Thread string
+    field Outcome string
+    field Error string
+    field Time time.Time
+    field Invoked time.Time
+    field Args map[string]any
+    field Obs map[string]any
+    field Order map[string]int64
+    field Source string
+    method (*Step) Attributes() map[string]any
+    method (*Step) Get(name string) (any, bool)
+    method (*Step) MarshalLine() ([]byte, error)
+    method (*Step) String() string
+type TornTail struct
+    field Line int
+    field Text string
+    method (*TornTail) Error() string
+type Trace struct
+    field Actor string
+    field Steps []Step
+    field Processes []string
+    field Issues []Issue
 
 == github.com/chucklehead-dev/gotogether/skills
-var DefaultTargets = []string{ ... }
-var Renamed = map[string]string{ ... }
-var Targets = map[string]string{ ... }
 func FS() fs.FS
 func Install(dir string, force bool) ([]string, error)
+func List() ([]Skill, error)
 func RemoveRenamed(dir string) ([]string, error)
 func TargetDirs(root string, names []string) ([]string, error)
-type Skill struct{ ... }
-    func List() ([]Skill, error)
+type Skill struct
+    field Name string
+    field Description string
+var DefaultTargets
+var Renamed
+var Targets
 
 == github.com/chucklehead-dev/gotogether/sktrace
 func Applied(kinds ...string) func(Event) int
 func Quantiles(ds []time.Duration, n int) []time.Duration
+func Read(r io.Reader) (*Trace, error)
+func ReadFile(path string) (*Trace, error)
 func Replicas(o Object) float64
-type Env struct{ ... }
-type Event struct{ ... }
-type Finding struct{ ... }
-type Lifecycle struct{ ... }
+type Env struct
+    field Kinds []string
+    field Namespaces []string
+type Event struct
+    field TS int64
+    field Applied []Object
+    field Deleted []Object
+type Finding struct
+    field At time.Duration
+    field Object string
+    field What string
+    field Fix string
+    method (Finding) String() string
+type Lifecycle struct
+    field GVK string
+    field Owner string
+    field Mtime int64
+    field Start int64
+    field End int64
+    method (Lifecycle) Duration() time.Duration
 type Object map[string]any
-type Trace struct{ ... }
-    func Read(r io.Reader) (*Trace, error)
-    func ReadFile(path string) (*Trace, error)
+    method (Object) APIVersion() string
+    method (Object) GVK() string
+    method (Object) Key() string
+    method (Object) Kind() string
+    method (Object) Name() string
+    method (Object) Namespace() string
+type Trace struct
+    field Version int
+    field Config map[string]any
+    field Events []Event
+    field Lifecycles []Lifecycle
+    method (*Trace) End() time.Time
+    method (*Trace) Gauge(tick time.Duration, value func(Object) float64) []float64
+    method (*Trace) Lifetimes(gvk string) []time.Duration
+    method (*Trace) Lint(env Env) []Finding
+    method (*Trace) Offset(e Event) time.Duration
+    method (*Trace) Rates(tick time.Duration, count func(Event) int) []float64
+    method (*Trace) Start() time.Time
+    method (*Trace) Starts(tick time.Duration) []float64
 
 == github.com/chucklehead-dev/gotogether/validate
-type Checker struct{ ... }
-    func Cached(bindingPath string, o Options) (*Checker, error)
-    func NewChecker(bindingPath string, opt Options) (*Checker, error)
-type Failure struct{ ... }
-type ITFOptions struct{ ... }
-type InvariantResult struct{ ... }
-type Options struct{ ... }
-type Report struct{ ... }
-type Result struct{ ... }
-    func Validate(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, ...) (*Result, error)
-    func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
-type ToolError struct{ ... }
+const Fail Verdict
+const NotEvaluated Verdict
+const Pass Verdict
+func Cached(bindingPath string, o Options) (*Checker, error)
+func NewChecker(bindingPath string, opt Options) (*Checker, error)
+func Validate(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, opt Options) (*Result, error)
+func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
+type Checker struct
+    field Binding *binding.Binding
+    field Model *binding.Model
+    field Options Options
+    method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
+    method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
+    method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
+    method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type Failure struct
+    field Note string
+    field Kind string
+    field Index int
+    field Call string
+    field Expect string
+    field Step *qtrace.Step
+    field Quint string
+    field State map[string]itf.Value
+    field StateAfter bool
+type ITFOptions struct
+    embed Options
+    field Binding *binding.Binding
+    field Spec string
+    field Module string
+    field Instance string
+    field Invariants []string
+    field NoVarCheck bool
+type InvariantResult struct
+    field Name string
+    field Verdict Verdict
+    field Failure *Failure
+type Options struct
+    field Quint string
+    field Backend string
+    field Dir string
+    field NoITF bool
+type Report struct
+    field Issues []qtrace.Issue
+    field Actors []*Result
+    method (*Report) OK() bool
+    method (*Report) Summary() string
+type Result struct
+    field Actor string
+    field Steps int
+    field Conforms Verdict
+    field Failure *Failure
+    field Invariants []InvariantResult
+    field Issues []qtrace.Issue
+    field Constants []string
+    field Module string
+    field ITF string
+    field Calls []binding.Call
+    field Output string
+    method (*Result) OK() bool
+    method (*Result) Summary() string
+type ToolError struct
+    field Module string
+    field Test string
+    field Msg string
+    field Output string
+    method (*ToolError) Error() string
 type Verdict string
-    const Pass Verdict = "pass" ...
 

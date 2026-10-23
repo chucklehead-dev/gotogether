@@ -89,10 +89,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   the core, qweave, qhegel, qanalysis and qgosim, each module's tag
   prefixed with its directory (`qhegel/v0.1.0`), and each module's
   requirements moved from pseudo-versions to the tags.
-- The core's exported API is recorded in api/core.txt (`go doc -short`
-  of every package): a deliberate change regenerates it
-  (`GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/`) and adds a
-  CHANGELOG line.
+- Each published module's exported API is recorded in api/<module>.txt
+  (api/core.txt, api/qhegel.txt, ...): every exported function, type,
+  field, method, interface method, constant and variable, as declared,
+  read with go/ast by the core's internal/apisurface (an alias of an
+  internal type, qenv.Rates, carries that type's fields and methods). A
+  deliberate change to any of them regenerates it (`GOTOGETHER_UPDATE_API=1
+  go test ./internal/apisurface/`, from the root) and adds a CHANGELOG
+  line.
 - The repository is a Go workspace (`go.work`, checked in): every module
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.

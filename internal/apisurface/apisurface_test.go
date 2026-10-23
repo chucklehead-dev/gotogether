@@ -1,81 +1,99 @@
-// Package apisurface keeps the core's exported API in api/core.txt: every
-// package's `go doc -short`, so a change to what users can call shows in
-// review, and, until tags give apidiff a baseline, is never made by
-// accident.
 package apisurface
 
 import (
 	"bytes"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-const file = "../../api/core.txt"
+const root = "../.."
 
-func surface(t *testing.T) []byte {
-	t.Helper()
-	cmd := exec.Command("go", "list", "./...")
-	cmd.Dir = "../.."
-	out, err := cmd.Output()
+// Each published module's exported API is the recorded one. After a
+// deliberate change: GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/,
+// and review the diff of api/ with the change (and a CHANGELOG line).
+func TestAPISurface(t *testing.T) {
+	for _, m := range Modules {
+		t.Run(m.Dir, func(t *testing.T) {
+			got, err := Surface(root, m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			file := filepath.Join(root, m.File)
+			if os.Getenv("GOTOGETHER_UPDATE_API") == "1" {
+				if err := os.WriteFile(file, got, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			want, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("%v: write it with GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/", err)
+			}
+			if d := diff(string(want), string(got)); d != "" {
+				t.Errorf("%s's exported API changed:\n%s\nIf deliberate: GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/, and commit %s with the change (and a CHANGELOG line)", m.Path, d, m.File)
+			}
+		})
+	}
+}
+
+// diff lists the lines of got not in want (+) and of want not in got (-),
+// each under its package.
+func diff(want, got string) string {
+	lines := func(s string) map[string]bool {
+		m := map[string]bool{}
+		pkg := ""
+		for _, l := range strings.Split(s, "\n") {
+			if strings.HasPrefix(l, "== ") {
+				pkg = l
+			}
+			m[pkg+"\x00"+l] = true
+		}
+		return m
+	}
+	w, g := lines(want), lines(got)
+	var b bytes.Buffer
+	for _, s := range []struct {
+		from, other map[string]bool
+		text        string
+		sign        string
+	}{{g, w, got, "+ "}, {w, g, want, "- "}} {
+		pkg := ""
+		for _, l := range strings.Split(s.text, "\n") {
+			if strings.HasPrefix(l, "== ") {
+				pkg = l
+			}
+			if !s.other[pkg+"\x00"+l] {
+				b.WriteString(s.sign + strings.TrimPrefix(pkg, "== ") + ": " + l + "\n")
+			}
+		}
+	}
+	return b.String()
+}
+
+// The record sees what go doc -short did not: a method, a field, an
+// interface's method; and not what is not API.
+func TestSurfaceSeesMethodsAndFields(t *testing.T) {
+	got, err := Surface(root, Modules[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	var b bytes.Buffer
-	for _, pkg := range strings.Fields(string(out)) {
-		if strings.Contains(pkg, "/internal/") || strings.HasSuffix(pkg, "/internal") || strings.Contains(pkg, "/cmd/") {
-			continue
+	s := string(got)
+	for _, want := range []string{
+		"    method (*Network) PartitionNemesis(procs ...*Process)",
+		"    field CutLength time.Duration",
+		"type Rates = choice.Rates", // an alias of an internal type, and its API:
+		"    method (Rates) Set(kind string, p float64) Rates",
+		"func New(c Chooser) *Sim",
+	} {
+		if !strings.Contains(s, want+"\n") {
+			t.Errorf("the record lacks %q", want)
 		}
-		doc := exec.Command("go", "doc", "-short", pkg)
-		doc.Dir = "../.."
-		d, err := doc.Output()
-		if err != nil {
-			t.Fatalf("go doc %s: %v", pkg, err)
-		}
-		b.WriteString("== " + pkg + "\n")
-		b.Write(d)
-		b.WriteString("\n")
 	}
-	return b.Bytes()
-}
-
-// The exported API is the recorded one. After a deliberate change:
-// GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/, and review the
-// diff of api/core.txt with the change.
-func TestAPISurface(t *testing.T) {
-	got := surface(t)
-	if os.Getenv("GOTOGETHER_UPDATE_API") == "1" {
-		if err := os.WriteFile(file, got, 0o644); err != nil {
-			t.Fatal(err)
+	for _, not := range []string{"/internal/", "/cmd/", "healAll", "== github.com/chucklehead-dev/gotogether/qhegel"} {
+		if strings.Contains(s, not) {
+			t.Errorf("the core's record has %q, which is not its API", not)
 		}
-		return
-	}
-	want, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("%v: write it with GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/", err)
-	}
-	if !bytes.Equal(got, want) {
-		gl, wl := strings.Split(string(got), "\n"), strings.Split(string(want), "\n")
-		var diff []string
-		seen := map[string]bool{}
-		for _, l := range wl {
-			seen[l] = true
-		}
-		for _, l := range gl {
-			if !seen[l] {
-				diff = append(diff, "+ "+l)
-			}
-		}
-		now := map[string]bool{}
-		for _, l := range gl {
-			now[l] = true
-		}
-		for _, l := range wl {
-			if !now[l] {
-				diff = append(diff, "- "+l)
-			}
-		}
-		t.Errorf("the core's exported API changed:\n%s\nIf deliberate: GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/, and commit api/core.txt with the change (and a CHANGELOG line)", strings.Join(diff, "\n"))
 	}
 }

@@ -1,0 +1,4 @@
+== github.com/chucklehead-dev/gotogether/qgosim
+func Run(t *testing.T, pkg, test string, c qenv.Chooser, env ...string) ([]qtrace.Step, error)
+func Scenario(t *testing.T, pkg, test string, env ...string) func(qenv.Chooser) error
+

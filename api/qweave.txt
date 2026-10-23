@@ -1,0 +1,59 @@
+== github.com/chucklehead-dev/gotogether/qweave
+func Hash(aspects []*Aspect) string
+func Load(path string) ([]*Aspect, []Skipped, error)
+func ToolFile(dir string, preferGosim bool) string
+func ToolImports(path string) ([]string, error)
+func Weave(c Config) (*Result, error)
+type Advice struct
+    field Kind string
+    field Imports map[string]string
+type AllOf []Join
+type Aspect struct
+    field ID string
+    field Join Join
+    field Advice []Advice
+    field File string
+type Config struct
+    field Dir string
+    field Tool string
+    field Tags []string
+    field Patterns []string
+    field Env []string
+    field GOSIM bool
+    field Cover bool
+    field CoverPkgs []string
+    field Mutate bool
+    method (Config) Aspects() ([]*Aspect, []Skipped, error)
+type Directive struct
+    field Name string
+type DirectiveArg struct
+    field Key string
+    field Value string
+type Function struct
+type FunctionBody struct
+    field Directive string
+type FunctionCall struct
+    field Path string
+    field Name string
+type Join interface
+type MethodCall struct
+    field Receiver string
+    field Name string
+    field Match string
+type Not struct
+    field J Join
+type OneOf []Join
+type PackageFilter struct
+    field Root bool
+type Result struct
+    field Files map[string][]byte
+    field Skipped []string
+    field Aspects []*Aspect
+    field Hash string
+    method (*Result) WriteOverlay(dir string) (string, error)
+type Skipped struct
+    field File string
+    field ID string
+    field Why string
+    method (Skipped) String() string
+
