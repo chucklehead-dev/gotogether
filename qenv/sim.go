@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -1006,14 +1007,34 @@ func (s *Sim) maybeNemesis() {
 	}
 }
 
-// panicKey carries where a run wants a task's panic stack (WithPanicStack).
-var panicKey = qrun.NewKey[*string]("panicStack")
+// A TaskPanic is a task's panic: its value and the task's stack.
+type TaskPanic struct {
+	Value any
+	Stack string
+}
+
+// Is reports whether p is the panic of value v: Run re-raised it, rather
+// than the caller panicking anew after recovering it. Values of types
+// that do not compare are never the same.
+func (p *TaskPanic) Is(v any) bool {
+	if p == nil || p.Value == nil || v == nil {
+		return false
+	}
+	if t := reflect.TypeOf(v); !t.Comparable() || t != reflect.TypeOf(p.Value) {
+		return false
+	}
+	return p.Value == v
+}
+
+// panicKey carries where a run wants a task's panic (WithPanicStack).
+var panicKey = qrun.NewKey[*TaskPanic]("panic")
 
 // WithPanicStack returns ctx asking simulations created with it (their
-// chooser's context) to write a panicking task's stack into *dst before
-// Run re-raises the panic: the stack where the panic happened, which a
-// recover around Run cannot see. qtest's explorations use it.
-func WithPanicStack(ctx context.Context, dst *string) context.Context {
+// chooser's context) to write a panicking task's value and stack into
+// *dst before Run re-raises the panic: the stack where the panic
+// happened, which a recover around Run cannot see. qtest's explorations
+// use it; check dst.Is(the recovered value) before using its stack.
+func WithPanicStack(ctx context.Context, dst *TaskPanic) context.Context {
 	return qrun.With(ctx, panicKey, dst)
 }
 
@@ -1021,7 +1042,7 @@ func WithPanicStack(ctx context.Context, dst *string) context.Context {
 func (s *Sim) notePanic(r any, stack []byte) {
 	s.panicked, s.stack = r, stack
 	if dst, ok := qrun.InContext(s.base, panicKey); ok {
-		*dst = string(stack)
+		*dst = TaskPanic{Value: r, Stack: string(stack)}
 	}
 }
 

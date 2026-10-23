@@ -284,10 +284,12 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 // Sim.Run re-raised (a self-check under GOTOGETHER_CHECK, a bug in the
 // system), or the scenario's own.
 type RunPanic struct {
-	Value any
-	Stack string // the panicking task's, when a simulation recorded it
+	Value  any
+	Stack  string // the panicking task's if InTask, else the scenario's
+	InTask bool   // a simulation's task panicked (and Run re-raised it)
 }
 
+// Error is the panic's value.
 func (p *RunPanic) Error() string { return fmt.Sprintf("panic: %v", p.Value) }
 
 // runOne runs the scenario once on ch, recording its steps into a recorder
@@ -303,18 +305,19 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		ctx, sink = qcover.WithCounts(ctx, code), code.Sink(mem)
 	}
 	r := qobs.NewRecorder(sink, c.Recorder...)
-	var stack string
-	ctx = qenv.WithPanicStack(ctx, &stack)
+	var task qenv.TaskPanic
+	ctx = qenv.WithPanicStack(ctx, &task)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
 			// queue's and the scheduler's self-checks report so. It is the
 			// run's failure, not the test binary's end.
 			if p := recover(); p != nil {
-				if stack == "" {
-					stack = string(debug.Stack())
+				rp := &RunPanic{Value: p, Stack: string(debug.Stack())}
+				if task.Is(p) { // the task's, re-raised: its own stack
+					rp.Stack, rp.InTask = task.Stack, true
 				}
-				err = &RunPanic{Value: p, Stack: stack}
+				err = rp
 			}
 		}()
 		return scenario(qenv.WithContext(rec, qobs.WithRecorder(ctx, r)))
@@ -343,9 +346,13 @@ func (x *Exploration) keep(r *Run, save bool) string {
 			fmt.Fprintf(&b, "  not saved to the corpus: %v\n", err)
 		}
 	}
-	if x.test != "" && x.search != nil {
+	switch {
+	case x.test == "":
+	case r.Corpus != "": // GOTOGETHER_SEED would skip the corpus and run another seed
+		fmt.Fprintf(&b, "  reproduce: go test -run '^%s$' (the corpus replays %s before the seeds)\n", strings.ReplaceAll(x.test, "/", "$/^"), filepath.Base(r.Corpus))
+	case x.search != nil:
 		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SCHEDULE=%q go test -run '^%s$'\n", r.Schedule, strings.ReplaceAll(x.test, "/", "$/^"))
-	} else if x.test != "" {
+	default:
 		fmt.Fprintf(&b, "  reproduce: GOTOGETHER_SEED=%d go test -run '^%s$'\n", r.Seed, strings.ReplaceAll(x.test, "/", "$/^"))
 	}
 	return b.String()
@@ -382,7 +389,13 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		if r.Err != nil {
 			var p *RunPanic
 			if errors.As(r.Err, &p) { // a self-check's finding, or a bug: keep the run
-				t.Errorf("gotogether: %s panicked: %v\n%s", x.nameOf(r), p.Value, x.keep(r, true)+"  the task's stack:\n"+p.Stack)
+				where := "the scenario's stack"
+				if p.InTask {
+					where = "the task's stack"
+				}
+				t.Errorf("gotogether: %s panicked: %v\n"+
+					"  a qenv self-check (GOTOGETHER_CHECK: the store's history, a queue's contract, the scheduler's invariants) or a bug in the system: "+
+					"fix the code it names below; the run replays exactly as recorded\n%s  %s:\n%s", x.nameOf(r), p.Value, x.keep(r, true), where, p.Stack)
 				continue
 			}
 			t.Errorf("gotogether: %s did not run: %v", x.nameOf(r), r.Err)

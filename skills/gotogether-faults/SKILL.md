@@ -129,7 +129,9 @@ qhegel.Shrink(t, sys, rates, hegel.WithTestCases(50)).Expect(t, qtest.Violates("
   error when the system could not run, which fails the test and names
   the seed: never `t.Fatal` inside it, since a seed's goroutine is not
   the test's. `ExploreConfig.Chooser` gives each seed its own chooser (a
-  Script, `qenv.Replay(v.Choices)` of a shrunk failure).
+  Script, `qenv.Replay(v.Choices)` of a shrunk failure). A run that
+  panics (a `GOTOGETHER_CHECK` self-check, a bug) fails as that run,
+  with the panicking task's stack, kept in the corpus if there is one.
 
 - **Batching:** every seeded run is checked in one quint batch. On a
   miss, the report names the seed, its faults and its step log.

@@ -340,7 +340,9 @@ Y7) included. Order: Y1–Y9 before a tag, Y10–Y12 soon after. Each item
 gets a review of its commit against its bullet here before the next
 starts, and the review's findings are fixed first.
 
-- **Y1. A run that panics is a failing run.** `runOne` has no recover:
+- **Y1. A run that panics is a failing run. Done** (`qtest.RunPanic`,
+  `qenv.WithPanicStack`; its review's fixes: a corpus run's reproduce
+  line, a stale task stack). `runOne` had no recover:
   a task's panic (the store's history check, the queue's contract check,
   Sim.Check: they all report by panicking) kills the test binary with no
   seed, schedule or corpus entry. Recover it into `Run.Err` with the
