@@ -804,3 +804,30 @@ ROADMAP's M, W9 and R items:
 - Environment-variable prefixes.
 - A stale Packages table and stale hello snippets.
 - No license.
+
+### Fifth review (after X)
+
+Architecture and design/usability, on the X track. Both found its
+mechanisms sound (the layering, Exhaust and the verdict cache, the history
+checker, Script's by-name order, vacuity, simulate's holds and allows,
+Disk and the FileSink finding, partitions and their heal) and the trust
+around them short. Their findings are ROADMAP's Y track:
+- a run's panic kills the test binary, so the self-checks' findings
+  cannot be replayed (Y1);
+- reproduce lines that judge other runs, and failure artifacts deleted
+  with the test (Y2);
+- a truncated Exhaust passes (Y3);
+- a wall-clock-only clock model where Go measures intervals on the
+  monotonic clock, which makes lease's jump finding the model's (Y4);
+- corpus entries with no header, which forced every new fault kind to be
+  opt-in (Y5);
+- claims judged twice, `Exercised` and `NotVacuous` proving less than
+  their names, Linearize's budget read as a rejection (Y6);
+- Sim's growing field set, doubles wired two ways, global fault kinds
+  (Y7);
+- an API record that lists no methods or fields (Y8);
+- options a workflow silently ignores (Y9);
+- evidence.json unversioned, duplicated on reruns (Y10);
+- qhegel's core-property tests pinned to a pre-X core (Y11);
+- DESIGN without the X track, README tables behind (Y12).
+

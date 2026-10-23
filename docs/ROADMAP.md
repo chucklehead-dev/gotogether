@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: R4 → X (in its own order below); R5 when the maintainer says.
+Order: R4 → X (in its own order below) → Y; R5 when the maintainer says.
 
 ## W8. First hour and docs
 
@@ -328,6 +328,100 @@ already the common oracle), DPOR.
 
 Order: X1 → X2 (stage 1 and the models' `quint run`) → X3 → X4 → X5 → X6
 → X2 (vacuity) → X7; X8 alongside.
+
+## Fifth review: what X left (Y)
+
+From the fifth architecture and design reviews (HISTORY, "Fifth review").
+Most of X's machinery is sound; what it left is about trust: a check that
+panics loses its run, a reproduce line that judges something else, claims
+and options that pass for less than they say, and a clock model that is
+not Go's. Proposed order: Y1–Y9 before a tag, Y10–Y12 soon after.
+
+- **Y1. A run that panics is a failing run.** `runOne` has no recover:
+  a task's panic (the store's history check, the queue's contract check,
+  Sim.Check: they all report by panicking) kills the test binary with no
+  seed, schedule or corpus entry. Recover it into `Run.Err` with the
+  stack, name the run, save it; Hegel's path keeps the re-raise.
+- **Y2. Reproduce exactly what failed.** `GOTOGETHER_SEED` and
+  `GOTOGETHER_SCHEDULE` apply to every exploration of the test and judge
+  claims over runs on one run (`Some(Conforms())` fails; `Complete()`
+  passes). One variable scoped to the exploration that printed it
+  (`GOTOGETHER_RUN=TestX#2:seed:17`, also ending the SEED/SEEDS
+  collision); a reproduction judges per-run claims only and says which it
+  did not judge. A failing run's artifacts are kept where the report
+  points (today under `t.TempDir()`, deleted when the test ends).
+- **Y3. A truncated search fails.** `Exhaust` cut short by MaxRuns passes
+  unless the test also claims `Complete()`. Truncation fails by default;
+  `Bound.Partial` opts into a sample.
+- **Y4. Go's clocks.** `qenv.Now` is a wall clock with skew and jumps,
+  and `Now().Sub` is wall arithmetic, but Go's `time.Since` uses the
+  monotonic reading an NTP step does not move: lease's "one jump breaks a
+  lease timed on the holder's own clock" is the model's, not Go's. A
+  monotonic reading (drift only: `qenv.Since`, `qenv.Until`), jumps as a
+  per-process nemesis rather than a choice at every read (a log line
+  shifted every later choice), deadlines as durations, and one
+  `Sim.Clocks{Skew, Jump, Drift}` checked at the first process (today
+  the knobs are no-ops without `ClockFaults`, and set late give some
+  processes jumps but no skew). Say that skew and drift are per-process
+  fault choices at their rates, not every process. lease's claims redone
+  on the monotonic reading.
+- **Y5. Run files that say what they are.** A corpus entry records no
+  format, byte rule, gosim version or fault model, so a refactor turns it
+  into a red test reported as a failure, and every new fault kind has had
+  to stay opt-in to keep old choices. One run file with a header (format,
+  BytesVersion, gosim version, a hash of the declared kinds and Sim's
+  settings), keyed by exploration, not by test; a stale entry is reported
+  as stale, with the fix. Then choose defaults on their merits.
+- **Y6. Claims that say what they prove.** Claims are a closed switch,
+  judged twice (`Expect`, and `Mutate`'s `meets`, which already differ).
+  One judgment for both. `Exercised` counts each option and each nemesis
+  by name (one crash of one process now exercises every nemesis, drop
+  covers duplicate); Rates gets `nemesis.crash` and `nemesis.partition`
+  (partitions now dilute crashes unseen). `NotVacuous` fails when an
+  antecedent cannot be evaluated and says when no invariant has one.
+  Linearize out of budget is inconclusive, which `Rejects` does not match.
+- **Y7. Sim's shape, before names freeze.** Sim's eleven config fields
+  and the network state: `Sim.Net` (Partition, Heal, Partitioned, the
+  nemesis renamed `PartitionNemesis`, an exported `OnCut`, the cut
+  length), the clocks as Y4's value, `Process.Spawn` exported. Every
+  double takes its process at construction (`NewQueue(s, name, p)`; a
+  forgotten `q.Proc` silently disables partitions). Fault kinds per
+  instance (`queue.<name>.ack`, `store.<name>.commit`, `disk.<name>.crash`,
+  as `rpc.<name>` is; prefixes keep `queue` matching all); disk's options
+  `powerLoss`, `tornWrite`. The new fault models tested on the native
+  runtime, or refused there.
+- **Y8. The API record sees methods and fields.** api/core.txt is `go doc
+  -short`, which lists no method or field: none of X's API reached the
+  diff. Build it from go/types; record the published sub-modules too.
+- **Y9. An option a workflow ignores fails.** `Linearize()` and `Global()`
+  in a System's or qhegel's Opts do nothing in Explore, Exhaust or
+  Shrink, silently.
+- **Y10. Evidence as a format.** A format field and one reader (cover and
+  actionmap guess by a key today); its own `GOTOGETHER_EVIDENCE` dir,
+  cleared per test (a rerun appends duplicates); explorations numbered
+  and labelled faithful or mutant (mutants now count toward "taken");
+  `evidence -strict` on hello and checkout in CI.
+- **Y11. The core's Hegel properties against the current core.** qhegel
+  and qgosim pin the core before X, and CI runs them GOWORK=off: none of
+  X's qenv changes reached qhegel's core-property tests. Move those to an
+  unpublished module with `replace`, or add a workspace job.
+- **Y12. Docs.** A DESIGN section for X (exhaust, linearize, clocks,
+  disk, partitions, the history and contract checks, vacuity, corpus,
+  verify), and §10.7's "partitions not yet". Stale `qenv.Faults` in
+  AGENTS and the faults skill (the docs gate matches only `Faults(`).
+  README's tables (clocks, partitions, Disk, SyncedFileSink, `evidence`,
+  CHECK's new checks). `scaffold -system` writes `Exercised()` and
+  `NotVacuous()`. `simulate` says "none of 1000 sampled traces", and does
+  not advise raising a capped `-verify`. A passing Expect logs a one-line
+  evidence summary.
+
+Consider: the nightly's confidence per claim ((1−p̂)ⁿ for Some, the
+binomial tail for InAtLeast), and fleetrollout, edgepublish and gosim in
+it; simulate's and evidence's logic as library calls
+(`validate.Simulate`, `qtest.Suite`); a `Machine` grouping processes for
+disks, clocks and partitions; bare expectations' arity (`Conforms` every
+run, the rest some) and contradictory pairs; "run 3" not "schedule 3";
+`Reaches` by prefix as Rates are.
 
 ## Dropped on purpose
 
