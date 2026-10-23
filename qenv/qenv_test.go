@@ -537,3 +537,47 @@ func TestCapacityAfterCrash(t *testing.T) {
 		t.Errorf("after the crash: the second call %v, %d requests in the system", second, svc.InSystem())
 	}
 }
+
+// last schedules the last task offered and duplicates the second request:
+// its duplicate then runs before the copy it duplicates.
+type last struct{ requests int }
+
+func (l *last) Choose(kind string, n int) int {
+	switch {
+	case strings.HasSuffix(kind, ".request"):
+		if l.requests++; l.requests == 2 {
+			return 2 // duplicate
+		}
+		return 0
+	case strings.HasPrefix(kind, "fault."):
+		return 0
+	}
+	return n - 1
+}
+
+// ErrOverloaded says the request was not processed: a duplicate that got
+// the queue's last place, ahead of its first copy, is not processed after
+// that copy was refused, as it once was.
+func TestOverloadedMeansNotProcessed(t *testing.T) {
+	s := qenv.New(&last{})
+	defer s.Close()
+	var handled []int
+	svc := qenv.NewService(s, "slow", nil, func(ctx context.Context, n int) (int, error) { handled = append(handled, n); return n, nil })
+	svc.Capacity = &qenv.Capacity{Workers: 1, Queue: 1, Time: func() time.Duration { return time.Second }}
+	var errs []error
+	s.Spawn("client", func(ctx context.Context) {
+		qenv.Go(ctx, "busy", func(ctx context.Context) { _, _ = svc.Call(ctx, 1, time.Minute) })
+		qenv.Sleep(ctx, 100*time.Millisecond) // 1 in service: one place left in the queue
+		_, err := svc.Call(ctx, 2, time.Minute)
+		errs = append(errs, err)
+	})
+	if err := s.Run(5 * time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range handled {
+		if n == 2 && errors.Is(errs[0], qenv.ErrOverloaded) {
+			t.Fatalf("request 2 was processed (handled %v) and its caller told it was rejected", handled)
+		}
+	}
+	t.Logf("handled %v, the call: %v", handled, errs)
+}

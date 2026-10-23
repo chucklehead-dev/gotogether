@@ -160,6 +160,10 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 		deliveries = 0
 	}
 	deadline := s.Now().Add(caller.drifted(timeout)) // the caller's timer, on its clock
+	// ErrOverloaded tells the caller its request was not processed: a
+	// duplicate is not processed once the first copy was refused, and a
+	// refusal after a duplicate's processing leaves the caller to time out
+	var processed, refused bool
 	for i := 0; i < deliveries; i++ {
 		first := i == 0
 		s.spawn(s.base, svc.Name+".handle", svc.Proc, func(hctx context.Context) {
@@ -167,12 +171,19 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 				gen := svc.gen
 				ok, rejected := svc.serve(hctx, deadline)
 				if rejected && first {
-					res.err, res.done = ErrOverloaded, true
+					refused = true
+					if !processed {
+						res.err, res.done = ErrOverloaded, true
+					}
 				}
 				if !ok {
 					return
 				}
 				defer svc.release(gen)
+				if refused {
+					return
+				}
+				processed = true
 			}
 			svc.Calls++
 			resp, err := svc.handler(hctx, req)
