@@ -187,7 +187,7 @@ func TestNondetPath(t *testing.T) {
 }
 
 func TestDiff(t *testing.T) {
-	d := Diff(bankState{Balances: map[string]int{"a": 1, "b": 2}, Ops: 3}, bankState{Balances: map[string]int{"a": 1, "b": 5}, Ops: 3})
+	d := diffValues(bankState{Balances: map[string]int{"a": 1, "b": 2}, Ops: 3}, bankState{Balances: map[string]int{"a": 1, "b": 5}, Ops: 3})
 	if len(d) != 1 || d[0] != ".Balances[b]: model 2, implementation 5" {
 		t.Fatalf("%q", d)
 	}

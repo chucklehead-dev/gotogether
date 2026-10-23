@@ -24,7 +24,7 @@ import (
 // sleeps, its Service calls' timeouts, WaitFor) last a correspondingly
 // shorter or longer true time.
 //
-// The simulation's own time (Sim.Now, deadlines given to WaitUntil and
+// The simulation's own time (Sim.Now, deadlines given to
 // Signal.Wait) stays true: a clock fault changes what a process believes,
 // not when things happen. Code that compares wall-clock times from two
 // processes (an expiry stamped by one, checked by another) is broken by a
@@ -182,7 +182,7 @@ func WaitFor(ctx context.Context, ready func() bool, d time.Duration) bool {
 	if t == nil {
 		return pollReal(ctx, ready, time.Now().Add(d)) //qenv:ok real time, outside a simulation
 	}
-	return WaitUntil(ctx, ready, t.sim.Now().Add(t.proc.drifted(d)))
+	return waitUntil(ctx, ready, t.sim.Now().Add(t.proc.drifted(d)))
 }
 
 // ToVirtual is Sim.ToVirtual on p's wall clock: a real-clock time a

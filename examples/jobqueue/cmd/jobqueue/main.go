@@ -31,7 +31,7 @@ func main() {
 	flag.Parse()
 
 	m := map[string]queue.Mutation{"": queue.Faithful, "ack-any-lease": queue.AckAnyLease, "forget-done": queue.ForgetDone}[*mutation]
-	sink, err := qobs.FileSink(*steps)
+	sink, err := qobs.FileSink(*steps, qobs.PerStep)
 	if err != nil {
 		log.Fatal(err)
 	}

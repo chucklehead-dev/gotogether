@@ -362,7 +362,7 @@ func StepLogFromEnv(n *Node) {
 		return
 	}
 	n.OnInit(func() {
-		sink, err := qobs.FileSink(fmt.Sprintf("%s/%s.jsonl", dir, n.id))
+		sink, err := qobs.FileSink(fmt.Sprintf("%s/%s.jsonl", dir, n.id), qobs.PerStep)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "step log:", err)
 			return

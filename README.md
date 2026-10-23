@@ -394,7 +394,7 @@ recorder travels in the chooser's context (`qenv.WithContext`) to every
 task of the simulation. A step recorded without it, for example with
 `context.Background()`, still lands in its run: qenv knows which
 simulation each of its goroutines belongs to (its tasks, and the goroutine
-that created it). During such runs recording is strict (`qobs.Strict`): a
+that created it). During such runs recording is strict: a
 step with nowhere to go fails the exploration, naming the fix, rather than vanish. That
 happens only for a goroutine started with `go`, which `gotogether lint -sim
 DIR` flags, along with wall-clock time. Tests are checked too (a
@@ -506,7 +506,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `connect` | the model drives Go: `Run`, `Test`, `Switch`, `Pick[T]`, `StateDriver`, `GenerateRun`; `FaultScript` (a trace's faults imposed on a whole program in qenv) |
 | `qhegel` (module) | Hegel and the model: `Test` (modes `Each`, `After`, `Batched`, `Off`), `FindViolation` (an expected failure, shrunk), `Shrink` (a `qtest.System` under Hegel), `NewCase`, `Choices` (qenv's choices from a test case), `VaryTraces`, `FindTrigger` |
 | `itf` | ITF traces: `Parse`, `Decode`/`Encode` (Go ⇄ Quint values), `ParseQuint` (Quint literals) |
-| `qobs` | the recorder: `Record`, `Thread`, `WithRecorder`, `SlogHandler`; sinks `MemorySink`, `FileSink` (survives a killed process), `SyncedFileSink` (an fsync per step: a power loss), `BufferedFileSink`, `JSONLSink`, `OTelSink`, `Tee`; `SetGlobal` for a program, `InstallGlobal` for a test's run; `Strict`, `Escaped`; `orchestrion.yml` |
+| `qobs` | the recorder: `Record`, `Thread`, `WithRecorder`, `SlogHandler`; sinks `MemorySink`, `FileSink` and `NewJSONLSink` by durability (`PerStep`: survives a killed process; `Synced`: an fsync per step, a power loss; `Buffered`), `OTelSink`, `Tee`; `SetGlobal` for a program, `InstallGlobal` for a test's run; `orchestrion.yml` |
 | `qtrace` | the step schema, `Reconstruct` (order, gaps, restarts, real-time order from `Invoked`), step logs (`ReadJSONL` keeps a torn tail's steps: `TornTail`), `Linearize`, `Filter` (select and pseudonymize) |
 | `otelio` | an OTLP/JSON file exporter and reader; span events to steps |
 | `convert` | an application's own spans to steps, by YAML rules |

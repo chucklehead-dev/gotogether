@@ -370,7 +370,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   panic is re-raised by `Sim.Run` with its original value, because Hegel
   aborts a test case by panicking from whichever goroutine draws. qtest's
   explorations recover it (`runOne`) into the run's `*RunPanic` with the
-  task's stack (`qenv.WithPanicStack`): a self-check's panic is a failing
+  task's stack (`internal/hooks.WithPanicStack`): a self-check's panic is a failing
   run, named and kept, not the test binary's end. qhegel's own runs do
   not go through `runOne`, so Hegel's aborts reach Hegel.
 - A nemesis (crash) is considered at every scheduling step: its rate is
@@ -390,8 +390,8 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   context finds its run through its goroutine: qenv registers each
   task's goroutine and the simulation's creator (`qrun`,
   `qenv/goroutine.go`). Explore and Experiment runs are strict
-  (`qobs.Strict`), so a step from a goroutine started with `go` fails
-  the exploration (`qobs.Escaped`; `Series.Escaped` for an Experiment).
+  (`internal/hooks.Strict`), so a step from a goroutine started with `go` fails
+  the exploration (`hooks.Escaped`; `Series.Escaped` for an Experiment).
   It once panicked, on a goroutine nothing could recover, killing the
   test binary.
   `gotogether lint -sim .` (in CI) flags `go` statements and wall-clock
@@ -421,7 +421,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   deferred code runs), and unwinds at `Close`. Steps recorded while it
   unwinds (`//quint:action` records on return) are not in the run: they
   go to `Recorder.Interrupted`, and `System.Explore` reports them with a
-  failing run (`qobs.SetDiscard`). A task that crashes its own process
+  failing run (`hooks.SetDiscard`). A task that crashes its own process
   stops in `Crash`; restart from an `OnCrash` hook.
 - A step recorded by the caller on return describes what the caller saw.
   An effect the model must see whether or not its caller survives (a
@@ -457,12 +457,12 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - One thread per goroutine when recording with a domain clock: a thread
   asserts program order, and goroutines sharing one contradict it
   (`issue: error cycle`).
-- `FileSink` survives a killed process (one write per step, no buffer),
+- A sink's durability (`qobs.FileSink(path, d)`, `NewJSONLSink(w, d)`):
+  `PerStep` survives a killed process (one write per step, no buffer),
   not a power loss: the OS may not have written the last steps back, and
-  the line being written can be torn (`qenv.Disk` shows both).
-  `SyncedFileSink` fsyncs each step. `BufferedFileSink` buffers, and a
-  killed process loses its last steps, undetectably: use it only where
-  nothing crashes. `qtrace.ReadJSONL` keeps the steps before a torn last
+  the line being written can be torn (`qenv.Disk` shows both). `Synced`
+  fsyncs each step. `Buffered` buffers, and a killed process loses its
+  last steps, undetectably: use it only where nothing crashes. `qtrace.ReadJSONL` keeps the steps before a torn last
   line and returns a `*TornTail` (input.File.Torn; validate warns).
 - A `qenv.Signal` waiter is tagged with the task's wait generation; a
   timed-out wait must not be woken by a later `Notify` (it once shortened

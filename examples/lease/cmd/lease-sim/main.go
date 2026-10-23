@@ -37,7 +37,7 @@ func main() {
 		fail(err)
 	}
 	for seed := 1; seed <= *seeds; seed++ {
-		sink, err := qobs.FileSink(filepath.Join(*out, fmt.Sprintf("seed%d.jsonl", seed)))
+		sink, err := qobs.FileSink(filepath.Join(*out, fmt.Sprintf("seed%d.jsonl", seed)), qobs.PerStep)
 		if err != nil {
 			fail(err)
 		}

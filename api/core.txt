@@ -127,7 +127,6 @@ type Simulation struct
 type TestSet int
 
 == github.com/chucklehead-dev/gotogether/connect
-func Diff(want, got any) []string
 func FaultScript(tr *itf.Trace, faults FaultMap, opt ReplayOptions) (*qenv.Script, error)
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
 func MustPick[T any](s *Step, name string) T
@@ -372,7 +371,6 @@ type U64 int64
 == github.com/chucklehead-dev/gotogether/qcover
 func Blocks() []Block
 func Compare(sim *Summary, real *GoProfile) *Gap
-func From(ctx context.Context) *Counts
 func Hit(id int)
 func NewCounts() *Counts
 func ParseGoCover(r io.Reader) (*GoProfile, error)
@@ -425,7 +423,6 @@ type Summary struct
     method (*Summary) Ratio() float64
     method (*Summary) String() string
     method (*Summary) Uncovered() []Block
-var Default *Counts
 
 == github.com/chucklehead-dev/gotogether/qenv
 const BytesVersion = choice.BytesVersion
@@ -433,24 +430,20 @@ const DefaultPartitionLength = time.Second
 const ReadCommitted Isolation = iota (spec 2 of its group)
 const Serializable Isolation = iota
 const SnapshotIsolation Isolation = iota (spec 1 of its group)
-func AddKey(ctx context.Context, key any, n int)
 func As[T any](c Chooser) (T, bool)
 func ContextOf(c Chooser) context.Context
 func CoverageOf(runs [][]Choice) *Coverage
-func Current() (context.Context, bool)
 func Daemon(ctx context.Context)
 func DeclareFaultSite(kind, site string)
 func DeclareFaults(name string, options ...string) FaultKind
 func EncodeChoices(choices []Choice, rates Rates) ([]byte, error)
 func EntropyOf(c Chooser) func(n int) []byte
-func FaultOptions(kind string) []string
 func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) error
 func From(ctx context.Context) *Sim
 func FromBytes(data []byte, rates Rates) *Bytes
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
 func IsFault(kind string) bool
 func KnownFault(name string) bool
-func LockKey(ctx context.Context, key any)
 func Mono(ctx context.Context) time.Duration
 func New(c Chooser) *Sim
 func NewDisk(s *Sim, name string, p *Process) *Disk
@@ -462,23 +455,15 @@ func NewStore(s *Sim, name string, iso Isolation) *Store
 func NewTimeProfile() *TimeProfile
 func Now(ctx context.Context) time.Time
 func ProcessOf(ctx context.Context) *Process
-func RLockKey(ctx context.Context, key any)
-func RUnlockKey(ctx context.Context, key any)
 func Replay(choices []Choice) *Replayer
 func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error
 func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
 func Swarm(c Chooser, kinds ...string) Chooser
-func TryLockKey(ctx context.Context, key any) bool
-func TryRLockKey(ctx context.Context, key any) bool
-func UnlockKey(ctx context.Context, key any)
 func Wait(ctx context.Context, ready func() bool)
 func WaitFor(ctx context.Context, ready func() bool, d time.Duration) bool
 func WaitIdle(ctx context.Context, ready func() bool)
-func WaitKey(ctx context.Context, key any)
-func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool
 func WithContext(c Chooser, ctx context.Context) Chooser
-func WithPanicStack(ctx context.Context, dst *TaskPanic) context.Context
 func Without(c Chooser, kinds ...string) Chooser
 func Yield(ctx context.Context)
 type Bytes = choice.Bytes
@@ -685,10 +670,6 @@ type Store struct
     method (*Store) Keys(prefix string) []string
     method (*Store) Load(key string, val any)
     method (*Store) Read(key string) (any, bool)
-type TaskPanic struct
-    field Value any
-    field Stack string
-    method (*TaskPanic) Is(v any) bool
 type TimeProfile = profile.Profile
     method (*Profile) Total() time.Duration
     method (*Profile) Waited(task string, start time.Time, now func() time.Time) func()
@@ -1007,29 +988,25 @@ type Reach struct
 
 == github.com/chucklehead-dev/gotogether/qobs
 const ActionKey = "quint.action"
-func Attributes(s *qtrace.Step) []attribute.KeyValue
-func BufferedFileSink(path string) (*JSONLSink, error)
-func Escaped(mark int) (n int, since []string)
-func FileSink(path string) (*JSONLSink, error)
+const Buffered Durability = iota (spec 2 of its group)
+const PerStep Durability = iota
+const Synced Durability = iota (spec 1 of its group)
+func FileSink(path string, d Durability) (*JSONLSink, error)
 func From(ctx context.Context) *Recorder
 func Global() *Recorder
 func InstallGlobal(r *Recorder) (restore func(), err error)
-func NewJSONLSink(w io.Writer) *JSONLSink
+func NewJSONLSink(w io.Writer, d Durability) *JSONLSink
 func NewOTelSink(tp trace.TracerProvider) *OTelSink
 func NewRecorder(sink Sink, opts ...Option) *Recorder
 func NewSlogHandler(next slog.Handler) *SlogHandler
-func NewSyncedJSONLSink(w interface { io.Writer Sync() error }) *JSONLSink
-func Normalize(v any) any
 func Record(ctx context.Context, action string, err error, kv ...any)
-func SetDiscard(f func() bool)
 func SetGlobal(r *Recorder)
-func Strict() (release func())
-func SyncedFileSink(path string) (*JSONLSink, error)
 func Thread(ctx context.Context) context.Context
 func WithActor(a string) Option
 func WithID(id string) Option
 func WithProcess(p string) Option
 func WithRecorder(ctx context.Context, r *Recorder) context.Context
+type Durability int
 type JSONLSink struct
     method (*JSONLSink) Close() error
     method (*JSONLSink) Err() error
@@ -1091,15 +1068,12 @@ var Default = New()
 == github.com/chucklehead-dev/gotogether/qrun
 func Current() (context.Context, bool)
 func Get[T any](ctx context.Context, k *Key[T]) (T, bool)
-func GoroutineID() int64
 func InContext[T any](ctx context.Context, k *Key[T]) (T, bool)
 func NewKey[T any](name string) *Key[T]
-func SetResolver(f func() (context.Context, bool))
 func Start(ctx context.Context) (end func())
 func With[T any](ctx context.Context, k *Key[T], v T) context.Context
 type Key[T any] struct
     method (*Key[T]) String() string
-var Task = NewKey[any]("task")
 
 == github.com/chucklehead-dev/gotogether/qsweep
 const MaxSpace = 1 << 21
@@ -1307,7 +1281,6 @@ const PrefixObs = "quint.obs."
 const PrefixOrder = "quint.order."
 const RealTimeSlack = time.Millisecond
 const SpanName = "quint "
-func Fields(s string) []string
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func Key(steps []Step) string
 func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
@@ -1426,7 +1399,6 @@ const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 func Cached(bindingPath string, o Options) (*Checker, error)
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
-func Validate(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, opt Options) (*Result, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Checker struct
     field Binding *binding.Binding

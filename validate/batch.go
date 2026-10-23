@@ -137,7 +137,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				// or did not report them: re-check it alone, so a problem
 				// in one trace, or in the chunk's size, costs no verdicts.
 				it := ch.items[i]
-				r, err := Validate(ctx, c.Binding, c.Model, it.trace, Options{Quint: opt.Quint, Backend: opt.Backend, NoITF: opt.NoITF,
+				r, err := validateTrace(ctx, c.Binding, c.Model, it.trace, Options{Quint: opt.Quint, Backend: opt.Backend, NoITF: opt.NoITF,
 					Dir: filepath.Join(opt.Dir, fmt.Sprintf("%s_retry%d", name, i))})
 				if err != nil {
 					setErr(it.run, err)

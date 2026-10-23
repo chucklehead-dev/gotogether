@@ -89,7 +89,7 @@ func BenchmarkRecordOTelBatchToFile(b *testing.B) {
 }
 
 func BenchmarkRecordStepLog(b *testing.B) {
-	r := qobs.NewRecorder(qobs.NewJSONLSink(io.Discard))
+	r := qobs.NewRecorder(qobs.NewJSONLSink(io.Discard, qobs.PerStep))
 	ctx := context.Background()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

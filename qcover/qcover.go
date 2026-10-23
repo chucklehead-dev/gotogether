@@ -15,6 +15,7 @@ package qcover
 import (
 	"context"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/runkeys"
 	"github.com/chucklehead-dev/gotogether/qrun"
 	"sort"
 	"strings"
@@ -63,19 +64,12 @@ func Blocks() []Block {
 	return append([]Block(nil), blocks...)
 }
 
-// Default collects blocks run outside any simulation, if set: a real
-// binary's coverage, or a plain test's.
-var Default *Counts
-
 // Hit records that block id ran. Woven code calls it on entry to each
 // block.
 func Hit(id int) {
 	rc, _ := qrun.Current()
 	c, _ := qrun.InContext(rc, countsKey)
-	task, _ := qrun.InContext(rc, qrun.Task)
-	if c == nil {
-		c = Default
-	}
+	task, _ := qrun.InContext(rc, runkeys.Task)
 	if c != nil {
 		c.hit(id, task)
 	}
@@ -87,12 +81,6 @@ var countsKey = qrun.NewKey[*Counts]("coverage")
 // contexts derive from ctx) and the steps they record.
 func WithCounts(ctx context.Context, c *Counts) context.Context {
 	return qrun.With(ctx, countsKey, c)
-}
-
-// From returns the Counts of ctx or of the goroutine's run, or nil.
-func From(ctx context.Context) *Counts {
-	c, _ := qrun.Get(ctx, countsKey)
-	return c
 }
 
 // A StepCover is the blocks one step ran.
@@ -134,7 +122,7 @@ type stepSink struct {
 }
 
 func (s stepSink) Record(ctx context.Context, st *qtrace.Step) {
-	task, _ := qrun.Get(ctx, qrun.Task)
+	task, _ := qrun.Get(ctx, runkeys.Task)
 	s.c.mu.Lock()
 	p := s.c.pending[task]
 	delete(s.c.pending, task)

@@ -3,7 +3,14 @@ package qenv
 import (
 	"context"
 	"fmt"
+
+	"github.com/chucklehead-dev/gotogether/qenv/internal/keyed"
 )
+
+func init() {
+	keyed.Current, keyed.Lock, keyed.TryLock, keyed.Unlock = current, lockKey, tryLockKey, unlockKey
+	keyed.RLock, keyed.TryRLock, keyed.RUnlock, keyed.Add, keyed.Wait = rLockKey, tryRLockKey, rUnlockKey, addKey, waitKey
+}
 
 // Locks and wait groups keyed by the real object they stand for: what code
 // rewritten at build time (qenv/weave) calls in place of sync.Mutex,
@@ -40,9 +47,9 @@ func keyedOf[T any](ctx context.Context, key any, what string) (*T, *task) {
 	return v, t
 }
 
-// LockKey takes the lock named by key exclusively (Mutex.Lock,
+// lockKey takes the lock named by key exclusively (Mutex.Lock,
 // RWMutex.Lock).
-func LockKey(ctx context.Context, key any) {
+func lockKey(ctx context.Context, key any) {
 	l, _ := keyedOf[rwState](ctx, key, "Lock")
 	Yield(ctx)
 	l.writersWaiting++
@@ -51,8 +58,8 @@ func LockKey(ctx context.Context, key any) {
 	l.writer = true
 }
 
-// TryLockKey takes the lock exclusively if it is free.
-func TryLockKey(ctx context.Context, key any) bool {
+// tryLockKey takes the lock exclusively if it is free.
+func tryLockKey(ctx context.Context, key any) bool {
 	l, _ := keyedOf[rwState](ctx, key, "TryLock")
 	Yield(ctx)
 	if l.writer || l.readers > 0 {
@@ -62,8 +69,8 @@ func TryLockKey(ctx context.Context, key any) bool {
 	return true
 }
 
-// UnlockKey releases an exclusive hold.
-func UnlockKey(ctx context.Context, key any) {
+// unlockKey releases an exclusive hold.
+func unlockKey(ctx context.Context, key any) {
 	l, _ := keyedOf[rwState](ctx, key, "Unlock")
 	if !l.writer {
 		panic("qenv: unlock of unlocked mutex")
@@ -71,17 +78,17 @@ func UnlockKey(ctx context.Context, key any) {
 	l.writer = false
 }
 
-// RLockKey takes the lock shared (RWMutex.RLock): it waits while a writer
+// rLockKey takes the lock shared (RWMutex.RLock): it waits while a writer
 // holds it or waits for it.
-func RLockKey(ctx context.Context, key any) {
+func rLockKey(ctx context.Context, key any) {
 	l, _ := keyedOf[rwState](ctx, key, "RLock")
 	Yield(ctx)
 	Wait(ctx, func() bool { return !l.writer && l.writersWaiting == 0 })
 	l.readers++
 }
 
-// TryRLockKey takes the lock shared if no writer holds or waits for it.
-func TryRLockKey(ctx context.Context, key any) bool {
+// tryRLockKey takes the lock shared if no writer holds or waits for it.
+func tryRLockKey(ctx context.Context, key any) bool {
 	l, _ := keyedOf[rwState](ctx, key, "TryRLock")
 	Yield(ctx)
 	if l.writer || l.writersWaiting > 0 {
@@ -91,8 +98,8 @@ func TryRLockKey(ctx context.Context, key any) bool {
 	return true
 }
 
-// RUnlockKey releases a shared hold.
-func RUnlockKey(ctx context.Context, key any) {
+// rUnlockKey releases a shared hold.
+func rUnlockKey(ctx context.Context, key any) {
 	l, _ := keyedOf[rwState](ctx, key, "RUnlock")
 	if l.readers == 0 {
 		panic("qenv: RUnlock of unlocked RWMutex")
@@ -100,8 +107,8 @@ func RUnlockKey(ctx context.Context, key any) {
 	l.readers--
 }
 
-// AddKey adds n to the wait group named by key (WaitGroup.Add, Done).
-func AddKey(ctx context.Context, key any, n int) {
+// addKey adds n to the wait group named by key (WaitGroup.Add, Done).
+func addKey(ctx context.Context, key any, n int) {
 	g, _ := keyedOf[wgState](ctx, key, "WaitGroup.Add")
 	g.n += n
 	if g.n < 0 {
@@ -109,8 +116,8 @@ func AddKey(ctx context.Context, key any, n int) {
 	}
 }
 
-// WaitKey waits until the wait group's counter is zero (WaitGroup.Wait).
-func WaitKey(ctx context.Context, key any) {
+// waitKey waits until the wait group's counter is zero (WaitGroup.Wait).
+func waitKey(ctx context.Context, key any) {
 	g, _ := keyedOf[wgState](ctx, key, "WaitGroup.Wait")
 	Yield(ctx)
 	Wait(ctx, func() bool { return g.n == 0 })

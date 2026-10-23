@@ -62,9 +62,9 @@ func TestStepLogAcrossPowerLoss(t *testing.T) {
 		returned := 0
 		p := s.Process("node", false, func(ctx context.Context) {
 			f := d.Create("steps.jsonl")
-			sink := qobs.NewJSONLSink(f)
+			sink := qobs.NewJSONLSink(f, qobs.PerStep)
 			if synced {
-				sink = qobs.NewSyncedJSONLSink(f)
+				sink = qobs.NewJSONLSink(f, qobs.Synced)
 			}
 			rec := qobs.NewRecorder(sink)
 			for i := 1; i <= 5; i++ {

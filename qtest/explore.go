@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -118,8 +119,8 @@ type ExploreConfig struct {
 	// runs. A step lands in its run if it is recorded through a context of
 	// the run or from a goroutine of the simulation (its tasks, the one
 	// that created it); one recorded from a goroutine started with `go`
-	// has nowhere to go and fails the exploration (qobs.Strict,
-	// qobs.Escaped).
+	// has nowhere to go and fails the exploration (internal/hooks.Strict,
+	// hooks.Escaped).
 	Parallel int
 	// Chooser, if set, makes each seed's chooser instead of a seeded one
 	// at Rates: a Script per seed, a Replay of a recorded run, a swarm.
@@ -253,8 +254,8 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	c := config(t, cfg.opts)
 	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
 	woven := len(qcover.Blocks()) > 0
-	defer qobs.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
-	mark, _ := qobs.Escaped(0)
+	defer hooks.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
+	mark, _ := hooks.Escaped(0)
 	// a nightly run widens the sample: GOTOGETHER_SEEDS=n runs n seeds,
 	// GOTOGETHER_SEED_OFFSET=k starts them after k (fresh seeds each night);
 	// a failure's report names its run, which GOTOGETHER_RUN runs alone
@@ -408,8 +409,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		ctx, sink = qcover.WithCounts(ctx, code), code.Sink(mem)
 	}
 	r := qobs.NewRecorder(sink, c.Recorder...)
-	var task qenv.TaskPanic
-	ctx = qenv.WithPanicStack(ctx, &task)
+	var task hooks.TaskPanic
+	ctx = hooks.WithPanicStack(ctx, &task)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
@@ -478,7 +479,7 @@ func (x *Exploration) nameOf(r *Run) string { return x.name(r.Seed, r.Corpus) }
 // naming it.
 func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, ids []uint64) {
 	t.Helper()
-	if n, msgs := qobs.Escaped(mark); n > mark {
+	if n, msgs := hooks.Escaped(mark); n > mark {
 		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
 	x.unknownScripted(t)

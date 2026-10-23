@@ -125,7 +125,7 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 	traces, issues := qtrace.Reconstruct(steps)
 	rep := &Report{Issues: issues}
 	for _, t := range traces {
-		r, err := Validate(ctx, c.Binding, c.Model, t, c.Options)
+		r, err := validateTrace(ctx, c.Binding, c.Model, t, c.Options)
 		if err != nil {
 			return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
 		}

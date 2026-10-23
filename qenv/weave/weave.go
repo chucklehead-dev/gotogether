@@ -9,8 +9,8 @@
 //	go func() { ... }()
 //
 // Each function checks whether the calling goroutine is a task of a
-// running simulation (qenv.Current). If it is, the lock or wait group is
-// the simulation's, keyed by the real object (qenv.LockKey and friends):
+// running simulation. If it is, the lock or wait group is the
+// simulation's, keyed by the real object (qenv/internal/keyed):
 // taking it is a scheduling point and blocking on it is a simulated wait.
 // If not, the real method runs. A woven program therefore behaves as
 // before outside a simulation, at the cost of a goroutine lookup per call:
@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/internal/keyed" // installed by qenv's init: weave imports qenv for it and Go
 )
 
 // Go is a go statement marked //qenv:go: in a simulation, fn runs as a new
@@ -35,7 +36,7 @@ import (
 // goroutine executing the go statement, before the new one starts, which
 // is what lets it find the simulation.
 func Go(fn func()) func() {
-	if ctx, ok := qenv.Current(); ok {
+	if ctx, ok := keyed.Current(); ok {
 		qenv.Go(ctx, "go", func(context.Context) { fn() })
 		return func() {}
 	}
@@ -44,8 +45,8 @@ func Go(fn func()) func() {
 
 // MutexLock is (*sync.Mutex).Lock.
 func MutexLock(m *sync.Mutex) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.LockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.Lock(ctx, m)
 		return
 	}
 	m.Lock()
@@ -53,8 +54,8 @@ func MutexLock(m *sync.Mutex) {
 
 // MutexUnlock is (*sync.Mutex).Unlock.
 func MutexUnlock(m *sync.Mutex) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.UnlockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.Unlock(ctx, m)
 		return
 	}
 	m.Unlock()
@@ -62,16 +63,16 @@ func MutexUnlock(m *sync.Mutex) {
 
 // MutexTryLock is (*sync.Mutex).TryLock.
 func MutexTryLock(m *sync.Mutex) bool {
-	if ctx, ok := qenv.Current(); ok {
-		return qenv.TryLockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		return keyed.TryLock(ctx, m)
 	}
 	return m.TryLock()
 }
 
 // RWLock is (*sync.RWMutex).Lock.
 func RWLock(m *sync.RWMutex) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.LockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.Lock(ctx, m)
 		return
 	}
 	m.Lock()
@@ -79,8 +80,8 @@ func RWLock(m *sync.RWMutex) {
 
 // RWUnlock is (*sync.RWMutex).Unlock.
 func RWUnlock(m *sync.RWMutex) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.UnlockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.Unlock(ctx, m)
 		return
 	}
 	m.Unlock()
@@ -88,16 +89,16 @@ func RWUnlock(m *sync.RWMutex) {
 
 // RWTryLock is (*sync.RWMutex).TryLock.
 func RWTryLock(m *sync.RWMutex) bool {
-	if ctx, ok := qenv.Current(); ok {
-		return qenv.TryLockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		return keyed.TryLock(ctx, m)
 	}
 	return m.TryLock()
 }
 
 // RLock is (*sync.RWMutex).RLock.
 func RLock(m *sync.RWMutex) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.RLockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.RLock(ctx, m)
 		return
 	}
 	m.RLock()
@@ -105,8 +106,8 @@ func RLock(m *sync.RWMutex) {
 
 // RUnlock is (*sync.RWMutex).RUnlock.
 func RUnlock(m *sync.RWMutex) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.RUnlockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.RUnlock(ctx, m)
 		return
 	}
 	m.RUnlock()
@@ -114,16 +115,16 @@ func RUnlock(m *sync.RWMutex) {
 
 // TryRLock is (*sync.RWMutex).TryRLock.
 func TryRLock(m *sync.RWMutex) bool {
-	if ctx, ok := qenv.Current(); ok {
-		return qenv.TryRLockKey(ctx, m)
+	if ctx, ok := keyed.Current(); ok {
+		return keyed.TryRLock(ctx, m)
 	}
 	return m.TryRLock()
 }
 
 // Add is (*sync.WaitGroup).Add.
 func Add(wg *sync.WaitGroup, n int) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.AddKey(ctx, wg, n)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.Add(ctx, wg, n)
 		return
 	}
 	wg.Add(n)
@@ -134,8 +135,8 @@ func Done(wg *sync.WaitGroup) { Add(wg, -1) }
 
 // Wait is (*sync.WaitGroup).Wait.
 func Wait(wg *sync.WaitGroup) {
-	if ctx, ok := qenv.Current(); ok {
-		qenv.WaitKey(ctx, wg)
+	if ctx, ok := keyed.Current(); ok {
+		keyed.Wait(ctx, wg)
 		return
 	}
 	wg.Wait()

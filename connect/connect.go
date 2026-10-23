@@ -432,7 +432,7 @@ func compare(model itf.Value, impl any) ([]string, error) {
 	if err := itf.DecodeProjection(model, want.Interface()); err != nil {
 		return nil, fmt.Errorf("decoding the model's state into %s: %w", t, err)
 	}
-	return Diff(want.Elem().Interface(), impl), nil
+	return diffValues(want.Elem().Interface(), impl), nil
 }
 
 func sortedKeys[V any](m map[string]V) []string {

@@ -44,7 +44,7 @@ func main() {
 	}
 	for i := 1; i <= *runs; i++ {
 		name := fmt.Sprintf("%s-%d", *backend, i)
-		sink, err := qobs.FileSink(filepath.Join(*out, name+".jsonl"))
+		sink, err := qobs.FileSink(filepath.Join(*out, name+".jsonl"), qobs.PerStep)
 		if err != nil {
 			fail(err)
 		}

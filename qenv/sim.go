@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -14,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/internal/runkeys"
 	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
 	"github.com/chucklehead-dev/gotogether/qrun"
 )
@@ -294,7 +295,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 		t.inc = p.Incarnation
 	}
 	s.tasks = append(s.tasks, t)
-	ctx := qrun.With(context.WithValue(parent, ctxKey{}, t), qrun.Task, any(t))
+	ctx := qrun.With(context.WithValue(parent, ctxKey{}, t), runkeys.Task, any(t))
 	t.ctx = ctx
 	if s.nat != nil {
 		s.spawnNative(t, fn)
@@ -474,14 +475,14 @@ func (f *fenwick) kth(k int) int {
 // simulation it polls ready in real time (every millisecond) until it
 // holds or ctx is done: ready must then be safe to call concurrently.
 func Wait(ctx context.Context, ready func() bool) {
-	WaitUntil(ctx, ready, time.Time{})
+	waitUntil(ctx, ready, time.Time{})
 }
 
-// WaitUntil blocks until ready holds or the virtual time reaches deadline
+// waitUntil blocks until ready holds or the virtual time reaches deadline
 // (zero: no deadline): the simulation's true time (Sim.Now), not a
 // process's clock; WaitFor waits an interval on the caller's clock. It reports whether ready held. Outside a
 // simulation the deadline is real time, as in Wait.
-func WaitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool {
+func waitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool {
 	t := taskOf(ctx)
 	if t == nil {
 		return pollReal(ctx, ready, deadline)
@@ -1081,42 +1082,11 @@ func eachLog(c Chooser, f func(*ChoiceLog)) {
 	}
 }
 
-// A TaskPanic is a task's panic: its value and the task's stack.
-type TaskPanic struct {
-	Value any
-	Stack string
-}
-
-// Is reports whether p is the panic of value v: Run re-raised it, rather
-// than the caller panicking anew after recovering it. Values of types
-// that do not compare are never the same.
-func (p *TaskPanic) Is(v any) bool {
-	if p == nil || p.Value == nil || v == nil {
-		return false
-	}
-	if t := reflect.TypeOf(v); !t.Comparable() || t != reflect.TypeOf(p.Value) {
-		return false
-	}
-	return p.Value == v
-}
-
-// panicKey carries where a run wants a task's panic (WithPanicStack).
-var panicKey = qrun.NewKey[*TaskPanic]("panic")
-
-// WithPanicStack returns ctx asking simulations created with it (their
-// chooser's context) to write a panicking task's value and stack into
-// *dst before Run re-raises the panic: the stack where the panic
-// happened, which a recover around Run cannot see. qtest's explorations
-// use it; check dst.Is(the recovered value) before using its stack.
-func WithPanicStack(ctx context.Context, dst *TaskPanic) context.Context {
-	return qrun.With(ctx, panicKey, dst)
-}
-
 // notePanic records a task's panic for Run to re-raise, and its stack.
 func (s *Sim) notePanic(r any, stack []byte) {
 	s.panicked, s.stack = r, stack
-	if dst, ok := qrun.InContext(s.base, panicKey); ok {
-		*dst = TaskPanic{Value: r, Stack: string(stack)}
+	if dst, ok := hooks.PanicStackOf(s.base); ok { // a run asked for it (qtest's explorations)
+		*dst = hooks.TaskPanic{Value: r, Stack: string(stack)}
 	}
 }
 

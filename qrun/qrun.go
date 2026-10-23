@@ -12,12 +12,11 @@
 package qrun
 
 import (
-	"bytes"
 	"context"
-	"runtime"
-	"strconv"
 	"sync"
 	"sync/atomic"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 )
 
 // A Key names a value of type T a run carries. Keys compare by identity:
@@ -58,27 +57,19 @@ func Get[T any](ctx context.Context, k *Key[T]) (T, bool) {
 	return zero, false
 }
 
-var resolver atomic.Pointer[func() (context.Context, bool)]
-
-// SetResolver installs how the calling goroutine's run context is found:
-// qenv returns the context of the goroutine's simulation task, or of the
-// simulation it created.
-func SetResolver(f func() (context.Context, bool)) { resolver.Store(&f) }
-
 // Current is the calling goroutine's run context, if it belongs to a run:
-// a simulation's (the resolver), else one Start began on it.
+// a simulation's (qenv resolves it from the goroutine), else one Start
+// began on it.
 func Current() (context.Context, bool) {
-	if f := resolver.Load(); f != nil {
-		if ctx, ok := (*f)(); ok {
-			return ctx, true
-		}
+	if ctx, ok := hooks.Resolve(); ok { // a simulation's (qenv installs the resolver)
+		return ctx, true
 	}
 	if started.n.Load() == 0 {
 		return nil, false
 	}
 	started.Lock()
 	defer started.Unlock()
-	if st := started.m[GoroutineID()]; len(st) > 0 {
+	if st := started.m[hooks.GoroutineID()]; len(st) > 0 {
 		return st[len(st)-1], true
 	}
 	return nil, false
@@ -99,7 +90,7 @@ var started struct {
 // parallel. Goroutines the run starts are not in it: they have only the
 // contexts they are given.
 func Start(ctx context.Context) (end func()) {
-	id := GoroutineID()
+	id := hooks.GoroutineID()
 	started.Lock()
 	if started.m == nil {
 		started.m = map[int64][]context.Context{}
@@ -128,21 +119,3 @@ func Start(ctx context.Context) (end func()) {
 		})
 	}
 }
-
-// GoroutineID is the calling goroutine's id, from the runtime's stack
-// header ("goroutine 123 [running]:"): Go has no goroutine-local storage.
-func GoroutineID() int64 {
-	var buf [32]byte
-	b := buf[:runtime.Stack(buf[:], false)]
-	b = bytes.TrimPrefix(b, []byte("goroutine "))
-	if i := bytes.IndexByte(b, ' '); i > 0 {
-		b = b[:i]
-	}
-	id, _ := strconv.ParseInt(string(b), 10, 64)
-	return id
-}
-
-// Task identifies the simulation task a context belongs to (qenv sets it
-// on every task's context): state kept per task, such as the code a task
-// ran since its last step.
-var Task = NewKey[any]("task")

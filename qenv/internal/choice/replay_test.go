@@ -105,3 +105,32 @@ func TestEncodeRefusesNominalAboveLastByte(t *testing.T) {
 		t.Fatal("nominal at 0.99 replays as a fault")
 	}
 }
+
+// fixed answers a kind with its value, else 1: every fault offered.
+type fixed map[string]int
+
+func (f fixed) Choose(kind string, n int) int {
+	if v, ok := f[kind]; ok {
+		return v
+	}
+	return 1
+}
+
+// Swarm turns each kind it is given off for the whole run when its own
+// choice is 0 (what a shrinker's zeros give: all off), and leaves the rest
+// to the chooser; over seeds each kind is on in about half the runs.
+func TestSwarm(t *testing.T) {
+	c := Swarm(fixed{"swarm.rpc": 0, "swarm.queue": 1}, "rpc", "queue")
+	if c.Choose("fault.rpc.pay.request", 3) != 0 || c.Choose("fault.queue.jobs.ack", 2) != 1 || c.Choose("fault.disk.d.crash", 2) != 1 {
+		t.Error("rpc off, queue and disk on")
+	}
+	on := 0 // the kind's own choice, which a seeded chooser makes uniformly
+	for seed := uint64(0); seed < 400; seed++ {
+		if NewSeeded(seed).Choose("swarm.rpc", 2) == 1 {
+			on++
+		}
+	}
+	if on < 150 || on > 250 {
+		t.Errorf("rpc on in %d of 400 seeds, want about half", on)
+	}
+}

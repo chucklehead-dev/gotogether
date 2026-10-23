@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qrun"
 	"reflect"
 	"sync"
@@ -62,7 +63,7 @@ func (r *Recorder) Issues() []string {
 // checkThread notes the goroutine of a Thread's first step, and an issue
 // when a later step comes from another.
 func (r *Recorder) checkThread(thread, action string) {
-	g := qrun.GoroutineID()
+	g := hooks.GoroutineID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.threads == nil {
@@ -189,34 +190,6 @@ func WithRecorder(ctx context.Context, r *Recorder) context.Context {
 	return qrun.With(ctx, recorderKey, r)
 }
 
-var (
-	discard atomic.Pointer[func() bool]
-	strict  atomic.Int64
-)
-
-// SetDiscard installs a check, made for every step, of whether the calling
-// goroutine is unwinding work that never completed. A qenv task killed by
-// a crash stays frozen; when the simulation is closed it unwinds, and runs
-// its deferred functions. A step recorded in one (a //quint:action
-// function's, which records on return) would claim a completion that did
-// not happen: it goes to the recorder's Interrupted list, not to its sink.
-// qenv installs the check.
-func SetDiscard(f func() bool) { discard.Store(&f) }
-
-// Strict turns on, until release is called, the rule that a step must have
-// somewhere to go: a step with no recorder in its context, no run for its
-// goroutine and no global recorder is logged as escaped (Escaped) instead
-// of being dropped silently. Simulated runs (qtest.Explore,
-// qload.Experiment) are strict, and fail when a step escaped: a dropped
-// step would make a correct run fail the model, or hide a bug. It is a
-// log, not a panic: the step comes from a goroutine no run owns, whose
-// panic nothing could recover, and it would kill the test binary.
-func Strict() (release func()) {
-	strict.Add(1)
-	var once sync.Once
-	return func() { once.Do(func() { strict.Add(-1) }) }
-}
-
 // From returns the recorder Record uses for ctx: the one WithRecorder set;
 // else that of the run the goroutine belongs to (qrun.Get: a step recorded
 // with context.Background() inside a simulation still lands in its own
@@ -246,47 +219,14 @@ func Record(ctx context.Context, action string, err error, kv ...any) {
 		r.Record(ctx, action, err, kv...)
 		return
 	}
-	if f := discard.Load(); f != nil && (*f)() {
+	if hooks.Discarding() {
 		return // interrupted work with nowhere to report it
 	}
-	if strict.Load() > 0 {
-		escaped.Lock()
-		escaped.n++
-		if len(escaped.msgs) < maxEscaped {
-			escaped.msgs = append(escaped.msgs, fmt.Sprintf("qobs: step %q has no recorder: its context carries none, its goroutine belongs to no "+
-				"simulated run, and no global recorder is installed. A goroutine started with `go` is outside the "+
-				"simulation: start it with qenv.Go, or record through a context from the run (qenv.WithContext).", action))
-		}
-		escaped.Unlock()
+	if hooks.StrictOn() {
+		hooks.Escape(fmt.Sprintf("qobs: step %q has no recorder: its context carries none, its goroutine belongs to no "+
+			"simulated run, and no global recorder is installed. A goroutine started with `go` is outside the "+
+			"simulation: start it with qenv.Go, or record through a context from the run (qenv.WithContext).", action))
 	}
-}
-
-// escaped logs the steps strict runs could not place, process-wide: their
-// goroutine names no run, so no run can be told.
-var escaped struct {
-	sync.Mutex
-	n    int
-	msgs []string // the first maxEscaped
-}
-
-const maxEscaped = 1000
-
-// Escaped returns the number of steps that escaped strict runs so far,
-// and messages of those after mark (an earlier count): a strict run takes
-// the count when it starts and reports what escaped while it ran. Compare
-// the counts: past the first 1000 escapes the messages are not kept, and
-// since then holds one that says so.
-func Escaped(mark int) (n int, since []string) {
-	escaped.Lock()
-	defer escaped.Unlock()
-	if mark < len(escaped.msgs) {
-		since = append(since, escaped.msgs[mark:]...)
-	}
-	if escaped.n > mark && len(since) == 0 {
-		since = []string{fmt.Sprintf("qobs: %d steps had no recorder (their messages are past the first %d kept): "+
-			"a goroutine started with `go` is outside the simulation; start it with qenv.Go", escaped.n-mark, maxEscaped)}
-	}
-	return escaped.n, since
 }
 
 type threadKey struct{}
@@ -320,7 +260,7 @@ func (r *Recorder) Record(ctx context.Context, action string, err error, kv ...a
 	if !ok {
 		return
 	}
-	if f := discard.Load(); f != nil && (*f)() {
+	if hooks.Discarding() {
 		s.Time = time.Now()
 		r.mu.Lock()
 		r.interrupted = append(r.interrupted, *s)
@@ -353,7 +293,7 @@ func (r *Recorder) step(ctx context.Context, action string, err error, kv []any)
 			s.Invoked = t
 			continue
 		}
-		v := Normalize(kv[i+1])
+		v := normalize(kv[i+1])
 		switch {
 		case k == "when":
 			if (v == "ok" && err != nil) || (v == "error" && err == nil) {
@@ -400,8 +340,8 @@ func outcome(err error) string {
 	return "error"
 }
 
-// Normalize maps a Go value to an attribute-friendly one.
-func Normalize(v any) any {
+// normalize maps a Go value to an attribute-friendly one.
+func normalize(v any) any {
 	switch x := v.(type) {
 	case nil:
 		return ""

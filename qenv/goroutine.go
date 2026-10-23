@@ -5,15 +5,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/chucklehead-dev/gotogether/qobs"
-	"github.com/chucklehead-dev/gotogether/qrun"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 )
 
 // Which simulation each goroutine belongs to: its tasks' goroutines (qenv
 // creates them), and the goroutine that created it (which runs it, and
 // records around it). qobs asks for a step whose context carries no
 // recorder, so that context.Background() inside a simulation records into
-// the simulation's run (qrun.SetResolver). Go has no goroutine-local
+// the simulation's run (the resolver it installs). Go has no goroutine-local
 // storage; the goroutine id comes from the runtime's stack header, read
 // only when a task starts and on that fallback path.
 var owners struct {
@@ -34,14 +33,14 @@ var live atomic.Int64
 
 func init() {
 	owners.m = map[int64][]owner{}
-	qobs.SetDiscard(func() bool {
+	hooks.SetDiscard(func() bool {
 		if live.Load() == 0 {
 			return false
 		}
 		o, ok := ownerOf(goid())
 		return ok && o.t != nil && o.t.killed
 	})
-	qrun.SetResolver(func() (context.Context, bool) {
+	hooks.SetResolver(func() (context.Context, bool) {
 		if live.Load() == 0 {
 			return nil, false
 		}
@@ -56,11 +55,11 @@ func init() {
 	})
 }
 
-// Current returns the context of the simulation task running on the
+// current returns the context of the simulation task running on the
 // calling goroutine, whatever context the caller has (none: woven code).
 // It is how code rewritten at build time (qenv/weave) finds the
 // simulation it runs in; false outside any task.
-func Current() (context.Context, bool) {
+func current() (context.Context, bool) {
 	o, ok := ownerOf(goid())
 	if !ok || o.t == nil {
 		return nil, false
@@ -69,7 +68,7 @@ func Current() (context.Context, bool) {
 }
 
 // goid is the calling goroutine's id.
-func goid() int64 { return qrun.GoroutineID() }
+func goid() int64 { return hooks.GoroutineID() }
 
 func own(id int64, s *Sim, t *task) {
 	owners.Lock()

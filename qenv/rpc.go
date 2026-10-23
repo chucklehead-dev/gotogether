@@ -200,7 +200,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 		})
 	}
 	var zero Resp
-	if !WaitUntil(ctx, func() bool { return res.done }, deadline) {
+	if !waitUntil(ctx, func() bool { return res.done }, deadline) {
 		return zero, ErrTimeout
 	}
 	return res.resp, res.err

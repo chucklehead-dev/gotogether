@@ -52,7 +52,7 @@ func main() {
 	}
 
 	if *steps != "" {
-		sink, err := qobs.FileSink(*steps)
+		sink, err := qobs.FileSink(*steps, qobs.PerStep)
 		if err != nil {
 			log.Fatal(err)
 		}

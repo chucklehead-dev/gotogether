@@ -134,8 +134,8 @@ func (r *Result) OK() bool {
 	return true
 }
 
-// Validate checks one actor's trace.
-func Validate(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, opt Options) (*Result, error) {
+// validateTrace checks one actor's trace.
+func validateTrace(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, opt Options) (*Result, error) {
 	opt, err := opt.resolve()
 	if err != nil {
 		return nil, err

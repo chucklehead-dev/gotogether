@@ -32,6 +32,7 @@ package qtest
 
 import (
 	"context"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
 	"strings"
@@ -260,7 +261,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 		t.Fatal(err)
 	}
 	run := &Run{StepLog: filepath.Join(c.Dir, "steps.jsonl"), ITF: map[string]string{}}
-	file, err := qobs.FileSink(run.StepLog)
+	file, err := qobs.FileSink(run.StepLog, qobs.PerStep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,9 +280,9 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 			t.Fatalf("gotogether: %v", err)
 		}
 	}
-	mark, _ := qobs.Escaped(0)
+	mark, _ := hooks.Escaped(0)
 	func() {
-		release := qobs.Strict()
+		release := hooks.Strict()
 		defer end()
 		defer restore()
 		defer release()
@@ -290,7 +291,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	if err := file.Close(); err != nil {
 		t.Fatalf("gotogether: step log: %v", err)
 	}
-	if n, msgs := qobs.Escaped(mark); n > mark && !c.Global {
+	if n, msgs := hooks.Escaped(mark); n > mark && !c.Global {
 		// a verdict on a run missing steps would only mislead
 		t.Fatalf("gotogether: %d steps were recorded from goroutines outside the scenario's run (the first: %s); "+
 			"record through the scenario's context (rec's: qobs.WithRecorder), or pass qtest.Global() for goroutines "+

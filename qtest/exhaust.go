@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"runtime"
 	"slices"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Bound limits an exhaustive search (System.Exhaust) to the runs that
@@ -146,8 +146,8 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	c := config(t, s.opts())
 	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
 	woven := len(qcover.Blocks()) > 0
-	defer qobs.Strict()()
-	mark, _ := qobs.Escaped(0)
+	defer hooks.Strict()()
+	mark, _ := hooks.Escaped(0)
 	x := &Exploration{test: t.Name(), id: nextExploration(t), search: &search{bound: b}, tempDir: c.tempDir, mutation: c.mutant}
 	x.dir = exploreDir(t, c.Dir, x.id)
 	run := func(ds []deviation) *Run {

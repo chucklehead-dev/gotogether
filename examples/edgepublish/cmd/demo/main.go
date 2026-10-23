@@ -67,7 +67,7 @@ func main() {
 	var stepLog *qobs.JSONLSink
 	if *steps != "" {
 		var err error
-		if stepLog, err = qobs.FileSink(*steps); err != nil {
+		if stepLog, err = qobs.FileSink(*steps, qobs.PerStep); err != nil {
 			log.Fatal(err)
 		}
 		sinks = append(sinks, stepLog)

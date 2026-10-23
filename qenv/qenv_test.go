@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"strings"
 	"sync"
 	"testing"
@@ -419,11 +420,11 @@ func TestBackgroundStepsFindTheirRun(t *testing.T) {
 // do. It once panicked, on a goroutine no run owns, which killed the test
 // binary instead of failing the run.
 func TestStrictStepWithNowhereToGo(t *testing.T) {
-	release := qobs.Strict()
+	release := hooks.Strict()
 	defer release()
-	mark, _ := qobs.Escaped(0)
+	mark, _ := hooks.Escaped(0)
 	qobs.Record(context.Background(), "lost", nil) //qenv:ok a step with nowhere to go
-	n, msgs := qobs.Escaped(mark)
+	n, msgs := hooks.Escaped(mark)
 	if n != mark+1 || len(msgs) != 1 || !strings.Contains(msgs[0], "qenv.Go") {
 		t.Fatalf("got %d escaped since %d: %v; want one naming qenv.Go", n, mark, msgs)
 	}

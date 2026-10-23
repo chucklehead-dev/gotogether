@@ -11,10 +11,10 @@ import (
 // maxDiff bounds the number of differences reported.
 const maxDiff = 20
 
-// Diff lists the paths at which want (the model) and got (the
+// diffValues lists the paths at which want (the model) and got (the
 // implementation) differ, as "path: model X, implementation Y". Equal
 // values give nil.
-func Diff(want, got any) []string {
+func diffValues(want, got any) []string {
 	var out []string
 	diff(reflect.ValueOf(want), reflect.ValueOf(got), "", &out)
 	if len(out) > maxDiff {

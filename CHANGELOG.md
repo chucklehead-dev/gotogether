@@ -30,6 +30,18 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- Plumbing out of the public API, into the core's internal packages:
+  `qobs.Strict`, `Escaped`, `SetDiscard`; `qrun.SetResolver`,
+  `GoroutineID`, `Task`; `qenv.Current`, `TaskPanic`, `WithPanicStack`
+  and the eight `LockKey`-style functions woven sync calls (qenv/weave
+  reaches them through qenv/internal/keyed). Gone, with no caller:
+  `qenv.FaultOptions`, `qcover.Default`, `qcover.From`; unexported:
+  `qobs.Normalize`, `qobs.Attributes`, `connect.Diff`,
+  `validate.Validate` (use a Checker), `qenv.WaitUntil` (use `WaitFor`);
+  `qtrace.Fields` moved into the CLI. The five step-log sink
+  constructors are two, by durability: `qobs.FileSink(path, d)` and
+  `NewJSONLSink(w, d)` with `PerStep` (the old FileSink), `Synced` and
+  `Buffered`. `qenv.Swarm` stays, now tested.
 - `qtest.NoSurvivors` marks an equivalent mutant by function, change and
   code (`"(Counter).Add: drop call: qobs.Record(...)"`), as a survivor's
   report now prints it: a line added above no longer moves the mark. A
@@ -72,7 +84,7 @@ Added to the core since api/core.txt was first recorded:
   claims that an exploration's runs took the model's actions, each option
   of the fault kinds they reached and each nemesis they enabled, by name
   (`Run.Nemeses`, `qenv.ChoiceLog.Nemeses`; a heal is not wanted);
-  `qenv.FaultOptions` names a declared kind's options; `Evidence.Model` lists the
+  `Evidence.Model` lists the
   actions never taken. `Expect` and `System.Mutate` judge a claim by one
   verdict, so NotVacuous kills mutants too.
 - `qtest.Settings.RefuseExploration` and `Settings.SkipIfEmpty`, for a

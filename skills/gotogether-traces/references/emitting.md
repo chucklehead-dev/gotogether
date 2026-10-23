@@ -35,11 +35,12 @@ Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with
 `qobs.SetGlobal`; a test gets one per run from qtest, and `qtest.Global()`
 installs it globally for goroutines the run starts):
 - `MemorySink` for tests;
-- `FileSink("steps.jsonl")` for a native step log: each step reaches
-  the OS before Record returns, so a killed process loses none, but a
-  machine that loses power can lose the last ones and tear the line being
-  written. `SyncedFileSink` fsyncs every step (a disk round trip each)
-  for logs that must survive that. A torn last line costs nothing else:
+- `FileSink("steps.jsonl", qobs.PerStep)` for a native step log: each
+  step reaches the OS before Record returns, so a killed process loses
+  none, but a machine that loses power can lose the last ones and tear the
+  line being written. `qobs.Synced` fsyncs every step (a disk round trip
+  each) for logs that must survive that, and `qobs.Buffered` buffers them
+  where nothing crashes. A torn last line costs nothing else:
   `qtrace.ReadJSONL` keeps the steps before it and returns a `*TornTail`
   (`gotogether validate` warns);
 - `NewOTelSink(tp)` for span events. Use a TracerProvider that never

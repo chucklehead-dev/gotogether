@@ -131,7 +131,7 @@ func record(path, mutation string) error {
 	if !ok {
 		return fmt.Errorf("unknown mutation %q: want uncapped or deposit-on-retry", mutation)
 	}
-	sink, err := qobs.FileSink(path)
+	sink, err := qobs.FileSink(path, qobs.PerStep)
 	if err != nil {
 		return err
 	}

@@ -999,7 +999,7 @@ the same workarounds kept appearing in examples. They are now in the core.
   the goroutine id comes from the stack header, read once per task. It
   cost nothing measurable in the checkout load tests. What remains, a
   step from a goroutine started with `go`, is made loud: Explore and
-  Experiment runs are strict (`qobs.Strict`), and such a step panics with
+  Experiment runs are strict (`internal/hooks.Strict`), and such a step panics with
   the fix. It is also caught before running, by `gotogether lint -sim`,
   which flags `go` statements, wall-clock calls and background-context
   steps in files that import qenv, and runs in CI. A compile-time
@@ -1094,9 +1094,9 @@ weaving is the right trade.
 module's packages (`package-filter: {root: true}`; never the standard
 library or dependencies). Each call becomes a function in `qenv/weave`.
 That function asks qenv whether the calling goroutine is a simulation task
-(`qenv.Current`, from the goroutine registry of §12):
+(`qenv/internal/keyed.Current`, from the goroutine registry of §12):
 - inside a task, it operates on a lock or counter kept by the simulation
-  and keyed by the real object's address (`qenv.LockKey` and the others).
+  and keyed by the real object's address (`keyed.Lock` and the others).
   Taking the lock is a scheduling point, and waiting for it is a simulated
   wait, with `sync`'s semantics (a waiting writer blocks new readers);
 - outside, the real method runs.
@@ -1294,7 +1294,7 @@ qenv is two things in one package:
 
 The doubles reach the scheduler through a narrow seam:
 - the context-level functions (`qenv.Go`, `Now`, `Sleep`, `Wait`,
-  `WaitUntil`, `Signal`);
+  `WaitFor`, `Signal`);
 - `Process`, for crashes;
 - `Choose` and `Fault`.
 
@@ -1892,7 +1892,7 @@ found from the goroutine when the context carries none.
 - `qrun.Key[T]`, `qrun.Get` (the context, then the goroutine's run: a
   task's context, or the simulation's for the goroutine that created it)
   and one resolver installed by qenv now serve all three.
-- Every task's context names its task (`qrun.Task`), for state kept per
+- Every task's context names its task (`internal/runkeys.Task`), for state kept per
   task.
 - `qobs.SetFallback` is gone.
 
@@ -2776,8 +2776,8 @@ nemeses, not choices at every read, so reading the clock makes no choice.
 writes reach the OS at once and the disk on `File.Sync`; a crash of its
 process is a fault point (`disk.<name>.crash`: nominal keeps every write,
 `powerLoss` the synced ones, `tornWrite` part of the last). It is what
-tells "written" from "durable", which `FileSink` (one write per step) and
-`SyncedFileSink` (an fsync per step) differ in. The network
+tells "written" from "durable", which a sink's `qobs.PerStep` (one write
+per step) and `qobs.Synced` (an fsync per step) differ in. The network
 (`Sim.Net()`) cuts and heals links between processes, by hand or by a
 nemesis (`PartitionNemesis`), which a `Service` call and a `Queue` whose
 broker runs in a process (`NewQueue(s, name, p)`) see; a nemesis's cut

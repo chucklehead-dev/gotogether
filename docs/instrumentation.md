@@ -37,7 +37,7 @@ qobs.Record(ctx, "withdraw", err, "account", acct, "amount", n, "obs.balance", b
 
 // Install a recorder at start-up, choosing where the steps go:
 qobs.SetGlobal(qobs.NewRecorder(qobs.NewOTelSink(tp), qobs.WithActor("bank-1")))   // span events
-sink, _ := qobs.FileSink("steps.jsonl"); qobs.SetGlobal(qobs.NewRecorder(sink))    // step log
+sink, _ := qobs.FileSink("steps.jsonl", qobs.PerStep); qobs.SetGlobal(qobs.NewRecorder(sink)) // step log
 ```
 
 With Orchestrion, an annotation on a function records a step when the
@@ -135,7 +135,7 @@ Everything else is generic.
    path when"):
    - `qobs.NewOTelSink(tp)`, on a TracerProvider that never samples these
      spans out;
-   - `qobs.FileSink("steps.jsonl")` for a native step log;
+   - `qobs.FileSink("steps.jsonl", qobs.PerStep)` for a native step log;
    - in tests, `qtest.Record(...).Expect(t, qtest.Conforms())`, which also
      writes the model-level ITF.
 

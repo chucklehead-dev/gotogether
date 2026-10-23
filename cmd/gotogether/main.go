@@ -337,8 +337,8 @@ func steps(args []string) error {
 	if err != nil {
 		return err
 	}
-	f := qtrace.Filter{Actors: qtrace.Fields(*actors), Actions: qtrace.Fields(*actions),
-		Pseudonymize: qtrace.Fields(*pseud), Salt: os.Getenv("GOTOGETHER_SALT")}
+	f := qtrace.Filter{Actors: fields(*actors), Actions: fields(*actions),
+		Pseudonymize: fields(*pseud), Salt: os.Getenv("GOTOGETHER_SALT")}
 	for _, t := range []struct {
 		s  string
 		to *time.Time
@@ -890,4 +890,18 @@ func TestMutantIsCaught(t *testing.T) {
 	system(Mutant).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
 }
 `, pkg, bpath, rec.String(), claim, faithful)
+}
+
+// fields parses a comma-separated list, for flags.
+func fields(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, f := range strings.Split(s, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }

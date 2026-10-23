@@ -8,19 +8,27 @@ import (
 	"testing"
 )
 
-// A file sink is durable: its steps are in the file as soon as they are recorded.
-func TestFileSinkIsDurable(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "steps.jsonl")
-	sink, err := FileSink(p)
-	if err != nil {
-		t.Fatal(err)
+// A file sink's steps are in the file as soon as they are recorded
+// (PerStep, Synced), or once it is flushed or closed (Buffered).
+func TestFileSinkDurability(t *testing.T) {
+	for _, d := range []Durability{PerStep, Synced, Buffered} {
+		p := filepath.Join(t.TempDir(), "steps.jsonl")
+		sink, err := FileSink(p, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		NewRecorder(sink).Record(context.Background(), "deposit", nil, "amount", 5)
+		b, _ := os.ReadFile(p) // before Close
+		if in := strings.Contains(string(b), `"quint.action":"deposit"`); in != (d != Buffered) {
+			t.Errorf("durability %d: the step in the file before Close: %v", d, in)
+		}
+		if err := sink.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if b, _ := os.ReadFile(p); !strings.Contains(string(b), `"quint.action":"deposit"`) {
+			t.Errorf("durability %d: the step not in the file after Close: %q", d, b)
+		}
 	}
-	NewRecorder(sink).Record(context.Background(), "deposit", nil, "amount", 5)
-	b, _ := os.ReadFile(p) // before Close
-	if !strings.Contains(string(b), `"quint.action":"deposit"`) {
-		t.Fatalf("not written through: %q", b)
-	}
-	sink.Close()
 }
 
 // A context's recorder takes precedence over the global one, so parallel

@@ -3,6 +3,7 @@ package qload
 import (
 	"context"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"hash/fnv"
 	"math"
 	"math/rand/v2"
@@ -126,7 +127,7 @@ type Series struct {
 	Points []Point
 	// Escaped are steps recorded from outside the run while it ran (a
 	// goroutine started with go): the run is strict, and its counts miss
-	// them (qobs.Escaped).
+	// them (internal/hooks.Escaped).
 	Escaped []string
 	// Err is the simulation's error (Sim.Run's), if it did not run to
 	// its horizon: its points stop there.
@@ -193,8 +194,8 @@ func (x Experiment) Run(seed uint64, tr Trigger, horizon time.Duration) *Series 
 		sc.Rates = x.Faults
 		c = sc
 	}
-	defer qobs.Strict()()
-	mark, _ := qobs.Escaped(0)
+	defer hooks.Strict()()
+	mark, _ := hooks.Escaped(0)
 	cnt := &counter{n: map[string]int{}, next: x.Sink}
 	s := qenv.New(qenv.WithContext(c, qobs.WithRecorder(context.Background(), qobs.NewRecorder(cnt, qobs.WithActor(x.Actor)))))
 	defer s.Close()
@@ -252,6 +253,6 @@ func (x Experiment) Run(seed uint64, tr Trigger, horizon time.Duration) *Series 
 		}
 	})
 	series.Err = s.Run(horizon)
-	_, series.Escaped = qobs.Escaped(mark)
+	_, series.Escaped = hooks.Escaped(mark)
 	return series
 }

@@ -26,14 +26,14 @@ func NewOTelSink(tp trace.TracerProvider) *OTelSink {
 
 func (o *OTelSink) Record(ctx context.Context, s *qtrace.Step) {
 	_, span := o.Tracer.Start(ctx, qtrace.SpanName+s.Action, trace.WithTimestamp(s.Time))
-	span.AddEvent(qtrace.EventName, trace.WithTimestamp(s.Time), trace.WithAttributes(Attributes(s)...))
+	span.AddEvent(qtrace.EventName, trace.WithTimestamp(s.Time), trace.WithAttributes(attributes(s)...))
 	span.End(trace.WithTimestamp(s.Time))
 }
 
-// Attributes encodes a step in the schema: the native step log's
+// attributes encodes a step in the schema: the native step log's
 // attributes (qtrace.Step.Attributes) as OTel attributes, but its time,
 // which is the event's timestamp. One encoding serves both formats.
-func Attributes(s *qtrace.Step) []attribute.KeyValue {
+func attributes(s *qtrace.Step) []attribute.KeyValue {
 	m := s.Attributes()
 	delete(m, qtrace.KeyTime)
 	keys := make([]string, 0, len(m))

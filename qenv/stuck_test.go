@@ -60,7 +60,7 @@ func TestWaitOutsideASimulation(t *testing.T) {
 		t.Fatal("Signal.Wait: not notified")
 	}
 	qenv.Wait(ctx, func() bool { mu.Lock(); defer mu.Unlock(); return done })
-	if qenv.WaitUntil(ctx, func() bool { return false }, time.Now().Add(10*time.Millisecond)) { //qenv:ok a real deadline
-		t.Error("WaitUntil past its deadline reported ready")
+	if qenv.WaitFor(ctx, func() bool { return false }, 10*time.Millisecond) {
+		t.Error("WaitFor past its time reported ready")
 	}
 }

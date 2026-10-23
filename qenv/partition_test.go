@@ -314,7 +314,7 @@ func TestManualCutOverNemesis(t *testing.T) {
 	s.Net().PartitionNemesis(a, b)
 	cutAfter := false
 	s.Spawn("driver", func(ctx context.Context) {
-		if !qenv.WaitUntil(ctx, func() bool { return s.Net().Partitioned(a, b) }, s.Now().Add(time.Second)) {
+		if !qenv.WaitFor(ctx, func() bool { return s.Net().Partitioned(a, b) }, time.Second) {
 			t.Error("the scripted cut never came")
 			return
 		}

@@ -48,8 +48,8 @@ func (f Finding) String() string { return f.Pos + ": " + f.What + ": " + f.Fix }
 // tests included (a System's Run closure lives in a test), for code that
 // escapes the simulation:
 //   - goroutines started with `go`: outside the scheduler, so runs are
-//     not reproducible, and a step they record has no run (qobs.Strict
-//     panics);
+//     not reproducible, and a step they record has no run (a strict run
+//     fails on it);
 //   - the wall clock (time.Now, Since, Until, Sleep, After, AfterFunc, Tick,
 //     NewTimer, NewTicker): virtual time does not pass for it;
 //   - steps recorded with context.Background() or TODO(): they find their

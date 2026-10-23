@@ -52,8 +52,8 @@ shrinking removes faults.
   effect whether or not its caller survives (a write that landed, then a
   crash), record it at the effect's site instead.
 - **Crash tests in a real environment** need a durable step log:
-  `qobs.FileSink` is (one write per step). `BufferedFileSink` loses the
-  last steps of a killed process, undetectably.
+  `qobs.FileSink(path, qobs.PerStep)` is (one write per step).
+  `qobs.Buffered` loses the last steps of a killed process, undetectably.
 
 ## 3. Deploy into a simulation
 
@@ -114,7 +114,7 @@ qobs.Record(s.Context(), "settle", nil)
   0.05)` (at DefaultRates a lease's wall-clock bug showed in 7 runs of
   100), and crashes come as often as before. Skew and jumps
   move only the wall clock; a drift moves both, with the process's sleeps,
-  call timeouts and `qenv.WaitFor`. Deadlines given to `WaitUntil` and
+  call timeouts and `qenv.WaitFor`. Deadlines given to
   `Signal.Wait` are true time. examples/lease shows each fault breaking
   the code that trusts it: a cross-machine comparison by a skew, a
   wall-clock interval by a jump, a monotonic one by a drift past its

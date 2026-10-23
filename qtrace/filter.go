@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path"
-	"strings"
 	"time"
 )
 
@@ -92,20 +91,6 @@ func (f Filter) Apply(steps []Step) []Step {
 			s.Actor = f.Pseudonym(s.Actor)
 		}
 		out = append(out, s)
-	}
-	return out
-}
-
-// Fields parses a comma-separated list, for flags.
-func Fields(s string) []string {
-	if s == "" {
-		return nil
-	}
-	var out []string
-	for _, f := range strings.Split(s, ",") {
-		if f = strings.TrimSpace(f); f != "" {
-			out = append(out, f)
-		}
 	}
 	return out
 }

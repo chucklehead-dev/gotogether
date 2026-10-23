@@ -96,7 +96,7 @@ func run(ms members, image string, maxUnavailable int, mutation, steps string, v
 	if len(ms) == 0 {
 		return fmt.Errorf("no -member")
 	}
-	sink, err := qobs.FileSink(steps) // a killed controller loses no steps
+	sink, err := qobs.FileSink(steps, qobs.PerStep) // a killed controller loses no steps
 	if err != nil {
 		return err
 	}
