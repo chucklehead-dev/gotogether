@@ -135,7 +135,8 @@ func simulate(args []string) (int, error) {
 			fmt.Printf("  allows  %s: a trace violates it (the code must not)\n", inv)
 		case holds[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should guarantee it, and a trace violates it:\n%s\n", inv, out)
+			fmt.Printf("  FAIL    %s: the model should guarantee it, and a trace violates it: fix the model if it must hold, "+
+				"or move it to simulate.allows if it is a requirement on the code (the model lets it fail, the code must prevent it). The trace:\n%s\n", inv, out)
 		case allows[inv] && *verify > 0:
 			code = 1
 			raise := "Raise -verify"

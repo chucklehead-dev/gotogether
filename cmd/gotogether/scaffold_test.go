@@ -111,7 +111,7 @@ func TestScaffoldBindingChecks(t *testing.T) {
 	// underLimit can fail in the model (deposits have no cap): simulate
 	// says to move it to allows, which is the classification's point
 	code, out = capture(t, func() (int, error) { return simulate([]string{"-binding", p, "-samples", "100"}) })
-	if code != 1 || !strings.Contains(out, "underLimit") || strings.Contains(out, "FAIL    nonNegative") {
+	if code != 1 || !strings.Contains(out, "FAIL    underLimit: the model should guarantee it, and a trace violates it: fix the model if it must hold, or move it to simulate.allows") || strings.Contains(out, "FAIL    nonNegative") {
 		t.Errorf("simulate: exit %d:\n%s", code, out)
 	}
 }
@@ -133,4 +133,19 @@ func capture(t *testing.T, f func() (int, error)) (int, string) {
 		t.Fatalf("%v:\n%s", err, out)
 	}
 	return code, string(out)
+}
+
+// scaffold -system takes the test's package from the Go files where it
+// goes: its default "app" did not build in a package stock.
+func TestScaffoldPackageIn(t *testing.T) {
+	dir := t.TempDir()
+	if got := packageIn(dir); got != "app" {
+		t.Errorf("no Go files: %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stock_test.go"), []byte("package stock_test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := packageIn(dir); got != "stock" {
+		t.Errorf("a stock_test file: %q", got)
+	}
 }

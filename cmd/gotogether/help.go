@@ -28,6 +28,8 @@ var commands = map[string]command{
 	"convert": {"turn an app's OTLP/JSON spans into a step log with rules", "gotogether convert -rules spans.convert.yaml -out steps.jsonl spans.json"},
 	"cover": {"compare a real environment's code coverage with a simulation's: what ran only for real, only simulated",
 		"gotogether cover -covdir covdata -sim ev/app/TestX/x1.json"},
+	"skills": {"list the agent skills (skills list, the default), or install them into a project (skills install; its -h)",
+		"gotogether skills install -target all"},
 	"skills install": {"install the agent skills into a project (.agents/skills and .claude/skills by default)", "gotogether skills install"},
 }
 

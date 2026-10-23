@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -13,7 +14,11 @@ import (
 // one of commands, so none is left with Go's bare "Usage of x:".
 func TestCommandHelp(t *testing.T) {
 	var src []byte
-	for _, f := range []string{"main.go", "cover.go", "evidence.go", "simulate.go"} {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "help.go" { // help.go makes commandFlags' own
+			continue
+		}
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

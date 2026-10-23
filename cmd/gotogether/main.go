@@ -26,6 +26,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -123,13 +125,26 @@ usage:
 validate, steps and itf also take -convert r.yaml to convert OTLP/JSON spans on the way in.`)
 }
 
+// packageIn is the package of the Go files in dir, a test's package
+// without its _test, or "app" when there are none: a scaffolded test in
+// another package's directory would not build.
+func packageIn(dir string) string {
+	files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+	for _, f := range files {
+		if p, err := parser.ParseFile(token.NewFileSet(), f, nil, parser.PackageClauseOnly); err == nil {
+			return strings.TrimSuffix(p.Name.Name, "_test")
+		}
+	}
+	return "app"
+}
+
 func scaffold(args []string) error {
 	fset := commandFlags("scaffold")
 	spec := fset.String("spec", "", "Quint spec")
 	module := fset.String("module", "", "the model's module (its name after `module` in the spec)")
 	system := fset.Bool("system", false, "print a qtest.System test for -binding instead of a binding")
 	bpath := fset.String("binding", "", "binding file (with -system)")
-	pkg := fset.String("pkg", "app", "package of the test (with -system)")
+	pkg := fset.String("pkg", "", "package of the test (with -system; default: that of the Go files in -out's directory, else app)")
 	quint := fset.String("quint", "quint", "quint binary")
 	out := fset.String("out", "", "write to this file (not overwritten) instead of standard output")
 	fset.Parse(args)
@@ -149,6 +164,9 @@ func scaffold(args []string) error {
 		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
 		if err != nil {
 			return err
+		}
+		if *pkg == "" {
+			*pkg = packageIn(filepath.Dir(*out))
 		}
 		fmt.Fprint(w, systemTest(*pkg, *bpath, b, m))
 		return nil
@@ -669,6 +687,13 @@ func runConvert(args []string) error {
 }
 
 func runSkills(args []string) error {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help") || len(args) > 1 && args[0] == "list" {
+		// skills and skills list take no flags: their help, not the usage
+		fs := commandFlags("skills")
+		fs.SetOutput(os.Stdout)
+		fs.Usage()
+		return nil
+	}
 	if len(args) == 0 || args[0] == "list" {
 		list, err := skills.List()
 		if err != nil {
