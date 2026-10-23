@@ -2,6 +2,8 @@ package qenv_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,4 +96,55 @@ func TestClockDrift(t *testing.T) {
 		}
 	}
 	s.Close()
+}
+
+// A drift of 1 or more would stop a slow clock or run it backwards (its
+// sleeps would end at once): it panics with the field and its range.
+func TestClockDriftRange(t *testing.T) {
+	for _, d := range []float64{1, 1.5, -0.1} {
+		func() {
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "in [0, 1)") {
+					t.Errorf("ClockDrift %v: %v, want a panic naming the range", d, r)
+				}
+			}()
+			s := qenv.New(qenv.NewSeeded(1))
+			defer s.Close()
+			s.ClockFaults, s.ClockDrift = true, d
+			s.Process("node", false, func(context.Context) {})
+		}()
+	}
+}
+
+// A Service call's timeout is the caller's timer: on a slow clock it lasts
+// longer in true time.
+func TestClockDriftTimesCalls(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for seed := uint64(1); seed <= 10; seed++ {
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults.Set("clock.drift", 1)
+		s := qenv.New(c)
+		s.ClockFaults, s.ClockDrift = true, 0.5
+		svc := qenv.NewService(s, "slow", nil, func(ctx context.Context, n int) (int, error) {
+			qenv.Sleep(ctx, 10*time.Second) // a server of no process: true time
+			return n, nil
+		})
+		var took time.Duration
+		s.Process("client", false, func(ctx context.Context) {
+			start := s.Now()
+			_, _ = svc.Call(ctx, 1, time.Second) // the server takes 10 s: a timeout
+			took = s.Now().Sub(start)
+		})
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		if took != 666666666 && took != 2*time.Second {
+			t.Errorf("seed %d: a 1s timeout on a drifting clock took %v of true time, want 2/3 s (fast) or 2 s (slow)", seed, took)
+		}
+		seen[took] = true
+	}
+	if len(seen) != 2 {
+		t.Errorf("timeouts seen %v, want a fast clock's and a slow one's", seen)
+	}
 }

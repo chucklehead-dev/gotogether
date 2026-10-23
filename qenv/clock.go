@@ -1,6 +1,9 @@
 package qenv
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Clock faults. A process reads its own clock through Now: with
 // Sim.ClockFaults, each process's clock starts off true time by a skew
@@ -15,8 +18,9 @@ import "time"
 //
 // With Sim.ClockDrift, a process's clock also runs fast or slow (fault kind
 // "clock.drift", chosen when the process is created): it gains or loses
-// that fraction of true time, and its sleeps, timed by the same
-// oscillator, last a correspondingly shorter or longer true time. Drift
+// that fraction of true time, and the intervals it times with the same
+// oscillator (its sleeps, its Service calls' timeouts) last a
+// correspondingly shorter or longer true time. Drift
 // breaks what skew cannot: an interval timed on one clock (a lease's
 // "TTL since I asked").
 var (
@@ -46,6 +50,9 @@ func (s *Sim) skewProcess(p *Process) {
 	case "behind":
 		p.clock = -d
 	}
+	if s.ClockDrift < 0 || s.ClockDrift >= 1 {
+		panic(fmt.Sprintf("qenv: Sim.ClockDrift is %v: it is a fraction of true time a clock gains or loses, in [0, 1) (0.01: 10 ms a second); a slow clock at 1 or more would stop or run backwards", s.ClockDrift))
+	}
 	if s.ClockDrift > 0 {
 		p.born = s.Now()
 		switch s.FaultOf(clockDrift) {
@@ -65,13 +72,14 @@ func (p *Process) drift(now time.Time) time.Duration {
 	return time.Duration(float64(now.Sub(p.born)) * p.rate)
 }
 
-// drifted is how long a sleep of d on t's process's clock lasts in true
-// time: shorter on a fast clock, longer on a slow one.
-func (t *task) drifted(d time.Duration) time.Duration {
-	if t.proc == nil || t.proc.rate == 0 {
+// drifted is how long an interval of d timed on p's clock (a sleep, a
+// call's timeout) lasts in true time: shorter on a fast clock, longer on
+// a slow one. A task of no process (nil) keeps true time.
+func (p *Process) drifted(d time.Duration) time.Duration {
+	if p == nil || p.rate == 0 {
 		return d
 	}
-	return time.Duration(float64(d) / (1 + t.proc.rate))
+	return time.Duration(float64(d) / (1 + p.rate))
 }
 
 // clockOf is the time on t's process's clock: true time and the process's

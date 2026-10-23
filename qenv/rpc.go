@@ -142,7 +142,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 	if svc.Proc.Down() || s.Partitioned(caller, svc.Proc) {
 		deliveries = 0
 	}
-	deadline := s.Now().Add(timeout)
+	deadline := s.Now().Add(caller.drifted(timeout)) // the caller's timer, on its clock
 	for i := 0; i < deliveries; i++ {
 		first := i == 0
 		s.spawn(s.base, svc.Name+".handle", svc.Proc, func(hctx context.Context) {

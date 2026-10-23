@@ -62,7 +62,8 @@ type Sim struct {
 	ClockSkew, ClockJump time.Duration
 	// ClockDrift, with ClockFaults, makes each process's clock run fast or
 	// slow by this fraction of true time (fault kind "clock.drift": 0.01
-	// gains or loses 10 ms a second), its sleeps with it. Zero, the
+	// gains or loses 10 ms a second; less than 1), its sleeps and call
+	// timeouts with it. Zero, the
 	// default, chooses no drift, so runs recorded without it keep their
 	// choices.
 	ClockDrift float64
@@ -584,7 +585,7 @@ func Sleep(ctx context.Context, d time.Duration) {
 		}
 		return
 	}
-	d = t.drifted(d)
+	d = t.proc.drifted(d)
 	if t.sim.nat != nil {
 		t.sleepNative(d)
 		return

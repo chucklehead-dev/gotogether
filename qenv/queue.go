@@ -3,6 +3,7 @@ package qenv
 import (
 	"context"
 	"fmt"
+	"sort"
 )
 
 // Queue is an at-least-once message queue: a published message is
@@ -68,7 +69,8 @@ func NewQueue(s *Sim, name string) *Queue {
 	return q
 }
 
-// drop requeues the messages p holds, in the order they were taken.
+// drop requeues the messages p holds (by id, each to the front: the last
+// first).
 func (q *Queue) drop(p *Process) {
 	var back []*Delivery
 	for _, d := range q.heldIn() {
@@ -93,10 +95,13 @@ func (q *Queue) check(op string) {
 	if q.acked == nil {
 		return
 	}
-	copies := map[int]int{}
+	// O(pending + held) per operation: the live messages, counted against
+	// those published and not acknowledged; the scan over every id runs
+	// only to name the one lost
+	live := map[int]bool{}
 	last := 0
 	for _, d := range q.pending {
-		copies[d.ID]++
+		live[d.ID] = true
 		if q.Ordered && !d.Redelivered {
 			if d.ID < last {
 				panic(fmt.Sprintf("qenv: queue %s, after %s: message %d waits behind %d, though Ordered (GOTOGETHER_CHECK)", q.Name, op, d.ID, last))
@@ -105,16 +110,32 @@ func (q *Queue) check(op string) {
 		}
 	}
 	for d := range q.held {
-		copies[d.ID]++
+		live[d.ID] = true
+	}
+	for _, id := range sortedIDs(live) {
+		if q.acked[id] {
+			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d is delivered again after its acknowledgement (GOTOGETHER_CHECK)", q.Name, op, id))
+		}
+	}
+	if len(live) == q.next-len(q.acked) {
+		return
 	}
 	for id := 1; id <= q.next; id++ {
-		switch {
-		case q.acked[id] && copies[id] > 0:
-			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d is delivered again after its acknowledgement (GOTOGETHER_CHECK)", q.Name, op, id))
-		case !q.acked[id] && copies[id] == 0:
+		if !q.acked[id] && !live[id] {
 			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d was lost, neither acknowledged nor pending nor held (GOTOGETHER_CHECK)", q.Name, op, id))
 		}
 	}
+}
+
+// sortedIDs are m's keys in order: a check's first failure is the same
+// in every run.
+func sortedIDs(m map[int]bool) []int {
+	ids := make([]int, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
 }
 
 // reaches reports whether the network lets the task of ctx reach the
