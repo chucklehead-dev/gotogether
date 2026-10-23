@@ -68,7 +68,7 @@ table for agents):
 | Do runs of the real system conform? | `qobs`, `//quint:action`, `convert` (OTel spans), a binding, `gotogether validate` |
 | Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` and `qtest.System`: `Explore`, `Exhaust`, `Sweep`, `Fuzz`, `qhegel.Shrink` |
 | Does the whole system survive the faults my model's traces have? | `System.FollowTraces`: each trace's fault actions become the simulation's faults (`connect.FaultMap`), the rest of the run is the system's, checked by the model |
-| What did no run reach? What does the model not constrain? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `Exploration.Evidence` |
+| What did no run reach? What does the model not constrain? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `Exploration.Evidence`; over a suite, `gotogether evidence` |
 | Does it recover after a spike or a slow dependency? | `qmeta`, `qload`, `qhegel.FindTrigger`, alert rules from the chain |
 | My model is in Choreo | named transitions over `choreo::step_with`, then any of the above ([examples/twophase](examples/twophase)) |
 
@@ -104,7 +104,7 @@ Python and no server.
 | `GOTOGETHER_CORPUS=dir` | every exploration replays and saves corpus entries under dir/<test> (ExploreConfig.Corpus) |
 | `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
-| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
+| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test, and each exploration's evidence.json (`gotogether evidence dir`: what no test tried) |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
 | `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step |
 | `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |

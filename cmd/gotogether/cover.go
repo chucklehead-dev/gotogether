@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/qcover"
@@ -16,7 +14,7 @@ import (
 func runCover(args []string) error {
 	fset := flag.NewFlagSet("cover", flag.ExitOnError)
 	covdir := fset.String("covdir", "", "comma-separated GOCOVERDIRs of the real environment's runs")
-	sim := fset.String("sim", "", "a simulation's coverage summary (qcover.Summary as JSON)")
+	sim := fset.String("sim", "", "a simulation's coverage: an exploration's evidence.json (under GOTOGETHER_KEEP) or a qcover.Summary as JSON")
 	fset.Parse(args)
 	if *covdir == "" {
 		return fmt.Errorf("cover needs -covdir")
@@ -29,14 +27,10 @@ func runCover(args []string) error {
 	if *sim == "" {
 		return nil
 	}
-	b, err := os.ReadFile(*sim)
+	s, err := qcover.ReadSummary(*sim)
 	if err != nil {
 		return err
 	}
-	var s qcover.Summary
-	if err := json.Unmarshal(b, &s); err != nil {
-		return fmt.Errorf("%s: %w (want a qcover.Summary as JSON)", *sim, err)
-	}
-	fmt.Print(qcover.Compare(&s, real))
+	fmt.Print(qcover.Compare(s, real))
 	return nil
 }

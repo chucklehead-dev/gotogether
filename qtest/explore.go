@@ -32,6 +32,7 @@ type Exploration struct {
 	Cached int
 
 	constants map[string]string // the instance checked against, for messages
+	model     string            // the binding's spec and module ("model/m.qnt:m"), for Evidence
 	test      string            // the test's name, for reproducing a seed
 	actions   map[string]bool   // the model's, for checking claims' names
 	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
@@ -364,6 +365,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	for k, v := range c.Constants {
 		x.constants[k] = v
 	}
+	x.model = ch.Binding.SpecPath() + ":" + ch.Binding.Module
 	if ch.Model != nil {
 		x.actions = map[string]bool{}
 		for a := range ch.Model.Actions {
@@ -419,7 +421,15 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	}
 	if os.Getenv("GOTOGETHER_KEEP") != "" {
 		// the report, for tools that read a kept run (gotogether cover, actionmap)
-		if err := x.Evidence().WriteJSON(filepath.Join(c.Dir, "evidence.json")); err != nil {
+		// a test's later explorations get files of their own
+		path := filepath.Join(c.Dir, "evidence.json")
+		for n := 2; ; n++ {
+			if _, err := os.Stat(path); err != nil {
+				break
+			}
+			path = filepath.Join(c.Dir, fmt.Sprintf("evidence-%d.json", n))
+		}
+		if err := x.Evidence().WriteJSON(path); err != nil {
 			t.Logf("gotogether: evidence.json: %v", err)
 		}
 	}

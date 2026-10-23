@@ -190,8 +190,13 @@ The track, in order:
     is beyond Apalache). Its finding: 6 steps were too few for
     edgepublish's duplicate payload, which sampling at 30 finds; 8 are
     enough.
-  - **Left.** Readers of `evidence.json`: `gotogether cover -sim` and actionmap
-    (V13's later work).
+  - **Readers of `evidence.json`, done.** Evidence names its test and
+    model; a test's later explorations write `evidence-2.json` and on
+    (each overwrote the last). `gotogether evidence DIR` reports a suite:
+    each exploration's verdicts, then what no test tried (a model action,
+    a declared fault point, a kind never faulted); `-strict` fails on a
+    gap. `gotogether cover -sim` and actionmap read an evidence.json
+    (`qcover.ReadSummary`). hello's and checkout's suites have no gap.
 - **X3. Bounded exhaustive schedules (M).** Done. `System.Exhaust(t,
   qtest.Bound{Delays, Faults, Without, MaxRuns})` runs every run within
   the bound breadth first by deviations, replaying each from the start

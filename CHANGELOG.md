@@ -68,6 +68,11 @@ Added to the core since api/core.txt was first recorded:
   says it guarantees (`holds`) or lets the code break (`allows`);
   `-verify N` checks every trace of up to N steps with quint verify
   (Apalache) instead of sampling.
+- `gotogether evidence DIR`: a suite's explorations, from the evidence.json
+  each writes under GOTOGETHER_KEEP (a test's later ones evidence-2.json
+  and on), and what no test tried; `-strict` fails on a gap. Evidence
+  names its `Test` and `Spec`; `qtest.ReadEvidence`, `qcover.ReadSummary`
+  (a Summary or an evidence.json, read by `gotogether cover -sim`).
 
 Before this, the project was quint-connect-go
 (github.com/casselc/quint-connect-go); docs/HISTORY.md has the path here.

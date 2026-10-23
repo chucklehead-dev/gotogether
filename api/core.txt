@@ -132,6 +132,7 @@ type GoProfile struct{ ... }
     func ReadGoCover(dirs ...string) (*GoProfile, error)
 type StepCover struct{ ... }
 type Summary struct{ ... }
+    func ReadSummary(path string) (*Summary, error)
     func Summarize(runs []*Counts) *Summary
 
 == github.com/chucklehead-dev/gotogether/qenv
@@ -406,6 +407,7 @@ type Claim interface{ ... }
     func NotVacuous() Claim
     func Some(es ...Expectation) Claim
 type Evidence struct{ ... }
+    func ReadEvidence(path string) (*Evidence, error)
 type Exercise struct{ ... }
     func Exercised(except ...string) Exercise
 type Expectation struct{ ... }

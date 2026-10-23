@@ -25,12 +25,26 @@ t.Log(x.Evidence().Code) // never run, run by no step, outcomes that ran the sam
 ## A real environment's coverage against the simulation's
 
 Build the real environment's binaries with `go build -cover`, run them
-with `GOCOVERDIR=dir`, and compare with a woven simulation's summary
-(write it as JSON from `x.Evidence().Code`):
+with `GOCOVERDIR=dir`, and compare with a woven simulation's: run its
+tests with `GOTOGETHER_KEEP=dir` and pass an exploration's evidence.json
+(or a summary written from `x.Evidence().Code`):
 
 ```sh
-gotogether cover -covdir run1,run2 -sim summary.json
+gotogether cover -covdir run1,run2 -sim keep/TestFaithful/evidence.json
 ```
+
+## What no test of the suite tried
+
+Each exploration's Evidence says what its own runs left out; a suite's
+tests may cover each other. Run them with `GOTOGETHER_KEEP=dir`, then
+
+```sh
+gotogether evidence dir            # each exploration's verdicts, then the gaps
+gotogether evidence -strict dir    # exit 1 on a gap (for CI)
+```
+
+A gap is a model action no test took (by model), a declared fault point
+no test reached, or a fault kind reached and never faulted.
 
 "Real only" is code the simulation never leads to (a fault its doubles
 do not inject, a path they do not take): its verdicts say nothing about

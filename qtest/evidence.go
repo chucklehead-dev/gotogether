@@ -18,8 +18,13 @@ import (
 // unsaid: that runs conformed says nothing of the faults never tried, the
 // code never run or the code the model does not constrain.
 type Evidence struct {
-	Runs    int `json:"runs"`
-	Conform int `json:"conform"`
+	// Test is the test that explored, and Spec the binding's spec and
+	// module ("/abs/model/m.qnt:m"): a suite's evidence groups by them
+	// (gotogether evidence).
+	Test    string `json:"test,omitempty"`
+	Spec    string `json:"spec,omitempty"`
+	Runs    int    `json:"runs"`
+	Conform int    `json:"conform"`
 	// FailingBy counts the failing runs by reason: "violates I", "rejects a
 	// (step the model cannot take)", "mismatch after a", "issue".
 	FailingBy map[string]int  `json:"failing"`
@@ -33,8 +38,9 @@ type Evidence struct {
 }
 
 // WriteJSON writes the evidence to path as JSON, for tools that read a
-// run's report (gotogether cover, actionmap). Explorations write theirs under
-// GOTOGETHER_KEEP (evidence.json in the test's directory).
+// run's report (gotogether evidence, cover, actionmap). Explorations write
+// theirs under GOTOGETHER_KEEP: evidence.json in the test's directory, and
+// evidence-2.json and on for a test's later explorations.
 func (e *Evidence) WriteJSON(path string) error {
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
@@ -43,9 +49,24 @@ func (e *Evidence) WriteJSON(path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
+// ReadEvidence reads an Evidence written by WriteJSON (an exploration's
+// evidence.json under GOTOGETHER_KEEP).
+func ReadEvidence(path string) (*Evidence, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var e Evidence
+	if err := json.Unmarshal(b, &e); err != nil {
+		return nil, fmt.Errorf("%s: %w (want the JSON of a qtest.Evidence)", path, err)
+	}
+	return &e, nil
+}
+
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
+	e.Test, e.Spec = x.test, x.model
 	e.Faults = x.faultCoverage()
 	if x.actions != nil {
 		e.Model = modelCoverage(x.Runs, x.actions)
@@ -67,7 +88,7 @@ func (s *SweepResult) Evidence() *Evidence {
 		if x != nil {
 			all.Runs = append(all.Runs, x.Runs...)
 			if all.actions == nil {
-				all.actions = x.actions
+				all.actions, all.test, all.model = x.actions, x.test, x.model
 			}
 		}
 	}
