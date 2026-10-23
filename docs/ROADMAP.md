@@ -501,27 +501,22 @@ the maintainer: all of Z1–Z8, breaking the API freely before tags. In
 order, bugs first; each item reviewed against its bullet before the
 next.
 
-- **Z1. Silent wrong answers (S each; confirmed by probes).**
-  - A crash of a `Service` with `Capacity` leaks its workers for good
-    (`release` is deferred, and a killed task runs no deferred code):
-    after a restart the service never serves, and a load experiment
-    with crashes reports the simulator's collapse as the system's.
-  - A `Store` commit waiting on a row lock is invisible to deadlock
-    detection, and a multi-key commit can apply under another
-    transaction's FOR UPDATE lock (a lost update correct code cannot
-    prevent).
-  - `Linearize` renumbers the order it checks, so a lost step's gap
-    error disappears.
-  - connect's state check compares nothing for a state struct of
-    unexported fields, and a misspelled field compares as zero.
-  - A process's old incarnation acting after its successor (split brain)
-    validates as restarts, with only a warning.
-  - `EncodeChoices` at a fault rate above 255/256 encodes a nominal
-    choice that replays as a fault.
-  - To check: `ErrStuck` only when no timer exists (any timer turns a
-    stall into a quiet run); the verdict cache's key leaves out fields a
-    template or an issue reads; `Bound.Without` names unchecked; a
-    Queue's broker crashing changes nothing.
+- **Z1. Silent wrong answers. Done:** a crashed `Service`'s workers are
+  freed (a generation per incarnation); a `Store` commit's lock wait is
+  one wait for every key, seen by deadlock detection; `Linearize` keeps
+  the recorded steps' gaps and cycles; connect's state check refuses an
+  unexported or misspelled field (`itf.DecodeProjection`); an
+  incarnation acting after its successor is an error; `EncodeChoices`
+  refuses a nominal choice no byte encodes. Of the suspicions: the
+  verdict cache key carries seq, error and intervals; `Bound.Without`
+  kinds are checked; a crashed queue broker is unreachable and drops its
+  consumers' connections; a duplicate is not processed once its first
+  copy was refused (ErrOverloaded); connect clears a kept Dir's traces.
+  Left for Z7: `ErrStuck` only when no timer is set (a periodic timer
+  hides a stall until the deadline: the Settle verdict). Read, no
+  counterexample: the history checker's scans over the transaction's own
+  writes, and SI's G-SIa unchecked (such reads form a G-single cycle or
+  are serializable).
 - **Z2. Reports a user can act on (S–M).** A Mismatch in an exploration
   prints the expectation with the observation filled in (`expect: count
   == 3` over `obs: count=3`), hiding the model's value: print the model's
@@ -579,7 +574,9 @@ next.
   contract allows (X5 checks only that it does no more).
 - **Z7. Liveness (S, then M).** Settle reports whether it settled (it
   returns nil when its time runs out with work pending) and a
-  `Settles()` claim. Then obligations: a binding names a model def of
+  `Settles()` claim; a run ending at its deadline with non-daemon tasks
+  waiting and no deadline of their own says so (a periodic timer once
+  hid such a stall, Z1). Then obligations: a binding names a model def of
   pending work and `Eventually(...)` is judged in virtual time across
   the workflows; a mode where faults continue outside a chosen quorum
   (VOPR's); a fair scheduler for settle and liveness windows; steps
