@@ -78,3 +78,25 @@ func TestShrinkSkipsWhenEmpty(t *testing.T) {
 		t.Errorf("got %q", f.msg)
 	}
 }
+
+// When Hegel finds nothing, an expectation is judged on a conforming run,
+// by its type: AnyOf(Conforms(), ...) holds, Rejects does not. Their
+// descriptions were compared, and AnyOf's failed.
+func TestNothingFoundJudgedByType(t *testing.T) {
+	qtest.RequireQuint(t)
+	nothing := func(t testing.TB) *qhegel.Violation {
+		return qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "testdata/bank.yaml", AllowEmpty: true},
+			func(hegel.TestCase, *qhegel.Case) {}, hegel.WithTestCases(3))
+	}
+	nothing(t).Expect(t, qtest.AnyOf(qtest.Conforms(), qtest.Rejects("deposit")))
+	f := &fatalTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Fatalf
+		defer close(done)
+		nothing(f).Expect(f, qtest.Rejects("deposit"))
+	}()
+	<-done
+	if !strings.Contains(f.msg, "every test case satisfied the model") {
+		t.Errorf("got %q", f.msg)
+	}
+}
