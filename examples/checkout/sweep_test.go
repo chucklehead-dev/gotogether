@@ -24,6 +24,13 @@ var space = []qsweep.Factor{
 	qsweep.FaultKind("rpc.provider"),
 }
 
+// sweepRates fault each kind that is on three times as often as crashy:
+// a pair of kinds on in a row must fault together in some run of it, and
+// at crashy's rates a lost acknowledgement and an API fault met in 0 to 2
+// runs of a sweep (seeds 1-20 met every pair, 1001-1020 missed three).
+// At these, every pair meets in 4 to 7 runs at fresh seeds.
+var sweepRates = qenv.Rates{Default: 0.15, Kinds: map[string]float64{"nemesis": 0.05}}
+
 var isoOf = map[string]qenv.Isolation{"ser": qenv.Serializable, "si": qenv.SnapshotIsolation, "rc": qenv.ReadCommitted}
 
 // sweepSystem is the shop with mutation m, deployed as each sweep row says
@@ -46,7 +53,7 @@ func TestFaithfulSweep(t *testing.T) {
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
-	sw := sweepSystem(shop.Faithful).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 20, Rates: crashy}})
+	sw := sweepSystem(shop.Faithful).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 20, Rates: sweepRates}})
 	t.Log(sw.Evidence())
 	if u := sw.Evidence().Faults.Untried(); len(u) > 0 {
 		t.Errorf("fault kinds never together: %v", u)
