@@ -30,6 +30,10 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- A scripted fault (`qenv.Scripted`) whose kind covers nothing declared,
+  or whose `Name` is no option of its kind, fails the exploration; it
+  never fired, and the claim it was for failed as if the code survived
+  it.
 - `gotogether validate` ends `RESULT: PASS (n traces ...)` or `RESULT:
   FAIL (2 of 3 traces: 1 mismatch after deposit, 1 rejects withdraw)`,
   in the claims' words (`validate.Result.Reason`), where it said

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -434,7 +435,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
-		run.Unscripted = sc.Remaining()
+		run.Unscripted, run.scripted = sc.Remaining(), true
 	}
 	return run
 }
@@ -481,6 +482,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	if n, msgs := qobs.Escaped(mark); n > mark {
 		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
+	x.unknownScripted(t)
 	for i, r := range x.Runs {
 		if r == nil { // the scenario failed t from its goroutine before the run ended
 			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i], ""))
@@ -899,6 +901,11 @@ func (x *Exploration) unfaulted() string {
 	if len(kinds) == 0 {
 		return ""
 	}
+	for _, r := range x.Runs {
+		if r.scripted { // rates and seeds do not reach a Script's faults
+			return fmt.Sprintf(" (never faulted: %s)", strings.Join(kinds, ", "))
+		}
+	}
 	return fmt.Sprintf(" (never faulted: %s; raise their rates or the seeds)", strings.Join(kinds, ", "))
 }
 
@@ -946,7 +953,35 @@ func (x *Exploration) unscripted() string {
 	if n == 0 {
 		return ""
 	}
-	return fmt.Sprintf(" (in %d of %d runs scripted faults never happened, the first's: %v; a fault of a phase that has passed blocks every later one)", n, len(x.Runs), first)
+	return fmt.Sprintf(" (in %d of %d runs scripted faults never happened, the first's: %v; a run never reached a choice of its kind after its After steps, "+
+		"or after the faults it Follows, or an earlier fault of its kind)", n, len(x.Runs), first)
+}
+
+// unknownScripted fails t for each scripted fault that names no declared
+// kind or nemesis, or an option its kind lacks: it never fires, and the
+// claim it was for fails as if the code had survived it.
+func (x *Exploration) unknownScripted(t testing.TB) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, r := range x.Runs {
+		if r == nil {
+			continue
+		}
+		for _, s := range r.Unscripted { // a misnamed fault never fires: it is always left
+			if seen[s.String()] {
+				continue
+			}
+			seen[s.String()] = true
+			if !qenv.KnownFault(s.Kind) {
+				t.Errorf("gotogether: scripted fault %s: its kind %q covers no fault kind or nemesis the system declared, so it never happens: "+
+					"name it as fault coverage prints it (\"rpc.<service>.response\", \"nemesis.crash.<process>\")", s, s.Kind)
+				continue
+			}
+			if opts := qenv.FaultOptions(s.Kind); s.Name != "" && opts != nil && !slices.Contains(opts, s.Name) {
+				t.Errorf("gotogether: scripted fault %s: %s has no option %q; its options: %s", s, s.Kind, s.Name, strings.Join(opts, ", "))
+			}
+		}
+	}
 }
 
 func describeAll(es []Expectation) string {

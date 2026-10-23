@@ -189,6 +189,8 @@ type Run struct {
 	Code *qcover.Counts
 	// savedFrom is a corpus entry's seed, the run it was saved from
 	savedFrom uint64
+	// scripted is a run a Script chose for: it makes only its own faults
+	scripted bool
 	// diverged is why the run's replay stopped repeating its choices (a
 	// corpus entry the code no longer follows), apart from Err
 	diverged error
