@@ -144,8 +144,8 @@ var realStart = time.Now() //qenv:ok the real monotonic clock, outside a simulat
 // as Go's monotonic reading is. Measure an interval with Since:
 //
 //	start := qenv.Mono(ctx)
-//	...
-//	if qenv.Since(ctx, start) > ttl { ... }
+//	/* ... */
+//	if qenv.Since(ctx, start) > ttl { /* ... */ }
 //
 // which is what time.Since(start) of a time.Now() reading does in Go: a
 // time.Time from Now carries no monotonic reading, so Now(ctx).Sub is wall

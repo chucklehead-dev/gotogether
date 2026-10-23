@@ -17,7 +17,7 @@ import (
 //	roles := qrole.From(ctx)
 //	w := &qmeta.Watch{Region: region, State: func() qmeta.State {
 //		return qmeta.State{U: roles.Queue("api"), V: roles.Orbit("api")}
-//	}, Snapshot: func(s qmeta.State) (io.WriteCloser, error) { return os.Create(...) }}
+//	}, Snapshot: func(s qmeta.State) (io.WriteCloser, error) { return os.Create(path) }}
 //	go w.Run(ctx, time.Second)
 //
 // It runs on the real clock, in the real process: not in a simulation.

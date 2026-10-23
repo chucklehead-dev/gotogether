@@ -1,13 +1,15 @@
 // Package docsnippets checks the Go in the docs: every fenced go block of
-// the README, the skills, the examples' READMEs and docs/ parses, and
-// every name it takes from one of the toolkit's packages (qtest.System,
-// qenv.Rates) is one that package exports. A renamed or removed API in a
+// the README, the skills, the examples' READMEs and docs/, and every Go
+// code block of the published modules' doc comments (comments_test.go),
+// parses, and every name it takes from one of the toolkit's packages
+// (qtest.System, qenv.Rates) is one that package exports. A renamed or removed API in a
 // snippet once lived on until a reader tried it. Methods and fields are
 // not checked (that needs the snippets type-checked), nor code outside
 // fences: TestSkillsAvoidDeprecated's list covers prose.
 package docsnippets
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -161,37 +163,44 @@ func TestSnippets(t *testing.T) {
 			n++
 			src := string(b[m[2]:m[3]])
 			line := 1 + strings.Count(string(b[:m[2]]), "\n")
-			f, err := parse(src)
-			if err != nil {
-				t.Errorf("%s:%d: a go block that does not parse (write elided code as /* ... */): %v", rel, line, err)
-				continue
-			}
-			var missing []string
-			mine := locals(f)
-			ast.Inspect(f, func(x ast.Node) bool {
-				sel, ok := x.(*ast.SelectorExpr)
-				if !ok {
-					return true
-				}
-				id, ok := sel.X.(*ast.Ident)
-				if !ok || packages[id.Name] == "" || mine[id.Name] {
-					return true
-				}
-				if apis[id.Name] == nil {
-					apis[id.Name] = exported(t, packages[id.Name])
-				}
-				if !apis[id.Name][sel.Sel.Name] {
-					missing = append(missing, id.Name+"."+sel.Sel.Name)
-				}
-				return true
-			})
-			if len(missing) > 0 {
-				sort.Strings(missing)
-				t.Errorf("%s:%d: a go block names what its package does not export (renamed or removed?): %s", rel, line, strings.Join(missing, ", "))
-			}
+			check(t, apis, fmt.Sprintf("%s:%d", rel, line), src)
 		}
 	}
 	if n < 20 {
 		t.Fatalf("only %d go blocks found under %s: is the walk wrong?", n, root)
+	}
+}
+
+// check reports a snippet at where that does not parse, or that names
+// what its package does not export.
+func check(t *testing.T, apis map[string]map[string]bool, where, src string) {
+	t.Helper()
+	f, err := parse(src)
+	if err != nil {
+		t.Errorf("%s: a go block that does not parse (write elided code as /* ... */): %v", where, err)
+		return
+	}
+	var missing []string
+	mine := locals(f)
+	ast.Inspect(f, func(x ast.Node) bool {
+		sel, ok := x.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		id, ok := sel.X.(*ast.Ident)
+		if !ok || packages[id.Name] == "" || mine[id.Name] {
+			return true
+		}
+		if apis[id.Name] == nil {
+			apis[id.Name] = exported(t, packages[id.Name])
+		}
+		if !apis[id.Name][sel.Sel.Name] {
+			missing = append(missing, id.Name+"."+sel.Sel.Name)
+		}
+		return true
+	})
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("%s: a go block names what its package does not export (renamed or removed?): %s", where, strings.Join(missing, ", "))
 	}
 }

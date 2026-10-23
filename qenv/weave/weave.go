@@ -6,7 +6,7 @@
 // and a go statement marked //qenv:go starts a simulation task:
 //
 //	//qenv:go
-//	go func() { ... }()
+//	go func() { /* ... */ }()
 //
 // Each function checks whether the calling goroutine is a task of a
 // running simulation. If it is, the lock or wait group is the

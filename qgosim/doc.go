@@ -7,7 +7,7 @@
 // built with the sim tag. It makes a simulation with New (or uses Chooser,
 // Platform and Sink directly) and records steps with qobs as usual. The
 // steps reach the host, where a normal test drives the simulated one
-// with Run or, for qtest.Explore, Scenario, and checks the steps against
+// with Run or, for System.Explore, Scenario, and checks the steps against
 // the model:
 //
 //	// checkout/sim_test.go, //go:build sim
@@ -17,8 +17,10 @@
 //	}
 //
 //	// checkout/host_test.go
-//	sys := qtest.System{Binding: binding, Run: qgosim.Scenario(t, pkg, "TestCheckout")}
-//	sys.Explore(t, x).Expect(t, qtest.Conforms())
+//	func TestCheckoutConforms(t *testing.T) {
+//		sys := qtest.System{Binding: binding, Run: qgosim.Scenario(t, pkg, "TestCheckout")}
+//		sys.Explore(t, qtest.ExploreConfig{Seeds: 20}).Expect(t, qtest.Conforms())
+//	}
 //
 // The package lives in a module of its own because it depends on gosim.
 package qgosim
