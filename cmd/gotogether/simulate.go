@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,7 +27,7 @@ import (
 // nondet over an infinite set or Choreo's recursion, fails with its
 // error without it).
 func simulate(args []string) (int, error) {
-	fset := flag.NewFlagSet("simulate", flag.ExitOnError)
+	fset := commandFlags("simulate")
 	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
 	steps := fset.Int("steps", 0, "steps per trace (default: the binding's simulate.steps, else 30)")
 	samples := fset.Int("samples", 0, "traces per invariant (default: the binding's simulate.samples, else 1000)")

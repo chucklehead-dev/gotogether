@@ -82,7 +82,7 @@ its protocol model (`examples/edgepublish`).
 go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.1
 go get github.com/chucklehead-dev/gotogether/qhegel@latest               # Hegel, in tests (its own module: the core needs no Hegel)
 npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
-go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills
+go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills (gotogether help; each command's -h)
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 ```
 

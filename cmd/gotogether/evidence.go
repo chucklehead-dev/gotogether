@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,7 +18,7 @@ import (
 // report says so of itself, but only the suite can say that nothing tried
 // it. With -strict such a gap fails (exit 1).
 func evidence(args []string) (int, error) {
-	fset := flag.NewFlagSet("evidence", flag.ExitOnError)
+	fset := commandFlags("evidence")
 	strict := fset.Bool("strict", false, "exit 1 if a model action, fault point or fault kind is untried by every test")
 	fset.Parse(args)
 	roots := fset.Args()

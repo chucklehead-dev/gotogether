@@ -25,7 +25,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -71,6 +70,10 @@ func main() {
 		code, err = simulate(os.Args[2:])
 	case "evidence":
 		code, err = evidence(os.Args[2:])
+	case "help", "-h", "-help", "--help":
+		help()
+	case "version":
+		fmt.Println("gotogether", version())
 	default:
 		usage()
 	}
@@ -81,8 +84,21 @@ func main() {
 	os.Exit(code)
 }
 
+// usage prints the commands to standard error and exits 2: the command
+// line was wrong.
 func usage() {
-	fmt.Fprintln(os.Stderr, `usage:
+	usageTo(os.Stderr)
+	os.Exit(2)
+}
+
+func usageTo(w io.Writer) {
+	fmt.Fprintln(w, `gotogether checks Go code against a Quint model. Start with a binding, then a test:
+  gotogether scaffold -spec model.qnt -module M -out m.binding.yaml    (set its constants)
+  gotogether lint -binding m.binding.yaml && gotogether simulate -binding m.binding.yaml
+  gotogether scaffold -system -binding m.binding.yaml -out system_test.go
+Each command's -h says what it is for, with an example. gotogether version prints the version.
+
+usage:
   gotogether scaffold -spec model.qnt -module M [-out m.binding.yaml]
   gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
   gotogether simulate -binding b.yaml [-steps n] [-samples n] [-const N=e] [-seed s] [-verify n]
@@ -105,13 +121,12 @@ func usage() {
                    agent skills for this toolkit (default: .agents/skills and .claude/skills)
 
 validate, steps and itf also take -convert r.yaml to convert OTLP/JSON spans on the way in.`)
-	os.Exit(2)
 }
 
 func scaffold(args []string) error {
-	fset := flag.NewFlagSet("scaffold", flag.ExitOnError)
+	fset := commandFlags("scaffold")
 	spec := fset.String("spec", "", "Quint spec")
-	module := fset.String("module", "", "parameterised module to bind")
+	module := fset.String("module", "", "the model's module (its name after `module` in the spec)")
 	system := fset.Bool("system", false, "print a qtest.System test for -binding instead of a binding")
 	bpath := fset.String("binding", "", "binding file (with -system)")
 	pkg := fset.String("pkg", "app", "package of the test (with -system)")
@@ -177,7 +192,7 @@ func scaffold(args []string) error {
 }
 
 func lint(args []string) (int, error) {
-	fset := flag.NewFlagSet("lint", flag.ExitOnError)
+	fset := commandFlags("lint")
 	bpath := fset.String("binding", "", "binding file")
 	src := fset.String("src", "", "Go source tree to scan for //quint:action annotations and literal qobs.Record actions")
 	sim := fset.String("sim", "", "Go source tree of simulation code (files importing qenv) to check for what escapes the simulation")
@@ -285,7 +300,7 @@ func readSteps(files []string, rules *convert.Rules) ([]qtrace.Step, error) {
 }
 
 func steps(args []string) error {
-	fset := flag.NewFlagSet("steps", flag.ExitOnError)
+	fset := commandFlags("steps")
 	conv := fset.String("convert", "", "convert OTLP/JSON spans with this rule file")
 	out := fset.String("out", "", "write the selected, sanitized steps to this step log instead of listing them")
 	actors := fset.String("actors", "", "keep these actors (comma-separated path.Match patterns)")
@@ -360,7 +375,7 @@ func steps(args []string) error {
 }
 
 func runValidate(args []string) (int, error) {
-	fset := flag.NewFlagSet("validate", flag.ExitOnError)
+	fset := commandFlags("validate")
 	bpath := fset.String("binding", "", "binding file (optional for ITF written by gotogether)")
 	dir := fset.String("dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
 	backend := fset.String("backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
@@ -542,7 +557,7 @@ func plural(n int, what string) string {
 
 // toITF writes one model-level ITF per actor from recorded steps.
 func toITF(args []string) error {
-	fset := flag.NewFlagSet("itf", flag.ExitOnError)
+	fset := commandFlags("itf")
 	bpath := fset.String("binding", "", "binding file")
 	out := fset.String("out", ".", "output directory: <actor>.itf.json per actor")
 	conv := fset.String("convert", "", "convert OTLP/JSON spans with this rule file")
@@ -615,7 +630,7 @@ func convertFile(path string, rules *convert.Rules) ([]qtrace.Step, bool, error)
 }
 
 func runConvert(args []string) error {
-	fset := flag.NewFlagSet("convert", flag.ExitOnError)
+	fset := commandFlags("convert")
 	rpath := fset.String("rules", "", "rule file mapping spans to model actions")
 	out := fset.String("out", "-", "native step log to write (- for stdout)")
 	fset.Parse(args)
@@ -668,7 +683,7 @@ func runSkills(args []string) error {
 	if args[0] != "install" {
 		usage()
 	}
-	fset := flag.NewFlagSet("skills install", flag.ExitOnError)
+	fset := commandFlags("skills install")
 	target := fset.String("target", "", "comma-separated: agents (.agents/skills), claude (.claude/skills), github, cursor, or all (default agents,claude)")
 	dir := fset.String("dir", "", "install into this skills directory instead of the targets")
 	user := fset.Bool("user", false, "install for the user (under $HOME) instead of the current project")

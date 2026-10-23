@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"strings"
 
@@ -12,7 +11,7 @@ import (
 // built with -cover) and, given a simulation's coverage summary, what ran
 // in one and not the other.
 func runCover(args []string) error {
-	fset := flag.NewFlagSet("cover", flag.ExitOnError)
+	fset := commandFlags("cover")
 	covdir := fset.String("covdir", "", "comma-separated GOCOVERDIRs of the real environment's runs")
 	sim := fset.String("sim", "", "a simulation's coverage: an exploration's evidence (under GOTOGETHER_EVIDENCE) or a qcover.Summary as JSON")
 	fset.Parse(args)
