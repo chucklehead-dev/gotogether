@@ -67,6 +67,9 @@ Mapping from quint-connect: `#[quint_run]` → `connect.Run`; `#[quint_test]`
    step, its picks and the model's next state.
    - If the model's state is right, fix the code.
    - If the projection is wrong (a field mapped incorrectly), fix `State()`.
+     Its type's fields must be exported and named after the model record's
+     (`itf:"-"` leaves one out): a field that compares nothing fails the
+     check, naming the record's fields.
    - The spec is ground truth: change it only when the requirements say
      the model is wrong, and say so.
 4. Repeat until a run with `MaxSamples` ≥ 50 passes. Then raise `MaxSteps`.

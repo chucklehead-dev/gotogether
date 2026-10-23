@@ -181,9 +181,11 @@ type Driver interface {
 // StateDriver is a Driver whose state is compared with the model's after
 // every step, init included. State returns the implementation's state as a
 // Go value; the model's state (Step.State) is decoded into a new value of
-// the same type with itf.Decode, and the two must be reflect.DeepEqual.
-// Fields absent from the Go type are not compared, so the type can project
-// the part of the model the implementation has.
+// the same type with itf.DecodeProjection, and the two must be
+// reflect.DeepEqual. Fields absent from the Go type are not compared, so
+// the type can project the part of the model the implementation has; a
+// field the model's record lacks (a misspelling) or an unexported one
+// fails the check, since it would compare nothing.
 type StateDriver interface {
 	Driver
 	State() (any, error)
@@ -427,7 +429,7 @@ func compare(model itf.Value, impl any) ([]string, error) {
 	}
 	t := reflect.TypeOf(impl)
 	want := reflect.New(t)
-	if err := itf.Decode(model, want.Interface()); err != nil {
+	if err := itf.DecodeProjection(model, want.Interface()); err != nil {
 		return nil, fmt.Errorf("decoding the model's state into %s: %w", t, err)
 	}
 	return Diff(want.Elem().Interface(), impl), nil

@@ -260,6 +260,7 @@ const Variant Kind = iota (spec 9 of its group)
 func BoolOf(b bool) Value
 func Decode(v Value, out any) error
 func DecodeAs[T any](v Value) (T, error)
+func DecodeProjection(v Value, out any) error
 func Encode(x any) (Value, error)
 func Enum(tag string) Value
 func FromGo(x any) (Value, error)

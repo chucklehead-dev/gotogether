@@ -56,8 +56,25 @@ func Decode(v Value, out any) error {
 	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return fmt.Errorf("itf.Decode: need a non-nil pointer, got %T", out)
 	}
-	return decodeInto(v, rv.Elem(), "")
+	return decoder{}.decodeInto(v, rv.Elem(), "")
 }
+
+// DecodeProjection is Decode for a type that projects the value, to be
+// compared with another of its type (connect's StateDriver): a struct
+// decoded from a record may leave out the record's fields, but every
+// field it has must be the record's (or tagged `itf:"-"`) and exported.
+// Decode leaves a field the record lacks at its zero value and skips an
+// unexported one, and a comparison of either compares nothing.
+func DecodeProjection(v Value, out any) error {
+	rv := reflect.ValueOf(out)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return fmt.Errorf("itf.DecodeProjection: need a non-nil pointer, got %T", out)
+	}
+	return decoder{strict: true}.decodeInto(v, rv.Elem(), "")
+}
+
+// decoder decodes values into Go; strict is DecodeProjection's.
+type decoder struct{ strict bool }
 
 // DecodeAs decodes v into a new T.
 func DecodeAs[T any](v Value) (T, error) {
@@ -84,7 +101,7 @@ func kindName(k Kind) string {
 	return [...]string{"invalid", "int", "bool", "str", "list", "set", "map", "tuple", "record", "variant"}[k]
 }
 
-func decodeInto(v Value, rv reflect.Value, path string) error {
+func (d decoder) decodeInto(v Value, rv reflect.Value, path string) error {
 	t := rv.Type()
 	if rv.CanAddr() && reflect.PointerTo(t).Implements(unmarshalerType) {
 		return rv.Addr().Interface().(Unmarshaler).UnmarshalITF(v)
@@ -115,14 +132,14 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 				return nil
 			}
 			p := reflect.New(t.Elem())
-			if err := decodeInto(v.inner(), p.Elem(), path); err != nil {
+			if err := d.decodeInto(v.inner(), p.Elem(), path); err != nil {
 				return err
 			}
 			rv.Set(p)
 			return nil
 		}
 		p := reflect.New(t.Elem())
-		if err := decodeInto(v, p.Elem(), path); err != nil {
+		if err := d.decodeInto(v, p.Elem(), path); err != nil {
 			return err
 		}
 		rv.Set(p)
@@ -177,7 +194,7 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 			return nil
 		}
 		if v.Kind == Map {
-			return decodePairs(v, rv, path)
+			return d.decodePairs(v, rv, path)
 		}
 		elems, err := seqElems(v, path)
 		if err != nil {
@@ -185,7 +202,7 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 		}
 		s := reflect.MakeSlice(t, len(elems), len(elems))
 		for i, e := range elems {
-			if err := decodeInto(e, s.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			if err := d.decodeInto(e, s.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
 				return err
 			}
 		}
@@ -200,7 +217,7 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 			return derr(path, "want %d elements for %s, have %d", t.Len(), t, len(elems))
 		}
 		for i, e := range elems {
-			if err := decodeInto(e, rv.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			if err := d.decodeInto(e, rv.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
 				return err
 			}
 		}
@@ -211,11 +228,11 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 		case Map:
 			for i, p := range v.Pairs {
 				k := reflect.New(t.Key()).Elem()
-				if err := decodeInto(p[0], k, fmt.Sprintf("%s{key %d}", path, i)); err != nil {
+				if err := d.decodeInto(p[0], k, fmt.Sprintf("%s{key %d}", path, i)); err != nil {
 					return err
 				}
 				x := reflect.New(t.Elem()).Elem()
-				if err := decodeInto(p[1], x, fmt.Sprintf("%s[%s]", path, p[0])); err != nil {
+				if err := d.decodeInto(p[1], x, fmt.Sprintf("%s[%s]", path, p[0])); err != nil {
 					return err
 				}
 				m.SetMapIndex(k, x)
@@ -226,7 +243,7 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 			}
 			for name, f := range v.Fields {
 				x := reflect.New(t.Elem()).Elem()
-				if err := decodeInto(f, x, path+"."+name); err != nil {
+				if err := d.decodeInto(f, x, path+"."+name); err != nil {
 					return err
 				}
 				m.SetMapIndex(reflect.ValueOf(name).Convert(t.Key()), x)
@@ -239,7 +256,7 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 			}
 			for i, e := range v.Elems {
 				k := reflect.New(t.Key()).Elem()
-				if err := decodeInto(e, k, fmt.Sprintf("%s{%d}", path, i)); err != nil {
+				if err := d.decodeInto(e, k, fmt.Sprintf("%s{%d}", path, i)); err != nil {
 					return err
 				}
 				x := reflect.New(t.Elem()).Elem()
@@ -254,7 +271,7 @@ func decodeInto(v Value, rv reflect.Value, path string) error {
 		rv.Set(m)
 		return nil
 	case reflect.Struct:
-		return decodeStruct(v, rv, path)
+		return d.decodeStruct(v, rv, path)
 	}
 	if rv.CanAddr() && reflect.PointerTo(t).Implements(textUnmarshaler) && v.Kind == Str {
 		return rv.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(v.S))
@@ -273,14 +290,14 @@ func seqElems(v Value, path string) ([]Value, error) {
 }
 
 // decodePairs decodes a Quint map into a slice of pairs (sorted by key).
-func decodePairs(v Value, rv reflect.Value, path string) error {
+func (d decoder) decodePairs(v Value, rv reflect.Value, path string) error {
 	t := rv.Type()
 	pairs := append([][2]Value(nil), v.Pairs...)
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i][0].String() < pairs[j][0].String() })
 	s := reflect.MakeSlice(t, len(pairs), len(pairs))
 	for i, p := range pairs {
 		tup := Value{Kind: Tuple, Elems: []Value{p[0], p[1]}}
-		if err := decodeInto(tup, s.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+		if err := d.decodeInto(tup, s.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
 			return err
 		}
 	}
@@ -330,6 +347,15 @@ func structFields(t reflect.Type) []fieldInfo {
 	return out
 }
 
+func sortedNames(m map[string]Value) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func norm(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r == '_' {
@@ -339,7 +365,7 @@ func norm(s string) string {
 	}, s)
 }
 
-func decodeStruct(v Value, rv reflect.Value, path string) error {
+func (d decoder) decodeStruct(v Value, rv reflect.Value, path string) error {
 	t := rv.Type()
 	fields := structFields(t)
 	isTuple := false
@@ -360,12 +386,19 @@ func decodeStruct(v Value, rv reflect.Value, path string) error {
 			return derr(path, "tuple of %d elements into %s with %d fields", len(v.Elems), t, len(live))
 		}
 		for i, f := range live {
-			if err := decodeInto(v.Elems[i], rv.Field(f.index), fmt.Sprintf("%s._%d", path, i+1)); err != nil {
+			if err := d.decodeInto(v.Elems[i], rv.Field(f.index), fmt.Sprintf("%s._%d", path, i+1)); err != nil {
 				return err
 			}
 		}
 		return nil
 	case v.Kind == Record:
+		if d.strict {
+			for i := 0; i < t.NumField(); i++ {
+				if f := t.Field(i); !f.IsExported() {
+					return derr(path, "field %s of %s is unexported, so it is never compared: export it, or leave it out of the type", f.Name, t)
+				}
+			}
+		}
 		byName := map[string]string{}
 		for name := range v.Fields {
 			byName[norm(name)] = name
@@ -382,10 +415,13 @@ func decodeStruct(v Value, rv reflect.Value, path string) error {
 					key, ok = k, true
 				}
 			}
+			if !ok && d.strict {
+				return derr(path, "field %s of %s is not the record's (it has %s): name it after one, or tag it `itf:\"-\"`", f.name, t, strings.Join(sortedNames(v.Fields), ", "))
+			}
 			if !ok {
 				continue // absent: leave the zero value, as serde does with defaults
 			}
-			if err := decodeInto(v.Fields[key], rv.Field(f.index), path+"."+key); err != nil {
+			if err := d.decodeInto(v.Fields[key], rv.Field(f.index), path+"."+key); err != nil {
 				return err
 			}
 		}
@@ -409,7 +445,7 @@ func decodeStruct(v Value, rv reflect.Value, path string) error {
 			}
 		}
 		if tagF != nil {
-			if err := decodeInto(Value{Kind: Str, S: v.Tag}, rv.Field(tagF.index), path+".tag"); err != nil {
+			if err := d.decodeInto(Value{Kind: Str, S: v.Tag}, rv.Field(tagF.index), path+".tag"); err != nil {
 				return err
 			}
 		}
@@ -417,7 +453,7 @@ func decodeStruct(v Value, rv reflect.Value, path string) error {
 			if v.nullary() {
 				return nil // no payload: the value field keeps its zero value
 			}
-			return decodeInto(v.inner(), rv.Field(valF.index), path+"."+v.Tag)
+			return d.decodeInto(v.inner(), rv.Field(valF.index), path+"."+v.Tag)
 		}
 		// 2. a field named like the variant holds its payload
 		for _, f := range fields {
@@ -430,7 +466,7 @@ func decodeStruct(v Value, rv reflect.Value, path string) error {
 					fv.SetBool(true)
 					return nil
 				}
-				return decodeInto(v.inner(), fv, path+"."+v.Tag)
+				return d.decodeInto(v.inner(), fv, path+"."+v.Tag)
 			}
 		}
 		if tagF != nil && v.nullary() {

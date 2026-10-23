@@ -191,3 +191,30 @@ func TestDiff(t *testing.T) {
 }
 
 func sprintf(format string, args ...any) string { return fmt.Sprintf(format, args...) }
+
+// A state type whose field compares nothing fails the check: an
+// unexported field is never decoded, and a misspelled one stayed at its
+// zero value, so a balance of 999 against the model's 5 once passed.
+func TestCompareRefusesFieldsThatCompareNothing(t *testing.T) {
+	model := itf.RecordOf("balance", itf.IntOf(5), "ops", itf.IntOf(1))
+	type unexported struct{ balance int64 }
+	type misspelled struct{ Balanse int64 }
+	for _, tc := range []struct {
+		impl any
+		want string
+	}{
+		{unexported{999}, "field balance of connect.unexported is unexported"},
+		{misspelled{0}, "field Balanse of connect.misspelled is not the record's (it has balance, ops)"},
+	} {
+		if _, err := compare(model, tc.impl); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%T: %v, want %q", tc.impl, err, tc.want)
+		}
+	}
+	type projection struct {
+		Balance int64
+		Note    string `itf:"-"`
+	}
+	if d, err := compare(model, projection{Balance: 999}); err != nil || len(d) != 1 {
+		t.Errorf("a projection: %v %v", d, err)
+	}
+}

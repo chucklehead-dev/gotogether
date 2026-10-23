@@ -30,6 +30,10 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- `itf.DecodeProjection`, which connect's state check decodes with: a
+  StateDriver's state type with an unexported field, or a field the
+  model's record lacks (a misspelling), fails the check instead of
+  comparing nothing.
 - `qtest.Takes(action).InAtLeast(p)` and `qtest.Exercised(except...)`:
   claims that an exploration's runs took the model's actions, each option
   of the fault kinds they reached and each nemesis they enabled, by name
