@@ -747,13 +747,17 @@ func (x *Exploration) summary() string {
 	}
 	if x.actions != nil {
 		m := modelCoverage(x.Runs, x.actions)
-		taken := 0
-		for _, n := range m.Taken {
-			if n > 0 {
+		taken, all := 0, 0
+		for a := range x.actions {
+			if a == "init" || a == "step" {
+				continue // the model's own, not a step a run records
+			}
+			all++
+			if m.Taken[a] > 0 {
 				taken++
 			}
 		}
-		line += fmt.Sprintf("; actions taken %d of %d", taken, taken+len(m.Never))
+		line += fmt.Sprintf("; actions taken %d of %d", taken, all)
 	}
 	cov := x.faultCoverage()
 	faulted, reached := 0, 0

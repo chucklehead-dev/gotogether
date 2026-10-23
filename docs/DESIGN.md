@@ -1056,7 +1056,7 @@ the same workarounds kept appearing in examples. They are now in the core.
   deliveries wait in publication order. A queue that forgets a crashed
   consumer's messages is caught (`TestQueueContract`), through crashes,
   lost acknowledgements, nacks and partitions.
-- **Constants per check** (`qtest.Constants`, `qhegel.Config.Constants`,
+- **Constants per check** (`qtest.Constants`, in qhegel's `Config.Opts`,
   `validate.Checker.WithConstants`). One binding serves runs of any size.
   Checkout's load runs had needed a copy of the binding with a different
   stock.
@@ -2772,7 +2772,7 @@ intervals on the monotonic one) and fencing surviving all. Jumps are
 nemeses, not choices at every read, so reading the clock makes no choice.
 
 **Disks and partitions (X7, Y7).** `qenv.Disk` is a machine's disk:
-writes reach the OS at once and the disk on `Sync`; a crash of its
+writes reach the OS at once and the disk on `File.Sync`; a crash of its
 process is a fault point (`disk.<name>.crash`: nominal keeps every write,
 `powerLoss` the synced ones, `tornWrite` part of the last). It is what
 tells "written" from "durable", which `FileSink` (one write per step) and

@@ -53,6 +53,19 @@ jobs:
           name: corpus-${{ matrix.example }}
           path: ${{ runner.temp }}/corpus
 
+  core-properties:
+    # the core's Hegel properties (internal/hegelprops) at a fresh Hegel seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: the core's Hegel properties at a fresh seed
+        working-directory: internal/hegelprops
+        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 50m ./...
+
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 90

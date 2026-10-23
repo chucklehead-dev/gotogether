@@ -391,21 +391,49 @@ func expr(fset *token.FileSet, e ast.Node) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
-// value prints a constant's or variable's value, its type but not its body
-// for a function literal or a composite one: an analyzer's Run, a table of
-// names, are implementation, and a change to them is not one to the API.
+// value prints a constant's or variable's value. A function literal's
+// body and a composite literal's computed parts are implementation (an
+// analyzer's Run, a table built from others): elided. A composite's
+// literal parts are kept, since they are what a user names (an analyzer's
+// Name, which flags and nolint comments spell).
 func value(fset *token.FileSet, e ast.Expr) string {
 	switch v := e.(type) {
 	case *ast.FuncLit:
 		return expr(fset, v.Type) + " {…}"
 	case *ast.CompositeLit:
 		if v.Type != nil {
-			return expr(fset, v.Type) + "{…}"
+			return expr(fset, v.Type) + composite(fset, v)
 		}
 	case *ast.UnaryExpr:
 		if c, ok := v.X.(*ast.CompositeLit); ok && v.Op == token.AND && c.Type != nil {
-			return "&" + expr(fset, c.Type) + "{…}"
+			return "&" + expr(fset, c.Type) + composite(fset, c)
 		}
 	}
 	return expr(fset, e)
+}
+
+// composite is a composite literal's braces: its elements whose value is
+// a basic literal (`Name: "quintaction"`, `"a"`; a Doc aside), then …
+// for the rest.
+func composite(fset *token.FileSet, c *ast.CompositeLit) string {
+	var kept []string
+	elided := false
+	for _, el := range c.Elts {
+		val := el
+		if kv, ok := el.(*ast.KeyValueExpr); ok {
+			if k, ok := kv.Key.(*ast.Ident); ok && k.Name == "Doc" {
+				continue // documentation, not what a user names
+			}
+			val = kv.Value
+		}
+		if _, ok := val.(*ast.BasicLit); ok {
+			kept = append(kept, expr(fset, el))
+		} else {
+			elided = true
+		}
+	}
+	if elided {
+		kept = append(kept, "…")
+	}
+	return "{" + strings.Join(kept, ", ") + "}"
 }

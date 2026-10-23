@@ -1121,7 +1121,7 @@ type Row struct
 
 == github.com/chucklehead-dev/gotogether/qtest
 const DefaultLinearizeBudget = 200
-const EvidenceFormat = "gotogether.evidence/1"
+const EvidenceFormat = "gotogether.evidence/2"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
 const RoleReplay = "replay"
@@ -1168,6 +1168,7 @@ type Evidence struct
     field Format string `json:"format"`
     field Role string `json:"role"`
     field Mutant string `json:"mutant,omitempty"`
+    field Package string `json:"package,omitempty"`
     field Test string `json:"test,omitempty"`
     field Spec string `json:"spec,omitempty"`
     field Runs int `json:"runs"`
@@ -1364,8 +1365,8 @@ func TargetDirs(root string, names []string) ([]string, error)
 type Skill struct
     field Name string
     field Description string
-var DefaultTargets = []string{…}
-var Renamed = map[string]string{…}
+var DefaultTargets = []string{"agents", "claude"}
+var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-for-go": "gotogether-model", "quint-modeling-patterns": "gotogether-patterns", "quint-mbt-driver": "gotogether-mbt", "quint-hegel": "gotogether-hegel", "quint-trace-validation": "gotogether-traces", "quint-fault-injection": "gotogether-faults", "quint-metastability": "gotogether-metastability", "quint-verification-workflow": "gotogether-workflow"}
 var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/sktrace

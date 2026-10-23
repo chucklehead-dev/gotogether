@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -292,26 +293,20 @@ var pkgOnce struct {
 	dir string
 }
 
-// pkgDir names the test binary's package as a directory: its directory
-// relative to its module's root (go test runs a test in its package's
-// directory), "_" for the root, slashes as "_".
+// pkgDir names the test binary's package as a relative directory: its
+// import path below its module's ("qtest", "examples/x/y"), "_" for the
+// module's root. The build info says it (a test binary's path is the
+// package's with ".test"), whatever the working directory.
 func pkgDir() string {
 	pkgOnce.Do(func() {
 		pkgOnce.dir = "_"
-		wd, err := os.Getwd()
-		if err != nil {
+		bi, ok := debug.ReadBuildInfo()
+		if !ok {
 			return
 		}
-		for dir := wd; ; dir = filepath.Dir(dir) {
-			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-				if rel, err := filepath.Rel(dir, wd); err == nil && rel != "." {
-					pkgOnce.dir = strings.ReplaceAll(filepath.ToSlash(rel), "/", "_")
-				}
-				return
-			}
-			if filepath.Dir(dir) == dir {
-				return
-			}
+		pkg := strings.TrimSuffix(bi.Path, ".test")
+		if rel, ok := strings.CutPrefix(pkg, bi.Main.Path+"/"); ok && bi.Main.Path != "" {
+			pkgOnce.dir = filepath.FromSlash(rel)
 		}
 	})
 	return pkgOnce.dir

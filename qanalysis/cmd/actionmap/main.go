@@ -1,12 +1,12 @@
 // Command actionmap prints the code each model action statically reaches
 // from where its steps are recorded (qanalysis/actionmap) and, with
 // -coverage, compares it with the code its steps ran: an exploration's
-// evidence.json, which explorations woven with qweave -cover write under
-// $GOTOGETHER_KEEP (or a qcover.Summary as JSON, which examples/checkout's
+// evidence, which explorations woven with qweave -cover write under
+// $GOTOGETHER_EVIDENCE (or a qcover.Summary as JSON, which examples/checkout's
 // TestCodeCoverage writes). It lists dead functions
 // first: the ones no root (main, init, exported API) reaches.
 //
-//	actionmap [-C dir] [-coverage evidence.json] packages...
+//	actionmap [-C dir] [-coverage EVIDENCE] packages...
 package main
 
 import (

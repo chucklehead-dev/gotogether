@@ -58,7 +58,7 @@ func simulate(args []string) (int, error) {
 		fmt.Printf("simulate %s: not verified: %s\n", *bpath, sim.VerifySkip)
 		return 0, nil
 	}
-	if *verify > sim.VerifySteps && sim.VerifySteps > 0 {
+	if sim.VerifySteps > 0 && *verify >= sim.VerifySteps {
 		*verify, capped = sim.VerifySteps, ", the binding's verifySteps"
 	}
 	overrides := []string{}
@@ -147,8 +147,8 @@ func simulate(args []string) (int, error) {
 				"checking the code against it proves nothing. %s, or move it to simulate.holds\n", inv, *verify, raise)
 		case allows[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should allow its violation, and none of %d sampled traces violates it: "+
-				"checking the code against it proves nothing. Raise -samples or -steps, or move it to simulate.holds\n", inv, *samples)
+			fmt.Printf("  FAIL    %s: the model should allow its violation, and none of %d sampled traces of up to %d steps violates it: "+
+				"checking the code against it proves nothing. Raise -samples or -steps, or move it to simulate.holds\n", inv, *samples, *steps)
 		case violated:
 			code = 1
 			fmt.Printf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model\n", inv)

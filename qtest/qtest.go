@@ -83,7 +83,7 @@ func (c settings) refuse(t testing.TB, workflow string, ignored map[string]strin
 // records nothing.
 var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
-		"or record through the run's context); Global is Record's and qhegel's cases', for goroutines no run can follow"
+		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	whyLinearize = "its runs are checked in the order they were recorded; Linearize is Record's and Validate's, " +
 		"for steps recorded where an operation was invoked and returned"
 	exploreIgnores  = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize}

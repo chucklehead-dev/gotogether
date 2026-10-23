@@ -13,7 +13,7 @@ import (
 )
 
 // evidence reads the evidence every exploration writes under
-// GOTOGETHER_KEEP and reports the suite as a whole: what each test's runs
+// GOTOGETHER_EVIDENCE (or GOTOGETHER_KEEP) and reports the suite as a whole: what each test's runs
 // showed, and what no test showed. A model action no test took, a fault
 // point no test reached, a fault kind no test injected: each test's own
 // report says so of itself, but only the suite can say that nothing tried
@@ -75,7 +75,11 @@ func suiteReport(es []*qtest.Evidence) (string, int) {
 	runs := 0
 	for _, e := range es {
 		runs += e.Runs
-		fmt.Fprintf(&b, "%s: %d runs, %d conform", e.Test, e.Runs, e.Conform)
+		name := e.Test
+		if e.Package != "" && e.Package != "_" {
+			name = e.Package + " " + e.Test // two packages' tests may share a name
+		}
+		fmt.Fprintf(&b, "%s: %d runs, %d conform", name, e.Runs, e.Conform)
 		for _, r := range sortedKeys(e.FailingBy) {
 			fmt.Fprintf(&b, ", %d %s", e.FailingBy[r], r)
 		}

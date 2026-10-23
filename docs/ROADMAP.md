@@ -446,7 +446,7 @@ starts, and the review's findings are fixed first.
   in a System's or qhegel's Opts do nothing in Explore, Exhaust or
   Shrink, silently.
 - **Y10. Evidence as a format. Done:** `Evidence.Format`
-  (`gotogether.evidence/1`) refused when other, and read by format
+  (`gotogether.evidence/2`) refused when other, and read by format
   (qcover, `gotogether evidence`) rather than by a key or a file name;
   `GOTOGETHER_EVIDENCE` (dir/<package>/<test>/x<N>.json), cleared per test, and
   KEEP's x<N>/evidence.json cleared likewise; `Evidence.Role` (faithful,

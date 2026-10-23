@@ -28,6 +28,9 @@ type Evidence struct {
 	Role string `json:"role"`
 	// Mutant is the System's Mutant, if any.
 	Mutant string `json:"mutant,omitempty"`
+	// Package is the test's package, below its module ("qtest"; "_" the
+	// root): two packages may have tests of one name.
+	Package string `json:"package,omitempty"`
 	// Test is the exploration (TestX#2), and Spec the binding's spec and
 	// module ("/abs/model/m.qnt:m"): a suite's evidence groups by them
 	// (gotogether evidence).
@@ -63,7 +66,7 @@ func (e *Evidence) WriteJSON(path string) error {
 // Bump it when a field's name or meaning changes (qenv.Coverage's and
 // qcover.Summary's, which it embeds, too), so old files are refused, not
 // misread.
-const EvidenceFormat = "gotogether.evidence/1"
+const EvidenceFormat = "gotogether.evidence/2" // 2: qenv.Coverage's keys in lower case, Package
 
 // Evidence roles (Evidence.Role).
 const (
@@ -117,7 +120,7 @@ func IsEvidence(path string) bool {
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
 	e.Test, e.Spec = x.ref(), x.model
-	e.Format, e.Role, e.Mutant = EvidenceFormat, x.role(), x.mutation
+	e.Format, e.Role, e.Mutant, e.Package = EvidenceFormat, x.role(), x.mutation, pkgDir()
 	e.Faults = x.faultCoverage()
 	if x.actions != nil {
 		e.Model = modelCoverage(x.Runs, x.actions)

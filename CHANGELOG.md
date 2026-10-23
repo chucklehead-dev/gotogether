@@ -37,7 +37,10 @@ Added to the core since api/core.txt was first recorded:
   `qenv.FaultOptions` names a declared kind's options; `Evidence.Model` lists the
   actions never taken. `Expect` and `System.Mutate` judge a claim by one
   verdict, so NotVacuous kills mutants too.
-- Evidence is a format (`Evidence.Format`, `qtest.EvidenceFormat`,
+- `qtest.Settings.RefuseExploration` and `Settings.SkipIfEmpty`, for a
+  package building on qtest's workflows (qhegel.Shrink).
+- Evidence is a format (`Evidence.Format`, `qtest.EvidenceFormat`
+  `gotogether.evidence/2`, whose qenv.Coverage keys are lower case,
   `IsEvidence`) with a role (faithful, mutant, replay: `System.Mutant`,
   `ExploreConfig.Replay`); `GOTOGETHER_EVIDENCE=dir` writes it as
   dir/<package>/<test>/x<N>.json, cleared per test; `gotogether evidence` and
@@ -124,11 +127,12 @@ Added to the core since api/core.txt was first recorded:
   says it guarantees (`holds`) or lets the code break (`allows`);
   `-verify N` checks every trace of up to N steps with quint verify
   (Apalache) instead of sampling.
-- `gotogether evidence DIR`: a suite's explorations, from the evidence.json
-  each writes under GOTOGETHER_KEEP (one per exploration, in its own
-  directory, named by its TestX#N), and what no test tried; `-strict` fails on a gap. Evidence
-  names its `Test` and `Spec`; `qtest.ReadEvidence`, `qcover.ReadSummary`
-  (a Summary or an evidence.json, read by `gotogether cover -sim`).
+- `gotogether evidence DIR`: a suite's explorations, from the evidence
+  each writes (under GOTOGETHER_EVIDENCE, as below), and what no faithful
+  exploration tried; `-strict` fails on a gap. Evidence names its `Test`
+  (TestX#N), `Package` and `Spec`; `qtest.ReadEvidence`,
+  `qcover.ReadSummary` (a Summary or evidence, read by `gotogether cover
+  -sim`).
 
 Before this, the project was quint-connect-go
 (github.com/casselc/quint-connect-go); docs/HISTORY.md has the path here.
