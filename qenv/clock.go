@@ -106,3 +106,16 @@ func (s *Sim) clockOf(t *task) time.Time {
 // ClockOffset is how far the process's clock is from true time (clock
 // faults: Sim.ClockFaults), its drift so far included.
 func (p *Process) ClockOffset() time.Duration { return p.clock + p.drift(p.sim.Now()) }
+
+// ToVirtual is Sim.ToVirtual on p's clock: a real-clock time a library
+// read in p, as p's clock shows it (its skew, jumps and drift so far), so
+// a library that keeps time through the seam is off as p is. It reads the
+// offset without a jump (no choice is made).
+func (p *Process) ToVirtual(real time.Time) time.Time {
+	return p.sim.ToVirtual(real).Add(p.ClockOffset())
+}
+
+// ToReal is Sim.ToReal of a time on p's clock (the inverse of ToVirtual).
+func (p *Process) ToReal(virtual time.Time) time.Time {
+	return p.sim.ToReal(virtual.Add(-p.ClockOffset()))
+}

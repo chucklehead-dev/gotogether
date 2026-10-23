@@ -148,3 +148,25 @@ func TestClockDriftTimesCalls(t *testing.T) {
 		t.Errorf("timeouts seen %v, want a fast clock's and a slow one's", seen)
 	}
 }
+
+// A process's ToVirtual is its clock's view of a real-clock time: off true
+// virtual time by its offset, and ToReal undoes it.
+func TestProcessClockTranslation(t *testing.T) {
+	c := qenv.NewSeeded(1)
+	c.Rates = qenv.NoFaults.Set("clock.skew", 1)
+	s := qenv.New(c)
+	defer s.Close()
+	s.ClockFaults = true
+	p := s.Process("node", false, func(context.Context) {})
+	if p.ClockOffset() == 0 {
+		t.Fatal("no skew chosen")
+	}
+	real := time.Now()
+	v := p.ToVirtual(real)
+	if got := v.Sub(s.ToVirtual(real)); (got - p.ClockOffset()).Abs() > time.Millisecond {
+		t.Errorf("the process's view is %v off true virtual time, want its offset %v", got, p.ClockOffset())
+	}
+	if back := p.ToReal(v); back.Sub(real).Abs() > time.Millisecond {
+		t.Errorf("ToReal(ToVirtual(t)) is %v off t", back.Sub(real))
+	}
+}

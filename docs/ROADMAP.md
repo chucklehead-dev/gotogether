@@ -271,8 +271,9 @@ The track, in order:
     what skew cannot, a lease timed on the holder's own clock: lease's
     NoFencing conforms at 2% and fails at 25% (43% of runs), the margin
     left after a pause covering about 5%.
-  - **Left.** `ToVirtual`/`ToReal` per process for libraries that read the
-    real clock.
+  - `Process.ToVirtual`/`ToReal`: a library that reads the real clock
+    through the seam, in a process, sees that process's clock (its skew,
+    jumps and drift).
 - **X7. Storage faults and partitions (M).** Done but the journal.
   - `qenv.Disk`: writes reach the OS at once and the disk on `Sync`; the
     crash of its process is a fault point ("disk.crash": nominal keeps

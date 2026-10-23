@@ -57,7 +57,8 @@ Added to the core since api/core.txt was first recorded:
 - Clock faults: `Sim.ClockFaults` gives each process a clock that starts
   skewed and may jump ("clock.skew", "clock.jump"), read by `qenv.Now`;
   `Process.ClockOffset`; `Sim.ClockDrift`, clocks that run fast or slow
-  ("clock.drift"), their sleeps with them. examples/lease.
+  ("clock.drift"), their sleeps with them; `Process.ToVirtual`/`ToReal`
+  for a library's real-clock times on a process's clock. examples/lease.
 - Under `GOTOGETHER_CHECK=1` every `qenv.Store` checks each commit's
   dependency cycles against its isolation level (G1a, G1c, G-single, G2),
   and every `qenv.Queue` its at-least-once contract after each operation.
