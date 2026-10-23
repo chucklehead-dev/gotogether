@@ -1,6 +1,6 @@
 ---
 name: gotogether-workflow
-description: End-to-end workflow for checking a Go system against a Quint model with gotogether - model first, simulate its invariants, implement with step recording, bind, prove each check can fail with mutants (qtest.Expect, qhegel.FindViolation), let Hegel explore, then check runs from the real environment - and how to triage each verdict. Use when starting verification of a new component or example, planning which tests to write, deciding whether a failure is the code's, the model's or the binding's, or setting up CI for model-checked tests.
+description: End-to-end workflow for checking a Go system against a Quint model with gotogether - model first, simulate its invariants, implement with step recording, bind, prove each check can fail with mutants (.Expect(t, claims...), qhegel.FindViolation), let Hegel explore, then check runs from the real environment - and how to triage each verdict. Use when starting verification of a new component or example, planning which tests to write, deciding whether a failure is the code's, the model's or the binding's, or setting up CI for model-checked tests.
 ---
 
 # Verifying a Go system against a Quint model

@@ -517,15 +517,18 @@ next.
   counterexample: the history checker's scans over the transaction's own
   writes, and SI's G-SIa unchecked (such reads form a G-single cycle or
   are serializable).
-- **Z2. Reports a user can act on (S–M).** A Mismatch in an exploration
-  prints the expectation with the observation filled in (`expect: count
-  == 3` over `obs: count=3`), hiding the model's value: print the model's
-  state and the template. A passing claim's expected failures read as
-  `conformance: FAIL` blocks with paths to deleted files: head them with
-  the claim they satisfy. One vocabulary for verdicts (Rejects, Mismatch,
-  Violates) in reports and the CLI. A misnamed `Scripted.Kind` fails;
-  advice that names the old strict script order goes. validate names the
-  file and the expected shapes, and sums up.
+- **Z2. Reports a user can act on. Done:** a mismatch prints the
+  binding's expect as written under the rendered one, and the model's
+  state in a batch's report too (a chunk's failures replay on Rust, which
+  writes their ITF); a passing claim's example is headed `as expected,
+  <claim>:`, indented, without paths its test removes; counts are said in
+  the claims' words ("21 of 30 runs reject apply"), in the CLI too
+  (`RESULT: FAIL (2 of 3 traces: 1 mismatch after deposit, 1 rejects
+  withdraw)`, `validate.Result.Reason`); a misnamed scripted fault fails,
+  and the strict-order advice is gone; validate names its artifacts
+  directory and each step's file, and refuses an unknown shape with its
+  keys and the shapes wanted; the skills say `.Expect(t, claims...)`, not
+  a `qtest.Expect` that does not exist.
 - **Z3. The newcomer's path (S–M).** A glossary after Quickstart (actor,
   step, binding, double, nemesis, nominal, claim, evidence, corpus) and
   the README's order (workflows before the environment table). A scaffold

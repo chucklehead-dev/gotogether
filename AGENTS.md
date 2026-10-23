@@ -199,8 +199,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - An example app has a model in `model/`, a binding, at least one
   mutant, a `run-demo.sh`, tests showing which check catches which
   mutant, and a README with the table of tests. Its row goes in the
-  README's example table. State expected verdicts with `qtest.Expect`
-  (`Rejects`, `Mismatch`, `Violates`; over runs, `Some`, `All`, `None`)
+  README's example table. State expected verdicts with `.Expect(t,
+  claims...)` (`Rejects`, `Mismatch`, `Violates`; over runs, `Some`,
+  `All`, `None`)
   and expected Hegel failures with `qhegel.FindViolation(...).Expect`,
   not by hand: no string matching on summaries, no walks of reports.
   Bindings give templates only where a parameter is not the same-named

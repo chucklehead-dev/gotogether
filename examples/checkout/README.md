@@ -42,7 +42,7 @@ MUTATION=lock-without-write ISOLATIONS=snapshot examples/checkout/run-demo.sh
 ## What each bug looks like, at each isolation level
 
 `System.Explore` runs 60–100 seeds per case and checks them in one quint
-batch. Each test states the verdict it expects with `qtest.Expect`.
+batch. Each test states the verdict it expects with `.Expect(t, claims...)`.
 
 | Code | Serializable | Snapshot isolation | Read committed |
 |---|---|---|---|

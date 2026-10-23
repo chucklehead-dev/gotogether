@@ -89,6 +89,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qtest.SweepExplore", "System.Sweep"},
 		{"qtest.Explored", "qtest.Run"},
 		{"qtest.Expect(", "Run.Expect (qtest.Validate(...).Expect)"},
+		{"`qtest.Expect`", "`.Expect(t, claims...)` (Run's, Exploration's)"},
+		{"qtest.Expect,", ".Expect(t, claims...) (Run's, Exploration's)"},
 		{"DurableFileSink", "qobs.FileSink (durable)"},
 		{"qenv.Recorder", "qenv.ChoiceLog"},
 		{"qhegel.Recorder", "qhegel.Case"},

@@ -125,5 +125,5 @@ func TestHegelShrinks(t *testing.T) {
 ```
 
 In Go tests, `qtest.RequireQuint(t)` skips without quint; state what
-each test expects with `qtest.Expect` and its claims, never by matching
-report text.
+each test expects with `.Expect(t, claims...)` on its run or
+exploration, never by matching report text.
