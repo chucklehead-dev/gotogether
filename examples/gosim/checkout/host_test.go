@@ -51,21 +51,24 @@ func TestMutantsOnGosim(t *testing.T) {
 	cases := []struct {
 		m     shop.Mutation
 		iso   qenv.Isolation
+		seeds int
 		rates qenv.Rates
 		want  qtest.Expectation
 	}{
-		// write skew: a shipment and a cancellation both commit
-		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, shipOrCancel},
+		// write skew: a shipment and a cancellation both commit, in 11-15%
+		// of gosim's runs (13 and 18 of 120, before and after an unrelated
+		// change moved its schedules): 30 seeds once found none
+		{shop.LockWithoutWrite, qenv.SnapshotIsolation, 60, qenv.DefaultRates, shipOrCancel},
 		// Fresh keys per attempt: a retry after a lost response charges
 		// again, and a cancellation's void (by the order's key) finds no
 		// charge to refund. qenv's scheduler shows the first; gosim's
 		// schedules, where a cancel races the payment, mostly the second.
-		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates,
+		{shop.NoIdempotencyKey, qenv.Serializable, 30, qenv.DefaultRates,
 			qtest.AnyOf(qtest.Violates("chargedAtMostOnce"), qtest.Violates("settledCorrectly"))},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
-			explore(t, c.iso, c.m, qtest.ExploreConfig{Seeds: 30, Rates: c.rates}).Expect(t, c.want)
+			explore(t, c.iso, c.m, qtest.ExploreConfig{Seeds: c.seeds, Rates: c.rates}).Expect(t, c.want)
 		})
 	}
 }
