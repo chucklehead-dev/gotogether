@@ -269,8 +269,12 @@ The track, in order:
     replay before the seeds, and a failed claim saves the run it shows;
     `GOTOGETHER_CORPUS` for every exploration. Shrink's own pass over
     faults (above, X1).
-  - **Left.** One example's mutation test ending in `NoSurvivors`;
-    `Reaches`/`Exercised` in checkout's conforming tests; `FollowTraces`
+  - **Done.** examples/hello's mutation test ends in `NoSurvivors` (CI
+    weaves it): of 8 mutants, a client sending two requests of three
+    survived (nothing said it finished), now killed by a `done` action
+    and `Mutate`'s new claims (`Takes("done")`); three are marked
+    equivalent with their reasons.
+  - **Left.** `Reaches`/`Exercised` in checkout's conforming tests; `FollowTraces`
     in the README and gotogether-start's table; qload monotonicity (more
     capacity never recovers worse) as self-tests.
 

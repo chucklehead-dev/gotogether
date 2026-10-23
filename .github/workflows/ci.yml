@@ -71,6 +71,8 @@ jobs:
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
         working-directory: examples/checkout
         run: go test -run XXX -fuzz FuzzFaithful -fuzztime 60s .
+      - name: mutation testing (hello woven by qweave -mutate; no survivors but the marked)
+        run: go run -C qweave ./cmd/qweave -C ../examples/hello -mutate -coverpkg github.com/chucklehead-dev/gotogether/examples/hello go test -count=1 -run TestMutationOfTheCounter -v .
       - name: code coverage by model step (checkout woven by qweave -cover)
         run: go run -C qweave ./cmd/qweave -C ../examples/checkout -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v .
       - name: test (typescript backend)

@@ -12,6 +12,7 @@ actions:
     expect: 'count == {{.obs.count}}'
   replay:
     expect: 'count == {{.obs.count}}'
+  done: {}
 
 invariants: [exactlyOnce]
 

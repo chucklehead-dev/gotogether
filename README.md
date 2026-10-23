@@ -298,6 +298,9 @@ func Run(c qenv.Chooser, m Mutation) error {
 		for id := 1; id <= Requests && err == nil; id++ {
 			err = Send(ctx, svc, id, 100*time.Millisecond)
 		}
+		if err == nil {
+			qobs.Record(ctx, "done", nil) // every request answered
+		}
 	})
 	if rerr := s.Run(time.Minute); rerr != nil {
 		return rerr

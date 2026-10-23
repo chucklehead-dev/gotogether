@@ -35,6 +35,9 @@ Added to the core since api/core.txt was first recorded:
   key, a converted span's start); Reconstruct reports an order its keys
   force that real time contradicts; `qtest.Linearize()` and
   `qtrace.Linearize` search the orders operations' intervals allow.
+- `System.Mutate(t, cfg, claims...)`: claims the baseline meets and a
+  mutant is killed by failing; a mutant whose runs record nothing is
+  killed. examples/hello's mutation test ends in `NoSurvivors`.
 - `ExploreConfig.Corpus` (and `GOTOGETHER_CORPUS`): saved runs replayed
   before the seeds, a failed claim's run saved; `Run.Corpus`.
 - qhegel: `Shrink` removes the faults the shrunk failure does not need

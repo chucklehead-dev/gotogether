@@ -37,6 +37,7 @@ type Exploration struct {
 	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
 	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
+	emptyOK   bool              // ExploreConfig.emptyOK
 	vacuity   *[]Vacuity        // computed once (Vacuous)
 }
 
@@ -87,6 +88,10 @@ type ExploreConfig struct {
 	// applies to them.
 	Rates qenv.Rates
 	opts  []Option // the System's, and a sweep row's (System.Opts configures)
+	// emptyOK returns runs that recorded nothing unchecked, rather than
+	// failing: a mutant's (Mutate), which the baseline's steps show is
+	// killed by it.
+	emptyOK bool
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
 	// the chooser's context (qenv.WithContext), so the scenario must build
@@ -226,7 +231,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}
 		seeds = []uint64{n}
 	}
-	x := &Exploration{Runs: make([]*Run, len(seeds)), test: t.Name(), corpus: corpusDir(t, cfg)}
+	x := &Exploration{Runs: make([]*Run, len(seeds)), test: t.Name(), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK}
 	// the corpus's runs, after the seeds' (their numbers stay the same)
 	var corpusPaths []string
 	var corpusRuns [][]qenv.Choice
@@ -335,6 +340,9 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		// a scenario failed t (t.Fatal from a run's goroutine ends only
 		// that run)
 		t.FailNow()
+	}
+	if empty(x.Runs) && x.emptyOK {
+		return
 	}
 	if empty(x.Runs) {
 		// an empty run conforms to any model: every run empty is a system

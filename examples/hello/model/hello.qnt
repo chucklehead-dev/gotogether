@@ -25,7 +25,14 @@ module hello {
     count' = count,
   }
 
-  action step = { nondet id = REQUESTS.oneOf() any { apply(id), replay(id) } }
+  // the client is done: every request it sends was applied
+  action done = all {
+    applied == REQUESTS,
+    applied' = applied,
+    count' = count,
+  }
+
+  action step = { nondet id = REQUESTS.oneOf() any { apply(id), replay(id), done } }
 
   val exactlyOnce = count == applied.size()
 }

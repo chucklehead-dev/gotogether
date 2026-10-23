@@ -9,6 +9,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qmut"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A MutationReport is what exploring the woven mutants found.
@@ -117,10 +118,13 @@ func (r *MutationReport) String() string {
 // none woven it skips): a baseline exploration with every mutant off,
 // which must conform and says which mutants' code is reached, then each
 // reached mutant with cfg's seeds. A mutant is killed
-// when some run is rejected by the model, errs or panics. Verdicts are
+// when some run is rejected by the model, errs or panics, when no run
+// records a step, or when one of claims fails for it: what the baseline
+// shows besides conforming (qtest.Takes("done").InAtLeast(0.9): a step
+// whose absence no single run's model check can see). Verdicts are
 // shared across the explorations: most mutants' runs repeat the
 // baseline's steps.
-func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
+func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport {
 	t.Helper()
 	all := qmut.Mutants()
 	if len(all) == 0 {
@@ -131,7 +135,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 	base := explore(t, s.Binding, cfg, func(c qenv.Chooser) error {
 		return s.Run(qenv.WithContext(c, qmut.WithReach(qenv.ContextOf(c), reach)))
 	})
-	base.Expect(t, Conforms())
+	base.Expect(t, append([]Claim{Conforms()}, claims...)...)
 	rep := &MutationReport{Baseline: base}
 	for _, m := range all {
 		if !reach.Reached(m.ID) {
@@ -139,7 +143,9 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 			continue
 		}
 		var broke atomic.Bool
-		x := explore(t, s.Binding, cfg, func(c qenv.Chooser) (err error) {
+		mcfg := cfg
+		mcfg.emptyOK = true
+		x := explore(t, s.Binding, mcfg, func(c qenv.Chooser) (err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					broke.Store(true) // a run the mutant crashed: killed
@@ -150,11 +156,38 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 			}
 			return nil
 		})
-		if broke.Load() || len(x.Failing()) > 0 {
+		// killed: a run broke, or the model rejects one, or none recorded a
+		// step where the baseline's did
+		if broke.Load() || empty(x.Runs) || len(x.Failing()) > 0 || !x.meets(claims) {
 			rep.Killed = append(rep.Killed, m)
 		} else {
 			rep.Survived = append(rep.Survived, m)
 		}
 	}
 	return rep
+}
+
+// meets reports whether the exploration meets every claim, without
+// failing anything: a mutant's, judged as the baseline was.
+func (x *Exploration) meets(claims []Claim) bool {
+	reps := make([]*validate.Report, len(x.Runs))
+	for i, r := range x.Runs {
+		reps[i] = r.Report
+	}
+	for _, c := range claims {
+		if rc, ok := c.(runsClaim); ok {
+			if rc.judgeRuns(x.Runs, x.actions) != "" {
+				return false
+			}
+			continue
+		}
+		switch c.(type) {
+		case completeClaim, vacuityClaim:
+			continue
+		}
+		if !c.judge(reps).ok {
+			return false
+		}
+	}
+	return true
 }

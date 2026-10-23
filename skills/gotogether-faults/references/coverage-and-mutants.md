@@ -76,4 +76,14 @@ rep.Expect(t, qtest.NoSurvivors("pay.go:42 drop call")) // equivalent ones marke
 - Checkout's first run had a cancel that forgot to restock survive: no
   step carried the stock. Recording it and an `expect: 'stock ==
   {{.obs.stock}}'` killed it.
+- A step whose absence no run's check can see (the client's "done") is
+  a claim over runs: give it to Mutate, `sys.Mutate(t, cfg,
+  qtest.Takes("done").InAtLeast(0.9))`. The baseline must meet it, and a
+  mutant that does not is killed. A mutant whose runs record nothing at
+  all is killed too.
+- examples/hello's `TestMutationOfTheCounter` ends in `NoSurvivors` with
+  three marked equivalent, each with its reason. Its first run had a
+  client that sent two requests of three survive: nothing said the
+  client finished. A `done` action (every request applied) and the
+  `Takes("done")` claim killed it.
 - Unreached mutants are coverage's: no run reached their code.
