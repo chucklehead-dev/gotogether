@@ -218,17 +218,15 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		batched(t, cfg, body, opts)
 		return
 	}
-	set := qtest.Resolve(t, cfg.Opts...)
-	refuse(t, set, "qhegel.Test", false)
+	binding, workflow := cfg.Binding, "qhegel.Test"
 	if cfg.Mode == Off {
-		set.Refuse(t, "qhegel.Test (Mode Off)", "with Mode Off no case is checked against the model", "Constants", "Invariants", "Quint")
+		binding, workflow = "", "qhegel.Test (Mode Off)" // no case is checked against the model
 	}
-	var checker *validate.Checker
+	cases := qtest.CheckCases(t, workflow, binding, cfg.Opts...)
+	checker := cases.Checker
 	var cc *caseChecker
-	if cfg.Mode != Off {
-		c := set.Checker(t, cfg.Binding)
-		checker = c
-		cc = newCaseChecker(c)
+	if checker != nil {
+		cc = newCaseChecker(checker)
 	}
 	var (
 		mu   sync.Mutex
@@ -241,8 +239,8 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		opts = append([]hegel.Option{hegel.SuppressHealthCheck(hegel.TooSlow)}, opts...)
 	}
 	hegel.Test(t, func(ht *hegel.T) {
-		rec := NewCase(ht, set.Recorder()...)
-		defer rec.begin(ht, set.Global())()
+		rec := NewCase(ht, cases.Recorder...)
+		defer rec.begin(ht, cases.Global)()
 		body(ht, rec)
 		steps := rec.Steps()
 		if len(steps) == 0 {
@@ -269,14 +267,14 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		t.Logf("qhegel: %d runs checked with quint, %d decided from earlier verdicts", q, hits)
 	}
 	if cfg.Mode == After && len(runs) > 0 {
-		CheckAll(t, checker, runs)
+		checkAll(t, checker, runs)
 	}
 }
 
-// CheckAll validates runs in parallel (the checker's quint processes,
+// checkAll validates runs in parallel (the checker's quint processes,
 // GOMAXPROCS at a time) and fails t, listing each violating
 // run's steps and verdict.
-func CheckAll(t testing.TB, c *validate.Checker, runs [][]qtrace.Step) []*validate.Report {
+func checkAll(t testing.TB, c *validate.Checker, runs [][]qtrace.Step) []*validate.Report {
 	t.Helper()
 	reps, errs := c.CheckBatch(context.Background(), runs, 0)
 	bad := 0
@@ -312,9 +310,8 @@ func Render(steps []qtrace.Step) string {
 // batched is Test in Batched mode.
 func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts []hegel.Option) {
 	t.Helper()
-	set := qtest.Resolve(t, cfg.Opts...)
-	refuse(t, set, "qhegel.Test (Batched)", false)
-	c := set.Checker(t, cfg.Binding)
+	cases := qtest.CheckCases(t, "qhegel.Test (Batched)", cfg.Binding, cfg.Opts...)
+	c := cases.Checker
 	cc := newCaseChecker(c)
 	rounds := cfg.Rounds
 	if rounds <= 0 {
@@ -326,8 +323,8 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 	}
 	start := time.Now() //qenv:ok the rounds' real time budget
 	record := func(ht *hegel.T) []qtrace.Step {
-		rec := NewCase(ht, set.Recorder()...)
-		defer rec.begin(ht, set.Global())()
+		rec := NewCase(ht, cases.Recorder...)
+		defer rec.begin(ht, cases.Global)()
 		body(ht, rec)
 		steps := rec.Steps()
 		if len(steps) == 0 && !cfg.AllowEmpty {
@@ -396,16 +393,4 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 	q, hits := cc.Stats()
 	t.Logf("qhegel: %d distinct runs in bulk, all satisfy the model (~%d quint processes, %d verdicts from the cache, %v)",
 		total, q, hits, time.Since(start).Round(time.Millisecond)) //qenv:ok reported real time
-}
-
-// refuse fails t for the options qhegel's case checks ignore: a case's
-// steps are checked in the order the case recorded them (Linearize is
-// Record's and Validate's), and a case that records nothing is a case
-// that took no step, not an unwoven build (SkipIfEmpty is Record's).
-func refuse(t testing.TB, set qtest.Settings, workflow string, shrink bool) {
-	t.Helper()
-	set.Refuse(t, workflow, "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's", "Linearize", "LinearizeBudget")
-	if !shrink { // Shrink honours a System's SkipIfEmpty itself
-		set.Refuse(t, workflow, "it is qtest.Record's and explorations' (and Shrink's), for an unwoven build that records nothing", "SkipIfEmpty")
-	}
 }

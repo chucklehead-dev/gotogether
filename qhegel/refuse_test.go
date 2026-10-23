@@ -27,6 +27,7 @@ func (f *fatalTB) Skip(a ...any) {
 	f.msg = "skip: " + fmt.Sprint(a...)
 	runtime.Goexit()
 }
+func (f *fatalTB) Skipf(format string, a ...any) { f.Skip(fmt.Sprintf(format, a...)) }
 
 // Linearize in a case's options does nothing (a case is checked in the
 // order it recorded): FindViolation refuses it, naming why.

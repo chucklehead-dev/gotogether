@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 	"hegel.dev/go/hegel"
 )
 
@@ -48,10 +48,6 @@ type ViolationConfig struct {
 	// no operations), as Config.AllowEmpty does; qtest.SkipIfEmpty, for a
 	// whole test that recorded nothing, is another matter.
 	AllowEmpty bool
-
-	// shrink is Shrink's: its Opts are a System's, which may carry
-	// SkipIfEmpty (honoured by Shrink itself)
-	shrink bool
 }
 
 // FindViolation runs Hegel expecting the model to reject some test case:
@@ -78,9 +74,14 @@ type ViolationConfig struct {
 // logged.
 func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation {
 	t.Helper()
-	set := qtest.Resolve(t, cfg.Opts...)
-	refuse(t, set, "qhegel.FindViolation", cfg.shrink)
-	c := set.Checker(t, cfg.Binding)
+	return findViolation(t, cfg, qtest.CheckCases(t, "qhegel.FindViolation", cfg.Binding, cfg.Opts...), body, opts...)
+}
+
+// findViolation is FindViolation with its cases' checker and recording
+// resolved (a System's for Shrink).
+func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation {
+	t.Helper()
+	c := cases.Checker
 	c.Options.NoITF = true
 	var err error
 	cc := newCaseChecker(c)
@@ -108,8 +109,8 @@ func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCas
 	func() {
 		defer func() { out = hegelOut.stop() }() // also when a case's t.Fatal ends the goroutine
 		err = hegel.Run(func(tc hegel.TestCase) {
-			rec := NewCase(tc, set.Recorder()...)
-			defer rec.begin(tc, set.Global())()
+			rec := NewCase(tc, cases.Recorder...)
+			defer rec.begin(tc, cases.Global)()
 			body(tc, rec)
 			steps := rec.Steps()
 			if len(steps) == 0 && cfg.AllowEmpty {
@@ -178,8 +179,10 @@ func (v *Violation) Expect(t testing.TB, es ...qtest.Expectation) {
 	t.Helper()
 	v.expected = true
 	if !v.found {
+		// nothing found is a conforming run: an expectation must hold of one
+		none := &qtest.Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass}}}}
 		for _, e := range es {
-			if e.String() != qtest.Conforms().String() {
+			if !e.Holds(none) {
 				t.Fatalf("qhegel: every test case satisfied the model (%d checked with quint); want %s", v.QuintRuns, e)
 			}
 		}
@@ -210,14 +213,12 @@ func Shrink(t testing.TB, sys qtest.System, rates qenv.Rates, opts ...hegel.Opti
 		rates = qenv.DefaultRates
 	}
 	// its replays are an exploration's runs: what an exploration ignores,
-	// it refuses now, before the search, not in a replay that fails quietly
-	set := qtest.Resolve(t, sys.Opts...)
-	set.RefuseExploration(t, "qhegel.Shrink (its replays are an exploration's runs)")
-	if set.SkipIfEmpty() && recordsNothing(sys) {
-		// an unwoven build records nothing: skipped, as an exploration does
-		t.Skip("qhegel: the system recorded no step on its nominal run (qtest.SkipIfEmpty): an unwoven build?")
-	}
-	v := FindViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts, shrink: true}, func(tc hegel.TestCase, rec *Case) {
+	// it refuses now, before the search, not in a replay that fails
+	// quietly; the nominal run first, which skips an unwoven build that
+	// records nothing (qtest.SkipIfEmpty), as an exploration does
+	cases := sys.CheckCases(t, "qhegel.Shrink (its replays are an exploration's runs)")
+	sys.Judge(t, qenv.Nominal{})
+	v := findViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, cases, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
 		if err := sys.Run(rec.Env(c)); err != nil {
@@ -296,15 +297,4 @@ func seedFromEnv(t testing.TB) (int64, bool) {
 	}
 	t.Logf("qhegel: Hegel's seed %d (GOTOGETHER_HEGEL_SEED=%d replays this search)", s, s)
 	return s, true
-}
-
-// recordsNothing runs sys once on the nominal schedule, recording into a
-// recorder of its own (an exploration's would number the test's
-// explorations, write evidence and run quint), and reports whether it
-// recorded no step.
-func recordsNothing(sys qtest.System) bool {
-	mem := &qobs.MemorySink{}
-	rec := qobs.NewRecorder(mem)
-	_ = sys.Run(qenv.WithContext(qenv.Nominal{}, qobs.WithRecorder(context.Background(), rec)))
-	return len(mem.Steps()) == 0
 }

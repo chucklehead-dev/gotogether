@@ -3,7 +3,6 @@ const After Mode = iota (spec 1 of its group)
 const Batched Mode = iota (spec 2 of its group)
 const Each Mode = iota
 const Off Mode = iota (spec 3 of its group)
-func CheckAll(t testing.TB, c *validate.Checker, runs [][]qtrace.Step) []*validate.Report
 func Choices(tc hegel.TestCase) *ChoiceSource
 func FindTrigger(t testing.TB, sys qload.Target, space qload.TriggerSpace, opts ...hegel.Option) *TriggerSearch
 func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation

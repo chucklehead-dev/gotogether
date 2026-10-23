@@ -1,7 +1,6 @@
 package qhegel
 
 import (
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -82,8 +81,8 @@ func minimize(t testing.TB, sys qtest.System, v *Violation) {
 			}
 			cand := append([]qenv.Choice(nil), v.Choices...)
 			cand[i].Value = 0
-			r := replayQuietly(t, sys, cand)
-			if r == nil || r.Report == nil || r.OK() || signature(r.Report) != sig {
+			r := sys.Judge(t, newByKind(cand))
+			if r.Err != nil || r.Report == nil || r.OK() || signature(r.Report) != sig {
 				continue
 			}
 			v.Run.Steps, v.Run.Choices, v.Run.Report = r.Steps, r.Choices, r.Report
@@ -100,45 +99,3 @@ func minimize(t testing.TB, sys qtest.System, v *Violation) {
 		t.Logf("qhegel: %d of the shrunk run's %d faults were not needed; the failure needs %d: %s", before-after, before, after, strings.Join(fs, ", "))
 	}
 }
-
-// replayQuietly runs sys once on the choices, checked as an exploration's
-// run, with failures of the run itself (it did not run) kept from t.
-func replayQuietly(t testing.TB, sys qtest.System, cs []qenv.Choice) *qtest.Run {
-	q := &quietTB{TB: t}
-	var r *qtest.Run
-	done := make(chan struct{})
-	go func() { //qenv:ok the replay runs outside any simulation; Goexit ends it on a failure
-		defer close(done)
-		x := sys.Explore(q, qtest.ExploreConfig{Seeds: 1, Parallel: 1, Replay: true, Chooser: func(uint64) qenv.Chooser { return newByKind(cs) }})
-		if !q.failed && len(x.Runs) == 1 {
-			r = x.Runs[0]
-		}
-	}()
-	<-done
-	return r
-}
-
-// quietTB keeps a replay's failures and logs from the test.
-type quietTB struct {
-	testing.TB
-	failed bool
-}
-
-func (q *quietTB) Helper() {}
-
-// Name keeps a replay's exploration out of the test's numbering, so the
-// numbers its own explorations' reproduce lines print do not depend on
-// how many replays Shrink made.
-func (q *quietTB) Name() string          { return q.TB.Name() + "/qhegel-replay" }
-func (q *quietTB) Log(...any)            {}
-func (q *quietTB) Logf(string, ...any)   {}
-func (q *quietTB) Error(...any)          { q.failed = true }
-func (q *quietTB) Errorf(string, ...any) { q.failed = true }
-func (q *quietTB) Fail()                 { q.failed = true }
-func (q *quietTB) Failed() bool          { return q.failed }
-func (q *quietTB) FailNow()              { q.failed = true; runtime.Goexit() }
-func (q *quietTB) Fatal(...any)          { q.FailNow() }
-func (q *quietTB) Fatalf(string, ...any) { q.FailNow() }
-func (q *quietTB) SkipNow()              { q.FailNow() }
-func (q *quietTB) Skip(...any)           { q.FailNow() }
-func (q *quietTB) Skipf(string, ...any)  { q.FailNow() }
