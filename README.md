@@ -503,7 +503,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 
 | Package | What it is |
 |---|---|
-| `connect` | the model drives Go: `Run`, `Test`, `Switch`, `Pick[T]`, `StateDriver`, `GenerateRun`; `FaultScript` (a trace's faults imposed on a whole program in qenv) |
+| `connect` | the model drives Go: `Run`, `Test`, `Switch`, `Pick[T]`, `StateDriver`, `GenerateRun` |
 | `qhegel` (module) | Hegel and the model: `Test` (modes `Each`, `After`, `Batched`, `Off`), `FindViolation` (an expected failure, shrunk), `Shrink` (a `qtest.System` under Hegel), `NewCase`, `Choices` (qenv's choices from a test case), `VaryTraces`, `FindTrigger` |
 | `itf` | ITF traces: `Parse`, `Decode`/`Encode` (Go ⇄ Quint values), `ParseQuint` (Quint literals) |
 | `qobs` | the recorder: `Record`, `Thread`, `WithRecorder`, `SlogHandler`; sinks `MemorySink`, `FileSink` and `NewJSONLSink` by durability (`PerStep`: survives a killed process; `Synced`: an fsync per step, a power loss; `Buffered`), `OTelSink`, `Tee`; `SetGlobal` for a program, `InstallGlobal` for a test's run; `orchestrion.yml` |
@@ -512,7 +512,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |
 | `validate` | replay with `quint test`: `Checker` (`Check`, `CheckBatch`), `Cached`, `ValidateITF`; structured verdicts |
-| `qtest` | tests that check against the model: `System` (`Explore`, `Exhaust`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes`, `Exercised`, `NotVacuous`; `Linearize` for histories recorded by clients; `Violates(...).At`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
+| `qtest` | tests that check against the model: `System` (`Explore`, `Exhaust`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`: a trace's faults, `FaultScript`, imposed on the whole system), `Validate`, `Record`; claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes`, `Exercised`, `NotVacuous`; `Linearize` for histories recorded by clients; `Violates(...).At`; a shrunk run's `ShrunkTo`); `Evidence`; options (`Constants`, `Invariants`, `Quint`, `Global`) |
 | `qenv` | deterministic simulation: scheduler, virtual time, crashable processes, choosers (`NewSeeded`, `Replay`, `Script`, `Swarm`, `FromBytes`); doubles `Store` (isolation levels), `Queue`, `Service` (with `Capacity`), `Disk` (fsync, power loss, torn writes); the network (`Sim.Net`: `Partition`, `Heal`, `PartitionNemesis`); clocks (`Sim.Clocks`: skew, jumps, drift; `Now`, `Mono`, `Since`, `WaitFor`); nemesis families (`nemesis.crash`, `.partition`, `.jump`); `DeclareFaults`, `FaultPoint`, `CoverageOf`; `NewNative` (the same on goroutines, for gosim); `TimeProfile` |
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `qenv/fault` | the `//quint:fault` aspect: a function's entry a fault choice, with its own errors |
