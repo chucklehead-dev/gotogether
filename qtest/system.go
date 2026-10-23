@@ -33,10 +33,19 @@ type System struct {
 	// could not run to its end, not that it violates the model: it fails
 	// the test, naming its seed.
 	Run func(c qenv.Chooser) error
+	// Mutant names the bug this system carries on purpose (a config's
+	// mutation, "no-dedupe"): its explorations' evidence has role
+	// "mutant", which a suite's report does not count as what the system
+	// tried. Empty: the system as it is.
+	Mutant string
 }
 
 func (s System) opts(more ...Option) []Option {
-	return append(append([]Option(nil), s.Opts...), more...)
+	out := append(append([]Option(nil), s.Opts...), more...)
+	if s.Mutant != "" {
+		out = append(out, func(c *settings) { c.mutant = s.Mutant })
+	}
+	return out
 }
 
 // Explore runs the system once per seed, each time with a seeded qenv

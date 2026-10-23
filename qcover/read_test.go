@@ -14,8 +14,8 @@ func TestReadSummary(t *testing.T) {
 	dir := t.TempDir()
 	s := &Summary{Runs: 3, Hit: map[int]int{1: 2}}
 	bare, _ := json.Marshal(s)
-	ev, _ := json.Marshal(map[string]any{"runs": 3, "conform": 3, "code": s})
-	none, _ := json.Marshal(map[string]any{"runs": 3, "conform": 3})
+	ev, _ := json.Marshal(map[string]any{"format": "gotogether.evidence/1", "runs": 3, "conform": 3, "code": s})
+	none, _ := json.Marshal(map[string]any{"format": "gotogether.evidence/1", "runs": 3, "conform": 3})
 	for name, b := range map[string][]byte{"bare.json": bare, "evidence.json": ev, "none.json": none} {
 		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
 			t.Fatal(err)

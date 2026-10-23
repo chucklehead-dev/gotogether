@@ -53,6 +53,7 @@ func nextExploration(t testing.TB) int {
 	if tr == nil {
 		tr = &testRuns{}
 		explorations.n[name] = tr
+		clearEvidence(name)
 		t.Cleanup(func() {
 			explorations.mu.Lock()
 			defer explorations.mu.Unlock()
@@ -274,3 +275,33 @@ func copyTree(src, dst string) error {
 		return err
 	})
 }
+
+// evidenceDir is where test's explorations write their evidence under
+// GOTOGETHER_EVIDENCE, or "".
+func evidenceDir(test string) string {
+	root := os.Getenv("GOTOGETHER_EVIDENCE")
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, safeName(test))
+}
+
+// clearEvidence removes the evidence earlier runs of test wrote: under
+// GOTOGETHER_EVIDENCE, and in its kept explorations' directories. A run
+// writes each of its explorations' anew; one an earlier run had and this
+// one has not would otherwise be read as this run's.
+func clearEvidence(test string) {
+	if dir := evidenceDir(test); dir != "" {
+		_ = os.RemoveAll(dir)
+	}
+	if keep := os.Getenv("GOTOGETHER_KEEP"); keep != "" {
+		old, _ := filepath.Glob(filepath.Join(keep, safeName(test), "x*", "evidence.json"))
+		for _, f := range old {
+			_ = os.Remove(f)
+		}
+	}
+}
+
+// safeName is a test's name as a directory's (config's rule for
+// GOTOGETHER_KEEP).
+func safeName(test string) string { return strings.NewReplacer("/", "_", " ", "_").Replace(test) }

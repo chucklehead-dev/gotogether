@@ -26,22 +26,29 @@ t.Log(x.Evidence().Code) // never run, run by no step, outcomes that ran the sam
 
 Build the real environment's binaries with `go build -cover`, run them
 with `GOCOVERDIR=dir`, and compare with a woven simulation's: run its
-tests with `GOTOGETHER_KEEP=dir` and pass an exploration's evidence.json
+tests with `GOTOGETHER_EVIDENCE=dir` and pass an exploration's evidence
 (or a summary written from `x.Evidence().Code`):
 
 ```sh
-gotogether cover -covdir run1,run2 -sim keep/TestFaithful/x1/evidence.json
+gotogether cover -covdir run1,run2 -sim evidence/TestFaithful/x1.json
 ```
 
 ## What no test of the suite tried
 
 Each exploration's Evidence says what its own runs left out; a suite's
-tests may cover each other. Run them with `GOTOGETHER_KEEP=dir`, then
+tests may cover each other. Run them with `GOTOGETHER_EVIDENCE=dir`
+(each exploration writes `dir/<test>/x<N>.json`, its format and role in
+it; a test's first exploration clears what earlier runs left), then
 
 ```sh
 gotogether evidence dir            # each exploration's verdicts, then the gaps
 gotogether evidence -strict dir    # exit 1 on a gap (for CI)
 ```
+
+The gaps count faithful explorations only: one of a `System` whose
+`Mutant` names its bug (a config's mutation), Mutate's mutant runs and
+qhegel's replays are listed, not counted, since a mutant takes paths the
+system does not.
 
 A gap is a model action no test took (by model), a declared fault point
 no test reached, or a fault kind reached and never faulted.

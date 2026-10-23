@@ -49,6 +49,8 @@ type settings struct {
 	Linearize bool
 	// linearizeBudget is LinearizeBudget's (0: DefaultLinearizeBudget)
 	linearizeBudget int
+	// mutant is System.Mutant
+	mutant string
 	// given are the options given, by name, for the workflows that
 	// ignore some to refuse them (refuse)
 	given []string
@@ -220,7 +222,7 @@ func config(t testing.TB, opts []Option) settings {
 	}
 	if c.Dir == "" {
 		if keep := os.Getenv("GOTOGETHER_KEEP"); keep != "" {
-			c.Dir = filepath.Join(keep, strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
+			c.Dir = filepath.Join(keep, safeName(t.Name()))
 		} else {
 			c.Dir, c.tempDir = t.TempDir(), true
 		}

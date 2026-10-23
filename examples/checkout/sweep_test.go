@@ -2,6 +2,7 @@ package checkout_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/checkout"
@@ -36,7 +37,11 @@ var isoOf = map[string]qenv.Isolation{"ser": qenv.Serializable, "si": qenv.Snaps
 // sweepSystem is the shop with mutation m, deployed as each sweep row says
 // (the row's fault kinds that are off are off in its chooser already).
 func sweepSystem(m shop.Mutation) qtest.System {
-	return qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
+	mutant := ""
+	if m != shop.Faithful {
+		mutant = fmt.Sprintf("shop.Mutation(%d)", m)
+	}
+	return qtest.System{Binding: binding, Mutant: mutant, Run: func(c qenv.Chooser) error {
 		row, _ := qtest.RowOf(c)
 		cfg := checkout.Config{Isolation: isoOf[row.Get("iso")], Mutation: m,
 			Orders: row.Int("orders"), Stock: row.Int("stock"), NoCrashes: !row.On("crash")}

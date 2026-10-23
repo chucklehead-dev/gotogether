@@ -37,6 +37,12 @@ Added to the core since api/core.txt was first recorded:
   `qenv.FaultOptions` names a declared kind's options; `Evidence.Model` lists the
   actions never taken. `Expect` and `System.Mutate` judge a claim by one
   verdict, so NotVacuous kills mutants too.
+- Evidence is a format (`Evidence.Format`, `qtest.EvidenceFormat`,
+  `IsEvidence`) with a role (faithful, mutant, replay: `System.Mutant`,
+  `ExploreConfig.Replay`); `GOTOGETHER_EVIDENCE=dir` writes it as
+  dir/<test>/x<N>.json, cleared per test; `gotogether evidence` and
+  `qcover.ReadSummary` read by format, and the suite's gaps count
+  faithful explorations only.
 - An option a workflow ignores fails it, saying why: `Global()` or
   `Linearize()` in a System's Opts, `SkipIfEmpty()` in Validate,
   `Linearize()` in qhegel's Opts (`qtest.Settings.Refuse`).

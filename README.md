@@ -103,7 +103,8 @@ Python and no server.
 | `GOTOGETHER_CORPUS=dir` | every exploration replays and saves corpus entries under dir/<test> (ExploreConfig.Corpus) |
 | `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
-| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test, and each exploration's evidence.json (`gotogether evidence dir`: what no test tried) |
+| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
+| `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`) |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
 | `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step |
 | `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |
@@ -315,7 +316,11 @@ by Hegel to the one fault the bug needs:
 <!-- from examples/hello/hello_test.go -->
 ```go
 func system(m Mutation) qtest.System {
-	return qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
+	s := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
+	if m == NoDedupe {
+		s.Mutant = "NoDedupe" // its runs are not the counter's: the suite's evidence leaves them out
+	}
+	return s
 }
 
 // lossy loses or duplicates one message in five.

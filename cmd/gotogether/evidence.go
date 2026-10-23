@@ -24,9 +24,12 @@ func evidence(args []string) (int, error) {
 	fset.Parse(args)
 	roots := fset.Args()
 	if len(roots) == 0 {
-		dir := os.Getenv("GOTOGETHER_KEEP")
+		dir := os.Getenv("GOTOGETHER_EVIDENCE")
 		if dir == "" {
-			return 2, fmt.Errorf("evidence needs a directory (or GOTOGETHER_KEEP): where tests run with GOTOGETHER_KEEP=dir wrote evidence.json")
+			dir = os.Getenv("GOTOGETHER_KEEP")
+		}
+		if dir == "" {
+			return 2, fmt.Errorf("evidence needs a directory (or GOTOGETHER_EVIDENCE): where tests run with GOTOGETHER_EVIDENCE=dir wrote their explorations' evidence")
 		}
 		roots = []string{dir}
 	}
@@ -36,8 +39,8 @@ func evidence(args []string) (int, error) {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || !isEvidence(d.Name()) && path != root {
-				return nil
+			if d.IsDir() || path != root && (!strings.HasSuffix(d.Name(), ".json") || !qtest.IsEvidence(path)) {
+				return nil // not evidence: an ITF trace, a corpus entry, a summary
 			}
 			e, err := qtest.ReadEvidence(path)
 			if err != nil {
@@ -54,7 +57,7 @@ func evidence(args []string) (int, error) {
 		}
 	}
 	if len(es) == 0 {
-		return 2, fmt.Errorf("no evidence.json under %s: run the tests with GOTOGETHER_KEEP=dir", strings.Join(roots, ", "))
+		return 2, fmt.Errorf("no evidence under %s: run the tests with GOTOGETHER_EVIDENCE=dir", strings.Join(roots, ", "))
 	}
 	report, gaps := suiteReport(es)
 	fmt.Print(report)
@@ -63,10 +66,6 @@ func evidence(args []string) (int, error) {
 	}
 	return 0, nil
 }
-
-// isEvidence reports whether name is an exploration's evidence file (one
-// per exploration, in its own directory).
-func isEvidence(name string) bool { return name == "evidence.json" }
 
 // suiteReport is the suite's evidence: a line per test, then what no test
 // tried, and how many such gaps there are.
@@ -83,10 +82,23 @@ func suiteReport(es []*qtest.Evidence) (string, int) {
 		if e.Search != nil && !e.Search.Complete {
 			b.WriteString(" (search truncated)")
 		}
+		if e.Role != qtest.RoleFaithful {
+			fmt.Fprintf(&b, " (%s: not counted below)", e.Role)
+		}
 		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "suite: %d explorations, %d runs\n", len(es), runs)
 	gaps := 0
+	// what the suite tried is what its faithful explorations did: a
+	// mutant takes paths the system does not, a replay repeats a run
+	// counted where it was found
+	all := es
+	es = nil
+	for _, e := range all {
+		if e.Role == qtest.RoleFaithful {
+			es = append(es, e)
+		}
+	}
 	// model actions, by model: taken by some test, else never
 	taken, actions := map[string]map[string]bool{}, map[string]map[string]bool{}
 	for _, e := range es {

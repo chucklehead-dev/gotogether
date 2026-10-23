@@ -48,6 +48,8 @@ type Exploration struct {
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
 	emptyOK   bool              // ExploreConfig.emptyOK
 	mutant    bool              // its corpus runs are a baseline's, under a mutant (corpusOf)
+	replay    bool              // ExploreConfig.Replay
+	mutation  string            // System.Mutant
 	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
 	mu        sync.Mutex        // guards recheck's report swaps
 	vacuity   *vacuityResult    // computed once (Vacuous)
@@ -131,6 +133,10 @@ type ExploreConfig struct {
 	// how to find its run again. GOTOGETHER_CORPUS=dir gives every
 	// exploration dir/<test name> (a nightly run collecting what it finds).
 	Corpus string
+	// Replay marks the exploration as a replay of a failure found
+	// elsewhere (qhegel.Shrink's): its evidence's role is "replay", which
+	// a suite's report does not count as what it tried.
+	Replay bool
 }
 
 // corpusFormat names a corpus entry's format: an entry of another is
@@ -267,7 +273,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = offset + uint64(i+1)
 	}
-	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz, mutant: cfg.corpusOf != ""}
+	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz, mutant: cfg.corpusOf != "", replay: cfg.Replay, mutation: c.mutant}
 	x.dir = exploreDir(t, c.Dir, x.id)
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
@@ -592,10 +598,20 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			verdicts.put(keys[i], reps[j])
 		}
 	}
-	if os.Getenv("GOTOGETHER_KEEP") != "" {
-		// the report, for tools that read a kept run (gotogether evidence,
-		// cover, actionmap): in the exploration's own directory, so a rerun
-		// replaces it
+	// the report, for tools that read it (gotogether evidence, cover,
+	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's
+	// own directory; each test's are cleared at its first exploration
+	// (nextExploration), so a rerun with fewer explorations leaves none
+	// stale
+	if dir := evidenceDir(x.test); dir != "" {
+		err := os.MkdirAll(dir, 0o755)
+		if err == nil {
+			err = x.Evidence().WriteJSON(filepath.Join(dir, fmt.Sprintf("x%d.json", x.id)))
+		}
+		if err != nil {
+			t.Logf("gotogether: evidence: %v", err)
+		}
+	} else if os.Getenv("GOTOGETHER_KEEP") != "" {
 		if err := x.Evidence().WriteJSON(filepath.Join(x.dir, "evidence.json")); err != nil {
 			t.Logf("gotogether: evidence.json: %v", err)
 		}

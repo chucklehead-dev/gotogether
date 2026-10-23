@@ -18,7 +18,17 @@ import (
 // unsaid: that runs conformed says nothing of the faults never tried, the
 // code never run or the code the model does not constrain.
 type Evidence struct {
-	// Test is the test that explored, and Spec the binding's spec and
+	// Format names this format, EvidenceFormat: a reader refuses another.
+	Format string `json:"format"`
+	// Role is what the exploration was: "faithful" (the system as it
+	// is), "mutant" (a System.Mutant's, or Mutate's with a mutant on),
+	// "replay" (a found failure replayed, ExploreConfig.Replay). A suite's
+	// evidence counts what the faithful ones tried: a mutant takes paths
+	// the system does not.
+	Role string `json:"role"`
+	// Mutant is the System's Mutant, if any.
+	Mutant string `json:"mutant,omitempty"`
+	// Test is the exploration (TestX#2), and Spec the binding's spec and
 	// module ("/abs/model/m.qnt:m"): a suite's evidence groups by them
 	// (gotogether evidence).
 	Test    string `json:"test,omitempty"`
@@ -49,8 +59,21 @@ func (e *Evidence) WriteJSON(path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
-// ReadEvidence reads an Evidence written by WriteJSON (an exploration's
-// evidence.json under GOTOGETHER_KEEP).
+// EvidenceFormat is the format WriteJSON writes and ReadEvidence reads.
+// Bump it when a field's meaning changes, so old files are refused, not
+// misread.
+const EvidenceFormat = "gotogether.evidence/1"
+
+// Evidence roles (Evidence.Role).
+const (
+	RoleFaithful = "faithful"
+	RoleMutant   = "mutant"
+	RoleReplay   = "replay"
+)
+
+// ReadEvidence reads an Evidence written by WriteJSON (an exploration's,
+// under GOTOGETHER_EVIDENCE or GOTOGETHER_KEEP). A file of another format,
+// or none (written before the format was), is refused with the fix.
 func ReadEvidence(path string) (*Evidence, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -60,13 +83,31 @@ func ReadEvidence(path string) (*Evidence, error) {
 	if err := json.Unmarshal(b, &e); err != nil {
 		return nil, fmt.Errorf("%s: %w (want the JSON of a qtest.Evidence)", path, err)
 	}
+	if e.Format != EvidenceFormat {
+		return nil, fmt.Errorf("%s: evidence of format %q, not %q: run the tests again to write it anew", path, e.Format, EvidenceFormat)
+	}
 	return &e, nil
+}
+
+// IsEvidence reports whether the JSON file at path is evidence of any
+// format version: what a tool walking a directory reads, and skips the
+// rest (ITF traces, corpus entries, summaries).
+func IsEvidence(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var head struct {
+		Format string `json:"format"`
+	}
+	return json.Unmarshal(b, &head) == nil && strings.HasPrefix(head.Format, "gotogether.evidence/")
 }
 
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
 	e.Test, e.Spec = x.ref(), x.model
+	e.Format, e.Role, e.Mutant = EvidenceFormat, x.role(), x.mutation
 	e.Faults = x.faultCoverage()
 	if x.actions != nil {
 		e.Model = modelCoverage(x.Runs, x.actions)
@@ -88,7 +129,7 @@ func (s *SweepResult) Evidence() *Evidence {
 		if x != nil {
 			all.Runs = append(all.Runs, x.Runs...)
 			if all.actions == nil {
-				all.actions, all.test, all.model = x.actions, x.test, x.model
+				all.actions, all.test, all.model, all.mutation = x.actions, x.test, x.model, x.mutation
 			}
 		}
 	}
@@ -254,4 +295,15 @@ func countNot(taken map[string]int) int {
 		}
 	}
 	return n
+}
+
+// role is what the exploration was (Evidence.Role).
+func (x *Exploration) role() string {
+	switch {
+	case x.mutant || x.mutation != "":
+		return RoleMutant
+	case x.replay:
+		return RoleReplay
+	}
+	return RoleFaithful
 }

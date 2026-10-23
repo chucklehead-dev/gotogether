@@ -445,7 +445,14 @@ starts, and the review's findings are fixed first.
   finding: `Linearize()` and `Global()`
   in a System's or qhegel's Opts do nothing in Explore, Exhaust or
   Shrink, silently.
-- **Y10. Evidence as a format.** A format field and one reader (cover and
+- **Y10. Evidence as a format. Done:** `Evidence.Format`
+  (`gotogether.evidence/1`) refused when other, and read by format
+  (qcover, `gotogether evidence`) rather than by a key or a file name;
+  `GOTOGETHER_EVIDENCE` (dir/<test>/x<N>.json), cleared per test, and
+  KEEP's x<N>/evidence.json cleared likewise; `Evidence.Role` (faithful,
+  mutant: Mutate's or `System.Mutant`, replay: `ExploreConfig.Replay`,
+  qhegel's), gaps counting faithful only; `evidence -strict` on hello
+  and checkout in CI. The finding: a format field and one reader (cover and
   actionmap guess by a key today); its own `GOTOGETHER_EVIDENCE` dir,
   cleared per test (a rerun appends duplicates); explorations numbered
   and labelled faithful or mutant (mutants now count toward "taken");

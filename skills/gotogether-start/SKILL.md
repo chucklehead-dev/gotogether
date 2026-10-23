@@ -90,7 +90,11 @@ Its shape is every simulated test's:
 <!-- from examples/hello/hello_test.go -->
 ```go
 func system(m Mutation) qtest.System {
-	return qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
+	s := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
+	if m == NoDedupe {
+		s.Mutant = "NoDedupe" // its runs are not the counter's: the suite's evidence leaves them out
+	}
+	return s
 }
 
 // lossy loses or duplicates one message in five.

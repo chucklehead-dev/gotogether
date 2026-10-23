@@ -1121,6 +1121,10 @@ type Row struct
 
 == github.com/chucklehead-dev/gotogether/qtest
 const DefaultLinearizeBudget = 200
+const EvidenceFormat = "gotogether.evidence/1"
+const RoleFaithful = "faithful"
+const RoleMutant = "mutant"
+const RoleReplay = "replay"
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
 func Conforms() Expectation
@@ -1128,6 +1132,7 @@ func Constants(m map[string]string) Option
 func Exercised(except ...string) Exercise
 func Global() Option
 func Invariants(names ...string) Option
+func IsEvidence(path string) bool
 func Linearize() Option
 func LinearizeBudget(n int) Option
 func Mismatch(action string) Expectation
@@ -1160,6 +1165,9 @@ type Claim interface
     judge(reports []*validate.Report) judgment
     String() string
 type Evidence struct
+    field Format string `json:"format"`
+    field Role string `json:"role"`
+    field Mutant string `json:"mutant,omitempty"`
     field Test string `json:"test,omitempty"`
     field Spec string `json:"spec,omitempty"`
     field Runs int `json:"runs"`
@@ -1192,6 +1200,7 @@ type ExploreConfig struct
     field Parallel int
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
+    field Replay bool
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
@@ -1258,6 +1267,7 @@ type System struct
     field Binding string
     field Opts []Option
     field Run func(c qenv.Chooser) error
+    field Mutant string
     method (System) Exhaust(t testing.TB, b Bound) *Exploration
     method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
     method (System) FollowTraces(t testing.TB, trace connect.Config, faults connect.FaultMap) *Exploration

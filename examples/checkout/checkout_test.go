@@ -16,10 +16,14 @@ const binding = "checkout.binding.yaml"
 
 // system is the shop as cfg deploys it, bound to the model.
 func system(cfg checkout.Config) qtest.System {
-	return qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
+	s := qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
 		_, err := checkout.Run(c, cfg)
 		return err
 	}}
+	if cfg.Mutation != shop.Faithful {
+		s.Mutant = fmt.Sprintf("shop.Mutation(%d)", cfg.Mutation) // its runs are not the shop's: the suite's evidence leaves them out
+	}
+	return s
 }
 
 func explore(t *testing.T, cfg checkout.Config, x qtest.ExploreConfig) *qtest.Exploration {

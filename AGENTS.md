@@ -142,6 +142,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.
+  `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
+  (`gotogether.evidence/1`, with its role: faithful, mutant, replay) as
+  dir/<test>/x<N>.json, cleared per test; a System's `Mutant` marks a
+  config's mutation so the suite's gaps leave it out.
   `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
