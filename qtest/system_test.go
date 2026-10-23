@@ -104,8 +104,10 @@ func TestRunPanic(t *testing.T) {
 		t.Errorf("%d of 20 runs reported as panicked, want some: %s", n, all)
 	}
 
-	// the saved entries replay to the same panic, before any seed, and
-	// say how to rerun them (the corpus, not a seed)
+	// the saved entries replay to the same panic, before any seed, in the
+	// next run of the test, and say how to rerun them (the corpus, not a
+	// seed)
+	rerun(t)
 	f = &failTB{TB: t}
 	done = make(chan struct{})
 	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
@@ -115,7 +117,7 @@ func TestRunPanic(t *testing.T) {
 	<-done
 	all = strings.Join(f.errs, "\n")
 	if !strings.Contains(all, "corpus entry ") || !strings.Contains(all, "panicked: the store's history check failed") ||
-		!strings.Contains(all, "GOTOGETHER_RUN='TestRunPanic#2:corpus=") || strings.Contains(all, "seed=0") {
+		!strings.Contains(all, "GOTOGETHER_RUN='TestRunPanic#1:corpus=") || strings.Contains(all, "seed=0") {
 		t.Errorf("the corpus's replay: %s", all)
 	}
 }
