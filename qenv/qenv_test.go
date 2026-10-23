@@ -511,3 +511,29 @@ func TestBackgroundContextInTask(t *testing.T) {
 		t.Fatalf("slept %v of virtual time in %v of real time", slept, time.Since(t0)) //qenv:ok real time
 	}
 }
+
+// A crash of a Capacity service's process kills the requests in service
+// and waiting with it; the restarted service has every worker free (a
+// killed handler's deferred release never ran, and leaked them).
+func TestCapacityAfterCrash(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	s.OnCrash(func(p *qenv.Process) { p.Restart() })
+	server := s.Process("server", true, func(context.Context) {})
+	svc := qenv.NewService(s, "slow", server, func(ctx context.Context, n int) (int, error) { return n, nil })
+	svc.Capacity = &qenv.Capacity{Workers: 1, Queue: 1, Time: func() time.Duration { return 10 * time.Second }}
+	var second error = errors.New("not called")
+	s.Spawn("client", func(ctx context.Context) {
+		qenv.Go(ctx, "first", func(ctx context.Context) { _, _ = svc.Call(ctx, 1, time.Minute) })
+		qenv.Sleep(ctx, time.Second)
+		server.Crash() // the first request dies in service
+		qenv.Sleep(ctx, time.Second)
+		_, second = svc.Call(ctx, 2, time.Minute)
+	})
+	if err := s.Run(5 * time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if second != nil || svc.InSystem() != 0 {
+		t.Errorf("after the crash: the second call %v, %d requests in the system", second, svc.InSystem())
+	}
+}

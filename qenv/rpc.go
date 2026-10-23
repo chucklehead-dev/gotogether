@@ -69,6 +69,7 @@ type Service[Req, Resp any] struct {
 
 	busy, waiting int
 	free          Signal
+	gen           int // the counts' generation: a crash of Proc starts a new one
 }
 
 // InSystem is the number of requests waiting or in service (with Capacity).
@@ -104,7 +105,13 @@ func (svc *Service[Req, Resp]) serve(ctx context.Context, deadline time.Time) (o
 	return true, false
 }
 
-func (svc *Service[Req, Resp]) release() {
+// release frees the worker a request of generation gen held. A crash
+// killed every request of its generation with the process (their deferred
+// releases run only when the simulation closes), and reset the counts.
+func (svc *Service[Req, Resp]) release(gen int) {
+	if gen != svc.gen {
+		return
+	}
 	svc.busy--
 	svc.free.Notify()
 }
@@ -115,9 +122,19 @@ func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx
 	if p == nil {
 		p = s.Process(name, false, func(context.Context) {})
 	}
-	return &Service[Req, Resp]{Name: name, Proc: p, handler: handler, sim: s,
+	svc := &Service[Req, Resp]{Name: name, Proc: p, handler: handler, sim: s,
 		request:  DeclareFaults("rpc."+name+".request", "drop", "duplicate"),
 		response: DeclareFaults("rpc."+name+".response", "lost")}
+	// the requests waiting and in service die with the process, and
+	// release nothing: a restarted service starts with every worker free
+	s.OnCrash(func(c *Process) {
+		if c == svc.Proc {
+			svc.busy, svc.waiting = 0, 0
+			svc.gen++
+			svc.free.Notify()
+		}
+	})
+	return svc
 }
 
 type result[Resp any] struct {
@@ -147,6 +164,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 		first := i == 0
 		s.spawn(s.base, svc.Name+".handle", svc.Proc, func(hctx context.Context) {
 			if svc.Capacity != nil {
+				gen := svc.gen
 				ok, rejected := svc.serve(hctx, deadline)
 				if rejected && first {
 					res.err, res.done = ErrOverloaded, true
@@ -154,7 +172,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 				if !ok {
 					return
 				}
-				defer svc.release()
+				defer svc.release(gen)
 			}
 			svc.Calls++
 			resp, err := svc.handler(hctx, req)
