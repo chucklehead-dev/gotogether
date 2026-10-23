@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -81,6 +82,14 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 		}
 		if verdict(batch[i]) != verdict(par[i]) {
 			t.Errorf("run %d: batch %q, one by one %q", i, verdict(batch[i]), verdict(par[i]))
+		}
+	}
+	// a mismatch says the model's value, in a chunk as alone: the chunk's
+	// backend wrote no ITF for a failing test, and the report had only
+	// the rendered expect ("balance == 11") over the observation (11)
+	for _, want := range []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "model state after the step:", "balance = 10"} {
+		if s := batch[2].Summary(); !strings.Contains(s, want) {
+			t.Errorf("the mismatch's report lacks %q:\n%s", want, s)
 		}
 	}
 	t0 = time.Now()

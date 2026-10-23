@@ -53,6 +53,7 @@ type Binding struct
 type Call struct
     field Quint string
     field Expect string
+    field ExpectTemplate string
     field Step *qtrace.Step
     field Inferred string
     field Action string
@@ -1439,6 +1440,7 @@ type Failure struct
     field Index int
     field Call string
     field Expect string
+    field ExpectTemplate string
     field Step *qtrace.Step
     field Quint string
     field State map[string]itf.Value

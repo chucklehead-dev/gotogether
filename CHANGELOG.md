@@ -30,6 +30,11 @@ qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
 
 Added to the core since api/core.txt was first recorded:
 
+- A state mismatch's report prints the binding's expect as written
+  (`binding.Call.ExpectTemplate`, `validate.Failure.ExpectTemplate`)
+  under the rendered one, and the model's state after the step in a
+  batch's report too (a chunk replayed on TypeScript has its failures
+  replayed on Rust, which writes their ITF).
 - Two incarnations of a process overlapping (an old one acting after its
   successor started) is an `error overlap` issue, not a warning: a run
   that passed with it fails. Fence the old incarnation, or order the

@@ -30,6 +30,10 @@ type Options struct {
 	// empty). The ITF holds the model's full state at every step, which for
 	// a model with a large state is much of the cost of a check.
 	NoITF bool
+	// detailBackend, if set, replays the runs that failed (the detail
+	// phase): a chunk's TypeScript backend writes no ITF for a failing
+	// test, so the model's state at the failure is Rust's to report
+	detailBackend string
 }
 
 // Verdict of one check.
@@ -78,8 +82,10 @@ type Failure struct {
 	Index  int    // into Calls
 	Call   string // the Quint step
 	Expect string // the post-state check of the step, if any
-	Step   *qtrace.Step
-	Quint  string // quint's error message
+	// ExpectTemplate is the binding's expect that rendered Expect
+	ExpectTemplate string
+	Step           *qtrace.Step
+	Quint          string // quint's error message
 	// State is the model's state at the failure: before the step for a
 	// step the model cannot take, after it for a failed expect or
 	// invariant (StateAfter). Variables as quint reports them.
@@ -241,6 +247,9 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 	// the model's state at the failure goes into the report.
 	withITF := opt
 	withITF.NoITF = false
+	if opt.detailBackend != "" {
+		withITF.Backend = opt.detailBackend
+	}
 	gs, qnt, out, err := phase(binding.DetailTests, file, detailed, withITF)
 	if err != nil {
 		fail(detailed, err)
@@ -382,7 +391,7 @@ func parseQuintTest(out, qnt string, g *binding.Generated) (map[string]Verdict, 
 		if ok {
 			fl.Index = i
 			fl.Call = g.Calls[i].Quint
-			fl.Expect = g.Calls[i].Expect
+			fl.Expect, fl.ExpectTemplate = g.Calls[i].Expect, g.Calls[i].ExpectTemplate
 			fl.Step = g.Calls[i].Step
 			fl.Note = g.Calls[i].Note
 		} else {
@@ -524,7 +533,12 @@ func (f *Failure) describe(pfx string) string {
 		fmt.Fprintf(&b, "%s  quint:    %s\n", pfx, f.Call)
 	}
 	if f.Expect != "" && f.Kind == "state" {
+		// as rendered, the observation is in it ("count == 3"): the
+		// template says which part is the model's
 		fmt.Fprintf(&b, "%s  expect:   %s\n", pfx, f.Expect)
+		if t := f.ExpectTemplate; t != "" && t != f.Expect {
+			fmt.Fprintf(&b, "%s  binding:  %s\n", pfx, t)
+		}
 	}
 	if f.Step == nil && f.Note != "" {
 		fmt.Fprintf(&b, "%s  observed: %s\n", pfx, f.Note)

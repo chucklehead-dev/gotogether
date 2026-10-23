@@ -35,13 +35,16 @@ type GeneratedTests struct {
 
 // Call is one step of the replay.
 type Call struct {
-	Quint    string            // e.g. writeTable({ payload: 1, ... }, Ok)
-	Expect   string            // post-state check, or ""
-	Step     *qtrace.Step      // the observed step; nil for inferred steps
-	Inferred string            // why the step was inserted ("restart"), if inferred
-	Action   string            // the model action
-	Args     map[string]string // parameter -> the Quint expression passed
-	Note     string            // description, for calls that come from an ITF state
+	Quint  string // e.g. writeTable({ payload: 1, ... }, Ok)
+	Expect string // post-state check, or ""
+	// ExpectTemplate is the binding's expect that rendered Expect, whose
+	// {{.obs.X}} the step's observations filled in
+	ExpectTemplate string
+	Step           *qtrace.Step      // the observed step; nil for inferred steps
+	Inferred       string            // why the step was inserted ("restart"), if inferred
+	Action         string            // the model action
+	Args           map[string]string // parameter -> the Quint expression passed
+	Note           string            // description, for calls that come from an ITF state
 }
 
 // Plan is the binding applied to one actor's trace: the instance's
@@ -223,6 +226,7 @@ func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) {
 			c.Quint += "(" + strings.Join(vals, ", ") + ")"
 		}
 		if ab.Expect != "" {
+			c.ExpectTemplate = ab.Expect
 			if c.Expect, err = render(ab.Expect, data, funcs); err != nil {
 				if f, ok := missingField(err); ok {
 					return nil, fmt.Errorf("step %d (%s%s): the binding's expect for %s reads the step's field %q, which the step does not have (%s): "+

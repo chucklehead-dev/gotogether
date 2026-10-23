@@ -127,7 +127,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			}
 			copt := opt
 			if !chosen && len(ch.items) > 1 {
-				copt.Backend = "typescript"
+				copt.Backend, copt.detailBackend = "typescript", "rust"
 			}
 			for i, err := range evaluate(ctx, ms, calls, name, copt, results) {
 				if err == nil {
