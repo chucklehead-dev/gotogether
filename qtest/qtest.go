@@ -265,7 +265,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 		if err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
-		lc.Options.Dir = filepath.Join(o.Dir, "linearize")
+		lc.Options.Dir, lc.Options.NoITF = filepath.Join(o.Dir, "linearize"), true
 		run.Steps, found = linearize(t, lc, run.Steps)
 	}
 	// The model-level trace, emitted in-process from the same steps.
