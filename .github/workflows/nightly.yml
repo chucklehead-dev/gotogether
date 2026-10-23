@@ -81,3 +81,33 @@ jobs:
         with:
           name: fuzz-corpus-${{ strategy.job-index }}
           path: ${{ matrix.dir }}/testdata/fuzz
+
+  # Every model on its own, every trace of up to 8 steps (quint verify,
+  # Apalache): a bounded proof of what the binding says each invariant
+  # holds, a counterexample for what it allows. Not grpcledger (Apalache
+  # does not finish in 10 minutes) nor twophase (Choreo's recursion is
+  # beyond Apalache's encoding): their sampling in CI stands.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: quint verify on every binding
+        run: |
+          go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
+          GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
+          for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u | grep -v -e grpcledger -e twophase); do
+            "$RUNNER_TEMP/gotogether" simulate -binding "$b" -verify 8 || exit 1
+          done

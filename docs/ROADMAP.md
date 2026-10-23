@@ -183,8 +183,14 @@ The track, in order:
     the Evidence line and `qtest.NotVacuous()`. checkout's, streams',
     crossdb's and fleetrollout's faithful explorations claim it and pass:
     their runs settle.
-  - **Left.** `quint verify` (Apalache) nightly on the small models.
-    Readers of `evidence.json`: `gotogether cover -sim` and actionmap
+  - **`quint verify`, done.** `gotogether simulate -verify N` checks each
+    invariant over every trace of up to N steps (Apalache), classified as
+    the binding says; the nightly runs it at 8 on every binding but
+    grpcledger (not done in 10 minutes) and twophase (Choreo's recursion
+    is beyond Apalache). Its finding: 6 steps were too few for
+    edgepublish's duplicate payload, which sampling at 30 finds; 8 are
+    enough.
+  - **Left.** Readers of `evidence.json`: `gotogether cover -sim` and actionmap
     (V13's later work).
 - **X3. Bounded exhaustive schedules (M).** Done. `System.Exhaust(t,
   qtest.Bound{Delays, Faults, Without, MaxRuns})` runs every run within
