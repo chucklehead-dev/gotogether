@@ -232,6 +232,14 @@ func From(ctx context.Context) *Recorder {
 // its goroutine's run's (qrun) or the global one; a no-op when
 // there is none, unless a run is Strict. This is the function
 // //quint:action advice calls.
+//
+//	qobs.Record(ctx, "deposit", err, "account", acct, "amount", n, "obs.balance", bal)
+//
+// action is the model's action; a key is one of its parameters
+// ("account", "amount"), or "obs.<name>", what the code observed after
+// the step (the binding's expect compares it with the model's state); a
+// non-nil err makes the step's outcome "error". Recorder.Record lists the
+// other keys (actor, process, thread, order.<d>, invoked, when).
 func Record(ctx context.Context, action string, err error, kv ...any) {
 	if r := From(ctx); r != nil {
 		r.Record(ctx, action, err, kv...)

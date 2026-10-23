@@ -23,6 +23,8 @@ import (
 //	}}
 //	sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, qtest.Conforms())
 type System struct {
+	// Binding is the path of the binding file, relative to the test's
+	// package directory (where go test runs).
 	Binding string
 	// Opts apply to every workflow over the system: the model's constants
 	// for this instance (Constants), the invariants checked (Invariants),

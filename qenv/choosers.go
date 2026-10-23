@@ -7,7 +7,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv/internal/profile"
 )
 
-// The choosers, implemented in qenv/internal/choice, and the profile.
+// The choosers, implemented in qenv/internal/choice, and the profile. go
+// doc shows an alias without its fields and methods, so each one's doc
+// lists them.
 type (
 	// A Chooser makes the environment's choices. Choose returns an index in
 	// [0, n), n >= 2. Kinds starting with "fault." are fault choices, where 0 is
@@ -15,8 +17,11 @@ type (
 	// option is normal and 0 is the canonical one (the oldest, the first).
 	Chooser = choice.Chooser
 
-	// A Choice is one decision, as recorded by a Recorder. A chunk of entropy
-	// (EntropyOf) is a Choice of Kind "entropy", N bytes long, in Bytes.
+	// A Choice is one decision, as recorded by a ChoiceLog: its Kind
+	// ("fault.rpc.payments.response", "sched.task"), its N options, the
+	// Value chosen, the Step the run was at, and the option's Name for a
+	// declared fault kind. A chunk of entropy (EntropyOf) is a Choice of
+	// Kind "entropy", N bytes long, in Bytes. String prints it.
 	Choice = choice.Choice
 
 	// A Wrapper is a chooser over another (a Recorder, a swarm, a Script over
@@ -41,13 +46,24 @@ type (
 	// longest entry that covers it ("rpc" covers "rpc.payments.response",
 	// not "rpcx"), else Default. A zero Rates in an ExploreConfig (and
 	// wherever a default applies) is DefaultRates; NoFaults is none at all.
+	//
+	// Its fields are Default (the rate of a kind no key covers) and Kinds
+	// (rates by kind); Set returns a copy with one kind's rate, and Of is a
+	// kind's rate:
+	//
+	//	rates := qenv.DefaultRates.Set("rpc.payments.response", 0.3)
+	//	quiet := qenv.Rates{Default: 0.05, Kinds: map[string]float64{"store": 0}}
 	Rates = choice.Rates
 
 	// Seeded makes choices from a seeded generator: schedule choices uniformly,
-	// fault choices at their Rates.
+	// fault choices at their Rates (its one field; NewSeeded sets
+	// DefaultRates). Choose and Entropy draw from the generator.
 	Seeded = choice.Seeded
 
-	// ChoiceLog records the choices of the Chooser it wraps, to replay a run.
+	// ChoiceLog records the choices of the Chooser it wraps (its field C),
+	// to replay a run: Choices, every choice made, and Nemeses, the nemeses
+	// it was offered by name. Faults are the Choices that faulted; Unwrap
+	// is C.
 	ChoiceLog = choice.ChoiceLog
 
 	// Bytes makes choices from a stream of bytes, by one rule shared by every
@@ -60,13 +76,19 @@ type (
 	// A zero byte is the nominal or canonical option, so a shrinker's zeros are
 	// fewer faults and the canonical schedule; past the end of the stream
 	// every choice is nominal.
+	//
+	// Its fields: Next returns the next n bytes of the stream, Rates the
+	// rates faults are made at, Chunk the size of Next's reads, OnFault
+	// (if set) is told each fault made. Err is a stream encoded by another
+	// rule's version (EncodeChoices' header).
 	Bytes = choice.Bytes
 
 	// A Replayer makes recorded choices again (Replay). At the first choice
 	// that is not the one recorded (another kind, another number of options:
 	// the run is not deterministic, or the code changed since) it stops
 	// replaying, makes every later choice nominal, and keeps the divergence
-	// (Err), which an exploration reports as the run's error.
+	// (Err), which an exploration reports as the run's error. Left is how
+	// many recorded choices it has not made.
 	Replayer = choice.Replayer
 
 	// A TimeProfile is where a simulation's virtual time goes: each wait at a seam

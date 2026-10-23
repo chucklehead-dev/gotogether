@@ -1,5 +1,20 @@
-// Package qtest records a scenario's model steps and checks them against a
-// Quint model inside a Go test: no OTel, no files to manage.
+// Package qtest checks Go code against a Quint model inside a Go test. Its
+// main entry is System: an application deployed in a simulated environment
+// (qenv), explored over many seeded runs, each run's recorded steps
+// checked against the model, and claims about them expected:
+//
+//	sys := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error {
+//		return hello.Run(c, hello.Faithful)
+//	}}
+//	sys.Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+//
+// A System also runs every schedule within a bound (Exhaust), a covering
+// array of configurations (Sweep), fuzzing (Fuzz) and mutants (Mutate).
+// Claims are Conforms, Rejects, Mismatch and Violates, over runs Some,
+// All and None, and what the runs exercised (Reaches, Exercised).
+//
+// Record and Validate check one scenario's steps, recorded in the test or
+// read from a file, without a simulation:
 //
 //	func TestWithdraw(t *testing.T) {
 //		qtest.Record(t, "binding.yaml", func(rec *qobs.Recorder) {
