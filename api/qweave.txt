@@ -36,6 +36,7 @@ type FunctionCall struct
     field Path string
     field Name string
 type Join interface
+    join()
 type MethodCall struct
     field Receiver string
     field Name string

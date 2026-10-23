@@ -5,9 +5,11 @@
 // and, until tags give apidiff a baseline, is never made by accident.
 //
 // It reads the source with go/ast rather than `go doc -short` (which
-// lists no method or field) or go/types (whose loader, x/tools, the core
-// does not depend on): a declaration is recorded as written, which is
-// what a reviewer reads.
+// lists no method or field) or go/types: type-checking a sub-module from
+// the core's test would need that module's dependencies (Hegel, x/tools),
+// which are not in the core's module graph, and a declaration as written
+// is what a reviewer reads. What go/types would add, promoted members,
+// shows under the embedded type's own record.
 package apisurface
 
 import (
@@ -29,16 +31,20 @@ import (
 // ("." for the core), its import path, and the file its API is recorded in.
 type Module struct {
 	Dir, Path, File string
+	// Tags are build tags the module publishes API behind (qgosim's
+	// "sim"): each package whose API differs under them is recorded again,
+	// as "== path [tags]".
+	Tags []string
 }
 
 // Modules are the published modules (AGENTS.md: the core, qhegel, qweave,
 // qanalysis, qgosim).
 var Modules = []Module{
-	{".", "github.com/chucklehead-dev/gotogether", "api/core.txt"},
-	{"qhegel", "github.com/chucklehead-dev/gotogether/qhegel", "api/qhegel.txt"},
-	{"qweave", "github.com/chucklehead-dev/gotogether/qweave", "api/qweave.txt"},
-	{"qanalysis", "github.com/chucklehead-dev/gotogether/qanalysis", "api/qanalysis.txt"},
-	{"qgosim", "github.com/chucklehead-dev/gotogether/qgosim", "api/qgosim.txt"},
+	{Dir: ".", Path: "github.com/chucklehead-dev/gotogether", File: "api/core.txt"},
+	{Dir: "qhegel", Path: "github.com/chucklehead-dev/gotogether/qhegel", File: "api/qhegel.txt"},
+	{Dir: "qweave", Path: "github.com/chucklehead-dev/gotogether/qweave", File: "api/qweave.txt"},
+	{Dir: "qanalysis", Path: "github.com/chucklehead-dev/gotogether/qanalysis", File: "api/qanalysis.txt"},
+	{Dir: "qgosim", Path: "github.com/chucklehead-dev/gotogether/qgosim", File: "api/qgosim.txt", Tags: []string{"sim"}},
 }
 
 // Surface is module m's API, read from the repository at root: its
@@ -69,27 +75,46 @@ func Surface(root string, m Module) ([]byte, error) {
 		return nil, err
 	}
 	sort.Strings(dirs)
-	r := &reader{module: m.Path, base: base}
+	r := &reader{module: m.Path, base: base, ctx: build.Default}
+	var tagged *reader
+	if len(m.Tags) > 0 {
+		ctx := build.Default
+		ctx.BuildTags = append(append([]string(nil), ctx.BuildTags...), m.Tags...)
+		tagged = &reader{module: m.Path, base: base, ctx: ctx}
+	}
 	var b bytes.Buffer
 	for _, rel := range dirs {
-		decls, name, err := r.pkgDecls(filepath.Join(base, rel))
-		if err != nil {
-			return nil, err
-		}
-		if name == "" || name == "main" || len(decls) == 0 {
-			continue
-		}
 		path := m.Path
 		if rel != "." {
 			path += "/" + filepath.ToSlash(rel)
 		}
-		fmt.Fprintf(&b, "== %s\n", path)
-		for _, d := range decls {
-			b.WriteString(d + "\n")
+		decls, name, err := r.pkgDecls(filepath.Join(base, rel))
+		if err != nil {
+			return nil, err
 		}
-		b.WriteString("\n")
+		if name != "" && name != "main" && len(decls) > 0 {
+			section(&b, path, decls)
+		}
+		if tagged == nil {
+			continue
+		}
+		td, tname, err := tagged.pkgDecls(filepath.Join(base, rel))
+		if err != nil {
+			return nil, err
+		}
+		if tname != "" && tname != "main" && len(td) > 0 && strings.Join(td, "\n") != strings.Join(decls, "\n") {
+			section(&b, path+" ["+strings.Join(m.Tags, ",")+"]", td)
+		}
 	}
 	return b.Bytes(), nil
+}
+
+func section(b *bytes.Buffer, head string, decls []string) {
+	fmt.Fprintf(b, "== %s\n", head)
+	for _, d := range decls {
+		b.WriteString(d + "\n")
+	}
+	b.WriteString("\n")
 }
 
 // pkgDecls are the exported declarations of the package in dir, sorted
@@ -151,7 +176,8 @@ func (r *reader) aliased(dir string, p *parsed, target *ast.SelectorExpr) []stri
 
 // A reader reads one module's packages.
 type reader struct {
-	module, base string // the module's path and directory
+	module, base string        // the module's path and directory
+	ctx          build.Context // which files are built (Module.Tags)
 	cache        map[string]*parsed
 }
 
@@ -182,7 +208,7 @@ func (r *reader) parse(dir string) (*parsed, error) {
 		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
 			continue
 		}
-		if ok, err := build.Default.MatchFile(dir, n); err != nil || !ok {
+		if ok, err := r.ctx.MatchFile(dir, n); err != nil || !ok {
 			continue // another platform's, or behind a build tag (gosim's "sim")
 		}
 		f, err := parser.ParseFile(fset, filepath.Join(dir, n), nil, parser.SkipObjectResolution)
@@ -192,7 +218,7 @@ func (r *reader) parse(dir string) (*parsed, error) {
 		p.name = f.Name.Name
 		for _, im := range f.Imports {
 			path := strings.Trim(im.Path.Value, `"`)
-			name := filepath.Base(path)
+			name := strings.SplitN(filepath.Base(path), ".", 2)[0] // yaml of gopkg.in/yaml.v3
 			if im.Name != nil {
 				name = im.Name.Name
 			}
@@ -214,8 +240,8 @@ func (r *reader) parse(dir string) (*parsed, error) {
 				}
 				p.methods[recv] = append(p.methods[recv], fmt.Sprintf("    method (%s) %s%s", expr(fset, d.Recv.List[0].Type), d.Name.Name, sig(fset, d.Type)))
 			case *ast.GenDecl:
-				var implicit ast.Expr // a const group's type, which specs without one repeat
-				for _, spec := range d.Specs {
+				var implicit, implicitVal ast.Expr // a const group's type and value, which specs without one repeat
+				for k, spec := range d.Specs {
 					switch s := spec.(type) {
 					case *ast.TypeSpec:
 						if s.Name.IsExported() {
@@ -228,7 +254,10 @@ func (r *reader) parse(dir string) (*parsed, error) {
 						}
 					case *ast.ValueSpec:
 						if d.Tok == token.CONST && (s.Type != nil || len(s.Values) > 0) {
-							implicit = s.Type
+							implicit, implicitVal = s.Type, nil
+							if len(s.Values) > 0 {
+								implicitVal = s.Values[0]
+							}
 						}
 						for i, n := range s.Names {
 							if !n.IsExported() {
@@ -238,10 +267,14 @@ func (r *reader) parse(dir string) (*parsed, error) {
 							switch {
 							case s.Type != nil:
 								line += " " + expr(fset, s.Type)
-							case d.Tok == token.CONST && i < len(s.Values):
-								line += " = " + expr(fset, s.Values[i])
-							case d.Tok == token.CONST && implicit != nil:
+							case d.Tok == token.CONST && len(s.Values) == 0 && implicit != nil:
 								line += " " + expr(fset, implicit)
+							}
+							switch {
+							case i < len(s.Values):
+								line += " = " + expr(fset, s.Values[i]) // a value's change changes the API
+							case d.Tok == token.CONST && implicitVal != nil:
+								line += fmt.Sprintf(" = %s (spec %d of its group)", expr(fset, implicitVal), k) // iota's value is its place
 							}
 							p.blocks = append(p.blocks, []string{line})
 						}
@@ -278,15 +311,17 @@ func typeDecl(fset *token.FileSet, s *ast.TypeSpec) []string {
 		out := []string{head + " struct"}
 		for _, f := range t.Fields.List {
 			ty := expr(fset, f.Type)
-			if len(f.Names) == 0 { // embedded: exported when its type's name is
-				if ast.IsExported(recvName(f.Type)) {
-					out = append(out, "    embed "+ty)
-				}
+			tag := ""
+			if f.Tag != nil {
+				tag = " " + f.Tag.Value // a YAML or JSON name is what a config file spells
+			}
+			if len(f.Names) == 0 { // embedded, exported or not: it promotes its exported members
+				out = append(out, "    embed "+ty+tag)
 				continue
 			}
 			for _, n := range f.Names {
 				if n.IsExported() {
-					out = append(out, "    field "+n.Name+" "+ty)
+					out = append(out, "    field "+n.Name+" "+ty+tag)
 				}
 			}
 		}
@@ -299,7 +334,7 @@ func typeDecl(fset *token.FileSet, s *ast.TypeSpec) []string {
 				continue
 			}
 			for _, n := range m.Names {
-				if fn, ok := m.Type.(*ast.FuncType); ok && n.IsExported() {
+				if fn, ok := m.Type.(*ast.FuncType); ok { // an unexported one too: adding it breaks every outside implementation
 					out = append(out, "    "+n.Name+sig(fset, fn))
 				}
 			}

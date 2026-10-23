@@ -428,12 +428,16 @@ starts, and the review's findings are fixed first.
   `powerLoss`, `tornWrite`. The new fault models tested on the native
   runtime, or refused there.
 - **Y8. The API record sees methods and fields. Done:** api/<module>.txt
-  for the core, qhegel, qweave, qanalysis and qgosim, read with go/ast
-  (the core takes no x/tools for go/types): fields, methods, interface
-  methods, a const group's type, an internal type's API through its
-  alias. The finding: api/core.txt was `go doc
+  for the core, qhegel, qweave, qanalysis and qgosim (and qgosim's
+  `sim` side), read with go/ast: type-checking a sub-module from the
+  core's test would need its dependencies (Hegel, x/tools), which are not
+  in the core's module graph, and promoted members show under the
+  embedded type's own record. Fields with their tags, methods, interface
+  methods (unexported too), constants' values and places, variables'
+  values, an internal type's API through its alias; the test fails on any
+  byte of difference. The finding: api/core.txt was `go doc
   -short`, which lists no method or field: none of X's API reached the
-  diff. Build it from go/types; record the published sub-modules too.
+  diff. Record the published sub-modules too.
 - **Y9. An option a workflow ignores fails. Done:** each Option records
   its name; explorations refuse Global and Linearize, Validate refuses
   Global, RecorderOptions and SkipIfEmpty, qhegel's cases refuse

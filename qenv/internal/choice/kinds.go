@@ -48,6 +48,18 @@ func Declare(name string, options ...string) {
 	k.options, k.named = append([]string(nil), options...), true
 }
 
+// seen are the fault kinds chosen (Seen), declared or not: a double that
+// chooses "fault.mykind" without DeclareFaults has a kind all the same.
+var seen sync.Map
+
+// Seen notes a fault kind a choice was made of ("fault." prefix or not).
+func Seen(kind string) {
+	k := strings.TrimPrefix(kind, "fault.")
+	if _, ok := seen.Load(k); !ok {
+		seen.Store(k, true)
+	}
+}
+
 // DeclareNemesis registers a nemesis's name, as a declaration names a
 // kind's options: Known then knows it.
 func DeclareNemesis(name string) {
@@ -60,9 +72,9 @@ func DeclareNemesis(name string) {
 }
 
 // Known reports whether name (as reports print it) covers anything this
-// process declared: a fault kind, one of its options (kind.option), a
-// nemesis (nemesis.<name>), or a prefix of any of them at a dot
-// ("queue" of "queue.payments.ack"). A name that covers nothing matches
+// process declared or chose: a fault kind, one of its options
+// (kind.option), a nemesis (nemesis.<name>), or a prefix of any of them
+// at a dot ("queue" of "queue.payments.ack"). A name that covers nothing matches
 // nothing wherever it is given (a misspelling, a renamed kind).
 func Known(name string) bool {
 	registry.Lock()
@@ -83,7 +95,12 @@ func Known(name string) bool {
 			return true
 		}
 	}
-	return false
+	found := false
+	seen.Range(func(k, _ any) bool {
+		found = covers(k.(string))
+		return !found
+	})
+	return found
 }
 
 // Options are a declared kind's option names (with or without the

@@ -86,9 +86,13 @@ func FaultOptions(kind string) []string { return choice.Options("fault." + kind)
 
 // KnownFault reports whether name, as reports print it, covers a fault
 // kind, an option (kind.option) or a nemesis (nemesis.<name>) this
-// process declared, or is a prefix of one at a dot ("queue"). The
-// registry is the process's, so a name another test's double declared is
-// known too: a check that a name is not misspelled, not that a run met it.
+// process declared or a simulation chose, or is a prefix of one at a dot
+// ("queue"). The registry is the process's, so a name another test's
+// double declared is known too: a check that a name is not misspelled,
+// not that a run met it. It depends on what ran before it: a Rates key
+// for a kind only another test's system declares passes in the whole
+// suite and fails in `go test -run` of its own test, rightly (it covers
+// nothing there).
 func KnownFault(name string) bool { return choice.Known(name) }
 
 // PointCoverage is what runs did at one fault kind.

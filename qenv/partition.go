@@ -42,6 +42,7 @@ type Network struct {
 
 	sim   *Sim
 	cuts  map[[2]string]bool    // partitioned pairs of processes, by name
+	hand  map[[2]string]bool    // the cuts Partition made, which only Heal ends
 	gen   map[[2]string]int     // per pair, the cuts made: a healer heals only its own
 	onCut []func(a, b *Process) // OnCut's hooks
 }
@@ -51,16 +52,25 @@ func (s *Sim) Net() *Network { return &s.net }
 
 // Partition cuts the network between processes a and b.
 func (n *Network) Partition(a, b *Process) {
-	if n.cuts == nil {
-		n.cuts = map[[2]string]bool{}
-	}
 	if a == b {
 		return
+	}
+	if n.hand == nil {
+		n.hand = map[[2]string]bool{}
+	}
+	n.hand[pairOf(a, b)] = true // over a cut of the nemesis's too: neither of its healers ends it now
+	n.cut(a, b)
+}
+
+// cut cuts the network between a and b, by hand or by the nemesis.
+func (n *Network) cut(a, b *Process) {
+	if n.cuts == nil {
+		n.cuts = map[[2]string]bool{}
 	}
 	if n.gen == nil {
 		n.gen = map[[2]string]int{}
 	}
-	n.gen[pairOf(a, b)]++ // a cut already made by the nemesis now lasts until Heal: its healer's generation is past
+	n.gen[pairOf(a, b)]++ // a cut made over the nemesis's: its timed healer's generation is past
 	if n.cuts[pairOf(a, b)] {
 		return
 	}
@@ -71,10 +81,13 @@ func (n *Network) Partition(a, b *Process) {
 }
 
 // Heal restores the network between a and b.
-func (n *Network) Heal(a, b *Process) { delete(n.cuts, pairOf(a, b)) }
+func (n *Network) Heal(a, b *Process) {
+	delete(n.cuts, pairOf(a, b))
+	delete(n.hand, pairOf(a, b))
+}
 
 // healAll restores the whole network (Settle).
-func (n *Network) healAll() { n.cuts = nil }
+func (n *Network) healAll() { n.cuts, n.hand = nil, nil }
 
 // Partitioned reports whether the network between a and b is cut. A task
 // of no process (nil) is never partitioned.
@@ -105,7 +118,7 @@ func (n *Network) PartitionNemesis(procs ...*Process) {
 	for i, a := range sorted {
 		for _, b := range sorted[i+1:] {
 			s.Nemesis("partition."+a.Name+"."+b.Name, func() bool { return !n.Partitioned(a, b) }, func() {
-				n.Partition(a, b)
+				n.cut(a, b)
 				gen, d := n.gen[pairOf(a, b)], n.CutLength
 				if d == 0 {
 					d = DefaultPartitionLength
@@ -117,7 +130,9 @@ func (n *Network) PartitionNemesis(procs ...*Process) {
 					}
 				})
 			})
-			s.Nemesis("heal."+a.Name+"."+b.Name, func() bool { return n.Partitioned(a, b) }, func() { n.Heal(a, b) })
+			// the nemesis heals its own cuts only: one made with Partition
+			// lasts until Heal
+			s.Nemesis("heal."+a.Name+"."+b.Name, func() bool { return n.Partitioned(a, b) && !n.hand[pairOf(a, b)] }, func() { n.Heal(a, b) })
 		}
 	}
 }

@@ -173,6 +173,9 @@ func (s *Sim) Choose(kind string, n int) int {
 	if n <= 1 || s.settling || (s.faultsOff && IsFault(kind)) {
 		return 0
 	}
+	if IsFault(kind) {
+		choice.Seen(kind) // a kind, declared or not (KnownFault)
+	}
 	v := s.c.Choose(kind, n)
 	if v < 0 || v >= n {
 		panic(fmt.Sprintf("qenv: chooser returned %d for %s with %d options", v, kind, n))

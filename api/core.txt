@@ -1,7 +1,7 @@
 == github.com/chucklehead-dev/gotogether/binding
-const AllTests TestSet
-const DetailTests TestSet
-const FastTests TestSet
+const AllTests TestSet = iota
+const DetailTests TestSet = iota (spec 2 of its group)
+const FastTests TestSet = iota (spec 1 of its group)
 func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
@@ -14,9 +14,9 @@ func RenderModule(ms ModuleSpec, calls []Call, qntPath string) (*Generated, erro
 func ScanAnnotations(dir string) ([]Annotation, error)
 func ScanRecords(dir string) ([]RecordCall, error)
 type Action struct
-    field Args map[string]string
-    field Expect string
-    field Outcomes map[string]string
+    field Args map[string]string `yaml:"args"`
+    field Expect string `yaml:"expect"`
+    field Outcomes map[string]string `yaml:"outcomes"`
     method (Action) Fields(ps ...Param) []string
     method (Action) Template(p Param) string
 type Annotation struct
@@ -27,18 +27,18 @@ type Annotation struct
     field Action string
     field Keys map[string]string
 type Binding struct
-    field Spec string
-    field Module string
-    field Constants map[string]string
-    field Intern map[string]string
-    field Outcomes map[string]string
-    field Restart string
-    field Defs string
-    field Antecedents map[string]string
-    field Actions map[string]Action
-    field Invariants []string
-    field Simulate *Simulation
-    field Dir string
+    field Spec string `yaml:"spec"`
+    field Module string `yaml:"module"`
+    field Constants map[string]string `yaml:"constants"`
+    field Intern map[string]string `yaml:"intern"`
+    field Outcomes map[string]string `yaml:"outcomes"`
+    field Restart string `yaml:"restart"`
+    field Defs string `yaml:"defs"`
+    field Antecedents map[string]string `yaml:"antecedents"`
+    field Actions map[string]Action `yaml:"actions"`
+    field Invariants []string `yaml:"invariants"`
+    field Simulate *Simulation `yaml:"simulate"`
+    field Dir string `yaml:"-"`
     method (*Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generated, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
@@ -69,13 +69,13 @@ type GeneratedTests struct
     field Invariants map[string]string
     field All string
 type ITFMeta struct
-    field Spec string
-    field Module string
-    field Constants map[string]string
-    field Defs string
-    field Invariants []string
-    field Actor string
-    field Processes []string
+    field Spec string `json:"spec"`
+    field Module string `json:"module"`
+    field Constants map[string]string `json:"constants"`
+    field Defs string `json:"defs,omitempty"`
+    field Invariants []string `json:"invariants,omitempty"`
+    field Actor string `json:"actor,omitempty"`
+    field Processes []string `json:"processes,omitempty"`
 type Model struct
     field Module string
     field Actions map[string][]Param
@@ -115,14 +115,14 @@ type RecordCall struct
     field Action string
     field Method bool
 type Simulation struct
-    field Constants map[string]string
-    field Holds []string
-    field Allows []string
-    field Steps int
-    field Samples int
-    field Skip string
-    field VerifySteps int
-    field VerifySkip string
+    field Constants map[string]string `yaml:"constants"`
+    field Holds []string `yaml:"holds"`
+    field Allows []string `yaml:"allows"`
+    field Steps int `yaml:"steps"`
+    field Samples int `yaml:"samples"`
+    field Skip string `yaml:"skip"`
+    field VerifySteps int `yaml:"verifySteps"`
+    field VerifySkip string `yaml:"verifySkip"`
 type TestSet int
 
 == github.com/chucklehead-dev/gotogether/connect
@@ -211,31 +211,31 @@ type UnimplementedError struct
 func Load(p string) (*Rules, error)
 func Parse(b []byte) (*Rules, error)
 type Rule struct
-    field Span string
-    field Event string
-    field Where map[string]string
-    field Action string
-    field Actor string
-    field Process string
-    field Thread string
-    field Outcome string
-    field Args map[string]string
-    field Obs map[string]string
-    field Order map[string]string
-    field Drop bool
+    field Span string `yaml:"span"`
+    field Event string `yaml:"event"`
+    field Where map[string]string `yaml:"where"`
+    field Action string `yaml:"action"`
+    field Actor string `yaml:"actor"`
+    field Process string `yaml:"process"`
+    field Thread string `yaml:"thread"`
+    field Outcome string `yaml:"outcome"`
+    field Args map[string]string `yaml:"args"`
+    field Obs map[string]string `yaml:"obs"`
+    field Order map[string]string `yaml:"order"`
+    field Drop bool `yaml:"drop"`
 type Rules struct
-    field Recorder string
-    field Actor string
-    field Process string
-    field Thread string
-    field Rules []Rule
+    field Recorder string `yaml:"recorder"`
+    field Actor string `yaml:"actor"`
+    field Process string `yaml:"process"`
+    field Thread string `yaml:"thread"`
+    field Rules []Rule `yaml:"rules"`
     method (*Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error)
 
 == github.com/chucklehead-dev/gotogether/input
-const ITF Format
-const OTLP Format
-const StepLog Format
-const Unknown Format
+const ITF Format = "itf"
+const OTLP Format = "otlp"
+const StepLog Format = "steps"
+const Unknown Format = ""
 func Read(path string, format Format) (*File, error)
 func Sniff(data []byte) Format
 type File struct
@@ -247,16 +247,16 @@ type File struct
 type Format string
 
 == github.com/chucklehead-dev/gotogether/itf
-const Bool Kind
-const Int Kind
-const Invalid Kind
-const List Kind
-const Map Kind
-const Record Kind
-const Set Kind
-const Str Kind
-const Tuple Kind
-const Variant Kind
+const Bool Kind = iota (spec 2 of its group)
+const Int Kind = iota (spec 1 of its group)
+const Invalid Kind = iota
+const List Kind = iota (spec 4 of its group)
+const Map Kind = iota (spec 6 of its group)
+const Record Kind = iota (spec 8 of its group)
+const Set Kind = iota (spec 5 of its group)
+const Str Kind = iota (spec 3 of its group)
+const Tuple Kind = iota (spec 7 of its group)
+const Variant Kind = iota (spec 9 of its group)
 func BoolOf(b bool) Value
 func Decode(v Value, out any) error
 func DecodeAs[T any](v Value) (T, error)
@@ -320,48 +320,48 @@ func SpansToTracesData(spans []sdktrace.ReadOnlySpan) TracesData
 func StepsFromSpans(spans []sdktrace.ReadOnlySpan) ([]qtrace.Step, error)
 func StepsFromTracesData(td *TracesData) ([]qtrace.Step, error)
 type AnyValue struct
-    field StringValue *string
-    field IntValue *U64
-    field BoolValue *bool
-    field DoubleValue *float64
+    field StringValue *string `json:"stringValue,omitempty"`
+    field IntValue *U64 `json:"intValue,omitempty"`
+    field BoolValue *bool `json:"boolValue,omitempty"`
+    field DoubleValue *float64 `json:"doubleValue,omitempty"`
     method (AnyValue) Go() any
 type Event struct
-    field TimeUnixNano U64
-    field Name string
-    field Attributes []KeyValue
+    field TimeUnixNano U64 `json:"timeUnixNano"`
+    field Name string `json:"name"`
+    field Attributes []KeyValue `json:"attributes,omitempty"`
 type FileExporter struct
     method (*FileExporter) ExportSpans(_ context.Context, spans []sdktrace.ReadOnlySpan) error
     method (*FileExporter) Shutdown(context.Context) error
 type KeyValue struct
-    field Key string
-    field Value AnyValue
+    field Key string `json:"key"`
+    field Value AnyValue `json:"value"`
 type Resource struct
-    field Attributes []KeyValue
+    field Attributes []KeyValue `json:"attributes,omitempty"`
 type ResourceSpans struct
-    field Resource Resource
-    field ScopeSpans []ScopeSpans
+    field Resource Resource `json:"resource"`
+    field ScopeSpans []ScopeSpans `json:"scopeSpans"`
 type Scope struct
-    field Name string
+    field Name string `json:"name,omitempty"`
 type ScopeSpans struct
-    field Scope Scope
-    field Spans []Span
+    field Scope Scope `json:"scope"`
+    field Spans []Span `json:"spans"`
 type Span struct
-    field TraceID string
-    field SpanID string
-    field ParentSpanID string
-    field Name string
-    field StartTimeUnixNano U64
-    field EndTimeUnixNano U64
-    field Attributes []KeyValue
-    field Events []Event
-    field Status *Status
-    field Kind any
+    field TraceID string `json:"traceId"`
+    field SpanID string `json:"spanId"`
+    field ParentSpanID string `json:"parentSpanId,omitempty"`
+    field Name string `json:"name"`
+    field StartTimeUnixNano U64 `json:"startTimeUnixNano"`
+    field EndTimeUnixNano U64 `json:"endTimeUnixNano"`
+    field Attributes []KeyValue `json:"attributes,omitempty"`
+    field Events []Event `json:"events,omitempty"`
+    field Status *Status `json:"status,omitempty"`
+    field Kind any `json:"kind,omitempty"`
 type Status struct
-    field Code any
-    field Message string
+    field Code any `json:"code,omitempty"`
+    field Message string `json:"message,omitempty"`
     method (*Status) IsError() bool
 type TracesData struct
-    field ResourceSpans []ResourceSpans
+    field ResourceSpans []ResourceSpans `json:"resourceSpans"`
 type U64 int64
     method (*U64) UnmarshalJSON(b []byte) error
     method (U64) MarshalJSON() ([]byte, error)
@@ -427,9 +427,9 @@ var Default *Counts
 == github.com/chucklehead-dev/gotogether/qenv
 const BytesVersion = choice.BytesVersion
 const DefaultPartitionLength = time.Second
-const ReadCommitted Isolation
-const Serializable Isolation
-const SnapshotIsolation Isolation
+const ReadCommitted Isolation = iota (spec 2 of its group)
+const Serializable Isolation = iota
+const SnapshotIsolation Isolation = iota (spec 1 of its group)
 func AddKey(ctx context.Context, key any, n int)
 func As[T any](c Chooser) (T, bool)
 func ContextOf(c Chooser) context.Context
@@ -701,16 +701,16 @@ type Txn interface
 type Wrapper = choice.Wrapper
     embed Chooser
     Unwrap() Chooser
-var DefaultRates
-var Epoch
-var ErrConflict
-var ErrDeadlock
-var ErrMaxSteps
-var ErrOverloaded
-var ErrStuck
-var ErrTimeout
-var ErrUnknownOutcome
-var NoFaults
+var DefaultRates = choice.DefaultRates
+var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+var ErrConflict = errors.New("qenv: transaction conflict (serialization failure); retry")
+var ErrDeadlock = fmt.Errorf("%w: deadlock (lock waits form a cycle); lock rows in one order", ErrConflict)
+var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
+var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
+var ErrStuck = errors.New("qenv: stuck")
+var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
+var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
+var NoFaults = choice.NoFaults
 
 == github.com/chucklehead-dev/gotogether/qenv/weave
 func Add(wg *sync.WaitGroup, n int)
@@ -1082,7 +1082,7 @@ type Roles struct
     method (*Roles) Orbit(service string) int
     method (*Roles) Queue(name string) int
     method (*Roles) Served(name string) (ok, failed int)
-var Default
+var Default = New()
 
 == github.com/chucklehead-dev/gotogether/qrun
 func Current() (context.Context, bool)
@@ -1095,7 +1095,7 @@ func Start(ctx context.Context) (end func())
 func With[T any](ctx context.Context, k *Key[T], v T) context.Context
 type Key[T any] struct
     method (*Key[T]) String() string
-var Task
+var Task = NewKey[any]("task")
 
 == github.com/chucklehead-dev/gotogether/qsweep
 const MaxSpace = 1 << 21
@@ -1157,20 +1157,21 @@ type Bound struct
     field Partial bool
     field Parallel int
 type Claim interface
+    judge(reports []*validate.Report) judgment
     String() string
 type Evidence struct
-    field Test string
-    field Spec string
-    field Runs int
-    field Conform int
-    field FailingBy map[string]int
-    field Faults *qenv.Coverage
-    field Model *ModelCoverage
-    field Rows int
-    field Search *Search
-    field Vacuous []Vacuity
-    field Code *qcover.Summary
-    field Mutants *MutationReport
+    field Test string `json:"test,omitempty"`
+    field Spec string `json:"spec,omitempty"`
+    field Runs int `json:"runs"`
+    field Conform int `json:"conform"`
+    field FailingBy map[string]int `json:"failing"`
+    field Faults *qenv.Coverage `json:"faults,omitempty"`
+    field Model *ModelCoverage `json:"model,omitempty"`
+    field Rows int `json:"rows,omitempty"`
+    field Search *Search `json:"search,omitempty"`
+    field Vacuous []Vacuity `json:"vacuous,omitempty"`
+    field Code *qcover.Summary `json:"code,omitempty"`
+    field Mutants *MutationReport `json:"mutants,omitempty"`
     method (*Evidence) String() string
     method (*Evidence) WriteJSON(path string) error
 type Exercise struct
@@ -1192,14 +1193,14 @@ type ExploreConfig struct
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
 type ModelCoverage struct
-    field Taken map[string]int
-    field Never []string
+    field Taken map[string]int `json:"taken"`
+    field Never []string `json:"never,omitempty"`
 type MutationClaim struct
 type MutationReport struct
     field Unreached []qmut.Mutant
     field Killed []qmut.Mutant
     field Survived []qmut.Mutant
-    field Baseline *Exploration
+    field Baseline *Exploration `json:"-"`
     method (*MutationReport) Evidence() *Evidence
     method (*MutationReport) Expect(t testing.TB, c MutationClaim)
     method (*MutationReport) Score() float64
@@ -1232,10 +1233,10 @@ type RunPanic struct
     field InTask bool
     method (*RunPanic) Error() string
 type Search struct
-    field Delays int
-    field Faults int
-    field Complete bool
-    field Left int
+    field Delays int `json:"delays"`
+    field Faults int `json:"faults"`
+    field Complete bool `json:"complete"`
+    field Left int `json:"left,omitempty"`
 type Settings struct
     method (Settings) Checker(t testing.TB, bindingPath string) *validate.Checker
     method (Settings) Dir() string
@@ -1267,9 +1268,9 @@ type Take struct
     method (Take) InAtLeast(share float64) Take
     method (Take) String() string
 type Vacuity struct
-    field Invariant string
-    field Antecedent string
-    field Runs int
+    field Invariant string `json:"invariant"`
+    field Antecedent string `json:"antecedent"`
+    field Runs int `json:"runs"`
     method (Vacuity) String() string
 
 == github.com/chucklehead-dev/gotogether/qtrace
@@ -1351,9 +1352,9 @@ func TargetDirs(root string, names []string) ([]string, error)
 type Skill struct
     field Name string
     field Description string
-var DefaultTargets
-var Renamed
-var Targets
+var DefaultTargets = []string{"agents", "claude"}
+var Renamed = map[string]string{ "quint-start": "gotogether-start", "quint-model-for-go": "gotogether-model", "quint-modeling-patterns": "gotogether-patterns", "quint-mbt-driver": "gotogether-mbt", "quint-hegel": "gotogether-hegel", "quint-trace-validation": "gotogether-traces", "quint-fault-injection": "gotogether-faults", "quint-metastability": "gotogether-metastability", "quint-verification-workflow": "gotogether-workflow", }
+var Targets = map[string]string{ "agents": filepath.Join(".agents", "skills"), "claude": filepath.Join(".claude", "skills"), "github": filepath.Join(".github", "skills"), "cursor": filepath.Join(".cursor", "skills"), }
 
 == github.com/chucklehead-dev/gotogether/sktrace
 func Applied(kinds ...string) func(Event) int
@@ -1403,9 +1404,9 @@ type Trace struct
     method (*Trace) Starts(tick time.Duration) []float64
 
 == github.com/chucklehead-dev/gotogether/validate
-const Fail Verdict
-const NotEvaluated Verdict
-const Pass Verdict
+const Fail Verdict = "fail"
+const NotEvaluated Verdict = "n/a"
+const Pass Verdict = "pass"
 func Cached(bindingPath string, o Options) (*Checker, error)
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func Validate(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, opt Options) (*Result, error)

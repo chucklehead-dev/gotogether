@@ -314,7 +314,10 @@ func TestManualCutOverNemesis(t *testing.T) {
 	s.Net().PartitionNemesis(a, b)
 	cutAfter := false
 	s.Spawn("driver", func(ctx context.Context) {
-		qenv.WaitUntil(ctx, func() bool { return s.Net().Partitioned(a, b) }, s.Now().Add(time.Second))
+		if !qenv.WaitUntil(ctx, func() bool { return s.Net().Partitioned(a, b) }, s.Now().Add(time.Second)) {
+			t.Error("the scripted cut never came")
+			return
+		}
 		s.Net().Partition(a, b) // by hand, over the nemesis's
 		qenv.Sleep(ctx, 50*time.Millisecond)
 		cutAfter = s.Net().Partitioned(a, b)
@@ -324,5 +327,33 @@ func TestManualCutOverNemesis(t *testing.T) {
 	}
 	if !cutAfter {
 		t.Error("the nemesis's healer ended a cut made by hand")
+	}
+}
+
+// The heal nemesis heals the nemesis's cuts only: a cut made by hand, at
+// any nemesis rate, lasts until Heal.
+func TestHealNemesisSparesHandCuts(t *testing.T) {
+	for seed := uint64(1); seed <= 10; seed++ {
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults.Set("nemesis", 0.5)
+		s := qenv.New(c)
+		a := s.Process("a", false, func(context.Context) {})
+		b := s.Process("b", false, func(context.Context) {})
+		s.Net().PartitionNemesis(a, b)
+		s.Net().Partition(a, b)
+		held := true
+		s.Spawn("watch", func(ctx context.Context) {
+			for range 50 {
+				qenv.Yield(ctx)
+				held = held && s.Net().Partitioned(a, b)
+			}
+		})
+		if err := s.Run(time.Second); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		if !held {
+			t.Fatalf("seed %d: a nemesis healed a cut made by hand", seed)
+		}
 	}
 }

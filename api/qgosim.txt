@@ -2,3 +2,13 @@
 func Run(t *testing.T, pkg, test string, c qenv.Chooser, env ...string) ([]qtrace.Step, error)
 func Scenario(t *testing.T, pkg, test string, env ...string) func(qenv.Chooser) error
 
+== github.com/chucklehead-dev/gotogether/qgosim [sim]
+func New() *qenv.Sim
+func NewPlatform() *Platform
+func Sink() qobs.Sink
+type Chooser struct
+    method (Chooser) Choose(kind string, n int) int
+type Platform struct
+    field Recorder *qobs.Recorder
+    method (*Platform) Machine(name string, main func()) qenv.Machine
+

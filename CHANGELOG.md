@@ -24,8 +24,9 @@ The first release. What a user meets, by module:
   `github.com/chucklehead-dev/gosim`.
 
 Each published module's API is recorded in api/ (core.txt, qhegel.txt,
-qweave.txt, qanalysis.txt, qgosim.txt), fields and methods included;
-`internal/apisurface` fails on an unrecorded change.
+qweave.txt, qanalysis.txt, qgosim.txt with its `sim` side), fields
+(with tags), methods, constants' and variables' values included;
+`internal/apisurface` fails on any unrecorded change.
 
 Added to the core since api/core.txt was first recorded:
 
