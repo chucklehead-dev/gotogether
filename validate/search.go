@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -162,45 +164,98 @@ func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}
 func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue) {
 	traces, issues := qtrace.Reconstruct(steps) // deduplicated, gaps found across actors
 	undecided, kept = map[string]bool{}, map[string][]qtrace.Issue{}
+	type job struct {
+		tr, part *qtrace.Trace
+		o        []qtrace.Step
+		issue    qtrace.Issue
+		cut      bool
+		panicked any
+	}
+	var jobs []*job
 	for _, tr := range traces {
 		for _, part := range partitions(tr, key) {
-			actor := part.Actor // as the report names it ("" for no actor)
-			for _, i := range tr.Issues {
-				if i.Kind == "gap" || i.Kind == "cycle" {
-					kept[actor] = append(kept[actor], i)
+			jobs = append(jobs, &job{tr: tr, part: part})
+		}
+	}
+	// the searches side by side, a directory each: the partitions of a
+	// history are independent, and each search is quint processes one
+	// after another (a history of two keys took three times one search of
+	// both); their results in order
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	for i, j := range jobs {
+		jch, jfull := ch, full
+		if len(jobs) > 1 {
+			jch, jfull = inDir(ch, i), inDir(full, i)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() {
+				<-sem
+				if r := recover(); r != nil {
+					j.panicked = r // a searchError, re-raised on the caller's goroutine
 				}
+			}()
+			j.o, j.issue, j.cut = order(jch, jfull, j.part, budget, key != "")
+		}()
+	}
+	wg.Wait()
+	for _, j := range jobs {
+		if j.panicked != nil {
+			panic(j.panicked)
+		}
+	}
+	for _, j := range jobs {
+		tr, part, o := j.tr, j.part, j.o
+		actor := part.Actor // as the report names it ("" for no actor)
+		for _, i := range tr.Issues {
+			if i.Kind == "gap" || i.Kind == "cycle" {
+				kept[actor] = append(kept[actor], i)
 			}
-			o, issue, cut := order(ch, full, part, budget, key != "")
-			issues = append(issues, issue)
-			if unbounded(part.Steps) {
-				issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time bounds none of its %d steps: "+
-					"no step has an invocation (qobs.Invoke, then Call.Done) or an \"invoked\" time, so every order of its threads is allowed "+
-					"(sequential consistency, not linearizability)", nameOf(actor), len(part.Steps))})
-			}
-			if cut {
-				undecided[actor] = true
-			}
-			out = append(out, o...)
-			// what is no step goes on after the order, on its recorder: the
-			// calls never completed, then the settle, if the run recorded one
-			rec := len(o)
-			if len(o) > 0 {
-				rec = int(o[len(o)-1].Seq)
-			}
-			after := func(s qtrace.Step) {
-				rec++
-				s.Recorder, s.Thread, s.Seq, s.Actor = "linearized:"+actor, "linearized", uint64(rec), actor
-				out = append(out, s)
-			}
-			for _, p := range part.Pending {
-				after(p)
-			}
-			if part.Settled {
-				after(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
-			}
+		}
+		issues = append(issues, j.issue)
+		if unbounded(part.Steps) {
+			issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time bounds none of its %d steps: "+
+				"no step has an invocation (qobs.Invoke, then Call.Done) or an \"invoked\" time, so every order of its threads is allowed "+
+				"(sequential consistency, not linearizability)", nameOf(actor), len(part.Steps))})
+		}
+		if j.cut {
+			undecided[actor] = true
+		}
+		out = append(out, o...)
+		// what is no step goes on after the order, on its recorder: the
+		// calls never completed, then the settle, if the run recorded one
+		rec := len(o)
+		if len(o) > 0 {
+			rec = int(o[len(o)-1].Seq)
+		}
+		after := func(s qtrace.Step) {
+			rec++
+			s.Recorder, s.Thread, s.Seq, s.Actor = "linearized:"+actor, "linearized", uint64(rec), actor
+			out = append(out, s)
+		}
+		for _, p := range part.Pending {
+			after(p)
+		}
+		if part.Settled {
+			after(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
 		}
 	}
 	return out, issues, undecided, kept
+}
+
+// inDir is ch writing its modules in a subdirectory of its own for the
+// i-th of searches side by side (none if ch has no directory: each batch
+// makes a temporary one).
+func inDir(ch *Checker, i int) *Checker {
+	if ch.Options.Dir == "" {
+		return ch
+	}
+	c := *ch
+	c.Options.Dir = filepath.Join(ch.Options.Dir, fmt.Sprintf("part%d", i))
+	return &c
 }
 
 // partitions splits a trace by the value of argument key, in order of
