@@ -96,6 +96,32 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- examples/quorumkv: a replicated store (ABD over three replicas, hinted
+  handoff) whose mutants each need one of SettleCore, Completes,
+  `eventually`, PCT or LinearizeByKey; its first version re-picked a
+  version on retry, which a linearized history showed.
+- `qtest.Pending(action)`: a run left a call of the action invoked and
+  never completed (`Some(Pending("put"))`).
+- Linearize finds an order its guided search misses: when that search
+  finds none, every order real time allows is searched, prefix by prefix
+  (rejected prefixes pruned), and finding none there, within budget, is a
+  proof. A candidate carries the run's settle, so an order whose eventual
+  val fails (the probe saw another last write) is not taken.
+- ResolvePending: an assumed step is in the process of the step it
+  follows (no inferred restarts), re-sequenced steps drop their order
+  keys and call ids (a completed call's id named another record), a call
+  takes effect only after every step recorded before its invocation, and
+  a resolution the binding cannot replay is skipped. Linearize drops call
+  ids on re-sequencing too.
+- Steer refuses a Chooser factory (its choosers pick tasks and nemeses
+  the prefix cannot replay) and System.Mutate (each mutant would steer
+  its own sample); it replays entropy chunks (gosim); a steered run's file
+  is under its package's directory and replays only in its exploration.
+  The determinism self-check of a Chooser factory's runs replays the
+  first run's choices, whatever the factory hands out.
+- qhistory: G-nonadjacent (two or more rw edges, never adjacent:
+  forbidden under snapshot isolation, which allows write skew),
+  duplicate elements in a read, and a transaction id 0 refused.
 - A step recorded in a simulation carries the simulation's virtual time,
   not the wall clock's (its tasks' and its creator's: `internal/hooks`
   Now), so a client history recorded there has its intervals; and

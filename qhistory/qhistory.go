@@ -16,13 +16,15 @@
 //
 // A cycle of them is an anomaly, named as Adya does: G0 (ww only), G1c
 // (ww and wr), G-single (exactly one rw: read skew, a lost update),
-// G2 (two or more rw: write skew). With them, from the reads alone: G1a
+// G-nonadjacent (two or more rw, never two in a row), G2 (any other
+// cycle: write skew). With them, from the reads alone: G1a
 // (a read saw an aborted transaction's value), G1b (a read saw a
 // transaction's intermediate value), an incompatible order (two reads of
 // a key that are not prefixes of one another), garbage (a value no
 // transaction appended) and internal (a transaction's read misses its
-// own appends). Read committed forbids all but G-single and G2,
-// snapshot isolation all but G2, serializability every one.
+// own appends), a duplicate (a value twice in one read). Read committed
+// forbids all but G-single, G-nonadjacent and G2, snapshot isolation all
+// but G2, serializability every one.
 //
 // Generate makes a workload; the test runs each transaction against the
 // database, fills in each read's List and the transaction's Outcome, and
@@ -105,7 +107,7 @@ func (l Level) String() string {
 
 // An Anomaly is one thing the history shows that some level forbids.
 type Anomaly struct {
-	Kind string // G0, G1a, G1b, G1c, G-single, G2, incompatible-order, garbage, internal
+	Kind string // G0, G1a, G1b, G1c, G-single, G-nonadjacent, G2, incompatible-order, duplicate, garbage, internal
 	Txns []int  // the transactions involved (a cycle's, in its order)
 	Msg  string // what was seen: the cycle's edges, the reads
 	// Forbidden: the level checked forbids it (Report.OK fails); an
@@ -163,6 +165,8 @@ func forbidden(level Level, kind string) bool {
 		return level >= SnapshotIsolation
 	case "G2":
 		return level >= Serializable
+	case "G-nonadjacent":
+		return level >= SnapshotIsolation
 	}
 	return true
 }
@@ -192,6 +196,9 @@ func Check(level Level, txns []Txn) (*Report, error) {
 	lastOwn := map[wkey]bool{} // a transaction's last append to the key
 	for i := range txns {
 		t := &txns[i]
+		if t.ID == 0 {
+			return nil, fmt.Errorf("qhistory: a transaction with id 0: ids must be nonzero (0 is no transaction)")
+		}
 		if _, dup := byID[t.ID]; dup {
 			return nil, fmt.Errorf("qhistory: two transactions with id %d", t.ID)
 		}
@@ -257,6 +264,9 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			if o.Kind == Append {
 				own = append(own, wkey{o.Key, o.Value})
 				continue
+			}
+			if d, ok := duplicated(o.List); ok {
+				add("duplicate", []int{t.ID}, "transaction %d's %s holds %d twice", t.ID, o, d)
 			}
 			ext := o.List
 			mine := 0
@@ -467,5 +477,81 @@ func classify(scc []int, out map[int][]edge) (string, []hop) {
 			}
 		}
 	}
+	if c := nonadjacent(scc, in, out); c != nil {
+		return "G-nonadjacent", c
+	}
 	return "G2", cycle(func(string) bool { return true })
+}
+
+// nonadjacent finds a cycle of the component with two or more rw edges,
+// no two of them in a row (the last and the first in a row too): Adya's
+// G-nonadjacent, which snapshot isolation forbids though it allows write
+// skew, whose rw edges are adjacent.
+func nonadjacent(scc []int, in map[int]bool, out map[int][]edge) []hop {
+	type state struct {
+		node  int
+		lastR bool // the edge into node was rw
+	}
+	type step struct {
+		from state
+		hop
+	}
+	for _, n := range scc {
+		for _, first := range out[n] {
+			if !in[first.to] {
+				continue
+			}
+			firstR := first.kind == "rw"
+			start := state{first.to, firstR}
+			prev := map[state]step{}
+			seen := map[state]bool{start: true}
+			queue := []state{start}
+			for len(queue) > 0 {
+				st := queue[0]
+				queue = queue[1:]
+				for _, e := range out[st.node] {
+					r := e.kind == "rw"
+					if !in[e.to] || r && st.lastR {
+						continue
+					}
+					if e.to == n && !(r && firstR) {
+						rws := 0
+						var path []hop
+						for at := st; at != start; at = prev[at].from {
+							path = append(path, prev[at].hop)
+						}
+						slices.Reverse(path)
+						cyc := append(append([]hop{{n, first}}, path...), hop{st.node, e})
+						for _, h := range cyc {
+							if h.kind == "rw" {
+								rws++
+							}
+						}
+						if rws >= 2 { // fewer is G-single, or no rw at all: found before this
+							return cyc
+						}
+						continue
+					}
+					next := state{e.to, r}
+					if !seen[next] {
+						seen[next], prev[next] = true, step{st, hop{st.node, e}}
+						queue = append(queue, next)
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// duplicated returns a value list holds twice, if any.
+func duplicated(list []int) (int, bool) {
+	seen := map[int]bool{}
+	for _, v := range list {
+		if seen[v] {
+			return v, true
+		}
+		seen[v] = true
+	}
+	return 0, false
 }

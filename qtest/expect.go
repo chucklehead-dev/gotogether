@@ -80,6 +80,30 @@ func Completes() Expectation {
 	}, true, nil, nil, ""}
 }
 
+// Pending: a call of this action was invoked (qobs.Invoke) and never
+// completed ("" matches any): Some(Pending("put")) states a call left
+// unanswered, None(Pending("")) the same as All(Completes()).
+func Pending(action string) Expectation {
+	return Expectation{desc: fmt.Sprintf("%s invoked and never completed", aCall(action)), check: func(r *validate.Report) bool {
+		for _, a := range r.Actors {
+			for _, p := range a.Pending {
+				if action == "" || p.Action == action {
+					return true
+				}
+			}
+		}
+		return false
+	}, actions: named(action)}
+}
+
+// aCall names an action's call in a description.
+func aCall(action string) string {
+	if action == "" {
+		return "a call"
+	}
+	return "a call of " + action
+}
+
 func failed(r *validate.Report, kind, action string) bool {
 	for _, a := range r.Actors {
 		f := a.Failure

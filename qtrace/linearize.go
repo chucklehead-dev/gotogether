@@ -56,6 +56,10 @@ const RealTimeSlack = time.Millisecond
 // are near each other in recording order.
 const moveWindow = 32
 
+// reorderWindow bounds the reorderings of steps before the failing one:
+// each pair is a candidate, so it is kept small.
+const reorderWindow = 8
+
 // Linearize searches the orders of one actor's steps that their
 // constraints allow for one that check accepts: program order, domain
 // clocks, and real time (a step whose operation completed before another
@@ -71,10 +75,12 @@ const moveWindow = 32
 // they are Reconstruct's, and the caller reports them with the verdict.
 // The search starts from Reconstruct's order and, while an order fails,
 // tries every single move the constraints allow around the failing step
-// (it, earlier; a later step, before it), keeping the move that gets
+// (it, earlier; a later step, before it; a step before it, earlier),
+// keeping the move that gets
 // furthest, until one conforms, no move gets further, or budget orders
-// were checked. It is a guided search, not an exhaustive one: finding
-// none is strong evidence of a bug, not a proof.
+// were checked. When it finds none, a complete search follows (every
+// order real time allows, prefix by prefix, rejected prefixes pruned):
+// finding none there, within budget, is a proof.
 //
 // It returns the order that conformed, or that got furthest, whether one
 // conformed, how many orders it checked, and whether the budget cut the
@@ -107,6 +113,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		for i, k := range order {
 			s := ns[k].s
 			s.Recorder, s.Thread, s.Seq = "linearized:"+actor, "linearized", uint64(i+1)
+			s.Call = 0 // paired already: on the new recorder its invocation's seq means another record
 			out[i] = s
 		}
 		return out
@@ -159,6 +166,18 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 			c[f] = y
 			add(c)
 		}
+		// an earlier step, earlier still: the failing step may need a step
+		// before it reordered with another (two writes, of which a read saw
+		// the one recorded first), which no move of the failing step makes
+		for q := f - 1; q >= 0 && q >= f-reorderWindow; q-- {
+			y := cur[q]
+			for p := q - 1; p >= 0 && p >= q-reorderWindow && !mustPrecede(cur[p], y); p-- {
+				c := slices.Clone(cur)
+				copy(c[p+1:q+1], cur[p:q])
+				c[p] = y
+				add(c)
+			}
+		}
 		if len(cands) == 0 {
 			stopped = true
 			break
@@ -191,5 +210,84 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		}
 		cur, f = cands[bi], bf
 	}
-	return render(cur), f < 0, tried, f >= 0 && !stopped
+	if f < 0 {
+		return render(cur), true, tried, false
+	}
+	// the guided search found none: search every order the constraints
+	// allow, prefix by prefix, before calling it a bug
+	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, check); ok || n > 0 {
+		tried += n
+		if ok {
+			return o, true, tried, false
+		}
+		if cutShort || !stopped {
+			return render(cur), false, tried, true
+		}
+		return render(cur), false, tried, false
+	}
+	return render(cur), false, tried, !stopped
+}
+
+// prefixBeam bounds how many accepted prefixes of one length the complete
+// search keeps: past it the search is no longer complete (cut).
+const prefixBeam = 64
+
+// prefixes searches the orders the constraints allow level by level (Wing
+// and Gong's search, a batch of candidates a level): each prefix the model
+// accepts is extended by every step all of whose required predecessors it
+// already holds, and a rejected prefix is dropped with every order it
+// begins. A full order must conform as a whole (an eventual val included).
+// Unless budget or the beam cut it, finding none is a proof: no order
+// real time allows is a behaviour of the model.
+func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
+	check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
+	n := len(ns)
+	level := [][]int{nil}
+	for k := 0; k < n && tried < budget; k++ {
+		var cands [][]int
+		for _, p := range level {
+			placed := make([]bool, n)
+			for _, i := range p {
+				placed[i] = true
+			}
+			for _, i := range base {
+				if placed[i] {
+					continue
+				}
+				minimal := true
+				for j := 0; j < n && minimal; j++ {
+					minimal = placed[j] || j == i || !mustPrecede(j, i)
+				}
+				if minimal {
+					cands = append(cands, append(slices.Clip(p), i))
+				}
+			}
+		}
+		if room := budget - tried; len(cands) > room {
+			cands, cut = cands[:room], true
+		}
+		orders := make([][]Step, len(cands))
+		for i, c := range cands {
+			orders[i] = render(c)
+		}
+		fs := check(orders)
+		tried += len(cands)
+		var next [][]int
+		for i, f := range fs {
+			if f < 0 {
+				if k == n-1 {
+					return orders[i], true, tried, false
+				}
+				next = append(next, cands[i])
+			}
+		}
+		if len(next) > prefixBeam {
+			next, cut = next[:prefixBeam], true
+		}
+		if len(next) == 0 {
+			return nil, false, tried, cut
+		}
+		level = next
+	}
+	return nil, false, tried, true
 }

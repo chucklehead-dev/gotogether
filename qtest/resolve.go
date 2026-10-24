@@ -62,7 +62,12 @@ func resolve(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget int
 		seq := 0
 		add := func(s qtrace.Step) {
 			seq++
-			s.Recorder, s.Thread, s.Seq, s.Actor = "resolved:"+tr.Actor, "resolved", uint64(seq), tr.Actor
+			// one thread, in the resolution's order: its order keys and the
+			// calls its completions name (paired already) would contradict it
+			s.Recorder, s.Thread, s.Seq, s.Actor, s.Order = "resolved:"+tr.Actor, "resolved", uint64(seq), tr.Actor, nil
+			if !s.Invocation {
+				s.Call = 0
+			}
 			out = append(out, s)
 		}
 		for _, s := range chosen {
@@ -89,8 +94,12 @@ func resolutions(tr *qtrace.Trace, budget int) (out []placement, cut bool) {
 	k := len(tr.Pending)
 	from := make([]int, k) // the earliest position each may take effect at
 	for i, p := range tr.Pending {
-		for from[i] < len(tr.Steps) && tr.Steps[from[i]].Time.Before(p.Time) {
-			from[i]++
+		// after every step recorded before its invocation: on its recorder,
+		// a lower seq; elsewhere, an earlier time
+		for j, s := range tr.Steps {
+			if s.Recorder == p.Recorder && s.Seq < p.Seq || s.Recorder != p.Recorder && s.Time.Before(p.Time) {
+				from[i] = j + 1
+			}
 		}
 	}
 	for effects := 0; effects <= k; effects++ {
@@ -131,7 +140,15 @@ func apply(tr *qtrace.Trace, pl placement) []qtrace.Step {
 		for i, p := range tr.Pending {
 			if pl[i] == pos {
 				s := p
-				s.Invocation, s.Ambiguous, s.Outcome, s.Obs = false, true, "", nil
+				s.Invocation, s.Ambiguous, s.Outcome, s.Obs, s.Order = false, true, "", nil, nil
+				// in the process of the step it follows (the first's, at the
+				// start): its effect landed there, and a process of its own
+				// between them would read as two restarts
+				if pos > 0 {
+					s.Process = tr.Steps[pos-1].Process
+				} else if len(tr.Steps) > 0 {
+					s.Process = tr.Steps[0].Process
+				}
 				out = append(out, s)
 			}
 		}
@@ -175,11 +192,17 @@ func resolution(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int
 			orders[i] = append(orders[i], s)
 		}
 	}
-	reps, errs := ch.CheckBatch(context.Background(), orders, 0)
+	reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
 	best, bestAt := 0, -2
+	var firstErr error
 	for i := range orders {
 		if errs[i] != nil {
-			t.Fatalf("gotogether: resolving actor %s's pending calls: %v", a, errs[i])
+			// a resolution the binding cannot replay (a parameter read from an
+			// observation the assumed step lacks): not one to take
+			if firstErr == nil {
+				firstErr = errs[i]
+			}
+			continue
 		}
 		at := failedAt(reps[i], len(orders[i]))
 		if at < 0 {
@@ -189,6 +212,9 @@ func resolution(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int
 		if at > bestAt {
 			best, bestAt = i, at
 		}
+	}
+	if bestAt == -2 && firstErr != nil {
+		t.Fatalf("gotogether: resolving actor %s's pending calls: no resolution can be replayed: %v", a, firstErr)
 	}
 	if cut {
 		return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conformed in the %d of the budget: "+

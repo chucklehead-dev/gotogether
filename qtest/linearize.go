@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -59,7 +60,8 @@ func LinearizeByKey(arg string) Option {
 }
 
 // LinearizeBudget is Linearize with a budget of n orders per actor (per
-// partition with LinearizeByKey; at least 1): a run whose search ran out of DefaultLinearizeBudget's says
+// partition with LinearizeByKey; at least 1), for its guided search and as
+// many again for the complete one that follows it when it finds none: a run whose search ran out of DefaultLinearizeBudget's says
 // to raise it.
 func LinearizeBudget(n int) Option {
 	if n < 1 {
@@ -175,7 +177,7 @@ func order(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int, par
 		a = "default"
 	}
 	check := func(orders [][]qtrace.Step) []int {
-		reps, errs := ch.CheckBatch(context.Background(), orders, 0)
+		reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
 		fs := make([]int, len(orders))
 		for i := range orders {
 			if errs[i] != nil {
@@ -203,10 +205,18 @@ func order(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int, par
 
 // failedAt is the index of the first step of a one-actor order the model
 // rejects, or -1 when it conforms (an invariant it violates is not the
-// order's fault).
+// order's fault). An eventual val false at the end is the order's: the
+// last write a probe saw last may be the one an order put first, and
+// another order of the same steps ends as the probe saw, so it fails at
+// its last step and the search goes on.
 func failedAt(rep *validate.Report, n int) int {
 	for _, a := range rep.Actors {
 		if a.Conforms == validate.Pass {
+			for _, inv := range a.Invariants {
+				if inv.Verdict == validate.Fail && strings.HasPrefix(inv.Name, validate.EventuallyName("")) {
+					return n - 1
+				}
+			}
 			continue
 		}
 		if a.Failure != nil && a.Failure.Step != nil && a.Failure.Step.Seq >= 1 {
@@ -223,4 +233,26 @@ func partitionHint(partitioned bool) string {
 		return ""
 	}
 	return "partition independent keys (qtest.LinearizeByKey), "
+}
+
+// settledAs gives each candidate order of all the trace's steps the run's
+// settle, if it recorded one, after its last step: without it a candidate's eventual vals are not
+// judged, and the search would take an order the probe contradicts.
+func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
+	if !tr.Settled {
+		return orders
+	}
+	out := make([][]qtrace.Step, len(orders))
+	for i, o := range orders {
+		if len(o) < len(tr.Steps) { // a prefix of an order (Linearize's complete search): the run has not ended
+			out[i] = o
+			continue
+		}
+		s := qtrace.Step{Action: "settled", Settled: true, Actor: tr.Actor, Seq: uint64(len(o) + 1)}
+		if len(o) > 0 {
+			s.Recorder, s.Process = o[len(o)-1].Recorder, o[len(o)-1].Process
+		}
+		out[i] = append(slices.Clip(o), s)
+	}
+	return out
 }

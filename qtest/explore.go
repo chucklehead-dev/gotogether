@@ -10,7 +10,6 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -335,7 +334,6 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	}
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, cfg.Parallel)
-	var first qenv.Chooser // the first seed's, from cfg.Chooser
 	for i, seed := range seeds {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -359,9 +357,6 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			}
 			if cfg.Chooser != nil {
 				ch = cfg.Chooser(seed)
-				if i == 0 {
-					first = ch
-				}
 			} else {
 				s := qenv.NewSeeded(seed)
 				s.Rates = cfg.rates
@@ -372,17 +367,9 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}()
 	}
 	wg.Wait()
-	chooserOf := func(seed uint64) qenv.Chooser {
-		if cfg.Chooser != nil {
-			return cfg.Chooser(seed)
-		}
-		s := qenv.NewSeeded(seed)
-		s.Rates = cfg.rates
-		return s
-	}
 	one := func(ch qenv.Chooser) *Run { return runOne(c, woven, ch, scenario) }
 	if alone && spec.kind == "choices" {
-		e, err := readEntry(spec.value)
+		e, err := readEntry(spec.value, x.ref())
 		if err != nil {
 			t.Fatalf("gotogether: GOTOGETHER_RUN's choices: %v", err)
 		}
@@ -390,7 +377,16 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		r.steered = spec.value
 		x.Runs, ids = append(x.Runs, r), append(ids, 0)
 	} else if cfg.Steer > 0 && !alone && !cfg.fuzz {
-		steered, err := x.steer(x.Runs, cfg.Steer, cfg.Parallel, steerDir(x), chooserOf, one)
+		switch {
+		case cfg.Chooser != nil:
+			t.Fatalf("gotogether: ExploreConfig.Steer with a Chooser: steered runs go on with seeded choices at the System's Rates; " +
+				"a factory's choosers (a PCT's, a Script's) would not see the prefix they replay (they choose tasks, nemeses by name), so steer seeded explorations")
+		case cfg.corpusOf != "":
+			t.Fatalf("gotogether: ExploreConfig.Steer in System.Mutate: each mutant would steer its own sample from its own runs, " +
+				"not the baseline's, and a mutant only a steered baseline run reached would survive for it; mutate seeded explorations")
+		}
+		seeded := func(seed uint64) qenv.Chooser { s := qenv.NewSeeded(seed); s.Rates = cfg.rates; return s }
+		steered, err := x.steer(x.Runs, cfg.Steer, cfg.Parallel, steerDir(x), seeded, one)
 		if err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
@@ -399,19 +395,13 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			ids = append(ids, 0)
 		}
 	}
-	var again qenv.Chooser
-	if cfg.Chooser != nil && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
-		// a factory's chooser afresh (a PCT's); one that hands out the same
-		// stateful chooser again (a Script it made earlier) cannot run twice
-		if again = cfg.Chooser(x.Runs[0].seed); sameObject(again, first) {
-			again = nil
-		}
-	}
-	if !cfg.fuzz && (cfg.Chooser == nil || again != nil) && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
-		seed := x.Runs[0].seed
-		checkDeterminism(t, x.Runs[0], func() *Run {
-			if again != nil {
-				return runOne(c, woven, again, scenario)
+	if !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
+		seed, first := x.Runs[0].seed, x.Runs[0]
+		checkDeterminism(t, first, func() *Run {
+			if cfg.Chooser != nil {
+				// a factory's choosers may be stateful (a Script it made once):
+				// the first run's own choices, replayed, make the run again
+				return runOne(c, woven, qenv.Replay(first.Choices), scenario)
 			}
 			s := qenv.NewSeeded(seed)
 			s.Rates = cfg.rates
@@ -1235,10 +1225,4 @@ func chooserErr(c qenv.Chooser) error {
 		return b.Err()
 	}
 	return nil
-}
-
-// sameObject reports whether a and b are the same pointer.
-func sameObject(a, b qenv.Chooser) bool {
-	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
-	return va.Kind() == reflect.Pointer && vb.Kind() == reflect.Pointer && va.Pointer() == vb.Pointer()
 }

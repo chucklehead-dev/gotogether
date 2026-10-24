@@ -2,8 +2,8 @@ package qtest
 
 import (
 	"context"
-	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -70,9 +70,34 @@ func TestSteer(t *testing.T) {
 			break
 		}
 	}
-	t.Setenv("GOTOGETHER_RUN", fmt.Sprintf("%s#3:%s", t.Name(), r.ID())) // the next exploration is the test's third
-	alone := sys.Explore(t, ExploreConfig{Seeds: 20, Steer: 180})
-	if len(alone.Runs) != 1 || restarted(alone) != 1 {
-		t.Errorf("%s alone ran %d runs, %d restarting", r.ID(), len(alone.Runs), restarted(alone))
+	if !strings.HasPrefix(r.ID(), "choices=") {
+		t.Fatalf("a steered run's reproduce names %q, not its choices", r.ID())
+	}
+	e, err := readEntry(r.steered, steered.ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	alone := runOne(config(t, nil), false, qenv.Replay(e.Choices), sys.Run)
+	if !slices.ContainsFunc(alone.Steps, func(s qtrace.Step) bool { return s.Action == "restart" }) {
+		t.Errorf("%s replayed did not restart: %v", r.ID(), alone.Steps)
+	}
+	if _, err := readEntry(r.steered, plain.ref()); err == nil {
+		t.Error("another exploration's saved run was accepted")
+	}
+}
+
+// Steer steers seeded runs: with a Chooser factory (a PCT's, a Script's)
+// the prefix would not reach the choices it makes, so it is refused.
+func TestSteerRefusesAChooser(t *testing.T) {
+	RequireQuint(t)
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		journalSystem().Explore(f, ExploreConfig{Seeds: 2, Steer: 2, Chooser: func(seed uint64) qenv.Chooser { return qenv.NewSeeded(seed) }})
+	}()
+	<-done
+	if !f.failed || !strings.Contains(strings.Join(f.errs, "\n"), "Steer with a Chooser") {
+		t.Errorf("errors: %v", f.errs)
 	}
 }

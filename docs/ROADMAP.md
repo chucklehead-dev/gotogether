@@ -115,22 +115,29 @@ next.
   under SettleCore (a quorum whose convergence is stated of the core);
   eventual properties in connect's MBT; what a pending call may have
   done is Z8's ambiguous steps.
-- **Z8. Search and scale (M–L).** Done: PCT as a chooser
+- **Z8. Search and scale (M–L). Done:** PCT as a chooser
   (`qenv.NewPCT`, tasks picked by id, recorded as index choices);
-  Linearize per key (`qtest.LinearizeByKey`, Porcupine's partitioning);
-  the history checker public for real databases (`qhistory`: Elle's
-  list-append workload, Adya's anomalies). Deferred, for the next review:
-  footprint-based reduction for Exhaust, which is sound only if tasks
-  share state solely through the doubles (Go code between seams touches
-  any memory, a test's closures included): it needs an ownership
-  declaration and a DPOR with sleep sets, or a passing Exhaust would
-  prove less than it says. Steered exploration is done too
-  (`ExploreConfig.Steer`, by new steps, observed states, faults and code
-  blocks). Pending calls are resolved too (`qtest.ResolvePending`:
-  no effect, or an unobserved effect after a later step). Open: hidden
-  actions (an effect no one recorded, which the validator would search
-  for between steps), resolution together with Linearize. Online
-  validation stays deferred.
+  Linearize per key (`qtest.LinearizeByKey`) and a complete search after
+  the guided one, candidates judged with the run's settle; explorations
+  run Linearize, steps in a simulation carrying its virtual time; the
+  history checker public for real databases (`qhistory`: Elle's
+  list-append workload, Adya's anomalies, G-nonadjacent included);
+  exploration steered by new steps, observed states, faults and code
+  blocks (`ExploreConfig.Steer`); pending calls resolved
+  (`qtest.ResolvePending`); examples/quorumkv, which uses Z7's and Z8's
+  features and found two of the toolkit's misses (above) and its own
+  first bug. **Deferred, for the next review:** footprint-based
+  reduction for Exhaust, sound only if tasks share state solely through
+  the doubles (Go code between seams touches any memory, a test's
+  closures included): it needs an ownership declaration and a DPOR with
+  sleep sets, or a passing Exhaust would prove less than it says;
+  resolution searched together with linearization (Jepsen's :info in a
+  concurrent history), and calls placed at one gap in any order; hidden
+  actions (an effect no one recorded); Steer's features as counts (a
+  second fault of a kind is never new), cuts at the choice where a new
+  feature appeared, and unbounded observations (versions) that make
+  every run new; the CLI's validate linearizing (quorumkv's demo runs its
+  tests). Online validation stays deferred.
 
 ## Dropped on purpose
 

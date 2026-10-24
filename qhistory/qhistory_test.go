@@ -44,6 +44,10 @@ func TestAnomalies(t *testing.T) {
 		// each read the other's key before the other appended to it
 		{"write skew", "G2", []qhistory.Txn{txn(1, rd("x"), rd("y"), app("x", 1)), txn(2, rd("x"), rd("y"), app("y", 1)),
 			txn(3, rd("x", 1), rd("y", 1))}, qhistory.Serializable},
+		// 1 -rw(x)-> 2 -wr(y)-> 3 -rw(z)-> 4 -wr(w)-> 1: two rw, never adjacent
+		{"nonadjacent anti-dependencies", "G-nonadjacent", []qhistory.Txn{txn(1, rd("x"), rd("w", 1)), txn(2, app("x", 1), app("y", 1)),
+			txn(3, rd("y", 1), rd("z")), txn(4, app("z", 1), app("w", 1)), txn(5, rd("x", 1), rd("z", 1))}, qhistory.SnapshotIsolation},
+		{"duplicate element", "duplicate", []qhistory.Txn{txn(1, app("x", 1)), txn(2, rd("x", 1, 1))}, qhistory.ReadCommitted},
 		{"incompatible order", "incompatible-order", []qhistory.Txn{txn(1, app("x", 1)), txn(2, app("x", 2)), txn(3, rd("x", 1, 2)), txn(4, rd("x", 2, 1))}, qhistory.ReadCommitted},
 		{"garbage", "garbage", []qhistory.Txn{txn(1, rd("x", 9))}, qhistory.ReadCommitted},
 		{"own write unseen", "internal", []qhistory.Txn{txn(1, app("x", 1), rd("x"))}, qhistory.ReadCommitted},
@@ -74,6 +78,9 @@ func TestNotAWorkload(t *testing.T) {
 	_, err := qhistory.Check(qhistory.Serializable, []qhistory.Txn{txn(1, app("x", 1)), txn(2, app("x", 1))})
 	if err == nil || !strings.Contains(err.Error(), "must be unique per key") {
 		t.Errorf("Check = %v", err)
+	}
+	if _, err := qhistory.Check(qhistory.Serializable, []qhistory.Txn{txn(0, app("x", 1))}); err == nil || !strings.Contains(err.Error(), "nonzero") {
+		t.Errorf("id 0: Check = %v", err)
 	}
 }
 
@@ -154,13 +161,24 @@ func TestStoreHistories(t *testing.T) {
 // runTxn runs t against db: an append locks the key's list and writes it
 // longer (the database's atomic append), a read reads it. A failed
 // operation or commit aborts the transaction.
-func runTxn(ctx context.Context, db qenv.DB, t *qhistory.Txn) {
+func runTxn(ctx context.Context, db qenv.DB, t *qhistory.Txn) { runTxnAs(ctx, db, t, false) }
+
+// runTxnAs is runTxn; lockless appends read the list without its lock and
+// write it back longer: not the database's atomic append, and two of them
+// at once lose one.
+func runTxnAs(ctx context.Context, db qenv.DB, t *qhistory.Txn, lockless bool) {
 	tx := db.Begin(ctx)
 	for i := range t.Ops {
 		o := &t.Ops[i]
 		switch o.Kind {
 		case qhistory.Append:
-			v, _, err := tx.GetForUpdate(o.Key)
+			var v any
+			var err error
+			if lockless {
+				v, _ = tx.Get(o.Key)
+			} else {
+				v, _, err = tx.GetForUpdate(o.Key)
+			}
 			if err != nil {
 				tx.Rollback()
 				t.Outcome = qhistory.Aborted
@@ -182,4 +200,61 @@ func runTxn(ctx context.Context, db qenv.DB, t *qhistory.Txn) {
 		return
 	}
 	t.Outcome = qhistory.Committed
+}
+
+// The checker against a client that misuses the store, and against
+// outcomes it never learns: an append that reads without the lock under
+// read committed loses appends, which the reads show (two lists neither a
+// prefix of the other); commits whose outcome is unknown (the store's
+// commit faults) leave each level's history passing its own level.
+func TestStoreMisuseAndUnknownOutcomes(t *testing.T) {
+	run := func(iso qenv.Isolation, seed uint64, lockless, faults bool) []qhistory.Txn {
+		txns := qhistory.Workload{Keys: 2, Txns: 48, Seed: seed}.Generate()
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults
+		if faults {
+			c.Rates = qenv.NoFaults.Set("store", 0.3)
+		}
+		s := qenv.New(c)
+		defer s.Close()
+		db := qenv.NewStore(s, "db", iso)
+		db.CommitFaults = faults
+		for client := range 6 {
+			s.Spawn("client", func(ctx context.Context) {
+				for i := client; i < len(txns); i += 6 {
+					runTxnAs(ctx, db, &txns[i], lockless)
+				}
+			})
+		}
+		if err := s.Run(0); err != nil {
+			t.Fatal(err)
+		}
+		return txns
+	}
+	lost, unknown := false, 0
+	for seed := uint64(1); seed <= 20; seed++ {
+		rep, err := qhistory.Check(qhistory.ReadCommitted, run(qenv.ReadCommitted, seed, true, false))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lost = lost || rep.Has("incompatible-order") && !rep.OK()
+		for i, iso := range []qenv.Isolation{qenv.ReadCommitted, qenv.SnapshotIsolation, qenv.Serializable} {
+			txns := run(iso, seed, false, true)
+			for _, x := range txns {
+				if x.Outcome == qhistory.Unknown {
+					unknown++
+				}
+			}
+			level := []qhistory.Level{qhistory.ReadCommitted, qhistory.SnapshotIsolation, qhistory.Serializable}[i]
+			if rep, _ := qhistory.Check(level, txns); !rep.OK() {
+				t.Errorf("%v, seed %d, unknown outcomes: %s", iso, seed, rep)
+			}
+		}
+	}
+	if !lost {
+		t.Error("lockless appends under read committed never showed a lost append in 20 runs")
+	}
+	if unknown == 0 {
+		t.Error("no commit's outcome was unknown: the faults did not fire")
+	}
 }

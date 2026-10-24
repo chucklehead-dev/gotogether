@@ -70,6 +70,22 @@ func (s *steering) Choose(kind string, n int) int {
 // chooser's.
 func (s *steering) Unwrap() qenv.Chooser { return s.rest }
 
+// Entropy implements qenv.Entropy: the parent's chunks, while the run asks
+// the same (gosim's choices but faults are chunks), then the seed's.
+func (s *steering) Entropy(n int) []byte {
+	if s.i < len(s.prefix) {
+		if c := s.prefix[s.i]; c.Kind == "entropy" && c.N == n {
+			s.i++
+			return c.Bytes
+		}
+		s.i = len(s.prefix)
+	}
+	if e := qenv.EntropyOf(s.rest); e != nil {
+		return e(n)
+	}
+	return make([]byte, n)
+}
+
 // steer runs n more runs after runs (the seeds'), each a run that found a
 // feature no earlier run had, replayed up to a random choice and then made
 // on a fresh seed (of next, the chooser of a seed). Parents and cuts are
@@ -142,13 +158,15 @@ func (x *Exploration) steer(runs []*Run, n, parallel int, dir string, next func(
 }
 
 // steerDir is where an exploration's steered runs' choices go: outside
-// the test's temporary directory, so a reproduce line still finds them.
+// the test's temporary directory, so a reproduce line still finds them,
+// under the package's directory, so two packages' tests of one name do
+// not share it.
 func steerDir(x *Exploration) string {
-	return filepath.Join(os.TempDir(), "gotogether-steered", safeName(x.test)+fmt.Sprintf("#%d", x.id))
+	return filepath.Join(os.TempDir(), "gotogether-steered", safeName(pkgDir()), safeName(x.test)+fmt.Sprintf("#%d", x.id))
 }
 
 // readEntry reads one saved run (a steered run's file, a corpus entry).
-func readEntry(path string) (corpusEntry, error) {
+func readEntry(path, ref string) (corpusEntry, error) {
 	var e corpusEntry
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -159,6 +177,9 @@ func readEntry(path string) (corpusEntry, error) {
 	}
 	if e.Format != corpusFormat {
 		return e, fmt.Errorf("%s has format %q, not %q: written by another version of gotogether", path, e.Format, corpusFormat)
+	}
+	if e.Exploration != ref {
+		return e, fmt.Errorf("%s is a run of %s, not of %s: a saved run replays only in the exploration that made it", path, e.Exploration, ref)
 	}
 	return e, nil
 }
