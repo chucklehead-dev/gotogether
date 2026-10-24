@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- qweave passed the go command its overlay in place of the first
+  argument after the command: `qweave go test ./sim/` tested the current
+  directory, `qweave go test -short ./x/` ran without -short, and
+  `go test -c` ran the tests. Every argument now reaches go.
 - `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in every
   simulation: clock faults, stalls and a partition nemesis between every
   two processes, which are opt-in otherwise. `Network.PartitionNemesis`

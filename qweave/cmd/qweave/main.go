@@ -69,7 +69,7 @@ func run() int {
 			fmt.Fprintln(os.Stderr, "qweave: skipped", s)
 		}
 	}
-	goArgs := args[1:2]
+	overlay := ""
 	if len(r.Files) > 0 {
 		dir, err := os.MkdirTemp("", "qweave")
 		if err != nil {
@@ -77,14 +77,12 @@ func run() int {
 			return 1
 		}
 		defer os.RemoveAll(dir)
-		overlay, err := r.WriteOverlay(dir)
-		if err != nil {
+		if overlay, err = r.WriteOverlay(dir); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		goArgs = append(goArgs, "-overlay="+overlay)
 	}
-	cmd := exec.Command("go", append(goArgs, args[2:]...)...)
+	cmd := exec.Command("go", goCommand(args, overlay)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		if e, ok := err.(*exec.ExitError); ok {
@@ -94,4 +92,17 @@ func run() int {
 		return 1
 	}
 	return 0
+}
+
+// goCommand is the go command's arguments for qweave's (go, its command,
+// its arguments): the command, the overlay (if any), the rest. The
+// arguments are copied, not appended to args' own slice: that overwrote
+// the first argument after the command with the overlay, so `qweave go
+// test ./sim/` tested the current directory, and `go test -c` ran tests.
+func goCommand(args []string, overlay string) []string {
+	out := []string{args[1]}
+	if overlay != "" {
+		out = append(out, "-overlay="+overlay)
+	}
+	return append(out, args[2:]...)
 }

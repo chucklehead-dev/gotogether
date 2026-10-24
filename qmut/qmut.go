@@ -101,6 +101,12 @@ func WithReach(ctx context.Context, r *Reach) context.Context { return qrun.With
 // On reports whether mutant id is the calling code's run's mutant, and
 // notes that its code was reached.
 func On(id int) bool {
+	if process >= 0 {
+		// the process's mutant, its runs' reach untracked: the run lookup
+		// calls the resolver qenv installs, which, mutated itself when
+		// qenv is, would call On again
+		return id == process
+	}
 	rc, _ := qrun.Current()
 	if r, ok := qrun.InContext(rc, reach); ok && r != nil {
 		r.mu.Lock()
@@ -109,9 +115,6 @@ func On(id int) bool {
 		}
 		r.ids[id] = true
 		r.mu.Unlock()
-	}
-	if process >= 0 {
-		return id == process
 	}
 	v, _ := qrun.InContext(rc, active)
 	return v == id+1
