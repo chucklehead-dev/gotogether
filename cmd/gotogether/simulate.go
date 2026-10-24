@@ -69,6 +69,13 @@ func simulate(args []string) (int, error) {
 	if *invs != "" {
 		invariants = splitList(*invs)
 	}
+	if len(invariants) == 0 && len(b.Eventually) > 0 {
+		// an eventual val holds when a run settles, which a sampled trace of
+		// the model never says: there is nothing to sample
+		fmt.Printf("simulate %s: no invariants, and its eventual vals (%s) are judged after a run settles, not on sampled traces: nothing to simulate\n",
+			*bpath, strings.Join(b.Eventually, ", "))
+		return 0, nil
+	}
 	if len(invariants) == 0 {
 		return 2, fmt.Errorf("simulate: %s names no invariants (or pass -invariants a,b)", *bpath)
 	}

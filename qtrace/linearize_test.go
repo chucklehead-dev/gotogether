@@ -99,8 +99,8 @@ func TestRealTimeIssue(t *testing.T) {
 
 // The complete search is cut by the budget alone: five concurrent
 // operations no order explains are refuted given the budget to try every
-// order, and no verdict without it. A beam of 64 prefixes once made them
-// no verdict whatever the budget.
+// order (a beam of 64 prefixes once cut it whatever the budget), and with
+// less, the guided search's stop stands, as before the complete search.
 func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 	var steps []Step
 	for i := range 5 {
@@ -127,7 +127,9 @@ func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 		// of four is decided without the checker
 		t.Errorf("checked %d of %d orders tried: the memo of accepted prefixes decided none", checked, tried)
 	}
-	if _, ok, _, cut := Linearize(steps, 50, none); ok || !cut {
+	// cut short, the complete search leaves the guided search's evidence:
+	// it stopped, no move getting further, which is a verdict
+	if _, ok, _, cut := Linearize(steps, 50, none); ok || cut {
 		t.Errorf("with a budget of 50: ok %v, cut %v", ok, cut)
 	}
 }

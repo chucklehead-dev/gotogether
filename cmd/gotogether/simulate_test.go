@@ -88,3 +88,13 @@ func TestSimulateVerify(t *testing.T) {
 		}
 	}
 }
+
+// A binding with only eventual vals has nothing to sample (they are
+// judged after a run settles): simulate says so and succeeds, with no
+// quint run, where CI's loop over every binding once failed on it.
+func TestSimulateOnlyEventualVals(t *testing.T) {
+	code, err := simulate([]string{"-binding", "../../examples/quorumkv/quorumkv.binding.yaml", "-quint", "/nonexistent/quint"})
+	if code != 0 || err != nil {
+		t.Errorf("quorumkv: exit %d, %v; want nothing to simulate", code, err)
+	}
+}
