@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `validate.Options.VerdictsOnly`: verdicts and where each failed, no ITF
+  and no model state, the failing runs replayed on the batch's backend.
+  Linearize's and ResolvePending's candidates are checked so (they read
+  only where each failed; the detail phase had forced ITF and Rust back
+  on), and an exploration's runs are searched side by side: quorumkv's
+  Repick from 297 s to 209 s on four cores.
 - `qenv.Now` on the goroutine that created a simulation is the
   simulation's time, as the steps recorded there carry (it was the wall
   clock: an "invoked" taken there was real time, the step's virtual).

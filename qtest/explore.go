@@ -606,9 +606,28 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			x.actions[a] = true
 		}
 	}
-	for i, r := range x.Runs { // a search's order: the steps judged are the order it found
-		if r != nil && r.Err == nil && len(r.Steps) > 0 {
-			r.Steps, r.mark = c.order(t, cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
+	// a search's order: the steps judged are the order it found, each run's
+	// search on its own, side by side (each is quint processes in turn)
+	tbs := make([]*searchTB, len(x.Runs))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	for i, r := range x.Runs {
+		if r == nil || r.Err != nil || len(r.Steps) == 0 {
+			continue
+		}
+		tbs[i] = &searchTB{TB: t}
+		wg.Add(1)
+		go func() { //qenv:ok each run's search on a goroutine of its own; a failure is reported on the test's
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			r.Steps, r.mark = c.order(tbs[i], cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
+		}()
+	}
+	wg.Wait()
+	for i, tb := range tbs {
+		if tb != nil && tb.failed != "" {
+			t.Fatalf("%s (run %s)", tb.failed, x.nameOf(x.Runs[i]))
 		}
 	}
 	x.Cached = judge(t, cc, inst, x.Runs, func(r *Run) string { return x.nameOf(r) })
@@ -743,6 +762,22 @@ func sortedKV[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
+// searchTB is a run's search's testing.TB on a goroutine of its own: its
+// Fatalf ends that goroutine (FailNow must not end another's test), and
+// finish fails the test with it on the test's goroutine.
+type searchTB struct {
+	testing.TB
+	failed string
+}
+
+func (s *searchTB) Helper() {}
+func (s *searchTB) Fatalf(format string, a ...any) {
+	s.failed = fmt.Sprintf(format, a...)
+	runtime.Goexit()
+}
+func (s *searchTB) Fatal(a ...any) { s.Fatalf("%s", fmt.Sprint(a...)) }
+func (s *searchTB) FailNow()       { s.Fatalf("gotogether: a run's search failed") }
 
 // unjudged are the eventual vals of the binding es name that no run
 // judged (judged: the invariants the runs' reports have).

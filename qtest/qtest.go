@@ -451,14 +451,16 @@ func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step,
 	var undecided map[string]bool
 	var kept map[string][]qtrace.Issue
 	if c.Linearize {
-		lc.Options.Dir, lc.Options.NoITF = filepath.Join(dir, "linearize"), true
+		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(dir, "linearize"), true, true
 		budget := c.linearizeBudget
 		if budget == 0 {
 			budget = DefaultLinearizeBudget
 		}
-		steps, found, undecided, kept = linearize(t, lc, ch, steps, budget, c.linearizeKey)
+		fc := *ch // the invariants' search (an order that violates one): verdicts only too
+		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(dir, "linearize-invariants"), true, true
+		steps, found, undecided, kept = linearize(t, lc, &fc, steps, budget, c.linearizeKey)
 	} else {
-		lc.Options.Dir, lc.Options.NoITF = filepath.Join(dir, "resolve"), true
+		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(dir, "resolve"), true, true
 		steps, found, undecided, kept = resolve(t, lc, steps, DefaultResolveBudget)
 	}
 	return steps, func(rep *validate.Report) {

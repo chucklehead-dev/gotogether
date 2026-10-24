@@ -1486,6 +1486,7 @@ type Options struct
     field Backend string
     field Dir string
     field NoITF bool
+    field VerdictsOnly bool
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result

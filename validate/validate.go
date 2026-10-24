@@ -31,6 +31,13 @@ type Options struct {
 	// empty). The ITF holds the model's full state at every step, which for
 	// a model with a large state is much of the cost of a check.
 	NoITF bool
+	// VerdictsOnly makes a check report its verdicts and where each failed,
+	// nothing more: no ITF and no model state at a failure, so the runs
+	// that fail are replayed on the backend the others were (TypeScript for
+	// a CheckBatch chunk) rather than on Rust for its ITF. For searches
+	// that judge many candidates (qtest's Linearize, ResolvePending) and
+	// read only where each failed.
+	VerdictsOnly bool
 	// detailBackend, if set, replays the runs that failed (the detail
 	// phase): a chunk's TypeScript backend writes no ITF for a failing
 	// test, so the model's state at the failure is Rust's to report
@@ -303,9 +310,11 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 	// The detail run writes ITF regardless of NoITF: failures are rare, and
 	// the model's state at the failure goes into the report.
 	withITF := opt
-	withITF.NoITF = false
-	if opt.detailBackend != "" {
-		withITF.Backend = opt.detailBackend
+	if !opt.VerdictsOnly {
+		withITF.NoITF = false
+		if opt.detailBackend != "" {
+			withITF.Backend = opt.detailBackend
+		}
 	}
 	gs, qnt, out, err := phase(binding.DetailTests, file, detailed, withITF)
 	if err != nil {
