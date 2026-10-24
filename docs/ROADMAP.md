@@ -174,7 +174,10 @@ under a week, M two to four, L more.
   qweave dropping an argument, qmut recursing into qenv. Left:
   - a nightly that runs every example under `GOTOGETHER_ALL_FAULTS`
     (Exhausts bounded first), each changed verdict a fix or a reasoned
-    Without;
+    Without. Its first run (the examples' short suites) found a healer
+    keeping runs unsettled (fixed), hello's client giving up within a
+    partition (its model has none: a Without to give), and Exhausts out
+    of MaxRuns in hello and lease;
   - qenv in the mutation nightly with `GOTOGETHER_CHECK=1` and its bar
     (a first run without it: 288 of 895 survive, in sim.go 50,
     internal/profile 44, store.go 34, native.go 31, keyed.go 19,
