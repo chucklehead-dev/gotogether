@@ -1,0 +1,15 @@
+# Each package's test time in CI (seconds, `ok` lines of go test), from a
+# green run: ci/time-budget.sh fails a package that takes more than twice
+# its time. A deliberate change of a test's cost updates its line.
+examples/bank 73
+examples/checkout 581
+examples/glomers/broadcast 128
+examples/glomers/gcounter 62
+examples/glomers/kafka 78
+examples/glomers/uniqueids 45
+examples/hello 23
+examples/jobqueue 51
+examples/kvstore 107
+examples/lease 87
+examples/retrystorm 237
+examples/twophase 168

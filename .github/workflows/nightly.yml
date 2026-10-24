@@ -82,6 +82,7 @@ jobs:
           - pkg: qhistory
             max: 2
           - pkg: qsweep
+            max: 0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

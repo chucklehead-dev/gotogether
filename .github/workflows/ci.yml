@@ -82,9 +82,11 @@ jobs:
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
-              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -count=1 -timeout 30m ./...) || exit 1
+              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -count=1 -timeout 30m ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
             echo "::endgroup::"
           done
+          # a test twice as slow as it was (ci/test-times.txt) fails
+          ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
           # what no faithful exploration of the example tried fails: an action, a fault point, a kind
           for m in hello checkout; do
             "$RUNNER_TEMP/gotogether" evidence -strict "$RUNNER_TEMP/evidence/$m" || exit 1
