@@ -917,6 +917,16 @@ func (s *Sim) Run(d time.Duration) error {
 		k := 0
 		if s.settling {
 			k = s.turn(n, cands)
+		} else if by := taskChooserOf(s.c); by != nil {
+			ids := make([]int, n)
+			for i := range ids {
+				ids[i] = s.pick(i, cands).id
+			}
+			k = by(ids)
+			if k < 0 || k >= n {
+				panic(fmt.Sprintf("qenv: ChooseTask returned %d of %d runnable tasks", k, n))
+			}
+			eachLog(s.c, func(r *ChoiceLog) { r.Took("sched.task", n, k) }) // the choice it stands for: replays without it
 		} else {
 			k = s.Choose("sched.task", n)
 		}

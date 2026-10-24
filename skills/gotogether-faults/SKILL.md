@@ -263,6 +263,13 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
     choices only (a zero `Rates` is the default rates).
   - Turn whole kinds off with `qenv.DefaultRates.Set("kube", 0)`, or per
     run with `qenv.Swarm`.
+  - A bug that needs one task to run far ahead of another (a reader that
+    must finish before a writer's single step) is out of reach of
+    uniform random schedules. Schedule by priorities instead:
+    `ExploreConfig{Chooser: func(seed uint64) qenv.Chooser { return
+    qenv.NewPCT(base, seed, 3, 500) }}` with `base` a `qenv.NewSeeded(seed)`
+    at `sys.FaultRates()` (PCT: depth 3 finds bugs needing three
+    orderings; 500, about a run's scheduling steps).
 - **Shrinking:**
   `qhegel.FindViolation(t, cfg, func(tc, rec) { app.Run(rec.Env(qhegel.Choices(tc)), cfg) })`
   shrinks a failure to the interleaving and faults it needs; faults

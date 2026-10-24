@@ -60,6 +60,18 @@ type (
 	// DefaultRates). Choose and Entropy draw from the generator.
 	Seeded = choice.Seeded
 
+	// PCT schedules by Probabilistic Concurrency Testing (Burckhardt et
+	// al., ASPLOS 2010): a random priority per task, the highest-priority
+	// runnable task always runs, and at Depth-1 random steps in 1..Steps
+	// the task that ran last drops below every other. A bug that needs one
+	// task to run entirely before another's step is found in a run with
+	// probability about 1/n (n tasks), where a uniformly random schedule
+	// may need 2^-steps. Its fields are Base (every other choice: faults,
+	// a queue's order), Depth and Steps; NewPCT makes one, ChooseTask is
+	// what the scheduler asks, and its picks are recorded as schedule
+	// choices, so a ChoiceLog of its run replays without it.
+	PCT = choice.PCT
+
 	// ChoiceLog records the choices of the Chooser it wraps (its field C),
 	// to replay a run: Choices, every choice made, and Nemeses, the nemeses
 	// it was offered by name. Faults are the Choices that faulted; Unwrap
@@ -143,6 +155,19 @@ func EntropyOf(c Chooser) func(n int) []byte { return choice.EntropyOf(c) }
 
 // NewSeeded returns a Seeded chooser with DefaultRates.
 func NewSeeded(seed uint64) *Seeded { return choice.NewSeeded(seed) }
+
+// NewPCT returns a PCT scheduler of depth d over base (its other
+// choices), drawing priorities and change points from seed, for runs of
+// about steps scheduling steps (0: 1000). In an exploration:
+//
+//	ExploreConfig{Chooser: func(seed uint64) qenv.Chooser {
+//		base := qenv.NewSeeded(seed)
+//		base.Rates = sys.FaultRates()
+//		return qenv.NewPCT(base, seed, 3, 500)
+//	}}
+func NewPCT(base Chooser, seed uint64, depth, steps int) *PCT {
+	return choice.NewPCT(base, seed, depth, steps)
+}
 
 // Replay repeats recorded choices, then makes every later choice 0. A run
 // that asks for a different kind or option count than was recorded is not

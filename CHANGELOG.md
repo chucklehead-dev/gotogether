@@ -96,6 +96,12 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `qenv.NewPCT(base, seed, depth, steps)` schedules by Probabilistic
+  Concurrency Testing (random task priorities, depth-1 change points):
+  bugs that need one task to run far ahead of another, which a uniform
+  schedule practically never makes. A chooser that implements
+  `ChooseTask(runnable []int)` picks the task by id; its picks are
+  recorded as `sched.task` choices, so its runs replay without it.
 - `qobs.Invoke(ctx, action, kv...)` records an operation when it is
   invoked and `Call.Done(err, kv...)` when it completes: a trace keeps
   an invocation never completed (`qtrace.Trace.Pending`,

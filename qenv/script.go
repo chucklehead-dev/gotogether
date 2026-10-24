@@ -202,6 +202,26 @@ func (s *Script) Remaining() []Scripted {
 	return out
 }
 
+// taskChooser chooses the task to run by id (PCT): runnable in the order
+// of the schedule choice's options.
+type taskChooser interface{ ChooseTask(runnable []int) int }
+
+// taskChooserOf returns c's choice of a task by id, through the wrappers,
+// or nil.
+func taskChooserOf(c Chooser) func(runnable []int) int {
+	for c != nil {
+		if x, ok := c.(taskChooser); ok {
+			return x.ChooseTask
+		}
+		w, ok := c.(Wrapper)
+		if !ok {
+			return nil
+		}
+		c = w.Unwrap()
+	}
+	return nil
+}
+
 // nemesisChooser chooses a nemesis by name (Script).
 type nemesisChooser interface{ ChooseNemesis(enabled []string) int }
 

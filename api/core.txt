@@ -443,6 +443,7 @@ func Mono(ctx context.Context) time.Duration
 func New(c Chooser) *Sim
 func NewDisk(s *Sim, name string, p *Process) *Disk
 func NewNative(c Chooser, p Platform) *Sim
+func NewPCT(base Chooser, seed uint64, depth, steps int) *PCT
 func NewQueue(s *Sim, name string, p *Process) *Queue
 func NewSeeded(seed uint64) *Seeded
 func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx context.Context, req Req) (Resp, error)) *Service[Req, Resp]
@@ -554,6 +555,13 @@ type Network struct
     method (*Network) Partitioned(a, b *Process) bool
 type Nominal = choice.Nominal
     method (Nominal) Choose(string, int) int
+type PCT = choice.PCT
+    field Base Chooser
+    field Depth int
+    field Steps int
+    method (*PCT) Choose(kind string, n int) int
+    method (*PCT) ChooseTask(runnable []int) int
+    method (*PCT) Unwrap() Chooser
 type PairCoverage struct
     field A string
     field B string
