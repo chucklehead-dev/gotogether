@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A settle settles a trace only if no other recorder recorded a step
+  later in time (a warning names it): a harness's settle while a server
+  was still at work settled the run, and `Settles()` held.
 - `Sim.ResumeFaults`: faults stay off after `Settle` (a probe runs on the
   settled system), which made every phase after a run's first settle
   fault-free without a word; it starts a faulty phase again, and Settle

@@ -1,6 +1,7 @@
 package qtrace
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -131,5 +132,25 @@ func TestReconstructOnlyPending(t *testing.T) {
 		{Action: "settled", Seq: 2, Recorder: "r", Actor: "a", Settled: true, Time: time.Unix(2, 0)}})
 	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 0 || len(traces[0].Pending) != 1 || len(traces[0].Issues) > 0 || traces[0].Settled {
 		t.Fatalf("traces %+v, issues %v", traces, issues)
+	}
+}
+
+// A settle settles a trace only if no other recorder recorded a step
+// later in time: a harness's settle while a server is still at work once
+// settled the run, and its eventual vals were judged on a system that was
+// not quiet.
+func TestSettleAcrossRecorders(t *testing.T) {
+	at := func(u int) time.Time { return time.Unix(100, 0).Add(time.Duration(u) * time.Second) }
+	dep := func(seq uint64, u int) Step {
+		return Step{Action: "deposit", Recorder: "s", Process: "p", Seq: seq, Thread: "s", Time: at(u)}
+	}
+	settle := Step{Action: "settled", Recorder: "h", Process: "p", Seq: 1, Settled: true, Time: at(2)}
+	traces, issues := Reconstruct([]Step{dep(1, 1), settle, dep(2, 3)})
+	if traces[0].Settled || !strings.Contains(fmt.Sprint(issues), "after recorder h's settle") {
+		t.Errorf("a step after the settle elsewhere: settled %v, issues %v", traces[0].Settled, issues)
+	}
+	traces, issues = Reconstruct([]Step{dep(1, 1), dep(2, 1), settle})
+	if !traces[0].Settled || len(issues) > 0 {
+		t.Errorf("every step before the settle: settled %v, issues %v", traces[0].Settled, issues)
 	}
 }

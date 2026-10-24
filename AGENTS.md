@@ -251,7 +251,8 @@ working there:
   kinds carry its process, a nemesis the processes it touches).
   A settle is a record in the trace (`Sim.Settle`, `qobs.Settled`): a
   binding's `eventually` vals are judged in the last state of a trace
-  whose recorder recorded nothing after one (`Trace.Settled`), by every
+  whose recorder recorded nothing after one, nor any other recorder later
+  in time (`Trace.Settled`), by every
   check, never otherwise (a run cut short has work pending by right).
   `Run(d)` ending at its horizon judges nothing; only Settle says.
   Faults stay off after a settle (a probe runs on the settled system)

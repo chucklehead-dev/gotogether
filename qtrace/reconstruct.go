@@ -125,9 +125,33 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			last[s.Recorder] = max(last[s.Recorder], s.Seq)
 		}
 	}
+	// and no other recorder recorded a step later in time: a harness's
+	// settle says nothing of servers still at work
+	settleAt := map[string]time.Time{}
+	for _, s := range uniq {
+		if s.Settled && s.Seq == lastSettle[s.Recorder] {
+			settleAt[s.Recorder] = s.Time
+		}
+	}
 	settled := false
 	for rec, seq := range lastSettle {
-		settled = settled || seq > last[rec]
+		if seq <= last[rec] {
+			continue
+		}
+		var later *Step
+		for i := range uniq {
+			o := &uniq[i]
+			if o.Recorder != rec && !o.Settled && o.Time.After(settleAt[rec].Add(RealTimeSlack)) {
+				later = o
+				break
+			}
+		}
+		if later != nil {
+			issues = append(issues, Issue{"warn", "settle", fmt.Sprintf("recorder %s recorded %s (seq %d) after recorder %s's settle: the system was not quiet, and the settle settles nothing",
+				later.Recorder, later.Action, later.Seq, rec)})
+			continue
+		}
+		settled = true
 	}
 	pending := map[string][]Step{}
 	steps = uniq[:0:0]
