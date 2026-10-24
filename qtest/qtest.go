@@ -66,6 +66,8 @@ type settings struct {
 	Linearize bool
 	// linearizeBudget is LinearizeBudget's (0: DefaultLinearizeBudget)
 	linearizeBudget int
+	// linearizeKey is LinearizeByKey's argument ("": no partition)
+	linearizeKey string
 	// mutant is System.Mutant
 	mutant string
 	// given are the options given, by name, for the workflows that
@@ -395,7 +397,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 		if budget == 0 {
 			budget = DefaultLinearizeBudget
 		}
-		run.Steps, found, undecided, kept = linearize(t, lc, run.Steps, budget)
+		run.Steps, found, undecided, kept = linearize(t, lc, run.Steps, budget, c.linearizeKey)
 	}
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {

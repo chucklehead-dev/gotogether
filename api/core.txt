@@ -1141,6 +1141,7 @@ func Invariants(names ...string) Option
 func IsEvidence(path string) bool
 func Linearize() Option
 func LinearizeBudget(n int) Option
+func LinearizeByKey(arg string) Option
 func Mismatch(action string) Expectation
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim

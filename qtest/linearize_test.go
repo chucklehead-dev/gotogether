@@ -101,3 +101,33 @@ func TestLinearizeKeepsPendingAndSettle(t *testing.T) {
 		t.Error("Settles held of a run that went on after its settle")
 	}
 }
+
+// Independent keys partition a history: per key a write and a read that
+// returned before it (but overlapped it) and saw its value. Searched
+// whole, the overlapping operations of three keys take more orders than a
+// small budget; searched per key, each key's two do.
+func TestLinearizeByKey(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	var steps []qtrace.Step
+	for i, k := range []string{"a", "b", "c"} {
+		steps = append(steps,
+			qtrace.Step{Action: "read", Recorder: "r" + k, Seq: 1, Thread: "r" + k, Invoked: at(i), Time: at(5 + i),
+				Args: map[string]any{"key": k}, Obs: map[string]any{"value": int64(i + 1)}},
+			qtrace.Step{Action: "write", Recorder: "w" + k, Seq: 1, Thread: "w" + k, Invoked: at(i), Time: at(10 + i),
+				Args: map[string]any{"key": k, "value": int64(i + 1)}})
+	}
+	whole := Validate(t, "testdata/registers.yaml", steps, LinearizeBudget(3))
+	if whole.Report.Actors[0].Conforms != validate.NotEvaluated {
+		t.Fatalf("the whole history in a budget of 3 orders: %s", whole.Report.Summary())
+	}
+	parts := Validate(t, "testdata/registers.yaml", steps, LinearizeByKey("key"), LinearizeBudget(3))
+	parts.Expect(t, Conforms())
+	if n := len(parts.Report.Actors); n != 3 || parts.Report.Actors[0].Actor != "default key=a" {
+		t.Errorf("%d actors (%s), want one per key", n, parts.Report.Summary())
+	}
+	// a stale read is still found in its key's partition
+	steps[2].Obs["value"] = int64(7) // b's read
+	Validate(t, "testdata/registers.yaml", steps, LinearizeByKey("key")).Expect(t, Mismatch("read"))
+}

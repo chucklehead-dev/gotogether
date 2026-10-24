@@ -96,6 +96,9 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `qtest.LinearizeByKey(arg)` partitions each actor's history by an
+  argument's value and linearizes each partition alone, as its own actor
+  (Porcupine's partitioning), for models whose keys are independent.
 - `qenv.NewPCT(base, seed, depth, steps)` schedules by Probabilistic
   Concurrency Testing (random task priorities, depth-1 change points):
   bugs that need one task to run far ahead of another, which a uniform

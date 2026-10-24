@@ -36,7 +36,13 @@ conformed, or the one that got furthest: a stale read shows as a
 the actor's conformance is n/a, which `Conforms` fails and `Rejects` and
 `Mismatch` do not match, and the report says to raise it. Each order
 tried is a quint replay from the start, so keep such histories to tens
-of steps. Converted spans
+of steps. Where the model treats keys independently (a step on one key
+never enables, disables or changes another's), `qtest.LinearizeByKey("key")`
+searches each key's operations alone, each reported as its own actor
+(`default key=a`): the orders of k keys no longer multiply. A step without
+the argument fails the test. examples/kvstore's model counts one revision
+across keys, so its keys are not independent: it uses `Linearize`.
+Converted spans
 carry their start as the invocation.
 
 Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with

@@ -1,0 +1,7 @@
+# registers.qnt's steps: a read's observed value is its key's register.
+spec: registers.qnt
+module: registers
+actions:
+  write: {}
+  read:
+    expect: 'regs.get({{.key}}) == {{.obs.value}}'
