@@ -55,10 +55,11 @@ func TestMutantsOnGosim(t *testing.T) {
 		rates qenv.Rates
 		want  qtest.Expectation
 	}{
-		// write skew: a shipment and a cancellation both commit, in 11-15%
+		// write skew: a shipment and a cancellation both commit, in 8-15%
 		// of gosim's runs (13 and 18 of 120, before and after an unrelated
-		// change moved its schedules): 30 seeds once found none
-		{shop.LockWithoutWrite, qenv.SnapshotIsolation, 60, qenv.DefaultRates, shipOrCancel},
+		// change moved its schedules, then 5 of 60): 30 seeds once found
+		// none, and 90 miss it about once in a thousand at 8%
+		{shop.LockWithoutWrite, qenv.SnapshotIsolation, 90, qenv.DefaultRates, shipOrCancel},
 		// Fresh keys per attempt: a retry after a lost response charges
 		// again, and a cancellation's void (by the order's key) finds no
 		// charge to refund. qenv's scheduler shows the first; gosim's

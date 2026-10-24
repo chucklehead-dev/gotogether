@@ -55,7 +55,9 @@ func TestGeneratedExternalName(t *testing.T) {
 	noFaults := qenv.NoFaults
 	explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName, NoCrashes: true}, noFaults, qtest.ExploreConfig{Seeds: 20}).
 		Expect(t, qtest.Conforms())
-	explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 40}).
+	// in about one run in seven (6 of 40): 50 seeds miss it about once in
+	// a thousand
+	explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 50}).
 		Expect(t, qtest.Violates("settledCorrectly"))
 	// crashes alone: an incomplete create, and a resource that never gets ready
 	crashesOnly := qenv.Rates{Kinds: map[string]float64{"nemesis": 0.05}}
@@ -67,7 +69,9 @@ func TestGeneratedExternalName(t *testing.T) {
 // failure: a second database.
 func TestNoClientTokenDuplicates(t *testing.T) {
 	qtest.RequireQuint(t)
-	explore(t, crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 40}).
+	// in about one run in ten (4 of 40): 70 seeds miss it about once in a
+	// thousand
+	explore(t, crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 70}).
 		Expect(t, qtest.Violates("oneDatabasePerResource"))
 }
 
@@ -77,7 +81,8 @@ func TestNoClientTokenDuplicates(t *testing.T) {
 func TestPasswordFromCreate(t *testing.T) {
 	qtest.RequireQuint(t)
 	lossy := qenv.Rates{Default: 0.05, Kinds: map[string]float64{"rpc.dbaas.response": 0.3}}
-	explore(t, crossdb.Config{Mutation: provider.PasswordFromCreate, NoCrashes: true}, lossy, qtest.ExploreConfig{Seeds: 40}).
+	// in about one run in seven (6 of 40): 50 seeds
+	explore(t, crossdb.Config{Mutation: provider.PasswordFromCreate, NoCrashes: true}, lossy, qtest.ExploreConfig{Seeds: 50}).
 		Expect(t, qtest.Violates("settledCorrectly"))
 }
 
