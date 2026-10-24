@@ -2850,3 +2850,50 @@ not check, it says, and a name that matches nothing fails.
   module (Y8); evidence is a format with a role, so a suite's gaps count
   the system as it is, not its mutants (Y10); the core's Hegel
   properties test the current core (Y11).
+
+## 44. The exploration engine (T6)
+
+Explore and Exhaust each had their own setup, their own GOTOGETHER_RUN
+path and their own fan-out, and Exhaust had no determinism check: the
+modes had grown into flags (on ExploreConfig, on Exploration, on Run's
+seven identity fields) that every message decoded. Since T6 one engine
+(`qtest/engine.go`) runs every exploration: sources make its runs in
+batches, then stages put them through what every exploration shares.
+
+- **Sources.** Seeds, corpus entries, a saved run's choices
+  (`choices=<file>`), steered runs and an exhaustive search's schedules
+  (a breadth-first level per batch). A source's `next` sees every run so
+  far, so steering and schedules grow from the runs before them; the
+  engine asks each in turn, runs a batch side by side and writes runs by
+  index, so their order is the same every time. Each planned run carries
+  its origin (what GOTOGETHER_RUN names and messages print) and, if it
+  can be made again, how: the first run that can is the determinism
+  check's. Seeds come first, so the check is still the first seed's;
+  Exhaust's nominal run now has it too, and a nondeterministic system
+  fails Exhaust as it fails Explore, rather than finding schedules that
+  would not replay.
+- **Stages.** The determinism check, the names users gave checked
+  against what the runs declared, then finish: escapes, run errors,
+  emptiness, the searches, KEEP logs, judgment and evidence.
+- **Specs.** What only a System method sets (its options and Rates, a
+  fuzz input, a mutant's baseline) is an internal `exploreSpec` around
+  the user's ExploreConfig, not hidden fields of an exported struct.
+
+The engine is unexported: a public source would be frozen by the tags it
+precedes, and nothing outside qtest needs one yet. qhegel's runs do not
+go through it, since they must not go through runOne's panic recovery
+(Hegel aborts a test case by panicking).
+
+**Fault names per run.** A Rates key, a Bound.Without kind, a sweep's
+FaultKind or an exception that covers nothing declared fails, since it
+would match nothing. The check asked the process's registry, so a name
+another test's double had declared passed, and whether a misspelling
+failed depended on what else the binary ran. Now each run carries its
+own names (`hooks.FaultNames` in runOne's context): a simulation adds
+the kinds it chooses and the nemeses it registers, and `DeclareFaults`
+adds to the calling goroutine's run (qrun's resolver finds it for the
+simulation's creator and its tasks). What is declared outside any run
+(a woven fault point's site at init, a double built before its
+simulation) is static, known to every run, as before. A run of another
+workflow without names (Hegel's, a load experiment's) adds to neither.
+

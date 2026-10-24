@@ -341,10 +341,12 @@ working there:
   `queue.<name>.ack`, `store.<name>.commit`, `disk.<name>.crash`), and a
   double that a partition reaches takes its process at construction
   (`NewService`, `NewQueue`, `NewDisk`), not a field set later. A name
-  that covers nothing declared (`hooks.KnownFault`: the process's
-  registry of kinds, options and nemeses) matches nothing: an
+  that covers nothing declared (the run's `hooks.FaultNames`: what its
+  simulations and doubles declared and chose, and what was declared
+  outside any run, a woven fault point's at init) matches nothing: an
   exploration fails on such a Rates key, a sweep on such a FaultKind,
-  Exercised on such an exception. Two doubles of one kind and name in a
+  Exercised on such an exception. A name only another test's runs
+  declared is unknown, whatever ran first. Two doubles of one kind and name in a
   simulation would share their fault kinds: the second panics (a
   Service and a Queue may share a name).
 - A double declares its fault kinds by name (`qenv.DeclareFaults("kube.request",

@@ -185,11 +185,13 @@ under a week, M two to four, L more.
     guided-search survivors (56 of 167 survive now, held there as a
     ratchet);
   - the brute forces as Hegel properties, their sizes widened nightly;
-- **T6. The exploration engine (M), before tags.** Run sources (seeds,
-  corpus, a file, steered, schedules) feeding runs, then per-run stages
-  (searches, self-checks), then judgment; Explore and Exhaust one
-  engine; ExploreConfig's hidden modes as the sources' properties;
-  KnownFault per run.
+- **T6. The exploration engine (M), before tags. Done** (DESIGN §44):
+  sources (seeds, corpus, a file, steered, schedules) feeding one engine
+  for Explore and Exhaust, whose nominal run now has the determinism
+  check; a run's origin in one field; what only a System method sets an
+  internal spec; fault names known per run. Left: finish split into its
+  stages as functions of the engine, and a corpus for Exhaust (schedules
+  are their own regression).
 - **T7. Capabilities (after T2d).** Indeterminate calls searched within
   the linearization (Jepsen's :info) and a visual of a failing history;
   hidden actions and partial logs in trace validation; bounded-response

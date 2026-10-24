@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A Rates key, a Bound.Without kind, a sweep's FaultKind or an
+  Exercised exception is checked against what the exploration's own runs
+  declared and chose (and what was declared outside any run, a woven
+  fault point's), not the process's: a name only another test's double
+  declared fails, whatever ran first.
 - `System.Exhaust` makes its nominal run twice, as an exploration does
   its first seed, and fails on a system whose runs differ: none of its
   schedules would replay.
