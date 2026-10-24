@@ -224,13 +224,18 @@ func identity(n int) []int {
 
 // failingStep is the index in steps of the step after which the verdict
 // became a failure: the conformance failure, else the earliest invariant
-// violation. -1 if it is not an observed step.
+// violation. -1 if it is not an observed step. An eventual property's
+// failure is the run's end, not its prefix's: a longer run may finish
+// the work, so it rejects no prefix.
 func failingStep(r *validate.Result, steps []qtrace.Step) int {
 	var f *validate.Failure
 	if r.Failure != nil {
 		f = r.Failure
 	} else {
 		for _, inv := range r.Invariants {
+			if strings.HasPrefix(inv.Name, validate.EventuallyName("")) {
+				continue
+			}
 			if inv.Failure != nil && (f == nil || (inv.Failure.Index >= 0 && inv.Failure.Index < f.Index)) {
 				f = inv.Failure
 			}

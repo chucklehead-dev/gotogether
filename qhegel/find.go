@@ -4,6 +4,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
 	"os"
 	"strconv"
@@ -121,10 +122,13 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 				tc.Errorf("qhegel: checking the run: %v", err)
 				return
 			}
+			if rec.unsettled != "" {
+				v.OK, v.Summary = false, rec.unsettled+"\n"+v.Summary
+			}
 			if !v.OK {
 				// Hegel replays the shrunk case last, so the last failure is it
 				mu.Lock()
-				found = &Violation{Run: qtest.Run{Steps: steps, Choices: rec.Recorded()}, Summary: v.Summary}
+				found = &Violation{Run: qtest.Run{Steps: steps, Choices: rec.Recorded(), Unsettled: rec.unsettled}, Summary: v.Summary}
 				mu.Unlock()
 				tc.Errorf("qhegel: the run does not satisfy the model:\n%s", v.Summary)
 			}
@@ -153,6 +157,7 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 	if found.Report, err = c.Check(context.Background(), found.Steps); err != nil {
 		t.Fatalf("qhegel: checking the shrunk run: %v", err)
 	}
+	found.Report.Unsettled = found.Unsettled
 	faults := ""
 	if len(found.Choices) > 0 {
 		var fs []string
@@ -191,12 +196,15 @@ func (v *Violation) Expect(t testing.TB, es ...qtest.RunClaim) {
 	v.Run.Expect(t, es...)
 }
 
-// Last returns the last step of the run, or the zero step if it is empty.
+// Last returns the last model step of the run (not an invocation or
+// settle record), or the zero step if there is none.
 func (v *Violation) Last() qtrace.Step {
-	if len(v.Steps) == 0 {
-		return qtrace.Step{}
+	for i := len(v.Steps) - 1; i >= 0; i-- {
+		if v.Steps[i].Model() {
+			return v.Steps[i]
+		}
 	}
-	return v.Steps[len(v.Steps)-1]
+	return qtrace.Step{}
 }
 
 // Shrink runs Hegel against the system, expecting the model to reject
@@ -221,7 +229,10 @@ func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	v := findViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, cases, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
-		if err := sys.Run(rec.Env(c)); err != nil {
+		var u *qenv.Unsettled
+		if err := sys.Run(rec.Env(c)); errors.As(err, &u) {
+			rec.unsettled = u.Error() // an outcome, judged as an exploration judges it
+		} else if err != nil {
 			tc.Errorf("qhegel: the system did not run: %v", err)
 		}
 	}, opts...)

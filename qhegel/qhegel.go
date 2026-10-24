@@ -54,6 +54,10 @@ type Case struct {
 	n   int
 	mu  sync.Mutex
 	env *qenv.ChoiceLog // Env's
+	// unsettled is why the case's system did not settle (Shrink: a
+	// qenv.Unsettled from its Run), a failure of the case as in an
+	// exploration, where such a run does not conform
+	unsettled string
 }
 
 // NewCase returns the recording of the test case tc. opts configure the
@@ -68,6 +72,14 @@ func NewCase(tc hegel.TestCase, opts ...qobs.Option) *Case {
 type noteSink struct{ r *Case }
 
 func (n noteSink) Record(_ context.Context, s *qtrace.Step) {
+	switch {
+	case s.Invocation:
+		n.r.tc.Note("invoked: " + s.String())
+		return
+	case !s.Model():
+		n.r.tc.Note("the system settled")
+		return
+	}
 	n.r.mu.Lock()
 	n.r.n++
 	i := n.r.n

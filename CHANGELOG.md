@@ -112,6 +112,11 @@ Added to the core since api/core.txt was first recorded:
   (`validate.Result.Settled`); only its eventual properties are judged,
   by every check, and `qtest.Settles()` requires it. A Settle that
   finds the system stuck returns an `*Unsettled` too (`Unsettled.Stuck`).
+- qhegel: `Shrink` judges a run whose system does not settle as a
+  violation (an exploration's verdict) instead of failing the case as one
+  that "did not run"; an eventual property's failure rejects no prefix in
+  the case checker's cache; a case's notes and `Violation.Last` skip
+  invocation and settle records.
 - A binding's `eventually` names vals that must hold when a run ends
   (liveness obligations: no work pending), checked in its last state;
   a result names each `validate.EventuallyName(val)`, and an exploration
