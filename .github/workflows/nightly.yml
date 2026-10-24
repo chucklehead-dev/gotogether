@@ -78,7 +78,8 @@ jobs:
         # (internal/depgraph: sorting the nodes Tarjan visits, whose
         # components are sorted after)
         include:
-          - pkg: qtrace
+          - pkg: qtrace # a ratchet, not yet read: 56 of 167 (linearize 19, step 13, reconstruct 11, filter 8)
+            max: 56
           - pkg: qhistory
             max: 0
           - pkg: internal/depgraph

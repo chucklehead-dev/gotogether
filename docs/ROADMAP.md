@@ -174,7 +174,8 @@ under a week, M two to four, L more.
     (a first run without it: 288 of 895 survive, in sim.go 50,
     internal/profile 44, store.go 34, native.go 31, keyed.go 19,
     queue.go 14, the rest under 15 a file), and a bar for qtrace's
-    guided-search survivors;
+    guided-search survivors (56 of 167 survive now, held there as a
+    ratchet);
   - the brute forces as Hegel properties, their sizes widened nightly;
 - **T6. The exploration engine (M), before tags.** Run sources (seeds,
   corpus, a file, steered, schedules) feeding runs, then per-run stages
