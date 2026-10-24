@@ -219,3 +219,19 @@ func TestLinearizeCutJudgesNoInvariant(t *testing.T) {
 	// with the budget to finish, every order ends empty: the violation
 	Validate(t, "../validate/testdata/funds.binding.yaml", steps, Linearize()).Expect(t, Violates(validate.EventuallyName("funded")))
 }
+
+// Linearize takes an order in which the invariants hold when one
+// conforms: two increments and a decrement, all concurrent, exceed one
+// in their recorded order and not with the decrement between them. The
+// first conforming order was once taken, a violation by the order picked.
+func TestLinearizePrefersInvariantsHolding(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	op := func(rec, action string) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Invoked: at(0), Time: at(10)}
+	}
+	steps := []qtrace.Step{op("a", "inc"), op("b", "inc"), op("c", "dec")}
+	Validate(t, "testdata/counter.yaml", steps).Expect(t, Violates("atMostOne"))
+	Validate(t, "testdata/counter.yaml", steps, Linearize()).Expect(t, Conforms())
+}

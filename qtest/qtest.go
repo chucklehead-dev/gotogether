@@ -456,7 +456,7 @@ func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step,
 		if budget == 0 {
 			budget = DefaultLinearizeBudget
 		}
-		steps, found, undecided, kept = linearize(t, lc, steps, budget, c.linearizeKey)
+		steps, found, undecided, kept = linearize(t, lc, ch, steps, budget, c.linearizeKey)
 	} else {
 		lc.Options.Dir, lc.Options.NoITF = filepath.Join(dir, "resolve"), true
 		steps, found, undecided, kept = resolve(t, lc, steps, DefaultResolveBudget)

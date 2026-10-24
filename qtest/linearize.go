@@ -24,7 +24,9 @@ const DefaultLinearizeBudget = 200
 // another order than they took effect, and the recording order rejects
 // correct code. A step recorded where it takes effect needs none of it.
 //
-// The run's Steps become the order checked. The report gains an issue
+// The run's Steps become the order checked: one in which every invariant
+// holds, if a conforming one does (a run must not look violating by the
+// order picked). The report gains an issue
 // per actor: "info" with the number of orders tried when one conformed,
 // "warn" when none did, the order shown then being the one that got
 // furthest. A search that stopped there, no move getting further, is
@@ -80,7 +82,7 @@ func LinearizeBudget(n int) Option {
 // gap: steps were lost; a cycle: their constraints contradict each
 // other), for its result: the order checked is re-sequenced onto one
 // thread, where neither shows.
-func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget int, key string) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue) {
+func linearize(t testing.TB, ch, full *validate.Checker, steps []qtrace.Step, budget int, key string) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue) {
 	t.Helper()
 	traces, issues := qtrace.Reconstruct(steps) // deduplicated, gaps found across actors
 	undecided, kept = map[string]bool{}, map[string][]qtrace.Issue{}
@@ -92,7 +94,7 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 					kept[actor] = append(kept[actor], i)
 				}
 			}
-			o, issue, cut := order(t, ch, part, budget, key != "")
+			o, issue, cut := order(t, ch, full, part, budget, key != "")
 			issues = append(issues, issue)
 			if unbounded(part.Steps) {
 				issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time bounds none of its %d steps: "+
@@ -175,28 +177,41 @@ func partitions(t testing.TB, tr *qtrace.Trace, key string) []*qtrace.Trace {
 // order finds an order of one actor's steps the model accepts, within
 // budget, and says how it went: an issue, and whether the search was cut
 // short (no verdict).
-func order(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int, partitioned bool) ([]qtrace.Step, qtrace.Issue, bool) {
+func order(t testing.TB, ch, full *validate.Checker, tr *qtrace.Trace, budget int, partitioned bool) ([]qtrace.Step, qtrace.Issue, bool) {
 	t.Helper()
 	a := tr.Actor // as messages name it
 	if a == "" {
 		a = "default"
 	}
-	check := func(orders [][]qtrace.Step) []int {
-		reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
-		fs := make([]int, len(orders))
-		for i := range orders {
-			if errs[i] != nil {
-				t.Fatalf("gotogether: linearizing actor %s: %v", a, errs[i])
+	checker := func(ch *validate.Checker, invariants bool) func(orders [][]qtrace.Step) []int {
+		return func(orders [][]qtrace.Step) []int {
+			reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
+			fs := make([]int, len(orders))
+			for i := range orders {
+				if errs[i] != nil {
+					t.Fatalf("gotogether: linearizing actor %s: %v", a, errs[i])
+				}
+				fs[i] = failedAt(reps[i], len(orders[i]))
+				if invariants && fs[i] < 0 {
+					fs[i] = violatedAt(reps[i], len(orders[i]))
+				}
 			}
-			fs[i] = failedAt(reps[i], len(orders[i]))
+			return fs
 		}
-		return fs
 	}
+	check := checker(ch, false)
 	if len(tr.Steps) == 0 {
 		return nil, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no steps to order", a)}, false
 	}
 	o, ok, tried, cut := qtrace.Linearize(tr.Steps, budget, check)
 	switch {
+	case ok && len(full.Binding.Invariants) > 0 && checker(full, true)([][]qtrace.Step{o})[0] >= 0:
+		// the order found violates an invariant: another that conforms may
+		// not, and a run must not look violating by the order picked
+		if o2, ok2, tried2, _ := qtrace.Linearize(tr.Steps, budget, checker(full, true)); ok2 {
+			return o2, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms with every invariant holding (%d orders tried, %d with the invariants)", a, len(o2), tried, tried2)}, false
+		}
+		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried); none found in which every invariant holds", a, len(o), tried)}, false
 	case ok:
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried)}, false
 	case cut:
@@ -252,6 +267,27 @@ func nameOf(actor string) string {
 		return "default"
 	}
 	return actor
+}
+
+// violatedAt is the index of the step of a conforming order after which
+// an invariant first fails, or -1 when every one holds.
+func violatedAt(rep *validate.Report, n int) int {
+	at := -1
+	for _, a := range rep.Actors {
+		for _, inv := range a.Invariants {
+			if inv.Verdict != validate.Fail || strings.HasPrefix(inv.Name, validate.EventuallyName("")) {
+				continue
+			}
+			i := n - 1
+			if inv.Failure != nil && inv.Failure.Step != nil && inv.Failure.Step.Seq >= 1 {
+				i = int(inv.Failure.Step.Seq) - 1
+			}
+			if at < 0 || i < at {
+				at = i
+			}
+		}
+	}
+	return at
 }
 
 // partitionHint suggests LinearizeByKey to a search not partitioned.

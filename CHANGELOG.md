@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Linearize prefers a conforming order in which the invariants hold: the
+  first conforming order was taken, and a run could violate an
+  invariant by the order picked (a mutant "caught" for nothing).
 - qhistory: a transaction's own appends read back out of order are
   `internal` (the count alone was compared), and a value no transaction
   appended is garbage in any read, not "G1b of transaction 0" in a

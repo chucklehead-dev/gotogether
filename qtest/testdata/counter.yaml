@@ -1,0 +1,6 @@
+spec: counter.qnt
+module: counter
+actions:
+  inc: {}
+  dec: {}
+invariants: [atMostOne]
