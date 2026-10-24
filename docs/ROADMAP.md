@@ -1,7 +1,7 @@
 # Roadmap
 
-What is open. What is done (the A–D, U, V, W, R1–R4, X and Y tracks,
-Z1–Z4, the move to gotogether) and the reviews that shaped it are in
+What is open. What is done (the A–D, U, V, W, R1–R4, X, Y and Z tracks,
+the move to gotogether) and the reviews that shaped it are in
 docs/HISTORY.md; why the code is the way it is, in DESIGN.md.
 
 Standing decisions, with the maintainer:
@@ -13,8 +13,8 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: Z5 → Z8 (in the Z track's order below); the items left from X and
-Y alongside; R5 when the maintainer says.
+Order: T1 → T2a–b → T3 → T4 → T5 → T2c → T6 → T2d → T7, T8; the items
+left from X and Y alongside; R5 when the maintainer says.
 
 ## Release (R5)
 
@@ -62,82 +62,113 @@ disks, clocks and partitions; bare expectations' arity (`Conforms` every
 run, the rest some) and contradictory pairs; "run 3" not "schedule 3";
 `Reaches` by prefix as Rates are.
 
-## Sixth review: whole product (Z)
+## Seventh review: whole product (T)
 
-From four reviews of the whole product after Y (HISTORY, "Sixth
-review"): architecture and maintainability, correctness, a newcomer's
-usability and docs, missing features and lessons learned. Decided with
-the maintainer: all of Z1–Z8, breaking the API freely before tags. In
-order, bugs first; each item reviewed against its bullet before the
-next.
+From four reviews after Z (HISTORY, "Seventh review"). In order, bugs
+first; each item reviewed against its bullet before the next. Sizes: S
+under a week, M two to four, L more.
 
-- **Z1–Z4. Done** (silent wrong answers, reports a user can act on, the
-  newcomer's path, the API before tags): HISTORY, "Sixth review: whole
-  product (Z1–Z4)".
-- **Z5. Maintainability (S–M). Done:** an escaped step fails its own
-  run (found through its goroutine's creator), so qtest's tests run in
-  parallel (63s → 37s short); CI's test job a matrix, a tidy check, a
-  workspace job (whose first run found qweave weaving nothing outside the
-  go.work in use, now an error); done items and AGENTS' backstories in
-  HISTORY, its commands and one area's gotchas in docs/agents/ (5.3k
-  words to 3.8k); the README's package table checked against api/*.txt;
-  doc comments' Go under the docs gate. Later: KnownFault's registry per
-  run (it is the process's: under parallel tests one test's declarations
-  can make another's misspelled Rates key look known); one exploration
-  engine fed by run sources (Explore and Exhaust repeat their setup,
-  Exploration has seven mode flags), one verdict method per claim, one
-  memoizing checker for qtest and qhegel, qload's two recovery worlds
-  made one.
-- **Z6. A more faithful environment (S each). Done:** a request may
-  arrive late (`rpc.<name>.delay`: a late original after its retry),
-  which found lease's lock without fencing broken with true clocks and
-  crossdb's cloud leaking a database to a create that landed after the
-  delete (it now refuses a request past its deadline); pauses and gray
-  failures (`Sim.Stalls`); a full disk, a failed fsync (Linux's: its
-  writes lost though a later fsync succeeds), a corrupt read; a second
-  double of one name panics; an exploration runs its first seed twice
-  and fails on a difference; the doubles shown to reorder, redeliver and
-  read skew where their contracts allow. Left: a lint for map ranges,
-  math/rand and multi-case select in simulated code (the self-check
-  catches what they do, not where).
-- **Z7. Liveness (S, then M).** Done: Settle reports whether it
-  settled (`*Unsettled`, a stuck settle included; `qtest.Settles()`)
-  and records a settle in the trace (`qobs.Settled` for a real
-  deployment); a binding's `eventually` vals, judged in the last state
-  of a trace that recorded a settle, by every check (not in virtual time
-  across a run: a val of the last state); a fair settle (tasks in turn);
-  `Sim.SettleCore` (faults go on outside a core, VOPR's liveness mode);
-  calls recorded at invocation (`qobs.Invoke`, `Call.Done`, pending
-  calls in reports, `qtest.Completes()`). `Run(d)` ending at its horizon
-  with tasks waiting judges nothing, on purpose: a run's faulty phase
-  ends there, and only Settle asks for quiet. Left: `//quint:action`
-  advice recording at entry (Invoke) as well as on return; an example
-  under SettleCore (a quorum whose convergence is stated of the core);
-  eventual properties in connect's MBT; what a pending call may have
-  done is Z8's ambiguous steps.
-- **Z8. Search and scale (M–L). Done:** PCT as a chooser
-  (`qenv.NewPCT`, tasks picked by id, recorded as index choices);
-  Linearize per key (`qtest.LinearizeByKey`) and a complete search after
-  the guided one, candidates judged with the run's settle; explorations
-  run Linearize, steps in a simulation carrying its virtual time; the
-  history checker public for real databases (`qhistory`: Elle's
-  list-append workload, Adya's anomalies, G-nonadjacent included);
-  exploration steered by new steps, observed states, faults and code
-  blocks (`ExploreConfig.Steer`); pending calls resolved
-  (`qtest.ResolvePending`); examples/quorumkv, which uses Z7's and Z8's
-  features and found two of the toolkit's misses (above) and its own
-  first bug. **Deferred, for the next review:** footprint-based
-  reduction for Exhaust, sound only if tasks share state solely through
-  the doubles (Go code between seams touches any memory, a test's
-  closures included): it needs an ownership declaration and a DPOR with
-  sleep sets, or a passing Exhaust would prove less than it says;
-  resolution searched together with linearization (Jepsen's :info in a
-  concurrent history), and calls placed at one gap in any order; hidden
-  actions (an effect no one recorded); Steer's features as counts (a
-  second fault of a kind is never new), cuts at the choice where a new
-  feature appeared, and unbounded observations (versions) that make
-  every run new; the CLI's validate linearizing (quorumkv's demo runs its
-  tests). Online validation stays deferred.
+- **T1. Silent wrong answers (S each).**
+  - Real time from what the recorder knows: a completion takes its
+    invocation record's time (`"invoked"` becomes an override), steps of
+    one recorder are ordered exactly by seq (a completion after another's
+    invocation record), no slack between a simulation's steps, and a
+    linearized actor no step of which has an invocation time is warned
+    of. quorumkv stops passing `"invoked"` from the process's clock.
+  - A linearization cut by its budget is no verdict for the run's
+    invariants and eventual vals too, not only its conformance.
+  - Eventual vals judged in no run say so: an issue on each unsettled
+    actor of a binding with `eventually:`, and a claim that would hold
+    for nothing (Conforms, None(Violates(eventually ...))) fails when no
+    run settled.
+  - ResolvePending places a call's effect before the first settle after
+    its invocation (the system was quiet there).
+  - Faults come back after Settle returns (a second faulty phase was
+    fault-free).
+  - A settle settles a trace only if no other recorder recorded a step
+    later in time.
+  - The complete search's beam is the budget's, and a cut names its real
+    limit.
+  - qhistory: a transaction's reads of its own appends in their order;
+    garbage in any read, and no "G1b of transaction 0".
+  - Among orders that conform, one whose invariants hold is preferred (a
+    mutant must not look caught by the order picked).
+  - `qenv.Now` on a simulation's creating goroutine: virtual time, as its
+    steps' (or the warning names `Sim.Now`).
+- **T2. The cost of a verdict.**
+  - **a (S).** A conformance-only search mode in validate (no ITF, the
+    TypeScript batch, no detail phase), the per-run searches of an
+    exploration in parallel, the complete search given what is left of
+    the budget.
+  - **b (S–M).** Candidates memoized in a prefix trie (an extension of a
+    rejected prefix decided without quint), the complete search starting
+    from the guided one's accepted prefixes, one memoizing checker for
+    qtest and qhegel.
+  - **c (M).** A complete search without a beam: each level's survivors
+    deduplicated by (operations placed, model state), each extended from
+    its state as a literal (Wing–Gong with Lowe's memo, over quint).
+  - **d (L).** A Quint evaluator in Go over quint's own IR (`quint
+    compile --target json`, cached by the model's hash; about fifty
+    builtins cover every model here), stepping the model from a held
+    state: WGL at Porcupine's speed with the model as its oracle; quint
+    confirms (one replay of a passing order, one batch for a failing
+    search's evidence), a differential Hegel property compares the two
+    nightly, an operator outside its fragment falls back to quint.
+- **T3. The searches in the right layer (M).** `validate.Checker.Search`
+  (Linearize and ResolvePending as generators over one candidate
+  engine), called by qtest and by the CLI (`validate -linearize[=key]`);
+  `qtrace.Linearize` unexported; one re-sequencing helper; `Run.Recorded`
+  beside the judged `Run.Steps`; `Ambiguous` written to step logs;
+  `InvariantResult.Eventually`; one `Linearize` option (by key, budget)
+  and `ResolvePending(budget)`; the scheduler's task and nemesis chooser
+  protocols exported or documented on Chooser; one goroutine lookup per
+  step.
+- **T4. A newcomer's path to Z7 and Z8 (S each).** Start-table rows for
+  linearizability, liveness and convergence; verdicts.md on Pending,
+  Linearize and "no verdict (linearize budget)"; quorumkv's README with
+  the code a user copies, PCT's arguments and PCT against Steer; scaffold
+  writes a Settle when the binding has `eventually:`; a Mismatch of a
+  client history in recorded order suggests Linearize; a run's
+  scheduling steps reported (PCT's Steps); claim wording ("some run
+  showing a conforming run that violates"); pending and settle counts in
+  summaries; `GOTOGETHER_KEEP` keeping step logs; a failure's step log
+  as recorded, its judged order beside it; temporary directories
+  removed; quint's reserved names in the model skill; the doc drift the
+  review listed (explorations linearize, refusal texts, DESIGN's X4).
+- **T5. The lessons as structure (S–M).** The toolkit's own mutation
+  testing nightly (`qweave -mutate` over qenv, qtest, qtrace, validate,
+  binding; `NoSurvivors` for the scheduler, the choosers and the
+  searches) and an ablation subtest as the rule for every search or
+  heuristic; every search checked against brute force on small inputs by
+  a Hegel property (Linearize, ResolvePending, Exhaust, qhistory), and
+  against Porcupine on registers in internal/hegelprops; a nightly
+  matrix running every faithful example with every fault family on; seed
+  counts from measured rates; a lint for package-level mutable state
+  without a stated scope; the simulation lint over the core; quorumkv's
+  slow tests in the nightly, per-test time budgets in CI; one isolation
+  classifier for qhistory and `GOTOGETHER_CHECK` (G-nonadjacent at SI).
+- **T6. The exploration engine (M), before tags.** Run sources (seeds,
+  corpus, a file, steered, schedules) feeding runs, then per-run stages
+  (searches, self-checks), then judgment; Explore and Exhaust one
+  engine; ExploreConfig's hidden modes as the sources' properties;
+  KnownFault per run.
+- **T7. Capabilities (after T2d).** Indeterminate calls searched within
+  the linearization (Jepsen's :info) and a visual of a failing history;
+  hidden actions and partial logs in trace validation; bounded-response
+  liveness during a run (`within:` in virtual time); mixed-version and
+  upgrade runs (`Process.RestartAs`); Hegel parallel state machines that
+  linearize; Exhaust with sleep-set DPOR under a declared ownership mode;
+  a Script against a real deployment and an Antithesis assertion sink;
+  online validation over the set of reachable states; Steer branching
+  from where a feature appeared, features as counts; qhistory's strict
+  serializability and rw-registers; the determinism lint (map ranges,
+  math/rand, multi-case select).
+- **T8. An example: raftkv (M, after T2d).** etcd's raft RawNode as a
+  three-node KV on qenv; transfers across keys (no partition helps);
+  hundreds of operations linearized; a lease-read mutant under clock
+  drift, ReadOnlySafe conforming; a retried CAS without a request id
+  (indeterminate calls); election after a heal as a bounded-liveness
+  property.
 
 ## Dropped on purpose
 

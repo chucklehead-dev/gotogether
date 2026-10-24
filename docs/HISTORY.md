@@ -1062,6 +1062,76 @@ there).
   own per-run state is a `qrun.Key`); `validate.Cached` (a test binary
   that builds its own checkers typechecks each binding's model once).
 
+## Sixth review: Z5–Z8
+
+The rest of the Z track, as the roadmap had it when it was done.
+
+- **Z5. Maintainability (S–M). Done:** an escaped step fails its own
+  run (found through its goroutine's creator), so qtest's tests run in
+  parallel (63s → 37s short); CI's test job a matrix, a tidy check, a
+  workspace job (whose first run found qweave weaving nothing outside the
+  go.work in use, now an error); done items and AGENTS' backstories in
+  HISTORY, its commands and one area's gotchas in docs/agents/ (5.3k
+  words to 3.8k); the README's package table checked against api/*.txt;
+  doc comments' Go under the docs gate. Later: KnownFault's registry per
+  run (it is the process's: under parallel tests one test's declarations
+  can make another's misspelled Rates key look known); one exploration
+  engine fed by run sources (Explore and Exhaust repeat their setup,
+  Exploration has seven mode flags), one verdict method per claim, one
+  memoizing checker for qtest and qhegel, qload's two recovery worlds
+  made one.
+- **Z6. A more faithful environment (S each). Done:** a request may
+  arrive late (`rpc.<name>.delay`: a late original after its retry),
+  which found lease's lock without fencing broken with true clocks and
+  crossdb's cloud leaking a database to a create that landed after the
+  delete (it now refuses a request past its deadline); pauses and gray
+  failures (`Sim.Stalls`); a full disk, a failed fsync (Linux's: its
+  writes lost though a later fsync succeeds), a corrupt read; a second
+  double of one name panics; an exploration runs its first seed twice
+  and fails on a difference; the doubles shown to reorder, redeliver and
+  read skew where their contracts allow. Left: a lint for map ranges,
+  math/rand and multi-case select in simulated code (the self-check
+  catches what they do, not where).
+- **Z7. Liveness (S, then M).** Done: Settle reports whether it
+  settled (`*Unsettled`, a stuck settle included; `qtest.Settles()`)
+  and records a settle in the trace (`qobs.Settled` for a real
+  deployment); a binding's `eventually` vals, judged in the last state
+  of a trace that recorded a settle, by every check (not in virtual time
+  across a run: a val of the last state); a fair settle (tasks in turn);
+  `Sim.SettleCore` (faults go on outside a core, VOPR's liveness mode);
+  calls recorded at invocation (`qobs.Invoke`, `Call.Done`, pending
+  calls in reports, `qtest.Completes()`). `Run(d)` ending at its horizon
+  with tasks waiting judges nothing, on purpose: a run's faulty phase
+  ends there, and only Settle asks for quiet. Left: `//quint:action`
+  advice recording at entry (Invoke) as well as on return; an example
+  under SettleCore (a quorum whose convergence is stated of the core);
+  eventual properties in connect's MBT; what a pending call may have
+  done is Z8's ambiguous steps.
+- **Z8. Search and scale (M–L). Done:** PCT as a chooser
+  (`qenv.NewPCT`, tasks picked by id, recorded as index choices);
+  Linearize per key (`qtest.LinearizeByKey`) and a complete search after
+  the guided one, candidates judged with the run's settle; explorations
+  run Linearize, steps in a simulation carrying its virtual time; the
+  history checker public for real databases (`qhistory`: Elle's
+  list-append workload, Adya's anomalies, G-nonadjacent included);
+  exploration steered by new steps, observed states, faults and code
+  blocks (`ExploreConfig.Steer`); pending calls resolved
+  (`qtest.ResolvePending`); examples/quorumkv, which uses Z7's and Z8's
+  features and found two of the toolkit's misses (above) and its own
+  first bug. **Deferred, for the next review:** footprint-based
+  reduction for Exhaust, sound only if tasks share state solely through
+  the doubles (Go code between seams touches any memory, a test's
+  closures included): it needs an ownership declaration and a DPOR with
+  sleep sets, or a passing Exhaust would prove less than it says;
+  resolution searched together with linearization (Jepsen's :info in a
+  concurrent history), and calls placed at one gap in any order; hidden
+  actions (an effect no one recorded); Steer's features as counts (a
+  second fault of a kind is never new), cuts at the choice where a new
+  feature appeared, and unbounded observations (versions) that make
+  every run new; the CLI's validate linearizing (quorumkv's demo runs its
+  tests). Online validation stays deferred.
+
+
 ## Architecture and API review
 
 Two reviews of the library as of DESIGN §16, one of its structure and one
@@ -1382,6 +1452,39 @@ Z track. What they found:
   last only partly (X5 checks one direction);
 - liveness is the largest gap: Settle cannot say it settled, and nothing
   states "eventually" outside the settle pattern.
+
+### Seventh review (after Z)
+
+Four reviews of the whole product after Z: architecture and
+maintainability, correctness by probe, a newcomer applying Z7's and Z8's
+features to a store of their own, missing capabilities and the lessons
+of the past tracks. Their findings are ROADMAP's T track. What they
+found:
+- in a simulation, Linearize lost the order a recorder already knew
+  exactly: a completed call does not carry its invocation's time, nominal
+  calls take no virtual time and a millisecond of slack makes them
+  concurrent, so a client's read that missed its own write passed; with
+  six more bugs where a check said nothing (eventual vals never judged,
+  faults off after a settle, a settle that ignored other recorders, a
+  resolution placed after the settle, a budget cut read as a violation,
+  qhistory's internal reads);
+- the cost of a verdict is now the gap to the state of the art: every
+  candidate order a quint process replaying from init (quorumkv's Repick,
+  20 runs of 15 steps, 11 minutes; Porcupine checks a thousand
+  operations in milliseconds), with ITF and the Rust backend forced on
+  where the TypeScript batch was meant to serve, and a beam that turns a
+  contended rejection into no verdict whatever the budget;
+- the searches are qtest's, bound to testing.TB, so the CLI cannot run
+  them, written three times over;
+- a newcomer following the docs weakens Linearize (no "invoked"), and
+  cannot find linearizability, liveness or Pending in the start table or
+  the verdicts;
+- the most frequent mistake of this project's own development is a
+  feature whose test passes with the feature turned off (every one of
+  the last eight review fixes found one), then state at the wrong scope,
+  environments kinder than their contracts (the faithful examples each
+  new fault family broke), detection that hangs on seeds or timing, and a
+  search's cut-off read as a verdict.
 
 ## Why AGENTS.md's gotchas say what they say
 
