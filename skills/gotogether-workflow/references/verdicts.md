@@ -34,7 +34,7 @@ together (`Exploration.Expect`):
 | `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle |
 | `qtest.Pending("action")` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
-| `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock |
+| `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
 | `qtest.Some(a, b)` | one run shows both |
 | `qtest.All(a)` | every run shows it |
 | `qtest.None(a)` | no run shows it |
