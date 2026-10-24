@@ -45,7 +45,9 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
-  (both nightly). `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in
+  (both nightly). `GOTOGETHER_MUTANT=<id>` turns one woven mutant on for
+  the whole process (`=list` prints them; ci/mutate-core.sh).
+  `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in
   every simulation (clock faults, stalls, a partition nemesis between
   every two processes): a suite written before a family meets it. A
   failure's reproduce line sets it, and its corpus entries go to an

@@ -1488,6 +1488,23 @@ found:
   new fault family broke), detection that hangs on seeds or timing, and a
   search's cut-off read as a verdict.
 
+### T5 review
+
+An independent review of T5's fifteen commits found four bugs in them:
+- the store checker made quadratic, then cubic, by classifying a
+  commit's whole component (2.9 s for 200 commits of a hot counter);
+- `GOTOGETHER_ALL_FAULTS` runs reproduced without it;
+- ResolvePending's bounds ignored the clocks' slack, which its
+  brute force, written from the implementation's predicates on times
+  10 ms apart, could not see;
+- qmut's recursion fixed in one mode only.
+
+Its gaps: each brute force missed a path (invocation records and domain
+clocks, Without and failed runs, a bound on Cover's rows), the claim
+power's point estimate, mutate-core passing on nothing. All fixed in
+8917552..9d90a8b, but the nightly matrices and the Hegel properties,
+left in ROADMAP T5. Its example for the new features is T9 (wallet).
+
 ## Why AGENTS.md's gotchas say what they say
 
 The stories behind some of AGENTS.md's gotchas, moved here so the file

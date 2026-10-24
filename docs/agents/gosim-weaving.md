@@ -12,7 +12,17 @@ Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the 
   unobserved effect, not unneeded code: a step that records nothing the
   binding compares (checkout's cancel never carried the stock). Mutants
   equivalent under the environment (dropped acks, retries' boundaries)
-  survive by right: read the report, do not assert a score.
+  survive by right: read the report, do not assert a score (in an
+  example's System.Mutate).
+- The toolkit's own packages are mutated only when `-coverpkg` names
+  them, never qmut, qrun, qcover, internal/hooks or qenv/goroutine.go (the
+  code a mutant's switch calls to find its run: mutated, it called
+  itself). `GOTOGETHER_MUTANT=<id>` turns one mutant on for the whole
+  process (unit tests carry no run), `=list` prints them;
+  `ci/mutate-core.sh <pkg> [max]` runs a package's tests once a mutant
+  (`JOBS=n` at a time). There the nightly does hold a bar: a core
+  package's survivors are each read, and the matrix's `max` counts the
+  equivalent ones.
 - Woven code (`qenv/weave`): weaving rewrites calls of `sync` methods in
   the root module and `//qenv:go` go statements. A method value
   (`return st.mu.RUnlock`) or an unmarked `go` escapes, so check with

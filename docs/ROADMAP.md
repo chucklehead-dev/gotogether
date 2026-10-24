@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: T1 → T2a–b → T3 → T4 → T5 → T2c → T6 → T2d → T7, T8; the items
+Order: T1 → T2a–b → T3 → T4 → T5 → T2c → T6 → T9 → T2d → T7, T8; the items
 left from X and Y alongside; R5 when the maintainer says.
 
 ## Release (R5)
@@ -151,18 +151,30 @@ under a week, M two to four, L more.
   as recorded, its judged order beside it; temporary directories
   removed; quint's reserved names in the model skill; the doc drift the
   review listed (explorations linearize, refusal texts, DESIGN's X4).
-- **T5. The lessons as structure (S–M).** The toolkit's own mutation
-  testing nightly (`qweave -mutate` over qenv, qtest, qtrace, validate,
-  binding; `NoSurvivors` for the scheduler, the choosers and the
-  searches) and an ablation subtest as the rule for every search or
-  heuristic; every search checked against brute force on small inputs by
-  a Hegel property (Linearize, ResolvePending, Exhaust, qhistory), and
-  against Porcupine on registers in internal/hegelprops; a nightly
-  matrix running every faithful example with every fault family on; seed
-  counts from measured rates; a lint for package-level mutable state
-  without a stated scope; the simulation lint over the core; quorumkv's
-  slow tests in the nightly, per-test time budgets in CI; one isolation
-  classifier for qhistory and `GOTOGETHER_CHECK` (G-nonadjacent at SI).
+- **T5. The lessons as structure (S–M). Done**, reviewed: the toolkit's
+  own mutation testing (`ci/mutate-core.sh`, `GOTOGETHER_MUTANT`; the
+  nightly holds qhistory and qsweep at 0 survivors, internal/depgraph at
+  1 equivalent); brute-force comparisons for Linearize (registers,
+  invocation records, domain clocks), ResolvePending's placements,
+  Exhaust's schedules, the isolation classifier and Cover, each ablated,
+  and Linearize against Porcupine in internal/hegelprops; one isolation
+  classifier for qhistory and `GOTOGETHER_CHECK` (G-nonadjacent at SI,
+  linear per commit); package-level state stating its scope; the
+  simulation lint over the core; claim power (with the rate's lower
+  bound) and the examples' seeds raised to it; `GOTOGETHER_ALL_FAULTS`;
+  a CI time budget; the rule in AGENTS. What it found: Linearize's cut
+  search read as a proof, ResolvePending's settle bound and slack,
+  qweave dropping an argument, qmut recursing into qenv. Left:
+  - a nightly that runs every example under `GOTOGETHER_ALL_FAULTS`
+    (Exhausts bounded first), each changed verdict a fix or a reasoned
+    Without;
+  - qenv in the mutation nightly with `GOTOGETHER_CHECK=1` and its bar,
+    and a bar for qtrace's guided-search survivors;
+  - the brute forces as Hegel properties, their sizes widened nightly;
+  - `internal/pkgstate` checking what it is told (no write to a
+    read-only var outside init), not only that it is told;
+  - an info issue when a pending call's bounds cross (a clock problem
+    resolved as "no effect").
 - **T6. The exploration engine (M), before tags.** Run sources (seeds,
   corpus, a file, steered, schedules) feeding runs, then per-run stages
   (searches, self-checks), then judgment; Explore and Exhaust one
@@ -179,6 +191,16 @@ under a week, M two to four, L more.
   from where a feature appeared, features as counts; qhistory's strict
   serializability and rw-registers; the determinism lint (map ranges,
   math/rand, multi-case select).
+- **T9. An example: wallet (M, the T5 review's).** Transfers on a
+  `qenv.Store` with request-id dedupe, an outbox to a ledger process,
+  retrying clients over a `qenv.Service`: the one example that shows
+  ResolvePending, LinearizeByKey, a Settle with an `eventually` val, PCT,
+  Exhaust, `GOTOGETHER_ALL_FAULTS` and qhistory on its own store (and a
+  real database, optionally). Mutants: NoDedupe (a retried transfer
+  twice), ReadThenWrite (a lost update at SI: PCT finds it, qhistory
+  names it G-single), AckBeforeOutbox (only after a settle),
+  WallClockDedupe (only under every fault family), StaleBalanceRead
+  (LinearizeByKey).
 - **T8. An example: raftkv (M, after T2d).** etcd's raft RawNode as a
   three-node KV on qenv; transfers across keys (no partition helps);
   hundreds of operations linearized; a lease-read mutant under clock

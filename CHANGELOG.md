@@ -35,7 +35,7 @@ The first release. What a user meets, by module:
   `GOTOGETHER_MUTANT=<id>` turns one mutant on for a whole process
   (`=list` prints them), and `ci/mutate-core.sh <pkg>` runs its tests once
   a mutant and lists the survivors (nightly, for qtrace, qhistory,
-  qsweep). Its first finding: Linearize's verdicts were unchecked by its
+  qsweep and internal/depgraph, each with its bar). Its first finding: Linearize's verdicts were unchecked by its
   unit tests, and a brute-force comparison then found a complete search
   cut short, with the guided search stopped, reported as a proof of no
   order: it is no verdict again (kvstore's stale read is proven on loads
