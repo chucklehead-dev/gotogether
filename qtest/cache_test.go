@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // overdraw deposits past the default LIMIT (100).
@@ -53,5 +55,31 @@ func TestClaimNamesAreChecked(t *testing.T) {
 		if len(f.errs) != 1 || !strings.Contains(f.errs[0], "misspelled") {
 			t.Errorf("%v: %v", c, f.errs)
 		}
+	}
+}
+
+// An eventual val is judged only in a trace whose last record is a
+// settle: a claim on one that no run judged fails with the fix, where
+// None(Violates(...)) of an emptied account never settled held for
+// nothing. The report says why it was not judged.
+func TestClaimOnAnUnjudgedEventualVal(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	emptied := func(c qenv.Chooser) error {
+		ctx := qenv.ContextOf(c)
+		qobs.Record(ctx, "deposit", nil, "amount", 5, "obs.balance", 5)
+		qobs.Record(ctx, "withdraw", nil, "amount", 5, "obs.balance", 0)
+		return nil // and never settles
+	}
+	x := System{Binding: "../validate/testdata/funds.binding.yaml", Run: emptied}.Explore(t, ExploreConfig{Seeds: 1})
+	if !strings.Contains(fmt.Sprint(x.Runs[0].Report.Actors[0].Issues), "eventual vals not judged (funded)") {
+		t.Errorf("the report does not say funded was not judged: %v", x.Runs[0].Report.Actors[0].Issues)
+	}
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { defer close(done); x.Expect(f, None(Violates(validate.EventuallyName("funded")))) }() //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+	<-done
+	if len(f.errs) != 1 || !strings.Contains(f.errs[0], "which no run judged") {
+		t.Errorf("claim on an unjudged eventual val: %v", f.errs)
 	}
 }

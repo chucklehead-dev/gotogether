@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Eventual vals no run judged are said so: a trace whose last record is
+  no settle carries an issue naming the binding's eventual vals, an
+  exploration in which none settled logs it, and a claim on an eventual
+  val no run judged fails with the fix (a binding with only eventual
+  vals let `None(Violates(...))` hold for nothing).
 - A linearization (or resolution) cut by its budget is no verdict for
   the invariants and eventual vals of the order shown either: one that
   conformed step by step but failed an eventual val was reported as the

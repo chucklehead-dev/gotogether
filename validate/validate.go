@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -160,8 +161,21 @@ func validateTrace(ctx context.Context, b *binding.Binding, m *binding.Model, t 
 	if err != nil {
 		return nil, err
 	}
-	res := &Result{Actor: t.Actor, Issues: t.Issues, Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
+	res := newResult(b, t, p)
 	return res, evaluate(ctx, b.ModuleSpec(p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
+}
+
+// newResult is a trace's result before its replay. A binding's eventual
+// vals are judged only in a trace that recorded a settle last: one that
+// did not says so, or a run that never settled (no Settle, a step after
+// it, its error dropped) would pass with them unjudged and no word.
+func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
+	res := &Result{Actor: t.Actor, Issues: slices.Clip(t.Issues), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
+	if len(b.Eventually) > 0 && !t.Settled {
+		res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "eventually",
+			Msg: fmt.Sprintf("eventual vals not judged (%s): the trace's last record is no settle (Sim.Settle, or qobs.Settled after a probe)", strings.Join(b.Eventually, ", "))})
+	}
+	return res
 }
 
 func (opt Options) resolve() (Options, error) {
