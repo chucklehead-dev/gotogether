@@ -45,11 +45,11 @@ type Call struct {
 	// Expect renders them: the arguments of the expect's definition in an
 	// EvalModule (nil when the template is not text and fields)
 	ExpectArgs []string
-	Step           *qtrace.Step      // the observed step; nil for inferred steps
-	Inferred       string            // why the step was inserted ("restart"), if inferred
-	Action         string            // the model action
-	Args           map[string]string // parameter -> the Quint expression passed
-	Note           string            // description, for calls that come from an ITF state
+	Step       *qtrace.Step      // the observed step; nil for inferred steps
+	Inferred   string            // why the step was inserted ("restart"), if inferred
+	Action     string            // the model action
+	Args       map[string]string // parameter -> the Quint expression passed
+	Note       string            // description, for calls that come from an ITF state
 }
 
 // Plan is the binding applied to one actor's trace: the instance's
