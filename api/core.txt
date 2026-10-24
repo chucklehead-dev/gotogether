@@ -732,6 +732,49 @@ func RWUnlock(m *sync.RWMutex)
 func TryRLock(m *sync.RWMutex) bool
 func Wait(wg *sync.WaitGroup)
 
+== github.com/chucklehead-dev/gotogether/qhistory
+const Aborted Outcome = iota (spec 2 of its group)
+const Append OpKind = iota
+const Committed Outcome = iota (spec 1 of its group)
+const Read OpKind = iota (spec 1 of its group)
+const ReadCommitted Level = iota
+const Serializable Level = iota (spec 2 of its group)
+const SnapshotIsolation Level = iota (spec 1 of its group)
+const Unknown Outcome = iota
+func Check(level Level, txns []Txn) (*Report, error)
+type Anomaly struct
+    field Kind string
+    field Txns []int
+    field Msg string
+    field Forbidden bool
+    method (Anomaly) String() string
+type Level int
+    method (Level) String() string
+type Op struct
+    field Kind OpKind
+    field Key string
+    field Value int
+    field List []int
+    method (Op) String() string
+type OpKind int
+type Outcome int
+type Report struct
+    field Level Level
+    field Anomalies []Anomaly
+    method (*Report) Has(kind string) bool
+    method (*Report) OK() bool
+    method (*Report) String() string
+type Txn struct
+    field ID int
+    field Ops []Op
+    field Outcome Outcome
+type Workload struct
+    field Keys int
+    field Txns int
+    field MaxOps int
+    field Seed uint64
+    method (Workload) Generate() []Txn
+
 == github.com/chucklehead-dev/gotogether/qlint
 func Sim(dir string) ([]Finding, error)
 func SimFile(fset *token.FileSet, f *ast.File) []Finding

@@ -521,6 +521,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qrole` | load roles (`//quint:serve`, `//quint:operation`, `//quint:call`): u and v as OTel gauges, pprof labels |
 | `qcover` | code coverage by model step (woven by `qweave -cover`): `Summarize`; a real environment's coverage against a simulation's (`ReadGoCover`, `Compare`) |
 | `qmut` | mutant schemata woven by `qweave -mutate`, one build, a mutant per run |
+| `qhistory` | a database's isolation level from its clients' history: Elle's list-append `Workload`, `Check` (G0, G1a, G1b, G1c, G-single, G2, by level) |
 | `qsweep` | covering arrays: `Cover`, `Missing`, `Sequences`, `Factor.Constant` |
 | `qrun` | a run's state (`Key[T]`), from the context or the goroutine's run |
 | `qlint` | the simulation and weaving lints (`gotogether lint -sim`, `-weave`) |

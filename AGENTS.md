@@ -44,6 +44,7 @@ qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's stat
 qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
 qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin), static action map (cmd/actionmap)
 qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per run; qtest's System.Mutate explores each
+qhistory/     a real database's isolation level from a list-append workload's history (Elle's; Adya's anomalies)
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
 qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspects in orchestrion.yml): u and v as gauges
 cmd/gotogether/  CLI

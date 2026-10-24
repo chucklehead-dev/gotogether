@@ -96,6 +96,12 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `qhistory`: a database's isolation level checked from its clients'
+  history: Elle's list-append workload (`Workload.Generate`) and
+  `Check(level, txns)`, which infers each key's version order from the
+  reads and reports Adya's anomalies (G0, G1a, G1b, G1c, G-single, G2,
+  incompatible orders, garbage, internal), forbidden or allowed by the
+  level. Checked against qenv's Store at each of its levels.
 - `qtest.LinearizeByKey(arg)` partitions each actor's history by an
   argument's value and linearizes each partition alone, as its own actor
   (Porcupine's partitioning), for models whose keys are independent.

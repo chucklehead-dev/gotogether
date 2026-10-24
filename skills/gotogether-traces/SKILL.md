@@ -96,6 +96,10 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   1 violation, 2 tool error.
 - Converted spans: `gotogether convert -rules bank.convert.yaml spans.jsonl > steps.jsonl`.
 
+Before trusting a model's isolation level of a real database, check
+the database: read [references/histories.md](references/histories.md)
+for a list-append workload and `qhistory.Check`.
+
 Production logs are selected and sanitized before they are checked
 (`gotogether steps -binding ... -pseudonymize ...`): read
 [references/production-logs.md](references/production-logs.md).
