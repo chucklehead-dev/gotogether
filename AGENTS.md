@@ -74,6 +74,7 @@ examples/edgepublish  separate module (Orchestrion); the spike's real-world case
 examples/gosim        separate module; on gosim via qgosim: broadcast/ (Glomers node over TCP), checkout/ (the saga on
                       qenv's native runtime); simulated tests //go:build sim, host tests make the choices (DESIGN §14, §15.1)
 docs/         DESIGN.md (why), ROADMAP.md (what is open), HISTORY.md (what is done, and the reviews), instrumentation.md
+              agents/: commands by module, gotchas by area
 ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API rate limits)
 ```
 
@@ -111,50 +112,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   shrinking-against-the-model tests, ~3–4 min. Both cover the root
   module only: every example is a module, tested in its directory (`cd
   examples/hello && go test ./...`; CI loops over them).
-- edgepublish (its own module):
-  ```sh
-  cd examples/edgepublish
-  go test ./...
-  go run github.com/DataDog/orchestrion go test ./mbt/ ./scenarios/   # woven
-  ```
-- gosim (qgosim and examples/gosim, their own modules): `cd examples/gosim
-  && GOWORK=off go test -p 1 -short ./...`, as CI runs it (the first run
-  translates the standard library, about a minute). In the workspace
-  (GOWORK unset) gosim's translation cannot find the module's packages
-  and every test fails with "package translated/... is not in std". Check the simulated side with
-  `go vet -tags sim`.
-- qanalysis (its own module): `cd qanalysis && go test ./...` (the checkout
-  comparison weaves and explores checkout: skipped with -short, needs quint).
-- grpcledger and streams (their own modules): `cd examples/<name> && go test ./...`.
-  grpcledger's generated protobuf code is checked in; regenerate with buf
-  (no protoc: see its README).
-- fleetrollout (its own module): `cd examples/fleetrollout && go test ./...`;
-  `./kwok-demo.sh` needs kwokctl and kwok on PATH (`go install
-  sigs.k8s.io/kwok/cmd/{kwokctl,kwok}@v0.7.0`), no Docker (binary runtime).
-- crossdb (its own module): `cd examples/crossdb && go test ./...`; `kind/demo.sh`
-  needs Docker, kind, kubectl and helm (`kind/setup.sh` installs Crossplane;
-  `CA_BUNDLE=` for a TLS-intercepting proxy). CRD and deepcopy are generated:
-  `go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 object crd paths=./apis/... output:crd:dir=./package/crds`.
-- Backend: `QUINT_BACKEND=rust|typescript`, for connect, validate and
-  qtest alike (unset: rust for a single validation, typescript for a
-  batch chunk of several traces, which it evaluates in one process where
-  rust starts one evaluator per test; quint's own default for connect's
-  `quint run`).
-  `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
-  qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
-  `:corpus=<file>`) runs one run of one exploration alone, the test's
-  explorations numbered in order; each failing run's report prints it.
-  `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
-  (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as
-  dir/<package>/<test>/x<N>.json (the package as its directory in its
-  module, `_` the root), cleared per test, a run alone a replay; a System's `Mutant` marks a
-  config's mutation so the suite's gaps leave it out.
-  `GOTOGETHER_CORPUS=dir`
-  replays and saves explorations' corpus entries under dir/<test>;
-  `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
-  (both nightly). `GOTOGETHER_VERBOSE=1` shows
-  Hegel's output for expected failures (FindViolation and Shrink capture
-  os.Stdout while Hegel runs, since Hegel writes nowhere else).
+- Each module's own commands (edgepublish woven, gosim, qanalysis,
+  grpcledger, streams, fleetrollout, crossdb), quint's backends and the
+  `GOTOGETHER_*` variables (keep, run one run alone, evidence, corpus,
+  Hegel seeds, verbose): docs/agents/commands.md.
 
 ## Conventions
 
@@ -213,6 +174,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 
 ## Gotchas
 
+The gotchas of one area are in docs/agents/; read its page before
+working there:
+- qload, qmeta, qrole, a load test: docs/agents/metastability.md.
+- qgosim, qweave, qenv/weave, the native runtime, coverage, mutants:
+  docs/agents/gosim-weaving.md.
+- qanalysis, the binding lint: docs/agents/analysis.md.
+- fleetrollout, crossdb: docs/agents/kube.md.
+
 - `quint run --mbt` records every `nondet` evaluated in a step, not only
   the action's own: picks of other actions appear as `Some(..)`.
 - `quint test` ITF has no `mbt::` variables.
@@ -229,16 +198,6 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   model's module: bindings and runs read state through a def
   (`stage(n)`). connect's `StatePath: [s, system]` reaches the nodes (the
   `m::choreo::` qualifiers are stripped).
-- quintaction's scope check uses `LookupParent(name, body.Lbrace)`:
-  go/types declares a function body's top-level locals in the same scope
-  as its parameters, so a lookup without the position finds locals.
-  Its analysistest fixtures are GOPATH-style with stub qenv and qobs
-  packages (`qanalysis/testdata/src/github.com/...`): keep the stubs to
-  what the fixtures use. An expectation on a `//quint:action` line goes
-  in a block comment before the directive.
-- actionmap stops at functions outside the loaded packages: a library
-  that calls back (qenv's commit hooks) is one call-graph node for every
-  closure handed to it.
 - A step for a refusal recorded with `Txn.OnCommit` needs the transaction
   to commit: return nil from it and the error after `qenv.Retry`
   (checkout's `PlaceOrder`). An error rolls back and drops the hook.
@@ -321,17 +280,6 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   through `qrun`: the context, else the goroutine's run (qenv's
   resolver). A new kind of per-run state is a `qrun.Key`, never a
   package-level default that runs in parallel would share.
-- `qweave -cover` instruments the main module only, never the toolkit's
-  own packages (examples aside): qcover's `Hit` would count itself. A
-  block's code is attributed to its task's next step, so a client whose
-  step a service records shows as "run by no step": read that list as
-  code no step of its own task explains, not as dead code.
-- `qweave -mutate` switches mutants through qrun, like `-cover`, so it
-  mutates the main module only (or `-coverpkg`). A survivor is often an
-  unobserved effect, not unneeded code: a step that records nothing the
-  binding compares (checkout's cancel never carried the stock). Mutants
-  equivalent under the environment (dropped acks, retries' boundaries)
-  survive by right: read the report, do not assert a score.
 - A Script's faults are in a partial order: each kind's in order, other
   kinds independent unless a fault `Follows` them (qtest.FaultScript
   chains a trace's faults; an ordered pair says b follows a).
@@ -395,8 +343,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   Experiment). A step from a goroutine one of a run's tasks started (its
   stack's "created by ... in goroutine N", a task's id kept until its
   simulation closes) fails that run alone (`hooks.WithEscapes`); any
-  other escape is logged process-wide, where every strict run running
-  sees it. So qtest's tests run in parallel, except those that touch
+  other escape (a goroutine's goroutine, an escape under gosim, whose
+  goroutines gosim's scheduler starts, or one after its run ended) is
+  logged process-wide, where every strict run running sees it. So qtest's tests run in parallel, except those that touch
   process-wide state (Setenv, a global recorder, the process-wide log):
   keep `t.Parallel()` out of those.
   `gotogether lint -sim .` (in CI) flags `go` statements and wall-clock
@@ -406,18 +355,6 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   (`obs.balance:b.Balance(ctx, acct)` is one): binding's lint and qweave
   share the rule, tested on `binding/testdata/directives.json`. Change
   both with the table.
-- `gotogether lint -binding -src` and quintaction (`-binding`) check literal
-  actions passed to `qobs.Record` and `Recorder.Record`, in files that
-  import qobs. An action through a constant or variable is not seen, and
-  a call on another imported package's `Record` (qtest's) is skipped by
-  its name; the analyzer confirms each call by type, the CLI cannot.
-- kwok's pod stages given in a cluster's config replace all of its default
-  pod stages, not its node stages: `KwokStages` carries kwok's fast
-  pod-ready, pod-complete and pod-delete stages with only the delays
-  added, one stage per option with weight 1 (kwok picks among matching
-  stages by weight; one stage's jitter would be uniform, not the trace's
-  quantiles). Trace clusters are `fleet-trace-m*`, so `KEEP=1` never
-  reuses a cluster with kwok's immediate stages.
 - qenv finds the task of a goroutine when a context carries none: Sleep,
   Wait, Go and recording with `context.Background()` from a task stay in
   its simulation (`taskOf`, `qenv/goroutine.go`), so a woven background
@@ -432,16 +369,6 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   An effect the model must see whether or not its caller survives (a
   write that landed before the crash) belongs at the effect's site: the
   double or service records it.
-- Woven code (`qenv/weave`): weaving rewrites calls of `sync` methods in
-  the root module and `//qenv:go` go statements. A method value
-  (`return st.mu.RUnlock`) or an unmarked `go` escapes, so check with
-  `gotogether lint -weave DIR`. So does a promoted call through an embedded
-  `sync.Mutex` (`t.Lock()` on `struct{ sync.Mutex }`): Orchestrion
-  matches the receiver's type, so name the field. The lint flags the
-  embedding. Inside a simulation, every user of a woven
-  object must be one of its tasks (call `Close` from a task, not from the
-  test goroutine). Woven calls look up the goroutine (about 1 µs), so
-  weave test builds only.
 - Run qenv's tests, and tests of new doubles, with `GOTOGETHER_CHECK=1`: the
   scheduler checks its invariants at every step, and every `Store` checks
   each commit's dependency cycles against its isolation level
@@ -451,14 +378,6 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   `Queue` checks its contract after each operation: no message lost, none
   delivered after its acknowledgement, an Ordered queue's first
   deliveries in order.
-- A recovery verdict needs a healthy baseline (`Experiment.Healthy`):
-  without one `Assess` returns `Recovery.Err`, since a system already
-  collapsed before the trigger would "recover" to its collapsed goodput.
-- Libraries that read the real clock (crossplane-runtime's create
-  annotations and grace period) see no virtual time passing. Translate
-  their timestamps at the seam (`Sim.ToVirtual` on write, `Sim.ToReal` on
-  read: crossdb's kube interceptor), or their time-based logic is not
-  exercised.
 - One thread per goroutine when recording with a domain clock: a thread
   asserts program order, and goroutines sharing one contradict it
   (`issue: error cycle`).
@@ -472,74 +391,6 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - A `qenv.Signal` waiter is tagged with the task's wait generation; a
   timed-out wait must not be woken by a later `Notify`. Keep the tag when
   touching the scheduler.
-- qload metrics are time series of rates; sample counters reset every
-  tick. `Sample.Orbit` is known only in hindsight (an attempt is in the
-  orbit from its start if it times out) and is filled when the run ends.
-- Two v's: the chain's orbit (`qload.Sample.Orbit`, in hindsight:
-  attempts that will time out, and requests waiting to retry) and what a
-  running system sees (`qrole`'s `Orbit`, `Sample.Waiting`: the waiting
-  part). Under immediate retries the second stays at 0 through a storm
-  (`TestTwoOrbits`): alerts on it see only u.
-- An alert region is defined by the probability of recovering within the
-  bound (`RecoveryWithin`), not the mean hitting time, which near a storm
-  is dominated by rare tips into it. Calibrate a running system with
-  `CalibrateTimeout` (λ held): a fit of λ to storm data drives it to μ.
-- The chain's service is exponential. A measured service time far from
-  it (`qmeta.Measure(...).Exponential()` false) changes verdicts, not
-  just numbers. Constant service made a queue longer than μ × timeout
-  absorbing (every request in it times out), where exponential service
-  drains it: check such verdicts in a simulation with `Service.Draw`.
-- `qmeta`'s chain ranks policies; its absolute times are not the
-  simulation's. Keep its orbit bound well above the storm's size, and
-  assert orderings or orders of magnitude, not seconds.
-- Controllers are closed loops (`ClientConfig.Population`). An open-loop
-  abstraction double-counts a failing object's polls and finds storms
-  that cannot happen.
 - qhegel's case checker (`caseChecker`): prefix reuse is only sound for one actor with
   no `order.*` keys, where the recording order is the reconstructed order,
   and with equal instance constants. Keep those guards.
-- gosim (`qgosim`, `examples/gosim`) translates everything the simulated
-  package imports: keep Hegel and other native code out of it. Hegel
-  adapters live in qhegel (`Chooser`, `FindTrigger`), and the Glomers one in `maelstrom/hegelnet`, never
-  next to code a simulation runs. `internal/simdeps` fails if qenv, qobs,
-  qtrace, qload, qmeta, any package that imports qenv (qhegel aside)
-  or a simulated example depends on Hegel, purego or cgo, and names the
-  import chain. It writes the
-  translation into the module's `.gosim/`, which `gofmt -l .` at the root
-  reports: it is gitignored, ignore it.
-- qenv's native runtime (`qenv.NewNative`) keeps one-task-at-a-time
-  semantics with a lock the running task gives up at seams, and a
-  condition variable broadcast when it does. A waiter that wakes and is
-  not ready must not broadcast again: two waiters would wake each other
-  forever, and gosim's virtual time would never pass. Its processes'
-  tasks start on the process's machine (a spawn queue its main goroutine
-  serves), and a machine crash is requested before the crash hooks run,
-  which may restart it.
-- Without a Platform, the native runtime's `Close` waits for every
-  task's goroutine to exit (a sleep ends at Close), so a simulation in a
-  `testing/synctest` bubble leaves none behind (the bubble panics if one
-  remains). A task blocked outside a seam (a real lock, a channel) would
-  hang Close: keep tasks' waits in qenv's seams.
-- The gosim fork is its own module, github.com/chucklehead-dev/gosim:
-  upstream history plus our commits, its `FORK.md` saying what they
-  change. Change the fork there, push, then bump qgosim's and
-  examples/gosim's requirement (`go get github.com/chucklehead-dev/gosim@<commit>`).
-  It translates one Go release's standard library (Go 1.26) and refuses
-  another. Choosers with entropy
-  (`qenv.EntropyOf`: Seeded, qhegel.Choices, a ChoiceLog or Replay of
-  them) hand gosim bytes in chunks for every choice but faults. A chooser
-  without it (a plain wrapper) falls back to one round trip per choice,
-  about 9 times slower.
-- Weaving is qweave's (its own module, x/tools): `qweave go test ./...`
-  weaves the package graph with the aspects of the packages the tool file
-  imports and runs the go command with `-overlay`; qgosim hands gosim the
-  same overlay (`GOSIM_OVERLAY`). For gosim, the module's `gosim.tool.go`
-  (else `orchestrion.tool.go`) names them: list qobs for `//quint:action`,
-  never qenv/weave (gosim simulates sync itself). qweave weaves method
-  values and promoted calls that Orchestrion misses; `gotogether lint -weave`
-  is about Orchestrion builds. A new join point or advice goes in
-  `qweave/weave.go`, with a fixture test. On the native runtime with a
-  Platform, qenv takes no lock across user code (gosim is cooperative):
-  never put a real lock or a multi-send loop where a crash or a goroutine
-  switch could strand it (DESIGN §15.8), and compare times without
-  monotonic readings (`Sim.Now` already drops them).

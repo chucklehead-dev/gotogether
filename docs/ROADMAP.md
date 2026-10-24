@@ -78,12 +78,16 @@ next.
   run (found through its goroutine's creator), so qtest's tests run in
   parallel (63s → 37s short); CI's test job a matrix, a tidy check, a
   workspace job (whose first run found qweave weaving nothing outside the
-  go.work in use, now an error); done items and AGENTS' backstories in HISTORY; the
-  README's package table checked against api/*.txt; doc comments' Go
-  under the docs gate. Later: one exploration engine fed by run sources
-  (Explore and Exhaust repeat their setup, Exploration has seven mode
-  flags), one verdict method per claim, one memoizing checker for qtest
-  and qhegel, qload's two recovery worlds made one.
+  go.work in use, now an error); done items and AGENTS' backstories in
+  HISTORY, its commands and one area's gotchas in docs/agents/ (5.3k
+  words to 3.8k); the README's package table checked against api/*.txt;
+  doc comments' Go under the docs gate. Later: KnownFault's registry per
+  run (it is the process's: under parallel tests one test's declarations
+  can make another's misspelled Rates key look known); one exploration
+  engine fed by run sources (Explore and Exhaust repeat their setup,
+  Exploration has seven mode flags), one verdict method per claim, one
+  memoizing checker for qtest and qhegel, qload's two recovery worlds
+  made one.
 - **Z6. A more faithful environment (S each).** Message delay in
   `Service`: a request is never late and a duplicate arrives at once, so
   "a late original overwrites the retry's result" cannot happen. Pause

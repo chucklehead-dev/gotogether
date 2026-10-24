@@ -180,7 +180,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 	// the docs a user reads first; DESIGN.md and HISTORY.md are records,
 	// in the names of their time
 	docs, _ := filepath.Glob("../examples/*/README.md")
-	docs = append(docs, "../README.md", "../AGENTS.md", "../qgosim/README.md", "../docs/instrumentation.md")
+	agents, _ := filepath.Glob("../docs/agents/*.md") // AGENTS.md's pages by area
+	docs = append(append(docs, agents...), "../README.md", "../AGENTS.md", "../qgosim/README.md", "../docs/instrumentation.md")
 	for _, p := range docs {
 		b, err := os.ReadFile(p)
 		if err != nil {
