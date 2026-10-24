@@ -96,6 +96,11 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `ExploreConfig.Steer`: runs steered toward what the seeds rarely
+  reach, each replaying a run that found a new step, observed state,
+  fault or code block up to a random choice, then on a fresh seed; a
+  steered run's choices are saved, and `GOTOGETHER_RUN=...:choices=<file>`
+  runs it alone.
 - `qhistory`: a database's isolation level checked from its clients'
   history: Elle's list-append workload (`Workload.Generate`) and
   `Check(level, txns)`, which infers each key's version order from the

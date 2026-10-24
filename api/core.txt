@@ -1254,6 +1254,7 @@ type Exploration struct
 type ExploreConfig struct
     field Seeds int
     field Parallel int
+    field Steer int
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
 type Fault struct

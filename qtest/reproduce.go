@@ -153,7 +153,7 @@ func (x *Exploration) ref() string { return fmt.Sprintf("%s#%d", x.test, x.id) }
 // A runSpec is GOTOGETHER_RUN parsed: the exploration and the run in it.
 type runSpec struct {
 	ref   string // "TestShop#2"
-	kind  string // "seed", "schedule" or "corpus"
+	kind  string // "seed", "schedule", "corpus" or "choices" (a steered run's file)
 	value string
 }
 
@@ -184,7 +184,7 @@ func runSpecFor(t testing.TB, ref string) (runSpec, bool) {
 }
 
 func parseRunSpec(v string) (runSpec, error) {
-	for _, kind := range []string{"seed", "schedule", "corpus"} {
+	for _, kind := range []string{"seed", "schedule", "corpus", "choices"} {
 		if i := strings.LastIndex(v, ":"+kind+"="); i > 0 && strings.Contains(v[:i], "#") {
 			s := runSpec{ref: v[:i], kind: kind, value: v[i+len(kind)+2:]}
 			if kind == "seed" {

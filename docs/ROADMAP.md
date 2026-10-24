@@ -124,8 +124,9 @@ next.
   share state solely through the doubles (Go code between seams touches
   any memory, a test's closures included): it needs an ownership
   declaration and a DPOR with sleep sets, or a passing Exhaust would
-  prove less than it says. Open: exploration steered by coverage or
-  model state; trace validation with unobserved or ambiguous steps
+  prove less than it says. Steered exploration is done too
+  (`ExploreConfig.Steer`, by new steps, observed states, faults and code
+  blocks). Open: trace validation with unobserved or ambiguous steps
   (Jepsen's `:info`, hidden actions: the validator searches their
   resolutions), pending calls (`qobs.Invoke`) the first of them. Online
   validation stays deferred.

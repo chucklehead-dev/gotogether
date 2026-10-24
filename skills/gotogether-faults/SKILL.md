@@ -239,7 +239,8 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
 - **Reproducing a run:** a failing run's report ends with
   `reproduce: GOTOGETHER_RUN='TestX#2:seed=17' go test -run '^TestX$'`:
   that run alone in the test's second exploration (its others run as
-  usual), or `:schedule=...` (Exhaust), `:corpus=<file>`. A run alone is
+  usual), or `:schedule=...` (Exhaust), `:corpus=<file>`, `:choices=<file>`
+  (a steered run, `ExploreConfig.Steer`). A run alone is
   judged only by the claims about every run (Conforms, All, None); the
   rest are listed as not judged. The numbers restart in every run of the
   test (`-count`); a line that names no exploration of the test fails
@@ -263,6 +264,13 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
     choices only (a zero `Rates` is the default rates).
   - Turn whole kinds off with `qenv.DefaultRates.Set("kube", 0)`, or per
     run with `qenv.Swarm`.
+  - A path behind several rare faults in a row (three failed writes, then
+    a restart) is one run in hundreds. `ExploreConfig{Seeds: 20, Steer:
+    180}` runs 180 more, each replaying a run that found something new (a
+    step's action, outcome or observed state, a fault, a code block) up to
+    a random choice: runs one fault deep breed runs that start there
+    (journal's restart: 1 run in 200 seeds, 8 steered). Record the depth
+    as an observation (`obs.fails`) and steering can climb it.
   - A bug that needs one task to run far ahead of another (a reader that
     must finish before a writer's single step) is out of reach of
     uniform random schedules. Schedule by priorities instead:

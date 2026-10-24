@@ -35,7 +35,7 @@ AGENTS.md has the general requirements.
   `quint run`).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
-  `:corpus=<file>`) runs one run of one exploration alone, the test's
+  `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.
   `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
   (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as

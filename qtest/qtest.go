@@ -191,6 +191,8 @@ func (r *Run) ID() string {
 	switch {
 	case r.corpus != "":
 		return "corpus=" + filepath.Base(r.corpus) // as GOTOGETHER_RUN matches it
+	case r.steered != "":
+		return "choices=" + r.steered
 	case r.exhaustive:
 		return "schedule=" + r.schedule
 	case r.seed != 0:
@@ -214,9 +216,12 @@ type Run struct {
 	exhaustive bool
 	// corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
 	// or "" for a seeded run.
-	corpus  string
-	Steps   []qtrace.Step
-	Choices []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
+	corpus string
+	// steered is a steered run's saved choices (ExploreConfig.Steer), and
+	// steeredFrom the run it was steered from
+	steered, steeredFrom string
+	Steps                []qtrace.Step
+	Choices              []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
 	// Nemeses are the nemeses the run's nemesis choices offered, by name
 	// (qenv.ChoiceLog.Nemeses): Exercised wants each fired in some run.
 	Nemeses []string
