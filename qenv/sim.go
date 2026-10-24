@@ -86,6 +86,7 @@ type Sim struct {
 	nemeses   []*nemesis
 	held      []*task // runnable tasks of stalled processes (Stalls)
 	stallsSet *Stalls // Stalls when the first process was made: a change after panics
+	allFaults bool    // GOTOGETHER_ALL_FAULTS: every process partitionable from every other
 	onCrash   []func(*Process)
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)
 	faultsOff bool
@@ -178,6 +179,18 @@ func nemesisFamily(name string) string {
 // Read-only.
 var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// allFaultsClocks and allFaultsStalls are the clock faults and stalls
+// every simulation has under GOTOGETHER_ALL_FAULTS=1, which also makes
+// the network between every two processes a nemesis (PartitionNemesis):
+// every fault family on, for a nightly that runs a suite's explorations
+// with the faults it was written before (a family added later arrives
+// opt-in, and the code written before it is never tried against it). A
+// simulation may set its own after New. Read-only.
+var (
+	allFaultsClocks = Clocks{Skew: 100 * time.Millisecond, Jump: time.Second, Drift: 0.01}
+	allFaultsStalls = Stalls{Pause: 200 * time.Millisecond, Slow: 5 * time.Millisecond, SlowFor: 500 * time.Millisecond}
+)
+
 // New returns a simulation whose choices c makes.
 func New(c Chooser) *Sim {
 	base := context.Background()
@@ -189,6 +202,9 @@ func New(c Chooser) *Sim {
 	s := &Sim{c: c, base: base, now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
 		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid()}
 	s.net.sim = s
+	if os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" {
+		s.Clocks, s.Stalls, s.allFaults = allFaultsClocks, allFaultsStalls, true
+	}
 	own(s.creator, s, nil)
 	live.Add(1)
 	return s
@@ -724,6 +740,11 @@ func (s *Sim) Process(name string, crashable bool, start func(ctx context.Contex
 		s.nemesisOf("crash."+name, []*Process{p}, func() bool { return !p.down }, func() { p.Crash(); p.Restart() })
 	}
 	s.stallNemeses(p) // a pause or a slowdown is no crash: any process may suffer one
+	if s.allFaults {
+		for _, q := range s.procs[:len(s.procs)-1] {
+			s.net.PartitionNemesis(q, p)
+		}
+	}
 	return p
 }
 

@@ -45,6 +45,9 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
-  (both nightly). `GOTOGETHER_VERBOSE=1` shows
+  (both nightly). `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in
+  every simulation (clock faults, stalls, a partition nemesis between
+  every two processes; nightly): a suite written before a family meets
+  it. `GOTOGETHER_VERBOSE=1` shows
   Hegel's output for expected failures (FindViolation and Shrink capture
   os.Stdout while Hegel runs, since Hegel writes nowhere else).

@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in every
+  simulation: clock faults, stalls and a partition nemesis between every
+  two processes, which are opt-in otherwise. `Network.PartitionNemesis`
+  of a pair that is one already adds none.
 - `ResolvePending` placed a pending call before the step after the last
   one recorded before a settle, which a step recorded after the settle
   could precede (a step at its instant on another recorder ordered

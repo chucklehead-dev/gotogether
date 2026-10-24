@@ -427,3 +427,34 @@ func TestOrderedRedeliveryAfterBrokerCrash(t *testing.T) {
 		t.Errorf("redelivered %v, want [a b]", got)
 	}
 }
+
+// GOTOGETHER_ALL_FAULTS turns every fault family on: clock faults and
+// stalls on every process, the network between every two a nemesis, a
+// pair the simulation makes a nemesis itself among them.
+func TestAllFaults(t *testing.T) {
+	t.Setenv("GOTOGETHER_ALL_FAULTS", "1")
+	log := &qenv.ChoiceLog{C: qenv.NewSeeded(1)}
+	s := qenv.New(log)
+	defer s.Close()
+	if s.Clocks == (qenv.Clocks{}) || s.Stalls == (qenv.Stalls{}) {
+		t.Fatalf("clocks %+v, stalls %+v: want both on", s.Clocks, s.Stalls)
+	}
+	busy := func(ctx context.Context) {
+		for range 50 {
+			qenv.Yield(ctx)
+		}
+	}
+	a := s.Process("a", false, busy)
+	b := s.Process("b", false, busy)
+	s.Net().PartitionNemesis(a, b)
+	s.Process("c", false, busy)
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(log.Nemeses, " ")
+	for _, want := range []string{"partition.a.b", "partition.a.c", "partition.b.c", "pause.a", "slow.c", "jump.forward.b"} {
+		if !strings.Contains(" "+got+" ", " "+want+" ") {
+			t.Errorf("offered %s; want %s among them", got, want)
+		}
+	}
+}

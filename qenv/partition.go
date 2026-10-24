@@ -110,13 +110,17 @@ func (n *Network) OnCut(h func(a, b *Process)) { n.onCut = append(n.onCut, h) }
 // ("nemesis.partition", heals included). A cut heals by itself after
 // CutLength: a network that every task waits on would otherwise never
 // heal, since a nemesis acts only at a scheduling step and none comes
-// when nothing can run. Settle heals them all.
+// when nothing can run. Settle heals them all. A pair that is a nemesis
+// already (GOTOGETHER_ALL_FAULTS makes every pair one) stays one.
 func (n *Network) PartitionNemesis(procs ...*Process) {
 	s := n.sim
 	sorted := append([]*Process(nil), procs...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 	for i, a := range sorted {
 		for _, b := range sorted[i+1:] {
+			if s.hasNemesis("partition." + a.Name + "." + b.Name) {
+				continue
+			}
 			s.nemesisOf("partition."+a.Name+"."+b.Name, []*Process{a, b}, func() bool { return !n.Partitioned(a, b) }, func() {
 				n.cut(a, b)
 				gen, d := n.gen[pairOf(a, b)], n.CutLength
@@ -135,4 +139,14 @@ func (n *Network) PartitionNemesis(procs ...*Process) {
 			s.nemesisOf("heal."+a.Name+"."+b.Name, []*Process{a, b}, func() bool { return n.Partitioned(a, b) && !n.hand[pairOf(a, b)] }, func() { n.Heal(a, b) })
 		}
 	}
+}
+
+// hasNemesis reports whether a nemesis of that name is registered.
+func (s *Sim) hasNemesis(name string) bool {
+	for _, nm := range s.nemeses {
+		if nm.name == name {
+			return true
+		}
+	}
+	return false
 }

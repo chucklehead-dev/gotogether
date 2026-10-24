@@ -309,6 +309,12 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
   against its isolation level (a cycle of dependencies the level forbids
   panics, naming it). `TestSchedulerSemantics` states its
   semantics as a Hegel property over random programs.
+- **Families added after the suite:** clock faults, stalls and
+  partitions are opt-in, so a suite written before them never meets
+  them. `GOTOGETHER_ALL_FAULTS=1` turns them all on in every simulation
+  (Clocks, Stalls, a partition nemesis between every two processes), as
+  the nightly does: a verdict that changes is a fix, or a `qenv.Without`
+  with its reason.
 - **Profiles:** run each property under every contract you might run
   on. For each mutant, a row per isolation level (or store, or broker
   mode) says where the bug is real (see examples/checkout's table).
