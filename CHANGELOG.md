@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Linearize memoizes its candidates by prefix: an order that fails at a
+  step accepts its prefixes before it and rejects the one through it, so
+  the complete search starts from what the guided one learned and never
+  replays an extension of a rejected prefix (quorumkv's Repick 209 s to
+  138 s, BlindRepair 268 s to 116 s).
 - `validate.Options.VerdictsOnly`: verdicts and where each failed, no ITF
   and no model state, the failing runs replayed on the batch's backend.
   Linearize's and ResolvePending's candidates are checked so (they read

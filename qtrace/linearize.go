@@ -132,9 +132,54 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		}
 		return b.String()
 	}
+	// judge checks orders of indices, memoized by prefix: an order that
+	// fails at step f has its prefixes up to f accepted and the one through
+	// f rejected (an extension of it fails there too); one that conforms,
+	// every prefix accepted. A candidate the memo decides costs no quint.
+	accepted, rejected := map[string]bool{}, map[string]bool{}
+	judge := func(orders [][]int) []int {
+		out := make([]int, len(orders))
+		var ask []int
+		for i, o := range orders {
+			out[i] = -2
+			if accepted[key(o)] {
+				out[i] = -1
+				continue
+			}
+			for l := 1; l <= len(o); l++ {
+				if rejected[key(o[:l])] {
+					out[i] = l - 1
+					break
+				}
+			}
+			if out[i] == -2 {
+				ask = append(ask, i)
+			}
+		}
+		if len(ask) == 0 {
+			return out
+		}
+		rendered := make([][]Step, len(ask))
+		for j, i := range ask {
+			rendered[j] = render(orders[i])
+		}
+		for j, f := range check(rendered) {
+			o := orders[ask[j]]
+			out[ask[j]] = f
+			upTo := len(o)
+			if f >= 0 {
+				upTo = f
+				rejected[key(o[:f+1])] = true
+			}
+			for l := 1; l <= upTo; l++ {
+				accepted[key(o[:l])] = true
+			}
+		}
+		return out
+	}
 	seen := map[string]bool{key(at): true}
 	cur := at
-	f := check([][]Step{render(cur)})[0]
+	f := judge([][]int{cur})[0]
 	tried = 1
 	stopped := false // no move left, or none got further
 	for f >= 0 && tried < budget {
@@ -192,16 +237,12 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		if room := budget - tried; len(cands) > room {
 			cands = cands[:room]
 		}
-		orders := make([][]Step, len(cands))
-		for i, c := range cands {
-			orders[i] = render(c)
-		}
-		fs := check(orders)
+		fs := judge(cands)
 		tried += len(cands)
 		bi, bf := -1, f
 		for i, fi := range fs {
 			if fi < 0 {
-				return orders[i], true, tried, false
+				return render(cands[i]), true, tried, false
 			}
 			if fi > bf {
 				bi, bf = i, fi
@@ -221,7 +262,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	}
 	// the guided search found none: search every order the constraints
 	// allow, prefix by prefix, before calling it a bug
-	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, check); ok || n > 0 {
+	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge); ok || n > 0 {
 		tried += n
 		if ok {
 			return o, true, tried, false
@@ -244,7 +285,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 // beam of them made five concurrent operations no verdict whatever the
 // budget, and the budget is what a user can raise.
 func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
-	check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
+	judge func(orders [][]int) []int) (best []Step, ok bool, tried int, cut bool) {
 	n := len(ns)
 	level := [][]int{nil}
 	for k := 0; k < n && tried < budget; k++ {
@@ -270,17 +311,13 @@ func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget in
 		if room := budget - tried; len(cands) > room {
 			cands, cut = cands[:room], true
 		}
-		orders := make([][]Step, len(cands))
-		for i, c := range cands {
-			orders[i] = render(c)
-		}
-		fs := check(orders)
+		fs := judge(cands)
 		tried += len(cands)
 		var next [][]int
 		for i, f := range fs {
 			if f < 0 {
 				if k == n-1 {
-					return orders[i], true, tried, false
+					return render(cands[i]), true, tried, false
 				}
 				next = append(next, cands[i])
 			}

@@ -117,8 +117,15 @@ func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 		}
 		return out
 	}
-	if _, ok, tried, cut := Linearize(steps, 100000, none); ok || cut {
+	checked := 0
+	counting := func(orders [][]Step) []int { checked += len(orders); return none(orders) }
+	if _, ok, tried, cut := Linearize(steps, 100000, counting); ok || cut {
 		t.Errorf("with the budget to try every order: ok %v, cut %v after %d", ok, cut, tried)
+	} else if checked >= tried {
+		// the guided search's orders, each failing at its last step, accepted
+		// every prefix of four steps they hold: the complete search's level
+		// of four is decided without the checker
+		t.Errorf("checked %d of %d orders tried: the memo of accepted prefixes decided none", checked, tried)
 	}
 	if _, ok, _, cut := Linearize(steps, 50, none); ok || !cut {
 		t.Errorf("with a budget of 50: ok %v, cut %v", ok, cut)
