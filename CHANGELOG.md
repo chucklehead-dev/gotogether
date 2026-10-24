@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A linearization (or resolution) cut by its budget is no verdict for
+  the invariants and eventual vals of the order shown either: one that
+  conformed step by step but failed an eventual val was reported as the
+  run's violation.
 - Linearize keeps the real-time order a recorder knows: a completion
   recorded by `Call.Done` takes its invocation record's time (no
   `"invoked"` needed; it overrides one), and steps of one recorder are

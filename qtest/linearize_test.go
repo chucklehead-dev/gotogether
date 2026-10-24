@@ -187,3 +187,35 @@ func TestLinearizeTakesInvocationTimes(t *testing.T) {
 		t.Errorf("no warning that real time bounds nothing: %v", run.Report.Issues)
 	}
 }
+
+// A search cut by its budget is no verdict for what the order shown
+// violated either: an order that conformed step by step but failed an
+// eventual val was a candidate the search went on from, and was once
+// reported as the run's violation.
+func TestLinearizeCutJudgesNoInvariant(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	steps := []qtrace.Step{
+		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Invoked: at(0), Time: at(10),
+			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(60)}},
+		{Action: "withdraw", Recorder: "b", Seq: 1, Thread: "b", Invoked: at(1), Time: at(11),
+			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(0)}},
+		{Action: "settled", Recorder: "b", Seq: 2, Thread: "b", Time: at(12), Settled: true},
+	}
+	run := Validate(t, "../validate/testdata/funds.binding.yaml", steps, LinearizeBudget(1))
+	a := run.Report.Actors[0]
+	if a.Conforms != validate.NotEvaluated {
+		t.Errorf("conformance %s, want n/a: %s", a.Conforms, run.Report.Summary())
+	}
+	for _, inv := range a.Invariants {
+		if inv.Verdict == validate.Fail {
+			t.Errorf("%s failed in a search cut short: %s", inv.Name, run.Report.Summary())
+		}
+	}
+	if Violates(validate.EventuallyName("funded")).check(run.Report) {
+		t.Error("Violates matched a search that ran out of budget")
+	}
+	// with the budget to finish, every order ends empty: the violation
+	Validate(t, "../validate/testdata/funds.binding.yaml", steps, Linearize()).Expect(t, Violates(validate.EventuallyName("funded")))
+}

@@ -465,8 +465,18 @@ func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step,
 		rep.Issues = append(rep.Issues, found...)
 		for _, a := range rep.Actors {
 			a.Issues = append(a.Issues, kept[a.Actor]...)
-			if undecided[a.Actor] && a.Conforms == validate.Fail {
-				a.Conforms = validate.NotEvaluated // the search ran out of budget: the order shown is not a verdict
+			if !undecided[a.Actor] {
+				continue
+			}
+			// the search ran out of budget: the order shown is no verdict, for
+			// its conformance nor for what it violated (an order that conformed
+			// step by step but failed an eventual val was still a candidate the
+			// search rejected)
+			a.Conforms = validate.NotEvaluated
+			for i := range a.Invariants {
+				if a.Invariants[i].Verdict == validate.Fail {
+					a.Invariants[i].Verdict, a.Invariants[i].Failure = validate.NotEvaluated, nil
+				}
 			}
 		}
 	}
