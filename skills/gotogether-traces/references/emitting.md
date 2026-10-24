@@ -50,6 +50,8 @@ the argument fails the test. examples/kvstore's model counts one revision
 across keys, so its keys are not independent: it uses `Linearize`.
 Converted spans
 carry their start as the invocation.
+In a simulation, steps carry its virtual time, and an exploration takes
+the same options: a simulated client history is linearized run by run.
 
 Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with
 `qobs.SetGlobal`; a test gets one per run from qtest, and `qtest.Global()`

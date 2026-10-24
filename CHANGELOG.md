@@ -96,6 +96,11 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- A step recorded in a simulation carries the simulation's virtual time,
+  not the wall clock's (its tasks' and its creator's: `internal/hooks`
+  Now), so a client history recorded there has its intervals; and
+  explorations run Linearize, LinearizeByKey and ResolvePending, each
+  run's search on its own (they were refused).
 - `qtest.ResolvePending()`: Record and Validate search what each pending
   call may have done (no effect, or an effect after a step recorded
   since its invocation, unobserved: `qtrace.Step.Ambiguous`, no expect)

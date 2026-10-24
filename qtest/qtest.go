@@ -36,6 +36,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -105,9 +106,7 @@ func (c settings) refuse(t testing.TB, workflow string, ignored map[string]strin
 var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
-	whyLinearize = "its runs are checked in the order they were recorded; Linearize is Record's and Validate's, " +
-		"for steps recorded where an operation was invoked and returned"
-	exploreIgnores = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize, "LinearizeByKey": whyLinearize, "ResolvePending": whyLinearize}
+	exploreIgnores = map[string]string{"Global": whyGlobal}
 	whyCaseOrder   = "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's"
 	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder, "LinearizeByKey": whyCaseOrder, "ResolvePending": whyCaseOrder,
 		"SkipIfEmpty": "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
@@ -219,6 +218,9 @@ type Run struct {
 	// corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
 	// or "" for a seeded run.
 	corpus string
+	// mark marks the run's report with its search's issues (an
+	// exploration's Linearize or ResolvePending), on a copy (adjust)
+	mark func(*validate.Report)
 	// steered is a steered run's saved choices (ExploreConfig.Steer), and
 	// steeredFrom the run it was steered from
 	steered, steeredFrom string
@@ -275,6 +277,16 @@ func (r *Run) adjust() {
 	}
 	rep := *r.Report
 	rep.Unsettled = r.Unsettled
+	if r.mark != nil { // the run's own search: on copies of the shared verdict's results
+		rep.Issues = slices.Clone(rep.Issues)
+		rep.Actors = make([]*validate.Result, len(r.Report.Actors))
+		for i, a := range r.Report.Actors {
+			b := *a
+			b.Issues = slices.Clone(a.Issues)
+			rep.Actors[i] = &b
+		}
+		r.mark(&rep)
+	}
 	r.Report = &rep
 	r.adjusted = r.Report
 }
@@ -389,35 +401,8 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	o := c.Options
 	o.Dir = filepath.Join(c.Dir, "quint")
 	ch := checkerFor(t, bindingPath, o, c)
-	var found []qtrace.Issue
-	var undecided map[string]bool
-	var kept map[string][]qtrace.Issue
-	if c.Linearize { // the order checked, the step log's and the ITF's
-		// the search needs conformance only: without invariants each batch
-		// is one quint process, not two
-		lc, err := ch.WithInvariants()
-		if err != nil {
-			t.Fatalf("gotogether: %v", err)
-		}
-		lc.Options.Dir, lc.Options.NoITF = filepath.Join(o.Dir, "linearize"), true
-		budget := c.linearizeBudget
-		if budget == 0 {
-			budget = DefaultLinearizeBudget
-		}
-		run.Steps, found, undecided, kept = linearize(t, lc, run.Steps, budget, c.linearizeKey)
-	}
-	if c.resolvePending {
-		if c.Linearize {
-			t.Fatalf("gotogether: ResolvePending with Linearize: a resolution keeps the recorded order, and the two searches are not combined; " +
-				"record the steps where they take effect, or resolve the pending calls of a history in its recorded order")
-		}
-		lc, err := ch.WithInvariants()
-		if err != nil {
-			t.Fatalf("gotogether: %v", err)
-		}
-		lc.Options.Dir, lc.Options.NoITF = filepath.Join(o.Dir, "resolve"), true
-		run.Steps, found, undecided, kept = resolve(t, lc, run.Steps, DefaultResolveBudget)
-	}
+	var mark func(*validate.Report)
+	run.Steps, mark = c.order(t, ch, run.Steps, o.Dir) // the order checked, the step log's and the ITF's
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {
 		for actor, data := range itfs {
@@ -435,15 +420,56 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}
-	rep.Issues = append(rep.Issues, found...)
-	for _, a := range rep.Actors {
-		a.Issues = append(a.Issues, kept[a.Actor]...)
-		if undecided[a.Actor] && a.Conforms == validate.Fail {
-			a.Conforms = validate.NotEvaluated // the search ran out of budget: the order shown is not a verdict
-		}
+	if mark != nil {
+		mark(rep)
 	}
 	run.Report = rep
 	return run
+}
+
+// order runs the searches c asks for on steps (Linearize, LinearizeByKey,
+// ResolvePending), checking candidates' conformance with ch under dir: the
+// steps to check, and how to mark the report on them (the search's issues,
+// and n/a for an actor whose search ran out of budget). Without a search
+// it returns steps and nil.
+func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step, dir string) ([]qtrace.Step, func(*validate.Report)) {
+	t.Helper()
+	if !c.Linearize && !c.resolvePending {
+		return steps, nil
+	}
+	if c.Linearize && c.resolvePending {
+		t.Fatalf("gotogether: ResolvePending with Linearize: a resolution keeps the recorded order, and the two searches are not combined; " +
+			"record the steps where they take effect, or resolve the pending calls of a history in its recorded order")
+	}
+	// the search needs conformance only: without invariants each batch is
+	// one quint process, not two
+	lc, err := ch.WithInvariants()
+	if err != nil {
+		t.Fatalf("gotogether: %v", err)
+	}
+	var found []qtrace.Issue
+	var undecided map[string]bool
+	var kept map[string][]qtrace.Issue
+	if c.Linearize {
+		lc.Options.Dir, lc.Options.NoITF = filepath.Join(dir, "linearize"), true
+		budget := c.linearizeBudget
+		if budget == 0 {
+			budget = DefaultLinearizeBudget
+		}
+		steps, found, undecided, kept = linearize(t, lc, steps, budget, c.linearizeKey)
+	} else {
+		lc.Options.Dir, lc.Options.NoITF = filepath.Join(dir, "resolve"), true
+		steps, found, undecided, kept = resolve(t, lc, steps, DefaultResolveBudget)
+	}
+	return steps, func(rep *validate.Report) {
+		rep.Issues = append(rep.Issues, found...)
+		for _, a := range rep.Actors {
+			a.Issues = append(a.Issues, kept[a.Actor]...)
+			if undecided[a.Actor] && a.Conforms == validate.Fail {
+				a.Conforms = validate.NotEvaluated // the search ran out of budget: the order shown is not a verdict
+			}
+		}
+	}
 }
 
 // firstOr is the first of msgs, or a placeholder when none was kept.

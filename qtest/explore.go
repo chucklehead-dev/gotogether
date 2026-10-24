@@ -616,6 +616,11 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			x.actions[a] = true
 		}
 	}
+	for i, r := range x.Runs { // a search's order: the steps judged are the order it found
+		if r != nil && r.Err == nil && len(r.Steps) > 0 {
+			r.Steps, r.mark = c.order(t, cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
+		}
+	}
 	x.Cached = judge(t, cc, inst, x.Runs, func(r *Run) string { return x.nameOf(r) })
 	// the report, for tools that read it (gotogether evidence, cover,
 	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's

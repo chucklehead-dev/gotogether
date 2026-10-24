@@ -267,7 +267,7 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 	}
 	s.Call = call
 	if hooks.Discarding() {
-		s.Time = time.Now()
+		s.Time = hooks.Now()
 		r.mu.Lock()
 		r.interrupted = append(r.interrupted, *s)
 		r.mu.Unlock()
@@ -277,7 +277,7 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 	// Two concurrent steps may be numbered in either order; the
 	// reconstructor only relies on seq within a thread (see qtrace).
 	s.Seq = r.seq.Add(1)
-	s.Time = time.Now()
+	s.Time = hooks.Now()
 	r.sink.Record(ctx, s)
 }
 
@@ -331,7 +331,7 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 	s, _ := r.step(ctx, action, nil, keys)
 	s.Invocation, s.Outcome = true, ""
 	c.seq = r.seq.Add(1)
-	s.Seq, s.Time = c.seq, time.Now()
+	s.Seq, s.Time = c.seq, hooks.Now()
 	r.sink.Record(ctx, s)
 	return c
 }
@@ -373,7 +373,7 @@ func (r *Recorder) Settled(ctx context.Context) {
 		return
 	}
 	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Settled: true}
-	s.Seq, s.Time = r.seq.Add(1), time.Now()
+	s.Seq, s.Time = r.seq.Add(1), hooks.Now()
 	r.sink.Record(ctx, s)
 }
 

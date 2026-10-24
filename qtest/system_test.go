@@ -361,15 +361,6 @@ func TestIgnoredOptionsRefused(t *testing.T) {
 		{func(f *failTB) {
 			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{Global()}}.Explore(f, ExploreConfig{Seeds: 1})
 		}, "Global() does nothing in an exploration"},
-		{func(f *failTB) {
-			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{Linearize()}}.Exhaust(f, Bound{Faults: 0})
-		}, "Linearize() does nothing in an exploration"},
-		{func(f *failTB) {
-			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{LinearizeByKey("amount")}}.Explore(f, ExploreConfig{Seeds: 1})
-		}, "LinearizeByKey() does nothing in an exploration"},
-		{func(f *failTB) {
-			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{ResolvePending()}}.Explore(f, ExploreConfig{Seeds: 1})
-		}, "ResolvePending() does nothing in an exploration"},
 		{func(f *failTB) { Validate(f, "../validate/testdata/account.yaml", nil, SkipIfEmpty()) }, "SkipIfEmpty() does nothing in Validate"},
 	} {
 		f := &failTB{TB: t}
@@ -416,5 +407,44 @@ func TestInvokedNeverCompleted(t *testing.T) {
 	done.Expect(t, Conforms(), Completes())
 	if n := len(slices.DeleteFunc(slices.Clone(done.Runs[0].Steps), func(s qtrace.Step) bool { return !s.Invocation })); n != 2 {
 		t.Errorf("%d invocation records, want one per call: %v", n, done.Runs[0].Steps)
+	}
+}
+
+// A client history in a simulation: the deposit takes effect at once and
+// answers in 10ms, the withdrawal that needs it begins a millisecond later
+// and answers first. Steps carry the simulation's time, so their intervals
+// are its: in recorded order the withdrawal is rejected, and an
+// exploration with Linearize finds the order the intervals allow.
+func TestLinearizeInExploration(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	clients := func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		balance := 0
+		s.Spawn("depositor", func(ctx context.Context) {
+			start := s.Now()
+			balance += 60
+			seen := balance
+			qenv.Sleep(ctx, 10*time.Millisecond)
+			qobs.Record(ctx, "deposit", nil, "amount", 60, "obs.balance", seen, "invoked", start)
+		})
+		s.Spawn("withdrawer", func(ctx context.Context) {
+			qenv.Sleep(ctx, time.Millisecond)
+			start := s.Now()
+			balance -= 50
+			seen := balance
+			qenv.Sleep(ctx, 4*time.Millisecond)
+			qobs.Record(ctx, "withdraw", nil, "amount", 50, "obs.balance", seen, "invoked", start)
+		})
+		return s.Run(time.Second)
+	}
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: clients, Rates: qenv.NoFaults}
+	sys.Explore(t, ExploreConfig{Seeds: 3}).Expect(t, All(Rejects("withdraw")))
+	sys.Opts = []Option{Linearize()}
+	x := sys.Explore(t, ExploreConfig{Seeds: 3})
+	x.Expect(t, Conforms())
+	if s := x.Runs[0].Steps; s[0].Action != "deposit" || !strings.Contains(fmt.Sprint(x.Runs[0].Report.Issues), "an order of its 2 steps conforms") {
+		t.Errorf("checked %v: %v", s, x.Runs[0].Report.Issues)
 	}
 }

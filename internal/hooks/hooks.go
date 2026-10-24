@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var (
@@ -254,4 +255,24 @@ func WithPanicStack(ctx context.Context, dst *TaskPanic) context.Context {
 func PanicStackOf(ctx context.Context) (*TaskPanic, bool) {
 	dst, ok := ctx.Value(panicKey{}).(*TaskPanic)
 	return dst, ok
+}
+
+var clock atomic.Pointer[func() (time.Time, bool)]
+
+// SetClock installs qenv's clock: the virtual time of the simulation the
+// calling goroutine belongs to (a task's, or its creator's), so a step
+// recorded in a simulation carries the simulation's time, not the wall
+// clock's, and a client history recorded there has intervals to
+// linearize.
+func SetClock(f func() (time.Time, bool)) { clock.Store(&f) }
+
+// Now is the time a step recorded now carries: the simulation's, else the
+// wall clock's.
+func Now() time.Time {
+	if f := clock.Load(); f != nil {
+		if t, ok := (*f)(); ok {
+			return t
+		}
+	}
+	return time.Now()
 }

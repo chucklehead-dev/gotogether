@@ -30,8 +30,10 @@ const DefaultLinearizeBudget = 200
 // strong evidence of a bug: the actor fails as that order does. One that
 // ran out of its budget (DefaultLinearizeBudget orders, LinearizeBudget)
 // first is no verdict: the actor's conformance is n/a, which Conforms
-// fails and Rejects and Mismatch do not match. It is Record's and
-// Validate's: an exploration and qhegel's cases refuse it.
+// fails and Rejects and Mismatch do not match. Record, Validate and
+// explorations run it (each run's search on its own); qhegel's cases,
+// checked as they record, refuse it. In a simulation, steps carry its
+// virtual time, so a client history there has its intervals.
 func Linearize() Option { return option("Linearize", func(c *settings) { c.Linearize = true }) }
 
 // LinearizeByKey is Linearize with each actor's history partitioned by

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 )
@@ -57,6 +58,15 @@ func init() {
 		}
 		o, ok := ownerOf(goid())
 		return ok && o.t != nil && o.t.killed
+	})
+	hooks.SetClock(func() (time.Time, bool) {
+		if live.Load() == 0 {
+			return time.Time{}, false
+		}
+		if o, ok := ownerOf(goid()); ok {
+			return o.s.Now(), true // true time: a process's clock may be skewed, a step's time is the run's
+		}
+		return time.Time{}, false
 	})
 	hooks.SetResolver(func() (context.Context, bool) {
 		if live.Load() == 0 {
