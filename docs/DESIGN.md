@@ -2902,3 +2902,51 @@ package level. What is declared outside any run
 simulation) is static, known to every run, as before. A run of another
 workflow without names (Hegel's, a load experiment's) adds to neither.
 
+## 45. A Quint evaluator in Go (T2d)
+
+A linearization's search checks candidate orders by the hundred; each
+check was a quint process (half a second to start, the model loaded
+again), so a contended history's proof cost minutes. Since T2d the
+candidates are judged in Go (`internal/qeval`), and quint confirms.
+
+- **Over quint's own IR.** quint compiles the binding's evaluation
+  module (`binding.EvalModule`: the model imported with the constants the
+  binding computes from the steps passed through, a definition for each
+  action's expect whose parameters are its template's fields, a wrapper
+  of each action, the invariants and eventual vals as vals) to JSON once
+  per binding and model; the evaluator reads it. Names are resolved by
+  the IR's table, so no parsing or name resolution of Quint is ours. Its
+  stdout is written to a file: `--out` writes the modules unflattened,
+  and a pipe loses what quint has not flushed when it exits.
+- **The fragment.** About seventy builtins, actions (assign, all, any,
+  ite, lets and nondet, actions called from actions) and values with a
+  total order (sets and maps sorted, records by field). What it cannot
+  evaluate (an unknown operator, a choice outside an action, an integer
+  past 64 bits, a fold whose result depends on the set's order, which
+  quint's backends fold differently, a value of a kind it did not expect)
+  is `Unsupported`; the search sends that candidate and the rest to
+  quint. The model's own runtime errors (a missing key, a division by
+  zero) are `EvalError`s, and also go to quint.
+- **Judged as quint's replay reports.** A candidate is planned within
+  its history (`PlanWithin`), replayed from init, each call's expect the
+  definition applied to the call's `ExpectArgs`; its failure index is
+  failedAt's and violatedAt's reading of a report (an eventual val false
+  at the settle: the last step), and a conforming one's state is the
+  model's state as a key (with the last process when the binding infers
+  restarts), for the merge of prefixes by state.
+- **Confirmed by quint.** The search's conclusion is checked once by
+  quint: the order found conforms, or the one that got furthest fails.
+  A disagreement searches again with quint alone, and the issue says so.
+  The caller's check of the order is quint's, as before.
+- **Checked against quint.** Every binding's model, in its binding's
+  instance, against `quint run`'s traces (each state one of the
+  evaluator's successors of the one before), and a table of builtins at
+  their edges against both backends' values; a search with and without it
+  gives the same verdict, and one made wrong is caught by the
+  confirmation.
+
+quorumkv's contended-key tests took 51 s, 337 s with quint alone.
+`GOTOGETHER_EVAL=quint` turns it off. ResolvePending's placements still
+go to quint, and every candidate is replayed from init: extending a
+prefix's held state is the next step (ROADMAP T2d).
+

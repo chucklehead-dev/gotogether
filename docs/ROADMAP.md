@@ -120,13 +120,19 @@ under a week, M two to four, L more.
     each call. Reviewed: the merge's state is more than the model's when
     the binding infers restarts (the last process), and candidates are
     planned within their history (PlanWithin).
-  - **d (L).** A Quint evaluator in Go over quint's own IR (`quint
-    compile --target json`, cached by the model's hash; about fifty
-    builtins cover every model here), stepping the model from a held
-    state: WGL at Porcupine's speed with the model as its oracle; quint
-    confirms (one replay of a passing order, one batch for a failing
-    search's evidence), a differential Hegel property compares the two
-    nightly, an operator outside its fragment falls back to quint.
+  - **d (L). Done** (DESIGN §45): `internal/qeval` over quint's IR of the
+    binding's evaluation module, judging Linearize's candidates, quint
+    confirming each search's conclusion; checked against quint on every
+    model of the repository and a table of builtins at their edges on
+    both backends; reviewed. quorumkv's contended keys 337 s to 51 s.
+    Also: LinearizeByKey's partitions side by side, and a history real
+    time orders alone not searched (`qtrace.ForcedOrder`). Left:
+    ResolvePending's placements on the evaluator; each candidate extended
+    from its prefix's held state rather than replayed from init (WGL at
+    Porcupine's speed); a failing search's evidence confirmed by one quint
+    batch (now its best order alone); a nightly Hegel property drawing
+    states and arguments against quint, and a shadow mode running both;
+    quint-confirmed single steps in validate's shape for every binding.
 - **T3. The searches in the right layer (M). Done:** validate's
   `Checker.Search` and `Search.Mark`, the CLI's `-linearize`,
   `-linearize-key`, `-resolve-pending`; `quint.assumed` in step logs,
