@@ -65,7 +65,7 @@ func TestSteer(t *testing.T) {
 	steered.Expect(t, Conforms())
 	var r *Run
 	for _, run := range steered.Runs {
-		if run.steered != "" && slices.ContainsFunc(run.Steps, func(s qtrace.Step) bool { return s.Action == "restart" }) {
+		if run.origin.kind == "choices" && slices.ContainsFunc(run.Steps, func(s qtrace.Step) bool { return s.Action == "restart" }) {
 			r = run
 			break
 		}
@@ -73,7 +73,7 @@ func TestSteer(t *testing.T) {
 	if !strings.HasPrefix(r.ID(), "choices=") {
 		t.Fatalf("a steered run's reproduce names %q, not its choices", r.ID())
 	}
-	e, err := readEntry(r.steered, steered.ref())
+	e, err := readEntry(r.origin.value, steered.ref())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestSteer(t *testing.T) {
 	if !slices.ContainsFunc(alone.Steps, func(s qtrace.Step) bool { return s.Action == "restart" }) {
 		t.Errorf("%s replayed did not restart: %v", r.ID(), alone.Steps)
 	}
-	if _, err := readEntry(r.steered, plain.ref()); err == nil {
+	if _, err := readEntry(r.origin.value, plain.ref()); err == nil {
 		t.Error("another exploration's saved run was accepted")
 	}
 }

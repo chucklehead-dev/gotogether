@@ -58,7 +58,7 @@ func TestFollowTracesAlone(t *testing.T) {
 	lose := FaultMap{"lose": func(*connect.Step) *Fault { return &Fault{Kind: "net.lose", Name: "drop"} }}
 	t.Setenv("GOTOGETHER_RUN", t.Name()+"#1:seed=3")
 	x := sys.FollowTraces(t, cfg, lose)
-	if len(x.Runs) != 1 || x.Runs[0].seed != 3 {
+	if len(x.Runs) != 1 || x.Runs[0].origin.seed != 3 {
 		t.Fatalf("ran %d runs, want trace 3 alone", len(x.Runs))
 	}
 	t.Setenv("GOTOGETHER_RUN", t.Name()+"#2:seed=99")

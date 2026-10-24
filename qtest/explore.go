@@ -215,7 +215,7 @@ func readCorpus(dir, ref string) (paths []string, entries []corpusEntry, err err
 // save writes r's choices to the corpus, named by their hash, and
 // returns the file.
 func (x *Exploration) save(r *Run) (string, error) {
-	b, err := json.MarshalIndent(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Seed: r.seed, Choices: r.Choices}, "", " ")
+	b, err := json.MarshalIndent(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Seed: r.origin.seed, Choices: r.Choices}, "", " ")
 	if err != nil {
 		return "", err
 	}
@@ -351,7 +351,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			if k := i - (len(seeds) - len(corpusRuns)); k >= 0 {
 				rp := qenv.Replay(corpusRuns[k].Choices)
 				r := runOne(c, woven, rp, scenario)
-				r.corpus, r.savedFrom = corpusPaths[k], corpusRuns[k].Seed
+				r.origin = origin{kind: "corpus", value: corpusPaths[k], seed: corpusRuns[k].Seed}
 				if n := len(corpusRuns[k].Choices); r.diverged == nil && r.Err == nil && rp.Left() > 0 {
 					// the run took another, shorter path to a clean end: it no
 					// longer reaches what it saved. One that failed or panicked
@@ -371,7 +371,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 				ch = s
 			}
 			x.Runs[i] = runOne(c, woven, ch, scenario)
-			x.Runs[i].seed = seed
+			x.Runs[i].origin = origin{kind: "seed", seed: seed}
 		}()
 	}
 	wg.Wait()
@@ -382,7 +382,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			t.Fatalf("gotogether: GOTOGETHER_RUN's choices: %v", err)
 		}
 		r := one(qenv.Replay(e.Choices))
-		r.steered = spec.value
+		r.origin = origin{kind: "choices", value: spec.value}
 		x.Runs, ids = append(x.Runs, r), append(ids, 0)
 	} else if cfg.Steer > 0 && !alone && !cfg.fuzz {
 		switch {
@@ -403,8 +403,8 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			ids = append(ids, 0)
 		}
 	}
-	if !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
-		seed, first := x.Runs[0].seed, x.Runs[0]
+	if !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].origin.kind == "seed" {
+		seed, first := x.Runs[0].origin.seed, x.Runs[0]
 		checkDeterminism(t, first, func() *Run {
 			if cfg.Chooser != nil {
 				// a factory's choosers may be stateful (a Script it made once):
@@ -414,7 +414,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			s := qenv.NewSeeded(seed)
 			s.Rates = cfg.rates
 			return runOne(c, woven, s, scenario)
-		}, x.name(seed, ""))
+		}, x.name(seed))
 	}
 	unknownKinds(t, "System.Rates key", keysOf(cfg.rates.Kinds))
 	x.finish(t, bindingPath, c, mark, ids)
@@ -506,7 +506,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 // (if save and there is one), and how to run it alone.
 func (x *Exploration) keep(r *Run, save bool) string {
 	var b strings.Builder
-	if save && x.corpus != "" && r.corpus == "" && len(r.Choices) > 0 {
+	if save && x.corpus != "" && r.origin.kind != "corpus" && len(r.Choices) > 0 {
 		if p, err := x.save(r); err == nil {
 			fmt.Fprintf(&b, "  saved to the corpus: %s (replayed before the seeds from now on; commit it as a regression)\n", p)
 		} else {
@@ -521,12 +521,10 @@ func (x *Exploration) keep(r *Run, save bool) string {
 
 // name is how messages name a run: its seed, or an exhaustive search's
 // schedule.
-func (x *Exploration) name(id uint64, corpus string) string {
+func (x *Exploration) name(id uint64) string {
 	switch {
 	case x.alone != nil:
 		return x.alone.String()
-	case corpus != "":
-		return "corpus entry " + filepath.Base(corpus)
 	case x.search != nil:
 		return fmt.Sprintf("schedule %d", id)
 	}
@@ -535,10 +533,15 @@ func (x *Exploration) name(id uint64, corpus string) string {
 
 // nameOf is how messages name run r.
 func (x *Exploration) nameOf(r *Run) string {
-	if r.steered != "" && x.alone == nil {
-		return fmt.Sprintf("steered run %s (from %s)", strings.TrimSuffix(filepath.Base(r.steered), ".json"), r.steeredFrom)
+	switch {
+	case x.alone != nil:
+		return x.alone.String()
+	case r.origin.kind == "choices":
+		return fmt.Sprintf("steered run %s (from %s)", strings.TrimSuffix(filepath.Base(r.origin.value), ".json"), r.origin.from)
+	case r.origin.kind == "corpus":
+		return "corpus entry " + filepath.Base(r.origin.value)
 	}
-	return x.name(r.seed, r.corpus)
+	return x.name(r.origin.seed)
 }
 
 // finish checks the runs, made with ids (seeds, schedules), against the
@@ -553,7 +556,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	x.unknownScripted(t)
 	for i, r := range x.Runs {
 		if r == nil { // the scenario failed t from its goroutine before the run ended
-			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i], ""))
+			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i]))
 			continue
 		}
 		if r.Err != nil {
@@ -572,7 +575,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 					"fix the code it names below; %s\n%s  %s:\n%s", x.nameOf(r), p.Value, replays, x.keep(r, true), where, p.Stack)
 				continue
 			}
-			if r.corpus != "" && r.diverged != nil {
+			if r.origin.kind == "corpus" && r.diverged != nil {
 				if x.mutant {
 					continue // the mutant changed the run: its claims judge it
 				}
@@ -580,7 +583,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 				t.Errorf("gotogether: %s is stale: %v\n"+
 					"  the code or its fault model changed since it was saved, so its choices no longer replay the run they saved. "+
 					"If the bug it caught is fixed, delete it; the seed it came from may find a similar run: GOTOGETHER_RUN='%s:seed=%d' go test -run '^%s$'",
-					x.nameOf(r), r.diverged, x.ref(), r.savedFrom, strings.ReplaceAll(x.test, "/", "$/^"))
+					x.nameOf(r), r.diverged, x.ref(), r.origin.seed, strings.ReplaceAll(x.test, "/", "$/^"))
 				continue
 			}
 			t.Errorf("gotogether: %s did not run: %v", x.nameOf(r), r.Err)

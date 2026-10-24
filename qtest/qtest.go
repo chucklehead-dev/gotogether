@@ -191,17 +191,34 @@ func checkerFor(t testing.TB, bindingPath string, o validate.Options, c settings
 // after the exploration ("seed=17", "schedule=17:1", "corpus=<file>"),
 // or "" for a run of no exploration (Record's, Validate's, Judge's).
 func (r *Run) ID() string {
-	switch {
-	case r.corpus != "":
-		return "corpus=" + filepath.Base(r.corpus) // as GOTOGETHER_RUN matches it
-	case r.steered != "":
-		return "choices=" + r.steered
-	case r.exhaustive:
-		return "schedule=" + r.schedule
-	case r.seed != 0:
-		return fmt.Sprintf("seed=%d", r.seed)
+	switch r.origin.kind {
+	case "corpus":
+		return "corpus=" + filepath.Base(r.origin.value) // as GOTOGETHER_RUN matches it
+	case "choices", "schedule":
+		return r.origin.kind + "=" + r.origin.value
+	case "seed":
+		return fmt.Sprintf("seed=%d", r.origin.seed)
 	}
 	return ""
+}
+
+// origin is where a run of an exploration came from, as GOTOGETHER_RUN
+// names it: its kind says which of the other fields mean what.
+type origin struct {
+	// kind is "seed", "schedule" (an exhaustive search's run, System.Exhaust),
+	// "corpus" (a corpus entry replayed, ExploreConfig.Corpus), "choices"
+	// (a steered run's saved choices, ExploreConfig.Steer), or "" for a run
+	// of no exploration
+	kind string
+	// value is a schedule's choices made otherwise than nominal, as
+	// choice:option pairs ("17:1,40:2"; "" for the nominal run), a corpus
+	// entry's path, or a steered run's choices file
+	value string
+	// seed is a seeded run's seed, an exhaustive search's run number, or
+	// the seed a corpus entry was saved from
+	seed uint64
+	// from is the run a steered run was steered from
+	from string
 }
 
 // Run is one checked run, whichever workflow made it: Record's, one seed of
@@ -209,25 +226,12 @@ func (r *Run) ID() string {
 // value for is zero (Record makes no choices; an exploration writes no
 // step log).
 type Run struct {
-	seed uint64 // an exploration's seed, or an exhaustive search's run number
-	// schedule is an exhaustive search's run (System.Exhaust): the choices
-	// it made otherwise than nominal, as choice:option pairs ("17:1,40:2").
-	// GOTOGETHER_RUN runs it alone.
-	schedule string
-	// exhaustive is a run of an exhaustive search, whose schedule names
-	// it ("" for the nominal one)
-	exhaustive bool
-	// corpus is the corpus entry the run replayed (ExploreConfig.Corpus),
-	// or "" for a seeded run.
-	corpus string
+	origin origin // where the run came from, in its exploration
 	// mark marks the run's report with its search's issues (an
 	// exploration's Linearize or ResolvePending), on a copy (adjust)
 	mark func(*validate.Report)
 	// searched: a search ordered Steps (Recorded is what the run recorded)
 	searched bool
-	// steered is a steered run's saved choices (ExploreConfig.Steer), and
-	// steeredFrom the run it was steered from
-	steered, steeredFrom string
 	// Steps are the steps judged: as recorded, or the order a search
 	// (Linearize, ResolvePending) found, re-sequenced onto a recorder per
 	// actor. Recorded are the steps as the run recorded them.
@@ -245,8 +249,6 @@ type Run struct {
 	Unscripted []qenv.Scripted
 	// Code is the run's code coverage, when the code is woven (qweave -cover).
 	Code *qcover.Counts
-	// savedFrom is a corpus entry's seed, the run it was saved from
-	savedFrom uint64
 	// scripted is a run a Script chose for: it makes only its own faults;
 	// misnamed are what is wrong with its script's faults (Script.Misnamed)
 	scripted bool

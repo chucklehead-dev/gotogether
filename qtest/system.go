@@ -116,12 +116,12 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap
 	}
 	x := s.Explore(t, ExploreConfig{Seeds: len(files), Chooser: func(seed uint64) qenv.Chooser { return scripts[seed-1] }})
 	for _, r := range x.Runs { // the traces that ran (one, run alone)
-		if r.corpus != "" || r.seed < 1 || int(r.seed) > len(scripts) {
+		if r.origin.kind != "seed" || r.origin.seed < 1 || int(r.origin.seed) > len(scripts) {
 			continue
 		}
-		if rest := scripts[r.seed-1].Remaining(); len(rest) > 0 {
+		if rest := scripts[r.origin.seed-1].Remaining(); len(rest) > 0 {
 			t.Errorf("gotogether: trace %d: scripted faults never happened: %v (the run did not follow its trace: "+
-				"the fault's kind never came up after the steps before it)", r.seed-1, rest)
+				"the fault's kind never came up after the steps before it)", r.origin.seed-1, rest)
 		}
 	}
 	if t.Failed() {

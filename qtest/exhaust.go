@@ -153,7 +153,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	run := func(ds []deviation) *Run {
 		f := &forcing{ds: ds}
 		r := runOne(c, woven, f, s.Run)
-		r.schedule, r.exhaustive = schedule(ds), true
+		r.origin = origin{kind: "schedule", value: schedule(ds)}
 		return r
 	}
 	if spec, ok := runSpecFor(t, x.ref()); ok {
@@ -166,14 +166,14 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 			t.Fatalf("gotogether: %v", err)
 		}
 		x.Runs = []*Run{run(ds)}
-		x.Runs[0].seed = 1
+		x.Runs[0].origin.seed = 1
 		x.finish(t, s.Binding, c, mark, []uint64{1})
 		return x
 	}
 	x.Runs, x.search.left = schedules(b, off, run)
 	for i, r := range x.Runs {
 		if r != nil {
-			r.seed = uint64(i + 1)
+			r.origin.seed = uint64(i + 1)
 		}
 	}
 	if n := slices.Index(x.Runs, nil); n >= 0 {

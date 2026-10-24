@@ -133,8 +133,7 @@ func (x *Exploration) steer(runs []*Run, n, parallel int, dir string, next func(
 			go func() { //qenv:ok steered runs side by side, each its own simulation
 				defer wg.Done()
 				r := one(&steering{prefix: parent.Choices[:cut], rest: next(seed)})
-				r.steered = filepath.Join(dir, fmt.Sprintf("%d.json", k+i+1))
-				r.steeredFrom = x.nameOf(parent)
+				r.origin = origin{kind: "choices", value: filepath.Join(dir, fmt.Sprintf("%d.json", k+i+1)), from: x.nameOf(parent)}
 				made[i] = r
 			}()
 		}
@@ -142,10 +141,10 @@ func (x *Exploration) steer(runs []*Run, n, parallel int, dir string, next func(
 		for _, r := range made {
 			b, err := json.Marshal(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Choices: r.Choices})
 			if err == nil {
-				err = os.WriteFile(r.steered, b, 0o644)
+				err = os.WriteFile(r.origin.value, b, 0o644)
 			}
 			if err != nil {
-				return out, fmt.Errorf("saving steered run %s: %w", r.steered, err)
+				return out, fmt.Errorf("saving steered run %s: %w", r.origin.value, err)
 			}
 			if r.Err == nil {
 				grow(r)

@@ -84,12 +84,12 @@ func TestExhaust(t *testing.T) {
 	}
 	bad := x.Failing()[0]
 	// the test's third exploration, run alone as a report names it
-	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:schedule="+bad.schedule)
+	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:schedule="+bad.origin.value)
 	again := sys.Exhaust(t, Bound{Delays: 1})
 	log := &logTB{TB: t}
 	again.Expect(log, All(Rejects("withdraw")), Some(Conforms()))
-	if len(again.Runs) != 1 || again.Runs[0].schedule != bad.schedule {
-		t.Errorf("GOTOGETHER_RUN schedule=%s ran %d runs", bad.schedule, len(again.Runs))
+	if len(again.Runs) != 1 || again.Runs[0].origin.value != bad.origin.value {
+		t.Errorf("GOTOGETHER_RUN schedule=%s ran %d runs", bad.origin.value, len(again.Runs))
 	}
 	// one run is not a search: claims about other runs are not judged,
 	// and the evidence claims no complete search
