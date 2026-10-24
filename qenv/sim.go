@@ -952,7 +952,16 @@ func (s *Sim) Run(d time.Duration) error {
 // will not come while a daemon's timer keeps time moving, which once hid
 // such a stall). A property conditioned on quiescence would be judged on a
 // system that never reached it. Not on the native runtime.
+//
+// Faults stay off after it returns: what follows (a probe, an audit
+// through the doubles) runs on the settled system. ResumeFaults starts a
+// faulty phase again.
 func (s *Sim) Settle(d time.Duration) error { return s.settle(d, nil) }
+
+// ResumeFaults turns faults back on after a Settle or SettleCore: a run of
+// phases (faults, a settle and a probe, faults again) is faulty in each.
+// Without it, a phase after a settle draws no fault, whatever the Rates.
+func (s *Sim) ResumeFaults() { s.faultsOff = false }
 
 // SettleCore is Settle with faults going on outside a core of processes
 // (VOPR's liveness mode): the network heals, and the core is then left

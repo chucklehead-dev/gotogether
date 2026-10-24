@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `Sim.ResumeFaults`: faults stay off after `Settle` (a probe runs on the
+  settled system), which made every phase after a run's first settle
+  fault-free without a word; it starts a faulty phase again, and Settle
+  says so.
 - Eventual vals no run judged are said so: a trace whose last record is
   no settle carries an issue naming the binding's eventual vals, an
   exploration in which none settled logs it, and a claim on an eventual

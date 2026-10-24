@@ -254,6 +254,8 @@ working there:
   whose recorder recorded nothing after one (`Trace.Settled`), by every
   check, never otherwise (a run cut short has work pending by right).
   `Run(d)` ending at its horizon judges nothing; only Settle says.
+  Faults stay off after a settle (a probe runs on the settled system)
+  until `Sim.ResumeFaults`.
 - A step recorded inside a simulation (by a task, or the goroutine that
   created it) carries the simulation's true virtual time (`hooks.Now`,
   set by qenv), never a process's skewed clock nor the wall clock's, so a

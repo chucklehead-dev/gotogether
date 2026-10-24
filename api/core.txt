@@ -660,6 +660,7 @@ type Sim struct
     method (*Sim) OnCrash(h func(*Process))
     method (*Sim) PanicStack() string
     method (*Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process
+    method (*Sim) ResumeFaults()
     method (*Sim) Run(d time.Duration) error
     method (*Sim) Settle(d time.Duration) error
     method (*Sim) SettleCore(d time.Duration, core ...*Process) error

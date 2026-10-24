@@ -837,6 +837,44 @@ func TestSettleSaysWhetherItSettled(t *testing.T) {
 // sets a flag (a spin wait, woven code's runtime.Gosched) once kept the
 // lowest id first forever, so the setter never ran and the settle ran out
 // of steps instead of settling.
+// Faults stay off after a settle, so a probe after it runs on the settled
+// system, until ResumeFaults starts a faulty phase again: a run of phases
+// was once fault-free after its first settle, whatever its Rates.
+func TestFaultsAfterSettle(t *testing.T) {
+	c := qenv.NewSeeded(1)
+	c.Rates = qenv.DefaultRates.Set("rpc", 0.9)
+	s := qenv.New(c)
+	defer s.Close()
+	svc := qenv.NewService(s, "echo", nil, func(ctx context.Context, x int) (int, error) { return x, nil })
+	phase := func() int {
+		timeouts := 0
+		s.Spawn("client", func(ctx context.Context) {
+			for i := range 50 {
+				if _, err := svc.Call(ctx, i, time.Millisecond); errors.Is(err, qenv.ErrTimeout) {
+					timeouts++
+				}
+			}
+		})
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		return timeouts
+	}
+	if n := phase(); n == 0 {
+		t.Fatal("no fault before the settle")
+	}
+	if err := s.Settle(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if n := phase(); n != 0 {
+		t.Errorf("%d faults after the settle: a probe would not run on the settled system", n)
+	}
+	s.ResumeFaults()
+	if n := phase(); n == 0 {
+		t.Error("no fault after ResumeFaults")
+	}
+}
+
 func TestSettleIsFair(t *testing.T) {
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()
