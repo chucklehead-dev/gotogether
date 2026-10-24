@@ -12,6 +12,8 @@ package qmut
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/qrun"
@@ -39,7 +41,8 @@ var (
 )
 
 // Register adds a file's mutants and returns the ID of the first: woven
-// code numbers them from it.
+// code numbers them from it. With GOTOGETHER_MUTANT=list each is printed
+// to standard error as it registers ("qmut: mutant 3 file.go:12 f: ...").
 func Register(ms []Mutant) int {
 	mu.Lock()
 	defer mu.Unlock()
@@ -47,9 +50,24 @@ func Register(ms []Mutant) int {
 	for i, m := range ms {
 		m.ID = base + i
 		mutants = append(mutants, m)
+		if os.Getenv("GOTOGETHER_MUTANT") == "list" {
+			fmt.Fprintf(os.Stderr, "qmut: mutant %d %s\n", m.ID, m)
+		}
 	}
 	return base
 }
+
+// process is the mutant GOTOGETHER_MUTANT=<id> turns on for the whole
+// process (-1: none): plain unit tests, which carry no run's context,
+// run one mutant a process (the toolkit's own mutation testing, a test
+// binary run once per mutant).
+var process = func() int {
+	n, err := strconv.Atoi(os.Getenv("GOTOGETHER_MUTANT"))
+	if err != nil {
+		return -1
+	}
+	return n
+}()
 
 // Mutants are all registered mutants, by ID.
 func Mutants() []Mutant {
@@ -89,6 +107,9 @@ func On(id int) bool {
 		}
 		r.ids[id] = true
 		r.mu.Unlock()
+	}
+	if process >= 0 {
+		return id == process
 	}
 	v, _ := qrun.InContext(rc, active)
 	return v == id+1

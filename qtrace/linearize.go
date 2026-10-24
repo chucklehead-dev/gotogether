@@ -269,15 +269,15 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	}
 	// the guided search found none: search every order the constraints
 	// allow, prefix by prefix, before calling it a bug
-	if o, ok, n, _ := prefixes(ns, at, mustPrecede, budget, render, judge); ok || n > 0 {
+	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge); ok || n > 0 {
 		tried += n
 		if ok {
 			return o, true, tried, false
 		}
-		// cut short, it leaves the guided search's evidence as it was: a
-		// search that stopped (no move got further) is strong evidence of
-		// a bug, as before the complete search existed
-		if !stopped {
+		// cut short, it is no verdict: the guided search's stop (no move
+		// got further) is no proof, and a brute-force comparison found it
+		// wrong (TestLinearizeAgainstBruteForce)
+		if cutShort || !stopped {
 			return render(cur), false, tried, true
 		}
 		return render(cur), false, tried, false

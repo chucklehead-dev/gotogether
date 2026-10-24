@@ -66,6 +66,23 @@ jobs:
         working-directory: internal/hegelprops
         run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 50m ./...
 
+  core-mutants:
+    # the toolkit's own mutation testing: each core package's unit tests run
+    # once per woven mutant; survivors are code they do not constrain
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [qtrace, qhistory, qsweep]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: mutants of ${{ matrix.pkg }}
+        run: ci/mutate-core.sh ${{ matrix.pkg }}
+
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 90

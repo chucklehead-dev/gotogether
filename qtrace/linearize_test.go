@@ -1,6 +1,8 @@
 package qtrace
 
 import (
+	"fmt"
+	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
@@ -99,8 +101,8 @@ func TestRealTimeIssue(t *testing.T) {
 
 // The complete search is cut by the budget alone: five concurrent
 // operations no order explains are refuted given the budget to try every
-// order (a beam of 64 prefixes once cut it whatever the budget), and with
-// less, the guided search's stop stands, as before the complete search.
+// order (a beam of 64 prefixes once cut it whatever the budget), and no
+// verdict with less.
 func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 	var steps []Step
 	for i := range 5 {
@@ -127,9 +129,142 @@ func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 		// of four is decided without the checker
 		t.Errorf("checked %d of %d orders tried: the memo of accepted prefixes decided none", checked, tried)
 	}
-	// cut short, the complete search leaves the guided search's evidence:
-	// it stopped, no move getting further, which is a verdict
-	if _, ok, _, cut := Linearize(steps, 50, none); ok || cut {
+	// cut short, the complete search is no verdict, whatever the guided
+	// search's stop said
+	if _, ok, _, cut := Linearize(steps, 50, none); ok || !cut {
 		t.Errorf("with a budget of 50: ok %v, cut %v", ok, cut)
 	}
+}
+
+// Linearize against brute force: random register histories of up to six
+// operations on three clients, each client's operations in turn, whose
+// verdict is decided by enumerating every order real time and the clients
+// allow. Linearize, with the budget to finish, must find an order exactly
+// when one exists, and the order it returns must be one of those. (The
+// toolkit's own mutation testing found most of Linearize's code
+// unconstrained by its unit tests.)
+func TestLinearizeAgainstBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	for trial := range 400 {
+		var steps []Step
+		next := map[string]int{}
+		written := []int64{0}
+		n := 2 + rng.IntN(5)
+		for i := range n {
+			c := string(rune('a' + rng.IntN(3)))
+			from := next[c] + rng.IntN(3)
+			to := from + 1 + rng.IntN(4)
+			next[c] = to + 1
+			if rng.IntN(2) == 0 {
+				v := int64(i + 1)
+				written = append(written, v)
+				steps = append(steps, op(c, uint64(len(steps)+1), "write", v, from, to))
+			} else {
+				steps = append(steps, op(c, uint64(len(steps)+1), "read", written[rng.IntN(len(written))], from, to))
+			}
+		}
+		// each recorder's seqs from 1, in its order (op takes one seq a step)
+		seqs := map[string]uint64{}
+		for i := range steps {
+			seqs[steps[i].Recorder]++
+			steps[i].Seq = seqs[steps[i].Recorder]
+		}
+		want := bruteLinearizable(steps)
+		got, ok, _, cut := Linearize(steps, 100000, register)
+		if cut {
+			t.Fatalf("trial %d: cut with a budget of 100000", trial)
+		}
+		if ok != want {
+			t.Fatalf("trial %d: Linearize ok %v, brute force %v, for\n%v", trial, ok, want, steps)
+		}
+		if ok && (register([][]Step{got})[0] >= 0 || !allowed(steps, got)) {
+			t.Fatalf("trial %d: the order returned is no valid order: %v", trial, got)
+		}
+		// a small budget may cut the search, but a verdict it gives (no
+		// order: the guided search stopped, or the complete one proved it)
+		// must be right
+		for _, budget := range []int{1, 3, 10} {
+			_, ok, _, cut := Linearize(steps, budget, register)
+			if !cut && ok != want {
+				t.Fatalf("trial %d, budget %d: a verdict of ok %v, brute force %v, for\n%v", trial, budget, ok, want, steps)
+			}
+		}
+	}
+}
+
+// before reports whether a must precede b: the same client's earlier
+// operation, or one that completed (beyond the slack) before b began.
+func mustBefore(a, b Step) bool {
+	if a.Recorder == b.Recorder {
+		return a.Seq < b.Seq
+	}
+	return a.Time.Add(RealTimeSlack).Before(b.Invoked)
+}
+
+// allowed reports whether order (Linearize's, re-sequenced) is a
+// permutation of steps that respects mustBefore, matching steps by their
+// interval and action.
+func allowed(steps, order []Step) bool {
+	if len(order) != len(steps) {
+		return false
+	}
+	pos := make([]int, len(steps))
+	used := make([]bool, len(steps))
+	for k, o := range order {
+		found := false
+		for i, s := range steps {
+			if !used[i] && s.Action == o.Action && s.Invoked.Equal(o.Invoked) && s.Time.Equal(o.Time) && fmt.Sprint(s.Args, s.Obs) == fmt.Sprint(o.Args, o.Obs) {
+				used[i], pos[i], found = true, k, true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	for i := range steps {
+		for j := range steps {
+			if i != j && mustBefore(steps[i], steps[j]) && pos[i] > pos[j] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// bruteLinearizable enumerates every order mustBefore allows for one the
+// register accepts.
+func bruteLinearizable(steps []Step) bool {
+	n := len(steps)
+	order := make([]Step, 0, n)
+	used := make([]bool, n)
+	var rec func() bool
+	rec = func() bool {
+		if len(order) == n {
+			return register([][]Step{order})[0] < 0
+		}
+		for i := range steps {
+			if used[i] {
+				continue
+			}
+			ok := true
+			for j := range steps {
+				if !used[j] && j != i && mustBefore(steps[j], steps[i]) {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+			used[i] = true
+			order = append(order, steps[i])
+			if rec() {
+				return true
+			}
+			order, used[i] = order[:len(order)-1], false
+		}
+		return false
+	}
+	return rec()
 }

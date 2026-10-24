@@ -52,6 +52,17 @@ func (c Config) covers(path string, main bool) bool {
 		return false
 	}
 	if (path == toolkit || strings.HasPrefix(path, toolkit+"/")) && !strings.HasPrefix(path, toolkit+"/examples/") {
+		// the toolkit's own mutation testing: a toolkit package named in
+		// CoverPkgs is mutated (never covered: qcover would count itself),
+		// but never the packages that switch mutants or find a run's
+		if c.Cover || !c.Mutate || len(c.CoverPkgs) == 0 || selfWoven(path) {
+			return false
+		}
+		for _, p := range c.CoverPkgs {
+			if path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/") {
+				return true
+			}
+		}
 		return false
 	}
 	if len(c.CoverPkgs) == 0 {
@@ -59,6 +70,17 @@ func (c Config) covers(path string, main bool) bool {
 	}
 	for _, p := range c.CoverPkgs {
 		if path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// selfWoven reports whether a toolkit package is one woven code calls:
+// mutating it would switch its own mutants.
+func selfWoven(path string) bool {
+	for _, p := range []string{"qmut", "qrun", "qcover", "internal/hooks"} {
+		if path == toolkit+"/"+p || strings.HasPrefix(path, toolkit+"/"+p+"/") {
 			return true
 		}
 	}

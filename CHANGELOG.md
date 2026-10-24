@@ -8,6 +8,16 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- The toolkit's own mutation testing: `qweave -mutate -coverpkg` names a
+  core package to mutate (never qmut, qrun, qcover or internal/hooks),
+  `GOTOGETHER_MUTANT=<id>` turns one mutant on for a whole process
+  (`=list` prints them), and `ci/mutate-core.sh <pkg>` runs its tests once
+  a mutant and lists the survivors (nightly, for qtrace, qhistory,
+  qsweep). Its first finding: Linearize's verdicts were unchecked by its
+  unit tests, and a brute-force comparison then found a complete search
+  cut short, with the guided search stopped, reported as a proof of no
+  order: it is no verdict again (kvstore's stale read is proven within a
+  budget of 2000).
 - An exploration's summary counts the runs that settled and those that
   left calls pending. A failing run's step log is what it recorded (the
   CLI's validate, with the same search, judges it as the test did), and

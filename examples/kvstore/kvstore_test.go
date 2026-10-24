@@ -116,14 +116,15 @@ func TestClientHistoryLinearizes(t *testing.T) {
 
 // A stale read (StaleRead: reads from a lagging snapshot) began after a
 // write returned and did not see it: no order real time allows explains
-// it, and the order that got furthest stops at a read.
+// it, which the complete search proves within its budget (a search cut
+// short is no verdict), and the order that got furthest stops at a read.
 func TestStaleReadNotLinearizable(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
 		t.Skip("searches orders, a quint check each")
 	}
 	for seed := uint64(1); seed <= 5; seed++ {
-		run := qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.StaleRead, seed), qtest.Linearize())
+		run := qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.StaleRead, seed), qtest.LinearizeBudget(2000))
 		if run.OK() {
 			continue // no read was stale this time
 		}
