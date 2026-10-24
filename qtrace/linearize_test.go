@@ -234,7 +234,11 @@ func allowed(steps, order []Step) bool {
 
 // bruteLinearizable enumerates every order mustBefore allows for one the
 // register accepts.
-func bruteLinearizable(steps []Step) bool {
+func bruteLinearizable(steps []Step) bool { return bruteWith(steps, mustBefore) }
+
+// bruteWith enumerates every order prec allows for one the register
+// accepts.
+func bruteWith(steps []Step, mustBefore func(a, b Step) bool) bool {
 	n := len(steps)
 	order := make([]Step, 0, n)
 	used := make([]bool, n)
@@ -267,4 +271,190 @@ func bruteLinearizable(steps []Step) bool {
 		return false
 	}
 	return rec()
+}
+
+// orderBy reports whether order (Linearize's) is a permutation of steps
+// that respects prec, matching steps by their Source.
+func orderBy(steps, order []Step, prec func(a, b Step) bool) bool {
+	pos := map[string]int{}
+	for k, o := range order {
+		pos[o.Source] = k
+	}
+	if len(pos) != len(steps) || len(order) != len(steps) {
+		return false
+	}
+	for _, a := range steps {
+		for _, b := range steps {
+			if _, ok := pos[a.Source]; !ok {
+				return false
+			}
+			if a.Source != b.Source && prec(a, b) && pos[a.Source] > pos[b.Source] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// compareBrute runs Linearize on steps, from Reconstruct, against the
+// brute force under prec, the precedence written from its definition.
+func compareBrute(t *testing.T, trial int, steps []Step, prec func(a, b Step) bool) bool {
+	t.Helper()
+	traces, _ := Reconstruct(steps)
+	if len(traces) != 1 {
+		t.Fatalf("trial %d: %d traces", trial, len(traces))
+	}
+	tr := traces[0].Steps
+	want := bruteWith(tr, prec)
+	got, ok, _, cut := Linearize(tr, 100000, register)
+	if cut {
+		t.Fatalf("trial %d: cut with a budget of 100000", trial)
+	}
+	if ok != want {
+		var b strings.Builder
+		for _, s := range tr {
+			fmt.Fprintf(&b, "\n  %s %v%v [%d,%d] order %v", s.Source, s.Args, s.Obs, s.Invoked.UnixMilli(), s.Time.UnixMilli(), s.Order)
+		}
+		fmt.Fprintf(&b, "\nLinearize's order:")
+		for _, s := range got {
+			fmt.Fprintf(&b, " %s", s.Source)
+		}
+		t.Fatalf("trial %d: Linearize ok %v, brute force %v, for%s", trial, ok, want, b.String())
+	}
+	if ok && (register([][]Step{got})[0] >= 0 || !orderBy(tr, got, prec)) {
+		t.Fatalf("trial %d: the order returned is no valid order: %v", trial, got)
+	}
+	return want
+}
+
+// One recorder's concurrent calls (each on a thread of its own, its
+// invocation recorded by qobs.Invoke), at one virtual instant, as a
+// simulation's calls take no time: a call completed before another's
+// invocation record precedes it, and nothing else orders them. Linearize
+// agrees with every order that rule allows.
+func TestLinearizeAgainstBruteForceRecords(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	at := time.Unix(0, 0)
+	yes, no := 0, 0
+	for trial := range 400 {
+		k := 2 + rng.IntN(4)
+		// the events: each call's invocation, then its completion, interleaved
+		type event struct {
+			call int
+			done bool
+		}
+		var events []event
+		open := []int{}
+		next := 0
+		for next < k || len(open) > 0 {
+			if next < k && (len(open) == 0 || rng.IntN(2) == 0) {
+				events = append(events, event{next, false})
+				open = append(open, next)
+				next++
+			} else {
+				i := rng.IntN(len(open))
+				events = append(events, event{open[i], true})
+				open = append(open[:i], open[i+1:]...)
+			}
+		}
+		written := []int64{0}
+		inv := map[int]uint64{}
+		var steps []Step
+		for seq, e := range events {
+			s := Step{Recorder: "r", Seq: uint64(seq + 1), Thread: fmt.Sprint("t", e.call), Actor: "x", Process: "p", Time: at,
+				Args: map[string]any{}, Obs: map[string]any{}, Source: fmt.Sprint("call", e.call)}
+			if !e.done {
+				s.Action, s.Invocation = "invoke", true
+				inv[e.call] = s.Seq
+			} else {
+				s.Call = inv[e.call]
+				if rng.IntN(2) == 0 {
+					s.Action, s.Args["v"] = "write", int64(e.call+1)
+					written = append(written, int64(e.call+1))
+				} else {
+					s.Action, s.Obs["v"] = "read", written[rng.IntN(len(written))]
+				}
+			}
+			steps = append(steps, s)
+		}
+		prec := func(a, b Step) bool { return a.Seq < b.Call } // a recorded before b's invocation
+		if compareBrute(t, trial, steps, prec) {
+			yes++
+		} else {
+			no++
+		}
+	}
+	if yes == 0 || no == 0 {
+		t.Errorf("%d linearizable, %d not: the property needs both", yes, no)
+	}
+}
+
+// Nodes that order their steps by a domain clock (order.lamport), each
+// step also with its interval: a step precedes another of a larger clock
+// value, or one invoked after it completed. Linearize agrees with every
+// order those allow.
+func TestLinearizeAgainstBruteForceDomainClock(t *testing.T) {
+	rng := rand.New(rand.NewPCG(5, 6))
+	yes, no, contradictory := 0, 0, 0
+	for trial := range 400 {
+		var steps []Step
+		written := []int64{0}
+		n := 2 + rng.IntN(5)
+		for i := range n {
+			from := rng.IntN(6)
+			s := op(fmt.Sprint("n", i), 1, "read", 0, from, from+1+rng.IntN(4))
+			s.Source = fmt.Sprint("s", i)
+			if rng.IntN(2) == 0 {
+				s.Action, s.Args["v"], s.Obs = "write", int64(i+1), map[string]any{}
+				written = append(written, int64(i+1))
+			} else {
+				s.Obs["v"] = written[rng.IntN(len(written))]
+			}
+			s.Order = map[string]int64{"lamport": int64(rng.IntN(3))}
+			steps = append(steps, s)
+		}
+		prec := func(a, b Step) bool {
+			return a.Order["lamport"] < b.Order["lamport"] || a.Time.Add(RealTimeSlack).Before(b.Invoked)
+		}
+		// clocks that contradict real time are bad data, which Linearize
+		// reports (a realtime issue) rather than judges: a domain clock
+		// that respects causality respects real time
+		if cyclic(steps, prec) {
+			contradictory++
+			continue
+		}
+		if compareBrute(t, trial, steps, prec) {
+			yes++
+		} else {
+			no++
+		}
+	}
+	if yes == 0 || no == 0 {
+		t.Errorf("%d linearizable, %d not: the property needs both", yes, no)
+	}
+	t.Logf("%d linearizable, %d not, %d contradictory (skipped)", yes, no, contradictory)
+}
+
+// cyclic reports whether prec orders steps in a cycle.
+func cyclic(steps []Step, prec func(a, b Step) bool) bool {
+	state := make([]int, len(steps)) // 0 new, 1 on the path, 2 done
+	var visit func(i int) bool
+	visit = func(i int) bool {
+		state[i] = 1
+		for j := range steps {
+			if j != i && prec(steps[i], steps[j]) {
+				if state[j] == 1 || state[j] == 0 && visit(j) {
+					return true
+				}
+			}
+		}
+		state[i] = 2
+		return false
+	}
+	for i := range steps {
+		if state[i] == 0 && visit(i) {
+			return true
+		}
+	}
+	return false
 }

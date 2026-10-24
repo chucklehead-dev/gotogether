@@ -242,7 +242,18 @@ func TestCoverAgainstBruteForce(t *testing.T) {
 			for _, f := range fs {
 				vals = append(vals, row.Get(f.Name))
 			}
-			tuples(vals, func(s string) { delete(need, s) })
+			// each row covers a combination no row before it did: Cover adds
+			// none it does not need (all allowed rows would cover too)
+			fresh := false
+			tuples(vals, func(s string) {
+				if need[s] {
+					fresh = true
+				}
+				delete(need, s)
+			})
+			if !fresh {
+				t.Fatalf("trial %d: row %s covers nothing the rows before it did not", trial, row)
+			}
 		}
 		for tuple := range need {
 			t.Fatalf("trial %d: t=%d: no row of %d covers %s", trial, tw, len(rows), tuple)

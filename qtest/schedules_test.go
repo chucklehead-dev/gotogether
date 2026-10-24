@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"math/rand/v2"
@@ -25,11 +26,25 @@ func (tr tree) next(prefix []int) (kind string, n int, end bool) {
 	if len(prefix) >= tr.depth || len(prefix) > 0 && x%5 == 0 {
 		return "", 0, true
 	}
-	kind = "sched.task"
-	if x/5%3 == 0 {
+	switch x / 5 % 6 {
+	case 0, 1:
 		kind = "fault.rpc.x"
+	case 2:
+		kind = "fault.rpc.off" // a kind the bound's Without turns off
+	case 3:
+		kind = "entropy" // never varied
+	default:
+		kind = "sched.task"
 	}
-	return kind, 1 + int(x/15%3), false
+	return kind, 1 + int(x/30%3), false
+}
+
+// fails reports whether the run of vals ends in an error (a scenario's
+// failure): the search runs it, and goes no further from it.
+func (tr tree) fails(vals []int) bool {
+	h := fnv.New64a()
+	fmt.Fprint(h, tr.salt, "fail", vals)
+	return h.Sum64()%7 == 0
 }
 
 // run is the tree's run under a forcing chooser.
@@ -46,13 +61,18 @@ func (tr tree) run(ds []deviation) *Run {
 		vals = append(vals, v)
 		cs = append(cs, qenv.Choice{Kind: kind, N: n, Value: v})
 	}
-	return &Run{Choices: cs, Err: f.Err()}
+	err := f.Err()
+	if err == nil && tr.fails(vals) {
+		err = errors.New("the scenario failed")
+	}
+	return &Run{Choices: cs, Err: err}
 }
 
 // On random choice trees, an exhaustive search runs each path with at most
 // Delays schedule choices and Faults fault choices made otherwise exactly
-// once, and no other, fewest deviations first; a MaxRuns that cuts it says
-// some were left.
+// once, and no other, fewest deviations first: never an entropy choice or
+// a kind Without turns off made otherwise, nor a schedule beyond a run
+// that failed. A MaxRuns that cuts it says some were left.
 func TestSchedulesAgainstBruteForce(t *testing.T) {
 	r := rand.New(rand.NewPCG(7, 8))
 	for trial := range 500 {
@@ -71,7 +91,11 @@ func TestSchedulesAgainstBruteForce(t *testing.T) {
 				all = append(all, p)
 				return
 			}
-			for v := range n {
+			opts := n
+			if kind == "entropy" || kind == "fault.rpc.off" {
+				opts = 1
+			}
+			for v := range opts {
 				q := path{append(slices.Clone(p.vals), v), p.delays, p.faults}
 				if v > 0 && qenv.IsFault(kind) {
 					q.faults++
@@ -82,19 +106,33 @@ func TestSchedulesAgainstBruteForce(t *testing.T) {
 			}
 		}
 		walk(path{})
+		// a path is reached if no schedule it extends (its deviations
+		// but its last) failed
+		reached := func(vals []int) bool {
+			var ds []deviation
+			for at, v := range vals {
+				if v > 0 {
+					ds = append(ds, deviation{at, v})
+				}
+			}
+			for k := range ds {
+				if tr.run(ds[:k]).Err != nil {
+					return false
+				}
+			}
+			return true
+		}
 		want := map[string]bool{}
 		for _, p := range all {
-			if p.delays <= b.Delays && p.faults <= b.Faults {
+			if p.delays <= b.Delays && p.faults <= b.Faults && reached(p.vals) {
 				want[fmt.Sprint(p.vals)] = true
 			}
 		}
-		runs, left := schedules(b, qenv.Rates{Kinds: map[string]float64{}}, tr.run)
+		off := qenv.Rates{Kinds: map[string]float64{"rpc.off": 1}}
+		runs, left := schedules(b, off, tr.run)
 		got := map[string]bool{}
 		prev := 0
 		for _, run := range runs {
-			if run.Err != nil {
-				t.Fatalf("trial %d: %v", trial, run.Err)
-			}
 			var vals []int
 			devs := 0
 			for _, c := range run.Choices {
@@ -122,7 +160,7 @@ func TestSchedulesAgainstBruteForce(t *testing.T) {
 		// not run (a schedule not run has children no one knows of yet)
 		if len(want) > 2 {
 			b.MaxRuns = len(want) - 2
-			runs, left := schedules(b, qenv.Rates{Kinds: map[string]float64{}}, tr.run)
+			runs, left := schedules(b, off, tr.run)
 			if len(runs) != b.MaxRuns || left < 1 || left > 2 {
 				t.Fatalf("trial %d: MaxRuns %d of %d: %d runs, %d left", trial, b.MaxRuns, len(want), len(runs), left)
 			}
