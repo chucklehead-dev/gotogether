@@ -19,14 +19,15 @@ Where you cannot (a client of a service you do not own, a history like
 Jepsen's), record each operation when it returns with `"invoked", start`,
 or record it when it is invoked: `c := qobs.Invoke(ctx, "write", "key",
 k)` writes an invocation record at once, and `c.Done(err, "obs.v", v)`
-the step (pass `"invoked", start` too for a real-time interval: in a
-simulation a wall-clock time would make every run's cache key its own).
+the step, its real-time interval from the invocation record's time to
+its own (one recorder's records order its calls exactly, as a
+simulation's do: Linearize uses that order, not times).
 A call whose caller
 died, or that was never answered, is then in the trace as pending
 (`invoked, never completed: write(key=..)` in the report; no step of the
 replay), which `qtest.Completes()` judges. What it did is unknown, as for
-Jepsen's `:info` operations: `qtest.ResolvePending()` (Record and
-Validate) tries each pending call as having had no effect, or as having
+Jepsen's `:info` operations: `qtest.ResolvePending()` (Record, Validate and
+explorations) tries each pending call as having had no effect, or as having
 taken effect after one of the steps recorded since its invocation (with
 no observation: no expect is checked after it), and the actor conforms if
 one resolution does; an issue says which ("withdraw(amount=3) took

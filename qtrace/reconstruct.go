@@ -110,10 +110,14 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	// pending; a settle settles the run if its recorder recorded nothing
 	// after it (seq), whatever its actor.
 	completed := map[rk]bool{}
+	invokedAt := map[rk]time.Time{}
 	lastSettle, last := map[string]uint64{}, map[string]uint64{}
 	for _, s := range uniq {
 		if s.Call != 0 {
 			completed[rk{s.Recorder, s.Call}] = true
+		}
+		if s.Invocation {
+			invokedAt[rk{s.Recorder, s.Seq}] = s.Time
 		}
 		if s.Settled {
 			lastSettle[s.Recorder] = max(lastSettle[s.Recorder], s.Seq)
@@ -131,6 +135,12 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		switch {
 		case s.Settled:
 		case !s.Invocation:
+			// a completion was invoked when its invocation record was
+			// written: the recorder's own clock, the one its Time is on (a
+			// simulation's true time), whatever "invoked" said
+			if t, ok := invokedAt[rk{s.Recorder, s.Call}]; ok && s.Call != 0 {
+				s.Invoked = t
+			}
 			steps = append(steps, s)
 		case !completed[rk{s.Recorder, s.Seq}]:
 			pending[s.Actor] = append(pending[s.Actor], s)

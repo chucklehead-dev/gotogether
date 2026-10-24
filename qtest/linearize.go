@@ -94,6 +94,11 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 			}
 			o, issue, cut := order(t, ch, part, budget, key != "")
 			issues = append(issues, issue)
+			if unbounded(part.Steps) {
+				issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time bounds none of its %d steps: "+
+					"no step has an invocation (qobs.Invoke, then Call.Done) or an \"invoked\" time, so every order of its threads is allowed "+
+					"(sequential consistency, not linearizability)", nameOf(actor), len(part.Steps))})
+			}
 			if cut {
 				undecided[actor] = true
 			}
@@ -225,6 +230,28 @@ func failedAt(rep *validate.Report, n int) int {
 		return n - 1
 	}
 	return -1
+}
+
+// unbounded reports steps of which none has a real-time bound: no
+// invocation record (Call) and no invocation time.
+func unbounded(steps []qtrace.Step) bool {
+	if len(steps) < 2 {
+		return false
+	}
+	for _, s := range steps {
+		if s.Call != 0 || !s.Invoked.IsZero() {
+			return false
+		}
+	}
+	return true
+}
+
+// nameOf is an actor as messages name it.
+func nameOf(actor string) string {
+	if actor == "" {
+		return "default"
+	}
+	return actor
 }
 
 // partitionHint suggests LinearizeByKey to a search not partitioned.

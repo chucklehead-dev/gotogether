@@ -1,11 +1,14 @@
 package qtest
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -130,4 +133,57 @@ func TestLinearizeByKey(t *testing.T) {
 	// a stale read is still found in its key's partition
 	steps[2].Obs["value"] = int64(7) // b's read
 	Validate(t, "testdata/registers.yaml", steps, LinearizeByKey("key")).Expect(t, Mismatch("read"))
+}
+
+// In a simulation calls take no virtual time unless something sleeps:
+// one client's write and its read after it share an instant, which real
+// time with slack cannot order, and its read that missed its own write
+// once passed linearized. One recorder orders its steps exactly (the
+// write's completion before the read's invocation record).
+func TestLinearizeKeepsARecordersOrder(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	run := func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		s.Spawn("client", func(ctx context.Context) {
+			qobs.Invoke(ctx, "write", "key", "a", "value", 1).Done(nil)
+			qobs.Invoke(ctx, "read", "key", "a").Done(nil, "obs.value", 0) // missed its own write
+		})
+		return s.Run(time.Minute)
+	}
+	sys := System{Binding: "testdata/registers.yaml", Rates: qenv.NoFaults, Opts: []Option{Linearize()}, Run: run}
+	sys.Explore(t, ExploreConfig{Seeds: 2}).Expect(t, All(Mismatch("read")))
+}
+
+// A completion takes its invocation record's time: a stale read recorded
+// by Invoke and Done alone, on recorders of their own, is bounded by real
+// time. Steps of which none has an invocation time are warned of: every
+// order is then allowed.
+func TestLinearizeTakesInvocationTimes(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	inv := func(rec string, u int, action string, args map[string]any) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Time: at(u), Invocation: true, Args: args}
+	}
+	done := func(rec string, u int, action string, args, obs map[string]any) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 2, Thread: rec, Time: at(u), Call: 1, Args: args, Obs: obs}
+	}
+	w, r := map[string]any{"key": "a", "value": int64(1)}, map[string]any{"key": "a"}
+	steps := []qtrace.Step{
+		inv("w", 0, "write", w), done("w", 1, "write", w, nil),
+		inv("r", 5, "read", r), done("r", 6, "read", r, map[string]any{"value": int64(0)}),
+	}
+	Validate(t, "testdata/registers.yaml", steps, Linearize()).Expect(t, Mismatch("read"))
+
+	plain := []qtrace.Step{steps[1], steps[3]}
+	for i := range plain {
+		plain[i].Seq, plain[i].Call = 1, 0
+	}
+	run := Validate(t, "testdata/registers.yaml", plain, Linearize())
+	run.Expect(t, Conforms()) // no bound: the read may come first
+	if !strings.Contains(fmt.Sprint(run.Report.Issues), "real time bounds none of its 2 steps") {
+		t.Errorf("no warning that real time bounds nothing: %v", run.Report.Issues)
+	}
 }

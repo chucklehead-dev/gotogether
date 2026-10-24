@@ -100,11 +100,17 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 			hard[[2]int{i, j}] = true
 		}
 	}
-	// mustPrecede: a hard edge, or a completed before b was invoked (a step
-	// whose invocation is unknown has no real-time bound)
+	// mustPrecede: a hard edge, or a completed before b was invoked: on one
+	// recorder, exactly, when a was recorded before b's invocation record
+	// (b.Call); else by time, give or take the slack (a step whose
+	// invocation is unknown has no real-time bound)
 	after := func(a, b int) bool {
-		inv := ns[b].s.Invoked
-		return !inv.IsZero() && ns[a].s.Time.Add(RealTimeSlack).Before(inv)
+		sa, sb := &ns[a].s, &ns[b].s
+		if sa.Recorder == sb.Recorder && sb.Call != 0 && sa.Seq != 0 {
+			return sa.Seq < sb.Call
+		}
+		inv := sb.Invoked
+		return !inv.IsZero() && sa.Time.Add(RealTimeSlack).Before(inv)
 	}
 	mustPrecede := func(a, b int) bool { return hard[[2]int{a, b}] || after(a, b) }
 	actor := steps[0].Actor

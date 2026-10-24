@@ -263,7 +263,11 @@ working there:
   `qtrace.Reconstruct` drops the records, keeping those never completed
   as `Trace.Pending`, so every reader must go through it. Pending is no
   step and not in OK (a crashed caller's call is pending by right):
-  `qtest.Completes()` judges it.
+  `qtest.Completes()` judges it. A completion's `Invoked` is its
+  record's time, and Linearize orders one recorder's steps by seq (a step
+  recorded before another's invocation record precedes it): a
+  simulation's calls take no virtual time unless something sleeps, and
+  times with `RealTimeSlack` once let a client's read miss its own write.
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
   (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record

@@ -8,6 +8,15 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Linearize keeps the real-time order a recorder knows: a completion
+  recorded by `Call.Done` takes its invocation record's time (no
+  `"invoked"` needed; it overrides one), and steps of one recorder are
+  ordered by seq, exactly. In a simulation calls take no virtual time
+  unless something sleeps, and within `RealTimeSlack` every call was
+  concurrent: a client's read that missed its own write, or a stale read
+  after a signal, passed linearized. An actor of which no step has an
+  invocation time is warned of (sequential consistency, not
+  linearizability).
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

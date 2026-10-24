@@ -40,8 +40,8 @@ func TestInvokeAndDone(t *testing.T) {
 	}
 	tr := traces[0]
 	if len(tr.Steps) != 1 || tr.Steps[0].Action != "deposit" || tr.Steps[0].Args["amount"] != int64(5) ||
-		tr.Steps[0].Obs["balance"] != int64(5) || !tr.Steps[0].Invoked.IsZero() || tr.Steps[0].Outcome != "ok" {
-		t.Errorf("steps %+v, want deposit(amount=5) completed, with no real-time interval unless asked", tr.Steps)
+		tr.Steps[0].Obs["balance"] != int64(5) || !tr.Steps[0].Invoked.Equal(steps[0].Time) || tr.Steps[0].Outcome != "ok" {
+		t.Errorf("steps %+v, want deposit(amount=5) completed, invoked when its invocation was recorded", tr.Steps)
 	}
 	if len(tr.Pending) != 1 || tr.Pending[0].Action != "withdraw" || tr.Pending[0].Args["amount"] != int64(2) {
 		t.Errorf("pending %+v, want withdraw(amount=2)", tr.Pending)

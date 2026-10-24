@@ -337,8 +337,10 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 }
 
 // Done records the call's completed step: the invocation's keys, then
-// kv (Record's keys: obs.*, outcome, "invoked" for a real-time interval,
-// ...), with err its outcome. It always records: "when" keys, which would
+// kv (Record's keys: obs.*, outcome, ...), with err its outcome. Its
+// real-time interval is the invocation record's time to its own
+// (qtrace.Reconstruct pairs them; an "invoked" key is overridden), and
+// on one recorder the records' order is the calls' exact real-time order. It always records: "when" keys, which would
 // leave the call pending, are dropped. A second Done does nothing.
 func (c *Call) Done(err error, kv ...any) {
 	if c == nil || !c.done.CompareAndSwap(false, true) {
