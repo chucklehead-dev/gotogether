@@ -204,7 +204,11 @@ func (x *Exploration) reproduce(r *Run) string {
 	if x.fuzz { // the run is the fuzz input's, which Go saves and names
 		return fmt.Sprintf("go test -run '^%s$' (a fuzz input: the fuzzer saves a new failing one under testdata/fuzz/%s and prints its file; a seed input is the test's f.Add)", strings.ReplaceAll(x.test, "/", "$/^"), strings.SplitN(x.test, "/", 2)[0])
 	}
-	return fmt.Sprintf("GOTOGETHER_RUN='%s:%s' go test -run '^%s$'", x.ref(), r.ID(), strings.ReplaceAll(x.test, "/", "$/^"))
+	env := ""
+	if allFaults() { // the run's choices are every fault family's
+		env = "GOTOGETHER_ALL_FAULTS=1 "
+	}
+	return fmt.Sprintf("%sGOTOGETHER_RUN='%s:%s' go test -run '^%s$'", env, x.ref(), r.ID(), strings.ReplaceAll(x.test, "/", "$/^"))
 }
 
 // universal reports whether c holds of every run, so a run alone can be

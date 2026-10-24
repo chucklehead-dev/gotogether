@@ -47,7 +47,9 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
   (both nightly). `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in
   every simulation (clock faults, stalls, a partition nemesis between
-  every two processes; nightly): a suite written before a family meets
-  it. `GOTOGETHER_VERBOSE=1` shows
+  every two processes): a suite written before a family meets it. A
+  failure's reproduce line sets it, and its corpus entries go to an
+  `all-faults` subdirectory (their choices replay only so). Exhaust
+  under it searches every family's faults: bound its Faults. `GOTOGETHER_VERBOSE=1` shows
   Hegel's output for expected failures (FindViolation and Shrink capture
   os.Stdout while Hegel runs, since Hegel writes nowhere else).

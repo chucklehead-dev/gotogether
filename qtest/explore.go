@@ -160,15 +160,22 @@ type corpusEntry struct {
 }
 
 // corpusDir is the exploration's corpus directory, or "".
+// Under GOTOGETHER_ALL_FAULTS, its all-faults subdirectory: a run with
+// every fault family on makes other choices, and replays only so.
 func corpusDir(t testing.TB, cfg ExploreConfig) string {
-	if cfg.Corpus != "" {
-		return cfg.Corpus
+	dir := cfg.Corpus
+	if d := os.Getenv("GOTOGETHER_CORPUS"); dir == "" && d != "" {
+		dir = filepath.Join(d, strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
 	}
-	if d := os.Getenv("GOTOGETHER_CORPUS"); d != "" {
-		return filepath.Join(d, strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
+	if dir != "" && allFaults() {
+		dir = filepath.Join(dir, "all-faults")
 	}
-	return ""
+	return dir
 }
+
+// allFaults reports whether GOTOGETHER_ALL_FAULTS turns every fault family
+// on (qenv.New reads it).
+func allFaults() bool { return os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" }
 
 // readCorpus reads the entries of dir that exploration ref saved, sorted
 // by name.

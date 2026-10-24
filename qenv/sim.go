@@ -182,8 +182,8 @@ var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 // allFaultsClocks and allFaultsStalls are the clock faults and stalls
 // every simulation has under GOTOGETHER_ALL_FAULTS=1, which also makes
 // the network between every two processes a nemesis (PartitionNemesis):
-// every fault family on, for a nightly that runs a suite's explorations
-// with the faults it was written before (a family added later arrives
+// every fault family on, for running a suite's explorations with the
+// faults it was written before (a family added later arrives
 // opt-in, and the code written before it is never tried against it). A
 // simulation may set its own after New. Read-only.
 var (

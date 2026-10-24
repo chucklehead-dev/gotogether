@@ -312,9 +312,10 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
 - **Families added after the suite:** clock faults, stalls and
   partitions are opt-in, so a suite written before them never meets
   them. `GOTOGETHER_ALL_FAULTS=1` turns them all on in every simulation
-  (Clocks, Stalls, a partition nemesis between every two processes), as
-  the nightly does: a verdict that changes is a fix, or a `qenv.Without`
-  with its reason.
+  (Clocks, Stalls, a partition nemesis between every two processes): run
+  a suite so now and then, and a verdict that changes is a fix, or a
+  `qenv.Without` with its reason. A failure's reproduce line carries the
+  variable.
 - **Profiles:** run each property under every contract you might run
   on. For each mutant, a row per isolation level (or store, or broker
   mode) says where the bug is real (see examples/checkout's table).

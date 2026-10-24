@@ -172,3 +172,21 @@ func TestRefTest(t *testing.T) {
 		}
 	}
 }
+
+// A run found with every fault family on (GOTOGETHER_ALL_FAULTS) is
+// reproduced so: its reproduce line sets the variable, and its corpus
+// entries go apart from those of runs without it, whose choices differ.
+func TestAllFaultsReproduced(t *testing.T) {
+	t.Setenv("GOTOGETHER_ALL_FAULTS", "1")
+	x := &Exploration{test: "TestX", id: 1}
+	if got := x.reproduce(&Run{seed: 3}); !strings.HasPrefix(got, "GOTOGETHER_ALL_FAULTS=1 GOTOGETHER_RUN='TestX#1:seed=3'") {
+		t.Errorf("reproduce line %q", got)
+	}
+	if got := corpusDir(t, ExploreConfig{Corpus: "testdata/corpus"}); got != filepath.Join("testdata/corpus", "all-faults") {
+		t.Errorf("corpus %q", got)
+	}
+	t.Setenv("GOTOGETHER_ALL_FAULTS", "")
+	if got := corpusDir(t, ExploreConfig{Corpus: "testdata/corpus"}); got != "testdata/corpus" {
+		t.Errorf("corpus without it %q", got)
+	}
+}
