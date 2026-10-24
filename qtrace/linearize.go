@@ -276,8 +276,9 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		}
 		// cut short, it is no verdict: the guided search's stop (no move
 		// got further) is no proof, and a brute-force comparison found it
-		// wrong (TestLinearizeAgainstBruteForce)
-		if cutShort || !stopped {
+		// wrong (TestLinearizeAgainstBruteForce); uncut, it is a proof,
+		// however the guided search ended
+		if cutShort {
 			return render(cur), false, tried, true
 		}
 		return render(cur), false, tried, false
