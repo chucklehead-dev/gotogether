@@ -2,7 +2,9 @@ package validate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -74,7 +76,9 @@ func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err
 	}
 	s = &Search{}
 	if opt.Linearize {
-		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize"), true, true
+		// its ITF on: a conforming candidate's last state lets the complete
+		// search merge prefixes of one state (qtrace.LinearizeStates)
+		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize"), false, true
 		fc := *c // the invariants' search (an order that violates one): verdicts only too
 		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize-invariants"), true, true
 		budget := opt.Budget
@@ -253,10 +257,10 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 	if a == "" {
 		a = "default"
 	}
-	checker := func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) []int {
-		return func(orders [][]qtrace.Step) []int {
+	checker := func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
+		return func(orders [][]qtrace.Step) ([]int, []string) {
 			reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
-			fs := make([]int, len(orders))
+			fs, states := make([]int, len(orders)), make([]string, len(orders))
 			for i := range orders {
 				if errs[i] != nil {
 					fail("linearizing actor %s: %v", a, errs[i])
@@ -265,20 +269,23 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 				if invariants && fs[i] < 0 {
 					fs[i] = violatedAt(reps[i], len(orders[i]))
 				}
+				if fs[i] < 0 {
+					states[i] = lastState(reps[i])
+				}
 			}
-			return fs
+			return fs, states
 		}
 	}
 	check := checker(ch, false)
 	if len(tr.Steps) == 0 {
 		return nil, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no steps to order", a)}, false
 	}
-	o, ok, tried, cut := qtrace.Linearize(tr.Steps, budget, check)
+	o, ok, tried, cut := qtrace.LinearizeStates(tr.Steps, budget, check)
 	switch {
-	case ok && len(full.Binding.Invariants) > 0 && checker(full, true)([][]qtrace.Step{o})[0] >= 0:
+	case ok && len(full.Binding.Invariants) > 0 && first(checker(full, true)([][]qtrace.Step{o})) >= 0:
 		// the order found violates an invariant: another that conforms may
 		// not, and a run must not look violating by the order picked
-		o2, ok2, tried2, cut2 := qtrace.Linearize(tr.Steps, budget, checker(full, true))
+		o2, ok2, tried2, cut2 := qtrace.LinearizeStates(tr.Steps, budget, checker(full, true))
 		switch {
 		case ok2:
 			return o2, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms with every invariant holding (%d orders tried, %d with the invariants)", a, len(o2), tried, tried2)}, false
@@ -297,6 +304,41 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 		return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no order of its %d steps that real time allows conformed in %d orders tried; "+
 			"the order shown got furthest. A step the model rejects in every order is a bug (a stale read, a lost write), unless the invocation times are wrong", a, len(o), tried)}, false
 	}
+}
+
+// first is a check's verdict of its one order.
+func first(fs []int, _ []string) int { return fs[0] }
+
+// lastState is the model's state after a conforming replay, as a string
+// equal exactly when the states are (its variables, sorted, as JSON; the
+// mbt:: ones, which name the step taken, left out), or "" when the
+// report has no ITF: two prefixes of one actor's steps with one state
+// have the same futures.
+func lastState(rep *Report) string {
+	if rep == nil || len(rep.Actors) != 1 || rep.Actors[0].ITF == "" {
+		return ""
+	}
+	data, err := os.ReadFile(rep.Actors[0].ITF)
+	if err != nil {
+		return ""
+	}
+	var trace struct {
+		States []map[string]json.RawMessage `json:"states"`
+	}
+	if json.Unmarshal(data, &trace) != nil || len(trace.States) == 0 {
+		return ""
+	}
+	last := trace.States[len(trace.States)-1]
+	for k := range last {
+		if strings.HasPrefix(k, "mbt::") || strings.HasPrefix(k, "#") {
+			delete(last, k)
+		}
+	}
+	out, err := json.Marshal(last)
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 // failedAt is the index of the first step of a one-actor order the model

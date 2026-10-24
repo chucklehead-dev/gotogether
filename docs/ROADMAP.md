@@ -110,9 +110,11 @@ under a week, M two to four, L more.
     rejected prefix decided without quint), the complete search starting
     from the guided one's accepted prefixes, one memoizing checker for
     qtest and qhegel.
-  - **c (M).** A complete search without a beam: each level's survivors
-    deduplicated by (operations placed, model state), each extended from
-    its state as a literal (Wing–Gong with Lowe's memo, over quint).
+  - **c (M). Done** (merging prefixes of one state, from the ITF of the
+    candidates quint checks whole; five commuting deposits' proof in 146
+    orders, not 456). Left: extending a prefix from its state as a
+    literal (each candidate replays from the start), and states for the
+    prefixes the memo accepts (kept apart now).
   - **d (L).** A Quint evaluator in Go over quint's own IR (`quint
     compile --target json`, cached by the model's hash; about fifty
     builtins cover every model here), stepping the model from a held

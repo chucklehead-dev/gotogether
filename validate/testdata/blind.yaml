@@ -1,0 +1,12 @@
+# account.qnt with deposits that observe nothing: concurrent ones
+# commute, which the linearization's search by model state merges
+spec: account.qnt
+module: account
+constants:
+  LIMIT: '100'
+actions:
+  deposit:
+    args: { amount: '{{.amount}}' }
+  withdraw:
+    args: { amount: '{{.amount}}' }
+    expect: 'balance == {{.obs.balance}}'

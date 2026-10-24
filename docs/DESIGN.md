@@ -2762,9 +2762,16 @@ running out is no verdict at all (Y6: n/a, which Rejects does not match).
 Since Z8 a complete search follows a guided one that finds none (every
 order real time allows, level by level, rejected prefixes pruned, no
 beam but the budget): it finds an order the guided search missed, or
-proves there is none; cut short, the guided search's verdict stands.
-Candidates are memoized by prefix (T2b) and checked for verdicts only
-(T2a). Since T1a a call recorded with `qobs.Invoke` and `Call.Done` has
+proves there is none; cut short, it is no verdict (the guided search's
+stop is no proof: T5's brute force showed one wrong). Candidates are
+memoized by prefix (T2b) and checked for verdicts only (T2a), and since
+T2c the complete search keeps one of the prefixes that placed the same
+steps and reached the same model state (Lowe's memo for Wing and Gong's
+search, `qtrace.LinearizeStates`, the state read from a conforming
+candidate's ITF): concurrent operations that commute cost a prefix a
+set of them, not an order (five concurrent deposits: 146 orders, 456
+without). States are known only for orders quint checked whole, not for
+prefixes the memo accepted from a longer order, which are kept apart. Since T1a a call recorded with `qobs.Invoke` and `Call.Done` has
 its interval from the recorder, and one recorder's steps are ordered by
 seq, exactly: in a simulation, where calls take no virtual time unless
 something sleeps, times alone made every call concurrent. The searches

@@ -2,6 +2,8 @@ package validate
 
 import (
 	"fmt"
+	"os/exec"
+	"strings"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -142,4 +144,46 @@ func show(steps []qtrace.Step) []string {
 		out = append(out, fmt.Sprintf("%s%d@%d", s.Recorder, s.Seq, s.Time.UnixMilli()))
 	}
 	return out
+}
+
+// Five concurrent deposits that observe nothing, then a withdrawal no
+// order allows: proving it takes every order of the deposits by prefix,
+// but every prefix of the same deposits has one balance, so by model
+// state one prefix a set of deposits suffices: 146 orders tried, the
+// guided search's among them, where without the states it took 456.
+func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	var steps []qtrace.Step
+	for i, amount := range []int64{1, 2, 4, 8, 16} {
+		rec := fmt.Sprint("c", i)
+		steps = append(steps, qtrace.Step{Action: "deposit", Recorder: rec, Seq: 1, Thread: rec, Actor: "acct", Process: "p",
+			Invoked: at(0), Time: at(10), Args: map[string]any{"amount": amount}, Obs: map[string]any{}})
+	}
+	steps = append(steps, qtrace.Step{Action: "withdraw", Recorder: "w", Seq: 1, Thread: "w", Actor: "acct", Process: "p",
+		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(100)}, Obs: map[string]any{"balance": int64(0)}})
+	s, err := c.Search(steps, SearchOptions{Linearize: true, Budget: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var msg string
+	for _, i := range s.issues {
+		if i.Kind == "linearize" {
+			msg = i.Msg
+		}
+	}
+	var tried int
+	if _, err := fmt.Sscanf(msg[strings.Index(msg, "conformed in ")+len("conformed in "):], "%d", &tried); err != nil || strings.Contains(msg, "no verdict") {
+		t.Fatalf("want a proof of no order: %s", msg)
+	}
+	if tried >= 250 {
+		t.Errorf("%d orders tried, want the prefixes of one state merged (146; 456 unmerged): %s", tried, msg)
+	}
+	t.Log(msg)
 }
