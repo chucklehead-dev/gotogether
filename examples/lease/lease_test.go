@@ -28,10 +28,18 @@ var (
 	jump       = qenv.Clocks{Jump: 5 * time.Second}
 	all        = qenv.Clocks{Skew: time.Second, Jump: 5 * time.Second, Drift: 0.25}
 
-	skews  = qenv.DefaultRates.Set("clock.skew", 0.5)
-	jumps  = qenv.DefaultRates.Set("nemesis", 0.05)
-	drifts = qenv.DefaultRates.Set("clock.drift", 1)
+	skews  = punctual(qenv.DefaultRates.Set("clock.skew", 0.5))
+	jumps  = punctual(qenv.DefaultRates.Set("nemesis", 0.05))
+	drifts = punctual(qenv.DefaultRates.Set("clock.drift", 1))
 )
+
+// punctual is r with no request delivered late: the clock tests' runs
+// fault the clocks, the lost requests and responses, and nothing else. A
+// late write breaks a lock without fencing whatever the clocks do
+// (TestNoFencingBrokenByALateWrite).
+func punctual(r qenv.Rates) qenv.Rates {
+	return r.Set("rpc.lock.delay", 0).Set("rpc.store.delay", 0)
+}
 
 // The fenced store keeps the requirement whatever the clocks do: skewed,
 // jumping, drifting, and lost requests and responses. Every model action
@@ -42,11 +50,27 @@ func TestFencedConformsUnderClockFaults(t *testing.T) {
 	system(Faithful, all).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(), qtest.Exercised())
 }
 
-// Without fencing, the holders' margin is enough while clocks are true:
-// no run writes stale, so a test without clock faults passes the bug.
+// Without fencing, the holders' margin is enough while clocks are true
+// and every request arrives on time: no run writes stale, so a test
+// without clock faults or late messages passes the bug.
 func TestNoFencingSafeWithTrueClocks(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(NoFencing, trueClocks).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+	system(NoFencing, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+}
+
+// A write delivered late (a delayed packet, after its writer's timeout)
+// lands after the lease has passed to the next holder, who has written:
+// without fencing it overwrites, whatever the clocks, while the fenced
+// store refuses its old token. It is the case fencing exists for, which a
+// network that is never late hid. Measured at the default rates: 19 of
+// 100 runs write stale with true clocks; at a late write in three, every
+// run of the fenced store had one, and conformed.
+func TestNoFencingBrokenByALateWrite(t *testing.T) {
+	qtest.RequireQuint(t)
+	x := qtest.ExploreConfig{Seeds: 30}
+	system(NoFencing, trueClocks).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
+	system(Faithful, trueClocks).WithRates(qenv.DefaultRates.Set("rpc.store.delay", 0.3)).Explore(t, x).
+		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.store.delay").Faulted().InAtLeast(0.3))
 }
 
 // A lease timed on the monotonic clocks (the holder's interval, the lock's
@@ -82,7 +106,7 @@ func TestWallIntervalBrokenByAClockJump(t *testing.T) {
 // (WallInterval), is immune to skew. True clocks hide it.
 func TestAbsoluteExpiryBrokenBySkew(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(AbsoluteExpiry, trueClocks).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+	system(AbsoluteExpiry, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
 	system(AbsoluteExpiry, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Violates("noStaleWrite"))
 	system(WallInterval, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
 }

@@ -622,3 +622,57 @@ func TestDuplicateDoubleName(t *testing.T) {
 	}()
 	qenv.NewQueue(s, "orders", nil)
 }
+
+// faultAt makes option v of fault kind kind, every choice else nominal.
+type faultAt struct {
+	kind string
+	v    int
+}
+
+func (f faultAt) Choose(kind string, n int) int {
+	if kind == "fault."+f.kind && f.v < n {
+		return f.v
+	}
+	return 0
+}
+
+// A late request is processed just after its caller timed out, and its
+// response reaches no one: the caller's retry ran first, and the late
+// original runs after it, as a delayed packet does. lateDuplicate
+// delivers the request at once and a copy after the timeout.
+func TestLateRequests(t *testing.T) {
+	for _, c := range []struct {
+		fault      string
+		v          int
+		err        error
+		atTimeout  int // handled by the caller's timeout
+		afterwards int // handled in all
+	}{
+		{"late", 1, qenv.ErrTimeout, 0, 1},
+		{"lateDuplicate", 2, nil, 1, 2},
+	} {
+		s := qenv.New(faultAt{"rpc.api.delay", c.v})
+		var at []time.Duration
+		svc := qenv.NewService(s, "api", nil, func(ctx context.Context, n int) (int, error) {
+			at = append(at, s.Elapsed())
+			return n, nil
+		})
+		var err error
+		var handled int
+		s.Spawn("client", func(ctx context.Context) {
+			_, err = svc.Call(ctx, 1, time.Second)
+			handled = svc.Calls
+		})
+		if runErr := s.Run(time.Minute); runErr != nil {
+			t.Fatal(runErr)
+		}
+		s.Close()
+		if !errors.Is(err, c.err) || handled != c.atTimeout || svc.Calls != c.afterwards {
+			t.Errorf("%s: err %v, handled %d by the timeout and %d in all (at %v); want %v, %d, %d",
+				c.fault, err, handled, svc.Calls, at, c.err, c.atTimeout, c.afterwards)
+		}
+		if n := len(at); n > 0 && at[n-1] <= time.Second {
+			t.Errorf("%s: the late copy was handled at %v, before the caller's timeout", c.fault, at[n-1])
+		}
+	}
+}

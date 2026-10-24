@@ -48,12 +48,12 @@ func TestNoDedupeCountsRetries(t *testing.T) {
 }
 
 // Every run within two delays and two faults, not a sample: the faithful
-// counter conforms in all 921 (quint checks 21: the rest repeat their
-// steps), and NoDedupe's bug needs one fault, which the search of every
-// single fault finds.
+// counter conforms in all 2508 (quint checks 49: the rest repeat their
+// steps), late requests among them, and NoDedupe's bug needs one fault,
+// which the search of every single fault finds.
 func TestExhaustive(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).Exhaust(t, qtest.Bound{Delays: 2, Faults: 2}).Expect(t, qtest.Conforms())
+	system(Faithful).Exhaust(t, qtest.Bound{Delays: 2, Faults: 2, MaxRuns: 5000}).Expect(t, qtest.Conforms())
 	system(NoDedupe).Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"))
 }
 

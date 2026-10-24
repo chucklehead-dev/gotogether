@@ -22,7 +22,8 @@ and the process's sleeps with them.
 | test | variant | clocks | verdict |
 |---|---|---|---|
 | `TestFencedConformsUnderClockFaults` | faithful: the store refuses an older epoch (a fencing token) | skews, jumps and drift | every run conforms; every action and fault kind exercised |
-| `TestNoFencingSafeWithTrueClocks` | `NoFencing`: the store accepts every write; the holder stops a margin before its lease ends, timed on its monotonic clock | true | every run conforms: a test without clock faults passes the bug |
+| `TestNoFencingSafeWithTrueClocks` | `NoFencing`: the store accepts every write; the holder stops a margin before its lease ends, timed on its monotonic clock | true, every request on time | every run conforms: a test without clock faults or late messages passes the bug |
+| `TestNoFencingBrokenByALateWrite` | `NoFencing`, then faithful | true, a write delivered after its writer's timeout (`rpc.store.delay`) | `Violates("noStaleWrite")` (19 of 100 runs): the late write lands after the next holder's; the fenced store refuses its old token |
 | `TestNoFencingImmuneToSkewAndJumps` | `NoFencing` | skews and jumps; then every run with one jump (`System.Exhaust`, 3209 runs) | every run conforms: a monotonic clock sees neither |
 | `TestWallIntervalBrokenByAClockJump` | `WallInterval`: `NoFencing` timing its lease on the wall clock (`Now().Sub`, as code whose times lost their monotonic reading does); then faithful | jumps; then every run with one jump | `Violates("noStaleWrite")` (half the runs; 306 of the 3209 with one jump): the holder's clock went back; the fenced store survives each |
 | `TestAbsoluteExpiryBrokenBySkew` | `AbsoluteExpiry`: the holder compares the lock's expiry time with its own wall clock | true, then skews only | conforms, then `Violates("noStaleWrite")` (36%); `WallInterval` conforms under the same skews: an interval on one clock is immune to skew |

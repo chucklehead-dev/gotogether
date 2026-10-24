@@ -18,7 +18,7 @@ back; a model that says every request counts once. The whole system is
 |---|---|---|---|
 | `TestFaithfulConforms` | none | 30 seeds, one message fault in five | every run conforms |
 | `TestNoDedupeCountsRetries` | `NoDedupe`: a retried or duplicated request is counted again | the same exploration | some run's `apply` is rejected (the model has no second apply of a request); with no faults every run conforms: no retry, no bug |
-| `TestExhaustive` | none, then `NoDedupe` | every run within 2 delays and 2 faults (`System.Exhaust`), then within 1 fault | all 921 conform, the search complete; one fault is enough for a rejected `apply` |
+| `TestExhaustive` | none, then `NoDedupe` | every run within 2 delays and 2 faults (`System.Exhaust`), then within 1 fault | all 2508 conform, the search complete; one fault is enough for a rejected `apply` |
 | `TestMutationOfTheCounter` | every mutant `qweave -mutate` weaves (8), when woven (CI does) | 30 seeds each, and the client done in 90% of runs (`Takes("done")`) | `NoSurvivors`, three marked equivalent with their reasons; a client that sent too few requests is killed by `done`, an action that needs every request applied |
 | `TestHegelShrinks` | `NoDedupe`, then none | Hegel makes every choice (`qhegel.Shrink`) | shrunk to one fault and a rejected `apply`; in the faithful counter Hegel finds nothing (`Expect(t, qtest.Conforms())`) |
 

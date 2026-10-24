@@ -17,7 +17,9 @@ client := ledgerpb.NewLedgerClient(srv.Dial())           // a grpc.ClientConnInt
 
 - The generated code is unchanged. Faults are `grpc.<name>.conn`
   (Unavailable before sending), `rpc.<name>.request`
-  (drop/duplicate), `rpc.<name>.response` (lost), and crashes of
+  (drop/duplicate), `rpc.<name>.delay` (late: processed after the
+  caller's timeout, after its retry; lateDuplicate: a late copy too),
+  `rpc.<name>.response` (lost), and crashes of
   `proc`. A missing response is `DeadlineExceeded` after `Conn.Timeout`
   of virtual time.
 - Put the retry policy in client code (both tiers run it), not in a gRPC

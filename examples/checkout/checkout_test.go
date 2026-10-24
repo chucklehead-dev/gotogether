@@ -61,24 +61,31 @@ func TestMutants(t *testing.T) {
 		iso   qenv.Isolation
 		rates qenv.Rates
 		want  []qtest.Claim
+		seeds int // 0: 100
 	}{
-		{shop.NoLocks, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}},
-		{shop.NoLocks, qenv.SnapshotIsolation, crashy, []qtest.Claim{qtest.Rejects("refuse"), qtest.None(qtest.Rejects("place"))}},
+		{shop.NoLocks, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0},
+		{shop.NoLocks, qenv.SnapshotIsolation, crashy, []qtest.Claim{qtest.Rejects("refuse"), qtest.None(qtest.Rejects("place"))}, 0},
 		// lost updates: the stock oversold, or a shipment and a cancellation
-		{shop.NoLocks, qenv.ReadCommitted, qenv.DefaultRates, []qtest.Claim{qtest.AnyOf(qtest.Rejects("place"), shipOrCancel)}},
-		{shop.LockWithoutWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}},
-		{shop.LockWithoutWrite, qenv.ReadCommitted, crashy, []qtest.Claim{qtest.Conforms()}},
+		{shop.NoLocks, qenv.ReadCommitted, qenv.DefaultRates, []qtest.Claim{qtest.AnyOf(qtest.Rejects("place"), shipOrCancel)}, 0},
+		{shop.LockWithoutWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0},
+		{shop.LockWithoutWrite, qenv.ReadCommitted, crashy, []qtest.Claim{qtest.Conforms()}, 0},
 		// write skew: a shipment and a cancellation both commit
-		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{shipOrCancel}},
+		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{shipOrCancel}, 0},
 		// a retry after a lost response charges again
-		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Violates("chargedAtMostOnce")}},
+		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Violates("chargedAtMostOnce")}, 0},
 		// a crash between commit and publish loses the order's payment: a
-		// one-step window, found with crashes ten times as often
-		{shop.DualWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Violates("settledCorrectly")}},
+		// one-step window, found with crashes ten times as often, in about
+		// one run in fifty (5 and 6 of 300, measured with and without late
+		// requests): 300 seeds miss it less than once in a hundred
+		{shop.DualWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Violates("settledCorrectly")}, 300},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
-			explore(t, checkout.Config{Isolation: c.iso, Mutation: c.m}, c.rates, qtest.ExploreConfig{Seeds: 100}).Expect(t, c.want...)
+			seeds := c.seeds
+			if seeds == 0 {
+				seeds = 100
+			}
+			explore(t, checkout.Config{Isolation: c.iso, Mutation: c.m}, c.rates, qtest.ExploreConfig{Seeds: seeds}).Expect(t, c.want...)
 		})
 	}
 }
