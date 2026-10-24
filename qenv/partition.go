@@ -128,6 +128,9 @@ func (n *Network) PartitionNemesis(procs ...*Process) {
 					d = DefaultPartitionLength
 				}
 				s.Spawn(fmt.Sprintf("heal %s-%s", a.Name, b.Name), func(ctx context.Context) {
+					// a daemon: Settle heals every cut, and a heal still
+					// sleeping is no work left (it kept a run from settling)
+					Daemon(ctx)
 					Sleep(ctx, d)
 					if n.gen[pairOf(a, b)] == gen && n.Partitioned(a, b) {
 						n.Heal(a, b)

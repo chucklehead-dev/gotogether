@@ -458,3 +458,29 @@ func TestAllFaults(t *testing.T) {
 		}
 	}
 }
+
+// A cut the nemesis made heals by itself later, its healer sleeping
+// until then: Settle heals it at once, and the healer still asleep is no
+// work left. It once kept a run from settling ("heal r2-r3: waiting").
+func TestSettleIgnoresAHealAsleep(t *testing.T) {
+	for seed := uint64(1); seed <= 20; seed++ {
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults.Set("nemesis.partition", 1)
+		s := qenv.New(c)
+		s.Net().CutLength = time.Hour
+		a := s.Process("a", false, func(ctx context.Context) {
+			for range 5 {
+				qenv.Yield(ctx)
+			}
+		})
+		b := s.Process("b", false, func(context.Context) {})
+		s.Net().PartitionNemesis(a, b)
+		if err := s.Run(time.Second); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Settle(time.Second); err != nil {
+			t.Fatalf("seed %d: %v", seed, err)
+		}
+		s.Close()
+	}
+}

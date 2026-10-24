@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A partition the nemesis cut no longer keeps a run from settling: its
+  healer, asleep until the cut would end, is a daemon (Settle heals
+  every cut at once). Found by running every example under
+  `GOTOGETHER_ALL_FAULTS`.
 - `binding.Binding.PlanWithin`: a plan of some of a history's steps in
   the history's instance and naming (ids interned in its order, constants
   from all its steps). The searches plan their candidates so: a prefix's
