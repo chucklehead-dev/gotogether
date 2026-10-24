@@ -2,10 +2,10 @@ package validate
 
 import (
 	"fmt"
-	"os/exec"
-	"strings"
 	"math/rand/v2"
+	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
