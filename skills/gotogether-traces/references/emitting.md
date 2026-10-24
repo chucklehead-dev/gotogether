@@ -33,7 +33,7 @@ before the first settle after it (with
 no observation: no expect is checked after it), and the actor conforms if
 one resolution does; an issue says which ("withdraw(amount=3) took
 effect after step 1"). Either way
-check with `qtest.Linearize()`: concurrent operations return in
+check with `qtest.Linearize()` (the CLI: `gotogether validate -linearize`, `-linearize-key key`, `-resolve-pending`): concurrent operations return in
 another order than they took effect, and the recording order rejects
 correct code (examples/kvstore's client history, every load tried). The
 search tries the orders the operations' intervals allow (an operation

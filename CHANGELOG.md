@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- The searches are validate's: `Checker.Search(steps, SearchOptions)` and
+  `Search.Mark`, which qtest's Linearize, LinearizeByKey and
+  ResolvePending call, and so does the CLI: `gotogether validate
+  -linearize`, `-linearize-key key`, `-linearize-budget n`,
+  `-resolve-pending`. `validate.DefaultLinearizeBudget` and
+  `DefaultResolveBudget` (qtest's are the same).
 - Linearize memoizes its candidates by prefix: an order that fails at a
   step accepts its prefixes before it and rejects the one through it, so
   the complete search starts from what the guided one learned and never

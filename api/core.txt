@@ -1167,8 +1167,8 @@ type Row struct
     method (Row) String() string
 
 == github.com/chucklehead-dev/gotogether/qtest
-const DefaultLinearizeBudget = 200
-const DefaultResolveBudget = 200
+const DefaultLinearizeBudget = validate.DefaultLinearizeBudget
+const DefaultResolveBudget = validate.DefaultResolveBudget
 const EvidenceFormat = "gotogether.evidence/2"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
@@ -1443,6 +1443,8 @@ var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-
 var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
+const DefaultLinearizeBudget = 200
+const DefaultResolveBudget = 200
 const Fail Verdict = "fail"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
@@ -1456,6 +1458,7 @@ type Checker struct
     field Options Options
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
+    method (*Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type Failure struct
@@ -1510,6 +1513,15 @@ type Result struct
     method (*Result) OK() bool
     method (*Result) Reason() string
     method (*Result) Summary() string
+type Search struct
+    field Steps []qtrace.Step
+    method (*Search) Mark(rep *Report)
+type SearchOptions struct
+    field Linearize bool
+    field Key string
+    field Budget int
+    field ResolvePending bool
+    field ResolveBudget int
 type ToolError struct
     field Module string
     field Test string

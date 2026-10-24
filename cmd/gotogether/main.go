@@ -408,6 +408,10 @@ func runValidate(args []string) (int, error) {
 	invs := fset.String("invariants", "", "comma-separated model invariants to check instead of the binding's")
 	withITF := fset.Bool("itf", false, "also write the ITF of conforming runs, the model's state at every step (slow for models with a large state); failing runs always get theirs")
 	noITF := fset.Bool("noitf", false, "gone: no ITF for conforming runs is the default")
+	lin := fset.Bool("linearize", false, "check each actor's steps in an order real time allows, searched for one the model accepts (a client history: steps recorded when calls returned)")
+	linKey := fset.String("linearize-key", "", "linearize each actor's history partitioned by this argument's value (independent keys), each partition alone")
+	linBudget := fset.Int("linearize-budget", 0, "orders a linearization checks per actor or partition (default 200)")
+	resolvePending := fset.Bool("resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
 	fset.Parse(args)
 	if *noITF {
 		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
@@ -478,10 +482,15 @@ func runValidate(args []string) (int, error) {
 				return 2, err
 			}
 		}
-		rep, err := c.Check(context.Background(), steps)
+		search, err := c.Search(steps, validate.SearchOptions{Linearize: *lin || *linKey != "", Key: *linKey, Budget: *linBudget, ResolvePending: *resolvePending})
 		if err != nil {
 			return 2, err
 		}
+		rep, err := c.Check(context.Background(), search.Steps)
+		if err != nil {
+			return 2, err
+		}
+		search.Mark(rep)
 		fmt.Print(rep.Summary())
 		if *verbose {
 			for _, a := range rep.Actors {

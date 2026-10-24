@@ -44,8 +44,8 @@ func TestCheckCasesRefuses(t *testing.T) {
 		opt     Option
 		want    string
 	}{
-		{"../validate/testdata/account.yaml", Linearize(), "Linearize() does nothing in w: a case's steps are checked in the order it recorded them"},
-		{"../validate/testdata/account.yaml", LinearizeByKey("amount"), "LinearizeByKey() does nothing in w: a case's steps are checked in the order it recorded them"},
+		{"../validate/testdata/account.yaml", Linearize(), "Linearize() does nothing in w: a case's steps are checked as it records them, in that order"},
+		{"../validate/testdata/account.yaml", LinearizeByKey("amount"), "LinearizeByKey() does nothing in w: a case's steps are checked as it records them, in that order"},
 		{"../validate/testdata/account.yaml", SkipIfEmpty(), "SkipIfEmpty() does nothing in w"},
 		{"", Constants(map[string]string{"LIMIT": "3"}), "Constants() does nothing in w: no case is checked against the model"},
 	} {

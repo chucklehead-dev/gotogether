@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -69,5 +70,50 @@ func TestValidateResultLine(t *testing.T) {
 	out, _ = io.ReadAll(r)
 	if want := "RESULT: PASS (1 actor conforms to the model and satisfies its 2 invariants)"; err != nil || code != 0 || !strings.Contains(string(out), want) {
 		t.Errorf("exit %d, %v; output lacks %q:\n%s", code, err, want, out)
+	}
+}
+
+// -linearize checks a client history in an order real time allows: a
+// withdrawal that overlapped the deposit it depended on returned first,
+// which recorded order rejects and the order the intervals allow accepts.
+func TestValidateLinearize(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	steps := []qtrace.Step{
+		{Action: "deposit", Recorder: "a", Process: "p", Seq: 1, Thread: "a", Invoked: at(0), Time: at(10),
+			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(60)}},
+		{Action: "withdraw", Recorder: "b", Process: "p", Seq: 1, Thread: "b", Invoked: at(1), Time: at(5),
+			Args: map[string]any{"amount": int64(50)}, Obs: map[string]any{"balance": int64(10)}},
+	}
+	dir := t.TempDir()
+	log := filepath.Join(dir, "run.jsonl")
+	f, err := os.Create(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := qtrace.WriteJSONL(f, steps); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	for _, c := range []struct {
+		flags []string
+		code  int
+	}{{nil, 1}, {[]string{"-linearize"}, 0}} {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdout := os.Stdout
+		os.Stdout = w
+		args := append(append([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out")}, c.flags...), log)
+		code, err := runValidate(args)
+		os.Stdout = stdout
+		w.Close()
+		out, _ := io.ReadAll(r)
+		if err != nil || code != c.code {
+			t.Errorf("%v: exit %d, %v, want %d:\n%s", c.flags, code, err, c.code, out)
+		}
 	}
 }

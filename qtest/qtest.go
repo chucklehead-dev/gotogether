@@ -100,14 +100,15 @@ func (c settings) refuse(t testing.TB, workflow string, ignored map[string]strin
 }
 
 // What the workflows ignore, and why: explorations (Explore, Exhaust,
-// Mutate, Sweep, Fuzz, FollowTraces, and qhegel's runs) record each run
-// into its own recorder and check it in its recorded order; Validate
-// records nothing.
+// Mutate, Sweep, Fuzz, FollowTraces) record each run into its own
+// recorder, searched as Record's and Validate's are (Linearize,
+// ResolvePending); qhegel's cases are checked as they record, in their
+// recorded order; Validate records nothing.
 var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	exploreIgnores = map[string]string{"Global": whyGlobal}
-	whyCaseOrder   = "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's"
+	whyCaseOrder   = "a case's steps are checked as it records them, in that order; Linearize and ResolvePending are Record's, Validate's and explorations'"
 	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder, "LinearizeByKey": whyCaseOrder, "ResolvePending": whyCaseOrder,
 		"SkipIfEmpty": "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
 	whyUnchecked    = "no case is checked against the model"
@@ -437,51 +438,13 @@ func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step,
 	if !c.Linearize && !c.resolvePending {
 		return steps, nil
 	}
-	if c.Linearize && c.resolvePending {
-		t.Fatalf("gotogether: ResolvePending with Linearize: a resolution keeps the recorded order, and the two searches are not combined; " +
-			"record the steps where they take effect, or resolve the pending calls of a history in its recorded order")
-	}
-	// the search needs conformance only: without invariants each batch is
-	// one quint process, not two
-	lc, err := ch.WithInvariants()
+	sc := *ch
+	sc.Options.Dir = dir
+	s, err := sc.Search(steps, validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending})
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}
-	var found []qtrace.Issue
-	var undecided map[string]bool
-	var kept map[string][]qtrace.Issue
-	if c.Linearize {
-		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(dir, "linearize"), true, true
-		budget := c.linearizeBudget
-		if budget == 0 {
-			budget = DefaultLinearizeBudget
-		}
-		fc := *ch // the invariants' search (an order that violates one): verdicts only too
-		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(dir, "linearize-invariants"), true, true
-		steps, found, undecided, kept = linearize(t, lc, &fc, steps, budget, c.linearizeKey)
-	} else {
-		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(dir, "resolve"), true, true
-		steps, found, undecided, kept = resolve(t, lc, steps, DefaultResolveBudget)
-	}
-	return steps, func(rep *validate.Report) {
-		rep.Issues = append(rep.Issues, found...)
-		for _, a := range rep.Actors {
-			a.Issues = append(a.Issues, kept[a.Actor]...)
-			if !undecided[a.Actor] {
-				continue
-			}
-			// the search ran out of budget: the order shown is no verdict, for
-			// its conformance nor for what it violated (an order that conformed
-			// step by step but failed an eventual val was still a candidate the
-			// search rejected)
-			a.Conforms = validate.NotEvaluated
-			for i := range a.Invariants {
-				if a.Invariants[i].Verdict == validate.Fail {
-					a.Invariants[i].Verdict, a.Invariants[i].Failure = validate.NotEvaluated, nil
-				}
-			}
-		}
-	}
+	return s.Steps, s.Mark
 }
 
 // firstOr is the first of msgs, or a placeholder when none was kept.

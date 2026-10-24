@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Explore the replicated store and check every run against the model,
-# linearized key by key (a client history: the CLI's validate checks
-# recorded order, so the demo runs the explorations). MUTATION= one of
+# linearized key by key (each run's history is a client's: the
+# explorations search its orders, as `gotogether validate -linearize-key
+# key` does for a step log). MUTATION= one of
 # w3, leak, no-handoff, blind-repair, repick shows what catches it.
 set -euo pipefail
 cd "$(dirname "$0")"
