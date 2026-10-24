@@ -226,7 +226,7 @@ func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) {
 		if len(vals) > 0 {
 			c.Quint += "(" + strings.Join(vals, ", ") + ")"
 		}
-		if ab.Expect != "" {
+		if ab.Expect != "" && !s.Ambiguous { // an assumed effect observed nothing
 			c.ExpectTemplate = ab.Expect
 			if c.Expect, err = render(ab.Expect, data, funcs); err != nil {
 				if f, ok := missingField(err); ok {

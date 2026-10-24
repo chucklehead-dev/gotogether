@@ -160,7 +160,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 	}
 	check := func(p string, b []byte) {
 		for _, dep := range deprecated {
-			if strings.Contains(string(b), dep.text) {
+			if mentions(string(b), dep.text) {
 				t.Errorf("%s mentions %s, which is gone: use %s", p, dep.text, dep.instead)
 			}
 		}
@@ -287,3 +287,25 @@ func TestSnippetsMatchSource(t *testing.T) {
 }
 
 var snippet = regexp.MustCompile("(?s)<!-- from (\\S+) -->\\s*```go\\n(.*?)```")
+
+// mentions reports whether text contains name as a whole name: an
+// identifier ending it is not followed by more of one (qtest.Resolve is
+// not in qtest.ResolvePending).
+func mentions(text, name string) bool {
+	for i := 0; ; {
+		j := strings.Index(text[i:], name)
+		if j < 0 {
+			return false
+		}
+		end := i + j + len(name)
+		last := name[len(name)-1]
+		if !isIdent(last) || end == len(text) || !isIdent(text[end]) {
+			return true
+		}
+		i = i + j + 1
+	}
+}
+
+func isIdent(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+}

@@ -1167,6 +1167,7 @@ type Row struct
 
 == github.com/chucklehead-dev/gotogether/qtest
 const DefaultLinearizeBudget = 200
+const DefaultResolveBudget = 200
 const EvidenceFormat = "gotogether.evidence/2"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
@@ -1196,6 +1197,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 func RecorderOptions(opts ...qobs.Option) Option
 func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
+func ResolvePending() Option
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 func Settles() Expectation
 func ShrunkTo(n int) RunClaim
@@ -1403,6 +1405,7 @@ type Step struct
     field Invocation bool
     field Call uint64
     field Settled bool
+    field Ambiguous bool
     field Args map[string]any
     field Obs map[string]any
     field Order map[string]int64

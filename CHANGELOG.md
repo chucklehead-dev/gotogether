@@ -96,6 +96,10 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `qtest.ResolvePending()`: Record and Validate search what each pending
+  call may have done (no effect, or an effect after a step recorded
+  since its invocation, unobserved: `qtrace.Step.Ambiguous`, no expect)
+  and accept the run if a resolution conforms, saying which.
 - `ExploreConfig.Steer`: runs steered toward what the seeds rarely
   reach, each replaying a run that found a new step, observed state,
   fault or code block up to a random choice, then on a fresh seed; a

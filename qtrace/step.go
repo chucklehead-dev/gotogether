@@ -74,10 +74,15 @@ type Step struct {
 	Call       uint64
 	// Settled marks a settle record (KeySettled), not a step.
 	Settled bool
-	Args    map[string]any // string, int64, bool or float64
-	Obs     map[string]any
-	Order   map[string]int64
-	Source  string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	// Ambiguous marks a step whose effect is assumed, not observed: a
+	// pending call resolved as having taken effect (qtest.ResolvePending).
+	// It has no outcome and no observations, and the binding checks no
+	// expect after it.
+	Ambiguous bool
+	Args      map[string]any // string, int64, bool or float64
+	Obs       map[string]any
+	Order     map[string]int64
+	Source    string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
 }
 
 // Model reports whether s is a model step: not an invocation record or a

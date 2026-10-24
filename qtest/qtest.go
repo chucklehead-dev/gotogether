@@ -68,6 +68,8 @@ type settings struct {
 	linearizeBudget int
 	// linearizeKey is LinearizeByKey's argument ("": no partition)
 	linearizeKey string
+	// resolvePending is ResolvePending's
+	resolvePending bool
 	// mutant is System.Mutant
 	mutant string
 	// given are the options given, by name, for the workflows that
@@ -105,9 +107,9 @@ var (
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	whyLinearize = "its runs are checked in the order they were recorded; Linearize is Record's and Validate's, " +
 		"for steps recorded where an operation was invoked and returned"
-	exploreIgnores = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize, "LinearizeByKey": whyLinearize}
+	exploreIgnores = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize, "LinearizeByKey": whyLinearize, "ResolvePending": whyLinearize}
 	whyCaseOrder   = "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's"
-	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder, "LinearizeByKey": whyCaseOrder,
+	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder, "LinearizeByKey": whyCaseOrder, "ResolvePending": whyCaseOrder,
 		"SkipIfEmpty": "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
 	whyUnchecked    = "no case is checked against the model"
 	uncheckedIgnore = map[string]string{"Constants": whyUnchecked, "Invariants": whyUnchecked, "Quint": whyUnchecked}
@@ -403,6 +405,18 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 			budget = DefaultLinearizeBudget
 		}
 		run.Steps, found, undecided, kept = linearize(t, lc, run.Steps, budget, c.linearizeKey)
+	}
+	if c.resolvePending {
+		if c.Linearize {
+			t.Fatalf("gotogether: ResolvePending with Linearize: a resolution keeps the recorded order, and the two searches are not combined; " +
+				"record the steps where they take effect, or resolve the pending calls of a history in its recorded order")
+		}
+		lc, err := ch.WithInvariants()
+		if err != nil {
+			t.Fatalf("gotogether: %v", err)
+		}
+		lc.Options.Dir, lc.Options.NoITF = filepath.Join(o.Dir, "resolve"), true
+		run.Steps, found, undecided, kept = resolve(t, lc, run.Steps, DefaultResolveBudget)
 	}
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {

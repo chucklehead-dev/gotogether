@@ -126,9 +126,10 @@ next.
   declaration and a DPOR with sleep sets, or a passing Exhaust would
   prove less than it says. Steered exploration is done too
   (`ExploreConfig.Steer`, by new steps, observed states, faults and code
-  blocks). Open: trace validation with unobserved or ambiguous steps
-  (Jepsen's `:info`, hidden actions: the validator searches their
-  resolutions), pending calls (`qobs.Invoke`) the first of them. Online
+  blocks). Pending calls are resolved too (`qtest.ResolvePending`:
+  no effect, or an unobserved effect after a later step). Open: hidden
+  actions (an effect no one recorded, which the validator would search
+  for between steps), resolution together with Linearize. Online
   validation stays deferred.
 
 ## Dropped on purpose

@@ -24,7 +24,13 @@ simulation a wall-clock time would make every run's cache key its own).
 A call whose caller
 died, or that was never answered, is then in the trace as pending
 (`invoked, never completed: write(key=..)` in the report; no step of the
-replay), which `qtest.Completes()` judges. Either way
+replay), which `qtest.Completes()` judges. What it did is unknown, as for
+Jepsen's `:info` operations: `qtest.ResolvePending()` (Record and
+Validate) tries each pending call as having had no effect, or as having
+taken effect after one of the steps recorded since its invocation (with
+no observation: no expect is checked after it), and the actor conforms if
+one resolution does; an issue says which ("withdraw(amount=3) took
+effect after step 1"). Either way
 check with `qtest.Linearize()`: concurrent operations return in
 another order than they took effect, and the recording order rejects
 correct code (examples/kvstore's client history, every load tried). The
