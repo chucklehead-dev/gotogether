@@ -53,6 +53,12 @@ type Binding struct {
 	Actions map[string]Action `yaml:"actions"`
 	// Invariants are vals of the model checked in every observed state.
 	Invariants []string `yaml:"invariants"`
+	// Eventually are vals of the model that must hold when the run ends
+	// (no work pending: `outbox.size() == 0`): liveness obligations,
+	// checked in the last observed state only. qtest judges them only on a
+	// run whose system settled (Sim.Settle), where pending work is a
+	// failure to finish rather than a run cut short.
+	Eventually []string `yaml:"eventually"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.
 	Simulate *Simulation `yaml:"simulate"`
@@ -178,6 +184,11 @@ func (b *Binding) Lint(m *Model) []string {
 	for _, inv := range b.Invariants {
 		if !m.Vals[inv] {
 			errs = append(errs, fmt.Sprintf("invariant %s: not a val of %s", inv, m.Module))
+		}
+	}
+	for _, ev := range b.Eventually {
+		if !m.Vals[ev] {
+			errs = append(errs, fmt.Sprintf("eventually %s: not a val of %s", ev, m.Module))
 		}
 	}
 	for _, c := range sortedNames(m.Consts) {

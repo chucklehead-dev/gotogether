@@ -1,0 +1,13 @@
+spec: funds.qnt
+module: funds
+constants:
+  LIMIT: '100'
+actions:
+  deposit:
+    args: { amount: '{{.amount}}' }
+    expect: 'balance == {{.obs.balance}}'
+  withdraw:
+    args: { amount: '{{.amount}}' }
+    expect: 'balance == {{.obs.balance}}'
+invariants: [nonNegative, underLimit]
+eventually: [funded]

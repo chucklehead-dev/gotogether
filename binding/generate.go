@@ -26,6 +26,7 @@ type Generated struct {
 type GeneratedTests struct {
 	Conforms   string            // replays every step; checks each step's expect
 	Invariants map[string]string // invariant -> run that checks it in every state
+	Eventually map[string]string // eventual val -> run that checks it in the last state
 	// All, when there are invariants, replays the steps once checking each
 	// step's expect and every invariant: the fast path. If it passes, so
 	// do Conforms and every invariant run; if not, those runs say which
@@ -74,7 +75,7 @@ func (b *Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generate
 		return nil, err
 	}
 	return RenderModule(ModuleSpec{
-		Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants,
+		Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
 		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", t.Actor, len(t.Steps), t.Processes)},
 	}, p.Calls, qntPath)
 }
@@ -248,6 +249,7 @@ type ModuleSpec struct {
 	Instance   string   // if set, import this (already instantiated) module instead
 	Defs       string   // Quint helpers
 	Invariants []string
+	Eventually []string // vals checked in the last state only (liveness obligations)
 	InitExpect string   // checked in the initial state, if set
 	Header     []string // comment lines
 	Tests      TestSet  // which runs to write (default: all)
@@ -417,6 +419,27 @@ func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, er
 				return fmt.Sprintf("%s.expect(%s)", c.Quint, all)
 			}, false)
 		}
+		// each eventual val in its own run, in every test set: it holds or
+		// not at the end only, which the fused run cannot say
+		g.Tests.Eventually = map[string]string{}
+		for _, ev := range ms.Eventually {
+			name := prefix + ev + "EvTest"
+			g.Tests.Eventually[ev] = name
+			pr("")
+			pr("  // The same steps; %s must hold when they end.", ev)
+			if len(calls) == 0 {
+				pr("  run %s =", name)
+				pr("    init.expect(%s)", ev)
+				continue
+			}
+			n := 0
+			chain(name, "init", func(c Call) string {
+				if n++; n == len(calls) {
+					return fmt.Sprintf("%s.expect(%s)", c.Quint, ev)
+				}
+				return c.Quint
+			}, false)
+		}
 		g.Tests.Invariants = map[string]string{}
 		if separate {
 			for _, inv := range ms.Invariants {
@@ -439,7 +462,7 @@ func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, er
 
 // ModuleSpec returns what a replay of plan p imports and checks.
 func (b *Binding) ModuleSpec(p *Plan) ModuleSpec {
-	return ModuleSpec{Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants,
+	return ModuleSpec{Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
 		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", p.Actor, p.ObservedSteps, p.Processes)}}
 }
 

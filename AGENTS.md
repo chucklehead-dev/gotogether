@@ -244,6 +244,9 @@ working there:
   when its time runs out with such a task at work or waiting, polling
   loops included: mark them Daemon. qtest judges it, not fails it
   (`Run.Unsettled`, a report not OK, `qtest.Settles()`).
+  A binding's `eventually` vals are checked in a run's last state, and
+  qtest drops their results from a run that did not settle: a run cut
+  short has work pending by right.
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
   (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record

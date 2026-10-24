@@ -12,6 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // failTB records failures instead of failing the test, and stops like t.
@@ -163,6 +164,35 @@ func TestUnsettledRuns(t *testing.T) {
 	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "do not settle") || !strings.Contains(all, "client: waiting") {
 		t.Errorf("Conforms of an unsettled run: %q, want it named, with its task", f.errs)
 	}
+}
+
+// A binding's eventual property is judged at the end of a run whose
+// system settled: a run that funds the account conforms, one that drains
+// it violates "eventually funded"; a run that never settled says nothing
+// of it.
+func TestEventually(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	sys := func(settle bool, withdraw int) System {
+		return System{Binding: "../validate/testdata/funds.binding.yaml", Run: func(c qenv.Chooser) error {
+			s := qenv.New(c)
+			defer s.Close()
+			s.Spawn("client", func(ctx context.Context) {
+				qobs.Record(ctx, "deposit", nil, "amount", 10, "obs.balance", 10)
+				if withdraw > 0 {
+					qobs.Record(ctx, "withdraw", nil, "amount", withdraw, "obs.balance", 10-withdraw)
+				}
+			})
+			if settle {
+				return s.Settle(time.Minute)
+			}
+			return s.Run(time.Minute)
+		}}
+	}
+	funded := validate.EventuallyName("funded")
+	sys(true, 0).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms())
+	sys(true, 10).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, All(Violates(funded)))
+	sys(false, 10).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms()) // never settled: not judged
 }
 
 // A scenario that fails the test from its run's goroutine (t.Fatal in

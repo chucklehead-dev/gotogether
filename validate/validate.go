@@ -115,6 +115,11 @@ type InvariantResult struct {
 	Failure *Failure
 }
 
+// EventuallyName is how a result names an eventual val (binding's
+// Eventually) among its invariants: "eventually <val>". Violates takes it
+// so: qtest.Violates(validate.EventuallyName("outboxEmpty")).
+func EventuallyName(val string) string { return "eventually " + val }
+
 // OK is true when the trace conforms and every invariant holds, and
 // reconstruction reported no errors.
 func (r *Result) OK() bool {
@@ -220,6 +225,9 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 			for _, n := range g.Tests.Invariants {
 				names = append(names, n)
 			}
+			for _, n := range g.Tests.Eventually {
+				names = append(names, n)
+			}
 		}
 		out, err := quintTest(ctx, qnt, gs[0].Module, file, opt, names)
 		return gs, qnt, out, err
@@ -234,7 +242,11 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 		verdicts, _ := parseQuintTest(out, qnt, gs[0])
 		detailed = nil
 		for i, g := range gs {
-			if verdicts[g.Tests.All] != Pass {
+			evFailed := false
+			for _, n := range g.Tests.Eventually {
+				evFailed = evFailed || verdicts[n] != Pass
+			}
+			if verdicts[g.Tests.All] != Pass || evFailed {
 				detailed = append(detailed, i)
 				continue
 			}
@@ -243,6 +255,9 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 			r.Invariants = nil
 			for _, inv := range ms.Invariants {
 				r.Invariants = append(r.Invariants, InvariantResult{Name: inv, Verdict: Pass})
+			}
+			for _, ev := range ms.Eventually {
+				r.Invariants = append(r.Invariants, InvariantResult{Name: EventuallyName(ev), Verdict: Pass})
 			}
 			if !opt.NoITF {
 				itf := filepath.Join(opt.Dir, base+"_"+g.Tests.All+".itf.json")
@@ -273,7 +288,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 	}
 	pattern := filepath.Join(opt.Dir, file+"_{test}.itf.json")
 	for j, i := range detailed {
-		errs[i] = fill(gs[j], out, qnt, pattern, ms.Invariants, res[i])
+		errs[i] = fill(gs[j], out, qnt, pattern, ms.Invariants, ms.Eventually, res[i])
 		if withITF.Backend == "typescript" { // its failing tests write no ITF: say so where the state would be
 			for _, f := range res[i].failures() {
 				if f.State == nil {
@@ -306,7 +321,7 @@ func quintTest(ctx context.Context, qnt, module, base string, opt Options, tests
 }
 
 // fill turns quint's output into the verdict on one generated run.
-func fill(g *binding.Generated, output, qnt, itfPattern string, invariants []string, res *Result) error {
+func fill(g *binding.Generated, output, qnt, itfPattern string, invariants, eventually []string, res *Result) error {
 	res.Steps, res.Module, res.Calls, res.Output = len(g.Calls), qnt, g.Calls, output
 	verdicts, failures := parseQuintTest(res.Output, qnt, g)
 	if _, ok := verdicts[g.Tests.Conforms]; !ok {
@@ -337,6 +352,9 @@ func fill(g *binding.Generated, output, qnt, itfPattern string, invariants []str
 	for _, n := range g.Tests.Invariants {
 		names = append(names, n)
 	}
+	for _, n := range g.Tests.Eventually {
+		names = append(names, n)
+	}
 	for _, name := range names {
 		if verdicts[name] == Fail && failures[name] == nil {
 			msg := "no error location in quint's output"
@@ -349,6 +367,14 @@ func fill(g *binding.Generated, output, qnt, itfPattern string, invariants []str
 	for _, inv := range invariants {
 		name := g.Tests.Invariants[inv]
 		ir := InvariantResult{Name: inv, Verdict: verdicts[name], Failure: failures[name]}
+		if res.Conforms != Pass {
+			ir.Verdict, ir.Failure = NotEvaluated, nil
+		}
+		res.Invariants = append(res.Invariants, ir)
+	}
+	for _, ev := range eventually {
+		name := g.Tests.Eventually[ev]
+		ir := InvariantResult{Name: EventuallyName(ev), Verdict: verdicts[name], Failure: failures[name]}
 		if res.Conforms != Pass {
 			ir.Verdict, ir.Failure = NotEvaluated, nil
 		}

@@ -411,7 +411,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	r := qobs.NewRecorder(sink, c.Recorder...)
 	var task hooks.TaskPanic
 	var esc hooks.Escapes // steps from goroutines its tasks started with `go`: this run's, not a parallel test's
-	ctx = hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc)
+	var settled hooks.Settled
+	ctx = hooks.WithSettled(hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc), &settled)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
@@ -442,7 +443,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if n, first := esc.Steps(); err == nil && n > 0 {
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
-	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled}
+	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, settled: settled.Yes}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -607,7 +608,7 @@ func judge(t testing.TB, cc *validate.Checker, inst string, runs []*Run, name fu
 	t.Helper()
 	defer func() {
 		for _, r := range runs {
-			r.settled()
+			r.adjust()
 		}
 	}()
 	keys := make([]string, len(runs))
@@ -1149,7 +1150,7 @@ func (x *Exploration) recheck(t testing.TB, r *Run) {
 	case err != nil:
 	case rep.OK() == r.Report.OK() && reason(rep) == reason(r.Report):
 		r.Report = rep
-		r.settled()
+		r.adjust()
 	default: // a cache key or a backend at fault: say so, keep the verdict the claim was judged by
 		t.Logf("gotogether: %s checked again judges otherwise (%s, not %s): the verdict cache or a backend is wrong; the report below is the one judged", x.nameOf(r), reason(rep), reason(r.Report))
 	}

@@ -37,6 +37,7 @@ type Binding struct
     field Antecedents map[string]string `yaml:"antecedents"`
     field Actions map[string]Action `yaml:"actions"`
     field Invariants []string `yaml:"invariants"`
+    field Eventually []string `yaml:"eventually"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     method (*Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generated, error)
@@ -68,6 +69,7 @@ type Generated struct
 type GeneratedTests struct
     field Conforms string
     field Invariants map[string]string
+    field Eventually map[string]string
     field All string
 type ITFMeta struct
     field Spec string `json:"spec"`
@@ -93,6 +95,7 @@ type ModuleSpec struct
     field Instance string
     field Defs string
     field Invariants []string
+    field Eventually []string
     field InitExpect string
     field Header []string
     field Tests TestSet
@@ -1367,6 +1370,7 @@ const Fail Verdict = "fail"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 func Cached(bindingPath string, o Options) (*Checker, error)
+func EventuallyName(val string) string
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Checker struct

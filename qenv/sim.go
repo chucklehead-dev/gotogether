@@ -898,10 +898,13 @@ func (s *Sim) Settle(d time.Duration) error {
 		return err
 	}
 	if s.nat != nil {
-		return nil // the native runtime runs in real time and cannot tell, as with ErrStuck
+		return nil // the native runtime runs in real time and cannot tell, as with ErrStuck: no eventual property is judged
 	}
 	if pending := s.pending(); len(pending) > 0 {
 		return &Unsettled{After: d, Tasks: pending}
+	}
+	if m, ok := hooks.SettledOf(s.base); ok {
+		m.Yes = true // the run's eventual properties apply
 	}
 	return nil
 }

@@ -244,9 +244,13 @@ type Run struct {
 	// outcome the claims judge. It makes the run's report not OK, so
 	// Conforms does not hold of it; Settles states it alone.
 	Unsettled string
-	Report    *validate.Report
-	StepLog   string            // Record's native step log (JSONL)
-	ITF       map[string]string // Record's: actor -> model-level ITF written in-process
+	// settled: its simulation settled (Sim.Settle found it quiet), so the
+	// binding's eventual properties apply to it
+	settled  bool
+	adjusted *validate.Report // the report adjust made: it is not made again
+	Report   *validate.Report
+	StepLog  string            // Record's native step log (JSONL)
+	ITF      map[string]string // Record's: actor -> model-level ITF written in-process
 }
 
 // Faults are the run's fault choices that were not nominal.
@@ -255,14 +259,32 @@ func (r *Run) Faults() []qenv.Choice { return (&qenv.ChoiceLog{Choices: r.Choice
 // OK reports whether every actor conformed and satisfied the invariants.
 func (r *Run) OK() bool { return r.Report != nil && r.Report.OK() }
 
-// settled gives the run's report its Unsettled, on a copy: verdicts are
-// shared by every run of the same steps, which may have settled.
-func (r *Run) settled() {
-	if r.Unsettled != "" && r.Report != nil && r.Report.Unsettled != r.Unsettled {
-		rep := *r.Report
-		rep.Unsettled = r.Unsettled
-		r.Report = &rep
+// adjust fits the run's report to how the run ended, on a copy (verdicts
+// are shared by every run of the same steps, which may have ended
+// otherwise): its Unsettled, and the binding's eventual properties only
+// if its system settled. A run cut short, or not settled, says nothing of
+// what it would have finished.
+func (r *Run) adjust() {
+	if r.Report == nil || r.adjusted == r.Report {
+		return
 	}
+	rep := *r.Report
+	rep.Unsettled = r.Unsettled
+	if !r.settled {
+		rep.Actors = make([]*validate.Result, len(r.Report.Actors))
+		for i, a := range r.Report.Actors {
+			b := *a
+			b.Invariants = nil
+			for _, inv := range a.Invariants {
+				if !strings.HasPrefix(inv.Name, validate.EventuallyName("")) {
+					b.Invariants = append(b.Invariants, inv)
+				}
+			}
+			rep.Actors[i] = &b
+		}
+	}
+	r.Report = &rep
+	r.adjusted = r.Report
 }
 
 func checker(t testing.TB, bindingPath string, o validate.Options) *validate.Checker {

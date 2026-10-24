@@ -96,6 +96,10 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- A binding's `eventually` names vals that must hold when a run ends
+  (liveness obligations: no work pending), checked in its last state;
+  a result names each `validate.EventuallyName(val)`, and an exploration
+  judges them only on a run whose system settled.
 - `qtest.NoSurvivors` marks an equivalent mutant by function, change and
   code (`"(Counter).Add: drop call: qobs.Record(...)"`), as a survivor's
   report now prints it: a line added above no longer moves the mark. A
