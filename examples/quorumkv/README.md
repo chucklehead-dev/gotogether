@@ -78,7 +78,7 @@ qobs.Settled(ctx) // the probe came after Settle's own record
 key's history is searched alone:
 
 ```go
-sys := qtest.System{Binding: "quorumkv.binding.yaml", Opts: []qtest.Option{qtest.LinearizeByKey("key")}, Run: /* ... */}
+sys := qtest.System{Binding: "quorumkv.binding.yaml", Opts: []qtest.Option{qtest.LinearizeByKey("key")}, Run: run}
 sys.Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 ```
 
