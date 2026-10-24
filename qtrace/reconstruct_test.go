@@ -154,3 +154,24 @@ func TestSettleAcrossRecorders(t *testing.T) {
 		t.Errorf("every step before the settle: settled %v, issues %v", traces[0].Settled, issues)
 	}
 }
+
+// Machines ordered by a domain clock compare their own clocks with no
+// other's: a completion's invocation time from its record is no
+// contradiction of the Lamport order on a machine 4 ms behind (it once
+// made the trace an error, in every check).
+func TestRecordTimesAcrossSkewedMachines(t *testing.T) {
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * time.Millisecond) }
+	steps := []Step{
+		{Action: "write", Recorder: "c1", Seq: 1, Thread: "c1", Invocation: true, Time: at(100), Order: map[string]int64{"lamport": 1}},
+		{Action: "write", Recorder: "c1", Seq: 2, Thread: "c1", Call: 1, Time: at(101), Order: map[string]int64{"lamport": 2}},
+		{Action: "read", Recorder: "c2", Seq: 1, Thread: "c2", Invocation: true, Time: at(96), Order: map[string]int64{"lamport": 3}},
+		{Action: "read", Recorder: "c2", Seq: 2, Thread: "c2", Call: 1, Time: at(97), Order: map[string]int64{"lamport": 4}},
+	}
+	traces, issues := Reconstruct(steps)
+	if len(issues) > 0 || len(traces[0].Issues) > 0 {
+		t.Errorf("issues %v %v", issues, traces[0].Issues)
+	}
+	if got := actions(traces[0]); got != "write read" {
+		t.Errorf("order %s", got)
+	}
+}

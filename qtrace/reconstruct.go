@@ -163,7 +163,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			// written: the recorder's own clock, the one its Time is on (a
 			// simulation's true time), whatever "invoked" said
 			if t, ok := invokedAt[rk{s.Recorder, s.Call}]; ok && s.Call != 0 {
-				s.Invoked = t
+				s.Invoked, s.fromRecord = t, true
 			}
 			steps = append(steps, s)
 		case !completed[rk{s.Recorder, s.Seq}]:

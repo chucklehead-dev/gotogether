@@ -82,7 +82,10 @@ type Step struct {
 	Args      map[string]any // string, int64, bool or float64
 	Obs       map[string]any
 	Order     map[string]int64
-	Source    string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	// fromRecord: Invoked is the invocation record's time (Reconstruct),
+	// the recorder's own clock, which no other machine's compares with
+	fromRecord bool
+	Source     string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
 }
 
 // Model reports whether s is a model step: not an invocation record or a

@@ -30,7 +30,10 @@ func realTime(steps []Step) []Issue {
 				"(record the call with qobs.Invoke and Call.Done, which take both times from the recorder, and pass no \"invoked\"; in a simulation, a time from Sim.Now)", s.Action, s.Seq)})
 			continue
 		}
-		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && steps[j].Time.Add(RealTimeSlack).Before(s.Invoked) {
+		// an invocation time the recorder gave is its own clock's: an error
+		// against another machine's would be the clocks' skew (the user's
+		// "invoked" is a claim about real time, and is checked)
+		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && !s.fromRecord && steps[j].Time.Add(RealTimeSlack).Before(s.Invoked) {
 			a := &steps[j]
 			out = append(out, Issue{"error", "realtime", fmt.Sprintf("%s (seq %d) completed before %s (seq %d) was invoked, but the order puts it after: "+
 				"the thread or order keys contradict real time (a step recorded before its effect, an order key from another clock)", a.Action, a.Seq, s.Action, s.Seq)})
@@ -109,6 +112,9 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		sa, sb := &ns[a].s, &ns[b].s
 		if sa.Recorder == sb.Recorder && sb.Call != 0 && sa.Seq != 0 {
 			return sa.Seq < sb.Call
+		}
+		if (sb.fromRecord || sa.fromRecord) && (len(sa.Order) > 0 || len(sb.Order) > 0) {
+			return false // machines that order themselves by domain clocks: their own clocks compare with no other's
 		}
 		inv := sb.Invoked
 		return !inv.IsZero() && sa.Time.Add(RealTimeSlack).Before(inv)
