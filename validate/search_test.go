@@ -371,3 +371,47 @@ func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
 		t.Errorf("the search wrote quint modules for a history with one order")
 	}
 }
+
+// The Go evaluator decides a search as quint alone does: the same order,
+// the same verdict. And when it is wrong (here, made to reject every
+// order), quint's confirmation of the search's conclusion catches it, and
+// the search runs again with quint, saying so.
+func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	var steps []qtrace.Step
+	for i, amount := range []int64{1, 2, 4} {
+		rec := fmt.Sprint("c", i)
+		steps = append(steps, qtrace.Step{Action: "deposit", Recorder: rec, Seq: 1, Thread: rec, Actor: "acct", Process: "p",
+			Invoked: at(0), Time: at(10), Args: map[string]any{"amount": amount}, Obs: map[string]any{}})
+	}
+	steps = append(steps, qtrace.Step{Action: "withdraw", Recorder: "w", Seq: 1, Thread: "w", Actor: "acct", Process: "p",
+		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}})
+	search := func(mode string) *Search {
+		t.Setenv("GOTOGETHER_EVAL", mode)
+		c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := c.Search(steps, SearchOptions{Linearize: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	q, g := search("quint"), search("go")
+	if len(q.issues) == 0 || len(g.issues) == 0 || q.issues[0].Msg != g.issues[0].Msg {
+		t.Fatalf("quint: %v\nthe evaluator: %v", q.issues, g.issues)
+	}
+	if !strings.Contains(g.issues[0].Msg, "conforms") {
+		t.Fatalf("want an order found: %v", g.issues)
+	}
+	tamperEval = true
+	defer func() { tamperEval = false }()
+	w := search("go")
+	if !strings.Contains(w.issues[0].Msg, "disagree") || !strings.Contains(w.issues[0].Msg, "conforms") {
+		t.Errorf("a wrong evaluator: %v, want the disagreement said and quint's verdict", w.issues)
+	}
+}

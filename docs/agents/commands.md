@@ -33,6 +33,10 @@ AGENTS.md has the general requirements.
   batch chunk of several traces, which it evaluates in one process where
   rust starts one evaluator per test; quint's own default for connect's
   `quint run`).
+  `GOTOGETHER_EVAL=quint` checks a linearization's candidates with quint
+  alone (by default the Go evaluator judges them, internal/qeval over the
+  binding's evaluation module, compiled once into
+  $TMPDIR/gotogether-eval/, and quint confirms the search's conclusion).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's

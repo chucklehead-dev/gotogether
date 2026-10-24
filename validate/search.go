@@ -312,33 +312,45 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 	if a == "" {
 		a = "default"
 	}
+	// candidates are judged by the Go evaluator while it can (quint for the
+	// rest of the search once it refuses one), and quint confirms what the
+	// search concludes
+	ev := &evalUse{}
+	if evalMode() == "go" {
+		if ev.e = evaluatorFor(full); ev.e.err != nil {
+			ev.off, ev.why = true, ev.e.err.Error()
+		}
+	} else {
+		ev.off, ev.why = true, "GOTOGETHER_EVAL=quint"
+	}
 	checker := func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
 		// candidates in the history's instance and naming, as the memo and
 		// the merge of prefixes by state assume
 		within := *ch
 		within.within = tr
 		ch = &within
+		quint := quintChecker(ch, tr, a, invariants)
 		return func(orders [][]qtrace.Step) ([]int, []string) {
-			reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
-			fs, states := make([]int, len(orders)), make([]string, len(orders))
-			for i := range orders {
-				if errs[i] != nil {
-					fail("linearizing actor %s: %v", a, errs[i])
-				}
-				fs[i] = failedAt(reps[i], len(orders[i]))
-				if invariants && fs[i] < 0 {
-					fs[i] = violatedAt(reps[i], len(orders[i]))
-				}
-				if fs[i] < 0 {
-					states[i] = lastState(reps[i])
-					if s := orders[i]; states[i] != "" && ch.Binding.Restart != "" && len(s) > 0 {
-						// the restart the binding inserts depends on the
-						// process the last step ran in
-						states[i] += "|process=" + s[len(s)-1].Process
+			if !ev.off {
+				fs, states := make([]int, len(orders)), make([]string, len(orders))
+				judged := true
+				for i, o := range settledAs(tr, orders) {
+					f, st, err := ev.e.judge(ch, tr, o, len(orders[i]), invariants)
+					if err != nil {
+						ev.off, ev.why, judged = true, err.Error(), false
+						break
+					}
+					fs[i] = f
+					if f < 0 {
+						states[i] = withProcess(ch, st, orders[i])
 					}
 				}
+				if judged {
+					ev.used = true
+					return fs, states
+				}
 			}
-			return fs, states
+			return quint(orders)
 		}
 	}
 	check := checker(ch, false)
@@ -353,6 +365,89 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false
 	}
 	o, ok, tried, cut := qtrace.LinearizeStates(tr.Steps, budget, check)
+	if ev.used && !cut {
+		// quint confirms the conclusion: the order found conforms, or the
+		// one that got furthest fails. A disagreement searches again with
+		// quint alone (and says so: the evaluator has a bug)
+		q := quintChecker(&Checker{Binding: ch.Binding, Model: ch.Model, Options: ch.Options, within: tr}, tr, a, false)
+		if fq := first(q([][]qtrace.Step{o})); (fq < 0) != ok {
+			ev.off, ev.why = true, fmt.Sprintf("the Go evaluator and quint disagree on actor %s's order (quint: %s)", a, verdictOf(fq))
+			ev.disagreed = true
+			o, ok, tried, cut = qtrace.LinearizeStates(tr.Steps, budget, check)
+		}
+	}
+	o, issue, cut := orderIssue(ch, full, tr, a, budget, partitioned, checker, o, ok, tried, cut)
+	return o, ev.note(issue), cut
+}
+
+// evalUse is how a search used the Go evaluator.
+type evalUse struct {
+	e         *evaluator
+	off       bool   // quint checks the candidates (no evaluator, or it refused one)
+	why       string // why it is off
+	used      bool   // it judged some candidates
+	disagreed bool   // quint contradicted its conclusion
+}
+
+// note is issue with how its candidates were checked, when quint checked
+// some for a reason worth saying.
+func (ev *evalUse) note(issue qtrace.Issue) qtrace.Issue {
+	switch {
+	case ev.disagreed:
+		issue.Severity = "warn"
+		issue.Msg += "; " + ev.why + ": searched again with quint (GOTOGETHER_EVAL=quint checks with quint alone)"
+	case ev.used && ev.off:
+		issue.Msg += "; candidates after the evaluator refused one checked by quint (" + ev.why + ")"
+	}
+	return issue
+}
+
+func verdictOf(f int) string {
+	if f < 0 {
+		return "it conforms"
+	}
+	return fmt.Sprintf("it fails at step %d", f+1)
+}
+
+// withProcess is a conforming candidate's state, with the process its last
+// step ran in when the binding infers restarts: the restart it inserts
+// next depends on it.
+func withProcess(ch *Checker, state string, order []qtrace.Step) string {
+	if state != "" && ch.Binding.Restart != "" && len(order) > 0 {
+		state += "|process=" + order[len(order)-1].Process
+	}
+	return state
+}
+
+// quintChecker checks candidate orders of tr's steps with quint, in
+// batches: each one's failure index (with invariants, an invariant's
+// violation's too), and a conforming one's last state.
+func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
+	return func(orders [][]qtrace.Step) ([]int, []string) {
+		reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
+		fs, states := make([]int, len(orders)), make([]string, len(orders))
+		for i := range orders {
+			if errs[i] != nil {
+				fail("linearizing actor %s: %v", a, errs[i])
+			}
+			fs[i] = failedAt(reps[i], len(orders[i]))
+			if invariants && fs[i] < 0 {
+				fs[i] = violatedAt(reps[i], len(orders[i]))
+			}
+			if fs[i] < 0 {
+				states[i] = withProcess(ch, lastState(reps[i]), orders[i])
+			}
+		}
+		return fs, states
+	}
+}
+
+// orderIssue is a search's outcome, as order reports it: the order, the
+// issue, and whether the search was cut short; with invariants, a second
+// search for an order that keeps them.
+func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, partitioned bool,
+	checker func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string),
+	o []qtrace.Step, ok bool, tried int, cut bool) ([]qtrace.Step, qtrace.Issue, bool) {
 	switch {
 	case ok && len(full.Binding.Invariants) > 0 && first(checker(full, true)([][]qtrace.Step{o})) >= 0:
 		// the order found violates an invariant: another that conforms may
