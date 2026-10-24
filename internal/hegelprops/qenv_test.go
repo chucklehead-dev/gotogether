@@ -89,7 +89,8 @@ func TestHegelFindsLostUpdate(t *testing.T) {
 // Hegel-chosen schedule, with the scheduler checking its own invariants.
 //   - a Sleep lasts exactly its duration, a Yield no time;
 //   - a Wait that reports a Notify ends at the time of a Notify of its
-//     Signal made while it waited; one that reports none lasts its timeout;
+//     Signal made while it waited; one that reports none lasts its timeout,
+//     and one without a timeout (0) always reports a Notify;
 //   - the same choices replay the same run.
 func TestSchedulerSemantics(t *testing.T) {
 	type op struct {
@@ -106,9 +107,11 @@ func TestSchedulerSemantics(t *testing.T) {
 		sigs := []*qenv.Signal{{}, {}}
 		notifies := map[int][]time.Duration{}
 		out := make([][]op, len(progs))
+		running := len(progs) // programs not yet done (the closer's)
 		for i, prog := range progs {
 			out[i] = append([]op(nil), prog...)
 			s.Spawn("task", func(ctx context.Context) {
+				defer func() { running-- }()
 				for j := range out[i] {
 					o := &out[i][j]
 					o.start = s.Elapsed()
@@ -127,6 +130,19 @@ func TestSchedulerSemantics(t *testing.T) {
 				}
 			})
 		}
+		// a wait of 0 has no limit: while a program runs, the closer
+		// notifies both signals every 100s (longer than a program's bounded
+		// ops, at most 6 of 5s), so one that no program notifies ends at
+		// the closer's
+		s.Spawn("closer", func(ctx context.Context) {
+			for running > 0 {
+				qenv.Sleep(ctx, 100*time.Second)
+				for i, sig := range sigs {
+					notifies[i] = append(notifies[i], s.Elapsed())
+					sig.Notify()
+				}
+			}
+		})
 		if err := s.Run(time.Hour); err != nil {
 			t.Fatal(err)
 		}
@@ -136,12 +152,8 @@ func TestSchedulerSemantics(t *testing.T) {
 		progs := make([][]op, hegel.Draw(ht, hegel.Integers(1, 4)))
 		for i := range progs {
 			for range hegel.Draw(ht, hegel.Integers(1, 6)) {
-				o := op{kind: hegel.Draw(ht, hegel.Integers(0, 3)), sig: hegel.Draw(ht, hegel.Integers(0, 1)),
-					d: time.Duration(hegel.Draw(ht, hegel.Integers(0, 5))) * time.Second}
-				if o.kind == 2 && o.d == 0 {
-					o.d = time.Second // a wait of 0 has no limit: one never notified would wait forever
-				}
-				progs[i] = append(progs[i], o)
+				progs[i] = append(progs[i], op{kind: hegel.Draw(ht, hegel.Integers(0, 3)), sig: hegel.Draw(ht, hegel.Integers(0, 1)),
+					d: time.Duration(hegel.Draw(ht, hegel.Integers(0, 5))) * time.Second})
 			}
 		}
 		rec := &qenv.ChoiceLog{C: qhegel.Choices(ht)}
@@ -153,7 +165,7 @@ func TestSchedulerSemantics(t *testing.T) {
 					ht.Fatalf("Sleep(%v) lasted %v", o.d, o.end-o.start)
 				case o.kind == 1 && o.end != o.start:
 					ht.Fatalf("Yield took %v", o.end-o.start)
-				case o.kind == 2 && !o.notified && o.end-o.start != o.d:
+				case o.kind == 2 && !o.notified && (o.d == 0 || o.end-o.start != o.d):
 					ht.Fatalf("Wait(%v) timed out after %v", o.d, o.end-o.start)
 				case o.kind == 2 && o.notified:
 					ok := false

@@ -1,7 +1,9 @@
 package qtest
 
 import (
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -14,8 +16,10 @@ func overdraw(c qenv.Chooser) error {
 	return nil
 }
 
+var instances atomic.Int64
+
 // A verdict is of steps against one instance: the same steps are a
-// violation with LIMIT 100 and conform with LIMIT 200, and the verdicts
+// violation with LIMIT 100 and conform with LIMIT 200 (or more), and the verdicts
 // shared by every exploration (as a sweep's rows share them) keep them
 // apart.
 func TestVerdictCacheKeysTheInstance(t *testing.T) {
@@ -23,11 +27,15 @@ func TestVerdictCacheKeysTheInstance(t *testing.T) {
 	RequireQuint(t)
 	cfg := ExploreConfig{Seeds: 1}
 	System{Binding: "../validate/testdata/account.yaml", Run: overdraw}.Explore(t, cfg).Expect(t, Violates("underLimit"))
-	x := System{Binding: "../validate/testdata/account.yaml", Run: overdraw, Opts: []Option{Constants(map[string]string{"LIMIT": "200"})}}.
+	// an instance of its own each time the test runs (-count): verdicts are
+	// the test binary's, and a LIMIT checked by an earlier run is rightly
+	// a cache hit
+	limit := strconv.Itoa(200 + int(instances.Add(1)))
+	x := System{Binding: "../validate/testdata/account.yaml", Run: overdraw, Opts: []Option{Constants(map[string]string{"LIMIT": limit})}}.
 		Explore(t, cfg)
 	x.Expect(t, Conforms())
 	if x.Cached != 0 {
-		t.Errorf("the LIMIT 200 run took a verdict of another instance")
+		t.Errorf("the LIMIT %s run took a verdict of another instance", limit)
 	}
 }
 

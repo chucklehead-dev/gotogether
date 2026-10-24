@@ -246,3 +246,19 @@ func TestWeaveOutsideTheWorkspace(t *testing.T) {
 		t.Fatalf("err = %v, want the go.work named with the fix", err)
 	}
 }
+
+// An import cycle in one package is the go command's to report when it
+// builds: the weave still weaves the packages that load.
+func TestWeaveBesideAnImportCycle(t *testing.T) {
+	r, err := qweave.Weave(qweave.Config{Dir: "testdata/cycle"})
+	if err != nil {
+		t.Fatalf("a cycle in one package refused the weave: %v", err)
+	}
+	woven := false
+	for name := range r.Files {
+		woven = woven || strings.HasSuffix(name, filepath.Join("guarded", "guarded.go"))
+	}
+	if !woven {
+		t.Errorf("guarded.go was not woven beside the cycle: %v", r.Files)
+	}
+}
