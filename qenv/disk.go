@@ -72,10 +72,10 @@ func (f *diskFile) durable() []byte {
 func NewDisk(s *Sim, name string, p *Process) *Disk {
 	s.claim("disk."+name, "Disk", name)
 	d := &Disk{Name: name, sim: s, proc: p, files: map[string]*diskFile{},
-		fault: DeclareFaults("disk."+name+".crash", "powerLoss", "tornWrite"),
-		write: DeclareFaults("disk."+name+".write", "noSpace"),
-		sync:  DeclareFaults("disk."+name+".sync", "error"),
-		read:  DeclareFaults("disk."+name+".read", "corrupt")}
+		fault: DeclareFaults("disk."+name+".crash", "powerLoss", "tornWrite").at(p),
+		write: DeclareFaults("disk."+name+".write", "noSpace").at(p),
+		sync:  DeclareFaults("disk."+name+".sync", "error").at(p),
+		read:  DeclareFaults("disk."+name+".read", "corrupt").at(p)}
 	s.OnCrash(func(c *Process) {
 		if c == d.proc {
 			d.crash()

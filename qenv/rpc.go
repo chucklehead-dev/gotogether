@@ -132,9 +132,9 @@ func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx
 		p = s.Process(name, false, func(context.Context) {})
 	}
 	svc := &Service[Req, Resp]{Name: name, Proc: p, handler: handler, sim: s,
-		request:  DeclareFaults("rpc."+name+".request", "drop", "duplicate"),
-		delay:    DeclareFaults("rpc."+name+".delay", "late", "lateDuplicate", "veryLate", "slow"),
-		response: DeclareFaults("rpc."+name+".response", "lost")}
+		request:  DeclareFaults("rpc."+name+".request", "drop", "duplicate").at(p),
+		delay:    DeclareFaults("rpc."+name+".delay", "late", "lateDuplicate", "veryLate", "slow").at(p),
+		response: DeclareFaults("rpc."+name+".response", "lost").at(p)}
 	// the requests waiting and in service die with the process, and
 	// release nothing: a restarted service starts with every worker free
 	s.OnCrash(func(c *Process) {

@@ -244,6 +244,9 @@ working there:
   when its time runs out with such a task at work or waiting, polling
   loops included: mark them Daemon. qtest judges it, not fails it
   (`Run.Unsettled`, a report not OK, `qtest.Settles()`).
+  A settle takes runnable tasks in turn (fair), not choice 0;
+  `SettleCore` goes on faulting outside its core (a double's fault
+  kinds carry its process, a nemesis the processes it touches).
   A binding's `eventually` vals are checked in a run's last state, and
   qtest drops their results from a run that did not settle: a run cut
   short has work pending by right.

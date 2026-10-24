@@ -36,7 +36,7 @@ func (s *Sim) stallNemeses(p *Process) {
 		return
 	}
 	if st := s.Stalls; st.Pause > 0 {
-		s.Nemesis("pause."+p.Name, func() bool { return !p.down && !s.now.Before(p.stall.pausedUntil) }, func() {
+		s.nemesisOf("pause."+p.Name, []*Process{p}, func() bool { return !p.down && !s.now.Before(p.stall.pausedUntil) }, func() {
 			p.stall.pausedUntil = s.now.Add(st.Pause)
 			for _, t := range s.tasks { // those runnable now stop where they are
 				if t.proc == p && t.queued {
@@ -50,7 +50,7 @@ func (s *Sim) stallNemeses(p *Process) {
 		})
 	}
 	if st := s.Stalls; st.Slow > 0 && st.SlowFor > 0 {
-		s.Nemesis("slow."+p.Name, func() bool { return !p.down && !s.now.Before(p.stall.slowUntil) }, func() {
+		s.nemesisOf("slow."+p.Name, []*Process{p}, func() bool { return !p.down && !s.now.Before(p.stall.slowUntil) }, func() {
 			p.stall.slowUntil = s.now.Add(st.SlowFor)
 			if s.Log != nil {
 				s.Log(fmt.Sprintf("%v slow %s for %v", s.Elapsed(), p.ID(), st.SlowFor))

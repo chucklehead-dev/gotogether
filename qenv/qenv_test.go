@@ -832,3 +832,103 @@ func TestSettleSaysWhetherItSettled(t *testing.T) {
 		}
 	}
 }
+
+// A settle takes runnable tasks in turn: a task that yields until another
+// sets a flag (a spin wait, woven code's runtime.Gosched) once kept the
+// lowest id first forever, so the setter never ran and the settle ran out
+// of steps instead of settling.
+func TestSettleIsFair(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	done := false
+	s.Spawn("spinner", func(ctx context.Context) {
+		for !done {
+			qenv.Yield(ctx)
+		}
+	})
+	s.Spawn("setter", func(ctx context.Context) { done = true })
+	if err := s.Settle(time.Second); err != nil {
+		t.Fatalf("Settle = %v", err)
+	}
+	if !done {
+		t.Fatal("the setter never ran")
+	}
+}
+
+// A core settle leaves the core alone and goes on faulting the rest: c
+// crashes and its service drops requests while a and b, and a's service,
+// see no fault; a plain settle faults nothing. The client, of no process,
+// is the core's work: it finishes, so the settle settles.
+func TestSettleCore(t *testing.T) {
+	for _, core := range []bool{true, false} {
+		log := &qenv.ChoiceLog{C: qenv.NewSeeded(3)}
+		log.C.(*qenv.Seeded).Rates = qenv.Rates{Kinds: map[string]float64{"nemesis": 1, "rpc": 0.5}}
+		s := qenv.New(log)
+		s.NemesisEvery = 100 * time.Millisecond
+		procs := map[string]*qenv.Process{}
+		for _, n := range []string{"a", "b", "c"} {
+			procs[n] = s.Process(n, true, func(ctx context.Context) {
+				qenv.Daemon(ctx)
+				for {
+					qenv.Sleep(ctx, 10*time.Millisecond)
+				}
+			})
+		}
+		echo := func(_ context.Context, v int) (int, error) { return v, nil }
+		svcA := qenv.NewService(s, "sa", procs["a"], echo)
+		svcC := qenv.NewService(s, "sc", procs["c"], echo)
+		s.Spawn("client", func(ctx context.Context) {
+			for i := range 50 {
+				svcA.Call(ctx, i, time.Second)
+				svcC.Call(ctx, i, time.Second)
+			}
+		})
+		crashes := map[string]int{}
+		s.OnCrash(func(p *qenv.Process) { crashes[p.Name]++ })
+		var err error
+		if core {
+			err = s.SettleCore(time.Minute, procs["a"], procs["b"])
+		} else {
+			err = s.Settle(time.Minute)
+		}
+		s.Close()
+		if err != nil {
+			t.Fatalf("core %v: %v", core, err)
+		}
+		faulted := map[string]int{}
+		for _, c := range log.Choices {
+			if c.Value != 0 && strings.HasPrefix(c.Kind, "fault.rpc.") {
+				faulted[strings.Split(c.Kind, ".")[2]]++
+			}
+		}
+		if core && (crashes["c"] == 0 || faulted["sc"] == 0 || crashes["a"]+crashes["b"] > 0 || faulted["sa"] > 0) {
+			t.Errorf("core settle: crashes %v, faulted requests %v: want c's only", crashes, faulted)
+		}
+		if !core && (len(crashes) > 0 || len(faulted) > 0) {
+			t.Errorf("settle: crashes %v, faulted requests %v: want none", crashes, faulted)
+		}
+	}
+}
+
+// A core settle waits for the core's work, not the rest's: a process
+// outside the core retrying forever leaves it settled, one inside does not.
+func TestSettleCoreWaitsForTheCore(t *testing.T) {
+	for _, inCore := range []bool{false, true} {
+		s := qenv.New(qenv.Nominal{})
+		retry := s.Process("retrier", true, func(ctx context.Context) {
+			for {
+				qenv.Sleep(ctx, time.Second)
+			}
+		})
+		other := s.Process("other", true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+		core := []*qenv.Process{other}
+		if inCore {
+			core = append(core, retry)
+		}
+		err := s.SettleCore(10*time.Second, core...)
+		s.Close()
+		if inCore != errors.Is(err, qenv.ErrUnsettled) {
+			t.Errorf("retrier in the core %v: SettleCore = %v", inCore, err)
+		}
+	}
+}

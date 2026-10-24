@@ -67,7 +67,7 @@ api := s.Process("api", true, func(context.Context) {})              // crashabl
 s.Process("payments", true, func(ctx context.Context) { app.RunPayments(ctx, inbox{q}) })
 s.Spawn("client", func(ctx context.Context) { /* calls that retry on qenv.ErrTimeout */ })
 s.Run(20 * time.Second)       // with faults
-s.Settle(60 * time.Second)    // faults off, canonical schedule, until quiet
+s.Settle(60 * time.Second)    // faults off, tasks in turn, until quiet
 qobs.Record(s.Context(), "settle", nil)
 ```
 
@@ -84,6 +84,12 @@ qobs.Record(s.Context(), "settle", nil)
   retry loop that never ends, a wait a daemon's timer hid); in an
   exploration that is no error but an outcome: such a run does not
   conform, and `qtest.Settles()` states it alone.
+- **Quorum liveness:** `s.SettleCore(d, a, b)` heals the network and
+  leaves processes a and b alone while every other process goes on
+  crashing, pausing and losing requests (VOPR's liveness mode): a system
+  that needs only a quorum must still finish its work. Name every process
+  the core needs, a service's own included; the work of the others is no
+  pending work.
 - **Disks:** `qenv.NewDisk(s, p.Name, p)` is process p's machine's disk
   (name each double uniquely: a second of one name panics):
   writes reach the OS at once and the disk on `File.Sync`. When p crashes

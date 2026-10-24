@@ -783,8 +783,12 @@ reaches a seam (`Yield`, `Wait`, `Sleep`, an operation of a double), where
 the scheduler picks the next one. Code between seams is atomic, so a run
 is a function of its choices. Virtual time jumps to the next deadline when
 nothing can run. `Settle` turns faults off, heals what persists, and runs
-the canonical schedule until quiet. Properties conditioned on quiescence
-apply after it.
+until quiet, drawing nothing: it takes runnable tasks in turn, a fair
+schedule (always the first, choice 0, let a task spinning until another
+acted starve it). Properties conditioned on quiescence apply after it.
+`SettleCore` is VOPR's liveness mode: faults stop for a core of processes
+and go on, drawn as in a run, for the rest; a system that needs a quorum
+must finish with that core.
 
 Code under test reaches the environment only through seams: `qenv.DB` and
 `Txn`, its own interfaces for brokers and services, `qenv.Go`, `qenv.Now`

@@ -96,6 +96,9 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `Sim.Settle` takes runnable tasks in turn (a task spinning until
+  another acts no longer starves it), and `Sim.SettleCore(d, core...)`
+  keeps faulting every process outside a core while the core must finish.
 - A binding's `eventually` names vals that must hold when a run ends
   (liveness obligations: no work pending), checked in its last state;
   a result names each `validate.EventuallyName(val)`, and an exploration

@@ -55,7 +55,7 @@ type Delivery struct {
 func NewQueue(s *Sim, name string, p *Process) *Queue {
 	s.claim("queue."+name, "Queue", name)
 	q := &Queue{Name: name, sim: s, proc: p, held: map[*Delivery]*Process{},
-		ack: DeclareFaults("queue."+name+".ack", "lost")}
+		ack: DeclareFaults("queue."+name+".ack", "lost").at(p)}
 	if s.Check {
 		q.acked = map[int]bool{}
 	}

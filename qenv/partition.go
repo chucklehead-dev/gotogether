@@ -117,7 +117,7 @@ func (n *Network) PartitionNemesis(procs ...*Process) {
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 	for i, a := range sorted {
 		for _, b := range sorted[i+1:] {
-			s.Nemesis("partition."+a.Name+"."+b.Name, func() bool { return !n.Partitioned(a, b) }, func() {
+			s.nemesisOf("partition."+a.Name+"."+b.Name, []*Process{a, b}, func() bool { return !n.Partitioned(a, b) }, func() {
 				n.cut(a, b)
 				gen, d := n.gen[pairOf(a, b)], n.CutLength
 				if d == 0 {
@@ -132,7 +132,7 @@ func (n *Network) PartitionNemesis(procs ...*Process) {
 			})
 			// the nemesis heals its own cuts only: one made with Partition
 			// lasts until Heal
-			s.Nemesis("heal."+a.Name+"."+b.Name, func() bool { return n.Partitioned(a, b) && !n.hand[pairOf(a, b)] }, func() { n.Heal(a, b) })
+			s.nemesisOf("heal."+a.Name+"."+b.Name, []*Process{a, b}, func() bool { return n.Partitioned(a, b) && !n.hand[pairOf(a, b)] }, func() { n.Heal(a, b) })
 		}
 	}
 }

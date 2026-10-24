@@ -99,8 +99,8 @@ func (s *Sim) clockProcess(p *Process) {
 	}
 	if c.Jump > 0 {
 		up := func() bool { return !p.down }
-		s.Nemesis("jump.forward."+p.Name, up, func() { p.clock += c.Jump })
-		s.Nemesis("jump.back."+p.Name, up, func() { p.clock -= c.Jump })
+		s.nemesisOf("jump.forward."+p.Name, []*Process{p}, up, func() { p.clock += c.Jump })
+		s.nemesisOf("jump.back."+p.Name, []*Process{p}, up, func() { p.clock -= c.Jump })
 	}
 }
 

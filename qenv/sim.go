@@ -89,6 +89,8 @@ type Sim struct {
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)
 	faultsOff bool
 	settling  bool
+	ran       int               // the id of the task that ran last (a settle's turn)
+	core      map[*Process]bool // during SettleCore: the processes faults leave alone
 	steps     int
 	panicked  any
 	stack     []byte
@@ -148,6 +150,17 @@ type nemesis struct {
 	family  string // its choice's: "fault.nemesis.<family>" (nemesisFamily)
 	enabled func() bool
 	do      func()
+	procs   []*Process // the processes it touches: a core settle keeps it if one is outside the core
+}
+
+// beyond reports whether n touches a process outside core.
+func (n *nemesis) beyond(core map[*Process]bool) bool {
+	for _, p := range n.procs {
+		if !core[p] {
+			return true
+		}
+	}
+	return false
 }
 
 // nemesisFamily is the family a nemesis is chosen in: its name's first
@@ -185,6 +198,11 @@ func (s *Sim) Choose(kind string, n int) int {
 	if n <= 1 || s.settling || (s.faultsOff && IsFault(kind)) {
 		return 0
 	}
+	return s.draw(kind, n)
+}
+
+// draw asks the Chooser.
+func (s *Sim) draw(kind string, n int) int {
 	if IsFault(kind) {
 		choice.Seen(kind) // a kind, declared or not (hooks.KnownFault)
 	}
@@ -200,7 +218,30 @@ func (s *Sim) Choose(kind string, n int) int {
 
 // fault makes a fault choice: whether (and which) fault of a kind happens
 // here. 0 is nominal. Doubles declare their kinds and choose with FaultOf.
-func (s *Sim) fault(kind string, n int) int { return s.Choose("fault."+kind, n) }
+func (s *Sim) fault(kind string, n int) int { return s.faultAt(nil, kind, n) }
+
+// faultAt is a fault choice at a double of process owner (nil: none): in a
+// core settle, made as in a run if it touches a process outside the core.
+func (s *Sim) faultAt(owner *Process, kind string, n int) int {
+	if n > 1 && s.settling && s.beyondCore(owner) {
+		return s.draw("fault."+kind, n)
+	}
+	return s.Choose("fault."+kind, n)
+}
+
+// beyondCore reports whether a fault at a double of process owner touches
+// a process outside a core settle's core: the double's, or that of the
+// task making the choice.
+func (s *Sim) beyondCore(owner *Process) bool {
+	if s.core == nil {
+		return false
+	}
+	if owner != nil && !s.core[owner] {
+		return true
+	}
+	t := taskOf(nil)
+	return t != nil && t.sim == s && t.proc != nil && !s.core[t.proc]
+}
 
 // Now is the virtual time (on the native runtime, the time package's).
 func (s *Sim) Now() time.Time {
@@ -678,7 +719,7 @@ func (s *Sim) Process(name string, crashable bool, start func(ctx context.Contex
 	}
 	s.spawn(s.base, name+".main", p, start)
 	if crashable {
-		s.Nemesis("crash."+name, func() bool { return !p.down }, func() { p.Crash(); p.Restart() })
+		s.nemesisOf("crash."+name, []*Process{p}, func() bool { return !p.down }, func() { p.Crash(); p.Restart() })
 	}
 	s.stallNemeses(p) // a pause or a slowdown is no crash: any process may suffer one
 	return p
@@ -766,8 +807,13 @@ func (s *Sim) OnCrash(h func(*Process)) { s.onCrash = append(s.onCrash, h) }
 // kind's rate ("nemesis.crash"; "nemesis" covers every family), so one
 // family's nemeses do not dilute another's.
 func (s *Sim) Nemesis(name string, enabled func() bool, do func()) {
+	s.nemesisOf(name, nil, enabled, do)
+}
+
+// nemesisOf registers a nemesis that touches procs (SettleCore).
+func (s *Sim) nemesisOf(name string, procs []*Process, enabled func() bool, do func()) {
 	choice.DeclareNemesis(name)
-	s.nemeses = append(s.nemeses, &nemesis{name: name, family: nemesisFamily(name), enabled: enabled, do: do})
+	s.nemeses = append(s.nemeses, &nemesis{name: name, family: nemesisFamily(name), enabled: enabled, do: do, procs: procs})
 }
 
 // ---- running -----------------------------------------------------------------
@@ -861,13 +907,20 @@ func (s *Sim) Run(d time.Duration) error {
 		if s.Check {
 			s.selfCheck()
 		}
-		if !s.faultsOff && s.nemesisDue() {
+		if (!s.faultsOff || s.core != nil) && s.nemesisDue() {
 			s.maybeNemesis()
 			if n, cands = s.runnable(); n == 0 {
 				continue
 			}
 		}
-		t := s.pick(s.Choose("sched.task", n), cands)
+		k := 0
+		if s.settling {
+			k = s.turn(n, cands)
+		} else {
+			k = s.Choose("sched.task", n)
+		}
+		t := s.pick(k, cands)
+		s.ran = t.id
 		s.dequeue(t)
 		t.wake <- struct{}{}
 		<-s.back
@@ -881,8 +934,10 @@ func (s *Sim) Run(d time.Duration) error {
 
 // Settle turns faults off and runs until quiet or d has passed: the system's chance to
 // converge, after which properties conditioned on quiescence apply. It
-// runs the canonical schedule (every choice 0): what a run explores is
-// what happened before it, and a settle draws nothing from the Chooser.
+// draws nothing from the Chooser: what a run explores is what happened
+// before it. It takes runnable tasks in turn (a fair schedule: a task that
+// spins until another acts does not starve it), and every other choice is
+// 0.
 //
 // It returns an *Unsettled error (ErrUnsettled) if the system is not
 // quiet when its time is up: a task that is no daemon is still at work or
@@ -890,10 +945,41 @@ func (s *Sim) Run(d time.Duration) error {
 // will not come while a daemon's timer keeps time moving, which once hid
 // such a stall). A property conditioned on quiescence would be judged on a
 // system that never reached it. Not on the native runtime.
-func (s *Sim) Settle(d time.Duration) error {
+func (s *Sim) Settle(d time.Duration) error { return s.settle(d, nil) }
+
+// SettleCore is Settle with faults going on outside a core of processes
+// (VOPR's liveness mode): the network heals, and the core is then left
+// alone while every other process may still crash, pause, run slow, jump
+// its clock or be partitioned, and a fault choice that touches it (at its
+// doubles, or made by its tasks) is drawn as in a run. A system that needs
+// only a quorum must finish with one: SettleCore returns an *Unsettled if
+// it does not, naming the core's tasks and those of no process (its
+// clients) still at work; the others' work may never end. Name every
+// process the core needs, a service's own included (NewService with no
+// process makes one). The run's eventual properties then apply, as after
+// Settle: state them of what the core must finish. On the native
+// runtime, as Settle.
+func (s *Sim) SettleCore(d time.Duration, core ...*Process) error {
+	if len(core) == 0 {
+		panic("qenv: SettleCore with no core: Settle turns faults off everywhere")
+	}
+	in := map[*Process]bool{}
+	for _, p := range core {
+		if p == nil || p.sim != s {
+			panic("qenv: SettleCore: a core process of another simulation, or nil")
+		}
+		in[p] = true
+	}
+	return s.settle(d, in)
+}
+
+func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 	s.faultsOff, s.settling = true, true
+	if s.nat == nil {
+		s.core = core // the native runtime's own nemeses stay off
+	}
 	s.net.healAll() // a whole network to recover on
-	defer func() { s.settling = false }()
+	defer func() { s.settling, s.core = false, nil }()
 	if err := s.Run(d); err != nil {
 		return err
 	}
@@ -933,7 +1019,7 @@ func (s *Sim) pending() []string {
 	var out []string
 	self := taskOf(nil) // a task settling the simulation is not its pending work
 	for _, t := range s.tasks {
-		if t == self || t.done || t.killed || t.daemon || t.idle || t.proc != nil && t.proc.down {
+		if t == self || t.done || t.killed || t.daemon || t.idle || t.proc != nil && (t.proc.down || s.core != nil && !s.core[t.proc]) {
 			continue
 		}
 		state := "runnable"
@@ -990,6 +1076,23 @@ func (s *Sim) runnable() (int, []*task) {
 
 // pick returns the k-th runnable task in creation order: queued tasks and
 // predicate candidates merged by id.
+// turn is a settle's pick among the n runnable tasks: the first after the
+// task that ran last, in id order, wrapping around. Every runnable task runs
+// within n steps, so a task that spins (yields until another acts) cannot
+// starve the one it waits for, as always taking the first (choice 0) did.
+func (s *Sim) turn(n int, cands []*task) int {
+	k := s.runq.count(s.ran)
+	for _, c := range cands {
+		if c.id <= s.ran {
+			k++
+		}
+	}
+	if k >= n {
+		return 0
+	}
+	return k
+}
+
 func (s *Sim) pick(k int, cands []*task) *task {
 	for i, c := range cands {
 		pos := s.runq.count(c.id-1) + i
@@ -1102,14 +1205,14 @@ func (s *Sim) maybeNemesis() {
 	var fams []string
 	on := map[string][]*nemesis{}
 	for _, n := range s.nemeses {
-		if n.enabled() {
+		if n.enabled() && (s.core == nil || n.beyond(s.core)) {
 			if on[n.family] == nil {
 				fams = append(fams, n.family)
 			}
 			on[n.family] = append(on[n.family], n)
 		}
 	}
-	if len(fams) == 0 || s.settling || s.faultsOff {
+	if len(fams) == 0 || s.core == nil && (s.settling || s.faultsOff) {
 		return
 	}
 	var picked *nemesis
@@ -1139,7 +1242,9 @@ func (s *Sim) maybeNemesis() {
 		// that log saw no choice, nor any nemesis offered
 		before := map[*ChoiceLog]int{}
 		eachLog(s.c, func(r *ChoiceLog) { before[r] = len(r.Choices) })
-		if by == nil {
+		if by == nil && s.core != nil {
+			k = s.draw(kind, len(ns)+1) // a core settle: the nemeses left are outside the core
+		} else if by == nil {
 			k = s.Choose(kind, len(ns)+1)
 		} else if i := slices.Index(ns, picked); i >= 0 {
 			k = i + 1

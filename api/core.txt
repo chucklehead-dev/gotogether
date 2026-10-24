@@ -654,6 +654,7 @@ type Sim struct
     method (*Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process
     method (*Sim) Run(d time.Duration) error
     method (*Sim) Settle(d time.Duration) error
+    method (*Sim) SettleCore(d time.Duration, core ...*Process) error
     method (*Sim) Spawn(name string, fn func(ctx context.Context))
     method (*Sim) Tasks() string
     method (*Sim) ToReal(virtual time.Time) time.Time

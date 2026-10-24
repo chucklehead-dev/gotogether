@@ -14,7 +14,11 @@ import (
 type FaultKind struct {
 	Name    string
 	Options []string
+	owner   *Process // the double's process: a core settle faults it if outside the core
 }
+
+// at is the kind of a double in process p (SettleCore).
+func (k FaultKind) at(p *Process) FaultKind { k.owner = p; return k }
 
 // DeclareFaults declares a fault kind: name without the "fault." prefix ("kube.request")
 // and its options in order (choice.Declare: the one registry, which also
@@ -33,13 +37,13 @@ func (k FaultKind) Only(options ...string) FaultKind {
 	if len(options) > len(k.Options) || !slices.Equal(k.Options[:len(options)], options) {
 		panic(fmt.Sprintf("qenv: fault kind %s: Only(%v) is not a prefix of its options %v", k.Name, options, k.Options))
 	}
-	return FaultKind{Name: k.Name, Options: k.Options[:len(options)]}
+	return FaultKind{Name: k.Name, Options: k.Options[:len(options)], owner: k.owner}
 }
 
 // FaultOf makes a fault choice of the kind: "" for nominal, else the
 // option's name.
 func (s *Sim) FaultOf(k FaultKind) string {
-	v := s.fault(k.Name, 1+len(k.Options))
+	v := s.faultAt(k.owner, k.Name, 1+len(k.Options))
 	if v == 0 {
 		return ""
 	}
