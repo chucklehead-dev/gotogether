@@ -356,6 +356,14 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}()
 	}
 	wg.Wait()
+	if cfg.Chooser == nil && !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
+		seed := x.Runs[0].seed
+		checkDeterminism(t, x.Runs[0], func() *Run {
+			s := qenv.NewSeeded(seed)
+			s.Rates = cfg.rates
+			return runOne(c, woven, s, scenario)
+		}, x.name(seed, ""))
+	}
 	unknownKinds(t, "System.Rates key", keysOf(cfg.rates.Kinds))
 	x.finish(t, bindingPath, c, mark, ids)
 	return x

@@ -103,6 +103,34 @@ func TestEscapedStepFailsItsRun(t *testing.T) {
 	}
 }
 
+// A system whose runs differ from the same seed (here a counter outside
+// the Chooser) fails the exploration, naming the first difference: none
+// of its failures would replay.
+func TestNondeterministicSystem(t *testing.T) {
+	t.Parallel()
+	f := &failTB{TB: t}
+	calls := 0
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		calls++
+		n := calls
+		s.Spawn("client", func(ctx context.Context) {
+			qobs.Record(ctx, "deposit", nil, "amount", n, "obs.balance", n)
+		})
+		return s.Run(time.Second)
+	}}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		sys.Explore(f, ExploreConfig{Seeds: 1, Parallel: 1})
+	}()
+	<-done
+	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "seed 1 ran twice made two runs, first different at step 0: deposit(amount=1") {
+		t.Errorf("errors %q, want the difference named", f.errs)
+	}
+}
+
 // A scenario that fails the test from its run's goroutine (t.Fatal in
 // Run) fails the exploration with its seed, instead of a nil run
 // crashing it.

@@ -262,6 +262,9 @@ working there:
 - qenv runs are deterministic only if all nondeterminism goes through the
   Chooser: code under test must use `qenv.Go`, `qenv.Now`, `qenv.Sleep` and
   the doubles, and iterate maps in sorted order where the order matters.
+  An exploration runs its first seed twice and fails on the first
+  choice or step that differs (identities compared up to renaming: a
+  process's default name is its recorder's random id).
   `qenv.Replay` stops at the first divergence and reports it (`Err`, the
   run's error in an exploration). `EncodeChoices` writes the byte
   rule's version (`qenv.BytesVersion`): bump it when the rule changes,
