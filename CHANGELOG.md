@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qenv.Now` on the goroutine that created a simulation is the
+  simulation's time, as the steps recorded there carry (it was the wall
+  clock: an "invoked" taken there was real time, the step's virtual).
 - Linearize prefers a conforming order in which the invariants hold: the
   first conforming order was taken, and a run could violate an
   invariant by the order picked (a mutant "caught" for nothing).

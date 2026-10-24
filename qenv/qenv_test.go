@@ -970,3 +970,18 @@ func TestSettleCoreWaitsForTheCore(t *testing.T) {
 		}
 	}
 }
+
+// On the goroutine that created a simulation, Now is the simulation's
+// time, as the steps it records carry: it was the wall clock there, and
+// an interval from it to a step's time ran from real time to virtual.
+func TestNowOnTheCreatingGoroutine(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	s.Spawn("sleeper", func(ctx context.Context) { qenv.Sleep(ctx, time.Hour) })
+	if err := s.Run(2 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if got := qenv.Now(context.Background()); !got.Equal(s.Now()) {
+		t.Errorf("Now = %v on the creating goroutine, want the simulation's %v", got, s.Now())
+	}
+}

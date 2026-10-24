@@ -654,10 +654,18 @@ func (g *Signal) Notify() {
 // virtual time, off by the process's clock faults (Sim.Clocks). A Time it
 // returns carries no monotonic reading, so Now(ctx).Sub is wall
 // arithmetic, which a jump moves: time intervals with Mono and Since, as
-// time.Since does in Go. Outside a simulation it is the real time.
+// time.Since does in Go. On the goroutine that created a simulation (no
+// task, no process), the simulation's time, as its steps carry: the wall
+// clock there once made an interval run from real time to virtual.
+// Outside a simulation it is the real time.
 func Now(ctx context.Context) time.Time {
 	if t := taskOf(ctx); t != nil {
 		return t.sim.clockOf(t)
+	}
+	if live.Load() > 0 {
+		if o, ok := ownerOf(goid()); ok {
+			return o.s.Now()
+		}
 	}
 	return time.Now()
 }
