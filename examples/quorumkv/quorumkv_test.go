@@ -58,8 +58,10 @@ func TestLeakedPut(t *testing.T) {
 func TestNoHandoff(t *testing.T) {
 	qtest.RequireQuint(t)
 	// each client ends on a write: a read after it would write back to the
-	// replica the write missed, and repair what the mutant broke
-	system(Config{Mutation: NoHandoff, Ops: 3}).WithRates(qenv.DefaultRates.Set("rpc", 0.3)).Explore(t, qtest.ExploreConfig{Seeds: 20}).
+	// replica the write missed, and repair what the mutant broke; in
+	// about one run in ten (2 of 20), which 70 seeds miss about once in
+	// a thousand
+	system(Config{Mutation: NoHandoff, Ops: 3}).WithRates(qenv.DefaultRates.Set("rpc", 0.3)).Explore(t, qtest.ExploreConfig{Seeds: 70}).
 		Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("converged"))), qtest.None(qtest.Mismatch("read")))
 }
 
@@ -89,15 +91,16 @@ func contended(cfg Config) qtest.System {
 // read does not, when the write reached one replica and stalls: a stale
 // read no order of the key's history explains. It takes a reader between
 // a writer's two replicas, which PCT's priorities make: uniform seeds
-// found none in 10 runs, PCT 1 in 10.
+// found none in 10 runs, PCT 1 in 10 (4 in 20 since: 35 seeds miss it
+// about once in a thousand).
 func TestBlindRepair(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
-		t.Skip("explores 20 runs of a contended key, each linearized")
+		t.Skip("explores 35 runs of a contended key, each linearized")
 	}
 	cfg := Config{Mutation: BlindRepair, Clients: 3, Ops: 6, Keys: []string{"a"}, Writers: 1}
 	sys := contended(cfg)
-	sys.Explore(t, qtest.ExploreConfig{Seeds: 20, Chooser: pct(sys)}).Expect(t, qtest.Some(qtest.Mismatch("read")))
+	sys.Explore(t, qtest.ExploreConfig{Seeds: 35, Chooser: pct(sys)}).Expect(t, qtest.Some(qtest.Mismatch("read")))
 }
 
 // A retried put that picks a new version writes its value twice, around a
