@@ -167,3 +167,20 @@ func TestSchedulesAgainstBruteForce(t *testing.T) {
 		}
 	}
 }
+
+// schedules runs scheduleSource's schedules within b with run, one after
+// another as the engine would batch them, and returns the runs in order
+// and how many within b were left when MaxRuns cut the search short.
+func schedules(b Bound, off qenv.Rates, run func([]deviation) *Run) (out []*Run, left int) {
+	s := &scheduleSource{b: b, off: off, search: &search{}}
+	for batch := s.next(out); len(batch) > 0; batch = s.next(out) {
+		for i := range batch {
+			r := run(s.level[i])
+			out = append(out, r)
+			if r == nil {
+				return out, s.search.left
+			}
+		}
+	}
+	return out, s.search.left
+}

@@ -2,15 +2,12 @@ package qtest
 
 import (
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
-	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -125,7 +122,9 @@ func (f *forcing) Err() error {
 // quint once.
 //
 // The search is stateless: each run replays its schedule from the start,
-// which needs a deterministic system (qenv's rule for every run). It has
+// which needs a deterministic system (qenv's rule for every run): its
+// nominal run is made twice, and a difference fails the search, as an
+// exploration's first seed does. It has
 // no partial-order reduction: two schedules that only reorder independent
 // tasks are both run, and both checked unless their steps are the same. A
 // choice's options all count alike: a task among ten other than the
@@ -143,19 +142,10 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	for _, k := range b.Without {
 		off = off.Set(k, 1)
 	}
-	c := config(t, s.opts())
-	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
-	woven := len(qcover.Blocks()) > 0
-	defer hooks.Strict()()
-	mark, _ := hooks.Escaped(0)
-	x := &Exploration{test: t.Name(), id: nextExploration(t), search: &search{bound: b}, tempDir: c.tempDir, mutation: c.mutant}
-	x.dir = exploreDir(t, c.Dir, x.id)
-	run := func(ds []deviation) *Run {
-		f := &forcing{ds: ds}
-		r := runOne(c, woven, f, s.Run)
-		r.origin = origin{kind: "schedule", value: schedule(ds)}
-		return r
-	}
+	e := begin(t, s.Binding, s.opts(), s.Run, b.Parallel)
+	x := e.x
+	x.search = &search{bound: b}
+	src := &scheduleSource{b: b, off: off, search: x.search}
 	if spec, ok := runSpecFor(t, x.ref()); ok {
 		if spec.kind != "schedule" {
 			t.Fatalf("gotogether: GOTOGETHER_RUN names a %s, but %s is an exhaustive search: want :schedule=<choices>", spec.kind, x.ref())
@@ -165,26 +155,10 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 		if err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
-		x.Runs = []*Run{run(ds)}
-		x.Runs[0].origin.seed = 1
-		x.finish(t, s.Binding, c, mark, []uint64{1})
-		return x
+		src.alone = ds
 	}
-	x.Runs, x.search.left = schedules(b, off, run)
-	for i, r := range x.Runs {
-		if r != nil {
-			r.origin.seed = uint64(i + 1)
-		}
-	}
-	if n := slices.Index(x.Runs, nil); n >= 0 {
-		x.Runs = x.Runs[:n] // the scenario failed t: finish says so
-	}
-	ids := make([]uint64, len(x.Runs))
-	for i := range ids {
-		ids[i] = uint64(i + 1)
-	}
-	unknownKinds(t, "Bound.Without kind", b.Without)
-	x.finish(t, s.Binding, c, mark, ids)
+	e.known = append(e.known, knownCheck{"Bound.Without kind", b.Without})
+	e.run(src)
 	if x.search.left > 0 && !b.Partial && x.alone == nil {
 		t.Errorf("gotogether: %s: the search stopped at MaxRuns (%d runs) with at least %d runs within its bound left, "+
 			"so it proves nothing of them: raise MaxRuns, or lower Delays or Faults, or set Bound.Partial to accept a sample", x.ref(), len(x.Runs), x.search.left)
@@ -192,51 +166,75 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	return x
 }
 
-// schedules runs every schedule within b with run, breadth first by the
-// number of deviations (a search MaxRuns cuts short has tried every run
-// with fewer), b.Parallel side by side, and returns the runs in order and
-// how many within b were left when MaxRuns cut the search short. A nil
-// run (the scenario failed the test) ends the search, last of the runs.
-func schedules(b Bound, off qenv.Rates, run func([]deviation) *Run) (out []*Run, left int) {
-	level := [][]deviation{nil}
-	for len(level) > 0 {
-		room := b.MaxRuns - len(out)
-		if room <= 0 {
-			left = len(level)
-			break
-		}
-		if len(level) > room {
-			left = len(level) - room
-			level = level[:room]
-		}
-		runs := make([]*Run, len(level))
-		var wg sync.WaitGroup
-		sem := make(chan struct{}, b.Parallel)
-		for i, ds := range level {
-			wg.Add(1)
-			sem <- struct{}{}
-			go func() { //qenv:ok runs schedules side by side, each its own simulation
-				defer func() { <-sem; wg.Done() }()
-				runs[i] = run(ds)
-			}()
-		}
-		wg.Wait()
+// scheduleSource is every schedule within b, breadth first by the number
+// of deviations (a search MaxRuns cuts short has tried every run with
+// fewer), a level at a time, or the one schedule a run alone names. How
+// many within b were left when MaxRuns cut the search short goes in
+// search.left. The nominal run is made again for the determinism check:
+// a schedule replays only on a deterministic system.
+type scheduleSource struct {
+	b      Bound
+	off    qenv.Rates
+	search *search
+	alone  []deviation // GOTOGETHER_RUN's schedule, run alone
+
+	started bool
+	level   [][]deviation
+	n, last int // runs planned so far, and in the last level
+}
+
+func (s *scheduleSource) next(done []*Run) []planned {
+	switch {
+	case !s.started && s.alone != nil:
+		s.started = true
+		return []planned{s.plan(s.alone, 0)}
+	case !s.started:
+		s.started, s.level = true, [][]deviation{nil}
+	case s.alone != nil:
+		return nil
+	default:
 		var next [][]deviation
-		for i, r := range runs {
-			out = append(out, r)
-			if r == nil {
-				return out, left
-			}
+		for i, r := range done[len(done)-s.last:] {
 			if r.Err == nil {
-				next = append(next, children(level[i], r.Choices, b, off)...)
+				next = append(next, children(s.level[i], r.Choices, s.b, s.off)...)
 			}
 		}
-		if left > 0 {
-			return out, left + len(next)
+		if s.search.left > 0 { // the level MaxRuns cut short: the rest of it, and these, are left
+			s.search.left += len(next)
+			return nil
 		}
-		level = next
+		s.level = next
 	}
-	return out, left
+	if len(s.level) == 0 {
+		return nil
+	}
+	room := s.b.MaxRuns - s.n
+	if room <= 0 {
+		s.search.left = len(s.level)
+		return nil
+	}
+	if len(s.level) > room {
+		s.search.left = len(s.level) - room
+		s.level = s.level[:room]
+	}
+	out := make([]planned, len(s.level))
+	for i, ds := range s.level {
+		out[i] = s.plan(ds, s.n+i)
+	}
+	s.n, s.last = s.n+len(out), len(out)
+	return out
+}
+
+// plan is the k-th run, on schedule ds.
+func (s *scheduleSource) plan(ds []deviation, k int) planned {
+	p := planned{
+		origin:  origin{kind: "schedule", value: schedule(ds), seed: uint64(k + 1)},
+		chooser: func() qenv.Chooser { return &forcing{ds: ds} },
+	}
+	if k == 0 {
+		p.again = func(*Run) qenv.Chooser { return &forcing{ds: ds} }
+	}
+	return p
 }
 
 // children are the schedules one deviation further than ds, within b: a

@@ -134,6 +134,34 @@ func TestNondeterministicSystem(t *testing.T) {
 	}
 }
 
+// Exhaust makes its nominal run twice too: a nondeterministic system
+// fails the search, naming the difference, since none of its schedules
+// would replay.
+func TestNondeterministicSystemExhausted(t *testing.T) {
+	t.Parallel()
+	f := &failTB{TB: t}
+	calls := 0
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		calls++
+		n := calls
+		s.Spawn("client", func(ctx context.Context) {
+			qobs.Record(ctx, "deposit", nil, "amount", n, "obs.balance", n)
+		})
+		return s.Run(time.Second)
+	}}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		sys.Exhaust(f, Bound{Parallel: 1})
+	}()
+	<-done
+	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "schedule 1 ran twice made two runs, first different at step 0: deposit(amount=1") {
+		t.Errorf("errors %q, want the difference named", f.errs)
+	}
+}
+
 // A run whose system does not settle is checked all the same, and is no
 // conforming run: Conforms fails naming it, Settles states it alone, and
 // None(Settles()) holds of a livelock.
