@@ -117,7 +117,7 @@ func (e *engine) run(sources ...source) {
 		checkDeterminism(t, first, func() *Run { return e.one(again(first)) }, x.name(first.origin.seed))
 	}
 	for _, k := range e.known {
-		unknownKinds(t, k.what, k.names)
+		unknownKinds(t, k.what, k.names, x.Runs)
 	}
 	ids := make([]uint64, len(plans))
 	for i, p := range plans {

@@ -5,6 +5,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/qrun"
 )
 
 // The fault kinds of a process: each one's options' names (Declare) and
@@ -21,6 +24,18 @@ type kind struct {
 	options []string // nil: not declared by name
 	named   bool
 	sites   []string
+	static  bool // declared outside any run (KnownStatic)
+}
+
+// runNames are the FaultNames of the calling goroutine's run, and whether
+// it is in a run at all: a run without them (Hegel's, a load experiment's)
+// checks no names, and its declarations are neither its nor static.
+func runNames() (*hooks.FaultNames, bool) {
+	ctx, ok := qrun.Current()
+	if !ok {
+		return nil, false
+	}
+	return hooks.FaultNamesOf(ctx), true
 }
 
 func kindOf(name string) *kind {
@@ -47,6 +62,16 @@ func Declare(name string, options ...string) {
 		panic(fmt.Sprintf("qenv: fault kind %s declared with options %v, then %v", strings.TrimPrefix(name, "fault."), k.options, options))
 	}
 	k.options, k.named = append([]string(nil), options...), true
+	name = strings.TrimPrefix(name, "fault.")
+	switch f, inRun := runNames(); {
+	case f != nil:
+		f.Add(name)
+		for _, o := range options {
+			f.Add(name + "." + o)
+		}
+	case !inRun:
+		k.static = true
+	}
 }
 
 // seen are the fault kinds chosen (Seen), declared or not: a double that
@@ -54,35 +79,44 @@ func Declare(name string, options ...string) {
 // Process-wide.
 var seen sync.Map
 
-// Seen notes a fault kind a choice was made of ("fault." prefix or not).
-func Seen(kind string) {
+// Seen notes a fault kind a choice was made of ("fault." prefix or not),
+// in the process's registry and in f, its run's (nil: none).
+func Seen(f *hooks.FaultNames, kind string) {
 	k := strings.TrimPrefix(kind, "fault.")
+	if f != nil {
+		f.Add(k)
+	}
 	if _, ok := seen.Load(k); !ok {
 		seen.Store(k, true)
 	}
 }
 
 // DeclareNemesis registers a nemesis's name, as a declaration names a
-// kind's options: Known then knows it.
-func DeclareNemesis(name string) {
+// kind's options: Known then knows it, and f, its run's names (nil: none).
+func DeclareNemesis(f *hooks.FaultNames, name string) {
 	registry.Lock()
 	defer registry.Unlock()
 	if registry.nemeses == nil {
 		registry.nemeses = map[string]bool{}
 	}
 	registry.nemeses[name] = true
+	if f != nil {
+		f.Add("nemesis." + name)
+	}
 }
 
-// Known reports whether name (as reports print it) covers anything this
-// process declared or chose: a fault kind, one of its options
-// (kind.option), a nemesis (nemesis.<name>), or a prefix of any of them
-// at a dot ("queue" of "queue.payments.ack"). A name that covers nothing matches
-// nothing wherever it is given (a misspelling, a renamed kind).
-func Known(name string) bool {
+// KnownStatic reports whether name covers a fault kind, option or
+// nemesis declared outside any run, by Known's rule: a woven fault
+// point's (its site is declared at init) or a double's built before any
+// simulation. With a run's FaultNames it is what that run knows.
+func KnownStatic(name string) bool {
 	registry.Lock()
 	defer registry.Unlock()
 	covers := func(x string) bool { return x == name || strings.HasPrefix(x, name+".") }
 	for k, v := range registry.kinds {
+		if !v.static && len(v.sites) == 0 {
+			continue
+		}
 		if covers(k) {
 			return true
 		}
@@ -92,17 +126,7 @@ func Known(name string) bool {
 			}
 		}
 	}
-	for n := range registry.nemeses {
-		if covers("nemesis." + n) {
-			return true
-		}
-	}
-	found := false
-	seen.Range(func(k, _ any) bool {
-		found = covers(k.(string))
-		return !found
-	})
-	return found
+	return false // a nemesis is a simulation's: none is static
 }
 
 // Options are a declared kind's option names (with or without the

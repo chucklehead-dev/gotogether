@@ -253,6 +253,9 @@ type Run struct {
 	// misnamed are what is wrong with its script's faults (Script.Misnamed)
 	scripted bool
 	misnamed []string
+	// faults are the fault kinds, options and nemeses the run declared
+	// or chose, for the names users give (Rates keys, exceptions)
+	faults *hooks.FaultNames
 	// diverged is why the run's replay stopped repeating its choices (a
 	// corpus entry the code no longer follows), apart from Err
 	diverged error

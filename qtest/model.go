@@ -2,7 +2,6 @@ package qtest
 
 import (
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"sort"
 	"strings"
 
@@ -171,7 +170,7 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 		for _, r := range known {
 			ok = ok || r == x || strings.HasPrefix(r, x+".")
 		}
-		known := ok || hooks.KnownFault(x) // declared, though no run met it (a sweep row with it off)
+		known := ok || knownFault(x, runs) // declared, though no run met it (a sweep row with it off)
 		if !known {
 			missing = append(missing, x+" (excepted, but neither a model action, a declared fault kind or option, nor a nemesis a run enabled: misspelled?)")
 		}

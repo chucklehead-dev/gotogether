@@ -362,18 +362,33 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 }
 
 // unknownKinds fails t for each name that covers no fault kind, option or
-// nemesis declared by the time the runs are over (the doubles declare
-// theirs as they are made): it would match nothing, silently. "nemesis"
-// is every simulation's default key, so a system with no nemesis is not
-// told so.
-func unknownKinds(t testing.TB, what string, names []string) {
+// nemesis the runs declared or chose (the doubles declare theirs as they
+// are made), nor one declared outside any run: it would match nothing,
+// silently. A name only another test's runs declared is unknown here,
+// whatever ran before. "nemesis" is every simulation's default key, so a
+// system with no nemesis is not told so.
+func unknownKinds(t testing.TB, what string, names []string, runs []*Run) {
 	t.Helper()
 	for _, k := range names {
-		if k != "nemesis" && !hooks.KnownFault(k) {
+		if k != "nemesis" && !knownFault(k, runs) {
 			t.Errorf("gotogether: %s %q covers no fault kind, option or nemesis the system declared, so it matches nothing: "+
 				"name a kind as fault coverage prints it (a double's carry its name: \"queue.<name>.ack\"), or a prefix of one (\"queue\")", what, k)
 		}
 	}
+}
+
+// knownFault reports whether name covers a fault kind, option or nemesis
+// one of runs declared or chose, or one declared outside any run.
+func knownFault(name string, runs []*Run) bool {
+	if hooks.KnownStatic(name) {
+		return true
+	}
+	for _, r := range runs {
+		if r != nil && r.faults != nil && r.faults.Covers(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // A RunPanic is a run that panicked (Run.Err): a task's panic, which
@@ -404,6 +419,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	var task hooks.TaskPanic
 	var esc hooks.Escapes // steps from goroutines its tasks started with `go`: this run's, not a parallel test's
 	ctx = hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc)
+	faults := &hooks.FaultNames{} // what the run declares and chooses, for the names users give
+	ctx = hooks.WithFaultNames(ctx, faults)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
@@ -435,7 +452,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
 	recorded := mem.Steps()
-	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled}
+	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}

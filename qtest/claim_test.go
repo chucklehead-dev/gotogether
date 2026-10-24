@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -208,15 +209,16 @@ func TestExercisedByName(t *testing.T) {
 }
 
 // An exception list shared by runs that reached nothing (a sweep row with
-// every fault off) is judged by what was declared: prefixes, kinds,
+// every fault off) is judged by what they declared: prefixes, kinds,
 // options and nemeses no run met are known, a misspelling is not.
 func TestExercisedExceptionsOfAnEmptyRow(t *testing.T) {
 	t.Parallel()
-	qenv.DeclareFaults("test.row.queue", "lost")
-	s := qenv.New(qenv.Nominal{})
+	names := &hooks.FaultNames{} // the run's, as runOne gives it
+	s := qenv.New(qenv.WithContext(qenv.Nominal{}, hooks.WithFaultNames(context.Background(), names)))
+	qenv.DeclareFaults("test.row.queue", "lost")         // a double's, made in the run
 	s.Process("rowproc", true, func(context.Context) {}) // registers nemesis crash.rowproc
 	s.Close()
-	empty := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "init"}}}}}}
+	empty := &Run{faults: names, Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "init"}}}}}}
 	actions := map[string]bool{"init": true}
 	if msg := Exercised("test.row", "test.row.queue.lost", "nemesis", "nemesis.crash.rowproc").judgeRuns([]*Run{empty}, actions); msg != "" {
 		t.Errorf("declared exceptions refused: %s", msg)

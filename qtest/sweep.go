@@ -101,6 +101,12 @@ func sweep(t *testing.T, bindingPath string, sw SweepConfig, base exploreSpec, s
 			kinds = append(kinds, f.Name)
 		}
 	}
-	unknownKinds(t, "qsweep.FaultKind", kinds)
+	var runs []*Run
+	for _, x := range s.Runs {
+		if x != nil {
+			runs = append(runs, x.Runs...)
+		}
+	}
+	unknownKinds(t, "qsweep.FaultKind", kinds, runs)
 	return s
 }

@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -190,11 +191,66 @@ func creatorID() (int64, bool) {
 	return id, err == nil
 }
 
-// KnownFault reports whether a name users give (a Rates key, a sweep's
-// FaultKind) covers a fault kind, option or nemesis this process declared
-// or chose, or a prefix of one: qenv installs it, qtest's workflows ask.
-// Process-wide.
-var KnownFault = func(string) bool { return true }
+// KnownStatic reports whether a name users give (a Rates key, a sweep's
+// FaultKind) covers a fault kind, option or nemesis declared outside any
+// run (a woven fault point's, at init), or a prefix of one: qenv installs
+// it, qtest's workflows ask it and the runs' FaultNames. Process-wide.
+var KnownStatic = func(string) bool { return true }
+
+// FaultNames are what one run declared or chose: fault kinds, their
+// options (kind.option) and nemeses (nemesis.<name>), as reports print
+// them. A name another run's double declared is not one of them, so a
+// Rates key that covers nothing of this run's fails its exploration
+// whatever ran in parallel.
+type FaultNames struct {
+	mu    sync.Mutex
+	names map[string]bool
+}
+
+// Add notes names.
+func (f *FaultNames) Add(names ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.names == nil {
+		f.names = map[string]bool{}
+	}
+	for _, n := range names {
+		f.names[n] = true
+	}
+}
+
+// Covers reports whether name is one of the names, or a prefix of one at
+// a dot ("queue" of "queue.payments.ack").
+func (f *FaultNames) Covers(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.names[name] {
+		return true
+	}
+	for n := range f.names {
+		if strings.HasPrefix(n, name+".") {
+			return true
+		}
+	}
+	return false
+}
+
+type faultNamesKey struct{}
+
+// WithFaultNames returns ctx carrying a run's FaultNames, where the
+// run's simulations and doubles add to them.
+func WithFaultNames(ctx context.Context, f *FaultNames) context.Context {
+	return context.WithValue(ctx, faultNamesKey{}, f)
+}
+
+// FaultNamesOf is ctx's run's FaultNames, or nil.
+func FaultNamesOf(ctx context.Context) *FaultNames {
+	if ctx == nil {
+		return nil
+	}
+	f, _ := ctx.Value(faultNamesKey{}).(*FaultNames)
+	return f
+}
 
 // Process-wide: installed by qenv.
 var resolver atomic.Pointer[func() (context.Context, bool)]

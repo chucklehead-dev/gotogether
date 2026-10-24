@@ -377,6 +377,35 @@ func TestUnknownRatesKey(t *testing.T) {
 	}
 }
 
+// A Rates key is checked against what the exploration's own runs
+// declared, not the process's: a queue another exploration made, in
+// parallel, does not make "queue.jobs" known to runs that make none.
+func TestRatesKeyKnownPerRun(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	withQueue := func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		qenv.NewQueue(s, "jobs", nil)
+		s.Spawn("client", func(ctx context.Context) {
+			qobs.Record(ctx, "deposit", nil, "amount", 10, "obs.balance", 10)
+		})
+		return s.Run(time.Second)
+	}
+	rates := qenv.DefaultRates.Set("queue.jobs", 0.5)
+	System{Binding: "../validate/testdata/account.yaml", Run: withQueue, Rates: rates}.Explore(t, ExploreConfig{Seeds: 2}).Expect(t, Conforms())
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		System{Binding: "../validate/testdata/account.yaml", Run: race, Rates: rates}.Explore(f, ExploreConfig{Seeds: 1})
+	}()
+	<-done
+	if !strings.Contains(strings.Join(f.errs, "\n"), `System.Rates key "queue.jobs" covers no fault kind`) {
+		t.Errorf("errors: %q, want the key unknown to runs that make no queue", f.errs)
+	}
+}
+
 // An option a workflow ignores fails it, saying why and what to do: an
 // exploration records each run on its own (Global) and checks it in its
 // recorded order (Linearize); Validate records nothing.

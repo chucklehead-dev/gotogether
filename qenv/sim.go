@@ -65,13 +65,14 @@ type Sim struct {
 	Stalls Stalls
 
 	c         Chooser
-	base      context.Context // every task's context derives from it
-	nextNem   time.Time       // with NemesisEvery: when the next nemesis choice is due
-	lastNow   time.Time       // Check: time never goes backwards
-	creator   int64           // the goroutine that created it (owners)
-	doubles   map[string]bool // the doubles' fault-kind prefixes (claim)
-	ended     []int64         // its ended tasks' goroutines (owners.ended), under owners' lock
-	forgotten bool            // closed: ended tasks are no longer kept, under owners' lock
+	base      context.Context   // every task's context derives from it
+	names     *hooks.FaultNames // its run's fault names (base's), or nil
+	nextNem   time.Time         // with NemesisEvery: when the next nemesis choice is due
+	lastNow   time.Time         // Check: time never goes backwards
+	creator   int64             // the goroutine that created it (owners)
+	doubles   map[string]bool   // the doubles' fault-kind prefixes (claim)
+	ended     []int64           // its ended tasks' goroutines (owners.ended), under owners' lock
+	forgotten bool              // closed: ended tasks are no longer kept, under owners' lock
 	now       time.Time
 	start     time.Time
 	tasks     []*task   // every task, in creation order (task id-1)
@@ -199,7 +200,7 @@ func New(c Chooser) *Sim {
 	} else if rc, ok := qrun.Current(); ok {
 		base = rc // the run it is created in (qrun.Start, an enclosing simulation)
 	}
-	s := &Sim{c: c, base: base, now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
+	s := &Sim{c: c, base: base, names: hooks.FaultNamesOf(base), now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
 		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid()}
 	s.net.sim = s
 	if os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" {
@@ -222,7 +223,7 @@ func (s *Sim) Choose(kind string, n int) int {
 // draw asks the Chooser.
 func (s *Sim) draw(kind string, n int) int {
 	if IsFault(kind) {
-		choice.Seen(kind) // a kind, declared or not (hooks.KnownFault)
+		choice.Seen(s.names, kind) // a kind, declared or not
 	}
 	v := s.c.Choose(kind, n)
 	if v < 0 || v >= n {
@@ -835,7 +836,7 @@ func (s *Sim) Nemesis(name string, enabled func() bool, do func()) {
 
 // nemesisOf registers a nemesis that touches procs (SettleCore).
 func (s *Sim) nemesisOf(name string, procs []*Process, enabled func() bool, do func()) {
-	choice.DeclareNemesis(name)
+	choice.DeclareNemesis(s.names, name)
 	s.nemeses = append(s.nemeses, &nemesis{name: name, family: nemesisFamily(name), enabled: enabled, do: do, procs: procs})
 }
 

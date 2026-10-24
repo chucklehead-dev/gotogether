@@ -82,14 +82,14 @@ func DeclareFaultSite(kind, site string) { choice.DeclareSite(kind, site) }
 
 // The test workflows check that a name users give (a Rates key, a sweep's
 // FaultKind, an exception) covers something declared: a fault kind, an
-// option (kind.option) or a nemesis (nemesis.<name>) this process
-// declared or a simulation chose, or a prefix of one at a dot ("queue").
-// The registry is the process's, so a name another test's double
-// declared is known too: a check that a name is not misspelled, not that
-// a run met it. It is internal (hooks.KnownFault), not API: a run-scoped
-// check would need every declaration to name its run, and a woven fault
-// point declares its kind at init, before any run.
-func init() { hooks.KnownFault = choice.Known }
+// option (kind.option) or a nemesis (nemesis.<name>), or a prefix of one
+// at a dot ("queue"). A run's simulations and doubles add what they
+// declare and choose to the run's names (hooks.FaultNames, which qtest's
+// runs carry), so a name another test's double declared is not known to
+// this one's runs. What is declared outside any run is known to every
+// run: a woven fault point declares its kind at init, and a double built
+// before its simulation, outside a run, declares its kinds as it did.
+func init() { hooks.KnownStatic = choice.KnownStatic }
 
 // PointCoverage is what runs did at one fault kind.
 type PointCoverage struct {
