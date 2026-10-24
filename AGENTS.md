@@ -148,6 +148,14 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   paths and set `cmd.Dir` to the spec's directory.
 - Timing-sensitive or slow tests (shrinking against the model) skip under
   `testing.Short()`.
+- A search or a heuristic (Linearize, ResolvePending's placements,
+  Exhaust's schedules, the isolation classifier, Cover) is checked
+  against brute force on inputs small enough to enumerate (a
+  `...AgainstBruteForce` test), and its tests fail with it turned off
+  (ablate it before committing: a test that passes without the feature
+  proves nothing of it). The nightly mutates the core's packages
+  (`ci/mutate-core.sh <pkg>`, `JOBS=n`); a survivor is a test to write,
+  or an equivalent mutant the matrix's `max` names.
 - A skill's mechanics (how to weave, gosim, sweeps, coverage) go in
   `skills/<name>/references/*.md`, linked from its SKILL.md with when to
   read each; verdicts and expectations are in
