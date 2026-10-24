@@ -238,16 +238,15 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   in a block comment before the directive.
 - actionmap stops at functions outside the loaded packages: a library
   that calls back (qenv's commit hooks) is one call-graph node for every
-  closure handed to it, and going through it made cancel "reach"
-  PlaceOrder.
+  closure handed to it.
 - A step for a refusal recorded with `Txn.OnCommit` needs the transaction
   to commit: return nil from it and the error after `qenv.Retry`
   (checkout's `PlaceOrder`). An error rolls back and drops the hook.
 - `qenv.Store` detects lock-wait cycles: the transaction whose
   `GetForUpdate` or `Commit` would close one aborts with `ErrDeadlock`
   (an ErrConflict). A commit waits until every key it writes is unlocked
-  at once (waiting key by key let it write under another's lock), and the
-  check follows each waiter's keys as they are now, not a key it saw. `qenv.Service` lets a crash fall between the handler's
+  at once, and the check follows each waiter's keys as they are now, not
+  a key it saw. `qenv.Service` lets a crash fall between the handler's
   return and the response's delivery (the effect committed, the caller
   never told) unless `NoCrashWindow` is set; the window is a scheduling
   point, so choices recorded before it was the default do not replay.
@@ -269,14 +268,15 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   every restart adds work at the same virtual instant. Give it durable
   progress (an outbox it clears on acknowledgement), as a real one has.
 - Outside a simulation `qenv.Wait` polls its predicate in real time and
-  `Signal.Wait` waits on a channel `Notify` closes (they panicked once): a
-  seam's code runs unchanged with a real client, whose goroutines notify.
-  The predicate must then be safe to call concurrently.
+  `Signal.Wait` waits on a channel `Notify` closes: a seam's code runs
+  unchanged with a real client, whose goroutines notify. The predicate
+  must then be safe to call concurrently.
 - `Sim.Run` returns `ErrStuck` (naming the tasks) when nothing can run, no
-  deadline is set and a task still waits: a stalled run once looked
-  quiet. A task that may wait forever (a server's loop, a sender waiting
-  for records) calls `qenv.Daemon(ctx)`; a double's receive uses
-  `qenv.WaitIdle`. The native runtime runs in real time and cannot tell.
+  deadline is set and a task still waits, so a stalled run is not
+  mistaken for a quiet one. A task that may wait forever (a server's
+  loop, a sender waiting for records) calls `qenv.Daemon(ctx)`; a
+  double's receive uses `qenv.WaitIdle`. The native runtime runs in real
+  time and cannot tell.
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
   (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record
@@ -334,9 +334,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   survive by right: read the report, do not assert a score.
 - A Script's faults are in a partial order: each kind's in order, other
   kinds independent unless a fault `Follows` them (qtest.FaultScript
-  chains a trace's faults; an ordered pair says b follows a). It was a
-  strict order, where a fault of a phase that had passed (checkout's API
-  faults happen only while orders are placed) blocked every later one.
+  chains a trace's faults; an ordered pair says b follows a).
 - A chooser that wraps another implements `Unwrap() qenv.Chooser`
   (`qenv.Wrapper`): `New`, `ContextOf`, `EntropyOf` and nemeses by name
   look through the chain (`qenv.As[T]`). A wrapper without it hides the
@@ -344,12 +342,12 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - A double's fault kinds carry its instance's name (`rpc.<name>.request`,
   `queue.<name>.ack`, `store.<name>.commit`, `disk.<name>.crash`), and a
   double that a partition reaches takes its process at construction
-  (`NewService`, `NewQueue`, `NewDisk`): a field set later was forgotten
-  and silently kept partitions out. A name that covers nothing declared
-  (`hooks.KnownFault`: the process's registry of kinds, options and
-  nemeses) matches nothing: an exploration fails on such a Rates key, a
-  sweep on such a FaultKind, Exercised on such an exception. Name each
-  double uniquely in a simulation: two of one name share their kind.
+  (`NewService`, `NewQueue`, `NewDisk`), not a field set later. A name
+  that covers nothing declared (`hooks.KnownFault`: the process's
+  registry of kinds, options and nemeses) matches nothing: an
+  exploration fails on such a Rates key, a sweep on such a FaultKind,
+  Exercised on such an exception. Name each double uniquely in a
+  simulation: two of one name share their kind.
 - A double declares its fault kinds by name (`qenv.DeclareFaults("kube.request",
   "unavailable", "lostResponse")`) and chooses with `Sim.FaultOf`, which
   returns the option's name. A call that cannot fail in some options takes
@@ -358,23 +356,23 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   declaration.
 - Users name fault kinds as reports print them, without the chooser's
   `fault.` prefix: Rates keys (`"nemesis"`, `"rpc.payments"`), `Without`,
-  `Swarm`, `Reaches`, Script kinds. A prefixed one panics with the fix (it
-  once matched nothing, silently); a Script's is reported after the run
-  by `Script.Misnamed`, with every other fault it cannot make (a Script
-  matches kinds exactly, and nemeses by their full name), and fails the
-  exploration. The prefix stays in the Chooser
-  protocol (`Choose("fault.<kind>", n)`, a recorded `Choice.Kind`).
+  `Swarm`, `Reaches`, Script kinds. A prefixed one panics with the fix; a
+  Script's is reported after the run by `Script.Misnamed`, with every
+  other fault it cannot make (a Script matches kinds exactly, and nemeses
+  by their full name), and fails the exploration. The prefix stays in the
+  Chooser protocol (`Choose("fault.<kind>", n)`, a recorded
+  `Choice.Kind`).
 - Option 0 of every qenv choice is nominal (no fault, canonical order).
   Keep that convention in new doubles: it is what makes Hegel's shrinking
   remove faults.
 - `qhegel.Choices` draws 512-byte chunks (`hegel.Binary(n, n)`), not
-  one draw per choice: per-choice draws made a shrinking test 20x slower. A task's
-  panic is re-raised by `Sim.Run` with its original value, because Hegel
-  aborts a test case by panicking from whichever goroutine draws. qtest's
+  one draw per choice (20x slower when shrinking). A task's panic is
+  re-raised by `Sim.Run` with its original value, because Hegel aborts
+  a test case by panicking from whichever goroutine draws. qtest's
   explorations recover it (`runOne`) into the run's `*RunPanic` with the
-  task's stack (`internal/hooks.WithPanicStack`): a self-check's panic is a failing
-  run, named and kept, not the test binary's end. qhegel's own runs do
-  not go through `runOne`, so Hegel's aborts reach Hegel.
+  task's stack (`internal/hooks.WithPanicStack`): a self-check's panic is
+  a failing run, named and kept, not the test binary's end. qhegel's own
+  runs do not go through `runOne`, so Hegel's aborts reach Hegel.
 - A nemesis (crash) is considered at every scheduling step: its rate is
   per step (`DefaultRates` 1 in 200), not per operation. Under load that
   means far more crashes per second: set `Sim.NemesisEvery`
@@ -392,10 +390,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   context finds its run through its goroutine: qenv registers each
   task's goroutine and the simulation's creator (`qrun`,
   `qenv/goroutine.go`). Explore and Experiment runs are strict
-  (`internal/hooks.Strict`), so a step from a goroutine started with `go` fails
-  the exploration (`hooks.Escaped`; `Series.Escaped` for an Experiment).
-  It once panicked, on a goroutine nothing could recover, killing the
-  test binary. A step from a goroutine one of a run's tasks started (its
+  (`internal/hooks.Strict`), so a step from a goroutine started with `go`
+  fails the exploration (`hooks.Escaped`; `Series.Escaped` for an
+  Experiment). A step from a goroutine one of a run's tasks started (its
   stack's "created by ... in goroutine N", a task's id kept until its
   simulation closes) fails that run alone (`hooks.WithEscapes`); any
   other escape is logged process-wide, where every strict run running
@@ -423,8 +420,8 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   reuses a cluster with kwok's immediate stages.
 - qenv finds the task of a goroutine when a context carries none: Sleep,
   Wait, Go and recording with `context.Background()` from a task stay in
-  its simulation (`taskOf`, `qenv/goroutine.go`). Without that, a woven
-  background goroutine's simulated latency slept in real time.
+  its simulation (`taskOf`, `qenv/goroutine.go`), so a woven background
+  goroutine's simulated latency does not sleep in real time.
 - A task killed by a crash stays frozen while the simulation runs (no
   deferred code runs), and unwinds at `Close`. Steps recorded while it
   unwinds (`//quint:action` records on return) are not in the run: they
@@ -461,7 +458,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   annotations and grace period) see no virtual time passing. Translate
   their timestamps at the seam (`Sim.ToVirtual` on write, `Sim.ToReal` on
   read: crossdb's kube interceptor), or their time-based logic is not
-  exercised (a grace period that never expires blocked every deletion).
+  exercised.
 - One thread per goroutine when recording with a domain clock: a thread
   asserts program order, and goroutines sharing one contradict it
   (`issue: error cycle`).
@@ -473,8 +470,8 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   last steps, undetectably: use it only where nothing crashes. `qtrace.ReadJSONL` keeps the steps before a torn last
   line and returns a `*TornTail` (input.File.Torn; validate warns).
 - A `qenv.Signal` waiter is tagged with the task's wait generation; a
-  timed-out wait must not be woken by a later `Notify` (it once shortened
-  the next sleep). Keep the tag when touching the scheduler.
+  timed-out wait must not be woken by a later `Notify`. Keep the tag when
+  touching the scheduler.
 - qload metrics are time series of rates; sample counters reset every
   tick. `Sample.Orbit` is known only in hindsight (an attempt is in the
   orbit from its start if it times out) and is filled when the run ends.

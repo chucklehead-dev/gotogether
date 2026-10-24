@@ -2677,9 +2677,9 @@ could not say; each is fixed where it belongs:
   of a batch's failing runs share one detail run, so the cost is per
   batch, not per run. Nothing to fix; a machine under load multiplies it.
 
-## 41. After the second review (ROADMAP V1–V17)
+## 41. After the second review (V1–V17)
 
-What changed in the core, and why, item by item (ROADMAP "Next" has the
+What changed in the core, and why, item by item (HISTORY's "Next" has the
 plan; the commits have the detail).
 
 **Boundaries (V10).** qmeta is the chain and its alerts, and imports
@@ -2801,7 +2801,7 @@ sampling said only "none of the sampled traces". A binding caps N for a
 model whose depth Apalache cannot reach in time (`simulate.verifySteps`)
 or skips it (`verifySkip`: Choreo's recursion).
 
-## 43. After the fifth review (ROADMAP Y1–Y12)
+## 43. After the fifth review (Y1–Y12)
 
 The fifth review read the X track as a user would, and found claims that
 said more than they proved. The fixes share one rule: what a test does
