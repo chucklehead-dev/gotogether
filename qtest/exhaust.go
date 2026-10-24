@@ -155,7 +155,7 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 		if err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
-		src.alone = ds
+		src.alone, src.isAlone = ds, true
 	}
 	e.known = append(e.known, knownCheck{"Bound.Without kind", b.Without})
 	e.run(src)
@@ -170,13 +170,17 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 // of deviations (a search MaxRuns cuts short has tried every run with
 // fewer), a level at a time, or the one schedule a run alone names. How
 // many within b were left when MaxRuns cut the search short goes in
-// search.left. The nominal run is made again for the determinism check:
-// a schedule replays only on a deterministic system.
+// search.left. The first run (the nominal one, or the one run alone) is
+// made again for the determinism check: a schedule replays only on a
+// deterministic system.
 type scheduleSource struct {
 	b      Bound
 	off    qenv.Rates
 	search *search
-	alone  []deviation // GOTOGETHER_RUN's schedule, run alone
+	// alone is GOTOGETHER_RUN's schedule, run alone if isAlone (nil: the
+	// nominal run, as its reproduce line names it)
+	alone   []deviation
+	isAlone bool
 
 	started bool
 	level   [][]deviation
@@ -185,12 +189,12 @@ type scheduleSource struct {
 
 func (s *scheduleSource) next(done []*Run) []planned {
 	switch {
-	case !s.started && s.alone != nil:
+	case !s.started && s.isAlone:
 		s.started = true
 		return []planned{s.plan(s.alone, 0)}
 	case !s.started:
 		s.started, s.level = true, [][]deviation{nil}
-	case s.alone != nil:
+	case s.isAlone:
 		return nil
 	default:
 		var next [][]deviation

@@ -223,7 +223,7 @@ func (s *Sim) Choose(kind string, n int) int {
 // draw asks the Chooser.
 func (s *Sim) draw(kind string, n int) int {
 	if IsFault(kind) {
-		choice.Seen(s.names, kind) // a kind, declared or not
+		choice.Seen(kind) // a kind, declared or not
 	}
 	v := s.c.Choose(kind, n)
 	if v < 0 || v >= n {

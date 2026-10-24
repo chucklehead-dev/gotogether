@@ -189,9 +189,13 @@ under a week, M two to four, L more.
   sources (seeds, corpus, a file, steered, schedules) feeding one engine
   for Explore and Exhaust, whose nominal run now has the determinism
   check; a run's origin in one field; what only a System method sets an
-  internal spec; fault names known per run. Left: finish split into its
-  stages as functions of the engine, and a corpus for Exhaust (schedules
-  are their own regression).
+  internal spec; fault names known per run; reviewed (HISTORY, "T6
+  review"). Left: finish split into its stages as functions of the
+  engine; a corpus for Exhaust (schedules are their own regression);
+  `Script.Misnamed` against the run's names, not the process's (a
+  nemesis only another test registered passes it); a woven kind's
+  options still the process's (static at init); under gosim, kinds a
+  run declared but never chose are unknown to it.
 - **T7. Capabilities (after T2d).** Indeterminate calls searched within
   the linearization (Jepsen's :info) and a visual of a failing history;
   hidden actions and partial logs in trace validation; bounded-response
@@ -206,13 +210,22 @@ under a week, M two to four, L more.
 - **T9. An example: wallet (M, the T5 review's).** Transfers on a
   `qenv.Store` with request-id dedupe, an outbox to a ledger process,
   retrying clients over a `qenv.Service`: the one example that shows
-  ResolvePending, LinearizeByKey, a Settle with an `eventually` val, PCT,
+  ResolvePending (with Completes), Linearize and LinearizeByKey, a
+  Settle with an `eventually` val (the ledger's consumer a Daemon), PCT,
   Exhaust, `GOTOGETHER_ALL_FAULTS` and qhistory on its own store (and a
-  real database, optionally). Mutants: NoDedupe (a retried transfer
-  twice), ReadThenWrite (a lost update at SI: PCT finds it, qhistory
-  names it G-single), AckBeforeOutbox (only after a settle),
-  WallClockDedupe (only under every fault family), StaleBalanceRead
-  (LinearizeByKey).
+  real database, optionally). Each account is an append-only list of
+  ledger entries, so qhistory (list-append only) reads its history.
+  Deterministic by construction (counter request ids, named processes,
+  a sorted outbox drain); every double built in every run, kinds of
+  rare paths declared at package level. Mutants: NoDedupe (a retried
+  transfer twice), ReadThenWrite (rejected at ReadCommitted, G-single;
+  it conforms at SI and Serializable, whose first committer wins), a
+  write-skew overdraft across two accounts at SI (qhistory: G2),
+  AckBeforeOutbox (only after a settle), WallClockDedupe (only under
+  every fault family; Exhaust there with a reasoned Without or
+  Partial), StaleBalanceRead (LinearizeByKey on a per-account workload
+  of deposits and reads: transfers span keys, where it is unsound, and
+  stay on Linearize).
 - **T8. An example: raftkv (M, after T2d).** etcd's raft RawNode as a
   three-node KV on qenv; transfers across keys (no partition helps);
   hundreds of operations linearized; a lease-read mutant under clock

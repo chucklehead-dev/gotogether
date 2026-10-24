@@ -86,7 +86,9 @@ func (s System) Judge(t testing.TB, ch qenv.Chooser) *Run {
 	if n, msgs := hooks.Escaped(mark); n > mark {
 		t.Fatalf("gotogether: %d steps were recorded from outside the run judged (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
-	unknownKinds(t, "System.Rates key", keysOf(s.Rates.Kinds), []*Run{r})
+	if r.Err == nil { // a run that did not run declared nothing
+		unknownKinds(t, "System.Rates key", keysOf(s.Rates.Kinds), []*Run{r})
+	}
 	if r.Err != nil {
 		return r
 	}

@@ -1505,6 +1505,25 @@ power's point estimate, mutate-core passing on nothing. All fixed in
 8917552..9d90a8b, but the nightly matrices and the Hegel properties,
 left in ROADMAP T5. Its example for the new features is T9 (wallet).
 
+### T6 review
+
+An independent review of T6's six commits found:
+- a schedule run alone with the empty schedule (the nominal run's own
+  reproduce line, `schedule=`) ran the whole search: "alone" was a nil
+  slice, which the nominal schedule is;
+- the fault-name checks ran before finish's run errors, so a run that
+  failed before building its doubles had its Rates keys called
+  misspellings first;
+- per-run names missed what a simulation under gosim chose, and two of
+  their paths (a chosen kind never declared; a declaration in a run
+  without names) were untested.
+All fixed, each with a test that fails without it. Left in ROADMAP T6:
+Script.Misnamed's registry, woven kinds' options, gosim's declared but
+unchosen kinds. Its T9 guidance (folded into ROADMAP T9): SI cannot
+lose an update in qenv.Store (first committer wins), qhistory reads
+list-append histories only, and LinearizeByKey is unsound for
+transfers.
+
 ## Why AGENTS.md's gotchas say what they say
 
 The stories behind some of AGENTS.md's gotchas, moved here so the file

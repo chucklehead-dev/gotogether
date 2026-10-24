@@ -2867,13 +2867,14 @@ batches, then stages put them through what every exploration shares.
   engine asks each in turn, runs a batch side by side and writes runs by
   index, so their order is the same every time. Each planned run carries
   its origin (what GOTOGETHER_RUN names and messages print) and, if it
-  can be made again, how: the first run that can is the determinism
-  check's. Seeds come first, so the check is still the first seed's;
-  Exhaust's nominal run now has it too, and a nondeterministic system
+  can be made again, how: the first run is the determinism check's, if
+  it can be. Seeds come first, so the check is still the first seed's;
+  Exhaust's nominal run (or the one schedule run alone) now has it too, and a nondeterministic system
   fails Exhaust as it fails Explore, rather than finding schedules that
   would not replay.
 - **Stages.** The determinism check, the names users gave checked
-  against what the runs declared, then finish: escapes, run errors,
+  against what the runs declared (only when every run ran: one that did
+  not declared nothing, and finish says why), then finish: escapes, run errors,
   emptiness, the searches, KEEP logs, judgment and evidence.
 - **Specs.** What only a System method sets (its options and Rates, a
   fuzz input, a mutant's baseline) is an internal `exploreSpec` around
@@ -2890,9 +2891,13 @@ would match nothing. The check asked the process's registry, so a name
 another test's double had declared passed, and whether a misspelling
 failed depended on what else the binary ran. Now each run carries its
 own names (`hooks.FaultNames` in runOne's context): a simulation adds
-the kinds it chooses and the nemeses it registers, and `DeclareFaults`
-adds to the calling goroutine's run (qrun's resolver finds it for the
-simulation's creator and its tasks). What is declared outside any run
+the nemeses it registers, `DeclareFaults` adds to the calling
+goroutine's run (qrun's resolver finds it for the simulation's creator
+and its tasks; a fault point adds to its task's), and runOne adds every
+fault kind and nemesis its choice log saw, which is all the host sees
+of a simulation under gosim. A kind declared only on a path some runs
+never reach is known only to the runs that reach it: declare it at
+package level. What is declared outside any run
 (a woven fault point's site at init, a double built before its
 simulation) is static, known to every run, as before. A run of another
 workflow without names (Hegel's, a load experiment's) adds to neither.

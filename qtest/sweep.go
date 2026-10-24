@@ -107,6 +107,8 @@ func sweep(t *testing.T, bindingPath string, sw SweepConfig, base exploreSpec, s
 			runs = append(runs, x.Runs...)
 		}
 	}
-	unknownKinds(t, "qsweep.FaultKind", kinds, runs)
+	if ran(runs) { // a row's run that did not run declared nothing: its row's test says why
+		unknownKinds(t, "qsweep.FaultKind", kinds, runs)
+	}
 	return s
 }

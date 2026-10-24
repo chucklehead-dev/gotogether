@@ -406,6 +406,38 @@ func TestRatesKeyKnownPerRun(t *testing.T) {
 	}
 }
 
+// A kind a run chose but no double declared is the run's (the choice log
+// says so, as it does under gosim, where the host sees only choices), and
+// a run that did not run is reported as such, not its Rates key as a
+// misspelling: it declared nothing.
+func TestRatesKeyOfChoicesAndFailedRuns(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	chooses := func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		s.Spawn("client", func(ctx context.Context) {
+			s.Choose("fault.test.undeclared", 2) // chosen, never declared
+			qobs.Record(ctx, "deposit", nil, "amount", 10, "obs.balance", 10)
+		})
+		return s.Run(time.Second)
+	}
+	rates := qenv.DefaultRates.Set("test.undeclared", 0.5)
+	System{Binding: "../validate/testdata/account.yaml", Run: chooses, Rates: rates}.Explore(t, ExploreConfig{Seeds: 2}).Expect(t, Conforms())
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		broken := func(qenv.Chooser) error { return errors.New("config: no such account") } // before any double is built
+		System{Binding: "../validate/testdata/account.yaml", Run: broken, Rates: qenv.DefaultRates.Set("queue.jobs", 0.5)}.Explore(f, ExploreConfig{Seeds: 1})
+	}()
+	<-done
+	all := strings.Join(f.errs, "\n")
+	if !strings.Contains(all, "did not run: config: no such account") || strings.Contains(all, "covers no fault kind") {
+		t.Errorf("errors: %q, want the run's error alone", f.errs)
+	}
+}
+
 // An option a workflow ignores fails it, saying why and what to do: an
 // exploration records each run on its own (Global) and checks it in its
 // recorded order (Linearize); Validate records nothing.

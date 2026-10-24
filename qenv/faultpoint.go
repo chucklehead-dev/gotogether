@@ -59,7 +59,8 @@ func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) err
 	if crash {
 		names = append(names, "crash")
 	}
-	k := DeclareFaults(kind, names...)
+	choice.DeclareIn(t.sim.names, true, kind, names...) // the task's run's, without looking its goroutine up
+	k := FaultKind{Name: kind, Options: names}
 	v := t.sim.fault(k.Name, 1+len(k.Options))
 	switch {
 	case v == 0:

@@ -52,9 +52,18 @@ func kindOf(name string) *kind {
 }
 
 // Declare names a fault kind's options in order (option 0, nominal,
-// unnamed). Declaring it again with other options panics: option numbers
-// would change meaning.
+// unnamed), in the calling goroutine's run's names (DeclareIn).
 func Declare(name string, options ...string) {
+	f, inRun := runNames()
+	DeclareIn(f, inRun, name, options...)
+}
+
+// DeclareIn names a fault kind's options in order (option 0, nominal,
+// unnamed), for the run whose names are f (nil: none), or outside any
+// run when inRun is false, which makes the kind static (KnownStatic).
+// Declaring it again with other options panics: option numbers would
+// change meaning.
+func DeclareIn(f *hooks.FaultNames, inRun bool, name string, options ...string) {
 	registry.Lock()
 	defer registry.Unlock()
 	k := kindOf(name)
@@ -63,7 +72,7 @@ func Declare(name string, options ...string) {
 	}
 	k.options, k.named = append([]string(nil), options...), true
 	name = strings.TrimPrefix(name, "fault.")
-	switch f, inRun := runNames(); {
+	switch {
 	case f != nil:
 		f.Add(name)
 		for _, o := range options {
@@ -79,13 +88,11 @@ func Declare(name string, options ...string) {
 // Process-wide.
 var seen sync.Map
 
-// Seen notes a fault kind a choice was made of ("fault." prefix or not),
-// in the process's registry and in f, its run's (nil: none).
-func Seen(f *hooks.FaultNames, kind string) {
+// Seen notes a fault kind a choice was made of ("fault." prefix or not).
+// A run's names get its chosen kinds from its choice log (qtest's runOne),
+// which also sees choices a simulation under gosim makes.
+func Seen(kind string) {
 	k := strings.TrimPrefix(kind, "fault.")
-	if f != nil {
-		f.Add(k)
-	}
 	if _, ok := seen.Load(k); !ok {
 		seen.Store(k, true)
 	}

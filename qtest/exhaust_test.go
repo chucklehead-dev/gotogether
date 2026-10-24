@@ -99,6 +99,13 @@ func TestExhaust(t *testing.T) {
 	if sr := again.Evidence().Search; sr == nil || sr.Complete {
 		t.Errorf("a run alone's evidence claims a complete search: %+v", sr)
 	}
+	// the nominal run's reproduce line names the empty schedule: it too
+	// runs alone, not the whole search
+	t.Setenv("GOTOGETHER_RUN", t.Name()+"#4:schedule=")
+	nominal := sys.Exhaust(t, Bound{Delays: 1})
+	if len(nominal.Runs) != 1 || nominal.Runs[0].origin.value != "" {
+		t.Errorf("GOTOGETHER_RUN schedule= ran %d runs, want the nominal one alone", len(nominal.Runs))
+	}
 }
 
 // A search MaxRuns cuts short fails the test, saying how to finish it,

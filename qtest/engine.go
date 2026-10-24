@@ -18,7 +18,7 @@ import (
 // An engine runs one exploration, whichever method asked for it
 // (Explore, Exhaust, Sweep's rows, Mutate's mutants, Fuzz's inputs): its
 // sources' runs, side by side, then the stages every exploration's runs
-// go through in order (the determinism check, the names checked against
+// go through in order (the determinism check of its first run, the names checked against
 // the system's declarations, finish's run errors, searches and
 // judgment). The methods differ only in their sources.
 type engine struct {
@@ -116,16 +116,27 @@ func (e *engine) run(sources ...source) {
 		first, again := x.Runs[0], plans[0].again
 		checkDeterminism(t, first, func() *Run { return e.one(again(first)) }, x.name(first.origin.seed))
 	}
-	for _, k := range e.known {
-		unknownKinds(t, k.what, k.names, x.Runs)
-	}
-	ids := make([]uint64, len(plans))
-	for i, p := range plans {
-		if p.origin.kind == "seed" || p.origin.kind == "schedule" {
-			ids[i] = p.origin.seed
+	if ran(x.Runs) { // a run that did not run declared nothing: finish says why, rather than a name be called a misspelling
+		for _, k := range e.known {
+			unknownKinds(t, k.what, k.names, x.Runs)
 		}
 	}
-	x.finish(t, e.binding, e.c, mark, ids)
+	origins := make([]origin, len(plans))
+	for i, p := range plans {
+		origins[i] = p.origin
+	}
+	x.finish(t, e.binding, e.c, mark, origins)
+}
+
+// ran reports whether every run ran to its end: only then do the runs'
+// fault names say what the system declares.
+func ran(runs []*Run) bool {
+	for _, r := range runs {
+		if r == nil || r.Err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // seedSource is an exploration's seeds, one batch: each run's chooser is

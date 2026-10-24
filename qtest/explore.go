@@ -372,7 +372,9 @@ func unknownKinds(t testing.TB, what string, names []string, runs []*Run) {
 	for _, k := range names {
 		if k != "nemesis" && !knownFault(k, runs) {
 			t.Errorf("gotogether: %s %q covers no fault kind, option or nemesis the system declared, so it matches nothing: "+
-				"name a kind as fault coverage prints it (a double's carry its name: \"queue.<name>.ack\"), or a prefix of one (\"queue\")", what, k)
+				"name a kind as fault coverage prints it (a double's carry its name: \"queue.<name>.ack\"), or a prefix of one (\"queue\"); "+
+				"a kind is known to the runs that declare or choose it, so declare one some runs never reach at package level "+
+				"(var k = qenv.DeclareFaults(...)), and build every double in every run", what, k)
 		}
 	}
 }
@@ -451,6 +453,14 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if n, first := esc.Steps(); err == nil && n > 0 {
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
+	for _, c := range rec.Choices { // what the run chose: under gosim, all the host sees of its kinds
+		if k, ok := strings.CutPrefix(c.Kind, "fault."); ok {
+			faults.Add(k)
+		}
+	}
+	for _, n := range rec.Nemeses {
+		faults.Add("nemesis." + n)
+	}
 	recorded := mem.Steps()
 	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
@@ -501,10 +511,9 @@ func (x *Exploration) nameOf(r *Run) string {
 	return x.name(r.origin.seed)
 }
 
-// finish checks the runs, made with ids (seeds, schedules), against the
-// model: a run that failed to run (rather than to conform) fails t,
-// naming it.
-func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, ids []uint64) {
+// finish checks the runs, made from origins, against the model: a run
+// that failed to run (rather than to conform) fails t, naming it.
+func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, origins []origin) {
 	t.Helper()
 	if n, msgs := hooks.Escaped(mark); n > mark {
 		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (from a goroutine no run's task started, "+
@@ -513,7 +522,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	x.unknownScripted(t)
 	for i, r := range x.Runs {
 		if r == nil { // the scenario failed t from its goroutine before the run ended
-			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.name(ids[i]))
+			t.Errorf("gotogether: %s did not finish: the scenario failed the test (above)", x.nameOf(&Run{origin: origins[i]}))
 			continue
 		}
 		if r.Err != nil {
