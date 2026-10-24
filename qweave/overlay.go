@@ -87,6 +87,13 @@ func selfWoven(path string) bool {
 	return false
 }
 
+// runLookup reports whether a file is the code a mutant's switch calls to
+// find its run (qenv's resolver, which qrun asks): mutated, a switch in
+// it would call itself (qmut.On, qrun.Current, the resolver, qmut.On ...).
+func runLookup(path, file string) bool {
+	return path == toolkit+"/qenv" && filepath.Base(file) == "goroutine.go"
+}
+
 // A Result is the woven files, by the path of the file they replace.
 type Result struct {
 	Files   map[string][]byte

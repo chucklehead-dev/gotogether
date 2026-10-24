@@ -81,7 +81,7 @@ func weaveFile(p pkgInfo, file *ast.File, src []byte, name string, aspects []*As
 	// the module's own files: not tests, not generated ones in the build
 	// cache (a test binary's main)
 	own := !strings.HasSuffix(name, "_test.go") && p.modDir != "" && strings.HasPrefix(name, p.modDir+string(filepath.Separator))
-	if p.mutate && own {
+	if p.mutate && own && !runLookup(p.path, name) {
 		w.mutate() // before coverage: a block's Hit goes before a dropped call's switch
 	}
 	if p.cover && own {

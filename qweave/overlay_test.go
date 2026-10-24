@@ -23,3 +23,12 @@ func TestCoversToolkitPackages(t *testing.T) {
 		}
 	}
 }
+
+// qenv's resolver, which a mutant's switch calls to find its run, is
+// never mutated: a switch in it would call itself until the stack ran
+// out (mutating qenv in a System.Mutate build did).
+func TestRunLookupNotMutated(t *testing.T) {
+	if !runLookup(toolkit+"/qenv", "/x/qenv/goroutine.go") || runLookup(toolkit+"/qenv", "/x/qenv/sim.go") || runLookup(toolkit+"/qtrace", "/x/qtrace/goroutine.go") {
+		t.Error("runLookup names qenv's goroutine.go alone")
+	}
+}
