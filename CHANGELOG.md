@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A claim some runs meet says, in its "as expected" line, when its
+  seeds would miss it more than one time in a thousand at the rate it
+  measured, and the seed count that would not.
 - `GOTOGETHER_CHECK`'s store history checker classifies cycles as
   qhistory does (one classifier): it reports G-nonadjacent at snapshot
   isolation, which it took for write skew and let through.

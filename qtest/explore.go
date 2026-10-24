@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1007,6 +1008,26 @@ func (x *Exploration) summary() string {
 	return line
 }
 
+// power says, for a claim some runs meet, how likely as many seeds are
+// to miss it at the rate this exploration measured, when that is more
+// than one time in a thousand, with the seed count that would make it
+// that: a claim held by luck fails another day (fleetrollout's mutant,
+// in 6.5% of runs, missed by 20 seeds a quarter of the time). Nothing
+// for a bounded search, which is no sample.
+func (x *Exploration) power(n int) string {
+	runs := len(x.Runs)
+	if x.search != nil || n == 0 || n == runs {
+		return ""
+	}
+	p := float64(n) / float64(runs)
+	miss := math.Pow(1-p, float64(runs))
+	if miss <= 0.001 {
+		return ""
+	}
+	return fmt.Sprintf("; at that rate %d runs miss it %.1f%% of the time: %d seeds miss it one time in a thousand", runs, 100*miss,
+		int(math.Ceil(math.Log(0.001)/math.Log(1-p))))
+}
+
 // reports are the runs' reports, in order.
 func (x *Exploration) reports() []*validate.Report {
 	reps := make([]*validate.Report, len(x.Runs))
@@ -1052,7 +1073,8 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 			// the claim's own count, then how the failing runs fail: they
 			// need not be the same (a pending call in a run that also
 			// mismatches)
-			return fmt.Sprintf("as expected, %s: %d of %d runs (failing: %s); the first:\n%s", c, j.n, len(x.Runs), x.failingReasons(), indent(x.describe(t, r, false), "    "))
+			return fmt.Sprintf("as expected, %s: %d of %d runs (failing: %s)%s; the first:\n%s", c, j.n, len(x.Runs), x.failingReasons(),
+				x.power(j.n), indent(x.describe(t, r, false), "    "))
 		}}
 	case j.ok:
 		return claimVerdict{ok: true}

@@ -225,3 +225,23 @@ func TestExercisedExceptionsOfAnEmptyRow(t *testing.T) {
 		t.Errorf("a misspelling: %q", msg)
 	}
 }
+
+// A claim some runs meet says when its seeds would often miss it: 1 run
+// of 20 (fleetrollout's 6.5%, near enough) is missed by 20 seeds about a
+// third of the time, and 135 would miss it one time in a thousand; half
+// of 20 is no luck. A bounded search's count is no sample.
+func TestClaimPower(t *testing.T) {
+	x := &Exploration{Runs: make([]*Run, 20)}
+	if got, want := x.power(1), "; at that rate 20 runs miss it 35.8% of the time: 135 seeds miss it one time in a thousand"; got != want {
+		t.Errorf("1 of 20: %q, want %q", got, want)
+	}
+	for _, n := range []int{10, 20} {
+		if got := x.power(n); got != "" {
+			t.Errorf("%d of 20: %q", n, got)
+		}
+	}
+	x.search = &search{}
+	if got := x.power(1); got != "" {
+		t.Errorf("a search: %q", got)
+	}
+}
