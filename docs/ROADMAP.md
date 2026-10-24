@@ -98,7 +98,10 @@ under a week, M two to four, L more.
     (Invoke and Done, no "invoked"; Sim.Now). A virtual `qenv.Now` on a
     simulation's creating goroutine was tried and reverted: that
     goroutine's Sleep and Since stay real, and a deadline loop there hung.
-- **T2. The cost of a verdict.**
+- **T2. The cost of a verdict.** a and b done: verdicts-only checks for
+  the searches, an exploration's searched side by side, candidates
+  memoized by prefix (quorumkv's Repick 297 s to 138 s); left of b, one
+  memoizing checker shared with qhegel and across an exploration's runs.
   - **a (S).** A conformance-only search mode in validate (no ITF, the
     TypeScript batch, no detail phase), the per-run searches of an
     exploration in parallel, the complete search given what is left of
@@ -117,7 +120,14 @@ under a week, M two to four, L more.
     confirms (one replay of a passing order, one batch for a failing
     search's evidence), a differential Hegel property compares the two
     nightly, an operator outside its fragment falls back to quint.
-- **T3. The searches in the right layer (M).** `validate.Checker.Search`
+- **T3. The searches in the right layer (M). Done:** validate's
+  `Checker.Search` and `Search.Mark`, the CLI's `-linearize`,
+  `-linearize-key`, `-resolve-pending`; `quint.assumed` in step logs,
+  `InvariantResult.Eventually`, `Run.Recorded`, the chooser protocols on
+  Chooser's doc. Kept: `qtrace.Linearize` public (validate calls it), the
+  three Linearize options (each reads as what it does; the refusal names
+  the conflict with ResolvePending). Left: one goroutine lookup per step.
+  As planned: `validate.Checker.Search`
   (Linearize and ResolvePending as generators over one candidate
   engine), called by qtest and by the CLI (`validate -linearize[=key]`);
   `qtrace.Linearize` unexported; one re-sequencing helper; `Run.Recorded`
