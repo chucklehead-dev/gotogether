@@ -199,17 +199,129 @@ func (g *Graph) Classify(scc []int64) (string, []Hop) {
 			}
 		}
 	}
-	if c := g.nonadjacent(scc, in); c != nil {
+	if c := g.nonadjacent(scc, everyNode{set: in}); c != nil {
 		return GNonadjacent, c
 	}
 	return G2, cycle(func(string) bool { return true })
 }
 
-// nonadjacent finds a cycle of the component with no two rw edges in a
-// row: a breadth-first search over (transaction, whether the edge into
-// it was rw) from each first edge. Called after the G0, G1c and G-single
-// searches, so any such cycle has two rw edges or more.
-func (g *Graph) nonadjacent(scc []int64, in map[int64]bool) []Hop {
+// ClassifyThrough finds the strongest cycle through n of n's component
+// (Component; nil: the whole graph, whose cycles through n are all in
+// it, without the cost of finding it), searching from n alone: what a checker adding one
+// transaction at a time needs, since every new cycle goes through the
+// transaction just added, at a cost linear in the component (Classify's
+// is quadratic, and a component of cycles the level allows grows with
+// the history). Up to the kinds of most: "" when none of those is
+// through n (G2 if every kind may be).
+func (g *Graph) ClassifyThrough(scc []int64, n int64, most string) (string, []Hop) {
+	in := everyNode{}
+	if scc != nil {
+		in = everyNode{set: map[int64]bool{}}
+		for _, v := range scc {
+			in.set[v] = true
+		}
+	}
+	// cycle is a shortest cycle through n over edges of the kinds allowed
+	cycle := func(allowed func(string) bool) []Hop {
+		prev := map[int64]Hop{}
+		queue, seen := []int64{n}, map[int64]bool{n: true}
+		for len(queue) > 0 {
+			v := queue[0]
+			queue = queue[1:]
+			for _, e := range g.out[v] {
+				if !in.has(e.To) || !allowed(e.Kind) {
+					continue
+				}
+				if e.To == n {
+					p := []Hop{{v, e}}
+					for at := v; at != n; at = prev[at].From {
+						p = append(p, prev[at])
+					}
+					slices.Reverse(p)
+					return p
+				}
+				if !seen[e.To] {
+					seen[e.To], prev[e.To] = true, Hop{v, e}
+					queue = append(queue, e.To)
+				}
+			}
+		}
+		return nil
+	}
+	notRW := func(k string) bool { return k != "rw" }
+	order := []string{G0, G1c, GSingle, GNonadjacent, G2}
+	for _, kind := range order {
+		var c []Hop
+		switch kind {
+		case G0:
+			c = cycle(func(k string) bool { return k == "ww" })
+		case G1c:
+			c = cycle(notRW)
+		case GSingle:
+			c = g.singleThrough(n, in)
+		case GNonadjacent:
+			c = g.nonadjacent([]int64{n}, in)
+		case G2:
+			c = cycle(func(string) bool { return true })
+		}
+		if c != nil {
+			return kind, c
+		}
+		if kind == most {
+			break
+		}
+	}
+	return "", nil
+}
+
+// singleThrough finds a cycle through n with exactly one rw edge, u -rw->
+// v: n reaches u and v reaches n over the component's other edges.
+func (g *Graph) singleThrough(n int64, in everyNode) []Hop {
+	// fwd: n's reach over non-rw edges, with the hop into each; back: the
+	// nodes that reach n so, with the hop out of each
+	fwd, back := map[int64]Hop{n: {}}, map[int64]Hop{n: {}}
+	for queue := []int64{n}; len(queue) > 0; queue = queue[1:] {
+		for _, e := range g.out[queue[0]] {
+			if _, ok := fwd[e.To]; in.has(e.To) && e.Kind != "rw" && !ok {
+				fwd[e.To] = Hop{queue[0], e}
+				queue = append(queue, e.To)
+			}
+		}
+	}
+	for queue := []int64{n}; len(queue) > 0; queue = queue[1:] {
+		for _, e := range g.in[queue[0]] { // e.To is the edge's source
+			if _, ok := back[e.To]; in.has(e.To) && e.Kind != "rw" && !ok {
+				back[e.To] = Hop{e.To, Edge{queue[0], e.Kind, e.Key}}
+				queue = append(queue, e.To)
+			}
+		}
+	}
+	for u := range fwd {
+		for _, e := range g.out[u] {
+			if _, ok := back[e.To]; !ok || e.Kind != "rw" || !in.has(e.To) {
+				continue
+			}
+			var c []Hop
+			for at := u; at != n; at = fwd[at].From {
+				c = append(c, fwd[at])
+			}
+			slices.Reverse(c)
+			c = append(c, Hop{u, e})
+			for at := e.To; at != n; at = back[at].To {
+				c = append(c, back[at])
+			}
+			return c
+		}
+	}
+	return nil
+}
+
+// nonadjacent finds a cycle through one of starts, within in, with no two
+// rw edges in a row: a breadth-first search over (transaction, whether the
+// edge into it was rw) from each first edge. Called after the G0, G1c and
+// G-single searches over the same cycles, so any it finds has two rw edges
+// or more.
+func (g *Graph) nonadjacent(starts []int64, in everyNode) []Hop {
 	type state struct {
 		node  int64
 		lastR bool // the edge into node was rw
@@ -218,9 +330,9 @@ func (g *Graph) nonadjacent(scc []int64, in map[int64]bool) []Hop {
 		from state
 		Hop
 	}
-	for _, n := range scc {
+	for _, n := range starts {
 		for _, first := range g.out[n] {
-			if !in[first.To] {
+			if !in.has(first.To) {
 				continue
 			}
 			firstR := first.Kind == "rw"
@@ -233,7 +345,7 @@ func (g *Graph) nonadjacent(scc []int64, in map[int64]bool) []Hop {
 				queue = queue[1:]
 				for _, e := range g.out[st.node] {
 					r := e.Kind == "rw"
-					if !in[e.To] || r && st.lastR {
+					if !in.has(e.To) || r && st.lastR {
 						continue
 					}
 					if e.To == n {
@@ -258,3 +370,8 @@ func (g *Graph) nonadjacent(scc []int64, in map[int64]bool) []Hop {
 	}
 	return nil
 }
+
+// everyNode is a set of transactions, every one when set is nil.
+type everyNode struct{ set map[int64]bool }
+
+func (e everyNode) has(n int64) bool { return e.set == nil || e.set[n] }

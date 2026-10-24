@@ -111,6 +111,38 @@ func TestClassifyAgainstBruteForce(t *testing.T) {
 					t.Fatalf("trial %d: %v is not a cycle of the graph", trial, cyc)
 				}
 			}
+			// through each node: never weaker than the strongest simple
+			// cycle through it, never stronger than the component's, a
+			// closed walk through it of the kind it names
+			for _, n := range scc {
+				through := ""
+				for _, c := range simpleCycles(g, scc) {
+					if slices.ContainsFunc(c, func(h Hop) bool { return h.From == n }) {
+						if k := kindOf(c); through == "" || strength[k] < strength[through] {
+							through = k
+						}
+					}
+				}
+				k, walk := g.ClassifyThrough(scc, n, G2)
+				if k0, _ := g.ClassifyThrough(nil, n, G2); k0 != k {
+					t.Fatalf("trial %d: through %d: %s in the component, %s in the whole graph", trial, n, k, k0)
+				}
+				if through != "" && (k == "" || strength[k] > strength[through] || strength[k] < strength[best]) {
+					t.Fatalf("trial %d: through %d: %s, the strongest simple cycle through it %s, the component's %s", trial, n, k, through, best)
+				}
+				if k != "" && (kindOf(walk) != k || !slices.ContainsFunc(walk, func(h Hop) bool { return h.From == n })) {
+					t.Fatalf("trial %d: through %d: %s walk %v", trial, n, k, walk)
+				}
+				for i, h := range walk {
+					if next := walk[(i+1)%len(walk)].From; h.To != next || !slices.Contains(g.out[h.From], h.Edge) {
+						t.Fatalf("trial %d: %v is not a closed walk of the graph", trial, walk)
+					}
+				}
+				// most stops the search: at G1c, a G-single or weaker through n is no answer
+				if k2, _ := g.ClassifyThrough(scc, n, G1c); (strength[k] <= strength[G1c]) != (k2 == k) || strength[k] > strength[G1c] && k2 != "" {
+					t.Fatalf("trial %d: through %d up to G1c: %q, unbounded %q", trial, n, k2, k)
+				}
+			}
 			if c := g.Component(scc[0]); !slices.Equal(c, scc) {
 				t.Fatalf("trial %d: Component(%d) = %v, Tarjan's %v", trial, scc[0], c, scc)
 			}

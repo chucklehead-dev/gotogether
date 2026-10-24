@@ -3,6 +3,7 @@ package history
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // commit adds t and returns the violation's phenomenon, or "".
@@ -116,4 +117,28 @@ func TestNonadjacent(t *testing.T) {
 			t.Errorf("level %d: %q, want the cycle from T3, which closed it", c.level, got)
 		}
 	}
+}
+
+// A hot counter at read committed, each transaction reading the version
+// of two commits back (lost updates, which the level allows): the allowed
+// cycles make one component of the whole history, and a commit classifies
+// only the cycles through it, from it, so 2000 commits take milliseconds
+// (classifying the component took 2.9 s for 200).
+func TestCostOfAllowedCycles(t *testing.T) {
+	h := New(ReadCommitted)
+	h.Load("c", 1)
+	vers := []Version{1}
+	start := time.Now()
+	for i := range 2000 {
+		v := Version(i + 2)
+		r := vers[max(0, len(vers)-3)]
+		if err := h.Commit(Txn{ID: int64(i + 1), Commit: v, Reads: []Read{{"c", r}}, Writes: []string{"c"}}); err != nil {
+			t.Fatalf("commit %d: %v", i+1, err)
+		}
+		vers = append(vers, v)
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Errorf("2000 commits took %v", d)
+	}
+	t.Logf("2000 commits: %v", time.Since(start))
 }

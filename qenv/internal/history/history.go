@@ -18,9 +18,10 @@
 // G-nonadjacent (two or more, never two in a row) from snapshot isolation
 // up; G2 (write skew, whose rw edges are adjacent) under serializability.
 // The checker is incremental: every new cycle goes through the
-// transaction that closed it, so each commit classifies only that
-// transaction's strongly connected component (an older forbidden cycle
-// there would have failed its own commit).
+// transaction that closed it, so each commit classifies only the cycles
+// through it, in its strongly connected component, at a cost linear in
+// that component (an older forbidden cycle would have failed its own
+// commit).
 //
 // A store's own tests show the anomalies its level allows can happen
 // (completeness); this shows those it forbids never do (soundness).
@@ -195,18 +196,16 @@ var phenomena = map[string]struct {
 	depgraph.G2:           {"G2", Serializable},
 }
 
-// cycle classifies id's strongly connected component and reports its
-// strongest cycle if the level forbids it, from id when id is on it.
+// cycle reports the strongest cycle through id, from id, if the level
+// forbids it.
 func (h *History) cycle(id int64) error {
-	scc := h.g.Component(id)
-	if scc == nil {
+	// the cycles through id only, up to the strongest kind the level
+	// forbids: a component of the cycles it allows grows with the history
+	kind, cyc := h.g.ClassifyThrough(nil, id, [...]string{depgraph.G1c, depgraph.GNonadjacent, depgraph.G2}[h.level])
+	if kind == "" {
 		return nil
 	}
-	kind, cyc := h.g.Classify(scc)
 	p := phenomena[kind]
-	if p.level > h.level {
-		return nil
-	}
 	if i := slices.IndexFunc(cyc, func(e depgraph.Hop) bool { return e.From == id }); i > 0 {
 		cyc = append(cyc[i:], cyc[:i]...)
 	}
