@@ -1524,6 +1524,21 @@ lose an update in qenv.Store (first committer wins), qhistory reads
 list-append histories only, and LinearizeByKey is unsound for
 transfers.
 
+### T9 review
+
+An independent review of the wallet example (T9) found that it passed
+everything while:
+- the bank moved money on requests it must refuse (a transfer to its own
+  source made money, to an unknown account destroyed it, a negative
+  amount reversed it), which the model ruled out instead of refusing;
+- `TestNoOutbox` caught its mutant in 1 run of 30 (Exhaust within one
+  fault catches it every time);
+- the ledger's posts were checked by id only, commits of unknown outcome
+  were never on (and would have been recorded aborted: a false G1a),
+  deposits never ran under faults, and the bug the example found was no
+  mutant.
+All fixed, each with a test; its lessons for the core are in ROADMAP T9.
+
 ## Why AGENTS.md's gotchas say what they say
 
 The stories behind some of AGENTS.md's gotchas, moved here so the file

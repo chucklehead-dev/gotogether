@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"errors"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qhistory"
@@ -33,8 +34,9 @@ func (r *recording) Begin(ctx context.Context) qenv.Txn {
 // makes them. A transaction a crash cuts off stays Unknown.
 type recorded struct {
 	qenv.Txn
-	h *History
-	i int
+	h     *History
+	i     int
+	ended bool // committed, or tried to: a Rollback after it changes nothing
 }
 
 func (t *recorded) txn() *qhistory.Txn { return &t.h.Txns[t.i] }
@@ -72,20 +74,26 @@ func (t *recorded) Put(k string, v any) {
 
 func (t *recorded) Commit() error {
 	err := t.Txn.Commit()
-	if err == nil {
+	t.ended = true
+	switch {
+	case err == nil:
 		t.txn().Outcome = qhistory.Committed
-	} else {
+	case errors.Is(err, qenv.ErrUnknownOutcome):
+		// applied or not, the client cannot tell: a read that saw one of
+		// its values says it committed (qhistory's Unknown)
+	default:
 		t.txn().Outcome = qhistory.Aborted
 	}
 	return err
 }
 
 // Rollback after a commit does nothing (Retry rolls back what it began,
-// committed or not), and records nothing either.
+// committed or not), and records nothing either: a commit of unknown
+// outcome stays Unknown.
 func (t *recorded) Rollback() {
 	t.Txn.Rollback()
-	if t.txn().Outcome == qhistory.Unknown {
-		t.txn().Outcome = qhistory.Aborted
+	if !t.ended {
+		t.ended, t.txn().Outcome = true, qhistory.Aborted
 	}
 }
 

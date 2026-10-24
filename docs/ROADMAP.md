@@ -216,16 +216,29 @@ under a week, M two to four, L more.
   linearized per account, ResolvePending for crashed clients,
   `GOTOGETHER_ALL_FAULTS`. Its first faithful version applied a
   duplicated request twice at read committed (the request's record read
-  unlocked). Left: WallClockDedupe (a dedupe window on the process's
-  clock, broken only by clock faults); the optional real database. What
-  it taught the core:
+  unlocked), now the UnlockedRecord mutant. Reviewed (HISTORY, "T9
+  review"): invalid requests are refused in the model and the bank
+  (NoValidation), posts carry their moves, commits of unknown outcome are
+  on (and Unknown in the history), NoOutbox is found by Exhaust. Left:
+  WallClockDedupe (a dedupe window on the process's clock, broken only
+  by clock faults); the optional real database. What it taught the core:
   - LinearizeByKey cost three times Linearize on its small per-account
-    history (28 s against 9 s for five runs): each partition's search
-    pays quint's fixed cost. Batch the partitions' candidates, or fall
-    back to the whole history below a size.
+    history (28 s against 9 s for five runs): its partitions were searched
+    one after another (now side by side, T2d's first step); each also
+    pays a second quint call for the invariants, and the probe makes one
+    partition per account, each a quint call for one step. Next: skip the
+    search of a partition real time already orders, check invariants in
+    the first search, batch the partitions' candidates into one quint
+    process.
   - PCT at depth 2 found the wide write-skew window in 1 run of 40,
-    uniform seeds in 39: say in the skill when PCT helps (a narrow
-    window) and when it hurts.
+    uniform seeds in 39; but its `steps` (400) was mis-sized for a run of
+    about 60 choices, so the change point mostly fell past the end (sized
+    to the run: 16 to 18 of 40). Default PCT's steps to the nominal run's
+    choice count, which an exploration knows from its determinism run, and
+    say in the skill to size it.
+  - `GOTOGETHER_ALL_FAULTS` turns on every nemesis family but not a
+    store's commit faults (`Store.CommitFaults`, opt-in per store): "every
+    fault family" leaves out the one a dedupe-by-id service exists for.
 - **T8. An example: raftkv (M, after T2d).** etcd's raft RawNode as a
   three-node KV on qenv; transfers across keys (no partition helps);
   hundreds of operations linearized; a lease-read mutant under clock

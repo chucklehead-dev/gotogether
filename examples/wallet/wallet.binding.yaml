@@ -1,8 +1,8 @@
 # The clients' calls, the ledger's posts and the probe's observations as
 # calls of model/wallet.qnt's actions: every parameter is the step's field
-# of its name. A transfer's outcome and a read's balance are compared with
+# of its name. A request's outcome and a read's balance are compared with
 # the model's; an observation is a guard of its action (a probe's balance
-# the model does not hold rejects it).
+# the model does not hold rejects it); a post is judged after the settle.
 spec: model/wallet.qnt
 module: wallet
 
@@ -14,7 +14,8 @@ constants:
 actions:
   transfer:
     expect: 'result.get({{.id}}) == {{.obs.ok}}'
-  deposit: {}
+  deposit:
+    expect: 'result.get({{.id}}) == {{.obs.ok}}'
   read:
     expect: 'bal.get({{.account}}) == {{.obs.balance}}'
   post: {}

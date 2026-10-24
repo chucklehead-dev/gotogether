@@ -19,16 +19,22 @@
 //
 //   - NoDedupe applies a retried request again: a lost response's retry
 //     moves the money twice (Exhaust finds it within one fault).
+//   - UnlockedRecord reads the request's record without its lock: a
+//     duplicated request's two deliveries both find no record, and at read
+//     committed both apply it (the first faithful version did this).
+//   - NoValidation applies a request it must refuse: a transfer to its own
+//     source makes money, one to an account it does not hold destroys it,
+//     a negative amount reverses it.
 //   - ReadThenWrite reads the source account without locking it: at read
 //     committed two transfers from it both spend what one saw, a lost
 //     update; at snapshot isolation and above the first committer wins.
 //   - WriteSkew reads a credit line's other account without locking it:
 //     at snapshot isolation two transfers, one from each, both pass and
-//     the line goes negative (write skew; qhistory names it G2). PCT's
-//     schedules find the interleaving.
+//     the line goes negative (write skew; qhistory names it G2).
 //   - NoOutbox publishes to the ledger after the commit instead of through
 //     the outbox: a crash between them loses the post, which only the
-//     eventual check after a settle sees.
+//     eventual check after a settle sees (Exhaust finds it within one
+//     fault).
 //   - ReplicaRead answers a balance from the ledger's copy, behind the
 //     store: a read after a deposit misses it (linearized per account).
 package wallet
@@ -60,15 +66,15 @@ const (
 	NoOutbox
 	// ReplicaRead answers a balance from the ledger's copy.
 	ReplicaRead
+	// UnlockedRecord reads the request's record without its lock.
+	UnlockedRecord
+	// NoValidation applies a request it must refuse.
+	NoValidation
 )
 
 func (m Mutation) String() string {
-	return [...]string{"Faithful", "NoDedupe", "ReadThenWrite", "WriteSkew", "NoOutbox", "ReplicaRead"}[m]
+	return [...]string{"Faithful", "NoDedupe", "ReadThenWrite", "WriteSkew", "NoOutbox", "ReplicaRead", "UnlockedRecord", "NoValidation"}[m]
 }
-
-// Mutations names each mutation, for the simulator's -mutation flag.
-var Mutations = map[string]Mutation{"": Faithful, "no-dedupe": NoDedupe, "read-then-write": ReadThenWrite,
-	"write-skew": WriteSkew, "no-outbox": NoOutbox, "replica-read": ReplicaRead}
 
 // Accounts are the accounts, the model's ACCOUNTS; Joint the two that share
 // a credit line, its JOINT.
@@ -85,7 +91,9 @@ const Timeout = 50 * time.Millisecond
 
 // An Entry is one request's move on an account. Its tag is the append's
 // own, unique across the run: a retried transaction appends the request
-// again, and a history (qhistory) tells appends apart by their values.
+// again, and a history (qhistory) tells appends apart by their values. The
+// tags come from a counter in the bank's memory, which a simulated crash
+// keeps (a real bank would draw them from the database, as a sequence).
 type Entry struct {
 	ID, Amount, Tag int
 }
@@ -118,7 +126,13 @@ type Resp struct {
 // A Posting is what the ledger is told of an applied request: its moves.
 type Posting struct {
 	ID    int
-	Moves []Entry // Entry.ID here is the account's index in Accounts
+	Moves []Move
+}
+
+// A Move is an amount on an account.
+type Move struct {
+	Account string
+	Amount  int
 }
 
 // Bank is the wallet's service: its store, and the ledger's queue.
@@ -148,11 +162,12 @@ func read(tx qenv.Txn, account string, lock bool) ([]Entry, error) {
 // apply moves amounts in tx: each account's entry appended to its list,
 // as read already (have) or read now, locked.
 func (b *Bank) apply(tx qenv.Txn, id int, moves map[string]int, have map[string][]Entry) error {
-	for _, a := range Accounts { // in order: two transfers lock alike
-		amt, ok := moves[a]
-		if !ok {
-			continue
-		}
+	// the source is locked first (it was read), then the others in order:
+	// two transfers may lock two accounts in opposite orders, and the
+	// store aborts the one that would close the wait cycle (ErrDeadlock, a
+	// conflict), which Retry runs again
+	for _, a := range accountsOf(moves) {
+		amt := moves[a]
 		es, read1 := have[a]
 		if !read1 {
 			var err error
@@ -164,6 +179,24 @@ func (b *Bank) apply(tx qenv.Txn, id int, moves map[string]int, have map[string]
 		tx.Put(accountKey(a), append(slices.Clip(es), Entry{id, amt, b.tags}))
 	}
 	return nil
+}
+
+// accountsOf are the accounts moves touches: the bank's in order, then
+// any other (NoValidation's), sorted.
+func accountsOf(moves map[string]int) []string {
+	var out, other []string
+	for _, a := range Accounts {
+		if _, ok := moves[a]; ok {
+			out = append(out, a)
+		}
+	}
+	for a := range moves {
+		if !slices.Contains(Accounts, a) {
+			other = append(other, a)
+		}
+	}
+	slices.Sort(other)
+	return append(out, other...)
 }
 
 // Handle serves one request: applied at most once by its id (but by
@@ -182,7 +215,14 @@ func (b *Bank) Handle(ctx context.Context, r Req) (Resp, error) {
 		// and apply the request again (at read committed it did)
 		done := "done/" + strconv.Itoa(r.ID)
 		if b.Mutation != NoDedupe {
-			v, ok, err := tx.GetForUpdate(done)
+			var v any
+			var ok bool
+			var err error
+			if b.Mutation == UnlockedRecord {
+				v, ok = tx.Get(done)
+			} else {
+				v, ok, err = tx.GetForUpdate(done)
+			}
 			if err != nil {
 				return err
 			}
@@ -192,10 +232,12 @@ func (b *Bank) Handle(ctx context.Context, r Req) (Resp, error) {
 			}
 		}
 		moves, have := map[string]int{}, map[string][]Entry{}
-		switch r.Kind {
-		case "deposit":
-			moves[r.Account] = r.Amount
-		case "transfer":
+		switch {
+		case !valid(r) && b.Mutation != NoValidation:
+			// refused, and recorded as refused: a retry answers the same
+		case r.Kind == "deposit":
+			moves[r.Account] += r.Amount
+		case r.Kind == "transfer":
 			// the source read, and written as read: unlocked (ReadThenWrite),
 			// a write over another's that read it too
 			es, err := read(tx, r.Src, b.Mutation != ReadThenWrite)
@@ -217,7 +259,8 @@ func (b *Bank) Handle(ctx context.Context, r Req) (Resp, error) {
 				}
 			}
 			if funds >= r.Amount {
-				moves[r.Src], moves[r.Dest] = -r.Amount, r.Amount
+				moves[r.Src] -= r.Amount
+				moves[r.Dest] += r.Amount // to its own source (NoValidation): the two moves are one
 			}
 		default:
 			return fmt.Errorf("wallet: no request %q", r.Kind)
@@ -227,10 +270,8 @@ func (b *Bank) Handle(ctx context.Context, r Req) (Resp, error) {
 				return err
 			}
 			posting = &Posting{ID: r.ID}
-			for i, a := range Accounts {
-				if amt, ok := moves[a]; ok {
-					posting.Moves = append(posting.Moves, Entry{ID: i, Amount: amt})
-				}
+			for _, a := range accountsOf(moves) {
+				posting.Moves = append(posting.Moves, Move{Account: a, Amount: moves[a]})
 			}
 			if b.Mutation != NoOutbox {
 				tx.Put("outbox/"+key(r.ID), *posting)
@@ -248,6 +289,18 @@ func (b *Bank) Handle(ctx context.Context, r Req) (Resp, error) {
 		b.Ledger.Publish(ctx, *posting)
 	}
 	return resp, nil
+}
+
+// valid reports whether a request is one the bank may apply: accounts it
+// holds, a transfer between two of them, a positive amount.
+func valid(r Req) bool {
+	switch r.Kind {
+	case "deposit":
+		return slices.Contains(Accounts, r.Account) && r.Amount > 0
+	case "transfer":
+		return slices.Contains(Accounts, r.Src) && slices.Contains(Accounts, r.Dest) && r.Src != r.Dest && r.Amount > 0
+	}
+	return false
 }
 
 // key is an id as a key that sorts as the number does.
@@ -306,7 +359,7 @@ func (l *Ledger) Consume(ctx context.Context) {
 	for {
 		d := l.Queue.Receive(ctx)
 		p := d.Body.(Posting)
-		_ = qenv.Retry(ctx, l.DB, 20, func(tx qenv.Txn) error {
+		err := qenv.Retry(ctx, l.DB, 20, func(tx qenv.Txn) error {
 			k := "posted/" + key(p.ID)
 			if _, ok := tx.Get(k); ok {
 				return nil
@@ -314,14 +367,19 @@ func (l *Ledger) Consume(ctx context.Context) {
 			tx.Put(k, true)
 			tx.OnCommit(func() {
 				for _, m := range p.Moves {
-					l.Replica[Accounts[m.ID]] += m.Amount
+					l.Replica[m.Account] += m.Amount
 				}
-				// the post as one call at its commit, by the first account it
-				// moves: a history partitioned by account keeps it
-				qobs.Invoke(ctx, "post", "id", p.ID, "account", Accounts[p.Moves[0].ID]).Done(nil)
+				// the post as one call at its commit, its first move's: a
+				// history partitioned by account keeps it
+				m := p.Moves[0]
+				qobs.Invoke(ctx, "post", "id", p.ID, "account", m.Account, "amount", m.Amount).Done(nil)
 			})
 			return nil
 		})
+		if err != nil {
+			d.Nack(ctx) // not posted: delivered again
+			continue
+		}
 		d.Ack(ctx)
 	}
 }
@@ -361,8 +419,8 @@ func (c *Client) Do(ctx context.Context, n int, op Op) {
 		call.Done(nil, "obs.ok", resp.OK)
 	case "deposit":
 		call := qobs.Invoke(ctx, "deposit", "id", id, "account", op.Account, "amount", op.Amount)
-		c.call(ctx, Req{Kind: "deposit", ID: id, Account: op.Account, Amount: op.Amount})
-		call.Done(nil)
+		resp := c.call(ctx, Req{Kind: "deposit", ID: id, Account: op.Account, Amount: op.Amount})
+		call.Done(nil, "obs.ok", resp.OK)
 	case "read":
 		call := qobs.Invoke(ctx, "read", "account", op.Account)
 		resp := c.call(ctx, Req{Kind: "balance", Account: op.Account})
@@ -381,12 +439,21 @@ type Config struct {
 	ClientCrashes bool
 }
 
-// Transfers is three clients moving money between every pair of
-// accounts and reading balances, never more than an account holds.
+// Transfers is three clients moving money between accounts, depositing
+// and reading balances, never more than an account holds.
 var Transfers = [][]Op{
 	{{Kind: "transfer", Src: "a1", Dest: "b", Amount: 10}, {Kind: "read", Account: "b"}, {Kind: "transfer", Src: "c", Dest: "a2", Amount: 20}},
-	{{Kind: "transfer", Src: "b", Dest: "c", Amount: 30}, {Kind: "read", Account: "a1"}, {Kind: "transfer", Src: "a2", Dest: "a1", Amount: 5}},
+	{{Kind: "transfer", Src: "b", Dest: "c", Amount: 30}, {Kind: "deposit", Account: "a1", Amount: 8}, {Kind: "transfer", Src: "a2", Dest: "a1", Amount: 5}},
 	{{Kind: "read", Account: "c"}, {Kind: "transfer", Src: "b", Dest: "a1", Amount: 15}, {Kind: "read", Account: "b"}},
+}
+
+// Invalid is requests the bank must refuse, between two it applies: a
+// transfer to its own source, to an account it does not hold, of a
+// negative amount, and a deposit of nothing.
+var Invalid = [][]Op{
+	{{Kind: "transfer", Src: "b", Dest: "c", Amount: 10}, {Kind: "transfer", Src: "c", Dest: "c", Amount: 30},
+		{Kind: "transfer", Src: "b", Dest: "zz", Amount: 30}, {Kind: "transfer", Src: "c", Dest: "b", Amount: -400},
+		{Kind: "deposit", Account: "a1", Amount: 0}, {Kind: "transfer", Src: "a1", Dest: "c", Amount: 5}},
 }
 
 // Blind is Transfers without reads: what a run whose clients crash
@@ -442,6 +509,10 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 		replica[a] = Initial
 	}
 	d.Store = qenv.NewStore(s, "bank", iso)
+	// a commit may be applied and reported lost (ErrUnknownOutcome): the
+	// bank answers its client with the error, the client retries, and the
+	// request's record answers the retry
+	d.Store.CommitFaults = true
 	d.Posted = qenv.NewStore(s, "ledger", qenv.Serializable)
 	d.Bank = &Bank{Mutation: cfg.Mutation, DB: &recording{d.Store, d.History}, Replica: replica, Store: d.Store}
 	d.Ledger = &Ledger{DB: d.Posted, Replica: replica}

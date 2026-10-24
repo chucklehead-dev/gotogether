@@ -61,16 +61,16 @@ func TestReadThenWrite(t *testing.T) {
 }
 
 // quiet is no faults: two transfers that interleave, nothing else.
-var quiet = qenv.DefaultRates.Set("rpc", 0).Set("nemesis", 0).Set("queue", 0)
+var quiet = qenv.DefaultRates.Set("rpc", 0).Set("nemesis", 0).Set("queue", 0).Set("store", 0)
 
 // Two transfers, one from each account of a credit line, each reading the
 // other account without its lock, both pass at snapshot isolation, which
 // lets disjoint writes commit: the line goes negative. The transfers
 // overlap, and which one the line refuses depends on which took effect
 // first, not on which answered first: the history is linearized. The
-// window is wide (uniform seeds interleave the two in 39 runs of 40),
-// where PCT, which runs a task long before switching, finds it in 1: PCT
-// is for a narrow window (quorumkv's BlindRepair).
+// window is wide: uniform seeds interleave the two in 39 runs of 40 (PCT,
+// which runs a task long before switching, in fewer, sized to the run: it
+// is for a narrow window, as quorumkv's BlindRepair).
 func TestWriteSkew(t *testing.T) {
 	qtest.RequireQuint(t)
 	skew := Config{Mutation: WriteSkew, Workload: Skew}
@@ -105,6 +105,7 @@ func TestWriteSkewHistory(t *testing.T) {
 				if !si.OK() {
 					t.Errorf("seed %d: G2 is snapshot isolation's to allow, but:\n%s", seed, si)
 				}
+				t.Logf("seed %d, the skewed bank's history: %s", seed, ser)
 				found = true
 			}
 		}
@@ -142,28 +143,60 @@ func TestAllFaults(t *testing.T) {
 }
 
 // Publishing after the commit instead of through the outbox loses a post
-// when the bank crashes between them: every call still conforms, and only
-// the eventual check, after the settle, sees the post never came.
+// when the bank crashes between them: one crash, so a search within one
+// fault finds it. Every call still conforms (the transfer was applied
+// and answered); only the eventual check, after the settle, sees the post
+// never came.
 func TestNoOutbox(t *testing.T) {
 	qtest.RequireQuint(t)
-	crashy := qenv.DefaultRates.Set("nemesis.crash.bank", 0.05)
-	system(Config{Mutation: NoOutbox, Workload: Blind}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("allPosted"))))
+	one := Config{Mutation: NoOutbox, Workload: [][]Op{{{Kind: "transfer", Src: "b", Dest: "c", Amount: 30}}}}
+	system(one).Exhaust(t, qtest.Bound{Faults: 1}).
+		Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("allPosted"))), qtest.None(qtest.Mismatch("transfer")))
+}
+
+// A request the bank must refuse (a transfer to its own source, to an
+// account it does not hold, of a negative amount; a deposit of nothing) is
+// answered false and moves nothing; a bank that applies them makes and
+// destroys money.
+func TestInvalidRequests(t *testing.T) {
+	qtest.RequireQuint(t)
+	system(Config{Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms())
+	system(Config{Mutation: NoValidation, Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: 10}).
+		Expect(t, qtest.All(qtest.Mismatch("transfer")))
+}
+
+// A duplicated request delivered while its first delivery is in flight
+// finds no record unless the record is locked: at read committed both
+// deliveries apply it (8 runs of 20 here). Duplicates are half of the
+// requests, and the two deliveries must both read before either commits.
+// The first faithful version of this bank did it.
+func TestUnlockedRecord(t *testing.T) {
+	qtest.RequireQuint(t)
+	dups := qenv.DefaultRates.Set("rpc.wallet.request", 0.5)
+	rc := Config{Isolation: qenv.ReadCommitted, Workload: Contended}
+	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: 20}).Expect(t, qtest.Conforms())
+	rc.Mutation = UnlockedRecord
+	// the request applied twice: its answer is the second's (ok false, the
+	// funds spent by the first) or the balances show it
+	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: 20}).
+		Expect(t, qtest.Some(qtest.AnyOf(qtest.Mismatch("transfer"), qtest.Rejects("observe"))))
 }
 
 // A balance answered from the ledger's copy misses a deposit the bank
 // applied and the ledger has not posted: a read after the deposit
 // returned shows the old balance. Each call is on one account, so the
 // history is linearized account by account. (On a history this small that
-// costs more than Linearize, 28 s to 9 s for five runs: each partition's
-// search pays quint's fixed cost; it is for histories of many keys.)
+// cost more than Linearize, 28 s to 9 s for five runs, when the partitions
+// were searched one after another; it is for histories of many keys.)
 func TestReplicaRead(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
 		t.Skip("explores 5 runs linearized per account")
 	}
 	byKey := qtest.LinearizeByKey("account")
-	system(Config{Workload: Deposits}, byKey).Explore(t, qtest.ExploreConfig{Seeds: 3}).Expect(t, qtest.Conforms())
+	// some of these runs need the order (a read concurrent with a deposit
+	// on its account)
+	system(Config{Workload: Deposits}, byKey).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms())
 	system(Config{Mutation: ReplicaRead, Workload: Deposits}, byKey).Explore(t, qtest.ExploreConfig{Seeds: 2}).
 		Expect(t, qtest.Some(qtest.Mismatch("read")))
 }
