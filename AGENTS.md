@@ -392,7 +392,9 @@ working there:
   keep `t.Parallel()` out of those.
   `gotogether lint -sim .` (in CI) flags `go` statements and wall-clock
   calls in files that import qenv, tests included; `//qenv:ok` exempts a
-  line (give the reason after it).
+  line (give the reason after it). The core's own simulated code (qenv, its
+  internals, qload, qrole, qobs, qrun, qcover, qmut) is held to it too
+  (qlint's TestCoreStaysInTheSimulation), every exemption with its reason.
 - `//quint:action` arguments split on spaces outside quotes and brackets
   (`obs.balance:b.Balance(ctx, acct)` is one): binding's lint and qweave
   share the rule, tested on `binding/testdata/directives.json`. Change

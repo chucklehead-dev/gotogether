@@ -115,7 +115,7 @@ func NewNative(c Chooser, p Platform) *Sim {
 // clock, which is gosim's one clock. A monotonic reading is relative to an
 // origin in the time package's globals, which are per machine there, so
 // deadlines passed between machines would compare wrongly.
-func nativeNow() time.Time { return time.Now().Round(0) }
+func nativeNow() time.Time { return time.Now().Round(0) } //qenv:ok the native runtime runs in its machine's real time
 
 // release is a seam: whatever a waiter waits for may have changed. Without
 // a Platform it gives up the lock the running task holds.
@@ -193,7 +193,7 @@ func (s *Sim) spawnNative(t *task, fn func(ctx context.Context)) {
 		}
 		return
 	}
-	go body()
+	go body() //qenv:ok the native runtime's task, on its own goroutine
 }
 
 // machineMain is the main function of a process's machine: it starts the
@@ -202,7 +202,7 @@ func (s *Sim) machineMain(p *Process) func() {
 	return func() {
 		q := p.queue // the incarnation it boots
 		for f := range q {
-			go f()
+			go f() //qenv:ok a process's task, started on its machine
 		}
 	}
 }
@@ -217,10 +217,10 @@ func (t *task) sleepNative(d time.Duration) {
 	n := t.sim.nat
 	n.release()
 	if n.coop {
-		time.Sleep(d)
+		time.Sleep(d) //qenv:ok the native runtime sleeps in real time
 	} else {
 		// a sleep ends at Close too, which waits for every task
-		tm := time.NewTimer(d)
+		tm := time.NewTimer(d) //qenv:ok the native runtime sleeps in real time
 		select {
 		case <-tm.C:
 		case <-n.closed:
@@ -242,7 +242,7 @@ func (t *task) waitNative(ready func() bool, deadline time.Time) {
 	gen := t.gen
 	var tm *time.Timer
 	if !deadline.IsZero() {
-		tm = time.AfterFunc(deadline.Sub(nativeNow()), func() {
+		tm = time.AfterFunc(deadline.Sub(nativeNow()), func() { //qenv:ok a native wait's real deadline
 			n.mu.Lock()
 			n.cond.Broadcast()
 			n.mu.Unlock()
@@ -278,7 +278,7 @@ func (t *task) waitCoop(ready func() bool, deadline time.Time) {
 	t.waiting, t.notified = true, false
 	gen := t.gen
 	if !deadline.IsZero() {
-		tm := time.AfterFunc(deadline.Sub(nativeNow()), n.broadcast)
+		tm := time.AfterFunc(deadline.Sub(nativeNow()), n.broadcast) //qenv:ok a native wait's real deadline
 		defer tm.Stop()
 	}
 	n.broadcast() // this task ran before waiting (as in waitNative)
@@ -318,7 +318,7 @@ func (s *Sim) runNative(d time.Duration) error {
 		})
 	}
 	s.nat.release()
-	time.Sleep(d)
+	time.Sleep(d) //qenv:ok the native runtime sleeps in real time
 	if !s.nat.coop {
 		s.nat.mu.Lock()
 	}

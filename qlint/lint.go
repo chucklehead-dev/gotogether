@@ -95,7 +95,11 @@ var wallClock = map[string]string{
 
 // SimFile is Sim's check of one parsed file (with comments): nothing
 // unless the file imports qenv.
-func SimFile(fset *token.FileSet, f *ast.File) []Finding {
+func SimFile(fset *token.FileSet, f *ast.File) []Finding { return simFile(fset, f, false) }
+
+// simFile is SimFile; with all, of any file: the core's own simulation
+// code (qenv, its doubles, qload) imports no qenv to say so.
+func simFile(fset *token.FileSet, f *ast.File, all bool) []Finding {
 	names := map[string]string{} // import path -> local name
 	for _, im := range f.Imports {
 		p, _ := strconv.Unquote(im.Path.Value)
@@ -105,7 +109,7 @@ func SimFile(fset *token.FileSet, f *ast.File) []Finding {
 		}
 		names[p] = name
 	}
-	if _, ok := names[qenvPath]; !ok || f.Name.Name == "qenv" {
+	if _, ok := names[qenvPath]; !all && (!ok || f.Name.Name == "qenv") {
 		return nil
 	}
 	exempt := map[int]bool{}

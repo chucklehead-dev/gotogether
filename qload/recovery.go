@@ -223,7 +223,7 @@ func Runs(sys Target, tr Trigger, n int) []Recovery {
 	for i := range n {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func() {
+		go func() { //qenv:ok each run its own simulation, in parallel
 			defer func() { <-sem; wg.Done() }()
 			rs[i] = sys(tr, uint64(i+1))
 		}()

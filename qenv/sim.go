@@ -262,7 +262,7 @@ func (s *Sim) ToVirtual(real time.Time) time.Time {
 	if s.nat != nil {
 		return real // the library's clock is the simulation's
 	}
-	return s.now.Add(real.Sub(time.Now()))
+	return s.now.Add(real.Sub(time.Now())) //qenv:ok translating the real clock at a seam (ToVirtual)
 }
 
 // ToReal translates a virtual time into the real clock's frame (the inverse
@@ -271,7 +271,7 @@ func (s *Sim) ToReal(virtual time.Time) time.Time {
 	if s.nat != nil {
 		return virtual
 	}
-	return time.Now().Add(virtual.Sub(s.now))
+	return time.Now().Add(virtual.Sub(s.now)) //qenv:ok translating to the real clock at a seam (ToReal)
 }
 
 // Context is the context every task derives from (see WithContext): for
@@ -319,7 +319,7 @@ func From(ctx context.Context) *Sim {
 func Go(ctx context.Context, name string, fn func(ctx context.Context)) {
 	t := taskOf(ctx)
 	if t == nil {
-		go fn(ctx)
+		go fn(ctx) //qenv:ok outside a simulation, Go is a goroutine
 		return
 	}
 	t.sim.spawn(ctx, name, t.proc, fn)
@@ -356,7 +356,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 		return
 	}
 	s.enqueue(t)
-	go func() {
+	go func() { //qenv:ok the task's goroutine, which the scheduler runs one at a time
 		id := goid()
 		own(id, s, t)
 		defer disown(id, s)
@@ -660,7 +660,7 @@ func Now(ctx context.Context) time.Time {
 	if t := taskOf(ctx); t != nil {
 		return t.sim.clockOf(t)
 	}
-	return time.Now()
+	return time.Now() //qenv:ok outside a simulation, the wall clock
 }
 
 // Sleep waits d of virtual time in a simulation, else of real time (or
@@ -669,7 +669,7 @@ func Sleep(ctx context.Context, d time.Duration) {
 	t := taskOf(ctx)
 	if t == nil {
 		select {
-		case <-time.After(d):
+		case <-time.After(d): //qenv:ok outside a simulation, real time
 		case <-ctx.Done():
 		}
 		return
