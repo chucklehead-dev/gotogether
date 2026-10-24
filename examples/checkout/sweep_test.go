@@ -77,8 +77,9 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 	// the provider's faults at a quarter: since a crash can fall after a
 	// commit (qenv.Service's window), the double charge needs a lost
 	// provider response at the right moment, in 2 runs of 100 at crashy's
-	// rates and 13 of 100 at this one
-	sweepSystem(shop.NoIdempotencyKey).WithRates(crashy.Set("rpc.provider", 0.25)).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 30},
+	// rates and 13 of 100 at this one; the rarest rows show theirs in 4
+	// runs of 30, which 50 seeds miss about once in a thousand
+	sweepSystem(shop.NoIdempotencyKey).WithRates(crashy.Set("rpc.provider", 0.25)).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 50},
 		Expect: func(row qsweep.Row) []qtest.Claim {
 			if row.On("rpc.provider") {
 				return []qtest.Claim{qtest.Violates("chargedAtMostOnce")}

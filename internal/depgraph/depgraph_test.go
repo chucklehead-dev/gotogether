@@ -84,7 +84,14 @@ func TestClassifyAgainstBruteForce(t *testing.T) {
 		for range nodes + r.IntN(nodes) {
 			g.Add(int64(r.IntN(nodes)), int64(r.IntN(nodes)), kinds[r.IntN(3)], "k")
 		}
-		for _, scc := range g.Components() {
+		sccs := g.Components()
+		if !slices.IsSortedFunc(sccs, func(a, b []int64) int { return int(a[0] - b[0]) }) {
+			t.Fatalf("trial %d: components %v not in order of their least transaction", trial, sccs)
+		}
+		for _, scc := range sccs {
+			if !slices.IsSorted(scc) {
+				t.Fatalf("trial %d: component %v not sorted", trial, scc)
+			}
 			best := ""
 			for _, c := range simpleCycles(g, scc) {
 				if k := kindOf(c); best == "" || strength[k] < strength[best] {

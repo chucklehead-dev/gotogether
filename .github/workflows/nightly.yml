@@ -74,13 +74,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # max: the survivors allowed, each one read and equivalent (qhistory:
-        # sorting the nodes Tarjan visits, whose components are sorted after;
-        # nonadjacent's rw count, which classify's earlier cases make true)
+        # max: the survivors allowed, each one read and equivalent
+        # (internal/depgraph: sorting the nodes Tarjan visits, whose
+        # components are sorted after)
         include:
           - pkg: qtrace
           - pkg: qhistory
-            max: 2
+            max: 0
+          - pkg: internal/depgraph
+            max: 1
           - pkg: qsweep
             max: 0
     steps:
