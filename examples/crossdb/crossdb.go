@@ -57,6 +57,10 @@ type Config struct {
 	NoCrashes bool
 	// VisibilityLag of the cloud's reads (default 1s).
 	VisibilityLag time.Duration
+	// NoRequestExpiry makes the cloud apply a request however late it
+	// arrives (dbaas.NewSim): a create delivered after its timeout then
+	// leaks a database whose resource was deleted meanwhile.
+	NoRequestExpiry bool
 }
 
 // Debug, if set, receives a line per reconcile.
@@ -233,7 +237,7 @@ func Run(c qenv.Chooser, cfg Config) error {
 	cloud := dbaas.NewCloud()
 	cloud.VisibilityLag = cfg.VisibilityLag
 	cloud.Record = func(ctx context.Context, action string, kv ...any) { qobs.Record(ctx, action, nil, kv...) }
-	api := dbaas.NewSim(s, cloud)
+	api := dbaas.NewSim(s, cloud, !cfg.NoRequestExpiry)
 
 	pw := 0
 	s.Process("provider", !cfg.NoCrashes, func(ctx context.Context) {

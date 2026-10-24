@@ -14,6 +14,7 @@ type simReq struct {
 	ID       string
 	Token    string
 	Password string
+	Deadline time.Time // the caller's: a request arriving after it is refused
 }
 
 type simResp struct {
@@ -26,16 +27,33 @@ type simResp struct {
 // ("dbaas.throttle").
 type SimClient struct {
 	svc     *qenv.Service[simReq, simResp]
+	sim     *qenv.Sim
 	Timeout time.Duration
 }
+
+// ErrExpired is a request the cloud refused because it arrived after its
+// caller's deadline: it was not applied. The caller has given up by then
+// and never sees it.
+var ErrExpired = errors.New("dbaas: request arrived after its deadline (not applied)")
 
 // throttle is the cloud refusing a request for its rate limit.
 var throttle = qenv.DeclareFaults("dbaas.throttle", "throttled")
 
 // NewSim serves cloud in s, on the virtual clock, and returns its client.
-func NewSim(s *qenv.Sim, cloud *Cloud) *SimClient {
+// Each request carries its caller's deadline and the cloud refuses one
+// that arrives after it (ErrExpired), as a real API bounds a request's
+// age (AWS refuses a signed request five minutes old; a gRPC server drops
+// a request past its propagated deadline; over HTTP the connection the
+// caller closed takes the request with it). Without that, a create
+// delivered late (rpc.dbaas.delay) lands after the provider has seen the
+// resource deleted and found nothing, and the database leaks; expire
+// false keeps such a cloud, to show it.
+func NewSim(s *qenv.Sim, cloud *Cloud, expire bool) *SimClient {
 	cloud.Now = s.Now
 	svc := qenv.NewService(s, "dbaas", nil, func(ctx context.Context, r simReq) (simResp, error) {
+		if expire && s.Now().After(r.Deadline) {
+			return simResp{Err: ErrExpired}, nil
+		}
 		if s.FaultOf(throttle) == "throttled" {
 			return simResp{Err: ErrThrottled}, nil
 		}
@@ -54,10 +72,11 @@ func NewSim(s *qenv.Sim, cloud *Cloud) *SimClient {
 		}
 		return out, nil
 	})
-	return &SimClient{svc: svc, Timeout: 2 * time.Second}
+	return &SimClient{svc: svc, sim: s, Timeout: 2 * time.Second}
 }
 
 func (c *SimClient) call(ctx context.Context, r simReq) (Database, error) {
+	r.Deadline = c.sim.Now().Add(c.Timeout)
 	out, err := c.svc.Call(ctx, r, c.Timeout)
 	if errors.Is(err, qenv.ErrTimeout) {
 		return Database{}, errors.New("dbaas: request timed out (outcome unknown)")

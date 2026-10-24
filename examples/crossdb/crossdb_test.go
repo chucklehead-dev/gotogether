@@ -29,6 +29,21 @@ func TestFaithfulConforms(t *testing.T) {
 	explore(t, crossdb.Config{}, crashy, qtest.ExploreConfig{Seeds: 60}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
+// A cloud that applies a request however late it arrives leaks: the
+// resource is deleted while its create is delayed, the provider times out
+// and finds nothing, and the create lands after. The faithful provider
+// cannot close that window from its side; the cloud refusing a request
+// past its caller's deadline does (dbaas.NewSim). The window is narrow:
+// 4 runs of 300 leak, so 600 seeds miss it about once in three thousand.
+func TestLateCreateLeaksWithoutRequestExpiry(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("600 runs")
+	}
+	explore(t, crossdb.Config{NoRequestExpiry: true}, crashy, qtest.ExploreConfig{Seeds: 600}).
+		Expect(t, qtest.Violates("settledCorrectly"), qtest.Some(qtest.Conforms()))
+}
+
 // The cloud's ID as the external name. Correct while nothing fails. A
 // create whose response is lost is marked failed (by Crossplane's
 // contract, an error from Create is a failure); if the resource is deleted
