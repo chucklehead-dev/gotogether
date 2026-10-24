@@ -258,6 +258,11 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 		a = "default"
 	}
 	checker := func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
+		// candidates in the history's instance and naming, as the memo and
+		// the merge of prefixes by state assume
+		within := *ch
+		within.within = tr
+		ch = &within
 		return func(orders [][]qtrace.Step) ([]int, []string) {
 			reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
 			fs, states := make([]int, len(orders)), make([]string, len(orders))
@@ -271,6 +276,11 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 				}
 				if fs[i] < 0 {
 					states[i] = lastState(reps[i])
+					if s := orders[i]; states[i] != "" && ch.Binding.Restart != "" && len(s) > 0 {
+						// the restart the binding inserts depends on the
+						// process the last step ran in
+						states[i] += "|process=" + s[len(s)-1].Process
+					}
 				}
 			}
 			return fs, states
@@ -659,6 +669,9 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	if a == "" {
 		a = "default"
 	}
+	within := *ch // its candidates in the history's instance (binding.PlanWithin)
+	within.within = tr
+	ch = &within
 	pls, cut, crossed := resolutions(tr, settles, budget)
 	// a call whose bounds cross is resolved as no effect: say so, a clock
 	// problem otherwise silent

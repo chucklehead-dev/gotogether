@@ -67,7 +67,11 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		traces, issues := qtrace.Reconstruct(steps)
 		reports[i] = &Report{Issues: issues}
 		for _, t := range traces {
-			p, err := c.Binding.Plan(c.Model, t)
+			whole := t
+			if c.within != nil { // a search's: its candidates are one actor's
+				whole = c.within
+			}
+			p, err := c.Binding.PlanWithin(c.Model, t, whole)
 			if err != nil {
 				errs[i] = fmt.Errorf("actor %s: %w", t.Actor, err)
 				break
@@ -137,7 +141,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				// or did not report them: re-check it alone, so a problem
 				// in one trace, or in the chunk's size, costs no verdicts.
 				it := ch.items[i]
-				r, err := validateTrace(ctx, c.Binding, c.Model, it.trace, Options{Quint: opt.Quint, Backend: opt.Backend, NoITF: opt.NoITF,
+				r, err := validatePlan(ctx, c.Binding, it.trace, it.plan, Options{Quint: opt.Quint, Backend: opt.Backend, NoITF: opt.NoITF,
 					Dir: filepath.Join(opt.Dir, fmt.Sprintf("%s_retry%d", name, i))})
 				if err != nil {
 					setErr(it.run, err)

@@ -281,3 +281,8 @@ func Now() time.Time {
 	}
 	return time.Now()
 }
+
+// CompleteSearchOnly makes qtrace's linearization skip its guided search,
+// so a test of another package can check the complete search alone (it
+// finds what the guided one misses): process-wide, for tests.
+var CompleteSearchOnly atomic.Bool

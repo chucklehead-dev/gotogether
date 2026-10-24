@@ -1,0 +1,12 @@
+spec: procs.qnt
+module: procs
+constants:
+  IDS: '{{ set "id" }}'
+intern:
+  id: actor
+restart: restart
+actions:
+  inc:
+    args: { id: '{{.id}}' }
+  look:
+    expect: 'count == {{.obs.count}} and crashes == {{.obs.crashes}} and seen.size() == {{.obs.seen}}'

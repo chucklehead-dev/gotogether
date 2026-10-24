@@ -3,12 +3,16 @@ package validate
 import (
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -162,6 +166,9 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
+	if testing.Short() {
+		t.Skip("searches a few hundred orders with quint")
+	}
 	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +193,11 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 		}
 	}
 	var tried int
-	if _, err := fmt.Sscanf(msg[strings.Index(msg, "conformed in ")+len("conformed in "):], "%d", &tried); err != nil || strings.Contains(msg, "no verdict") {
+	i := strings.Index(msg, "conformed in ")
+	if i < 0 || strings.Contains(msg, "no verdict") {
+		t.Fatalf("want a proof of no order: %s", msg)
+	}
+	if _, err := fmt.Sscanf(msg[i+len("conformed in "):], "%d", &tried); err != nil {
 		t.Fatalf("want a proof of no order: %s", msg)
 	}
 	if tried >= 250 {
@@ -207,5 +218,129 @@ func TestResolutionsCrossing(t *testing.T) {
 	got, _, crossing := resolutions(&qtrace.Trace{Steps: []qtrace.Step{s}, Pending: []qtrace.Step{p}}, []qtrace.Step{st}, 100)
 	if !slices.Equal(crossing, []int{0}) || len(got) != 1 || got[0][0] != -1 {
 		t.Errorf("placements %v, crossing %v: want only no effect, and the call crossing", got, crossing)
+	}
+}
+
+// On small histories of a binding that infers restarts, interns ids and
+// sizes a constant from the history, the complete search alone (merging
+// prefixes of one state, its candidates planned within the history) finds
+// an order exactly when one of the orders real time allows, each checked
+// whole, conforms. A merge by state alone once proved no order where a
+// restart's process told two prefixes apart (the T2c review's B1), and
+// ids interned in each candidate's order named one state two ways (B2).
+func TestCompleteSearchAgainstWholeOrders(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	if testing.Short() {
+		t.Skip("checks every order of each history with quint")
+	}
+	hooks.CompleteSearchOnly.Store(true)
+	defer hooks.CompleteSearchOnly.Store(false)
+	c, err := NewChecker("testdata/procs.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(n int) time.Time { return time.Unix(0, 0).Add(time.Duration(n) * 10 * time.Millisecond) }
+	r := rand.New(rand.NewPCG(9, 10))
+	step := func(rec, action, proc string, from, to int) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Actor: "x", Process: proc,
+			Invoked: at(from), Time: at(to), Args: map[string]any{}, Obs: map[string]any{}}
+	}
+	procs := []string{"P", "Q"}
+	yes, no := 0, 0
+	// the reviewer's case first: inc@P, inc@P, inc@Q, then look@P after one crash
+	fixed := true
+	for trial := 0; trial < 16; trial++ {
+		var steps []qtrace.Step
+		if fixed {
+			for i, p := range []string{"P", "P", "Q"} {
+				s := step(fmt.Sprint("c", i), "inc", p, 0, 10)
+				s.Args["id"] = fmt.Sprint("id", i)
+				steps = append(steps, s)
+			}
+			l := step("l", "look", "P", 20, 30)
+			l.Obs["count"], l.Obs["crashes"], l.Obs["seen"] = int64(3), int64(1), int64(3)
+			steps = append(steps, l)
+			fixed = false
+		} else {
+			n := 2 + r.IntN(2)
+			for i := range n {
+				s := step(fmt.Sprint("c", i), "inc", procs[r.IntN(2)], 0, 10)
+				s.Args["id"] = fmt.Sprint("id", r.IntN(2))
+				steps = append(steps, s)
+			}
+			l := step("l", "look", procs[r.IntN(2)], 20, 30)
+			l.Obs["count"], l.Obs["crashes"], l.Obs["seen"] = int64(n), int64(r.IntN(3)), int64(1+r.IntN(2))
+			steps = append(steps, l)
+		}
+		// every order of the incs, the look last, each checked whole
+		var orders [][]qtrace.Step
+		var perm func(rest, cur []qtrace.Step)
+		perm = func(rest, cur []qtrace.Step) {
+			if len(rest) == 0 {
+				o := append(slices.Clone(cur), steps[len(steps)-1])
+				for i := range o {
+					o[i].Recorder, o[i].Thread, o[i].Seq = "whole", "whole", uint64(i+1)
+				}
+				orders = append(orders, o)
+				return
+			}
+			for i := range rest {
+				perm(append(slices.Clone(rest[:i]), rest[i+1:]...), append(slices.Clone(cur), rest[i]))
+			}
+		}
+		perm(steps[:len(steps)-1], nil)
+		reps, errs := c.CheckBatch(t.Context(), orders, 0)
+		want := false
+		for i := range orders {
+			if errs[i] != nil {
+				t.Fatalf("trial %d: %v", trial, errs[i])
+			}
+			// conformance alone: one order's steps on one thread show issues
+			// (processes overlapping) that a search reports apart
+			want = want || reps[i].Actors[0].Conforms == Pass
+		}
+		s, err := c.Search(steps, SearchOptions{Linearize: true, Budget: 1000})
+		if err != nil {
+			t.Fatalf("trial %d: %v", trial, err)
+		}
+		got, msg := false, ""
+		for _, i := range s.issues {
+			if i.Kind == "linearize" {
+				got, msg = strings.Contains(i.Msg, "conforms ("), i.Msg
+			}
+		}
+		if got != want {
+			t.Fatalf("trial %d: the complete search says %q; some whole order conforms: %v", trial, msg, want)
+		}
+		if want {
+			yes++
+		} else {
+			no++
+		}
+	}
+	if yes == 0 || no == 0 {
+		t.Errorf("%d histories with an order, %d without: the property needs both", yes, no)
+	}
+}
+
+// Two variables of one short name (a::x, b::x) keep their qualifiers in
+// an annotated ITF: stripped, one overwrote the other, whichever Go's map
+// order wrote last (and two states told apart by it read as one).
+func TestAnnotateKeepsCollidingNames(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.itf.json")
+	itf := `{"vars":["a::x","b::x","m::y"],"states":[{"a::x":1,"b::x":2,"m::y":3}]}`
+	if err := os.WriteFile(path, []byte(itf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := annotateITF(path, &binding.Generated{}); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.ReadFile(path)
+	for _, want := range []string{`"a::x":1`, `"b::x":2`, `"y":3`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("annotated %s: want %s", out, want)
+		}
 	}
 }

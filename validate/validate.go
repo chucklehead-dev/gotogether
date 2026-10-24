@@ -167,11 +167,20 @@ func validateTrace(ctx context.Context, b *binding.Binding, m *binding.Model, t 
 	if err != nil {
 		return nil, err
 	}
-	base := "observed_" + sanitize(t.Actor)
 	p, err := b.Plan(m, t)
 	if err != nil {
 		return nil, err
 	}
+	return validatePlan(ctx, b, t, p, opt)
+}
+
+// validatePlan checks one actor's trace as p plans it.
+func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *binding.Plan, opt Options) (*Result, error) {
+	opt, err := opt.resolve()
+	if err != nil {
+		return nil, err
+	}
+	base := "observed_" + sanitize(t.Actor)
 	res := newResult(b, t, p)
 	return res, evaluate(ctx, b.ModuleSpec(p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
 }
@@ -504,9 +513,23 @@ func annotateITF(path string, g *binding.Generated) error {
 	if err := json.Unmarshal(b, &t); err != nil {
 		return err
 	}
-	strip := func(k string) string {
+	short := func(k string) string {
 		if i := strings.LastIndex(k, "::"); i >= 0 {
 			return k[i+2:]
+		}
+		return k
+	}
+	// a name two variables share (a::x, b::x) keeps its qualifier: stripped,
+	// one would overwrite the other, whichever came last
+	uses := map[string]int{}
+	if vars, ok := t["vars"].([]any); ok {
+		for _, v := range vars {
+			uses[short(fmt.Sprint(v))]++
+		}
+	}
+	strip := func(k string) string {
+		if s := short(k); uses[s] <= 1 {
+			return s
 		}
 		return k
 	}

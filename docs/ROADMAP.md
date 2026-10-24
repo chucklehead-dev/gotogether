@@ -113,8 +113,13 @@ under a week, M two to four, L more.
   - **c (M). Done** (merging prefixes of one state, from the ITF of the
     candidates quint checks whole; five commuting deposits' proof in 146
     orders, not 456). Left: extending a prefix from its state as a
-    literal (each candidate replays from the start), and states for the
-    prefixes the memo accepts (kept apart now).
+    literal (each candidate replays from the start), states for the
+    prefixes the memo accepts (kept apart now), merging in the
+    invariants' second search (its checker writes no ITF), ITF only for
+    the complete search's batches, and a chunk's stale ITF removed before
+    each call. Reviewed: the merge's state is more than the model's when
+    the binding infers restarts (the last process), and candidates are
+    planned within their history (PlanWithin).
   - **d (L).** A Quint evaluator in Go over quint's own IR (`quint
     compile --target json`, cached by the model's hash; about fifty
     builtins cover every model here), stepping the model from a held

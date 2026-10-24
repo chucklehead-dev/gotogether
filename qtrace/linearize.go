@@ -2,6 +2,7 @@ package qtrace
 
 import (
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"slices"
 	"strconv"
 	"strings"
@@ -103,7 +104,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 // search): what follows them is the same, so a history whose operations
 // overlap is searched in as many prefixes as states, not orders.
 func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool) {
-	return linearize(steps, budget, check, true)
+	return linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load())
 }
 
 // linearize is LinearizeStates; without guided, the complete search alone

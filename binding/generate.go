@@ -83,17 +83,22 @@ func (b *Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generate
 // Plan applies the binding to a trace. With a model, parameters are taken
 // in the model's order and checked; with m == nil (emitting a model-level
 // ITF in-process, without Quint) they are keyed by name only.
-func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) {
-	// 1. Intern opaque identifiers, in trace order.
+func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) { return b.PlanWithin(m, t, t) }
+
+// PlanWithin is Plan of t, an order of some of whole's steps (a search's
+// candidate), with whole's interned identifiers and constants: interned
+// in whole's order, and constants from all its steps, so every candidate
+// of one history is checked in one instance with one naming (a prefix's
+// verdict, and its state, are then its extensions' too).
+func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
+	// 1. Intern opaque identifiers, in whole's order.
 	type ikey struct{ arg, scope string }
 	tables := map[ikey]map[string]int64{}
 	procIdx := map[string]int{}
 	for i, p := range t.Processes {
 		procIdx[p] = i + 1
 	}
-	args := make([]map[string]any, len(t.Steps))
-	for i := range t.Steps {
-		s := &t.Steps[i]
+	intern := func(s *qtrace.Step) map[string]any {
 		a := map[string]any{}
 		for k, v := range s.Args {
 			scope, ok := b.Intern[k]
@@ -116,15 +121,23 @@ func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) {
 			}
 			a[k] = tb[id]
 		}
-		args[i] = a
+		return a
+	}
+	all := make([]map[string]any, len(whole.Steps)) // whole's, for the constants
+	for i := range whole.Steps {
+		all[i] = intern(&whole.Steps[i])
+	}
+	args := make([]map[string]any, len(t.Steps))
+	for i := range t.Steps {
+		args[i] = intern(&t.Steps[i])
 	}
 
-	// 2. Constants, from statistics over the interned trace.
+	// 2. Constants, from statistics over whole, interned.
 	funcs := template.FuncMap{
 		"set": func(names ...string) string {
 			seen := map[string]bool{}
 			var vs []string
-			for _, a := range args {
+			for _, a := range all {
 				for _, arg := range names {
 					if v, ok := a[arg]; ok && !seen[quintLit(v)] {
 						seen[quintLit(v)] = true
@@ -140,7 +153,7 @@ func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) {
 		"toMap":  func(v any) (string, error) { return jsonQuint(v, "Map") },
 		"max": func(arg string) int64 {
 			var mx int64
-			for _, a := range args {
+			for _, a := range all {
 				if v, ok := a[arg].(int64); ok && v > mx {
 					mx = v
 				}
@@ -149,14 +162,14 @@ func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) {
 		},
 		"count": func(action string) int {
 			n := 0
-			for _, s := range t.Steps {
+			for _, s := range whole.Steps {
 				if s.Action == action {
 					n++
 				}
 			}
 			return n
 		},
-		"procs": func() int { return len(t.Processes) },
+		"procs": func() int { return len(whole.Processes) },
 		"add":   func(a, b any) int64 { return toI(a) + toI(b) },
 		"atLeast": func(lo, v any) int64 {
 			if toI(v) < toI(lo) {

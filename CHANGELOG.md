@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `binding.Binding.PlanWithin`: a plan of some of a history's steps in
+  the history's instance and naming (ids interned in its order, constants
+  from all its steps). The searches plan their candidates so: a prefix's
+  verdict and state were judged in its own smaller instance, with ids
+  named in its own order, and carried to extensions in another. An ITF
+  keeps the qualifier of a variable name two modules share.
 - `qtrace.LinearizeStates`: Linearize with a check that also gives each
   accepted order's model state; its complete search keeps one prefix of
   the same steps and state (Lowe's memo for Wing and Gong's search), so

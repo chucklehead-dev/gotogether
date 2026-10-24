@@ -17,6 +17,11 @@ type Checker struct {
 	Binding *binding.Binding
 	Model   *binding.Model
 	Options Options
+
+	// within, if set, is the history a search's candidates order: they
+	// are planned in its instance, with its interned identifiers
+	// (binding.PlanWithin)
+	within *qtrace.Trace
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the

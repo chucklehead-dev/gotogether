@@ -47,6 +47,7 @@ type Binding struct
     method (*Binding) ModuleSpec(p *Plan) ModuleSpec
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
+    method (*Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error)
     method (*Binding) Skips(s *qtrace.Step) bool
     method (*Binding) SpecPath() string
     method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
