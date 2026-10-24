@@ -344,3 +344,30 @@ func TestAnnotateKeepsCollidingNames(t *testing.T) {
 		}
 	}
 }
+
+// A history real time orders alone (each step completed before the next
+// was invoked) is not searched: its one order is the history's, which the
+// caller checks. No quint process runs for it, so it needs no quint here.
+func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
+	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Skip(err) // the binding loads its model with quint
+	}
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	var steps []qtrace.Step
+	for i, amount := range []int64{1, 2, 4} {
+		rec := fmt.Sprint("c", i)
+		steps = append(steps, qtrace.Step{Action: "deposit", Recorder: rec, Seq: 1, Thread: rec, Actor: "acct", Process: "p",
+			Invoked: at(20 * i), Time: at(20*i + 10), Args: map[string]any{"amount": amount}, Obs: map[string]any{}})
+	}
+	s, err := c.Search(steps, SearchOptions{Linearize: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.issues) == 0 || !strings.Contains(s.issues[0].Msg, "real time allows one order of its 3 steps") {
+		t.Fatalf("issues %v, want the one order taken without a search", s.issues)
+	}
+	if _, err := os.Stat(filepath.Join(c.Options.Dir, "linearize")); err == nil {
+		t.Errorf("the search wrote quint modules for a history with one order")
+	}
+}

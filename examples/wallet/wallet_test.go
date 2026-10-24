@@ -186,8 +186,8 @@ func TestUnlockedRecord(t *testing.T) {
 // applied and the ledger has not posted: a read after the deposit
 // returned shows the old balance. Each call is on one account, so the
 // history is linearized account by account. (On a history this small that
-// cost more than Linearize, 28 s to 9 s for five runs, when the partitions
-// were searched one after another; it is for histories of many keys.)
+// costs more than Linearize, 15 s to 9 s for five runs: each partition's
+// search pays quint's fixed cost; it is for histories of many keys.)
 func TestReplicaRead(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {

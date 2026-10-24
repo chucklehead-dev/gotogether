@@ -224,12 +224,13 @@ under a week, M two to four, L more.
   by clock faults); the optional real database. What it taught the core:
   - LinearizeByKey cost three times Linearize on its small per-account
     history (28 s against 9 s for five runs): its partitions were searched
-    one after another (now side by side, T2d's first step); each also
-    pays a second quint call for the invariants, and the probe makes one
-    partition per account, each a quint call for one step. Next: skip the
-    search of a partition real time already orders, check invariants in
-    the first search, batch the partitions' candidates into one quint
-    process.
+    one after another, each paying a second quint call for the
+    invariants, and the probe makes one partition per account, each a
+    quint call for one step. Now partitions are searched side by side (28
+    to 25 s: an exploration's runs already kept the CPUs busy) and a
+    partition real time orders alone is not searched (`qtrace.ForcedOrder`:
+    to 15 s). Next: check invariants in the first search, batch the
+    partitions' candidates into one quint process.
   - PCT at depth 2 found the wide write-skew window in 1 run of 40,
     uniform seeds in 39; but its `steps` (400) was mis-sized for a run of
     about 60 choices, so the change point mostly fell past the end (sized

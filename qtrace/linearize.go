@@ -107,15 +107,13 @@ func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (fail
 	return linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load())
 }
 
-// linearize is LinearizeStates; without guided, the complete search alone
-// (for tests of it).
-func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool) (best []Step, ok bool, tried int, cut bool) {
-	if len(steps) == 0 {
-		return nil, true, 0, false
-	}
-	ns := build(steps)
-	var issues []Issue
-	at := kahn(ns, &issues) // an order is of indices into ns
+// constraints are steps' nodes, an order of them the hard edges allow (of
+// indices into ns), the relation every order must keep, how an order of
+// indices becomes steps on one recorder, and a cycle of the hard edges,
+// broken.
+func constraints(steps []Step) (ns []*node, at []int, mustPrecede func(a, b int) bool, render func([]int) []Step, issues []Issue) {
+	ns = build(steps)
+	at = kahn(ns, &issues)
 	hard := map[[2]int]bool{}
 	for i, n := range ns {
 		for _, j := range n.succ {
@@ -137,9 +135,9 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		inv := sb.Invoked
 		return !inv.IsZero() && sa.Time.Add(RealTimeSlack).Before(inv)
 	}
-	mustPrecede := func(a, b int) bool { return hard[[2]int{a, b}] || after(a, b) }
+	mustPrecede = func(a, b int) bool { return hard[[2]int{a, b}] || after(a, b) }
 	actor := steps[0].Actor
-	render := func(order []int) []Step {
+	render = func(order []int) []Step {
 		out := make([]Step, len(order))
 		for i, k := range order {
 			s := ns[k].s
@@ -149,6 +147,36 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		}
 		return out
 	}
+	return ns, at, mustPrecede, render, issues
+}
+
+// ForcedOrder is the one order of steps real time and their recorders
+// allow, when there is one (each step must precede the next): a search
+// would try it alone, so a caller that checks the order it returns needs
+// no search. Its steps are on one recorder, as Linearize's.
+func ForcedOrder(steps []Step) ([]Step, bool) {
+	if len(steps) == 0 {
+		return nil, true
+	}
+	_, at, mustPrecede, render, issues := constraints(steps)
+	if len(issues) > 0 {
+		return nil, false // a cycle, broken: the search reports it
+	}
+	for i := 1; i < len(at); i++ {
+		if !mustPrecede(at[i-1], at[i]) {
+			return nil, false
+		}
+	}
+	return render(at), true
+}
+
+// linearize is LinearizeStates; without guided, the complete search alone
+// (for tests of it).
+func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool) (best []Step, ok bool, tried int, cut bool) {
+	if len(steps) == 0 {
+		return nil, true, 0, false
+	}
+	ns, at, mustPrecede, render, _ := constraints(steps)
 	key := func(order []int) string {
 		var b strings.Builder
 		for _, k := range order {

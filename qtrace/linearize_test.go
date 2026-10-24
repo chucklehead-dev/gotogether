@@ -530,3 +530,75 @@ func TestLinearizeStatesMergesOnlyEqualStates(t *testing.T) {
 		t.Errorf("orders tried: %d with no states, %d with distinct ones, %d with one: want the first two equal, the last fewer", none, distinct, equal)
 	}
 }
+
+// ForcedOrder says there is one order exactly when the orders mustBefore
+// allows are one, and returns it; on the brute force's random histories,
+// both answers come up.
+func TestForcedOrderAgainstBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	seen := map[bool]int{}
+	for trial := range 400 {
+		var steps []Step
+		next := map[string]int{}
+		n := 1 + rng.IntN(5)
+		for i := range n {
+			c := string(rune('a' + rng.IntN(3)))
+			from := next[c] + rng.IntN(3)
+			to := from + 1 + rng.IntN(4)
+			next[c] = to + 1
+			steps = append(steps, op(c, uint64(i+1), "write", int64(i+1), from, to))
+		}
+		seqs := map[string]uint64{}
+		for i := range steps {
+			seqs[steps[i].Recorder]++
+			steps[i].Seq = seqs[steps[i].Recorder]
+		}
+		orders := countOrders(steps, mustBefore, 2)
+		got, ok := ForcedOrder(steps)
+		if ok != (orders == 1) {
+			t.Fatalf("trial %d: ForcedOrder %v, %d orders allowed, for\n%v", trial, ok, orders, steps)
+		}
+		if ok && !allowed(steps, got) {
+			t.Fatalf("trial %d: the forced order is not allowed: %v", trial, got)
+		}
+		seen[ok]++
+	}
+	if seen[true] == 0 || seen[false] == 0 {
+		t.Errorf("forced %d, not %d: the histories never tried both", seen[true], seen[false])
+	}
+}
+
+// countOrders counts the orders of steps prec allows, up to limit.
+func countOrders(steps []Step, prec func(a, b Step) bool, limit int) int {
+	n, count := len(steps), 0
+	used := make([]bool, n)
+	var rec func(placed int)
+	rec = func(placed int) {
+		if count >= limit {
+			return
+		}
+		if placed == n {
+			count++
+			return
+		}
+		for i := range steps {
+			if used[i] {
+				continue
+			}
+			ok := true
+			for j := range steps {
+				if !used[j] && j != i && prec(steps[j], steps[i]) {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				used[i] = true
+				rec(placed + 1)
+				used[i] = false
+			}
+		}
+	}
+	rec(0)
+	return count
+}

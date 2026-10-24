@@ -345,6 +345,13 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 	if len(tr.Steps) == 0 {
 		return nil, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no steps to order", a)}, false
 	}
+	if o, ok := qtrace.ForcedOrder(tr.Steps); ok {
+		// one order: a search would check it alone, and the caller checks
+		// the order it gets (Checker.Check of Search.Steps), which judges it
+		// as this search would have; two quint processes saved (the probe
+		// of every account makes many such partitions)
+		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false
+	}
 	o, ok, tried, cut := qtrace.LinearizeStates(tr.Steps, budget, check)
 	switch {
 	case ok && len(full.Binding.Invariants) > 0 && first(checker(full, true)([][]qtrace.Step{o})) >= 0:

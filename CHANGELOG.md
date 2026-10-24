@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtrace.ForcedOrder`: the one order real time allows a history, when
+  there is one. A linearization (and each partition of `LinearizeByKey`,
+  now searched side by side) of such a history checks it without a
+  search: the wallet's per-account history took 15 s, not 28.
 - A Rates key, a Bound.Without kind, a sweep's FaultKind or an
   Exercised exception is checked against what the exploration's own runs
   declared and chose (and what was declared outside any run, a woven
