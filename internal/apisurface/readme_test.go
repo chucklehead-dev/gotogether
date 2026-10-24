@@ -18,18 +18,20 @@ const modulePath = "github.com/chucklehead-dev/gotogether/"
 // variable, method or field (connect's FaultScript stayed in the table
 // after it moved to qtest).
 func TestReadmePackageTable(t *testing.T) {
-	names := map[string]map[string]bool{} // package (module-relative) -> its names: top-level, methods, fields
-	module := map[string]string{}          // package -> its module's directory
+	names := map[string]map[string]bool{}   // package (module-relative) -> its names: top-level, methods, fields
+	module := map[string]string{}           // package -> its module's directory
+	members := map[string]map[string]bool{} // "package.Type" -> its methods and fields
 	for _, m := range Modules {
 		b, err := os.ReadFile(filepath.Join(root, m.File))
 		if err != nil {
 			t.Fatal(err)
 		}
 		var cur map[string]bool
+		var rel, typ string // the package, and the type whose members follow
 		for _, l := range strings.Split(string(b), "\n") {
 			if p, ok := strings.CutPrefix(l, "== "); ok {
 				p, _, _ = strings.Cut(p, " ") // "path [sim]": the same package under tags
-				rel := strings.TrimPrefix(p, modulePath)
+				rel = strings.TrimPrefix(p, modulePath)
 				if names[rel] == nil {
 					names[rel] = map[string]bool{}
 				}
@@ -41,8 +43,13 @@ func TestReadmePackageTable(t *testing.T) {
 				continue
 			}
 			name := f[1]
+			member := strings.HasPrefix(l, " ")
 			switch f[0] {
-			case "func", "type", "const", "var", "field":
+			case "type":
+				typ = rel + "." + base(name)
+			case "func", "const", "var":
+				typ = ""
+			case "field":
 			case "method": // method (T) Name(...)
 				if len(f) < 3 {
 					continue
@@ -51,7 +58,13 @@ func TestReadmePackageTable(t *testing.T) {
 			default:
 				continue
 			}
-			cur[strings.FieldsFunc(name, func(r rune) bool { return r == '(' || r == '[' })[0]] = true
+			cur[base(name)] = true
+			if member && typ != "" {
+				if members[typ] == nil {
+					members[typ] = map[string]bool{}
+				}
+				members[typ][base(name)] = true
+			}
 		}
 	}
 	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
@@ -60,7 +73,7 @@ func TestReadmePackageTable(t *testing.T) {
 	}
 	row := regexp.MustCompile("^\\| `([a-z0-9/]+)`( \\(module\\))? \\| (.*) \\|$")
 	cited := regexp.MustCompile("`([^`]+)`")
-	ident := regexp.MustCompile(`^(?:([a-z][a-z0-9]*)\.)?([A-Z][A-Za-z0-9]*)`)
+	ident := regexp.MustCompile(`^(?:([a-z][a-z0-9]*)\.)?([A-Z][A-Za-z0-9]*)(?:\.([A-Z][A-Za-z0-9]*))?`)
 	rows := map[string]bool{}
 	for _, l := range strings.Split(string(readme), "\n") {
 		m := row.FindStringSubmatch(l)
@@ -90,6 +103,12 @@ func TestReadmePackageTable(t *testing.T) {
 			}
 			if !in[id[2]] {
 				t.Errorf("README's package table: %s's row cites `%s`, which %s does not export (api/*.txt)", pkg, c[1], where)
+				continue
+			}
+			if m := id[3]; m != "" { // Type.Member: the type's own method or field
+				if ms, isType := members[where+"."+id[2]]; isType && !ms[m] {
+					t.Errorf("README's package table: %s's row cites `%s`, but %s.%s has no method or field %s (api/*.txt)", pkg, c[1], where, id[2], m)
+				}
 			}
 		}
 	}
@@ -103,4 +122,9 @@ func TestReadmePackageTable(t *testing.T) {
 	for _, p := range missing {
 		t.Errorf("README's package table has no row for %s", p)
 	}
+}
+
+// base is a declared name without its parameters or signature.
+func base(name string) string {
+	return strings.FieldsFunc(name, func(r rune) bool { return r == '(' || r == '[' })[0]
 }

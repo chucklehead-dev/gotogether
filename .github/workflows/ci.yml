@@ -159,6 +159,8 @@ jobs:
             (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
           done
+          # qgosim has no tests of its own: its simulated side, vetted
+          (cd qgosim && go vet -tags sim ./...)
 
   consumable:
     # what a user gets: the commands install at this commit, and a program
