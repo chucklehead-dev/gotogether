@@ -136,7 +136,10 @@ under a week, M two to four, L more.
   and `ResolvePending(budget)`; the scheduler's task and nemesis chooser
   protocols exported or documented on Chooser; one goroutine lookup per
   step.
-- **T4. A newcomer's path to Z7 and Z8 (S each).** Start-table rows for
+- **T4. A newcomer's path to Z7 and Z8 (S each). Done**, but: temporary
+  directories (a failing exploration's are kept on purpose, for its
+  reproduce line; steered runs' choices pile up under the temp dir).
+  As planned: Start-table rows for
   linearizability, liveness and convergence; verdicts.md on Pending,
   Linearize and "no verdict (linearize budget)"; quorumkv's README with
   the code a user copies, PCT's arguments and PCT against Steer; scaffold
