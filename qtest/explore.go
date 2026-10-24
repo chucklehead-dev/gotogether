@@ -798,6 +798,35 @@ func unjudged(es []Expectation, ch *validate.Checker, judged map[string]bool) []
 	return out
 }
 
+// claimsConformance reports whether a claim states conformance (Conforms,
+// alone or quantified).
+func claimsConformance(claims []Claim) bool {
+	return claimsDesc(claims, Conforms().desc)
+}
+
+// claimsSettling reports whether a claim states whether runs settle.
+func claimsSettling(claims []Claim) bool {
+	return claimsDesc(claims, Settles().desc)
+}
+
+func claimsDesc(claims []Claim, desc string) bool {
+	for _, c := range claims {
+		var es []Expectation
+		switch c := c.(type) {
+		case Expectation:
+			es = []Expectation{c}
+		case quantified:
+			es = c.es
+		}
+		for _, e := range es {
+			if e.desc == desc {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // anySettled reports whether a run's trace recorded a settle last.
 func anySettled(runs []*Run) bool {
 	for _, r := range runs {
@@ -849,8 +878,12 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			t.Fatalf("gotogether: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
 		}
 	}
-	if x.checker != nil && len(x.checker.Binding.Eventually) > 0 && !anySettled(x.Runs) {
-		t.Logf("gotogether: %s: the binding's eventual vals (%s) were judged in none of %d runs: no run's trace ends with a settle", x.ref(), strings.Join(x.checker.Binding.Eventually, ", "), len(x.Runs))
+	if x.checker != nil && len(x.checker.Binding.Eventually) > 0 && !anySettled(x.Runs) && claimsConformance(claims) && !claimsSettling(claims) {
+		// conformance would hold of a store that never converged: say what
+		// was judged, or settle
+		t.Fatalf("gotogether: %s: conformance claimed, and the binding's eventual vals (%s) were judged in none of %d runs: no run's trace ends with a settle. "+
+			"Call Sim.Settle at the end of Run and return its error (or qobs.Settled after a probe), or claim what the runs show: None(Settles()) alongside, for runs that are not to settle",
+			x.ref(), strings.Join(x.checker.Binding.Eventually, ", "), len(x.Runs))
 	}
 	if x.alone != nil {
 		// one run: judged only by the claims that hold of every run

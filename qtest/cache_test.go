@@ -83,3 +83,26 @@ func TestClaimOnAnUnjudgedEventualVal(t *testing.T) {
 		t.Errorf("claim on an unjudged eventual val: %v", f.errs)
 	}
 }
+
+// Conformance claimed of runs none of which settled, with a binding that
+// has eventual vals, fails with the fix: it held of a store that never
+// converged. Claiming whether runs settle states what was judged.
+func TestConformsWithEventualValsUnjudged(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	emptied := func(c qenv.Chooser) error {
+		ctx := qenv.ContextOf(c)
+		qobs.Record(ctx, "deposit", nil, "amount", 5, "obs.balance", 5)
+		qobs.Record(ctx, "withdraw", nil, "amount", 5, "obs.balance", 0)
+		return nil
+	}
+	x := System{Binding: "../validate/testdata/funds.binding.yaml", Run: emptied}.Explore(t, ExploreConfig{Seeds: 1})
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { defer close(done); x.Expect(f, Conforms()) }() //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+	<-done
+	if len(f.errs) != 1 || !strings.Contains(f.errs[0], "judged in none of 1 runs") {
+		t.Errorf("Conforms of runs that never settled: %v", f.errs)
+	}
+	x.Expect(t, Conforms(), None(Settles()))
+}
