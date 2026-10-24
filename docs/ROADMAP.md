@@ -168,8 +168,11 @@ under a week, M two to four, L more.
   - a nightly that runs every example under `GOTOGETHER_ALL_FAULTS`
     (Exhausts bounded first), each changed verdict a fix or a reasoned
     Without;
-  - qenv in the mutation nightly with `GOTOGETHER_CHECK=1` and its bar,
-    and a bar for qtrace's guided-search survivors;
+  - qenv in the mutation nightly with `GOTOGETHER_CHECK=1` and its bar
+    (a first run without it: 288 of 895 survive, in sim.go 50,
+    internal/profile 44, store.go 34, native.go 31, keyed.go 19,
+    queue.go 14, the rest under 15 a file), and a bar for qtrace's
+    guided-search survivors;
   - the brute forces as Hegel properties, their sizes widened nightly;
   - `internal/pkgstate` checking what it is told (no write to a
     read-only var outside init), not only that it is told;
