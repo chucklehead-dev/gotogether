@@ -637,6 +637,7 @@ type Sim struct
     field NemesisEvery time.Duration
     field Check bool
     field Clocks Clocks
+    field Stalls Stalls
     method (*Sim) Choose(kind string, n int) int
     method (*Sim) Close()
     method (*Sim) Context() context.Context
@@ -654,6 +655,10 @@ type Sim struct
     method (*Sim) Tasks() string
     method (*Sim) ToReal(virtual time.Time) time.Time
     method (*Sim) ToVirtual(real time.Time) time.Time
+type Stalls struct
+    field Pause time.Duration
+    field Slow time.Duration
+    field SlowFor time.Duration
 type Store struct
     field Name string
     field Iso Isolation

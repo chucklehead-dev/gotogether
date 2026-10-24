@@ -58,6 +58,10 @@ type Sim struct {
 	// and a drift, each left out when zero, as by default. Set them before
 	// creating processes; a change after panics.
 	Clocks Clocks
+	// Stalls are pauses and gray (slow) failures of the processes, as
+	// nemeses (stall.go): none by default. Set them before creating
+	// processes.
+	Stalls Stalls
 
 	c         Chooser
 	base      context.Context // every task's context derives from it
@@ -95,7 +99,8 @@ type task struct {
 	id       int // creation order: the order runnable tasks are offered in
 	name     string
 	proc     *Process
-	inc      int // the process incarnation it belongs to
+	inc      int  // the process incarnation it belongs to
+	stalling bool // in stalled's wait: its own scheduling points do not stall again
 	wake     chan struct{}
 	ctx      context.Context // its context (Current)
 	waiting  bool            // parked until ready, a signal, or deadline
@@ -328,6 +333,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 		if t.killed {
 			panic(killed{})
 		}
+		t.stalled() // a task its paused process starts (a request delivered) waits too
 		fn(ctx)
 	}()
 }
@@ -357,6 +363,7 @@ func (t *task) park() {
 	if t.killed {
 		panic(killed{})
 	}
+	t.stalled()
 }
 
 // wait parks the task until ready holds (nil: no predicate), a Signal
@@ -637,6 +644,7 @@ type Process struct {
 	Name        string
 	Incarnation int
 	sim         *Sim
+	stall       stall // its pause and slowness (Stalls)
 	start       func(ctx context.Context)
 	down        bool
 	machine     Machine       // native, with a Platform: the process's machine
@@ -667,6 +675,7 @@ func (s *Sim) Process(name string, crashable bool, start func(ctx context.Contex
 	if crashable {
 		s.Nemesis("crash."+name, func() bool { return !p.down }, func() { p.Crash(); p.Restart() })
 	}
+	s.stallNemeses(p) // a pause or a slowdown is no crash: any process may suffer one
 	return p
 }
 

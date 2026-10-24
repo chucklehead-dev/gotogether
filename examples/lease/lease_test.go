@@ -73,6 +73,24 @@ func TestNoFencingBrokenByALateWrite(t *testing.T) {
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.store.delay").Faulted().InAtLeast(0.3))
 }
 
+// A holder paused longer than its lease (a GC, a SIGSTOP) finds its
+// lease still valid by its own measure when it goes on, though the lock
+// gave it to the next holder meanwhile: without fencing it writes stale,
+// with true clocks and every request on time; the fenced store refuses
+// its old token. Measured: 5 of 30 runs at a pause in fifty steps.
+func TestNoFencingBrokenByAPause(t *testing.T) {
+	qtest.RequireQuint(t)
+	paused := func(m Mutation) qtest.System {
+		return qtest.System{Binding: binding, Rates: punctual(qenv.DefaultRates.Set("nemesis.pause", 0.02)), Run: func(c qenv.Chooser) error {
+			_, err := RunStalled(c, m, trueClocks, qenv.Stalls{Pause: 3 * time.Second})
+			return err
+		}}
+	}
+	x := qtest.ExploreConfig{Seeds: 30}
+	paused(NoFencing).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
+	paused(Faithful).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Reaches("nemesis.pause").Faulted().InAtLeast(0.3))
+}
+
 // A lease timed on the monotonic clocks (the holder's interval, the lock's
 // expiry: what time.Since and Time.Before of two time.Now readings use in
 // Go) does not see a skew or a jump: without fencing it still conforms,

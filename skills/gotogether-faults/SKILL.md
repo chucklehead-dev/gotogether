@@ -101,6 +101,17 @@ qobs.Record(s.Context(), "settle", nil)
   `rpc.<name>.request` does: `queue.<name>.ack`, `store.<name>.commit`,
   `disk.<name>.crash`. `"queue"` (in Rates, Without, a sweep) still covers
   every queue's.
+- **Pauses and gray failures:** `s.Stalls = qenv.Stalls{Pause: 3 *
+  time.Second, Slow: time.Second, SlowFor: 10 * time.Second}`, before
+  creating processes, adds nemeses to every process: `pause.<p>` freezes
+  it for Pause at its tasks' next scheduling point (a GC, a SIGSTOP: a
+  lease holder wakes still trusting its lease), and `slow.<p>` keeps it
+  alive but makes each scheduling point cost Slow more for SlowFor (its
+  health checks pass while its work times out). Families
+  `nemesis.pause` and `nemesis.slow`; raise one alone with
+  `Rates.Set("nemesis.pause", 0.02)`. Not on the native runtime.
+  A request can also be late (`rpc.<name>.delay`), on by default: a
+  lock without fencing breaks on either, whatever the clocks do.
 - **Clocks:** a process has two, as a Go program does. `qenv.Now(ctx)`
   is its wall clock; `qenv.Mono(ctx)` and `qenv.Since(ctx, m)` its
   monotonic clock, what `time.Since` measures (a `time.Time` from Now

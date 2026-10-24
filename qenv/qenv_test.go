@@ -676,3 +676,44 @@ func TestLateRequests(t *testing.T) {
 		}
 	}
 }
+
+// A paused process's tasks freeze at their next scheduling point and go
+// on after the pause, unaware: a worker ticking every second ticks once
+// late, by the pause. A slow one is alive, but each scheduling point
+// costs more time while it is slow.
+func TestStalls(t *testing.T) {
+	for _, c := range []struct {
+		nemesis string
+		gap     time.Duration // the longest between ticks
+		end     time.Duration // the last tick
+	}{
+		{"nemesis.pause.worker", 10 * time.Second, 14 * time.Second}, // 1s ticks, one 10s late
+		{"nemesis.slow.worker", 2 * time.Second, 6 * time.Second},    // 1s more per point while slow (3s)
+	} {
+		var ticks []time.Duration
+		sc := &qenv.Script{Faults: []qenv.Scripted{{Kind: c.nemesis, After: 1}}, Progress: func() int { return len(ticks) }}
+		s := qenv.New(sc)
+		s.Check = true
+		s.Stalls = qenv.Stalls{Pause: 10 * time.Second, Slow: time.Second, SlowFor: 3 * time.Second}
+		s.Process("worker", true, func(ctx context.Context) {
+			for range 5 {
+				ticks = append(ticks, s.Elapsed())
+				qenv.Sleep(ctx, time.Second)
+			}
+		})
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		if left := sc.Remaining(); len(left) > 0 {
+			t.Fatalf("%s: never fired: %v", c.nemesis, left)
+		}
+		var gap time.Duration
+		for i := 1; i < len(ticks); i++ {
+			gap = max(gap, ticks[i]-ticks[i-1])
+		}
+		if len(ticks) != 5 || gap < c.gap || ticks[4] > c.end {
+			t.Errorf("%s: ticks %v; want 5, the longest gap at least %v, the last by %v", c.nemesis, ticks, c.gap, c.end)
+		}
+	}
+}

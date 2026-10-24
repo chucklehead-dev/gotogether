@@ -120,9 +120,14 @@ type Deployment struct {
 // Run deploys the system on c with the holders' clock faults, and runs it
 // for 10 s of virtual time.
 func Run(c qenv.Chooser, m Mutation, clocks qenv.Clocks) (*Deployment, error) {
+	return RunStalled(c, m, clocks, qenv.Stalls{})
+}
+
+// RunStalled is Run with the processes' pauses and slowdowns (qenv.Stalls).
+func RunStalled(c qenv.Chooser, m Mutation, clocks qenv.Clocks, stalls qenv.Stalls) (*Deployment, error) {
 	s := qenv.New(c)
 	defer s.Close()
-	s.Clocks = clocks
+	s.Clocks, s.Stalls = clocks, stalls
 	d := &Deployment{Lock: &Lock{}, Store: &Store{Mutation: m}}
 	lock := qenv.NewService(s, "lock", nil, d.Lock.acquire)
 	store := qenv.NewService(s, "store", nil, d.Store.write)
