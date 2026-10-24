@@ -91,12 +91,12 @@ func loadSpans(t *testing.T, m kv.Mutation, seed uint64) []qtrace.Step {
 // that cannot see the store's lock record, each operation when it returns
 // with the time it was invoked. The store's own steps go nowhere: its
 // handlers' contexts carry no recorder.
-func clientHistory(t *testing.T, m kv.Mutation, seed uint64) []qtrace.Step {
+func clientHistory(t *testing.T, m kv.Mutation, clients, ops int, seed uint64) []qtrace.Step {
 	t.Helper()
 	mem := &qobs.MemorySink{}
 	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(mem, qobs.WithActor("kv")))
 	cl := service(t, m, nil)
-	if err := kv.LoadRecorded(ctx, cl.Base, 4, 8, []string{"a", "b"}, seed); err != nil {
+	if err := kv.LoadRecorded(ctx, cl.Base, clients, ops, []string{"a", "b"}, seed); err != nil {
 		t.Fatal(err)
 	}
 	return mem.Steps()
@@ -111,27 +111,30 @@ func TestClientHistoryLinearizes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("searches orders, a quint check each")
 	}
-	qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.Faithful, 1), qtest.Linearize()).Expect(t, qtest.Conforms())
+	qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.Faithful, 4, 8, 1), qtest.Linearize()).Expect(t, qtest.Conforms())
 }
 
 // A stale read (StaleRead: reads from a lagging snapshot) began after a
 // write returned and did not see it: no order real time allows explains
-// it, which the complete search proves within its budget (a search cut
-// short is no verdict), and the order that got furthest stops at a read.
+// it, which the complete search proves (a search cut short is no
+// verdict), and the order that got furthest stops at a read. Its loads
+// are small (3 clients, 4 operations each): a proof tries every order
+// real time allows, about a hundred of 12 steps, where 32 steps' took
+// thousands, as many as the history's concurrency made.
 func TestStaleReadNotLinearizable(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
 		t.Skip("searches orders, a quint check each")
 	}
-	for seed := uint64(1); seed <= 5; seed++ {
-		run := qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.StaleRead, seed), qtest.LinearizeBudget(2000))
+	for seed := uint64(1); seed <= 10; seed++ {
+		run := qtest.Validate(t, "kv.binding.yaml", clientHistory(t, kv.StaleRead, 3, 4, seed), qtest.Linearize())
 		if run.OK() {
 			continue // no read was stale this time
 		}
 		run.Expect(t, qtest.Mismatch("read"))
 		return
 	}
-	t.Fatal("five loads never read a stale snapshot")
+	t.Fatal("ten loads never read a stale snapshot")
 }
 
 // ---- 2. the model drives the service ---------------------------------------
