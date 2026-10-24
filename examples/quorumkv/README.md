@@ -40,13 +40,70 @@ the eventual val is judged.
 | `TestBlindRepair` | `BlindRepair`: a get answers without its write-back | one key, one writer and two readers, PCT schedules (`qenv.NewPCT`, depth 2) | some read is a stale read no order explains (`Mismatch("read")`): one reader saw a write that had reached one replica, a later one did not (4 runs in 20) |
 | `TestRepick` | `Repick`: a retried put picks a new version | one contended key, seeds | some read mismatches: the value landed twice, around a later write |
 
-`Repick` is the bug of this store's first version: its first exploration
-found it, as a history no order of its key explains. The same histories
-showed what the toolkit's linearization search missed: its guided search
-did not reorder two writes before the read that failed, and its
-candidates were judged without the probe's eventual val; a complete
-search (every order, prefix by prefix) follows a guided one that finds
-none, and candidates carry the run's settle.
+`Repick` is the bug of this store's first version, which its first
+explorations found: a history no order of its key explains.
+
+## How the checks are written
+
+**Calls, at invocation and answer.** A client records the call when it
+starts and the step when it answers; the invocation record's time is the
+call's start, and every client records into the run's recorder, so the
+history's real-time order is exact:
+
+```go
+call := qobs.Invoke(ctx, "read", "key", key)
+// ... quorum reads, the write-back ...
+call.Done(nil, "obs.val", e.Val) // the observation the binding's expect reads
+```
+
+A call whose caller gave up (`Leak`) never answers: it stays pending, and
+`qtest.Pending("write")` says some run left one.
+
+**The settle, then a probe.** `Run` settles the cluster (or `SettleCore`
+around the replicas that must finish alone), then records what each
+replica holds and settles again, so the probe's steps are judged with the
+eventual val:
+
+```go
+if err := s.Settle(time.Minute); err != nil {
+	return err // an *Unsettled is the run's outcome: Settles() judges it
+}
+for /* each replica and key */ {
+	qobs.Invoke(ctx, "observe", "replica", name, "key", key, "value", v).Done(nil)
+}
+qobs.Settled(ctx) // the probe came after Settle's own record
+```
+
+**Linearized per key.** The model treats keys independently, so each
+key's history is searched alone:
+
+```go
+sys := qtest.System{Binding: "quorumkv.binding.yaml", Opts: []qtest.Option{qtest.LinearizeByKey("key")}, Run: /* ... */}
+sys.Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
+```
+
+A contended key's search may need more than the default budget of 200
+orders: `qtest.LinearizeBudget(1000)`; a report that says "no verdict
+(linearize budget)" names the budget to raise.
+
+**PCT for a bug that needs one task far ahead.** `BlindRepair` shows only
+when a reader runs between a writer's replica writes, and another reader
+after it. Uniform seeds rarely schedule that; PCT gives each task a
+random priority, runs the highest, and at `depth-1` random points of a
+run of about `steps` scheduling choices (points where several tasks
+could run) drops the task it would run below every other:
+
+```go
+base := qenv.NewSeeded(seed)
+base.Rates = sys.FaultRates()          // faults as the System's
+chooser := qenv.NewPCT(base, seed, 2, 400) // depth 2: one change point in about 400 choices
+```
+
+Depth 2 finds orderings where one task overtakes another once (the
+blind read between two writes); a larger depth, longer chains. Use
+`ExploreConfig.Steer` instead when the rare thing is a state rather than
+an ordering (a fault combination, a branch of the code): it replays runs
+that reached something new and varies their tails.
 
 ## Run it
 

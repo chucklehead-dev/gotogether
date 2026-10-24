@@ -16,6 +16,8 @@ references when the task needs them.
 | Does the code accept inputs the model forbids? | Hegel drives, the model judges (`qhegel.Test`, `FindViolation`) | gotogether-hegel |
 | Do runs of the real system (tests, staging, production) conform? | record steps (`qobs`, `//quint:action`, OTel spans, `convert`), bind, `gotogether validate` | gotogether-traces |
 | Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` simulation, `qtest.System` (`Explore`, `Exhaust`, `Sweep`, `Fuzz`), `qhegel.Shrink` | gotogether-faults |
+| Is my store or client library linearizable (every call takes effect at one point between its invocation and its answer)? | record each call with `qobs.Invoke` and `Call.Done`, check with `qtest.Linearize()` or `LinearizeByKey("key")` (`gotogether validate -linearize` for a step log); `Pending` for calls never answered | gotogether-traces (its emitting reference), examples/quorumkv |
+| Does the system finish its work and converge after the faults stop (liveness)? | `Sim.Settle` (or `SettleCore` around a quorum), `eventually:` vals in the binding, `qtest.Settles()`, `Completes()` | gotogether-faults, gotogether-patterns (eventual properties) |
 | Does the whole system survive the faults my model's traces have? | `System.FollowTraces`: the model's fault actions (`qtest.FaultMap`) become the simulation's faults, at the trace's points; everything else is the system's | gotogether-faults |
 | Which code did no run reach, and does the model constrain the code that ran? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `x.Evidence()` | gotogether-faults (its coverage reference) |
 | Does it recover after a load spike or a slow dependency? | `qmeta` chain, `qload` simulation, `qhegel.FindTrigger`, alert rules | gotogether-metastability |
@@ -23,6 +25,7 @@ references when the task needs them.
 | My code is a whole program (goroutines, sockets, timers), not written against qenv's seams | run it unchanged on gosim (`qgosim`): the scheduler, network and clock simulated, choices from qenv | gotogether-faults (its gosim reference) |
 | I cannot change the code to record steps or use seams | weave it: `//quint:action` and qenv's sync/goroutine aspects, with `qweave go test` or Orchestrion | gotogether-faults (its weaving reference), gotogether-traces |
 | My system is a Kubernetes controller or a Crossplane provider | simulated API servers (fleetrollout's kubesim, crossdb's interceptors), then real kwok or kind clusters, one model | gotogether-faults (examples/fleetrollout, examples/crossdb) |
+| A bug needs one task far ahead of another, and seeds miss it | `qenv.NewPCT` as the exploration's chooser (priorities, change points), or `ExploreConfig.Steer` toward rare states | gotogether-faults |
 | Seeds and Hegel found nothing; I want coverage-guided search | `System.Fuzz` (the run's choices from the fuzzer's bytes, the model the oracle) | gotogether-faults (its fuzzing reference) |
 | My model is written in Choreo | name each transition (`choreo::step_with`), then any workflow | gotogether-model (Choreo section) |
 | I am starting a component or an example, or setting up CI | the end-to-end workflow and triage | gotogether-workflow |
