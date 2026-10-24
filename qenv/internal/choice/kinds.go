@@ -10,6 +10,7 @@ import (
 // The fault kinds of a process: each one's options' names (Declare) and
 // the sites that declared it (DeclareSite), in one registry, so a choice,
 // a coverage report and a script name an option the same way.
+// Process-wide: a kind declared anywhere is the same kind everywhere.
 var registry struct {
 	sync.Mutex
 	kinds   map[string]*kind
@@ -50,6 +51,7 @@ func Declare(name string, options ...string) {
 
 // seen are the fault kinds chosen (Seen), declared or not: a double that
 // chooses "fault.mykind" without DeclareFaults has a kind all the same.
+// Process-wide.
 var seen sync.Map
 
 // Seen notes a fault kind a choice was made of ("fault." prefix or not).

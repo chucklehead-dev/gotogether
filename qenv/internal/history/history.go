@@ -183,6 +183,7 @@ func (h *History) Commit(t Txn) error {
 
 // phenomena names each anomaly as a violation reports it, with the
 // weakest level that forbids it.
+// Read-only.
 var phenomena = map[string]struct {
 	name  string
 	level int

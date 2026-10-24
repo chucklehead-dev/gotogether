@@ -740,6 +740,7 @@ func judge(t testing.TB, cc *validate.Checker, inst string, runs []*Run, name fu
 // model-level steps, and quint takes a second), as do mutants (most of
 // their runs repeat the baseline's) and explorations whose seeds repeat
 // runs.
+// Process-wide.
 var verdicts verdictCache
 
 type verdictCache struct {

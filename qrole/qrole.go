@@ -47,6 +47,7 @@ func New() *Roles {
 }
 
 // Default is the registry of contexts that carry none (WithRoles).
+// Process-wide.
 var Default = New()
 
 var rolesKey = qrun.NewKey[*Roles]("roles")
@@ -78,6 +79,7 @@ func (r *Roles) get(m map[string]*stats, name string) *stats {
 	return s
 }
 
+// Process-wide: Labels's switch.
 var labels atomic.Bool
 
 // Labels turns on pprof labels for the roles: while a request is served,

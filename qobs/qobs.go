@@ -138,6 +138,7 @@ func (r *Recorder) Add(steps ...qtrace.Step) {
 	}
 }
 
+// Process-wide: InstallGlobal's.
 var global atomic.Pointer[Recorder]
 
 // SetGlobal installs the recorder used by the package-level Record (and so by
@@ -152,6 +153,7 @@ func SetGlobal(r *Recorder) { global.Store(r) }
 func Global() *Recorder { return global.Load() }
 
 // installed is the recorder InstallGlobal put in place, while it is.
+// Process-wide.
 var installed atomic.Pointer[Recorder]
 
 // InstallGlobal installs r as the global recorder for a test's run
@@ -231,6 +233,7 @@ func Record(ctx context.Context, action string, err error, kv ...any) {
 
 type threadKey struct{}
 
+// Process-wide: thread ids unique across runs.
 var threadSeq atomic.Uint64
 
 // Thread returns a context whose steps are in program order with each other

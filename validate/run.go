@@ -36,6 +36,7 @@ func NewChecker(bindingPath string, opt Options) (*Checker, error) {
 	return &Checker{Binding: b, Model: m, Options: opt}, nil
 }
 
+// Process-wide: the checkers For built.
 var cached sync.Map // absolute binding path, quint, backend -> *Checker
 
 // Cached is NewChecker once per binding, quint binary and backend in a

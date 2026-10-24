@@ -32,6 +32,7 @@ type Bytes struct {
 const BytesVersion = 1
 
 // header marks an encoded run: 0xff, "qc", the version.
+// Read-only.
 var header = []byte{0xff, 'q', 'c', BytesVersion}
 
 // FromBytes makes choices from data (a fuzz input, a corpus entry) at the

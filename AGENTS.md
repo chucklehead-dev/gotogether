@@ -318,7 +318,9 @@ working there:
 - A run's state (its recorder, role registry, coverage counts) is found
   through `qrun`: the context, else the goroutine's run (qenv's
   resolver). A new kind of per-run state is a `qrun.Key`, never a
-  package-level default that runs in parallel would share.
+  package-level default that runs in parallel would share: every
+  package-level var of the core says in its comment whether it is
+  read-only or process-wide (`internal/pkgstate` fails otherwise).
 - A Script's faults are in a partial order: each kind's in order, other
   kinds independent unless a fault `Follows` them (qtest.FaultScript
   chains a trace's faults; an ordered pair says b follows a).

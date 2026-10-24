@@ -38,6 +38,7 @@ type Block struct {
 // Pos is the block's position, file:line.
 func (b Block) Pos() string { return fmt.Sprintf("%s:%d", b.File, b.Line) }
 
+// Process-wide: the blocks woven code registers at init.
 var (
 	regMu  sync.Mutex
 	blocks []Block

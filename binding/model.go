@@ -52,6 +52,7 @@ func (p Param) DefaultTemplate() string {
 
 // reserved are the template names that are the step's, whatever its
 // arguments (StepData); seq and action are not: an argument wins there.
+// Read-only.
 var reserved = map[string]bool{"process": true, "outcome": true, "obs": true, "step": true, "args": true}
 
 // Signature renders an action as `name(p: T, ...)`.
@@ -303,6 +304,7 @@ type irExpr struct {
 }
 
 // infix are the built-in operators written between their arguments.
+// Read-only.
 var infix = map[string]string{"eq": "==", "neq": "!=", "ilt": "<", "ilte": "<=", "igt": ">", "igte": ">=",
 	"iadd": "+", "isub": "-", "imul": "*", "idiv": "/", "imod": "%", "and": "and", "or": "or", "implies": "implies", "iff": "iff"}
 

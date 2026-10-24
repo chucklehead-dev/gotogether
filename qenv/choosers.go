@@ -116,6 +116,7 @@ type (
 // NewTimeProfile returns an empty profile, for Sim.Profile.
 func NewTimeProfile() *TimeProfile { return profile.New() }
 
+// Read-only (Rates.Set returns a copy).
 var (
 	// DefaultRates inject a fault at one fault choice in twenty, except a
 	// nemesis (a crash, a partition), which is considered at every

@@ -104,6 +104,7 @@ func (c settings) refuse(t testing.TB, workflow string, ignored map[string]strin
 // recorder, searched as Record's and Validate's are (Linearize,
 // ResolvePending); qhegel's cases are checked as they record, in their
 // recorded order; Validate records nothing.
+// Read-only.
 var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"

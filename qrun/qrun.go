@@ -76,6 +76,7 @@ func Current() (context.Context, bool) {
 }
 
 // started holds the runs Start began, a stack per goroutine.
+// Process-wide.
 var started struct {
 	sync.Mutex
 	m map[int64][]context.Context

@@ -15,6 +15,8 @@ import (
 	"strings"
 )
 
+// files are the skills, embedded: read-only.
+//
 //go:embed */SKILL.md */references/*.md
 var files embed.FS
 
@@ -67,6 +69,7 @@ func frontMatter(doc, key string) string {
 
 // Targets are the skills directories agents read, relative to a project
 // (or, for a user-wide install, to the home directory).
+// Read-only.
 var Targets = map[string]string{
 	"agents": filepath.Join(".agents", "skills"), // vendor-neutral: Cursor, VS Code/Copilot, Codex, ...
 	"claude": filepath.Join(".claude", "skills"), // Claude Code
@@ -75,6 +78,7 @@ var Targets = map[string]string{
 }
 
 // DefaultTargets are installed when none are named.
+// Read-only.
 var DefaultTargets = []string{"agents", "claude"}
 
 // TargetDirs resolves target names ("all" for every one) under root.
@@ -135,6 +139,7 @@ func Install(dir string, force bool) ([]string, error) {
 
 // Renamed maps the names skills were installed under before the project
 // became gotogether to their names now.
+// Read-only.
 var Renamed = map[string]string{
 	"quint-start":                 "gotogether-start",
 	"quint-model-for-go":          "gotogether-model",

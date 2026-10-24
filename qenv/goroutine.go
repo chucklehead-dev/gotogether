@@ -16,6 +16,7 @@ import (
 // the simulation's run (the resolver it installs). Go has no goroutine-local
 // storage; the goroutine id comes from the runtime's stack header, read
 // only when a task starts and on that fallback path.
+// Process-wide.
 var owners struct {
 	sync.Mutex
 	m map[int64][]owner // a stack: a goroutine may create a simulation inside another's lifetime
@@ -35,6 +36,7 @@ type owner struct {
 
 // live counts the simulations not yet closed: with none, the per-step
 // discard check costs an atomic load.
+// Process-wide.
 var live atomic.Int64
 
 func init() {

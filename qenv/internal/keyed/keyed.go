@@ -9,6 +9,7 @@ import "context"
 // The simulation's side of a woven sync call. Current is the context of
 // the simulation task running on the calling goroutine (false outside
 // one); the rest take that context and the real object as the key.
+// Process-wide: installed by qenv at init.
 var (
 	Current  func() (context.Context, bool)
 	Lock     func(ctx context.Context, key any)

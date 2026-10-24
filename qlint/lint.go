@@ -85,6 +85,7 @@ func Sim(dir string) ([]Finding, error) {
 
 const qenvPath = "github.com/chucklehead-dev/gotogether/qenv"
 
+// Read-only.
 var wallClock = map[string]string{
 	"Now": "qenv.Now(ctx) or Sim.Now", "Since": "qenv.Since(ctx, m) on a qenv.Mono(ctx) reading (Now(ctx).Sub is wall arithmetic, which a clock jump moves)",
 	"Until": "qenv.WaitFor(ctx, ready, d), or an interval on qenv.Mono(ctx)",
@@ -157,6 +158,7 @@ func SimFile(fset *token.FileSet, f *ast.File) []Finding {
 
 // syncMethods are the sync.Mutex, RWMutex and WaitGroup methods qenv/weave
 // rewrites, when called.
+// Read-only.
 var syncMethods = map[string]bool{"Lock": true, "Unlock": true, "TryLock": true, "RLock": true, "RUnlock": true,
 	"TryRLock": true, "Add": true, "Done": true, "Wait": true}
 

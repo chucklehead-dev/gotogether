@@ -17,6 +17,7 @@ import (
 	"time"
 )
 
+// Process-wide: the hooks qenv installs, and the strict runs in progress.
 var (
 	discard atomic.Pointer[func() bool]
 	strict  atomic.Int64
@@ -153,6 +154,7 @@ func WithEscapes(ctx context.Context, e *Escapes) context.Context {
 	return context.WithValue(ctx, escapesKey{}, e)
 }
 
+// Process-wide: installed by qenv.
 var creatorRun atomic.Pointer[func(int64) (context.Context, bool)]
 
 // SetCreatorRun installs how a goroutine's run context is found by its
@@ -191,8 +193,10 @@ func creatorID() (int64, bool) {
 // KnownFault reports whether a name users give (a Rates key, a sweep's
 // FaultKind) covers a fault kind, option or nemesis this process declared
 // or chose, or a prefix of one: qenv installs it, qtest's workflows ask.
+// Process-wide.
 var KnownFault = func(string) bool { return true }
 
+// Process-wide: installed by qenv.
 var resolver atomic.Pointer[func() (context.Context, bool)]
 
 // SetResolver installs how the calling goroutine's run context is found:
@@ -257,6 +261,7 @@ func PanicStackOf(ctx context.Context) (*TaskPanic, bool) {
 	return dst, ok
 }
 
+// Process-wide: installed by qenv.
 var clock atomic.Pointer[func() (time.Time, bool)]
 
 // SetClock installs qenv's clock: the virtual time of the simulation the

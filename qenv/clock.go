@@ -137,6 +137,7 @@ func (s *Sim) clockOf(t *task) time.Time {
 func (p *Process) ClockOffset() time.Duration { return p.clock + p.drift(p.sim.Now()) }
 
 // realStart is Mono's origin outside a simulation.
+// Read-only.
 var realStart = time.Now() //qenv:ok the real monotonic clock, outside a simulation
 
 // Mono is the task's process's monotonic clock reading: time since an

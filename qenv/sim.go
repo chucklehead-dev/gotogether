@@ -175,6 +175,7 @@ func nemesisFamily(name string) string {
 }
 
 // Epoch is the virtual time a simulation starts at.
+// Read-only.
 var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // New returns a simulation whose choices c makes.

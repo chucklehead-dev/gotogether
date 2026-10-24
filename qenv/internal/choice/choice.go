@@ -193,6 +193,7 @@ type Rates struct {
 
 // NoFaults makes every fault choice nominal: a run with the schedule's
 // choices only.
+// Read-only (Rates.Set returns a copy).
 var NoFaults = Rates{Kinds: map[string]float64{}}
 
 // Set returns r with kind's rate p. kind is as reports print it
@@ -245,6 +246,7 @@ func covers(prefix, kind string) bool {
 // one step in two hundred, in each family ("nemesis.crash",
 // "nemesis.partition", "nemesis.jump", a double's own): "nemesis" covers
 // them all, and a family's own key sets it alone.
+// Read-only (Rates.Set returns a copy).
 var DefaultRates = Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.005}}
 
 // Seeded makes choices from a seeded generator: schedule choices uniformly,

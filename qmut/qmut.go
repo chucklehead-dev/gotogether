@@ -35,6 +35,7 @@ func (m Mutant) String() string {
 	return fmt.Sprintf("%s:%d %s: %s (%s)", m.File, m.Line, m.Func, m.Op, m.Code)
 }
 
+// Process-wide: the mutants woven code registers at init.
 var (
 	mu      sync.Mutex
 	mutants []Mutant
@@ -61,6 +62,7 @@ func Register(ms []Mutant) int {
 // process (-1: none): plain unit tests, which carry no run's context,
 // run one mutant a process (the toolkit's own mutation testing, a test
 // binary run once per mutant).
+// Process-wide.
 var process = func() int {
 	n, err := strconv.Atoi(os.Getenv("GOTOGETHER_MUTANT"))
 	if err != nil {

@@ -260,6 +260,7 @@ func (a Action) usesOutcome() bool {
 
 // templateFuncs names the functions templates may call (Plan defines them;
 // these stand-ins let a template parse for linting).
+// Read-only.
 var templateFuncs = template.FuncMap{
 	"set": func(...string) string { return "" }, "max": func(string) int64 { return 0 }, "count": func(string) int { return 0 },
 	"procs": func() int { return 0 }, "add": func(a, b any) int64 { return 0 }, "atLeast": func(lo, v any) int64 { return 0 },

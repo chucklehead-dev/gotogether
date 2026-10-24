@@ -101,6 +101,7 @@ func Read(path string, format Format) (*File, error) {
 
 // StepLogExample is one line of a step log: a deposit of 5 that left a
 // balance of 5, the first step of recorder r.
+// Read-only.
 var StepLogExample = fmt.Sprintf(`{%q:"deposit",%q:1,%q:"r",%q:5,%q:5}`,
 	qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder, qtrace.PrefixArg+"amount", qtrace.PrefixObs+"balance")
 

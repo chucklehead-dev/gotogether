@@ -29,6 +29,7 @@ import (
 // from 1 in each run of the test (-count, each fuzz input): the count
 // ends with the test. Explorations started from goroutines of one test
 // are numbered in the order they happen to start.
+// Process-wide.
 var explorations struct {
 	mu sync.Mutex
 	n  map[string]*testRuns
@@ -279,6 +280,7 @@ func evidenceDir(test string) string {
 	return filepath.Join(root, pkgDir(), safeName(test))
 }
 
+// pkgOnce finds the package directory once: process-wide.
 var pkgOnce struct {
 	sync.Once
 	dir string
