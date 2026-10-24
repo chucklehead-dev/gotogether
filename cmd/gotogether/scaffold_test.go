@@ -56,6 +56,42 @@ func TestScaffoldSystem(t *testing.T) {
 	}
 }
 
+// A binding with eventual vals gets a Run that settles, and a claim that
+// every run did: its eventual vals are judged only after a settle, and a
+// scaffold without one passed with them unjudged.
+func TestScaffoldSystemSettles(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+	b, err := binding.Load("../../examples/quorumkv/quorumkv.binding.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := binding.LoadModel("quint", b.SpecPath(), b.Module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := systemTest("scaffolded", "../quorumkv/quorumkv.binding.yaml", b, m)
+	for _, want := range []string{"return s.Settle(time.Minute)", "qtest.All(qtest.Settles())"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("missing %s in:\n%s", want, src)
+		}
+	}
+	dir, err := os.MkdirTemp("../../examples", "_scaffolded")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	if err := os.WriteFile(filepath.Join(dir, "system_test.go"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "vet", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("the scaffold does not build: %v\n%s", err, out)
+	}
+}
+
 // -out writes the scaffold to a file, and never over one: a scaffold is
 // filled in by hand.
 func TestScaffoldOut(t *testing.T) {

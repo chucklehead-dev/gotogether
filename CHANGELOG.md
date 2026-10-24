@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `gotogether scaffold -system` for a binding with eventual vals writes a
+  Run that settles and claims `All(Settles())`. A client history (steps
+  with invocation times) that fails in its recorded order says to check
+  it linearized.
 - A step log keeps an assumed step (`quint.assumed`, `Step.Ambiguous`):
   a resolution written out and validated again had its expect checked.
   `validate.InvariantResult.Eventually` marks an eventual val's result;

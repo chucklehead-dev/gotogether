@@ -43,6 +43,9 @@ type Search struct {
 	issues    []qtrace.Issue
 	undecided map[string]bool
 	kept      map[string][]qtrace.Issue
+	// intervals: no search ran, and the steps are a client's history (a
+	// failing actor's report suggests Linearize)
+	intervals bool
 }
 
 // Search orders steps by opt's search, checking candidates with c's
@@ -90,18 +93,35 @@ func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err
 		s.Steps, s.issues, s.undecided, s.kept = resolve(lc, steps, budget)
 		return s, nil
 	}
-	s.Steps = steps
+	s.Steps, s.intervals = steps, intervals(steps)
 	return s, nil
 }
 
+// intervals reports whether steps carry invocation times or records: a
+// client's history, recorded where calls returned.
+func intervals(steps []qtrace.Step) bool {
+	for _, s := range steps {
+		if s.Invocation || s.Call != 0 || !s.Invoked.IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
 // Mark puts what the search found in rep, the report of its Steps: its
-// issues, the issues of each actor's steps as recorded that no order
+// issues (with no search, for a failing client history, a hint to
+// linearize), the issues of each actor's steps as recorded that no order
 // removes (gaps, cycles), and no verdict for an actor whose search ran out
 // of its budget (its conformance and failed invariants n/a: the order
 // shown is the one that got furthest).
 func (s *Search) Mark(rep *Report) {
 	rep.Issues = append(rep.Issues, s.issues...)
 	for _, a := range rep.Actors {
+		if s.intervals && a.Conforms == Fail {
+			a.Issues = append(a.Issues, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: "its steps carry invocation times, a client's history: " +
+				"calls that overlapped return in another order than they took effect, which the recorded order checks; if they were recorded where they returned, " +
+				"check in an order real time allows (qtest.Linearize(), gotogether validate -linearize)"})
+		}
 		a.Issues = append(a.Issues, s.kept[a.Actor]...)
 		if !s.undecided[a.Actor] {
 			continue

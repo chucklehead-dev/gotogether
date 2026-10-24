@@ -26,7 +26,11 @@ func TestLinearizeOption(t *testing.T) {
 		{Action: "withdraw", Recorder: "b", Seq: 1, Thread: "b", Invoked: at(1), Time: at(5),
 			Args: map[string]any{"amount": int64(50)}, Obs: map[string]any{"balance": int64(10)}},
 	}
-	Validate(t, "../validate/testdata/account.yaml", steps).Expect(t, Rejects("withdraw"))
+	recorded := Validate(t, "../validate/testdata/account.yaml", steps)
+	recorded.Expect(t, Rejects("withdraw"))
+	if !strings.Contains(fmt.Sprint(recorded.Report.Actors[0].Issues), "check in an order real time allows") {
+		t.Errorf("a failing client history checked as recorded does not suggest Linearize: %v", recorded.Report.Actors[0].Issues)
+	}
 	// a budget of one order checks only the recording order: no verdict,
 	// which is not a rejection
 	short := Validate(t, "../validate/testdata/account.yaml", steps, LinearizeBudget(1))

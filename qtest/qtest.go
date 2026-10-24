@@ -440,9 +440,6 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 // it returns steps and nil.
 func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step, dir string) ([]qtrace.Step, func(*validate.Report)) {
 	t.Helper()
-	if !c.Linearize && !c.resolvePending {
-		return steps, nil
-	}
 	sc := *ch
 	sc.Options.Dir = dir
 	s, err := sc.Search(steps, validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending})

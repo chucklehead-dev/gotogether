@@ -839,6 +839,14 @@ func systemTest(pkg, bpath string, b *binding.Binding, m *binding.Model) string 
 			break
 		}
 	}
+	// a binding with eventual vals has them judged only after a settle
+	end := "\t\treturn s.Run(time.Minute) // a task waiting forever is an error (qenv.ErrStuck)\n"
+	if len(b.Eventually) > 0 {
+		end = "\t\tif err := s.Run(time.Minute); err != nil {\n\t\t\treturn err // a task waiting forever is an error (qenv.ErrStuck)\n\t\t}\n" +
+			"\t\t// faults off until quiet, then a settle in the trace: the binding's\n\t\t// eventual vals (" + strings.Join(b.Eventually, ", ") +
+			") are judged then; an *Unsettled is the run's outcome\n\t\treturn s.Settle(time.Minute)\n"
+		faithful += ", qtest.All(qtest.Settles())"
+	}
 	return fmt.Sprintf(`package %[1]s
 
 import (
@@ -873,8 +881,7 @@ func system(m Mutation) qtest.System {
 		// takes effect, with the fields the binding reads:
 		s.Spawn("client", func(ctx context.Context) {
 %[3]s		})
-		return s.Run(time.Minute) // a task waiting forever is an error (qenv.ErrStuck)
-	}}
+%[6]s	}}
 	if m != Faithful {
 		s.Mutant = "Mutant" // its runs are not the application's: a suite's evidence leaves them out
 	}
@@ -898,7 +905,7 @@ func TestMutantIsCaught(t *testing.T) {
 	t.Skip("scaffold: inject a bug as Mutant, state how it shows, and remove this line")
 	system(Mutant).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
 }
-`, pkg, bpath, rec.String(), claim, faithful)
+`, pkg, bpath, rec.String(), claim, faithful, end)
 }
 
 // fields parses a comma-separated list, for flags.
