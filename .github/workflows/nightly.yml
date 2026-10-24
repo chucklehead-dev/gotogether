@@ -74,14 +74,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [qtrace, qhistory, qsweep]
+        # max: the survivors allowed, each one read and equivalent (qhistory:
+        # sorting the nodes Tarjan visits, whose components are sorted after;
+        # nonadjacent's rw count, which classify's earlier cases make true)
+        include:
+          - pkg: qtrace
+          - pkg: qhistory
+            max: 2
+          - pkg: qsweep
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - name: mutants of ${{ matrix.pkg }}
-        run: ci/mutate-core.sh ${{ matrix.pkg }}
+        run: ci/mutate-core.sh ${{ matrix.pkg }} ${{ matrix.max }}
 
   fuzz:
     runs-on: ubuntu-latest

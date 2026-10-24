@@ -3,6 +3,7 @@ package qhistory_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -264,5 +265,71 @@ func TestStoreMisuseAndUnknownOutcomes(t *testing.T) {
 	}
 	if unknown == 0 {
 		t.Error("no commit's outcome was unknown: the faults did not fire")
+	}
+}
+
+// A report says each anomaly in the same words, in the same order, every
+// time: the anomalies of the reads key by key, then the cycles by their
+// least transaction, each from it; a G1a names only the transactions
+// that read the aborted value. Its text is what a failing test shows,
+// and two checks of one history that differ would make a flaky one.
+func TestReportText(t *testing.T) {
+	aborted := txn(8, app("a", 2))
+	aborted.Outcome = qhistory.Aborted
+	h := []qhistory.Txn{
+		// two components, the first reaching the second (2 -ww(z)-> 3)
+		txn(1, app("x", 1), rd("y", 1)), txn(2, app("y", 1), rd("x", 1), app("z", 1)),
+		txn(3, app("u", 1), rd("v", 1), app("z", 2)), txn(4, app("v", 1), rd("w", 1)), txn(15, app("w", 1), rd("u", 1)),
+		txn(5, rd("z", 1, 2)),
+		txn(6, rd("g1", 9), rd("g2", 9)),
+		txn(7, app("a", 1)), aborted, txn(9, rd("a", 1, 2)), txn(10, rd("a", 1)),
+		txn(11, app("i", 1), rd("i")),
+		txn(12, rd("p"), rd("q"), app("p", 1)), txn(13, rd("p"), rd("q"), app("q", 1)), txn(14, rd("p", 1), rd("q", 1)),
+		txn(21, rd("m"), rd("n", 1)), txn(22, app("m", 1), app("o", 1)),
+		txn(23, rd("o", 1), rd("r")), txn(24, app("r", 1), app("n", 1)), txn(25, rd("m", 1), rd("r", 1)),
+	}
+	want := `8 anomalies (snapshot isolation):
+  internal (forbidden): transaction 11's read(i) = [] does not end with its own appends to i, [1] in order
+  G1a (forbidden): a: transactions [9] read 2, appended by transaction 8, which aborted
+  garbage (forbidden): g1: transaction 6 read 9, which no transaction appended
+  garbage (forbidden): g2: transaction 6 read 9, which no transaction appended
+  G1c (forbidden): 1 -wr(x)-> 2 -wr(y)-> 1
+  G1c (forbidden): 3 -wr(u)-> 15 -wr(w)-> 4 -wr(v)-> 3
+  G2 (allowed): 12 -rw(q)-> 13 -rw(p)-> 12
+  G-nonadjacent (forbidden): 21 -rw(m)-> 22 -wr(o)-> 23 -rw(r)-> 24 -wr(n)-> 21`
+	for range 20 { // keys come from a map
+		rep, err := qhistory.Check(qhistory.SnapshotIsolation, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := rep.String(); got != want {
+			t.Fatalf("got\n%s\nwant\n%s", got, want)
+		}
+	}
+	rep, err := qhistory.Check(qhistory.Serializable, []qhistory.Txn{txn(1, app("x", 1))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rep.String(); got != "no anomaly (serializable)" {
+		t.Errorf("got %q", got)
+	}
+}
+
+// A seed's workload stays the same (a failing history's seed reproduces
+// it), and zero fields take their defaults: 3 keys, up to 4 operations.
+func TestWorkload(t *testing.T) {
+	got := fmt.Sprint(qhistory.Workload{Keys: 2, Txns: 3, MaxOps: 2, Seed: 1}.Generate())
+	if want := "[{1 [append(k1, 1)] 0} {2 [read(k1) = [] append(k1, 2)] 0} {3 [read(k1) = [] append(k0, 1)] 0}]"; got != want {
+		t.Errorf("seed 1's workload changed:\n got %s\nwant %s", got, want)
+	}
+	keys, most := map[string]bool{}, 0
+	for _, x := range (qhistory.Workload{Txns: 50, Seed: 3}).Generate() {
+		most = max(most, len(x.Ops))
+		for _, o := range x.Ops {
+			keys[o.Key] = true
+		}
+	}
+	if len(keys) != 3 || !keys["k0"] || !keys["k2"] || most != 4 {
+		t.Errorf("defaults: keys %v, at most %d operations; want k0..k2 and 4", keys, most)
 	}
 }
