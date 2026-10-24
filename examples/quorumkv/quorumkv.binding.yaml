@@ -1,0 +1,17 @@
+# The clients' calls and the probe's observations as calls of
+# model/quorumkv.qnt's actions: every parameter is the step's field of its
+# name; a read's observed value is the key's register.
+spec: model/quorumkv.qnt
+module: quorumkv
+
+constants:
+  KEYS: 'Set("a", "b")'
+  REPLICAS: 'Set("r1", "r2", "r3")'
+
+actions:
+  write: {}
+  read:
+    expect: 'reg.get({{.key}}) == {{.obs.val}}'
+  observe: {}
+
+eventually: [converged]

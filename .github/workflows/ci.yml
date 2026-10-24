@@ -252,6 +252,29 @@ jobs:
       - name: test (broadcast and checkout on gosim, choices from qenv)
         run: go test -p 1 -short -count=1 -timeout 30m ./...
 
+  quorumkv:
+    # its own job: its mutants' explorations are linearized, each candidate
+    # order a quint replay, about twenty minutes in all
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/quorumkv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/quorumkv/go.mod
+          cache-dependency-path: examples/quorumkv/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../../ci/install-quint.sh
+      - name: gofmt, vet
+        run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./...
+      - name: test (liveness, pending calls, linearized per key, PCT)
+        run: go test -count=1 -timeout 45m ./...
+
   maelstrom:
     runs-on: ubuntu-latest
     steps:

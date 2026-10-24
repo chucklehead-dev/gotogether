@@ -14,6 +14,7 @@ use (
 	./examples/jobqueue
 	./examples/kvstore
 	./examples/lease
+	./examples/quorumkv
 	./examples/retrystorm
 	./examples/sktrace
 	./examples/streams
