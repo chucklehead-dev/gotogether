@@ -176,8 +176,6 @@ under a week, M two to four, L more.
     queue.go 14, the rest under 15 a file), and a bar for qtrace's
     guided-search survivors;
   - the brute forces as Hegel properties, their sizes widened nightly;
-  - `internal/pkgstate` checking what it is told (no write to a
-    read-only var outside init), not only that it is told;
   - an info issue when a pending call's bounds cross (a clock problem
     resolved as "no effect").
 - **T6. The exploration engine (M), before tags.** Run sources (seeds,
