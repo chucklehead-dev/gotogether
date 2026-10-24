@@ -92,6 +92,23 @@ const reorderWindow = 8
 // further). A search that found none and was not cut stopped because no
 // move got further: the stronger evidence.
 func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
+	return LinearizeStates(steps, budget, func(orders [][]Step) ([]int, []string) { return check(orders), nil })
+}
+
+// LinearizeStates is Linearize with a check that also returns, for each
+// order the model accepts, its state after the order (any string that is
+// equal exactly when the states are; "" or a nil slice: unknown). The
+// complete search then keeps one of the prefixes that placed the same
+// steps and reached the same state (Lowe's memo for Wing and Gong's
+// search): what follows them is the same, so a history whose operations
+// overlap is searched in as many prefixes as states, not orders.
+func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool) {
+	return linearize(steps, budget, check, true)
+}
+
+// linearize is LinearizeStates; without guided, the complete search alone
+// (for tests of it).
+func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool) (best []Step, ok bool, tried int, cut bool) {
 	if len(steps) == 0 {
 		return nil, true, 0, false
 	}
@@ -144,6 +161,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	// f rejected (an extension of it fails there too); one that conforms,
 	// every prefix accepted. A candidate the memo decides costs no quint.
 	accepted, rejected := map[string]bool{}, map[string]bool{}
+	stateOf := map[string]string{} // an accepted order's state, when check knows it
 	judge := func(orders [][]int) []int {
 		out := make([]int, len(orders))
 		var ask []int
@@ -170,8 +188,12 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 		for j, i := range ask {
 			rendered[j] = render(orders[i])
 		}
-		for j, f := range check(rendered) {
+		fs, states := check(rendered)
+		for j, f := range fs {
 			o := orders[ask[j]]
+			if f < 0 && j < len(states) && states[j] != "" {
+				stateOf[key(o)] = states[j]
+			}
 			out[ask[j]] = f
 			upTo := len(o)
 			if f >= 0 {
@@ -189,7 +211,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	f := judge([][]int{cur})[0]
 	tried = 1
 	stopped := false // no move left, or none got further
-	for f >= 0 && tried < budget {
+	for guided && f >= 0 && tried < budget {
 		var cands [][]int
 		add := func(c []int) {
 			if k := key(c); !seen[k] {
@@ -269,7 +291,17 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	}
 	// the guided search found none: search every order the constraints
 	// allow, prefix by prefix, before calling it a bug
-	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge); ok || n > 0 {
+	// two accepted prefixes of the same steps and state have the same
+	// futures: the complete search keeps one
+	same := func(o []int) string {
+		st := stateOf[key(o)]
+		if st == "" {
+			return ""
+		}
+		placed := slices.Sorted(slices.Values(o))
+		return key(placed) + "|" + st
+	}
+	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge, same); ok || n > 0 {
 		tried += n
 		if ok {
 			return o, true, tried, false
@@ -296,7 +328,7 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 // beam of them made five concurrent operations no verdict whatever the
 // budget, and the budget is what a user can raise.
 func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
-	judge func(orders [][]int) []int) (best []Step, ok bool, tried int, cut bool) {
+	judge func(orders [][]int) []int, same func([]int) string) (best []Step, ok bool, tried int, cut bool) {
 	n := len(ns)
 	level := [][]int{nil}
 	for k := 0; k < n && tried < budget; k++ {
@@ -325,10 +357,17 @@ func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget in
 		fs := judge(cands)
 		tried += len(cands)
 		var next [][]int
+		kept := map[string]bool{}
 		for i, f := range fs {
 			if f < 0 {
 				if k == n-1 {
 					return render(cands[i]), true, tried, false
+				}
+				if s := same(cands[i]); s != "" {
+					if kept[s] {
+						continue // another prefix of these steps reached this state
+					}
+					kept[s] = true
 				}
 				next = append(next, cands[i])
 			}

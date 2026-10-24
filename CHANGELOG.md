@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtrace.LinearizeStates`: Linearize with a check that also gives each
+  accepted order's model state; its complete search keeps one prefix of
+  the same steps and state (Lowe's memo for Wing and Gong's search), so
+  overlapping operations cost as many prefixes as states, not orders.
 - qweave passed the go command its overlay in place of the first
   argument after the command: `qweave go test ./sim/` tested the current
   directory, `qweave go test -short ./x/` ran without -short, and

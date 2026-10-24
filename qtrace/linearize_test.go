@@ -41,6 +41,25 @@ func register(orders [][]Step) []int {
 	return out
 }
 
+// registerStates is register, with each accepted order's state: the
+// value a read would see.
+func registerStates(orders [][]Step) ([]int, []string) {
+	fs := register(orders)
+	st := make([]string, len(orders))
+	for i, o := range orders {
+		if fs[i] < 0 {
+			var v int64
+			for _, s := range o {
+				if s.Action == "write" {
+					v = s.Args["v"].(int64)
+				}
+			}
+			st[i] = fmt.Sprint(v)
+		}
+	}
+	return fs, st
+}
+
 // A read that overlaps a write and saw it completes first: its recording
 // order is wrong, and a single move finds the order that is right.
 func TestLinearizeOverlap(t *testing.T) {
@@ -145,6 +164,12 @@ func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 // unconstrained by its unit tests.)
 func TestLinearizeAgainstBruteForce(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
+	saved := 0
+	defer func() {
+		if saved == 0 {
+			t.Error("merging prefixes by state saved no order in any trial: the property never compared it")
+		}
+	}()
 	for trial := range 400 {
 		var steps []Step
 		next := map[string]int{}
@@ -180,6 +205,17 @@ func TestLinearizeAgainstBruteForce(t *testing.T) {
 		if ok && (register([][]Step{got})[0] >= 0 || !allowed(steps, got)) {
 			t.Fatalf("trial %d: the order returned is no valid order: %v", trial, got)
 		}
+		// with the register's state, the complete search merges prefixes:
+		// the same verdict, in no more orders
+		sgot, sok, stried, scut := LinearizeStates(steps, 100000, registerStates)
+		_, _, ptried, _ := Linearize(steps, 100000, register)
+		if scut || sok != want || sok && !allowed(steps, sgot) {
+			t.Fatalf("trial %d: by state ok %v (cut %v), brute force %v", trial, sok, scut, want)
+		}
+		if stried > ptried {
+			t.Fatalf("trial %d: by state %d orders, by prefix %d", trial, stried, ptried)
+		}
+		saved += ptried - stried
 		// a small budget may cut the search, but a verdict it gives (no
 		// order: the guided search stopped, or the complete one proved it)
 		// must be right
@@ -457,4 +493,40 @@ func cyclic(steps []Step, prec func(a, b Step) bool) bool {
 		}
 	}
 	return false
+}
+
+// The complete search merges two prefixes of the same steps only when
+// check says their states are equal: with every order's state its own,
+// it tries as many orders as with no states; with one state for all, it
+// tries fewer. (Merging by the steps alone would merge the first too.)
+func TestLinearizeStatesMergesOnlyEqualStates(t *testing.T) {
+	// three concurrent writes, then a read no order explains: the complete
+	// search must try every order of the writes
+	steps := []Step{op("a", 1, "write", 1, 0, 10), op("b", 1, "write", 2, 0, 10), op("c", 1, "write", 3, 0, 10), op("d", 1, "read", 9, 20, 30)}
+	with := func(state func(o []Step) string) int {
+		_, ok, tried, cut := linearize(steps, 10000, func(orders [][]Step) ([]int, []string) {
+			fs := register(orders)
+			st := make([]string, len(orders))
+			for i, o := range orders {
+				st[i] = state(o)
+			}
+			return fs, st
+		}, false)
+		if ok || cut {
+			t.Fatalf("ok %v, cut %v: no order reads 9", ok, cut)
+		}
+		return tried
+	}
+	none := with(func([]Step) string { return "" })
+	distinct := with(func(o []Step) string {
+		var b strings.Builder
+		for _, s := range o {
+			fmt.Fprint(&b, s.Args["v"], ",")
+		}
+		return b.String()
+	})
+	equal := with(func([]Step) string { return "one" })
+	if distinct != none || equal >= none {
+		t.Errorf("orders tried: %d with no states, %d with distinct ones, %d with one: want the first two equal, the last fewer", none, distinct, equal)
+	}
 }
