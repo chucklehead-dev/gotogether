@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Linearize's complete search is cut by its budget alone: a beam of 64
+  prefixes made five concurrent operations no order explains no verdict
+  whatever the budget, while the report said to raise it.
 - ResolvePending places a pending call's effect before the first settle
   after its invocation: one placed after a probe that saw it missing made
   an eventual val hold and the run conform.

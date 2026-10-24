@@ -234,17 +234,15 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 	return render(cur), false, tried, !stopped
 }
 
-// prefixBeam bounds how many accepted prefixes of one length the complete
-// search keeps: past it the search is no longer complete (cut).
-const prefixBeam = 64
-
 // prefixes searches the orders the constraints allow level by level (Wing
 // and Gong's search, a batch of candidates a level): each prefix the model
 // accepts is extended by every step all of whose required predecessors it
 // already holds, and a rejected prefix is dropped with every order it
 // begins. A full order must conform as a whole (an eventual val included).
-// Unless budget or the beam cut it, finding none is a proof: no order
-// real time allows is a behaviour of the model.
+// Unless budget cut it, finding none is a proof: no order real time
+// allows is a behaviour of the model. Every accepted prefix is kept: a
+// beam of them made five concurrent operations no verdict whatever the
+// budget, and the budget is what a user can raise.
 func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
 	check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
 	n := len(ns)
@@ -286,9 +284,6 @@ func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget in
 				}
 				next = append(next, cands[i])
 			}
-		}
-		if len(next) > prefixBeam {
-			next, cut = next[:prefixBeam], true
 		}
 		if len(next) == 0 {
 			return nil, false, tried, cut

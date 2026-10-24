@@ -96,3 +96,31 @@ func TestRealTimeIssue(t *testing.T) {
 		t.Errorf("an unknown invocation bounded the order: %v", traces[0].Issues)
 	}
 }
+
+// The complete search is cut by the budget alone: five concurrent
+// operations no order explains are refuted given the budget to try every
+// order, and no verdict without it. A beam of 64 prefixes once made them
+// no verdict whatever the budget.
+func TestLinearizeCompleteSearchRefutes(t *testing.T) {
+	var steps []Step
+	for i := range 5 {
+		steps = append(steps, op(string(rune('a'+i)), 1, "write", int64(i), 0, 10))
+	}
+	// proper prefixes conform, every full order fails at its last step
+	none := func(orders [][]Step) []int {
+		out := make([]int, len(orders))
+		for i, o := range orders {
+			out[i] = -1
+			if len(o) == len(steps) {
+				out[i] = len(o) - 1
+			}
+		}
+		return out
+	}
+	if _, ok, tried, cut := Linearize(steps, 100000, none); ok || cut {
+		t.Errorf("with the budget to try every order: ok %v, cut %v after %d", ok, cut, tried)
+	}
+	if _, ok, _, cut := Linearize(steps, 50, none); ok || !cut {
+		t.Errorf("with a budget of 50: ok %v, cut %v", ok, cut)
+	}
+}
