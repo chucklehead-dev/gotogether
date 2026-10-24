@@ -77,25 +77,33 @@ func sameStep(a, b qtrace.Step) bool {
 }
 
 // checkDeterminism runs seed again and fails t, naming the first
-// difference, if the run is not first's.
+// difference, if the run is not first's: its error (a failing run is the
+// one whose replay matters most), its choices, its steps.
 func checkDeterminism(t interface {
 	Helper()
 	Errorf(string, ...any)
 }, first *Run, again func() *Run, name string) {
 	t.Helper()
-	if first == nil || first.Err != nil {
-		return // a run that failed to run is reported as such
+	if first == nil {
+		return
 	}
 	second := again()
-	if second.Err != nil {
-		t.Errorf("gotogether: %s ran twice: the first run ended, the second did not (%v): the system is not deterministic "+
-			"(nondeterminism outside the Chooser: a map range, math/rand, the wall clock, a `go` statement, a select over "+
-			"several ready channels)", name, second.Err)
+	const why = "the system is not deterministic, so no failure of it replays (nondeterminism outside the Chooser: a map " +
+		"range, math/rand, the wall clock, a `go` statement, a select over several ready channels; `gotogether lint -sim` " +
+		"finds the `go` statements and clocks)"
+	if e1, e2 := errText(first.Err), errText(second.Err); e1 != e2 {
+		t.Errorf("gotogether: %s ran twice ended differently: %s, then %s: %s", name, e1, e2, why)
 		return
 	}
 	if d := sameRun(first, second); d != "" {
-		t.Errorf("gotogether: %s ran twice made two runs, first different at %s: the system is not deterministic, so no "+
-			"failure of it replays (nondeterminism outside the Chooser: a map range, math/rand, the wall clock, a `go` "+
-			"statement, a select over several ready channels; `gotogether lint -sim` finds the `go` statements and clocks)", name, d)
+		t.Errorf("gotogether: %s ran twice made two runs, first different at %s: %s", name, d, why)
 	}
+}
+
+// errText is how a run ended, for comparing two runs.
+func errText(err error) string {
+	if err == nil {
+		return "at its end"
+	}
+	return "with " + err.Error()
 }

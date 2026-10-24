@@ -209,8 +209,9 @@ working there:
   return and the response's delivery (the effect committed, the caller
   never told) unless `NoCrashWindow` is set; the window is a scheduling
   point, so choices recorded before it was the default do not replay.
-  A request may also arrive late (`rpc.<name>.delay`: processed after
-  its caller's timeout, so after its retry), which breaks a lock without
+  A request may also arrive late (`rpc.<name>.delay`: just after its
+  caller's timeout, a timeout after it, after a retry that backed off,
+  or slow but in time; in true time), which breaks a lock without
   fencing whatever the clocks do: a test of other faults turns it off by
   its kind (lease's `punctual`).
 - An expectation naming an action the model lacks, or an invariant the

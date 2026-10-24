@@ -83,6 +83,8 @@ type Sim struct {
 	net       Network // the network between processes (Net)
 	clocksSet *Clocks // Clocks as the first process saw them
 	nemeses   []*nemesis
+	held      []*task // runnable tasks of stalled processes (Stalls)
+	stallsSet *Stalls // Stalls when the first process was made: a change after panics
 	onCrash   []func(*Process)
 	keyed     map[any]any // keyed locks and wait groups (keyed.go)
 	faultsOff bool
@@ -95,24 +97,25 @@ type Sim struct {
 }
 
 type task struct {
-	sim      *Sim
-	id       int // creation order: the order runnable tasks are offered in
-	name     string
-	proc     *Process
-	inc      int  // the process incarnation it belongs to
-	stalling bool // in stalled's wait: its own scheduling points do not stall again
-	wake     chan struct{}
-	ctx      context.Context // its context (Current)
-	waiting  bool            // parked until ready, a signal, or deadline
-	ready    func() bool     // the predicate waited for, if any
-	deadline time.Time       // zero: none
-	gen      int             // bumped when a wait ends: stale timers are skipped
-	notified bool            // a Signal it waited on fired
-	queued   bool            // in runq
-	done     bool
-	killed   bool
-	daemon   bool // its waits may last forever (Daemon)
-	idle     bool // this wait may last forever (a double's receive)
+	sim       *Sim
+	id        int // creation order: the order runnable tasks are offered in
+	name      string
+	proc      *Process
+	inc       int       // the process incarnation it belongs to
+	held      bool      // runnable but held while its process stalls (Stalls): off the run queue
+	heldUntil time.Time // when it is released
+	wake      chan struct{}
+	ctx       context.Context // its context (Current)
+	waiting   bool            // parked until ready, a signal, or deadline
+	ready     func() bool     // the predicate waited for, if any
+	deadline  time.Time       // zero: none
+	gen       int             // bumped when a wait ends: stale timers are skipped
+	notified  bool            // a Signal it waited on fired
+	queued    bool            // in runq
+	done      bool
+	killed    bool
+	daemon    bool // its waits may last forever (Daemon)
+	idle      bool // this wait may last forever (a double's receive)
 }
 
 type timer struct {
@@ -333,7 +336,6 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 		if t.killed {
 			panic(killed{})
 		}
-		t.stalled() // a task its paused process starts (a request delivered) waits too
 		fn(ctx)
 	}()
 }
@@ -363,7 +365,6 @@ func (t *task) park() {
 	if t.killed {
 		panic(killed{})
 	}
-	t.stalled()
 }
 
 // wait parks the task until ready holds (nil: no predicate), a Signal
@@ -406,7 +407,11 @@ func (s *Sim) enqueue(t *task) {
 		}
 		return // it wakes when the notifier gives up the lock
 	}
-	if !t.queued && !t.done && !t.killed {
+	if !t.queued && !t.done && !t.killed && !t.held {
+		if until := s.holdUntil(t); until.After(s.now) {
+			s.hold(t, until) // its wake stands; it runs when its process goes on
+			return
+		}
 		t.queued = true
 		s.runq.add(t.id, 1, s)
 	}
@@ -699,6 +704,7 @@ func (p *Process) Crash() {
 		return
 	}
 	p.down = true
+	p.stall = stall{} // a restarted process starts fresh, not paused
 	for _, t := range p.sim.tasks {
 		if t.proc == p && !t.done {
 			t.killed = true
@@ -822,6 +828,7 @@ var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
 // A panic in a task is re-raised here, with its own value (PanicStack has
 // the task's stack).
 func (s *Sim) Run(d time.Duration) error {
+	s.stallsFixed()
 	if s.clocksSet != nil {
 		s.clocksFor() // Clocks changed after the first process: panics
 	}
@@ -890,6 +897,7 @@ func (s *Sim) Settle(d time.Duration) error {
 // falsifies its predicate, it waits on (a lock taken by another
 // transaction stays taken).
 func (s *Sim) runnable() (int, []*task) {
+	s.release()
 	for len(s.timers) > 0 {
 		e := s.timers[0]
 		if e.t.gen != e.gen || e.t.done || e.t.killed || !e.t.waiting {
@@ -909,7 +917,7 @@ func (s *Sim) runnable() (int, []*task) {
 			continue
 		}
 		keep = append(keep, t)
-		if !t.queued && t.ready() {
+		if !t.queued && !t.stalledAt(s.now) && t.ready() { // a paused process's waiter is no candidate: it checks again after
 			cands = append(cands, t)
 		}
 	}
@@ -946,15 +954,19 @@ func (s *Sim) dequeue(t *task) {
 }
 
 func (s *Sim) nextDeadline() (time.Time, bool) {
+	at, ok := s.nextRelease()
 	for len(s.timers) > 0 {
 		e := s.timers[0]
 		if e.t.gen != e.gen || e.t.done || e.t.killed || !e.t.waiting {
 			heap.Pop(&s.timers)
 			continue
 		}
-		return e.at, true
+		if !ok || e.at.Before(at) {
+			at, ok = e.at, true
+		}
+		break
 	}
-	return time.Time{}, false
+	return at, ok
 }
 
 // nemesisDue reports whether a nemesis is to be considered at this step:
@@ -995,6 +1007,11 @@ func (s *Sim) selfCheck() {
 	}
 	if total := s.runq.total(); total != queued {
 		fail("run queue holds %d tasks, %d are flagged queued", total, queued)
+	}
+	for _, t := range s.held {
+		if t.held && (t.queued || t.waiting) {
+			fail("task %s is held for its stalled process and also queued or waiting", t.name)
+		}
 	}
 	timers := map[*task]bool{}
 	for _, e := range s.timers {

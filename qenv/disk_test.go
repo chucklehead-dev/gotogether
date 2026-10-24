@@ -152,6 +152,20 @@ func TestDiskErrors(t *testing.T) {
 		t.Errorf("fsyncgate: syncs %v then %v, read %q before the power loss and %q after", first, second, before, after)
 	}
 
+	// a program that writes its data again after the error, and syncs, keeps
+	// it: only the dropped writes are lost
+	d = run(byKind{"fault.disk.node.sync": {1}, "fault.disk.node.crash": {1}}, func(ctx context.Context, d *qenv.Disk, p *qenv.Process) {
+		f := d.Create("log")
+		_, _ = f.Write([]byte("dropped\n"))
+		_ = f.Sync() // EIO
+		_, _ = f.Write([]byte("again\n"))
+		_ = f.Sync()
+		p.Crash()
+	})
+	if after, _ := d.ReadFile("log"); string(after) != "again\n" {
+		t.Errorf("rewritten after EIO: %q after the power loss, want the rewrite only", after)
+	}
+
 	d = run(byKind{"fault.disk.node.read": {1}}, func(ctx context.Context, d *qenv.Disk, _ *qenv.Process) {
 		f := d.Create("log")
 		_, _ = f.Write([]byte("abc"))

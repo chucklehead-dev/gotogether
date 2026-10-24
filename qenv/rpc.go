@@ -39,10 +39,14 @@ type Capacity struct {
 // never". Its faults:
 //   - "rpc.<name>.request": 1 loses the request (never processed),
 //     2 duplicates it (processed twice, as a retransmission can);
-//   - "rpc.<name>.delay": 1 delivers the request late (processed just
-//     after the caller's timeout, when it may have retried: a late
-//     original after its retry), 2 adds a late copy (a retransmission
-//     that arrives after the timeout);
+//   - "rpc.<name>.delay": 1 delivers the request just after the caller's
+//     timeout ("late": processed after the caller gave up), 2 delivers it
+//     and a copy a timeout after that ("lateDuplicate": a retransmission
+//     that arrives after the caller's retry), 3 delivers it a timeout after
+//     the caller's ("veryLate": a late original after its retry, even one
+//     that backed off), 4 at half the timeout ("slow": late, but in time);
+//     a copy that arrives after the caller gave up answers no one, and
+//     every delay is in true time, not the service's drifted clock;
 //   - "rpc.<name>.response": 1 loses the response after the request
 //     was processed, the ambiguous failure that makes retries dangerous.
 //
@@ -129,7 +133,7 @@ func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx
 	}
 	svc := &Service[Req, Resp]{Name: name, Proc: p, handler: handler, sim: s,
 		request:  DeclareFaults("rpc."+name+".request", "drop", "duplicate"),
-		delay:    DeclareFaults("rpc."+name+".delay", "late", "lateDuplicate"),
+		delay:    DeclareFaults("rpc."+name+".delay", "late", "lateDuplicate", "veryLate", "slow"),
 		response: DeclareFaults("rpc."+name+".response", "lost")}
 	// the requests waiting and in service die with the process, and
 	// release nothing: a restarted service starts with every worker free
@@ -154,41 +158,41 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 	Yield(ctx)
 	s := svc.sim
 	res := &result[Resp]{}
-	deliveries, late := 1, -1 // late: the delivery that arrives after the caller's deadline
+	deliveries := 1
 	switch s.FaultOf(svc.request) {
 	case "drop":
 		deliveries = 0
 	case "duplicate":
 		deliveries = 2
 	}
+	caller := ProcessOf(ctx)
+	deadline := s.Now().Add(caller.drifted(timeout)) // the caller's timer, on its clock
+	// late is the delivery that arrives after its time, at arrives, in
+	// true time: a delay is the network's, not the service's clock
+	late, arrives := -1, time.Time{}
 	if deliveries > 0 {
+		wait := deadline.Sub(s.Now())
 		switch s.FaultOf(svc.delay) {
 		case "late":
-			late = 0
+			late, arrives = 0, deadline.Add(time.Millisecond)
 		case "lateDuplicate":
-			deliveries, late = deliveries+1, deliveries
+			deliveries, late, arrives = deliveries+1, deliveries, deadline.Add(wait)
+		case "veryLate":
+			late, arrives = 0, deadline.Add(wait)
+		case "slow":
+			late, arrives = 0, s.Now().Add(wait/2)
 		}
 	}
-	caller := ProcessOf(ctx)
 	if svc.Proc.Down() || s.net.Partitioned(caller, svc.Proc) {
 		deliveries = 0
 	}
-	deadline := s.Now().Add(caller.drifted(timeout)) // the caller's timer, on its clock
 	// ErrOverloaded tells the caller its request was not processed: a
 	// duplicate is not processed once the first copy was refused, and a
 	// refusal after a duplicate's processing leaves the caller to time out
 	var processed, refused bool
 	for i := 0; i < deliveries; i++ {
 		first, delayed := i == 0, i == late
-		s.spawn(s.base, svc.Name+".handle", svc.Proc, func(hctx context.Context) {
-			if delayed {
-				// in the network until just after the caller gave up; it
-				// arrives only if the service is still reachable
-				Sleep(hctx, deadline.Sub(s.Now())+time.Millisecond)
-				if svc.Proc.Down() || s.net.Partitioned(caller, svc.Proc) {
-					return
-				}
-			}
+		handle := func(hctx context.Context) {
 			if svc.Capacity != nil {
 				gen := svc.gen
 				ok, rejected := svc.serve(hctx, deadline)
@@ -212,13 +216,25 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 			if !svc.NoCrashWindow {
 				Yield(hctx) // a crash here kills the task: no response
 			}
-			if !first || delayed {
+			if !first || delayed && s.Now().After(deadline) {
 				return // a duplicate's response is a stray; a late one's caller is gone
 			}
 			if s.FaultOf(svc.response) == "lost" || s.net.Partitioned(caller, svc.Proc) {
 				return
 			}
 			res.resp, res.err, res.done = resp, err, true
+		}
+		if !delayed {
+			s.spawn(s.base, svc.Name+".handle", svc.Proc, handle)
+			continue
+		}
+		// in the network, no process's: a crash and restart meanwhile does
+		// not lose it; it arrives if the service is reachable then
+		s.spawn(s.base, svc.Name+".net", nil, func(nctx context.Context) {
+			waitUntil(nctx, func() bool { return false }, arrives)
+			if !svc.Proc.Down() && !s.net.Partitioned(caller, svc.Proc) {
+				s.spawn(s.base, svc.Name+".handle", svc.Proc, handle)
+			}
 		})
 	}
 	var zero Resp

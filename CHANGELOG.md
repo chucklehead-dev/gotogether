@@ -80,9 +80,10 @@ Added to the core since api/core.txt was first recorded:
   `NewJSONLSink(w, d)` with `PerStep` (the old FileSink), `Synced` and
   `Buffered`. `qenv.Swarm` stays, now tested.
 - A more faithful environment: a `qenv.Service`'s request may arrive
-  late (`rpc.<name>.delay`: `late`, processed after its caller's
-  timeout; `lateDuplicate`, a late copy too), so a late original can
-  land after its retry; a second double of one kind and name in a
+  late (`rpc.<name>.delay`: `late`, just after its caller's timeout;
+  `veryLate`, a timeout after it, after a retry that backed off;
+  `lateDuplicate`, a copy that late; `slow`, late but in time), so a
+  late original can land after its retry; a second double of one kind and name in a
   simulation panics (they shared their fault kinds); `Sim.Stalls`
   pauses a process (`nemesis.pause`) or keeps it alive but slow
   (`nemesis.slow`); a `Disk` fills (`ErrNoSpace`), fails an fsync

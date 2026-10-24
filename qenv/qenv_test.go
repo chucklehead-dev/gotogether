@@ -636,10 +636,11 @@ func (f faultAt) Choose(kind string, n int) int {
 	return 0
 }
 
-// A late request is processed just after its caller timed out, and its
-// response reaches no one: the caller's retry ran first, and the late
-// original runs after it, as a delayed packet does. lateDuplicate
-// delivers the request at once and a copy after the timeout.
+// A late request is processed after its caller timed out, and its
+// response reaches no one, as a delayed packet's: just after the timeout
+// (late), or a timeout after it, after a retry that backed off
+// (veryLate); lateDuplicate delivers the request at once and such a copy;
+// a slow one arrives at half the timeout, and its response in time.
 func TestLateRequests(t *testing.T) {
 	for _, c := range []struct {
 		fault      string
@@ -650,6 +651,8 @@ func TestLateRequests(t *testing.T) {
 	}{
 		{"late", 1, qenv.ErrTimeout, 0, 1},
 		{"lateDuplicate", 2, nil, 1, 2},
+		{"veryLate", 3, qenv.ErrTimeout, 0, 1},
+		{"slow", 4, nil, 1, 1},
 	} {
 		s := qenv.New(faultAt{"rpc.api.delay", c.v})
 		var at []time.Duration
@@ -671,8 +674,10 @@ func TestLateRequests(t *testing.T) {
 			t.Errorf("%s: err %v, handled %d by the timeout and %d in all (at %v); want %v, %d, %d",
 				c.fault, err, handled, svc.Calls, at, c.err, c.atTimeout, c.afterwards)
 		}
-		if n := len(at); n > 0 && at[n-1] <= time.Second {
-			t.Errorf("%s: the late copy was handled at %v, before the caller's timeout", c.fault, at[n-1])
+		wantAt := map[string]time.Duration{"late": time.Second + time.Millisecond, "lateDuplicate": 2 * time.Second,
+			"veryLate": 2 * time.Second, "slow": time.Second / 2}[c.fault]
+		if n := len(at); n == 0 || at[n-1] != wantAt {
+			t.Errorf("%s: the delayed copy was handled at %v, want %v", c.fault, at, wantAt)
 		}
 	}
 }
@@ -714,6 +719,79 @@ func TestStalls(t *testing.T) {
 		}
 		if len(ticks) != 5 || gap < c.gap || ticks[4] > c.end {
 			t.Errorf("%s: ticks %v; want 5, the longest gap at least %v, the last by %v", c.nemesis, ticks, c.gap, c.end)
+		}
+	}
+}
+
+// A stall delays a task's wake, never changes it: a notified Signal.Wait
+// still reports the Notify under a slowdown, and a lock built on a
+// predicate wait keeps one holder at a time through pauses and
+// slowdowns (a woken waiter checks its predicate again when its process
+// goes on; one stalled after its wake was decided once ran on a stale
+// one).
+func TestStallsKeepWaitsTrue(t *testing.T) {
+	for seed := uint64(0); seed < 50; seed++ {
+		sd := qenv.NewSeeded(seed)
+		sd.Rates = qenv.NoFaults.Set("nemesis.pause", 0.3).Set("nemesis.slow", 0.3)
+		s := qenv.New(sd)
+		s.Check = true
+		s.Stalls = qenv.Stalls{Pause: 2 * time.Second, Slow: 300 * time.Millisecond, SlowFor: 3 * time.Second}
+		var sig qenv.Signal
+		var notified []bool
+		holders, most, locked, entered := 0, 0, false, 0
+		for i := range 3 {
+			s.Process(fmt.Sprintf("p%d", i), false, func(ctx context.Context) {
+				for range 3 {
+					qenv.Wait(ctx, func() bool { return !locked })
+					locked = true
+					holders++
+					most = max(most, holders)
+					qenv.Sleep(ctx, 100*time.Millisecond)
+					holders--
+					locked = false
+				}
+				entered++                                     // and in Wait at once: no scheduling point between
+				notified = append(notified, sig.Wait(ctx, 0)) // no limit: the Notify comes once all three wait
+			})
+		}
+		s.Spawn("notifier", func(ctx context.Context) {
+			qenv.Wait(ctx, func() bool { return entered == 3 }) // every waiter registered: each is notified
+			sig.Notify()
+		})
+		if err := s.Run(time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		if most > 1 {
+			t.Errorf("seed %d: %d holders of the lock at once", seed, most)
+		}
+		for i, n := range notified {
+			if !n {
+				t.Errorf("seed %d: wait %d was notified but reported a timeout", seed, i)
+			}
+		}
+	}
+}
+
+// A delay is the network's, in true time: a late request arrives after its
+// caller's deadline whatever the service's clock does (a fast one once
+// handled it before).
+func TestLateRequestsIgnoreDrift(t *testing.T) {
+	for _, drift := range []int{1, 2} { // fast, slow
+		s := qenv.New(byKind{"fault.rpc.api.delay": {1}, "fault.clock.drift": {drift, drift, drift}})
+		s.Clocks = qenv.Clocks{Drift: 0.25}
+		var at time.Duration
+		svc := qenv.NewService(s, "api", nil, func(ctx context.Context, n int) (int, error) {
+			at = s.Elapsed()
+			return n, nil
+		})
+		s.Spawn("client", func(ctx context.Context) { _, _ = svc.Call(ctx, 1, time.Second) })
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		if at != time.Second+time.Millisecond {
+			t.Errorf("drift option %d: the late request was handled at %v, want just after the deadline", drift, at)
 		}
 	}
 }

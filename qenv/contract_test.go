@@ -17,7 +17,7 @@ import (
 // never does (its first deliveries).
 func TestQueueReorders(t *testing.T) {
 	for _, ordered := range []bool{false, true} {
-		reordered := 0
+		reordered, whole := 0, 0
 		for seed := uint64(0); seed < 200; seed++ {
 			s := qenv.New(qenv.NewSeeded(seed))
 			s.Check = true
@@ -43,6 +43,9 @@ func TestQueueReorders(t *testing.T) {
 				t.Fatal(err)
 			}
 			s.Close()
+			if len(got) == 3 {
+				whole++
+			}
 			for i := 1; i < len(got); i++ {
 				if got[i] < got[i-1] {
 					reordered++
@@ -50,8 +53,8 @@ func TestQueueReorders(t *testing.T) {
 				}
 			}
 		}
-		if (reordered > 0) == ordered {
-			t.Errorf("ordered %v: %d of 200 runs delivered a later message first", ordered, reordered)
+		if (reordered > 0) == ordered || whole < 150 { // runs that saw every message, so the order means something
+			t.Errorf("ordered %v: %d of 200 runs delivered a later message first, %d saw all three", ordered, reordered, whole)
 		}
 	}
 }
@@ -109,12 +112,14 @@ func TestReadSkew(t *testing.T) {
 				})
 			})
 			s.Spawn("reader", func(ctx context.Context) {
-				_ = qenv.Retry(ctx, st, 5, func(tx qenv.Txn) error {
-					x, _ := tx.Get("x")
-					y, _ := tx.Get("y")
-					skewed = skewed || x != y
+				var x, y any
+				if qenv.Retry(ctx, st, 5, func(tx qenv.Txn) error {
+					x, _ = tx.Get("x")
+					y, _ = tx.Get("y")
 					return nil
-				})
+				}) == nil {
+					skewed = x != y // the committed attempt's reads, not an aborted one's
+				}
 			})
 		}
 		n := anomaly(t, c.iso, setup, func(*qenv.Store) bool { return skewed })

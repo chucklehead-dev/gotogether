@@ -17,8 +17,9 @@ client := ledgerpb.NewLedgerClient(srv.Dial())           // a grpc.ClientConnInt
 
 - The generated code is unchanged. Faults are `grpc.<name>.conn`
   (Unavailable before sending), `rpc.<name>.request`
-  (drop/duplicate), `rpc.<name>.delay` (late: processed after the
-  caller's timeout, after its retry; lateDuplicate: a late copy too),
+  (drop/duplicate), `rpc.<name>.delay` (late: just after the caller's
+  timeout; veryLate: a timeout after it, after a retry that backed off;
+  lateDuplicate: a copy that late; slow: late but in time),
   `rpc.<name>.response` (lost), and crashes of
   `proc`. A missing response is `DeadlineExceeded` after `Conn.Timeout`
   of virtual time.

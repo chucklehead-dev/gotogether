@@ -47,17 +47,25 @@ type diskFile struct {
 	data   []byte // what the machine reads: synced and not
 	synced int    // the prefix of data on the disk
 	starts []int  // where each write since the last sync began
-	// lost, if >= 0, is where the writes a failed fsync dropped begin: a
-	// power loss keeps no more than that, whatever a later fsync said
-	lost int
+	// lost are the ranges of writes failed fsyncs dropped: a power loss
+	// loses them, whatever a later fsync said, and keeps what was written
+	// and synced after (a program that writes its data again)
+	lost [][2]int
 }
 
-// durable is the prefix of the file a power loss keeps.
-func (f *diskFile) durable() int {
-	if f.lost >= 0 && f.lost < f.synced {
-		return f.lost
+// durable is what of the file a power loss keeps: the synced writes but
+// those a failed fsync dropped.
+func (f *diskFile) durable() []byte {
+	var out []byte
+	at := 0
+	for _, r := range f.lost {
+		if r[0] >= f.synced {
+			break
+		}
+		out = append(out, f.data[at:r[0]]...)
+		at = min(r[1], f.synced)
 	}
-	return f.synced
+	return append(out, f.data[at:f.synced]...)
 }
 
 // NewDisk returns an empty disk of process p's machine.
@@ -87,28 +95,31 @@ func (d *Disk) crash() {
 		f := d.files[n]
 		switch fault {
 		case "powerLoss":
-			f.data = f.data[:f.durable()]
+			f.data = f.durable()
 		case "tornWrite":
-			if k := len(f.starts); k > 0 && f.durable() == f.synced {
+			if k := len(f.starts); k > 0 && len(f.lost) == 0 {
 				last := f.starts[k-1]
 				f.data = f.data[:last+(len(f.data)-last)/2]
 			} else {
-				f.data = f.data[:f.durable()]
+				f.data = f.durable() // with dropped writes, the power loss is the loss that matters
 			}
 		}
-		f.synced, f.starts, f.lost = len(f.data), nil, -1
+		f.synced, f.starts, f.lost = len(f.data), nil, nil
 	}
 }
 
 // ReadFile is the file's content as the machine sees it, and whether it
-// exists. A corrupt read ("disk.<name>.read") flips its middle byte.
+// exists. A corrupt read ("disk.<name>.read") by one of the simulation's
+// tasks flips its middle byte.
 func (d *Disk) ReadFile(name string) ([]byte, bool) {
 	f, ok := d.files[name]
 	if !ok {
 		return nil, false
 	}
 	out := append([]byte(nil), f.data...)
-	if len(out) > 0 && d.sim.FaultOf(d.read) == "corrupt" {
+	// only a task's read is faulted: a test inspecting the disk after
+	// the run reads it as it is
+	if len(out) > 0 && taskOf(nil) != nil && d.sim.FaultOf(d.read) == "corrupt" {
 		out[len(out)/2] ^= 0xff
 	}
 	return out, true
@@ -118,7 +129,7 @@ func (d *Disk) ReadFile(name string) ([]byte, bool) {
 // synced.
 func (d *Disk) Durable(name string) []byte {
 	if f, ok := d.files[name]; ok {
-		return append([]byte(nil), f.data[:f.durable()]...)
+		return f.durable()
 	}
 	return nil
 }
@@ -126,14 +137,14 @@ func (d *Disk) Durable(name string) []byte {
 // Create opens a file for writing, truncating it (the truncation is
 // durable at once: metadata is not modelled).
 func (d *Disk) Create(name string) *File {
-	d.files[name] = &diskFile{lost: -1}
+	d.files[name] = &diskFile{}
 	return &File{d: d, name: name}
 }
 
 // Append opens a file for writing at its end, creating it.
 func (d *Disk) Append(name string) *File {
 	if d.files[name] == nil {
-		d.files[name] = &diskFile{lost: -1}
+		d.files[name] = &diskFile{}
 	}
 	return &File{d: d, name: name}
 }
@@ -160,14 +171,15 @@ func (f *File) Write(b []byte) (int, error) {
 
 // Sync makes every write so far durable, as fsync does. On ErrIO it does
 // not, and the writes it was to make durable never will be: a power loss
-// keeps no more than what was durable before it, though they stay readable
-// and a later Sync returns nil.
+// drops them, though they stay readable and a later Sync returns nil.
+// Writes after them, synced, survive: a program that writes its data
+// again after the error keeps it.
 func (f *File) Sync() error {
 	Yield(context.Background())
 	df := f.d.files[f.name]
 	if f.d.sim.FaultOf(f.d.sync) == "error" {
-		if df.lost < 0 {
-			df.lost = df.synced
+		if df.synced < len(df.data) {
+			df.lost = append(df.lost, [2]int{df.synced, len(df.data)})
 		}
 		df.synced, df.starts = len(df.data), nil // marked clean: no later fsync writes them
 		return ErrIO

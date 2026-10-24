@@ -72,9 +72,12 @@ the ID. The faithful provider's answer:
   caller gave up (`rpc.dbaas.delay`). If the user deletes the resource
   while its create is delayed, the provider times out, finds nothing by
   the token, and removes the finalizer; then the create lands, and the
-  database leaks. No provider can close that window from its side: the
-  cloud must refuse a request past its caller's deadline, as real APIs
-  bound a request's age. The simulated cloud does (`dbaas.NewSim`).
+  database leaks. No provider can close that window from its side
+  without a bound on a request's age: the simulated cloud refuses a
+  request past its caller's deadline (`dbaas.NewSim`, deadline
+  propagation as gRPC does it), an assumption of the faithful tier. A
+  cloud whose bound is longer (AWS's five minutes for a signed request)
+  needs a provider that waits that long before it trusts "not found".
 
 - **A leak with no crash.** With the cloud's ID as the external name, a
   create whose response is lost is marked failed. That's Crossplane's
