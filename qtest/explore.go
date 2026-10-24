@@ -1013,7 +1013,10 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 		return claimVerdict{ok: true, log: func(t testing.TB) string {
 			// an expected failure: said as the claim it satisfies, so its
 			// conformance FAIL does not read as the test's
-			return fmt.Sprintf("as expected, %s: %s; the first:\n%s", c, x.failingWords(), indent(x.describe(t, r, false), "    "))
+			// the claim's own count, then how the failing runs fail: they
+			// need not be the same (a pending call in a run that also
+			// mismatches)
+			return fmt.Sprintf("as expected, %s: %d of %d runs (failing: %s); the first:\n%s", c, j.n, len(x.Runs), x.failingReasons(), indent(x.describe(t, r, false), "    "))
 		}}
 	case j.ok:
 		return claimVerdict{ok: true}
@@ -1061,6 +1064,9 @@ func (x *Exploration) failingReasons() string {
 	parts := make([]string, len(reasons))
 	for i, r := range reasons {
 		parts[i] = fmt.Sprintf("%d %s", e.FailingBy[r], runsDo(r))
+		if e.FailingBy[r] == 1 {
+			parts[i] = "1 " + runDoes(r)
+		}
 	}
 	return strings.Join(parts, ", ")
 }
@@ -1084,6 +1090,21 @@ func runsDo(r string) string {
 		return "do not settle"
 	}
 	return "have " + r
+}
+
+// runDoes is runsDo for one run: "1 rejects apply", "1 shows a mismatch".
+func runDoes(r string) string {
+	switch {
+	case strings.HasPrefix(r, "rejects "), strings.HasPrefix(r, "violates "), r == "does not settle":
+		return r
+	case strings.HasPrefix(r, "mismatch"):
+		return "shows a " + r
+	case r == "issue":
+		return "has a reconstruction issue (a gap, a cycle, an overlap)"
+	case strings.HasPrefix(r, "evaluation error"):
+		return "hits an " + r
+	}
+	return "has " + r
 }
 
 // describeClaim names what a failing All or None was about.

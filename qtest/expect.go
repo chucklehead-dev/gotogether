@@ -138,10 +138,11 @@ func Violates(invariant string) Expectation {
 }
 
 func violatesAt(invariant, action string) Expectation {
-	desc := fmt.Sprintf("a conforming run that violates %s", invariant)
+	desc := fmt.Sprintf("a violation of %s", invariant)
 	if action != "" {
 		desc += " after " + aStep(action)
 	}
+	desc += " (the run conforming)"
 	return Expectation{desc: desc, check: func(r *validate.Report) bool {
 		for _, a := range r.Actors {
 			if a.Conforms != validate.Pass {
