@@ -58,7 +58,7 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 		// the settles a search is given: those no other recorder worked past
 		// (times 0.5 ms apart, so within RealTimeSlack and beyond it)
 		settles = settlesOf(all)
-		got, cut := resolutions(tr, settles, 1<<20)
+		got, cut, crossing := resolutions(tr, settles, 1<<20)
 		compared++
 		if len(settles) > 0 {
 			settled++
@@ -108,6 +108,13 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 		walk(0, nil)
 		if len(want) == 1 {
 			crossed++ // no call could take effect anywhere
+		}
+		// a call crosses exactly when no allowed placement gives it an effect
+		for i := range pending {
+			never := !slices.ContainsFunc(want, func(p placement) bool { return p[i] >= 0 })
+			if never != slices.Contains(crossing, i) {
+				t.Fatalf("trial %d: call %d never takes effect %v, reported crossing %v", trial, i, never, crossing)
+			}
 		}
 		key := func(ps []placement) []string {
 			var out []string
@@ -186,4 +193,19 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 		t.Errorf("%d orders tried, want the prefixes of one state merged (146; 456 unmerged): %s", tried, msg)
 	}
 	t.Log(msg)
+}
+
+// A pending call recorded before a settle on its recorder, but timed after
+// another recorder's step that its settle precedes: its bounds cross,
+// which only clocks that disagree make, and resolutions says so (the call
+// can have had no effect).
+func TestResolutionsCrossing(t *testing.T) {
+	ms := func(n int) time.Time { return time.Unix(0, 0).Add(time.Duration(n) * time.Millisecond) }
+	p := qtrace.Step{Action: "op", Recorder: "b", Seq: 1, Time: ms(100), Invocation: true}
+	st := qtrace.Step{Action: "settled", Recorder: "b", Seq: 2, Time: ms(0), Settled: true}
+	s := qtrace.Step{Action: "op", Recorder: "a", Seq: 1, Time: ms(50)}
+	got, _, crossing := resolutions(&qtrace.Trace{Steps: []qtrace.Step{s}, Pending: []qtrace.Step{p}}, []qtrace.Step{st}, 100)
+	if !slices.Equal(crossing, []int{0}) || len(got) != 1 || got[0][0] != -1 {
+		t.Errorf("placements %v, crossing %v: want only no effect, and the call crossing", got, crossing)
+	}
 }

@@ -494,7 +494,10 @@ type placement []int
 // resolutions enumerates the placements of pending calls, the fewest
 // effects first, then the earliest, at most budget of them: a call may
 // take effect only after the steps recorded before its invocation.
-func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []placement, cut bool) {
+// crossed are the calls whose bounds cross: invoked after a step recorded
+// after a settle that followed them, which only clocks that disagree
+// make; they take no effect.
+func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []placement, cut bool, crossed []int) {
 	k := len(tr.Pending)
 	from := make([]int, k) // the earliest position each may take effect at
 	to := make([]int, k)   // the latest
@@ -523,6 +526,11 @@ func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []pla
 			}
 		}
 	}
+	for i := range k {
+		if to[i] < from[i] {
+			crossed = append(crossed, i)
+		}
+	}
 	for effects := 0; effects <= k; effects++ {
 		var rec func(i, left int, cur placement) bool
 		rec = func(i, left int, cur placement) bool {
@@ -548,10 +556,10 @@ func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []pla
 			return true
 		}
 		if !rec(0, effects, nil) {
-			return out, true
+			return out, true, crossed
 		}
 	}
-	return out, false
+	return out, false, crossed
 }
 
 // before reports whether a was surely recorded before b: on one recorder,
@@ -651,7 +659,13 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	if a == "" {
 		a = "default"
 	}
-	pls, cut := resolutions(tr, settles, budget)
+	pls, cut, crossed := resolutions(tr, settles, budget)
+	// a call whose bounds cross is resolved as no effect: say so, a clock
+	// problem otherwise silent
+	var note string
+	for _, i := range crossed {
+		note += fmt.Sprintf("; %s was invoked after a step recorded after a settle that followed it (clocks that disagree?): it can have had no effect", tr.Pending[i].String())
+	}
 	orders := make([][]qtrace.Step, len(pls))
 	for i, pl := range pls {
 		// each candidate on one thread of its own, as the run's steps will be
@@ -675,7 +689,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 		at := failedAt(reps[i], len(orders[i]))
 		if at < 0 {
 			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
-				a, len(tr.Pending), i+1, describe(tr, pls[i]))}, false
+				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note}, false
 		}
 		if at > bestAt {
 			best, bestAt = i, at
@@ -686,8 +700,8 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	}
 	if cut {
 		return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conformed in the %d of the budget: "+
-			"no verdict (conformance n/a); the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best]))}, true
+			"no verdict (conformance n/a); the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note}, true
 	}
 	return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conforms (%d tried): "+
-		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best]))}, false
+		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note}, false
 }
