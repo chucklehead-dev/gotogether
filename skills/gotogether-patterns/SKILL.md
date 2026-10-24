@@ -91,10 +91,13 @@ cannot be an invariant as is. Instead:
 A fire-and-forget gossip (`NoRetry`) conforms at every step and fails
 here, after the partition heals.
 
-In a simulation, a binding's `eventually: [converged]` says the same
-without a model action: the val is checked in the last state, and only
-on a run whose `Sim.Settle` found the system quiet (an unsettled run is
-judged by `qtest.Settles()` instead).
+A binding's `eventually: [converged]` says the same without a model
+action: the val is checked in the last state, and only of a run that
+recorded a settle with nothing after it. `Sim.Settle` records one when it
+finds the system quiet (an unsettled run is judged by `qtest.Settles()`
+instead); a real deployment records one with `qobs.Settled(ctx)` where it
+knows the system is quiet. On qenv's native runtime and in gosim, Settle
+cannot tell and records none: the val is not judged there.
 
 Where nobody records `settle` (real Maelstrom), the property holds
 vacuously. Say so in the README, and rely on the environment's own final

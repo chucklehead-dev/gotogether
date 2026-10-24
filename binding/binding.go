@@ -55,9 +55,11 @@ type Binding struct {
 	Invariants []string `yaml:"invariants"`
 	// Eventually are vals of the model that must hold when the run ends
 	// (no work pending: `outbox.size() == 0`): liveness obligations,
-	// checked in the last observed state only. qtest judges them only on a
-	// run whose system settled (Sim.Settle), where pending work is a
-	// failure to finish rather than a run cut short.
+	// checked in the last observed state only, and only of a trace that
+	// recorded its system settled (a settle record: qenv's Sim.Settle, or
+	// qobs.Settled), where pending work is a failure to finish rather than
+	// a run cut short. Every check honours it: explorations, Record,
+	// Validate, qhegel and the CLI.
 	Eventually []string `yaml:"eventually"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.

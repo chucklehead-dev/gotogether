@@ -88,6 +88,23 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 				"the order shown got furthest. A step the model rejects in every order is a bug (a stale read, a lost write), unless the invocation times are wrong", a, len(o), tried)})
 		}
 		out = append(out, o...)
+		// what is no step goes on after the order, on its recorder: the
+		// calls never completed, then the settle, if the run recorded one
+		rec := len(o)
+		if len(o) > 0 {
+			rec = int(o[len(o)-1].Seq)
+		}
+		after := func(s qtrace.Step) {
+			rec++
+			s.Recorder, s.Thread, s.Seq, s.Actor = "linearized:"+tr.Actor, "linearized", uint64(rec), tr.Actor
+			out = append(out, s)
+		}
+		for _, p := range tr.Pending {
+			after(p)
+		}
+		if tr.Settled {
+			after(qtrace.Step{Action: "settled", Settled: true})
+		}
 	}
 	return out, issues, undecided, kept
 }

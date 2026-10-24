@@ -101,14 +101,20 @@ next.
   math/rand and multi-case select in simulated code (the self-check
   catches what they do, not where).
 - **Z7. Liveness (S, then M).** Done: Settle reports whether it
-  settled (`*Unsettled`, `qtest.Settles()`); a binding's `eventually`
-  vals, judged in a settled run's last state; a fair settle (tasks in
-  turn); `Sim.SettleCore` (faults go on outside a core, VOPR's liveness
-  mode); calls recorded at invocation (`qobs.Invoke`, `Call.Done`,
-  pending calls in reports, `qtest.Completes()`). Left: `//quint:action`
+  settled (`*Unsettled`, a stuck settle included; `qtest.Settles()`)
+  and records a settle in the trace (`qobs.Settled` for a real
+  deployment); a binding's `eventually` vals, judged in the last state
+  of a trace that recorded a settle, by every check (not in virtual time
+  across a run: a val of the last state); a fair settle (tasks in turn);
+  `Sim.SettleCore` (faults go on outside a core, VOPR's liveness mode);
+  calls recorded at invocation (`qobs.Invoke`, `Call.Done`, pending
+  calls in reports, `qtest.Completes()`). `Run(d)` ending at its horizon
+  with tasks waiting judges nothing, on purpose: a run's faulty phase
+  ends there, and only Settle asks for quiet. Left: `//quint:action`
   advice recording at entry (Invoke) as well as on return; an example
   under SettleCore (a quorum whose convergence is stated of the core);
-  what a pending call may have done is Z8's ambiguous steps.
+  eventual properties in connect's MBT; what a pending call may have
+  done is Z8's ambiguous steps.
 - **Z8. Search and scale (M–L).** PCT as a chooser; a footprint-based
   reduction for Exhaust (the doubles know what each seam touches);
   Linearize per key (Porcupine's partitioning); exploration steered by

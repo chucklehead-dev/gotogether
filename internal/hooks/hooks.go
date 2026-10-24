@@ -255,22 +255,3 @@ func PanicStackOf(ctx context.Context) (*TaskPanic, bool) {
 	dst, ok := ctx.Value(panicKey{}).(*TaskPanic)
 	return dst, ok
 }
-
-// Settled is where a run learns that its simulation settled (qenv's
-// Settle found the system quiet): qtest judges a binding's eventual
-// properties only on such a run.
-type Settled struct{ Yes bool }
-
-type settledKey struct{}
-
-// WithSettled returns ctx with s for a simulation made with it (its
-// chooser's context) to mark.
-func WithSettled(ctx context.Context, s *Settled) context.Context {
-	return context.WithValue(ctx, settledKey{}, s)
-}
-
-// SettledOf is ctx's Settled, if it has one.
-func SettledOf(ctx context.Context) (*Settled, bool) {
-	s, ok := ctx.Value(settledKey{}).(*Settled)
-	return s, ok
-}

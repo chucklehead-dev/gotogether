@@ -70,6 +70,11 @@ type Result struct {
 	// them; OK does not, since a crashed caller's call is pending by right.
 	Pending []qtrace.Step
 
+	// Settled: the trace recorded that its system settled
+	// (qtrace.Trace.Settled), so the binding's eventual properties were
+	// judged; otherwise they are not among Invariants.
+	Settled bool
+
 	// Constants are the instance checked against ("NAME = expr"), printed
 	// with a failure: a run that fails at its first step is most often
 	// checked against the wrong instance.
@@ -155,7 +160,7 @@ func validateTrace(ctx context.Context, b *binding.Binding, m *binding.Model, t 
 	if err != nil {
 		return nil, err
 	}
-	res := &Result{Actor: t.Actor, Issues: t.Issues, Pending: t.Pending, Constants: p.ConstantList()}
+	res := &Result{Actor: t.Actor, Issues: t.Issues, Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
 	return res, evaluate(ctx, b.ModuleSpec(p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
 }
 
@@ -249,7 +254,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 		for i, g := range gs {
 			evFailed := false
 			for _, n := range g.Tests.Eventually {
-				evFailed = evFailed || verdicts[n] != Pass
+				evFailed = evFailed || res[i].Settled && verdicts[n] != Pass
 			}
 			if verdicts[g.Tests.All] != Pass || evFailed {
 				detailed = append(detailed, i)
@@ -262,7 +267,9 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 				r.Invariants = append(r.Invariants, InvariantResult{Name: inv, Verdict: Pass})
 			}
 			for _, ev := range ms.Eventually {
-				r.Invariants = append(r.Invariants, InvariantResult{Name: EventuallyName(ev), Verdict: Pass})
+				if r.Settled {
+					r.Invariants = append(r.Invariants, InvariantResult{Name: EventuallyName(ev), Verdict: Pass})
+				}
 			}
 			if !opt.NoITF {
 				itf := filepath.Join(opt.Dir, base+"_"+g.Tests.All+".itf.json")
@@ -378,6 +385,9 @@ func fill(g *binding.Generated, output, qnt, itfPattern string, invariants, even
 		res.Invariants = append(res.Invariants, ir)
 	}
 	for _, ev := range eventually {
+		if !res.Settled {
+			break // a run cut short has work pending by right
+		}
 		name := g.Tests.Eventually[ev]
 		ir := InvariantResult{Name: EventuallyName(ev), Verdict: verdicts[name], Failure: failures[name]}
 		if res.Conforms != Pass {

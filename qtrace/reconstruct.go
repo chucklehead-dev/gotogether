@@ -17,6 +17,12 @@ type Trace struct {
 	// completed, in recording order: operations invoked whose outcome no
 	// step says (a caller that crashed, or a call never answered).
 	Pending []Step
+	// Settled: the run recorded that its system settled (qobs.Settled; a
+	// qenv.Sim.Settle that found it quiet) with nothing recorded after it
+	// by that recorder, and this actor took a step. Only then are the
+	// binding's eventual properties judged: a run cut short has work
+	// pending by right.
+	Settled bool
 }
 
 // Issue is something the reconstructor could not make sense of. Severity
@@ -99,18 +105,31 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 	}
 
-	// 3. Invocation records are no steps: one whose completion names it
-	// (Call, same recorder) is done with, any other is pending.
+	// 3. Invocation and settle records are no steps: an invocation whose
+	// completion names it (Call, same recorder) is done with, any other is
+	// pending; a settle settles the run if its recorder recorded nothing
+	// after it (seq), whatever its actor.
 	completed := map[rk]bool{}
+	lastSettle, last := map[string]uint64{}, map[string]uint64{}
 	for _, s := range uniq {
 		if s.Call != 0 {
 			completed[rk{s.Recorder, s.Call}] = true
 		}
+		if s.Settled {
+			lastSettle[s.Recorder] = max(lastSettle[s.Recorder], s.Seq)
+		} else {
+			last[s.Recorder] = max(last[s.Recorder], s.Seq)
+		}
+	}
+	settled := false
+	for rec, seq := range lastSettle {
+		settled = settled || seq > last[rec]
 	}
 	pending := map[string][]Step{}
 	steps = uniq[:0:0]
 	for _, s := range uniq {
 		switch {
+		case s.Settled:
 		case !s.Invocation:
 			steps = append(steps, s)
 		case !completed[rk{s.Recorder, s.Seq}]:
@@ -137,6 +156,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	for _, a := range actors {
 		t := order(a, byActor[a])
 		t.Pending = pending[a]
+		t.Settled = settled && len(t.Steps) > 0
 		sort.SliceStable(t.Pending, func(i, j int) bool { return t.Pending[i].Time.Before(t.Pending[j].Time) })
 		for _, m := range gapActors[a] {
 			t.Issues = append(t.Issues, Issue{"error", "gap", m})

@@ -32,6 +32,9 @@ func (s *Step) Attributes() map[string]any {
 	if s.Call != 0 {
 		m[KeyCall] = int64(s.Call)
 	}
+	if s.Settled {
+		m[KeySettled] = true
+	}
 	for k, v := range s.Args {
 		m[PrefixArg+k] = v
 	}

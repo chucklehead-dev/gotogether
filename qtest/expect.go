@@ -44,11 +44,24 @@ func Conforms() Expectation {
 	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, ""}
 }
 
-// Settles: the system settled (qenv.Sim.Settle found it quiet), whatever
-// its steps; a run that does not settle does not conform either.
-// Over runs, None(Settles()) states a livelock.
+// Settles: the system settled, whatever its steps: the run recorded a
+// settle (qenv.Sim.Settle found it quiet, or qobs.Settled) with nothing
+// after it. A run that never settles (no Settle, a Settle whose error was
+// dropped, the native runtime, which cannot tell) does not; one that
+// does not settle does not conform either. Over runs, None(Settles())
+// states a livelock.
 func Settles() Expectation {
-	return Expectation{"a system that settles", func(r *validate.Report) bool { return r.Unsettled == "" }, true, nil, nil, ""}
+	return Expectation{"a system that settles", func(r *validate.Report) bool {
+		if r.Unsettled != "" {
+			return false
+		}
+		for _, a := range r.Actors {
+			if a.Settled {
+				return true
+			}
+		}
+		return false
+	}, true, nil, nil, ""}
 }
 
 // Completes: every operation recorded at its invocation (qobs.Invoke)

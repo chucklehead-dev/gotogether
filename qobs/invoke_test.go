@@ -10,8 +10,10 @@ import (
 )
 
 // An invocation is written when it happens, and its completion names it:
-// read back, the completed call is one step (with its invocation's time
-// and keys) and the one never completed is pending, no step. A second
+// read back, the completed call is one step (with its invocation's keys;
+// a real-time interval only with "invoked", which would make every
+// simulated run's cache key its own) and the one never completed is
+// pending, no step. A second
 // Done records nothing; a nil call (no recorder) is inert.
 func TestInvokeAndDone(t *testing.T) {
 	var buf bytes.Buffer
@@ -38,8 +40,8 @@ func TestInvokeAndDone(t *testing.T) {
 	}
 	tr := traces[0]
 	if len(tr.Steps) != 1 || tr.Steps[0].Action != "deposit" || tr.Steps[0].Args["amount"] != int64(5) ||
-		tr.Steps[0].Obs["balance"] != int64(5) || tr.Steps[0].Invoked.IsZero() || tr.Steps[0].Outcome != "ok" {
-		t.Errorf("steps %+v, want deposit(amount=5) completed with its invocation's time", tr.Steps)
+		tr.Steps[0].Obs["balance"] != int64(5) || !tr.Steps[0].Invoked.IsZero() || tr.Steps[0].Outcome != "ok" {
+		t.Errorf("steps %+v, want deposit(amount=5) completed, with no real-time interval unless asked", tr.Steps)
 	}
 	if len(tr.Pending) != 1 || tr.Pending[0].Action != "withdraw" || tr.Pending[0].Args["amount"] != int64(2) {
 		t.Errorf("pending %+v, want withdraw(amount=2)", tr.Pending)

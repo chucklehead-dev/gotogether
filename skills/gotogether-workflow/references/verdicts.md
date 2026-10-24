@@ -30,7 +30,7 @@ together (`Exploration.Expect`):
 | an expectation alone, e.g. `qtest.Rejects("ship")` | some run shows it (the run is logged) |
 | `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
-| `qtest.Settles()` | every run's system settled (`Sim.Settle` found it quiet); `None(qtest.Settles())` states a livelock |
+| `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock |
 | `qtest.Some(a, b)` | one run shows both |
 | `qtest.All(a)` | every run shows it |
 | `qtest.None(a)` | no run shows it |

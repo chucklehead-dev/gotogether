@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -190,9 +192,26 @@ func TestEventually(t *testing.T) {
 		}}
 	}
 	funded := validate.EventuallyName("funded")
-	sys(true, 0).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms())
+	held := sys(true, 0).Explore(t, ExploreConfig{Seeds: 1})
+	held.Expect(t, Conforms(), All(Settles()))
+	if invs := held.Runs[0].Report.Actors[0].Invariants; !slices.ContainsFunc(invs, func(i validate.InvariantResult) bool { return i.Name == funded && i.Verdict == validate.Pass }) {
+		t.Errorf("a settled run's eventual property was not judged: %v", invs)
+	}
 	sys(true, 10).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, All(Violates(funded)))
-	sys(false, 10).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms()) // never settled: not judged
+	sys(false, 10).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms(), None(Settles())) // never settled: not judged
+	// a recorded run is judged as an exploration's: once it records a settle
+	scenario := func(settle bool) func(*qobs.Recorder) {
+		return func(r *qobs.Recorder) {
+			ctx := context.Background()
+			r.Record(ctx, "deposit", nil, "amount", 10, "obs.balance", 10)
+			r.Record(ctx, "withdraw", nil, "amount", 10, "obs.balance", 0)
+			if settle {
+				r.Settled(ctx)
+			}
+		}
+	}
+	Record(t, "../validate/testdata/funds.binding.yaml", scenario(false)).Expect(t, Conforms())
+	Record(t, "../validate/testdata/funds.binding.yaml", scenario(true)).Expect(t, Violates(funded), Settles())
 }
 
 // A scenario that fails the test from its run's goroutine (t.Fatal in
@@ -387,5 +406,9 @@ func TestInvokedNeverCompleted(t *testing.T) {
 	if sum := x.Runs[0].Report.Summary(); !strings.Contains(sum, "invoked, never completed: withdraw(amount=3)") {
 		t.Errorf("the report does not name the pending call:\n%s", sum)
 	}
-	sys(false).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms(), Completes())
+	done := sys(false).Explore(t, ExploreConfig{Seeds: 1})
+	done.Expect(t, Conforms(), Completes())
+	if n := len(slices.DeleteFunc(slices.Clone(done.Runs[0].Steps), func(s qtrace.Step) bool { return !s.Invocation })); n != 2 {
+		t.Errorf("%d invocation records, want one per call: %v", n, done.Runs[0].Steps)
+	}
 }

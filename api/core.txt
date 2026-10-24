@@ -687,8 +687,10 @@ type Txn interface
 type Unsettled struct
     field After time.Duration
     field Tasks []string
+    field Stuck error
     method (*Unsettled) Error() string
     method (*Unsettled) Is(target error) bool
+    method (*Unsettled) Unwrap() error
 type Wrapper = choice.Wrapper
     embed Chooser
     Unwrap() Chooser
@@ -1011,6 +1013,7 @@ func NewRecorder(sink Sink, opts ...Option) *Recorder
 func NewSlogHandler(next slog.Handler) *SlogHandler
 func Record(ctx context.Context, action string, err error, kv ...any)
 func SetGlobal(r *Recorder)
+func Settled(ctx context.Context)
 func Thread(ctx context.Context) context.Context
 func WithActor(a string) Option
 func WithID(id string) Option
@@ -1042,6 +1045,7 @@ type Recorder struct
     method (*Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call
     method (*Recorder) Issues() []string
     method (*Recorder) Record(ctx context.Context, action string, err error, kv ...any)
+    method (*Recorder) Settled(ctx context.Context)
 type Sink interface
     Record(ctx context.Context, s *qtrace.Step)
 type SlogHandler struct
@@ -1301,6 +1305,7 @@ const KeyOutcome = "quint.outcome"
 const KeyProcess = "quint.process"
 const KeyRecorder = "quint.recorder"
 const KeySeq = "quint.seq"
+const KeySettled = "quint.settled"
 const KeyThread = "quint.thread"
 const KeyTime = "quint.time_unix_nano"
 const PrefixArg = "quint.arg."
@@ -1344,6 +1349,7 @@ type Step struct
     field Invoked time.Time
     field Invocation bool
     field Call uint64
+    field Settled bool
     field Args map[string]any
     field Obs map[string]any
     field Order map[string]int64
@@ -1351,6 +1357,7 @@ type Step struct
     method (*Step) Attributes() map[string]any
     method (*Step) Get(name string) (any, bool)
     method (*Step) MarshalLine() ([]byte, error)
+    method (*Step) Model() bool
     method (*Step) String() string
 type TornTail struct
     field Line int
@@ -1362,6 +1369,7 @@ type Trace struct
     field Processes []string
     field Issues []Issue
     field Pending []Step
+    field Settled bool
 
 == github.com/chucklehead-dev/gotogether/skills
 func FS() fs.FS
@@ -1434,6 +1442,7 @@ type Result struct
     field Invariants []InvariantResult
     field Issues []qtrace.Issue
     field Pending []qtrace.Step
+    field Settled bool
     field Constants []string
     field Module string
     field ITF string

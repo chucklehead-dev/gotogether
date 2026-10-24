@@ -41,6 +41,10 @@ const (
 	// KeyCall. An invocation never completed is in Trace.Pending.
 	KeyInvocation = "quint.invocation"
 	KeyCall       = "quint.call" // on a completion: its invocation record's seq (same recorder)
+	// KeySettled marks a settle record (qobs.Settled): the system was quiet
+	// then. A trace whose recorder's last record is one is Trace.Settled,
+	// and only such a trace's eventual properties are judged.
+	KeySettled = "quint.settled"
 
 	PrefixArg   = "quint.arg."   // an observed parameter of the action
 	PrefixObs   = "quint.obs."   // an observed projection of the post-state
@@ -68,11 +72,18 @@ type Step struct {
 	// keeps it in Trace.Pending if there is none.
 	Invocation bool
 	Call       uint64
-	Args       map[string]any // string, int64, bool or float64
-	Obs        map[string]any
-	Order      map[string]int64
-	Source     string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	// Settled marks a settle record (KeySettled), not a step.
+	Settled bool
+	Args    map[string]any // string, int64, bool or float64
+	Obs     map[string]any
+	Order   map[string]int64
+	Source  string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
 }
+
+// Model reports whether s is a model step: not an invocation record or a
+// settle record, which Reconstruct takes out of the steps. A sink that
+// counts or replays steps skips the others.
+func (s *Step) Model() bool { return !s.Invocation && !s.Settled }
 
 // Get returns an argument or, with the "obs." prefix, an observation.
 func (s *Step) Get(name string) (any, bool) {
@@ -135,6 +146,9 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 	if len(layers) > 0 {
 		if v, ok := layers[0][KeyInvocation]; ok {
 			s.Invocation = v == true || fmt.Sprint(v) == "true"
+		}
+		if v, ok := layers[0][KeySettled]; ok {
+			s.Settled = v == true || fmt.Sprint(v) == "true"
 		}
 		if v, ok := layers[0][KeyCall]; ok {
 			n, err := toInt(v)

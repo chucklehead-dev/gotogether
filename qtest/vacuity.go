@@ -127,7 +127,7 @@ func (x *Exploration) findVacuous() vacuityResult {
 		fmt.Fprintf(&defs, "\nval %s = not(%s)", n, ante[inv])
 	}
 	b.Defs = defs.String()
-	b.Invariants = nil
+	b.Invariants, b.Eventually = nil, nil // the witnesses alone: an eventual failure is no witness
 	for _, inv := range invs {
 		b.Invariants = append(b.Invariants, "gotogetherNot_"+inv)
 	}

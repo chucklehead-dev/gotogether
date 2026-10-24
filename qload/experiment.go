@@ -167,10 +167,12 @@ type counter struct {
 }
 
 func (c *counter) Record(ctx context.Context, s *qtrace.Step) {
-	c.mu.Lock()
-	c.n[s.Action]++
-	c.n[s.Action+"/"+s.Outcome]++
-	c.mu.Unlock()
+	if s.Model() { // an invocation is no goodput, nor a settle
+		c.mu.Lock()
+		c.n[s.Action]++
+		c.n[s.Action+"/"+s.Outcome]++
+		c.mu.Unlock()
+	}
 	if c.next != nil {
 		c.next.Record(ctx, s)
 	}

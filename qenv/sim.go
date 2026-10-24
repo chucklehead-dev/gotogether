@@ -16,6 +16,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/runkeys"
 	"github.com/chucklehead-dev/gotogether/qenv/internal/choice"
+	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qrun"
 )
 
@@ -980,7 +981,11 @@ func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 	}
 	s.net.healAll() // a whole network to recover on
 	defer func() { s.settling, s.core = false, nil }()
-	if err := s.Run(d); err != nil {
+	if err := s.Run(d); errors.Is(err, ErrStuck) {
+		// waits nothing will end: not settled, whether or not a daemon's
+		// timer keeps time moving (which makes the same stall Unsettled)
+		return &Unsettled{After: d, Tasks: s.pending(), Stuck: err}
+	} else if err != nil {
 		return err
 	}
 	if s.nat != nil {
@@ -989,8 +994,8 @@ func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 	if pending := s.pending(); len(pending) > 0 {
 		return &Unsettled{After: d, Tasks: pending}
 	}
-	if m, ok := hooks.SettledOf(s.base); ok {
-		m.Yes = true // the run's eventual properties apply
+	if r := qobs.From(s.base); r != nil {
+		r.Settled(s.base) // the run's eventual properties apply, if nothing is recorded after it
 	}
 	return nil
 }
@@ -1003,9 +1008,18 @@ var ErrUnsettled = errors.New("qenv: not settled")
 type Unsettled struct {
 	After time.Duration
 	Tasks []string
+	// Stuck is the ErrStuck error when no task could run and nothing was
+	// left to wake the waiting ones (Unwrap): a stall, judged as one.
+	Stuck error
 }
 
+// Unwrap is Stuck.
+func (u *Unsettled) Unwrap() error { return u.Stuck }
+
 func (u *Unsettled) Error() string {
+	if u.Stuck != nil {
+		return fmt.Sprintf("qenv: not settled: %v", u.Stuck)
+	}
 	return fmt.Sprintf("qenv: not settled after %v: tasks still at work or waiting (mark one that may wait forever with qenv.Daemon; "+
 		"a longer settle, or a fix, for one that should have finished):\n  %s", u.After, strings.Join(u.Tasks, "\n  "))
 }

@@ -18,8 +18,17 @@ func (k *Keyer) Step(s *Step) string {
 	if !s.Invoked.IsZero() {
 		times = fmt.Sprintf("|%d-%d", s.Invoked.UnixNano(), s.Time.UnixNano())
 	}
-	return fmt.Sprintf("%s|r%d|p%d|t%d|#%d|%s|%q|%s|%v|%v%s;", s.Actor, k.id("r", s.Recorder), k.id("p", s.Process), k.id("t", s.Thread),
-		s.Seq, s.Outcome, s.Error, s.String(), s.Obs, s.Order, times)
+	var rec string // an invocation (and its completion) or settle record is no step
+	switch {
+	case s.Invocation:
+		rec = "|invoked"
+	case s.Settled:
+		rec = "|settled"
+	case s.Call != 0:
+		rec = fmt.Sprintf("|call%d", s.Call)
+	}
+	return fmt.Sprintf("%s|r%d|p%d|t%d|#%d|%s|%q|%s|%v|%v%s%s;", s.Actor, k.id("r", s.Recorder), k.id("p", s.Process), k.id("t", s.Thread),
+		s.Seq, s.Outcome, s.Error, s.String(), s.Obs, s.Order, times, rec)
 }
 
 func (k *Keyer) id(kind, name string) int {

@@ -122,6 +122,12 @@ type stepSink struct {
 }
 
 func (s stepSink) Record(ctx context.Context, st *qtrace.Step) {
+	if !st.Model() { // an invocation or settle record: its blocks go to the task's next step
+		if s.next != nil {
+			s.next.Record(ctx, st)
+		}
+		return
+	}
 	task, _ := qrun.Get(ctx, runkeys.Task)
 	s.c.mu.Lock()
 	p := s.c.pending[task]

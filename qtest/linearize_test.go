@@ -62,3 +62,42 @@ func TestLinearizeKeepsGaps(t *testing.T) {
 		t.Fatalf("a gap passed: %s", run.Report.Summary())
 	}
 }
+
+// A linearized history keeps what is no step: a call never completed is
+// still pending (Completes fails), and a settle still lets the eventual
+// properties be judged, as without Linearize.
+func TestLinearizeKeepsPendingAndSettle(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	steps := []qtrace.Step{
+		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Invoked: at(0), Time: at(10),
+			Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
+		{Action: "withdraw", Recorder: "a", Seq: 2, Thread: "a", Invocation: true, Time: at(11),
+			Args: map[string]any{"amount": int64(10)}},
+		{Action: "settled", Recorder: "a", Seq: 3, Settled: true, Time: at(12)},
+	}
+	funds := "../validate/testdata/funds.binding.yaml"
+	for _, opts := range [][]Option{nil, {Linearize()}} {
+		run := Validate(t, funds, steps, opts...)
+		run.Expect(t, Conforms(), Settles())
+		if a := run.Report.Actors[0]; Completes().Holds(run) || len(a.Pending) != 1 || !a.Settled {
+			t.Errorf("%d options: pending %v, settled %v", len(opts), a.Pending, a.Settled)
+		}
+	}
+	// the withdrawal completed: the account is empty when the run settles
+	done := append(steps[:2:2], qtrace.Step{Action: "withdraw", Recorder: "a", Seq: 3, Thread: "a", Call: 2, Time: at(13),
+		Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(0)}},
+		qtrace.Step{Action: "settled", Recorder: "a", Seq: 4, Settled: true, Time: at(14)})
+	for _, opts := range [][]Option{nil, {Linearize()}} {
+		Validate(t, funds, done, opts...).Expect(t, Completes(), Violates(validate.EventuallyName("funded")))
+	}
+	// with a step after the settle, the run did not end settled: nothing judged
+	late := append(append([]qtrace.Step(nil), done...), qtrace.Step{Action: "deposit", Recorder: "a", Seq: 5, Thread: "a", Time: at(15),
+		Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}})
+	run := Validate(t, funds, late)
+	run.Expect(t, Conforms())
+	if Settles().Holds(run) {
+		t.Error("Settles held of a run that went on after its settle")
+	}
+}

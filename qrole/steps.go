@@ -35,9 +35,11 @@ func NewMetricsSink(meter metric.Meter, next qobs.Sink) (*MetricsSink, error) {
 
 // Record counts s and passes it on.
 func (m *MetricsSink) Record(ctx context.Context, s *qtrace.Step) {
-	m.steps.Add(ctx, 1, metric.WithAttributes(
-		attribute.String(qtrace.KeyAction, s.Action),
-		attribute.String(qtrace.KeyOutcome, s.Outcome)))
+	if s.Model() { // invocation and settle records are no steps
+		m.steps.Add(ctx, 1, metric.WithAttributes(
+			attribute.String(qtrace.KeyAction, s.Action),
+			attribute.String(qtrace.KeyOutcome, s.Outcome)))
+	}
 	if m.Next != nil {
 		m.Next.Record(ctx, s)
 	}

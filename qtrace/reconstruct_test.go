@@ -123,10 +123,13 @@ func TestDomainClockGroups(t *testing.T) {
 
 // An actor whose only operation was invoked and never completed still
 // has a trace, with no steps and that call pending; the invocation's seq
-// counts, so no gap is reported.
+// counts, so no gap is reported. A settle after it does not settle that
+// trace: an actor that took no step has no eventual property to judge (its
+// state is the model's initial one, whatever its call did).
 func TestReconstructOnlyPending(t *testing.T) {
-	traces, issues := Reconstruct([]Step{{Action: "withdraw", Seq: 1, Recorder: "r", Actor: "a", Invocation: true, Time: time.Unix(1, 0)}})
-	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 0 || len(traces[0].Pending) != 1 || len(traces[0].Issues) > 0 {
+	traces, issues := Reconstruct([]Step{{Action: "withdraw", Seq: 1, Recorder: "r", Actor: "a", Invocation: true, Time: time.Unix(1, 0)},
+		{Action: "settled", Seq: 2, Recorder: "r", Actor: "a", Settled: true, Time: time.Unix(2, 0)}})
+	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 0 || len(traces[0].Pending) != 1 || len(traces[0].Issues) > 0 || traces[0].Settled {
 		t.Fatalf("traces %+v, issues %v", traces, issues)
 	}
 }

@@ -286,13 +286,12 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 // whose call was never answered, says "invoked, never completed"
 // (qtrace.Trace.Pending, a report's pending calls) instead of nothing.
 type Call struct {
-	r       *Recorder
-	ctx     context.Context
-	action  string
-	kv      []any
-	seq     uint64
-	invoked time.Time
-	done    atomic.Bool
+	r      *Recorder
+	ctx    context.Context
+	action string
+	kv     []any
+	seq    uint64
+	done   atomic.Bool
 }
 
 // Invoke records the invocation of an operation through the context's
@@ -319,30 +318,63 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 	if r == nil {
 		return nil
 	}
-	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), kv...), invoked: time.Now()}
+	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), kv...)}
 	if hooks.Discarding() {
 		return c // interrupted work: its Done, if any, goes to Interrupted
 	}
-	s, ok := r.step(ctx, action, nil, c.kv)
-	if !ok {
-		return c
+	var keys []any // "when" is the completion's: the invocation is recorded whatever
+	for i := 0; i+1 < len(c.kv); i += 2 {
+		if c.kv[i] != "when" {
+			keys = append(keys, c.kv[i], c.kv[i+1])
+		}
 	}
+	s, _ := r.step(ctx, action, nil, keys)
 	s.Invocation, s.Outcome = true, ""
 	c.seq = r.seq.Add(1)
-	s.Seq, s.Time = c.seq, c.invoked
+	s.Seq, s.Time = c.seq, time.Now()
 	r.sink.Record(ctx, s)
 	return c
 }
 
 // Done records the call's completed step: the invocation's keys, then
-// kv (Record's keys: obs.*, outcome, ...), with err its outcome and the
-// invocation's time its Invoked. A second Done does nothing.
+// kv (Record's keys: obs.*, outcome, "invoked" for a real-time interval,
+// ...), with err its outcome. It always records: "when" keys, which would
+// leave the call pending, are dropped. A second Done does nothing.
 func (c *Call) Done(err error, kv ...any) {
 	if c == nil || !c.done.CompareAndSwap(false, true) {
 		return
 	}
-	all := append(append(append([]any(nil), c.kv...), kv...), "invoked", c.invoked)
+	var all []any
+	for _, l := range [][]any{c.kv, kv} {
+		for i := 0; i+1 < len(l); i += 2 {
+			if l[i] != "when" {
+				all = append(all, l[i], l[i+1])
+			}
+		}
+	}
 	c.r.record(c.ctx, c.action, err, all, c.seq)
+}
+
+// Settled records, through the context's recorder (found as Record finds
+// it), that the system has settled: nothing is pending, so the binding's
+// eventual properties apply to the run if nothing is recorded after it.
+// qenv.Sim.Settle records it when it finds the system quiet; a real
+// deployment records it where it knows (every client done, queues
+// drained). A no-op with no recorder.
+func Settled(ctx context.Context) {
+	if r := From(ctx); r != nil {
+		r.Settled(ctx)
+	}
+}
+
+// Settled records that the system has settled (the package's Settled).
+func (r *Recorder) Settled(ctx context.Context) {
+	if r == nil || hooks.Discarding() {
+		return
+	}
+	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Settled: true}
+	s.Seq, s.Time = r.seq.Add(1), time.Now()
+	r.sink.Record(ctx, s)
 }
 
 // step builds a step from Record's arguments; false if "when" excludes it.

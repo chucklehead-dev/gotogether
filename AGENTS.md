@@ -247,9 +247,11 @@ working there:
   A settle takes runnable tasks in turn (fair), not choice 0;
   `SettleCore` goes on faulting outside its core (a double's fault
   kinds carry its process, a nemesis the processes it touches).
-  A binding's `eventually` vals are checked in a run's last state, and
-  qtest drops their results from a run that did not settle: a run cut
-  short has work pending by right.
+  A settle is a record in the trace (`Sim.Settle`, `qobs.Settled`): a
+  binding's `eventually` vals are judged in the last state of a trace
+  whose recorder recorded nothing after one (`Trace.Settled`), by every
+  check, never otherwise (a run cut short has work pending by right).
+  `Run(d)` ending at its horizon judges nothing; only Settle says.
 - `qobs.Invoke` writes an invocation record (a step with `Invocation`,
   its own seq) and `Call.Done` the step, whose `Call` names it:
   `qtrace.Reconstruct` drops the records, keeping those never completed

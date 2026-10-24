@@ -411,8 +411,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	r := qobs.NewRecorder(sink, c.Recorder...)
 	var task hooks.TaskPanic
 	var esc hooks.Escapes // steps from goroutines its tasks started with `go`: this run's, not a parallel test's
-	var settled hooks.Settled
-	ctx = hooks.WithSettled(hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc), &settled)
+	ctx = hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
@@ -443,7 +442,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if n, first := esc.Steps(); err == nil && n > 0 {
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
-	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, settled: settled.Yes}
+	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -1142,6 +1141,9 @@ func (x *Exploration) recheck(t testing.TB, r *Run) {
 	ch := *x.checker
 	ch.Options.Dir = filepath.Join(x.dir, "recheck", strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
 	rep, err := ch.Check(context.Background(), r.Steps)
+	if rep != nil {
+		rep.Unsettled = r.Unsettled // judged as the run's report was (adjust)
+	}
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	// the same verdict, or the old report stands (a backend may word a

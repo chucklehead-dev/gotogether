@@ -105,6 +105,13 @@ Added to the core since api/core.txt was first recorded:
 - `Sim.Settle` takes runnable tasks in turn (a task spinning until
   another acts no longer starves it), and `Sim.SettleCore(d, core...)`
   keeps faulting every process outside a core while the core must finish.
+- A settle is in the trace: `Sim.Settle` records one (a step with
+  `Settled`, `quint.settled`) when it finds the system quiet, and
+  `qobs.Settled(ctx)` records one where a deployment knows. A trace whose
+  recorder recorded nothing after it is `qtrace.Trace.Settled`
+  (`validate.Result.Settled`); only its eventual properties are judged,
+  by every check, and `qtest.Settles()` requires it. A Settle that
+  finds the system stuck returns an `*Unsettled` too (`Unsettled.Stuck`).
 - A binding's `eventually` names vals that must hold when a run ends
   (liveness obligations: no work pending), checked in its last state;
   a result names each `validate.EventuallyName(val)`, and an exploration
