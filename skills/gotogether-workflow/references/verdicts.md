@@ -27,7 +27,8 @@ together (`Exploration.Expect`):
 | Claim | Holds when |
 |---|---|
 | an expectation alone, e.g. `qtest.Rejects("ship")` | some run shows it (the run is logged) |
-| `qtest.Conforms()` | every run conforms |
+| `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle |
+| `qtest.Settles()` | every run's system settled (`Sim.Settle` found it quiet); `None(qtest.Settles())` states a livelock |
 | `qtest.Some(a, b)` | one run shows both |
 | `qtest.All(a)` | every run shows it |
 | `qtest.None(a)` | no run shows it |

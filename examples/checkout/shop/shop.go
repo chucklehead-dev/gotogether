@@ -241,6 +241,7 @@ func (s *Shop) Cancel(ctx context.Context, id string) error {
 // RunRelay publishes the outbox forever: read, publish, delete. A crash
 // between publishing and deleting publishes again (at least once).
 func (s *Shop) RunRelay(ctx context.Context) {
+	qenv.Daemon(ctx) // it polls forever: a settled shop is one whose outbox is empty, which settledCorrectly judges
 	every := s.PollInterval
 	if every == 0 {
 		every = 100 * time.Millisecond

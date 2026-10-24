@@ -883,11 +883,67 @@ func (s *Sim) Run(d time.Duration) error {
 // converge, after which properties conditioned on quiescence apply. It
 // runs the canonical schedule (every choice 0): what a run explores is
 // what happened before it, and a settle draws nothing from the Chooser.
+//
+// It returns an *Unsettled error (ErrUnsettled) if the system is not
+// quiet when its time is up: a task that is no daemon is still at work or
+// waiting (a retry loop that never ends, a client waiting on a reply that
+// will not come while a daemon's timer keeps time moving, which once hid
+// such a stall). A property conditioned on quiescence would be judged on a
+// system that never reached it. Not on the native runtime.
 func (s *Sim) Settle(d time.Duration) error {
 	s.faultsOff, s.settling = true, true
 	s.net.healAll() // a whole network to recover on
 	defer func() { s.settling = false }()
-	return s.Run(d)
+	if err := s.Run(d); err != nil {
+		return err
+	}
+	if s.nat != nil {
+		return nil // the native runtime runs in real time and cannot tell, as with ErrStuck
+	}
+	if pending := s.pending(); len(pending) > 0 {
+		return &Unsettled{After: d, Tasks: pending}
+	}
+	return nil
+}
+
+// ErrUnsettled is what an *Unsettled error is (errors.Is).
+var ErrUnsettled = errors.New("qenv: not settled")
+
+// Unsettled is a Settle whose time ran out before the system was quiet:
+// the tasks, not daemons, still at work or waiting then.
+type Unsettled struct {
+	After time.Duration
+	Tasks []string
+}
+
+func (u *Unsettled) Error() string {
+	return fmt.Sprintf("qenv: not settled after %v: tasks still at work or waiting (mark one that may wait forever with qenv.Daemon; "+
+		"a longer settle, or a fix, for one that should have finished):\n  %s", u.After, strings.Join(u.Tasks, "\n  "))
+}
+
+// Is reports whether target is ErrUnsettled.
+func (u *Unsettled) Is(target error) bool { return target == ErrUnsettled }
+
+// pending lists the tasks that keep the system from being quiet: live,
+// no daemon, not idle in a double's receive, of no crashed process.
+func (s *Sim) pending() []string {
+	var out []string
+	self := taskOf(nil) // a task settling the simulation is not its pending work
+	for _, t := range s.tasks {
+		if t == self || t.done || t.killed || t.daemon || t.idle || t.proc != nil && t.proc.down {
+			continue
+		}
+		state := "runnable"
+		if t.waiting {
+			state = "waiting"
+			if !t.deadline.IsZero() {
+				state = fmt.Sprintf("waiting until %v", t.deadline.Sub(s.start))
+			}
+		}
+		out = append(out, t.name+": "+state)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // runnable reports how many tasks are runnable: the queued ones (yielded,

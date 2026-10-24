@@ -91,6 +91,11 @@ Added to the core since api/core.txt was first recorded:
   returns corrupt reads; an exploration of
   seeds runs its first seed twice and fails on the first choice or step
   that differs.
+- Liveness: `Sim.Settle` returns a `*qenv.Unsettled` (`ErrUnsettled`)
+  when its time runs out before the system is quiet, a task that is no
+  daemon still at work or waiting; an exploration judges such a run
+  rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
+  does not conform, and `qtest.Settles()` states it alone.
 - `qtest.NoSurvivors` marks an equivalent mutant by function, change and
   code (`"(Counter).Add: drop call: qobs.Record(...)"`), as a survivor's
   report now prints it: a line added above no longer moves the mark. A

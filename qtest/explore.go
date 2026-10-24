@@ -431,6 +431,10 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if err == nil {
 		err = cerr
 	}
+	var unsettled string
+	if u := (*qenv.Unsettled)(nil); errors.As(err, &u) { // a run outcome, judged by claims (Conforms, Settles), not a run that failed to run
+		unsettled, err = u.Error(), nil
+	}
 	if is := r.Issues(); err == nil && len(is) > 0 {
 		err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
 	}
@@ -438,7 +442,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if n, first := esc.Steps(); err == nil && n > 0 {
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
-	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr}
+	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -601,6 +605,11 @@ func instanceChecker(t testing.TB, bindingPath string, o validate.Options, c set
 // not check fails t, named by name.
 func judge(t testing.TB, cc *validate.Checker, inst string, runs []*Run, name func(*Run) string) (cached int) {
 	t.Helper()
+	defer func() {
+		for _, r := range runs {
+			r.settled()
+		}
+	}()
 	keys := make([]string, len(runs))
 	var todo [][]qtrace.Step
 	first := map[string]int{} // key -> index in todo
@@ -907,6 +916,8 @@ func runsDo(r string) string {
 		return "have a reconstruction issue (a gap, a cycle, an overlap)"
 	case strings.HasPrefix(r, "evaluation error"):
 		return "hit an " + r
+	case r == "does not settle":
+		return "do not settle"
 	}
 	return "have " + r
 }
@@ -1138,6 +1149,7 @@ func (x *Exploration) recheck(t testing.TB, r *Run) {
 	case err != nil:
 	case rep.OK() == r.Report.OK() && reason(rep) == reason(r.Report):
 		r.Report = rep
+		r.settled()
 	default: // a cache key or a backend at fault: say so, keep the verdict the claim was judged by
 		t.Logf("gotogether: %s checked again judges otherwise (%s, not %s): the verdict cache or a backend is wrong; the report below is the one judged", x.nameOf(r), reason(rep), reason(r.Report))
 	}

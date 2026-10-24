@@ -96,10 +96,18 @@ func sortedConsts(m map[string]string) []string {
 type Report struct {
 	Issues []qtrace.Issue
 	Actors []*Result
+	// Unsettled, if set, is why the run's system did not settle when the
+	// run had it settle (qenv.Settle): a run that never reached quiescence
+	// is not OK, whatever its steps. Set by the caller that ran it (qtest).
+	Unsettled string
 }
 
-// OK is true when every actor's trace conforms and satisfies the invariants.
+// OK is true when every actor's trace conforms and satisfies the
+// invariants, and the system settled if it was asked to.
 func (r *Report) OK() bool {
+	if r.Unsettled != "" {
+		return false
+	}
 	for _, a := range r.Actors {
 		if !a.OK() {
 			return false
@@ -110,6 +118,9 @@ func (r *Report) OK() bool {
 
 func (r *Report) Summary() string {
 	s := ""
+	if r.Unsettled != "" {
+		s += r.Unsettled + "\n"
+	}
 	for _, i := range r.Issues {
 		s += fmt.Sprintf("issue: %s\n", i)
 	}

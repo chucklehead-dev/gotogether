@@ -77,8 +77,13 @@ qobs.Record(s.Context(), "settle", nil)
 - **Stuck runs:** `Run` and `Settle` return `qenv.ErrStuck`, naming the
   tasks, when a task waits with nothing left to wake it (a lost message, a
   missed Notify). Return the error from your `Run`; a task that may wait
-  forever by design (a server loop) calls `qenv.Daemon(ctx)`, and a
-  double's own receive waits with `qenv.WaitIdle`.
+  forever by design (a server loop, a controller's or a relay's polling
+  loop) calls `qenv.Daemon(ctx)`, and a double's own receive waits with
+  `qenv.WaitIdle`. `Settle` also returns a `*qenv.Unsettled` when its
+  time runs out with a task that is no daemon still at work or waiting (a
+  retry loop that never ends, a wait a daemon's timer hid); in an
+  exploration that is no error but an outcome: such a run does not
+  conform, and `qtest.Settles()` states it alone.
 - **Disks:** `qenv.NewDisk(s, p.Name, p)` is process p's machine's disk
   (name each double uniquely: a second of one name panics):
   writes reach the OS at once and the disk on `File.Sync`. When p crashes

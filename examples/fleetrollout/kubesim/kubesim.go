@@ -218,6 +218,7 @@ func (c *Cluster) scale(ctx context.Context, replicas int32) {
 // generation after a lag, then replaces the pods one at a time (one
 // unavailable during the rollout).
 func (c *Cluster) deploymentController(ctx context.Context) {
+	qenv.Daemon(ctx) // kube-controller-manager's loop runs forever
 	for {
 		qenv.Sleep(ctx, 100*time.Millisecond)
 		d := &appsv1.Deployment{}

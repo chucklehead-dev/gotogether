@@ -44,6 +44,13 @@ func Conforms() Expectation {
 	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, ""}
 }
 
+// Settles: the system settled (qenv.Sim.Settle found it quiet), whatever
+// its steps; a run that does not settle does not conform either.
+// Over runs, None(Settles()) states a livelock.
+func Settles() Expectation {
+	return Expectation{"a system that settles", func(r *validate.Report) bool { return r.Unsettled == "" }, true, nil, nil, ""}
+}
+
 func failed(r *validate.Report, kind, action string) bool {
 	for _, a := range r.Actors {
 		f := a.Failure

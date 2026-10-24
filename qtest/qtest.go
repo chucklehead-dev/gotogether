@@ -238,10 +238,15 @@ type Run struct {
 	diverged error
 	// Err is the scenario's error: the run did not run to its end
 	// (System.Run's error).
-	Err     error
-	Report  *validate.Report
-	StepLog string            // Record's native step log (JSONL)
-	ITF     map[string]string // Record's: actor -> model-level ITF written in-process
+	Err error
+	// Unsettled is why the system did not settle, when the run had it
+	// settle (a qenv.Unsettled from Sim.Settle): no error of the run, an
+	// outcome the claims judge. It makes the run's report not OK, so
+	// Conforms does not hold of it; Settles states it alone.
+	Unsettled string
+	Report    *validate.Report
+	StepLog   string            // Record's native step log (JSONL)
+	ITF       map[string]string // Record's: actor -> model-level ITF written in-process
 }
 
 // Faults are the run's fault choices that were not nominal.
@@ -249,6 +254,16 @@ func (r *Run) Faults() []qenv.Choice { return (&qenv.ChoiceLog{Choices: r.Choice
 
 // OK reports whether every actor conformed and satisfied the invariants.
 func (r *Run) OK() bool { return r.Report != nil && r.Report.OK() }
+
+// settled gives the run's report its Unsettled, on a copy: verdicts are
+// shared by every run of the same steps, which may have settled.
+func (r *Run) settled() {
+	if r.Unsettled != "" && r.Report != nil && r.Report.Unsettled != r.Unsettled {
+		rep := *r.Report
+		rep.Unsettled = r.Unsettled
+		r.Report = &rep
+	}
+}
 
 func checker(t testing.TB, bindingPath string, o validate.Options) *validate.Checker {
 	t.Helper()

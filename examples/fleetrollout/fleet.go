@@ -65,6 +65,7 @@ func Run(c qenv.Chooser, cfg Config) (*kubesim.Fleet, error) {
 	// a new Controller, with nothing remembered
 	s.Process("controller", !cfg.NoCrashes, func(ctx context.Context) {
 		ctl := newController()
+		qenv.Daemon(ctx) // a controller reconciles forever
 		for {
 			_, _ = ctl.Reconcile(ctx)
 			qenv.Sleep(ctx, 200*time.Millisecond)

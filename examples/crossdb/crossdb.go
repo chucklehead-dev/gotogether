@@ -246,6 +246,8 @@ func Run(c qenv.Chooser, cfg Config) error {
 			return fmt.Sprintf("pw%d", pw)
 		}})
 		r := managed.NewReconciler(mgr{kube: kube}, resource.ManagedKind(v1alpha1.DatabaseGVK), opts...)
+		// a controller reconciles forever: what settled means is the model's settledCorrectly
+		qenv.Daemon(ctx)
 		for { // reconcile every resource, every 500 ms
 			list := &v1alpha1.DatabaseList{}
 			if err := kube.List(ctx, list); err == nil {

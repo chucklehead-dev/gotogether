@@ -795,3 +795,40 @@ func TestLateRequestsIgnoreDrift(t *testing.T) {
 		}
 	}
 }
+
+// Settle says whether the system settled: a client still retrying when
+// its time is up, or one waiting forever on a reply while a daemon's
+// periodic timer keeps time moving (which once hid such a stall), is
+// Unsettled, naming the task; a daemon's own loop and a finished client
+// are quiet.
+func TestSettleSaysWhetherItSettled(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		client  func(ctx context.Context, sig *qenv.Signal)
+		settled bool
+	}{
+		{"finishes", func(ctx context.Context, _ *qenv.Signal) { qenv.Sleep(ctx, time.Second) }, true},
+		{"retries forever", func(ctx context.Context, _ *qenv.Signal) {
+			for {
+				qenv.Sleep(ctx, time.Second)
+			}
+		}, false},
+		{"waits forever", func(ctx context.Context, sig *qenv.Signal) { sig.Wait(ctx, 0) }, false},
+	} {
+		s := qenv.New(qenv.Nominal{})
+		var sig qenv.Signal
+		s.Spawn("ticker", func(ctx context.Context) { // a daemon's periodic timer
+			qenv.Daemon(ctx)
+			for {
+				qenv.Sleep(ctx, 100*time.Millisecond)
+			}
+		})
+		s.Spawn("client", func(ctx context.Context) { c.client(ctx, &sig) })
+		err := s.Settle(10 * time.Second)
+		s.Close()
+		var u *qenv.Unsettled
+		if c.settled != (err == nil) || !c.settled && (!errors.As(err, &u) || !errors.Is(err, qenv.ErrUnsettled) || len(u.Tasks) != 1 || !strings.HasPrefix(u.Tasks[0], "client: waiting")) {
+			t.Errorf("%s: Settle = %v", c.name, err)
+		}
+	}
+}

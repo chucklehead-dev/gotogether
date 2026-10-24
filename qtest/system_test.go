@@ -131,6 +131,40 @@ func TestNondeterministicSystem(t *testing.T) {
 	}
 }
 
+// A run whose system does not settle is checked all the same, and is no
+// conforming run: Conforms fails naming it, Settles states it alone, and
+// None(Settles()) holds of a livelock.
+func TestUnsettledRuns(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	sys := func(livelock bool) System {
+		return System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
+			s := qenv.New(c)
+			defer s.Close()
+			s.Spawn("client", func(ctx context.Context) {
+				qobs.Record(ctx, "deposit", nil, "amount", 10, "obs.balance", 10)
+				for livelock {
+					qenv.Sleep(ctx, time.Second) // retries forever
+				}
+			})
+			return s.Settle(time.Minute)
+		}}
+	}
+	sys(false).Explore(t, ExploreConfig{Seeds: 2}).Expect(t, Conforms(), Settles())
+	x := sys(true).Explore(t, ExploreConfig{Seeds: 2})
+	x.Expect(t, None(Settles()))
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		x.Expect(f, Conforms())
+	}()
+	<-done
+	if all := strings.Join(f.errs, "\n"); !strings.Contains(all, "do not settle") || !strings.Contains(all, "client: waiting") {
+		t.Errorf("Conforms of an unsettled run: %q, want it named, with its task", f.errs)
+	}
+}
+
 // A scenario that fails the test from its run's goroutine (t.Fatal in
 // Run) fails the exploration with its seed, instead of a nil run
 // crashing it.

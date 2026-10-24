@@ -179,6 +179,9 @@ func reason(rep *validate.Report) string {
 			return r
 		}
 	}
+	if rep.Unsettled != "" {
+		return "does not settle"
+	}
 	return "issue"
 }
 

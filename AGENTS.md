@@ -240,7 +240,10 @@ working there:
   mistaken for a quiet one. A task that may wait forever (a server's
   loop, a sender waiting for records) calls `qenv.Daemon(ctx)`; a
   double's receive uses `qenv.WaitIdle`. The native runtime runs in real
-  time and cannot tell.
+  time and cannot tell. `Settle` returns a `*Unsettled` (`ErrUnsettled`)
+  when its time runs out with such a task at work or waiting, polling
+  loops included: mark them Daemon. qtest judges it, not fails it
+  (`Run.Unsettled`, a report not OK, `qtest.Settles()`).
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
   (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record

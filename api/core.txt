@@ -680,6 +680,11 @@ type Txn interface
     Commit() error
     Rollback()
     OnCommit(fn func())
+type Unsettled struct
+    field After time.Duration
+    field Tasks []string
+    method (*Unsettled) Error() string
+    method (*Unsettled) Is(target error) bool
 type Wrapper = choice.Wrapper
     embed Chooser
     Unwrap() Chooser
@@ -694,6 +699,7 @@ var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
 var ErrStuck = errors.New("qenv: stuck")
 var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
 var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
+var ErrUnsettled = errors.New("qenv: not settled")
 var NoFaults = choice.NoFaults
 
 == github.com/chucklehead-dev/gotogether/qenv/weave
@@ -1126,6 +1132,7 @@ func RecorderOptions(opts ...qobs.Option) Option
 func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
+func Settles() Expectation
 func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option
 func Some(es ...Expectation) Claim
@@ -1216,6 +1223,7 @@ type Run struct
     field Unscripted []qenv.Scripted
     field Code *qcover.Counts
     field Err error
+    field Unsettled string
     field Report *validate.Report
     field StepLog string
     field ITF map[string]string
@@ -1400,6 +1408,7 @@ type Options struct
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
+    field Unsettled string
     method (*Report) OK() bool
     method (*Report) Summary() string
 type Result struct
