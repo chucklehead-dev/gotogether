@@ -112,7 +112,8 @@ func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []pla
 			}
 			to[i] = 0
 			for j, s := range tr.Steps {
-				if before(s, st) {
+				// at the settle's instant, on another recorder: before it
+				if before(s, st) || s.Recorder != st.Recorder && s.Time.Equal(st.Time) {
 					to[i] = j + 1
 				}
 			}
@@ -160,11 +161,24 @@ func before(a, b qtrace.Step) bool {
 	return a.Time.Before(b.Time)
 }
 
-// settlesOf are the settle records of steps, earliest first.
+// settlesOf are the settle records of steps at which the system was
+// quiet, earliest first: as Reconstruct takes a settle, one no other
+// recorder recorded a step after (a settle that settles nothing bounds
+// nothing).
 func settlesOf(steps []qtrace.Step) []qtrace.Step {
 	var out []qtrace.Step
 	for _, s := range steps {
-		if s.Settled {
+		if !s.Settled {
+			continue
+		}
+		quiet := true
+		for _, o := range steps {
+			if o.Recorder != s.Recorder && !o.Settled && o.Time.After(s.Time.Add(qtrace.RealTimeSlack)) {
+				quiet = false
+				break
+			}
+		}
+		if quiet {
 			out = append(out, s)
 		}
 	}

@@ -94,3 +94,19 @@ func TestResolvePendingStopsAtTheSettle(t *testing.T) {
 		t.Errorf("a write placed after the settle that preceded its probe:\n%s", run.Report.Summary())
 	}
 }
+
+// A settle another recorder worked past (it settles nothing) bounds no
+// placement: the write left pending landed after it, as a later probe
+// saw, and once was a false Mismatch.
+func TestResolvePendingIgnoresASettleWorkedPast(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(100, 0).Add(time.Duration(u) * time.Second) }
+	steps := []qtrace.Step{
+		{Action: "write", Recorder: "c", Seq: 1, Thread: "c", Invocation: true, Time: at(1), Args: map[string]any{"value": int64(1)}},
+		{Action: "settled", Recorder: "h", Seq: 1, Settled: true, Time: at(2)},
+		{Action: "observe", Recorder: "s", Seq: 1, Thread: "s", Time: at(30), Obs: map[string]any{"value": int64(0)}},
+		{Action: "observe", Recorder: "s", Seq: 2, Thread: "s", Time: at(50), Obs: map[string]any{"value": int64(1)}},
+	}
+	Validate(t, "testdata/probed.yaml", steps, ResolvePending()).Expect(t, Conforms())
+}
