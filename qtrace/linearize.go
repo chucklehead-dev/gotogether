@@ -26,7 +26,8 @@ func realTime(steps []Step) []Issue {
 	for i := range steps {
 		s := &steps[i]
 		if !s.Invoked.IsZero() && s.Invoked.After(s.Time) {
-			out = append(out, Issue{"warn", "realtime", fmt.Sprintf("%s (seq %d) was invoked after it completed: its invocation time is from another clock, or is not when it began", s.Action, s.Seq)})
+			out = append(out, Issue{"warn", "realtime", fmt.Sprintf("%s (seq %d) was invoked after it completed: its invocation time is from another clock, or is not when it began "+
+				"(record the call with qobs.Invoke and Call.Done, which take both times from the recorder, and pass no \"invoked\"; in a simulation, a time from Sim.Now)", s.Action, s.Seq)})
 			continue
 		}
 		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && steps[j].Time.Add(RealTimeSlack).Before(s.Invoked) {
