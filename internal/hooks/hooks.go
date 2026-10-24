@@ -67,8 +67,7 @@ func Escape(msg string) {
 	if f := creatorRun.Load(); f != nil {
 		if id, ok := creatorID(); ok {
 			if ctx, ok := (*f)(id); ok {
-				if e, ok := ctx.Value(escapesKey{}).(*Escapes); ok {
-					e.add(msg)
+				if e, ok := ctx.Value(escapesKey{}).(*Escapes); ok && e.add(msg) {
 					return
 				}
 			}
@@ -103,18 +102,34 @@ func Escaped(mark int) (n int, since []string) {
 // Escapes is one run's log of the steps that escaped it: recorded from a
 // goroutine one of its tasks started with `go`, which no run owns.
 type Escapes struct {
-	mu   sync.Mutex
-	n    int
-	msgs []string // the first maxEscaped
+	mu     sync.Mutex
+	n      int
+	msgs   []string // the first maxEscaped
+	closed bool
 }
 
-func (e *Escapes) add(msg string) {
+// add logs msg, or reports false once the log is closed.
+func (e *Escapes) add(msg string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return false
+	}
 	e.n++
 	if len(e.msgs) < maxEscaped {
 		e.msgs = append(e.msgs, msg)
 	}
+	return true
+}
+
+// Close ends the log when its run is over: a step that escapes it later
+// (from a goroutine of a simulation never closed) is logged process-wide,
+// where the strict runs still running, and the exploration's own check,
+// see it.
+func (e *Escapes) Close() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.closed = true
 }
 
 // Steps returns how many steps escaped the run, and the first one's

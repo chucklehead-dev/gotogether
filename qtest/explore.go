@@ -434,6 +434,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if is := r.Issues(); err == nil && len(is) > 0 {
 		err = fmt.Errorf("gotogether: recording: %s", strings.Join(is, "; "))
 	}
+	esc.Close() // a step from a goroutine still running goes process-wide: the exploration's check sees it
 	if n, first := esc.Steps(); err == nil && n > 0 {
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}

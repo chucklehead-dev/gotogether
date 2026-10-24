@@ -47,4 +47,21 @@ func TestEscapeToTheCreatorsRun(t *testing.T) {
 	if n, msgs := Escaped(mark); n != mark+1 || msgs[0] != "unowned" {
 		t.Errorf("process-wide: %d since %d, %q", n, mark, msgs)
 	}
+
+	// once the run is over its log is closed: a late step (a goroutine of
+	// a simulation never closed) goes process-wide, not to a log no one
+	// reads again
+	e.Close()
+	done = make(chan struct{})
+	go func() { //qenv:ok a step after its run's log closed
+		defer close(done)
+		Escape("late")
+	}()
+	<-done
+	if n, _ := e.Steps(); n != 1 {
+		t.Errorf("the closed log took the late step: %d", n)
+	}
+	if n, msgs := Escaped(mark); n != mark+2 || msgs[1] != "late" {
+		t.Errorf("process-wide after close: %d since %d, %q", n, mark, msgs)
+	}
 }
