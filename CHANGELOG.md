@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- qhistory: a transaction's own appends read back out of order are
+  `internal` (the count alone was compared), and a value no transaction
+  appended is garbage in any read, not "G1b of transaction 0" in a
+  shorter one.
 - Linearize's complete search is cut by its budget alone: a beam of 64
   prefixes made five concurrent operations no order explains no verdict
   whatever the budget, while the report said to raise it.

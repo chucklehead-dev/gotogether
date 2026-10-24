@@ -273,14 +273,15 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			for len(ext) > 0 && writer[wkey{o.Key, ext[len(ext)-1]}] == t.ID {
 				ext, mine = ext[:len(ext)-1], mine+1
 			}
-			want := 0
+			// its own appends to the key, in the order it made them
+			var want []int
 			for _, w := range own {
 				if w.key == o.Key {
-					want++
+					want = append(want, w.value)
 				}
 			}
-			if mine != want {
-				add("internal", []int{t.ID}, "transaction %d's %s does not end with its own %d appends to %s", t.ID, o, want, o.Key)
+			if !slices.Equal(o.List[len(o.List)-mine:], want) {
+				add("internal", []int{t.ID}, "transaction %d's %s does not end with its own appends to %s, %v in order", t.ID, o, o.Key, want)
 			}
 			reads[o.Key] = append(reads[o.Key], obs{t.ID, ext})
 		}
@@ -314,12 +315,22 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			}
 		}
 		bad := false
+		// a value no transaction appended, in any read (one in a shorter
+		// read is no version of the longest's either)
+		garbage := map[int]bool{}
+		for _, r := range rs {
+			for _, v := range r.list {
+				if _, ok := writer[wkey{key, v}]; !ok && !garbage[v] {
+					garbage[v] = true
+					add("garbage", []int{r.txn}, "%s: transaction %d read %d, which no transaction appended", key, r.txn, v)
+					bad = true
+				}
+			}
+		}
 		for _, v := range order {
 			w, ok := writer[wkey{key, v}]
 			switch {
 			case !ok:
-				add("garbage", []int{longest.txn}, "%s: transaction %d read %d, which no transaction appended", key, longest.txn, v)
-				bad = true
 			case byID[w].Outcome == Aborted:
 				var by []int
 				for _, r := range rs {

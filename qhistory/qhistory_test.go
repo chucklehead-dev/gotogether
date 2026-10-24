@@ -51,6 +51,11 @@ func TestAnomalies(t *testing.T) {
 		{"incompatible order", "incompatible-order", []qhistory.Txn{txn(1, app("x", 1)), txn(2, app("x", 2)), txn(3, rd("x", 1, 2)), txn(4, rd("x", 2, 1))}, qhistory.ReadCommitted},
 		{"garbage", "garbage", []qhistory.Txn{txn(1, rd("x", 9))}, qhistory.ReadCommitted},
 		{"own write unseen", "internal", []qhistory.Txn{txn(1, app("x", 1), rd("x"))}, qhistory.ReadCommitted},
+		// its own appends read back in the wrong order (the count matched)
+		{"own writes reordered", "internal", []qhistory.Txn{txn(1, app("x", 1), app("x", 2), rd("x", 2, 1))}, qhistory.ReadCommitted},
+		// garbage in a read that is not the longest, once seen only as a
+		// G1b "of transaction 0"
+		{"garbage in a short read", "garbage", []qhistory.Txn{txn(1, app("x", 1)), txn(2, app("x", 2)), txn(3, rd("x", 1, 2)), txn(4, rd("x", 99))}, qhistory.ReadCommitted},
 	} {
 		for _, level := range []qhistory.Level{qhistory.ReadCommitted, qhistory.SnapshotIsolation, qhistory.Serializable} {
 			rep, err := qhistory.Check(level, c.txns)
@@ -65,6 +70,9 @@ func TestAnomalies(t *testing.T) {
 			}
 			if !rep.Has(c.kind) {
 				t.Errorf("%s at %s: want %s, got %s", c.name, level, c.kind, rep)
+			}
+			if c.kind == "garbage" && rep.Has("G1b") {
+				t.Errorf("%s at %s: a G1b of a value no one appended: %s", c.name, level, rep)
 			}
 			if want := level >= c.level; rep.OK() == want {
 				t.Errorf("%s at %s: OK %v, want forbidden %v: %s", c.name, level, rep.OK(), want, rep)
