@@ -254,3 +254,23 @@ func TestLinearizeInvariantSearchCut(t *testing.T) {
 		}
 	}
 }
+
+// A run's settle, re-sequenced after each partition's order, keeps its
+// time: without it the other partitions' steps were all later than it,
+// and since a settle settles nothing another recorder worked past, no
+// partitioned run settled.
+func TestLinearizeByKeyKeepsTheSettle(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	w := func(seq uint64, key string, u int) qtrace.Step {
+		return qtrace.Step{Action: "write", Recorder: "r", Seq: seq, Thread: "c", Invoked: at(u), Time: at(u + 1),
+			Args: map[string]any{"key": key, "value": int64(1)}}
+	}
+	steps := []qtrace.Step{w(1, "a", 0), w(2, "b", 2), {Action: "settled", Recorder: "r", Seq: 3, Settled: true, Time: at(5)}}
+	run := Validate(t, "testdata/registers.yaml", steps, LinearizeByKey("key"))
+	run.Expect(t, Conforms())
+	if !Settles().Holds(run) {
+		t.Errorf("a settled run, partitioned, does not settle:\n%s", run.Report.Summary())
+	}
+}

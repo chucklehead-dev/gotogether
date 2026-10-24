@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -79,7 +80,7 @@ func resolve(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget int
 			add(p)
 		}
 		if tr.Settled {
-			add(qtrace.Step{Action: "settled", Settled: true})
+			add(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
 		}
 	}
 	return out, issues, undecided, kept
@@ -159,6 +160,19 @@ func before(a, b qtrace.Step) bool {
 		return a.Seq < b.Seq
 	}
 	return a.Time.Before(b.Time)
+}
+
+// lastSettle is the time of steps' last settle record: a settle a search
+// re-sequences keeps it, or the other partitions' steps would all be
+// later than it, and it would settle nothing.
+func lastSettle(steps []qtrace.Step) time.Time {
+	var t time.Time
+	for _, s := range steps {
+		if s.Settled && s.Time.After(t) {
+			t = s.Time
+		}
+	}
+	return t
 }
 
 // settlesOf are the settle records of steps at which the system was

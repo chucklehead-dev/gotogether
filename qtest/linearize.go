@@ -120,7 +120,7 @@ func linearize(t testing.TB, ch, full *validate.Checker, steps []qtrace.Step, bu
 				after(p)
 			}
 			if part.Settled {
-				after(qtrace.Step{Action: "settled", Settled: true})
+				after(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
 			}
 		}
 	}
