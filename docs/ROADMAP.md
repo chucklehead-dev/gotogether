@@ -83,8 +83,9 @@ under a week, M two to four, L more.
     run settled.
   - ResolvePending places a call's effect before the first settle after
     its invocation (the system was quiet there).
-  - Faults come back after Settle returns (a second faulty phase was
-    fault-free).
+  - Faults after Settle returns: they stay off (a probe or an audit after
+    it runs on the settled system), said in Settle's doc and the faults
+    skill; `Sim.ResumeFaults` starts a faulty phase again.
   - A settle settles a trace only if no other recorder recorded a step
     later in time.
   - The complete search's beam is the budget's, and a cut names its real
@@ -93,8 +94,10 @@ under a week, M two to four, L more.
     garbage in any read, and no "G1b of transaction 0".
   - Among orders that conform, one whose invariants hold is preferred (a
     mutant must not look caught by the order picked).
-  - `qenv.Now` on a simulation's creating goroutine: virtual time, as its
-    steps' (or the warning names `Sim.Now`).
+  - The warning for a step invoked after it completed names the fix
+    (Invoke and Done, no "invoked"; Sim.Now). A virtual `qenv.Now` on a
+    simulation's creating goroutine was tried and reverted: that
+    goroutine's Sleep and Since stay real, and a deadline loop there hung.
 - **T2. The cost of a verdict.**
   - **a (S).** A conformance-only search mode in validate (no ITF, the
     TypeScript batch, no detail phase), the per-run searches of an

@@ -28,7 +28,8 @@ died, or that was never answered, is then in the trace as pending
 replay), which `qtest.Completes()` judges. What it did is unknown, as for
 Jepsen's `:info` operations: `qtest.ResolvePending()` (Record, Validate and
 explorations) tries each pending call as having had no effect, or as having
-taken effect after one of the steps recorded since its invocation (with
+taken effect after one of the steps recorded since its invocation, and
+before the first settle after it (with
 no observation: no expect is checked after it), and the actor conforms if
 one resolution does; an issue says which ("withdraw(amount=3) took
 effect after step 1"). Either way

@@ -833,10 +833,6 @@ func TestSettleSaysWhetherItSettled(t *testing.T) {
 	}
 }
 
-// A settle takes runnable tasks in turn: a task that yields until another
-// sets a flag (a spin wait, woven code's runtime.Gosched) once kept the
-// lowest id first forever, so the setter never ran and the settle ran out
-// of steps instead of settling.
 // Faults stay off after a settle, so a probe after it runs on the settled
 // system, until ResumeFaults starts a faulty phase again: a run of phases
 // was once fault-free after its first settle, whatever its Rates.
@@ -875,6 +871,10 @@ func TestFaultsAfterSettle(t *testing.T) {
 	}
 }
 
+// A settle takes runnable tasks in turn: a task that yields until another
+// sets a flag (a spin wait, woven code's runtime.Gosched) once kept the
+// lowest id first forever, so the setter never ran and the settle ran out
+// of steps instead of settling.
 func TestSettleIsFair(t *testing.T) {
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()

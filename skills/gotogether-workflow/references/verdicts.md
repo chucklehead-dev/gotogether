@@ -14,6 +14,9 @@ mutants) ends in one of these verdicts.
 | an eventual val false at the end | `invariant eventually V: FAIL` | `qtest.Violates(validate.EventuallyName("V"))` | the run ended (settled, in a simulation) with work the model says is pending: a livelock or lost work |
 | an invariant violated | `conformance: PASS`, `invariant I: FAIL` | `qtest.Violates("I")` | the model allows the behaviour and the property rules it out: a design bug, or a property stronger than the requirement |
 | an issue | `issue: ...` (gaps, cycles in the recorded order, an order real time contradicts) | none: fix the recording | the steps could not be put in one order; a pass would mean little |
+| no verdict (a search's budget) | `issue: warn linearize: ... no verdict (conformance n/a)`, invariants `n/a` | none: not a `Rejects`, `Mismatch` or `Violates` | Linearize (or ResolvePending) ran out of its budget before finding an order that conforms, or one in which every invariant holds: raise `qtest.LinearizeBudget`, partition keys (`LinearizeByKey`), or record steps where they take effect |
+| eventual vals not judged | `issue: info eventually: eventual vals not judged (V)` | `qtest.Settles()` states whether runs settled | the trace's last record is no settle (no `Sim.Settle`, a step after it, its error dropped) or another recorder recorded after it (`issue: warn settle`): an exploration claiming `Conforms()` of such runs fails, unless it also claims whether they settle |
+| real time bounds nothing | `issue: warn linearize: ... real time bounds none of its N steps` | none: record calls with `qobs.Invoke` and `Call.Done` | no step has an invocation time, so every order of its threads is allowed: sequential consistency, not linearizability |
 | a tool failure | an error, exit 2, no verdict | none: fix the binding or model | a template, a type, a missing field, or quint itself |
 
 `qtest.AnyOf(a, b)` is either. A report's summary shows the model's state
@@ -29,7 +32,7 @@ together (`Exploration.Expect`):
 |---|---|
 | an expectation alone, e.g. `qtest.Rejects("ship")` | some run shows it (the run is logged) |
 | `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle |
-| an issue `resolve` (with `qtest.ResolvePending()`) | info: a resolution of the pending calls conformed, and which (a call had no effect, or took effect after step i); warn: none did, the one shown got furthest | — |
+| `qtest.Pending("action")` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
 | `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock |
 | `qtest.Some(a, b)` | one run shows both |
@@ -83,3 +86,8 @@ never faulted and the scripted faults that never happened.
 
 After a green test, `t.Log(x.Evidence())`: what the runs reached
 (faults, pairs, code, mutants) is what "conforms" leaves unsaid.
+
+With `qtest.ResolvePending()`, an issue `resolve` says what the pending
+calls were taken to have done: info, a resolution conformed, and which (a
+call had no effect, or took effect after step i, before the first settle
+that followed it); warn, none did, the one shown got furthest.

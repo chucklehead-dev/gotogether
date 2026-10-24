@@ -180,7 +180,7 @@ func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
 	res := &Result{Actor: t.Actor, Issues: slices.Clip(t.Issues), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
 	if len(b.Eventually) > 0 && !t.Settled {
 		res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "eventually",
-			Msg: fmt.Sprintf("eventual vals not judged (%s): the trace's last record is no settle (Sim.Settle, or qobs.Settled after a probe)", strings.Join(b.Eventually, ", "))})
+			Msg: fmt.Sprintf("eventual vals not judged (%s): the trace's last record is no settle (Sim.Settle, or qobs.Settled after a probe), or another recorder recorded after it", strings.Join(b.Eventually, ", "))})
 	}
 	return res
 }

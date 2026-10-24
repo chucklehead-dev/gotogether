@@ -67,15 +67,20 @@ api := s.Process("api", true, func(context.Context) {})              // crashabl
 s.Process("payments", true, func(ctx context.Context) { app.RunPayments(ctx, inbox{q}) })
 s.Spawn("client", func(ctx context.Context) { /* calls that retry on qenv.ErrTimeout */ })
 s.Run(20 * time.Second)       // with faults
-s.Settle(60 * time.Second)    // faults off, tasks in turn, until quiet
-qobs.Record(s.Context(), "settle", nil)
+return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; records the settle
 ```
 
 - **Restarts:** a process's start function runs on boot and after every
   restart. It must rebuild from durable doubles only; in-memory state is
   lost, which is the point.
-- **Stuck runs:** `Run` and `Settle` return `qenv.ErrStuck`, naming the
-  tasks, when a task waits with nothing left to wake it (a lost message, a
+- **Settles:** `Settle` records a settle in the trace when it finds the
+  system quiet, and only then are the binding's `eventually:` vals judged
+  (a step recorded after it, by a probe, needs `qobs.Settled` again).
+  Faults stay off after it, so a probe runs on the settled system; a run
+  of phases calls `s.ResumeFaults()` to fault again.
+- **Stuck runs:** `Run` returns `qenv.ErrStuck`, naming the tasks, and
+  `Settle` a `*qenv.Unsettled` (its `Stuck`), when a task waits with
+  nothing left to wake it (a lost message, a
   missed Notify). Return the error from your `Run`; a task that may wait
   forever by design (a server loop, a controller's or a relay's polling
   loop) calls `qenv.Daemon(ctx)`, and a double's own receive waits with
