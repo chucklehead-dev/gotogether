@@ -19,10 +19,8 @@ func TestEvidenceDir(t *testing.T) {
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	nominal := ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.Nominal{} }}
 	sys.Explore(t, nominal)
-	mutant := nominal
-	mutant.corpusOf = t.Name() + "#1" // as Mutate's mutant explorations are
-	sys.Explore(t, mutant)
-	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:seed=1") // a run reproduced alone is a replay
+	explore(t, sys.Binding, exploreSpec{ExploreConfig: nominal, baseline: t.Name() + "#1"}, sys.Run) // as Mutate's mutant explorations are
+	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:seed=1")                                                 // a run reproduced alone is a replay
 	sys.Explore(t, ExploreConfig{Seeds: 1})
 	os.Unsetenv("GOTOGETHER_RUN") // t.Setenv restores it at the end
 	for n, role := range map[string]string{"x1.json": RoleFaithful, "x2.json": RoleMutant, "x3.json": RoleReplay} {

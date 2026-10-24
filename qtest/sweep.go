@@ -58,7 +58,7 @@ var rowKey = qrun.NewKey[qsweep.Row]("sweep.row")
 // fault kinds that are off are off in the chooser already.
 func RowOf(c qenv.Chooser) (qsweep.Row, bool) { return qrun.InContext(qenv.ContextOf(c), rowKey) }
 
-func sweep(t *testing.T, bindingPath string, sw SweepConfig, scenario func(c qenv.Chooser) error) *SweepResult {
+func sweep(t *testing.T, bindingPath string, sw SweepConfig, base exploreSpec, scenario func(c qenv.Chooser) error) *SweepResult {
 	t.Helper()
 	strength := sw.Strength
 	if strength == 0 {
@@ -72,7 +72,7 @@ func sweep(t *testing.T, bindingPath string, sw SweepConfig, scenario func(c qen
 	t.Logf("qtest: %d rows cover every %d-way combination of %d factors", len(rows), strength, len(sw.Factors))
 	for i, row := range rows {
 		t.Run(row.String(), func(t *testing.T) {
-			xc := sw.Explore
+			xc := base
 			if cs := row.Constants(); len(cs) > 0 {
 				xc.opts = append(append([]Option(nil), xc.opts...), Constants(cs))
 			}

@@ -48,8 +48,7 @@ type Exploration struct {
 	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
 	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
-	emptyOK   bool              // ExploreConfig.emptyOK
-	mutant    bool              // its corpus runs are a baseline's, under a mutant (corpusOf)
+	mutant    bool              // a mutant's: its corpus runs are its baseline's, and runs that recorded nothing are its finding (exploreSpec.baseline)
 	mutation  string            // System.Mutant
 	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
 	mu        sync.Mutex        // guards recheck's report swaps
@@ -98,17 +97,6 @@ type ExploreConfig struct {
 	// GOTOGETHER_SEED_OFFSET=k widen the sample (a nightly run): n seeds
 	// from k+1, unless Chooser makes the runs (a script per trace).
 	Seeds int
-	opts  []Option   // the System's, and a sweep row's (System.Opts configures)
-	rates qenv.Rates // the System's Rates
-	// emptyOK returns runs that recorded nothing unchecked, rather than
-	// failing: a mutant's (Mutate), which the baseline's steps show is
-	// killed by it.
-	emptyOK bool
-	fuzz    bool // System.Fuzz: the run is the fuzz input's
-	// corpusOf is the exploration whose corpus entries these runs replay
-	// (a mutant's: its baseline's), else its own; with it a replay that
-	// diverges is the mutant's doing, not a stale entry
-	corpusOf string
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
 	// the chooser's context (qenv.WithContext), so the scenario must build
@@ -142,6 +130,21 @@ type ExploreConfig struct {
 	// how to find its run again. GOTOGETHER_CORPUS=dir gives every
 	// exploration dir/<test name> (a nightly run collecting what it finds).
 	Corpus string
+}
+
+// An exploreSpec is an exploration as the System's methods ask for it:
+// the user's ExploreConfig, and what only a method sets.
+type exploreSpec struct {
+	ExploreConfig
+	opts  []Option   // the System's, and a sweep row's (System.Opts configures)
+	rates qenv.Rates // the System's Rates
+	fuzz  bool       // System.Fuzz: the run is the fuzz input's
+	// baseline is the exploration whose corpus entries these runs replay
+	// (a mutant's: its baseline's), else "": with it a replay that diverges
+	// is the mutant's doing, not a stale entry, and runs that recorded
+	// nothing are returned unchecked rather than failing (the baseline's
+	// steps show the mutant killed)
+	baseline string
 }
 
 // corpusFormat names a corpus entry's format: an entry of another is
@@ -251,7 +254,7 @@ func empty(runs []*Run) bool {
 
 // explore runs the scenario once per seed and checks every run (System.Explore):
 // a run that fails to run (rather than to conform) fails t, naming its seed.
-func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(c qenv.Chooser) error) *Exploration {
+func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c qenv.Chooser) error) *Exploration {
 	t.Helper()
 	if cfg.Seeds == 0 {
 		cfg.Seeds = 50
@@ -264,7 +267,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	}
 	e := begin(t, bindingPath, cfg.opts, scenario, cfg.Parallel)
 	x := e.x
-	x.corpus, x.emptyOK, x.fuzz, x.mutant = corpusDir(t, cfg), cfg.emptyOK, cfg.fuzz, cfg.corpusOf != ""
+	x.corpus, x.fuzz, x.mutant = corpusDir(t, cfg.ExploreConfig), cfg.fuzz, cfg.baseline != ""
 	// a nightly run widens the sample: GOTOGETHER_SEEDS=n runs n seeds,
 	// GOTOGETHER_SEED_OFFSET=k starts them after k (fresh seeds each night);
 	// a failure's report names its run, which GOTOGETHER_RUN runs alone
@@ -309,8 +312,8 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	// a seed run alone runs no corpus entry
 	if x.corpus != "" && (!alone || spec.kind == "corpus") {
 		ref := x.ref()
-		if cfg.corpusOf != "" { // a mutant's exploration replays its baseline's entries
-			ref = cfg.corpusOf
+		if cfg.baseline != "" { // a mutant's exploration replays its baseline's entries
+			ref = cfg.baseline
 		}
 		paths, entries, err := readCorpus(x.corpus, ref)
 		if err != nil {
@@ -347,7 +350,7 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		case cfg.Chooser != nil:
 			t.Fatalf("gotogether: ExploreConfig.Steer with a Chooser: steered runs go on with seeded choices at the System's Rates; " +
 				"a factory's choosers (a PCT's, a Script's) would not see the prefix they replay (they choose tasks, nemeses by name), so steer seeded explorations")
-		case cfg.corpusOf != "":
+		case cfg.baseline != "":
 			t.Fatalf("gotogether: ExploreConfig.Steer in System.Mutate: each mutant would steer its own sample from its own runs, " +
 				"not the baseline's, and a mutant only a steered baseline run reached would survive for it; mutate seeded explorations")
 		}
@@ -531,7 +534,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		// that run)
 		t.FailNow()
 	}
-	if empty(x.Runs) && x.emptyOK {
+	if empty(x.Runs) && x.mutant {
 		return
 	}
 	if empty(x.Runs) {

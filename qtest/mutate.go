@@ -167,9 +167,9 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 	if len(all) == 0 {
 		t.Skip("no mutants woven: run with qweave -mutate")
 	}
-	cfg.opts, cfg.rates = s.opts(cfg.opts...), s.FaultRates()
+	spec := exploreSpec{ExploreConfig: cfg, opts: s.opts(), rates: s.FaultRates()}
 	reach := &qmut.Reach{}
-	base := explore(t, s.Binding, cfg, func(c qenv.Chooser) error {
+	base := explore(t, s.Binding, spec, func(c qenv.Chooser) error {
 		return s.Run(qenv.WithContext(c, qmut.WithReach(qenv.ContextOf(c), reach)))
 	})
 	base.Expect(t, append([]Claim{Conforms()}, claims...)...)
@@ -180,9 +180,8 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 			continue
 		}
 		var broke atomic.Bool
-		mcfg := cfg
-		mcfg.emptyOK = true
-		mcfg.corpusOf = base.ref() // the baseline's regressions are the mutants' too
+		mcfg := spec
+		mcfg.baseline = base.ref() // the baseline's regressions are the mutants' too
 		mut := m.String()
 		mcfg.opts = append(append([]Option(nil), mcfg.opts...), func(c *settings) { c.mutant = mut }) // its evidence names it
 		x := explore(t, s.Binding, mcfg, func(c qenv.Chooser) (err error) {

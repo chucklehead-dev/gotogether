@@ -84,8 +84,7 @@ func (s System) opts(more ...Option) []Option {
 // expectations with Exploration.Expect.
 func (s System) Explore(t testing.TB, cfg ExploreConfig) *Exploration {
 	t.Helper()
-	cfg.opts, cfg.rates = s.opts(cfg.opts...), s.FaultRates()
-	return explore(t, s.Binding, cfg, s.Run)
+	return explore(t, s.Binding, exploreSpec{ExploreConfig: cfg, opts: s.opts(), rates: s.FaultRates()}, s.Run)
 }
 
 // FollowTraces drives the whole system through each of the model's traces'
@@ -138,8 +137,7 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap
 // the chooser.
 func (s System) Sweep(t *testing.T, sw SweepConfig) *SweepResult {
 	t.Helper()
-	sw.Explore.opts, sw.Explore.rates = s.opts(sw.Explore.opts...), s.FaultRates()
-	return sweep(t, s.Binding, sw, s.Run)
+	return sweep(t, s.Binding, sw, exploreSpec{ExploreConfig: sw.Explore, opts: s.opts(), rates: s.FaultRates()}, s.Run)
 }
 
 // Fuzz explores the system with Go's coverage-guided fuzzer: each input is
@@ -160,7 +158,7 @@ func (s System) Fuzz(f *testing.F, seeds ...[]byte) {
 	}
 	rates := s.FaultRates()
 	f.Fuzz(func(t *testing.T, data []byte) {
-		s.Explore(t, ExploreConfig{Seeds: 1, Parallel: 1, fuzz: true,
-			Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, rates) }}).Expect(t, Conforms())
+		cfg := ExploreConfig{Seeds: 1, Parallel: 1, Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, rates) }}
+		explore(t, s.Binding, exploreSpec{ExploreConfig: cfg, opts: s.opts(), rates: rates, fuzz: true}, s.Run).Expect(t, Conforms())
 	})
 }

@@ -58,7 +58,7 @@ func TestOldReproduceVariables(t *testing.T) {
 			done := make(chan struct{})
 			go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
 				defer close(done)
-				explore(f, "../validate/testdata/account.yaml", ExploreConfig{Seeds: 1}, race)
+				explore(f, "../validate/testdata/account.yaml", exploreSpec{ExploreConfig: ExploreConfig{Seeds: 1}}, race)
 			}()
 			<-done
 			if len(f.errs) == 0 || !strings.Contains(f.errs[0], "GOTOGETHER_RUN='") {

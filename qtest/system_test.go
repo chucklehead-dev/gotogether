@@ -251,7 +251,7 @@ func TestScenarioFatal(t *testing.T) {
 	done := make(chan struct{})
 	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
 		defer close(done)
-		explore(f, "../validate/testdata/account.yaml", ExploreConfig{Seeds: 1, Parallel: 1}, func(qenv.Chooser) error {
+		explore(f, "../validate/testdata/account.yaml", exploreSpec{ExploreConfig: ExploreConfig{Seeds: 1, Parallel: 1}}, func(qenv.Chooser) error {
 			f.Fatalf("the gosim binary is missing")
 			return nil
 		})
