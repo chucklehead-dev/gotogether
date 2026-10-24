@@ -208,10 +208,16 @@ func order(t testing.TB, ch, full *validate.Checker, tr *qtrace.Trace, budget in
 	case ok && len(full.Binding.Invariants) > 0 && checker(full, true)([][]qtrace.Step{o})[0] >= 0:
 		// the order found violates an invariant: another that conforms may
 		// not, and a run must not look violating by the order picked
-		if o2, ok2, tried2, _ := qtrace.Linearize(tr.Steps, budget, checker(full, true)); ok2 {
+		o2, ok2, tried2, cut2 := qtrace.Linearize(tr.Steps, budget, checker(full, true))
+		switch {
+		case ok2:
 			return o2, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms with every invariant holding (%d orders tried, %d with the invariants)", a, len(o2), tried, tried2)}, false
+		case cut2:
+			// another order may keep them: no verdict for the invariants
+			return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried), and the search for one in which every invariant holds ran out of its budget (%d orders): "+
+				"no verdict for the invariants. Raise the budget (qtest.LinearizeBudget(%d))", a, len(o), tried, tried2, 4*budget)}, true
 		}
-		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried); none found in which every invariant holds", a, len(o), tried)}, false
+		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried); none of the orders real time allows keeps every invariant (%d searched)", a, len(o), tried, tried2)}, false
 	case ok:
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried)}, false
 	case cut:

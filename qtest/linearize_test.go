@@ -235,3 +235,22 @@ func TestLinearizePrefersInvariantsHolding(t *testing.T) {
 	Validate(t, "testdata/counter.yaml", steps).Expect(t, Violates("atMostOne"))
 	Validate(t, "testdata/counter.yaml", steps, Linearize()).Expect(t, Conforms())
 }
+
+// The search for an order in which the invariants hold, cut by the
+// budget, is no verdict for them: it once reported the violation of the
+// order found first, T1b's case again.
+func TestLinearizeInvariantSearchCut(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	op := func(rec, action string) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Invoked: at(0), Time: at(10)}
+	}
+	steps := []qtrace.Step{op("a", "inc"), op("b", "inc"), op("c", "dec")}
+	for _, budget := range []int{1, 2} {
+		run := Validate(t, "testdata/counter.yaml", steps, LinearizeBudget(budget))
+		if Violates("atMostOne").check(run.Report) {
+			t.Errorf("budget %d: a violation from a search cut short:\n%s", budget, run.Report.Summary())
+		}
+	}
+}
