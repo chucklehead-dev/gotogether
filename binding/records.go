@@ -15,8 +15,8 @@ import (
 // qobsPath is the import path of the recording package.
 const qobsPath = "github.com/chucklehead-dev/gotogether/qobs"
 
-// RecordCall is an explicit qobs.Record or Recorder.Record call whose
-// action is a string literal, found in Go source.
+// RecordCall is an explicit qobs.Record or Recorder.Record call (or their
+// Invoke) whose action is a string literal, found in Go source.
 type RecordCall struct {
 	Pos    string        // file:line
 	At     token.Pos     // Pos in the file set the file was parsed with
@@ -81,11 +81,12 @@ func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall {
 	scan := func(fn string, n ast.Node) {
 		ast.Inspect(n, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) < 3 {
+			if !ok {
 				return true
 			}
+			// Record(ctx, action, err, kv...) or Invoke(ctx, action, kv...)
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Record" {
+			if !ok || !(sel.Sel.Name == "Record" && len(call.Args) >= 3 || sel.Sel.Name == "Invoke" && len(call.Args) >= 2) {
 				return true
 			}
 			lit, ok := call.Args[1].(*ast.BasicLit)

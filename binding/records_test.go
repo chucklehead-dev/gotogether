@@ -49,7 +49,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-func record(ctx context.Context) { qobs.Record(ctx, "transfer", nil) }
+func record(ctx context.Context) { qobs.Record(ctx, "transfer", nil); qobs.Invoke(ctx, "invokd").Done(nil) }
 
 func TestRun(t *testing.T) { qtest.Record(t, "bank.yaml", nil) }
 `)
@@ -75,6 +75,7 @@ func other(l logger) { l.Record(nil, "deposit", nil) }
 		"app.go:15:18 deposit depositt",
 		"app.go:18:53  init",
 		"app_test.go:12:53 record transfer",
+		"app_test.go:12:88 record invokd",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

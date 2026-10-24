@@ -100,15 +100,15 @@ next.
   read skew where their contracts allow. Left: a lint for map ranges,
   math/rand and multi-case select in simulated code (the self-check
   catches what they do, not where).
-- **Z7. Liveness (S, then M).** Settle reports whether it settled (it
-  returns nil when its time runs out with work pending) and a
-  `Settles()` claim; a run ending at its deadline with non-daemon tasks
-  waiting and no deadline of their own says so (a periodic timer once
-  hid such a stall, Z1 in HISTORY). Then obligations: a binding names a
-  model def of pending work and `Eventually(...)` is judged in virtual time across
-  the workflows; a mode where faults continue outside a chosen quorum
-  (VOPR's); a fair scheduler for settle and liveness windows; steps
-  recorded at invocation so a trace says "invoked, never completed".
+- **Z7. Liveness (S, then M).** Done: Settle reports whether it
+  settled (`*Unsettled`, `qtest.Settles()`); a binding's `eventually`
+  vals, judged in a settled run's last state; a fair settle (tasks in
+  turn); `Sim.SettleCore` (faults go on outside a core, VOPR's liveness
+  mode); calls recorded at invocation (`qobs.Invoke`, `Call.Done`,
+  pending calls in reports, `qtest.Completes()`). Left: `//quint:action`
+  advice recording at entry (Invoke) as well as on return; an example
+  under SettleCore (a quorum whose convergence is stated of the core);
+  what a pending call may have done is Z8's ambiguous steps.
 - **Z8. Search and scale (M–L).** PCT as a chooser; a footprint-based
   reduction for Exhaust (the doubles know what each seam touches);
   Linearize per key (Porcupine's partitioning); exploration steered by

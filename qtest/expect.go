@@ -51,6 +51,22 @@ func Settles() Expectation {
 	return Expectation{"a system that settles", func(r *validate.Report) bool { return r.Unsettled == "" }, true, nil, nil, ""}
 }
 
+// Completes: every operation recorded at its invocation (qobs.Invoke)
+// completed, whatever the run's verdict: every call was answered. A caller
+// that crashes leaves its call pending by right, so state it of runs
+// whose callers do not crash (the core's clients under
+// qenv.Sim.SettleCore); Some(validate's pending call) is None(Completes()).
+func Completes() Expectation {
+	return Expectation{"every invoked operation completing", func(r *validate.Report) bool {
+		for _, a := range r.Actors {
+			if len(a.Pending) > 0 {
+				return false
+			}
+		}
+		return true
+	}, true, nil, nil, ""}
+}
+
 func failed(r *validate.Report, kind, action string) bool {
 	for _, a := range r.Actors {
 		f := a.Failure

@@ -253,6 +253,11 @@ func Thread(ctx context.Context) context.Context {
 //
 // Values are normalised to string, int64, bool or float64.
 func (r *Recorder) Record(ctx context.Context, action string, err error, kv ...any) {
+	r.record(ctx, action, err, kv, 0)
+}
+
+// record records a step, the completion of invocation call if not 0.
+func (r *Recorder) record(ctx context.Context, action string, err error, kv []any, call uint64) {
 	if r == nil {
 		return
 	}
@@ -260,6 +265,7 @@ func (r *Recorder) Record(ctx context.Context, action string, err error, kv ...a
 	if !ok {
 		return
 	}
+	s.Call = call
 	if hooks.Discarding() {
 		s.Time = time.Now()
 		r.mu.Lock()
@@ -273,6 +279,70 @@ func (r *Recorder) Record(ctx context.Context, action string, err error, kv ...a
 	s.Seq = r.seq.Add(1)
 	s.Time = time.Now()
 	r.sink.Record(ctx, s)
+}
+
+// A Call is an operation recorded when it is invoked (Invoke): its
+// invocation record is written at once, so a trace whose caller died, or
+// whose call was never answered, says "invoked, never completed"
+// (qtrace.Trace.Pending, a report's pending calls) instead of nothing.
+type Call struct {
+	r       *Recorder
+	ctx     context.Context
+	action  string
+	kv      []any
+	seq     uint64
+	invoked time.Time
+	done    atomic.Bool
+}
+
+// Invoke records the invocation of an operation through the context's
+// recorder, found as Record finds it, and returns the call, whose Done
+// records the completed step. kv are the step's keys known at invocation
+// (its arguments, actor, process, thread); Done adds the rest.
+//
+//	c := qobs.Invoke(ctx, "transfer", "src", a, "dest", b, "amount", n)
+//	err := client.Transfer(ctx, a, b, n)
+//	c.Done(err)
+//
+// With no recorder it returns nil, whose Done does nothing.
+func Invoke(ctx context.Context, action string, kv ...any) *Call {
+	if r := From(ctx); r != nil {
+		return r.Invoke(ctx, action, kv...)
+	}
+	Record(ctx, action, nil, kv...) // the same no-op, or strict failure
+	return nil
+}
+
+// Invoke records the invocation of an operation and returns the call (see
+// the package's Invoke).
+func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
+	if r == nil {
+		return nil
+	}
+	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), kv...), invoked: time.Now()}
+	if hooks.Discarding() {
+		return c // interrupted work: its Done, if any, goes to Interrupted
+	}
+	s, ok := r.step(ctx, action, nil, c.kv)
+	if !ok {
+		return c
+	}
+	s.Invocation, s.Outcome = true, ""
+	c.seq = r.seq.Add(1)
+	s.Seq, s.Time = c.seq, c.invoked
+	r.sink.Record(ctx, s)
+	return c
+}
+
+// Done records the call's completed step: the invocation's keys, then
+// kv (Record's keys: obs.*, outcome, ...), with err its outcome and the
+// invocation's time its Invoked. A second Done does nothing.
+func (c *Call) Done(err error, kv ...any) {
+	if c == nil || !c.done.CompareAndSwap(false, true) {
+		return
+	}
+	all := append(append(append([]any(nil), c.kv...), kv...), "invoked", c.invoked)
+	c.r.record(c.ctx, c.action, err, all, c.seq)
 }
 
 // step builds a step from Record's arguments; false if "when" excludes it.

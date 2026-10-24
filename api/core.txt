@@ -1004,6 +1004,7 @@ func FileSink(path string, d Durability) (*JSONLSink, error)
 func From(ctx context.Context) *Recorder
 func Global() *Recorder
 func InstallGlobal(r *Recorder) (restore func(), err error)
+func Invoke(ctx context.Context, action string, kv ...any) *Call
 func NewJSONLSink(w io.Writer, d Durability) *JSONLSink
 func NewOTelSink(tp trace.TracerProvider) *OTelSink
 func NewRecorder(sink Sink, opts ...Option) *Recorder
@@ -1015,6 +1016,8 @@ func WithActor(a string) Option
 func WithID(id string) Option
 func WithProcess(p string) Option
 func WithRecorder(ctx context.Context, r *Recorder) context.Context
+type Call struct
+    method (*Call) Done(err error, kv ...any)
 type Durability int
 type JSONLSink struct
     method (*JSONLSink) Close() error
@@ -1036,6 +1039,7 @@ type Recorder struct
     method (*Recorder) Count() int
     method (*Recorder) ID() string
     method (*Recorder) Interrupted() []qtrace.Step
+    method (*Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call
     method (*Recorder) Issues() []string
     method (*Recorder) Record(ctx context.Context, action string, err error, kv ...any)
 type Sink interface
@@ -1115,6 +1119,7 @@ const RoleReplay = "replay"
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
 func CheckCases(t testing.TB, workflow, bindingPath string, opts ...Option) CaseCheck
+func Completes() Expectation
 func Conforms() Expectation
 func Constants(m map[string]string) Option
 func Exercised(except ...string) Exercise
@@ -1288,7 +1293,9 @@ type Vacuity struct
 const EventName = "quint.step"
 const KeyAction = "quint.action"
 const KeyActor = "quint.actor"
+const KeyCall = "quint.call"
 const KeyError = "quint.error"
+const KeyInvocation = "quint.invocation"
 const KeyInvoked = "quint.invoked_unix_nano"
 const KeyOutcome = "quint.outcome"
 const KeyProcess = "quint.process"
@@ -1335,6 +1342,8 @@ type Step struct
     field Error string
     field Time time.Time
     field Invoked time.Time
+    field Invocation bool
+    field Call uint64
     field Args map[string]any
     field Obs map[string]any
     field Order map[string]int64
@@ -1352,6 +1361,7 @@ type Trace struct
     field Steps []Step
     field Processes []string
     field Issues []Issue
+    field Pending []Step
 
 == github.com/chucklehead-dev/gotogether/skills
 func FS() fs.FS
@@ -1423,6 +1433,7 @@ type Result struct
     field Failure *Failure
     field Invariants []InvariantResult
     field Issues []qtrace.Issue
+    field Pending []qtrace.Step
     field Constants []string
     field Module string
     field ITF string

@@ -36,6 +36,11 @@ const (
 	// nanoseconds): with the step's time, its real-time interval. A step
 	// whose operation completed before another's was invoked precedes it.
 	KeyInvoked = "quint.invoked_unix_nano"
+	// KeyInvocation marks an invocation record (qobs.Invoke): the operation
+	// began, and its completion, if any, names this record's seq as
+	// KeyCall. An invocation never completed is in Trace.Pending.
+	KeyInvocation = "quint.invocation"
+	KeyCall       = "quint.call" // on a completion: its invocation record's seq (same recorder)
 
 	PrefixArg   = "quint.arg."   // an observed parameter of the action
 	PrefixObs   = "quint.obs."   // an observed projection of the post-state
@@ -58,10 +63,15 @@ type Step struct {
 	// step took effect at some point between Invoked and Time. Zero:
 	// unknown, some time before Time (no real-time bound).
 	Invoked time.Time
-	Args    map[string]any // string, int64, bool or float64
-	Obs     map[string]any
-	Order   map[string]int64
-	Source  string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	// Invocation marks an invocation record (KeyInvocation), not a step:
+	// Reconstruct pairs it with its completion, whose Call is its Seq, and
+	// keeps it in Trace.Pending if there is none.
+	Invocation bool
+	Call       uint64
+	Args       map[string]any // string, int64, bool or float64
+	Obs        map[string]any
+	Order      map[string]int64
+	Source     string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
 }
 
 // Get returns an argument or, with the "obs." prefix, an observation.
@@ -123,6 +133,16 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 	}
 	// args, obs, order keys and the invocation only from the event itself (layer 0)
 	if len(layers) > 0 {
+		if v, ok := layers[0][KeyInvocation]; ok {
+			s.Invocation = v == true || fmt.Sprint(v) == "true"
+		}
+		if v, ok := layers[0][KeyCall]; ok {
+			n, err := toInt(v)
+			if err != nil || n <= 0 {
+				return s, fmt.Errorf("%s: %s: not a seq: %v", EventName, KeyCall, v)
+			}
+			s.Call = uint64(n)
+		}
 		if v, ok := layers[0][KeyInvoked]; ok {
 			n, err := toInt(v)
 			if err != nil {

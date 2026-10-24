@@ -26,6 +26,12 @@ func (s *Step) Attributes() map[string]any {
 	if !s.Invoked.IsZero() {
 		m[KeyInvoked] = s.Invoked.UnixNano()
 	}
+	if s.Invocation {
+		m[KeyInvocation] = true
+	}
+	if s.Call != 0 {
+		m[KeyCall] = int64(s.Call)
+	}
 	for k, v := range s.Args {
 		m[PrefixArg+k] = v
 	}

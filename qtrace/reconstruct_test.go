@@ -120,3 +120,13 @@ func TestDomainClockGroups(t *testing.T) {
 		t.Fatalf("order: %s", got)
 	}
 }
+
+// An actor whose only operation was invoked and never completed still
+// has a trace, with no steps and that call pending; the invocation's seq
+// counts, so no gap is reported.
+func TestReconstructOnlyPending(t *testing.T) {
+	traces, issues := Reconstruct([]Step{{Action: "withdraw", Seq: 1, Recorder: "r", Actor: "a", Invocation: true, Time: time.Unix(1, 0)}})
+	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 0 || len(traces[0].Pending) != 1 || len(traces[0].Issues) > 0 {
+		t.Fatalf("traces %+v, issues %v", traces, issues)
+	}
+}

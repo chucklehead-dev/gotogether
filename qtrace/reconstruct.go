@@ -13,6 +13,10 @@ type Trace struct {
 	Steps     []Step
 	Processes []string // incarnations in the order they appear
 	Issues    []Issue  // problems that affect only this actor
+	// Pending are the invocations (qobs.Invoke) of this actor never
+	// completed, in recording order: operations invoked whose outcome no
+	// step says (a caller that crashed, or a call never answered).
+	Pending []Step
 }
 
 // Issue is something the reconstructor could not make sense of. Severity
@@ -95,10 +99,34 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 	}
 
-	// 3. Partition by actor, then order each.
-	byActor := map[string][]Step{}
+	// 3. Invocation records are no steps: one whose completion names it
+	// (Call, same recorder) is done with, any other is pending.
+	completed := map[rk]bool{}
 	for _, s := range uniq {
+		if s.Call != 0 {
+			completed[rk{s.Recorder, s.Call}] = true
+		}
+	}
+	pending := map[string][]Step{}
+	steps = uniq[:0:0]
+	for _, s := range uniq {
+		switch {
+		case !s.Invocation:
+			steps = append(steps, s)
+		case !completed[rk{s.Recorder, s.Seq}]:
+			pending[s.Actor] = append(pending[s.Actor], s)
+		}
+	}
+
+	// 4. Partition by actor, then order each.
+	byActor := map[string][]Step{}
+	for _, s := range steps {
 		byActor[s.Actor] = append(byActor[s.Actor], s)
+	}
+	for a := range pending {
+		if byActor[a] == nil {
+			byActor[a] = []Step{} // an actor whose every operation is pending
+		}
 	}
 	actors := make([]string, 0, len(byActor))
 	for a := range byActor {
@@ -108,6 +136,8 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	var out []*Trace
 	for _, a := range actors {
 		t := order(a, byActor[a])
+		t.Pending = pending[a]
+		sort.SliceStable(t.Pending, func(i, j int) bool { return t.Pending[i].Time.Before(t.Pending[j].Time) })
 		for _, m := range gapActors[a] {
 			t.Issues = append(t.Issues, Issue{"error", "gap", m})
 		}

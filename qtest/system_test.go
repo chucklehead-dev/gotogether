@@ -359,3 +359,33 @@ func TestIgnoredOptionsRefused(t *testing.T) {
 		}
 	}
 }
+
+// An operation recorded at its invocation whose caller crashes before it
+// completes is pending, no step: the run conforms, the report names it,
+// and Completes fails of it; with no crash every call completes.
+func TestInvokedNeverCompleted(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	sys := func(crash bool) System {
+		return System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
+			s := qenv.New(c)
+			defer s.Close()
+			var p *qenv.Process
+			p = s.Process("client", true, func(ctx context.Context) {
+				qobs.Invoke(ctx, "deposit", "amount", 10).Done(nil, "obs.balance", 10)
+				w := qobs.Invoke(ctx, "withdraw", "amount", 3)
+				if crash {
+					p.Crash() // the caller dies: the withdrawal's outcome is unknown
+				}
+				w.Done(nil, "obs.balance", 7)
+			})
+			return s.Run(time.Minute)
+		}}
+	}
+	x := sys(true).Explore(t, ExploreConfig{Seeds: 1})
+	x.Expect(t, Conforms(), None(Completes()))
+	if sum := x.Runs[0].Report.Summary(); !strings.Contains(sum, "invoked, never completed: withdraw(amount=3)") {
+		t.Errorf("the report does not name the pending call:\n%s", sum)
+	}
+	sys(false).Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Conforms(), Completes())
+}

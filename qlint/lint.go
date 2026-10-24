@@ -142,7 +142,7 @@ func SimFile(fset *token.FileSet, f *ast.File) []Finding {
 			if fn, ok := sel(n.Fun, "time"); ok && wallClock[fn] != "" {
 				add(n, "time."+fn+" reads the wall clock, which does not move in a simulation", "use "+wallClock[fn])
 			}
-			if fn, ok := sel(n.Fun, "github.com/chucklehead-dev/gotogether/qobs"); ok && fn == "Record" && len(n.Args) > 0 {
+			if fn, ok := sel(n.Fun, "github.com/chucklehead-dev/gotogether/qobs"); ok && (fn == "Record" || fn == "Invoke") && len(n.Args) > 0 {
 				if c, ok := n.Args[0].(*ast.CallExpr); ok {
 					if bg, ok := sel(c.Fun, "context"); ok && (bg == "Background" || bg == "TODO") {
 						add(n, "step recorded with context."+bg+"()", "record through the task's context, or Sim.Context() outside tasks")

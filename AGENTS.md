@@ -250,6 +250,12 @@ working there:
   A binding's `eventually` vals are checked in a run's last state, and
   qtest drops their results from a run that did not settle: a run cut
   short has work pending by right.
+- `qobs.Invoke` writes an invocation record (a step with `Invocation`,
+  its own seq) and `Call.Done` the step, whose `Call` names it:
+  `qtrace.Reconstruct` drops the records, keeping those never completed
+  as `Trace.Pending`, so every reader must go through it. Pending is no
+  step and not in OK (a crashed caller's call is pending by right):
+  `qtest.Completes()` judges it.
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
   (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record

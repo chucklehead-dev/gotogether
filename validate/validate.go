@@ -65,6 +65,11 @@ type Result struct {
 	// "error" issue was validated anyway, but a pass means little.
 	Issues []qtrace.Issue
 
+	// Pending are the operations invoked (qobs.Invoke) and never completed
+	// (qtrace.Trace.Pending): no step of the replay. qtest.Completes judges
+	// them; OK does not, since a crashed caller's call is pending by right.
+	Pending []qtrace.Step
+
 	// Constants are the instance checked against ("NAME = expr"), printed
 	// with a failure: a run that fails at its first step is most often
 	// checked against the wrong instance.
@@ -150,7 +155,7 @@ func validateTrace(ctx context.Context, b *binding.Binding, m *binding.Model, t 
 	if err != nil {
 		return nil, err
 	}
-	res := &Result{Actor: t.Actor, Issues: t.Issues, Constants: p.ConstantList()}
+	res := &Result{Actor: t.Actor, Issues: t.Issues, Pending: t.Pending, Constants: p.ConstantList()}
 	return res, evaluate(ctx, b.ModuleSpec(p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
 }
 
@@ -567,6 +572,9 @@ func (r *Result) Summary() string {
 		fmt.Fprintf(&b, "  issue: %s\n", i)
 	}
 	fmt.Fprintf(&b, "  conformance: %s\n", strings.ToUpper(string(r.Conforms)))
+	for _, p := range r.Pending {
+		fmt.Fprintf(&b, "  invoked, never completed: %s (process %s)\n", p.String(), p.Process)
+	}
 	if f := r.Failure; f != nil {
 		if r.Conforms == NotEvaluated { // a search cut short (qtest.Linearize): its furthest order, not a verdict
 			fmt.Fprintf(&b, "    no verdict: the order checked is the one that got furthest, where it failed:\n")

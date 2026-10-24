@@ -141,10 +141,11 @@ func checkRecords(pass *analysis.Pass, m *binding.Model, f *ast.File) {
 	}
 }
 
-// isQobsRecord reports whether obj is qobs.Record or (*qobs.Recorder).Record.
+// isQobsRecord reports whether obj is qobs.Record or (*qobs.Recorder).Record,
+// or their Invoke.
 func isQobsRecord(obj types.Object) bool {
 	fn, ok := obj.(*types.Func)
-	return ok && fn.Name() == "Record" && fn.Pkg() != nil && fn.Pkg().Path() == "github.com/chucklehead-dev/gotogether/qobs"
+	return ok && (fn.Name() == "Record" || fn.Name() == "Invoke") && fn.Pkg() != nil && fn.Pkg().Path() == "github.com/chucklehead-dev/gotogether/qobs"
 }
 
 // checkScope reports the names in a's expressions that are not in the

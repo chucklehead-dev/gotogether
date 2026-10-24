@@ -16,8 +16,14 @@ The final `error` is the outcome. An error can classify itself with a
 orders it, and before spawning work that depends on it.
 
 Where you cannot (a client of a service you do not own, a history like
-Jepsen's), record each operation when it returns with `"invoked", start`
-and check with `qtest.Linearize()`: concurrent operations return in
+Jepsen's), record each operation when it returns with `"invoked", start`,
+or record it when it is invoked: `c := qobs.Invoke(ctx, "write", "key",
+k)` writes an invocation record at once, and `c.Done(err, "obs.v", v)`
+the step, with its invocation's time as `invoked`. A call whose caller
+died, or that was never answered, is then in the trace as pending
+(`invoked, never completed: write(key=..)` in the report; no step of the
+replay), which `qtest.Completes()` judges. Either way
+check with `qtest.Linearize()`: concurrent operations return in
 another order than they took effect, and the recording order rejects
 correct code (examples/kvstore's client history, every load tried). The
 search tries the orders the operations' intervals allow (an operation

@@ -96,6 +96,12 @@ Added to the core since api/core.txt was first recorded:
   daemon still at work or waiting; an exploration judges such a run
   rather than fail it (`Run.Unsettled`, `validate.Report.Unsettled`): it
   does not conform, and `qtest.Settles()` states it alone.
+- `qobs.Invoke(ctx, action, kv...)` records an operation when it is
+  invoked and `Call.Done(err, kv...)` when it completes: a trace keeps
+  an invocation never completed (`qtrace.Trace.Pending`,
+  `validate.Result.Pending`, "invoked, never completed" in a report),
+  and `qtest.Completes()` states that every call completed. Steps carry
+  `Invocation` and `Call` (`quint.invocation`, `quint.call`).
 - `Sim.Settle` takes runnable tasks in turn (a task spinning until
   another acts no longer starves it), and `Sim.SettleCore(d, core...)`
   keeps faulting every process outside a core while the core must finish.

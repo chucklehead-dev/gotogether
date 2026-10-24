@@ -23,6 +23,7 @@ then works through the following stages:
 | Way | Code | When |
 |---|---|---|
 | Explicit | `qobs.Record(ctx, "deposit", err, "account", a, "amount", n, "obs.balance", bal)` | anywhere; ~20 ns when no recorder is installed |
+| At invocation | `c := qobs.Invoke(ctx, "transfer", "src", a, "dest", b, "amount", n)`, then `c.Done(err, "obs.balance", bal)` | a client's call whose caller may crash or never hear back: the trace says "invoked, never completed" (`qtest.Completes()`) |
 | Annotation | `//quint:action action:deposit account:acct amount:n obs.balance:b.bal` on a function, built woven: `qweave go build` (this repository's weaver, an overlay), `go run github.com/DataDog/orchestrion go build`, or in gosim (a `gosim.tool.go` naming qobs) | function-shaped steps, no code change in plain builds |
 | Structured logs | `slog.New(qobs.NewSlogHandler(next))`, then `slog.InfoContext(ctx, "deposited", "quint.action", "deposit", "account", a, ...)`: records with `quint.action` are steps, every record still reaches `next` | a service that already logs what it did |
 | Existing OTel spans | a `convert` rule file mapping span names and attributes to actions | code you cannot change, or telemetry you already have |
