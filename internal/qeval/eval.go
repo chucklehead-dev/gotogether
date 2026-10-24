@@ -20,7 +20,8 @@ func (u *Unsupported) Error() string {
 }
 
 // An EvalError is the model's own runtime error (a map's missing key, a
-// list's index out of range), as quint would report it.
+// list's index out of range, a division by zero), as quint would report
+// it.
 type EvalError struct{ Msg string }
 
 func (e *EvalError) Error() string { return "qeval: " + e.Msg }
@@ -30,6 +31,13 @@ func unsupported(op, why string, a ...any) error {
 }
 
 func evalErr(format string, a ...any) error { return &EvalError{fmt.Sprintf(format, a...)} }
+
+// internal is the evaluator's own failure (a value of a kind a
+// typechecked model cannot give, a name it did not bind): Unsupported, so
+// that quint, not the evaluator, says what the model does.
+func internal(format string, a ...any) error {
+	return &Unsupported{Op: "evaluation", Why: fmt.Sprintf(format, a...)}
+}
 
 // maxSet bounds a set the evaluator builds (a range, a powerset, a
 // product): past it, quint.
@@ -170,7 +178,10 @@ func recoverInto(err *error) {
 	if r := recover(); r != nil {
 		t, ok := r.(thrown)
 		if !ok {
-			panic(r)
+			// the evaluator's own failure (a value of a kind it did not
+			// expect): never a verdict, quint's to give
+			*err = &Unsupported{Op: "evaluation", Why: fmt.Sprint(r)}
+			return
 		}
 		*err = t.err
 	}
@@ -356,7 +367,7 @@ func (ev *evaluation) varName(e *Expr) string {
 // bindLet binds a let's definition: a value now, or an operator.
 func (ev *evaluation) bindLet(d *Decl, en *env) *env {
 	if d.Expr.Kind == "lambda" {
-		return en.bind(d.Name, &Lambda{params: paramNames(d.Expr), body: d.Expr.Expr, env: nil})
+		return en.bind(d.Name, &Lambda{params: paramNames(d.Expr), body: d.Expr.Expr, env: en}) // it closes over the lets and parameters around it (quint has no recursion)
 	}
 	return en.bind(d.Name, ev.eval(d.Expr, en))
 }
@@ -375,7 +386,7 @@ func (ev *evaluation) boolOf(e *Expr, en *env) bool {
 	v := ev.eval(e, en)
 	b, ok := v.(Bool)
 	if !ok {
-		throw(evalErr("expected a Boolean, got %s", String(v)))
+		throw(internal("expected a Boolean, got %s", String(v)))
 	}
 	return bool(b)
 }
@@ -383,7 +394,7 @@ func (ev *evaluation) boolOf(e *Expr, en *env) bool {
 func (ev *evaluation) intOf(v Value, op string) int64 {
 	i, ok := v.(Int)
 	if !ok {
-		throw(evalErr("%s: expected an integer, got %s", op, String(v)))
+		throw(internal("%s: expected an integer, got %s", op, String(v)))
 	}
 	return int64(i)
 }
@@ -395,14 +406,14 @@ func (ev *evaluation) setOf(v Value, op string) *Set {
 	case infinite:
 		throw(unsupported(op, "of an infinite set"))
 	}
-	throw(evalErr("%s: expected a set, got %s", op, String(v)))
+	throw(internal("%s: expected a set, got %s", op, String(v)))
 	return nil
 }
 
 func (ev *evaluation) mapOf(v Value, op string) *Map {
 	m, ok := v.(*Map)
 	if !ok {
-		throw(evalErr("%s: expected a map, got %s", op, String(v)))
+		throw(internal("%s: expected a map, got %s", op, String(v)))
 	}
 	return m
 }
@@ -414,7 +425,7 @@ func (ev *evaluation) seqOf(v Value, op string) []Value {
 	case Tup:
 		return x
 	}
-	throw(evalErr("%s: expected a list, got %s", op, String(v)))
+	throw(internal("%s: expected a list, got %s", op, String(v)))
 	return nil
 }
 
@@ -422,10 +433,10 @@ func (ev *evaluation) seqOf(v Value, op string) []Value {
 func (ev *evaluation) call(f Value, args ...Value) Value {
 	l, ok := f.(*Lambda)
 	if !ok {
-		throw(evalErr("expected an operator, got %s", String(f)))
+		throw(internal("expected an operator, got %s", String(f)))
 	}
 	if len(l.params) != len(args) {
-		throw(evalErr("an operator of %d parameters applied to %d", len(l.params), len(args)))
+		throw(internal("an operator of %d parameters applied to %d", len(l.params), len(args)))
 	}
 	en := l.env
 	for i, p := range l.params {
@@ -488,15 +499,15 @@ func (ev *evaluation) name(e *Expr, en *env) Value {
 		if v, ok := en.lookup(r.param); ok {
 			return v
 		}
-		throw(evalErr("parameter %s unbound", r.param))
+		throw(internal("parameter %s unbound", r.param))
 	case "var":
 		d := ev.m.byID[r.decl]
 		if ev.state == nil {
-			throw(evalErr("%s read before init", d.Name))
+			throw(internal("%s read before init", d.Name))
 		}
 		v, ok := ev.state[d.Name]
 		if !ok {
-			throw(evalErr("%s has no value", d.Name))
+			throw(internal("%s has no value", d.Name))
 		}
 		return v
 	case "const":
@@ -504,7 +515,7 @@ func (ev *evaluation) name(e *Expr, en *env) Value {
 		if v, ok := ev.consts[d.Name]; ok {
 			return v
 		}
-		throw(evalErr("constant %s has no value: give the instance's", d.Name))
+		throw(internal("constant %s has no value: give the instance's", d.Name))
 	case "def":
 		d := ev.m.byID[r.decl]
 		if d == nil {
@@ -548,6 +559,13 @@ func mul(a, b int64) int64 {
 
 // app is an operator applied: a definition of the model's, or a builtin.
 func (ev *evaluation) app(e *Expr, en *env) Value {
+	if f, ok := en.lookup(e.Opcode); ok { // a let-bound operator, or one passed as a parameter
+		args := make([]Value, len(e.Args))
+		for i, a := range e.Args {
+			args[i] = ev.eval(a, en)
+		}
+		return ev.call(f, args...)
+	}
 	if r, ok := ev.m.refs[e.ID]; ok && (r.kind == "def" || r.kind == "param") {
 		args := make([]Value, len(e.Args))
 		for i, a := range e.Args {
@@ -556,7 +574,7 @@ func (ev *evaluation) app(e *Expr, en *env) Value {
 		if r.kind == "param" {
 			f, ok := en.lookup(r.param)
 			if !ok {
-				throw(evalErr("parameter %s unbound", r.param))
+				throw(internal("parameter %s unbound", r.param))
 			}
 			return ev.call(f, args...)
 		}
@@ -569,13 +587,6 @@ func (ev *evaluation) app(e *Expr, en *env) Value {
 			throw(err)
 		}
 		return v
-	}
-	if f, ok := en.lookup(e.Opcode); ok { // a let-bound operator
-		args := make([]Value, len(e.Args))
-		for i, a := range e.Args {
-			args[i] = ev.eval(a, en)
-		}
-		return ev.call(f, args...)
 	}
 	return ev.builtin(e, en)
 }
@@ -643,27 +654,28 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		if b == 0 {
 			throw(evalErr("division by zero"))
 		}
-		// quint divides as TLA+: floored for imod's sign, truncated for idiv
+		if a == math.MinInt64 && b == -1 {
+			throw(unsupported(op, "past 64 bits"))
+		}
+		// as quint's backends do: truncated, the remainder with the
+		// dividend's sign (-7 % 2 is -1), Go's / and %
 		if op == "idiv" {
 			return Int(a / b)
 		}
-		m := a % b
-		if m < 0 {
-			if b > 0 {
-				m += b
-			} else {
-				m -= b
-			}
-		}
-		return Int(m)
+		return Int(a % b)
 	case "ipow":
 		a, b := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
-		if b < 0 {
-			throw(evalErr("a negative power"))
+		if b < 0 || a == 0 && b == 0 {
+			throw(evalErr("%d^%d is undefined", a, b))
 		}
-		r := int64(1)
-		for range b {
-			r = mul(r, a)
+		r, x := int64(1), a // by squaring, overflow checked
+		for ; b > 0; b >>= 1 {
+			if b&1 == 1 {
+				r = mul(r, x)
+			}
+			if b > 1 {
+				x = mul(x, x)
+			}
 		}
 		return Int(r)
 	case "iuminus":
@@ -686,7 +698,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		return NewSet(all())
 	case "to":
 		lo, hi := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
-		if hi-lo >= maxSet {
+		if hi > lo && (hi-lo >= maxSet || hi-lo < 0) {
 			throw(unsupported(op, "%d..%d, more than %d values", lo, hi, maxSet))
 		}
 		var out []Value
@@ -780,11 +792,22 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		return Bool(true)
 	case "fold":
-		// over the set in its order: quint's order is its own, so a fold
-		// whose result depends on the order (none here) may differ
-		s, acc, f := ev.setOf(arg(0), op), arg(1), arg(2)
+		// quint folds a set in an order of its own (its backends' differ):
+		// folded both ways, a result that depends on the order is quint's to
+		// give
+		s, init, f := ev.setOf(arg(0), op), arg(1), arg(2)
+		acc := init
 		for _, x := range s.Elems {
 			acc = ev.call(f, acc, x)
+		}
+		if len(s.Elems) > 1 {
+			back := init
+			for i := len(s.Elems) - 1; i >= 0; i-- {
+				back = ev.call(f, back, s.Elems[i])
+			}
+			if Compare(acc, back) != 0 {
+				throw(unsupported(op, "a fold whose result depends on the set's order"))
+			}
 		}
 		return acc
 	case "flatten":
@@ -839,7 +862,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		for _, p := range all() {
 			t, ok := p.(Tup)
 			if !ok || len(t) != 2 {
-				throw(evalErr("Map: expected pairs, got %s", String(p)))
+				throw(internal("Map: expected pairs, got %s", String(p)))
 			}
 			ks, vs = append(ks, t[0]), append(vs, t[1])
 		}
@@ -897,7 +920,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		for i := 0; i+1 < len(e.Args); i += 2 {
 			n, ok := arg(i).(Str)
 			if !ok {
-				throw(evalErr("Rec: a field name"))
+				throw(internal("Rec: a field name"))
 			}
 			names, vals = append(names, string(n)), append(vals, arg(i+1))
 		}
@@ -905,23 +928,23 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	case "field":
 		r, ok := arg(0).(*Rec)
 		if !ok {
-			throw(evalErr("field: expected a record"))
+			throw(internal("field: expected a record"))
 		}
 		n := arg(1).(Str)
 		v, ok := r.field(string(n))
 		if !ok {
-			throw(evalErr("no field %s", n))
+			throw(internal("no field %s", n))
 		}
 		return v
 	case "with":
 		r, ok := arg(0).(*Rec)
 		if !ok {
-			throw(evalErr("with: expected a record"))
+			throw(internal("with: expected a record"))
 		}
 		n := string(arg(1).(Str))
 		i, found := slices.BinarySearch(r.Names, n)
 		if !found {
-			throw(evalErr("with: no field %s", n))
+			throw(internal("with: no field %s", n))
 		}
 		out := &Rec{Names: r.Names, Vals: slices.Clone(r.Vals)}
 		out.Vals[i] = arg(2)
@@ -938,7 +961,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	case "item":
 		t, ok := arg(0).(Tup)
 		if !ok {
-			throw(evalErr("item: expected a tuple"))
+			throw(internal("item: expected a tuple"))
 		}
 		i := ev.intOf(arg(1), op)
 		if i < 1 || i > int64(len(t)) {
@@ -950,7 +973,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	case "matchVariant":
 		v, ok := arg(0).(Variant)
 		if !ok {
-			throw(evalErr("match: expected a variant"))
+			throw(internal("match: expected a variant"))
 		}
 		for i := 1; i+1 < len(e.Args); i += 2 {
 			l := string(arg(i).(Str))
@@ -1003,7 +1026,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		return List(slices.Clone(l[s:t]))
 	case "range":
 		lo, hi := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
-		if hi-lo > maxSet {
+		if hi > lo && (hi-lo > maxSet || hi-lo < 0) {
 			throw(unsupported(op, "more than %d values", maxSet))
 		}
 		var out List
@@ -1038,7 +1061,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 func (ev *evaluation) truth(v Value) bool {
 	b, ok := v.(Bool)
 	if !ok {
-		throw(evalErr("expected a Boolean, got %s", String(v)))
+		throw(internal("expected a Boolean, got %s", String(v)))
 	}
 	return bool(b)
 }

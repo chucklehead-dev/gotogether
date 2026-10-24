@@ -133,7 +133,9 @@ func agree(t *testing.T, b *binding.Binding) bool {
 			if err != nil {
 				var u *Unsupported
 				if asUnsupported(err, &u) {
-					t.Logf("refused: %v", err)
+					// every model of the repository is in the fragment: a
+					// refusal is a regression (or a model that left it)
+					t.Errorf("refused: %v", err)
 					return false
 				}
 				t.Fatalf("%s state %d: %v", filepath.Base(tp), i, err)

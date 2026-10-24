@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // compile compiles testdata's module name (with its init and step) to IR.
@@ -88,5 +90,55 @@ func TestWallet(t *testing.T) {
 	}
 	if v, err := m.Eval(consts, s2, "__gtg_ev_0"); err != nil || v != Bool(false) {
 		t.Errorf("allPosted before any post: %v %v", v, err)
+	}
+}
+
+// Builtins at their edges (signs of % and /, closures of let operators,
+// operators as arguments, duplicate map keys, records' field order,
+// match's default, a fold over a set): the evaluator's values are quint's,
+// on both its backends.
+func TestEdgesAgreeWithQuint(t *testing.T) {
+	m := compile(t, "edges.qnt", "edges", "init", "step")
+	s, err := m.Init(nil, "init")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s["edges::out"]
+	if got == nil {
+		got = s["out"]
+	}
+	for _, backend := range []string{"rust", "typescript"} {
+		dir := t.TempDir()
+		out := filepath.Join(dir, "t.itf.json")
+		abs, _ := filepath.Abs("testdata/edges.qnt")
+		cmd := exec.Command("quint", "run", "--backend", backend, "--max-steps", "0", "--max-samples", "1", "--out-itf", out, abs)
+		cmd.Dir = filepath.Dir(abs)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("quint run (%s): %v\n%s", backend, err, b)
+		}
+		tr, err := itf.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := FromITF(tr.States[0].Vars["out"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		wt, gt := want.(Tup), got.(Tup)
+		for i := range wt {
+			if Compare(wt[i], gt[i]) != 0 {
+				t.Errorf("%s: value %d: quint %s, the evaluator %s", backend, i+1, String(wt[i]), String(gt[i]))
+			}
+		}
+	}
+}
+
+// A fold whose result depends on the set's order is refused: quint's
+// backends fold in orders of their own.
+func TestOrderDependentFoldRefused(t *testing.T) {
+	m := compile(t, "edges.qnt", "edges", "init", "step")
+	_, err := m.Eval(nil, nil, "foldOrder")
+	if _, ok := err.(*Unsupported); !ok {
+		t.Errorf("a fold into a list: %v, want Unsupported", err)
 	}
 }
