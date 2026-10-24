@@ -42,16 +42,15 @@ var throttle = qenv.DeclareFaults("dbaas.throttle", "throttled")
 // NewSim serves cloud in s, on the virtual clock, and returns its client.
 // Each request carries its caller's deadline and the cloud refuses one
 // that arrives after it (ErrExpired): deadline propagation, as a gRPC
-// server drops a request past its caller's deadline. It is an assumption
-// of the faithful tier, and the cloud's to keep, not the provider's:
-// without it, a create delivered late (rpc.dbaas.delay) lands after the
-// provider has seen the resource deleted and found nothing, and the
-// database leaks. A cloud with a longer bound (AWS refuses a signed
-// request only after five minutes) leaves the provider to wait that long
-// before it trusts "not found"; over HTTP, a request the server had not
-// read when the caller closed the connection is never applied, one it
-// had read still is. expire false keeps a cloud with no bound, to show
-// the leak.
+// server drops a request past its caller's deadline. Without it, a create
+// delivered late (rpc.dbaas.delay) lands after the provider may have seen
+// the resource deleted: the provider's creation grace (30 s from a
+// create's start) is what keeps it from believing the database absent
+// before then, and it outlasts every delay here. A cloud with a longer
+// bound (AWS refuses a signed request only after five minutes) needs a
+// grace that long; over HTTP, a request the server had not read when the
+// caller closed the connection is never applied, one it had read still
+// is. expire false keeps a cloud with no bound.
 func NewSim(s *qenv.Sim, cloud *Cloud, expire bool) *SimClient {
 	cloud.Now = s.Now
 	svc := qenv.NewService(s, "dbaas", nil, func(ctx context.Context, r simReq) (simResp, error) {

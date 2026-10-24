@@ -29,19 +29,19 @@ func TestFaithfulConforms(t *testing.T) {
 	explore(t, crossdb.Config{}, crashy, qtest.ExploreConfig{Seeds: 60}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
-// A cloud that applies a request however late it arrives leaks: the
-// resource is deleted while its create is delayed, the provider times out
-// and finds nothing, and the create lands after. The faithful provider
-// cannot close that window from its side; the cloud refusing a request
-// past its caller's deadline does (dbaas.NewSim). The window is narrow:
-// 4 runs of 300 leak, so 600 seeds miss it about once in three thousand.
-func TestLateCreateLeaksWithoutRequestExpiry(t *testing.T) {
+// A cloud that applies a request however late it arrives does not leak
+// either: the provider waits out its creation grace (30 s from a create's
+// start, whatever its result) before it believes a deleted resource's
+// database absent, longer than a request is ever delayed here (a timeout
+// or two). This test once claimed a leak, which was the simulated kube
+// API's stamp translation (TestStampsSurviveConflictRetry): the stamps
+// came out months old and the grace over.
+func TestLateCreateCoveredByCreationGrace(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
-		t.Skip("600 runs")
+		t.Skip("300 runs")
 	}
-	explore(t, crossdb.Config{NoRequestExpiry: true}, crashy, qtest.ExploreConfig{Seeds: 600}).
-		Expect(t, qtest.Violates("settledCorrectly"), qtest.Some(qtest.Conforms()))
+	explore(t, crossdb.Config{NoRequestExpiry: true}, crashy, qtest.ExploreConfig{Seeds: 300}).Expect(t, qtest.Conforms())
 }
 
 // The cloud's ID as the external name. Correct while nothing fails. A

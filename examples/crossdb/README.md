@@ -64,20 +64,25 @@ the ID. The faithful provider's answer:
 | `GeneratedExternalName`: the cloud's ID as the external name, with a client token | conforms with no faults; **violates** `settledCorrectly` with lost responses alone, and with crashes alone | conforms, in a 6-resource run with 30% of responses dropped and in one with 14 `kill -9`s: the windows are narrow (see below) |
 | `NoClientToken`: the same, without the token | **violates** `oneDatabasePerResource`: a lost response, retried as a failure, makes a second database | **violates** `oneDatabasePerResource` (30% dropped): `app1` got a second database |
 | `PasswordFromCreate`: the password generated in `Create`, published only with its result | **violates** `settledCorrectly`: after a lost response, the retry's new password is ignored by the idempotent cloud, and the Secret doesn't open the database | **violates** `settledCorrectly` (30% dropped) |
-| faithful, on a cloud without request expiry (`Config.NoRequestExpiry`) | **violates** `settledCorrectly` in 4 runs of 300: a create delivered late lands after the resource was deleted and the provider found nothing | (over HTTP the closed connection takes the late request with it) |
+| faithful, on a cloud without request expiry (`Config.NoRequestExpiry`) | conforms (300 seeds): the creation grace outlasts a late create | (over HTTP the closed connection takes the late request with it) |
 
 ## Findings along the way
 
 - **A late create, after the delete.** A request can arrive after its
   caller gave up (`rpc.dbaas.delay`). If the user deletes the resource
-  while its create is delayed, the provider times out, finds nothing by
-  the token, and removes the finalizer; then the create lands, and the
-  database leaks. No provider can close that window from its side
-  without a bound on a request's age: the simulated cloud refuses a
-  request past its caller's deadline (`dbaas.NewSim`, deadline
-  propagation as gRPC does it), an assumption of the faithful tier. A
-  cloud whose bound is longer (AWS's five minutes for a signed request)
-  needs a provider that waits that long before it trusts "not found".
+  while its create is delayed, the provider times out and finds nothing
+  by the token; if it removed the finalizer then, the create would land
+  and the database leak. The provider's creation grace closes it: a
+  deleted resource whose create has no known result waits 30 s from the
+  create's start before "not found" is believed, longer than any delay
+  here (a cloud whose requests can be older, AWS's five minutes for a
+  signed request, needs a grace that long). The simulated cloud also
+  refuses a request past its caller's deadline (`dbaas.NewSim`, as gRPC
+  does), and without that the faithful provider still conforms. A leak
+  this example once reported here was the simulation's own: its stamp
+  translation, converting a map crossplane-runtime held, wrote the
+  create-pending stamp months in the past, and the grace was over before
+  it began (`TestStampsSurviveConflictRetry`).
 
 - **A leak with no crash.** With the cloud's ID as the external name, a
   create whose response is lost is marked failed. That's Crossplane's

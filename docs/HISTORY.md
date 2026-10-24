@@ -1084,7 +1084,9 @@ The rest of the Z track, as the roadmap had it when it was done.
   arrive late (`rpc.<name>.delay`: a late original after its retry),
   which found lease's lock without fencing broken with true clocks and
   crossdb's cloud leaking a database to a create that landed after the
-  delete (it now refuses a request past its deadline); pauses and gray
+  delete (it now refuses a request past its deadline; the seventh review
+  found that leak the simulation's own, its stamp translation, and the
+  provider's creation grace enough without the refusal); pauses and gray
   failures (`Sim.Stalls`); a full disk, a failed fsync (Linux's: its
   writes lost though a later fsync succeeds), a corrupt read; a second
   double of one name panics; an exploration runs its first seed twice

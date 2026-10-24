@@ -59,8 +59,8 @@ type Config struct {
 	// VisibilityLag of the cloud's reads (default 1s).
 	VisibilityLag time.Duration
 	// NoRequestExpiry makes the cloud apply a request however late it
-	// arrives (dbaas.NewSim): a create delivered after its timeout then
-	// leaks a database whose resource was deleted meanwhile.
+	// arrives (dbaas.NewSim): the provider's creation grace must then
+	// outlast a late create (it does: 30 s against a timeout or two).
 	NoRequestExpiry bool
 }
 
