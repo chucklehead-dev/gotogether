@@ -87,17 +87,17 @@ func TestMutants(t *testing.T) {
 }
 
 // Which faults make the missing dedupe a bug, pairwise over the fault
-// kinds: a duplicated request, a lost response, or a crash, which can fall
-// between the handler's commit and its response (qenv.Service's window), as
-// a real server can die there. A refused connection is harmless: nothing
-// was sent.
+// kinds: a duplicated request, a late one (applied after its retry), a
+// lost response, or a crash, which can fall between the handler's commit
+// and its response (qenv.Service's window), as a real server can die
+// there. A refused connection is harmless: nothing was sent.
 func TestNoDedupeSweep(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
 	space := []qsweep.Factor{qsweep.FaultKind("grpc.ledger.conn"), qsweep.FaultKind("rpc.ledger.request"),
-		qsweep.FaultKind("rpc.ledger.response"), qsweep.Bool("crash")}
+		qsweep.FaultKind("rpc.ledger.delay"), qsweep.FaultKind("rpc.ledger.response"), qsweep.Bool("crash")}
 	sys := qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
 		row, _ := qtest.RowOf(c) // the row's fault kinds that are off are off in c
 		_, err := grpcledger.Run(c, grpcledger.Config{Mutation: ledger.NoDedupe, NoCrashes: !row.On("crash")})
@@ -106,7 +106,7 @@ func TestNoDedupeSweep(t *testing.T) {
 	sw := sys.WithRates(qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.02}}).Sweep(t, qtest.SweepConfig{Factors: space,
 		Explore: qtest.ExploreConfig{Seeds: 30},
 		Expect: func(row qsweep.Row) []qtest.Claim {
-			if row.On("rpc.ledger.request") || row.On("rpc.ledger.response") || row.On("crash") {
+			if row.On("rpc.ledger.request") || row.On("rpc.ledger.delay") || row.On("rpc.ledger.response") || row.On("crash") {
 				return []qtest.Claim{reapplied}
 			}
 			return []qtest.Claim{qtest.Conforms()}
@@ -132,7 +132,7 @@ func TestShrinkDoubleApply(t *testing.T) {
 // applied), and the faithful ledger still conforms.
 func TestCrashWindow(t *testing.T) {
 	qtest.RequireQuint(t)
-	net := []string{"grpc.ledger.conn", "rpc.ledger.request", "rpc.ledger.response"}
+	net := []string{"grpc.ledger.conn", "rpc.ledger.request", "rpc.ledger.delay", "rpc.ledger.response"}
 	crashes := qtest.ExploreConfig{Seeds: 30}
 	run := func(m ledger.Mutation) qtest.System {
 		cfg := grpcledger.Config{Mutation: m}

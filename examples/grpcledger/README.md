@@ -46,7 +46,7 @@ client on return. A transfer whose response was lost still happened.
 |---|---|---|
 | `TestFaithfulConforms` | simulated | 60 seeds with crashes and every network fault conform; `Evidence` lists the 4 fault kinds faulted and every pair together |
 | `TestMutants` | simulated | the table above: `NoDedupe` conforms without faults and is caught with them; the others need none |
-| `TestNoDedupeSweep` | simulated | pairwise over {conn, request, response, crash}: the bug shows in every row with duplicated requests, lost responses or crashes (one can fall after the commit), and in no row with only refused connections |
+| `TestNoDedupeSweep` | simulated | pairwise over {conn, request, delay, response, crash}: the bug shows in every row with duplicated or late requests, lost responses or crashes (one can fall after the commit), and in no row with only refused connections |
 | `TestCrashWindow` | simulated, crashes only | a crash can fall after the commit (qenv.Service's crash window), so crashes alone expose `NoDedupe`; the faithful ledger conforms |
 | `TestShrinkDoubleApply` | simulated, Hegel | shrinks `NoDedupe` to one duplicated request (`qhegel.Shrink`), replayable from its choices |
 | `TestRealSpansConform` | real | a concurrent load with refused calls and lost responses: the otelgrpc spans conform |
