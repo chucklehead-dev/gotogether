@@ -1018,7 +1018,7 @@ func (x *Exploration) summary() string {
 // power says, for a claim some runs meet, how likely as many seeds are
 // to miss it at the rate this exploration measured, when that is more
 // than one time in a thousand, with the seed count that would make it
-// that: a claim held by luck fails another day (fleetrollout's mutant,
+// that, and at the measured rate's lower bound: a claim held by luck fails another day (fleetrollout's mutant,
 // in 6.5% of runs, missed by 20 seeds a quarter of the time). Nothing
 // for a bounded search, which is no sample.
 func (x *Exploration) power(n int) string {
@@ -1031,8 +1031,14 @@ func (x *Exploration) power(n int) string {
 	if miss <= 0.001 {
 		return ""
 	}
-	return fmt.Sprintf("; at that rate %d runs miss it %.1f%% of the time: %d seeds miss it one time in a thousand", runs, 100*miss,
-		int(math.Ceil(math.Log(0.001)/math.Log(1-p))))
+	need := func(p float64) int { return int(math.Ceil(math.Log(0.001) / math.Log(1-p))) }
+	// a few failing runs measure the rate loosely: the seeds at its lower
+	// bound too (Wilson's, one standard error), which a rate as low is
+	// as likely as not to need
+	nf, z := float64(runs), 1.0
+	low := (p + z*z/(2*nf) - z*math.Sqrt(p*(1-p)/nf+z*z/(4*nf*nf))) / (1 + z*z/nf)
+	return fmt.Sprintf("; at that rate %d runs miss it %.1f%% of the time: %d seeds miss it one time in a thousand (%d at the rate's lower bound, %.2g%%)",
+		runs, 100*miss, need(p), need(low), 100*low)
 }
 
 // reports are the runs' reports, in order.

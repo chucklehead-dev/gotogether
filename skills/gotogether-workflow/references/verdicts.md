@@ -80,8 +80,10 @@ expected, <claim>:`, without paths: its files are not kept
 (`GOTOGETHER_KEEP=dir` keeps them). When the rate it measured would let
 as many seeds miss the claim more than one time in a thousand, the line
 says how often, and the seeds that would not (`at that rate 20 runs
-miss it 35.8% of the time: 135 seeds ...`): a claim held by luck fails
-another day, so raise `Seeds` to it. Run alone, only the claims about every
+miss it 35.8% of the time: 135 seeds ... (356 at the rate's lower
+bound)`): a claim held by luck fails another day, so raise `Seeds` to
+it; a rate measured from a few failing runs is loose, and the lower
+bound's count is the safer one. Run alone, only the claims about every
 run are judged. Two traps
 have their own message: every run failing at step 1 (the binding's
 constants do not match the scenario's: `qtest.Constants`, or a sweep

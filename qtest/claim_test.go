@@ -232,7 +232,7 @@ func TestExercisedExceptionsOfAnEmptyRow(t *testing.T) {
 // of 20 is no luck. A bounded search's count is no sample.
 func TestClaimPower(t *testing.T) {
 	x := &Exploration{Runs: make([]*Run, 20)}
-	if got, want := x.power(1), "; at that rate 20 runs miss it 35.8% of the time: 135 seeds miss it one time in a thousand"; got != want {
+	if got, want := x.power(1), "; at that rate 20 runs miss it 35.8% of the time: 135 seeds miss it one time in a thousand (356 at the rate's lower bound, 1.9%)"; got != want {
 		t.Errorf("1 of 20: %q, want %q", got, want)
 	}
 	for _, n := range []int{10, 20} {

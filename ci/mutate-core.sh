@@ -4,7 +4,7 @@
 # (GOTOGETHER_MUTANT=<id>, JOBS at a time), and list the survivors: code its tests do not
 # constrain. A survivor in a search or a scheduler is a feature whose
 # test would pass with it turned off (the seventh review's most frequent
-# lesson). Usage: ci/mutate-core.sh qtrace [max-survivors]
+# lesson). Usage: [JOBS=n] [GOTOGETHER_CHECK=1] ci/mutate-core.sh qtrace [max-survivors]
 set -euo pipefail
 pkg=${1:?a core package, e.g. qtrace}
 max=${2:-}
@@ -15,14 +15,22 @@ go run -C "$root/qweave" ./cmd/qweave -C "$root" -mutate -coverpkg "github.com/c
   go test -c -o "$work/t" "./$pkg/" >/dev/null
 cd "$root/$pkg"
 GOTOGETHER_MUTANT=list "$work/t" -test.run '^$' 2>&1 | grep '^qmut: mutant' > "$work/list" || true
-# each mutant's tests, JOBS at a time (default 1): a survivor prints its line
+if [ ! -s "$work/list" ]; then
+  echo "$pkg: no mutants woven: is it a core package qweave may mutate (not qmut, qrun, qcover, internal/hooks)?" >&2
+  exit 1
+fi
+# the tests pass unmutated, or every mutant would be "killed"
+"$work/t" -test.short >/dev/null 2>&1 || { echo "$pkg: its tests fail unmutated" >&2; exit 1; }
+# each mutant's tests, JOBS at a time (default 1): a survivor prints its
+# line; a mutant whose tests run past 300 s (a loop that never ends)
+# counts as killed, as a test that hangs fails
 export work
 awk '{ id = $3; $1 = $2 = $3 = ""; sub(/^ +/, ""); print id "\t" $0 }' "$work/list" |
   xargs -d '\n' -P "${JOBS:-1}" -I{} sh -c '
     id=$(printf "%s" "$1" | cut -f1); rest=$(printf "%s" "$1" | cut -f2-)
     if GOTOGETHER_MUTANT=$id timeout 300 "$work/t" -test.short -test.failfast >/dev/null 2>&1; then
       echo "survived: $id $rest"
-    fi' _ {} | sort -n -k2 > "$work/survived" || true
+    fi' _ {} | sort -n -k2 > "$work/survived"
 cat "$work/survived"
 n=$(wc -l < "$work/list")
 s=$(wc -l < "$work/survived")
