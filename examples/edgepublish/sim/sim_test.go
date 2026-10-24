@@ -72,13 +72,16 @@ func TestMutants(t *testing.T) {
 	// a boundary another push rotated across, rotates back into a sealed
 	// generation. Exploration found it in the stand-in. The window is
 	// narrow (about 3 runs in 100 with 3 exporters and 12 requests), so
-	// it takes more seeds than the other mutants.
+	// it takes more seeds than the other mutants. The rotation back shows
+	// as a rotateGen the model cannot take (while another holds the lock)
+	// or as one to a generation the model never rotated to (the binding's
+	// expect): either is this bug.
 	t.Run("BackwardRotation", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("150 seeds")
 		}
 		explore(t, sim.Config{Mutation: publisher.BackwardRotation, NoCrashes: true, NoAmbiguous: true, Workers: 3, Requests: 12}, 150, qtest.Invariants()).
-			Expect(t, qtest.Rejects("rotateGen"))
+			Expect(t, qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Mismatch("rotateGen")))
 	})
 }
 

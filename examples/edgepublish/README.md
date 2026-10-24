@@ -120,7 +120,7 @@ go run github.com/DataDog/orchestrion go test ./sim/ -v            # Orchestrion
 | `TestExploredRunsConform` | 40 seeds: every interleaving of pushes, rotations and background seals, with failures, ambiguous writes and crashes, is a behaviour of the model |
 | `TestInvariantsHoldWithoutAmbiguousWrites` | with plain failures only, the design's invariants hold too |
 | `TestExplorationFindsAmbiguousFindings` | with ambiguous writes, random runs find the model's known findings F1/F3 (9 of 60 seeds), which `ambiguous-seal` had reproduced by hand |
-| `TestMutants` | `ManifestBeforeTable` (every seed), `NoRotationLock` (34 of 40), `BackwardRotation` (7 of 150: a narrow window) |
+| `TestMutants` | `ManifestBeforeTable` (every seed), `NoRotationLock` (34 of 40), `BackwardRotation` (2 of 150: a narrow window; a rotation back to a generation the model never rotated to) |
 | `TestHegelShrinksNoRotationLock` | Hegel shrinks to a rotation while a push is between its writes |
 | `TestLoadRecovers` | 3 requests/s against an S3 that serves 10 writes/s, through a 3x slowdown: recovers with 4 exporters or 16 |
 | `TestTimeoutsMakeDuplicates` | with 16 exporters and a 2 s S3 timeout, S3's queueing delay turns writes ambiguous and the collector's retries commit requests twice, with no trigger at all (30 in a run); with a 10 s timeout, none |
