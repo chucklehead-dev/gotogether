@@ -170,17 +170,43 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 		x.finish(t, s.Binding, c, mark, []uint64{1})
 		return x
 	}
-	// breadth first, by the number of deviations: a search MaxRuns cuts
-	// short has tried every run with fewer
+	x.Runs, x.search.left = schedules(b, off, run)
+	for i, r := range x.Runs {
+		if r != nil {
+			r.seed = uint64(i + 1)
+		}
+	}
+	if n := slices.Index(x.Runs, nil); n >= 0 {
+		x.Runs = x.Runs[:n] // the scenario failed t: finish says so
+	}
+	ids := make([]uint64, len(x.Runs))
+	for i := range ids {
+		ids[i] = uint64(i + 1)
+	}
+	unknownKinds(t, "Bound.Without kind", b.Without)
+	x.finish(t, s.Binding, c, mark, ids)
+	if x.search.left > 0 && !b.Partial && x.alone == nil {
+		t.Errorf("gotogether: %s: the search stopped at MaxRuns (%d runs) with at least %d runs within its bound left, "+
+			"so it proves nothing of them: raise MaxRuns, or lower Delays or Faults, or set Bound.Partial to accept a sample", x.ref(), len(x.Runs), x.search.left)
+	}
+	return x
+}
+
+// schedules runs every schedule within b with run, breadth first by the
+// number of deviations (a search MaxRuns cuts short has tried every run
+// with fewer), b.Parallel side by side, and returns the runs in order and
+// how many within b were left when MaxRuns cut the search short. A nil
+// run (the scenario failed the test) ends the search, last of the runs.
+func schedules(b Bound, off qenv.Rates, run func([]deviation) *Run) (out []*Run, left int) {
 	level := [][]deviation{nil}
 	for len(level) > 0 {
-		room := b.MaxRuns - len(x.Runs)
+		room := b.MaxRuns - len(out)
 		if room <= 0 {
-			x.search.left = len(level)
+			left = len(level)
 			break
 		}
 		if len(level) > room {
-			x.search.left = len(level) - room
+			left = len(level) - room
 			level = level[:room]
 		}
 		runs := make([]*Run, len(level))
@@ -197,32 +223,20 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 		wg.Wait()
 		var next [][]deviation
 		for i, r := range runs {
+			out = append(out, r)
 			if r == nil {
-				break // the scenario failed t: finish says so
+				return out, left
 			}
-			r.seed = uint64(len(x.Runs) + 1)
-			x.Runs = append(x.Runs, r)
 			if r.Err == nil {
 				next = append(next, children(level[i], r.Choices, b, off)...)
 			}
 		}
-		if x.search.left > 0 || slices.Contains(runs, nil) {
-			x.search.left += len(next)
-			break
+		if left > 0 {
+			return out, left + len(next)
 		}
 		level = next
 	}
-	ids := make([]uint64, len(x.Runs))
-	for i := range ids {
-		ids[i] = uint64(i + 1)
-	}
-	unknownKinds(t, "Bound.Without kind", b.Without)
-	x.finish(t, s.Binding, c, mark, ids)
-	if x.search.left > 0 && !b.Partial && x.alone == nil {
-		t.Errorf("gotogether: %s: the search stopped at MaxRuns (%d runs) with at least %d runs within its bound left, "+
-			"so it proves nothing of them: raise MaxRuns, or lower Delays or Faults, or set Bound.Partial to accept a sample", x.ref(), len(x.Runs), x.search.left)
-	}
-	return x
+	return out, left
 }
 
 // children are the schedules one deviation further than ds, within b: a
