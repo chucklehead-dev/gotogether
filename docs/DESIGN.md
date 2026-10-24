@@ -2759,6 +2759,16 @@ model accepts (guided: from the failing step, every single move
 constraints allow, keeping the one that gets furthest). `qtest.Linearize`
 checks a history so; finding none is strong evidence of a bug, a budget
 running out is no verdict at all (Y6: n/a, which Rejects does not match).
+Since Z8 a complete search follows a guided one that finds none (every
+order real time allows, level by level, rejected prefixes pruned, no
+beam but the budget): it finds an order the guided search missed, or
+proves there is none; cut short, the guided search's verdict stands.
+Candidates are memoized by prefix (T2b) and checked for verdicts only
+(T2a). Since T1a a call recorded with `qobs.Invoke` and `Call.Done` has
+its interval from the recorder, and one recorder's steps are ordered by
+seq, exactly: in a simulation, where calls take no virtual time unless
+something sleeps, times alone made every call concurrent. The searches
+are validate's (`Checker.Search`, T3), so the CLI runs them too.
 
 **Contracts (X5).** A double is only as good as its contract. Under
 `GOTOGETHER_CHECK` every `Store` keeps the history of its transactions

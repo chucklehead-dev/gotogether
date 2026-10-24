@@ -158,7 +158,10 @@ func NewSeeded(seed uint64) *Seeded { return choice.NewSeeded(seed) }
 
 // NewPCT returns a PCT scheduler of depth d over base (its other
 // choices), drawing priorities and change points from seed, for runs of
-// about steps scheduling steps (0: 1000). In an exploration:
+// about steps scheduling choices (0: 1000): the points where more than
+// one task could run, each recorded as a "sched.task" choice, so a
+// nominal run's count is how many of its Run.Choices (qtest) have that
+// kind. Change points past a run's end make no change. In an exploration:
 //
 //	ExploreConfig{Chooser: func(seed uint64) qenv.Chooser {
 //		base := qenv.NewSeeded(seed)
