@@ -277,6 +277,31 @@ jobs:
       - name: test (liveness, pending calls, linearized per key, PCT)
         run: go test -count=1 -timeout 45m ./...
 
+  wallet:
+    # its own job: linearized explorations and resolved pending calls,
+    # under the store's own history check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/wallet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/wallet/go.mod
+          cache-dependency-path: examples/wallet/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../../ci/install-quint.sh
+      - name: gofmt, vet, lint -sim
+        run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/wallet
+      - name: test (Exhaust, isolation levels and qhistory, linearized, pending calls, every fault family)
+        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./...
+      - name: demos
+        run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
+
   maelstrom:
     runs-on: ubuntu-latest
     steps:

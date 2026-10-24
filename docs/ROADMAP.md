@@ -207,25 +207,25 @@ under a week, M two to four, L more.
   from where a feature appeared, features as counts; qhistory's strict
   serializability and rw-registers; the determinism lint (map ranges,
   math/rand, multi-case select).
-- **T9. An example: wallet (M, the T5 review's).** Transfers on a
-  `qenv.Store` with request-id dedupe, an outbox to a ledger process,
-  retrying clients over a `qenv.Service`: the one example that shows
-  ResolvePending (with Completes), Linearize and LinearizeByKey, a
-  Settle with an `eventually` val (the ledger's consumer a Daemon), PCT,
-  Exhaust, `GOTOGETHER_ALL_FAULTS` and qhistory on its own store (and a
-  real database, optionally). Each account is an append-only list of
-  ledger entries, so qhistory (list-append only) reads its history.
-  Deterministic by construction (counter request ids, named processes,
-  a sorted outbox drain); every double built in every run, kinds of
-  rare paths declared at package level. Mutants: NoDedupe (a retried
-  transfer twice), ReadThenWrite (rejected at ReadCommitted, G-single;
-  it conforms at SI and Serializable, whose first committer wins), a
-  write-skew overdraft across two accounts at SI (qhistory: G2),
-  AckBeforeOutbox (only after a settle), WallClockDedupe (only under
-  every fault family; Exhaust there with a reasoned Without or
-  Partial), StaleBalanceRead (LinearizeByKey on a per-account workload
-  of deposits and reads: transfers span keys, where it is unsound, and
-  stay on Linearize).
+- **T9. An example: wallet (M, the T5 review's). Done** (examples/wallet):
+  transfers on a `qenv.Store` with request-id dedupe, an outbox to a
+  ledger, retrying clients over a `qenv.Service`, a credit line two
+  accounts share; Exhaust (NoDedupe within one fault), isolation levels
+  (ReadThenWrite at read committed, WriteSkew at SI, qhistory naming it
+  G2 from the store's history), NoOutbox after a settle, ReplicaRead
+  linearized per account, ResolvePending for crashed clients,
+  `GOTOGETHER_ALL_FAULTS`. Its first faithful version applied a
+  duplicated request twice at read committed (the request's record read
+  unlocked). Left: WallClockDedupe (a dedupe window on the process's
+  clock, broken only by clock faults); the optional real database. What
+  it taught the core:
+  - LinearizeByKey cost three times Linearize on its small per-account
+    history (28 s against 9 s for five runs): each partition's search
+    pays quint's fixed cost. Batch the partitions' candidates, or fall
+    back to the whole history below a size.
+  - PCT at depth 2 found the wide write-skew window in 1 run of 40,
+    uniform seeds in 39: say in the skill when PCT helps (a narrow
+    window) and when it hurts.
 - **T8. An example: raftkv (M, after T2d).** etcd's raft RawNode as a
   three-node KV on qenv; transfers across keys (no partition helps);
   hundreds of operations linearized; a lease-read mutant under clock

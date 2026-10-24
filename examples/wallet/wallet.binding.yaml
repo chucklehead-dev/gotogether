@@ -1,0 +1,29 @@
+# The clients' calls, the ledger's posts and the probe's observations as
+# calls of model/wallet.qnt's actions: every parameter is the step's field
+# of its name. A transfer's outcome and a read's balance are compared with
+# the model's; an observation is a guard of its action (a probe's balance
+# the model does not hold rejects it).
+spec: model/wallet.qnt
+module: wallet
+
+constants:
+  ACCOUNTS: 'Set("a1", "a2", "b", "c")'
+  JOINT: 'Set("a1", "a2")'
+  INITIAL: '100'
+
+actions:
+  transfer:
+    expect: 'result.get({{.id}}) == {{.obs.ok}}'
+  deposit: {}
+  read:
+    expect: 'bal.get({{.account}}) == {{.obs.balance}}'
+  post: {}
+  observe: {}
+
+invariants: [noOverdraft]
+eventually: [allPosted, postedApplied]
+
+# The model on its own (gotogether simulate): which invariants the design
+# guarantees.
+simulate:
+  holds: [noOverdraft]
