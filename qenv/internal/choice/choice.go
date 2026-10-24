@@ -23,6 +23,15 @@ import (
 // [0, n), n >= 2. Kinds starting with "fault." are fault choices, where 0 is
 // the nominal option; any other kind is a schedule choice, where every
 // option is normal and 0 is the canonical one (the oldest, the first).
+//
+// A Chooser, or one it wraps (Wrapper), may implement two more methods,
+// which qenv's scheduler looks for through the chain: ChooseTask(runnable
+// []int) int picks the task to run by its id, given the runnable tasks in
+// the order of the sched.task choice's options, and returns that index
+// (PCT does; the pick is recorded as the sched.task choice, so a log
+// replays without it); ChooseNemesis(enabled []string) int picks a
+// nemesis by name among those enabled: i+1 for enabled[i], 0 for none
+// (Script does).
 type Chooser interface {
 	Choose(kind string, n int) int
 }

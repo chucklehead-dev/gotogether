@@ -225,8 +225,11 @@ type Run struct {
 	// steered is a steered run's saved choices (ExploreConfig.Steer), and
 	// steeredFrom the run it was steered from
 	steered, steeredFrom string
-	Steps                []qtrace.Step
-	Choices              []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
+	// Steps are the steps judged: as recorded, or the order a search
+	// (Linearize, ResolvePending) found, re-sequenced onto a recorder per
+	// actor. Recorded are the steps as the run recorded them.
+	Steps, Recorded []qtrace.Step
+	Choices         []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
 	// Nemeses are the nemeses the run's nemesis choices offered, by name
 	// (qenv.ChoiceLog.Nemeses): Exercised wants each fired in some run.
 	Nemeses []string
@@ -367,6 +370,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 		t.Errorf("gotogether: recording: %s", is)
 	}
 	run.Steps = mem.Steps()
+	run.Recorded = run.Steps
 	if len(run.Steps) == 0 {
 		if c.SkipIfEmpty {
 			t.Skip("gotogether: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
@@ -385,7 +389,7 @@ func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Opt
 	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	run := &Run{Steps: steps, StepLog: filepath.Join(c.Dir, "steps.jsonl"), ITF: map[string]string{}}
+	run := &Run{Steps: steps, Recorded: steps, StepLog: filepath.Join(c.Dir, "steps.jsonl"), ITF: map[string]string{}}
 	f, err := os.Create(run.StepLog)
 	if err == nil {
 		err = qtrace.WriteJSONL(f, steps)
@@ -403,6 +407,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	o.Dir = filepath.Join(c.Dir, "quint")
 	ch := checkerFor(t, bindingPath, o, c)
 	var mark func(*validate.Report)
+	run.Recorded = run.Steps
 	run.Steps, mark = c.order(t, ch, run.Steps, o.Dir) // the order checked, the step log's and the ITF's
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {

@@ -35,6 +35,9 @@ func (s *Step) Attributes() map[string]any {
 	if s.Settled {
 		m[KeySettled] = true
 	}
+	if s.Ambiguous {
+		m[KeyAssumed] = true
+	}
 	for k, v := range s.Args {
 		m[PrefixArg+k] = v
 	}

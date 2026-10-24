@@ -289,7 +289,7 @@ func failedAt(rep *Report, n int) int {
 	for _, a := range rep.Actors {
 		if a.Conforms == Pass {
 			for _, inv := range a.Invariants {
-				if inv.Verdict == Fail && strings.HasPrefix(inv.Name, EventuallyName("")) {
+				if inv.Verdict == Fail && inv.Eventually {
 					return n - 1
 				}
 			}
@@ -331,7 +331,7 @@ func violatedAt(rep *Report, n int) int {
 	at := -1
 	for _, a := range rep.Actors {
 		for _, inv := range a.Invariants {
-			if inv.Verdict != Fail || strings.HasPrefix(inv.Name, EventuallyName("")) {
+			if inv.Verdict != Fail || inv.Eventually {
 				continue
 			}
 			i := n - 1

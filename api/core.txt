@@ -1287,6 +1287,7 @@ type Reach struct
     method (Reach) String() string
 type Run struct
     field Steps []qtrace.Step
+    field Recorded []qtrace.Step
     field Choices []qenv.Choice
     field Nemeses []string
     field Interrupted []qtrace.Step
@@ -1354,6 +1355,7 @@ type Vacuity struct
 const EventName = "quint.step"
 const KeyAction = "quint.action"
 const KeyActor = "quint.actor"
+const KeyAssumed = "quint.assumed"
 const KeyCall = "quint.call"
 const KeyError = "quint.error"
 const KeyInvocation = "quint.invocation"
@@ -1484,6 +1486,7 @@ type InvariantResult struct
     field Name string
     field Verdict Verdict
     field Failure *Failure
+    field Eventually bool
 type Options struct
     field Quint string
     field Backend string

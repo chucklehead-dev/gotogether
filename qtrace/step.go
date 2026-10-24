@@ -45,6 +45,9 @@ const (
 	// then. A trace whose recorder's last record is one is Trace.Settled,
 	// and only such a trace's eventual properties are judged.
 	KeySettled = "quint.settled"
+	// KeyAssumed marks an assumed step (Step.Ambiguous): a pending call's
+	// effect a resolution placed, with no expect checked after it.
+	KeyAssumed = "quint.assumed"
 
 	PrefixArg   = "quint.arg."   // an observed parameter of the action
 	PrefixObs   = "quint.obs."   // an observed projection of the post-state
@@ -157,6 +160,9 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 		}
 		if v, ok := layers[0][KeySettled]; ok {
 			s.Settled = v == true || fmt.Sprint(v) == "true"
+		}
+		if v, ok := layers[0][KeyAssumed]; ok {
+			s.Ambiguous = v == true || fmt.Sprint(v) == "true"
 		}
 		if v, ok := layers[0][KeyCall]; ok {
 			n, err := toInt(v)

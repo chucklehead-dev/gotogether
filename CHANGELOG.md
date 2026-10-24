@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A step log keeps an assumed step (`quint.assumed`, `Step.Ambiguous`):
+  a resolution written out and validated again had its expect checked.
+  `validate.InvariantResult.Eventually` marks an eventual val's result;
+  `qtest.Run.Recorded` holds the steps as recorded beside `Steps`, the
+  steps judged; `Chooser`'s doc gives the ChooseTask and ChooseNemesis
+  protocols the scheduler looks for.
 - The searches are validate's: `Checker.Search(steps, SearchOptions)` and
   `Search.Mark`, which qtest's Linearize, LinearizeByKey and
   ResolvePending call, and so does the CLI: `gotogether validate

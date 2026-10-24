@@ -127,10 +127,14 @@ func (r *Result) failures() []*Failure {
 	return out
 }
 
+// InvariantResult is one invariant's, or eventual val's, verdict in a replay.
 type InvariantResult struct {
 	Name    string
 	Verdict Verdict
 	Failure *Failure
+	// Eventually: an eventual val (binding's Eventually), judged in the
+	// last state of a settled trace, named EventuallyName(val)
+	Eventually bool
 }
 
 // EventuallyName is how a result names an eventual val (binding's
@@ -289,7 +293,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 			}
 			for _, ev := range ms.Eventually {
 				if r.Settled {
-					r.Invariants = append(r.Invariants, InvariantResult{Name: EventuallyName(ev), Verdict: Pass})
+					r.Invariants = append(r.Invariants, InvariantResult{Name: EventuallyName(ev), Verdict: Pass, Eventually: true})
 				}
 			}
 			if !opt.NoITF {
@@ -412,7 +416,7 @@ func fill(g *binding.Generated, output, qnt, itfPattern string, invariants, even
 			break // a run cut short has work pending by right
 		}
 		name := g.Tests.Eventually[ev]
-		ir := InvariantResult{Name: EventuallyName(ev), Verdict: verdicts[name], Failure: failures[name]}
+		ir := InvariantResult{Name: EventuallyName(ev), Verdict: verdicts[name], Failure: failures[name], Eventually: true}
 		if res.Conforms != Pass {
 			ir.Verdict, ir.Failure = NotEvaluated, nil
 		}

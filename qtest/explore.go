@@ -486,7 +486,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	if n, first := esc.Steps(); err == nil && n > 0 {
 		err = fmt.Errorf("gotogether: %d steps were recorded from goroutines the run's tasks started with `go`, outside the simulation; the first: %s", n, first)
 	}
-	run := &Run{Steps: mem.Steps(), Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled}
+	recorded := mem.Steps()
+	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -621,6 +622,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			r.Recorded = r.Steps
 			r.Steps, r.mark = c.order(tbs[i], cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
 		}()
 	}
