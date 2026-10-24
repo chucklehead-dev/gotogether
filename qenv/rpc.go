@@ -119,6 +119,7 @@ func (svc *Service[Req, Resp]) release(gen int) {
 // NewService registers a service whose handler runs in process p (nil: a
 // process of its own, which never crashes).
 func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx context.Context, req Req) (Resp, error)) *Service[Req, Resp] {
+	s.claim("rpc."+name, "Service", name)
 	if p == nil {
 		p = s.Process(name, false, func(context.Context) {})
 	}

@@ -606,3 +606,19 @@ func TestOverloadedMeansNotProcessed(t *testing.T) {
 	}
 	t.Logf("handled %v, the call: %v", handled, errs)
 }
+
+// Two doubles of one kind and name in a simulation would share their
+// fault kinds: the second panics, naming the fix. Doubles of other kinds
+// may share a name.
+func TestDuplicateDoubleName(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	qenv.NewQueue(s, "orders", nil)
+	qenv.NewStore(s, "orders", qenv.Serializable) // another kind: fine
+	defer func() {
+		if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), `a second Queue named "orders"`) {
+			t.Errorf("recovered %v, want the duplicate named", r)
+		}
+	}()
+	qenv.NewQueue(s, "orders", nil)
+}

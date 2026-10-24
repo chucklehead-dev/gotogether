@@ -294,8 +294,9 @@ working there:
   that covers nothing declared (`hooks.KnownFault`: the process's
   registry of kinds, options and nemeses) matches nothing: an
   exploration fails on such a Rates key, a sweep on such a FaultKind,
-  Exercised on such an exception. Name each double uniquely in a
-  simulation: two of one name share their kind.
+  Exercised on such an exception. Two doubles of one kind and name in a
+  simulation would share their fault kinds: the second panics (a
+  Service and a Queue may share a name).
 - A double declares its fault kinds by name (`qenv.DeclareFaults("kube.request",
   "unavailable", "lostResponse")`) and chooses with `Sim.FaultOf`, which
   returns the option's name. A call that cannot fail in some options takes

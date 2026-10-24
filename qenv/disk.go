@@ -32,6 +32,7 @@ type diskFile struct {
 
 // NewDisk returns an empty disk of process p's machine.
 func NewDisk(s *Sim, name string, p *Process) *Disk {
+	s.claim("disk."+name, "Disk", name)
 	d := &Disk{Name: name, sim: s, proc: p, files: map[string]*diskFile{},
 		fault: DeclareFaults("disk."+name+".crash", "powerLoss", "tornWrite")}
 	s.OnCrash(func(c *Process) {

@@ -53,6 +53,7 @@ type Delivery struct {
 // acknowledgements are the fault kind "queue.<name>.ack" ("queue" covers
 // every queue's).
 func NewQueue(s *Sim, name string, p *Process) *Queue {
+	s.claim("queue."+name, "Queue", name)
 	q := &Queue{Name: name, sim: s, proc: p, held: map[*Delivery]*Process{},
 		ack: DeclareFaults("queue."+name+".ack", "lost")}
 	if s.Check {

@@ -115,6 +115,7 @@ type version struct {
 
 // NewStore returns an empty store in s.
 func NewStore(s *Sim, name string, iso Isolation) *Store {
+	s.claim("store."+name, "Store", name)
 	st := &Store{Name: name, Iso: iso, sim: s, rows: map[string][]version{}, locks: map[string]*tx{}, open: map[*tx]bool{},
 		commit: DeclareFaults("store."+name+".commit", "unknownOutcome")} // a commit applied whose outcome the client never learns
 	if s.Check {

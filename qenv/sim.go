@@ -64,6 +64,7 @@ type Sim struct {
 	nextNem   time.Time       // with NemesisEvery: when the next nemesis choice is due
 	lastNow   time.Time       // Check: time never goes backwards
 	creator   int64           // the goroutine that created it (owners)
+	doubles   map[string]bool // the doubles' fault-kind prefixes (claim)
 	ended     []int64         // its ended tasks' goroutines (owners.ended), under owners' lock
 	forgotten bool            // closed: ended tasks are no longer kept, under owners' lock
 	now       time.Time
@@ -1147,4 +1148,18 @@ func (s *Sim) Tasks() string {
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "\n")
+}
+
+// claim registers a double's fault-kind prefix ("rpc.payments"): two
+// doubles of one kind and name in a simulation would share their fault
+// kinds, so a rate, a script or a report naming one would mean both.
+func (s *Sim) claim(prefix, what, name string) {
+	if s.doubles == nil {
+		s.doubles = map[string]bool{}
+	}
+	if s.doubles[prefix] {
+		panic(fmt.Sprintf("qenv: a second %s named %q in this simulation: its faults would be the first's (%s.*), so a rate, "+
+			"a script or a report naming one would mean both; give each %s its own name", what, name, prefix, what))
+	}
+	s.doubles[prefix] = true
 }
