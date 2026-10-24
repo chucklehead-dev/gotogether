@@ -3,6 +3,7 @@ package qtest
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,7 +19,8 @@ const DefaultResolveBudget = 200
 // pending (qobs.Invoke with no Done: the caller crashed or never heard
 // back) may have done, as Jepsen treats an :info operation: either it had
 // no effect, or it took effect after one of the steps recorded at or
-// after its invocation, with no outcome or observation (its step is
+// after its invocation and before the first settle after it (the system
+// was quiet there), with no outcome or observation (its step is
 // Ambiguous: no expect is checked after it). The actor conforms if some
 // resolution does; the report says which, as an issue, and the run's
 // Steps are the resolution checked. When none conforms, the one that got
@@ -53,7 +55,7 @@ func resolve(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget int
 		if len(tr.Pending) > 0 {
 			var issue qtrace.Issue
 			var cut bool
-			chosen, issue, cut = resolution(t, ch, tr, budget)
+			chosen, issue, cut = resolution(t, ch, tr, settlesOf(steps), budget)
 			issues = append(issues, issue)
 			if cut {
 				undecided[tr.Actor] = true
@@ -90,17 +92,33 @@ type placement []int
 // resolutions enumerates the placements of pending calls, the fewest
 // effects first, then the earliest, at most budget of them: a call may
 // take effect only after the steps recorded before its invocation.
-func resolutions(tr *qtrace.Trace, budget int) (out []placement, cut bool) {
+func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []placement, cut bool) {
 	k := len(tr.Pending)
 	from := make([]int, k) // the earliest position each may take effect at
+	to := make([]int, k)   // the latest
 	for i, p := range tr.Pending {
-		// after every step recorded before its invocation: on its recorder,
-		// a lower seq; elsewhere, an earlier time
+		// after every step recorded before its invocation
 		for j, s := range tr.Steps {
-			if s.Recorder == p.Recorder && s.Seq < p.Seq || s.Recorder != p.Recorder && s.Time.Before(p.Time) {
+			if before(s, p) {
 				from[i] = j + 1
 			}
 		}
+		// before every step recorded after the first settle that followed
+		// it: the system was quiet there, with nothing left in flight
+		to[i] = len(tr.Steps)
+		for _, st := range settles {
+			if !before(p, st) {
+				continue
+			}
+			to[i] = 0
+			for j, s := range tr.Steps {
+				if before(s, st) {
+					to[i] = j + 1
+				}
+			}
+			break
+		}
+		to[i] = max(to[i], from[i])
 	}
 	for effects := 0; effects <= k; effects++ {
 		var rec func(i, left int, cur placement) bool
@@ -118,7 +136,7 @@ func resolutions(tr *qtrace.Trace, budget int) (out []placement, cut bool) {
 				return false
 			}
 			if left > 0 {
-				for pos := from[i]; pos <= len(tr.Steps); pos++ {
+				for pos := from[i]; pos <= to[i]; pos++ {
 					if !rec(i+1, left-1, append(cur, pos)) {
 						return false
 					}
@@ -131,6 +149,27 @@ func resolutions(tr *qtrace.Trace, budget int) (out []placement, cut bool) {
 		}
 	}
 	return out, false
+}
+
+// before reports whether a was recorded before b: on one recorder, a lower
+// seq; across recorders, an earlier time.
+func before(a, b qtrace.Step) bool {
+	if a.Recorder == b.Recorder {
+		return a.Seq < b.Seq
+	}
+	return a.Time.Before(b.Time)
+}
+
+// settlesOf are the settle records of steps, earliest first.
+func settlesOf(steps []qtrace.Step) []qtrace.Step {
+	var out []qtrace.Step
+	for _, s := range steps {
+		if s.Settled {
+			out = append(out, s)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b qtrace.Step) int { return a.Time.Compare(b.Time) })
+	return out
 }
 
 // apply is the actor's steps with the pending calls placed.
@@ -177,13 +216,13 @@ func describe(tr *qtrace.Trace, pl placement) string {
 
 // resolution searches the placements of one actor's pending calls for one
 // the model accepts.
-func resolution(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int) ([]qtrace.Step, qtrace.Issue, bool) {
+func resolution(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int) ([]qtrace.Step, qtrace.Issue, bool) {
 	t.Helper()
 	a := tr.Actor
 	if a == "" {
 		a = "default"
 	}
-	pls, cut := resolutions(tr, budget)
+	pls, cut := resolutions(tr, settles, budget)
 	orders := make([][]qtrace.Step, len(pls))
 	for i, pl := range pls {
 		// each candidate on one thread of its own, as the run's steps will be

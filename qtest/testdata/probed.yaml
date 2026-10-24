@@ -1,0 +1,7 @@
+spec: probed.qnt
+module: probed
+actions:
+  write: {}
+  observe:
+    expect: 'x == {{.obs.value}}'
+eventually: [written]

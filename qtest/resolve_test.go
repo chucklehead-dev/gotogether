@@ -74,3 +74,23 @@ func TestResolvePendingKeepsCallsAndOrder(t *testing.T) {
 	}
 	Validate(t, account, same, ResolvePending()).Expect(t, Mismatch("deposit"))
 }
+
+// A pending call cannot have taken effect after the system settled: it
+// was quiet there, nothing in flight. A write left pending, a settle, a
+// probe that saw it missing: placed after the probe, it once made the
+// eventual val hold and the run conform.
+func TestResolvePendingStopsAtTheSettle(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(100, 0).Add(time.Duration(u) * time.Second) }
+	steps := []qtrace.Step{
+		{Action: "write", Recorder: "r", Seq: 1, Thread: "c", Invocation: true, Time: at(1), Args: map[string]any{"value": int64(1)}},
+		{Action: "settled", Recorder: "r", Seq: 2, Settled: true, Time: at(2)},
+		{Action: "observe", Recorder: "r", Seq: 3, Thread: "probe", Time: at(3), Obs: map[string]any{"value": int64(0)}},
+		{Action: "settled", Recorder: "r", Seq: 4, Settled: true, Time: at(4)},
+	}
+	run := Validate(t, "testdata/probed.yaml", steps, ResolvePending())
+	if Conforms().Holds(run) {
+		t.Errorf("a write placed after the settle that preceded its probe:\n%s", run.Report.Summary())
+	}
+}

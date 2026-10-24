@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- ResolvePending places a pending call's effect before the first settle
+  after its invocation: one placed after a probe that saw it missing made
+  an eventual val hold and the run conform.
 - A settle settles a trace only if no other recorder recorded a step
   later in time (a warning names it): a harness's settle while a server
   was still at work settled the run, and `Settles()` held.
