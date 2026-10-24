@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `ResolvePending` placed a pending call before the step after the last
+  one recorded before a settle, which a step recorded after the settle
+  could precede (a step at its instant on another recorder ordered
+  later): a resolution the settle rules out could make a run conform.
+  It now bounds the call by the first step recorded after the settle.
 - A claim some runs meet says, in its "as expected" line, when its
   seeds would miss it more than one time in a thousand at the rate it
   measured, and the seed count that would not.

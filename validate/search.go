@@ -464,22 +464,24 @@ func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []pla
 			}
 		}
 		// before every step recorded after the first settle that followed
-		// it: the system was quiet there, with nothing left in flight
+		// it: the system was quiet there, with nothing left in flight. The
+		// first such step bounds it, not the last before the settle: a
+		// step at the settle's instant on another recorder may follow one
+		// recorded after it. A call whose bounds cross took no effect.
 		to[i] = len(tr.Steps)
 		for _, st := range settles {
 			if !before(p, st) {
 				continue
 			}
-			to[i] = 0
 			for j, s := range tr.Steps {
 				// at the settle's instant, on another recorder: before it
-				if before(s, st) || s.Recorder != st.Recorder && s.Time.Equal(st.Time) {
-					to[i] = j + 1
+				if !before(s, st) && !(s.Recorder != st.Recorder && s.Time.Equal(st.Time)) {
+					to[i] = j
+					break
 				}
 			}
 			break
 		}
-		to[i] = max(to[i], from[i])
 	}
 	for effects := 0; effects <= k; effects++ {
 		var rec func(i, left int, cur placement) bool
