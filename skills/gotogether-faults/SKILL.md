@@ -269,7 +269,10 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
     `ExploreConfig{Chooser: func(seed uint64) qenv.Chooser { return
     qenv.NewPCT(base, seed, 3, 500) }}` with `base` a `qenv.NewSeeded(seed)`
     at `sys.FaultRates()` (PCT: depth 3 finds bugs needing three
-    orderings; 500, about a run's scheduling steps).
+    orderings; 500, about a run's scheduling steps: set it to your run's
+    length, since change points past the run's end are lost and too large
+    a value makes depth 2 act as depth 1). Not on the native runtime
+    (gosim), which refuses it; over Hegel, only faults shrink.
 - **Shrinking:**
   `qhegel.FindViolation(t, cfg, func(tc, rec) { app.Run(rec.Env(qhegel.Choices(tc)), cfg) })`
   shrinks a failure to the interleaving and faults it needs; faults

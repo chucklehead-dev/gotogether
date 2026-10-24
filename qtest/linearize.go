@@ -3,6 +3,7 @@ package qtest
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -41,14 +42,22 @@ func Linearize() Option { return option("Linearize", func(c *settings) { c.Linea
 // search of each key's m, not of their k·m together. It is sound only if
 // the model treats keys independently (a step on one key cannot enable,
 // disable or change another's) and the model's initial state is every
-// key's: a replay of one partition starts the model from init. A step
-// without the argument fails the test with the fix.
+// key's: a replay of one partition starts the model from init. So an
+// invariant or eventual val over every key is judged in each partition
+// with the other keys at init, and a step on two keys (a transfer's src
+// and dest) belongs to both, which a partition by one cannot say: it
+// lands in src's alone and dest's then shows a false Mismatch. Keep such
+// histories on Linearize. A step without the argument fails the test with
+// the fix. LinearizeBudget is then per partition.
 func LinearizeByKey(arg string) Option {
+	if arg == "" {
+		panic("qtest: LinearizeByKey(\"\"): name the argument whose value partitions the history (\"key\"), or use Linearize")
+	}
 	return option("LinearizeByKey", func(c *settings) { c.Linearize, c.linearizeKey = true, arg })
 }
 
-// LinearizeBudget is Linearize with a budget of n orders per actor (at
-// least 1): a run whose search ran out of DefaultLinearizeBudget's says
+// LinearizeBudget is Linearize with a budget of n orders per actor (per
+// partition with LinearizeByKey; at least 1): a run whose search ran out of DefaultLinearizeBudget's says
 // to raise it.
 func LinearizeBudget(n int) Option {
 	if n < 1 {
@@ -79,7 +88,7 @@ func linearize(t testing.TB, ch *validate.Checker, steps []qtrace.Step, budget i
 					kept[actor] = append(kept[actor], i)
 				}
 			}
-			o, issue, cut := order(t, ch, part, budget)
+			o, issue, cut := order(t, ch, part, budget, key != "")
 			issues = append(issues, issue)
 			if cut {
 				undecided[actor] = true
@@ -129,10 +138,14 @@ func partitions(t testing.TB, tr *qtrace.Trace, key string) []*qtrace.Trace {
 			actor = "default" // as a step log's steps name it
 		}
 		name := fmt.Sprintf("%s %s=%v", actor, key, v)
-		p := by[name]
+		id := fmt.Sprintf("%T:%v", v, v) // 1 and "1" are two keys
+		p := by[id]
 		if p == nil {
+			if slices.ContainsFunc(out, func(o *qtrace.Trace) bool { return o.Actor == name }) {
+				name += fmt.Sprintf(" (%T)", v)
+			}
 			p = &qtrace.Trace{Actor: name, Settled: tr.Settled}
-			by[name] = p
+			by[id] = p
 			out = append(out, p)
 		}
 		return p
@@ -153,7 +166,7 @@ func partitions(t testing.TB, tr *qtrace.Trace, key string) []*qtrace.Trace {
 // order finds an order of one actor's steps the model accepts, within
 // budget, and says how it went: an issue, and whether the search was cut
 // short (no verdict).
-func order(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int) ([]qtrace.Step, qtrace.Issue, bool) {
+func order(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int, partitioned bool) ([]qtrace.Step, qtrace.Issue, bool) {
 	t.Helper()
 	a := tr.Actor // as messages name it
 	if a == "" {
@@ -179,7 +192,7 @@ func order(t testing.TB, ch *validate.Checker, tr *qtrace.Trace, budget int) ([]
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried)}, false
 	case cut:
 		return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no order of its %d steps conformed in the %d orders of the budget, and the search had moves left: "+
-			"no verdict (conformance n/a). Raise the budget (qtest.LinearizeBudget(%d)), partition independent keys (qtest.LinearizeByKey), or record its steps where they take effect", a, len(o), tried, 4*budget)}, true
+			"no verdict (conformance n/a). Raise the budget (qtest.LinearizeBudget(%d)), %sor record its steps where they take effect", a, len(o), tried, 4*budget, partitionHint(partitioned))}, true
 	default:
 		return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no order of its %d steps that real time allows conformed in %d orders tried; "+
 			"the order shown got furthest. A step the model rejects in every order is a bug (a stale read, a lost write), unless the invocation times are wrong", a, len(o), tried)}, false
@@ -200,4 +213,12 @@ func failedAt(rep *validate.Report, n int) int {
 		return n - 1
 	}
 	return -1
+}
+
+// partitionHint suggests LinearizeByKey to a search not partitioned.
+func partitionHint(partitioned bool) string {
+	if partitioned {
+		return ""
+	}
+	return "partition independent keys (qtest.LinearizeByKey), "
 }

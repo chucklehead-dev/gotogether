@@ -105,9 +105,9 @@ var (
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	whyLinearize = "its runs are checked in the order they were recorded; Linearize is Record's and Validate's, " +
 		"for steps recorded where an operation was invoked and returned"
-	exploreIgnores = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize}
+	exploreIgnores = map[string]string{"Global": whyGlobal, "Linearize": whyLinearize, "LinearizeBudget": whyLinearize, "LinearizeByKey": whyLinearize}
 	whyCaseOrder   = "a case's steps are checked in the order it recorded them; Linearize is qtest.Record's and Validate's"
-	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder,
+	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder, "LinearizeByKey": whyCaseOrder,
 		"SkipIfEmpty": "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
 	whyUnchecked    = "no case is checked against the model"
 	uncheckedIgnore = map[string]string{"Constants": whyUnchecked, "Invariants": whyUnchecked, "Quint": whyUnchecked}

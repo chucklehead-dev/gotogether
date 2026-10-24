@@ -364,6 +364,9 @@ func TestIgnoredOptionsRefused(t *testing.T) {
 		{func(f *failTB) {
 			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{Linearize()}}.Exhaust(f, Bound{Faults: 0})
 		}, "Linearize() does nothing in an exploration"},
+		{func(f *failTB) {
+			System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{LinearizeByKey("amount")}}.Explore(f, ExploreConfig{Seeds: 1})
+		}, "LinearizeByKey() does nothing in an exploration"},
 		{func(f *failTB) { Validate(f, "../validate/testdata/account.yaml", nil, SkipIfEmpty()) }, "SkipIfEmpty() does nothing in Validate"},
 	} {
 		f := &failTB{TB: t}

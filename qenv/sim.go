@@ -917,12 +917,8 @@ func (s *Sim) Run(d time.Duration) error {
 		k := 0
 		if s.settling {
 			k = s.turn(n, cands)
-		} else if by := taskChooserOf(s.c); by != nil {
-			ids := make([]int, n)
-			for i := range ids {
-				ids[i] = s.pick(i, cands).id
-			}
-			k = by(ids)
+		} else if by := taskChooserOf(s.c); by != nil && n > 1 { // one runnable task is no choice: Choose asks nothing either
+			k = by(s.runnableIDs(n, cands))
 			if k < 0 || k >= n {
 				panic(fmt.Sprintf("qenv: ChooseTask returned %d of %d runnable tasks", k, n))
 			}
@@ -1115,6 +1111,22 @@ func (s *Sim) turn(n int, cands []*task) int {
 		return 0
 	}
 	return k
+}
+
+// runnableIDs are the ids of the n runnable tasks in the order of the
+// schedule choice's options (pick's): the queued ones and the predicate
+// waiters, merged by id.
+func (s *Sim) runnableIDs(n int, cands []*task) []int {
+	ids := make([]int, 0, n)
+	q, c := s.runq.total(), 0
+	for j := 0; j < q || c < len(cands); {
+		if c < len(cands) && (j >= q || cands[c].id < s.runq.kth(j)) {
+			ids, c = append(ids, cands[c].id), c+1
+		} else {
+			ids, j = append(ids, s.runq.kth(j)), j+1
+		}
+	}
+	return ids
 }
 
 func (s *Sim) pick(k int, cands []*task) *task {

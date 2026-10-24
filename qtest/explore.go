@@ -356,9 +356,12 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 		}()
 	}
 	wg.Wait()
-	if cfg.Chooser == nil && !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
+	if !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].seed != 0 {
 		seed := x.Runs[0].seed
 		checkDeterminism(t, x.Runs[0], func() *Run {
+			if cfg.Chooser != nil { // a factory: the seed's chooser afresh (a PCT's, a Script's)
+				return runOne(c, woven, cfg.Chooser(seed), scenario)
+			}
 			s := qenv.NewSeeded(seed)
 			s.Rates = cfg.rates
 			return runOne(c, woven, s, scenario)

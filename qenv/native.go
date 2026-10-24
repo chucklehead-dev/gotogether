@@ -93,6 +93,9 @@ const spawnQueue = 1 << 16
 // runs for d, without stopping early when the system is quiet; and Settle
 // makes fault choices nominal but not the runtime's schedule.
 func NewNative(c Chooser, p Platform) *Sim {
+	if taskChooserOf(c) != nil {
+		panic("qenv: NewNative with a chooser that picks tasks (PCT): the native runtime's goroutines (gosim's) are not scheduled by qenv, so it would pick none; use New, or a Seeded chooser")
+	}
 	s := New(c)
 	n := &native{plat: p, closed: make(chan struct{}), coop: p != nil}
 	n.cond = sync.NewCond(&n.mu)

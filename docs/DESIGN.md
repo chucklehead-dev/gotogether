@@ -786,7 +786,11 @@ nothing can run. `Settle` turns faults off, heals what persists, and runs
 until quiet, drawing nothing: it takes runnable tasks in turn, a fair
 schedule (always the first, choice 0, let a task spinning until another
 acted starve it). Properties conditioned on quiescence apply after it.
-`SettleCore` is VOPR's liveness mode: faults stop for a core of processes
+A chooser may pick the task to run by id instead of by index
+(`ChooseTask`): PCT does, from random priorities with depth-1 change
+points, for bugs that need one task far ahead of another. Its picks are
+recorded as the index choices they stand for, so its runs replay without
+it, and a settle never asks it. `SettleCore` is VOPR's liveness mode: faults stop for a core of processes
 and go on, drawn as in a run, for the rest; a system that needs a quorum
 must finish with that core.
 

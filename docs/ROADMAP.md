@@ -115,13 +115,20 @@ next.
   under SettleCore (a quorum whose convergence is stated of the core);
   eventual properties in connect's MBT; what a pending call may have
   done is Z8's ambiguous steps.
-- **Z8. Search and scale (M–L).** PCT as a chooser; a footprint-based
-  reduction for Exhaust (the doubles know what each seam touches);
-  Linearize per key (Porcupine's partitioning); exploration steered by
-  coverage or model state; the history checker public, for real
-  databases (an Elle-style workload); trace validation with unobserved
-  or ambiguous steps (Jepsen's `:info`, hidden actions: the validator
-  searches their resolutions). Online validation stays deferred.
+- **Z8. Search and scale (M–L).** Done: PCT as a chooser
+  (`qenv.NewPCT`, tasks picked by id, recorded as index choices);
+  Linearize per key (`qtest.LinearizeByKey`, Porcupine's partitioning);
+  the history checker public for real databases (`qhistory`: Elle's
+  list-append workload, Adya's anomalies). Deferred, for the next review:
+  footprint-based reduction for Exhaust, which is sound only if tasks
+  share state solely through the doubles (Go code between seams touches
+  any memory, a test's closures included): it needs an ownership
+  declaration and a DPOR with sleep sets, or a passing Exhaust would
+  prove less than it says. Open: exploration steered by coverage or
+  model state; trace validation with unobserved or ambiguous steps
+  (Jepsen's `:info`, hidden actions: the validator searches their
+  resolutions), pending calls (`qobs.Invoke`) the first of them. Online
+  validation stays deferred.
 
 ## Dropped on purpose
 

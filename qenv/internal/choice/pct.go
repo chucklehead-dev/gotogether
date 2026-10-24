@@ -16,17 +16,24 @@ import "math/rand/v2"
 // it through the chain of wrappers), and leaves every other choice
 // (faults, a queue's order) to Base. Its picks are recorded as the
 // schedule choices they stand for, so a ChoiceLog of a PCT run replays
-// without it. gosim's own scheduler is not qenv's, and does not ask.
+// without it. A settle does not ask it (a settle's schedule is fair).
+// The native runtime (gosim's) schedules its own goroutines and refuses
+// it. Its priorities come from its seed, not from Base: over Hegel's
+// chooser, Hegel varies and shrinks the faults, not the schedule.
 type PCT struct {
 	Base  Chooser // every choice but which task runs: NewSeeded's, at the run's Rates
 	Depth int     // the bug depth d: d-1 change points (at least 1)
-	Steps int     // about how many scheduling steps a run takes (default 1000)
+	// Steps is about how many scheduling steps a run takes (default 1000).
+	// It matters: change points fall in 1..Steps, so with Steps ten times
+	// a run's length most fall after its end and depth d acts as depth 1
+	// (on a run of 60 steps, Steps 1000 found a depth-2 bug once in 200
+	// runs, Steps 60 in 52). Set it to a run's length, from a nominal run.
+	Steps int
 
 	r      *rand.Rand
 	prio   map[int]float64
 	change map[int]int // step -> its change point j (1..Depth-1)
 	step   int
-	last   int
 }
 
 // NewPCT returns a PCT scheduler of depth d over base, drawing its
@@ -61,9 +68,20 @@ func (p *PCT) Unwrap() Chooser { return p.Base }
 // returns its index in runnable.
 func (p *PCT) ChooseTask(runnable []int) int {
 	p.step++
-	if j, ok := p.change[p.step]; ok && p.last != 0 {
-		p.prio[p.last] = float64(p.Depth - j) // below every initial priority (>= Depth), later ones lower
+	best := p.highest(runnable)
+	if j, ok := p.change[p.step]; ok {
+		// the task about to run drops below every initial priority (>=
+		// Depth), later change points lower: the preemption the change
+		// point is for, whether or not that task ran last
+		p.prio[runnable[best]] = float64(p.Depth - j)
+		best = p.highest(runnable)
 	}
+	return best
+}
+
+// highest is the index of the runnable task of the highest priority,
+// giving each one first seen its random priority.
+func (p *PCT) highest(runnable []int) int {
 	best := 0
 	for i, id := range runnable {
 		if _, ok := p.prio[id]; !ok {
@@ -73,6 +91,5 @@ func (p *PCT) ChooseTask(runnable []int) int {
 			best = i
 		}
 	}
-	p.last = runnable[best]
 	return best
 }
