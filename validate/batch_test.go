@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -87,7 +88,11 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 	// a mismatch says the model's value, in a chunk as alone: the chunk's
 	// backend wrote no ITF for a failing test, and the report had only
 	// the rendered expect ("balance == 11") over the observation (11)
-	for _, want := range []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "model state after the step:", "balance = 10"} {
+	wants := []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "model state after the step:", "balance = 10"}
+	if os.Getenv("QUINT_BACKEND") == "typescript" { // the user's choice: no ITF, and the report says so
+		wants = []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "model state: not reported: the TypeScript backend"}
+	}
+	for _, want := range wants {
 		if s := batch[2].Summary(); !strings.Contains(s, want) {
 			t.Errorf("the mismatch's report lacks %q:\n%s", want, s)
 		}
