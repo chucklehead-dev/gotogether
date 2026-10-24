@@ -136,8 +136,12 @@ func TestSchedulerSemantics(t *testing.T) {
 		progs := make([][]op, hegel.Draw(ht, hegel.Integers(1, 4)))
 		for i := range progs {
 			for range hegel.Draw(ht, hegel.Integers(1, 6)) {
-				progs[i] = append(progs[i], op{kind: hegel.Draw(ht, hegel.Integers(0, 3)), sig: hegel.Draw(ht, hegel.Integers(0, 1)),
-					d: time.Duration(hegel.Draw(ht, hegel.Integers(0, 5))) * time.Second})
+				o := op{kind: hegel.Draw(ht, hegel.Integers(0, 3)), sig: hegel.Draw(ht, hegel.Integers(0, 1)),
+					d: time.Duration(hegel.Draw(ht, hegel.Integers(0, 5))) * time.Second}
+				if o.kind == 2 && o.d == 0 {
+					o.d = time.Second // a wait of 0 has no limit: one never notified would wait forever
+				}
+				progs[i] = append(progs[i], o)
 			}
 		}
 		rec := &qenv.ChoiceLog{C: qhegel.Choices(ht)}
