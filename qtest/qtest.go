@@ -222,6 +222,8 @@ type Run struct {
 	// mark marks the run's report with its search's issues (an
 	// exploration's Linearize or ResolvePending), on a copy (adjust)
 	mark func(*validate.Report)
+	// searched: a search ordered Steps (Recorded is what the run recorded)
+	searched bool
 	// steered is a steered run's saved choices (ExploreConfig.Steer), and
 	// steeredFrom the run it was steered from
 	steered, steeredFrom string

@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- An exploration's summary counts the runs that settled and those that
+  left calls pending. A failing run's step log is what it recorded (the
+  CLI's validate, with the same search, judges it as the test did), and
+  a search's order is beside it (`.judged.steps.jsonl`);
+  `GOTOGETHER_KEEP` keeps every run's step log (`runs/`), not only those
+  a report describes.
 - `gotogether scaffold -system` for a binding with eventual vals writes a
   Run that settles and claims `All(Settles())`. A client history (steps
   with invocation times) that fails in its recorded order says to check

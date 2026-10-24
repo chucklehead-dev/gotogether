@@ -622,7 +622,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			r.Recorded = r.Steps
+			r.Recorded, r.searched = r.Steps, c.Linearize || c.resolvePending
 			r.Steps, r.mark = c.order(tbs[i], cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
 		}()
 	}
@@ -630,6 +630,17 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	for i, tb := range tbs {
 		if tb != nil && tb.failed != "" {
 			t.Fatalf("%s (run %s)", tb.failed, x.nameOf(x.Runs[i]))
+		}
+	}
+	if os.Getenv("GOTOGETHER_KEEP") != "" && x.dir != "" {
+		// kept: every run's step log, not only the runs a report describes
+		dir := filepath.Join(x.dir, "runs")
+		if os.MkdirAll(dir, 0o755) == nil {
+			for _, r := range x.Runs {
+				if r != nil && len(r.Recorded) > 0 {
+					writeSteps(filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r))+".steps.jsonl"), r.Recorded)
+				}
+			}
 		}
 	}
 	x.Cached = judge(t, cc, inst, x.Runs, func(r *Run) string { return x.nameOf(r) })
@@ -933,6 +944,30 @@ func (x *Exploration) summary() string {
 	line := fmt.Sprintf("%s: %d runs, %d conform", x.ref(), e.Runs, e.Conform)
 	for _, r := range keysOf(e.FailingBy) {
 		line += fmt.Sprintf(", %d %s", e.FailingBy[r], runsDo(r))
+	}
+	// what liveness claims judge: runs that settled, calls left pending
+	settled, pending := 0, 0
+	for _, r := range x.Runs {
+		if r == nil || r.Report == nil {
+			continue
+		}
+		s, p := false, false
+		for _, a := range r.Report.Actors {
+			s = s || a.Settled
+			p = p || len(a.Pending) > 0
+		}
+		if s {
+			settled++
+		}
+		if p {
+			pending++
+		}
+	}
+	if settled > 0 {
+		line += fmt.Sprintf("; %d settled", settled)
+	}
+	if pending > 0 {
+		line += fmt.Sprintf("; %d left calls pending", pending)
 	}
 	if x.actions != nil {
 		m := modelCoverage(x.Runs, x.actions)
@@ -1268,18 +1303,34 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	p := filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r))+".steps.jsonl")
-	if f, err := os.Create(p); err == nil {
-		if qtrace.WriteJSONL(f, r.Steps) == nil {
-			fmt.Fprintf(&b, "  step log: %s\n", p)
-		}
-		f.Close()
+	base := filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
+	// the step log is what the run recorded, which the CLI's validate (with
+	// the same search) judges as the test did; a search's order is beside it
+	recorded := r.Recorded
+	if recorded == nil {
+		recorded = r.Steps
+	}
+	if writeSteps(base+".steps.jsonl", recorded) {
+		fmt.Fprintf(&b, "  step log: %s\n", base+".steps.jsonl")
+	}
+	if r.searched && writeSteps(base+".judged.steps.jsonl", r.Steps) {
+		fmt.Fprintf(&b, "  the order judged (the search's): %s\n", base+".judged.steps.jsonl")
 	}
 	b.WriteString(x.keep(r, save))
 	if !save && x.alone == nil {
 		return b.String() // a passing claim's example, kept under GOTOGETHER_KEEP
 	}
 	return x.keepFiles(b.String())
+}
+
+// writeSteps writes a step log, reporting whether it did.
+func writeSteps(path string, steps []qtrace.Step) bool {
+	f, err := os.Create(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	return qtrace.WriteJSONL(f, steps) == nil
 }
 
 // withoutPaths drops a report's lines naming its files (module, itf).
