@@ -88,15 +88,18 @@ next.
   Exploration has seven mode flags), one verdict method per claim, one
   memoizing checker for qtest and qhegel, qload's two recovery worlds
   made one.
-- **Z6. A more faithful environment (S each).** Message delay in
-  `Service`: a request is never late and a duplicate arrives at once, so
-  "a late original overwrites the retry's result" cannot happen. Pause
-  and gray-failure (slow, alive) nemeses. Disk errors on fsync, read
-  corruption, ENOSPC. A duplicate double name panics. A determinism
-  self-check (a seed run twice compares choices and steps) and lint for
-  map ranges, math/rand and multi-case select in simulated code. A
-  double's contract checked the other way too: it can do what its
-  contract allows (X5, in HISTORY, checks only that it does no more).
+- **Z6. A more faithful environment (S each). Done:** a request may
+  arrive late (`rpc.<name>.delay`: a late original after its retry),
+  which found lease's lock without fencing broken with true clocks and
+  crossdb's cloud leaking a database to a create that landed after the
+  delete (it now refuses a request past its deadline); pauses and gray
+  failures (`Sim.Stalls`); a full disk, a failed fsync (Linux's: its
+  writes lost though a later fsync succeeds), a corrupt read; a second
+  double of one name panics; an exploration runs its first seed twice
+  and fails on a difference; the doubles shown to reorder, redeliver and
+  read skew where their contracts allow. Left: a lint for map ranges,
+  math/rand and multi-case select in simulated code (the self-check
+  catches what they do, not where).
 - **Z7. Liveness (S, then M).** Settle reports whether it settled (it
   returns nil when its time runs out with work pending) and a
   `Settles()` claim; a run ending at its deadline with non-daemon tasks
