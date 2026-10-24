@@ -463,24 +463,22 @@ func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []pla
 				from[i] = j + 1
 			}
 		}
-		// before every step recorded after the first settle that followed
-		// it: the system was quiet there, with nothing left in flight. The
-		// first such step bounds it, not the last before the settle: a
-		// step at the settle's instant on another recorder may follow one
-		// recorded after it. A call whose bounds cross took no effect.
+		// before every step recorded after a settle that followed it: the
+		// system was quiet there, with nothing left in flight. The first
+		// such step bounds it, not the last before the settle (a step
+		// concurrent with the settle may follow one recorded after it);
+		// a call whose bounds cross took no effect.
 		to[i] = len(tr.Steps)
 		for _, st := range settles {
 			if !before(p, st) {
 				continue
 			}
 			for j, s := range tr.Steps {
-				// at the settle's instant, on another recorder: before it
-				if !before(s, st) && !(s.Recorder != st.Recorder && s.Time.Equal(st.Time)) {
+				if j < to[i] && before(st, s) {
 					to[i] = j
 					break
 				}
 			}
-			break
 		}
 	}
 	for effects := 0; effects <= k; effects++ {
@@ -514,13 +512,14 @@ func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []pla
 	return out, false
 }
 
-// before reports whether a was recorded before b: on one recorder, a lower
-// seq; across recorders, an earlier time.
+// before reports whether a was surely recorded before b: on one recorder,
+// a lower seq; across recorders, earlier by more than RealTimeSlack (as
+// Reconstruct and Linearize take machines' clocks), else concurrent.
 func before(a, b qtrace.Step) bool {
 	if a.Recorder == b.Recorder {
 		return a.Seq < b.Seq
 	}
-	return a.Time.Before(b.Time)
+	return a.Time.Add(qtrace.RealTimeSlack).Before(b.Time)
 }
 
 // lastSettle is the time of steps' last settle record: a settle a search

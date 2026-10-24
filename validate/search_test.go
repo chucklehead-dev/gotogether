@@ -13,9 +13,10 @@ import (
 // On small random traces of two recorders, with pending calls and maybe a
 // settle, resolutions enumerates every placement a brute force allows,
 // once each, the fewest effects first: a call takes effect after every
-// step recorded before its invocation, and before every step recorded
-// after the first settle that followed it (the system was quiet there),
-// whatever order the actor's steps are in.
+// step surely recorded before its invocation, and before every step
+// surely recorded after a settle that followed it (the system was quiet
+// there), whatever order the actor's steps are in; surely: on one
+// recorder by seq, across recorders by more than RealTimeSlack.
 func TestResolutionsAgainstBruteForce(t *testing.T) {
 	r := rand.New(rand.NewPCG(5, 6))
 	t0 := time.Unix(0, 0)
@@ -29,7 +30,7 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 			at += r.IntN(3) // equal times: concurrent across recorders
 			rec := recs[r.IntN(2)]
 			seq[rec]++
-			s := qtrace.Step{Action: "op", Recorder: rec, Seq: seq[rec], Time: t0.Add(time.Duration(at) * 10 * time.Millisecond)}
+			s := qtrace.Step{Action: "op", Recorder: rec, Seq: seq[rec], Time: t0.Add(time.Duration(at) * 500 * time.Microsecond)}
 			switch r.IntN(6) {
 			case 0:
 				s.Invocation = true
@@ -53,7 +54,7 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 		tr := traces[0]
 		steps, pending = tr.Steps, tr.Pending
 		// the settles a search is given: those no other recorder worked past
-		// (times 10 ms apart: equal, or apart by more than RealTimeSlack)
+		// (times 0.5 ms apart, so within RealTimeSlack and beyond it)
 		settles = settlesOf(all)
 		got, cut := resolutions(tr, settles, 1<<20)
 		compared++
@@ -63,25 +64,28 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 		if cut {
 			t.Fatalf("trial %d: cut", trial)
 		}
-		// brute force: every placement, kept if each call's position is
-		// allowed
+		// brute force, from the definitions: a step surely precedes another
+		// on its recorder by seq, across recorders by more than the slack
+		// of the machines' clocks; a call takes effect after every step
+		// surely before its invocation, and before every step surely after
+		// a settle surely after it (the system was quiet then)
+		slack := qtrace.RealTimeSlack
+		surely := func(a, b qtrace.Step) bool {
+			if a.Recorder == b.Recorder {
+				return a.Seq < b.Seq
+			}
+			return b.Time.Sub(a.Time) > slack
+		}
 		allowed := func(p qtrace.Step, pos int) bool {
 			for j, s := range steps {
-				if before(s, p) && pos <= j {
-					return false // a step recorded before its invocation follows it
+				if surely(s, p) && pos <= j {
+					return false
 				}
-			}
-			for _, st := range settles {
-				if !before(p, st) {
-					continue
-				}
-				for j, s := range steps {
-					afterSettle := !before(s, st) && !(s.Recorder != st.Recorder && s.Time.Equal(st.Time))
-					if afterSettle && pos > j {
-						return false // it took effect after a step recorded after the settle
+				for _, st := range settles {
+					if surely(p, st) && surely(st, s) && pos > j {
+						return false
 					}
 				}
-				break
 			}
 			return true
 		}

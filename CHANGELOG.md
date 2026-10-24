@@ -20,7 +20,10 @@ The first release. What a user meets, by module:
   one recorded before a settle, which a step recorded after the settle
   could precede (a step at its instant on another recorder ordered
   later): a resolution the settle rules out could make a run conform.
-  It now bounds the call by the first step recorded after the settle.
+  It now bounds the call by the first step recorded after the settle,
+  and, as Reconstruct and Linearize do, takes two recorders' steps for
+  concurrent within `RealTimeSlack`: a step just after a quiet settle on
+  another machine bounds nothing.
 - A claim some runs meet says, in its "as expected" line, when its
   seeds would miss it more than one time in a thousand at the rate it
   measured, and the seed count that would not.
@@ -35,8 +38,8 @@ The first release. What a user meets, by module:
   qsweep). Its first finding: Linearize's verdicts were unchecked by its
   unit tests, and a brute-force comparison then found a complete search
   cut short, with the guided search stopped, reported as a proof of no
-  order: it is no verdict again (kvstore's stale read is proven within a
-  budget of 2000).
+  order: it is no verdict again (kvstore's stale read is proven on loads
+  small enough for the default budget).
 - An exploration's summary counts the runs that settled and those that
   left calls pending. A failing run's step log is what it recorded (the
   CLI's validate, with the same search, judges it as the test did), and
