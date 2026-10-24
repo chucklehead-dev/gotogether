@@ -85,7 +85,9 @@ Added to the core since api/core.txt was first recorded:
   land after its retry; a second double of one kind and name in a
   simulation panics (they shared their fault kinds); `Sim.Stalls`
   pauses a process (`nemesis.pause`) or keeps it alive but slow
-  (`nemesis.slow`); an exploration of
+  (`nemesis.slow`); a `Disk` fills (`ErrNoSpace`), fails an fsync
+  (`ErrIO`, whose writes a power loss then drops, as Linux does) and
+  returns corrupt reads; an exploration of
   seeds runs its first seed twice and fails on the first choice or step
   that differs.
 - `qtest.NoSurvivors` marks an equivalent mutant by function, change and

@@ -2,8 +2,18 @@ package qenv
 
 import (
 	"context"
+	"errors"
 	"sort"
 )
+
+// ErrNoSpace is a write that failed for a full disk (ENOSPC): nothing of
+// it was written.
+var ErrNoSpace = errors.New("qenv: no space left on device")
+
+// ErrIO is an fsync that failed (EIO). As Linux does, the writes it was to
+// make durable are marked clean and dropped: still readable, never on the
+// disk, and a later fsync succeeds without them ("fsyncgate").
+var ErrIO = errors.New("qenv: input/output error")
 
 // Disk is a machine's disk: files whose writes reach the OS at once and
 // the disk only when synced (File.Sync, fsync). A crash of the process it
@@ -15,6 +25,13 @@ import (
 // "durable": a log that never syncs survives every process crash and
 // loses its tail to the first power loss.
 //
+// Its other faults: "disk.<name>.write" ("noSpace": ENOSPC, nothing
+// written), "disk.<name>.sync" ("error": a failed fsync, whose writes are
+// lost to the next power loss though a later fsync succeeds) and
+// "disk.<name>.read" ("corrupt": a read returns a byte flipped, as bit rot
+// does). A program that trusts a retried fsync, or does not checksum what
+// it reads back, meets them.
+//
 // Files are byte slices, read whole; writes and syncs are seams.
 type Disk struct {
 	Name  string
@@ -22,19 +39,35 @@ type Disk struct {
 	proc  *Process
 	files map[string]*diskFile
 	fault FaultKind // "disk.<name>.crash"
+	// its I/O faults: a full disk, a failed fsync, a corrupt read
+	write, sync, read FaultKind
 }
 
 type diskFile struct {
 	data   []byte // what the machine reads: synced and not
 	synced int    // the prefix of data on the disk
 	starts []int  // where each write since the last sync began
+	// lost, if >= 0, is where the writes a failed fsync dropped begin: a
+	// power loss keeps no more than that, whatever a later fsync said
+	lost int
+}
+
+// durable is the prefix of the file a power loss keeps.
+func (f *diskFile) durable() int {
+	if f.lost >= 0 && f.lost < f.synced {
+		return f.lost
+	}
+	return f.synced
 }
 
 // NewDisk returns an empty disk of process p's machine.
 func NewDisk(s *Sim, name string, p *Process) *Disk {
 	s.claim("disk."+name, "Disk", name)
 	d := &Disk{Name: name, sim: s, proc: p, files: map[string]*diskFile{},
-		fault: DeclareFaults("disk."+name+".crash", "powerLoss", "tornWrite")}
+		fault: DeclareFaults("disk."+name+".crash", "powerLoss", "tornWrite"),
+		write: DeclareFaults("disk."+name+".write", "noSpace"),
+		sync:  DeclareFaults("disk."+name+".sync", "error"),
+		read:  DeclareFaults("disk."+name+".read", "corrupt")}
 	s.OnCrash(func(c *Process) {
 		if c == d.proc {
 			d.crash()
@@ -54,32 +87,38 @@ func (d *Disk) crash() {
 		f := d.files[n]
 		switch fault {
 		case "powerLoss":
-			f.data = f.data[:f.synced]
+			f.data = f.data[:f.durable()]
 		case "tornWrite":
-			if k := len(f.starts); k > 0 {
+			if k := len(f.starts); k > 0 && f.durable() == f.synced {
 				last := f.starts[k-1]
 				f.data = f.data[:last+(len(f.data)-last)/2]
+			} else {
+				f.data = f.data[:f.durable()]
 			}
 		}
-		f.synced, f.starts = len(f.data), nil
+		f.synced, f.starts, f.lost = len(f.data), nil, -1
 	}
 }
 
 // ReadFile is the file's content as the machine sees it, and whether it
-// exists.
+// exists. A corrupt read ("disk.<name>.read") flips its middle byte.
 func (d *Disk) ReadFile(name string) ([]byte, bool) {
 	f, ok := d.files[name]
 	if !ok {
 		return nil, false
 	}
-	return append([]byte(nil), f.data...), true
+	out := append([]byte(nil), f.data...)
+	if len(out) > 0 && d.sim.FaultOf(d.read) == "corrupt" {
+		out[len(out)/2] ^= 0xff
+	}
+	return out, true
 }
 
 // Durable is the part of the file a power loss would keep: what was
 // synced.
 func (d *Disk) Durable(name string) []byte {
 	if f, ok := d.files[name]; ok {
-		return append([]byte(nil), f.data[:f.synced]...)
+		return append([]byte(nil), f.data[:f.durable()]...)
 	}
 	return nil
 }
@@ -87,14 +126,14 @@ func (d *Disk) Durable(name string) []byte {
 // Create opens a file for writing, truncating it (the truncation is
 // durable at once: metadata is not modelled).
 func (d *Disk) Create(name string) *File {
-	d.files[name] = &diskFile{}
+	d.files[name] = &diskFile{lost: -1}
 	return &File{d: d, name: name}
 }
 
 // Append opens a file for writing at its end, creating it.
 func (d *Disk) Append(name string) *File {
 	if d.files[name] == nil {
-		d.files[name] = &diskFile{}
+		d.files[name] = &diskFile{lost: -1}
 	}
 	return &File{d: d, name: name}
 }
@@ -106,19 +145,33 @@ type File struct {
 	name string
 }
 
-// Write appends b. It is in the OS when Write returns, not on the disk.
+// Write appends b. It is in the OS when Write returns, not on the disk. On
+// a full disk it fails with ErrNoSpace and writes nothing.
 func (f *File) Write(b []byte) (int, error) {
 	Yield(context.Background()) // the calling task's: a crash may come before the write
+	if f.d.sim.FaultOf(f.d.write) == "noSpace" {
+		return 0, ErrNoSpace
+	}
 	df := f.d.files[f.name]
 	df.starts = append(df.starts, len(df.data))
 	df.data = append(df.data, b...)
 	return len(b), nil
 }
 
-// Sync makes every write so far durable, as fsync does.
+// Sync makes every write so far durable, as fsync does. On ErrIO it does
+// not, and the writes it was to make durable never will be: a power loss
+// keeps no more than what was durable before it, though they stay readable
+// and a later Sync returns nil.
 func (f *File) Sync() error {
 	Yield(context.Background())
 	df := f.d.files[f.name]
+	if f.d.sim.FaultOf(f.d.sync) == "error" {
+		if df.lost < 0 {
+			df.lost = df.synced
+		}
+		df.synced, df.starts = len(df.data), nil // marked clean: no later fsync writes them
+		return ErrIO
+	}
 	df.synced, df.starts = len(df.data), nil
 	return nil
 }

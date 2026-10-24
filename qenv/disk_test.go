@@ -98,3 +98,68 @@ func TestStepLogAcrossPowerLoss(t *testing.T) {
 		s.Close()
 	}
 }
+
+// byKind plays each fault kind's values in turn, every other choice
+// nominal.
+type byKind map[string][]int
+
+func (b byKind) Choose(kind string, n int) int {
+	vs := b[kind]
+	if len(vs) == 0 {
+		return 0
+	}
+	b[kind] = vs[1:]
+	return vs[0]
+}
+
+// The disk's I/O errors: a write to a full disk writes nothing; a failed
+// fsync loses its writes to the next power loss even after a later fsync
+// succeeds (Linux's "fsyncgate"), though they stay readable until then;
+// a corrupt read flips a byte of what it returns, not of the file.
+func TestDiskErrors(t *testing.T) {
+	run := func(faults byKind, body func(ctx context.Context, d *qenv.Disk, p *qenv.Process)) *qenv.Disk {
+		s := qenv.New(faults)
+		var d *qenv.Disk
+		var p *qenv.Process
+		p = s.Process("node", false, func(ctx context.Context) { body(ctx, d, p) })
+		d = qenv.NewDisk(s, "node", p)
+		if err := s.Run(time.Second); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		return d
+	}
+	var werr error
+	d := run(byKind{"fault.disk.node.write": {1}}, func(ctx context.Context, d *qenv.Disk, _ *qenv.Process) {
+		_, werr = d.Create("log").Write([]byte("full\n"))
+	})
+	if data, _ := d.ReadFile("log"); !errors.Is(werr, qenv.ErrNoSpace) || len(data) != 0 {
+		t.Errorf("a full disk: err %v, the file %q", werr, data)
+	}
+
+	var first, second error
+	var before []byte
+	d = run(byKind{"fault.disk.node.sync": {1}, "fault.disk.node.crash": {1}}, func(ctx context.Context, d *qenv.Disk, p *qenv.Process) {
+		f := d.Create("log")
+		_, _ = f.Write([]byte("lost\n"))
+		first = f.Sync()  // EIO: the write is marked clean, never written
+		second = f.Sync() // succeeds, and writes nothing
+		before, _ = d.ReadFile("log")
+		p.Crash() // a power loss
+	})
+	after, _ := d.ReadFile("log")
+	if !errors.Is(first, qenv.ErrIO) || second != nil || string(before) != "lost\n" || len(after) != 0 {
+		t.Errorf("fsyncgate: syncs %v then %v, read %q before the power loss and %q after", first, second, before, after)
+	}
+
+	d = run(byKind{"fault.disk.node.read": {1}}, func(ctx context.Context, d *qenv.Disk, _ *qenv.Process) {
+		f := d.Create("log")
+		_, _ = f.Write([]byte("abc"))
+		_ = f.Sync()
+		before, _ = d.ReadFile("log") // corrupt
+	})
+	again, _ := d.ReadFile("log") // the file itself is whole
+	if string(before) != "a\x9dc" || string(again) != "abc" {
+		t.Errorf("a corrupt read: %q, then %q", before, again)
+	}
+}

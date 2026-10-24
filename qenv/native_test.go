@@ -283,7 +283,7 @@ func TestNativeFaultModels(t *testing.T) {
 	})
 	t.Run("disk", func(t *testing.T) {
 		for _, rate := range []float64{0, 1} {
-			s := native(1, qenv.NoFaults.Set("disk", rate))
+			s := native(1, qenv.NoFaults.Set("disk.node.crash", rate)) // the crash alone: a full disk or a failed fsync would end the write first
 			var disk *qenv.Disk
 			var node *qenv.Process
 			node = s.Process("node", false, func(ctx context.Context) {

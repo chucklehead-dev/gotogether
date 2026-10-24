@@ -80,13 +80,16 @@ qobs.Record(s.Context(), "settle", nil)
   forever by design (a server loop) calls `qenv.Daemon(ctx)`, and a
   double's own receive waits with `qenv.WaitIdle`.
 - **Disks:** `qenv.NewDisk(s, p.Name, p)` is process p's machine's disk
-  (name each double uniquely in a simulation: two of one name share their
-  fault kind, so neither can be faulted alone):
+  (name each double uniquely: a second of one name panics):
   writes reach the OS at once and the disk on `File.Sync`. When p crashes
   the fault kind "disk.<name>.crash" decides: nominal (the process died,
   the OS kept every write), "powerLoss" (only synced writes) or
-  "tornWrite" (power loss mid-write: part of the last one). Write a journal or a
-  step log through it to see what an fsync buys.
+  "tornWrite" (power loss mid-write: part of the last one). Its I/O
+  faults: "disk.<name>.write" (`ErrNoSpace`, nothing written),
+  "disk.<name>.sync" (`ErrIO`: the writes are dropped, and a later
+  successful fsync does not bring them back, as on Linux) and
+  "disk.<name>.read" (a byte flipped: checksum what you read back).
+  Write a journal or a step log through it to see what an fsync buys.
 - **Partitions:** `s.Net().PartitionNemesis(a, b, ...)` makes every link
   between those processes a nemesis (cut, later healed): a `Service` call
   across a cut loses its request and its response, for as long as it
