@@ -1,6 +1,9 @@
 package qsweep_test
 
 import (
+	"fmt"
+	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 
@@ -120,5 +123,148 @@ func TestRowConstants(t *testing.T) {
 		if len(cs) != 1 || cs["STOCK"] != r.Get("stock") {
 			t.Errorf("%v: constants %v", r, cs)
 		}
+	}
+}
+
+// A sweep's rows are its subtests' names: the same factors give the same
+// rows, in the same words, from one version to the next (a CI failure's
+// subtest name reruns it); FaultsOff names a row's kinds that are off,
+// and Missing lists what rows leave out in order.
+func TestRowsStayTheSame(t *testing.T) {
+	fs := []qsweep.Factor{qsweep.Ints("retries", 0, 1, 3), qsweep.FaultKind("rpc.pay"), {Name: "iso", Values: []string{"ser", "si"}}}
+	rows, err := qsweep.Cover(fs, 2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range rows {
+		got = append(got, fmt.Sprint(r, r.FaultsOff()))
+	}
+	want := []string{
+		"retries=0,rpc.pay=off,iso=ser [rpc.pay]", "retries=0,rpc.pay=on,iso=si []",
+		"retries=1,rpc.pay=off,iso=si [rpc.pay]", "retries=1,rpc.pay=on,iso=ser []",
+		"retries=3,rpc.pay=off,iso=ser [rpc.pay]", "retries=3,rpc.pay=on,iso=si []",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("rows:\n got %q\nwant %q", got, want)
+	}
+	if got := fmt.Sprint(qsweep.Sequences([]string{"a", "b", "c"}, 2)); got != "[[a b c] [c b a]]" {
+		t.Errorf("sequences: %s", got)
+	}
+	if got, want := fmt.Sprint(qsweep.Sequences([]string{"a", "b", "c", "d"}, 3)), "[[a c b d] [d c a b] [b c a d] [a d b c] [c d b a] [b d a c]]"; got != want {
+		t.Errorf("3-way sequences: %s, want %s", got, want)
+	}
+	miss, err := qsweep.Missing(fs, 2, nil, rows[:2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.IsSorted(miss) || len(miss) != 10 || miss[0] != "retries=1,iso=ser" {
+		t.Errorf("missing from two rows: %q, want 10, sorted", miss)
+	}
+}
+
+// On small random spaces with random constraints, Cover's rows are
+// allowed and cover every t-way combination some allowed row has, as an
+// enumeration of the whole space says (Missing asks Cover, so it cannot
+// check Cover).
+func TestCoverAgainstBruteForce(t *testing.T) {
+	r := rand.New(rand.NewPCG(3, 4))
+	for trial := range 300 {
+		var fs []qsweep.Factor
+		for i := range 2 + r.IntN(4) {
+			var vs []string
+			for v := range 1 + r.IntN(4) {
+				vs = append(vs, fmt.Sprint(v))
+			}
+			fs = append(fs, qsweep.Factor{Name: string(rune('a' + i)), Values: vs})
+		}
+		// a row's text, as Row.String writes it, and a constraint on it
+		// admitting about three rows in four
+		text := func(vals []string) string {
+			var parts []string
+			for i, v := range vals {
+				parts = append(parts, fs[i].Name+"="+v)
+			}
+			return strings.Join(parts, ",")
+		}
+		salt := r.Uint64()
+		ok := func(s string) bool {
+			h := salt
+			for _, c := range s {
+				h = h*31 + uint64(c)
+			}
+			return h%4 != 0
+		}
+		tw := min(1+r.IntN(3), len(fs))
+		rows, err := qsweep.Cover(fs, tw, func(row qsweep.Row) bool { return ok(row.String()) })
+		// the t-way combinations of one row's values
+		tuples := func(vals []string, add func(string)) {
+			var walk func(start int, chosen []string)
+			walk = func(start int, chosen []string) {
+				if len(chosen) == tw {
+					add(strings.Join(chosen, ","))
+					return
+				}
+				for i := start; i < len(fs); i++ {
+					walk(i+1, append(chosen, fs[i].Name+"="+vals[i]))
+				}
+			}
+			walk(0, nil)
+		}
+		need := map[string]bool{}
+		var space func(i int, vals []string)
+		space = func(i int, vals []string) {
+			if i == len(fs) {
+				if ok(text(vals)) {
+					tuples(vals, func(s string) { need[s] = true })
+				}
+				return
+			}
+			for _, v := range fs[i].Values {
+				space(i+1, append(vals, v))
+			}
+		}
+		space(0, nil)
+		if len(need) == 0 {
+			if err == nil {
+				t.Fatalf("trial %d: no row is allowed, and Cover returned %v", trial, rows)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("trial %d: %v", trial, err)
+		}
+		for _, row := range rows {
+			if !ok(row.String()) {
+				t.Fatalf("trial %d: row %s is not allowed", trial, row)
+			}
+			var vals []string
+			for _, f := range fs {
+				vals = append(vals, row.Get(f.Name))
+			}
+			tuples(vals, func(s string) { delete(need, s) })
+		}
+		for tuple := range need {
+			t.Fatalf("trial %d: t=%d: no row of %d covers %s", trial, tw, len(rows), tuple)
+		}
+	}
+}
+
+// MaxSpace bounds the space Cover enumerates, inclusive: 21 two-valued
+// factors are allowed, 22 are not.
+func TestMaxSpace(t *testing.T) {
+	var fs []qsweep.Factor
+	for i := range 22 {
+		fs = append(fs, qsweep.Bool(fmt.Sprint("f", i)))
+	}
+	if 1<<21 != qsweep.MaxSpace {
+		t.Fatalf("MaxSpace is %d: change the factors", qsweep.MaxSpace)
+	}
+	first := func(r qsweep.Row) bool { return !r.On("f0") && !r.On("f1") && !r.On("f20") && r.FaultsOff() == nil }
+	if _, err := qsweep.Cover(fs[:21], 1, first); err != nil {
+		t.Errorf("a space of MaxSpace rows: %v", err)
+	}
+	if _, err := qsweep.Cover(fs, 1, first); err == nil {
+		t.Error("a space of twice MaxSpace rows: no error")
 	}
 }
