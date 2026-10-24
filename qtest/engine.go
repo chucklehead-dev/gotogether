@@ -1,0 +1,294 @@
+package qtest
+
+import (
+	"encoding/json"
+	"fmt"
+	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"slices"
+	"sync"
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qenv"
+)
+
+// An engine runs one exploration, whichever method asked for it
+// (Explore, Exhaust, Sweep's rows, Mutate's mutants, Fuzz's inputs): its
+// sources' runs, side by side, then the stages every exploration's runs
+// go through in order (the determinism check, the names checked against
+// the system's declarations, finish's run errors, searches and
+// judgment). The methods differ only in their sources.
+type engine struct {
+	t        testing.TB
+	c        settings
+	binding  string
+	scenario func(qenv.Chooser) error
+	parallel int
+	woven    bool // the code is woven with qweave -cover
+	x        *Exploration
+	known    []knownCheck
+}
+
+// A knownCheck is names the user gave (Rates keys, Bound.Without kinds)
+// to check against the fault kinds the system declared, once the runs
+// are over: what says what they are, in the message.
+type knownCheck struct {
+	what  string
+	names []string
+}
+
+// A planned run is one run a source asks for.
+type planned struct {
+	origin  origin
+	chooser func() qenv.Chooser // made on the run's goroutine
+	// again makes the run once more from the run it made (the determinism
+	// check), or is nil: the run is not one to repeat (a fuzz input's, a
+	// replay)
+	again func(first *Run) qenv.Chooser
+	after func(*Run) // fills in what only the finished run tells (a corpus replay's staleness)
+}
+
+// A source makes an exploration's runs in batches: next sees every run so
+// far (steering grows from them) and returns none when it is done. The
+// engine asks each source in turn until it is done.
+type source interface {
+	next(done []*Run) []planned
+}
+
+// begin sets up an exploration of scenario against the binding: its
+// options (refusing those an exploration ignores), its number among the
+// test's explorations and its directory. The caller builds its sources
+// from it (they need the exploration's id and ref) and runs them.
+func begin(t testing.TB, binding string, opts []Option, scenario func(qenv.Chooser) error, parallel int) *engine {
+	t.Helper()
+	c := config(t, opts)
+	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
+	x := &Exploration{test: t.Name(), id: nextExploration(t), tempDir: c.tempDir, mutation: c.mutant}
+	x.dir = exploreDir(t, c.Dir, x.id)
+	return &engine{t: t, c: c, binding: binding, scenario: scenario, parallel: parallel, woven: len(qcover.Blocks()) > 0, x: x}
+}
+
+// one runs the scenario once on ch.
+func (e *engine) one(ch qenv.Chooser) *Run { return runOne(e.c, e.woven, ch, e.scenario) }
+
+// run runs the sources' runs, in order and e.parallel at a time, and puts
+// them through the stages. Runs are written by index, so their order is
+// the same every time. A nil run (the scenario failed t from its
+// goroutine) ends every source: finish says so.
+func (e *engine) run(sources ...source) {
+	t, x := e.t, e.x
+	t.Helper()
+	defer hooks.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
+	mark, _ := hooks.Escaped(0)
+	var plans []planned
+	stopped := false
+	for _, s := range sources {
+		for !stopped {
+			batch := s.next(x.Runs)
+			if len(batch) == 0 {
+				break
+			}
+			runs := make([]*Run, len(batch))
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, e.parallel)
+			for i, p := range batch {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func() { //qenv:ok runs side by side, each its own simulation
+					defer func() { <-sem; wg.Done() }()
+					r := e.one(p.chooser())
+					r.origin = p.origin
+					if p.after != nil {
+						p.after(r)
+					}
+					runs[i] = r
+				}()
+			}
+			wg.Wait()
+			x.Runs, plans = append(x.Runs, runs...), append(plans, batch...)
+			stopped = slices.Contains(runs, nil)
+		}
+	}
+	if len(x.Runs) > 0 && x.Runs[0] != nil && plans[0].again != nil {
+		first, again := x.Runs[0], plans[0].again
+		checkDeterminism(t, first, func() *Run { return e.one(again(first)) }, x.name(first.origin.seed))
+	}
+	for _, k := range e.known {
+		unknownKinds(t, k.what, k.names)
+	}
+	ids := make([]uint64, len(plans))
+	for i, p := range plans {
+		if p.origin.kind == "seed" || p.origin.kind == "schedule" {
+			ids[i] = p.origin.seed
+		}
+	}
+	x.finish(t, e.binding, e.c, mark, ids)
+}
+
+// seedSource is an exploration's seeds, one batch: each run's chooser is
+// made from its seed.
+type seedSource struct {
+	seeds   []uint64
+	chooser func(seed uint64) qenv.Chooser
+	// replayed: a run made again replays its own choices (a factory's
+	// choosers may be stateful: a Script it made once), else is made from
+	// its seed afresh
+	replayed bool
+	once     bool // no run made again (a fuzz input's)
+	done     bool
+}
+
+func (s *seedSource) next([]*Run) []planned {
+	if s.done {
+		return nil
+	}
+	s.done = true
+	out := make([]planned, len(s.seeds))
+	for i, seed := range s.seeds {
+		out[i] = planned{origin: origin{kind: "seed", seed: seed}, chooser: func() qenv.Chooser { return s.chooser(seed) }}
+		switch {
+		case s.once:
+		case s.replayed:
+			out[i].again = func(first *Run) qenv.Chooser { return qenv.Replay(first.Choices) }
+		default:
+			out[i].again = func(*Run) qenv.Chooser { return s.chooser(seed) }
+		}
+	}
+	return out
+}
+
+// corpusSource replays an exploration's corpus entries, one batch, after
+// its seeds (their numbers stay the same). An entry whose run took
+// another, shorter path to a clean end no longer reaches what it saved:
+// it is stale. One that failed or panicked first ended by its failure,
+// which is the entry's run not running, not staleness.
+type corpusSource struct {
+	paths   []string
+	entries []corpusEntry
+	done    bool
+}
+
+func (s *corpusSource) next([]*Run) []planned {
+	if s.done {
+		return nil
+	}
+	s.done = true
+	out := make([]planned, len(s.entries))
+	for k, e := range s.entries {
+		var rp *qenv.Replayer
+		out[k] = planned{
+			origin:  origin{kind: "corpus", value: s.paths[k], seed: e.Seed},
+			chooser: func() qenv.Chooser { rp = qenv.Replay(e.Choices); return rp },
+			after: func(r *Run) {
+				if n := len(e.Choices); r.diverged == nil && r.Err == nil && rp.Left() > 0 {
+					r.diverged = fmt.Errorf("the run ended after %d of the entry's %d choices", n-rp.Left(), n)
+					r.Err = r.diverged
+				}
+			},
+		}
+	}
+	return out
+}
+
+// fileSource is one saved run's choices replayed (GOTOGETHER_RUN's
+// choices=<file>: a steered run alone).
+type fileSource struct {
+	path    string
+	choices []qenv.Choice
+	done    bool
+}
+
+func (s *fileSource) next([]*Run) []planned {
+	if s.done {
+		return nil
+	}
+	s.done = true
+	return []planned{{origin: origin{kind: "choices", value: s.path}, chooser: func() qenv.Chooser { return qenv.Replay(s.choices) }}}
+}
+
+// steerSource runs n more runs after the runs before it (the seeds' and
+// the corpus's), each a run that found a feature no earlier run had,
+// replayed up to a random choice and then made on a fresh seed (of
+// seeded). Parents and cuts are drawn from a generator of the
+// exploration's id, and each batch's features are counted in order, so
+// the steered runs are the same every time. Each run's choices are saved
+// to a file in dir, which a reproduce line names
+// (GOTOGETHER_RUN=...:choices=<file>).
+type steerSource struct {
+	t           testing.TB
+	x           *Exploration
+	n, parallel int
+	dir         string
+	seeded      func(seed uint64) qenv.Chooser
+
+	started bool
+	seen    map[string]bool
+	pool    []*Run
+	rng     *rand.Rand
+	k, last int // runs planned so far, and in the last batch
+}
+
+// grow adds r to the pool if it found a feature no earlier run had.
+func (s *steerSource) grow(r *Run) {
+	fresh := false
+	for _, f := range features(r) {
+		if !s.seen[f] {
+			s.seen[f], fresh = true, true
+		}
+	}
+	if fresh && len(r.Choices) > 0 {
+		s.pool = append(s.pool, r)
+	}
+}
+
+func (s *steerSource) next(done []*Run) []planned {
+	if !s.started {
+		s.started, s.seen = true, map[string]bool{}
+		for _, r := range done {
+			if r != nil && r.Err == nil {
+				s.grow(r)
+			}
+		}
+		if len(s.pool) == 0 {
+			return nil
+		}
+		os.RemoveAll(s.dir) // an earlier exploration's
+		if err := os.MkdirAll(s.dir, 0o755); err != nil {
+			s.t.Fatalf("gotogether: %v", err)
+		}
+		s.rng = rand.New(rand.NewPCG(uint64(s.x.id), 0x57ee12ed))
+	} else {
+		// the last batch's runs, saved and counted in order
+		for _, r := range done[len(done)-s.last:] {
+			b, err := json.Marshal(corpusEntry{Format: corpusFormat, Exploration: s.x.ref(), Choices: r.Choices})
+			if err == nil {
+				err = os.WriteFile(r.origin.value, b, 0o644)
+			}
+			if err != nil {
+				s.t.Fatalf("gotogether: saving steered run %s: %v", r.origin.value, err)
+			}
+			if r.Err == nil {
+				s.grow(r)
+			}
+		}
+	}
+	if s.k >= s.n {
+		return nil
+	}
+	batch := min(s.parallel, s.n-s.k)
+	out := make([]planned, batch)
+	for i := range batch {
+		parent := s.pool[s.rng.IntN(len(s.pool))]
+		cut := s.rng.IntN(len(parent.Choices) + 1)
+		seed := uint64(1)<<40 + uint64(s.k+i+1)
+		out[i] = planned{
+			origin:  origin{kind: "choices", value: filepath.Join(s.dir, fmt.Sprintf("%d.json", s.k+i+1)), from: s.x.nameOf(parent)},
+			chooser: func() qenv.Chooser { return &steering{prefix: parent.Choices[:cut], rest: s.seeded(seed)} },
+		}
+	}
+	s.k, s.last = s.k+batch, batch
+	return out
+}

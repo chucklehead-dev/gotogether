@@ -3,12 +3,10 @@ package qtest
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
@@ -84,76 +82,6 @@ func (s *steering) Entropy(n int) []byte {
 		return e(n)
 	}
 	return make([]byte, n)
-}
-
-// steer runs n more runs after runs (the seeds'), each a run that found a
-// feature no earlier run had, replayed up to a random choice and then made
-// on a fresh seed (of next, the chooser of a seed). Parents and cuts are
-// drawn from a generator of the exploration's id, and each batch's
-// features are counted in order, so the steered runs are the same every
-// time. Each run's choices are saved to a file in dir, which a reproduce
-// line names (GOTOGETHER_RUN=...:choices=<file>).
-func (x *Exploration) steer(runs []*Run, n, parallel int, dir string, next func(seed uint64) qenv.Chooser, one func(qenv.Chooser) *Run) ([]*Run, error) {
-	seen := map[string]bool{}
-	var pool []*Run
-	grow := func(r *Run) {
-		fresh := false
-		for _, f := range features(r) {
-			if !seen[f] {
-				seen[f], fresh = true, true
-			}
-		}
-		if fresh && len(r.Choices) > 0 {
-			pool = append(pool, r)
-		}
-	}
-	for _, r := range runs {
-		if r != nil && r.Err == nil {
-			grow(r)
-		}
-	}
-	if len(pool) == 0 {
-		return nil, nil
-	}
-	os.RemoveAll(dir) // an earlier exploration's
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-	rng := rand.New(rand.NewPCG(uint64(x.id), 0x57ee12ed))
-	var out []*Run
-	for k := 0; k < n; {
-		batch := min(parallel, n-k)
-		made := make([]*Run, batch)
-		var wg sync.WaitGroup
-		for i := range batch {
-			parent := pool[rng.IntN(len(pool))]
-			cut := rng.IntN(len(parent.Choices) + 1)
-			seed := uint64(1)<<40 + uint64(k+i+1)
-			wg.Add(1)
-			go func() { //qenv:ok steered runs side by side, each its own simulation
-				defer wg.Done()
-				r := one(&steering{prefix: parent.Choices[:cut], rest: next(seed)})
-				r.origin = origin{kind: "choices", value: filepath.Join(dir, fmt.Sprintf("%d.json", k+i+1)), from: x.nameOf(parent)}
-				made[i] = r
-			}()
-		}
-		wg.Wait()
-		for _, r := range made {
-			b, err := json.Marshal(corpusEntry{Format: corpusFormat, Exploration: x.ref(), Choices: r.Choices})
-			if err == nil {
-				err = os.WriteFile(r.origin.value, b, 0o644)
-			}
-			if err != nil {
-				return out, fmt.Errorf("saving steered run %s: %w", r.origin.value, err)
-			}
-			if r.Err == nil {
-				grow(r)
-			}
-			out = append(out, r)
-		}
-		k += batch
-	}
-	return out, nil
 }
 
 // steerDir is where an exploration's steered runs' choices go: outside

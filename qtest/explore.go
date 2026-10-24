@@ -262,11 +262,9 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	if cfg.Parallel <= 0 {
 		cfg.Parallel = runtime.GOMAXPROCS(0)
 	}
-	c := config(t, cfg.opts)
-	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
-	woven := len(qcover.Blocks()) > 0
-	defer hooks.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
-	mark, _ := hooks.Escaped(0)
+	e := begin(t, bindingPath, cfg.opts, scenario, cfg.Parallel)
+	x := e.x
+	x.corpus, x.emptyOK, x.fuzz, x.mutant = corpusDir(t, cfg), cfg.emptyOK, cfg.fuzz, cfg.corpusOf != ""
 	// a nightly run widens the sample: GOTOGETHER_SEEDS=n runs n seeds,
 	// GOTOGETHER_SEED_OFFSET=k starts them after k (fresh seeds each night);
 	// a failure's report names its run, which GOTOGETHER_RUN runs alone
@@ -285,8 +283,6 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 	for i := range seeds {
 		seeds[i] = offset + uint64(i+1)
 	}
-	x := &Exploration{test: t.Name(), id: nextExploration(t), corpus: corpusDir(t, cfg), emptyOK: cfg.emptyOK, tempDir: c.tempDir, fuzz: cfg.fuzz, mutant: cfg.corpusOf != "", mutation: c.mutant}
-	x.dir = exploreDir(t, c.Dir, x.id)
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
 		x.alone = &spec
@@ -303,87 +299,49 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			t.Fatalf("gotogether: GOTOGETHER_RUN names a %s, but %s explores seeds: want :seed=<n>, :corpus=<file> or :choices=<file>", spec.kind, x.ref())
 		}
 	}
-	x.Runs = make([]*Run, len(seeds))
+	seeded := func(seed uint64) qenv.Chooser { s := qenv.NewSeeded(seed); s.Rates = cfg.rates; return s }
+	chooser := seeded
+	if cfg.Chooser != nil {
+		chooser = cfg.Chooser
+	}
+	sources := []source{&seedSource{seeds: seeds, chooser: chooser, replayed: cfg.Chooser != nil, once: cfg.fuzz}}
 	// the corpus's runs, after the seeds' (their numbers stay the same);
 	// a seed run alone runs no corpus entry
-	var corpusPaths []string
-	var corpusRuns []corpusEntry
 	if x.corpus != "" && (!alone || spec.kind == "corpus") {
 		ref := x.ref()
 		if cfg.corpusOf != "" { // a mutant's exploration replays its baseline's entries
 			ref = cfg.corpusOf
 		}
-		var err error
-		if corpusPaths, corpusRuns, err = readCorpus(x.corpus, ref); err != nil {
+		paths, entries, err := readCorpus(x.corpus, ref)
+		if err != nil {
 			t.Fatalf("gotogether: %v", err)
 		}
 		if !alone {
 			noteCorpus(t.Name(), x.corpus, ref)
 		}
-	}
-	if alone && spec.kind == "corpus" {
-		var ps []string
-		var rs []corpusEntry
-		for i, p := range corpusPaths {
-			if filepath.Base(p) == spec.value {
-				ps, rs = append(ps, p), append(rs, corpusRuns[i])
-			}
-		}
-		if len(ps) == 0 {
-			t.Fatalf("gotogether: GOTOGETHER_RUN names corpus entry %s, which is not one of %s's in %s (an entry belongs to the exploration its \"exploration\" names)", spec.value, x.ref(), x.corpus)
-		}
-		corpusPaths, corpusRuns = ps, rs
-	}
-	x.Runs = append(x.Runs, make([]*Run, len(corpusRuns))...)
-	ids := append([]uint64(nil), seeds...)
-	for range corpusRuns {
-		ids = append(ids, 0)
-		seeds = append(seeds, 0)
-	}
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, cfg.Parallel)
-	for i, seed := range seeds {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() { //qenv:ok runs seeds side by side, each its own simulation
-			defer func() { <-sem; wg.Done() }()
-			var ch qenv.Chooser
-			if k := i - (len(seeds) - len(corpusRuns)); k >= 0 {
-				rp := qenv.Replay(corpusRuns[k].Choices)
-				r := runOne(c, woven, rp, scenario)
-				r.origin = origin{kind: "corpus", value: corpusPaths[k], seed: corpusRuns[k].Seed}
-				if n := len(corpusRuns[k].Choices); r.diverged == nil && r.Err == nil && rp.Left() > 0 {
-					// the run took another, shorter path to a clean end: it no
-					// longer reaches what it saved. One that failed or panicked
-					// first ended by its failure, which is the entry's run not
-					// running, not staleness.
-					r.diverged = fmt.Errorf("the run ended after %d of the entry's %d choices", n-rp.Left(), n)
-					r.Err = r.diverged
+		if alone {
+			var ps []string
+			var es []corpusEntry
+			for i, p := range paths {
+				if filepath.Base(p) == spec.value {
+					ps, es = append(ps, p), append(es, entries[i])
 				}
-				x.Runs[i] = r
-				return
 			}
-			if cfg.Chooser != nil {
-				ch = cfg.Chooser(seed)
-			} else {
-				s := qenv.NewSeeded(seed)
-				s.Rates = cfg.rates
-				ch = s
+			if len(ps) == 0 {
+				t.Fatalf("gotogether: GOTOGETHER_RUN names corpus entry %s, which is not one of %s's in %s (an entry belongs to the exploration its \"exploration\" names)", spec.value, x.ref(), x.corpus)
 			}
-			x.Runs[i] = runOne(c, woven, ch, scenario)
-			x.Runs[i].origin = origin{kind: "seed", seed: seed}
-		}()
+			paths, entries = ps, es
+		}
+		sources = append(sources, &corpusSource{paths: paths, entries: entries})
+	} else if alone && spec.kind == "corpus" {
+		t.Fatalf("gotogether: GOTOGETHER_RUN names corpus entry %s, which is not one of %s's in %s (an entry belongs to the exploration its \"exploration\" names)", spec.value, x.ref(), x.corpus)
 	}
-	wg.Wait()
-	one := func(ch qenv.Chooser) *Run { return runOne(c, woven, ch, scenario) }
 	if alone && spec.kind == "choices" {
 		e, err := readEntry(spec.value, x.ref())
 		if err != nil {
 			t.Fatalf("gotogether: GOTOGETHER_RUN's choices: %v", err)
 		}
-		r := one(qenv.Replay(e.Choices))
-		r.origin = origin{kind: "choices", value: spec.value}
-		x.Runs, ids = append(x.Runs, r), append(ids, 0)
+		sources = append(sources, &fileSource{path: spec.value, choices: e.Choices})
 	} else if cfg.Steer > 0 && !alone && !cfg.fuzz {
 		switch {
 		case cfg.Chooser != nil:
@@ -393,31 +351,10 @@ func explore(t testing.TB, bindingPath string, cfg ExploreConfig, scenario func(
 			t.Fatalf("gotogether: ExploreConfig.Steer in System.Mutate: each mutant would steer its own sample from its own runs, " +
 				"not the baseline's, and a mutant only a steered baseline run reached would survive for it; mutate seeded explorations")
 		}
-		seeded := func(seed uint64) qenv.Chooser { s := qenv.NewSeeded(seed); s.Rates = cfg.rates; return s }
-		steered, err := x.steer(x.Runs, cfg.Steer, cfg.Parallel, steerDir(x), seeded, one)
-		if err != nil {
-			t.Fatalf("gotogether: %v", err)
-		}
-		x.Runs = append(x.Runs, steered...)
-		for range steered {
-			ids = append(ids, 0)
-		}
+		sources = append(sources, &steerSource{t: t, x: x, n: cfg.Steer, parallel: cfg.Parallel, dir: steerDir(x), seeded: seeded})
 	}
-	if !cfg.fuzz && len(x.Runs) > 0 && x.Runs[0] != nil && x.Runs[0].origin.kind == "seed" {
-		seed, first := x.Runs[0].origin.seed, x.Runs[0]
-		checkDeterminism(t, first, func() *Run {
-			if cfg.Chooser != nil {
-				// a factory's choosers may be stateful (a Script it made once):
-				// the first run's own choices, replayed, make the run again
-				return runOne(c, woven, qenv.Replay(first.Choices), scenario)
-			}
-			s := qenv.NewSeeded(seed)
-			s.Rates = cfg.rates
-			return runOne(c, woven, s, scenario)
-		}, x.name(seed))
-	}
-	unknownKinds(t, "System.Rates key", keysOf(cfg.rates.Kinds))
-	x.finish(t, bindingPath, c, mark, ids)
+	e.known = append(e.known, knownCheck{"System.Rates key", keysOf(cfg.rates.Kinds)})
+	e.run(sources...)
 	return x
 }
 
