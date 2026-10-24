@@ -13,8 +13,8 @@ package kv
 import (
 	"context"
 	"errors"
-	"runtime"
 	"sync"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
@@ -106,7 +106,10 @@ func (s *Store) CAS(ctx context.Context, key string, expected int64, value strin
 		s.mu.RLock()
 		e, ok := s.data[key]
 		s.mu.RUnlock()
-		runtime.Gosched() // the window the bug lives in
+		// the window the bug lives in, held open long enough that a
+		// concurrent CAS lands in it on a loaded runner too (a Gosched once
+		// missed it in five loads)
+		time.Sleep(200 * time.Microsecond)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if !ok || e.Version != expected {
