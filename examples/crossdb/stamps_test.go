@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/chucklehead-dev/gotogether/examples/crossdb/apis/v1alpha1"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -56,6 +59,70 @@ func TestStampsRoundTrip(t *testing.T) {
 		// lose more than that
 		if d := got.Sub(s.Now()); d < 500*time.Millisecond || d > 1500*time.Millisecond+10*time.Millisecond {
 			t.Errorf("a new stamp 1.5 s ahead is stored %v from then", d)
+		}
+	})
+	if err := s.Run(time.Hour); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// crossplane-runtime's critical annotation updater keeps the annotations
+// it writes and, on a conflict (a client deleted the resource during its
+// create), gets the resource and adds them back. The stamps it adds back
+// are the real ones it was handed, and are stored as the virtual ones
+// they stand for: once converted in place, the kept map held virtual
+// stamps, converted a second time, and the create-pending stamp was
+// months old.
+func TestStampsSurviveConflictRetry(t *testing.T) {
+	seeded := qenv.NewSeeded(1)
+	seeded.Rates = qenv.NoFaults
+	s := qenv.New(seeded)
+	defer s.Close()
+	raw := fake.NewClientBuilder().WithScheme(Scheme).WithStatusSubresource(&v1alpha1.Database{}).Build()
+	kube := kubeAPI(s, raw)
+	s.Spawn("reconciler", func(ctx context.Context) {
+		if err := raw.Create(ctx, NewDatabase("default", "db1")); err != nil {
+			t.Fatal(err)
+		}
+		db := &v1alpha1.Database{}
+		key := client.ObjectKey{Namespace: "default", Name: "db1"}
+		if err := kube.Get(ctx, key, db); err != nil {
+			t.Fatal(err)
+		}
+		start := s.Now()
+		meta.SetExternalCreatePending(db, s.ToReal(start))
+		if err := kube.Update(ctx, db); err != nil {
+			t.Fatal(err)
+		}
+		qenv.Sleep(ctx, time.Second) // the create's call to the cloud
+		// meanwhile, a client changes the resource: the next update conflicts
+		other := &v1alpha1.Database{}
+		if err := raw.Get(ctx, key, other); err != nil {
+			t.Fatal(err)
+		}
+		other.SetLabels(map[string]string{"touched": "yes"})
+		if err := raw.Update(ctx, other); err != nil {
+			t.Fatal(err)
+		}
+		meta.SetExternalCreateSucceeded(db, s.ToReal(s.Now()))
+		if err := managed.NewRetryingCriticalAnnotationUpdater(kube).UpdateCriticalAnnotations(ctx, db); err != nil {
+			t.Fatal(err)
+		}
+		stored := &v1alpha1.Database{}
+		if err := raw.Get(ctx, key, stored); err != nil {
+			t.Fatal(err)
+		}
+		// both written in this second of virtual time, give or take
+		// crossplane-runtime's whole seconds (one real second may stand
+		// for both, as in TestStampsRoundTrip)
+		for _, k := range []string{meta.AnnotationKeyExternalCreatePending, meta.AnnotationKeyExternalCreateSucceeded} {
+			got, err := time.Parse(time.RFC3339Nano, stored.GetAnnotations()[k])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Before(start.Add(-time.Second)) || got.After(s.Now().Add(time.Second)) {
+				t.Errorf("%s stored at %v, the stamps were written from %v to %v", k, got, start, s.Now())
+			}
 		}
 	})
 	if err := s.Run(time.Hour); err != nil {

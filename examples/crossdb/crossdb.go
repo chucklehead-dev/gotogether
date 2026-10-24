@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -187,14 +188,34 @@ func (c *stamps) toVirtual(obj client.Object) {
 	})
 }
 
+// each converts obj's time annotations with to. It converts a copy of
+// the annotations and gives obj the copy, never the caller's map: the
+// reconciler may hold that map across the request. Its critical
+// annotation updater keeps the annotations it means to write, and on a
+// conflict gets the resource and adds them back. The fake client's Update
+// gives obj a new map even when it fails, so converting in place left the
+// held map with virtual stamps, which the retry wrote as real ones and
+// were converted again: a create-pending stamp months old, a creation
+// grace long over, and a resource deleted during its create losing its
+// finalizer before the create landed.
 func (c *stamps) each(obj client.Object, to func(string, time.Time) string) {
-	a := obj.GetAnnotations()
+	var out map[string]string
 	for _, k := range timeAnnotations {
-		if v, ok := a[k]; ok {
-			if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
-				a[k] = to(v, t)
-			}
+		v, ok := obj.GetAnnotations()[k]
+		if !ok {
+			continue
 		}
+		t, err := time.Parse(time.RFC3339Nano, v)
+		if err != nil {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(obj.GetAnnotations())
+		}
+		out[k] = to(v, t)
+	}
+	if out != nil {
+		obj.SetAnnotations(out)
 	}
 }
 
