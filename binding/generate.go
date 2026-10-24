@@ -41,6 +41,10 @@ type Call struct {
 	// ExpectTemplate is the binding's expect that rendered Expect, whose
 	// {{.obs.X}} the step's observations filled in
 	ExpectTemplate string
+	// ExpectArgs are the values of ExpectTemplate's fields, rendered as
+	// Expect renders them: the arguments of the expect's definition in an
+	// EvalModule (nil when the template is not text and fields)
+	ExpectArgs []string
 	Step           *qtrace.Step      // the observed step; nil for inferred steps
 	Inferred       string            // why the step was inserted ("restart"), if inferred
 	Action         string            // the model action
@@ -241,6 +245,16 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 		}
 		if ab.Expect != "" && !s.Ambiguous { // an assumed effect observed nothing
 			c.ExpectTemplate = ab.Expect
+			if _, holes, err := splitTemplate(ab.Expect); err == nil {
+				for _, h := range holes {
+					v, err := render(h, data, funcs)
+					if err != nil {
+						c.ExpectArgs = nil
+						break
+					}
+					c.ExpectArgs = append(c.ExpectArgs, v)
+				}
+			}
 			if c.Expect, err = render(ab.Expect, data, funcs); err != nil {
 				if f, ok := missingField(err); ok {
 					return nil, fmt.Errorf("step %d (%s%s): the binding's expect for %s reads the step's field %q, which the step does not have (%s): "+
