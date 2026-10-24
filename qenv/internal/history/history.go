@@ -11,13 +11,16 @@
 //     T1's view of it.
 //
 // A read of a version no committed transaction installed is G1a (a dirty
-// read), forbidden at every level. A cycle with no rw edge is G1c (G0 if every edge is ww): forbidden from
-// read committed up. A cycle with exactly one rw edge is G-single (a lost
-// update, read skew): forbidden from snapshot isolation up. Any cycle is
-// G2: forbidden under serializability; snapshot isolation allows it with
-// two rw edges or more (write skew). The checker is incremental: every
-// new cycle goes through the transaction that closed it, so each commit
-// is checked once, by a search from it.
+// read), forbidden at every level. A cycle is classified as qhistory
+// classifies a real database's (package internal/depgraph, one
+// classifier for both): G0 and G1c (no rw edge) are forbidden from read
+// committed up; G-single (one rw edge: a lost update, read skew) and
+// G-nonadjacent (two or more, never two in a row) from snapshot isolation
+// up; G2 (write skew, whose rw edges are adjacent) under serializability.
+// The checker is incremental: every new cycle goes through the
+// transaction that closed it, so each commit classifies only that
+// transaction's strongly connected component (an older forbidden cycle
+// there would have failed its own commit).
 //
 // A store's own tests show the anomalies its level allows can happen
 // (completeness); this shows those it forbids never do (soundness).
@@ -25,8 +28,11 @@ package history
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/internal/depgraph"
 )
 
 // Version identifies a key's version: the commit number of the
@@ -56,29 +62,22 @@ type Txn struct {
 	Writes []string
 }
 
-// MaxRW is how many rw edges a forbidden cycle may have, by level: a
-// cycle with at most MaxRW of them violates the level.
+// The levels a history is checked at, weakest first.
 const (
-	ReadCommitted     = 0
-	SnapshotIsolation = 1
-	Serializable      = 1 << 30
+	ReadCommitted = iota
+	SnapshotIsolation
+	Serializable
 )
-
-type edge struct {
-	to   int64
-	kind string // "ww", "wr", "rw"
-	key  string
-}
 
 // History is a store's committed transactions and the dependencies
 // between them.
 type History struct {
-	maxRW    int
+	level    int
 	versions map[string][]Version // per key, in order
 	writer   map[Version]int64    // version -> the transaction that installed it
 	readers  map[string]map[Version][]int64
 	scans    []scanOf
-	out      map[int64][]edge
+	g        *depgraph.Graph
 }
 
 type scanOf struct {
@@ -89,8 +88,8 @@ type scanOf struct {
 // New returns an empty history checked at level (ReadCommitted,
 // SnapshotIsolation or Serializable).
 func New(level int) *History {
-	return &History{maxRW: level, versions: map[string][]Version{}, writer: map[Version]int64{},
-		readers: map[string]map[Version][]int64{}, out: map[int64][]edge{}}
+	return &History{level: level, versions: map[string][]Version{}, writer: map[Version]int64{},
+		readers: map[string]map[Version][]int64{}, g: depgraph.New()}
 }
 
 // Load records a version installed outside any transaction (initial data).
@@ -99,12 +98,7 @@ func (h *History) Load(key string, v Version) {
 	h.writer[v] = 0 // the initial "transaction"
 }
 
-func (h *History) add(from, to int64, kind, key string) {
-	if from == to {
-		return
-	}
-	h.out[from] = append(h.out[from], edge{to, kind, key})
-}
+func (h *History) add(from, to int64, kind, key string) { h.g.Add(from, to, kind, key) }
 
 // next is the version of key installed after v, if any.
 func (h *History) next(key string, v Version) (Version, bool) {
@@ -187,105 +181,45 @@ func (h *History) Commit(t Txn) error {
 	return h.cycle(t.ID)
 }
 
-// cycle finds the cycle through id with the fewest rw edges (a 0-1
-// breadth-first search, rw edges weighing 1) and reports it if the level
-// forbids it.
+// phenomena names each anomaly as a violation reports it, with the
+// weakest level that forbids it.
+var phenomena = map[string]struct {
+	name  string
+	level int
+}{
+	depgraph.G0:           {"G0 (dirty write)", ReadCommitted},
+	depgraph.G1c:          {"G1c (circular information flow)", ReadCommitted},
+	depgraph.GSingle:      {"G-single (a lost update or read skew)", SnapshotIsolation},
+	depgraph.GNonadjacent: {"G-nonadjacent (anti-dependencies, never two in a row)", SnapshotIsolation},
+	depgraph.G2:           {"G2", Serializable},
+}
+
+// cycle classifies id's strongly connected component and reports its
+// strongest cycle if the level forbids it, from id when id is on it.
 func (h *History) cycle(id int64) error {
-	type step struct {
-		prev int64
-		e    edge
-	}
-	dist := map[int64]int{}
-	via := map[int64]step{}
-	type item struct {
-		n int64
-		d int
-	}
-	var deque []item
-	push := func(it item, front bool) {
-		if front {
-			deque = append([]item{it}, deque...)
-		} else {
-			deque = append(deque, it)
-		}
-	}
-	best, bestVia := -1, step{}
-	for _, e := range h.out[id] {
-		w := 0
-		if e.kind == "rw" {
-			w = 1
-		}
-		if e.to == id {
-			continue
-		}
-		if d, ok := dist[e.to]; !ok || w < d {
-			dist[e.to], via[e.to] = w, step{id, e}
-			push(item{e.to, w}, w == 0)
-		}
-	}
-	for len(deque) > 0 {
-		it := deque[0]
-		deque = deque[1:]
-		if it.d != dist[it.n] {
-			continue
-		}
-		if it.d > h.maxRW || best >= 0 && it.d >= best {
-			continue
-		}
-		for _, e := range h.out[it.n] {
-			w := it.d
-			if e.kind == "rw" {
-				w++
-			}
-			if e.to == id {
-				if best < 0 || w < best {
-					best, bestVia = w, step{it.n, e}
-				}
-				continue
-			}
-			if d, ok := dist[e.to]; !ok || w < d {
-				dist[e.to], via[e.to] = w, step{it.n, e}
-				push(item{e.to, w}, w == it.d)
-			}
-		}
-	}
-	if best < 0 || best > h.maxRW {
+	scc := h.g.Component(id)
+	if scc == nil {
 		return nil
 	}
-	// the cycle, from id back to id
-	var path []string
-	allWW := true
-	cur, st := id, bestVia
-	for len(path) <= len(h.out) {
-		path = append(path, fmt.Sprintf("T%d -%s(%s)-> T%d", st.prev, st.e.kind, st.e.key, st.e.to))
-		if st.e.kind != "ww" {
-			allWW = false
-		}
-		cur = st.prev
-		if cur == id {
-			break
-		}
-		st = via[cur]
+	kind, cyc := h.g.Classify(scc)
+	p := phenomena[kind]
+	if p.level > h.level {
+		return nil
 	}
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
+	if i := slices.IndexFunc(cyc, func(e depgraph.Hop) bool { return e.From == id }); i > 0 {
+		cyc = append(cyc[i:], cyc[:i]...)
 	}
-	name := "G2"
-	switch {
-	case best == 0 && allWW:
-		name = "G0 (dirty write)"
-	case best == 0:
-		name = "G1c (circular information flow)"
-	case best == 1:
-		name = "G-single (a lost update or read skew)"
+	path := make([]string, len(cyc))
+	for i, e := range cyc {
+		path[i] = fmt.Sprintf("T%d -%s(%s)-> T%d", e.From, e.Kind, e.Key, e.To)
 	}
-	return &Violation{Phenomenon: name, Cycle: path}
+	return &Violation{Phenomenon: p.name, Cycle: path}
 }
 
 // A Violation is a forbidden cycle.
 type Violation struct {
 	Phenomenon string
-	Cycle      []string // its edges, from the transaction that closed it
+	Cycle      []string // its edges, from the transaction that closed it if it is on it
 }
 
 func (v *Violation) Error() string {

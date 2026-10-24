@@ -412,7 +412,8 @@ working there:
 - Run qenv's tests, and tests of new doubles, with `GOTOGETHER_CHECK=1`: the
   scheduler checks its invariants at every step, and every `Store` checks
   each commit's dependency cycles against its isolation level
-  (`qenv/internal/history`: G1a, G1c, G-single, G2). CI does, and runs
+  (`qenv/internal/history`: G1a, G0, G1c, G-single, G-nonadjacent, G2;
+  one classifier with qhistory, `internal/depgraph`). CI does, and runs
   the store's examples so too. A change to the store's validation that
   lets a forbidden cycle commit panics there, naming the cycle. Every
   `Queue` checks its contract after each operation: no message lost, none

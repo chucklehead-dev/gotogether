@@ -2773,8 +2773,12 @@ are validate's (`Checker.Search`, T3), so the CLI runs them too.
 **Contracts (X5).** A double is only as good as its contract. Under
 `GOTOGETHER_CHECK` every `Store` keeps the history of its transactions
 and checks, at each commit, the dependency cycles its isolation level
-forbids (G1a, G1c, G-single, G2: Adya's phenomena, as Elle checks them);
-a change to the store's validation that lets one commit panics there,
+forbids (G1a, G0, G1c, G-single, G-nonadjacent, G2: Adya's phenomena,
+as Elle checks them), classified by the one classifier qhistory uses
+(`internal/depgraph`, checked against an enumeration of every simple
+cycle): each commit classifies its transaction's component. A search
+for the cycle with the fewest rw edges took G-nonadjacent, which
+snapshot isolation forbids, for write skew, which it allows. A change to the store's validation that lets one commit panics there,
 naming the cycle. Every `Queue` checks after each operation that no
 message is lost, none is delivered after its acknowledgement, and an
 Ordered queue's first deliveries are in order.

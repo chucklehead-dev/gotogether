@@ -8,6 +8,9 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `GOTOGETHER_CHECK`'s store history checker classifies cycles as
+  qhistory does (one classifier): it reports G-nonadjacent at snapshot
+  isolation, which it took for write skew and let through.
 - The toolkit's own mutation testing: `qweave -mutate -coverpkg` names a
   core package to mutate (never qmut, qrun, qcover or internal/hooks),
   `GOTOGETHER_MUTANT=<id>` turns one mutant on for a whole process

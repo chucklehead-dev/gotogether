@@ -40,6 +40,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/internal/depgraph"
 )
 
 // OpKind is what an operation does.
@@ -176,12 +178,6 @@ type wkey struct {
 	value int
 }
 
-type edge struct {
-	to   int
-	kind string // ww, wr, rw
-	key  string
-}
-
 // Check checks a history against level. It returns an error, not a
 // report, when the history is not a list-append workload's: a value
 // appended twice to one key (Generate never does), or an operation of
@@ -294,10 +290,10 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	out := map[int][]edge{}
+	g := depgraph.New()
 	link := func(from, to int, kind, key string) {
-		if from != to && committed(from) && committed(to) {
-			out[from] = append(out[from], edge{to, kind, key})
+		if committed(from) && committed(to) {
+			g.Add(int64(from), int64(to), kind, key)
 		}
 	}
 	for _, key := range keys {
@@ -361,198 +357,18 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			}
 		}
 	}
-	for _, scc := range components(out) {
-		kind, cyc := classify(scc, out)
+	for _, scc := range g.Components() {
+		kind, cyc := g.Classify(scc)
 		ids := make([]int, len(cyc))
 		var b strings.Builder
 		for i, e := range cyc {
-			ids[i] = e.from
-			fmt.Fprintf(&b, "%d -%s(%s)-> ", e.from, e.kind, e.key)
+			ids[i] = int(e.From)
+			fmt.Fprintf(&b, "%d -%s(%s)-> ", e.From, e.Kind, e.Key)
 		}
-		fmt.Fprintf(&b, "%d", cyc[0].from)
+		fmt.Fprintf(&b, "%d", cyc[0].From)
 		add(kind, ids, "%s", b.String())
 	}
 	return rep, nil
-}
-
-// components returns the graph's strongly connected components of more
-// than one transaction (Tarjan), each sorted, in order of their least id.
-func components(out map[int][]edge) [][]int {
-	nodes := make([]int, 0, len(out))
-	for n := range out {
-		nodes = append(nodes, n)
-	}
-	sort.Ints(nodes)
-	index, low, on := map[int]int{}, map[int]int{}, map[int]bool{}
-	var stack []int
-	var sccs [][]int
-	var visit func(v int)
-	visit = func(v int) {
-		index[v], low[v] = len(index), len(index)
-		stack, on[v] = append(stack, v), true
-		for _, e := range out[v] {
-			if _, ok := index[e.to]; !ok {
-				visit(e.to)
-				low[v] = min(low[v], low[e.to])
-			} else if on[e.to] {
-				low[v] = min(low[v], index[e.to])
-			}
-		}
-		if low[v] == index[v] {
-			var c []int
-			for {
-				w := stack[len(stack)-1]
-				stack, on[w] = stack[:len(stack)-1], false
-				c = append(c, w)
-				if w == v {
-					break
-				}
-			}
-			if len(c) > 1 {
-				sort.Ints(c)
-				sccs = append(sccs, c)
-			}
-		}
-	}
-	for _, n := range nodes {
-		if _, ok := index[n]; !ok {
-			visit(n)
-		}
-	}
-	sort.Slice(sccs, func(i, j int) bool { return sccs[i][0] < sccs[j][0] })
-	return sccs
-}
-
-type hop struct {
-	from int
-	edge
-}
-
-// classify finds the component's cycle of the strongest anomaly: ww edges
-// only (G0), ww and wr (G1c), exactly one rw (G-single), else any (G2).
-func classify(scc []int, out map[int][]edge) (string, []hop) {
-	in := map[int]bool{}
-	for _, n := range scc {
-		in[n] = true
-	}
-	// path is a shortest path from a to b over the component's edges of the
-	// kinds allowed, or nil
-	path := func(a, b int, allowed func(string) bool) []hop {
-		prev := map[int]hop{}
-		queue, visited := []int{a}, map[int]bool{a: true}
-		for len(queue) > 0 {
-			v := queue[0]
-			queue = queue[1:]
-			for _, e := range out[v] {
-				if !in[e.to] || !allowed(e.kind) || visited[e.to] {
-					continue
-				}
-				visited[e.to], prev[e.to] = true, hop{v, e}
-				if e.to == b {
-					var p []hop
-					for n := b; n != a; n = prev[n].from {
-						p = append(p, prev[n])
-					}
-					slices.Reverse(p)
-					return p
-				}
-				queue = append(queue, e.to)
-			}
-		}
-		return nil
-	}
-	cycle := func(allowed func(string) bool) []hop {
-		for _, n := range scc {
-			for _, e := range out[n] {
-				if in[e.to] && allowed(e.kind) {
-					if back := path(e.to, n, allowed); back != nil || e.to == n {
-						return append([]hop{{n, e}}, back...)
-					}
-				}
-			}
-		}
-		return nil
-	}
-	if c := cycle(func(k string) bool { return k == "ww" }); c != nil {
-		return "G0", c
-	}
-	if c := cycle(func(k string) bool { return k != "rw" }); c != nil {
-		return "G1c", c
-	}
-	for _, n := range scc {
-		for _, e := range out[n] {
-			if in[e.to] && e.kind == "rw" {
-				if back := path(e.to, n, func(k string) bool { return k != "rw" }); back != nil {
-					return "G-single", append([]hop{{n, e}}, back...)
-				}
-			}
-		}
-	}
-	if c := nonadjacent(scc, in, out); c != nil {
-		return "G-nonadjacent", c
-	}
-	return "G2", cycle(func(string) bool { return true })
-}
-
-// nonadjacent finds a cycle of the component with two or more rw edges,
-// no two of them in a row (the last and the first in a row too): Adya's
-// G-nonadjacent, which snapshot isolation forbids though it allows write
-// skew, whose rw edges are adjacent.
-func nonadjacent(scc []int, in map[int]bool, out map[int][]edge) []hop {
-	type state struct {
-		node  int
-		lastR bool // the edge into node was rw
-	}
-	type step struct {
-		from state
-		hop
-	}
-	for _, n := range scc {
-		for _, first := range out[n] {
-			if !in[first.to] {
-				continue
-			}
-			firstR := first.kind == "rw"
-			start := state{first.to, firstR}
-			prev := map[state]step{}
-			seen := map[state]bool{start: true}
-			queue := []state{start}
-			for len(queue) > 0 {
-				st := queue[0]
-				queue = queue[1:]
-				for _, e := range out[st.node] {
-					r := e.kind == "rw"
-					if !in[e.to] || r && st.lastR {
-						continue
-					}
-					if e.to == n && !(r && firstR) {
-						rws := 0
-						var path []hop
-						for at := st; at != start; at = prev[at].from {
-							path = append(path, prev[at].hop)
-						}
-						slices.Reverse(path)
-						cyc := append(append([]hop{{n, first}}, path...), hop{st.node, e})
-						for _, h := range cyc {
-							if h.kind == "rw" {
-								rws++
-							}
-						}
-						if rws >= 2 { // fewer is G-single, or no rw at all: found before this
-							return cyc
-						}
-						continue
-					}
-					next := state{e.to, r}
-					if !seen[next] {
-						seen[next], prev[next] = true, step{st, hop{st.node, e}}
-						queue = append(queue, next)
-					}
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // duplicated returns a value list holds twice, if any.

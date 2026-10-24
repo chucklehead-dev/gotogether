@@ -90,3 +90,30 @@ func TestSerial(t *testing.T) {
 		}
 	}
 }
+
+// Two read-only transactions, each seeing one writer's effect but not
+// the other's: 3 -rw(z)-> 4 -wr(w)-> 1 -rw(x)-> 2 -wr(y)-> 3, two rw
+// edges never in a row, G-nonadjacent, which snapshot isolation forbids
+// (no snapshot shows it) though it allows write skew. A search for the
+// cycle with the fewest rw edges took it for write skew.
+func TestNonadjacent(t *testing.T) {
+	for _, c := range []struct {
+		level int
+		want  string
+	}{{ReadCommitted, ""}, {SnapshotIsolation, "G-nonadjacent"}, {Serializable, "G-nonadjacent"}} {
+		h := New(c.level)
+		for i, k := range []string{"x", "y", "z", "w"} {
+			h.Load(k, Version(i+1))
+		}
+		commit(t, h, Txn{ID: 2, Commit: 5, Writes: []string{"x", "y"}})
+		commit(t, h, Txn{ID: 4, Commit: 6, Writes: []string{"z", "w"}})
+		commit(t, h, Txn{ID: 1, Reads: []Read{{"x", 1}, {"w", 6}}})
+		got := commit(t, h, Txn{ID: 3, Reads: []Read{{"y", 5}, {"z", 3}}})
+		if !strings.HasPrefix(got, c.want) || (c.want == "") != (got == "") {
+			t.Errorf("level %d: %q, want %q", c.level, got, c.want)
+		}
+		if c.want != "" && !strings.HasPrefix(got, c.want+" (anti-dependencies, never two in a row): T3 -rw(z)-> T4") {
+			t.Errorf("level %d: %q, want the cycle from T3, which closed it", c.level, got)
+		}
+	}
+}
