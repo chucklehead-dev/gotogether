@@ -37,7 +37,10 @@ effect after step 1"). With `qtest.Linearize()` too (the CLI's
 call may take effect anywhere real time allows in an order of the steps,
 or not at all, and the issue says where each did ("pending calls taking
 effect: write(key=a, value=1) at step 2"): a client history with
-timeouts. Either way
+timeouts. A searched run's history is drawn too (`validate -history
+out.svg`; a kept failing exploration run's `<run>.history.svg`): a lane
+per client, the order checked numbered, the failing step red, where to
+look first. Either way
 check with `qtest.Linearize()` (the CLI: `gotogether validate -linearize`, `-linearize-key key`, `-resolve-pending`): concurrent operations return in
 another order than they took effect, and the recording order rejects
 correct code (examples/kvstore's client history, every load tried). The

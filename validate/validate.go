@@ -758,3 +758,27 @@ func obsString(m map[string]any) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// HistorySVG draws a run's history (qtrace.HistorySVG): recorded is what
+// the run recorded, judged the order this report checked (a search's
+// Steps), and the step its first failing actor failed at is drawn red.
+func (r *Report) HistorySVG(recorded, judged []qtrace.Step) []byte {
+	failedAt := -1
+	for _, a := range r.Actors {
+		for _, f := range a.failures() {
+			if f.Step == nil {
+				continue
+			}
+			for i, s := range judged {
+				if s.Recorder == f.Step.Recorder && s.Seq == f.Step.Seq {
+					failedAt = i
+					break
+				}
+			}
+			if failedAt >= 0 {
+				return qtrace.HistorySVG(recorded, judged, failedAt)
+			}
+		}
+	}
+	return qtrace.HistorySVG(recorded, judged, failedAt)
+}

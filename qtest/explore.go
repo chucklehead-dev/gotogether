@@ -1351,6 +1351,9 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	}
 	if r.searched && writeSteps(base+".judged.steps.jsonl", r.Steps) {
 		fmt.Fprintf(&b, "  the order judged (the search's): %s\n", base+".judged.steps.jsonl")
+		if r.Report != nil && os.WriteFile(base+".history.svg", r.Report.HistorySVG(recorded, r.Steps), 0o644) == nil {
+			fmt.Fprintf(&b, "  the history drawn (the order judged numbered, the failing step red): %s\n", base+".history.svg")
+		}
 	}
 	b.WriteString(x.keep(r, save))
 	if !save && x.alone == nil {

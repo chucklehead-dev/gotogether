@@ -221,8 +221,8 @@ under a week, M two to four, L more.
 - **T7. Capabilities (after T2d).** Planned by a review (HISTORY, "T7
   plan"), in this order:
   - **a (M). Pending calls inside the linearization** (Jepsen's :info;
-    the search done, DESIGN §46; left: the history's drawing and the
-    wallet example):
+    the search and the drawing done, DESIGN §46; left: the wallet
+    example):
     Linearize with ResolvePending, a pending call an optional node of the
     search, bounded below by its invocation and above by the first step
     after a settle that followed it; dropped is "no effect". Checked

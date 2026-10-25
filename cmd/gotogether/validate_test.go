@@ -100,7 +100,7 @@ func TestValidateLinearize(t *testing.T) {
 	for _, c := range []struct {
 		flags []string
 		code  int
-	}{{nil, 1}, {[]string{"-linearize"}, 0}} {
+	}{{nil, 1}, {[]string{"-linearize"}, 0}, {[]string{"-history", filepath.Join(dir, "h.svg")}, 1}} {
 		r, w, err := os.Pipe()
 		if err != nil {
 			t.Fatal(err)
@@ -115,5 +115,10 @@ func TestValidateLinearize(t *testing.T) {
 		if err != nil || code != c.code {
 			t.Errorf("%v: exit %d, %v, want %d:\n%s", c.flags, code, err, c.code, out)
 		}
+	}
+	// -history drew the failing run: the withdrawal checked first, red
+	svg, err := os.ReadFile(filepath.Join(dir, "h.svg"))
+	if err != nil || !strings.Contains(string(svg), "<svg") || strings.Count(string(svg), `fill="#f6b5b5"`) != 1 {
+		t.Errorf("-history: %v\n%s", err, svg)
 	}
 }

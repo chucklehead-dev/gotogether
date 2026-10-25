@@ -1386,6 +1386,7 @@ const RealTimeSlack = time.Millisecond
 const SpanName = "quint "
 func ForcedOrder(steps []Step) ([]Step, bool)
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
+func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
 func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
 func LinearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof)
@@ -1516,6 +1517,7 @@ type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
     field Unsettled string
+    method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
     method (*Report) Summary() string
 type Result struct

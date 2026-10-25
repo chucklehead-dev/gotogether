@@ -412,6 +412,7 @@ func runValidate(args []string) (int, error) {
 	linKey := fset.String("linearize-key", "", "linearize each actor's history partitioned by this argument's value (independent keys), each partition alone")
 	linBudget := fset.Int("linearize-budget", 0, "orders a linearization checks per actor or partition (default 200)")
 	resolvePending := fset.Bool("resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
+	history := fset.String("history", "", "write the history drawn as SVG to this file (lanes of calls, the order checked numbered, the failing step red)")
 	fset.Parse(args)
 	if *noITF {
 		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
@@ -502,6 +503,11 @@ func runValidate(args []string) (int, error) {
 			search = again
 		}
 		search.Mark(rep)
+		if *history != "" {
+			if err := os.WriteFile(*history, rep.HistorySVG(steps, search.Steps), 0o644); err != nil {
+				return 2, err
+			}
+		}
 		fmt.Print(rep.Summary())
 		if *verbose {
 			for _, a := range rep.Actors {

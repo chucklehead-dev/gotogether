@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="186" font-family="sans-serif" font-size="11">
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="8" y="18" font-size="12">history: 4 calls over 140ms; numbers are the order judged; red is where it failed</text>
+<line x1="140" y1="62" x2="890" y2="62" stroke="#ddd"/>
+<text x="8" y="51">late</text>
+<line x1="140" y1="96" x2="890" y2="96" stroke="#ddd"/>
+<text x="8" y="85">reader</text>
+<line x1="140" y1="130" x2="890" y2="130" stroke="#ddd"/>
+<text x="8" y="119">timedout</text>
+<line x1="140" y1="164" x2="890" y2="164" stroke="#ddd"/>
+<text x="8" y="153">writer</text>
+<rect x="395.1" y="70" width="51.0" height="16" rx="2" fill="#f6b5b5" stroke="#c0392b"/>
+<text x="398.1" y="82"><title>#1 read() → v=1</title>#1 read() → v=1</text>
+<rect x="701.2" y="36" width="51.0" height="16" rx="2" fill="#cfe0f5" stroke="#4a78b0"/>
+<text x="704.2" y="48"><title>#2 read() → v=7</title>#2 read() → v=7</text>
+<rect x="650.2" y="138" width="204.1" height="16" rx="2" fill="#cfe0f5" stroke="#4a78b0"/>
+<text x="653.2" y="150"><title>#3 write(v=2)</title>#3 write(v=2)</text>
+<rect x="140.0" y="104" width="750.0" height="16" rx="2" fill="#f3f3f3" stroke="#888" stroke-dasharray="4 3"/>
+<text x="143.0" y="116"><title>write(v=1) (pending)</title>write(v=1) (pending)</text>
+</svg>

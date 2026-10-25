@@ -35,6 +35,11 @@ The first release. What a user meets, by module:
   indeterminate calls (`qtrace.LinearizePending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
+- `qtrace.HistorySVG` and `validate.Report.HistorySVG` draw a history
+  (a lane per client, calls as bars, the order checked numbered, pending
+  calls dashed, the failing step red); a kept failing exploration run
+  that was searched writes `<run>.history.svg` beside its judged order,
+  and the CLI's `validate -history out.svg` writes one.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,
   now searched side by side) of such a history checks it without a

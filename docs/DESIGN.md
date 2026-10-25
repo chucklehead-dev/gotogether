@@ -3029,3 +3029,9 @@ subset of the pending writes, every order the bounds allow, with and
 without a settle and a final value some runs require), through the
 complete search alone and under small budgets, each rule ablated.
 
+A failing history is drawn (`qtrace.HistorySVG`): a lane per recorder,
+each call a bar from invocation to completion numbered by the order
+judged, pending calls dashed to the history's end, the step the check
+failed at red. Kept failing runs of a search get one beside their
+judged order; the CLI writes one with `-history`.
+
