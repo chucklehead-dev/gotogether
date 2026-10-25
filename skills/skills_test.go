@@ -123,6 +123,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"step [", `"step N" (reports number steps from 1)`},
 		{"Sweep.Expect", "SweepConfig.Expect"},
 		{"ExploreConfig.Opts", "System.Opts"},
+		{"ConfirmByCheck", "validate.Checker.Judge (it confirms)"},
+		{"Checker.Search(", "validate.Checker.Judge"},
 		{"Recovery.Judge", "the Recovery Recovers or Assess returns"},
 		{"CheckRuns", "Checker.CheckBatch"},
 		{"-noitf", "nothing: no ITF is the default (-itf writes it)"},

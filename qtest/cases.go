@@ -95,6 +95,6 @@ func (s System) Judge(t testing.TB, ch qenv.Chooser) *Run {
 	o := c.Options
 	o.Dir, o.NoITF = filepath.Join(c.Dir, "judge", "quint"), true
 	cc, inst, _ := instanceChecker(t, s.Binding, o, c)
-	judge(t, cc, inst, []*Run{r}, func(*Run) string { return "the run judged" })
+	judge(t, cc, inst, validate.SearchOptions{}, []*Run{r}, func(*Run) string { return "the run judged" })
 	return r
 }

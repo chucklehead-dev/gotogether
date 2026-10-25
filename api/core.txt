@@ -1496,6 +1496,7 @@ func Cached(bindingPath string, o Options) (*Checker, error)
 func EventuallyName(val string) string
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
+type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error)
 type Checker struct
     field Binding *binding.Binding
     field Model *binding.Model
@@ -1503,8 +1504,9 @@ type Checker struct
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
     method (*Checker) Close() error
+    method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
+    method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
-    method (*Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type Failure struct
@@ -1532,6 +1534,9 @@ type InvariantResult struct
     field Failure *Failure
     field Eventually bool
     field Within bool
+type Judgment struct
+    field Report *Report
+    field Steps []qtrace.Step
 type Options struct
     field Quint string
     field Backend string
@@ -1563,17 +1568,12 @@ type Result struct
     method (*Result) OK() bool
     method (*Result) Reason() string
     method (*Result) Summary() string
-type Search struct
-    field Steps []qtrace.Step
-    method (*Search) Confirm(rep *Report) (again *Search, err error)
-    method (*Search) Mark(rep *Report)
 type SearchOptions struct
     field Linearize bool
     field Key string
     field Budget int
     field ResolvePending bool
     field ResolveBudget int
-    field ConfirmByCheck bool
 type ToolError struct
     field Module string
     field Test string

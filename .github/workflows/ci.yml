@@ -278,7 +278,9 @@ jobs:
       - name: gofmt, vet
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./...
       - name: test (liveness, pending calls, linearized per key, PCT)
-        run: go test -count=1 -timeout 45m ./...
+        run: |
+          go test -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
 
   raftkv:
     # its own job: etcd's raft library on qenv, histories linearized whole
@@ -301,7 +303,9 @@ jobs:
       - name: gofmt, vet, lint -sim
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/raftkv
       - name: test (linearized whole, pending calls, leadership within a bound, clock drift, rolling upgrades)
-        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./...
+        run: |
+          GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
 
   wallet:
     # its own job: linearized explorations and resolved pending calls,
@@ -324,7 +328,9 @@ jobs:
       - name: gofmt, vet, lint -sim
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/wallet
       - name: test (Exhaust, isolation levels and qhistory, linearized, pending calls, every fault family)
-        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./...
+        run: |
+          GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
       - name: demos
         run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
 

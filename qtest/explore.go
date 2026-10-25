@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -585,31 +584,8 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			x.actions[a] = true
 		}
 	}
-	// a search's order: the steps judged are the order it found, each run's
-	// search on its own, side by side (each is quint processes in turn)
-	tbs := make([]*searchTB, len(x.Runs))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
-	for i, r := range x.Runs {
-		if r == nil || r.Err != nil || len(r.Steps) == 0 {
-			continue
-		}
-		tbs[i] = &searchTB{TB: t}
-		wg.Add(1)
-		go func() { //qenv:ok each run's search on a goroutine of its own; a failure is reported on the test's
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r.Recorded, r.searched = r.Steps, c.Linearize || c.resolvePending
-			r.search = c.order(tbs[i], cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
-			r.Steps, r.mark = r.search.Steps, r.search.Mark
-		}()
-	}
-	wg.Wait()
-	for i, tb := range tbs {
-		if tb != nil && tb.failed != "" {
-			t.Fatalf("%s (run %s)", tb.failed, x.nameOf(x.Runs[i]))
-		}
+	for _, r := range x.Runs {
+		r.Recorded, r.searched = r.Steps, len(r.Steps) > 0 && (c.Linearize || c.resolvePending)
 	}
 	if os.Getenv("GOTOGETHER_KEEP") != "" && x.dir != "" {
 		// kept: every run's step log, not only the runs a report describes
@@ -622,36 +598,10 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			}
 		}
 	}
-	x.Cached = judge(t, cc, inst, x.Runs, func(r *Run) string { return x.nameOf(r) })
-	// the Go evaluator's orders, confirmed by the runs' reports: a run that
-	// fails where one speaks has it checked by quint, and is searched and
-	// judged again when quint rejects it
-	again := make([]*Run, len(x.Runs))
-	for i, r := range x.Runs {
-		if r == nil || r.search == nil || r.Report == nil || r.Report.OK() {
-			continue
-		}
-		tbs[i] = &searchTB{TB: t}
-		wg.Add(1)
-		go func() { //qenv:ok each run's confirmation on a goroutine of its own; a failure is reported on the test's
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			if s := confirm(tbs[i], r.search, r.Report); s != nil {
-				r.search, r.Steps, r.mark = s, s.Steps, s.Mark
-				again[i] = r
-			}
-		}()
-	}
-	wg.Wait()
-	for i, tb := range tbs {
-		if tb != nil && tb.failed != "" {
-			t.Fatalf("%s (run %s)", tb.failed, x.nameOf(x.Runs[i]))
-		}
-	}
-	if again = slices.DeleteFunc(again, func(r *Run) bool { return r == nil }); len(again) > 0 {
-		x.Cached += judge(t, cc, inst, again, func(r *Run) string { return x.nameOf(r) })
-	}
+	// judged as validate.Checker.JudgeBatch does: each run's search (the
+	// steps judged are the order it found), the orders checked through the
+	// verdict cache, the Go evaluator's orders confirmed where a run fails
+	x.Cached = judge(t, cc, inst, c.searchOptions(), x.Runs, func(r *Run) string { return x.nameOf(r) })
 	// the report, for tools that read it (gotogether evidence, cover,
 	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's
 	// own directory; each test's are cleared at its first exploration
@@ -692,54 +642,70 @@ func instanceChecker(t testing.TB, bindingPath string, o validate.Options, c set
 	return &cc, fmt.Sprintf("%s|%v|%v\n", bindingPath, sortedKV(constants), c.Invariants), constants
 }
 
-// judge checks runs against the model with cc, filling their Reports:
-// runs already judged against the instance inst (the same steps) take
-// their verdict from the cache, and runs with the same steps are checked
-// once. It returns how many were not checked again. A run quint could
-// not check fails t, named by name.
-func judge(t testing.TB, cc *validate.Checker, inst string, runs []*Run, name func(*Run) string) (cached int) {
+// judge judges runs against the model with cc (validate.Checker.JudgeBatch,
+// opt's search), filling their Steps (the order judged) and Reports:
+// steps already judged against the instance inst take their verdict from
+// the cache, and the same steps are checked once. It returns how many
+// were not checked again. A run quint could not check, or whose search
+// failed, fails t, named by name.
+func judge(t testing.TB, cc *validate.Checker, inst string, opt validate.SearchOptions, runs []*Run, name func(*Run) string) (cached int) {
 	t.Helper()
-	defer func() {
-		for _, r := range runs {
-			r.adjust()
-		}
-	}()
-	keys := make([]string, len(runs))
-	var todo [][]qtrace.Step
-	first := map[string]int{} // key -> index in todo
-	at := map[int]int{}       // run -> index in todo
+	steps := make([][]qtrace.Step, len(runs))
 	for i, r := range runs {
-		keys[i] = inst + cc.Key(r.Steps)
-		if rep, ok := verdicts.get(keys[i]); ok {
-			r.Report = rep
-			cached++
-			continue
-		}
-		if j, ok := first[keys[i]]; ok {
-			at[i] = j
-			cached++
-			continue
-		}
-		first[keys[i]] = len(todo)
-		at[i] = len(todo)
-		todo = append(todo, r.Steps)
+		steps[i] = r.Steps
 	}
-	if len(todo) == 0 {
-		return cached
-	}
-	reps, errs := cc.CheckBatch(context.Background(), todo, 0)
+	js, errs := cc.JudgeBatch(context.Background(), steps, opt, cachedCheck(cc, inst, &cached))
 	for i, r := range runs { // in order: an error names the first run it hit
-		j, ok := at[i]
-		if !ok {
-			continue
+		if errs[i] != nil {
+			t.Fatalf("gotogether: %s: %v", name(r), errs[i])
 		}
-		if errs[j] != nil {
-			t.Fatalf("gotogether: %s: %v", name(r), errs[j])
-		}
-		r.Report = reps[j]
-		verdicts.put(keys[i], reps[j])
+		r.Steps, r.Report = js[i].Steps, js[i].Report
+		r.adjust()
 	}
 	return cached
+}
+
+// cachedCheck checks runs with cc through the verdict cache, counting
+// in cached the runs it did not check again: a run's steps already judged
+// against the instance inst, or the same as another's in the batch.
+func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchCheck {
+	return func(ctx context.Context, runs [][]qtrace.Step) ([]*validate.Report, []error) {
+		reps, errs := make([]*validate.Report, len(runs)), make([]error, len(runs))
+		keys := make([]string, len(runs))
+		var todo [][]qtrace.Step
+		first := map[string]int{} // key -> index in todo
+		at := map[int]int{}       // run -> index in todo
+		for i, steps := range runs {
+			keys[i] = inst + cc.Key(steps)
+			if rep, ok := verdicts.get(keys[i]); ok {
+				reps[i] = rep
+				*cached++
+				continue
+			}
+			if j, ok := first[keys[i]]; ok {
+				at[i] = j
+				*cached++
+				continue
+			}
+			first[keys[i]] = len(todo)
+			at[i] = len(todo)
+			todo = append(todo, steps)
+		}
+		if len(todo) == 0 {
+			return reps, errs
+		}
+		treps, terrs := cc.CheckBatch(ctx, todo, 0)
+		for i := range runs {
+			j, ok := at[i]
+			if !ok {
+				continue
+			}
+			if reps[i], errs[i] = treps[j], terrs[j]; errs[i] == nil {
+				verdicts.put(keys[i], treps[j])
+			}
+		}
+		return reps, errs
+	}
 }
 
 // verdicts keeps the model's verdicts by instance and steps, for the test
@@ -784,22 +750,6 @@ func sortedKV[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
-
-// searchTB is a run's search's testing.TB on a goroutine of its own: its
-// Fatalf ends that goroutine (FailNow must not end another's test), and
-// finish fails the test with it on the test's goroutine.
-type searchTB struct {
-	testing.TB
-	failed string
-}
-
-func (s *searchTB) Helper() {}
-func (s *searchTB) Fatalf(format string, a ...any) {
-	s.failed = fmt.Sprintf(format, a...)
-	runtime.Goexit()
-}
-func (s *searchTB) Fatal(a ...any) { s.Fatalf("%s", fmt.Sprint(a...)) }
-func (s *searchTB) FailNow()       { s.Fatalf("gotogether: a run's search failed") }
 
 // anyWithinJudged reports whether some run's report judged a
 // bounded-response obligation (an obligation open at a trace's end is not

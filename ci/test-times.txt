@@ -11,8 +11,11 @@ examples/hello 23
 examples/jobqueue 51
 examples/kvstore 107
 examples/lease 87
+examples/quorumkv 90
+examples/raftkv 200
 examples/retrystorm 237
 examples/twophase 168
+examples/wallet 170
 binding 142
 cmd/gotogether 29
 internal/qeval 188

@@ -16,7 +16,7 @@ import (
 // has bounded-response obligations, which are judged on the replay's
 // states.
 func (c *Checker) withinITF(o Options) Options {
-	if len(c.Binding.Within) > 0 && c.within == nil && !c.shadowed {
+	if len(c.Binding.Within) > 0 && c.mode.history == nil && !c.mode.shadowed {
 		o.NoITF, o.VerdictsOnly = false, false
 	}
 	return o
@@ -34,7 +34,7 @@ func (c *Checker) withinITF(o Options) Options {
 // are the Go evaluator's to compute on quint's states: one it refuses is
 // no verdict, said as an issue.
 func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
-	if len(c.Binding.Within) == 0 || c.within != nil || c.shadowed {
+	if len(c.Binding.Within) == 0 || c.mode.history != nil || c.mode.shadowed {
 		return
 	}
 	// not judged: no verdict among the invariants (a conforming run is not

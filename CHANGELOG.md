@@ -17,11 +17,11 @@ The first release. What a user meets, by module:
   the evaluator cannot evaluate is quint's. quorumkv's faithful
   exploration took 13 s, 20 s with quint alone; its contended mutants
   62 s, 337 s. `binding.EvalModule` writes the module the evaluator
-  reads. `validate.SearchOptions.ConfirmByCheck` leaves an order (or a
-  resolution: ResolvePending's placements are the evaluator's too) to
-  the caller's check, and `Search.Confirm` checks with quint the orders
-  of the actors that check fails, searching again with quint alone if
-  one is wrong; qtest and the CLI do. quorumkv's faithful exploration then took
+  reads. `validate.Checker.Judge` leaves an order (or a resolution:
+  ResolvePending's placements are the evaluator's too) to the run's
+  check, and checks with quint the orders of the actors that check
+  fails, searching again with quint alone if one is wrong; qtest and the
+  CLI judge through it. quorumkv's faithful exploration then took
   4 s, its contended mutants 43 s, wallet's pending transfers 12 s (44 s
   before). `GOTOGETHER_EVAL=quint` turns it off; `GOTOGETHER_EVAL=shadow`
   checks every batch it judges with quint too, and judges each actor of
@@ -66,7 +66,7 @@ The first release. What a user meets, by module:
   fell back in silence).
 - `Checker.Key` holds the evaluator's mode and quint's backend.
 - The evaluator refuses `range(a, b)` with a > b: quint's backends differ.
-- A run's marked report copies its invariants: `Search.Mark` once wrote
+- A run's marked report copies its invariants: a search's mark once wrote
   n/a into the shared verdict cache's, for every later run of the same
   steps.
 - A sleep or wait timed on a drifting clock lasts its interval rounded up
@@ -189,9 +189,16 @@ The first release. What a user meets, by module:
   `qtest.Run.Recorded` holds the steps as recorded beside `Steps`, the
   steps judged; `Chooser`'s doc gives the ChooseTask and ChooseNemesis
   protocols the scheduler looks for.
-- The searches are validate's: `Checker.Search(steps, SearchOptions)` and
-  `Search.Mark`, which qtest's Linearize, LinearizeByKey and
-  ResolvePending call, and so does the CLI: `gotogether validate
+- One way to judge: `validate.Checker.Judge(ctx, steps, SearchOptions)`
+  orders a run's steps by the search, checks them, confirms the Go
+  evaluator's orders with quint where the check fails (searching and
+  checking again where quint disagrees) and marks the report;
+  `JudgeBatch` judges many runs, with a `BatchCheck` hook for a caller
+  that caches verdicts. qtest's Record, Validate and explorations
+  (Linearize, LinearizeByKey, ResolvePending) and the CLI judge through
+  it, where each once wrote out search, check, confirm, check again and
+  mark (a caller that forgot to confirm took the evaluator's orders
+  unconfirmed). The CLI's flags: `gotogether validate
   -linearize`, `-linearize-key key`, `-linearize-budget n`,
   `-resolve-pending`. `validate.DefaultLinearizeBudget` and
   `DefaultResolveBudget` (qtest's are the same).

@@ -74,11 +74,11 @@ func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtra
 // evaluator and, all of them in one batch, by quint; a disagreement is
 // its run's error. It covers every binding a run is checked against,
 // where the searches' shadow covers only theirs. A search's candidates
-// (c.within set) are its shadow's, and an actor the evaluator refuses is
+// (c.mode.history set) are its shadow's, and an actor the evaluator refuses is
 // quint's alone.
 func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
 	errs := make([]error, len(runs))
-	if c.Options.evalMode() != "shadow" || c.within != nil || c.shadowed || len(c.Binding.Hidden) > 0 {
+	if c.Options.evalMode() != "shadow" || c.mode.history != nil || c.mode.shadowed || len(c.Binding.Hidden) > 0 {
 		return errs // (a binding with hidden actions is the evaluator's alone: quint has nothing to compare)
 	}
 	e := evaluatorFor(c)
@@ -107,7 +107,7 @@ func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
 			}
 			// planned in itself, as a check plans an actor's steps alone
 			settled := settledAs(tr, [][]qtrace.Step{order})[0]
-			f, _, err := e.judge(within(c, tr), tr, settled, len(order), inv)
+			f, _, err := e.judge(inHistory(c, tr), tr, settled, len(order), inv)
 			if err != nil {
 				continue
 			}
@@ -127,7 +127,7 @@ func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
 	}
 	defer os.RemoveAll(dir)
 	q := *c
-	q.shadowed, q.Options.Dir, q.Options.VerdictsOnly, q.Options.NoITF = true, dir, true, true
+	q.mode.shadowed, q.Options.Dir, q.Options.VerdictsOnly, q.Options.NoITF = true, dir, true, true
 	reps, qerrs := q.CheckBatch(context.Background(), batch, 0)
 	for k, it := range items {
 		if errs[it.run] != nil {
@@ -274,11 +274,11 @@ func (e *evaluator) unknownTag(v itf.Value) (string, bool) {
 	return "", false
 }
 
-// judge checks one candidate order of within's steps, as a quint replay
+// judge checks one candidate order of history's steps, as a quint replay
 // of it would: the index of the step it fails at (as failedAt and, with
 // invariants, violatedAt read a report), or -1 and its last state. An
 // error is the evaluator's refusal (the caller asks quint).
-func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step, n int, invariants bool) (int, string, error) {
+func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step, n int, invariants bool) (int, string, error) {
 	traces, _ := qtrace.Reconstruct(order)
 	if len(traces) != 1 {
 		return 0, "", &qeval.Unsupported{Op: "order", Why: fmt.Sprintf("%d actors in one candidate", len(traces))}
@@ -290,7 +290,7 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 	if hooks.TamperEval.Load() == 2 {
 		return -1, fmt.Sprint(len(order)), nil
 	}
-	plan, err := c.plan(tr, within)
+	plan, err := c.plan(tr, history)
 	if err != nil {
 		return 0, "", err
 	}
@@ -475,7 +475,7 @@ func (m *stateMemo) put(k [2]uint64, s qeval.State) {
 // plan is t's plan within the history whole: by the search's planner when
 // it has one for whole.
 func (c *Checker) plan(t, whole *qtrace.Trace) (*binding.Plan, error) {
-	if c.planner != nil && whole == c.within {
+	if c.planner != nil && whole == c.mode.history {
 		return c.planner.Plan(t)
 	}
 	return c.Binding.PlanWithin(c.Model, t, whole)

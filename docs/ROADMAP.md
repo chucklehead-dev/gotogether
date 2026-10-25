@@ -90,26 +90,25 @@ more.
   `BenchmarkLinearize200` in the time budget. Success: 58 s to under 25
   s, the verdict unchanged. Then, if replay dominates, extending a
   prefix from its held state (M).
-- **S3. One way to judge (M), before tags.** Search, Check, Confirm,
-  Check again, Mark: written out three times (CLI, Validate, Explore),
-  unsafe if Confirm is forgotten. `Checker.Judge(ctx, steps,
-  SearchOptions) *Report` doing all of it; Search, Confirm, Mark,
-  ConfirmByCheck unexported. The checker's modes (`within`, `quintOnly`,
-  `byCheck`, `shadowed`) one value; `Checker.within` renamed `history`;
-  `decide` returning its outcome.
+- **S3. One way to judge (M), before tags. Done.** `Checker.Judge(ctx,
+  steps, SearchOptions)` and `JudgeBatch` (a `BatchCheck` hook for
+  qtest's verdict cache) search, check, confirm, check again and mark,
+  on copies of the check's reports; the CLI, Record, Validate and
+  explorations call them. Search, Confirm, Mark and ConfirmByCheck
+  unexported; the checker's modes one value (`mode`, `within` renamed
+  `history`); `decide` takes and returns a `found`.
 - **S4. The API before it freezes (M).** binding's code generation
   (RenderBatch, RenderModule, EvalModule, PlanWithin, Generate, ...)
   internal; qtrace's four Linearize variants one, with typed verdicts and
   an error return (no panic through the callback); `qtest.Search` renamed
   (an Exhaust's extent, not validate's Search); qtest's re-exported
   budgets dropped; ignored-option refusals keyed by identity.
-- **S5. The suite (S).** `go test -short ./...` takes minutes, not one:
-  validate's tests serial because the evaluator mode is an environment
-  variable (an Options field, the variable its default; then
-  t.Parallel); a check with no Dir leaks a temporary directory per call
-  (checker-owned, removed); TestCheckBatchMatchesCheck's timings under
-  -short skipped; the core packages and wallet, quorumkv, raftkv in the
-  time budget; AGENTS' "~1 min" corrected.
+- **S5. The suite (S). Done.** The evaluator mode an Options field (the
+  variable its default) and validate's tests parallel; a checker's own
+  scratch directory, removed by Close; TestCheckBatchMatchesCheck smaller
+  under -short; the core packages and wallet, quorumkv, raftkv in the
+  time budget; AGENTS' test times. validate's -short suite: about 300 s
+  to 140 s.
 - **S6. The verdict-path matrix (M).** The most frequent bug of every
   review since the sixth: a verdict kind (eventual, within, hidden,
   pending, settle) some consumer never judges. A registry of verdict

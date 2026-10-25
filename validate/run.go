@@ -19,19 +19,9 @@ type Checker struct {
 	Model   *binding.Model
 	Options Options
 
-	// within, if set, is the history a search's candidates order: they
-	// are planned in its instance, with its interned identifiers
-	// (binding.PlanWithin)
-	within *qtrace.Trace
-	// quintOnly: a search's candidates are checked by quint alone (a
-	// search again after quint contradicted the Go evaluator's)
-	quintOnly bool
-	// byCheck: an order the Go evaluator found is left to the caller's
-	// check to confirm (SearchOptions.ConfirmByCheck)
-	byCheck bool
-	// shadowed: the checks of a shadow's (GOTOGETHER_EVAL=shadow), not
-	// shadowed again
-	shadowed bool
+	// mode is how its checks are made: a search's and a shadow's
+	// checkers set it on their copies
+	mode mode
 	// memo is a search's states of the candidates the Go evaluator
 	// accepted, by their calls: an extension is judged from its prefix's
 	memo *stateMemo
@@ -39,6 +29,24 @@ type Checker struct {
 	planner *binding.Planner
 	// scratch is its temporary directory, with no Options.Dir (Close)
 	scratch *scratch
+}
+
+// mode is how a checker's checks are made, set on the copies a search
+// and a shadow make: one value, so a copy carries all of it.
+type mode struct {
+	// history, if set, is the history a search's candidates order: they
+	// are planned in its instance, with its interned identifiers
+	// (binding.PlanWithin)
+	history *qtrace.Trace
+	// quintOnly: a search's candidates are checked by quint alone (a
+	// search again after quint contradicted the Go evaluator's)
+	quintOnly bool
+	// byCheck: an order the Go evaluator found is left to the check of the
+	// search's Steps to confirm (Judge)
+	byCheck bool
+	// shadowed: the checks of a shadow's (GOTOGETHER_EVAL=shadow), not
+	// shadowed again
+	shadowed bool
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the
@@ -197,7 +205,7 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 	traces, issues := qtrace.Reconstruct(steps)
 	rep := &Report{Issues: issues}
 	for _, t := range traces {
-		if len(c.Binding.Hidden) > 0 && c.within == nil {
+		if len(c.Binding.Hidden) > 0 && c.mode.history == nil {
 			r, err := c.checkHidden(t)
 			if err != nil {
 				return rep, fmt.Errorf("actor %s: %w", t.Actor, err)

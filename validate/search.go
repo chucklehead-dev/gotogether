@@ -37,18 +37,11 @@ type SearchOptions struct {
 	// ResolvePending searches the pending calls' effects, in recorded order.
 	ResolvePending bool
 	ResolveBudget  int // 0: DefaultResolveBudget
-	// ConfirmByCheck leaves an order (or a resolution) the Go evaluator
-	// found to the caller's check of Steps, which replays it with quint
-	// anyway, instead of a quint process of its own: the caller passes
-	// that check's report to Search.Confirm, which checks the evaluator's
-	// orders of the actors it fails with quint, and searches again with
-	// quint alone if one does not conform.
-	ConfirmByCheck bool
 }
 
-// A Search is a run's steps as a search ordered them, for Check, and what
-// the search found, for the report (Mark).
-type Search struct {
+// A search is a run's steps as a search ordered them, for Check, and what
+// the search found, for the report (mark).
+type search struct {
 	// Steps are the order to check: each actor's (or partition's) on one
 	// thread of its own, its pending calls and settle after it.
 	Steps     []qtrace.Step
@@ -59,9 +52,9 @@ type Search struct {
 	// failing actor's report suggests Linearize)
 	intervals bool
 	// claims are the orders the Go evaluator found that quint has not
-	// confirmed, by actor (ConfirmByCheck); again searches with quint alone
+	// confirmed, by actor (byCheck); again searches with quint alone
 	claims map[string]*claim
-	again  func() (*Search, error)
+	again  func() (*search, error)
 }
 
 // A claim is what a search took from the Go evaluator alone: an order of
@@ -78,19 +71,18 @@ type claim struct {
 	rejected   [][]qtrace.Step
 }
 
-// Confirm confirms, after the caller's check of a ConfirmByCheck search's
-// Steps, the claims the Go evaluator made for the actors rep does not pass
+// confirm confirms, after the check of a byCheck search's Steps, the claims the Go evaluator made for the actors rep does not pass
 // (an actor that passes every check confirmed its order there): each
 // order is checked by quint (conformance, eventual vals, and invariants
 // when the claim is that they hold), with the orders a resolution
 // rejected before it, side by side. When quint disagrees with one, it
 // returns the search again with quint alone, its Steps to check instead
-// (and its report to Mark), with a warning that says so; nil when every
+// (and its report to mark), with a warning that says so; nil when every
 // claim stands. rep may be marked already (an actor the search left
 // undecided is confirmed whatever its marked verdicts). It confirms once:
-// a second call returns nil. A caller that never calls it takes the
-// evaluator's orders unconfirmed.
-func (s *Search) Confirm(rep *Report) (again *Search, err error) {
+// a second call returns nil. Judge calls it: a caller that did not would
+// take the evaluator's orders unconfirmed.
+func (s *search) confirm(rep *Report) (again *search, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			e, ok := r.(searchError)
@@ -166,11 +158,15 @@ func passed(a *Result) bool {
 	return true
 }
 
-// Search orders steps by opt's search, checking candidates with c's
-// binding and instance (verdicts only, under c's Dir). An error is the
-// search's (a step without the Key's argument, a candidate quint could
-// not check), never a verdict.
-func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error) {
+// search orders steps by opt's search, checking candidates with c's
+// binding and instance (verdicts only, under c's Dir). With byCheck an
+// order (or a resolution) the Go evaluator found is left to the check of
+// Steps, which replays it with quint anyway, instead of a quint process
+// of its own: confirm then checks the evaluator's orders of the actors
+// that check fails with quint, and searches again with quint alone if
+// one does not conform. An error is the search's (a step without the
+// Key's argument, a candidate quint could not check), never a verdict.
+func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (s *search, err error) {
 	if len(c.Binding.Hidden) > 0 && (opt.Linearize || opt.ResolvePending) {
 		return nil, fmt.Errorf("a search (Linearize, ResolvePending) with hidden actions (%s): not combined, each candidate would be a search over the hidden actions' states; check the recorded order, or record the steps the search would order where they take effect",
 			strings.Join(c.Binding.Hidden, ", "))
@@ -190,19 +186,18 @@ func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err
 	if err != nil {
 		return nil, err
 	}
-	lc.byCheck = opt.ConfirmByCheck
-	s = &Search{again: func() (*Search, error) {
+	lc.mode.byCheck = byCheck
+	s = &search{again: func() (*search, error) {
 		q := *c
-		q.quintOnly = true
-		opt.ConfirmByCheck = false
-		return q.Search(steps, opt)
+		q.mode.quintOnly = true
+		return q.search(steps, opt, false)
 	}}
 	if opt.Linearize {
 		// its ITF on: a conforming candidate's last state lets the complete
 		// search merge prefixes of one state (qtrace.LinearizeStates)
 		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize"), false, true
 		fc := *c // the invariants' search (an order that violates one): verdicts only too
-		fc.byCheck = opt.ConfirmByCheck
+		fc.mode.byCheck = byCheck
 		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize-invariants"), true, true
 		budget := opt.Budget
 		if budget == 0 {
@@ -235,13 +230,13 @@ func intervals(steps []qtrace.Step) bool {
 	return false
 }
 
-// Mark puts what the search found in rep, the report of its Steps: its
+// mark puts what the search found in rep, the report of its Steps: its
 // issues (with no search, for a failing client history, a hint to
 // linearize), the issues of each actor's steps as recorded that no order
 // removes (gaps, cycles), and no verdict for an actor whose search ran out
 // of its budget (its conformance and failed invariants n/a: the order
 // shown is the one that got furthest).
-func (s *Search) Mark(rep *Report) {
+func (s *search) mark(rep *Report) {
 	rep.Issues = append(rep.Issues, s.issues...)
 	for _, a := range rep.Actors {
 		if s.intervals && a.Conforms == Fail {
@@ -269,7 +264,7 @@ func (s *Search) Mark(rep *Report) {
 // searchError is a search's failure, carried out of its callbacks.
 type searchError struct{ error }
 
-// fail ends a search with an error (Search recovers it).
+// fail ends a search with an error (search recovers it).
 func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}) }
 
 // linearize orders each actor's steps by the search, checking candidate
@@ -448,11 +443,11 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 	checker := func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
 		// candidates in the history's instance and naming, as the memo and
 		// the merge of prefixes by state assume
-		within := *ch
-		within.within = tr
-		within.memo = newStateMemo() // the candidates' states, for their extensions
-		within.planner = ch.Binding.Planner(ch.Model, tr)
-		ch = &within
+		hc := *ch
+		hc.mode.history = tr
+		hc.memo = newStateMemo() // the candidates' states, for their extensions
+		hc.planner = ch.Binding.Planner(ch.Model, tr)
+		ch = &hc
 		quint := quintChecker(ch, tr, a, invariants)
 		return func(orders [][]qtrace.Step) ([]int, []string) {
 			if !ev.off {
@@ -485,26 +480,27 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 		return nil, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no steps to order", a)}, false, nil
 	}
 	// the search, with the pending calls it places (ResolvePending)
-	lin := func(check func([][]qtrace.Step) ([]int, []string)) ([]qtrace.Step, bool, int, bool, *qtrace.Proof) {
-		return qtrace.LinearizePending(tr.Steps, pending, settles, budget, check)
+	lin := func(check func([][]qtrace.Step) ([]int, []string)) (found, *qtrace.Proof) {
+		o, ok, tried, cut, proof := qtrace.LinearizePending(tr.Steps, pending, settles, budget, check)
+		return found{o, ok, tried, cut}, proof
 	}
-	again := func(check func([][]qtrace.Step) ([]int, []string)) func() ([]qtrace.Step, bool, int, bool) {
-		return func() ([]qtrace.Step, bool, int, bool) {
-			o, ok, tried, cut, _ := lin(check)
-			return o, ok, tried, cut
+	again := func(check func([][]qtrace.Step) ([]int, []string)) func() found {
+		return func() found {
+			f, _ := lin(check)
+			return f
 		}
 	}
 	if o, ok := qtrace.ForcedOrder(tr.Steps); ok && len(pending) == 0 {
 		// one order: a search would check it alone, and the caller checks
-		// the order it gets (Checker.Check of Search.Steps), which judges it
+		// the order it gets (Checker.Check of search.Steps), which judges it
 		// as this search would have; two quint processes saved (the probe
 		// of every account makes many such partitions)
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false, nil
 	}
-	o, ok, tried, cut, proof := lin(check)
-	o, ok, tried, cut = ev.decide(o, ok, tried, cut, proof, quintChecker(within(ch, tr), tr, a, false), a, again(check))
-	cl := ev.claim(within(ch, tr), tr, o, false)
-	o, issue, cut, cl := orderIssue(ch, full, tr, a, budget, partitioned, checker, ev, lin, again, o, ok, tried, cut, cl)
+	f, proof := lin(check)
+	f = ev.decide(f, proof, quintChecker(inHistory(ch, tr), tr, a, false), a, again(check))
+	cl := ev.claim(inHistory(ch, tr), tr, f.order, false)
+	o, issue, cut, cl := orderIssue(ch, full, tr, a, budget, partitioned, checker, ev, lin, again, f, cl)
 	if len(pending) > 0 {
 		issue.Msg += "; " + effects(o, pending)
 	}
@@ -515,9 +511,9 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 // the Go evaluator: not at all under GOTOGETHER_EVAL=quint or when it
 // searches again with quint alone.
 func newEvalUse(ch, full *Checker) *evalUse {
-	ev := &evalUse{byCheck: ch.byCheck}
+	ev := &evalUse{byCheck: ch.mode.byCheck}
 	switch {
-	case ch.quintOnly:
+	case ch.mode.quintOnly:
 		ev.off, ev.why = true, "a search again with quint alone"
 	case ch.Options.evalMode() == "quint":
 		ev.off, ev.why = true, "GOTOGETHER_EVAL=quint"
@@ -530,7 +526,7 @@ func newEvalUse(ch, full *Checker) *evalUse {
 	return ev
 }
 
-// claim is the order decide left to the caller's check (ConfirmByCheck),
+// claim is the order decide left to the caller's check (byCheck),
 // as a claim in ch's instance; nil if quint confirmed it or there is none.
 func (ev *evalUse) claim(ch *Checker, tr *qtrace.Trace, o []qtrace.Step, invariants bool) *claim {
 	if !ev.pending {
@@ -540,11 +536,21 @@ func (ev *evalUse) claim(ch *Checker, tr *qtrace.Trace, o []qtrace.Step, invaria
 	return &claim{ch: ch, tr: tr, order: o, invariants: invariants}
 }
 
-// within is ch planning its candidates in tr's instance.
-func within(ch *Checker, tr *qtrace.Trace) *Checker {
+// inHistory is ch planning its candidates in tr's instance.
+func inHistory(ch *Checker, tr *qtrace.Trace) *Checker {
 	c := *ch
-	c.within = tr
+	c.mode.history = tr
 	return &c
+}
+
+// found is a search's outcome: the order it got furthest with, whether
+// it conforms, how many orders were tried, and whether the budget cut
+// the search short.
+type found struct {
+	order []qtrace.Step
+	ok    bool
+	tried int
+	cut   bool
 }
 
 // decide is a search's conclusion as quint confirms it, when the Go
@@ -555,16 +561,16 @@ func within(ch *Checker, tr *qtrace.Trace) *Checker {
 // disagreement searches again with quint alone, and says so. A search cut
 // short, or a proof whose states quint did not write, is decided by quint
 // alone.
-func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, proof *qtrace.Proof, quint func([][]qtrace.Step) ([]int, []string), a string,
-	again func() ([]qtrace.Step, bool, int, bool)) ([]qtrace.Step, bool, int, bool) {
+func (ev *evalUse) decide(f found, proof *qtrace.Proof, quint func([][]qtrace.Step) ([]int, []string), a string, again func() found) found {
+	o, ok, cut := f.order, f.ok, f.cut
 	if !ev.used {
-		return o, ok, tried, cut // quint judged every candidate
+		return f // quint judged every candidate
 	}
 	ev.used = false
 	if ok {
 		if ev.byCheck {
-			ev.pending = true // the caller's check replays it with quint (Search.Confirm)
-			return o, ok, tried, cut
+			ev.pending = true // the caller's check replays it with quint (search.confirm)
+			return f
 		}
 		if fq := first(quint([][]qtrace.Step{o})); fq >= 0 {
 			ev.off, ev.disagreed = true, true
@@ -572,12 +578,12 @@ func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, proof *
 			searchedAgain.Add(1)
 			return again()
 		}
-		return o, ok, tried, cut
+		return f
 	}
 	if !cut && proof != nil {
 		switch confirms(proof, quint) {
 		case confirmed:
-			return o, ok, tried, cut
+			return f
 		case contradicted:
 			ev.off, ev.disagreed = true, true
 			ev.why = fmt.Sprintf("quint does not confirm the Go evaluator's verdict that no order of actor %s's steps conforms", a)
@@ -592,14 +598,14 @@ func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, proof *
 		// what a larger budget finds; searching again cost minutes for
 		// nothing (the shadow mode checks the evaluator's verdicts)
 		ev.cut = true
-		return o, ok, tried, cut
+		return f
 	}
 	off := ev.off
 	ev.off = true
 	searchedAgain.Add(1)
-	o, ok, tried, cut = again()
+	f = again()
 	ev.off = off
-	return o, ok, tried, cut
+	return f
 }
 
 // A proof's confirmation by quint.
@@ -739,12 +745,13 @@ func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func
 // search for an order that keeps them.
 func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, partitioned bool,
 	checker func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string), ev *evalUse,
-	lin func(func([][]qtrace.Step) ([]int, []string)) ([]qtrace.Step, bool, int, bool, *qtrace.Proof),
-	again func(func([][]qtrace.Step) ([]int, []string)) func() ([]qtrace.Step, bool, int, bool),
-	o []qtrace.Step, ok bool, tried int, cut bool, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+	lin func(func([][]qtrace.Step) ([]int, []string)) (found, *qtrace.Proof),
+	again func(func([][]qtrace.Step) ([]int, []string)) func() found,
+	f found, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+	o, ok, tried, cut := f.order, f.ok, f.tried, f.cut
 	// with ITF (the invariants' searches write none): a proof's merged
 	// prefixes are confirmed by their states
-	inst := within(full, tr)
+	inst := inHistory(full, tr)
 	inst.Options.NoITF = false
 	quintInv := quintChecker(inst, tr, a, true)
 	violates := false
@@ -759,8 +766,9 @@ func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, parti
 		// not, and a run must not look violating by the order picked
 		inv := checker(full, true)
 		ev.used = false
-		o2, ok2, tried2, cut2, proof2 := lin(inv)
-		o2, ok2, tried2, cut2 = ev.decide(o2, ok2, tried2, cut2, proof2, quintInv, a, again(inv))
+		f2, proof2 := lin(inv)
+		f2 = ev.decide(f2, proof2, quintInv, a, again(inv))
+		o2, ok2, tried2, cut2 := f2.order, f2.ok, f2.tried, f2.cut
 		switch {
 		case ok2:
 			return o2, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms with every invariant holding (%d orders tried, %d with the invariants)", a, len(o2), tried, tried2)}, false,
@@ -1177,9 +1185,9 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	if a == "" {
 		a = "default"
 	}
-	within := *ch // its candidates in the history's instance (binding.PlanWithin)
-	within.within = tr
-	ch = &within
+	hc := *ch // its candidates in the history's instance (binding.PlanWithin)
+	hc.mode.history = tr
+	ch = &hc
 	pls, cut, crossed := resolutions(tr, settles, budget)
 	// a call whose bounds cross is resolved as no effect: say so, a clock
 	// problem otherwise silent
@@ -1205,7 +1213,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
 				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note}, false, nil
 		}
-		if ch.byCheck {
+		if ch.mode.byCheck {
 			o, issue, cut, _ := found()
 			return o, issue, cut, &claim{ch: ch, tr: tr, order: orders[i], rejected: orders[:i]}
 		}

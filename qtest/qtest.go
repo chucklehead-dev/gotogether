@@ -36,7 +36,6 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -227,12 +226,6 @@ type origin struct {
 // step log).
 type Run struct {
 	origin origin // where the run came from, in its exploration
-	// mark marks the run's report with its search's issues (an
-	// exploration's Linearize or ResolvePending), on a copy (adjust)
-	mark func(*validate.Report)
-	// search is the run's search, to confirm the Go evaluator's orders by
-	// the run's report (validate.Search.Confirm)
-	search *validate.Search
 	// searched: a search ordered Steps (Recorded is what the run recorded)
 	searched bool
 	// Steps are the steps judged: as recorded, or the order a search
@@ -294,17 +287,6 @@ func (r *Run) adjust() {
 	}
 	rep := *r.Report
 	rep.Unsettled = r.Unsettled
-	if r.mark != nil { // the run's own search: on copies of the shared verdict's results
-		rep.Issues = slices.Clone(rep.Issues)
-		rep.Actors = make([]*validate.Result, len(r.Report.Actors))
-		for i, a := range r.Report.Actors {
-			b := *a
-			b.Issues = slices.Clone(a.Issues)
-			b.Invariants = slices.Clone(a.Invariants) // Mark writes their verdicts: once into the shared cache's
-			rep.Actors[i] = &b
-		}
-		r.mark(&rep)
-	}
 	r.Report = &rep
 	r.adjusted = r.Report
 }
@@ -421,21 +403,13 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	o.Dir = filepath.Join(c.Dir, "quint")
 	ch := checkerFor(t, bindingPath, o, c)
 	run.Recorded = run.Steps
-	s := c.order(t, ch, run.Steps, o.Dir)
 	cc := *ch // per run: its own output directory
 	cc.Options.Dir = o.Dir
-	checkSteps := func(steps []qtrace.Step) *validate.Report {
-		rep, err := cc.Check(context.Background(), steps)
-		if err != nil {
-			t.Fatalf("gotogether: %v", err)
-		}
-		return rep
+	j, err := cc.Judge(context.Background(), run.Steps, c.searchOptions())
+	if err != nil {
+		t.Fatalf("gotogether: %v", err)
 	}
-	rep := checkSteps(s.Steps)
-	if again := confirm(t, s, rep); again != nil {
-		s, rep = again, checkSteps(again.Steps)
-	}
-	run.Steps = s.Steps // the order checked, the step log's and the ITF's
+	run.Steps = j.Steps // the order checked, the step log's and the ITF's
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {
 		for actor, data := range itfs {
@@ -447,8 +421,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	} else {
 		t.Logf("gotogether: no model-level ITF: %v", err)
 	}
-	s.Mark(rep)
-	run.Report = rep
+	run.Report = j.Report
 	run.checks = checkedNames(ch)
 	return run
 }
@@ -472,34 +445,10 @@ func checkedNames(ch *validate.Checker) map[string]bool {
 	return m
 }
 
-// order runs the searches c asks for on steps (Linearize, LinearizeByKey,
-// ResolvePending), checking candidates' conformance with ch under dir: the
-// steps to check, how to mark the report on them (the search's issues,
-// and n/a for an actor whose search ran out of budget), and to confirm
-// the Go evaluator's orders by that report (confirm). Without a search
-// its Steps are steps.
-func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step, dir string) *validate.Search {
-	t.Helper()
-	sc := *ch
-	sc.Options.Dir = dir
-	s, err := sc.Search(steps, validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending,
-		ConfirmByCheck: true})
-	if err != nil {
-		t.Fatalf("gotogether: %v", err)
-	}
-	return s
-}
-
-// confirm is s's search again, when rep (the check of its Steps) failed
-// an actor whose order only the Go evaluator had judged and quint rejects
-// it; nil when s stands.
-func confirm(t testing.TB, s *validate.Search, rep *validate.Report) *validate.Search {
-	t.Helper()
-	again, err := s.Confirm(rep)
-	if err != nil {
-		t.Fatalf("gotogether: %v", err)
-	}
-	return again
+// searchOptions are the searches c asks for (Linearize, LinearizeByKey,
+// ResolvePending): none, the steps as recorded.
+func (c settings) searchOptions() validate.SearchOptions {
+	return validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending}
 }
 
 // firstOr is the first of msgs, or a placeholder when none was kept.

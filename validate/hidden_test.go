@@ -123,7 +123,7 @@ func TestHiddenActions(t *testing.T) {
 		t.Errorf("shadow mode on a hidden binding: %v %v", err, rep)
 	}
 	t.Setenv("GOTOGETHER_EVAL", "")
-	if _, err := c.Search(two, SearchOptions{Linearize: true}); err == nil || !strings.Contains(err.Error(), "with hidden actions") {
+	if _, err := c.search(two, SearchOptions{Linearize: true}, false); err == nil || !strings.Contains(err.Error(), "with hidden actions") {
 		t.Errorf("a linearization with hidden actions: %v", err)
 	}
 }

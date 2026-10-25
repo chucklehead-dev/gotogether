@@ -483,28 +483,15 @@ func runValidate(args []string) (int, error) {
 				return 2, err
 			}
 		}
-		search, err := c.Search(steps, validate.SearchOptions{Linearize: *lin || *linKey != "", Key: *linKey, Budget: *linBudget, ResolvePending: *resolvePending,
-			ConfirmByCheck: true})
+		// ordered by the search, checked, the Go evaluator's orders confirmed
+		// by quint where the check fails, and marked
+		j, err := c.Judge(context.Background(), steps, validate.SearchOptions{Linearize: *lin || *linKey != "", Key: *linKey, Budget: *linBudget, ResolvePending: *resolvePending})
 		if err != nil {
 			return 2, err
 		}
-		rep, err := c.Check(context.Background(), search.Steps)
-		if err != nil {
-			return 2, err
-		}
-		// a failing actor whose order only the Go evaluator judged: quint
-		// checks it, and a search again with quint alone replaces it if wrong
-		if again, err := search.Confirm(rep); err != nil {
-			return 2, err
-		} else if again != nil {
-			if rep, err = c.Check(context.Background(), again.Steps); err != nil {
-				return 2, err
-			}
-			search = again
-		}
-		search.Mark(rep)
+		rep := j.Report
 		if *history != "" {
-			if err := os.WriteFile(*history, rep.HistorySVG(steps, search.Steps), 0o644); err != nil {
+			if err := os.WriteFile(*history, rep.HistorySVG(steps, j.Steps), 0o644); err != nil {
 				return 2, err
 			}
 		}

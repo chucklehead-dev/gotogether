@@ -35,7 +35,7 @@ type Options struct {
 	// nothing more: no ITF and no model state at a failure, so the runs
 	// that fail are replayed on the backend the others were (TypeScript for
 	// a CheckBatch chunk) rather than on Rust for its ITF. For searches
-	// that judge many candidates (Checker.Search's Linearize,
+	// that judge many candidates (Judge's Linearize,
 	// ResolvePending) and read only where each failed.
 	VerdictsOnly bool
 	// Eval is how a search judges its candidates: "go" (the Go evaluator,

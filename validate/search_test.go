@@ -186,7 +186,7 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 	}
 	steps = append(steps, qtrace.Step{Action: "withdraw", Recorder: "w", Seq: 1, Thread: "w", Actor: "acct", Process: "p",
 		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(100)}, Obs: map[string]any{"balance": int64(0)}})
-	s, err := c.Search(steps, SearchOptions{Linearize: true, Budget: 1000})
+	s, err := c.search(steps, SearchOptions{Linearize: true, Budget: 1000}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestCompleteSearchAgainstWholeOrders(t *testing.T) {
 			// (processes overlapping) that a search reports apart
 			want = want || reps[i].Actors[0].Conforms == Pass
 		}
-		s, err := c.Search(steps, SearchOptions{Linearize: true, Budget: 1000})
+		s, err := c.search(steps, SearchOptions{Linearize: true, Budget: 1000}, false)
 		if err != nil {
 			t.Fatalf("trial %d: %v", trial, err)
 		}
@@ -368,7 +368,7 @@ func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
 		steps = append(steps, qtrace.Step{Action: "deposit", Recorder: rec, Seq: 1, Thread: rec, Actor: "acct", Process: "p",
 			Invoked: at(20 * i), Time: at(20*i + 10), Args: map[string]any{"amount": amount}, Obs: map[string]any{}})
 	}
-	s, err := c.Search(steps, SearchOptions{Linearize: true})
+	s, err := c.search(steps, SearchOptions{Linearize: true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,13 +398,13 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	}
 	steps = append(steps, qtrace.Step{Action: "withdraw", Recorder: "w", Seq: 1, Thread: "w", Actor: "acct", Process: "p",
 		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}})
-	search := func(mode string) *Search {
+	search := func(mode string) *search {
 		t.Setenv("GOTOGETHER_EVAL", mode)
 		c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := c.Search(steps, SearchOptions{Linearize: true})
+		s, err := c.search(steps, SearchOptions{Linearize: true}, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -444,7 +444,7 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 		t.Fatal(err)
 	}
 	before = searchedAgain.Load()
-	cut, err := c.Search(steps, SearchOptions{Linearize: true, Budget: 2})
+	cut, err := c.search(steps, SearchOptions{Linearize: true, Budget: 2}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -537,9 +537,9 @@ func TestJudgeAgreesWithQuint(t *testing.T) {
 				orders = append(orders, orders[0][:k])
 			}
 			for _, inv := range []bool{false, true} {
-				q, _ := quintChecker(within(c, tr), tr, "x", inv)(orders)
+				q, _ := quintChecker(inHistory(c, tr), tr, "x", inv)(orders)
 				for i, o := range settledAs(tr, orders) {
-					f, _, err := ev.judge(within(c, tr), tr, o, len(orders[i]), inv)
+					f, _, err := ev.judge(inHistory(c, tr), tr, o, len(orders[i]), inv)
 					if err != nil {
 						t.Fatalf("%s trial %d: the evaluator refused: %v", path, trial, err)
 					}
@@ -550,7 +550,7 @@ func TestJudgeAgreesWithQuint(t *testing.T) {
 				}
 				// as a search judges them: each order after its prefixes,
 				// from their states (the memo) and by one planner
-				mc := within(c, tr)
+				mc := inHistory(c, tr)
 				mc.memo, mc.planner = newStateMemo(), mc.Binding.Planner(mc.Model, tr)
 				for i, o := range settledAs(tr, orders) {
 					for k := 1; k < len(o); k++ {
@@ -678,13 +678,12 @@ func TestConfirmByCheck(t *testing.T) {
 	} {
 		t.Run(x.name, func(t *testing.T) {
 			opt := x.opt
-			opt.ConfirmByCheck = true
-			run := func(steps []qtrace.Step) (*Checker, *Search, *Report) {
+			run := func(steps []qtrace.Step) (*Checker, *search, *Report) {
 				c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
 				if err != nil {
 					t.Fatal(err)
 				}
-				s, err := c.Search(steps, opt)
+				s, err := c.search(steps, opt, true)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -699,14 +698,14 @@ func TestConfirmByCheck(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(c.Options.Dir, x.dir)); err == nil {
 				t.Errorf("the search ran quint for an order the evaluator found")
 			}
-			if again, err := s.Confirm(rep); err != nil || again != nil || !rep.OK() {
+			if again, err := s.confirm(rep); err != nil || again != nil || !rep.OK() {
 				t.Errorf("a right order: again %v, err %v, report OK %v", again, err, rep.OK())
 			}
 			// an evaluator that accepts every candidate: the first, which the
 			// check fails, and quint, which searches again
 			hooks.TamperEval.Store(2)
 			c, s, rep = run(x.steps(x.bad))
-			again, err := s.Confirm(rep)
+			again, err := s.confirm(rep)
 			if err != nil || again == nil {
 				t.Fatalf("a wrong order the check failed: again %v, err %v", again, err)
 			}
@@ -716,6 +715,35 @@ func TestConfirmByCheck(t *testing.T) {
 			}
 			if rep, err = c.Check(context.Background(), again.Steps); err != nil || rep.OK() {
 				t.Errorf("the search again's order passes (err %v)", err)
+			}
+			// Judge does all of it: the check of the evaluator's order, its
+			// confirmation, the second check, the mark; on copies of the
+			// check's reports
+			for _, tamper := range []int32{0, 2} {
+				hooks.TamperEval.Store(tamper)
+				balance, checks := x.good, 0
+				if tamper != 0 {
+					balance = x.bad
+				}
+				var last *Report
+				js, errs := c.JudgeBatch(context.Background(), [][]qtrace.Step{x.steps(balance)}, x.opt, func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error) {
+					checks++
+					reps, errs := c.CheckBatch(ctx, runs, 0)
+					last = reps[0]
+					return reps, errs
+				})
+				if errs[0] != nil {
+					t.Fatal(errs[0])
+				}
+				msgs := fmt.Sprint(js[0].Report.Issues)
+				switch {
+				case tamper == 0 && (checks != 1 || !js[0].Report.OK()):
+					t.Errorf("Judge of a right order: %d checks, report %s", checks, js[0].Report.Summary())
+				case tamper != 0 && (checks != 2 || js[0].Report.OK() || !strings.Contains(msgs, "does not conform for quint")):
+					t.Errorf("Judge of a wrong order: %d checks, issues %s, report OK %v", checks, msgs, js[0].Report.OK())
+				case tamper != 0 && strings.Contains(fmt.Sprint(last.Issues), "does not conform for quint"):
+					t.Errorf("Judge marked the check's own report: %v", last.Issues)
+				}
 			}
 		})
 	}
@@ -766,7 +794,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			check := func(s *Search) *Report {
+			check := func(s *search) *Report {
 				rep, err := c.Check(context.Background(), s.Steps)
 				if err != nil {
 					t.Fatal(err)
@@ -775,7 +803,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 			}
 			hooks.TamperEval.Store(0)
 			opt := x.opt
-			q, err := c.Search(x.steps, opt)
+			q, err := c.search(x.steps, opt, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -784,14 +812,13 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 			}
 			hooks.TamperEval.Store(x.tamper)
 			// without ConfirmByCheck quint confirms in the search
-			if s, err := c.Search(x.steps, opt); err != nil || !check(s).OK() {
+			if s, err := c.search(x.steps, opt, false); err != nil || !check(s).OK() {
 				t.Errorf("confirmed in the search: err %v, report %s", err, check(s).Summary())
 			} else if opt.ResolvePending && !strings.Contains(fmt.Sprint(s.issues), "disagree") {
 				// quint's batch decided: said, not silent
 				t.Errorf("a resolution quint rejected, decided by quint in silence: %v", s.issues)
 			}
-			opt.ConfirmByCheck = true
-			s, err := c.Search(x.steps, opt)
+			s, err := c.search(x.steps, opt, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -799,14 +826,14 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 			if rep.OK() {
 				t.Fatalf("the wrong evaluator's order passes the check: the test shows nothing")
 			}
-			again, err := s.Confirm(rep)
+			again, err := s.confirm(rep)
 			if err != nil || again == nil {
 				t.Fatalf("again %v, err %v", again, err)
 			}
 			if rep := check(again); !rep.OK() || !strings.Contains(fmt.Sprint(again.issues), "does not conform for quint") {
 				t.Errorf("searched again: %s %v", rep.Summary(), again.issues)
 			}
-			if a, err := s.Confirm(rep); a != nil || err != nil {
+			if a, err := s.confirm(rep); a != nil || err != nil {
 				t.Errorf("a second Confirm: %v, %v", a, err)
 			}
 		})
@@ -828,15 +855,15 @@ func TestConfirmSeesThroughMark(t *testing.T) {
 	steps := []qtrace.Step{{Action: "withdraw", Recorder: "w", Seq: 1, Actor: "x", Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}}}
 	traces, _ := qtrace.Reconstruct(steps)
 	searched := false
-	s := &Search{Steps: steps, undecided: map[string]bool{"x": true},
-		claims: map[string]*claim{"x": {ch: within(c, traces[0]), tr: traces[0], order: steps}},
-		again:  func() (*Search, error) { searched = true; return &Search{}, nil }}
+	s := &search{Steps: steps, undecided: map[string]bool{"x": true},
+		claims: map[string]*claim{"x": {ch: inHistory(c, traces[0]), tr: traces[0], order: steps}},
+		again:  func() (*search, error) { searched = true; return &search{}, nil }}
 	rep := &Report{Actors: []*Result{{Actor: "x", Conforms: Fail}}}
-	s.Mark(rep)
+	s.mark(rep)
 	if rep.Actors[0].Conforms != NotEvaluated {
 		t.Fatalf("Mark left %v", rep.Actors[0].Conforms)
 	}
-	if again, err := s.Confirm(rep); err != nil || again == nil || !searched {
+	if again, err := s.confirm(rep); err != nil || again == nil || !searched {
 		t.Errorf("an undecided actor's wrong order: again %v, err %v", again, err)
 	}
 }
@@ -863,7 +890,7 @@ func TestConfirmByCheckByKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := c.Search(steps, SearchOptions{Linearize: true, Key: "key", ConfirmByCheck: true})
+	s, err := c.search(steps, SearchOptions{Linearize: true, Key: "key"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -871,7 +898,7 @@ func TestConfirmByCheckByKey(t *testing.T) {
 	if err != nil || rep.OK() {
 		t.Fatalf("the wrong evaluator's order passes (err %v)", err)
 	}
-	again, err := s.Confirm(rep)
+	again, err := s.confirm(rep)
 	if err != nil || again == nil || !strings.Contains(fmt.Sprint(again.issues), "x key=a") {
 		t.Errorf("again %v, err %v", again, err)
 	}
@@ -916,12 +943,12 @@ func TestShadowMode(t *testing.T) {
 				t.Fatal(err)
 			}
 			hooks.TamperEval.Store(0)
-			s, err := c.Search(x.steps, x.opt)
+			s, err := c.search(x.steps, x.opt, false)
 			if err != nil || !strings.Contains(fmt.Sprint(s.issues), "conform") && !strings.Contains(fmt.Sprint(s.issues), "resolved") {
 				t.Fatalf("a right evaluator in shadow: err %v, issues %v", err, s)
 			}
 			hooks.TamperEval.Store(1) // rejects every candidate at its first step
-			if _, err := c.Search(x.steps, x.opt); err == nil || !strings.Contains(err.Error(), "GOTOGETHER_EVAL=shadow") {
+			if _, err := c.search(x.steps, x.opt, false); err == nil || !strings.Contains(err.Error(), "GOTOGETHER_EVAL=shadow") {
 				t.Errorf("a wrong evaluator in shadow: err %v", err)
 			}
 		})

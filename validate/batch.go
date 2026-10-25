@@ -27,7 +27,7 @@ import (
 // re-checked one trace at a time.
 func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error) {
 	reports, errs = make([]*Report, len(runs)), make([]error, len(runs))
-	if len(c.Binding.Hidden) > 0 && c.within == nil {
+	if len(c.Binding.Hidden) > 0 && c.mode.history == nil {
 		// the evaluator's search, run by run: no quint batch to share
 		for i, run := range runs {
 			if reports[i], errs[i] = c.Check(ctx, run); errs[i] != nil {
@@ -80,8 +80,8 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		reports[i] = &Report{Issues: issues}
 		for _, t := range traces {
 			whole := t
-			if c.within != nil { // a search's: its candidates are one actor's
-				whole = c.within
+			if c.mode.history != nil { // a search's: its candidates are one actor's
+				whole = c.mode.history
 			}
 			p, err := c.plan(t, whole)
 			if err != nil {
