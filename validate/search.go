@@ -171,6 +171,10 @@ func passed(a *Result) bool {
 // search's (a step without the Key's argument, a candidate quint could
 // not check), never a verdict.
 func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error) {
+	if len(c.Binding.Hidden) > 0 && (opt.Linearize || opt.ResolvePending) {
+		return nil, fmt.Errorf("a search (Linearize, ResolvePending) with hidden actions (%s): not combined, each candidate would be a search over the hidden actions' states; check the recorded order, or record the steps the search would order where they take effect",
+			strings.Join(c.Binding.Hidden, ", "))
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			e, ok := r.(searchError)

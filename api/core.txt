@@ -39,6 +39,8 @@ type Binding struct
     field Invariants []string `yaml:"invariants"`
     field Eventually []string `yaml:"eventually"`
     field Within []Within `yaml:"within"`
+    field Hidden []string `yaml:"hidden"`
+    field HiddenDepth int `yaml:"hiddenDepth"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
@@ -1480,6 +1482,7 @@ var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-
 var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
+const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = 200
 const DefaultResolveBudget = 200
 const Fail Verdict = "fail"

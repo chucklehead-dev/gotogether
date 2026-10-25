@@ -1,0 +1,8 @@
+# gossip.qnt's writes and reads; its gossip rounds are never recorded
+spec: gossip.qnt
+module: gossip
+actions:
+  write: {}
+  read:
+    expect: 'known.get({{.node}}) == {{toSet .obs.seen}}'
+hidden: [gossipAny]

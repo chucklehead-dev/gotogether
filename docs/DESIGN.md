@@ -3082,3 +3082,22 @@ which a cache keyed by the steps alone ignored: qtest's gave a slow run
 the fast one's verdict, so caches key by `Checker.Key`, with the times
 for such a binding, and qhegel does no prefix reuse for one.
 
+## 49. Hidden actions (T7e)
+
+A production trace records what its code records; some of what the
+system does never shows (a gossip round, a handoff). A binding names
+such model actions `hidden` (nullary: their choices are the model's, by
+nondet), and a trace is then judged as a search over the states the
+model may be in: before each recorded step, the states reached are
+closed under at most `hiddenDepth` hidden actions, the step is applied
+to each, and those where its expect holds go on. It conforms if some path
+takes every step; an invariant holds if some path also keeps it; an
+eventual val holds if some final state has it. Quint cannot judge this: a
+replay names every step's arguments, and a hidden action's choices are
+unknown, so the verdict is the Go evaluator's alone (checked against
+quint's own traces of every model in CI, `TestAgreesWithQuint`), and the
+report says so. More states than the cap at a step is no verdict.
+Checked against an independent brute force (the model in Go, every
+gossip sequence up to the depth), the depth's bound shown by a line of
+nodes where a value two hops away takes two rounds.
+

@@ -250,7 +250,10 @@ under a week, M two to four, L more.
     short; `Checker.Key` for verdict caches. The example moves to T8
     (raftkv's election within a bound of a heal): lease's model has no
     takeover to bound.
-  - **e (L). Hidden actions and partial logs**, then online validation:
+  - **e (L). Hidden actions and partial logs**, then online validation
+    (hidden actions done, nullary ones, judged by the evaluator, DESIGN
+    §49; left: partial logs, online validation, and confirming a verdict
+    with quint):
     the state set closed under hidden actions between recorded steps, by
     the evaluator, its "no path" confirmed by a proof. Example: quorumkv
     with handoff unrecorded.

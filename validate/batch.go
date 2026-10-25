@@ -27,6 +27,15 @@ import (
 // re-checked one trace at a time.
 func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error) {
 	reports, errs = make([]*Report, len(runs)), make([]error, len(runs))
+	if len(c.Binding.Hidden) > 0 && c.within == nil {
+		// the evaluator's search, run by run: no quint batch to share
+		for i, run := range runs {
+			if reports[i], errs[i] = c.Check(ctx, run); errs[i] != nil {
+				reports[i] = nil
+			}
+		}
+		return reports, errs
+	}
 	base := c.Options.Dir
 	if base == "" {
 		d, err := os.MkdirTemp("", "gotogether-batch-")

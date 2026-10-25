@@ -35,6 +35,12 @@ The first release. What a user meets, by module:
   indeterminate calls (`qtrace.LinearizePending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
+- A binding's `hidden` actions: model actions that run unrecorded (a
+  gossip round), any sequence of them, up to `hiddenDepth` (default 4),
+  between recorded steps. Such a trace is judged by the Go evaluator's
+  search over the states they reach (quint cannot replay steps whose
+  choices are unknown), and the report says so. Checked against brute
+  force; searches (Linearize, ResolvePending) refuse it.
 - A binding's `within` (bounded response): each time a val becomes true,
   another must hold within a bound of virtual (or recorded) time, judged
   on the replay's timed states; a run cut short before its bound is not

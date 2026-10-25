@@ -69,6 +69,15 @@ type Binding struct {
 	// verdict, unless it recorded its system settled (nothing changes
 	// after). Every check of a run honours it.
 	Within []Within `yaml:"within"`
+	// Hidden are model actions that happen and are never recorded (a
+	// gossip round, a handoff): between recorded steps any sequence of
+	// them, at most HiddenDepth long (default 4), may have run. Each takes
+	// no parameters (give the model a wrapper that picks them with
+	// nondet). A trace is then judged by the Go evaluator, which searches
+	// the states they reach: quint cannot replay a step whose choices are
+	// unknown.
+	Hidden      []string `yaml:"hidden"`
+	HiddenDepth int      `yaml:"hiddenDepth"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.
 	Simulate *Simulation `yaml:"simulate"`
@@ -224,6 +233,21 @@ func (b *Binding) Lint(m *Model) []string {
 		if !m.Vals[ev] {
 			errs = append(errs, fmt.Sprintf("eventually %s: not a val of %s", ev, m.Module))
 		}
+	}
+	for _, h := range b.Hidden {
+		ps, ok := m.Actions[h]
+		switch {
+		case !ok:
+			errs = append(errs, fmt.Sprintf("hidden %s: not an action of %s", h, m.Module))
+		case len(ps) > 0:
+			errs = append(errs, fmt.Sprintf("hidden %s takes parameters: a hidden action's choices are unknown; give the model one that picks them (action %sAny = nondet ... %s(...))", h, h, h))
+		}
+		if _, bound := b.Actions[h]; bound {
+			errs = append(errs, fmt.Sprintf("hidden %s is bound too: an action is recorded (actions) or hidden, not both", h))
+		}
+	}
+	if b.HiddenDepth < 0 {
+		errs = append(errs, "hiddenDepth: negative")
 	}
 	for _, w := range b.Within {
 		for _, v := range []string{w.After, w.Holds} {
