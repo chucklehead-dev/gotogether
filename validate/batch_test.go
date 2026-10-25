@@ -34,7 +34,11 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 		return sink.Steps()
 	}
 	var runs [][]qtrace.Step
-	for i := 0; i < 24; i++ {
+	n := 24 // several chunks
+	if testing.Short() {
+		n = 8 // each kind twice: each run is checked alone too, a quint process each
+	}
+	for i := 0; i < n; i++ {
 		switch i % 4 {
 		case 0:
 			runs = append(runs, rec("deposit", 5, 5, "withdraw", 2, 3, "deposit", i+1, 4+i))

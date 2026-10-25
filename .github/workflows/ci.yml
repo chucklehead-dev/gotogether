@@ -40,7 +40,10 @@ jobs:
         run: go vet ./...
       - name: test
         if: matrix.part == 'core'
-        run: go test -count=1 -timeout 30m ./...
+        run: |
+          go test -count=1 -timeout 30m ./... | tee "$RUNNER_TEMP/core-times.txt"; test "${PIPESTATUS[0]}" = 0
+          # a core package twice as slow as it was (ci/test-times.txt) fails
+          ci/time-budget.sh < "$RUNNER_TEMP/core-times.txt"
       - name: every module tidy on its own go.mod
         if: matrix.part == 'core'
         run: |
