@@ -13,6 +13,8 @@ actions:
   lead: {}
   stepDown: {}
   stop: {}
+  boot: {}
+  apply: {}
 
 invariants: [electionSafety]
 eventually: [hasLeader]
@@ -24,6 +26,12 @@ within:
   - after: healed
     holds: hasLeader
     bound: 300ms
+  # a node that boots behind catches up within a second: the leader
+  # probes it within a heartbeat, and a snapshot it lost is sent again
+  # once reported (at most two election timeouts after it was sent)
+  - after: behind
+    holds: caughtUp
+    bound: 1s
 
 # The model on its own (gotogether simulate): electionSafety is the
 # requirement on the code, which the model lets a node that votes twice

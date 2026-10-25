@@ -140,10 +140,15 @@ more.
   and 56 of qtrace's 167 survive: tests or named equivalents, held by
   the nightly with a ratchet. Success: qenv under 10% non-equivalent
   survivors.
-- **S9. raftkv's catch-up (S).** A node's applied index in the cluster
-  history and `within: {after: restarted(n), holds: caughtUp(n)}`, with
-  compaction forced: lost snapshots made a bounded-liveness verdict (the
-  review's suggestion), a mutant dropping ReportSnapshot its failing case.
+- **S9. raftkv's catch-up (S). Done.** cluster.qnt records each node's
+  state machine (`boot`, `apply`); a node that boots behind owes the
+  others' highest index, `within 1s after behind: caughtUp`, with the
+  clients writing unrecorded (`Config.Load`) so the logs compact. A
+  scenario keeps a follower down past a compaction and loses its
+  snapshot by a cut: the faithful node catches up in all 20 runs, and
+  `NoSnapshotReport` (no ReportSnapshot, no retry) never does in 18,
+  though the cluster settles with a leader. Random loss alone lost a
+  snapshot in 3 of 40 (a new leader resends one).
 - **S10. A per-PR tier with stated power (S).** Every example's -short
   under 60 s, each mutant's chance of being caught there printed, at
   least 0.95; the full searches nightly.

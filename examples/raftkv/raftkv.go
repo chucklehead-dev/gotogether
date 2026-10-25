@@ -31,6 +31,9 @@
 //     restarts can vote twice in a term.
 //   - EagerV2: the upgraded code writes its new log format at once, which
 //     the nodes not yet upgraded skip.
+//   - NoSnapshotReport: a snapshot lost on the way is never reported to
+//     raft, which waits for it forever: the follower it was for stays
+//     behind.
 package raftkv
 
 import (
@@ -58,11 +61,13 @@ const (
 	NoPersistVote
 	// EagerV2 writes the v2 log format as soon as a node runs v2.
 	EagerV2
+	// NoSnapshotReport never reports a snapshot failed.
+	NoSnapshotReport
 )
 
 // Mutations names each mutation, for run-demo.sh.
 var Mutations = map[string]Mutation{"": Faithful, "no-request-id": NoRequestID, "lease-read": LeaseRead,
-	"slow-election": SlowElection, "no-persist-vote": NoPersistVote, "eager-v2": EagerV2}
+	"slow-election": SlowElection, "no-persist-vote": NoPersistVote, "eager-v2": EagerV2, "no-snapshot-report": NoSnapshotReport}
 
 func (m Mutation) String() string {
 	for k, v := range Mutations {
@@ -103,6 +108,9 @@ type Config struct {
 	Record   Record
 	Clients  int // 3 by default
 	Ops      int // per client, 6 by default
+	// Load runs the clients in a run that records the cluster too (their
+	// calls unrecorded), so its logs grow and compact
+	Load bool
 	// Think is how long a client waits between its operations (none by
 	// default): a client that runs as long as a rollout.
 	Think time.Duration

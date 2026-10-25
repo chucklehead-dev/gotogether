@@ -130,6 +130,9 @@ func (inc *incarnation) encode(op Op, m Mutation) []byte {
 func (n *Node) start(ctx context.Context) {
 	inc := n.boot(ctx)
 	n.inc = inc
+	if n.d.cfg.Record == Cluster {
+		qobs.Record(ctx, "boot", nil, "node", n.Name, "index", int(inc.applied))
+	}
 	for i := range n.d.Nodes {
 		if i != n.Index {
 			qenv.Go(ctx, fmt.Sprintf("%s.send.%s", n.Name, n.d.Nodes[i].Name), func(ctx context.Context) { n.send(ctx, inc, i) })
@@ -232,7 +235,7 @@ func (n *Node) loop(ctx context.Context, inc *incarnation) {
 		}
 		for _, f := range inc.failed {
 			inc.rn.ReportUnreachable(f.to)
-			if f.snap {
+			if f.snap && n.d.cfg.Mutation != NoSnapshotReport {
 				inc.rn.ReportSnapshot(f.to, raft.SnapshotFailure)
 			}
 		}
@@ -259,6 +262,7 @@ func (n *Node) ready(ctx context.Context, inc *incarnation, rd raft.Ready) {
 		}
 		inc.outbox[to] = q
 	}
+	before := inc.applied
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		inc.sm = decodeSM(rd.Snapshot.GetData())
 		inc.applied = rd.Snapshot.GetMetadata().GetIndex()
@@ -270,6 +274,9 @@ func (n *Node) ready(ctx context.Context, inc *incarnation, rd raft.Ready) {
 			}
 		}
 		inc.applied = e.GetIndex()
+	}
+	if n.d.cfg.Record == Cluster && inc.applied != before {
+		qobs.Record(ctx, "apply", nil, "node", n.Name, "index", int(inc.applied))
 	}
 	for _, rs := range rd.ReadStates {
 		inc.readIndex[binary.BigEndian.Uint64(rs.RequestCtx)] = rs.Index
@@ -326,7 +333,7 @@ func (n *Node) proposeVersion(ctx context.Context, inc *incarnation) {
 // succeeded (in the peer's inbox when it crashed), and raft resends one
 // only after a failure is reported.
 func (n *Node) retrySnapshots(inc *incarnation) {
-	if inc.state != raft.StateLeader {
+	if inc.state != raft.StateLeader || n.d.cfg.Mutation == NoSnapshotReport {
 		inc.snapWait = nil
 		return
 	}

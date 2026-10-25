@@ -7,6 +7,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // Backoff is how long a client waits before it tries an operation again
@@ -18,8 +19,16 @@ const Backoff = 20 * time.Millisecond
 // between nodes does not reach them).
 func (d *Deployment) clients(s *qenv.Sim) {
 	cfg := d.cfg
+	unrecorded := func(ctx context.Context) context.Context { return ctx }
 	if cfg.Record != KV {
-		return
+		if !cfg.Load {
+			return
+		}
+		// the clients write, so the logs grow and compact, but their calls
+		// are no steps of the cluster's model: into a recorder of their own
+		unrecorded = func(ctx context.Context) context.Context {
+			return qobs.WithRecorder(ctx, qobs.NewRecorder(dropSteps{}))
+		}
 	}
 	if cfg.Readers {
 		for i := range d.Nodes {
@@ -41,6 +50,7 @@ func (d *Deployment) clients(s *qenv.Sim) {
 	}
 	for id := 1; id <= cfg.Clients; id++ {
 		s.Spawn(fmt.Sprintf("client%d", id), func(ctx context.Context) {
+			ctx = unrecorded(ctx)
 			for k := range cfg.Ops {
 				d.do(ctx, id, k+1, workload(id, k), -1)
 				qenv.Sleep(ctx, cfg.Think)
@@ -48,6 +58,12 @@ func (d *Deployment) clients(s *qenv.Sim) {
 		})
 	}
 }
+
+// dropSteps is a sink that keeps nothing: the clients' calls of a run
+// that records the cluster (Config.Load).
+type dropSteps struct{}
+
+func (dropSteps) Record(context.Context, *qtrace.Step) {}
 
 // workload is client id's k-th operation: a mix over the keys, each
 // write's value its own (a stale read shows), transfers between keys.

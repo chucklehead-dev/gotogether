@@ -23,9 +23,9 @@ away, and the cluster also goes through a rolling upgrade.
 | file | what it is |
 |---|---|
 | [model/raftkv.qnt](model/raftkv.qnt) | the store as clients must see it: `write`, `read`, `cas`, `transfer` (whether it took effect is `lastOk`), the probe's `observe`; `converged` an eventual val |
-| [model/cluster.qnt](model/cluster.qnt) | leadership as the nodes record it: `campaign`, `lead`, `stepDown`, `stop` (a crash), the test's `isolate` and `heal`; `electionSafety` an invariant, `hasLeader` and `healed` vals |
+| [model/cluster.qnt](model/cluster.qnt) | leadership as the nodes record it: `campaign`, `lead`, `stepDown`, `stop` (a crash), the test's `isolate` and `heal`, and each node's state machine (`boot`, `apply`); `electionSafety` an invariant, `hasLeader`, `healed`, `behind` and `caughtUp` vals |
 | [raftkv.binding.yaml](raftkv.binding.yaml) | a read's value and a cas's or transfer's answer against the model's; `eventually: [converged]` |
-| [cluster.binding.yaml](cluster.binding.yaml) | `invariants: [electionSafety]`, `eventually: [hasLeader]`, `within: [{after: healed, holds: hasLeader, bound: 300ms}]` |
+| [cluster.binding.yaml](cluster.binding.yaml) | `invariants: [electionSafety]`, `eventually: [hasLeader]`, `within:` a leader 300ms after a heal, and a restarted node caught up 1s after it booted behind |
 | [node.go](node.go) | a node: its raft loop (the RawNode's only user), its senders, the services' handlers, the leadership steps it records |
 | [storage.go](storage.go) | the write-ahead log: hard state, snapshot and entries, persisted before any message is sent |
 | [sm.go](sm.go) | the state machine, its sessions (a retry answered as the first time), the log's two formats (v1 text, v2 binary) |
@@ -49,6 +49,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestLeaseRead` | `LeaseRead`: reads answered on the leader's lease (`ReadOnlyLeaseBased`) | the leadership moved to n1, then n1 cut off for 400 ms; `Exhaust` over every combination of the three clocks' drifts (none, fast, slow at 0.8), 27 runs | the faithful leader (`ReadOnlySafe`) conforms in all 27; the mutant reads stale in 3 |
 | `TestRollingUpgrade` | `EagerV2`: v2 code writes the v2 log format at once | nodes upgraded one every 500 ms while clients write; a full rollout, and one paused after two nodes | the faithful cluster conforms in both and ends on the v2 log after the full one. The mutant, paused, leaves the v1 node skipping entries it cannot read: 8 of 20 runs violate `converged` |
 | `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 5 of 50 mutant runs do |
+| `TestCatchUp` | `NoSnapshotReport`: a snapshot lost on the way is never reported to raft | a follower down while the clients write past a compaction, restarted, and its snapshot lost by a 200 ms cut; the cluster's history | the faithful follower catches up within 1 s in all 20 runs; the mutant's never does in 18 of 20 (`within 1s after behind: caughtUp`), though the cluster settles with a leader |
 | `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
@@ -95,5 +96,5 @@ confirmation).
 ```sh
 go test ./...            # about 7 minutes; -short skips the slow searches
 ./run-demo.sh            # the faithful explorations
-MUTATION=lease-read ./run-demo.sh   # or no-request-id, slow-election, no-persist-vote, eager-v2
+MUTATION=lease-read ./run-demo.sh   # or no-request-id, slow-election, no-persist-vote, eager-v2, no-snapshot-report
 ```

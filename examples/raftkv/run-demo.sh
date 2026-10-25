@@ -2,7 +2,8 @@
 # Explore the raft store and check every run against the models: the
 # clients' history linearized whole (model/raftkv.qnt), the nodes'
 # leadership in the order recorded (model/cluster.qnt). MUTATION= one of
-# no-request-id, lease-read, slow-election, no-persist-vote, eager-v2
+# no-request-id, lease-read, slow-election, no-persist-vote, eager-v2,
+# no-snapshot-report
 # shows what catches it.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -13,6 +14,7 @@ case "${MUTATION:-}" in
   slow-election) run='TestElectionAfterHeal$' ;;
   no-persist-vote) run='TestUnpersistedVote$' ;;
   eager-v2) run='TestRollingUpgrade$' ;;
+  no-snapshot-report) run='TestCatchUp$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 echo "== raftkv ${MUTATION:+(mutation $MUTATION)}"

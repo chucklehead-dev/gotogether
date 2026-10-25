@@ -9,6 +9,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"go.etcd.io/raft/v3/tracker"
 )
 
 // system is the cluster under cfg as one System, checked against the
@@ -236,4 +237,59 @@ func TestLinearizeScale(t *testing.T) {
 	sys := system(Config{Clients: 4, Ops: 50, Duration: 10 * time.Second})
 	sys.Opts = append(sys.Opts, qtest.LinearizeBudget(50000))
 	sys.Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()))
+}
+
+// downWhileWriting crashes a follower and keeps it down while the clients
+// write, long enough for the leader to compact past it, then restarts
+// it: it can catch up only by a snapshot, which the scenario loses. When
+// the leader starts sending it (the follower's progress in
+// StateSnapshot), the link between them is cut for 200ms: the call
+// carrying the snapshot fails.
+func downWhileWriting(ctx context.Context, d *Deployment) {
+	qenv.Wait(ctx, func() bool { return d.Leader() >= 0 })
+	l := d.Leader()
+	fi := (l + 1) % len(d.Nodes)
+	f := d.Nodes[fi].Proc
+	if !f.Down() {
+		f.Crash()
+	}
+	qenv.Sleep(ctx, 1500*time.Millisecond)
+	if !f.Down() {
+		return
+	}
+	f.Restart()
+	snapshotting := func() bool {
+		inc := d.Nodes[l].inc
+		if inc == nil || d.Leader() != l {
+			return false
+		}
+		pr, ok := inc.rn.Status().Progress[uint64(fi+1)]
+		return ok && pr.State == tracker.StateSnapshot
+	}
+	if !qenv.WaitFor(ctx, snapshotting, time.Second) {
+		return // the leader changed, or caught it up by its log
+	}
+	d.Sim.Net().Partition(d.Nodes[l].Proc, f)
+	qenv.Sleep(ctx, 200*time.Millisecond)
+	d.Sim.Net().Heal(d.Nodes[l].Proc, f)
+}
+
+// A node that restarts behind catches up within a second (cluster.qnt's
+// caughtUp, the binding's within): by a snapshot, the leader having
+// compacted past it, which the scenario loses on the way. Never told a
+// snapshot failed (NoSnapshotReport), raft waits for it forever and the
+// node stays behind; the cluster still settles with a leader, so only
+// the bound tells them apart.
+func TestCatchUp(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("explores 40 runs with compaction")
+	}
+	name := "within 1s after behind: caughtUp"
+	cfg := Config{Record: Cluster, Load: true, Ops: 20, Scenario: downWhileWriting}
+	system(cfg).WithRates(faulty.Set("rpc", 0.1).Set("nemesis.crash", 0)).Explore(t, qtest.ExploreConfig{Seeds: 20}).
+		Expect(t, qtest.Conforms())
+	cfg.Mutation = NoSnapshotReport
+	system(cfg).WithRates(faulty.Set("rpc", 0.1).Set("nemesis.crash", 0)).Explore(t, qtest.ExploreConfig{Seeds: 20}).
+		Expect(t, qtest.Some(qtest.Violates(name)))
 }
