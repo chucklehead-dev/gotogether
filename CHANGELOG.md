@@ -189,6 +189,19 @@ The first release. What a user meets, by module:
   `qtest.Run.Recorded` holds the steps as recorded beside `Steps`, the
   steps judged; `Chooser`'s doc gives the ChooseTask and ChooseNemesis
   protocols the scheduler looks for.
+- A newcomer's frictions (S7): `Network.OnHeal` runs once per cut that
+  ends (Heal, the nemesis, CutLength, Settle), so heals are recorded as
+  cuts are; `gotogether lint -binding a.yaml,b.yaml -src .` lints one
+  tree against several bindings (`binding.LintSources`, `binding.Bound`),
+  a step an error only when no model has it; `binding.Model.Helpers` are
+  the frame conditions (`sameNet`) other actions call and step does not,
+  which scaffold and lint's lists of actions leave out; a failing run
+  whose faults duplicated a request says so in its report. The skills
+  say how a heal reaches the trace, two models of one system, handlers'
+  state across a restart (`OnCrash`), recording from a hook
+  (`s.Context()`), that `qenv.Retry` commits, each pending call
+  multiplying a search, the delay faults' options, the default actor,
+  and running the CLI from a module that replaces gotogether.
 - Each check writes into a directory of its own under `Options.Dir`
   (`check-*`): checks with one Dir once wrote the same module and ITF
   files, so two at once replayed each other's modules and took each

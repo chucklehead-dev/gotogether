@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -661,8 +662,32 @@ func judge(t testing.TB, cc *validate.Checker, inst string, opt validate.SearchO
 		}
 		r.Steps, r.Report = js[i].Steps, js[i].Report
 		r.adjust()
+		noteDuplicates(r)
 	}
 	return cached
+}
+
+// noteDuplicates says, on a failing run's report, which requests its
+// faults duplicated (rpc.<name>.request's "duplicate", .delay's
+// "lateDuplicate"): a handler that is not idempotent applies one twice,
+// which no order of the history explains, and the report said only that
+// no order conformed.
+func noteDuplicates(r *Run) {
+	if r.Report == nil || r.Report.OK() {
+		return
+	}
+	var dups []string
+	for _, c := range r.Faults() {
+		kind := strings.TrimPrefix(c.Kind, "fault.")
+		if strings.HasPrefix(kind, "rpc.") && (c.Name == "duplicate" || c.Name == "lateDuplicate") {
+			dups = append(dups, fmt.Sprintf("%s=%s after step %d", kind, c.Name, c.Step))
+		}
+	}
+	if len(dups) == 0 {
+		return
+	}
+	r.Report.Issues = append(slices.Clip(r.Report.Issues), qtrace.Issue{Severity: "info", Kind: "faults", Msg: fmt.Sprintf(
+		"the run's faults duplicated %d request(s) (%s): a handler that is not idempotent applies a duplicate twice, which no order of the steps explains; dedupe by a request id", len(dups), strings.Join(dups, ", "))})
 }
 
 // cachedCheck checks runs with cc through the verdict cache, counting

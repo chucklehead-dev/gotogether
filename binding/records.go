@@ -170,14 +170,83 @@ func (b *Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (er
 	return errs, warns
 }
 
+// A Bound is a binding with its model, one of the several a source tree
+// records for (LintSources).
+type Bound struct {
+	Binding *Binding
+	Model   *Model
+}
+
+// LintSources is LintSource for a source tree that records for several
+// bindings (a system checked against two models: its leadership and its
+// clients' history): an annotation or a literal Record is checked
+// against the bindings whose models have its action, and is an error
+// only when none has it; a bound action is warned of when nothing in the
+// tree emits it. With one binding it is LintSource.
+func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns []string) {
+	if len(bs) == 1 {
+		return bs[0].Binding.LintSource(bs[0].Model, anns, recs)
+	}
+	owners := func(action string) []Bound {
+		var out []Bound
+		for _, b := range bs {
+			if _, ok := b.Model.Actions[action]; ok {
+				out = append(out, b)
+			}
+		}
+		return out
+	}
+	none := func(action string) string {
+		var mods []string
+		for _, b := range bs {
+			mods = append(mods, b.Model.Module)
+		}
+		return fmt.Sprintf("%s is an action of none of %s", action, strings.Join(mods, ", "))
+	}
+	emitted := map[string]bool{}
+	for _, a := range anns {
+		emitted[a.Action] = true
+		os := owners(a.Action)
+		if a.Action != "" && len(os) == 0 {
+			errs = append(errs, fmt.Sprintf("%s: %s: %s", a.Pos, a.Func, none(a.Action)))
+			continue
+		}
+		if len(os) == 0 { // no action: the first binding says so
+			os = bs[:1]
+		}
+		for _, o := range os {
+			e, _ := o.Binding.lintAnnotations(o.Model, []Annotation{a})
+			errs = append(errs, e...)
+		}
+	}
+	for _, r := range recs {
+		emitted[r.Action] = true
+		if len(owners(r.Action)) == 0 {
+			in := ""
+			if r.Func != "" {
+				in = " " + r.Func + ":"
+			}
+			errs = append(errs, fmt.Sprintf("%s:%s Record(ctx, %q, ...): %s", r.Pos, in, r.Action, none(r.Action)))
+		}
+	}
+	for _, b := range bs {
+		for _, name := range sortedNames(b.Binding.Actions) {
+			if !emitted[name] {
+				warns = append(warns, fmt.Sprintf("%s: action %s is bound but neither a //quint:action nor a literal qobs.Record emits it (an action recorded through a constant or a variable is not seen)", b.Model.Module, name))
+			}
+		}
+	}
+	return errs, warns
+}
+
 // notAnAction says that name is not an action of m, with the closest
 // action if one is near, and the list.
 func (m *Model) notAnAction(name string) string {
 	var names []string
 	best, bestD := "", -1
 	for _, a := range m.ActionNames() {
-		if a == "init" || a == "step" {
-			continue // the state machine, not steps
+		if a == "init" || a == "step" || m.Helpers[a] {
+			continue // the state machine, not steps; a helper is part of one
 		}
 		names = append(names, a)
 		if d := editDistance(strings.ToLower(name), strings.ToLower(a)); bestD < 0 || d < bestD {

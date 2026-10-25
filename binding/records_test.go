@@ -125,3 +125,25 @@ func TestLintSourceEmitted(t *testing.T) {
 		t.Fatalf("errs %q, warns %q", errs, warns)
 	}
 }
+
+// One source tree, two bindings (a system's leadership and its clients'
+// history): a step for either is no error, one for neither is, and each
+// binding's actions nothing emits are warned of. Against one binding
+// alone the other's steps were errors.
+func TestLintSourcesOfTwoBindings(t *testing.T) {
+	bank := Bound{Binding: &Binding{Actions: map[string]Action{"deposit": {}, "withdraw": {}}}, Model: bankModel()}
+	cluster := Bound{Binding: &Binding{Actions: map[string]Action{"elect": {}, "heal": {}}},
+		Model: &Model{Module: "cluster", Actions: map[string][]Param{"init": nil, "step": nil, "elect": nil, "heal": nil}}}
+	recs := []RecordCall{{Pos: "app.go:1", Action: "deposit"}, {Pos: "app.go:2", Action: "elect"}, {Pos: "app.go:3", Action: "close"}}
+	anns := []Annotation{{Pos: "app.go:4", Func: "Heal", Action: "heal"}}
+	errs, warns := LintSources([]Bound{bank, cluster}, anns, recs)
+	if len(errs) != 1 || !strings.Contains(errs[0], `"close"`) || !strings.Contains(errs[0], "none of bank, cluster") {
+		t.Errorf("errors %q, want close's alone", errs)
+	}
+	if len(warns) != 1 || !strings.HasPrefix(warns[0], "bank: action withdraw") {
+		t.Errorf("warnings %q, want bank's withdraw alone", warns)
+	}
+	if errs, _ := bank.Binding.LintSource(bank.Model, anns, recs); len(errs) != 3 {
+		t.Errorf("against bank alone: %q, want elect, heal and close", errs)
+	}
+}

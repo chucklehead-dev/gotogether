@@ -1,0 +1,6 @@
+# tally.qnt's adds, each observing the total it made.
+spec: tally.qnt
+module: tally
+actions:
+  add:
+    expect: 'total == {{.obs.total}}'

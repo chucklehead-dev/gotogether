@@ -120,7 +120,18 @@ or went on past the bound; a run cut short before its bound is not
 judged (an info issue says so). Claim it as reports name it:
 `qtest.Violates("within 3s after healed: hasLeader")`. Record the steps
 that make both vals change: a response the code reaches but never
-records counts as late. Settle the run (`Sim.Settle`): an exploration
+records counts as late. A heal is the environment's, so record it from
+the network's hooks, the nemesis's cuts and heals included (a
+`PartitionNemesis` cuts and heals unrecorded otherwise):
+
+```go
+s.Net().OnCut(func(a, b *qenv.Process) { qobs.Record(s.Context(), "isolate", nil, "a", a.Name, "b", b.Name) })
+s.Net().OnHeal(func(a, b *qenv.Process) { qobs.Record(s.Context(), "heal", nil, "a", a.Name, "b", b.Name) })
+```
+
+`OnHeal` runs once per cut that ends, by `Heal`, the nemesis, a cut's
+`CutLength` or `Settle`. examples/raftkv scripts its partitions instead
+(`Isolate`, `Heal`), to place them. Settle the run (`Sim.Settle`): an exploration
 claiming conformance fails if no run judged the obligation, since a run
 that stalls in silence, unsettled, leaves it open. Its vals are computed
 by the Go evaluator on quint's states; one it cannot evaluate, or steps

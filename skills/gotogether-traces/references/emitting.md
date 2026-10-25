@@ -50,7 +50,14 @@ conformed, or the one that got furthest: a stale read shows as a
 `Mismatch` no order explains. A search that runs out of its budget
 (200 orders; `qtest.LinearizeBudget(n)`) before it stops is no verdict:
 the actor's conformance is n/a, which `Conforms` fails and `Rejects` and
-`Mismatch` do not match, and the report says to raise it. Each order
+`Mismatch` do not match, and the report says to raise it. Each pending
+call multiplies the orders (it may take effect anywhere, or not at all):
+a client that retries a timed-out call with the same request id, leaving
+one pending only when it crashes, keeps a search small, where a call
+abandoned at each timeout took 3000 orders for 7 steps. A history no
+order explains may hold a request the network duplicated
+(`rpc.<name>.request`'s `duplicate`) that a handler applied twice: the
+issue names it when a run's faults duplicated a request. Each order
 tried is a quint replay from the start, so keep such histories to tens
 of steps. Where the model treats keys independently (a step on one key
 never enables, disables or changes another's), `qtest.LinearizeByKey("key")`

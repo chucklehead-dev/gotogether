@@ -45,6 +45,10 @@ type Network struct {
 	hand  map[[2]string]bool    // the cuts Partition made, which only Heal ends
 	gen   map[[2]string]int     // per pair, the cuts made: a healer heals only its own
 	onCut []func(a, b *Process) // OnCut's hooks
+	// onHeal are OnHeal's hooks, and procs each cut pair's processes, for
+	// them
+	onHeal []func(a, b *Process)
+	procs  map[[2]string][2]*Process
 }
 
 // Net is the simulation's network.
@@ -75,6 +79,10 @@ func (n *Network) cut(a, b *Process) {
 		return
 	}
 	n.cuts[pairOf(a, b)] = true
+	if n.procs == nil {
+		n.procs = map[[2]string][2]*Process{}
+	}
+	n.procs[pairOf(a, b)] = [2]*Process{a, b}
 	for _, h := range n.onCut {
 		h(a, b)
 	}
@@ -82,12 +90,39 @@ func (n *Network) cut(a, b *Process) {
 
 // Heal restores the network between a and b.
 func (n *Network) Heal(a, b *Process) {
-	delete(n.cuts, pairOf(a, b))
-	delete(n.hand, pairOf(a, b))
+	k := pairOf(a, b)
+	delete(n.hand, k)
+	if !n.cuts[k] {
+		return
+	}
+	delete(n.cuts, k)
+	n.healed(k)
 }
 
-// healAll restores the whole network (Settle).
-func (n *Network) healAll() { n.cuts, n.hand = nil, nil }
+// healed runs OnHeal's hooks for the pair k, its cut just ended.
+func (n *Network) healed(k [2]string) {
+	p := n.procs[k]
+	delete(n.procs, k)
+	for _, h := range n.onHeal {
+		h(p[0], p[1])
+	}
+}
+
+// healAll restores the whole network (Settle), its pairs' OnHeal hooks
+// run in the pairs' order.
+func (n *Network) healAll() {
+	keys := make([][2]string, 0, len(n.cuts))
+	for k := range n.cuts {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i][0] < keys[j][0] || keys[i][0] == keys[j][0] && keys[i][1] < keys[j][1]
+	})
+	n.cuts, n.hand = nil, nil
+	for _, k := range keys {
+		n.healed(k)
+	}
+}
 
 // Partitioned reports whether the network between a and b is cut. A task
 // of no process (nil) is never partitioned.
@@ -102,6 +137,12 @@ func (n *Network) Partitioned(a, b *Process) bool {
 // Partition or the nemesis: a double whose connections a cut breaks (a
 // queue's consumers) drops them there.
 func (n *Network) OnCut(h func(a, b *Process)) { n.onCut = append(n.onCut, h) }
+
+// OnHeal registers a hook run when a cut between a and b ends: by Heal,
+// the nemesis's heal, a cut's own CutLength, or Settle. A test that
+// judges heals (a binding's `within: {after: healed, ...}`) records them
+// here, the nemesis's included; OnCut records the cuts.
+func (n *Network) OnHeal(h func(a, b *Process)) { n.onHeal = append(n.onHeal, h) }
 
 // PartitionNemesis makes the network between every two of procs a
 // nemesis: at any step the scheduler may cut a link

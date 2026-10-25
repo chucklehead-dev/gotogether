@@ -19,7 +19,9 @@ shrinking removes faults.
 
 - **Data:** `qenv.DB` and `qenv.Txn` (Get, GetForUpdate, Put, Delete,
   Scan, Commit, Rollback, OnCommit). In production, an adapter over
-  `database/sql` implements them.
+  `database/sql` implements them. `qenv.Retry(ctx, db, n, fn)` begins,
+  runs fn and commits, again on a conflict: fn returns nil to commit and
+  never calls Commit itself.
 - **Other services:** small interfaces of your own (a broker, a payment
   client), implemented in the deployment over `qenv.Queue` and
   `qenv.Service`.
@@ -51,6 +53,13 @@ shrinking removes faults.
   reported with a failing run but not checked. If the model must see an
   effect whether or not its caller survives (a write that landed, then a
   crash), record it at the effect's site instead.
+- **The actor:** a step's actor is its recorder's (`qobs.WithActor`),
+  and in a simulation every process records into the run's one recorder,
+  so the whole system is one actor, `default`: what a cluster's model
+  needs. Give actors only to independent histories (one account each).
+- **From a hook:** a crash or network hook runs outside any task; record
+  with the simulation's context, `s.Context()`, which carries the run's
+  recorder (`OnCrash`'s `stop`, `OnHeal`'s `heal`).
 - **Crash tests in a real environment** need a durable step log:
   `qobs.FileSink(path, qobs.PerStep)` is (one write per step).
   `qobs.Buffered` loses the last steps of a killed process, undetectably.
@@ -71,8 +80,15 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
 ```
 
 - **Restarts:** a process's start function runs on boot and after every
-  restart. It must rebuild from durable doubles only; in-memory state is
-  lost, which is the point.
+  restart. It must rebuild from durable doubles only. State the start
+  function makes is lost, which is the point; state a handler reaches
+  that was bound at construction (a `Service`'s handler, a struct the
+  test holds) is not. A crash runs `s.OnCrash` hooks, then kills the
+  process's tasks, and the restart's start function runs later, so a
+  request can reach the handler before the rebuild: clear such state in
+  an `s.OnCrash(func(p *qenv.Process) { ... })` hook for its process
+  (a node that served as leader after its crash, in a newcomer's
+  counter).
 - **Settles:** `Settle` records a settle in the trace when it finds the
   system quiet, and only then are the binding's `eventually:` vals judged
   (a step recorded after it, by a probe, needs `qobs.Settled` again).
@@ -149,7 +165,14 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   `nemesis.pause` and `nemesis.slow`; raise one alone with
   `Rates.Set("nemesis.pause", 0.02)`. Not on the native runtime.
   A request can also be late (`rpc.<name>.delay`), on by default: a
-  lock without fencing breaks on either, whatever the clocks do.
+  lock without fencing breaks on either, whatever the clocks do. Its
+  options: `late` (delivered just after the caller's timeout: processed
+  after it gave up), `lateDuplicate` (delivered, and a copy a timeout
+  after that, as a retransmission), `veryLate` (a timeout after the
+  caller's, past its retry, even one that backed off) and `slow` (at half
+  the timeout: late, but in time). `rpc.<name>.request` also
+  `duplicate`s a request: a handler that is not idempotent applies it
+  twice, so faithful code dedupes by a request id.
 - **Clocks:** a process has two, as a Go program does. `qenv.Now(ctx)`
   is its wall clock; `qenv.Mono(ctx)` and `qenv.Since(ctx, m)` its
   monotonic clock, what `time.Since` measures (a `time.Time` from Now
@@ -178,6 +201,12 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   filled in.
 - **Write a `Run(chooser, Config)`** for the whole deployment, so tests,
   Hegel and a CLI that writes step logs all share it.
+- **Two models of one system** (leadership, and the clients' history):
+  a System has one binding, so give the deployment a recording switch
+  (examples/raftkv's `Config.Record`, KV or Cluster) and a System per
+  model, or one model holding both. Lint each binding's sources with all
+  the bindings at once: `gotogether lint -binding a.yaml,b.yaml -src .`
+  checks each recorded action against their union.
 
 ## 4. Explore, then shrink
 

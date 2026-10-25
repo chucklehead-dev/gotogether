@@ -23,6 +23,12 @@ type Model struct {
 	Antecedents map[string]string
 	Vars        []string
 	Consts      map[string]string // name -> type
+	// Helpers are the frame conditions (`sameNet`: every assignment
+	// leaves a variable as it was) other actions call and step never
+	// names: parts of steps, not steps. Scaffold writes none, and a lint's
+	// list of actions leaves them out. A nested model's real steps, called
+	// through another action, assign something: they are no helpers.
+	Helpers map[string]bool
 }
 
 // Param is an action parameter. Shape is the kind of its resolved type
@@ -164,7 +170,9 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 		if mod.Name != module {
 			continue
 		}
-		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}}
+		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{}}
+		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
+		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range mod.Declarations {
 			switch {
 			case d.Kind == "var":
@@ -197,6 +205,10 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 					}
 				}
 				m.Actions[d.Name] = ps
+				calledBy[d.Name] = namesIn(d.RawExpr)
+				if unchanging(d.RawExpr) {
+					frames[d.Name] = true
+				}
 			case d.Kind == "def" && (d.Qualifier == "val" || d.Qualifier == "def"):
 				// candidate invariants: boolean vals (not operators, not sum-type constructors)
 				if d.Expr != nil && d.Expr.Kind != "lambda" {
@@ -209,9 +221,95 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 				}
 			}
 		}
+		// a helper: called by an action, and not by step (whose calls are
+		// the steps); a model with no step has none
+		if step, ok := calledBy["step"]; ok {
+			for a, names := range calledBy {
+				if a == "step" {
+					continue
+				}
+				for n := range names {
+					if frames[n] && n != a && !step[n] && n != "init" && n != "step" {
+						m.Helpers[n] = true
+					}
+				}
+			}
+		}
 		return m, nil
 	}
 	return nil, fmt.Errorf("module %q not found in typecheck output", module)
+}
+
+// unchanging reports whether an expression's IR assigns some variable
+// and every assignment leaves its variable as it was (`y' = y`).
+func unchanging(raw json.RawMessage) bool {
+	assigns, same := 0, true
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if x["kind"] == "app" && x["opcode"] == "assign" {
+				assigns++
+				args, _ := x["args"].([]any)
+				name := func(i int) string {
+					if i < len(args) {
+						if a, ok := args[i].(map[string]any); ok && a["kind"] == "name" {
+							n, _ := a["name"].(string)
+							return n
+						}
+					}
+					return ""
+				}
+				same = same && name(0) != "" && name(0) == name(1)
+			}
+			for _, e := range x {
+				walk(e)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		}
+	}
+	var v any
+	if json.Unmarshal(raw, &v) == nil {
+		walk(v)
+	}
+	return assigns > 0 && same
+}
+
+// namesIn are the names an expression's IR refers to: operators applied
+// and names read.
+func namesIn(raw json.RawMessage) map[string]bool {
+	out := map[string]bool{}
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			switch x["kind"] {
+			case "app":
+				if op, ok := x["opcode"].(string); ok {
+					out[op] = true
+				}
+			case "name":
+				if n, ok := x["name"].(string); ok {
+					out[n] = true
+				}
+			}
+			for _, e := range x {
+				walk(e)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		}
+	}
+	var v any
+	if json.Unmarshal(raw, &v) == nil {
+		walk(v)
+	}
+	return out
 }
 
 // renderType prints a Quint type from its JSON IR (enough for messages).

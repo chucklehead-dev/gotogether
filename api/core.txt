@@ -2,6 +2,7 @@
 func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
+func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns []string)
 func Load(path string) (*Binding, error)
 func LoadModel(quint, spec, module string) (*Model, error)
 func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
@@ -49,6 +50,9 @@ type Binding struct
     method (*Binding) SpecPath() string
     method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
     method (*Binding) UsedFields(m *Model) map[string][]string
+type Bound struct
+    field Binding *Binding
+    field Model *Model
 type Call struct
     field Quint string
     field Expect string
@@ -85,6 +89,7 @@ type Model struct
     field Antecedents map[string]string
     field Vars []string
     field Consts map[string]string
+    field Helpers map[string]bool
     method (*Model) ActionNames() []string
     method (*Model) Signature(action string) string
 type Param struct
@@ -545,6 +550,7 @@ type Network struct
     field CutLength time.Duration
     method (*Network) Heal(a, b *Process)
     method (*Network) OnCut(h func(a, b *Process))
+    method (*Network) OnHeal(h func(a, b *Process))
     method (*Network) Partition(a, b *Process)
     method (*Network) PartitionNemesis(procs ...*Process)
     method (*Network) Partitioned(a, b *Process) bool

@@ -189,6 +189,10 @@ func scaffold(args []string) error {
 		if a == "init" || a == "step" {
 			continue // the state machine itself, not steps
 		}
+		if m.Helpers[a] {
+			fmt.Fprintf(w, "  # %s: a helper other actions call and step does not: no step records it\n", a)
+			continue
+		}
 		fmt.Fprintf(w, "  %s:   # %s\n", a, m.Signature(a))
 		if ps := m.Actions[a]; len(ps) > 0 {
 			// the defaults, commented out: uncomment to map a field differently
@@ -211,7 +215,7 @@ func scaffold(args []string) error {
 
 func lint(args []string) (int, error) {
 	fset := commandFlags("lint")
-	bpath := fset.String("binding", "", "binding file")
+	bpath := fset.String("binding", "", "binding file; several, comma-separated, for a source tree that records for each (-src checks each step against their union)")
 	src := fset.String("src", "", "Go source tree to scan for //quint:action annotations and literal qobs.Record actions")
 	sim := fset.String("sim", "", "Go source tree of simulation code (files importing qenv) to check for what escapes the simulation")
 	weave := fset.String("weave", "", "Go source tree woven by qenv/weave to check for what weaving cannot rewrite")
@@ -252,15 +256,25 @@ func lint(args []string) (int, error) {
 			return 0, nil
 		}
 	}
-	b, err := binding.Load(*bpath)
-	if err != nil {
-		return 2, err
+	var bound []binding.Bound
+	var errs []string
+	for _, path := range strings.Split(*bpath, ",") {
+		b, err := binding.Load(path)
+		if err != nil {
+			return 2, err
+		}
+		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
+		if err != nil {
+			return 2, err
+		}
+		for _, e := range b.Lint(m) {
+			if strings.Contains(*bpath, ",") {
+				e = path + ": " + e
+			}
+			errs = append(errs, e)
+		}
+		bound = append(bound, binding.Bound{Binding: b, Model: m})
 	}
-	m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
-	if err != nil {
-		return 2, err
-	}
-	errs := b.Lint(m)
 	var warns []string
 	if *src != "" {
 		anns, err := binding.ScanAnnotations(*src)
@@ -276,7 +290,7 @@ func lint(args []string) (int, error) {
 			return 2, err
 		}
 		fmt.Printf("%d literal Record calls under %s\n", len(recs), *src)
-		e, w := b.LintSource(m, anns, recs)
+		e, w := binding.LintSources(bound, anns, recs)
 		errs, warns = append(errs, e...), w
 	}
 	for _, w := range warns {
@@ -288,7 +302,9 @@ func lint(args []string) (int, error) {
 	if len(errs) > 0 || simFindings > 0 {
 		return 1, nil
 	}
-	fmt.Printf("binding %s fits %s (%d actions bound)\n", *bpath, b.Module, len(b.Actions))
+	for i, b := range bound {
+		fmt.Printf("binding %s fits %s (%d actions bound)\n", strings.Split(*bpath, ",")[i], b.Binding.Module, len(b.Binding.Actions))
+	}
 	return 0, nil
 }
 
@@ -803,7 +819,7 @@ func output(path string) (w io.Writer, done func(), err error) {
 func systemTest(pkg, bpath string, b *binding.Binding, m *binding.Model) string {
 	var rec strings.Builder
 	for _, a := range m.ActionNames() {
-		if a == "init" || a == "step" || a == b.Restart {
+		if _, bound := b.Actions[a]; a == "init" || a == "step" || a == b.Restart || m.Helpers[a] && !bound {
 			continue
 		}
 		// the parameters' fields in the signature's order, then the rest

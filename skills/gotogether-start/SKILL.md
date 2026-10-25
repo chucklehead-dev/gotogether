@@ -38,7 +38,12 @@ The `examples/...` paths in these skills are in the gotogether repository
 your project: clone it to read and run them. In your own module, `go get
 github.com/chucklehead-dev/gotogether@latest` (and `.../qhegel@latest`
 for Hegel) and start from `gotogether scaffold`; the examples' `replace`
-lines are only for working inside the repository.
+lines are only for working inside the repository. To run the CLI without
+installing it, add it to the module first (`go get
+github.com/chucklehead-dev/gotogether/cmd/gotogether`), then `go run
+github.com/chucklehead-dev/gotogether/cmd/gotogether ...`; in a module
+that replaces gotogether with a checkout, `go mod tidy` after the
+`go get`.
 
 1. Run the smallest example: `git clone
    https://github.com/chucklehead-dev/gotogether && cd

@@ -129,15 +129,13 @@ more.
   without eventual vals, the CLI dropping -resolve-pending, and the case
   checker reusing a prefix past an eventual val or keying within without
   times. It found checks sharing a Dir taking each other's verdicts.
-- **S7. A newcomer's friction (S each)** (the newcomer's twelve): how a
-  heal reaches the trace (scripted, recorded partitions; an OnHeal hook);
-  two bindings for one system (a recording switch, documented; lint over
-  several bindings); handlers' state across a restart (clear it in
-  `OnCrash`, recorded with `s.Context()`); pending calls multiplying a
-  search (retry with the same id); `qenv.Retry` commits; helper actions
-  out of scaffold and lint; a duplicated request named in a
-  linearization's issue; the delay faults' options documented; the
-  default actor of a simulation; running the CLI from a replace module.
+- **S7. A newcomer's friction (S each). Done.** `Network.OnHeal`;
+  `lint -binding a,b` (LintSources); `Model.Helpers` out of scaffold and
+  lint's lists; a duplicated request named in a failing run's report;
+  the skills on recording heals, two models of one system, handlers'
+  state across a restart and recording from OnCrash, Retry's commit,
+  pending calls and the budget, the delay options, the default actor,
+  the CLI from a replace module.
 - **S8. The toolkit's own mutation bar (M).** 288 of qenv's 895 mutants
   and 56 of qtrace's 167 survive: tests or named equivalents, held by
   the nightly with a ratchet. Success: qenv under 10% non-equivalent

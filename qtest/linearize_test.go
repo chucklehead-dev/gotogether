@@ -379,3 +379,51 @@ func TestPendingCallKeepsItsProcess(t *testing.T) {
 		}
 	}
 }
+
+// A request the network duplicated, applied twice by a handler that does
+// not dedupe, leaves a history no order explains: the failing run's
+// report names the duplicate (it once said only that no order
+// conformed), and a run of the same faults that conforms says nothing.
+func TestDuplicatedRequestNamed(t *testing.T) {
+	RequireQuint(t)
+	run := func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		total := 0
+		server := s.Process("server", false, func(context.Context) {})
+		svc := qenv.NewService(s, "tally", server, func(context.Context, int) (int, error) { total++; return total, nil })
+		s.Spawn("client", func(ctx context.Context) {
+			for range 3 {
+				call := qobs.Invoke(ctx, "add")
+				if got, err := svc.Call(ctx, 1, 100*time.Millisecond); err == nil {
+					call.Done(nil, "obs.total", got)
+				}
+			}
+		})
+		return s.Run(time.Minute)
+	}
+	sys := System{Binding: "testdata/tally.yaml", Rates: qenv.NoFaults.Set("rpc.tally.request", 0.5), Opts: []Option{Linearize()}, Run: run}
+	x := sys.Explore(t, ExploreConfig{Seeds: 20})
+	named := 0
+	for _, r := range x.Runs {
+		said := strings.Contains(fmt.Sprint(r.Report.Issues), "duplicated")
+		if said && r.OK() {
+			t.Errorf("run %v: a conforming run's report names a duplicate: %v", r.origin, r.Report.Issues)
+		}
+		if !r.OK() {
+			dup := false
+			for _, c := range r.Faults() {
+				dup = dup || c.Name == "duplicate"
+			}
+			if dup != said {
+				t.Errorf("run %v: duplicated %v, said %v: %v", r.origin, dup, said, r.Report.Issues)
+			}
+			if said {
+				named++
+			}
+		}
+	}
+	if named == 0 {
+		t.Error("no failing run duplicated a request: the test shows nothing")
+	}
+}

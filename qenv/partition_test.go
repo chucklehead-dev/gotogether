@@ -484,3 +484,62 @@ func TestSettleIgnoresAHealAsleep(t *testing.T) {
 		s.Close()
 	}
 }
+
+// OnHeal runs once per cut that ends, however it ends (Heal, the
+// nemesis's heal, a cut's length, Settle): every cut has its heal, so a
+// test that records both judges each heal (raftkv's within), and a Heal
+// of a pair not cut runs no hook.
+func TestOnHealPairsWithOnCut(t *testing.T) {
+	nemesis := 0
+	for seed := uint64(1); seed <= 20; seed++ {
+		c := qenv.NewSeeded(seed)
+		c.Rates = qenv.NoFaults.Set("nemesis", 0.3)
+		s := qenv.New(c)
+		s.Net().CutLength = time.Duration(seed%2) * time.Hour // odd seeds: cuts that only Settle heals
+		if seed%2 == 0 {
+			s.Net().CutLength = 2 * time.Second
+		}
+		a := s.Process("a", false, func(context.Context) {})
+		b := s.Process("b", false, func(ctx context.Context) {
+			for range 200 { // scheduling steps, at each of which the nemesis may act
+				qenv.Sleep(ctx, 100*time.Millisecond)
+			}
+		})
+		var events []string
+		s.Net().OnCut(func(x, y *qenv.Process) { events = append(events, "cut "+x.Name+y.Name) })
+		s.Net().OnHeal(func(x, y *qenv.Process) { events = append(events, "heal "+x.Name+y.Name) })
+		s.Net().PartitionNemesis(a, b)
+		s.Spawn("hand", func(ctx context.Context) {
+			s.Net().Heal(a, b) // not cut, or the nemesis's: a heal either way, at most once
+			s.Net().Partition(a, b)
+			qenv.Sleep(ctx, time.Second)
+			s.Net().Heal(a, b)
+			s.Net().Heal(a, b) // healed already: no hook
+		})
+		// faults first, then a settle that heals what is still cut
+		if err := s.Run(10 * time.Second); err != nil {
+			t.Fatalf("seed %d: %v", seed, err)
+		}
+		if err := s.Settle(time.Minute); err != nil {
+			t.Fatalf("seed %d: %v", seed, err)
+		}
+		s.Close()
+		if len(events) > 2 {
+			nemesis++
+		}
+		open := false
+		for _, e := range events {
+			cut := strings.HasPrefix(e, "cut ")
+			if cut == open {
+				t.Fatalf("seed %d: %v: a cut while cut, or a heal of no cut", seed, events)
+			}
+			open = cut
+		}
+		if open || len(events) < 2 {
+			t.Errorf("seed %d: %v: a cut never healed, or none made", seed, events)
+		}
+	}
+	if nemesis == 0 {
+		t.Error("no run's nemesis cut the network")
+	}
+}
