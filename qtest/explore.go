@@ -709,7 +709,7 @@ func judge(t testing.TB, cc *validate.Checker, inst string, runs []*Run, name fu
 	first := map[string]int{} // key -> index in todo
 	at := map[int]int{}       // run -> index in todo
 	for i, r := range runs {
-		keys[i] = inst + qtrace.Key(r.Steps)
+		keys[i] = inst + cc.Key(r.Steps)
 		if rep, ok := verdicts.get(keys[i]); ok {
 			r.Report = rep
 			cached++

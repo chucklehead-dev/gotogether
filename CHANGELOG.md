@@ -35,6 +35,12 @@ The first release. What a user meets, by module:
   indeterminate calls (`qtrace.LinearizePending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
+- A binding's `within` (bounded response): each time a val becomes true,
+  another must hold within a bound of virtual (or recorded) time, judged
+  on the replay's timed states; a run cut short before its bound is not
+  judged. `validate.Checker.Key` keys a verdict cache, with the steps'
+  times for such a binding (qtest's cache once gave a slow run a fast
+  one's verdict).
 - qhistory checks strict serializability: `StrictSerializable`, with
   `Txn.Invoked` and `Completed`, orders a transaction completed before
   another began first, and names a cycle through real time Elle's way

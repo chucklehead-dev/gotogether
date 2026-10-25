@@ -3063,3 +3063,22 @@ in place before the crash now. A process upgrading itself, and a second
 rollout of one process (two nemeses of one name undoing each other),
 panic with the fix.
 
+## 48. Bounded response (T7d)
+
+An eventual val passes code that recovers, however slowly; a deadline is
+a property of its own. A binding's `within` (after a val, another within
+a bound) is judged after a run's check, on the states quint's replay
+reached (its ITF, written for such a binding whatever the options), each
+timed by the step that reached it. Each time After becomes true (a
+rising edge: a second trigger opens a second obligation), Holds must hold
+in a state no later than the bound: later, or never in a run that
+settled or went on past the bound, fails, with the trigger's step and
+what came of it; never in a run that ended before its bound, unsettled,
+is not judged, as an eventual val of an unsettled run is not (an info
+issue says so). The vals are the Go evaluator's to compute on quint's
+states: the states are quint's, and a val the evaluator refuses is no
+verdict, said as a warning. A verdict depends on the steps' times then,
+which a cache keyed by the steps alone ignored: qtest's gave a slow run
+the fast one's verdict, so caches key by `Checker.Key`, with the times
+for such a binding, and qhegel does no prefix reuse for one.
+

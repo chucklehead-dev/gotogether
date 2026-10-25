@@ -245,9 +245,11 @@ under a week, M two to four, L more.
     multi-case select (done); qhistory's strict serializability
     (done: `StrictSerializable`, real-time edges from `Txn.Invoked` and
     `Completed`, checked against brute force).
-  - **d (M). Bounded response**: a binding's `within:` (after a val,
-    another within a virtual-time bound), n/a for a run cut short.
-    Example: lease's SlowTakeover.
+  - **d (M). Bounded response. Done** (DESIGN §48): a binding's `within:`
+    (after a val, another within a bound), not judged for a run cut
+    short; `Checker.Key` for verdict caches. The example moves to T8
+    (raftkv's election within a bound of a heal): lease's model has no
+    takeover to bound.
   - **e (L). Hidden actions and partial logs**, then online validation:
     the state set closed under hidden actions between recorded steps, by
     the evaluator, its "no path" confirmed by a proof. Example: quorumkv

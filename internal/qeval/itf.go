@@ -3,6 +3,7 @@ package qeval
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/chucklehead-dev/gotogether/itf"
 )
@@ -84,4 +85,23 @@ func FromITF(v itf.Value) (Value, error) {
 		return Variant{Label: v.Tag, Val: inner}, nil
 	}
 	return nil, fmt.Errorf("qeval: an ITF value of kind %d", v.Kind)
+}
+
+// StateOf is an ITF state (quint's) as the model's State: each of its
+// variables by its name's last segment, as ITF names them.
+func StateOf(m *Model, st itf.State) (State, error) {
+	out := State{}
+	for _, v := range m.Vars {
+		short := v[strings.LastIndex(v, ":")+1:]
+		x, ok := st.Vars[short]
+		if !ok {
+			return nil, fmt.Errorf("qeval: the ITF state has no %s", short)
+		}
+		val, err := FromITF(x)
+		if err != nil {
+			return nil, err
+		}
+		out[v] = val
+	}
+	return out, nil
 }

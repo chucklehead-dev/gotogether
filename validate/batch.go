@@ -38,7 +38,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		}
 		base = d
 	}
-	opt := c.Options
+	opt := c.withinITF(c.Options)
 	opt.Dir = base
 	// A chunk of several traces is replayed by quint's TypeScript backend
 	// unless a backend was chosen: with the Rust backend `quint test`
@@ -152,6 +152,13 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		}(ch)
 	}
 	wg.Wait()
+	for _, ch := range chunks {
+		for _, it := range ch.items {
+			if errs[it.run] == nil {
+				c.judgeWithin(it.trace, it.res)
+			}
+		}
+	}
 	for i, err := range c.shadowRuns(runs) {
 		if errs[i] == nil {
 			errs[i] = err

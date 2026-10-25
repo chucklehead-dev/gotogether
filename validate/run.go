@@ -151,10 +151,11 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 	traces, issues := qtrace.Reconstruct(steps)
 	rep := &Report{Issues: issues}
 	for _, t := range traces {
-		r, err := validateTrace(ctx, c.Binding, c.Model, t, c.Options)
+		r, err := validateTrace(ctx, c.Binding, c.Model, t, c.withinITF(c.Options))
 		if err != nil {
 			return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
 		}
+		c.judgeWithin(t, r)
 		rep.Actors = append(rep.Actors, r)
 	}
 	if err := c.shadowRuns([][]qtrace.Step{steps})[0]; err != nil {

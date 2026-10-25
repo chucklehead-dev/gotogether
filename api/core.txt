@@ -38,6 +38,7 @@ type Binding struct
     field Actions map[string]Action `yaml:"actions"`
     field Invariants []string `yaml:"invariants"`
     field Eventually []string `yaml:"eventually"`
+    field Within []Within `yaml:"within"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
@@ -72,6 +73,7 @@ type EvalModule struct
     field Expects map[string]string
     field Invariants map[string]string
     field Eventually map[string]string
+    field Vals map[string]string
 type Generated struct
     field Module string
     field Text string
@@ -140,6 +142,12 @@ type Simulation struct
     field VerifySteps int `yaml:"verifySteps"`
     field VerifySkip string `yaml:"verifySkip"`
 type TestSet int
+type Within struct
+    field After string `yaml:"after"`
+    field Holds string `yaml:"holds"`
+    field Bound time.Duration `yaml:"-"`
+    field BoundText string `yaml:"bound"`
+    method (Within) Name() string
 
 == github.com/chucklehead-dev/gotogether/connect
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
@@ -1487,6 +1495,7 @@ type Checker struct
     field Options Options
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
+    method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
@@ -1514,6 +1523,7 @@ type InvariantResult struct
     field Verdict Verdict
     field Failure *Failure
     field Eventually bool
+    field Within bool
 type Options struct
     field Quint string
     field Backend string

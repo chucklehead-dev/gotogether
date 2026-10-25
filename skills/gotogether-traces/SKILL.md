@@ -57,6 +57,8 @@ actions:
     expect: 'balances.get({{.account}}) == {{.obs.balance}}'
 invariants: [noOverdraft]
 eventually: [noPending]          # must hold in the last state (a run that settled)
+within:                          # bounded response: after a val, another within a time
+  - { after: overdrawn, holds: alerted, bound: 5s }
 ```
 
 A parameter with no template is the step field of its name; give a

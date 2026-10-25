@@ -103,6 +103,25 @@ Where nobody records `settle` (real Maelstrom), the property holds
 vacuously. Say so in the README, and rely on the environment's own final
 checks there.
 
+"Eventually" passes code that recovers, however slowly. A bound is a
+binding's `within`:
+
+```yaml
+within:
+  - after: healed     # a val: each time it becomes true...
+    holds: hasLeader  # ...this val must hold
+    bound: 3s         # ...within this much virtual (or recorded) time
+```
+
+It is judged on the replay's states, each timed by the step that reached
+it: a response after the bound fails, as does none in a run that settled
+or went on past the bound; a run cut short before its bound is not
+judged (an info issue says so). Claim it as reports name it:
+`qtest.Violates("within 3s after healed: hasLeader")`. Record the steps
+that make both vals change: a response the code reaches but never
+records counts as late. Its vals are computed by the Go evaluator on
+quint's states; one it cannot evaluate is no verdict, said as an issue.
+
 ## 6. Spec model vs mechanism model, plus a lemma
 
 When the spec model's state grows with the run (every issued id), a

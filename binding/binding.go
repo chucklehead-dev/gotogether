@@ -15,6 +15,7 @@ import (
 	"strings"
 	"text/template"
 	"text/template/parse"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"gopkg.in/yaml.v3"
@@ -61,11 +62,34 @@ type Binding struct {
 	// a run cut short. Every check honours it: explorations, Record,
 	// Validate, qhegel and the CLI.
 	Eventually []string `yaml:"eventually"`
+	// Within are bounded-response obligations: each time a val (After)
+	// becomes true, another (Holds) must hold within Bound of virtual (or
+	// recorded) time, in the replay's states, timed by their steps. A
+	// trace that ends before the bound with the obligation open is no
+	// verdict, unless it recorded its system settled (nothing changes
+	// after). Every check of a run honours it.
+	Within []Within `yaml:"within"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.
 	Simulate *Simulation `yaml:"simulate"`
 
 	Dir string `yaml:"-"` // directory of the binding file
+}
+
+// A Within is a bounded-response obligation (Binding.Within): after After
+// becomes true, Holds within Bound ("3s", "500ms").
+type Within struct {
+	After string        `yaml:"after"`
+	Holds string        `yaml:"holds"`
+	Bound time.Duration `yaml:"-"`
+	// BoundText is the bound as written
+	BoundText string `yaml:"bound"`
+}
+
+// Name is how a result names the obligation among a run's invariants:
+// "within 3s after healed: hasLeader". qtest.Violates takes it so.
+func (w Within) Name() string {
+	return fmt.Sprintf("within %s after %s: %s", w.BoundText, w.After, w.Holds)
 }
 
 // Simulation is how the model runs on its own (`quint run`), and what it
@@ -134,6 +158,14 @@ func Load(path string) (*Binding, error) {
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
+	for i := range bd.Within {
+		w := &bd.Within[i]
+		d, err := time.ParseDuration(w.BoundText)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %s: bound %q: %v (a Go duration: 3s, 500ms)", path, w.Name(), w.BoundText, err)
+		}
+		w.Bound = d
+	}
 	return &bd, nil
 }
 
@@ -191,6 +223,16 @@ func (b *Binding) Lint(m *Model) []string {
 	for _, ev := range b.Eventually {
 		if !m.Vals[ev] {
 			errs = append(errs, fmt.Sprintf("eventually %s: not a val of %s", ev, m.Module))
+		}
+	}
+	for _, w := range b.Within {
+		for _, v := range []string{w.After, w.Holds} {
+			if !m.Vals[v] {
+				errs = append(errs, fmt.Sprintf("%s: %q is not a val of %s (within takes vals: after, holds)", w.Name(), v, m.Module))
+			}
+		}
+		if w.Bound <= 0 {
+			errs = append(errs, fmt.Sprintf("%s: no bound: give a positive duration (bound: 3s)", w.Name()))
 		}
 	}
 	for _, c := range sortedNames(m.Consts) {

@@ -1,0 +1,12 @@
+# within.qnt's steps; a leader within 3s of a heal
+spec: within.qnt
+module: within
+actions:
+  crash: {}
+  heal: {}
+  elect: {}
+  tick: {}
+within:
+  - after: healed
+    holds: hasLeader
+    bound: 3s

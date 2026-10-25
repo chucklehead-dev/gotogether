@@ -135,6 +135,9 @@ type InvariantResult struct {
 	// Eventually: an eventual val (binding's Eventually), judged in the
 	// last state of a settled trace, named EventuallyName(val)
 	Eventually bool
+	// Within: a bounded-response obligation (binding's Within), judged on
+	// the replay's timed states, named by binding.Within.Name
+	Within bool
 }
 
 // EventuallyName is how a result names an eventual val (binding's
@@ -677,6 +680,9 @@ func (f *Failure) describe(pfx string) string {
 		} else {
 			fmt.Fprintf(&b, "%sviolated after step %d\n", pfx, f.Index+1)
 		}
+	case "within":
+		// the obligation's story: when it opened, and what came of it
+		fmt.Fprintf(&b, "%s%s\n", pfx, f.Note)
 	default:
 		fmt.Fprintf(&b, "%sfailed at step %d\n", pfx, f.Index+1)
 	}
@@ -691,7 +697,7 @@ func (f *Failure) describe(pfx string) string {
 			fmt.Fprintf(&b, "%s  binding:  %s\n", pfx, t)
 		}
 	}
-	if f.Step == nil && f.Note != "" {
+	if f.Step == nil && f.Note != "" && f.Kind != "within" {
 		fmt.Fprintf(&b, "%s  observed: %s\n", pfx, f.Note)
 	}
 	if s := f.Step; s != nil {
