@@ -2947,10 +2947,12 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   wrongly accepted needs nothing: its extensions were judged in turn. A
   proof quint contradicts searches again with quint alone, and says so;
   a search cut short has no proof, and is quint's. The same holds for
-  the invariants' second search. A guided search the budget stopped
-  before the complete one began is now no verdict (it had claimed one
-  when the budget ran out exactly as its moves did). The caller's check
-  of the order is quint's, as before.
+  the invariants' second search. A merge assumes that equal states have
+  equal futures: the key holds, beside the model's state, the order the
+  candidate's processes first appear in (which numbers them for
+  `{{.process}}`) and, with inferred restarts, its last process (a review
+  found two prefixes of one state numbering their processes otherwise,
+  merged). The caller's check of the order is quint's, as before.
 - **Checked against quint.** Every binding's model, in its binding's
   instance, against `quint run`'s traces (each state one of the
   evaluator's successors of the one before), and a table of builtins at

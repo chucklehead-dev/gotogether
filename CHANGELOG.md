@@ -17,8 +17,8 @@ The first release. What a user meets, by module:
   the evaluator cannot evaluate is quint's. quorumkv's faithful
   exploration took 13 s, 20 s with quint alone; its contended mutants
   62 s, 337 s. `binding.EvalModule` writes the module the evaluator
-  reads. `GOTOGETHER_EVAL=quint` turns it off. A guided linearization
-  the budget stops before its complete search begins is no verdict.
+  reads. `GOTOGETHER_EVAL=quint` turns it off. Two prefixes merge
+  only when their processes are numbered alike.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,
   now searched side by side) of such a history checks it without a

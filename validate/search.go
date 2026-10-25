@@ -494,11 +494,24 @@ func verdictOf(f int) string {
 	return fmt.Sprintf("it fails at step %d", f+1)
 }
 
-// withProcess is a conforming candidate's state, with the process its last
-// step ran in when the binding infers restarts: the restart it inserts
-// next depends on it.
+// withProcess is a conforming candidate's state, with what of its
+// processes its extensions depend on beyond the model's state: the order
+// they first appear in, which numbers them ({{.process}}, procs: two
+// prefixes of one state and other numberings render the next step
+// otherwise), and, when the binding infers restarts, the last one (the
+// restart it inserts next depends on it).
 func withProcess(ch *Checker, state string, order []qtrace.Step) string {
-	if state != "" && ch.Binding.Restart != "" && len(order) > 0 {
+	if state == "" || len(order) == 0 {
+		return state
+	}
+	var procs []string
+	for _, s := range order {
+		if !slices.Contains(procs, s.Process) {
+			procs = append(procs, s.Process)
+		}
+	}
+	state += "|processes=" + strings.Join(procs, ",")
+	if ch.Binding.Restart != "" {
 		state += "|process=" + order[len(order)-1].Process
 	}
 	return state

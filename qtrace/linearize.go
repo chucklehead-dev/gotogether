@@ -359,8 +359,8 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		}
 		return render(cur), false, tried, false
 	}
-	// the budget ran out before the complete search began: whatever stopped
-	// the guided search, no verdict
+	// the complete search tried nothing (a budget under 1): whatever
+	// stopped the guided search, no verdict
 	return render(cur), false, tried, true
 }
 

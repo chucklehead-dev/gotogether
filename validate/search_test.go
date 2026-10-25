@@ -537,3 +537,58 @@ func actions(o []qtrace.Step) []string {
 	}
 	return out
 }
+
+// Two prefixes of one model state merge only when their extensions render
+// alike: the processes' numbering ({{.process}} numbers them by first
+// appearance) is part of the key, not only the last one restarts read.
+func TestMergeKeyHoldsTheProcessNumbering(t *testing.T) {
+	ch := &Checker{Binding: &binding.Binding{Restart: "restart"}}
+	at := func(action, process string) qtrace.Step { return qtrace.Step{Action: action, Process: process} }
+	p1 := []qtrace.Step{at("x", "p1"), at("y", "p2"), at("z", "p2")}
+	p2 := []qtrace.Step{at("y", "p2"), at("x", "p1"), at("z", "p2")}
+	if withProcess(ch, "s", p1) == withProcess(ch, "s", p2) {
+		t.Errorf("prefixes that number their processes otherwise share a key: %q", withProcess(ch, "s", p1))
+	}
+	if withProcess(ch, "", p1) != "" {
+		t.Errorf("a candidate with no state has a key")
+	}
+}
+
+// A proof is confirmed when quint rejects every dropped prefix and gives
+// each merged pair one state; contradicted when it accepts a dropped
+// prefix, rejects a merged one or gives a pair two states; unconfirmed
+// when it wrote no state.
+func TestConfirmsAProof(t *testing.T) {
+	a, b, c := []qtrace.Step{{Action: "a"}}, []qtrace.Step{{Action: "b"}}, []qtrace.Step{{Action: "c"}}
+	proof := &qtrace.Proof{Rejected: [][]qtrace.Step{a}, Merged: [][2][]qtrace.Step{{b, c}}}
+	quint := func(fa int, sb, sc string) func([][]qtrace.Step) ([]int, []string) {
+		return func(orders [][]qtrace.Step) ([]int, []string) {
+			if len(orders) != 3 {
+				t.Fatalf("%d orders in the batch, want 3", len(orders))
+			}
+			fs, st := []int{fa, -1, -1}, []string{"", sb, sc}
+			if sb == "rejected" {
+				fs[1], st[1] = 0, ""
+			}
+			return fs, st
+		}
+	}
+	for _, x := range []struct {
+		name    string
+		quint   func([][]qtrace.Step) ([]int, []string)
+		verdict int
+	}{
+		{"agrees", quint(0, "s", "s"), confirmed},
+		{"accepts a dropped prefix", quint(-1, "s", "s"), contradicted},
+		{"two states", quint(0, "s", "t"), contradicted},
+		{"rejects a merged prefix", quint(0, "rejected", "s"), contradicted},
+		{"no state", quint(0, "", ""), unconfirmed},
+	} {
+		if got := confirms(proof, x.quint); got != x.verdict {
+			t.Errorf("%s: %d, want %d", x.name, got, x.verdict)
+		}
+	}
+	if confirms(&qtrace.Proof{}, nil) != contradicted {
+		t.Errorf("an empty proof confirmed")
+	}
+}
