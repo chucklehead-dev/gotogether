@@ -155,16 +155,17 @@ jobs:
           done
 
   evaluator-shadow:
-    # the Go evaluator against quint on every batch it judges in the
-    # searching examples (GOTOGETHER_EVAL=shadow): a disagreement fails the
-    # test, naming the candidate. Quint checks everything too, so it takes
-    # what quint alone does.
+    # the Go evaluator against quint (GOTOGETHER_EVAL=shadow) on every
+    # batch a search judges and on each actor of every run checked, in
+    # every example: a disagreement fails the test, naming the candidate.
+    # Quint checks everything too, so it takes what quint alone does, and
+    # more.
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        example: [kvstore, quorumkv, wallet]
+        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -175,7 +176,7 @@ jobs:
           node-version: 22
       - name: Install quint
         run: ci/install-quint.sh
-      - name: the searching tests, every batch checked by both
+      - name: the tests, every judgement checked by both
         working-directory: examples/${{ matrix.example }}
         run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ./...
       - name: the core's searches, checked by both

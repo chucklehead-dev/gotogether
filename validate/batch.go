@@ -152,6 +152,21 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		}(ch)
 	}
 	wg.Wait()
+	if evalMode() == "shadow" {
+		for i := range runs {
+			if errs[i] != nil {
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				errs[i] = c.shadowRun(runs[i])
+			}()
+		}
+		wg.Wait()
+	}
 	for i := range reports {
 		if errs[i] != nil {
 			reports[i] = nil

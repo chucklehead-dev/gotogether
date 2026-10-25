@@ -38,7 +38,8 @@ AGENTS.md has the general requirements.
   binding's evaluation module, compiled once into
   $TMPDIR/gotogether-eval/, and quint confirms the search's conclusion).
   `GOTOGETHER_EVAL=shadow` judges with both, every batch the evaluator
-  judges checked by quint too, and fails the search on a disagreement,
+  judges checked by quint too, and each actor of every run checked
+  (Check, CheckBatch) judged by both, and fails on a disagreement,
   naming the candidate (the nightly's `evaluator-shadow`; as slow as
   quint alone).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and

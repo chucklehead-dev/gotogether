@@ -24,8 +24,8 @@ The first release. What a user meets, by module:
   one is wrong; qtest and the CLI do. quorumkv's faithful exploration then took
   4 s, its contended mutants 43 s, wallet's pending transfers 12 s (44 s
   before). `GOTOGETHER_EVAL=quint` turns it off; `GOTOGETHER_EVAL=shadow`
-  checks every batch it judges with quint too, failing on a
-  disagreement (nightly). Two prefixes merge
+  checks every batch it judges with quint too, and judges each actor of
+  every run checked with both, failing on a disagreement (nightly). Two prefixes merge
   only when their processes are numbered alike.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,

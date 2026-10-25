@@ -62,6 +62,61 @@ func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtra
 	}
 }
 
+// shadowRun is, under GOTOGETHER_EVAL=shadow, a run's check shadowed:
+// each actor's steps, on one thread in the order checked, judged by the
+// evaluator and by quint (one more quint process an actor), a
+// disagreement the check's error. It covers every binding a run is
+// checked against, where the searches' shadow covers only theirs. A
+// search's candidates (c.within set) are its shadow's, and an actor the
+// evaluator refuses is quint's alone.
+func (c *Checker) shadowRun(steps []qtrace.Step) (err error) {
+	if evalMode() != "shadow" || c.within != nil {
+		return nil
+	}
+	e := evaluatorFor(c)
+	if e.err != nil {
+		return nil
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			se, ok := r.(searchError)
+			if !ok {
+				panic(r)
+			}
+			err = se
+		}
+	}()
+	traces, _ := qtrace.Reconstruct(steps)
+	inv := len(c.Binding.Invariants) > 0
+	for _, tr := range traces {
+		if len(tr.Steps) == 0 {
+			continue
+		}
+		a := nameOf(tr.Actor)
+		order := make([]qtrace.Step, len(tr.Steps))
+		for i, s := range tr.Steps {
+			s.Recorder, s.Thread, s.Seq, s.Order, s.Call = "shadow:"+tr.Actor, "shadow", uint64(i+1), nil, 0
+			order[i] = s
+		}
+		ch := within(c, tr)
+		f, _, jerr := e.judge(ch, tr, settledAs(tr, [][]qtrace.Step{order})[0], len(order), inv)
+		if jerr != nil {
+			continue
+		}
+		// quint's replay in a directory of its own: checks run side by side
+		dir, derr := os.MkdirTemp("", "gotogether-shadow-")
+		if derr != nil {
+			return derr
+		}
+		ch.Options.Dir = dir
+		func() {
+			defer os.RemoveAll(dir)
+			shadowCheck(a, [][]qtrace.Step{order}, []int{f}, quintChecker(ch, tr, a, inv))
+		}()
+	}
+	return nil
+}
+
 // stepsString is an order's steps, one line.
 func stepsString(o []qtrace.Step) string {
 	parts := make([]string, len(o))

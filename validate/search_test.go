@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -878,5 +879,41 @@ func TestShadowMode(t *testing.T) {
 				t.Errorf("a wrong evaluator in shadow: err %v", err)
 			}
 		})
+	}
+}
+
+// Under shadow a run's check is shadowed too, actor by actor: every
+// binding a run is checked against, not only the searches'. A right
+// evaluator checks as without it; a wrong one is the check's error.
+func TestShadowChecksRuns(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	t.Setenv("GOTOGETHER_EVAL", "shadow")
+	defer hooks.TamperEval.Store(0)
+	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
+	steps := []qtrace.Step{
+		{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
+		{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Args: map[string]any{"amount": int64(3)}, Obs: map[string]any{"balance": int64(7)}},
+	}
+	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []func() error{
+		func() error { _, err := c.Check(context.Background(), steps); return err },
+		func() error {
+			_, errs := c.CheckBatch(context.Background(), [][]qtrace.Step{steps, steps}, 0)
+			return errors.Join(errs...)
+		},
+	} {
+		hooks.TamperEval.Store(0)
+		if err := check(); err != nil {
+			t.Errorf("a right evaluator: %v", err)
+		}
+		hooks.TamperEval.Store(1)
+		if err := check(); err == nil || !strings.Contains(err.Error(), "GOTOGETHER_EVAL=shadow") {
+			t.Errorf("a wrong evaluator: %v", err)
+		}
 	}
 }

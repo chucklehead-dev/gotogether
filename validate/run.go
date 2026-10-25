@@ -154,6 +154,9 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 		}
 		rep.Actors = append(rep.Actors, r)
 	}
+	if err := c.shadowRun(steps); err != nil {
+		return rep, err
+	}
 	return rep, nil
 }
 

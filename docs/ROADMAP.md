@@ -139,11 +139,11 @@ under a week, M two to four, L more.
     claim is judged in its history's instance (identifiers interned in the
     history's order) and the run's check in the order's: the same verdict
     only for a model symmetric in interned identifiers, which a check of
-    the claim in the check's instance would not need;
-    quint-confirmed single steps in validate's shape for every binding.
-    `GOTOGETHER_EVAL=shadow` judges with both and fails a search on a
-    disagreement, nightly on the searching examples and the core's search
-    tests (`evaluator-shadow`). Not done, by measurement: extending each
+    the claim in the check's instance would not need.
+    `GOTOGETHER_EVAL=shadow` judges with both, a search's batches and
+    each actor of every run checked, and fails on a disagreement,
+    nightly on every example and the core's search tests
+    (`evaluator-shadow`). Not done, by measurement: extending each
     candidate from its prefix's held state rather than replaying it from
     init (the contended mutants spend 2.3 s of 32 s in Go, the rest in
     quint processes); a Hegel property drawing states against quint

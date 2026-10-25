@@ -2960,8 +2960,11 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   gives the same verdict, and one made wrong is caught by the
   confirmation. `GOTOGETHER_EVAL=shadow` checks every batch the
   evaluator judges with quint too, failing the search on any
-  disagreement of a failure index; the nightly runs the searching
-  examples so, where the histories are the ones users' runs make.
+  disagreement of a failure index, and each actor of every run a
+  Checker checks judged by both too (on one thread, in the order
+  checked): every binding a run is checked against, not only the
+  searches'. The nightly runs every example so, where the histories are
+  the ones users' runs make.
 
 - **Confirmed by the run's check.** An order found was confirmed by a
   quint process of its own, and then replayed by quint again in the
