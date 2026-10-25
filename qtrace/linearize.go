@@ -312,6 +312,17 @@ func before(a, b Step) bool {
 	return a.Time.Add(RealTimeSlack).Before(b.Time)
 }
 
+// orderKey is an order of indices as a memo's key: one key per order
+// (the separators keep [1, 12] and [11, 2] apart).
+func orderKey(order []int) string {
+	var b strings.Builder
+	for _, k := range order {
+		b.WriteString(strconv.Itoa(k))
+		b.WriteByte(',')
+	}
+	return b.String()
+}
+
 // linearizeWith is linearizePending: steps are nodes 0..n-1, pending calls
 // n..n+m-1, which no order needs.
 func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
@@ -354,12 +365,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 		}
 		return bound[[2]int{a, b}]
 	}
-	actor := ""
-	if n > 0 {
-		actor = steps[0].Actor
-	} else {
-		actor = pending[0].Actor
-	}
+	actor := steps[0].Actor // steps is not empty: an empty history returned above
 	render := func(order []int) []Step {
 		var req []int
 		for _, k := range order {
@@ -398,14 +404,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 		}
 		return c == n
 	}
-	key := func(order []int) string {
-		var b strings.Builder
-		for _, k := range order {
-			b.WriteString(strconv.Itoa(k))
-			b.WriteByte(',')
-		}
-		return b.String()
-	}
+	key := orderKey
 	// judge checks orders of indices, memoized by prefix: an order that
 	// fails at step f has its prefixes up to f accepted and the one through
 	// f rejected (an extension of it fails there too); one that conforms,
@@ -416,6 +415,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 	// it may make hold: its extensions are judged.
 	accepted, rejected := map[string]bool{}, map[string]bool{}
 	stateOf := map[string]string{} // an accepted order's state, when check knows it
+	whole := map[string]int{}      // a complete order's verdict: the same each time it is asked
 	judge := func(orders [][]int) []int {
 		out := make([]int, len(orders))
 		var ask []int
@@ -425,6 +425,10 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 			// complete search's order: this and the marking below are guards)
 			if accepted[key(o)] && !complete(o) {
 				out[i] = -1
+				continue
+			}
+			if f, ok := whole[key(o)]; ok { // a complete order judged before (the guided search's, again in the complete one)
+				out[i] = f
 				continue
 			}
 			for l := 1; l <= len(o); l++ {
@@ -451,6 +455,9 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 				stateOf[key(o)] = states[j]
 			}
 			out[ask[j]] = f
+			if complete(o) {
+				whole[key(o)] = f
+			}
 			upTo := len(o)
 			if f >= 0 {
 				upTo = f

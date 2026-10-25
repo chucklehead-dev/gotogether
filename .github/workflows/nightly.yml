@@ -78,8 +78,19 @@ jobs:
         # (internal/depgraph: sorting the nodes Tarjan visits, whose
         # components are sorted after)
         include:
-          - pkg: qtrace # a ratchet, not yet read: 56 of 167 (linearize 19, step 13, reconstruct 11, filter 8)
-            max: 56
+          # qtrace: 16 of 236, each read. Equivalent: realTime's loop bounds
+          # (33, 35, 38: earliest[0] is never read, earliest[k] >= k); a seq
+          # equal to a Call or a pending call's own (47, 53: that record is
+          # never among the steps); a rejected order's state (77: never
+          # read); a budget's last turn (85, 110, 113, 114: it checks
+          # nothing); a reorder at the first step (94: nothing to move);
+          # the comparator's < on values never equal (151, 152); the time
+          # key left in a line's attributes (27: nothing reads it); the
+          # assumed mark inverted for every step alike (30: the same groups
+          # of equal keys). 103 ties the guided search's best move
+          # otherwise: another path, the same verdicts.
+          - pkg: qtrace
+            max: 16
           - pkg: qhistory
             max: 0
           - pkg: internal/depgraph

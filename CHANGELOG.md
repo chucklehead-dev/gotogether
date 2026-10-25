@@ -189,6 +189,10 @@ The first release. What a user meets, by module:
   `qtest.Run.Recorded` holds the steps as recorded beside `Steps`, the
   steps judged; `Chooser`'s doc gives the ChooseTask and ChooseNemesis
   protocols the scheduler looks for.
+- Linearize remembers a complete order's verdict: the guided search's
+  orders were asked again in the complete search (found by qtrace's
+  mutation testing, S8, whose survivors fell from 55 to 16 of 236, each
+  left one an equivalent the nightly names).
 - A newcomer's frictions (S7): `Network.OnHeal` runs once per cut that
   ends (Heal, the nemesis, CutLength, Settle), so heals are recorded as
   cuts are; `gotogether lint -binding a.yaml,b.yaml -src .` lints one
