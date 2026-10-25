@@ -35,6 +35,9 @@ The first release. What a user meets, by module:
   indeterminate calls (`qtrace.LinearizePending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
+- Steered exploration branches a run from where it first found something
+  new (the choices that led to it, kept), not from anywhere in it: the
+  journal's rare restart in 43 of 200 runs, 7 before.
 - `gotogether lint -sim` (and quintvet) flags math/rand's, math/rand/v2's
   and crypto/rand's package functions, and a select of two or more
   cases: neither replays. It names `math/rand/v2` as `rand`, not `v2`.

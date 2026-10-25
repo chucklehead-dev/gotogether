@@ -222,8 +222,8 @@ func (s *fileSource) next([]*Run) []planned {
 
 // steerSource runs n more runs after the runs before it (the seeds' and
 // the corpus's), each a run that found a feature no earlier run had,
-// replayed up to a random choice and then made on a fresh seed (of
-// seeded). Parents and cuts are drawn from a generator of the
+// replayed up to a random choice from where it first reached one (so the
+// branch keeps what was new) and then made on a fresh seed (of seeded). Parents and cuts are drawn from a generator of the
 // exploration's id, and each batch's features are counted in order, so
 // the steered runs are the same every time. Each run's choices are saved
 // to a file in dir, which a reproduce line names
@@ -237,21 +237,31 @@ type steerSource struct {
 
 	started bool
 	seen    map[string]bool
-	pool    []*Run
+	pool    []parent
 	rng     *rand.Rand
 	k, last int // runs planned so far, and in the last batch
 }
 
+// A parent is a run steering branches from, at or after at: the choices
+// that led to its first new feature (-1: anywhere).
+type parent struct {
+	run *Run
+	at  int
+}
+
 // grow adds r to the pool if it found a feature no earlier run had.
 func (s *steerSource) grow(r *Run) {
-	fresh := false
+	fresh, at := false, -1
 	for _, f := range features(r) {
-		if !s.seen[f] {
-			s.seen[f], fresh = true, true
+		if !s.seen[f.name] {
+			s.seen[f.name], fresh = true, true
+			if f.at >= 0 && (at < 0 || f.at < at) {
+				at = f.at
+			}
 		}
 	}
 	if fresh && len(r.Choices) > 0 {
-		s.pool = append(s.pool, r)
+		s.pool = append(s.pool, parent{r, at})
 	}
 }
 
@@ -292,8 +302,9 @@ func (s *steerSource) next(done []*Run) []planned {
 	batch := min(s.parallel, s.n-s.k)
 	out := make([]planned, batch)
 	for i := range batch {
-		parent := s.pool[s.rng.IntN(len(s.pool))]
-		cut := s.rng.IntN(len(parent.Choices) + 1)
+		p := s.pool[s.rng.IntN(len(s.pool))]
+		parent, from := p.run, max(p.at, 0)
+		cut := from + s.rng.IntN(len(parent.Choices)-from+1)
 		seed := uint64(1)<<40 + uint64(s.k+i+1)
 		out[i] = planned{
 			origin:  origin{kind: "choices", value: filepath.Join(s.dir, fmt.Sprintf("%d.json", s.k+i+1)), from: s.x.nameOf(parent)},

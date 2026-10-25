@@ -21,11 +21,11 @@ func journalSystem() System {
 		defer s.Close()
 		s.Spawn("writer", func(ctx context.Context) {
 			written, fails := 0, 0
-			for range 6 {
+			for i := range 6 {
 				if s.FaultOf(disk) == "fail" {
 					fails++
 					qobs.Record(ctx, "writeFail", nil, "obs.written", written, "obs.fails", fails)
-					if fails == 3 {
+					if fails == 3 && i < 5 { // a restart with attempts left, as the model has it (steering once found one after the last)
 						qobs.Record(ctx, "restart", nil, "obs.written", written)
 						return
 					}
@@ -59,7 +59,7 @@ func TestSteer(t *testing.T) {
 	steered := sys.Explore(t, ExploreConfig{Seeds: 20, Steer: 180})
 	p, s := restarted(plain), restarted(steered)
 	t.Logf("restarts: %d of 200 seeds, %d of 20 seeds and 180 steered runs", p, s)
-	if s <= p || s < 3 {
+	if s <= p || s < 20 { // branching where a run first found something: 43; anywhere in it, 7
 		t.Fatalf("steering reached the restart in %d runs, uniform seeds in %d", s, p)
 	}
 	steered.Expect(t, Conforms())

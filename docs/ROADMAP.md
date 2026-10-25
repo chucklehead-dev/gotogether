@@ -239,9 +239,11 @@ under a week, M two to four, L more.
     moves to T8 (raftkv's nodes upgrade naturally): quorumkv's
     NewTiebreak needs its clients versioned with its replicas, which are
     no processes.
-  - **c (S). Polish**: Steer cutting where a feature appeared, features as
-    counts; qhistory's strict serializability (real-time edges); qlint
-    flagging math/rand and multi-case select.
+  - **c (S). Polish**: Steer cutting where a feature appeared (done: the
+    journal's restart in 43 steered runs of 180, 7 before; features as
+    counts measured no gain there, not done); qlint flagging math/rand and
+    multi-case select (done); qhistory's strict serializability
+    (real-time edges).
   - **d (M). Bounded response**: a binding's `within:` (after a val,
     another within a virtual-time bound), n/a for a run cut short.
     Example: lease's SlowTakeover.

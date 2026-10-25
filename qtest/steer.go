@@ -11,32 +11,63 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
-// features are what a run reached, as steering tells runs apart: each
-// model step's action, outcome and observed state (its obs values, the
-// model state the step projects), each fault made, each code block run
-// (under qweave -cover). A run with one no earlier run had found
-// something new.
-func features(r *Run) []string {
-	var fs []string
-	for _, s := range r.Steps {
+// A feature is something a run reached, as steering tells runs apart,
+// and where: at is how many of the run's choices lead to it (a steered
+// run that keeps that many reaches it again, and branches from there),
+// -1 when no choice tells (a code block).
+type feature struct {
+	name string
+	at   int
+}
+
+// features are what a run reached: each model step's action, outcome and
+// observed state (its obs values, the model state the step projects),
+// each fault made, each code block run (under qweave -cover), where it
+// first reached it. A run with one no earlier run had found something
+// new. (Counting them as AFL does, a second reach its own feature, bred
+// no more of the journal's rare restart, observed or not: not done.)
+func features(r *Run) []feature {
+	var fs []feature
+	seen := map[string]bool{}
+	add := func(name string, at int) {
+		if !seen[name] {
+			seen[name] = true
+			fs = append(fs, feature{name, at})
+		}
+	}
+	// a step is reached by the choices made before the step after it
+	recorded := r.Recorded
+	if recorded == nil {
+		recorded = r.Steps
+	}
+	model := 0
+	for _, s := range recorded {
 		if !s.Model() {
 			continue
 		}
+		model++
 		obs := make([]string, 0, len(s.Obs))
 		for k, v := range s.Obs {
 			obs = append(obs, fmt.Sprintf("%s=%v", k, v))
 		}
 		sort.Strings(obs)
-		fs = append(fs, fmt.Sprintf("step %s/%s %s", s.Action, s.Outcome, strings.Join(obs, ",")))
+		at := len(r.Choices)
+		for j, c := range r.Choices {
+			if c.Step >= model {
+				at = j
+				break
+			}
+		}
+		add(fmt.Sprintf("step %s/%s %s", s.Action, s.Outcome, strings.Join(obs, ",")), at)
 	}
-	for _, c := range r.Choices {
+	for j, c := range r.Choices {
 		if qenv.IsFault(c.Kind) && c.Value != 0 {
-			fs = append(fs, fmt.Sprintf("fault %s=%d", c.Kind, c.Value))
+			add(fmt.Sprintf("fault %s=%d", c.Kind, c.Value), j+1)
 		}
 	}
 	if r.Code != nil {
 		for id := range r.Code.Hits() {
-			fs = append(fs, fmt.Sprintf("block %d", id))
+			fs = append(fs, feature{fmt.Sprintf("block %d", id), -1})
 		}
 	}
 	return fs
