@@ -31,6 +31,21 @@ The first release. What a user meets, by module:
   is no verdict at once, not searched again with quint alone at the same
   budget (minutes, for the same no verdict): raftkv's faithful
   exploration with two such runs took 82 s, now 5 s.
+- `None(...)` claims fail over runs with no verdict (a search out of its
+  budget): they once held of runs judged by nothing. A mutant with no
+  failing run and some without a verdict is `MutationReport.Undecided`
+  (it counted as killed), and `NoSurvivors` fails on it.
+- A claim's invariant names are checked against the binding's
+  invariants, eventual vals and bounded-response obligations, not only
+  the names some report carried: with none judged, a misspelled name held
+  for nothing.
+- A hidden-action search cut by `hiddenDepth` (one more hidden action
+  reaching a new state) is no verdict for a step it cannot take, an
+  invariant no path keeps or an eventual val no final state has: it was
+  a rejection.
+- A run's marked report copies its invariants: `Search.Mark` once wrote
+  n/a into the shared verdict cache's, for every later run of the same
+  steps.
 - A sleep or wait timed on a drifting clock lasts its interval rounded up
   in true time: rounded down, a wait of a nanosecond on a fast clock
   lasted none, and a loop that waits until its own monotonic clock

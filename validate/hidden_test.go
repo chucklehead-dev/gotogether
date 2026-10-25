@@ -52,7 +52,9 @@ func TestHiddenActions(t *testing.T) {
 		{"two rounds", 0, two, Pass},
 		// a to c is two hops: two rounds in one gap
 		{"two hops", 2, []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "c", 0, []int{1})}, Pass},
-		{"two hops, depth one", 1, []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "c", 0, []int{1})}, Fail},
+		// depth one leaves out a state two rounds away: no verdict, where it
+		// once said Fail
+		{"two hops, depth one", 1, []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "c", 0, []int{1})}, NotEvaluated},
 	} {
 		cc := *c
 		b := *c.Binding
@@ -126,6 +128,35 @@ func TestHiddenActions(t *testing.T) {
 	}
 }
 
+// A step that more hidden actions than the depth would enable is no
+// verdict, not a rejection: fire needs five ticks, the default depth is
+// four (it once said "not a transition of the model"); a depth of five
+// conforms.
+func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := NewChecker("testdata/ticks.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fire := []qtrace.Step{{Recorder: "r", Seq: 1, Actor: "t", Action: "fire", Args: map[string]any{}, Obs: map[string]any{}}}
+	rep, err := c.Check(context.Background(), fire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := rep.Actors[0]; a.Conforms != NotEvaluated || !strings.Contains(fmt.Sprint(a.Issues), "raise hiddenDepth") {
+		t.Errorf("fire past the depth: %s", rep.Summary())
+	}
+	cc := *c
+	b := *c.Binding
+	b.HiddenDepth = 5
+	cc.Binding = &b
+	if rep, err := cc.Check(context.Background(), fire); err != nil || rep.Actors[0].Conforms != Pass {
+		t.Errorf("fire within the depth: %v %v", err, rep)
+	}
+}
+
 // The search over hidden actions against brute force: the same model in
 // Go, every sequence of gossip rounds up to the depth before each step,
 // on random histories of writes and reads (some reads seeing what gossip
@@ -143,7 +174,7 @@ func TestHiddenAgainstBruteForce(t *testing.T) {
 	}
 	rng := rand.New(rand.NewPCG(13, 14))
 	nodes := []string{"a", "b", "c"}
-	counts := map[bool]int{}
+	counts := map[string]int{}
 	for trial := range 60 {
 		var steps []qtrace.Step
 		written := []int{}
@@ -173,12 +204,20 @@ func TestHiddenAgainstBruteForce(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := bruteGossip(steps, depth)
+		if rep.Actors[0].Conforms == NotEvaluated {
+			// cut by the depth: brute force, bounded the same, finds no path
+			if want {
+				t.Fatalf("trial %d (depth %d): no verdict, brute force conforms: %v\n%s", trial, depth, steps, rep.Summary())
+			}
+			counts["cut"]++
+			continue
+		}
 		if got := rep.Actors[0].Conforms == Pass; got != want {
 			t.Fatalf("trial %d (depth %d): the search %v, brute force %v, for %v\n%s", trial, depth, got, want, steps, rep.Summary())
 		}
-		counts[want]++
+		counts[fmt.Sprint(want)]++
 	}
-	if counts[true] == 0 || counts[false] == 0 {
+	if counts["true"] == 0 || counts["false"] == 0 {
 		t.Errorf("verdicts %v: the property compared too little", counts)
 	}
 }

@@ -260,6 +260,10 @@ type judgment struct {
 	ok   bool
 	show int
 	n    int // runs meeting (Some, None) or missing (All) the expectations
+	// unjudged are None's runs that meet none of its expectations but have
+	// no verdict to meet them with (a search out of budget): None holds of
+	// none of them, which once passed it over runs judged by nothing
+	unjudged int
 }
 
 func (e Expectation) judge(rs []*validate.Report) judgment {
@@ -333,21 +337,40 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 				if j.show < 0 {
 					j.show = i
 				}
+			} else if r == nil || undecided(r) {
+				j.unjudged++
 			}
 		}
 	}
-	j.ok = (q.kind == "some") == (j.n > 0)
+	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0
 	return j
+}
+
+// undecided reports whether some actor of the run has no verdict on its
+// conformance (a search out of its budget, hidden actions past their
+// cap): what the run did is not known, so no claim that it did not do
+// something holds of it.
+func undecided(r *validate.Report) bool {
+	for _, a := range r.Actors {
+		if a.Conforms == validate.NotEvaluated {
+			return true
+		}
+	}
+	return false
 }
 
 // expectReport fails t unless the report meets every expectation,
 // printing the report.
-func expectReport(t testing.TB, r *validate.Report, es ...Expectation) {
+func expectReport(t testing.TB, r *validate.Report, checks map[string]bool, es ...Expectation) {
 	t.Helper()
 	if r == nil {
 		t.Fatalf("gotogether: no report")
 	}
-	if u := unknownNames(es, nil, reportInvariants(r)); len(u) > 0 {
+	known := checks // the binding's names; a Run made by hand has only its report's
+	if known == nil {
+		known = reportInvariants(r)
+	}
+	if u := unknownNames(es, nil, known); len(u) > 0 {
 		t.Fatalf("gotogether: the expectation names %s: a misspelled name never matches", strings.Join(u, "; "))
 	}
 	for _, e := range es {
@@ -405,7 +428,7 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 			}
 		}
 	}
-	expectReport(t, r.Report, es...)
+	expectReport(t, r.Report, r.checks, es...)
 	for _, c := range cs {
 		if _, ok := c.(Expectation); !ok && !c.Holds(r) {
 			t.Fatalf("gotogether: want %s, got %d faults: %v", c, len(r.Faults()), r.Faults())

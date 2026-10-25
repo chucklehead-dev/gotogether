@@ -1304,6 +1304,7 @@ type MutationReport struct
     field Unreached []qmut.Mutant
     field Killed []qmut.Mutant
     field Survived []qmut.Mutant
+    field Undecided []qmut.Mutant
     field Baseline *Exploration `json:"-"`
     method (*MutationReport) Evidence() *Evidence
     method (*MutationReport) Expect(t testing.TB, cs ...MutationClaim)

@@ -2948,8 +2948,13 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   proof quint contradicts searches again with quint alone, and says so;
   a search cut short is no verdict, and stays the evaluator's: quint's
   search of the same budget, from the same verdicts, would be cut where it
-  was, and one that differs (an order the evaluator wrongly rejected)
-  finds at best what a larger budget finds. It was quint's, searched
+  was. From other verdicts it may not be: a prefix the evaluator wrongly
+  accepted spends budget quint would have pruned, so quint might finish
+  with no order (a rejection); one wrongly rejected, quint might extend to
+  an order. Either is an evaluator bug, which the nightly shadow job
+  (every batch judged by both, every example) exists to catch; the cost
+  of one here is a verdict missed (no verdict, which a `None` claim fails
+  on and a `Some` does not count), never a verdict wrong. It was quint's, searched
   again, which cost minutes for nothing (raftkv's faithful explorations,
   82 s for two cut runs of ten; 5 s with the cut kept), and the shadow
   mode checks the verdicts it rests on. The same holds for the
@@ -3110,8 +3115,8 @@ nondet), and a trace is then judged as a search over the states the
 model may be in: before each recorded step, the states reached are
 closed under at most `hiddenDepth` hidden actions, the step is applied
 to each, and those where its expect holds go on. It conforms if some path
-takes every step; an invariant holds if some path also keeps it; an
-eventual val holds if some final state has it. Quint cannot judge this: a
+takes every step; the invariants hold if some such path keeps them all;
+an eventual val holds if some final state has it. Quint cannot judge this: a
 replay names every step's arguments, and a hidden action's choices are
 unknown, so the verdict is the Go evaluator's alone (checked against
 quint's own traces of every model in CI, `TestAgreesWithQuint`), and the
@@ -3126,5 +3131,9 @@ judged each on a path of its own: they are now kept on one path, as a
 replay keeps them. Eventual vals are judged over the states hidden
 actions may reach after the last step, since they may run before the
 system is quiet: a probe recorded after the settle observes what they
-did.
+did. A failure within the depth while more hidden actions reach new
+states (the depth, not the model, ended a closure) is no verdict, "raise
+hiddenDepth": a probe found a step five hidden actions away rejected at
+the default depth of four, and the brute force, bounded alike, could not
+see it.
 

@@ -1,0 +1,6 @@
+# fire needs five ticks, which no step records: hidden
+spec: ticks.qnt
+module: ticks
+hidden: [tick]
+actions:
+  fire: {}

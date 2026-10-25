@@ -59,7 +59,17 @@ invariants: [noOverdraft]
 eventually: [noPending]          # must hold in the last state (a run that settled)
 within:                          # bounded response: after a val, another within a time
   - { after: overdrawn, holds: alerted, bound: 5s }
+hidden: [settleAny]              # nullary actions no step records: searched between steps
+hiddenDepth: 4                   # at most this many between two recorded steps (default 4)
 ```
+
+`hidden` names actions the system takes without recording them (a
+background gossip, a timer): the Go evaluator searches the states they
+reach between recorded steps, and a trace conforms if some path takes
+every step. A step no state within `hiddenDepth` of them takes, while
+more hidden actions would reach new states, is no verdict ("raise
+hiddenDepth"), never a rejection. Hidden actions do not combine with
+Linearize or ResolvePending.
 
 A parameter with no template is the step field of its name; give a
 template only to map a field differently, and map every failed outcome

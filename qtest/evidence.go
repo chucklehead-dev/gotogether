@@ -247,8 +247,8 @@ func (e *Evidence) String() string {
 			100*s.Ratio(), len(s.Uncovered()), len(s.Indistinct()))
 	}
 	if m := e.Mutants; m != nil {
-		fmt.Fprintf(&b, "  mutants   %d reached, %d killed (%.0f%%), %d survive, %d unreached\n",
-			len(m.Killed)+len(m.Survived), len(m.Killed), 100*m.Score(), len(m.Survived), len(m.Unreached))
+		fmt.Fprintf(&b, "  mutants   %d reached, %d killed (%.0f%%), %d survive, %d unreached, %d undecided\n",
+			len(m.Killed)+len(m.Survived), len(m.Killed), 100*m.Score(), len(m.Survived), len(m.Unreached), len(m.Undecided))
 	}
 	return b.String()
 }

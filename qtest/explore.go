@@ -894,13 +894,19 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	if len(claims) == 0 {
 		claims = []Claim{Conforms()}
 	}
-	invariants := map[string]bool{}
+	judged := map[string]bool{} // the names some run's report judged
 	for _, r := range x.Runs {
 		for k := range reportInvariants(r.Report) {
-			invariants[k] = true
+			judged[k] = true
 		}
 	}
-	if len(invariants) == 0 {
+	invariants := judged // the names known: the binding's, else the reports'
+	if x.checker != nil {
+		invariants = checkedNames(x.checker)
+		for k := range judged {
+			invariants[k] = true
+		}
+	} else if len(invariants) == 0 {
 		invariants = nil
 	}
 	for _, c := range claims {
@@ -911,7 +917,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		case quantified:
 			es = c.es
 		}
-		if u := unjudged(es, x.checker, invariants); len(u) > 0 {
+		if u := unjudged(es, x.checker, judged); len(u) > 0 {
 			t.Fatalf("gotogether: %s names %s, which no run judged: an eventual val is judged in a trace whose last record is a settle, and no run's was "+
 				"(call Sim.Settle at the end of Run and return its error, or qobs.Settled after a probe; Settles() states that a run settled)", describeClaim(c), strings.Join(u, ", "))
 		}
@@ -1106,6 +1112,11 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 	q, isQ := c.(quantified)
 	every := !isQ && c.(Expectation).every || isQ && q.kind == "all"
 	switch {
+	case !j.ok && j.unjudged > 0 && j.n == 0:
+		return claimVerdict{say: func(testing.TB) string {
+			return fmt.Sprintf("want %s; %d of %d runs have no verdict (%s), and a claim that no run shows something does not hold of a run whose behaviour is not known: "+
+				"raise the budget (qtest.LinearizeBudget, a binding's hiddenDepth) or shorten the runs", describeClaim(c), j.unjudged, len(x.Runs), x.failingReasons())
+		}}
 	case j.ok && j.show >= 0 && !every:
 		r := x.Runs[j.show]
 		if r.Report.OK() {

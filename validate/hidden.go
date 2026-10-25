@@ -65,6 +65,17 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 		res.Issues = append(res.Issues, qtrace.Issue{Severity: "warn", Kind: "hidden",
 			Msg: fmt.Sprintf("no verdict: the states the hidden actions reach passed %d at step %d; lower hiddenDepth, or record more of the actions", hiddenCap, out.at+1)})
 		return res, nil
+	case out.at >= 0 && out.cut:
+		// a rejection within the depth is not the model's: a longer run of
+		// hidden actions may take the step (it once said Fail)
+		res.Conforms = NotEvaluated
+		res.Issues = append(res.Issues, qtrace.Issue{Severity: "warn", Kind: "hidden",
+			Msg: fmt.Sprintf("no verdict: no state within %d hidden actions of the step before takes step %d (%s), and more hidden actions reach states the depth left out: raise hiddenDepth, or record more of the actions",
+				h.depth, out.at+1, h.calls[out.at].Action)})
+		for _, inv := range c.Binding.Invariants {
+			res.Invariants = append(res.Invariants, InvariantResult{Name: inv, Verdict: NotEvaluated})
+		}
+		return res, nil
 	case out.at >= 0:
 		res.Conforms = Fail
 		res.Failure = h.failure(out)
@@ -86,7 +97,7 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 		verdict := func(o hiddenOutcome, inv, why string) InvariantResult {
 			ir := InvariantResult{Name: inv, Verdict: Pass}
 			switch {
-			case o.capped:
+			case o.capped, o.at >= 0 && o.cut: // past the cap, or no path within the depth: a longer one may keep it
 				ir.Verdict = NotEvaluated
 			case o.at >= 0:
 				ir.Verdict = Fail
@@ -132,7 +143,10 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 				return nil, err
 			}
 			ir := InvariantResult{Name: EventuallyName(ev), Verdict: Pass, Eventually: true}
-			if !ok {
+			switch {
+			case !ok && out.cut: // no final state within the depth has it; one past it may
+				ir.Verdict = NotEvaluated
+			case !ok:
 				ir.Verdict = Fail
 				ir.Failure = &Failure{Kind: "invariant", Index: len(plan.Calls) - 1, Note: fmt.Sprintf("%s holds in no state the run may have settled in, hidden actions after its last step included", ev)}
 			}
@@ -168,6 +182,10 @@ type hiddenOutcome struct {
 	states   []qeval.State
 	final    int
 	capped   bool
+	// cut: a closure the depth ended (one more hidden action reached a new
+	// state): a step no state took, an invariant no path kept, an eventual
+	// val no final state had, may be a longer path's
+	cut bool
 }
 
 // run searches the trace's paths whose states keep the invariants keep
@@ -195,11 +213,13 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 	if len(frontier) == 0 {
 		return hiddenOutcome{at: 0, initial: true}, nil
 	}
+	cut := false // some closure so far was ended by the depth: a failure is no verdict
 	for i, call := range h.calls {
-		closure, capped, err := h.close(frontier, ok)
+		closure, capped, c, err := h.close(frontier, ok)
 		if err != nil || capped {
 			return hiddenOutcome{at: i, capped: capped}, err
 		}
+		cut = cut || c
 		var args []qeval.Value
 		if params, ok := h.c.Model.Actions[call.Action]; ok {
 			for _, p := range params {
@@ -253,19 +273,20 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 			}
 		}
 		if len(next) == 0 {
-			return hiddenOutcome{at: i, disabled: !enabled}, nil
+			return hiddenOutcome{at: i, disabled: !enabled, cut: cut}, nil
 		}
 		frontier = next
 	}
-	final, capped, err := h.close(frontier, ok)
-	return hiddenOutcome{at: -1, states: final, final: len(final), capped: capped}, err
+	final, capped, c, err := h.close(frontier, ok)
+	return hiddenOutcome{at: -1, states: final, final: len(final), capped: capped, cut: cut || c}, err
 }
 
 // close is states with every state the hidden actions reach from them in
-// at most the depth of steps, that keep ok; capped if they passed the cap.
-func (h *hiddenSearch) close(states []qeval.State, ok func(qeval.State) (bool, error)) ([]qeval.State, bool, error) {
+// at most the depth of steps, that keep ok; capped if they passed the cap,
+// cut if one more hidden action reaches a state they do not hold (the
+// depth, not the model, ended the closure).
+func (h *hiddenSearch) close(states []qeval.State, ok func(qeval.State) (bool, error)) (all []qeval.State, capped, cut bool, err error) {
 	seen := map[string]bool{}
-	var all []qeval.State
 	for _, s := range states {
 		if k := h.e.m.Key(s); !seen[k] {
 			seen[k] = true
@@ -273,39 +294,39 @@ func (h *hiddenSearch) close(states []qeval.State, ok func(qeval.State) (bool, e
 		}
 	}
 	layer := all
-	for range h.depth {
+	for d := 0; d <= h.depth && len(layer) > 0; d++ {
 		var next []qeval.State
 		for _, s := range layer {
 			for _, a := range h.c.Binding.Hidden {
 				succ, err := h.e.m.Successors(h.consts, s, h.e.em.Actions[a])
 				if err != nil {
-					return nil, false, err
+					return nil, false, false, err
 				}
 				for _, s2 := range succ {
 					if k := h.e.m.Key(s2); !seen[k] {
 						keep, err := ok(s2)
 						if err != nil {
-							return nil, false, err
+							return nil, false, false, err
 						}
 						seen[k] = true
 						if !keep {
 							continue
 						}
+						if d == h.depth {
+							return all, false, true, nil // a state one past the depth: cut
+						}
 						all = append(all, s2)
 						next = append(next, s2)
 						if len(all) > hiddenCap {
-							return nil, true, nil
+							return nil, true, false, nil
 						}
 					}
 				}
 			}
 		}
-		if len(next) == 0 {
-			break
-		}
 		layer = next
 	}
-	return all, false, nil
+	return all, false, false, nil
 }
 
 // eventually reports whether ev holds in some of states.

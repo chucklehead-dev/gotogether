@@ -106,3 +106,57 @@ func TestConformsWithEventualValsUnjudged(t *testing.T) {
 	}
 	x.Expect(t, Conforms(), None(Settles()))
 }
+
+// A claim that no run shows something holds only of runs judged: two
+// concurrent withdrawals of 50 from 60 that both succeed, linearized
+// within a budget of one order, have no verdict, and None(Mismatch(""))
+// once held of all three (the full search finds the mismatch).
+func TestNoneOverRunsWithNoVerdict(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	race := func(c qenv.Chooser) error {
+		ctx := qenv.ContextOf(c)
+		qobs.Record(ctx, "deposit", nil, "amount", 60, "obs.balance", 60)
+		a := qobs.Invoke(ctx, "withdraw", "amount", 50)
+		b := qobs.Invoke(ctx, "withdraw", "amount", 50)
+		d := qobs.Invoke(ctx, "deposit", "amount", 1)
+		d.Done(nil, "obs.balance", 61)
+		a.Done(nil, "obs.balance", 10)
+		b.Done(nil, "obs.balance", -40)
+		return nil
+	}
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: race, Opts: []Option{LinearizeBudget(1)}}
+	x := sys.Explore(t, ExploreConfig{Seeds: 2})
+	for _, c := range []Claim{None(Mismatch("")), None(Rejects("withdraw"))} {
+		f := &failTB{TB: t}
+		done := make(chan struct{})
+		go func() { defer close(done); x.Expect(f, c) }() //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		<-done
+		if len(f.errs) != 1 || !strings.Contains(f.errs[0], "have no verdict") {
+			t.Errorf("%v over runs with no verdict: %v", c, f.errs)
+		}
+	}
+	sys.Opts = []Option{Linearize()}
+	sys.Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Mismatch(""))
+}
+
+// A claim's invariant names are the binding's: with no invariant listed
+// and no run settled (so no report names one), a misspelled name once
+// went unchecked and None(Violates(...)) held for nothing.
+func TestClaimNamesAreTheBindings(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	emptied := func(c qenv.Chooser) error {
+		ctx := qenv.ContextOf(c)
+		qobs.Record(ctx, "deposit", nil, "amount", 5, "obs.balance", 5)
+		return nil // and never settles
+	}
+	x := System{Binding: "../validate/testdata/funds.binding.yaml", Run: emptied}.Explore(t, ExploreConfig{Seeds: 1})
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { defer close(done); x.Expect(f, None(Violates("fundedd"))) }() //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+	<-done
+	if len(f.errs) != 1 || !strings.Contains(f.errs[0], "misspelled") {
+		t.Errorf("a name the binding does not have: %v", f.errs)
+	}
+}

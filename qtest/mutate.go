@@ -23,6 +23,10 @@ type MutationReport struct {
 	// code the model does not constrain. Each is a question: is the code
 	// needed, or is the model missing what it is for?
 	Survived []qmut.Mutant
+	// Undecided are mutants no run of which failed and some of whose runs
+	// have no verdict (a linearization out of its budget): neither killed
+	// nor survived. Raise the budget, or shorten the runs.
+	Undecided []qmut.Mutant
 	// Baseline is the exploration with every mutant off.
 	Baseline *Exploration `json:"-"`
 }
@@ -93,7 +97,7 @@ func (r *MutationReport) Expect(t testing.TB, cs ...MutationClaim) {
 	// a mark by function and code names every mutant of that text in the
 	// function (two "if err != nil" in one): one marked equivalent would
 	// excuse the other, and any later one alike, so it must be one
-	all := append(append(append([]qmut.Mutant(nil), r.Survived...), r.Killed...), r.Unreached...)
+	all := append(append(append(append([]qmut.Mutant(nil), r.Survived...), r.Killed...), r.Unreached...), r.Undecided...)
 	for _, e := range c.equivalent {
 		var at []string
 		for _, m := range all {
@@ -127,12 +131,20 @@ func (r *MutationReport) Expect(t testing.TB, cs ...MutationClaim) {
 	if len(survived) > 0 {
 		t.Errorf("gotogether: %d mutants survived every run: code the model does not constrain, or a check missing:\n%s", len(survived), strings.Join(survived, "\n"))
 	}
+	if len(r.Undecided) > 0 {
+		var us []string
+		for _, m := range r.Undecided {
+			us = append(us, "  "+m.String())
+		}
+		t.Errorf("gotogether: %d mutants undecided: no run failed, and some had no verdict (a search out of its budget): raise the budget (qtest.LinearizeBudget) or shorten the runs:\n%s",
+			len(us), strings.Join(us, "\n"))
+	}
 	if len(stale) > 0 {
 		t.Errorf("gotogether: marked equivalent but no survivor there (killed now, or the code changed): %s", strings.Join(stale, ", "))
 	}
 }
 
-// Score is the share of reached mutants killed.
+// Score is the share of reached mutants killed, of those decided.
 func (r *MutationReport) Score() float64 {
 	n := len(r.Killed) + len(r.Survived)
 	if n == 0 {
@@ -143,10 +155,17 @@ func (r *MutationReport) Score() float64 {
 
 func (r *MutationReport) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "mutants: %d reached, %d killed (%.0f%%), %d survived, %d unreached\n",
+	fmt.Fprintf(&b, "mutants: %d reached, %d killed (%.0f%%), %d survived, %d unreached",
 		len(r.Killed)+len(r.Survived), len(r.Killed), 100*r.Score(), len(r.Survived), len(r.Unreached))
+	if len(r.Undecided) > 0 {
+		fmt.Fprintf(&b, ", %d undecided (no verdict)", len(r.Undecided))
+	}
+	b.WriteString("\n")
 	for _, m := range r.Survived {
 		fmt.Fprintf(&b, "  survived: %s\n", m)
+	}
+	for _, m := range r.Undecided {
+		fmt.Fprintf(&b, "  undecided: %s\n", m)
 	}
 	return b.String()
 }
@@ -196,14 +215,41 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 			return nil
 		})
 		// killed: a run broke, or the model rejects one, or none recorded a
-		// step where the baseline's did
-		if broke.Load() || empty(x.Runs) || len(x.Failing()) > 0 || !x.meets(claims) {
+		// step where the baseline's did; undecided: no run failed, and some
+		// have no verdict (a search out of budget), which once counted as a
+		// kill
+		switch {
+		case broke.Load() || empty(x.Runs) || decidedFailing(x.Runs):
 			rep.Killed = append(rep.Killed, m)
-		} else {
+		case anyUndecided(x.Runs):
+			rep.Undecided = append(rep.Undecided, m)
+		case !x.meets(claims):
+			rep.Killed = append(rep.Killed, m)
+		default:
 			rep.Survived = append(rep.Survived, m)
 		}
 	}
 	return rep
+}
+
+// decidedFailing reports whether a run failed with a verdict: not OK,
+// and no actor without one.
+func decidedFailing(runs []*Run) bool {
+	for _, r := range runs {
+		if !r.Report.OK() && !undecided(r.Report) {
+			return true
+		}
+	}
+	return false
+}
+
+func anyUndecided(runs []*Run) bool {
+	for _, r := range runs {
+		if undecided(r.Report) {
+			return true
+		}
+	}
+	return false
 }
 
 // meets reports whether the exploration meets every claim, without

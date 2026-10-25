@@ -252,6 +252,8 @@ type Run struct {
 	Unscripted []qenv.Scripted
 	// Code is the run's code coverage, when the code is woven (qweave -cover).
 	Code *qcover.Counts
+	// checks are the invariant names its check judges (checkedNames)
+	checks map[string]bool
 	// scripted is a run a Script chose for: it makes only its own faults;
 	// misnamed are what is wrong with its script's faults (Script.Misnamed)
 	scripted bool
@@ -298,6 +300,7 @@ func (r *Run) adjust() {
 		for i, a := range r.Report.Actors {
 			b := *a
 			b.Issues = slices.Clone(a.Issues)
+			b.Invariants = slices.Clone(a.Invariants) // Mark writes their verdicts: once into the shared cache's
 			rep.Actors[i] = &b
 		}
 		r.mark(&rep)
@@ -446,7 +449,27 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	}
 	s.Mark(rep)
 	run.Report = rep
+	run.checks = checkedNames(ch)
 	return run
+}
+
+// checkedNames are the invariant names a check with ch judges: the
+// binding's invariants, eventual vals and bounded-response obligations,
+// as reports name them. A claim's names are checked against them, not
+// against the reports' (none, when no run judged one: a misspelled name
+// then held for nothing).
+func checkedNames(ch *validate.Checker) map[string]bool {
+	m := map[string]bool{}
+	for _, inv := range ch.Binding.Invariants {
+		m[inv] = true
+	}
+	for _, ev := range ch.Binding.Eventually {
+		m[validate.EventuallyName(ev)] = true
+	}
+	for _, w := range ch.Binding.Within {
+		m[w.Name()] = true
+	}
+	return m
 }
 
 // order runs the searches c asks for on steps (Linearize, LinearizeByKey,
