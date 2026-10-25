@@ -270,4 +270,3 @@ func TestHiddenLint(t *testing.T) {
 		}
 	}
 }
-
