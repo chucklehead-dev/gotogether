@@ -36,7 +36,7 @@ type Checker struct {
 type mode struct {
 	// history, if set, is the history a search's candidates order: they
 	// are planned in its instance, with its interned identifiers
-	// (binding.PlanWithin)
+	// (binding.Planner)
 	history *qtrace.Trace
 	// quintOnly: a search's candidates are checked by quint alone (a
 	// search again after quint contradicted the Go evaluator's)

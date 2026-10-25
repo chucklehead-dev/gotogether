@@ -1,6 +1,7 @@
 package qtrace
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"slices"
@@ -68,7 +69,7 @@ func TestLinearizeOverlap(t *testing.T) {
 	if f := register([][]Step{steps}); f[0] != -1 {
 		t.Fatal("the steps as given should conform")
 	}
-	o, ok, tried, _ := Linearize(steps, 10, register)
+	o, ok, tried, _ := linearizeBasic(steps, 10, register)
 	if !ok || o[0].Action != "write" || tried != 2 {
 		t.Errorf("ok %v after %d orders: %v", ok, tried, o)
 	}
@@ -81,13 +82,42 @@ func TestLinearizeOverlap(t *testing.T) {
 // real time forbids every order that would explain it.
 func TestLinearizeStale(t *testing.T) {
 	steps := []Step{op("a", 1, "write", 1, 0, 2), op("b", 1, "read", 0, 3, 4), op("a", 2, "write", 2, 3, 8)}
-	o, ok, _, cut := Linearize(steps, 10, register)
+	o, ok, _, cut := linearizeBasic(steps, 10, register)
 	if ok || cut {
 		t.Errorf("a stale read linearized, or the search was cut short with room left: %v (cut %v)", o, cut)
 	}
 	// with room for the first order only, the search is cut short
-	if _, ok, _, cut := Linearize(steps, 1, register); ok || !cut {
+	if _, ok, _, cut := linearizeBasic(steps, 1, register); ok || !cut {
 		t.Errorf("a budget of 1: ok %v cut %v, want a search cut short", ok, cut)
+	}
+}
+
+// Linearize says which of its three verdicts it reached, a proof with
+// none, and returns its check's error (no verdict) instead of a panic.
+func TestLinearizeVerdicts(t *testing.T) {
+	check := func(orders [][]Step) ([]int, []string, error) { return register(orders), nil, nil }
+	overlap := []Step{op("a", 1, "write", 1, 0, 10), op("b", 1, "read", 1, 1, 5)}
+	stale := []Step{op("a", 1, "write", 1, 0, 2), op("b", 1, "read", 0, 3, 4), op("a", 2, "write", 2, 3, 8)}
+	for _, x := range []struct {
+		steps  []Step
+		budget int
+		want   LinearizeVerdict
+	}{{overlap, 10, Linearizable}, {stale, 10, NotLinearizable}, {stale, 1, Undecided}, {overlap, 0, Linearizable}} {
+		l, err := Linearize(x.steps, LinearizeOptions{Budget: x.budget}, check)
+		if err != nil || l.Verdict != x.want || (l.Proof != nil) != (x.want == NotLinearizable) {
+			t.Errorf("budget %d: %v %v, proof %v; want %v", x.budget, l, err, l != nil && l.Proof != nil, x.want)
+		}
+	}
+	boom := errors.New("quint could not check")
+	calls := 0
+	l, err := Linearize(stale, LinearizeOptions{Budget: 10}, func(orders [][]Step) ([]int, []string, error) {
+		if calls++; calls == 2 {
+			return nil, nil, boom
+		}
+		return register(orders), nil, nil
+	})
+	if l != nil || !errors.Is(err, boom) || calls != 2 {
+		t.Errorf("a check's error: %v, %v after %d checks; want the error, at once", l, err, calls)
 	}
 }
 
@@ -98,7 +128,7 @@ func TestLinearizeTwoWindows(t *testing.T) {
 		op("a", 1, "write", 1, 0, 10), op("b", 1, "read", 1, 1, 5),
 		op("a", 2, "write", 2, 20, 30), op("b", 2, "read", 2, 21, 25),
 	}
-	if _, ok, tried, _ := Linearize(steps, 20, register); !ok || tried > 6 {
+	if _, ok, tried, _ := linearizeBasic(steps, 20, register); !ok || tried > 6 {
 		t.Errorf("ok %v after %d orders", ok, tried)
 	}
 }
@@ -141,7 +171,7 @@ func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 	}
 	checked := 0
 	counting := func(orders [][]Step) []int { checked += len(orders); return none(orders) }
-	if _, ok, tried, cut := Linearize(steps, 100000, counting); ok || cut {
+	if _, ok, tried, cut := linearizeBasic(steps, 100000, counting); ok || cut {
 		t.Errorf("with the budget to try every order: ok %v, cut %v after %d", ok, cut, tried)
 	} else if checked >= tried {
 		// the guided search's orders, each failing at its last step, accepted
@@ -151,7 +181,7 @@ func TestLinearizeCompleteSearchRefutes(t *testing.T) {
 	}
 	// cut short, the complete search is no verdict, whatever the guided
 	// search's stop said
-	if _, ok, _, cut := Linearize(steps, 50, none); ok || !cut {
+	if _, ok, _, cut := linearizeBasic(steps, 50, none); ok || !cut {
 		t.Errorf("with a budget of 50: ok %v, cut %v", ok, cut)
 	}
 }
@@ -196,7 +226,7 @@ func TestLinearizeAgainstBruteForce(t *testing.T) {
 			steps[i].Seq = seqs[steps[i].Recorder]
 		}
 		want := bruteLinearizable(steps)
-		got, ok, _, cut := Linearize(steps, 100000, register)
+		got, ok, _, cut := linearizeBasic(steps, 100000, register)
 		if cut {
 			t.Fatalf("trial %d: cut with a budget of 100000", trial)
 		}
@@ -208,8 +238,8 @@ func TestLinearizeAgainstBruteForce(t *testing.T) {
 		}
 		// with the register's state, the complete search merges prefixes:
 		// the same verdict, in no more orders
-		sgot, sok, stried, scut := LinearizeStates(steps, 100000, registerStates)
-		_, _, ptried, _ := Linearize(steps, 100000, register)
+		sgot, sok, stried, scut := linearizeStates(steps, 100000, registerStates)
+		_, _, ptried, _ := linearizeBasic(steps, 100000, register)
 		if scut || sok != want || sok && !allowed(steps, sgot) {
 			t.Fatalf("trial %d: by state ok %v (cut %v), brute force %v", trial, sok, scut, want)
 		}
@@ -221,7 +251,7 @@ func TestLinearizeAgainstBruteForce(t *testing.T) {
 		// order: the guided search stopped, or the complete one proved it)
 		// must be right
 		for _, budget := range []int{1, 3, 10} {
-			_, ok, _, cut := Linearize(steps, budget, register)
+			_, ok, _, cut := linearizeBasic(steps, budget, register)
 			if !cut && ok != want {
 				t.Fatalf("trial %d, budget %d: a verdict of ok %v, brute force %v, for\n%v", trial, budget, ok, want, steps)
 			}
@@ -343,7 +373,7 @@ func compareBrute(t *testing.T, trial int, steps []Step, prec func(a, b Step) bo
 	}
 	tr := traces[0].Steps
 	want := bruteWith(tr, prec)
-	got, ok, _, cut := Linearize(tr, 100000, register)
+	got, ok, _, cut := linearizeBasic(tr, 100000, register)
 	if cut {
 		t.Fatalf("trial %d: cut with a budget of 100000", trial)
 	}
@@ -655,7 +685,7 @@ func TestLinearizeProofAgainstBruteForce(t *testing.T) {
 			steps[i].Seq = seqs[steps[i].Recorder]
 		}
 		want := bruteLinearizable(steps)
-		_, ok, _, cut, proof := LinearizeProof(steps, 100000, registerStates)
+		_, ok, _, cut, proof := linearizeProof(steps, 100000, registerStates)
 		if ok != want || cut || !ok && (proof == nil || !confirms(proof)) {
 			t.Fatalf("trial %d: the true oracle's verdict ok %v (cut %v), brute force %v, or its proof does not check out", trial, ok, cut, want)
 		}
@@ -807,7 +837,7 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 		}
 		check := registerFinal(len(steps), final, need...)
 		want := brutePending(steps, pending, settles, check)
-		got, ok, _, cut, proof := LinearizePending(steps, pending, settles, 1000000, check)
+		got, ok, _, cut, proof := linearizePending(steps, pending, settles, 1000000, check)
 		if cut {
 			t.Fatalf("trial %d: cut with a budget of a million", trial)
 		}
@@ -854,12 +884,12 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 			t.Fatalf("trial %d: the complete search alone: ok %v (cut %v), brute force %v", trial, cok, ccut, want)
 		}
 		for _, budget := range []int{1, 3, 10} {
-			if _, bok, _, bcut, _ := LinearizePending(steps, pending, settles, budget, check); !bcut && bok != want {
+			if _, bok, _, bcut, _ := linearizePending(steps, pending, settles, budget, check); !bcut && bok != want {
 				t.Fatalf("trial %d, budget %d: a verdict of ok %v, brute force %v", trial, budget, bok, want)
 			}
 		}
 		if len(pending) == 0 {
-			_, lok, _, _ := LinearizeStates(steps, 1000000, check)
+			_, lok, _, _ := linearizeStates(steps, 1000000, check)
 			if lok != ok {
 				t.Fatalf("trial %d: with no pending calls %v, Linearize %v", trial, ok, lok)
 			}
@@ -979,14 +1009,14 @@ func TestLinearizePendingAcrossASettle(t *testing.T) {
 	p1, p2 := pending("p1", 1, 2), pending("p2", 2, 6)
 	settles := []Step{{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: at(4)}, {Action: "settled", Settled: true, Recorder: "s", Seq: 2, Time: at(20)}}
 	check := registerFinal(1, 1, 1, 2) // ends at 1, both written: 2 before 1
-	if _, ok, _, cut, _ := LinearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, check); ok || cut {
+	if _, ok, _, cut, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, check); ok || cut {
 		t.Errorf("ok %v, cut %v: the write invoked after the settle placed before the one invoked before it", ok, cut)
 	}
 	if brutePending([]Step{s0}, []Step{p1, p2}, settles, check) {
 		t.Errorf("the brute force places them so too")
 	}
 	// the other way round it conforms: 1 then 2, ending at 2
-	if _, ok, _, _, _ := LinearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, registerFinal(1, 2, 1, 2)); !ok {
+	if _, ok, _, _, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, registerFinal(1, 2, 1, 2)); !ok {
 		t.Errorf("the order real time allows does not conform")
 	}
 }

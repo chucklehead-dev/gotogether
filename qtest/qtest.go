@@ -74,14 +74,35 @@ type settings struct {
 	mutant string
 	// given are the options given, by name, for the workflows that
 	// ignore some to refuse them (refuse)
-	given []string
+	given []optionID
 }
 
-// option is an option that records its name, so a workflow that ignores
-// it can say so (refuse).
-func option(name string, f func(*settings)) Option {
+// An optionID is an option's identity, with its name as the refusals
+// print it: a workflow's ignored options are keyed by it, so a key that
+// names no option does not compile (string keys once could hold a
+// misspelling that refused nothing).
+type optionID struct{ name string }
+
+// The options a workflow may refuse.
+// Read-only.
+var (
+	optConstants       = optionID{"Constants"}
+	optGlobal          = optionID{"Global"}
+	optInvariants      = optionID{"Invariants"}
+	optLinearize       = optionID{"Linearize"}
+	optLinearizeBudget = optionID{"LinearizeBudget"}
+	optLinearizeByKey  = optionID{"LinearizeByKey"}
+	optQuint           = optionID{"Quint"}
+	optRecorderOptions = optionID{"RecorderOptions"}
+	optResolvePending  = optionID{"ResolvePending"}
+	optSkipIfEmpty     = optionID{"SkipIfEmpty"}
+)
+
+// option is an option that records its identity, so a workflow that
+// ignores it can say so (refuse).
+func option(id optionID, f func(*settings)) Option {
 	return func(c *settings) {
-		c.given = append(c.given, name)
+		c.given = append(c.given, id)
 		f(c)
 	}
 }
@@ -89,11 +110,11 @@ func option(name string, f func(*settings)) Option {
 // refuse fails t for every option given that workflow ignores: an option
 // that does nothing, silently, reads as a check the test does not make.
 // ignored maps each such option's name to why, and what to do instead.
-func (c settings) refuse(t testing.TB, workflow string, ignored map[string]string) {
+func (c settings) refuse(t testing.TB, workflow string, ignored map[optionID]string) {
 	t.Helper()
-	for _, n := range c.given {
-		if why, ok := ignored[n]; ok {
-			t.Fatalf("gotogether: %s() does nothing in %s: %s. Drop it", n, workflow, why)
+	for _, id := range c.given {
+		if why, ok := ignored[id]; ok {
+			t.Fatalf("gotogether: %s() does nothing in %s: %s. Drop it", id.name, workflow, why)
 		}
 	}
 }
@@ -107,16 +128,16 @@ func (c settings) refuse(t testing.TB, workflow string, ignored map[string]strin
 var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
-	exploreIgnores = map[string]string{"Global": whyGlobal}
+	exploreIgnores = map[optionID]string{optGlobal: whyGlobal}
 	whyCaseOrder   = "a case's steps are checked as it records them, in that order; Linearize and ResolvePending are Record's, Validate's and explorations'"
-	casesIgnore    = map[string]string{"Linearize": whyCaseOrder, "LinearizeBudget": whyCaseOrder, "LinearizeByKey": whyCaseOrder, "ResolvePending": whyCaseOrder,
-		"SkipIfEmpty": "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
+	casesIgnore    = map[optionID]string{optLinearize: whyCaseOrder, optLinearizeBudget: whyCaseOrder, optLinearizeByKey: whyCaseOrder, optResolvePending: whyCaseOrder,
+		optSkipIfEmpty: "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing"}
 	whyUnchecked    = "no case is checked against the model"
-	uncheckedIgnore = map[string]string{"Constants": whyUnchecked, "Invariants": whyUnchecked, "Quint": whyUnchecked}
-	validateIgnores = map[string]string{
-		"Global":          "Validate checks steps already recorded: there is no recorder to install",
-		"RecorderOptions": "Validate checks steps already recorded: there is no recorder to configure",
-		"SkipIfEmpty":     "it is Record's and explorations', for an unwoven build that records nothing; skip on len(steps) == 0 instead",
+	uncheckedIgnore = map[optionID]string{optConstants: whyUnchecked, optInvariants: whyUnchecked, optQuint: whyUnchecked}
+	validateIgnores = map[optionID]string{
+		optGlobal:          "Validate checks steps already recorded: there is no recorder to install",
+		optRecorderOptions: "Validate checks steps already recorded: there is no recorder to configure",
+		optSkipIfEmpty:     "it is Record's and explorations', for an unwoven build that records nothing; skip on len(steps) == 0 instead",
 	}
 )
 
@@ -127,16 +148,16 @@ type Option func(*settings)
 // Quint sets how quint runs: its binary and backend (the default backend
 // is $QUINT_BACKEND, else rust). Its Dir is ignored: artifacts go to
 // $GOTOGETHER_KEEP/<test>, else a temporary directory.
-func Quint(o validate.Options) Option { return option("Quint", func(c *settings) { c.Options = o }) }
+func Quint(o validate.Options) Option { return option(optQuint, func(c *settings) { c.Options = o }) }
 
 // RecorderOptions configure the run's recorder, e.g. qobs.WithActor("acct-1").
 func RecorderOptions(opts ...qobs.Option) Option {
-	return option("RecorderOptions", func(c *settings) { c.Recorder = append(c.Recorder, opts...) })
+	return option(optRecorderOptions, func(c *settings) { c.Recorder = append(c.Recorder, opts...) })
 }
 
 // SkipIfEmpty skips the test, rather than failing it, when nothing was
 // recorded: an unwoven build of code that records through //quint:action.
-func SkipIfEmpty() Option { return option("SkipIfEmpty", func(c *settings) { c.SkipIfEmpty = true }) }
+func SkipIfEmpty() Option { return option(optSkipIfEmpty, func(c *settings) { c.SkipIfEmpty = true }) }
 
 // Global makes Record install its recorder as the global one
 // (qobs.InstallGlobal) while the scenario runs, for the steps of
@@ -145,12 +166,12 @@ func SkipIfEmpty() Option { return option("SkipIfEmpty", func(c *settings) { c.S
 // a second install fails. Without it only the scenario's goroutine, and
 // code recording through its recorder's context, record into the run. It
 // is Record's and qhegel's: an exploration and Validate refuse it.
-func Global() Option { return option("Global", func(c *settings) { c.Global = true }) }
+func Global() Option { return option(optGlobal, func(c *settings) { c.Global = true }) }
 
 // Constants checks against another instance of the binding's model: these
 // constants override the binding's, e.g. Constants(map[string]string{"STOCK": "1000"}).
 func Constants(m map[string]string) Option {
-	return option("Constants", func(c *settings) {
+	return option(optConstants, func(c *settings) {
 		if c.Constants == nil {
 			c.Constants = map[string]string{}
 		}
@@ -164,7 +185,7 @@ func Constants(m map[string]string) Option {
 // binding's list: none with Invariants(), for conformance alone, or a
 // design-level property the binding leaves out.
 func Invariants(names ...string) Option {
-	return option("Invariants", func(c *settings) { c.Invariants = append([]string{}, names...) })
+	return option(optInvariants, func(c *settings) { c.Invariants = append([]string{}, names...) })
 }
 
 // checkerFor is the cached checker for a binding, with c's constants and

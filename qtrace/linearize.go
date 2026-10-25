@@ -75,34 +75,133 @@ const reorderWindow = 8
 //
 // check gets candidate orders, each re-sequenced onto one thread of one
 // recorder ("linearized:<actor>") so that Reconstruct keeps it, and
-// returns for each the index of its first step the model rejects, or -1.
-// Re-sequenced, an order hides its steps' own issues (a gap, a cycle):
-// they are Reconstruct's, and the caller reports them with the verdict.
+// returns for each the index of its first step the model rejects, or -1;
+// and, for each order the model accepts, its state after the order (any
+// string that is equal exactly when the states are; "" or a nil slice:
+// unknown). Re-sequenced, an order hides its steps' own issues (a gap, a
+// cycle): they are Reconstruct's, and the caller reports them with the
+// verdict. An error from check ends the search: Linearize returns it,
+// and no verdict.
+//
 // The search starts from Reconstruct's order and, while an order fails,
 // tries every single move the constraints allow around the failing step
 // (it, earlier; a later step, before it; a step before it, earlier),
-// keeping the move that gets
-// furthest, until one conforms, no move gets further, or budget orders
-// were checked. When it finds none, a complete search follows (every
-// order real time allows, prefix by prefix, rejected prefixes pruned):
-// finding none there, within budget, is a proof.
+// keeping the move that gets furthest, until one conforms, no move gets
+// further, or the budget's orders were checked. When it finds none, a
+// complete search follows (every order real time allows, prefix by
+// prefix, rejected prefixes pruned), which keeps one of the prefixes that
+// placed the same steps and reached the same state (Lowe's memo for Wing
+// and Gong's search): what follows them is the same, so a history whose
+// operations overlap is searched in as many prefixes as states, not
+// orders. Finding none there, within budget, is a proof (Proof).
 //
-// It returns the order that conformed, or that got furthest, whether one
-// conformed, how many orders it checked, and whether the budget cut the
-// search short (cut: no verdict). A search that found none and was not
-// cut checked every order, the complete search's proof.
-func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
-	return LinearizeStates(steps, budget, func(orders [][]Step) ([]int, []string) { return check(orders), nil })
+// With Pending (Jepsen's indeterminate calls: a caller that crashed or
+// timed out never learned whether its call took effect), each pending
+// call may have taken effect once, anywhere real time allows, or not at
+// all: after every step recorded before its invocation, and before every
+// step recorded after one of Settles that followed it (the system was
+// quiet there). An order is complete when every step is in it; a pending
+// call in it is an assumed step (Ambiguous, no observation, in the
+// process of the step before it), and one left out took no effect. The
+// guided search orders the steps alone; the complete search places the
+// pending calls too. check is told which orders are complete by their
+// steps that are not assumed: as many as steps.
+func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Linearization, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			e, ok := r.(checkError)
+			if !ok {
+				panic(r)
+			}
+			l, err = nil, e.error
+		}
+	}()
+	inner := func(orders [][]Step) ([]int, []string) {
+		fs, states, err := check(orders)
+		if err != nil {
+			panic(checkError{err}) // out of the search, to the recover above
+		}
+		return fs, states
+	}
+	budget := opt.Budget
+	if budget <= 0 {
+		budget = DefaultLinearizeBudget
+	}
+	best, ok, tried, cut, proof := linearizePending(steps, opt.Pending, opt.Settles, budget, inner)
+	l = &Linearization{Order: best, Tried: tried, Proof: proof}
+	switch {
+	case ok:
+		l.Verdict = Linearizable
+	case cut:
+		l.Verdict = Undecided
+	default:
+		l.Verdict = NotLinearizable
+	}
+	return l, nil
 }
 
-// LinearizeStates is Linearize with a check that also returns, for each
-// order the model accepts, its state after the order (any string that is
-// equal exactly when the states are; "" or a nil slice: unknown). The
-// complete search then keeps one of the prefixes that placed the same
-// steps and reached the same state (Lowe's memo for Wing and Gong's
-// search): what follows them is the same, so a history whose operations
-// overlap is searched in as many prefixes as states, not orders.
-func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool) {
+// DefaultLinearizeBudget is how many orders Linearize checks at most when
+// its options name no budget.
+const DefaultLinearizeBudget = 200
+
+// LinearizeOptions bound and widen a Linearize search.
+type LinearizeOptions struct {
+	// Budget is how many orders the search checks at most (0:
+	// DefaultLinearizeBudget).
+	Budget int
+	// Pending are calls left pending (Trace.Pending), each of which may
+	// have taken effect anywhere real time allows, or not at all; Settles
+	// are the settle records that bound them.
+	Pending, Settles []Step
+}
+
+// An OrderCheck judges candidate orders for Linearize: for each, the index of
+// its first step the model rejects, or -1; for each accepted, its state
+// ("" or nil: unknown). An error ends the search.
+type OrderCheck func(orders [][]Step) (failed []int, states []string, err error)
+
+// checkError carries an OrderCheck's error out of the search.
+type checkError struct{ error }
+
+// A Linearization is what Linearize found.
+type Linearization struct {
+	// Order is the order that conformed, or the one that got furthest.
+	Order []Step
+	// Verdict says whether an order conforms, none does (a proof), or the
+	// budget cut the search short (no verdict).
+	Verdict LinearizeVerdict
+	// Tried is how many orders were checked.
+	Tried int
+	// Proof is what a verdict of NotLinearizable rests on (nil for any
+	// other): an oracle other than check confirms it.
+	Proof *Proof
+}
+
+// A LinearizeVerdict is a Linearize search's conclusion.
+type LinearizeVerdict int
+
+const (
+	// Linearizable: an order the constraints allow conforms (Order).
+	Linearizable LinearizeVerdict = iota
+	// NotLinearizable: no order conforms; the complete search checked
+	// every one (Proof).
+	NotLinearizable
+	// Undecided: the budget ran out first; Order got furthest.
+	Undecided
+)
+
+// String names the verdict.
+func (v LinearizeVerdict) String() string {
+	return [...]string{"linearizable", "not linearizable", "undecided"}[v]
+}
+
+// linearizeBasic is Linearize with a check that knows no states.
+func linearizeBasic(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
+	return linearizeStates(steps, budget, func(orders [][]Step) ([]int, []string) { return check(orders), nil })
+}
+
+// linearizeStates is Linearize without pending calls nor a proof.
+func linearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool) {
 	return linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load(), nil)
 }
 
@@ -118,25 +217,14 @@ type Proof struct {
 	Merged   [][2][]Step
 }
 
-// LinearizeProof is LinearizeStates, with the proof of a verdict of no
+// linearizeProof is linearizeStates with the proof of a verdict of no
 // order (nil for any other).
-func LinearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
-	return LinearizePending(steps, nil, nil, budget, check)
+func linearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
+	return linearizePending(steps, nil, nil, budget, check)
 }
 
-// LinearizePending is LinearizeProof with calls left pending (Jepsen's
-// indeterminate calls: a caller that crashed or timed out never learned
-// whether its call took effect), each of which may have taken effect
-// once, anywhere real time allows, or not at all: after every step
-// recorded before its invocation, and before every step recorded after a
-// settle that followed it (the system was quiet there). An order is
-// complete when every step is in it; a pending call in it is an assumed
-// step (Ambiguous, no observation, in the process of the step before it),
-// and one left out took no effect. The guided search orders the steps
-// alone (no pending call took effect); the complete search places the
-// pending calls too. check is told which orders are complete by their
-// steps that are not assumed: as many as steps.
-func LinearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
+// linearizePending is Linearize's search, its check's errors panics.
+func linearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
 	proof = &Proof{}
 	best, ok, tried, cut = linearizeWith(steps, pending, settles, budget, check, !hooks.CompleteSearchOnly.Load(), proof)
 	if ok || cut {
@@ -208,7 +296,7 @@ func ForcedOrder(steps []Step) ([]Step, bool) {
 	return render(at), true
 }
 
-// linearize is LinearizeStates; without guided, the complete search alone
+// linearize is linearizeStates; without guided, the complete search alone
 // (for tests of it).
 func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
 	return linearizeWith(steps, nil, nil, budget, check, guided, proof)
@@ -224,7 +312,7 @@ func before(a, b Step) bool {
 	return a.Time.Add(RealTimeSlack).Before(b.Time)
 }
 
-// linearizeWith is LinearizePending: steps are nodes 0..n-1, pending calls
+// linearizeWith is linearizePending: steps are nodes 0..n-1, pending calls
 // n..n+m-1, which no order needs.
 func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
 	if len(steps) == 0 {

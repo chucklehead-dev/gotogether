@@ -15,6 +15,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -341,7 +342,7 @@ func TestAnnotateKeepsCollidingNames(t *testing.T) {
 	if err := os.WriteFile(path, []byte(itf), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := annotateITF(path, &binding.Generated{}); err != nil {
+	if err := annotateITF(path, &replay.Generated{}); err != nil {
 		t.Fatal(err)
 	}
 	out, _ := os.ReadFile(path)

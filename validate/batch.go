@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -133,7 +134,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			name := fmt.Sprintf("batch%d", ch.n)
-			ms := c.Binding.ModuleSpec(ch.items[0].plan)
+			ms := replay.Spec(c.Binding, ch.items[0].plan)
 			ms.Header = []string{fmt.Sprintf("%d traces of instance %s", len(ch.items), strings.Join(ms.Constants, ", "))}
 			calls := make([][]binding.Call, len(ch.items))
 			results := make([]*Result, len(ch.items))

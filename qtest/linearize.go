@@ -2,13 +2,7 @@ package qtest
 
 import (
 	"fmt"
-
-	"github.com/chucklehead-dev/gotogether/validate"
 )
-
-// DefaultLinearizeBudget is how many orders Linearize checks per actor at
-// most, unless LinearizeBudget says otherwise.
-const DefaultLinearizeBudget = validate.DefaultLinearizeBudget
 
 // Linearize makes Validate and Record check steps in an order their
 // real-time intervals allow, searched for one the model accepts
@@ -26,13 +20,13 @@ const DefaultLinearizeBudget = validate.DefaultLinearizeBudget
 // "warn" when none did, the order shown then being the one that got
 // furthest. A search that stopped there, no move getting further, is
 // strong evidence of a bug: the actor fails as that order does. One that
-// ran out of its budget (DefaultLinearizeBudget orders, LinearizeBudget)
+// ran out of its budget (validate.DefaultLinearizeBudget orders, LinearizeBudget)
 // first is no verdict: the actor's conformance is n/a, which Conforms
 // fails and Rejects and Mismatch do not match. Record, Validate and
 // explorations run it (each run's search on its own); qhegel's cases,
 // checked as they record, refuse it. In a simulation, steps carry its
 // virtual time, so a client history there has its intervals.
-func Linearize() Option { return option("Linearize", func(c *settings) { c.Linearize = true }) }
+func Linearize() Option { return option(optLinearize, func(c *settings) { c.Linearize = true }) }
 
 // LinearizeByKey is Linearize with each actor's history partitioned by
 // the value of one argument (a key-value store's "key"), each partition
@@ -53,16 +47,16 @@ func LinearizeByKey(arg string) Option {
 	if arg == "" {
 		panic("qtest: LinearizeByKey(\"\"): name the argument whose value partitions the history (\"key\"), or use Linearize")
 	}
-	return option("LinearizeByKey", func(c *settings) { c.Linearize, c.linearizeKey = true, arg })
+	return option(optLinearizeByKey, func(c *settings) { c.Linearize, c.linearizeKey = true, arg })
 }
 
 // LinearizeBudget is Linearize with a budget of n orders per actor (per
 // partition with LinearizeByKey; at least 1), for its guided search and as
-// many again for the complete one that follows it when it finds none: a run whose search ran out of DefaultLinearizeBudget's says
+// many again for the complete one that follows it when it finds none: a run whose search ran out of validate.DefaultLinearizeBudget's says
 // to raise it.
 func LinearizeBudget(n int) Option {
 	if n < 1 {
 		panic(fmt.Sprintf("qtest: LinearizeBudget(%d): the budget is a number of orders to check, at least 1", n))
 	}
-	return option("LinearizeBudget", func(c *settings) { c.Linearize, c.linearizeBudget = true, n })
+	return option(optLinearizeBudget, func(c *settings) { c.Linearize, c.linearizeBudget = true, n })
 }

@@ -1,7 +1,4 @@
 == github.com/chucklehead-dev/gotogether/binding
-const AllTests TestSet = iota
-const DetailTests TestSet = iota (spec 2 of its group)
-const FastTests TestSet = iota (spec 1 of its group)
 func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
@@ -9,8 +6,6 @@ func Load(path string) (*Binding, error)
 func LoadModel(quint, spec, module string) (*Model, error)
 func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
 func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
-func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, error)
-func RenderModule(ms ModuleSpec, calls []Call, qntPath string) (*Generated, error)
 func ScanAnnotations(dir string) ([]Annotation, error)
 func ScanRecords(dir string) ([]RecordCall, error)
 type Action struct
@@ -44,14 +39,11 @@ type Binding struct
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
-    method (*Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generated, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
     method (*Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (errs, warns []string)
-    method (*Binding) ModuleSpec(p *Plan) ModuleSpec
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
-    method (*Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error)
     method (*Binding) Planner(m *Model, whole *qtrace.Trace) *Planner
     method (*Binding) Skips(s *qtrace.Step) bool
     method (*Binding) SpecPath() string
@@ -67,6 +59,7 @@ type Call struct
     field Action string
     field Args map[string]string
     field Note string
+    method (Call) String() string
 type EvalModule struct
     field Name string
     field Text string
@@ -77,17 +70,6 @@ type EvalModule struct
     field Invariants map[string]string
     field Eventually map[string]string
     field Vals map[string]string
-type Generated struct
-    field Module string
-    field Text string
-    field LineStep map[int]int
-    field Calls []Call
-    field Tests GeneratedTests
-type GeneratedTests struct
-    field Conforms string
-    field Invariants map[string]string
-    field Eventually map[string]string
-    field All string
 type ITFMeta struct
     field Spec string `json:"spec"`
     field Module string `json:"module"`
@@ -105,17 +87,6 @@ type Model struct
     field Consts map[string]string
     method (*Model) ActionNames() []string
     method (*Model) Signature(action string) string
-type ModuleSpec struct
-    field Spec string
-    field Module string
-    field Constants []string
-    field Instance string
-    field Defs string
-    field Invariants []string
-    field Eventually []string
-    field InitExpect string
-    field Header []string
-    field Tests TestSet
 type Param struct
     field Name string
     field Type string
@@ -146,7 +117,6 @@ type Simulation struct
     field Skip string `yaml:"skip"`
     field VerifySteps int `yaml:"verifySteps"`
     field VerifySkip string `yaml:"verifySkip"`
-type TestSet int
 type Within struct
     field After string `yaml:"after"`
     field Holds string `yaml:"holds"`
@@ -1199,8 +1169,6 @@ type Row struct
     method (Row) String() string
 
 == github.com/chucklehead-dev/gotogether/qtest
-const DefaultLinearizeBudget = validate.DefaultLinearizeBudget
-const DefaultResolveBudget = validate.DefaultResolveBudget
 const EvidenceFormat = "gotogether.evidence/2"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
@@ -1268,7 +1236,7 @@ type Evidence struct
     field Faults *qenv.Coverage `json:"faults,omitempty"`
     field Model *ModelCoverage `json:"model,omitempty"`
     field Rows int `json:"rows,omitempty"`
-    field Search *Search `json:"search,omitempty"`
+    field Exhaust *Extent `json:"search,omitempty"`
     field Vacuous []Vacuity `json:"vacuous,omitempty"`
     field Code *qcover.Summary `json:"code,omitempty"`
     field Mutants *MutationReport `json:"mutants,omitempty"`
@@ -1293,6 +1261,11 @@ type ExploreConfig struct
     field Steer int
     field Chooser func(seed uint64) qenv.Chooser
     field Corpus string
+type Extent struct
+    field Delays int `json:"delays"`
+    field Faults int `json:"faults"`
+    field Complete bool `json:"complete"`
+    field Left int `json:"left,omitempty"`
 type Fault struct
     field Kind string
     field Option int
@@ -1343,11 +1316,6 @@ type RunPanic struct
     field Stack string
     field InTask bool
     method (*RunPanic) Error() string
-type Search struct
-    field Delays int `json:"delays"`
-    field Faults int `json:"faults"`
-    field Complete bool `json:"complete"`
-    field Left int `json:"left,omitempty"`
 type SweepConfig struct
     field Factors []qsweep.Factor
     field Strength int
@@ -1385,6 +1353,7 @@ type Vacuity struct
     method (Vacuity) String() string
 
 == github.com/chucklehead-dev/gotogether/qtrace
+const DefaultLinearizeBudget = 200
 const EventName = "quint.step"
 const KeyAction = "quint.action"
 const KeyActor = "quint.actor"
@@ -1400,19 +1369,19 @@ const KeySeq = "quint.seq"
 const KeySettled = "quint.settled"
 const KeyThread = "quint.thread"
 const KeyTime = "quint.time_unix_nano"
+const Linearizable LinearizeVerdict = iota
+const NotLinearizable LinearizeVerdict = iota (spec 1 of its group)
 const PrefixArg = "quint.arg."
 const PrefixObs = "quint.obs."
 const PrefixOrder = "quint.order."
 const RealTimeSlack = time.Millisecond
 const SpanName = "quint "
+const Undecided LinearizeVerdict = iota (spec 2 of its group)
 func ForcedOrder(steps []Step) ([]Step, bool)
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
-func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
-func LinearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof)
-func LinearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof)
-func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool)
+func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Linearization, err error)
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
 func WriteJSONL(w io.Writer, steps []Step) error
@@ -1433,6 +1402,18 @@ type Issue struct
     method (Issue) String() string
 type Keyer struct
     method (*Keyer) Step(s *Step) string
+type Linearization struct
+    field Order []Step
+    field Verdict LinearizeVerdict
+    field Tried int
+    field Proof *Proof
+type LinearizeOptions struct
+    field Budget int
+    field Pending []Step
+    field Settles []Step
+type LinearizeVerdict int
+    method (LinearizeVerdict) String() string
+type OrderCheck func(orders [][]Step) (failed []int, states []string, err error)
 type Proof struct
     field Rejected [][]Step
     field Merged [][2][]Step
@@ -1487,7 +1468,7 @@ var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
 const DefaultHiddenDepth = 4
-const DefaultLinearizeBudget = 200
+const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 const DefaultResolveBudget = 200
 const Fail Verdict = "fail"
 const NotEvaluated Verdict = "n/a"

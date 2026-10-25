@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -191,7 +192,7 @@ func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *b
 	}
 	base := "observed_" + sanitize(t.Actor)
 	res := newResult(b, t, p)
-	return res, evaluate(ctx, b.ModuleSpec(p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
+	return res, evaluate(ctx, replay.Spec(b, p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
 }
 
 // newResult is a trace's result before its replay. A binding's eventual
@@ -235,12 +236,12 @@ func (opt Options) resolve() (Options, error) {
 
 // evaluate replays runs of one instance (one run, or a batch) and fills
 // their results, in at most two quint processes. The first replays each
-// run once with every check fused (binding.FastTests): it decides every
+// run once with every check fused (replay.FastTests): it decides every
 // run that passes. Only the runs that fail it are replayed again, with a
-// conformance run and a run per invariant (binding.DetailTests), which say
+// conformance run and a run per invariant (replay.DetailTests), which say
 // which check failed and where. Modules go to <Dir>/<base>.qnt and
 // <base>_detail.qnt.
-func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call, base string, opt Options, res []*Result) []error {
+func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, base string, opt Options, res []*Result) []error {
 	errs := make([]error, len(runs))
 	fail := func(idx []int, err error) {
 		for _, i := range idx {
@@ -252,7 +253,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 		all[i] = i
 	}
 	// phase writes the module of the given runs and test set, and runs it.
-	phase := func(set binding.TestSet, file string, idx []int, opt Options) ([]*binding.Generated, string, string, error) {
+	phase := func(set replay.TestSet, file string, idx []int, opt Options) ([]*replay.Generated, string, string, error) {
 		m := ms
 		m.Tests = set
 		qnt := filepath.Join(opt.Dir, file+".qnt")
@@ -260,7 +261,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 		for j, i := range idx {
 			sub[j] = runs[i]
 		}
-		gs, err := binding.RenderBatch(m, sub, qnt)
+		gs, err := replay.RenderBatch(m, sub, qnt)
 		if err != nil {
 			return nil, "", "", err
 		}
@@ -287,7 +288,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 	}
 	detailed := all
 	if len(ms.Invariants) > 0 {
-		gs, qnt, out, err := phase(binding.FastTests, base, all, opt)
+		gs, qnt, out, err := phase(replay.FastTests, base, all, opt)
 		if err != nil {
 			fail(all, err)
 			return errs
@@ -338,7 +339,7 @@ func evaluate(ctx context.Context, ms binding.ModuleSpec, runs [][]binding.Call,
 			withITF.Backend = opt.detailBackend
 		}
 	}
-	gs, qnt, out, err := phase(binding.DetailTests, file, detailed, withITF)
+	gs, qnt, out, err := phase(replay.DetailTests, file, detailed, withITF)
 	if err != nil {
 		fail(detailed, err)
 		return errs
@@ -378,7 +379,7 @@ func quintTest(ctx context.Context, qnt, module, base string, opt Options, tests
 }
 
 // fill turns quint's output into the verdict on one generated run.
-func fill(g *binding.Generated, output, qnt, itfPattern string, invariants, eventually []string, res *Result) error {
+func fill(g *replay.Generated, output, qnt, itfPattern string, invariants, eventually []string, res *Result) error {
 	res.Steps, res.Module, res.Calls, res.Output = len(g.Calls), qnt, g.Calls, output
 	verdicts, failures := parseQuintTest(res.Output, qnt, g)
 	if _, ok := verdicts[g.Tests.Conforms]; !ok {
@@ -465,7 +466,7 @@ var (
 	reBlock   = regexp.MustCompile(`(?m)^\s+\d+\) (\S+):\s*\n\s+(Error \[QNT\d+\]: [^\n]*)\n\s+at ([^\n]*):(\d+):(\d+)`)
 )
 
-func parseQuintTest(out, qnt string, g *binding.Generated) (map[string]Verdict, map[string]*Failure) {
+func parseQuintTest(out, qnt string, g *replay.Generated) (map[string]Verdict, map[string]*Failure) {
 	v := map[string]Verdict{}
 	f := map[string]*Failure{}
 	for _, m := range reOK.FindAllStringSubmatch(out, -1) {
@@ -513,7 +514,7 @@ func parseQuintTest(out, qnt string, g *binding.Generated) (map[string]Verdict, 
 
 // annotateITF strips the module prefix from variable names (so tools like
 // the model's trace.py read it) and records the action taken per state.
-func annotateITF(path string, g *binding.Generated) error {
+func annotateITF(path string, g *replay.Generated) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return err

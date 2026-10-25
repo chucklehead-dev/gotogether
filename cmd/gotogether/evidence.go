@@ -82,7 +82,7 @@ func suiteReport(es []*qtest.Evidence) (string, int) {
 		for _, r := range sortedKeys(e.FailingBy) {
 			fmt.Fprintf(&b, ", %d %s", e.FailingBy[r], r)
 		}
-		if e.Search != nil && !e.Search.Complete {
+		if e.Exhaust != nil && !e.Exhaust.Complete {
 			b.WriteString(" (search truncated)")
 		}
 		if e.Role != qtest.RoleFaithful {

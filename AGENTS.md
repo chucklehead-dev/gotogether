@@ -205,7 +205,7 @@ working there:
 - Generated replay modules import the model by relative path from their
   own directory. Moving a generated `.qnt` breaks its import.
 - A model with no constants must be imported as `import M.*`, not `M()`
-  (`binding.RenderModule` handles this).
+  (internal/replay's `RenderModule` handles this).
 - Hegel's `TestCase.Errorf` aborts the test case (unlike `testing.T`).
   `hegel.Test` cannot express "expected to fail": use `hegel.Run`.
 - Choreo models (examples/twophase): Choreo's `step` picks a node and a
@@ -298,7 +298,7 @@ working there:
 - A model that learns a log from its reads checks Kafka, Kinesis and a
   simulated log with one binding (examples/streams): the consumer is the
   one place every tier can record.
-- Long replays are split into `.then` segments of 20 (`binding.segmentSteps`):
+- Long replays are split into `.then` segments of 20 (`internal/replay`'s `segmentSteps`):
   Quint's Rust evaluator rejects chains nested much past 50. A disabled
   last step is reported by quint as QNT511 at the run's own line, and a
   segment ending in one at the `.then(segK)` line. The validator maps both,

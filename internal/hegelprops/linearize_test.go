@@ -97,7 +97,13 @@ func TestLinearizeAgreesWithPorcupine(t *testing.T) {
 			steps = append(steps, s)
 		}
 		want := porcupine.CheckOperations(porcupineRegister, hist)
-		_, got, _, wasCut := qtrace.Linearize(steps, 20000, register)
+		l, err := qtrace.Linearize(steps, qtrace.LinearizeOptions{Budget: 20000}, func(orders [][]qtrace.Step) ([]int, []string, error) {
+			return register(orders), nil, nil
+		})
+		if err != nil {
+			ht.Fatal(err)
+		}
+		got, wasCut := l.Verdict == qtrace.Linearizable, l.Verdict == qtrace.Undecided
 		if wasCut && !got {
 			cut++
 			return

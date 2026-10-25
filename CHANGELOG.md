@@ -12,7 +12,7 @@ The first release. What a user meets, by module:
   IR quint compiles the binding's evaluation module to: an order it finds
   is confirmed by quint (a disagreement searches again with quint, and
   says so), and a search that finds none is confirmed from its proof
-  (`qtrace.LinearizeProof`, `qtrace.Proof`: every prefix it dropped as
+  (`qtrace.Linearization.Proof`, `qtrace.Proof`: every prefix it dropped as
   rejected, every pair it merged as one state) in one quint batch; what
   the evaluator cannot evaluate is quint's. quorumkv's faithful
   exploration took 13 s, 20 s with quint alone; its contended mutants
@@ -79,7 +79,7 @@ The first release. What a user meets, by module:
   calls inside the linearization: each may take effect once anywhere real
   time allows (after the steps recorded before its invocation, before
   those after a settle that followed it) or not at all, Jepsen's
-  indeterminate calls (`qtrace.LinearizePending`). Checked against brute
+  indeterminate calls (`qtrace.LinearizeOptions.Pending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
 - A binding's `hidden` actions: model actions that run unrecorded (a
@@ -137,7 +137,7 @@ The first release. What a user meets, by module:
   verdict and state were judged in its own smaller instance, with ids
   named in its own order, and carried to extensions in another. An ITF
   keeps the qualifier of a variable name two modules share.
-- `qtrace.LinearizeStates`: Linearize with a check that also gives each
+- `qtrace.Linearize`'s check also gives each
   accepted order's model state; its complete search keeps one prefix of
   the same steps and state (Lowe's memo for Wing and Gong's search), so
   overlapping operations cost as many prefixes as states, not orders.
@@ -189,6 +189,23 @@ The first release. What a user meets, by module:
   `qtest.Run.Recorded` holds the steps as recorded beside `Steps`, the
   steps judged; `Chooser`'s doc gives the ChooseTask and ChooseNemesis
   protocols the scheduler looks for.
+- binding plans, internal/replay writes: the replay modules
+  (RenderModule, RenderBatch, ModuleSpec, Generated, Generate) are the
+  validator's own, no longer binding's API; `binding.PlanWithin` is
+  `Planner(m, whole).Plan(t)`; `binding.Call` has `String`.
+- One Linearize: `qtrace.Linearize(steps, LinearizeOptions{Budget,
+  Pending, Settles}, check)` returns a `*Linearization` (the order, a
+  `LinearizeVerdict`: Linearizable, NotLinearizable with its Proof, or
+  Undecided when the budget ran out; how many orders it tried) and the
+  check's error, which ends the search: Linearize, LinearizeStates,
+  LinearizeProof and LinearizePending were four, with four results and
+  errors carried by panics through the callback.
+  `qtrace.DefaultLinearizeBudget` is validate's. qtest's
+  DefaultLinearizeBudget and DefaultResolveBudget are gone (validate's
+  are the ones); `qtest.Search`, an exhaustive search's extent, is
+  `qtest.Extent`, in `Evidence.Exhaust` (its JSON key still `search`).
+  An option a workflow ignores is refused by its identity, not its name
+  as a string.
 - One way to judge: `validate.Checker.Judge(ctx, steps, SearchOptions)`
   orders a run's steps by the search, checks them, confirms the Go
   evaluator's orders with quint where the check fails (searching and

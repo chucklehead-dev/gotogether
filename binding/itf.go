@@ -58,7 +58,7 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 			picks[name] = itf.Some(v)
 		}
 		st := map[string]any{
-			"#meta":            map[string]any{"index": i + 1, "observed": describe(c)},
+			"#meta":            map[string]any{"index": i + 1, "observed": c.String()},
 			"mbt::actionTaken": c.Action,
 			"mbt::nondetPicks": picks,
 		}

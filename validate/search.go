@@ -18,7 +18,7 @@ import (
 // DefaultLinearizeBudget is how many orders a linearization checks per
 // actor (per partition with a Key) at most, unless the options say
 // otherwise: as many again for the complete search after the guided one.
-const DefaultLinearizeBudget = 200
+const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 
 // DefaultResolveBudget is how many resolutions of an actor's pending calls
 // a search checks at most.
@@ -29,7 +29,7 @@ const DefaultResolveBudget = 200
 // accepts), by Key (each value's history alone), or ResolvePending (what
 // each call left pending may have done). With both, a pending call may
 // take effect anywhere real time allows in the order searched, or not at
-// all (qtrace.LinearizePending: Jepsen's indeterminate calls).
+// all (qtrace.Linearize's Pending: Jepsen's indeterminate calls).
 type SearchOptions struct {
 	Linearize bool
 	Key       string // partition each actor's history by this argument
@@ -194,7 +194,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 	}}
 	if opt.Linearize {
 		// its ITF on: a conforming candidate's last state lets the complete
-		// search merge prefixes of one state (qtrace.LinearizeStates)
+		// search merge prefixes of one state (qtrace.Linearize)
 		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize"), false, true
 		fc := *c // the invariants' search (an order that violates one): verdicts only too
 		fc.mode.byCheck = byCheck
@@ -481,8 +481,27 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 	}
 	// the search, with the pending calls it places (ResolvePending)
 	lin := func(check func([][]qtrace.Step) ([]int, []string)) (found, *qtrace.Proof) {
-		o, ok, tried, cut, proof := qtrace.LinearizePending(tr.Steps, pending, settles, budget, check)
-		return found{o, ok, tried, cut}, proof
+		// a candidate quint could not check ends the search with its error
+		// (fail's searchError), which qtrace returns: raised again here, for
+		// search's recover
+		l, err := qtrace.Linearize(tr.Steps, qtrace.LinearizeOptions{Budget: budget, Pending: pending, Settles: settles},
+			func(orders [][]qtrace.Step) (fs []int, states []string, err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						e, ok := r.(searchError)
+						if !ok {
+							panic(r)
+						}
+						err = e
+					}
+				}()
+				fs, states = check(orders)
+				return fs, states, nil
+			})
+		if err != nil {
+			panic(err.(searchError))
+		}
+		return found{l.Order, l.Verdict == qtrace.Linearizable, l.Tried, l.Verdict == qtrace.Undecided}, l.Proof
 	}
 	again := func(check func([][]qtrace.Step) ([]int, []string)) func() found {
 		return func() found {
@@ -1185,7 +1204,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	if a == "" {
 		a = "default"
 	}
-	hc := *ch // its candidates in the history's instance (binding.PlanWithin)
+	hc := *ch // its candidates in the history's instance (binding.Planner)
 	hc.mode.history = tr
 	ch = &hc
 	pls, cut, crossed := resolutions(tr, settles, budget)

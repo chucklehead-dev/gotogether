@@ -44,7 +44,7 @@ type Evidence struct {
 	Faults    *qenv.Coverage  `json:"faults,omitempty"`
 	Model     *ModelCoverage  `json:"model,omitempty"`   // the model's actions the runs took (nil: no model)
 	Rows      int             `json:"rows,omitempty"`    // a sweep's rows (0: not a sweep)
-	Search    *Search         `json:"search,omitempty"`  // an exhaustive search's extent (nil: seeded runs)
+	Exhaust   *Extent         `json:"search,omitempty"`  // an exhaustive search's extent (nil: seeded runs)
 	Vacuous   []Vacuity       `json:"vacuous,omitempty"` // invariants that held only because their antecedent never did
 	Code      *qcover.Summary `json:"code,omitempty"`    // when the code is woven with qweave -cover (nil: not)
 	Mutants   *MutationReport `json:"mutants,omitempty"` // from System.Mutate, if set
@@ -130,7 +130,7 @@ func (x *Exploration) Evidence() *Evidence {
 	}
 	e.Vacuous = x.Vacuous()
 	if x.search != nil {
-		e.Search = &Search{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0 && x.alone == nil, Left: x.search.left}
+		e.Exhaust = &Extent{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0 && x.alone == nil, Left: x.search.left}
 	}
 	return e
 }
@@ -191,7 +191,7 @@ func (e *Evidence) String() string {
 	if e.Rows > 0 {
 		fmt.Fprintf(&b, ", %d rows", e.Rows)
 	}
-	if sr := e.Search; sr != nil && sr.Complete {
+	if sr := e.Exhaust; sr != nil && sr.Complete {
 		fmt.Fprintf(&b, "\n  search    complete: every run within %d delays and %d faults", sr.Delays, sr.Faults)
 	} else if sr != nil {
 		fmt.Fprintf(&b, "\n  search    truncated: at least %d runs within %d delays and %d faults left (MaxRuns)", sr.Left, sr.Delays, sr.Faults)

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
@@ -133,7 +134,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		}
 		calls = append(calls, c)
 	}
-	ms := binding.ModuleSpec{Spec: spec, Module: module, Defs: defs, Invariants: invs,
+	ms := replay.ModuleSpec{Spec: spec, Module: module, Defs: defs, Invariants: invs,
 		Header: []string{fmt.Sprintf("replay of a model-level ITF trace, %d states", len(tr.States))}}
 	if opt.Instance != "" {
 		im, consts, err := binding.InstanceConstants(spec, opt.Instance)

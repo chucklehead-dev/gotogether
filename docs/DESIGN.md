@@ -583,7 +583,7 @@ steps (`examples/bank`).
 
 A replay is one `init.then(c1).then(c2)...` chain, and the Rust evaluator
 rejects chains nested much past 50 steps ("recursion limit exceeded").
-`binding.RenderModule` writes longer chains as named segments of 20 calls
+`internal/replay`'s RenderModule writes longer chains as named segments of 20 calls
 (`action conformsTest_seg0 = c1.then(c2)...`), and the run chains the
 segments. Each call stays on its own line, so a failure is still located
 by line, with two cases quint reports elsewhere:
@@ -2767,7 +2767,7 @@ stop is no proof: T5's brute force showed one wrong). Candidates are
 memoized by prefix (T2b) and checked for verdicts only (T2a), and since
 T2c the complete search keeps one of the prefixes that placed the same
 steps and reached the same model state (Lowe's memo for Wing and Gong's
-search, `qtrace.LinearizeStates`, the state read from a conforming
+search, `qtrace.Linearize`'s check, the state read from a conforming
 candidate's ITF): concurrent operations that commute cost a prefix a
 set of them, not an order (five concurrent deposits: 146 orders, 456
 without). States are known only for orders quint checked whole, not for
@@ -2937,7 +2937,7 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
 - **Confirmed by quint.** An order the search finds is checked by quint
   (a disagreement searches again with quint alone, and the issue says
   so). A search that finds none is confirmed from its proof
-  (`qtrace.LinearizeProof`), in one quint batch: the complete search
+  (`qtrace.Linearization.Proof`), in one quint batch: the complete search
   drops a candidate only when it is rejected (the prefix through the
   failing step, which every order it begins shares) or when another
   prefix of the same steps reached its state, so quint rejecting every
@@ -3017,7 +3017,7 @@ taken effect, once, or not at all. ResolvePending searched where in the
 recorded order; Linearize searched orders of the completed steps; a
 client history with timeouts needs both, and they were refused together.
 
-`qtrace.LinearizePending` gives the complete search optional nodes, one
+`qtrace.Linearize`'s Pending gives the complete search optional nodes, one
 per pending call, bounded as ResolvePending bounds them: after every step
 recorded before its invocation, before every step recorded after a
 settle that followed it (the system was quiet there). A pending call is

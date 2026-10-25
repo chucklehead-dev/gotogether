@@ -478,5 +478,5 @@ func (c *Checker) plan(t, whole *qtrace.Trace) (*binding.Plan, error) {
 	if c.planner != nil && whole == c.mode.history {
 		return c.planner.Plan(t)
 	}
-	return c.Binding.PlanWithin(c.Model, t, whole)
+	return c.Binding.Planner(c.Model, whole).Plan(t)
 }

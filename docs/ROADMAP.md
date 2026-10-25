@@ -97,12 +97,19 @@ more.
   explorations call them. Search, Confirm, Mark and ConfirmByCheck
   unexported; the checker's modes one value (`mode`, `within` renamed
   `history`); `decide` takes and returns a `found`.
-- **S4. The API before it freezes (M).** binding's code generation
-  (RenderBatch, RenderModule, EvalModule, PlanWithin, Generate, ...)
-  internal; qtrace's four Linearize variants one, with typed verdicts and
-  an error return (no panic through the callback); `qtest.Search` renamed
-  (an Exhaust's extent, not validate's Search); qtest's re-exported
-  budgets dropped; ignored-option refusals keyed by identity.
+- **S4. The API before it freezes (M). Done**, but EvalModule: the
+  replay modules (RenderModule, RenderBatch, ModuleSpec, Generated,
+  Generate) moved to internal/replay; PlanWithin gone (Planner); qtrace's
+  four Linearize variants one (`Linearize(steps, LinearizeOptions,
+  OrderCheck) (*Linearization, error)`: a typed verdict, the check's
+  error returned, no panic through the callback); `qtest.Search` is
+  `qtest.Extent` (`Evidence.Exhaust`); qtest's re-exported budgets
+  dropped; ignored-option refusals keyed by an identity a misspelling
+  cannot compile. Left: `binding.EvalModule` stays exported, since it
+  shares the template splitting the planner uses; it moves when
+  planning's helpers are split from binding's YAML (a package of its
+  own, both internal), or stays as the documented module the Go
+  evaluator reads.
 - **S5. The suite (S). Done.** The evaluator mode an Options field (the
   variable its default) and validate's tests parallel; a checker's own
   scratch directory, removed by Close; TestCheckBatchMatchesCheck smaller

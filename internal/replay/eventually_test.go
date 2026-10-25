@@ -1,9 +1,11 @@
-package binding
+package replay
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/binding"
 )
 
 // An eventual val is expected once, after the last step: holding before
@@ -11,7 +13,7 @@ import (
 func TestEventuallyExpectsTheLastState(t *testing.T) {
 	dir := t.TempDir()
 	ms := ModuleSpec{Spec: filepath.Join(dir, "m.qnt"), Module: "m", Eventually: []string{"done"}}
-	calls := []Call{{Quint: "a(1)", Action: "a"}, {Quint: "b(2)", Action: "b"}}
+	calls := []binding.Call{{Quint: "a(1)", Action: "a"}, {Quint: "b(2)", Action: "b"}}
 	g, err := RenderModule(ms, calls, filepath.Join(dir, "replay.qnt"))
 	if err != nil {
 		t.Fatal(err)

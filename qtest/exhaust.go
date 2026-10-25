@@ -277,8 +277,9 @@ func children(ds []deviation, choices []qenv.Choice, b Bound, off qenv.Rates) []
 	return out
 }
 
-// A Search is an exhaustive search's extent, in its Evidence.
-type Search struct {
+// An Extent is an exhaustive search's (System.Exhaust), in its
+// Evidence: its bound, and whether it ran every run within it.
+type Extent struct {
 	Delays   int  `json:"delays"`
 	Faults   int  `json:"faults"`
 	Complete bool `json:"complete"`

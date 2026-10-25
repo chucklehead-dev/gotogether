@@ -96,7 +96,7 @@ func TestExhaust(t *testing.T) {
 	if !strings.Contains(log.logs, "not judged on one run (about the runs it leaves out): conformance") {
 		t.Errorf("logs: %s", log.logs)
 	}
-	if sr := again.Evidence().Search; sr == nil || sr.Complete {
+	if sr := again.Evidence().Exhaust; sr == nil || sr.Complete {
 		t.Errorf("a run alone's evidence claims a complete search: %+v", sr)
 	}
 	// the nominal run's reproduce line names the empty schedule: it too
@@ -127,12 +127,12 @@ func TestExhaustTruncated(t *testing.T) {
 		!strings.Contains(strings.Join(f.errs, "\n"), "set Bound.Partial to accept a sample") {
 		t.Errorf("a truncated search: %q", f.errs)
 	}
-	if e := x.Evidence(); e.Search == nil || e.Search.Complete || e.Search.Left == 0 {
-		t.Errorf("search %+v, want truncated", e.Search)
+	if e := x.Evidence(); e.Exhaust == nil || e.Exhaust.Complete || e.Exhaust.Left == 0 {
+		t.Errorf("search %+v, want truncated", e.Exhaust)
 	}
 	sample := sys.Exhaust(t, Bound{Delays: 1, MaxRuns: 1, Partial: true}) // t: passes
-	if e := sample.Evidence(); e.Search.Complete || e.Search.Left == 0 {
-		t.Errorf("a partial search's evidence: %+v", e.Search)
+	if e := sample.Evidence(); e.Exhaust.Complete || e.Exhaust.Left == 0 {
+		t.Errorf("a partial search's evidence: %+v", e.Exhaust)
 	}
 }
 

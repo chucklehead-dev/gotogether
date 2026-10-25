@@ -9,7 +9,7 @@ import (
 // A search's candidate, planned within its history, interns ids in the
 // history's order and takes its constants from all the history's steps:
 // two orders of one history name each id alike and check one instance.
-func TestPlanWithin(t *testing.T) {
+func TestPlannerWithin(t *testing.T) {
 	b := &Binding{Spec: "x.qnt", Module: "m", Intern: map[string]string{"id": "actor"},
 		Constants: map[string]string{"IDS": `{{ set "id" }}`, "N": `{{ count "inc" }}`},
 		Actions:   map[string]Action{"inc": {Args: map[string]string{"id": "{{.id}}"}}}}
@@ -19,7 +19,7 @@ func TestPlanWithin(t *testing.T) {
 	whole := &qtrace.Trace{Actor: "x", Steps: []qtrace.Step{inc("a"), inc("b"), inc("c")}, Processes: []string{"p"}}
 	// a prefix of another order: c first, then a
 	cand := &qtrace.Trace{Actor: "x", Steps: []qtrace.Step{inc("c"), inc("a")}, Processes: []string{"p"}}
-	p, err := b.PlanWithin(nil, cand, whole)
+	p, err := b.Planner(nil, whole).Plan(cand)
 	if err != nil {
 		t.Fatal(err)
 	}

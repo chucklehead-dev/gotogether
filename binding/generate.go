@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -14,27 +13,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
-
-// Generated is a Quint module that replays one observed trace.
-type Generated struct {
-	Module   string         // module name
-	Text     string         // the .qnt source
-	LineStep map[int]int    // source line -> index into Calls
-	Calls    []Call         // the replayed steps, in order, including inferred ones
-	Tests    GeneratedTests // names of the runs in Text
-}
-
-// GeneratedTests names the runs a generated module holds.
-type GeneratedTests struct {
-	Conforms   string            // replays every step; checks each step's expect
-	Invariants map[string]string // invariant -> run that checks it in every state
-	Eventually map[string]string // eventual val -> run that checks it in the last state
-	// All, when there are invariants, replays the steps once checking each
-	// step's expect and every invariant: the fast path. If it passes, so
-	// do Conforms and every invariant run; if not, those runs say which
-	// check failed, and where.
-	All string
-}
 
 // Call is one step of the replay.
 type Call struct {
@@ -73,38 +51,20 @@ func (p *Plan) ConstantList() []string {
 	return out
 }
 
-// Generate builds the replay module for one actor's trace. qntPath is where
-// the module will be written (the model import is made relative to it).
-func (b *Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generated, error) {
-	p, err := b.Plan(m, t)
-	if err != nil {
-		return nil, err
-	}
-	return RenderModule(ModuleSpec{
-		Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
-		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", t.Actor, len(t.Steps), t.Processes)},
-	}, p.Calls, qntPath)
-}
-
 // Plan applies the binding to a trace. With a model, parameters are taken
 // in the model's order and checked; with m == nil (emitting a model-level
 // ITF in-process, without Quint) they are keyed by name only.
-func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) { return b.PlanWithin(m, t, t) }
-
-// PlanWithin is Plan of t, an order of some of whole's steps (a search's
-// candidate), with whole's interned identifiers and constants: interned
-// in whole's order, and constants from all its steps, so every candidate
-// of one history is checked in one instance with one naming (a prefix's
-// verdict, and its state, are then its extensions' too).
-func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
-	return b.Planner(m, whole).Plan(t)
-}
+func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) { return b.Planner(m, t).Plan(t) }
 
 // A Planner plans the orders of one history's steps (a search's
 // candidates) in the history's instance: its identifiers interned in its
 // order and its constants rendered once, for every candidate (they were
 // computed again for each, a search's cost quadratic in the history).
-// Plan may be called from several goroutines.
+// Its Plan of t, an order of some of the history's steps (a search's
+// candidate), interns in the history's order and takes the constants
+// from all its steps, so every candidate of one history is checked in
+// one instance with one naming (a prefix's verdict, and its state, are
+// then its extensions' too). Plan may be called from several goroutines.
 type Planner struct {
 	b      *Binding
 	m      *Model
@@ -345,231 +305,6 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 	return plan, nil
 }
 
-// ModuleSpec says what a generated replay module imports and checks.
-type ModuleSpec struct {
-	Spec       string   // the model file
-	Module     string   // parameterised module, instantiated with Constants
-	Constants  []string // "NAME = expr"
-	Instance   string   // if set, import this (already instantiated) module instead
-	Defs       string   // Quint helpers
-	Invariants []string
-	Eventually []string // vals checked in the last state only (liveness obligations)
-	InitExpect string   // checked in the initial state, if set
-	Header     []string // comment lines
-	Tests      TestSet  // which runs to write (default: all)
-}
-
-// TestSet selects the runs of a replay module.
-type TestSet int
-
-const (
-	// AllTests writes the fused run and the separate ones.
-	AllTests TestSet = iota
-	// FastTests writes only the fused run (allTest), or only conformsTest
-	// when there are no invariants: one replay that decides a passing run.
-	FastTests
-	// DetailTests writes conformsTest and one run per invariant: they say
-	// which check failed, and where.
-	DetailTests
-)
-
-// segmentSteps is the longest `.then` chain written as one expression.
-const segmentSteps = 20
-
-// RenderModule writes the replay module for calls: a conformance run with
-// each call's expect, and one run per invariant.
-func RenderModule(ms ModuleSpec, calls []Call, qntPath string) (*Generated, error) {
-	gs, err := RenderBatch(ms, [][]Call{calls}, qntPath)
-	if err != nil {
-		return nil, err
-	}
-	return gs[0], nil
-}
-
-// RenderBatch writes one module replaying several runs of the same
-// instance (same ModuleSpec): the runs of run i are prefixed r<i>_, so one
-// `quint test` process checks them all. Each returned Generated describes
-// one run; all share Text. With a single run there is no prefix.
-func RenderBatch(ms ModuleSpec, runs [][]Call, qntPath string) ([]*Generated, error) {
-	rel, err := filepath.Rel(filepath.Dir(qntPath), strings.TrimSuffix(ms.Spec, ".qnt"))
-	if err != nil {
-		return nil, err
-	}
-	var w strings.Builder
-	line := 1
-	pr := func(format string, a ...any) {
-		s := fmt.Sprintf(format, a...)
-		w.WriteString(s)
-		w.WriteString("\n")
-		line += strings.Count(s, "\n") + 1
-	}
-	pr("// Generated by gotogether from observed telemetry. Do not edit.")
-	for _, h := range ms.Header {
-		pr("// %s", h)
-	}
-	if len(runs) > 1 {
-		pr("// %d runs, checked together: the tests of run i are r<i>_*.", len(runs))
-	}
-	pr("module observed {")
-	if ms.Instance != "" {
-		pr("  import %s.* from %q", ms.Instance, rel)
-	} else if len(ms.Constants) == 0 {
-		pr("  import %s.* from %q", ms.Module, rel)
-	} else {
-		pr("  import %s(%s).* from %q", ms.Module, strings.Join(ms.Constants, ", "), rel)
-	}
-	if strings.TrimSpace(ms.Defs) != "" {
-		pr("%s", indent(strings.TrimRight(ms.Defs, "\n"), "  "))
-	}
-	out := make([]*Generated, len(runs))
-	for ri, calls := range runs {
-		g := &Generated{Module: "observed", LineStep: map[int]int{}, Calls: calls}
-		out[ri] = g
-		prefix := ""
-		if len(runs) > 1 {
-			prefix = fmt.Sprintf("r%d_", ri)
-			pr("")
-			pr("  // ---- run %d ----", ri)
-		}
-		pr("")
-		// chain writes a run of init and then every call, rendered by step.
-		// Long chains are split into named segments, and long chains of
-		// segments into segments of segments: Quint's Rust evaluator rejects
-		// a `.then` chain nested much past 50 steps, so no chain is longer
-		// than segmentSteps.
-		chain := func(name, first string, step func(c Call) string, comment bool) {
-			type item struct {
-				call int    // index of the call, or -1 for a segment
-				ref  string // the segment's name
-				last int    // the last call it covers
-			}
-			// emit writes an item on its own line (quint's error positions map
-			// back to the observed step by line): `.then(...)`, or bare as
-			// the first item of a segment. A segment that evaluates to false
-			// is reported at the line that uses it: its last call was the
-			// disabled one (an earlier one would be reported inside it).
-			emit := func(it item, then bool) {
-				text := it.ref
-				if it.call >= 0 {
-					if comment {
-						pr("    // step %d: %s", it.call+1, describe(calls[it.call]))
-					}
-					text = step(calls[it.call])
-				}
-				g.LineStep[line] = it.last
-				if then {
-					pr("    .then(%s)", text)
-				} else {
-					pr("    %s", text)
-				}
-			}
-			items := make([]item, len(calls))
-			for i := range calls {
-				items[i] = item{call: i, last: i}
-			}
-			for level := 0; len(items) > segmentSteps; level++ {
-				var next []item
-				for s := 0; s < len(items); s += segmentSteps {
-					// no "Test" in the name: quint test --match would take it for a test
-					base := strings.TrimSuffix(name, "Test")
-					seg := fmt.Sprintf("%s_seg%d", base, s/segmentSteps)
-					if level > 0 {
-						seg = fmt.Sprintf("%s_l%d_%d", base, level, s/segmentSteps)
-					}
-					group := items[s:min(s+segmentSteps, len(items))]
-					pr("  action %s =", seg)
-					for j, it := range group {
-						emit(it, j > 0)
-					}
-					next = append(next, item{call: -1, ref: seg, last: group[len(group)-1].last})
-				}
-				items = next
-			}
-			pr("  run %s =", name)
-			pr("    %s", first)
-			for _, it := range items {
-				emit(it, true)
-			}
-		}
-		fused := len(ms.Invariants) > 0 && ms.Tests != DetailTests
-		separate := ms.Tests != FastTests || len(ms.Invariants) == 0
-		if separate {
-			g.Tests.Conforms = prefix + "conformsTest"
-			pr("  // The observed steps, each checked against the observed state.")
-			first := "init"
-			if ms.InitExpect != "" {
-				first = fmt.Sprintf("init.expect(%s)", ms.InitExpect)
-			}
-			chain(g.Tests.Conforms, first, func(c Call) string {
-				if c.Expect != "" {
-					return fmt.Sprintf("%s.expect(%s)", c.Quint, c.Expect)
-				}
-				return c.Quint
-			}, true)
-		}
-		if fused {
-			g.Tests.All = prefix + "allTest"
-			all := strings.Join(ms.Invariants, " and ")
-			pr("")
-			pr("  // The steps once, with every check: each step's expect and every invariant.")
-			allFirst := fmt.Sprintf("init.expect(%s)", all)
-			if ms.InitExpect != "" {
-				allFirst = fmt.Sprintf("init.expect(%s and %s)", ms.InitExpect, all)
-			}
-			chain(g.Tests.All, allFirst, func(c Call) string {
-				if c.Expect != "" {
-					return fmt.Sprintf("%s.expect((%s) and %s)", c.Quint, c.Expect, all)
-				}
-				return fmt.Sprintf("%s.expect(%s)", c.Quint, all)
-			}, false)
-		}
-		// each eventual val in its own run, in every test set: it holds or
-		// not at the end only, which the fused run cannot say
-		g.Tests.Eventually = map[string]string{}
-		for _, ev := range ms.Eventually {
-			name := prefix + ev + "EvTest"
-			g.Tests.Eventually[ev] = name
-			pr("")
-			pr("  // The same steps; %s must hold when they end.", ev)
-			if len(calls) == 0 {
-				pr("  run %s =", name)
-				pr("    init.expect(%s)", ev)
-				continue
-			}
-			n := 0
-			chain(name, "init", func(c Call) string {
-				if n++; n == len(calls) {
-					return fmt.Sprintf("%s.expect(%s)", c.Quint, ev)
-				}
-				return c.Quint
-			}, false)
-		}
-		g.Tests.Invariants = map[string]string{}
-		if separate {
-			for _, inv := range ms.Invariants {
-				name := prefix + inv + "InvTest"
-				g.Tests.Invariants[inv] = name
-				pr("")
-				pr("  // The same steps; %s must hold in every state.", inv)
-				chain(name, fmt.Sprintf("init.expect(%s)", inv), func(c Call) string {
-					return fmt.Sprintf("%s.expect(%s)", c.Quint, inv)
-				}, false)
-			}
-		}
-	}
-	pr("}")
-	for _, g := range out {
-		g.Text = w.String()
-	}
-	return out, nil
-}
-
-// ModuleSpec returns what a replay of plan p imports and checks.
-func (b *Binding) ModuleSpec(p *Plan) ModuleSpec {
-	return ModuleSpec{Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
-		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", p.Actor, p.ObservedSteps, p.Processes)}}
-}
-
 // Skips reports whether the binding drops the step: its outcome maps to
 // "skip" for its action, so it becomes no model call.
 func (b *Binding) Skips(s *qtrace.Step) bool {
@@ -602,7 +337,9 @@ func (b *Binding) outcome(a Action, s *qtrace.Step) (string, error) {
 	return "", fmt.Errorf("%s: outcome %q has no mapping in the binding (error: %s)", s.Action, o, s.Error)
 }
 
-func describe(c Call) string {
+// String describes the call: its step's seq, process and action, or why
+// it was inferred.
+func (c Call) String() string {
 	if c.Step == nil {
 		if c.Inferred == "" {
 			return c.Note
@@ -618,16 +355,6 @@ func short(s string) string {
 		return s[:24] + "…"
 	}
 	return s
-}
-
-func indent(s, pfx string) string {
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		if l != "" {
-			lines[i] = pfx + l
-		}
-	}
-	return strings.Join(lines, "\n")
 }
 
 func toI(v any) int64 {
