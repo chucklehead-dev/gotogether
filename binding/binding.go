@@ -234,9 +234,16 @@ func (b *Binding) Lint(m *Model) []string {
 			errs = append(errs, fmt.Sprintf("eventually %s: not a val of %s", ev, m.Module))
 		}
 	}
+	seenHidden := map[string]bool{}
 	for _, h := range b.Hidden {
 		ps, ok := m.Actions[h]
 		switch {
+		case seenHidden[h]:
+			errs = append(errs, fmt.Sprintf("hidden %s: listed twice", h))
+		case h == "init" || h == "step":
+			errs = append(errs, fmt.Sprintf("hidden %s: the model's %s is no action of the system: name the actions that run unrecorded", h, h))
+		case h == b.Restart:
+			errs = append(errs, fmt.Sprintf("hidden %s is the restart action, which the binding infers where the process changes: it is not hidden", h))
 		case !ok:
 			errs = append(errs, fmt.Sprintf("hidden %s: not an action of %s", h, m.Module))
 		case len(ps) > 0:
@@ -245,9 +252,13 @@ func (b *Binding) Lint(m *Model) []string {
 		if _, bound := b.Actions[h]; bound {
 			errs = append(errs, fmt.Sprintf("hidden %s is bound too: an action is recorded (actions) or hidden, not both", h))
 		}
+		seenHidden[h] = true
 	}
 	if b.HiddenDepth < 0 {
 		errs = append(errs, "hiddenDepth: negative")
+	}
+	if b.HiddenDepth != 0 && len(b.Hidden) == 0 {
+		errs = append(errs, "hiddenDepth with no hidden actions: list them (hidden: [gossip])")
 	}
 	for _, w := range b.Within {
 		for _, v := range []string{w.After, w.Holds} {

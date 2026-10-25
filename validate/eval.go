@@ -72,8 +72,8 @@ func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtra
 // quint's alone.
 func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
 	errs := make([]error, len(runs))
-	if evalMode() != "shadow" || c.within != nil || c.shadowed {
-		return errs
+	if evalMode() != "shadow" || c.within != nil || c.shadowed || len(c.Binding.Hidden) > 0 {
+		return errs // (a binding with hidden actions is the evaluator's alone: quint has nothing to compare)
 	}
 	e := evaluatorFor(c)
 	if e.err != nil {

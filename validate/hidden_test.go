@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -88,6 +90,37 @@ func TestHiddenActions(t *testing.T) {
 			t.Errorf("small: %s", rep.Summary())
 		}
 	}
+	// an invariant a hidden state breaks and a later one restores: a's 1
+	// came through b, breaking bWithinA on the way, so no path keeps it
+	bc, err := c.WithInvariants("bWithinA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := bc.Check(context.Background(), []qtrace.Step{gossipStep(1, "c", 1, nil), gossipStep(2, "a", 0, []int{1})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := rep.Actors[0]; a.Conforms != Pass || a.Invariants[0].Verdict != Fail {
+		t.Errorf("bWithinA, broken by a hidden state: %s", rep.Summary())
+	}
+	// an invariant the initial state violates: there, not after step 1
+	sc, err := c.WithInvariants("someKnow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err = sc.Check(context.Background(), two)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := rep.Actors[0].Invariants[0].Failure; f == nil || f.Index != -1 || !strings.Contains(rep.Summary(), "violated in the initial state") {
+		t.Errorf("someKnow in the initial state: %s", rep.Summary())
+	}
+	// shadow mode has nothing to compare: the evaluator's alone
+	t.Setenv("GOTOGETHER_EVAL", "shadow")
+	if rep, err := c.Check(context.Background(), []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "b", 0, []int{1})}); err != nil || !rep.OK() {
+		t.Errorf("shadow mode on a hidden binding: %v %v", err, rep)
+	}
+	t.Setenv("GOTOGETHER_EVAL", "")
 	if _, err := c.Search(two, SearchOptions{Linearize: true}); err == nil || !strings.Contains(err.Error(), "with hidden actions") {
 		t.Errorf("a linearization with hidden actions: %v", err)
 	}
@@ -218,3 +251,23 @@ func bruteGossip(steps []qtrace.Step, depth int) bool {
 	}
 	return true
 }
+
+// The binding's hidden actions are linted: the model's init and step, the
+// restart action, a duplicate, a depth with nothing hidden.
+func TestHiddenLint(t *testing.T) {
+	for _, x := range []struct{ yaml, want string }{
+		{"hidden: [step]", "is no action of the system"},
+		{"hidden: [gossipAny, gossipAny]", "listed twice"},
+		{"hiddenDepth: 2", "hiddenDepth with no hidden actions"},
+	} {
+		dir := t.TempDir()
+		src, _ := os.ReadFile("testdata/gossip.qnt")
+		os.WriteFile(filepath.Join(dir, "gossip.qnt"), src, 0o644)
+		b := "spec: gossip.qnt\nmodule: gossip\nactions:\n  write: {}\n  read: {}\n" + x.yaml + "\n"
+		os.WriteFile(filepath.Join(dir, "b.yaml"), []byte(b), 0o644)
+		if _, err := NewChecker(filepath.Join(dir, "b.yaml"), Options{}); err == nil || !strings.Contains(err.Error(), x.want) {
+			t.Errorf("%s: %v, want %q", x.yaml, err, x.want)
+		}
+	}
+}
+

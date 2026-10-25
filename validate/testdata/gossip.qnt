@@ -33,4 +33,8 @@ module gossip {
   }
 
   val small = NODES.forall(n => known.get(n).size() <= 2)
+  // b knows only what a does: c telling b breaks it, b telling a restores it
+  val bWithinA = known.get("b").subseteq(known.get("a"))
+  // false in the initial state
+  val someKnow = NODES.exists(n => known.get(n).size() > 0)
 }

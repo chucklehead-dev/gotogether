@@ -21,9 +21,11 @@ const hiddenCap = 20000
 // the model may be in are searched, each recorded step taken from any
 // state the hidden actions reach (at most the depth of them since the
 // step before), its expect holding after it. The trace conforms if some
-// path takes every step; invariants hold if some path also keeps each;
-// eventual vals of a settled trace hold if some final state, after hidden
-// actions too, has them. It is the Go evaluator's search (quint cannot
+// path takes every step; the invariants hold if some path also keeps them
+// all; eventual vals of a settled trace hold if some final state, hidden
+// actions after the last step included (they may run before the system
+// is quiet: a probe recorded after the settle observes what they did),
+// has them. It is the Go evaluator's search (quint cannot
 // replay a step whose choices are unknown), and says so; an evaluator
 // that cannot evaluate the model is an error, never a verdict.
 func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
@@ -73,27 +75,55 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 		return res, nil
 	}
 	res.Conforms = Pass
-	for _, inv := range c.Binding.Invariants {
-		o, err := h.run([]string{inv})
+	// the invariants on one path, as a replay keeps them all; when no path
+	// keeps them all, those no path keeps alone fail, or, each kept on some
+	// path, every one does
+	if len(c.Binding.Invariants) > 0 {
+		all, err := h.run(c.Binding.Invariants)
 		if err != nil {
 			return nil, err
 		}
-		ir := InvariantResult{Name: inv, Verdict: Pass}
-		switch {
-		case o.capped:
-			ir.Verdict = NotEvaluated
-		case o.at >= 0 || o.final == 0:
-			ir.Verdict = Fail
-			step := -1
-			if o.at >= 0 {
-				step = o.at
+		verdict := func(o hiddenOutcome, inv, why string) InvariantResult {
+			ir := InvariantResult{Name: inv, Verdict: Pass}
+			switch {
+			case o.capped:
+				ir.Verdict = NotEvaluated
+			case o.at >= 0:
+				ir.Verdict = Fail
+				ir.Failure = &Failure{Kind: "invariant", Index: o.at, Note: why}
+				if o.initial {
+					ir.Failure.Index = -1 // the initial state violates it
+				} else {
+					ir.Failure.Step = plan.Calls[o.at].Step
+				}
 			}
-			ir.Failure = &Failure{Kind: "invariant", Index: step, Note: fmt.Sprintf("every path the hidden actions allow violates %s by step %d", inv, max(step, 0)+1)}
-			if step >= 0 {
-				ir.Failure.Step = plan.Calls[step].Step
-			}
+			return ir
 		}
-		res.Invariants = append(res.Invariants, ir)
+		switch {
+		case all.capped || all.at < 0:
+			for _, inv := range c.Binding.Invariants {
+				res.Invariants = append(res.Invariants, verdict(all, inv, ""))
+			}
+		default:
+			var irs []InvariantResult
+			alone := false
+			for _, inv := range c.Binding.Invariants {
+				o, err := h.run([]string{inv})
+				if err != nil {
+					return nil, err
+				}
+				ir := verdict(o, inv, fmt.Sprintf("every path the hidden actions allow violates %s", inv))
+				alone = alone || ir.Verdict == Fail
+				irs = append(irs, ir)
+			}
+			if !alone { // each kept on some path, no path keeps them all
+				irs = irs[:0]
+				for _, inv := range c.Binding.Invariants {
+					irs = append(irs, verdict(all, inv, "no one path the hidden actions allow keeps every invariant"))
+				}
+			}
+			res.Invariants = append(res.Invariants, irs...)
+		}
 	}
 	if tr.Settled {
 		for _, ev := range c.Binding.Eventually {
@@ -133,6 +163,7 @@ type hiddenSearch struct {
 // whether the states passed the cap.
 type hiddenOutcome struct {
 	at       int
+	initial  bool // at 0: no initial state keeps the invariants
 	disabled bool
 	states   []qeval.State
 	final    int
@@ -161,6 +192,9 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 	if frontier, err = filter(frontier, ok); err != nil {
 		return hiddenOutcome{}, err
 	}
+	if len(frontier) == 0 {
+		return hiddenOutcome{at: 0, initial: true}, nil
+	}
 	for i, call := range h.calls {
 		closure, capped, err := h.close(frontier, ok)
 		if err != nil || capped {
@@ -176,6 +210,19 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 				args = append(args, v)
 			}
 		}
+		var xs []qeval.Value // the expect's arguments, once
+		if call.Expect != "" {
+			if call.ExpectArgs == nil {
+				return hiddenOutcome{}, &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
+			}
+			for _, a := range call.ExpectArgs {
+				v, err := h.e.literal(a)
+				if err != nil {
+					return hiddenOutcome{}, err
+				}
+				xs = append(xs, v)
+			}
+		}
 		var next []qeval.State
 		seen, enabled := map[string]bool{}, false
 		for _, s := range closure {
@@ -186,17 +233,6 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 			for _, s2 := range succ {
 				enabled = true
 				if call.Expect != "" {
-					if call.ExpectArgs == nil {
-						return hiddenOutcome{}, &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
-					}
-					var xs []qeval.Value
-					for _, a := range call.ExpectArgs {
-						v, err := h.e.literal(a)
-						if err != nil {
-							return hiddenOutcome{}, err
-						}
-						xs = append(xs, v)
-					}
 					v, err := h.e.m.Eval(h.consts, s2, h.e.em.Expects[call.Action], xs...)
 					if err != nil {
 						return hiddenOutcome{}, err

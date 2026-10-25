@@ -3112,5 +3112,13 @@ quint's own traces of every model in CI, `TestAgreesWithQuint`), and the
 report says so. More states than the cap at a step is no verdict.
 Checked against an independent brute force (the model in Go, every
 gossip sequence up to the depth), the depth's bound shown by a line of
-nodes where a value two hops away takes two rounds.
+nodes where a value two hops away takes two rounds. A review found shadow
+mode comparing the evaluator with itself (a binding with hidden actions
+has nothing for quint to compare, and shadow skips it now), an invariant
+the initial state violates reported after step 1, and the invariants
+judged each on a path of its own: they are now kept on one path, as a
+replay keeps them. Eventual vals are judged over the states hidden
+actions may reach after the last step, since they may run before the
+system is quiet: a probe recorded after the settle observes what they
+did.
 
