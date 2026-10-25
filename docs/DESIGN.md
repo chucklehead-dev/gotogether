@@ -2946,8 +2946,14 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   search too) is what "no order" rests on. A candidate the evaluator
   wrongly accepted needs nothing: its extensions were judged in turn. A
   proof quint contradicts searches again with quint alone, and says so;
-  a search cut short has no proof, and is quint's. The same holds for
-  the invariants' second search. A merge assumes that equal states have
+  a search cut short is no verdict, and stays the evaluator's: quint's
+  search of the same budget, from the same verdicts, would be cut where it
+  was, and one that differs (an order the evaluator wrongly rejected)
+  finds at best what a larger budget finds. It was quint's, searched
+  again, which cost minutes for nothing (raftkv's faithful explorations,
+  82 s for two cut runs of ten; 5 s with the cut kept), and the shadow
+  mode checks the verdicts it rests on. The same holds for the
+  invariants' second search. A merge assumes that equal states have
   equal futures: the key holds, beside the model's state, the order the
   candidate's processes first appear in (which numbers them for
   `{{.process}}`) and, with inferred restarts, its last process (a review

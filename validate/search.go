@@ -583,6 +583,15 @@ func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, proof *
 			return again()
 		}
 	}
+	if cut {
+		// no verdict either way: quint's search of the same budget, from the
+		// same verdicts, would be cut where this one was, and one that
+		// differs (an order the evaluator wrongly rejected) found at best
+		// what a larger budget finds; searching again cost minutes for
+		// nothing (the shadow mode checks the evaluator's verdicts)
+		ev.cut = true
+		return o, ok, tried, cut
+	}
 	off := ev.off
 	ev.off = true
 	searchedAgain.Add(1)
@@ -644,6 +653,7 @@ type evalUse struct {
 	// cannot carry a template, or did not compile)
 	unavailable bool
 	disagreed   bool // quint contradicted its conclusion
+	cut         bool // it judged a search cut short: no verdict, not searched again
 }
 
 // note is issue with how its candidates were checked, when quint checked
@@ -657,6 +667,8 @@ func (ev *evalUse) note(issue qtrace.Issue) qtrace.Issue {
 		issue.Msg += "; candidates checked by quint, the binding having no Go evaluator (" + ev.why + ")"
 	case ev.refused:
 		issue.Msg += "; candidates after the evaluator refused one checked by quint (" + ev.why + ")"
+	case ev.cut:
+		issue.Msg += "; its candidates judged by the Go evaluator (GOTOGETHER_EVAL=quint searches with quint alone)"
 	}
 	return issue
 }
