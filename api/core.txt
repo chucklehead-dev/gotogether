@@ -52,6 +52,7 @@ type Binding struct
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
     method (*Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error)
+    method (*Binding) Planner(m *Model, whole *qtrace.Trace) *Planner
     method (*Binding) Skips(s *qtrace.Step) bool
     method (*Binding) SpecPath() string
     method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
@@ -127,6 +128,8 @@ type Plan struct
     field Constants map[string]string
     field Calls []Call
     method (*Plan) ConstantList() []string
+type Planner struct
+    method (*Planner) Plan(t *qtrace.Trace) (*Plan, error)
 type RecordCall struct
     field Pos string
     field At token.Pos

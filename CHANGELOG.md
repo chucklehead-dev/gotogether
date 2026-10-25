@@ -44,8 +44,12 @@ The first release. What a user meets, by module:
   invariant no path keeps or an eventual val no final state has: it was
   a rejection.
 - A binding's templates are parsed once per process and its functions
-  bound once per plan, not per render: raftkv's 200-operation history
-  linearized in 24 s, from 50 s (template parsing was a third of it).
+  bound once per plan, not per render; a search plans its candidates with
+  one `binding.Planner` (the history interned and its constants rendered
+  once: `Binding.Planner`, `Planner.Plan`), and the Go evaluator judges a
+  candidate from the state of the longest prefix it accepted before
+  (each was replayed from init). raftkv's 200-operation history
+  linearized in 15 s, from 50 s.
 - A pending call placed by a search keeps its own process (it rendered
   `{{.process}}` as the step before it's): it infers no restart, and
   qtrace's overlap check skips it.

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/maphash"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -284,7 +285,7 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 	if hooks.TamperEval.Load() == 2 {
 		return -1, fmt.Sprint(len(order)), nil
 	}
-	plan, err := c.Binding.PlanWithin(c.Model, tr, within)
+	plan, err := c.plan(tr, within)
 	if err != nil {
 		return 0, "", err
 	}
@@ -296,9 +297,15 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 		}
 		consts[name] = v
 	}
-	s, err := e.m.Init(consts, e.em.Init)
-	if err != nil {
-		return 0, "", err
+	// the deepest prefix of the plan's calls a candidate before this one
+	// was accepted with: its state, judged again from there (each was
+	// replayed from init, a search's cost quadratic in the history)
+	keys := c.memo.keys(plan.Calls)
+	from, s := c.memo.deepest(keys)
+	if s == nil {
+		if s, err = e.m.Init(consts, e.em.Init); err != nil {
+			return 0, "", err
+		}
 	}
 	violated := -1
 	check := func(at int) error {
@@ -317,10 +324,15 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 		}
 		return nil
 	}
-	if err := check(n - 1); err != nil { // quint names no step for the initial state
-		return 0, "", err
+	if from == 0 {
+		if err := check(n - 1); err != nil { // quint names no step for the initial state
+			return 0, "", err
+		}
 	}
 	for i, call := range plan.Calls {
+		if i < from {
+			continue // the prefix's: accepted, every invariant held
+		}
 		at := stepAt(plan.Calls, i, n)
 		var args []qeval.Value
 		for _, p := range c.Model.Actions[call.Action] {
@@ -362,6 +374,9 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 			return 0, "", err
 		}
 	}
+	if violated < 0 {
+		c.memo.put(keys[len(plan.Calls)], s) // before the settle's vals: an extension adds steps
+	}
 	if tr.Settled {
 		for _, ev := range c.Binding.Eventually {
 			v, err := e.m.Eval(consts, s, e.em.Eventually[ev])
@@ -390,4 +405,73 @@ func stepAt(calls []binding.Call, i, n int) int {
 		return int(s.Seq) - 1
 	}
 	return n - 1
+}
+
+// A stateMemo holds a search's states after the candidates the Go
+// evaluator accepted, keyed by a hash of their planned calls (128 bits:
+// two seeds), for its extensions. The instance (the constants) is the
+// search's, fixed. A nil memo holds nothing.
+type stateMemo struct {
+	mu     sync.Mutex
+	seeds  [2]maphash.Seed
+	states map[[2]uint64]qeval.State
+}
+
+// memoCap bounds a memo: past it, no more states are kept.
+const memoCap = 200000
+
+func newStateMemo() *stateMemo {
+	return &stateMemo{seeds: [2]maphash.Seed{maphash.MakeSeed(), maphash.MakeSeed()}, states: map[[2]uint64]qeval.State{}}
+}
+
+// keys are the rolling keys of calls' prefixes: keys[i] the first i's.
+func (m *stateMemo) keys(calls []binding.Call) [][2]uint64 {
+	if m == nil {
+		return make([][2]uint64, len(calls)+1)
+	}
+	out := make([][2]uint64, len(calls)+1)
+	var h maphash.Hash
+	for i, c := range calls {
+		for j := range 2 {
+			h.SetSeed(m.seeds[j])
+			fmt.Fprintf(&h, "%d|%s|%s|%q", out[i][j], c.Quint, c.Expect, c.ExpectArgs)
+			out[i+1][j] = h.Sum64()
+		}
+	}
+	return out
+}
+
+// deepest is the longest prefix with a state, and its state (0, nil: none).
+func (m *stateMemo) deepest(keys [][2]uint64) (int, qeval.State) {
+	if m == nil {
+		return 0, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := len(keys) - 1; i > 0; i-- {
+		if s, ok := m.states[keys[i]]; ok {
+			return i, s
+		}
+	}
+	return 0, nil
+}
+
+func (m *stateMemo) put(k [2]uint64, s qeval.State) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.states) < memoCap {
+		m.states[k] = s
+	}
+}
+
+// plan is t's plan within the history whole: by the search's planner when
+// it has one for whole.
+func (c *Checker) plan(t, whole *qtrace.Trace) (*binding.Plan, error) {
+	if c.planner != nil && whole == c.within {
+		return c.planner.Plan(t)
+	}
+	return c.Binding.PlanWithin(c.Model, t, whole)
 }

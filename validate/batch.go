@@ -80,7 +80,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			if c.within != nil { // a search's: its candidates are one actor's
 				whole = c.within
 			}
-			p, err := c.Binding.PlanWithin(c.Model, t, whole)
+			p, err := c.plan(t, whole)
 			if err != nil {
 				errs[i] = fmt.Errorf("actor %s: %w", t.Actor, err)
 				break

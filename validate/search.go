@@ -450,6 +450,8 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 		// the merge of prefixes by state assume
 		within := *ch
 		within.within = tr
+		within.memo = newStateMemo() // the candidates' states, for their extensions
+		within.planner = ch.Binding.Planner(ch.Model, tr)
 		ch = &within
 		quint := quintChecker(ch, tr, a, invariants)
 		return func(orders [][]qtrace.Step) ([]int, []string) {

@@ -3,11 +3,13 @@ package binding
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -95,48 +97,34 @@ func (b *Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error) { return b.Plan
 // of one history is checked in one instance with one naming (a prefix's
 // verdict, and its state, are then its extensions' too).
 func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
-	// 1. Intern opaque identifiers, in whole's order.
-	type ikey struct{ arg, scope string }
-	tables := map[ikey]map[string]int64{}
-	procIdx := map[string]int{}
-	for i, p := range t.Processes {
-		procIdx[p] = i + 1
-	}
-	intern := func(s *qtrace.Step) map[string]any {
-		a := map[string]any{}
-		for k, v := range s.Args {
-			scope, ok := b.Intern[k]
-			if !ok {
-				a[k] = v
-				continue
-			}
-			key := ikey{k, ""}
-			if scope == "process" {
-				key.scope = s.Process
-			}
-			tb := tables[key]
-			if tb == nil {
-				tb = map[string]int64{}
-				tables[key] = tb
-			}
-			id := fmt.Sprint(v)
-			if _, ok := tb[id]; !ok {
-				tb[id] = int64(len(tb) + 1)
-			}
-			a[k] = tb[id]
-		}
-		return a
-	}
+	return b.Planner(m, whole).Plan(t)
+}
+
+// A Planner plans the orders of one history's steps (a search's
+// candidates) in the history's instance: its identifiers interned in its
+// order and its constants rendered once, for every candidate (they were
+// computed again for each, a search's cost quadratic in the history).
+// Plan may be called from several goroutines.
+type Planner struct {
+	b      *Binding
+	m      *Model
+	whole  *qtrace.Trace
+	tables map[ikey]map[string]int64 // whole's interning: read-only once made
+	consts map[string]string
+	err    error // the constants' rendering's
+	mu     sync.Mutex
+	rd     *renderer
+}
+
+type ikey struct{ arg, scope string }
+
+// Planner is a planner of whole's orders.
+func (b *Binding) Planner(m *Model, whole *qtrace.Trace) *Planner {
+	p := &Planner{b: b, m: m, whole: whole, tables: map[ikey]map[string]int64{}, consts: map[string]string{}}
 	all := make([]map[string]any, len(whole.Steps)) // whole's, for the constants
 	for i := range whole.Steps {
-		all[i] = intern(&whole.Steps[i])
+		all[i] = p.intern(&whole.Steps[i], p.tables)
 	}
-	args := make([]map[string]any, len(t.Steps))
-	for i := range t.Steps {
-		args[i] = intern(&t.Steps[i])
-	}
-
-	// 2. Constants, from statistics over whole, interned.
 	funcs := template.FuncMap{
 		"set": func(names ...string) string {
 			seen := map[string]bool{}
@@ -182,15 +170,96 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 			return toI(v)
 		},
 	}
-	rd := newRenderer(funcs)
-	plan := &Plan{Actor: t.Actor, Processes: t.Processes, ObservedSteps: len(t.Steps), Constants: map[string]string{}}
+	p.rd = newRenderer(funcs)
 	for _, c := range sortedKeys(b.Constants) {
-		v, err := rd.render(b.Constants[c], nil)
+		v, err := p.rd.render(b.Constants[c], nil)
 		if err != nil {
-			return nil, fmt.Errorf("constant %s: %w", c, err)
+			p.err = fmt.Errorf("constant %s: %w", c, err)
+			break
 		}
-		plan.Constants[c] = v
+		p.consts[c] = v
 	}
+	return p
+}
+
+// intern is s's arguments with opaque identifiers interned in tables,
+// new ones numbered after those there.
+// missing reports whether interning s would add an identifier to the
+// history's tables.
+func (p *Planner) missing(s *qtrace.Step) bool {
+	for k, v := range s.Args {
+		scope, ok := p.b.Intern[k]
+		if !ok {
+			continue
+		}
+		key := ikey{k, ""}
+		if scope == "process" {
+			key.scope = s.Process
+		}
+		if _, ok := p.tables[key][fmt.Sprint(v)]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Planner) intern(s *qtrace.Step, tables map[ikey]map[string]int64) map[string]any {
+	a := map[string]any{}
+	for k, v := range s.Args {
+		scope, ok := p.b.Intern[k]
+		if !ok {
+			a[k] = v
+			continue
+		}
+		key := ikey{k, ""}
+		if scope == "process" {
+			key.scope = s.Process
+		}
+		tb := tables[key]
+		if tb == nil {
+			tb = map[string]int64{}
+			tables[key] = tb
+		}
+		id := fmt.Sprint(v)
+		if _, ok := tb[id]; !ok {
+			tb[id] = int64(len(tb) + 1)
+		}
+		a[k] = tb[id]
+	}
+	return a
+}
+
+// Plan is t's plan, t an order of some of the history's steps.
+func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	b, m := p.b, p.m
+	procIdx := map[string]int{}
+	for i, pr := range t.Processes {
+		procIdx[pr] = i + 1
+	}
+	// a candidate's steps interned in the history's tables, an identifier
+	// they lack (a pending call's) numbered after them, in a copy
+	var tables map[ikey]map[string]int64
+	args := make([]map[string]any, len(t.Steps))
+	for i := range t.Steps {
+		if tables == nil && p.missing(&t.Steps[i]) {
+			tables = map[ikey]map[string]int64{}
+			for k, tb := range p.tables {
+				tables[k] = maps.Clone(tb)
+			}
+		}
+		if tables != nil {
+			args[i] = p.intern(&t.Steps[i], tables)
+		} else {
+			args[i] = p.intern(&t.Steps[i], p.tables) // read-only here: every identifier is there
+		}
+	}
+	plan := &Plan{Actor: t.Actor, Processes: t.Processes, ObservedSteps: len(t.Steps), Constants: maps.Clone(p.consts)}
+	p.mu.Lock() // the renderer's templates, added as they are first used
+	defer p.mu.Unlock()
+	rd := p.rd
 
 	// 3. Calls.
 	prevProc := ""

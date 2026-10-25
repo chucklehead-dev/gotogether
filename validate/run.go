@@ -31,6 +31,11 @@ type Checker struct {
 	// shadowed: the checks of a shadow's (GOTOGETHER_EVAL=shadow), not
 	// shadowed again
 	shadowed bool
+	// memo is a search's states of the candidates the Go evaluator
+	// accepted, by their calls: an extension is judged from its prefix's
+	memo *stateMemo
+	// planner plans within's candidates, its instance computed once
+	planner *binding.Planner
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the

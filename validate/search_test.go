@@ -541,6 +541,24 @@ func TestJudgeAgreesWithQuint(t *testing.T) {
 					}
 					compared++
 				}
+				// as a search judges them: each order after its prefixes,
+				// from their states (the memo) and by one planner
+				mc := within(c, tr)
+				mc.memo, mc.planner = newStateMemo(), mc.Binding.Planner(mc.Model, tr)
+				for i, o := range settledAs(tr, orders) {
+					for k := 1; k < len(o); k++ {
+						if _, _, err := ev.judge(mc, tr, o[:k], k, inv); err != nil {
+							t.Fatalf("%s: the evaluator refused a prefix: %v", path, err)
+						}
+					}
+					f, _, err := ev.judge(mc, tr, o, len(orders[i]), inv)
+					if err != nil {
+						t.Fatalf("%s trial %d: the evaluator refused: %v", path, trial, err)
+					}
+					if f != q[i] {
+						t.Errorf("%s trial %d, invariants %v, order %v, from its prefixes' states: the evaluator fails at %d, quint at %d", path, trial, inv, actions(orders[i]), f, q[i])
+					}
+				}
 			}
 		}
 	}
