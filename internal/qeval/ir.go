@@ -163,6 +163,21 @@ func Load(data []byte) (*Model, error) {
 	return m, nil
 }
 
+// Constructor reports whether tag is a variant constructor of the model's
+// (a definition that makes the variant tag: a val for one without a
+// payload), not another definition that shares its name (a val BIG = 5).
+func (m *Model) Constructor(tag string) bool {
+	d, ok := m.Decl(tag)
+	if !ok || d.Kind != "def" || d.Expr == nil {
+		return false
+	}
+	e := d.Expr
+	if e.Kind == "lambda" {
+		e = e.Expr
+	}
+	return e != nil && e.Kind == "app" && e.Opcode == "variant" && len(e.Args) > 0 && e.Args[0].Kind == "str" && e.Args[0].Value.String() == tag
+}
+
 // Decl is the declaration of name: its full name (a::b::c) or, when it is
 // none, the shortest declaration's whose name ends in ::name (quint's
 // q::init aliases a module's init; a flattened import is m::model::name).

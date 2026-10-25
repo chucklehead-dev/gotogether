@@ -111,17 +111,53 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 	return &evaluator{em: em, m: m}
 }
 
-// Process-wide: a test's, which flips the evaluator's verdicts to show
-// that quint's confirmation catches an evaluator that is wrong.
-var tamperEval bool
+// Process-wide: a test's, which makes the evaluator wrong (1: it rejects
+// every candidate at its first step, 2: it accepts every one) to show that
+// quint's confirmation catches it.
+var tamperEval int
 
-// literal is a rendered Quint literal (an argument, a constant) as a value.
-func literal(s string) (qeval.Value, error) {
+// literal is a rendered Quint literal (an argument, a constant) as a
+// value. ParseQuint reads a capitalised name as a constructor: one that is
+// no constructor of the model's (a val BIG = 5) is quint's to evaluate.
+func (e *evaluator) literal(s string) (qeval.Value, error) {
 	v, err := itf.ParseQuint(s)
 	if err != nil {
 		return nil, &qeval.Unsupported{Op: "literal", Why: fmt.Sprintf("%s is no literal the evaluator reads: %v", s, err)}
 	}
+	if tag, ok := e.unknownTag(v); ok {
+		return nil, &qeval.Unsupported{Op: "literal", Why: fmt.Sprintf("%s in %s is no constructor of the model's", tag, s)}
+	}
 	return qeval.FromITF(v)
+}
+
+// unknownTag is a variant of v whose tag is no constructor of the model.
+func (e *evaluator) unknownTag(v itf.Value) (string, bool) {
+	if v.Kind == itf.Variant && !e.m.Constructor(v.Tag) {
+		return v.Tag, true
+	}
+	if v.Inner != nil {
+		if t, ok := e.unknownTag(*v.Inner); ok {
+			return t, true
+		}
+	}
+	for _, x := range v.Elems {
+		if t, ok := e.unknownTag(x); ok {
+			return t, true
+		}
+	}
+	for _, p := range v.Pairs {
+		for _, x := range p {
+			if t, ok := e.unknownTag(x); ok {
+				return t, true
+			}
+		}
+	}
+	for _, x := range v.Fields {
+		if t, ok := e.unknownTag(x); ok {
+			return t, true
+		}
+	}
+	return "", false
 }
 
 // judge checks one candidate order of within's steps, as a quint replay
@@ -134,13 +170,16 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 		return 0, "", &qeval.Unsupported{Op: "order", Why: fmt.Sprintf("%d actors in one candidate", len(traces))}
 	}
 	tr := traces[0]
+	if tamperEval == 2 {
+		return -1, fmt.Sprint(len(order)), nil
+	}
 	plan, err := c.Binding.PlanWithin(c.Model, tr, within)
 	if err != nil {
 		return 0, "", err
 	}
 	consts := map[string]qeval.Value{}
 	for k, name := range e.em.Consts {
-		v, err := literal(plan.Constants[k])
+		v, err := e.literal(plan.Constants[k])
 		if err != nil {
 			return 0, "", err
 		}
@@ -174,7 +213,7 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 		at := stepAt(plan.Calls, i, n)
 		var args []qeval.Value
 		for _, p := range c.Model.Actions[call.Action] {
-			v, err := literal(call.Args[p.Name])
+			v, err := e.literal(call.Args[p.Name])
 			if err != nil {
 				return 0, "", err
 			}
@@ -194,7 +233,7 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 			}
 			var xs []qeval.Value
 			for _, a := range call.ExpectArgs {
-				v, err := literal(a)
+				v, err := e.literal(a)
 				if err != nil {
 					return 0, "", err
 				}
@@ -226,20 +265,18 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 	if violated >= 0 {
 		return violated, "", nil
 	}
-	if tamperEval {
+	if tamperEval == 1 {
 		return 0, "", nil
 	}
 	return -1, e.m.Key(s), nil
 }
 
-// stepAt is the order's index of call i: its step's (re-sequenced from 1),
-// or, for a call the binding inferred (a restart), the next observed
-// step's.
+// stepAt is the order's index of call i: its step's (re-sequenced from
+// 1), or, for a call the binding inferred (a restart), the last step's, as
+// failedAt reads a report that names no step for it.
 func stepAt(calls []binding.Call, i, n int) int {
-	for ; i < len(calls); i++ {
-		if s := calls[i].Step; s != nil && s.Seq >= 1 {
-			return int(s.Seq) - 1
-		}
+	if s := calls[i].Step; s != nil && s.Seq >= 1 {
+		return int(s.Seq) - 1
 	}
 	return n - 1
 }

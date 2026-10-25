@@ -133,6 +133,17 @@ func TestEdgesAgreeWithQuint(t *testing.T) {
 	}
 }
 
+// A constructor is a definition that makes its variant, not another
+// definition of the name: a literal's capitalised name is one only then.
+func TestConstructor(t *testing.T) {
+	m := compile(t, "edges.qnt", "edges", "init", "step")
+	for tag, want := range map[string]bool{"A": true, "B": true, "C": true, "mod1": false, "tag": false, "Z": false} {
+		if got := m.Constructor(tag); got != want {
+			t.Errorf("Constructor(%s) = %v", tag, got)
+		}
+	}
+}
+
 // A fold whose result depends on the set's order is refused: quint's
 // backends fold in orders of their own.
 func TestOrderDependentFoldRefused(t *testing.T) {

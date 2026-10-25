@@ -373,9 +373,10 @@ func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
 }
 
 // The Go evaluator decides a search as quint alone does: the same order,
-// the same verdict. And when it is wrong (here, made to reject every
-// order), quint's confirmation of the search's conclusion catches it, and
-// the search runs again with quint, saying so.
+// the same verdict. When it is wrong, quint's verdict stands: an evaluator
+// that rejects every order finds none, which quint alone decides; one
+// that accepts every order finds one quint rejects, a disagreement the
+// search says before it searches again with quint.
 func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
@@ -408,10 +409,122 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	if !strings.Contains(g.issues[0].Msg, "conforms") {
 		t.Fatalf("want an order found: %v", g.issues)
 	}
-	tamperEval = true
-	defer func() { tamperEval = false }()
-	w := search("go")
-	if !strings.Contains(w.issues[0].Msg, "disagree") || !strings.Contains(w.issues[0].Msg, "conforms") {
-		t.Errorf("a wrong evaluator: %v, want the disagreement said and quint's verdict", w.issues)
+	defer func() { tamperEval = 0 }()
+	tamperEval = 1
+	if w := search("go"); !strings.Contains(w.issues[0].Msg, "conforms") {
+		t.Errorf("an evaluator rejecting every order: %v, want quint's verdict", w.issues)
 	}
+	tamperEval = 2
+	steps[3].Obs["balance"] = int64(99) // no order leaves 99
+	if w := search("go"); !strings.Contains(w.issues[0].Msg, "disagree") || !strings.Contains(w.issues[0].Msg, "no order") {
+		t.Errorf("an evaluator accepting every order: %v, want the disagreement said and quint's verdict", w.issues)
+	}
+}
+
+// The evaluator judges a candidate as quint's replay of it reports: the
+// same failure index (an expect, a disabled action, an invariant with
+// invariants on, an eventual val at a settle, a restart's failure at the
+// last step), for every order and prefix of random histories of bindings
+// with invariants, an eventual val, restarts, interning and a constant
+// computed from the steps.
+func TestJudgeAgreesWithQuint(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	if testing.Short() {
+		t.Skip("checks a few hundred candidates with quint")
+	}
+	at := func(n int) time.Time { return time.Unix(0, 0).Add(time.Duration(n) * 10 * time.Millisecond) }
+	r := rand.New(rand.NewPCG(11, 12))
+	histories := map[string]func() []qtrace.Step{
+		"testdata/funds.binding.yaml": func() []qtrace.Step {
+			var steps []qtrace.Step
+			for i := range 2 + r.IntN(2) {
+				a := []string{"deposit", "withdraw"}[r.IntN(2)]
+				rec := fmt.Sprint("c", i)
+				steps = append(steps, qtrace.Step{Action: a, Recorder: rec, Seq: 1, Thread: rec, Actor: "x", Process: "p", Invoked: at(0), Time: at(10),
+					Args: map[string]any{"amount": int64(1 + r.IntN(60))}, Obs: map[string]any{"balance": int64(r.IntN(120))}})
+			}
+			if r.IntN(2) == 0 {
+				steps = append(steps, qtrace.Step{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(20)})
+			}
+			return steps
+		},
+		"testdata/funds.binding.yaml#drained": func() []qtrace.Step {
+			// a conforming order that settles with nothing funded
+			d := qtrace.Step{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Actor: "x", Process: "p", Invoked: at(0), Time: at(10),
+				Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
+			w := qtrace.Step{Action: "withdraw", Recorder: "b", Seq: 1, Thread: "b", Actor: "x", Process: "p", Invoked: at(0), Time: at(10),
+				Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(0)}}
+			return []qtrace.Step{d, w, {Action: "settled", Settled: true, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(20)}}
+		},
+		"testdata/procs.yaml": func() []qtrace.Step {
+			var steps []qtrace.Step
+			for i := range 2 + r.IntN(2) {
+				rec := fmt.Sprint("c", i)
+				steps = append(steps, qtrace.Step{Action: "inc", Recorder: rec, Seq: 1, Thread: rec, Actor: "x", Process: []string{"P", "Q"}[r.IntN(2)],
+					Invoked: at(0), Time: at(10), Args: map[string]any{"id": fmt.Sprint("id", r.IntN(2))}, Obs: map[string]any{}})
+			}
+			steps = append(steps, qtrace.Step{Action: "look", Recorder: "l", Seq: 1, Thread: "l", Actor: "x", Process: []string{"P", "Q"}[r.IntN(2)],
+				Invoked: at(20), Time: at(30), Args: map[string]any{}, Obs: map[string]any{"count": int64(r.IntN(4)), "crashes": int64(r.IntN(2)), "seen": int64(1 + r.IntN(2))}})
+			return steps
+		},
+	}
+	compared := 0
+	for path, gen := range histories {
+		c, err := NewChecker(strings.Split(path, "#")[0], Options{Dir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ev := evaluatorFor(c)
+		if ev.err != nil {
+			t.Fatalf("%s: %v", path, ev.err)
+		}
+		for trial := range 6 {
+			traces, _ := qtrace.Reconstruct(gen())
+			tr := traces[0]
+			// every order of the steps, and every prefix of the first
+			var orders [][]qtrace.Step
+			var perm func(rest, cur []qtrace.Step)
+			perm = func(rest, cur []qtrace.Step) {
+				if len(rest) == 0 {
+					o := slices.Clone(cur)
+					for i := range o {
+						o[i].Recorder, o[i].Thread, o[i].Seq, o[i].Call = "linearized:x", "linearized", uint64(i+1), 0
+					}
+					orders = append(orders, o)
+					return
+				}
+				for i := range rest {
+					perm(append(slices.Clone(rest[:i]), rest[i+1:]...), append(slices.Clone(cur), rest[i]))
+				}
+			}
+			perm(tr.Steps, nil)
+			for k := 1; k < len(orders[0]); k++ {
+				orders = append(orders, orders[0][:k])
+			}
+			for _, inv := range []bool{false, true} {
+				q, _ := quintChecker(within(c, tr), tr, "x", inv)(orders)
+				for i, o := range settledAs(tr, orders) {
+					f, _, err := ev.judge(within(c, tr), tr, o, len(orders[i]), inv)
+					if err != nil {
+						t.Fatalf("%s trial %d: the evaluator refused: %v", path, trial, err)
+					}
+					if f != q[i] {
+						t.Errorf("%s trial %d, invariants %v, order %v: the evaluator fails at %d, quint at %d", path, trial, inv, actions(orders[i]), f, q[i])
+					}
+					compared++
+				}
+			}
+		}
+	}
+	t.Logf("%d candidates compared", compared)
+}
+
+func actions(o []qtrace.Step) []string {
+	var out []string
+	for _, s := range o {
+		out = append(out, fmt.Sprintf("%s%v%v@%s", s.Action, s.Args, s.Obs, s.Process))
+	}
+	return out
 }

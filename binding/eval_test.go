@@ -21,10 +21,21 @@ func TestSplitTemplate(t *testing.T) {
 	if !slices.Equal(parts, []string{"result.get(", ") == ", " and s == ", ""}) || !slices.Equal(holes, []string{"{{.id}}", "{{.obs.ok}}", "{{toSet .ids}}"}) {
 		t.Errorf("parts %q, holes %q", parts, holes)
 	}
-	for _, bad := range []string{`{{if .x}}a{{end}}`, `{{range .xs}}{{.}}{{end}}`, `{{$v := .x}}{{$v}}`} {
+	// a field the text reads as part of a token means something else as a
+	// parameter: inside a string, glued to a name or a number
+	for _, bad := range []string{`{{if .x}}a{{end}}`, `{{range .xs}}{{.}}{{end}}`, `{{$v := .x}}{{$v}}`,
+		`name == "n{{.id}}"`, `x == n{{.id}}`, `x == {{.id}}0`, `r.{{.f}} == 1`} {
 		if _, _, err := splitTemplate(bad); err == nil {
 			t.Errorf("%s split", bad)
 		}
+	}
+	// applied to (a method, an index) it is the same Quint, but for a
+	// negative value: -3^2 is -(3^2), a parameter -3 squared is 9
+	if _, _, err := splitTemplate(`{{toList .xs}}.indices() == {{.n}}`); err != nil {
+		t.Errorf("a field applied to: %v", err)
+	}
+	if atomic("-3", "^2") || !atomic("3", "^2") || !atomic("-3", " == x") {
+		t.Errorf("atomic: a negative value before ^ reads otherwise")
 	}
 }
 
@@ -86,7 +97,7 @@ func TestEvalModuleCompiles(t *testing.T) {
 			qnt := filepath.Join(dir, "eval.qnt")
 			em, err := b.EvalModule(m, qnt)
 			if err != nil {
-				t.Skipf("no evaluation module: %v", err)
+				t.Errorf("no evaluation module: %v", err) // every binding of the repository has one
 			}
 			if err := os.WriteFile(qnt, []byte(em.Text), 0o644); err != nil {
 				t.Fatal(err)

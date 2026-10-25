@@ -245,10 +245,11 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 		}
 		if ab.Expect != "" && !s.Ambiguous { // an assumed effect observed nothing
 			c.ExpectTemplate = ab.Expect
-			if _, holes, err := splitTemplate(ab.Expect); err == nil {
-				for _, h := range holes {
+			if parts, holes, err := splitTemplate(ab.Expect); err == nil {
+				c.ExpectArgs = []string{} // a template of no fields has none, but has them
+				for i, h := range holes {
 					v, err := render(h, data, funcs)
-					if err != nil {
+					if err != nil || !atomic(v, parts[i+1]) {
 						c.ExpectArgs = nil
 						break
 					}

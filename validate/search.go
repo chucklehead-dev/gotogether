@@ -318,7 +318,7 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 	ev := &evalUse{}
 	if evalMode() == "go" {
 		if ev.e = evaluatorFor(full); ev.e.err != nil {
-			ev.off, ev.why = true, ev.e.err.Error()
+			ev.off, ev.unavailable, ev.why = true, true, ev.e.err.Error()
 		}
 	} else {
 		ev.off, ev.why = true, "GOTOGETHER_EVAL=quint"
@@ -337,7 +337,7 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 				for i, o := range settledAs(tr, orders) {
 					f, st, err := ev.e.judge(ch, tr, o, len(orders[i]), invariants)
 					if err != nil {
-						ev.off, ev.why, judged = true, err.Error(), false
+						ev.off, ev.refused, ev.why, judged = true, true, err.Error(), false
 						break
 					}
 					fs[i] = f
@@ -365,28 +365,57 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false
 	}
 	o, ok, tried, cut := qtrace.LinearizeStates(tr.Steps, budget, check)
-	if ev.used && !cut {
-		// quint confirms the conclusion: the order found conforms, or the
-		// one that got furthest fails. A disagreement searches again with
-		// quint alone (and says so: the evaluator has a bug)
-		q := quintChecker(&Checker{Binding: ch.Binding, Model: ch.Model, Options: ch.Options, within: tr}, tr, a, false)
-		if fq := first(q([][]qtrace.Step{o})); (fq < 0) != ok {
-			ev.off, ev.why = true, fmt.Sprintf("the Go evaluator and quint disagree on actor %s's order (quint: %s)", a, verdictOf(fq))
-			ev.disagreed = true
-			o, ok, tried, cut = qtrace.LinearizeStates(tr.Steps, budget, check)
-		}
-	}
-	o, issue, cut := orderIssue(ch, full, tr, a, budget, partitioned, checker, o, ok, tried, cut)
+	o, ok, tried, cut = ev.decide(o, ok, tried, cut, quintChecker(within(ch, tr), tr, a, false), a,
+		func() ([]qtrace.Step, bool, int, bool) { return qtrace.LinearizeStates(tr.Steps, budget, check) })
+	o, issue, cut := orderIssue(ch, full, tr, a, budget, partitioned, checker, ev, o, ok, tried, cut)
 	return o, ev.note(issue), cut
+}
+
+// within is ch planning its candidates in tr's instance.
+func within(ch *Checker, tr *qtrace.Trace) *Checker {
+	c := *ch
+	c.within = tr
+	return &c
+}
+
+// decide is a search's conclusion as quint confirms it, when the Go
+// evaluator judged its candidates: an order found is checked by quint (a
+// disagreement searches again with quint alone, and says so); no order
+// found, or a search cut short, is decided by quint alone, since no one
+// order confirms that every order fails (the evaluator could have
+// rejected the one that conforms).
+func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, quint func([][]qtrace.Step) ([]int, []string), a string,
+	again func() ([]qtrace.Step, bool, int, bool)) ([]qtrace.Step, bool, int, bool) {
+	if !ev.used {
+		return o, ok, tried, cut // quint judged every candidate
+	}
+	ev.used = false
+	if ok {
+		if fq := first(quint([][]qtrace.Step{o})); fq >= 0 {
+			ev.off, ev.disagreed = true, true
+			ev.why = fmt.Sprintf("the Go evaluator and quint disagree on actor %s's order (quint: %s)", a, verdictOf(fq))
+			return again()
+		}
+		return o, ok, tried, cut
+	}
+	off := ev.off
+	ev.off = true
+	o, ok, tried, cut = again()
+	ev.off = off
+	return o, ok, tried, cut
 }
 
 // evalUse is how a search used the Go evaluator.
 type evalUse struct {
-	e         *evaluator
-	off       bool   // quint checks the candidates (no evaluator, or it refused one)
-	why       string // why it is off
-	used      bool   // it judged some candidates
-	disagreed bool   // quint contradicted its conclusion
+	e       *evaluator
+	off     bool   // quint checks the candidates (no evaluator, or it refused one)
+	why     string // why it is off
+	used    bool   // it judged candidates of the search being decided
+	refused bool   // it refused a candidate: the rest of the search was quint's
+	// unavailable: the binding has no evaluator (its evaluation module
+	// cannot carry a template, or did not compile)
+	unavailable bool
+	disagreed   bool // quint contradicted its conclusion
 }
 
 // note is issue with how its candidates were checked, when quint checked
@@ -396,7 +425,9 @@ func (ev *evalUse) note(issue qtrace.Issue) qtrace.Issue {
 	case ev.disagreed:
 		issue.Severity = "warn"
 		issue.Msg += "; " + ev.why + ": searched again with quint (GOTOGETHER_EVAL=quint checks with quint alone)"
-	case ev.used && ev.off:
+	case ev.unavailable:
+		issue.Msg += "; candidates checked by quint, the binding having no Go evaluator (" + ev.why + ")"
+	case ev.refused:
 		issue.Msg += "; candidates after the evaluator refused one checked by quint (" + ev.why + ")"
 	}
 	return issue
@@ -446,13 +477,18 @@ func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func
 // issue, and whether the search was cut short; with invariants, a second
 // search for an order that keeps them.
 func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, partitioned bool,
-	checker func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string),
+	checker func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string), ev *evalUse,
 	o []qtrace.Step, ok bool, tried int, cut bool) ([]qtrace.Step, qtrace.Issue, bool) {
+	quintInv := quintChecker(within(full, tr), tr, a, true)
 	switch {
-	case ok && len(full.Binding.Invariants) > 0 && first(checker(full, true)([][]qtrace.Step{o})) >= 0:
-		// the order found violates an invariant: another that conforms may
+	case ok && len(full.Binding.Invariants) > 0 && first(quintInv([][]qtrace.Step{o})) >= 0:
+		// the order found violates an invariant (quint says, one check): another that conforms may
 		// not, and a run must not look violating by the order picked
-		o2, ok2, tried2, cut2 := qtrace.LinearizeStates(tr.Steps, budget, checker(full, true))
+		inv := checker(full, true)
+		ev.used = false
+		o2, ok2, tried2, cut2 := qtrace.LinearizeStates(tr.Steps, budget, inv)
+		o2, ok2, tried2, cut2 = ev.decide(o2, ok2, tried2, cut2, quintInv, a,
+			func() ([]qtrace.Step, bool, int, bool) { return qtrace.LinearizeStates(tr.Steps, budget, inv) })
 		switch {
 		case ok2:
 			return o2, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms with every invariant holding (%d orders tried, %d with the invariants)", a, len(o2), tried, tried2)}, false

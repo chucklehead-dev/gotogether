@@ -159,5 +159,34 @@ func splitTemplate(tpl string) (parts, holes []string, err error) {
 		}
 	}
 	parts = append(parts, text.String())
+	// a field the text reads as part of a token (inside a string literal,
+	// glued to a name or a number, applied or indexed) means something else
+	// as a parameter: "n{{.id}}" is one string, n__gtg_h0 a name
+	for i := range holes {
+		before, after := parts[i], parts[i+1]
+		if strings.Count(strings.Join(parts[:i+1], ""), `"`)%2 == 1 {
+			return nil, nil, fmt.Errorf("%s is inside a string literal: the Go evaluator takes fields that are values of their own", holes[i])
+		}
+		// (a value followed by .f(), [i] or a call is applied the same way as
+		// a parameter, but for a negative one: atomic, per call)
+		if n := len(before); n > 0 && glues(before[n-1]) || len(after) > 0 && after[0] != '.' && glues(after[0]) {
+			return nil, nil, fmt.Errorf("%s is glued to the text around it: the Go evaluator takes fields that are values of their own", holes[i])
+		}
+	}
 	return parts, holes, nil
+}
+
+func glues(c byte) bool {
+	return c == '_' || c == '"' || c == '.' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// Atomic reports whether a field's value, rendered, reads as one value
+// wherever the template puts it: a negative number before ^ (-3^2 is
+// -(3^2) in Quint) does not, as a parameter it is (-3)^2.
+func atomic(v, after string) bool {
+	if !strings.HasPrefix(v, "-") {
+		return true
+	}
+	a := strings.TrimLeft(after, " \t")
+	return a == "" || !strings.ContainsRune("^.[(", rune(a[0]))
 }
