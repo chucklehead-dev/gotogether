@@ -139,11 +139,16 @@ under a week, M two to four, L more.
     claim is judged in its history's instance (identifiers interned in the
     history's order) and the run's check in the order's: the same verdict
     only for a model symmetric in interned identifiers, which a check of
-    the claim in the check's instance would not need; each candidate extended
-    from its prefix's held state rather than replayed from init (WGL at
-    Porcupine's speed); a nightly Hegel property drawing
-    states and arguments against quint, and a shadow mode running both;
+    the claim in the check's instance would not need;
     quint-confirmed single steps in validate's shape for every binding.
+    `GOTOGETHER_EVAL=shadow` judges with both and fails a search on a
+    disagreement, nightly on the searching examples and the core's search
+    tests (`evaluator-shadow`). Not done, by measurement: extending each
+    candidate from its prefix's held state rather than replaying it from
+    init (the contended mutants spend 2.3 s of 32 s in Go, the rest in
+    quint processes); a Hegel property drawing states against quint
+    (quint cannot start from a drawn state; the shadow runs and
+    TestAgreesWithQuint's traces cover the reachable ones).
 - **T3. The searches in the right layer (M). Done:** validate's
   `Checker.Search` and `Search.Mark`, the CLI's `-linearize`,
   `-linearize-key`, `-resolve-pending`; `quint.assumed` in step logs,

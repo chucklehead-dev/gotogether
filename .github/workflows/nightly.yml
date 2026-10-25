@@ -153,3 +153,31 @@ jobs:
           for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u); do
             "$RUNNER_TEMP/gotogether" simulate -binding "$b" -verify 8 || exit 1
           done
+
+  evaluator-shadow:
+    # the Go evaluator against quint on every batch it judges in the
+    # searching examples (GOTOGETHER_EVAL=shadow): a disagreement fails the
+    # test, naming the candidate. Quint checks everything too, so it takes
+    # what quint alone does.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [kvstore, quorumkv, wallet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: the searching tests, every batch checked by both
+        working-directory: examples/${{ matrix.example }}
+        run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ./...
+      - name: the core's searches, checked by both
+        if: matrix.example == 'wallet'
+        run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 60m ./validate ./qtest

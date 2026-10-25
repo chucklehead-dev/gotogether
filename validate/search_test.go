@@ -599,6 +599,7 @@ func TestConfirmsAProof(t *testing.T) {
 // that check fails where the evaluator was wrong, Confirm searches again
 // with quint alone, and says so; when it holds, Confirm does nothing.
 func TestConfirmByCheck(t *testing.T) {
+	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -684,6 +685,7 @@ func TestConfirmByCheck(t *testing.T) {
 // it, which quint takes (a pending deposit with no effect keeps the
 // balance under the limit). Each is checked by quint and searched again.
 func TestConfirmByCheckBeyondConformance(t *testing.T) {
+	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -795,6 +797,7 @@ func TestConfirmSeesThroughMark(t *testing.T) {
 // LinearizeByKey's claims are its partitions', as the report names them:
 // a wrong order of one key's steps is confirmed and searched again.
 func TestConfirmByCheckByKey(t *testing.T) {
+	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -824,5 +827,56 @@ func TestConfirmByCheckByKey(t *testing.T) {
 	again, err := s.Confirm(rep)
 	if err != nil || again == nil || !strings.Contains(fmt.Sprint(again.issues), "x key=a") {
 		t.Errorf("again %v, err %v", again, err)
+	}
+}
+
+// GOTOGETHER_EVAL=shadow checks every batch the evaluator judges with
+// quint too: a right evaluator searches as without it; a wrong one is the
+// search's error, naming the candidate, for linearizations and
+// resolutions alike.
+func TestShadowMode(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	t.Setenv("GOTOGETHER_EVAL", "shadow")
+	defer hooks.TamperEval.Store(0)
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
+	var deposits []qtrace.Step
+	for i, amount := range []int64{1, 2, 4} {
+		rec := fmt.Sprint("c", i)
+		deposits = append(deposits, qtrace.Step{Action: "deposit", Recorder: rec, Seq: 1, Thread: rec, Actor: "acct", Process: "p",
+			Invoked: at(0), Time: at(10), Args: map[string]any{"amount": amount}, Obs: map[string]any{}})
+	}
+	deposits = append(deposits, qtrace.Step{Action: "withdraw", Recorder: "w", Seq: 1, Thread: "w", Actor: "acct", Process: "p",
+		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}})
+	pending := []qtrace.Step{
+		{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
+		{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+		{Action: "deposit", Recorder: "c", Seq: 3, Time: ms(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(12)}},
+	}
+	for _, x := range []struct {
+		name, binding string
+		opt           SearchOptions
+		steps         []qtrace.Step
+	}{
+		{"linearize", "testdata/blind.yaml", SearchOptions{Linearize: true}, deposits},
+		{"resolve", "testdata/account.yaml", SearchOptions{ResolvePending: true}, pending},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			hooks.TamperEval.Store(0)
+			s, err := c.Search(x.steps, x.opt)
+			if err != nil || !strings.Contains(fmt.Sprint(s.issues), "conform") && !strings.Contains(fmt.Sprint(s.issues), "resolved") {
+				t.Fatalf("a right evaluator in shadow: err %v, issues %v", err, s)
+			}
+			hooks.TamperEval.Store(1) // rejects every candidate at its first step
+			if _, err := c.Search(x.steps, x.opt); err == nil || !strings.Contains(err.Error(), "GOTOGETHER_EVAL=shadow") {
+				t.Errorf("a wrong evaluator in shadow: err %v", err)
+			}
+		})
 	}
 }

@@ -286,6 +286,7 @@ func TestLinearizeByKeyKeepsTheSettle(t *testing.T) {
 // judged again with quint alone, saying so. Not parallel: the evaluator
 // is made wrong process-wide.
 func TestExploreConfirmsTheEvaluatorsOrders(t *testing.T) {
+	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
 	RequireQuint(t)
 	hooks.TamperEval.Store(2)
 	defer hooks.TamperEval.Store(0)

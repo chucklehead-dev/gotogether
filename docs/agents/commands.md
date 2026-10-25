@@ -37,6 +37,10 @@ AGENTS.md has the general requirements.
   alone (by default the Go evaluator judges them, internal/qeval over the
   binding's evaluation module, compiled once into
   $TMPDIR/gotogether-eval/, and quint confirms the search's conclusion).
+  `GOTOGETHER_EVAL=shadow` judges with both, every batch the evaluator
+  judges checked by quint too, and fails the search on a disagreement,
+  naming the candidate (the nightly's `evaluator-shadow`; as slow as
+  quint alone).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's

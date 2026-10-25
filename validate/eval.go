@@ -38,13 +38,37 @@ type evalOnce struct {
 }
 
 // evalMode is how searches check candidates: "go" (the evaluator, quint
-// for what it refuses; the default), "quint" (quint alone), from
-// GOTOGETHER_EVAL.
+// for what it refuses; the default), "quint" (quint alone), "shadow" (the
+// evaluator, every batch it judges checked by quint too, a disagreement
+// the search's error: the nightly's), from GOTOGETHER_EVAL.
 func evalMode() string {
-	if m := os.Getenv("GOTOGETHER_EVAL"); m == "quint" {
+	if m := os.Getenv("GOTOGETHER_EVAL"); m == "quint" || m == "shadow" {
 		return m
 	}
 	return "go"
+}
+
+// shadowCheck fails the search when quint's verdicts of orders are not
+// the evaluator's (fs), index for index: under GOTOGETHER_EVAL=shadow.
+func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtrace.Step) ([]int, []string)) {
+	qs, _ := quint(orders)
+	for i := range orders {
+		if fs[i] != qs[i] {
+			fail("GOTOGETHER_EVAL=shadow: actor %s: the Go evaluator and quint disagree on a candidate of %d steps (the evaluator: %s, quint: %s): "+
+				"a bug of the evaluator (internal/qeval) or of the binding's evaluation module (binding.EvalModule); report it with this run's steps "+
+				"(GOTOGETHER_KEEP keeps them), and check with GOTOGETHER_EVAL=quint meanwhile\n  %s",
+				a, len(orders[i]), verdictOf(fs[i]), verdictOf(qs[i]), stepsString(orders[i]))
+		}
+	}
+}
+
+// stepsString is an order's steps, one line.
+func stepsString(o []qtrace.Step) string {
+	parts := make([]string, len(o))
+	for i, s := range o {
+		parts[i] = s.String()
+	}
+	return strings.Join(parts, "; ")
 }
 
 // evaluatorFor is c's binding's evaluator, compiled the first time.

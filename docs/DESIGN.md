@@ -2958,7 +2958,10 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   evaluator's successors of the one before), and a table of builtins at
   their edges against both backends' values; a search with and without it
   gives the same verdict, and one made wrong is caught by the
-  confirmation.
+  confirmation. `GOTOGETHER_EVAL=shadow` checks every batch the
+  evaluator judges with quint too, failing the search on any
+  disagreement of a failure index; the nightly runs the searching
+  examples so, where the histories are the ones users' runs make.
 
 - **Confirmed by the run's check.** An order found was confirmed by a
   quint process of its own, and then replayed by quint again in the

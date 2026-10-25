@@ -464,6 +464,9 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 				}
 				if judged {
 					ev.used = true
+					if ev.shadow {
+						shadowCheck(a, orders, fs, quint)
+					}
 					return fs, states
 				}
 			}
@@ -497,9 +500,10 @@ func newEvalUse(ch, full *Checker) *evalUse {
 	switch {
 	case ch.quintOnly:
 		ev.off, ev.why = true, "a search again with quint alone"
-	case evalMode() != "go":
+	case evalMode() == "quint":
 		ev.off, ev.why = true, "GOTOGETHER_EVAL=quint"
 	default:
+		ev.shadow = evalMode() == "shadow"
 		if ev.e = evaluatorFor(full); ev.e.err != nil {
 			ev.off, ev.unavailable, ev.why = true, true, ev.e.err.Error()
 		}
@@ -616,6 +620,7 @@ type evalUse struct {
 	why     string // why it is off
 	used    bool   // it judged candidates of the search being decided
 	byCheck bool   // an order it finds is the caller's check to confirm
+	shadow  bool   // quint checks every batch it judges too (GOTOGETHER_EVAL=shadow)
 	pending bool   // decide left the order it found to the caller's check
 	refused bool   // it refused a candidate: the rest of the search was quint's
 	// unavailable: the binding has no evaluator (its evaluation module
@@ -1118,7 +1123,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	// it rejected before it (or by the caller's check); none, or a
 	// refusal, and quint checks them all, as a verdict of none needs every
 	// one rejected
-	if i, ok := resolveEval(ch).first(ch, tr, orders); ok {
+	if i, ok := resolveEval(ch).first(ch, tr, a, orders); ok {
 		found := func() ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
 				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note}, false, nil
@@ -1176,18 +1181,26 @@ func resolveEval(ch *Checker) *evalUse { return newEvalUse(ch, ch) }
 
 // first is the index of the first of orders the Go evaluator accepts;
 // false if it accepts none or refuses one before it.
-func (ev *evalUse) first(ch *Checker, tr *qtrace.Trace, orders [][]qtrace.Step) (int, bool) {
+func (ev *evalUse) first(ch *Checker, tr *qtrace.Trace, a string, orders [][]qtrace.Step) (int, bool) {
 	if ev.off {
 		return 0, false
 	}
+	var fs []int
 	for i, o := range settledAs(tr, orders) {
 		f, _, err := ev.e.judge(ch, tr, o, len(orders[i]), false)
 		if err != nil {
 			return 0, false
 		}
+		fs = append(fs, f)
 		if f < 0 {
-			return i, true
+			break
 		}
+	}
+	if ev.shadow {
+		shadowCheck(a, orders[:len(fs)], fs, quintChecker(ch, tr, a, false))
+	}
+	if i := len(fs) - 1; i >= 0 && fs[i] < 0 {
+		return i, true
 	}
 	return 0, false
 }
