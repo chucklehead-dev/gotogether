@@ -189,6 +189,11 @@ The first release. What a user meets, by module:
   `qtest.Run.Recorded` holds the steps as recorded beside `Steps`, the
   steps judged; `Chooser`'s doc gives the ChooseTask and ChooseNemesis
   protocols the scheduler looks for.
+- Each check writes into a directory of its own under `Options.Dir`
+  (`check-*`): checks with one Dir once wrote the same module and ITF
+  files, so two at once replayed each other's modules and took each
+  other's verdicts (found by the verdict-path matrix, validate's
+  TestVerdictMatrix).
 - binding plans, internal/replay writes: the replay modules
   (RenderModule, RenderBatch, ModuleSpec, Generated, Generate) are the
   validator's own, no longer binding's API; `binding.PlanWithin` is

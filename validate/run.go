@@ -76,10 +76,24 @@ type scratch struct {
 	err  error
 }
 
-// dirFor is o with a directory of its own under c's scratch directory
-// when o names none.
+// dirFor is o with a directory of its own for one check: under o.Dir
+// when it names one, else under c's scratch directory. Checks with one
+// Dir once wrote the same files (observed_<actor>.qnt and its ITF), so
+// two at once replayed each other's modules and took each other's
+// verdicts.
 func (c *Checker) dirFor(o Options) (Options, error) {
-	if o.Dir != "" || c.scratch == nil {
+	if o.Dir != "" {
+		d, err := os.MkdirTemp(o.Dir, "check-")
+		if err != nil && os.MkdirAll(o.Dir, 0o755) == nil {
+			d, err = os.MkdirTemp(o.Dir, "check-")
+		}
+		if err != nil {
+			return o, err
+		}
+		o.Dir = d
+		return o, nil
+	}
+	if c.scratch == nil {
 		return o, nil
 	}
 	c.scratch.once.Do(func() { c.scratch.root, c.scratch.err = os.MkdirTemp("", "gotogether-") })
