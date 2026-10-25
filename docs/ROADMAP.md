@@ -135,7 +135,11 @@ under a week, M two to four, L more.
     contended mutants to 43 s, the faithful exploration to 4 s, wallet's
     pending transfers 44 s to 12 s.
     Also: LinearizeByKey's partitions side by side, and a history real
-    time orders alone not searched (`qtrace.ForcedOrder`). Left: each candidate extended
+    time orders alone not searched (`qtrace.ForcedOrder`). Left: a
+    claim is judged in its history's instance (identifiers interned in the
+    history's order) and the run's check in the order's: the same verdict
+    only for a model symmetric in interned identifiers, which a check of
+    the claim in the check's instance would not need; each candidate extended
     from its prefix's held state rather than replayed from init (WGL at
     Porcupine's speed); a nightly Hegel property drawing
     states and arguments against quint, and a shadow mode running both;
