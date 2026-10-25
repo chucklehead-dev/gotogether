@@ -2965,16 +2965,23 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   run's check, one process after the other (2–4 s a run). With
   `SearchOptions.ConfirmByCheck` (qtest's searches and the CLI's) the
   check is the confirmation: `Search.Confirm` takes its report, and for
-  each actor it fails (its conformance, or with a claim of invariants
-  held, one of them) whose order only the evaluator judged, checks that
-  order with quint; one quint rejects makes the run searched again with
-  quint alone, and checked again, with a warning. An actor that passes
-  confirmed its order in the check. A failing run pays the process it
-  saved, no more. ResolvePending's placements are judged the same way:
-  the first the evaluator accepts is the resolution, confirmed by the
-  check (or by one quint check without ConfirmByCheck); when it accepts
-  none, quint's batch decides as before, a verdict of none needing every
-  placement rejected.
+  each actor it does not pass (its conformance, an eventual val or an
+  invariant failed, or the search left it undecided, whose verdicts Mark
+  made n/a: an exploration confirms on marked reports) whose order only
+  the evaluator judged, checks that order with quint; one quint rejects
+  makes the run searched again with quint alone, and checked again, with
+  a warning. An actor that passes confirmed its order in the check. A
+  failing run pays the process it saved, no more. ResolvePending's
+  placements are judged the same way: the first the evaluator accepts is
+  the resolution, confirmed with the placements it rejected before it
+  (the run's invariants are judged on the one taken, so it must be
+  quint's: a review found a pending deposit's no-effect placement
+  wrongly rejected, and the limit violated on the next), by the check or,
+  without ConfirmByCheck, in one quint batch; when it accepts none,
+  quint's batch decides as before, a verdict of none needing every
+  placement rejected. A review also found a failed eventual val left
+  unconfirmed (it is no conformance failure in the report, but rejects
+  the order in a search).
 
 quorumkv's contended-key mutants took 51 s with the evaluator's
 unconfirmed negative verdicts, 214 s with quint searching them again,

@@ -65,20 +65,30 @@ type Search struct {
 
 // A claim is what a search took from the Go evaluator alone: an order of
 // an actor's (or partition's) steps that conforms, and with invariants
-// keeps them, in the instance of tr.
+// keeps them, in the instance of tr; and the orders it rejected before
+// it, where the search takes the first that conforms (a resolution: the
+// run's invariants are judged on the one it takes, so quint's must be
+// it).
 type claim struct {
 	ch         *Checker
 	tr         *qtrace.Trace
 	order      []qtrace.Step
 	invariants bool
+	rejected   [][]qtrace.Step
 }
 
 // Confirm confirms, after the caller's check of a ConfirmByCheck search's
-// Steps, the orders the Go evaluator found for the actors rep fails (an
-// actor that passes confirms its own): each is checked by quint, side by
-// side. When quint rejects one, it returns the search again with quint
-// alone, its Steps to check instead (and its report to Mark), with a
-// warning that says so; nil when every order stands. Call it before Mark.
+// Steps, the claims the Go evaluator made for the actors rep does not pass
+// (an actor that passes every check confirmed its order there): each
+// order is checked by quint (conformance, eventual vals, and invariants
+// when the claim is that they hold), with the orders a resolution
+// rejected before it, side by side. When quint disagrees with one, it
+// returns the search again with quint alone, its Steps to check instead
+// (and its report to Mark), with a warning that says so; nil when every
+// claim stands. rep may be marked already (an actor the search left
+// undecided is confirmed whatever its marked verdicts). It confirms once:
+// a second call returns nil. A caller that never calls it takes the
+// evaluator's orders unconfirmed.
 func (s *Search) Confirm(rep *Report) (again *Search, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -93,12 +103,13 @@ func (s *Search) Confirm(rep *Report) (again *Search, err error) {
 	var names []string
 	for _, a := range rep.Actors {
 		cl := s.claims[a.Actor]
-		if cl == nil || !failed(a, cl.invariants) {
+		if cl == nil || !s.undecided[a.Actor] && passed(a) {
 			continue
 		}
 		todo = append(todo, cl)
 		names = append(names, nameOf(a.Actor))
 	}
+	s.claims = nil
 	wrong := make([]bool, len(todo))
 	var wg sync.WaitGroup
 	panics := make([]any, len(todo))
@@ -107,7 +118,11 @@ func (s *Search) Confirm(rep *Report) (again *Search, err error) {
 		go func() {
 			defer wg.Done()
 			defer func() { panics[i] = recover() }()
-			wrong[i] = first(quintChecker(cl.ch, cl.tr, names[i], cl.invariants)([][]qtrace.Step{cl.order})) >= 0
+			fs, _ := quintChecker(cl.ch, cl.tr, names[i], cl.invariants)(append([][]qtrace.Step{cl.order}, cl.rejected...))
+			wrong[i] = fs[0] >= 0
+			for _, f := range fs[1:] {
+				wrong[i] = wrong[i] || f < 0
+			}
 		}()
 	}
 	wg.Wait()
@@ -133,20 +148,21 @@ func (s *Search) Confirm(rep *Report) (again *Search, err error) {
 	return again, nil
 }
 
-// failed reports whether a's check failed where a claim of its order
-// speaks: its conformance, or with invariants one of them.
-func failed(a *Result, invariants bool) bool {
+// passed reports whether a's check failed nothing: its conformance, an
+// invariant or an eventual val. A claim speaks to its conformance and
+// eventual vals, with invariants to them too, and a resolution's choice
+// decides which order its invariants are judged on: any failure, and
+// its claim is checked.
+func passed(a *Result) bool {
 	if a.Conforms == Fail {
-		return true
+		return false
 	}
-	if invariants {
-		for _, inv := range a.Invariants {
-			if inv.Verdict == Fail {
-				return true
-			}
+	for _, inv := range a.Invariants {
+		if inv.Verdict == Fail {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // Search orders steps by opt's search, checking candidates with c's
@@ -1098,9 +1114,10 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 			orders[i] = append(orders[i], s)
 		}
 	}
-	// the first the Go evaluator accepts, confirmed by quint (or by the
-	// caller's check); none, or a refusal, and quint checks them all, as a
-	// verdict of none needs every one rejected
+	// the first the Go evaluator accepts, confirmed by quint with the ones
+	// it rejected before it (or by the caller's check); none, or a
+	// refusal, and quint checks them all, as a verdict of none needs every
+	// one rejected
 	if i, ok := resolveEval(ch).first(ch, tr, orders); ok {
 		found := func() ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
@@ -1108,9 +1125,16 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 		}
 		if ch.byCheck {
 			o, issue, cut, _ := found()
-			return o, issue, cut, &claim{ch: ch, tr: tr, order: orders[i]}
+			return o, issue, cut, &claim{ch: ch, tr: tr, order: orders[i], rejected: orders[:i]}
 		}
-		if first(quintChecker(ch, tr, a, false)([][]qtrace.Step{orders[i]})) < 0 {
+		// quint confirms it, and the evaluator's rejections before it: the
+		// run's invariants are judged on the one taken (one batch)
+		fs, _ := quintChecker(ch, tr, a, false)(orders[:i+1])
+		agrees := fs[i] < 0
+		for _, f := range fs[:i] {
+			agrees = agrees && f >= 0
+		}
+		if agrees {
 			return found()
 		}
 		// quint rejects it: its batch decides, as without the evaluator

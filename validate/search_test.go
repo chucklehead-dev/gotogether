@@ -676,3 +676,153 @@ func TestConfirmByCheck(t *testing.T) {
 		})
 	}
 }
+
+// What a run's check fails beyond conformance is the claims' too: an
+// eventual val false at the settle (the evaluator's order of two writes
+// leaves 0; another leaves 1), and an invariant violated on the
+// resolution the evaluator took when it wrongly rejected the one before
+// it, which quint takes (a pending deposit with no effect keeps the
+// balance under the limit). Each is checked by quint and searched again.
+func TestConfirmByCheckBeyondConformance(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	defer hooks.TamperEval.Store(0)
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	step := func(action, rec string, from, to int, args, obs map[string]any) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Actor: "x", Process: "p", Invoked: at(from), Time: at(to), Args: args, Obs: obs}
+	}
+	settle := qtrace.Step{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(50)}
+	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
+	for _, x := range []struct {
+		name, binding string
+		invariants    []string
+		tamper        int32
+		opt           SearchOptions
+		steps         []qtrace.Step
+	}{
+		{"eventual, linearize", "../qtest/testdata/probed.yaml", nil, 2, SearchOptions{Linearize: true}, []qtrace.Step{
+			step("write", "a", 0, 10, map[string]any{"value": int64(1)}, nil), step("write", "b", 0, 10, map[string]any{"value": int64(0)}, nil), settle}},
+		{"eventual, resolve", "../qtest/testdata/probed.yaml", nil, 2, SearchOptions{ResolvePending: true}, []qtrace.Step{
+			{Action: "write", Recorder: "c", Seq: 1, Time: ms(1), Invocation: true, Args: map[string]any{"value": int64(1)}},
+			{Action: "observe", Recorder: "o", Seq: 1, Time: ms(2), Obs: map[string]any{"value": int64(0)}},
+			{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: ms(9)}}},
+		{"invariant, resolve", "testdata/blind.yaml", []string{"underLimit"}, 3, SearchOptions{ResolvePending: true}, []qtrace.Step{
+			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}},
+			{Action: "deposit", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(95)}}}},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if x.invariants != nil {
+				if c, err = c.WithInvariants(x.invariants...); err != nil {
+					t.Fatal(err)
+				}
+			}
+			check := func(s *Search) *Report {
+				rep, err := c.Check(context.Background(), s.Steps)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return rep
+			}
+			hooks.TamperEval.Store(0)
+			opt := x.opt
+			q, err := c.Search(x.steps, opt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rep := check(q); !rep.OK() {
+				t.Fatalf("with a right evaluator the run fails:\n%s", rep.Summary())
+			}
+			hooks.TamperEval.Store(x.tamper)
+			// without ConfirmByCheck quint confirms in the search
+			if s, err := c.Search(x.steps, opt); err != nil || !check(s).OK() {
+				t.Errorf("confirmed in the search: err %v, report %s", err, check(s).Summary())
+			}
+			opt.ConfirmByCheck = true
+			s, err := c.Search(x.steps, opt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rep := check(s)
+			if rep.OK() {
+				t.Fatalf("the wrong evaluator's order passes the check: the test shows nothing")
+			}
+			again, err := s.Confirm(rep)
+			if err != nil || again == nil {
+				t.Fatalf("again %v, err %v", again, err)
+			}
+			if rep := check(again); !rep.OK() || !strings.Contains(fmt.Sprint(again.issues), "does not conform for quint") {
+				t.Errorf("searched again: %s %v", rep.Summary(), again.issues)
+			}
+			if a, err := s.Confirm(rep); a != nil || err != nil {
+				t.Errorf("a second Confirm: %v, %v", a, err)
+			}
+		})
+	}
+}
+
+// A claim of an actor the search left undecided is confirmed though Mark
+// made its verdicts n/a (an exploration confirms on marked reports): the
+// order quint rejects there would otherwise stand as no verdict.
+func TestConfirmSeesThroughMark(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []qtrace.Step{{Action: "withdraw", Recorder: "w", Seq: 1, Actor: "x", Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}}}
+	traces, _ := qtrace.Reconstruct(steps)
+	searched := false
+	s := &Search{Steps: steps, undecided: map[string]bool{"x": true},
+		claims: map[string]*claim{"x": {ch: within(c, traces[0]), tr: traces[0], order: steps}},
+		again:  func() (*Search, error) { searched = true; return &Search{}, nil }}
+	rep := &Report{Actors: []*Result{{Actor: "x", Conforms: Fail}}}
+	s.Mark(rep)
+	if rep.Actors[0].Conforms != NotEvaluated {
+		t.Fatalf("Mark left %v", rep.Actors[0].Conforms)
+	}
+	if again, err := s.Confirm(rep); err != nil || again == nil || !searched {
+		t.Errorf("an undecided actor's wrong order: again %v, err %v", again, err)
+	}
+}
+
+// LinearizeByKey's claims are its partitions', as the report names them:
+// a wrong order of one key's steps is confirmed and searched again.
+func TestConfirmByCheckByKey(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	hooks.TamperEval.Store(2)
+	defer hooks.TamperEval.Store(0)
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	op := func(action, rec string, args, obs map[string]any) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Actor: "x", Process: "p", Invoked: at(0), Time: at(10), Args: args, Obs: obs}
+	}
+	steps := []qtrace.Step{
+		op("write", "a", map[string]any{"key": "a", "value": int64(1)}, nil),
+		op("read", "b", map[string]any{"key": "a"}, map[string]any{"value": int64(9)}),
+		op("write", "c", map[string]any{"key": "b", "value": int64(2)}, nil),
+	}
+	c, err := NewChecker("../qtest/testdata/registers.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := c.Search(steps, SearchOptions{Linearize: true, Key: "key", ConfirmByCheck: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := c.Check(context.Background(), s.Steps)
+	if err != nil || rep.OK() {
+		t.Fatalf("the wrong evaluator's order passes (err %v)", err)
+	}
+	again, err := s.Confirm(rep)
+	if err != nil || again == nil || !strings.Contains(fmt.Sprint(again.issues), "x key=a") {
+		t.Errorf("again %v, err %v", again, err)
+	}
+}

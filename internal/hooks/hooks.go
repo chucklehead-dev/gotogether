@@ -345,7 +345,8 @@ var CompleteSearchOnly atomic.Bool
 
 // TamperEval makes validate's Go evaluator wrong, for tests that show
 // quint's confirmation catches it (1: it rejects every candidate at its
-// first step, 2: it accepts every one).
+// first step, 2: it accepts every one, 3: it rejects every candidate of
+// an odd number of steps).
 //
 // Process-wide: a test's.
 var TamperEval atomic.Int32

@@ -650,7 +650,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		}
 	}
 	if again = slices.DeleteFunc(again, func(r *Run) bool { return r == nil }); len(again) > 0 {
-		judge(t, cc, inst, again, func(r *Run) string { return x.nameOf(r) })
+		x.Cached += judge(t, cc, inst, again, func(r *Run) string { return x.nameOf(r) })
 	}
 	// the report, for tools that read it (gotogether evidence, cover,
 	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's

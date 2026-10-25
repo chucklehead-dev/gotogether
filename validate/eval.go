@@ -171,6 +171,9 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 		return 0, "", &qeval.Unsupported{Op: "order", Why: fmt.Sprintf("%d actors in one candidate", len(traces))}
 	}
 	tr := traces[0]
+	if hooks.TamperEval.Load() == 3 && len(order)%2 == 1 {
+		return 0, "", nil
+	}
 	if hooks.TamperEval.Load() == 2 {
 		return -1, fmt.Sprint(len(order)), nil
 	}
