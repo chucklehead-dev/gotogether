@@ -67,6 +67,9 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		return nil, fmt.Errorf("no constants for %s: validate against an instance module (Instance) or a gotogether-written trace", module)
 	}
 	o, err := opt.Options.resolve()
+	if err == nil && o.Dir != "" { // a directory of its own, as a check's (dirFor)
+		o.Dir, err = checkDir(o.Dir)
+	}
 	if err != nil {
 		return nil, err
 	}

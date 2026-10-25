@@ -127,3 +127,84 @@ func TestEqualKeysEqualVerdicts(t *testing.T) {
 		t.Errorf("the property needs pairs of both: %d with one key, %d with two", same, differ)
 	}
 }
+
+// Equal keys, equal verdicts on a binding that reads arguments and
+// observations, its steps a client's history with invocation times
+// (Linearize's input): an observation, an amount or an interval changed,
+// or the history renamed or shifted. The bounded-response property's
+// steps carry none of these.
+func TestEqualKeysEqualVerdictsOfAHistory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("a check per case")
+	}
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := validate.NewChecker("../../validate/testdata/account.yaml", validate.Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	ms := func(u int) time.Time { return time.Unix(1000, 0).Add(time.Duration(u) * time.Millisecond) }
+	same, differ := 0, 0
+	hegel.Test(t, func(ht *hegel.T) {
+		var a []qtrace.Step
+		balance, now := int64(0), 0
+		for i := range hegel.Draw(ht, hegel.Integers(1, 4)) {
+			amount := int64(hegel.Draw(ht, hegel.Integers(1, 3)))
+			action := "deposit"
+			if hegel.Draw(ht, hegel.Booleans()) && amount <= balance {
+				action, balance = "withdraw", balance-amount
+			} else {
+				balance += amount
+			}
+			start := now + hegel.Draw(ht, hegel.Integers(0, 5))
+			now = start + hegel.Draw(ht, hegel.Integers(1, 5))
+			rec := fmt.Sprint("c", hegel.Draw(ht, hegel.Integers(0, 1)))
+			a = append(a, qtrace.Step{Action: action, Recorder: rec, Thread: rec, Seq: uint64(i + 1), Actor: "acct", Process: "p",
+				Invoked: ms(start), Time: ms(now), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}})
+		}
+		b := make([]qtrace.Step, len(a))
+		for i, s := range a {
+			s.Args, s.Obs = map[string]any{"amount": s.Args["amount"]}, map[string]any{"balance": s.Obs["balance"]}
+			b[i] = s
+		}
+		i := hegel.Draw(ht, hegel.Integers(0, len(b)-1))
+		switch hegel.Draw(ht, hegel.Integers(0, 4)) {
+		case 0: // every time shifted
+			for j := range b {
+				b[j].Invoked, b[j].Time = b[j].Invoked.Add(time.Second), b[j].Time.Add(time.Second)
+			}
+		case 1: // recorders renamed
+			for j := range b {
+				b[j].Recorder, b[j].Thread = "x"+b[j].Recorder, "x"+b[j].Thread
+			}
+		case 2: // an observation changed
+			b[i].Obs["balance"] = b[i].Obs["balance"].(int64) + 1
+		case 3: // an amount changed
+			b[i].Args["amount"] = b[i].Args["amount"].(int64) + 1
+		case 4: // an interval widened: it may now overlap another
+			b[i].Invoked = b[i].Invoked.Add(-time.Duration(hegel.Draw(ht, hegel.Integers(1, 20))) * time.Millisecond)
+		}
+		if c.Key(a) != c.Key(b) {
+			differ++
+			return
+		}
+		same++
+		var verdicts []string
+		for _, steps := range [][]qtrace.Step{a, b} {
+			j, err := c.Judge(context.Background(), steps, validate.SearchOptions{Linearize: true})
+			if err != nil {
+				ht.Fatal(err)
+			}
+			verdicts = append(verdicts, verdictOf(j.Report))
+		}
+		if verdicts[0] != verdicts[1] {
+			ht.Fatalf("one key, two verdicts:\n  %v\n  %s\n  %v\n  %s", a, verdicts[0], b, verdicts[1])
+		}
+	}, hegel.WithTestCases(40))
+	t.Logf("%d pairs with one key judged, %d with two keys", same, differ)
+	if same == 0 || differ == 0 {
+		t.Errorf("the property needs pairs of both: %d with one key, %d with two", same, differ)
+	}
+}

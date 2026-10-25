@@ -10,6 +10,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 )
 
 // Checker validates steps against one binding. Create it once (it typechecks
@@ -83,10 +84,7 @@ type scratch struct {
 // verdicts.
 func (c *Checker) dirFor(o Options) (Options, error) {
 	if o.Dir != "" {
-		d, err := os.MkdirTemp(o.Dir, "check-")
-		if err != nil && os.MkdirAll(o.Dir, 0o755) == nil {
-			d, err = os.MkdirTemp(o.Dir, "check-")
-		}
+		d, err := checkDir(o.Dir)
 		if err != nil {
 			return o, err
 		}
@@ -100,12 +98,27 @@ func (c *Checker) dirFor(o Options) (Options, error) {
 	if c.scratch.err != nil {
 		return o, c.scratch.err
 	}
-	d, err := os.MkdirTemp(c.scratch.root, "check-")
+	d, err := checkDir(c.scratch.root)
 	if err != nil {
 		return o, err
 	}
 	o.Dir = d
 	return o, nil
+}
+
+// Process-wide: the checks' directories numbered so far.
+var checks atomic.Int64
+
+// checkDir is a new directory under dir, check-<n> by the process's
+// count: a rerun with the same Dir (GOTOGETHER_KEEP, the CLI's -dir)
+// writes into the directories of the run before in the same order,
+// where random names piled a new generation up beside the old.
+func checkDir(dir string) (string, error) {
+	d := filepath.Join(dir, fmt.Sprintf("check-%d", checks.Add(1)))
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		return "", err
+	}
+	return d, nil
 }
 
 // Close removes the temporary directory c's checks wrote to when it was

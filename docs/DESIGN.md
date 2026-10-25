@@ -2928,7 +2928,7 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   quint. The model's own runtime errors (a missing key, a division by
   zero) are `EvalError`s, and also go to quint.
 - **Judged as quint's replay reports.** A candidate is planned within
-  its history (`PlanWithin`), replayed from init, each call's expect the
+  its history (`binding.Planner`), replayed from init, each call's expect the
   definition applied to the call's `ExpectArgs`; its failure index is
   failedAt's and violatedAt's reading of a report (an eventual val false
   at the settle: the last step), and a conforming one's state is the
