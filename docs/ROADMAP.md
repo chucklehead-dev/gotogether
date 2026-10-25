@@ -243,7 +243,8 @@ under a week, M two to four, L more.
     journal's restart in 43 steered runs of 180, 7 before; features as
     counts measured no gain there, not done); qlint flagging math/rand and
     multi-case select (done); qhistory's strict serializability
-    (real-time edges).
+    (done: `StrictSerializable`, real-time edges from `Txn.Invoked` and
+    `Completed`, checked against brute force).
   - **d (M). Bounded response**: a binding's `within:` (after a val,
     another within a virtual-time bound), n/a for a run cut short.
     Example: lease's SlowTakeover.

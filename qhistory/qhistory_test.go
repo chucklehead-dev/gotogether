@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qhistory"
@@ -318,7 +320,11 @@ func TestReportText(t *testing.T) {
 // A seed's workload stays the same (a failing history's seed reproduces
 // it), and zero fields take their defaults: 3 keys, up to 4 operations.
 func TestWorkload(t *testing.T) {
-	got := fmt.Sprint(qhistory.Workload{Keys: 2, Txns: 3, MaxOps: 2, Seed: 1}.Generate())
+	var parts []string
+	for _, x := range (qhistory.Workload{Keys: 2, Txns: 3, MaxOps: 2, Seed: 1}).Generate() {
+		parts = append(parts, fmt.Sprintf("{%d %v %d}", x.ID, x.Ops, x.Outcome))
+	}
+	got := "[" + strings.Join(parts, " ") + "]"
 	if want := "[{1 [append(k1, 1)] 0} {2 [read(k1) = [] append(k1, 2)] 0} {3 [read(k1) = [] append(k0, 1)] 0}]"; got != want {
 		t.Errorf("seed 1's workload changed:\n got %s\nwant %s", got, want)
 	}
@@ -332,4 +338,156 @@ func TestWorkload(t *testing.T) {
 	if len(keys) != 3 || !keys["k0"] || !keys["k2"] || most != 4 {
 		t.Errorf("defaults: keys %v, at most %d operations; want k0..k2 and 4", keys, most)
 	}
+}
+
+// A stale read: T2 began after T1 completed and still missed its append.
+// Serializable (T2 first explains it), not strictly: real time puts T1
+// first, a G-single-realtime. Overlapping, or with no times, it is fine.
+func TestStrictSerializability(t *testing.T) {
+	at := func(u int) time.Time { return time.Unix(0, int64(u)) }
+	timed := func(x qhistory.Txn, from, to int) qhistory.Txn {
+		x.Invoked, x.Completed = at(from), at(to)
+		return x
+	}
+	stale := []qhistory.Txn{timed(txn(1, app("x", 1)), 0, 1), timed(txn(2, rd("x")), 2, 3), timed(txn(3, rd("x", 1)), 4, 5)}
+	for level, ok := range map[qhistory.Level]bool{qhistory.Serializable: true, qhistory.StrictSerializable: false} {
+		rep, err := qhistory.Check(level, stale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.OK() != ok || !ok && !rep.Has("G-single-realtime") {
+			t.Errorf("a stale read at %s: %s", level, rep)
+		}
+	}
+	overlap := slices.Clone(stale)
+	overlap[1].Invoked = at(0) // began before T1 completed
+	untimed := []qhistory.Txn{txn(1, app("x", 1)), txn(2, rd("x")), txn(3, rd("x", 1))}
+	for _, h := range [][]qhistory.Txn{overlap, untimed} {
+		if rep, _ := qhistory.Check(qhistory.StrictSerializable, h); !rep.OK() {
+			t.Errorf("no real-time order: %s", rep)
+		}
+	}
+}
+
+// Check against brute force: a history is (strictly) serializable iff
+// some serial order of its transactions (that real time allows) replays
+// every read exactly. Histories are made by running random transactions
+// in a random serial order, given random intervals, and sometimes a read
+// truncated; a last reader sees every key whole, so every append is
+// observed.
+func TestStrictAgainstBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(9, 10))
+	at := func(u int) time.Time { return time.Unix(0, int64(u)) }
+	counts := map[string]int{}
+	for trial := range 3000 {
+		n := 2 + rng.IntN(3)
+		keys := []string{"x", "y"}
+		lists := map[string][]int{}
+		next := 1
+		txns := make([]qhistory.Txn, n)
+		order := rng.Perm(n)
+		for _, i := range order {
+			x := qhistory.Txn{ID: i + 1, Outcome: qhistory.Committed}
+			for range 1 + rng.IntN(3) {
+				k := keys[rng.IntN(len(keys))]
+				if rng.IntN(2) == 0 {
+					lists[k] = append(lists[k], next)
+					x.Ops = append(x.Ops, app(k, next))
+					next++
+				} else {
+					x.Ops = append(x.Ops, rd(k, lists[k]...))
+				}
+			}
+			from := rng.IntN(10)
+			x.Invoked, x.Completed = at(from), at(from+1+rng.IntN(5))
+			txns[i] = x
+		}
+		if rng.IntN(3) == 0 { // a stale read: one fewer value
+			i := rng.IntN(n)
+			for j, o := range txns[i].Ops {
+				if o.Kind == qhistory.Read && len(o.List) > 0 {
+					txns[i].Ops[j].List = o.List[:len(o.List)-1]
+					break
+				}
+			}
+		}
+		last := qhistory.Txn{ID: n + 1, Outcome: qhistory.Committed, Invoked: at(100), Completed: at(101)}
+		for _, k := range keys {
+			last.Ops = append(last.Ops, rd(k, lists[k]...))
+		}
+		txns = append(txns, last)
+		for _, strict := range []bool{false, true} {
+			level := qhistory.Serializable
+			if strict {
+				level = qhistory.StrictSerializable
+			}
+			rep, err := qhistory.Check(level, txns)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := bruteSerial(txns, strict)
+			if rep.OK() != want {
+				t.Fatalf("trial %d at %s: Check OK %v, brute force %v, for\n%v\n%s", trial, level, rep.OK(), want, txns, rep)
+			}
+			counts[fmt.Sprintf("%v/%v", strict, want)]++
+		}
+	}
+	if counts["true/false"] == 0 || counts["true/true"] == 0 || counts["false/false"] == 0 {
+		t.Errorf("verdicts %v: the property compared too little", counts)
+	}
+	t.Logf("verdicts (strict/serializable): %v", counts)
+}
+
+// bruteSerial reports whether some serial order of txns (with strict,
+// one in which a transaction completed before another was invoked comes
+// first) replays every read exactly.
+func bruteSerial(txns []qhistory.Txn, strict bool) bool {
+	n := len(txns)
+	used := make([]bool, n)
+	var rec func(lists map[string][]int, placed int) bool
+	rec = func(lists map[string][]int, placed int) bool {
+		if placed == n {
+			return true
+		}
+		for i := range txns {
+			if used[i] {
+				continue
+			}
+			if strict {
+				blocked := false
+				for j := range txns {
+					if !used[j] && j != i && txns[j].Completed.Before(txns[i].Invoked) {
+						blocked = true
+						break
+					}
+				}
+				if blocked {
+					continue
+				}
+			}
+			mine := map[string][]int{}
+			for k, l := range lists {
+				mine[k] = slices.Clone(l)
+			}
+			ok := true
+			for _, o := range txns[i].Ops {
+				if o.Kind == qhistory.Append {
+					mine[o.Key] = append(mine[o.Key], o.Value)
+				} else if !slices.Equal(o.List, mine[o.Key]) && !(len(o.List) == 0 && len(mine[o.Key]) == 0) {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+			used[i] = true
+			if rec(mine, placed+1) {
+				return true
+			}
+			used[i] = false
+		}
+		return false
+	}
+	return rec(map[string][]int{}, 0)
 }

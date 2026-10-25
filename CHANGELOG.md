@@ -35,6 +35,11 @@ The first release. What a user meets, by module:
   indeterminate calls (`qtrace.LinearizePending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
+- qhistory checks strict serializability: `StrictSerializable`, with
+  `Txn.Invoked` and `Completed`, orders a transaction completed before
+  another began first, and names a cycle through real time Elle's way
+  (G-single-realtime: a stale read). Checked against brute force (every
+  serial order real time allows).
 - Steered exploration branches a run from where it first found something
   new (the choices that led to it, kept), not from anywhere in it: the
   journal's rare restart in 43 of 200 runs, 7 before.

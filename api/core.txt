@@ -757,6 +757,7 @@ const Read OpKind = iota (spec 1 of its group)
 const ReadCommitted Level = iota
 const Serializable Level = iota (spec 2 of its group)
 const SnapshotIsolation Level = iota (spec 1 of its group)
+const StrictSerializable Level = iota (spec 3 of its group)
 const Unknown Outcome = iota
 func Check(level Level, txns []Txn) (*Report, error)
 type Anomaly struct
@@ -785,6 +786,8 @@ type Txn struct
     field ID int
     field Ops []Op
     field Outcome Outcome
+    field Invoked time.Time
+    field Completed time.Time
 type Workload struct
     field Keys int
     field Txns int

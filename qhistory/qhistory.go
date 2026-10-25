@@ -40,6 +40,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/depgraph"
 )
@@ -84,11 +85,15 @@ const (
 )
 
 // A Txn is one transaction of the history: its operations in the order
-// it ran them, and its outcome.
+// it ran them, and its outcome. Invoked and Completed, when known (both,
+// from one clock, the clients' or a simulation's), are when the client
+// began it and learned its outcome: strict serializability orders a
+// transaction completed before another was invoked first.
 type Txn struct {
-	ID      int
-	Ops     []Op
-	Outcome Outcome
+	ID                 int
+	Ops                []Op
+	Outcome            Outcome
+	Invoked, Completed time.Time
 }
 
 // Level is the isolation level a history is checked against.
@@ -101,10 +106,16 @@ const (
 	SnapshotIsolation
 	// Serializable (PL-3) forbids every cycle, G2 (write skew) too.
 	Serializable
+	// StrictSerializable also forbids a cycle through real time: a
+	// transaction that completed before another was invoked precedes it
+	// (Txn.Invoked, Completed), so a read of a value older than one a
+	// transaction completed before it began is a G-single-realtime (Elle's
+	// names: the cycle's kind with "-realtime").
+	StrictSerializable
 )
 
 func (l Level) String() string {
-	return [...]string{"read committed", "snapshot isolation", "serializable"}[l]
+	return [...]string{"read committed", "snapshot isolation", "serializable", "strict serializability"}[l]
 }
 
 // An Anomaly is one thing the history shows that some level forbids.
@@ -162,6 +173,9 @@ func (r *Report) String() string {
 
 // forbidden reports whether level forbids an anomaly of kind.
 func forbidden(level Level, kind string) bool {
+	if strings.HasSuffix(kind, "-realtime") {
+		return level >= StrictSerializable
+	}
 	switch kind {
 	case "G-single":
 		return level >= SnapshotIsolation
@@ -291,9 +305,11 @@ func Check(level Level, txns []Txn) (*Report, error) {
 	}
 	sort.Strings(keys)
 	g := depgraph.New()
+	var edges []dep
 	link := func(from, to int, kind, key string) {
 		if committed(from) && committed(to) {
 			g.Add(int64(from), int64(to), kind, key)
+			edges = append(edges, dep{from, to, kind, key})
 		}
 	}
 	for _, key := range keys {
@@ -368,7 +384,116 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		fmt.Fprintf(&b, "%d", cyc[0].From)
 		add(kind, ids, "%s", b.String())
 	}
+	if level >= StrictSerializable {
+		// real time's edges with the dependencies: a cycle through one is
+		// a history no serial order that keeps real time explains
+		rt := depgraph.New()
+		out := map[int][]dep{}
+		for _, e := range edges {
+			rt.Add(int64(e.from), int64(e.to), e.kind, e.key)
+			out[e.from] = append(out[e.from], e)
+		}
+		var timed []dep
+		for _, a := range txns {
+			for _, b := range txns {
+				if a.ID != b.ID && committed(a.ID) && committed(b.ID) && !a.Completed.IsZero() && !b.Invoked.IsZero() && a.Completed.Before(b.Invoked) {
+					e := dep{a.ID, b.ID, "rt", ""}
+					rt.Add(int64(a.ID), int64(b.ID), "rt", "")
+					out[a.ID] = append(out[a.ID], e)
+					timed = append(timed, e)
+				}
+			}
+		}
+		for _, scc := range rt.Components() {
+			in := map[int]bool{}
+			for _, n := range scc {
+				in[int(n)] = true
+			}
+			for _, e := range timed {
+				if !in[e.from] || !in[e.to] {
+					continue
+				}
+				if back := pathOf(out, in, e.to, e.from); back != nil {
+					cyc := append([]dep{e}, back...)
+					rws, wws := 0, 0
+					ids := make([]int, len(cyc))
+					var b strings.Builder
+					for i, h := range cyc {
+						ids[i] = h.from
+						switch h.kind {
+						case "rw":
+							rws++
+						case "ww":
+							wws++
+						}
+						if h.key != "" {
+							fmt.Fprintf(&b, "%d -%s(%s)-> ", h.from, h.kind, h.key)
+						} else {
+							fmt.Fprintf(&b, "%d -%s-> ", h.from, h.kind)
+						}
+					}
+					fmt.Fprintf(&b, "%d", cyc[0].from)
+					kind := "G2-realtime"
+					switch {
+					case rws == 0 && wws+rts(cyc) == len(cyc):
+						kind = "G0-realtime"
+					case rws == 0:
+						kind = "G1c-realtime"
+					case rws == 1:
+						kind = "G-single-realtime"
+					}
+					add(kind, ids, "%s (rt: completed before the next was invoked)", b.String())
+					break // one cycle a component, as for the others
+				}
+			}
+		}
+	}
 	return rep, nil
+}
+
+// A dep is an edge between transactions: a dependency (ww, wr, rw on a
+// key) or real time's (rt).
+type dep struct {
+	from, to  int
+	kind, key string
+}
+
+// pathOf is a shortest path from a to b over the edges out, among in's
+// transactions, or nil.
+func pathOf(out map[int][]dep, in map[int]bool, a, b int) []dep {
+	prev := map[int]dep{}
+	queue, visited := []int{a}, map[int]bool{a: true}
+	for len(queue) > 0 {
+		v := queue[0]
+		queue = queue[1:]
+		for _, e := range out[v] {
+			if !in[e.to] || visited[e.to] {
+				continue
+			}
+			visited[e.to], prev[e.to] = true, e
+			if e.to == b {
+				var p []dep
+				for n := b; n != a; n = prev[n].from {
+					p = append(p, prev[n])
+				}
+				slices.Reverse(p)
+				return p
+			}
+			queue = append(queue, e.to)
+		}
+	}
+	return nil
+}
+
+// rts counts a cycle's real-time edges.
+func rts(cyc []dep) int {
+	n := 0
+	for _, e := range cyc {
+		if e.kind == "rt" {
+			n++
+		}
+	}
+	return n
 }
 
 // duplicated returns a value list holds twice, if any.
