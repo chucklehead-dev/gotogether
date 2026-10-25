@@ -298,12 +298,19 @@ under a week, M two to four, L more.
   - `GOTOGETHER_ALL_FAULTS` turns on every nemesis family but not a
     store's commit faults (`Store.CommitFaults`, opt-in per store): "every
     fault family" leaves out the one a dedupe-by-id service exists for.
-- **T8. An example: raftkv (M, after T2d).** etcd's raft RawNode as a
-  three-node KV on qenv; transfers across keys (no partition helps);
-  hundreds of operations linearized; a lease-read mutant under clock
-  drift, ReadOnlySafe conforming; a retried CAS without a request id
-  (indeterminate calls); election after a heal as a bounded-liveness
-  property.
+- **T8. An example: raftkv (M, after T2d). Done** (examples/raftkv):
+  etcd's raft library, unchanged, as a three-node store on qenv, its
+  election entropy drawn from the run; two models (the clients' history
+  linearized whole, 200 operations within a budget of 50000; leadership:
+  one leader a term, a leader within 300 ms of a heal); pending calls
+  placed; a lease read made stale by drift only after a leadership
+  transfer (`Exhaust` over the drifts); a vote not persisted; an upgrade
+  writing its format too soon, caught by a paused rollout. It found two
+  faults of the toolkit's (a drifting wait rounded to none; a cut search
+  searched again with quint). Left: hidden messages (`hidden:` with
+  raft's campaigns unrecorded), and Linearize's cost on whole histories
+  of hundreds of operations (each candidate replayed from init, about 20
+  s a history: extending a prefix's held state, T2d's next step).
 
 ## Dropped on purpose
 

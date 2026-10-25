@@ -15,6 +15,7 @@ use (
 	./examples/kvstore
 	./examples/lease
 	./examples/quorumkv
+	./examples/raftkv
 	./examples/wallet
 	./examples/retrystorm
 	./examples/sktrace

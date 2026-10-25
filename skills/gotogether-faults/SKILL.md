@@ -115,6 +115,16 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   `qenv.ProcessOf(ctx).Version`. `p.Upgrade(v, start)` makes one where a
   test wants it, and `p.RestartAs` restarts a crashed process as another
   version. The same model judges every version: never give one slack.
+  Test a rollout paused partway too: a finished one restarts every node
+  on the new code, whose replay can repair what the old code got wrong
+  (examples/raftkv: a log format the v1 node skipped, caught in 8 of 20
+  paused rollouts and almost never in full ones).
+- **Clock drift and leaders:** a lease is timed on each node's own
+  clock, and under drift an election is won by the fastest clock, the
+  one whose lease ends first. The unsafe case (a slow leader) needs the
+  leadership moved to it (raftkv's `TransferLeader`): enumerate drifts
+  with `Exhaust` over "clock.drift" after a transfer, not after an
+  election.
 - **Partitions:** `s.Net().PartitionNemesis(a, b, ...)` makes every link
   between those processes a nemesis (cut, later healed): a `Service` call
   across a cut loses its request and its response, for as long as it

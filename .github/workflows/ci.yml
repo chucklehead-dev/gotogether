@@ -277,6 +277,29 @@ jobs:
       - name: test (liveness, pending calls, linearized per key, PCT)
         run: go test -count=1 -timeout 45m ./...
 
+  raftkv:
+    # its own job: etcd's raft library on qenv, histories linearized whole
+    # and searched exhaustively over clock drifts, about six minutes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/raftkv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/raftkv/go.mod
+          cache-dependency-path: examples/raftkv/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../../ci/install-quint.sh
+      - name: gofmt, vet, lint -sim
+        run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/raftkv
+      - name: test (linearized whole, pending calls, leadership within a bound, clock drift, rolling upgrades)
+        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./...
+
   wallet:
     # its own job: linearized explorations and resolved pending calls,
     # under the store's own history check

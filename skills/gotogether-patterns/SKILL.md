@@ -113,8 +113,9 @@ within:
     bound: 3s         # ...within this much virtual (or recorded) time
 ```
 
-It is judged on the replay's states, each timed by the step that reached
-it: a response after the bound fails, as does none in a run that settled
+examples/raftkv states raft's election after a heal so (a timeout ten
+times as long still elects, so only the bound catches it). It is judged
+on the replay's states, each timed by the step that reached it: a response after the bound fails, as does none in a run that settled
 or went on past the bound; a run cut short before its bound is not
 judged (an info issue says so). Claim it as reports name it:
 `qtest.Violates("within 3s after healed: hasLeader")`. Record the steps

@@ -1,0 +1,26 @@
+# The nodes' leadership and the test's partitions as calls of
+# model/cluster.qnt: every parameter is the step's field of its name.
+spec: model/cluster.qnt
+module: cluster
+
+constants:
+  NODES: 'Set("n1", "n2", "n3")'
+
+actions:
+  isolate: {}
+  heal: {}
+  campaign: {}
+  lead: {}
+  stepDown: {}
+  stop: {}
+
+invariants: [electionSafety]
+eventually: [hasLeader]
+
+# after the network heals, a leader within 300ms: a follower cut off
+# pre-campaigns every election timeout (100 to 200ms, randomized), and a
+# pre-vote and a vote take a round trip each
+within:
+  - after: healed
+    holds: hasLeader
+    bound: 300ms

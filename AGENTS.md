@@ -65,6 +65,8 @@ examples/hello        app: the smallest simulated system (a counter, a lossy net
 examples/wallet       app: transfers on a Store with request-id dedupe, an outbox, a ledger; Exhaust, isolation levels and qhistory,
                       ResolvePending, Linearize and LinearizeByKey, an eventual val, GOTOGETHER_ALL_FAULTS
 examples/quorumkv     app: a quorum-replicated store (ABD, hinted handoff); liveness (SettleCore), pending calls, LinearizeByKey, PCT
+examples/raftkv       app: etcd's raft library on qenv (WAL on a Store, election entropy from the run); two models (clients linearized
+                      whole, leadership with within), pending calls, lease reads under drift (Exhaust), votes, rolling upgrades
 examples/lease        app: a lease lock and the store it guards under clock faults (Sim.Clocks); fencing vs clocks, wall vs monotonic
 examples/twophase     app: two-phase commit on qenv against a Choreo model (vendored choreo.qnt); named transitions, connect and Explore
 examples/checkout     app: checkout saga on qenv (isolation levels, outbox, idempotency, crashes); cmd/checkout-sim; under load (load.go)

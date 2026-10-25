@@ -1,0 +1,23 @@
+# The clients' calls and the probe's observations as calls of
+# model/raftkv.qnt's actions: every parameter is the step's field of its
+# name; a read's value is the key's, a cas's or transfer's answer is
+# whether it took effect.
+spec: model/raftkv.qnt
+module: raftkv
+
+constants:
+  KEYS: 'Set("a", "b", "c")'
+  NODES: 'Set("n1", "n2", "n3")'
+  INITIAL: '10'
+
+actions:
+  write: {}
+  read:
+    expect: 'kv.get({{.key}}) == {{.obs.val}}'
+  cas:
+    expect: 'lastOk == {{.obs.ok}}'
+  transfer:
+    expect: 'lastOk == {{.obs.ok}}'
+  observe: {}
+
+eventually: [converged]

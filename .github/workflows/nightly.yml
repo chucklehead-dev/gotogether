@@ -165,7 +165,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet]
+        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, raftkv, wallet]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
