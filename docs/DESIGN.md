@@ -3024,6 +3024,12 @@ vals). Two rules keep the memo and the proof sound:
   proof.
 The guided search orders the recorded steps alone (no pending call took
 effect), the cheapest explanation; the complete search places them.
+A review found two pending calls on either side of a quiet settle
+unordered (the first, if it took effect, did so before the settle, and
+so before the second): a forbidden order passed a ghost history; and an
+order's completeness counted assumed steps out, so a saved resolution
+checked again was never settled (its eventual vals unjudged). Both fixed,
+the brute force given the rule independently.
 Validated against brute force on random register histories (every
 subset of the pending writes, every order the bounds allow, with and
 without a settle and a final value some runs require), through the

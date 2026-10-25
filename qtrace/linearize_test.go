@@ -704,24 +704,33 @@ func TestLinearizeProofAgainstBruteForce(t *testing.T) {
 // (every recorded step in it, assumed steps aside) must leave the
 // register at final (-1: any), failing at its last step otherwise, as a
 // settle's eventual val does.
-func registerFinal(n int, final int64) func(orders [][]Step) ([]int, []string) {
+func registerFinal(n int, final int64, need ...int64) func(orders [][]Step) ([]int, []string) {
 	return func(orders [][]Step) ([]int, []string) {
 		fs, st := registerStates(orders)
 		for i, o := range orders {
-			if fs[i] >= 0 || final < 0 {
+			if fs[i] >= 0 || final < 0 && len(need) == 0 {
 				continue
 			}
 			c := 0
 			var v int64
+			wrote := map[int64]bool{}
 			for _, s := range o {
 				if !s.Ambiguous {
 					c++
 				}
 				if s.Action == "write" {
 					v = s.Args["v"].(int64)
+					wrote[v] = true
 				}
 			}
-			if c == n && v != final {
+			if c != n {
+				continue
+			}
+			bad := final >= 0 && v != final
+			for _, w := range need { // a ghost history: these were written
+				bad = bad || !wrote[w]
+			}
+			if bad {
 				fs[i], st[i] = len(o)-1, ""
 			}
 		}
@@ -787,7 +796,16 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 				final = pending[0].Args["v"].(int64)
 			}
 		}
-		check := registerFinal(len(steps), final)
+		// sometimes every pending write must have landed (a ghost history):
+		// leaving one out then explains nothing, and their order matters
+		var need []int64
+		if len(pending) > 1 && rng.IntN(2) == 0 {
+			for _, p := range pending {
+				need = append(need, p.Args["v"].(int64))
+			}
+			final = need[rng.IntN(len(need))]
+		}
+		check := registerFinal(len(steps), final, need...)
 		want := brutePending(steps, pending, settles, check)
 		got, ok, _, cut, proof := LinearizePending(steps, pending, settles, 1000000, check)
 		if cut {
@@ -853,6 +871,15 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 	t.Logf("%d linearizable (%d with a pending call's effect), %d not", yes, effects, no)
 }
 
+// recordedBefore is the brute force's own "a was recorded before b": by
+// seq on one recorder, else by time beyond the slack.
+func recordedBefore(a, b Step) bool {
+	if a.Recorder == b.Recorder {
+		return a.Seq < b.Seq
+	}
+	return a.Time.Add(RealTimeSlack).Before(b.Time)
+}
+
 // brutePending enumerates, for every subset of pending, every order of
 // steps and the subset that mustBefore and the pending calls' bounds
 // allow, for one check accepts whole.
@@ -882,10 +909,16 @@ func brutePending(steps, pending, settles []Step, check func([][]Step) ([]int, [
 			case !aPending && !bPending:
 				return mustBefore(nodes[a], nodes[b])
 			case !aPending && bPending:
-				return before(nodes[a], pb)
+				return recordedBefore(nodes[a], pb)
 			case aPending && !bPending:
 				for _, st := range settles {
-					if before(pa, st) && before(st, nodes[b]) {
+					if recordedBefore(pa, st) && recordedBefore(st, nodes[b]) {
+						return true
+					}
+				}
+			default: // two pending calls on either side of a quiet settle
+				for _, st := range settles {
+					if recordedBefore(pa, st) && recordedBefore(st, pb) {
 						return true
 					}
 				}
@@ -928,4 +961,32 @@ func brutePending(steps, pending, settles []Step, check func([][]Step) ([]int, [
 		}
 	}
 	return false
+}
+
+// Two pending writes on either side of a quiet settle: the first took
+// effect before the settle, if it did, and so before the second. A
+// history whose writes must end with the second's value then the
+// first's, both written, has no order (it once passed, the second
+// placed first).
+func TestLinearizePendingAcrossASettle(t *testing.T) {
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	s0 := op("a", 1, "write", 5, 0, 1)
+	pending := func(rec string, v int64, u int) Step {
+		p := op(rec, 1, "write", v, 0, 0)
+		p.Time, p.Invoked, p.Invocation = at(u), time.Time{}, true
+		return p
+	}
+	p1, p2 := pending("p1", 1, 2), pending("p2", 2, 6)
+	settles := []Step{{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: at(4)}, {Action: "settled", Settled: true, Recorder: "s", Seq: 2, Time: at(20)}}
+	check := registerFinal(1, 1, 1, 2) // ends at 1, both written: 2 before 1
+	if _, ok, _, cut, _ := LinearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, check); ok || cut {
+		t.Errorf("ok %v, cut %v: the write invoked after the settle placed before the one invoked before it", ok, cut)
+	}
+	if brutePending([]Step{s0}, []Step{p1, p2}, settles, check) {
+		t.Errorf("the brute force places them so too")
+	}
+	// the other way round it conforms: 1 then 2, ending at 2
+	if _, ok, _, _, _ := LinearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, registerFinal(1, 2, 1, 2)); !ok {
+		t.Errorf("the order real time allows does not conform")
+	}
 }

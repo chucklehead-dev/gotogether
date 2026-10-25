@@ -233,8 +233,9 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 	ns, at, required, renderSteps, _ := constraints(steps)
 	n := len(ns)
 	// a pending call's bounds: the steps recorded before its invocation
-	// precede it; it precedes the steps recorded after a settle that
-	// followed it. Pending calls bound no step otherwise, nor each other.
+	// precede it; it precedes the steps, and the pending calls, recorded
+	// after a settle that followed it (the system was quiet there: it had
+	// taken effect, if it did). Pending calls bound no step otherwise.
 	bound := map[[2]int]bool{}
 	for pi, p := range pending {
 		i := n + pi
@@ -250,6 +251,11 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 			for j := range n {
 				if before(st, ns[j].s) {
 					bound[[2]int{i, j}] = true
+				}
+			}
+			for qi, q := range pending {
+				if qi != pi && before(st, q) {
+					bound[[2]int{i, n + qi}] = true
 				}
 			}
 		}
@@ -284,12 +290,11 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 			} else {
 				s = pending[k-n]
 				s.Invocation, s.Ambiguous, s.Outcome, s.Obs, s.Order = false, true, "", nil, nil
-				// in the process of the step it follows (the first step's, at
-				// the start): a process of its own would read as restarts
+				// in the process of the step it follows (at the start, the
+				// first step's in the hard edges' order, as in a prefix as in
+				// its extensions): a process of its own would read as restarts
 				if i > 0 {
 					s.Process = out[i-1].Process
-				} else if j := slices.IndexFunc(order, func(k int) bool { return k < n }); j >= 0 {
-					s.Process = ns[order[j]].s.Process
 				} else {
 					s.Process = ns[at[0]].s.Process
 				}
@@ -523,14 +528,16 @@ func prefixes(n int, nodes []int, mustPrecede func(a, b int) bool, budget int, r
 				if placed[i] {
 					continue
 				}
+				// after the steps it must follow (a pending call need follow no
+				// pending call: that one may have had no effect), and before
+				// every node it must precede
 				minimal := true
-				for j := 0; j < n && minimal; j++ {
-					if i < n {
-						minimal = placed[j] || j == i || !mustPrecede(j, i)
-					} else {
-						// a pending call: after the steps it must follow, and
-						// before every one it must precede
-						minimal = (placed[j] || !mustPrecede(j, i)) && !(placed[j] && mustPrecede(i, j))
+				for j := 0; j < total && minimal; j++ {
+					if j < n && !placed[j] && j != i && mustPrecede(j, i) {
+						minimal = false
+					}
+					if placed[j] && mustPrecede(i, j) {
+						minimal = false
 					}
 				}
 				if minimal {

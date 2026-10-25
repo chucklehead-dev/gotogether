@@ -860,12 +860,16 @@ func violatedAt(rep *Report, n int) int {
 	return at
 }
 
-// observed counts an order's steps that are not assumed (a pending call's
-// effect a search placed): an order is complete when it has them all.
-func observed(o []qtrace.Step) int {
+// recorded counts an order's steps that are tr's (all but the effects of
+// tr's pending calls a search placed): an order is complete when it has
+// them all. A step recorded as assumed (a saved resolution, checked
+// again) is one of tr's.
+func recorded(tr *qtrace.Trace, o []qtrace.Step) int {
 	n := 0
 	for _, s := range o {
-		if !s.Ambiguous {
+		if !s.Ambiguous || !slices.ContainsFunc(tr.Pending, func(p qtrace.Step) bool {
+			return p.Action == s.Action && p.Time.Equal(s.Time) && fmt.Sprint(p.Args) == fmt.Sprint(s.Args)
+		}) {
 			n++
 		}
 	}
@@ -917,7 +921,7 @@ func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
 	}
 	out := make([][]qtrace.Step, len(orders))
 	for i, o := range orders {
-		if observed(o) < len(tr.Steps) { // a prefix of an order (Linearize's complete search): the run has not ended
+		if recorded(tr, o) < len(tr.Steps) { // a prefix of an order (Linearize's complete search): the run has not ended
 			out[i] = o
 			continue
 		}

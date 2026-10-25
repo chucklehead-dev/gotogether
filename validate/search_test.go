@@ -917,3 +917,30 @@ func TestShadowChecksRuns(t *testing.T) {
 		}
 	}
 }
+
+// An order is settled when it holds every step of its trace: a step
+// recorded as assumed (a saved resolution, checked again) is one of them,
+// a pending call's placed effect is not. Counting assumed steps out once
+// left every order of such a trace unsettled, its eventual vals unjudged.
+func TestSettledAsCountsRecordedSteps(t *testing.T) {
+	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
+	assumed := qtrace.Step{Action: "withdraw", Time: ms(2), Ambiguous: true, Args: map[string]any{"amount": int64(3)}}
+	step := qtrace.Step{Action: "deposit", Time: ms(1), Args: map[string]any{"amount": int64(10)}}
+	pending := qtrace.Step{Action: "deposit", Time: ms(3), Invocation: true, Args: map[string]any{"amount": int64(5)}}
+	effect := pending
+	effect.Invocation, effect.Ambiguous = false, true
+	tr := &qtrace.Trace{Steps: []qtrace.Step{step, assumed}, Pending: []qtrace.Step{pending}, Settled: true}
+	settled := func(o []qtrace.Step) bool {
+		out := settledAs(tr, [][]qtrace.Step{o})[0]
+		return len(out) > len(o) && out[len(out)-1].Settled
+	}
+	if !settled([]qtrace.Step{step, assumed}) {
+		t.Errorf("the whole trace, with its recorded assumed step, is not settled")
+	}
+	if !settled([]qtrace.Step{step, effect, assumed}) {
+		t.Errorf("the whole trace with a pending call's effect placed is not settled")
+	}
+	if settled([]qtrace.Step{step, effect}) {
+		t.Errorf("a prefix, a pending call's effect standing for a recorded step, is settled")
+	}
+}
