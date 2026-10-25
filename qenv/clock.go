@@ -3,6 +3,7 @@ package qenv
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -114,12 +115,16 @@ func (p *Process) drift(now time.Time) time.Duration {
 
 // drifted is how long an interval of d timed on p's clock (a sleep, a
 // call's timeout) lasts in true time: shorter on a fast clock, longer on
-// a slow one. A task of no process (nil) keeps true time.
+// a slow one. A task of no process (nil) keeps true time. It rounds up:
+// rounded down, a wait of a nanosecond or two on a fast clock lasted none,
+// and a loop that waits until its own clock reaches a point (raft's tick)
+// spun at one instant forever; rounded up, every wait passes time, and
+// the clock has reached the point when it ends.
 func (p *Process) drifted(d time.Duration) time.Duration {
 	if p == nil || p.rate == 0 {
 		return d
 	}
-	return time.Duration(float64(d) / (1 + p.rate))
+	return time.Duration(math.Ceil(float64(d) / (1 + p.rate)))
 }
 
 // clockOf is the time on t's process's wall clock: true time, off by the

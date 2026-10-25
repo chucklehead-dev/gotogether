@@ -144,6 +144,34 @@ func TestClockDrift(t *testing.T) {
 	}
 }
 
+// A loop that waits until its monotonic clock reaches a point, as a
+// ticker does, gets there on a drifting clock: each wait passes true time,
+// however short. Truncated, a wait of a nanosecond on a fast clock lasted
+// none, and the loop spun at one instant until the scheduler's step limit.
+func TestClockDriftWaitsReachTheirPoint(t *testing.T) {
+	for seed := uint64(1); seed <= 20; seed++ {
+		s := clocked(seed, qenv.Clocks{Drift: 0.5}, 0)
+		ticks := 0
+		s.Process("node", false, func(ctx context.Context) {
+			next := qenv.Mono(ctx)
+			for ticks < 100 {
+				next += 10*time.Millisecond + 7 // not a multiple of the drift's rounding
+				for qenv.Mono(ctx) < next {
+					qenv.WaitFor(ctx, func() bool { return false }, next-qenv.Mono(ctx))
+				}
+				ticks++
+			}
+		})
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatalf("seed %d: %v after %d ticks", seed, err, ticks)
+		}
+		s.Close()
+		if ticks != 100 {
+			t.Fatalf("seed %d: %d ticks", seed, ticks)
+		}
+	}
+}
+
 // Clocks that cannot be (a drift of 1 or more would stop a slow clock or
 // run it backwards; a negative size) panic with the field; so do Clocks
 // changed after the first process, which would give processes different
@@ -200,7 +228,7 @@ func TestClockDriftTimesCalls(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.Close()
-		if call != 666666666 && call != 2*time.Second || wait != call {
+		if call != 666666667 && call != 2*time.Second || wait != call { // 2/3 s, rounded up
 			t.Errorf("seed %d: a 1s timeout took %v, a 1s WaitFor %v of true time, want 2/3 s (fast) or 2 s (slow) for both", seed, call, wait)
 		}
 		seen[call] = true
