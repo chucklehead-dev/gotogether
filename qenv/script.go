@@ -168,7 +168,13 @@ func (s *Script) Misnamed() []string {
 			continue
 		case !choice.Exact(f.Kind):
 			msg := fmt.Sprintf("%q is no fault kind or nemesis the system declared, so it never happens", f.Kind)
-			if near := choice.Nearest(f.Kind, names); near != "" {
+			family := strings.HasPrefix(f.Kind, "nemesis.") && slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, f.Kind+".") })
+			switch near := choice.Nearest(f.Kind, names); {
+			case family:
+				// a family's name is chosen, but a Script names one of its
+				// nemeses: suggesting the name itself said nothing
+				msg = fmt.Sprintf("%q is a nemesis family, not a nemesis: name one of its nemeses (%q, with its process or pair)", f.Kind, f.Kind+".<name>")
+			case near != "" && near != f.Kind:
 				msg += fmt.Sprintf(" (did you mean %s?)", near)
 			}
 			bad("%s: name a kind as fault coverage prints it (\"rpc.<service>.response\"), a nemesis as \"nemesis.crash.<process>\"", msg)

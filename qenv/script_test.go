@@ -248,7 +248,7 @@ func TestScriptMisnamed(t *testing.T) {
 		`script fault 1 (test=1 after 0 steps): "test" is no fault kind or nemesis`,
 		`script fault 2 (test.misnamed.unavailable=1 after 0 steps): "test.misnamed.unavailable" is no fault kind`,
 		`"test.misnamd" is no fault kind or nemesis the system declared, so it never happens (did you mean test.misnamed?)`,
-		`script fault 4 (nemesis.crash=0 after 1 steps): "nemesis.crash" is no fault kind or nemesis`,
+		`script fault 4 (nemesis.crash=0 after 1 steps): "nemesis.crash" is a nemesis family, not a nemesis: name one of its nemeses ("nemesis.crash.<name>"`,
 		`test.misnamed has no option "lots"; its options: unavailable`,
 		`test.misnamed has options unavailable; option 9 is none of them`,
 		`script fault 7 (test.misnamed=0 after 0 steps): option 0 is nominal`,
@@ -257,6 +257,9 @@ func TestScriptMisnamed(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("Misnamed lacks %q:\n%s", want, all)
 		}
+	}
+	if strings.Contains(all, "did you mean nemesis.crash?") {
+		t.Errorf("a family's name suggested as the fix for itself:\n%s", all)
 	}
 	if strings.Contains(all, "script fault 9") {
 		t.Errorf("a nemesis by its full name is misnamed:\n%s", all)
