@@ -106,6 +106,15 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   successful fsync does not bring them back, as on Linux) and
   "disk.<name>.read" (a byte flipped: checksum what you read back).
   Write a journal or a step log through it to see what an fsync buys.
+- **Upgrades:** `s.Upgrades("v2", startV2, procs...)` makes a rolling
+  upgrade a nemesis per process (`nemesis.upgrade.<name>`): each crashes
+  its process and restarts it running startV2, with `Process.Version`
+  "v2", at any step, so runs pass through every mix of versions (a v2
+  writer and a v1 reader, say); `Exhaust(t, qtest.Bound{Faults: 1})`
+  tries one upgrade at every point. Code that differs by version reads
+  `qenv.ProcessOf(ctx).Version`. `p.Upgrade(v, start)` makes one where a
+  test wants it, and `p.RestartAs` restarts a crashed process as another
+  version. The same model judges every version: never give one slack.
 - **Partitions:** `s.Net().PartitionNemesis(a, b, ...)` makes every link
   between those processes a nemesis (cut, later healed): a `Service` call
   across a cut loses its request and its response, for as long as it

@@ -593,14 +593,17 @@ type PointCoverage struct
 type Process struct
     field Name string
     field Incarnation int
+    field Version string
     method (*Process) ClockOffset() time.Duration
     method (*Process) Crash()
     method (*Process) Down() bool
     method (*Process) ID() string
     method (*Process) Restart()
+    method (*Process) RestartAs(version string, start func(ctx context.Context))
     method (*Process) Spawn(name string, fn func(ctx context.Context))
     method (*Process) ToReal(virtual time.Time) time.Time
     method (*Process) ToVirtual(real time.Time) time.Time
+    method (*Process) Upgrade(version string, start func(ctx context.Context))
 type Queue struct
     field Name string
     field Ordered bool
@@ -680,6 +683,7 @@ type Sim struct
     method (*Sim) Tasks() string
     method (*Sim) ToReal(virtual time.Time) time.Time
     method (*Sim) ToVirtual(real time.Time) time.Time
+    method (*Sim) Upgrades(version string, start func(ctx context.Context), procs ...*Process)
 type Stalls struct
     field Pause time.Duration
     field Slow time.Duration

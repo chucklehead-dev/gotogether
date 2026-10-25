@@ -35,6 +35,11 @@ The first release. What a user meets, by module:
   indeterminate calls (`qtrace.LinearizePending`). Checked against brute
   force (every subset, every order), its "no order" confirmed by the same
   proof.
+- Rolling upgrades in qenv: `Sim.Upgrades(version, start, procs...)`
+  registers a nemesis per process (`nemesis.upgrade.<name>`) that crashes
+  it and restarts it as `version` running `start`, so explorations and
+  `Exhaust` pass through every mix of versions; `Process.Version`,
+  `Process.RestartAs` and `Process.Upgrade`.
 - `qtrace.HistorySVG` and `validate.Report.HistorySVG` draw a history
   (a lane per client, calls as bars, the order checked numbered, pending
   calls dashed, the failing step red); a kept failing exploration run

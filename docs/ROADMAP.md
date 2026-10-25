@@ -220,8 +220,8 @@ under a week, M two to four, L more.
   run declared but never chose are unknown to it.
 - **T7. Capabilities (after T2d).** Planned by a review (HISTORY, "T7
   plan"), in this order:
-  - **a (M). Pending calls inside the linearization** (Jepsen's :info;
-    the search and the drawing done, DESIGN §46; left: a partition with
+  - **a (M). Pending calls inside the linearization. Done** (Jepsen's
+    :info; DESIGN §46; wallet's TestPendingTransfersLinearized). Left: a partition with
     pending calls and no steps places nothing, a pending effect is never
     placed after a restart the binding infers (shared with ResolvePending),
     and pending calls' arguments are not interned with the history's):
@@ -232,10 +232,13 @@ under a week, M two to four, L more.
     confirmed by the same proof. And `qtrace.HistorySVG`, a failing
     history drawn (lanes, bars, the failing step). Example: wallet's
     concurrent pending transfers (NoDedupe's retried timeout).
-  - **b (S–M). Upgrade runs**: `Process.RestartAs`, `Sim.Upgrades` (an
-    `upgrade` nemesis family, Scripts and Exhaust unchanged). Example:
-    quorumkv's NewTiebreak, conforming all-v1 and all-v2, caught mid-
-    rollout.
+  - **b (S–M). Upgrade runs. Done** (DESIGN §47): `Process.RestartAs`,
+    `Upgrade`, `Version`, `Sim.Upgrades` (an `upgrade` nemesis family,
+    Scripts and Exhaust unchanged); a mixed-version encoding caught by
+    Exhaust within one fault, nothing without the versions. The example
+    moves to T8 (raftkv's nodes upgrade naturally): quorumkv's
+    NewTiebreak needs its clients versioned with its replicas, which are
+    no processes.
   - **c (S). Polish**: Steer cutting where a feature appeared, features as
     counts; qhistory's strict serializability (real-time edges); qlint
     flagging math/rand and multi-case select.

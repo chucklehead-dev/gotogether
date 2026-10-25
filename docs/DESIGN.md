@@ -3041,3 +3041,20 @@ judged, pending calls dashed to the history's end, the step the check
 failed at red. Kept failing runs of a search get one beside their
 judged order; the CLI writes one with `-history`.
 
+## 47. Rolling upgrades (T7b)
+
+A rolling upgrade is a run in which processes restart, one at a time,
+running other code: for a while two versions talk to each other, which
+neither version's own tests see. `Sim.Upgrades(version, start, procs...)`
+makes it a nemesis per process, `nemesis.upgrade.<name>` (its own
+family, at the nemesis rate or `nemesis.upgrade`'s), enabled while the
+process is up and runs another version: doing it crashes the process and
+restarts it as the version, `Process.RestartAs`, which sets `start` and
+`Version`. Being a nemesis, it is a fault to everything that handles
+faults: Scripts name it, `Exhaust` bounds it (one fault: one upgrade, at
+every point), Swarm and Without turn it off, and a run's choices replay
+it. A process need not be crashable to be upgraded: crashability is the
+crash nemesis's. Faults stay off after a settle, so a rollout a test
+needs finished calls `Process.Upgrade` itself. The same model judges
+every version; code that differs reads `ProcessOf(ctx).Version`.
+

@@ -708,15 +708,18 @@ func Sleep(ctx context.Context, d time.Duration) {
 type Process struct {
 	Name        string
 	Incarnation int
-	sim         *Sim
-	stall       stall // its pause and slowness (Stalls)
-	start       func(ctx context.Context)
-	down        bool
-	machine     Machine       // native, with a Platform: the process's machine
-	queue       chan func()   // native, with a Platform: tasks to start there
-	clock       time.Duration // its wall clock's skew and jumps (Clocks)
-	rate        float64       // its clocks' drift: + fast, - slow (Clocks.Drift)
-	born        time.Time     // when its clock started drifting
+	// Version is the code it runs: "" as created, then what RestartAs or
+	// an upgrade (Sim.Upgrades) restarted it as
+	Version string
+	sim     *Sim
+	stall   stall // its pause and slowness (Stalls)
+	start   func(ctx context.Context)
+	down    bool
+	machine Machine       // native, with a Platform: the process's machine
+	queue   chan func()   // native, with a Platform: tasks to start there
+	clock   time.Duration // its wall clock's skew and jumps (Clocks)
+	rate    float64       // its clocks' drift: + fast, - slow (Clocks.Drift)
+	born    time.Time     // when its clock started drifting
 }
 
 // ID is the process name and incarnation, e.g. "payments#2".
@@ -819,6 +822,45 @@ func (p *Process) Restart() {
 		p.restartNative()
 	}
 	p.sim.spawn(p.sim.base, p.Name+".main", p, p.start)
+}
+
+// RestartAs boots a crashed process as a new incarnation running start,
+// as version: an upgrade (or a rollback) of its code. What the new code
+// reads of the old's is what the durable components hold, as for a
+// Restart; the same model judges every version.
+func (p *Process) RestartAs(version string, start func(ctx context.Context)) {
+	if !p.down {
+		return
+	}
+	p.start, p.Version = start, version
+	if p.sim.Log != nil {
+		p.sim.Log(fmt.Sprintf("%v upgrade %s to %q", p.sim.Elapsed(), p.Name, version))
+	}
+	p.Restart()
+}
+
+// Upgrade crashes the process and restarts it as version, running start:
+// one step of a rolling upgrade, made where a test wants it. Call it from
+// another process's task (a task of the process stops in its Crash).
+func (p *Process) Upgrade(version string, start func(ctx context.Context)) {
+	p.Crash()
+	p.RestartAs(version, start)
+}
+
+// Upgrades registers a rolling upgrade to version as nemeses, one per
+// process ("nemesis.upgrade.<name>", family upgrade): each, enabled while
+// its process runs another version and is up, crashes it and restarts it
+// as version running start. The scheduler then upgrades the processes at
+// any step, in any order, at the nemesis rate ("nemesis.upgrade"), so
+// runs pass through every mix of versions; a Script names one
+// ("nemesis.upgrade.b") and Exhaust bounds them as faults. Faults stay
+// off after a settle, so a rollout a test needs finished calls Upgrade
+// before it settles.
+func (s *Sim) Upgrades(version string, start func(ctx context.Context), procs ...*Process) {
+	for _, p := range procs {
+		s.nemesisOf("upgrade."+p.Name, []*Process{p}, func() bool { return !p.down && p.Version != version },
+			func() { p.Upgrade(version, start) })
+	}
 }
 
 // OnCrash registers a hook run when a process crashes.
