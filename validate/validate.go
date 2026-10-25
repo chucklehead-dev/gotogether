@@ -35,9 +35,15 @@ type Options struct {
 	// nothing more: no ITF and no model state at a failure, so the runs
 	// that fail are replayed on the backend the others were (TypeScript for
 	// a CheckBatch chunk) rather than on Rust for its ITF. For searches
-	// that judge many candidates (qtest's Linearize, ResolvePending) and
-	// read only where each failed.
+	// that judge many candidates (Checker.Search's Linearize,
+	// ResolvePending) and read only where each failed.
 	VerdictsOnly bool
+	// Eval is how a search judges its candidates: "go" (the Go evaluator,
+	// its conclusions confirmed by quint), "quint" (quint alone) or
+	// "shadow" (both, failing on any disagreement); "" is
+	// GOTOGETHER_EVAL's, else "go". An option, so tests of each run in
+	// parallel.
+	Eval string
 	// detailBackend, if set, replays the runs that failed (the detail
 	// phase): a chunk's TypeScript backend writes no ITF for a failing
 	// test, so the model's state at the failure is Rust's to report

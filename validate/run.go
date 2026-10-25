@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -36,6 +37,8 @@ type Checker struct {
 	memo *stateMemo
 	// planner plans within's candidates, its instance computed once
 	planner *binding.Planner
+	// scratch is its temporary directory, with no Options.Dir (Close)
+	scratch *scratch
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the
@@ -52,7 +55,45 @@ func NewChecker(bindingPath string, opt Options) (*Checker, error) {
 	if errs := b.Lint(m); len(errs) > 0 {
 		return nil, fmt.Errorf("binding %s does not fit %s: %v", bindingPath, b.Module, errs)
 	}
-	return &Checker{Binding: b, Model: m, Options: opt}, nil
+	return &Checker{Binding: b, Model: m, Options: opt, scratch: &scratch{}}, nil
+}
+
+// scratch is a checker's own temporary directory, for checks with no
+// Options.Dir: each check a directory under it (the modules and ITF its
+// report names), all removed by Close. Each check once made a temporary
+// directory of its own, which nothing removed.
+type scratch struct {
+	once sync.Once
+	root string
+	err  error
+}
+
+// dirFor is o with a directory of its own under c's scratch directory
+// when o names none.
+func (c *Checker) dirFor(o Options) (Options, error) {
+	if o.Dir != "" || c.scratch == nil {
+		return o, nil
+	}
+	c.scratch.once.Do(func() { c.scratch.root, c.scratch.err = os.MkdirTemp("", "gotogether-") })
+	if c.scratch.err != nil {
+		return o, c.scratch.err
+	}
+	d, err := os.MkdirTemp(c.scratch.root, "check-")
+	if err != nil {
+		return o, err
+	}
+	o.Dir = d
+	return o, nil
+}
+
+// Close removes the temporary directory c's checks wrote to when it was
+// made with no Options.Dir (and the modules and ITF its reports name). A
+// checker given a Dir leaves it. Its copies share it: close the one made.
+func (c *Checker) Close() error {
+	if c.scratch == nil || c.scratch.root == "" {
+		return nil
+	}
+	return os.RemoveAll(c.scratch.root)
 }
 
 // Process-wide: the checkers For built.
@@ -164,7 +205,11 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 			rep.Actors = append(rep.Actors, r)
 			continue
 		}
-		r, err := validateTrace(ctx, c.Binding, c.Model, t, c.withinITF(c.Options))
+		o, err := c.dirFor(c.withinITF(c.Options))
+		if err != nil {
+			return nil, err
+		}
+		r, err := validateTrace(ctx, c.Binding, c.Model, t, o)
 		if err != nil {
 			return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
 		}

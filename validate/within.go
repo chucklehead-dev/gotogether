@@ -228,7 +228,7 @@ func (c *Checker) Key(steps []qtrace.Step) string {
 		backend = os.Getenv("QUINT_BACKEND")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "eval=%s|backend=%s|", evalMode(), backend)
+	fmt.Fprintf(&b, "eval=%s|backend=%s|", c.Options.evalMode(), backend)
 	b.WriteString(qtrace.Key(steps))
 	if len(c.Binding.Within) == 0 || len(steps) == 0 {
 		return b.String()

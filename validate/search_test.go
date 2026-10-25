@@ -26,6 +26,7 @@ import (
 // there), whatever order the actor's steps are in; surely: on one
 // recorder by seq, across recorders by more than RealTimeSlack.
 func TestResolutionsAgainstBruteForce(t *testing.T) {
+	t.Parallel()
 	r := rand.New(rand.NewPCG(5, 6))
 	t0 := time.Unix(0, 0)
 	compared, settled, crossed := 0, 0, 0
@@ -165,6 +166,7 @@ func show(steps []qtrace.Step) []string {
 // state one prefix a set of deposits suffices: 146 orders tried, the
 // guided search's among them, where without the states it took 456.
 func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -213,6 +215,7 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 // which only clocks that disagree make, and resolutions says so (the call
 // can have had no effect).
 func TestResolutionsCrossing(t *testing.T) {
+	t.Parallel()
 	ms := func(n int) time.Time { return time.Unix(0, 0).Add(time.Duration(n) * time.Millisecond) }
 	p := qtrace.Step{Action: "op", Recorder: "b", Seq: 1, Time: ms(100), Invocation: true}
 	st := qtrace.Step{Action: "settled", Recorder: "b", Seq: 2, Time: ms(0), Settled: true}
@@ -231,6 +234,7 @@ func TestResolutionsCrossing(t *testing.T) {
 // restart's process told two prefixes apart (the T2c review's B1), and
 // ids interned in each candidate's order named one state two ways (B2).
 func TestCompleteSearchAgainstWholeOrders(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -331,6 +335,7 @@ func TestCompleteSearchAgainstWholeOrders(t *testing.T) {
 // an annotated ITF: stripped, one overwrote the other, whichever Go's map
 // order wrote last (and two states told apart by it read as one).
 func TestAnnotateKeepsCollidingNames(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "t.itf.json")
 	itf := `{"vars":["a::x","b::x","m::y"],"states":[{"a::x":1,"b::x":2,"m::y":3}]}`
 	if err := os.WriteFile(path, []byte(itf), 0o644); err != nil {
@@ -351,6 +356,7 @@ func TestAnnotateKeepsCollidingNames(t *testing.T) {
 // was invoked) is not searched: its one order is the history's, which the
 // caller checks. No quint process runs for it, so it needs no quint here.
 func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
+	t.Parallel()
 	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Skip(err) // the binding loads its model with quint
@@ -454,6 +460,7 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 // with invariants, an eventual val, restarts, interning and a constant
 // computed from the steps.
 func TestJudgeAgreesWithQuint(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -577,6 +584,7 @@ func actions(o []qtrace.Step) []string {
 // alike: the processes' numbering ({{.process}} numbers them by first
 // appearance) is part of the key, not only the last one restarts read.
 func TestMergeKeyHoldsTheProcessNumbering(t *testing.T) {
+	t.Parallel()
 	ch := &Checker{Binding: &binding.Binding{Restart: "restart"}}
 	at := func(action, process string) qtrace.Step { return qtrace.Step{Action: action, Process: process} }
 	p1 := []qtrace.Step{at("x", "p1"), at("y", "p2"), at("z", "p2")}
@@ -594,6 +602,7 @@ func TestMergeKeyHoldsTheProcessNumbering(t *testing.T) {
 // prefix, rejects a merged one or gives a pair two states; unconfirmed
 // when it wrote no state.
 func TestConfirmsAProof(t *testing.T) {
+	t.Parallel()
 	a, b, c := []qtrace.Step{{Action: "a"}}, []qtrace.Step{{Action: "b"}}, []qtrace.Step{{Action: "c"}}
 	proof := &qtrace.Proof{Rejected: [][]qtrace.Step{a}, Merged: [][2][]qtrace.Step{{b, c}}}
 	quint := func(fa int, sb, sc string) func([][]qtrace.Step) ([]int, []string) {
@@ -808,6 +817,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 // made its verdicts n/a (an exploration confirms on marked reports): the
 // order quint rejects there would otherwise stand as no verdict.
 func TestConfirmSeesThroughMark(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -959,6 +969,7 @@ func TestShadowChecksRuns(t *testing.T) {
 // a pending call's placed effect is not. Counting assumed steps out once
 // left every order of such a trace unsettled, its eventual vals unjudged.
 func TestSettledAsCountsRecordedSteps(t *testing.T) {
+	t.Parallel()
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	assumed := qtrace.Step{Action: "withdraw", Time: ms(2), Ambiguous: true, Args: map[string]any{"amount": int64(3)}}
 	step := qtrace.Step{Action: "deposit", Time: ms(1), Args: map[string]any{"amount": int64(10)}}

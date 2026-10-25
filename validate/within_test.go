@@ -18,6 +18,7 @@ import (
 // (not among the invariants, an issue says so) if it ended before; a
 // second heal answered late fails though the first was answered in time.
 func TestWithin(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -106,6 +107,7 @@ func TestWithin(t *testing.T) {
 // apart. A heal and an election both within one second pass; an election
 // whose invocation is past the bound fails.
 func TestWithinIntervals(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}

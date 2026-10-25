@@ -133,6 +133,7 @@ func TestHiddenActions(t *testing.T) {
 // four (it once said "not a transition of the model"); a depth of five
 // conforms.
 func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -162,6 +163,7 @@ func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
 // on random histories of writes and reads (some reads seeing what gossip
 // may have brought, some what it could not).
 func TestHiddenAgainstBruteForce(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
@@ -294,6 +296,7 @@ func bruteGossip(steps []qtrace.Step, depth int) bool {
 // The binding's hidden actions are linted: the model's init and step, the
 // restart action, a duplicate, a depth with nothing hidden.
 func TestHiddenLint(t *testing.T) {
+	t.Parallel()
 	for _, x := range []struct{ yaml, want string }{
 		{"hidden: [step]", "is no action of the system"},
 		{"hidden: [gossipAny, gossipAny]", "listed twice"},

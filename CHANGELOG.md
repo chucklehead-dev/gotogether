@@ -43,6 +43,12 @@ The first release. What a user meets, by module:
   reaching a new state) is no verdict for a step it cannot take, an
   invariant no path keeps or an eventual val no final state has: it was
   a rejection.
+- A checker made with no `Options.Dir` writes each check under one
+  temporary directory of its own, which `Checker.Close` removes: each
+  check made a temporary directory that nothing removed.
+- `validate.Options.Eval` sets how a search judges its candidates ("go",
+  "quint", "shadow"; GOTOGETHER_EVAL is its default): validate's tests
+  run in parallel, 138 s from about 300.
 - A binding's templates are parsed once per process and its functions
   bound once per plan, not per render; a search plans its candidates with
   one `binding.Planner` (the history interned and its constants rendered

@@ -38,14 +38,17 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	}
 	base := c.Options.Dir
 	if base == "" {
-		d, err := os.MkdirTemp("", "gotogether-batch-")
+		o, err := c.dirFor(c.Options)
+		if err == nil && o.Dir == "" { // a checker made by hand: no scratch of its own
+			o.Dir, err = os.MkdirTemp("", "gotogether-batch-")
+		}
 		if err != nil {
 			for i := range errs {
 				errs[i] = err
 			}
 			return reports, errs
 		}
-		base = d
+		base = o.Dir
 	}
 	opt := c.withinITF(c.Options)
 	opt.Dir = base

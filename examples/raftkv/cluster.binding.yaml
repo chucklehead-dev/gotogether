@@ -24,3 +24,9 @@ within:
   - after: healed
     holds: hasLeader
     bound: 300ms
+
+# The model on its own (gotogether simulate): electionSafety is the
+# requirement on the code, which the model lets a node that votes twice
+# break (lead takes any term campaigned for).
+simulate:
+  allows: [electionSafety]

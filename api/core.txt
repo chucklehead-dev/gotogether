@@ -1502,6 +1502,7 @@ type Checker struct
     field Options Options
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
+    method (*Checker) Close() error
     method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
@@ -1537,6 +1538,7 @@ type Options struct
     field Dir string
     field NoITF bool
     field VerdictsOnly bool
+    field Eval string
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result

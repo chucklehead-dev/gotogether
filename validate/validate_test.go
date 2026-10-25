@@ -13,6 +13,7 @@ import (
 // Exercises the library entry points on a model unrelated to edgePublish:
 // record with a MemorySink, Check with a Checker.
 func TestAccountModel(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not installed")
 	}

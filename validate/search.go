@@ -519,10 +519,10 @@ func newEvalUse(ch, full *Checker) *evalUse {
 	switch {
 	case ch.quintOnly:
 		ev.off, ev.why = true, "a search again with quint alone"
-	case evalMode() == "quint":
+	case ch.Options.evalMode() == "quint":
 		ev.off, ev.why = true, "GOTOGETHER_EVAL=quint"
 	default:
-		ev.shadow = evalMode() == "shadow"
+		ev.shadow = ch.Options.evalMode() == "shadow"
 		if ev.e = evaluatorFor(full); ev.e.err != nil {
 			ev.off, ev.unavailable, ev.why = true, true, ev.e.err.Error()
 		}

@@ -12,6 +12,7 @@ import (
 // Long runs are replayed in segments; a disabled step is located wherever
 // it falls: inside a segment, at a segment's end, or last of all.
 func TestDisabledStepLocatedInLongRuns(t *testing.T) {
+	t.Parallel()
 	needQuint(t)
 	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {

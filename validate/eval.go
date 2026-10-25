@@ -43,8 +43,13 @@ type evalOnce struct {
 // for what it refuses; the default), "quint" (quint alone), "shadow" (the
 // evaluator, every batch it judges checked by quint too, a disagreement
 // the search's error: the nightly's), from GOTOGETHER_EVAL.
-func evalMode() string {
-	if m := os.Getenv("GOTOGETHER_EVAL"); m == "quint" || m == "shadow" {
+// evalMode is o.Eval, else GOTOGETHER_EVAL's, else "go".
+func (o Options) evalMode() string {
+	m := o.Eval
+	if m == "" {
+		m = os.Getenv("GOTOGETHER_EVAL")
+	}
+	if m == "quint" || m == "shadow" {
 		return m
 	}
 	return "go"
@@ -73,7 +78,7 @@ func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtra
 // quint's alone.
 func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
 	errs := make([]error, len(runs))
-	if evalMode() != "shadow" || c.within != nil || c.shadowed || len(c.Binding.Hidden) > 0 {
+	if c.Options.evalMode() != "shadow" || c.within != nil || c.shadowed || len(c.Binding.Hidden) > 0 {
 		return errs // (a binding with hidden actions is the evaluator's alone: quint has nothing to compare)
 	}
 	e := evaluatorFor(c)

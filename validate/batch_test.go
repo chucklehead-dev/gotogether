@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -18,6 +19,7 @@ import (
 // CheckBatch gives the same verdicts as Check, at the same steps, with far
 // fewer quint processes.
 func TestCheckBatchMatchesCheck(t *testing.T) {
+	t.Parallel()
 	needQuint(t)
 	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
@@ -106,4 +108,36 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 	tSeq := time.Since(t0) * time.Duration(len(runs)) / 6
 	t.Logf("%d runs: CheckBatch %v, Check in parallel %v, Check one at a time ~%v", len(runs), tBatch.Round(time.Millisecond),
 		tPar.Round(time.Millisecond), tSeq.Round(time.Millisecond))
+}
+
+// A checker with no Dir writes each check under a temporary directory of
+// its own, which Close removes: each check once made one that nothing
+// removed (262 of them after one test run).
+func TestCheckerScratchRemovedByClose(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := NewChecker("testdata/account.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}}
+	var roots []string
+	for range 2 {
+		rep, err := c.Check(context.Background(), steps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		roots = append(roots, filepath.Dir(filepath.Dir(rep.Actors[0].Module)))
+	}
+	if roots[0] != roots[1] || !strings.Contains(roots[0], "gotogether-") {
+		t.Fatalf("two checks' directories under %v, want one root of the checker's", roots)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(roots[0]); !os.IsNotExist(err) {
+		t.Errorf("%s left after Close: %v", roots[0], err)
+	}
 }
