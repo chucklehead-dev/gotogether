@@ -124,13 +124,18 @@ under a week, M two to four, L more.
     binding's evaluation module, judging Linearize's candidates, quint
     confirming each search's conclusion; checked against quint on every
     model of the repository and a table of builtins at their edges on
-    both backends; reviewed. quorumkv's contended keys 337 s to 51 s.
+    both backends; reviewed twice (the second found three silent wrong
+    verdicts, now fixed: a search that finds no order is quint's alone).
+    quorumkv's faithful exploration 20 s to 13 s.
     Also: LinearizeByKey's partitions side by side, and a history real
     time orders alone not searched (`qtrace.ForcedOrder`). Left:
     ResolvePending's placements on the evaluator; each candidate extended
     from its prefix's held state rather than replayed from init (WGL at
-    Porcupine's speed); a failing search's evidence confirmed by one quint
-    batch (now its best order alone); a nightly Hegel property drawing
+    Porcupine's speed); a failing search confirmed from its evidence in one
+    quint batch (every rejected prefix rejected at the same step, every
+    merge of prefixes the same quint state) instead of searched again by
+    quint (the contended mutants: 214 s, 51 s with the evaluator's own
+    negative verdicts); a nightly Hegel property drawing
     states and arguments against quint, and a shadow mode running both;
     quint-confirmed single steps in validate's shape for every binding.
 - **T3. The searches in the right layer (M). Done:** validate's

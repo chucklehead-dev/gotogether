@@ -9,11 +9,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 The first release. What a user meets, by module:
 
 - Linearize's candidates are judged by a Quint evaluator in Go, over the
-  IR quint compiles the binding's evaluation module to, with quint
-  confirming each search's conclusion (a disagreement searches again with
-  quint, and says so); what the evaluator cannot evaluate is quint's.
-  quorumkv's contended-key tests took 51 s, 337 s with quint alone.
-  `GOTOGETHER_EVAL=quint` turns it off.
+  IR quint compiles the binding's evaluation module to: an order it finds
+  is confirmed by quint (a disagreement searches again with quint, and
+  says so), and a search that finds none is decided by quint alone; what
+  the evaluator cannot evaluate is quint's. quorumkv's faithful
+  exploration took 13 s, 20 s with quint alone; its mutants' failing
+  searches cost what they did. `GOTOGETHER_EVAL=quint` turns it off.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,
   now searched side by side) of such a history checks it without a

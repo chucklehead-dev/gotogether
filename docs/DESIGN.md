@@ -2934,10 +2934,13 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   at the settle: the last step), and a conforming one's state is the
   model's state as a key (with the last process when the binding infers
   restarts), for the merge of prefixes by state.
-- **Confirmed by quint.** The search's conclusion is checked once by
-  quint: the order found conforms, or the one that got furthest fails.
-  A disagreement searches again with quint alone, and the issue says so.
-  The caller's check of the order is quint's, as before.
+- **Confirmed by quint.** An order the search finds is checked by quint
+  (a disagreement searches again with quint alone, and the issue says
+  so); a search that finds none, or is cut short, is decided by quint
+  alone, since no one order confirms that every order fails (the
+  evaluator could have rejected the one that conforms). The same holds
+  for the invariants' second search. The caller's check of the order is
+  quint's, as before.
 - **Checked against quint.** Every binding's model, in its binding's
   instance, against `quint run`'s traces (each state one of the
   evaluator's successors of the one before), and a table of builtins at
@@ -2945,8 +2948,13 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   gives the same verdict, and one made wrong is caught by the
   confirmation.
 
-quorumkv's contended-key tests took 51 s, 337 s with quint alone.
-`GOTOGETHER_EVAL=quint` turns it off. ResolvePending's placements still
+Before negative conclusions went to quint, quorumkv's contended-key
+mutants took 51 s, 337 s with quint alone; they take 214 s now, their
+failing searches quint's, and its faithful exploration 13 s, 20 s with
+quint alone. Confirming a negative conclusion from its evidence (every
+rejected prefix rejected by quint at the same step, every merge of two
+prefixes the same quint state, in one batch) would give the first number
+back soundly: the next step. `GOTOGETHER_EVAL=quint` turns it off. ResolvePending's placements still
 go to quint, and every candidate is replayed from init: extending a
 prefix's held state is the next step (ROADMAP T2d).
 
