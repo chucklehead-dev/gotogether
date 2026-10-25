@@ -27,6 +27,15 @@ The first release. What a user meets, by module:
   checks every batch it judges with quint too, and judges each actor of
   every run checked with both, failing on a disagreement (nightly). Two prefixes merge
   only when their processes are numbered alike.
+- A linearization search the evaluator judged that runs out of its budget
+  is no verdict at once, not searched again with quint alone at the same
+  budget (minutes, for the same no verdict): raftkv's faithful
+  exploration with two such runs took 82 s, now 5 s.
+- A sleep or wait timed on a drifting clock lasts its interval rounded up
+  in true time: rounded down, a wait of a nanosecond on a fast clock
+  lasted none, and a loop that waits until its own monotonic clock
+  reaches a point (raft's tick loop) spun at one instant until
+  `ErrMaxSteps`.
 - `qtest.Linearize()` with `qtest.ResolvePending()` (and the CLI's
   `-linearize -resolve-pending`), refused together before, search pending
   calls inside the linearization: each may take effect once anywhere real

@@ -430,6 +430,21 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	if again := searchedAgain.Load() - before; again != 0 || g.issues[0].Msg != q.issues[0].Msg || !strings.Contains(g.issues[0].Msg, "no order") {
 		t.Errorf("searched again %d times; quint: %v\nthe evaluator: %v", again, q.issues, g.issues)
 	}
+	// a search cut short is no verdict, and stays the evaluator's: quint
+	// searched it again at the same budget, for the same no verdict
+	t.Setenv("GOTOGETHER_EVAL", "go")
+	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before = searchedAgain.Load()
+	cut, err := c.Search(steps, SearchOptions{Linearize: true, Budget: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again := searchedAgain.Load() - before; again != 0 || !strings.Contains(cut.issues[0].Msg, "no verdict") || !strings.Contains(cut.issues[0].Msg, "judged by the Go evaluator") {
+		t.Errorf("a cut search searched again %d times: %v", again, cut.issues)
+	}
 }
 
 // The evaluator judges a candidate as quint's replay of it reports: the
