@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -31,8 +32,9 @@ type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []er
 // orders the Go evaluator found alone confirmed by quint where the check
 // fails (and searched again with quint alone where quint disagrees), and
 // the report marked with what the search found (its issues, no verdict
-// for an actor whose search ran out of budget). An error is the search's
-// or the check's, never a verdict.
+// for an actor whose search ran out of budget). An error is the search's,
+// the check's or the confirmation's (and its search again with quint
+// alone), never a verdict.
 //
 // Its check is Check's (its failing actors' ITF written unless NoITF).
 func (c *Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error) {
@@ -45,8 +47,9 @@ func (c *Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOpti
 
 // JudgeBatch is Judge of many independent runs: their searches side by
 // side (each under a directory of its own), their orders checked by
-// check in one batch (nil: CheckBatch), then the confirmations of the
-// runs that fail, and the runs searched again checked in a second batch.
+// check in one batch (nil: CheckBatch), then the confirmation of each
+// run whose search left claims (an actor that passed and was decided
+// needs none), and the runs searched again checked in a second batch.
 // Each report is marked on a copy: check's are left as they were.
 func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error) {
 	if check == nil {
@@ -75,14 +78,26 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 	for i := range all {
 		all[i] = i
 	}
+	// a search's directory: the checker's, else its scratch, else (a
+	// checker made by hand) one of the batch's own, never the working
+	// directory
+	base := c.Options
+	if searching {
+		var err error
+		if base, err = c.dirFor(base); err == nil && base.Dir == "" {
+			base.Dir, err = os.MkdirTemp("", "gotogether-judge-")
+		}
+		if err != nil {
+			for i := range errs {
+				errs[i] = err
+			}
+			return js, errs
+		}
+	}
 	each(all, func(i int) {
 		sc := *c
 		if searching {
-			o, err := c.dirFor(c.Options)
-			if err != nil {
-				errs[i] = err
-				return
-			}
+			o := base
 			if len(runs) > 1 {
 				o.Dir = filepath.Join(o.Dir, "search", strconv.Itoa(i))
 			}
@@ -92,6 +107,9 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 	})
 	// checkAll checks the searches' orders of the runs idx, into js
 	checkAll := func(idx []int) {
+		if len(idx) == 0 {
+			return
+		}
 		orders := make([][]qtrace.Step, len(idx))
 		for k, i := range idx {
 			orders[k] = searches[i].Steps

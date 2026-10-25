@@ -71,8 +71,8 @@ type claim struct {
 	rejected   [][]qtrace.Step
 }
 
-// confirm confirms, after the check of a byCheck search's Steps, the claims the Go evaluator made for the actors rep does not pass
-// (an actor that passes every check confirmed its order there): each
+// confirm confirms, after the check of a byCheck search's Steps, the
+// claims the Go evaluator made for the actors rep does not pass (an actor that passes every check confirmed its order there): each
 // order is checked by quint (conformance, eventual vals, and invariants
 // when the claim is that they hold), with the orders a resolution
 // rejected before it, side by side. When quint disagrees with one, it

@@ -637,10 +637,11 @@ func TestConfirmsAProof(t *testing.T) {
 	}
 }
 
-// With ConfirmByCheck, an order or a resolution the Go evaluator finds
-// costs the search no quint process: the caller's check confirms it. When
-// that check fails where the evaluator was wrong, Confirm searches again
-// with quint alone, and says so; when it holds, Confirm does nothing.
+// A byCheck search (Judge's): an order or a resolution the Go evaluator
+// finds costs the search no quint process: the run's check confirms it.
+// When that check fails where the evaluator was wrong, confirm searches
+// again with quint alone, and says so; when it holds, confirm does
+// nothing.
 func TestConfirmByCheck(t *testing.T) {
 	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
 	if _, err := exec.LookPath("quint"); err != nil {
@@ -811,7 +812,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 				t.Fatalf("with a right evaluator the run fails:\n%s", rep.Summary())
 			}
 			hooks.TamperEval.Store(x.tamper)
-			// without ConfirmByCheck quint confirms in the search
+			// without byCheck quint confirms in the search
 			if s, err := c.search(x.steps, opt, false); err != nil || !check(s).OK() {
 				t.Errorf("confirmed in the search: err %v, report %s", err, check(s).Summary())
 			} else if opt.ResolvePending && !strings.Contains(fmt.Sprint(s.issues), "disagree") {
@@ -1016,5 +1017,33 @@ func TestSettledAsCountsRecordedSteps(t *testing.T) {
 	}
 	if settled([]qtrace.Step{step, effect}) {
 		t.Errorf("a prefix, a pending call's effect standing for a recorded step, is settled")
+	}
+}
+
+// A checker made by hand (no Dir, no scratch of its own) searches in a
+// temporary directory of the batch's, never the working directory.
+func TestJudgeBatchOfAHandMadeChecker(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	nc, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Checker{Binding: nc.Binding, Model: nc.Model, Options: Options{Eval: "quint"}} // quint writes its candidates
+	t.Chdir(t.TempDir())
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * time.Millisecond) }
+	run := []qtrace.Step{
+		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Actor: "acct", Process: "p", Invoked: at(0), Time: at(10), Args: map[string]any{"amount": int64(1)}, Obs: map[string]any{}},
+		{Action: "deposit", Recorder: "b", Seq: 1, Thread: "b", Actor: "acct", Process: "p", Invoked: at(0), Time: at(10), Args: map[string]any{"amount": int64(2)}, Obs: map[string]any{}},
+	}
+	_, errs := c.JudgeBatch(context.Background(), [][]qtrace.Step{run, run}, SearchOptions{Linearize: true}, nil)
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if ents, _ := os.ReadDir("."); len(ents) > 0 {
+		t.Errorf("the search wrote into the working directory: %v", ents)
 	}
 }

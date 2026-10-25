@@ -126,6 +126,14 @@ func TestHiddenActions(t *testing.T) {
 	if _, err := c.search(two, SearchOptions{Linearize: true}, false); err == nil || !strings.Contains(err.Error(), "with hidden actions") {
 		t.Errorf("a linearization with hidden actions: %v", err)
 	}
+	// Judge returns the search's error (it once checked an empty batch,
+	// and panicked), alone and in a batch
+	if j, err := c.Judge(context.Background(), two, SearchOptions{Linearize: true}); j != nil || err == nil || !strings.Contains(err.Error(), "with hidden actions") {
+		t.Errorf("Judge of a linearization with hidden actions: %v, %v", j, err)
+	}
+	if js, errs := c.JudgeBatch(context.Background(), [][]qtrace.Step{two, two}, SearchOptions{Linearize: true}, nil); js[1] != nil || errs[1] == nil {
+		t.Errorf("JudgeBatch of a linearization with hidden actions: %v, %v", js, errs)
+	}
 }
 
 // A step that more hidden actions than the depth would enable is no
