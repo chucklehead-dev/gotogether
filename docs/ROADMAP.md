@@ -68,26 +68,14 @@ counter, capabilities and lessons, and raftkv's own. Bugs first; each
 item reviewed before the next. Sizes: S under a week, M two to four, L
 more.
 
-- **S1. Silent wrong answers (S each).** Four done (None over runs with
-  no verdict, mutants undecided; claim names the binding's; a hidden
-  search cut by its depth; a marked report writing into the shared
-  cache) and raftkv's lost snapshots. Left:
-  - a pending call placed in a linearization renders `{{.process}}` as
-    the step before it's, not its own (probe 2: Mismatch where an order
-    conforms);
-  - `within` judges interval steps (Invoke/Done) on their completion
-    times alone: Fail where the tightest placement passes, Pass where the
-    loosest fails (probe 3); judge on both bounds, else no verdict;
-  - ResolvePending falls back to quint when quint rejects the
-    evaluator's resolution, silently (no warning, no count): through
-    decide and note as the order's search;
-  - `Checker.Key` leaves out the backend and the evaluator mode, and its
-    times are tested only from qhegel (a module CI tests on the older
-    core): the key the whole instance, tested in the core;
-  - TypeScript's `range(5, 2)` is `[5, 4, 3]`, Rust's and the
-    evaluator's `[]`: in edges.qnt, the backend named ground truth;
-  - raftkv may leave a `lead` unrecorded when a vote and a higher term
-    arrive in one batch (a suspicion: drain Ready per vote response).
+- **S1. Silent wrong answers (S each). Done**, but one suspicion: None
+  over runs with no verdict (mutants Undecided); claim names the
+  binding's; a hidden search cut by its depth; a marked report writing
+  into the shared cache; a placed pending call's process; within on
+  intervals; ResolvePending's silent fallback; Checker.Key's mode and
+  backend; a range counting down refused; raftkv's lost snapshots. Left:
+  raftkv may leave a `lead` unrecorded when a vote and a higher term
+  arrive in one batch (not reproduced: drain Ready per vote response).
 - **S2. The planner's hot path (S), then measure again.** A profile of
   raftkv's 200-operation history: 53% of the CPU in `PlanWithin`, 34% in
   template parsing per candidate, 8% in the evaluator; the "extend from a
