@@ -416,4 +416,3 @@ func runKey(c *validate.Checker, steps []qtrace.Step) string {
 	}
 	return c.Key(steps)
 }
-
