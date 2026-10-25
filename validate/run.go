@@ -28,6 +28,9 @@ type Checker struct {
 	// byCheck: an order the Go evaluator found is left to the caller's
 	// check to confirm (SearchOptions.ConfirmByCheck)
 	byCheck bool
+	// shadowed: the checks of a shadow's (GOTOGETHER_EVAL=shadow), not
+	// shadowed again
+	shadowed bool
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the
@@ -154,7 +157,7 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 		}
 		rep.Actors = append(rep.Actors, r)
 	}
-	if err := c.shadowRun(steps); err != nil {
+	if err := c.shadowRuns([][]qtrace.Step{steps})[0]; err != nil {
 		return rep, err
 	}
 	return rep, nil

@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -62,59 +63,86 @@ func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtra
 	}
 }
 
-// shadowRun is, under GOTOGETHER_EVAL=shadow, a run's check shadowed:
+// shadowRuns is, under GOTOGETHER_EVAL=shadow, runs' checks shadowed:
 // each actor's steps, on one thread in the order checked, judged by the
-// evaluator and by quint (one more quint process an actor), a
-// disagreement the check's error. It covers every binding a run is
-// checked against, where the searches' shadow covers only theirs. A
-// search's candidates (c.within set) are its shadow's, and an actor the
-// evaluator refuses is quint's alone.
-func (c *Checker) shadowRun(steps []qtrace.Step) (err error) {
-	if evalMode() != "shadow" || c.within != nil {
-		return nil
+// evaluator and, all of them in one batch, by quint; a disagreement is
+// its run's error. It covers every binding a run is checked against,
+// where the searches' shadow covers only theirs. A search's candidates
+// (c.within set) are its shadow's, and an actor the evaluator refuses is
+// quint's alone.
+func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
+	errs := make([]error, len(runs))
+	if evalMode() != "shadow" || c.within != nil || c.shadowed {
+		return errs
 	}
 	e := evaluatorFor(c)
 	if e.err != nil {
-		return nil
+		return errs
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			se, ok := r.(searchError)
-			if !ok {
-				panic(r)
-			}
-			err = se
-		}
-	}()
-	traces, _ := qtrace.Reconstruct(steps)
 	inv := len(c.Binding.Invariants) > 0
-	for _, tr := range traces {
-		if len(tr.Steps) == 0 {
-			continue
-		}
-		a := nameOf(tr.Actor)
-		order := make([]qtrace.Step, len(tr.Steps))
-		for i, s := range tr.Steps {
-			s.Recorder, s.Thread, s.Seq, s.Order, s.Call = "shadow:"+tr.Actor, "shadow", uint64(i+1), nil, 0
-			order[i] = s
-		}
-		ch := within(c, tr)
-		f, _, jerr := e.judge(ch, tr, settledAs(tr, [][]qtrace.Step{order})[0], len(order), inv)
-		if jerr != nil {
-			continue
-		}
-		// quint's replay in a directory of its own: checks run side by side
-		dir, derr := os.MkdirTemp("", "gotogether-shadow-")
-		if derr != nil {
-			return derr
-		}
-		ch.Options.Dir = dir
-		func() {
-			defer os.RemoveAll(dir)
-			shadowCheck(a, [][]qtrace.Step{order}, []int{f}, quintChecker(ch, tr, a, inv))
-		}()
+	type item struct {
+		run   int
+		actor string
+		order []qtrace.Step
+		f     int
 	}
-	return nil
+	var items []item
+	var batch [][]qtrace.Step
+	for r, steps := range runs {
+		traces, _ := qtrace.Reconstruct(steps)
+		for _, tr := range traces {
+			if len(tr.Steps) == 0 {
+				continue
+			}
+			order := make([]qtrace.Step, len(tr.Steps))
+			for i, s := range tr.Steps {
+				s.Recorder, s.Thread, s.Seq, s.Order, s.Call = "shadow:"+tr.Actor, "shadow", uint64(i+1), nil, 0
+				order[i] = s
+			}
+			// planned in itself, as a check plans an actor's steps alone
+			settled := settledAs(tr, [][]qtrace.Step{order})[0]
+			f, _, err := e.judge(within(c, tr), tr, settled, len(order), inv)
+			if err != nil {
+				continue
+			}
+			items = append(items, item{run: r, actor: nameOf(tr.Actor), order: order, f: f})
+			batch = append(batch, settled)
+		}
+	}
+	if len(batch) == 0 {
+		return errs
+	}
+	dir, err := os.MkdirTemp("", "gotogether-shadow-")
+	if err != nil {
+		for i := range errs {
+			errs[i] = err
+		}
+		return errs
+	}
+	defer os.RemoveAll(dir)
+	q := *c
+	q.shadowed, q.Options.Dir, q.Options.VerdictsOnly, q.Options.NoITF = true, dir, true, true
+	reps, qerrs := q.CheckBatch(context.Background(), batch, 0)
+	for k, it := range items {
+		if errs[it.run] != nil {
+			continue
+		}
+		if qerrs[k] != nil {
+			errs[it.run] = qerrs[k]
+			continue
+		}
+		f := failedAt(reps[k], len(it.order))
+		if inv && f < 0 {
+			f = violatedAt(reps[k], len(it.order))
+		}
+		if f != it.f {
+			errs[it.run] = fmt.Errorf("GOTOGETHER_EVAL=shadow: actor %s: the Go evaluator and quint disagree on its steps as checked (the evaluator: %s, quint: %s): "+
+				"a bug of the evaluator (internal/qeval) or of the binding's evaluation module (binding.EvalModule); report it with this run's steps "+
+				"(GOTOGETHER_KEEP keeps them), and check with GOTOGETHER_EVAL=quint meanwhile\n  %s",
+				it.actor, verdictOf(it.f), verdictOf(f), stepsString(it.order))
+		}
+	}
+	return errs
 }
 
 // stepsString is an order's steps, one line.
