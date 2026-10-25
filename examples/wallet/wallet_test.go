@@ -216,3 +216,27 @@ func TestPendingTransfers(t *testing.T) {
 		Expect(t, qtest.Conforms(), qtest.Some(qtest.Pending("transfer")))
 	system(cfg).WithRates(crashing).Explore(t, qtest.ExploreConfig{Seeds: 12}).Expect(t, qtest.Some(qtest.Rejects("observe")))
 }
+
+// Concurrent clients that read and transfer, some crashing mid-call: the
+// history needs both searches, an order of the calls real time allows and
+// where each crashed client's transfer took effect, if it did. With both
+// (Linearize and ResolvePending) every run conforms; Linearize alone
+// takes a crashed transfer as having no effect, which the probe's
+// balances contradict in some run. A bank that does not dedupe a retried
+// request applies it twice, which no placement of anything explains.
+func TestPendingTransfersLinearized(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("explores runs linearized with their pending calls placed")
+	}
+	crashing := faulty.Set("nemesis.crash", 0.02)
+	cfg := Config{Workload: Transfers, ClientCrashes: true}
+	both := []qtest.Option{qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(5000)}
+	system(cfg, both...).WithRates(crashing).Explore(t, qtest.ExploreConfig{Seeds: 12}).
+		Expect(t, qtest.Conforms(), qtest.Some(qtest.Pending("transfer")))
+	system(cfg, qtest.Linearize()).WithRates(crashing).Explore(t, qtest.ExploreConfig{Seeds: 12}).
+		Expect(t, qtest.Some(qtest.Rejects("observe")))
+	cfg.Mutation = NoDedupe
+	system(cfg, both...).WithRates(crashing).Explore(t, qtest.ExploreConfig{Seeds: 12}).
+		Expect(t, qtest.Some(qtest.Rejects("observe")))
+}
