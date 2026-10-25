@@ -116,14 +116,19 @@ more.
   under -short; the core packages and wallet, quorumkv, raftkv in the
   time budget; AGENTS' test times. validate's -short suite: about 300 s
   to 140 s.
-- **S6. The verdict-path matrix (M).** The most frequent bug of every
-  review since the sixth: a verdict kind (eventual, within, hidden,
-  pending, settle) some consumer never judges. A registry of verdict
-  features against every consumer (Check, the search's confirmation,
-  shadow, Checker.Key, the merge key, the CLI, qhegel's case checker,
-  evidence), each cell a planted failure that must fail, a missing cell
-  failing the build; a Hegel property per key (equal keys, equal
-  verdicts). Success: three past bugs re-planted are caught.
+- **S6. The verdict-path matrix (M). Done.** validate's
+  TestVerdictMatrix: conformance, invariant, eventual, within, hidden and
+  pending, each a passing and a failing run that differ only in what it
+  judges, by Check, shadow, CheckBatch, Judge (with quint alone, and
+  linearized) and the key; a consumer's n/a says why, and every field of
+  binding.Binding is classified, so a new kind of verdict needs its row.
+  The CLI's column (cmd's TestValidateVerdictMatrix, through a step log)
+  and the case checker's (qhegel's, its caches in turn); a Hegel property
+  in internal/hegelprops, equal keys equal verdicts. Re-planted, they
+  catch a key without times, a batch without within, an evaluator
+  without eventual vals, the CLI dropping -resolve-pending, and the case
+  checker reusing a prefix past an eventual val or keying within without
+  times. It found checks sharing a Dir taking each other's verdicts.
 - **S7. A newcomer's friction (S each)** (the newcomer's twelve): how a
   heal reaches the trace (scripted, recorded partitions; an OnHeal hook);
   two bindings for one system (a recording switch, documented; lint over
