@@ -243,6 +243,9 @@ func TestPredicateWaitersRecheck(t *testing.T) {
 // Many waiting tasks cost the scheduler nothing per step: 20000 requests,
 // each waiting on a Signal with a timeout, finish in well under a second.
 func TestManyWaitersScale(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing: 20000 tasks in real time (and woven mutants make every step slower)")
+	}
 	s := qenv.New(qenv.Nominal{})
 	defer s.Close()
 	sigs := make([]*qenv.Signal, 20000)
