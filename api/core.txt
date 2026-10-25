@@ -1536,6 +1536,7 @@ type Result struct
     method (*Result) Summary() string
 type Search struct
     field Steps []qtrace.Step
+    method (*Search) Confirm(rep *Report) (again *Search, err error)
     method (*Search) Mark(rep *Report)
 type SearchOptions struct
     field Linearize bool
@@ -1543,6 +1544,7 @@ type SearchOptions struct
     field Budget int
     field ResolvePending bool
     field ResolveBudget int
+    field ConfirmByCheck bool
 type ToolError struct
     field Module string
     field Test string

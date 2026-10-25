@@ -22,6 +22,12 @@ type Checker struct {
 	// are planned in its instance, with its interned identifiers
 	// (binding.PlanWithin)
 	within *qtrace.Trace
+	// quintOnly: a search's candidates are checked by quint alone (a
+	// search again after quint contradicted the Go evaluator's)
+	quintOnly bool
+	// byCheck: an order the Go evaluator found is left to the caller's
+	// check to confirm (SearchOptions.ConfirmByCheck)
+	byCheck bool
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the

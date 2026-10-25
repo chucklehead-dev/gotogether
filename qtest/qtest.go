@@ -230,6 +230,9 @@ type Run struct {
 	// mark marks the run's report with its search's issues (an
 	// exploration's Linearize or ResolvePending), on a copy (adjust)
 	mark func(*validate.Report)
+	// search is the run's search, to confirm the Go evaluator's orders by
+	// the run's report (validate.Search.Confirm)
+	search *validate.Search
 	// searched: a search ordered Steps (Recorded is what the run recorded)
 	searched bool
 	// Steps are the steps judged: as recorded, or the order a search
@@ -414,9 +417,22 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	o := c.Options
 	o.Dir = filepath.Join(c.Dir, "quint")
 	ch := checkerFor(t, bindingPath, o, c)
-	var mark func(*validate.Report)
 	run.Recorded = run.Steps
-	run.Steps, mark = c.order(t, ch, run.Steps, o.Dir) // the order checked, the step log's and the ITF's
+	s := c.order(t, ch, run.Steps, o.Dir)
+	cc := *ch // per run: its own output directory
+	cc.Options.Dir = o.Dir
+	checkSteps := func(steps []qtrace.Step) *validate.Report {
+		rep, err := cc.Check(context.Background(), steps)
+		if err != nil {
+			t.Fatalf("gotogether: %v", err)
+		}
+		return rep
+	}
+	rep := checkSteps(s.Steps)
+	if again := confirm(t, s, rep); again != nil {
+		s, rep = again, checkSteps(again.Steps)
+	}
+	run.Steps = s.Steps // the order checked, the step log's and the ITF's
 	// The model-level trace, emitted in-process from the same steps.
 	if itfs, _, err := ch.Binding.StepsToITF(run.Steps); err == nil {
 		for actor, data := range itfs {
@@ -428,33 +444,39 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	} else {
 		t.Logf("gotogether: no model-level ITF: %v", err)
 	}
-	cc := *ch // per run: its own output directory
-	cc.Options.Dir = o.Dir
-	rep, err := cc.Check(context.Background(), run.Steps)
-	if err != nil {
-		t.Fatalf("gotogether: %v", err)
-	}
-	if mark != nil {
-		mark(rep)
-	}
+	s.Mark(rep)
 	run.Report = rep
 	return run
 }
 
 // order runs the searches c asks for on steps (Linearize, LinearizeByKey,
 // ResolvePending), checking candidates' conformance with ch under dir: the
-// steps to check, and how to mark the report on them (the search's issues,
-// and n/a for an actor whose search ran out of budget). Without a search
-// it returns steps and nil.
-func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step, dir string) ([]qtrace.Step, func(*validate.Report)) {
+// steps to check, how to mark the report on them (the search's issues,
+// and n/a for an actor whose search ran out of budget), and to confirm
+// the Go evaluator's orders by that report (confirm). Without a search
+// its Steps are steps.
+func (c settings) order(t testing.TB, ch *validate.Checker, steps []qtrace.Step, dir string) *validate.Search {
 	t.Helper()
 	sc := *ch
 	sc.Options.Dir = dir
-	s, err := sc.Search(steps, validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending})
+	s, err := sc.Search(steps, validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending,
+		ConfirmByCheck: true})
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}
-	return s.Steps, s.Mark
+	return s
+}
+
+// confirm is s's search again, when rep (the check of its Steps) failed
+// an actor whose order only the Go evaluator had judged and quint rejects
+// it; nil when s stands.
+func confirm(t testing.TB, s *validate.Search, rep *validate.Report) *validate.Search {
+	t.Helper()
+	again, err := s.Confirm(rep)
+	if err != nil {
+		t.Fatalf("gotogether: %v", err)
+	}
+	return again
 }
 
 // firstOr is the first of msgs, or a placeholder when none was kept.

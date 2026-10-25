@@ -3,6 +3,7 @@ package qtest
 import (
 	"context"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"strings"
 	"testing"
 	"time"
@@ -276,5 +277,40 @@ func TestLinearizeByKeyKeepsTheSettle(t *testing.T) {
 	run.Expect(t, Conforms())
 	if !Settles().Holds(run) {
 		t.Errorf("a settled run, partitioned, does not settle:\n%s", run.Report.Summary())
+	}
+}
+
+// An exploration confirms the Go evaluator's orders by its runs' reports:
+// an evaluator that accepts every candidate gives an order quint rejects,
+// which a run's failing report catches, and the run is searched and
+// judged again with quint alone, saying so. Not parallel: the evaluator
+// is made wrong process-wide.
+func TestExploreConfirmsTheEvaluatorsOrders(t *testing.T) {
+	RequireQuint(t)
+	hooks.TamperEval.Store(2)
+	defer hooks.TamperEval.Store(0)
+	run := func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		// overlapping calls: real time allows both orders
+		s.Spawn("writer", func(ctx context.Context) {
+			c := qobs.Invoke(ctx, "write", "key", "a", "value", 1)
+			qenv.Sleep(ctx, time.Millisecond)
+			c.Done(nil)
+		})
+		s.Spawn("reader", func(ctx context.Context) {
+			c := qobs.Invoke(ctx, "read", "key", "a")
+			qenv.Sleep(ctx, time.Millisecond)
+			c.Done(nil, "obs.value", 9) // no write of 9
+		})
+		return s.Run(time.Minute)
+	}
+	sys := System{Binding: "testdata/registers.yaml", Rates: qenv.NoFaults, Opts: []Option{Linearize()}, Run: run}
+	x := sys.Explore(t, ExploreConfig{Seeds: 2})
+	x.Expect(t, All(Mismatch("read")))
+	for _, r := range x.Runs {
+		if !strings.Contains(fmt.Sprint(r.Report.Issues), "does not conform for quint") {
+			t.Errorf("run %v: issues %v, want the evaluator's wrong order said", r.origin, r.Report.Issues)
+		}
 	}
 }

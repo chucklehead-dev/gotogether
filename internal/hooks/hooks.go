@@ -342,3 +342,10 @@ func Now() time.Time {
 // so a test of another package can check the complete search alone (it
 // finds what the guided one misses): process-wide, for tests.
 var CompleteSearchOnly atomic.Bool
+
+// TamperEval makes validate's Go evaluator wrong, for tests that show
+// quint's confirmation catches it (1: it rejects every candidate at its
+// first step, 2: it accepts every one).
+//
+// Process-wide: a test's.
+var TamperEval atomic.Int32

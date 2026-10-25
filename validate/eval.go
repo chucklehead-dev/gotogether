@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -112,11 +113,6 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 	return &evaluator{em: em, m: m}
 }
 
-// Process-wide: a test's, which makes the evaluator wrong (1: it rejects
-// every candidate at its first step, 2: it accepts every one) to show that
-// quint's confirmation catches it.
-var tamperEval int
-
 // Process-wide: how many searches the Go evaluator judged were searched
 // again by quint (a test's, to see a proof spare one).
 var searchedAgain atomic.Int64
@@ -175,7 +171,7 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 		return 0, "", &qeval.Unsupported{Op: "order", Why: fmt.Sprintf("%d actors in one candidate", len(traces))}
 	}
 	tr := traces[0]
-	if tamperEval == 2 {
+	if hooks.TamperEval.Load() == 2 {
 		return -1, fmt.Sprint(len(order)), nil
 	}
 	plan, err := c.Binding.PlanWithin(c.Model, tr, within)
@@ -270,7 +266,7 @@ func (e *evaluator) judge(c *Checker, within *qtrace.Trace, order []qtrace.Step,
 	if violated >= 0 {
 		return violated, "", nil
 	}
-	if tamperEval == 1 {
+	if hooks.TamperEval.Load() == 1 {
 		return 0, "", nil
 	}
 	return -1, e.m.Key(s), nil

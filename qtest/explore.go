@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -600,7 +601,8 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			r.Recorded, r.searched = r.Steps, c.Linearize || c.resolvePending
-			r.Steps, r.mark = c.order(tbs[i], cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
+			r.search = c.order(tbs[i], cc, r.Steps, filepath.Join(x.dir, "search", strconv.Itoa(i)))
+			r.Steps, r.mark = r.search.Steps, r.search.Mark
 		}()
 	}
 	wg.Wait()
@@ -621,6 +623,35 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		}
 	}
 	x.Cached = judge(t, cc, inst, x.Runs, func(r *Run) string { return x.nameOf(r) })
+	// the Go evaluator's orders, confirmed by the runs' reports: a run that
+	// fails where one speaks has it checked by quint, and is searched and
+	// judged again when quint rejects it
+	again := make([]*Run, len(x.Runs))
+	for i, r := range x.Runs {
+		if r == nil || r.search == nil || r.Report == nil || r.Report.OK() {
+			continue
+		}
+		tbs[i] = &searchTB{TB: t}
+		wg.Add(1)
+		go func() { //qenv:ok each run's confirmation on a goroutine of its own; a failure is reported on the test's
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if s := confirm(tbs[i], r.search, r.Report); s != nil {
+				r.search, r.Steps, r.mark = s, s.Steps, s.Mark
+				again[i] = r
+			}
+		}()
+	}
+	wg.Wait()
+	for i, tb := range tbs {
+		if tb != nil && tb.failed != "" {
+			t.Fatalf("%s (run %s)", tb.failed, x.nameOf(x.Runs[i]))
+		}
+	}
+	if again = slices.DeleteFunc(again, func(r *Run) bool { return r == nil }); len(again) > 0 {
+		judge(t, cc, inst, again, func(r *Run) string { return x.nameOf(r) })
+	}
 	// the report, for tools that read it (gotogether evidence, cover,
 	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's
 	// own directory; each test's are cleared at its first exploration

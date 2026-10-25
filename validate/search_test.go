@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -409,19 +410,19 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	if !strings.Contains(g.issues[0].Msg, "conforms") {
 		t.Fatalf("want an order found: %v", g.issues)
 	}
-	defer func() { tamperEval = 0 }()
-	tamperEval = 1
+	defer func() { hooks.TamperEval.Store(0) }()
+	hooks.TamperEval.Store(1)
 	if w := search("go"); !strings.Contains(w.issues[0].Msg, "conforms") || !strings.Contains(w.issues[0].Msg, "does not confirm") {
 		t.Errorf("an evaluator rejecting every order: %v, want its proof contradicted and quint's verdict", w.issues)
 	}
-	tamperEval = 2
+	hooks.TamperEval.Store(2)
 	steps[3].Obs["balance"] = int64(99) // no order leaves 99
 	if w := search("go"); !strings.Contains(w.issues[0].Msg, "disagree") || !strings.Contains(w.issues[0].Msg, "no order") {
 		t.Errorf("an evaluator accepting every order: %v, want the disagreement said and quint's verdict", w.issues)
 	}
 	// a right verdict of no order is confirmed by its proof, in one batch:
 	// quint searches nothing again, and says what it says alone
-	tamperEval = 0
+	hooks.TamperEval.Store(0)
 	q = search("quint")
 	before := searchedAgain.Load()
 	g = search("go")
@@ -590,5 +591,88 @@ func TestConfirmsAProof(t *testing.T) {
 	}
 	if confirms(&qtrace.Proof{}, nil) != contradicted {
 		t.Errorf("an empty proof confirmed")
+	}
+}
+
+// With ConfirmByCheck, an order or a resolution the Go evaluator finds
+// costs the search no quint process: the caller's check confirms it. When
+// that check fails where the evaluator was wrong, Confirm searches again
+// with quint alone, and says so; when it holds, Confirm does nothing.
+func TestConfirmByCheck(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	defer func() { hooks.TamperEval.Store(0) }()
+	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
+	deposits := func(balance int64) []qtrace.Step {
+		var steps []qtrace.Step
+		for i, amount := range []int64{1, 2, 4} {
+			rec := fmt.Sprint("c", i)
+			steps = append(steps, qtrace.Step{Action: "deposit", Recorder: rec, Seq: 1, Thread: rec, Actor: "acct", Process: "p",
+				Invoked: at(0), Time: at(10), Args: map[string]any{"amount": amount}, Obs: map[string]any{}})
+		}
+		return append(steps, qtrace.Step{Action: "withdraw", Recorder: "w", Seq: 1, Thread: "w", Actor: "acct", Process: "p",
+			Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": balance}})
+	}
+	pending := func(balance int64) []qtrace.Step {
+		ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
+		return []qtrace.Step{
+			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
+			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+			{Action: "deposit", Recorder: "c", Seq: 3, Time: ms(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}},
+		}
+	}
+	for _, x := range []struct {
+		name, binding, dir string
+		opt                SearchOptions
+		steps              func(int64) []qtrace.Step
+		good, bad          int64 // a balance some order explains, and one none does
+		none               string
+	}{
+		{"linearize", "testdata/blind.yaml", "linearize", SearchOptions{Linearize: true}, deposits, 0, 99, "no order"},
+		{"resolve", "testdata/account.yaml", "resolve", SearchOptions{ResolvePending: true}, pending, 12, 99, "no resolution"},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			opt := x.opt
+			opt.ConfirmByCheck = true
+			run := func(steps []qtrace.Step) (*Checker, *Search, *Report) {
+				c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+				if err != nil {
+					t.Fatal(err)
+				}
+				s, err := c.Search(steps, opt)
+				if err != nil {
+					t.Fatal(err)
+				}
+				rep, err := c.Check(context.Background(), s.Steps)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return c, s, rep
+			}
+			hooks.TamperEval.Store(0)
+			c, s, rep := run(x.steps(x.good))
+			if _, err := os.Stat(filepath.Join(c.Options.Dir, x.dir)); err == nil {
+				t.Errorf("the search ran quint for an order the evaluator found")
+			}
+			if again, err := s.Confirm(rep); err != nil || again != nil || !rep.OK() {
+				t.Errorf("a right order: again %v, err %v, report OK %v", again, err, rep.OK())
+			}
+			// an evaluator that accepts every candidate: the first, which the
+			// check fails, and quint, which searches again
+			hooks.TamperEval.Store(2)
+			c, s, rep = run(x.steps(x.bad))
+			again, err := s.Confirm(rep)
+			if err != nil || again == nil {
+				t.Fatalf("a wrong order the check failed: again %v, err %v", again, err)
+			}
+			msgs := fmt.Sprint(again.issues)
+			if !strings.Contains(msgs, "does not conform for quint") || !strings.Contains(msgs, x.none) {
+				t.Errorf("searched again: %s, want the evaluator's error said and quint's verdict", msgs)
+			}
+			if rep, err = c.Check(context.Background(), again.Steps); err != nil || rep.OK() {
+				t.Errorf("the search again's order passes (err %v)", err)
+			}
+		})
 	}
 }

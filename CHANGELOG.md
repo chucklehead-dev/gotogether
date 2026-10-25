@@ -17,7 +17,13 @@ The first release. What a user meets, by module:
   the evaluator cannot evaluate is quint's. quorumkv's faithful
   exploration took 13 s, 20 s with quint alone; its contended mutants
   62 s, 337 s. `binding.EvalModule` writes the module the evaluator
-  reads. `GOTOGETHER_EVAL=quint` turns it off. Two prefixes merge
+  reads. `validate.SearchOptions.ConfirmByCheck` leaves an order (or a
+  resolution: ResolvePending's placements are the evaluator's too) to
+  the caller's check, and `Search.Confirm` checks with quint the orders
+  of the actors that check fails, searching again with quint alone if
+  one is wrong; qtest and the CLI do. quorumkv's faithful exploration then took
+  4 s, its contended mutants 43 s, wallet's pending transfers 12 s (44 s
+  before). `GOTOGETHER_EVAL=quint` turns it off. Two prefixes merge
   only when their processes are numbered alike.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,

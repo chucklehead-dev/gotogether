@@ -128,10 +128,14 @@ under a week, M two to four, L more.
     verdicts, now fixed: a search that finds no order is quint's alone).
     quorumkv's faithful exploration 20 s to 13 s. A failing search is
     confirmed from its proof in one quint batch (`qtrace.LinearizeProof`):
-    the contended mutants 214 s to 62 s.
+    the contended mutants 214 s to 62 s. An order (or a resolution) the
+    evaluator finds is confirmed by the run's own check
+    (`SearchOptions.ConfirmByCheck`, `Search.Confirm`), and
+    ResolvePending's placements are judged by the evaluator: the
+    contended mutants to 43 s, the faithful exploration to 4 s, wallet's
+    pending transfers 44 s to 12 s.
     Also: LinearizeByKey's partitions side by side, and a history real
-    time orders alone not searched (`qtrace.ForcedOrder`). Left:
-    ResolvePending's placements on the evaluator; each candidate extended
+    time orders alone not searched (`qtrace.ForcedOrder`). Left: each candidate extended
     from its prefix's held state rather than replayed from init (WGL at
     Porcupine's speed); a nightly Hegel property drawing
     states and arguments against quint, and a shadow mode running both;

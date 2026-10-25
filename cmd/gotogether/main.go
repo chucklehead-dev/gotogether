@@ -482,13 +482,24 @@ func runValidate(args []string) (int, error) {
 				return 2, err
 			}
 		}
-		search, err := c.Search(steps, validate.SearchOptions{Linearize: *lin || *linKey != "", Key: *linKey, Budget: *linBudget, ResolvePending: *resolvePending})
+		search, err := c.Search(steps, validate.SearchOptions{Linearize: *lin || *linKey != "", Key: *linKey, Budget: *linBudget, ResolvePending: *resolvePending,
+			ConfirmByCheck: true})
 		if err != nil {
 			return 2, err
 		}
 		rep, err := c.Check(context.Background(), search.Steps)
 		if err != nil {
 			return 2, err
+		}
+		// a failing actor whose order only the Go evaluator judged: quint
+		// checks it, and a search again with quint alone replaces it if wrong
+		if again, err := search.Confirm(rep); err != nil {
+			return 2, err
+		} else if again != nil {
+			if rep, err = c.Check(context.Background(), again.Steps); err != nil {
+				return 2, err
+			}
+			search = again
 		}
 		search.Mark(rep)
 		fmt.Print(rep.Summary())

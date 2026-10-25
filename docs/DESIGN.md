@@ -2960,10 +2960,28 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   gives the same verdict, and one made wrong is caught by the
   confirmation.
 
+- **Confirmed by the run's check.** An order found was confirmed by a
+  quint process of its own, and then replayed by quint again in the
+  run's check, one process after the other (2–4 s a run). With
+  `SearchOptions.ConfirmByCheck` (qtest's searches and the CLI's) the
+  check is the confirmation: `Search.Confirm` takes its report, and for
+  each actor it fails (its conformance, or with a claim of invariants
+  held, one of them) whose order only the evaluator judged, checks that
+  order with quint; one quint rejects makes the run searched again with
+  quint alone, and checked again, with a warning. An actor that passes
+  confirmed its order in the check. A failing run pays the process it
+  saved, no more. ResolvePending's placements are judged the same way:
+  the first the evaluator accepts is the resolution, confirmed by the
+  check (or by one quint check without ConfirmByCheck); when it accepts
+  none, quint's batch decides as before, a verdict of none needing every
+  placement rejected.
+
 quorumkv's contended-key mutants took 51 s with the evaluator's
 unconfirmed negative verdicts, 214 s with quint searching them again,
-and 62 s with their proofs confirmed (337 s with quint alone); its
-faithful exploration 13 s, 20 s with quint alone. `GOTOGETHER_EVAL=quint` turns it off. ResolvePending's placements still
-go to quint, and every candidate is replayed from init: extending a
-prefix's held state is the next step (ROADMAP T2d).
+62 s with their proofs confirmed, and 43 s with found orders confirmed
+by the runs' checks (337 s with quint alone); its faithful exploration
+20 s with quint alone, 13 s, then 4 s. wallet's pending transfers 44 s
+to 12 s. `GOTOGETHER_EVAL=quint` turns it off. Every candidate is still
+replayed from init: extending a prefix's held state is the next step
+(ROADMAP T2d).
 
