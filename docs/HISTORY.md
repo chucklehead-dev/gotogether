@@ -1566,6 +1566,27 @@ Antithesis sink deferred (ROADMAP T7). It proposed an example for each:
 wallet's concurrent pending transfers, quorumkv's NewTiebreak under a
 rolling upgrade, lease's SlowTakeover, quorumkv with handoff unrecorded.
 
+### T8: raftkv
+
+A design review planned the example: etcd's raft library, unchanged, on
+qenv, with two models, since a bounded obligation is judged along a
+trace in time order and a linearized one is a search's. Its risks held:
+raft's election jitter is crypto/rand's (drawn from the run by swapping
+the reader), and settling with ticking daemons worked as Daemon tasks.
+What the runs taught, beyond the README's table:
+- two faults of the toolkit's: a wait on a drifting clock rounded to no
+  time, so raft's tick loop spun until the step limit; and a search the
+  evaluator judged that ran out of budget was searched again with quint,
+  minutes for the same no verdict (82 s for two such runs of ten);
+- the planned lease-read mutant under drift found nothing until the
+  leadership was moved to a node: an election is won by the fastest
+  clock, whose lease ends first, so the unsafe case needs a transfer;
+- a full rollout hides a format bug the upgrade causes (each node's
+  restart on v2 replays its log); a paused one shows it;
+- clients' retry policy decided most measurements: three attempts at a
+  flat backoff gave up during the first election, leaving a third of the
+  calls pending and every search cut short.
+
 ## Why AGENTS.md's gotchas say what they say
 
 The stories behind some of AGENTS.md's gotchas, moved here so the file
