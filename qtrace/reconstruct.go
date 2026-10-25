@@ -235,7 +235,14 @@ func order(actor string, steps []Step) *Trace {
 	t.Issues = append(t.Issues, realTime(t.Steps)...)
 	// Incarnations: in order of first appearance; interleaving means two
 	// incarnations of one actor were alive at once.
-	seenP := map[string]bool{}
+	seenP := map[string]bool{}  // processes that ran: incarnations
+	listed := map[string]bool{} // processes numbered (t.Processes)
+	list := func(p string) {
+		if !listed[p] {
+			listed[p] = true
+			t.Processes = append(t.Processes, p)
+		}
+	}
 	cur := ""
 	for _, s := range t.Steps {
 		if s.Process == cur {
@@ -244,10 +251,7 @@ func order(actor string, steps []Step) *Trace {
 		if s.Ambiguous {
 			// a pending call's effect a search placed, in its caller's
 			// process, which did not run there: numbered, no incarnation
-			if !seenP[s.Process] {
-				seenP[s.Process] = true
-				t.Processes = append(t.Processes, s.Process)
-			}
+			list(s.Process)
 			continue
 		}
 		if seenP[s.Process] {
@@ -257,7 +261,7 @@ func order(actor string, steps []Step) *Trace {
 				"(a split brain, or the recorders' clocks disagree), and the model has one at a time. Fence the old incarnation, or order the steps with a domain clock", s.Process, s.Action, cur, actor)})
 		} else {
 			seenP[s.Process] = true
-			t.Processes = append(t.Processes, s.Process)
+			list(s.Process)
 		}
 		cur = s.Process
 	}

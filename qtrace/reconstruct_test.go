@@ -175,3 +175,24 @@ func TestRecordTimesAcrossSkewedMachines(t *testing.T) {
 		t.Errorf("order %s", got)
 	}
 }
+
+// A pending call's effect placed by a search is in its caller's process
+// but no incarnation of it: placed before that process's own steps, it
+// once marked the process started, and its steps read as a second
+// incarnation (an overlap error in every such run of wallet's).
+func TestAssumedStepIsNoIncarnation(t *testing.T) {
+	steps := []Step{
+		{Action: "transfer", Recorder: "x", Thread: "x", Seq: 1, Process: "A", Ambiguous: true},
+		{Action: "read", Recorder: "x", Thread: "x", Seq: 2, Process: "B"},
+		{Action: "read", Recorder: "x", Thread: "x", Seq: 3, Process: "A"},
+	}
+	trs, _ := Reconstruct(steps)
+	for _, i := range trs[0].Issues {
+		if i.Kind == "overlap" {
+			t.Errorf("an assumed step read as an incarnation: %v", i)
+		}
+	}
+	if fmt.Sprint(trs[0].Processes) != "[A B]" {
+		t.Errorf("processes %v, want [A B] (numbered in order of appearance)", trs[0].Processes)
+	}
+}
