@@ -1587,6 +1587,289 @@ What the runs taught, beyond the README's table:
   flat backoff gave up during the first election, leaving a third of the
   calls pending and every search cut short.
 
+### Eighth review (after T)
+
+Five reviews after T, their findings ROADMAP's S track:
+- a probe found six wrong answers: `None` claims holding over runs with
+  no verdict (and Mutate counting them as kills), misspelled names
+  unchecked when no report named an invariant, a hidden search cut by its
+  depth read as a rejection, a pending call rendered with its neighbour's
+  process, `within` judged on completion times alone, and quint's two
+  backends disagreeing on `range(5, 2)`;
+- raftkv's review found its faithful nodes never reporting a lost
+  snapshot, so a follower could stay behind for good (2 of 40 runs under
+  heavier loss), and the cut search's rationale missing the case of an
+  evaluator that wrongly accepts;
+- architecture: the five-call judging protocol written out three times,
+  a shared cached report mutated by Mark, binding exporting validate's
+  code generation, four Linearize variants, a suite serial by the
+  environment and leaking a temporary directory per check;
+- the newcomer built a leader-elected counter in an hour and a half, all
+  four goals met, and named twelve frictions: recording heals, two
+  bindings for one system, handlers' state across a restart first among
+  them;
+- capabilities: a profile put 53% of a long linearization in the
+  planner, not the evaluator; the most frequent bug since the sixth
+  review is a verdict kind a consumer never judges; adoption (I/O
+  adapters), a real-deployment nemesis and a per-PR tier are what a team
+  shipping a Go service misses most.
+
+### The T track as it closed
+
+ROADMAP's T section when its last item (T8) was done, moved here whole;
+what it left is in ROADMAP's "Left from T".
+
+#### Seventh review: whole product (T)
+
+From four reviews after Z (HISTORY, "Seventh review"). In order, bugs
+first; each item reviewed against its bullet before the next. Sizes: S
+under a week, M two to four, L more.
+
+- **T1. Silent wrong answers (S each).**
+  - Real time from what the recorder knows: a completion takes its
+    invocation record's time (`"invoked"` becomes an override), steps of
+    one recorder are ordered exactly by seq (a completion after another's
+    invocation record), no slack between a simulation's steps, and a
+    linearized actor no step of which has an invocation time is warned
+    of. quorumkv stops passing `"invoked"` from the process's clock.
+  - A linearization cut by its budget is no verdict for the run's
+    invariants and eventual vals too, not only its conformance.
+  - Eventual vals judged in no run say so: an issue on each unsettled
+    actor of a binding with `eventually:`, and a claim that would hold
+    for nothing (Conforms, None(Violates(eventually ...))) fails when no
+    run settled.
+  - ResolvePending places a call's effect before the first settle after
+    its invocation (the system was quiet there).
+  - Faults after Settle returns: they stay off (a probe or an audit after
+    it runs on the settled system), said in Settle's doc and the faults
+    skill; `Sim.ResumeFaults` starts a faulty phase again.
+  - A settle settles a trace only if no other recorder recorded a step
+    later in time.
+  - The complete search's beam is the budget's, and a cut names its real
+    limit.
+  - qhistory: a transaction's reads of its own appends in their order;
+    garbage in any read, and no "G1b of transaction 0".
+  - Among orders that conform, one whose invariants hold is preferred (a
+    mutant must not look caught by the order picked).
+  - The warning for a step invoked after it completed names the fix
+    (Invoke and Done, no "invoked"; Sim.Now). A virtual `qenv.Now` on a
+    simulation's creating goroutine was tried and reverted: that
+    goroutine's Sleep and Since stay real, and a deadline loop there hung.
+- **T2. The cost of a verdict.** a and b done: verdicts-only checks for
+  the searches, an exploration's searched side by side, candidates
+  memoized by prefix (quorumkv's Repick 297 s to 138 s); left of b, one
+  memoizing checker shared with qhegel and across an exploration's runs.
+  - **a (S).** A conformance-only search mode in validate (no ITF, the
+    TypeScript batch, no detail phase), the per-run searches of an
+    exploration in parallel, the complete search given what is left of
+    the budget.
+  - **b (S–M).** Candidates memoized in a prefix trie (an extension of a
+    rejected prefix decided without quint), the complete search starting
+    from the guided one's accepted prefixes, one memoizing checker for
+    qtest and qhegel.
+  - **c (M). Done** (merging prefixes of one state, from the ITF of the
+    candidates quint checks whole; five commuting deposits' proof in 146
+    orders, not 456). Left: extending a prefix from its state as a
+    literal (each candidate replays from the start), states for the
+    prefixes the memo accepts (kept apart now), merging in the
+    invariants' second search (its checker writes no ITF), ITF only for
+    the complete search's batches, and a chunk's stale ITF removed before
+    each call. Reviewed: the merge's state is more than the model's when
+    the binding infers restarts (the last process), and candidates are
+    planned within their history (PlanWithin).
+  - **d (L). Done** (DESIGN §45): `internal/qeval` over quint's IR of the
+    binding's evaluation module, judging Linearize's candidates, quint
+    confirming each search's conclusion; checked against quint on every
+    model of the repository and a table of builtins at their edges on
+    both backends; reviewed twice (the second found three silent wrong
+    verdicts, now fixed: a search that finds no order is quint's alone).
+    quorumkv's faithful exploration 20 s to 13 s. A failing search is
+    confirmed from its proof in one quint batch (`qtrace.LinearizeProof`):
+    the contended mutants 214 s to 62 s. An order (or a resolution) the
+    evaluator finds is confirmed by the run's own check
+    (`SearchOptions.ConfirmByCheck`, `Search.Confirm`), and
+    ResolvePending's placements are judged by the evaluator: the
+    contended mutants to 43 s, the faithful exploration to 4 s, wallet's
+    pending transfers 44 s to 12 s.
+    Also: LinearizeByKey's partitions side by side, and a history real
+    time orders alone not searched (`qtrace.ForcedOrder`). Left: a
+    claim is judged in its history's instance (identifiers interned in the
+    history's order) and the run's check in the order's: the same verdict
+    only for a model symmetric in interned identifiers, which a check of
+    the claim in the check's instance would not need.
+    `GOTOGETHER_EVAL=shadow` judges with both, a search's batches and
+    each actor of every run checked, and fails on a disagreement,
+    nightly on every example and the core's search tests
+    (`evaluator-shadow`). Not done, by measurement: extending each
+    candidate from its prefix's held state rather than replaying it from
+    init (the contended mutants spend 2.3 s of 32 s in Go, the rest in
+    quint processes); a Hegel property drawing states against quint
+    (quint cannot start from a drawn state; the shadow runs and
+    TestAgreesWithQuint's traces cover the reachable ones).
+- **T3. The searches in the right layer (M). Done:** validate's
+  `Checker.Search` and `Search.Mark`, the CLI's `-linearize`,
+  `-linearize-key`, `-resolve-pending`; `quint.assumed` in step logs,
+  `InvariantResult.Eventually`, `Run.Recorded`, the chooser protocols on
+  Chooser's doc. Kept: `qtrace.Linearize` public (validate calls it), the
+  three Linearize options (each reads as what it does; the refusal names
+  the conflict with ResolvePending). Left: one goroutine lookup per step.
+  As planned: `validate.Checker.Search`
+  (Linearize and ResolvePending as generators over one candidate
+  engine), called by qtest and by the CLI (`validate -linearize[=key]`);
+  `qtrace.Linearize` unexported; one re-sequencing helper; `Run.Recorded`
+  beside the judged `Run.Steps`; `Ambiguous` written to step logs;
+  `InvariantResult.Eventually`; one `Linearize` option (by key, budget)
+  and `ResolvePending(budget)`; the scheduler's task and nemesis chooser
+  protocols exported or documented on Chooser; one goroutine lookup per
+  step.
+- **T4. A newcomer's path to Z7 and Z8 (S each). Done**, but: temporary
+  directories (a failing exploration's are kept on purpose, for its
+  reproduce line; steered runs' choices pile up under the temp dir).
+  As planned: Start-table rows for
+  linearizability, liveness and convergence; verdicts.md on Pending,
+  Linearize and "no verdict (linearize budget)"; quorumkv's README with
+  the code a user copies, PCT's arguments and PCT against Steer; scaffold
+  writes a Settle when the binding has `eventually:`; a Mismatch of a
+  client history in recorded order suggests Linearize; a run's
+  scheduling steps reported (PCT's Steps); claim wording ("some run
+  showing a conforming run that violates"); pending and settle counts in
+  summaries; `GOTOGETHER_KEEP` keeping step logs; a failure's step log
+  as recorded, its judged order beside it; temporary directories
+  removed; quint's reserved names in the model skill; the doc drift the
+  review listed (explorations linearize, refusal texts, DESIGN's X4).
+- **T5. The lessons as structure (S–M). Done**, reviewed: the toolkit's
+  own mutation testing (`ci/mutate-core.sh`, `GOTOGETHER_MUTANT`; the
+  nightly holds qhistory and qsweep at 0 survivors, internal/depgraph at
+  1 equivalent); brute-force comparisons for Linearize (registers,
+  invocation records, domain clocks), ResolvePending's placements,
+  Exhaust's schedules, the isolation classifier and Cover, each ablated,
+  and Linearize against Porcupine in internal/hegelprops; one isolation
+  classifier for qhistory and `GOTOGETHER_CHECK` (G-nonadjacent at SI,
+  linear per commit); package-level state stating its scope; the
+  simulation lint over the core; claim power (with the rate's lower
+  bound) and the examples' seeds raised to it; `GOTOGETHER_ALL_FAULTS`;
+  a CI time budget; the rule in AGENTS. What it found: Linearize's cut
+  search read as a proof, ResolvePending's settle bound and slack,
+  qweave dropping an argument, qmut recursing into qenv. Left:
+  - a nightly that runs every example under `GOTOGETHER_ALL_FAULTS`
+    (Exhausts bounded first), each changed verdict a fix or a reasoned
+    Without. Its first run (the examples' short suites) found a healer
+    keeping runs unsettled (fixed), hello's client giving up within a
+    partition (its model has none: a Without to give), and Exhausts out
+    of MaxRuns in hello and lease;
+  - qenv in the mutation nightly with `GOTOGETHER_CHECK=1` and its bar
+    (a first run without it: 288 of 895 survive, in sim.go 50,
+    internal/profile 44, store.go 34, native.go 31, keyed.go 19,
+    queue.go 14, the rest under 15 a file), and a bar for qtrace's
+    guided-search survivors (56 of 167 survive now, held there as a
+    ratchet);
+  - the brute forces as Hegel properties, their sizes widened nightly;
+- **T6. The exploration engine (M), before tags. Done** (DESIGN §44):
+  sources (seeds, corpus, a file, steered, schedules) feeding one engine
+  for Explore and Exhaust, whose nominal run now has the determinism
+  check; a run's origin in one field; what only a System method sets an
+  internal spec; fault names known per run; reviewed (HISTORY, "T6
+  review"). Left: finish split into its stages as functions of the
+  engine; a corpus for Exhaust (schedules are their own regression);
+  `Script.Misnamed` against the run's names, not the process's (a
+  nemesis only another test registered passes it); a woven kind's
+  options still the process's (static at init); under gosim, kinds a
+  run declared but never chose are unknown to it.
+- **T7. Capabilities (after T2d).** Planned by a review (HISTORY, "T7
+  plan"), in this order:
+  - **a (M). Pending calls inside the linearization. Done** (Jepsen's
+    :info; DESIGN §46; wallet's TestPendingTransfersLinearized). Left: a partition with
+    pending calls and no steps places nothing, a pending effect is never
+    placed after a restart the binding infers (shared with ResolvePending),
+    and pending calls' arguments are not interned with the history's):
+    Linearize with ResolvePending, a pending call an optional node of the
+    search, bounded below by its invocation and above by the first step
+    after a settle that followed it; dropped is "no effect". Checked
+    against brute force (every subset of pending calls, every order);
+    confirmed by the same proof. And `qtrace.HistorySVG`, a failing
+    history drawn (lanes, bars, the failing step). Example: wallet's
+    concurrent pending transfers (NoDedupe's retried timeout).
+  - **b (S–M). Upgrade runs. Done** (DESIGN §47): `Process.RestartAs`,
+    `Upgrade`, `Version`, `Sim.Upgrades` (an `upgrade` nemesis family,
+    Scripts and Exhaust unchanged); a mixed-version encoding caught by
+    Exhaust within one fault, nothing without the versions. The example
+    moves to T8 (raftkv's nodes upgrade naturally): quorumkv's
+    NewTiebreak needs its clients versioned with its replicas, which are
+    no processes.
+  - **c (S). Polish**: Steer cutting where a feature appeared (done: the
+    journal's restart in 43 steered runs of 180, 7 before; features as
+    counts measured no gain there, not done); qlint flagging math/rand and
+    multi-case select (done); qhistory's strict serializability
+    (done: `StrictSerializable`, real-time edges from `Txn.Invoked` and
+    `Completed`, checked against brute force).
+  - **d (M). Bounded response. Done** (DESIGN §48): a binding's `within:`
+    (after a val, another within a bound), not judged for a run cut
+    short; `Checker.Key` for verdict caches. The example moves to T8
+    (raftkv's election within a bound of a heal): lease's model has no
+    takeover to bound.
+  - **e (L). Hidden actions. Done** (DESIGN §49): a binding's `hidden:`
+    (nullary actions no step records), the states they reach between
+    steps (at most `hiddenDepth`) searched by the evaluator, invariants
+    kept on one path, checked against brute force; reviewed (the
+    initial state's violations, joint invariants, shadow mode, lint).
+    Open, offline first: partial logs (a recorder's steps lost at its
+    start or end), online validation (`validate -follow`, judging a
+    growing log), and confirming a hidden verdict with quint (a proof of
+    "no path", as Linearize's). The example moves to T8 (raftkv's
+    messages unrecorded): quorumkv's model is a register, with no handoff to hide.
+  - Deferred: map-range lint (qanalysis, typed), qhistory rw-registers,
+    sleep-set DPOR in Exhaust (until raftkv measures Exhaust), Hegel
+    parallel machines (Explore + Choices + Linearize cover it), a Script
+    against a real deployment and an Antithesis sink (modules of their
+    own, when a user asks).
+- **T9. An example: wallet (M, the T5 review's). Done** (examples/wallet):
+  transfers on a `qenv.Store` with request-id dedupe, an outbox to a
+  ledger, retrying clients over a `qenv.Service`, a credit line two
+  accounts share; Exhaust (NoDedupe within one fault), isolation levels
+  (ReadThenWrite at read committed, WriteSkew at SI, qhistory naming it
+  G2 from the store's history), NoOutbox after a settle, ReplicaRead
+  linearized per account, ResolvePending for crashed clients,
+  `GOTOGETHER_ALL_FAULTS`. Its first faithful version applied a
+  duplicated request twice at read committed (the request's record read
+  unlocked), now the UnlockedRecord mutant. Reviewed (HISTORY, "T9
+  review"): invalid requests are refused in the model and the bank
+  (NoValidation), posts carry their moves, commits of unknown outcome are
+  on (and Unknown in the history), NoOutbox is found by Exhaust. Left:
+  WallClockDedupe (a dedupe window on the process's clock, broken only
+  by clock faults); the optional real database. What it taught the core:
+  - LinearizeByKey cost three times Linearize on its small per-account
+    history (28 s against 9 s for five runs): its partitions were searched
+    one after another, each paying a second quint call for the
+    invariants, and the probe makes one partition per account, each a
+    quint call for one step. Now partitions are searched side by side (28
+    to 25 s: an exploration's runs already kept the CPUs busy) and a
+    partition real time orders alone is not searched (`qtrace.ForcedOrder`:
+    to 15 s). Next: check invariants in the first search, batch the
+    partitions' candidates into one quint process.
+  - PCT at depth 2 found the wide write-skew window in 1 run of 40,
+    uniform seeds in 39; but its `steps` (400) was mis-sized for a run of
+    about 60 choices, so the change point mostly fell past the end (sized
+    to the run: 16 to 18 of 40). Default PCT's steps to the nominal run's
+    choice count, which an exploration knows from its determinism run, and
+    say in the skill to size it.
+  - `GOTOGETHER_ALL_FAULTS` turns on every nemesis family but not a
+    store's commit faults (`Store.CommitFaults`, opt-in per store): "every
+    fault family" leaves out the one a dedupe-by-id service exists for.
+- **T8. An example: raftkv (M, after T2d). Done** (examples/raftkv):
+  etcd's raft library, unchanged, as a three-node store on qenv, its
+  election entropy drawn from the run; two models (the clients' history
+  linearized whole, 200 operations within a budget of 50000; leadership:
+  one leader a term, a leader within 300 ms of a heal); pending calls
+  placed; a lease read made stale by drift only after a leadership
+  transfer (`Exhaust` over the drifts); a vote not persisted; an upgrade
+  writing its format too soon, caught by a paused rollout. It found two
+  faults of the toolkit's (a drifting wait rounded to none; a cut search
+  searched again with quint). Left: hidden messages (`hidden:` with
+  raft's campaigns unrecorded), and Linearize's cost on whole histories
+  of hundreds of operations (each candidate replayed from init, about 20
+  s a history: extending a prefix's held state, T2d's next step).
+
+
 ## Why AGENTS.md's gotchas say what they say
 
 The stories behind some of AGENTS.md's gotchas, moved here so the file
