@@ -1539,6 +1539,33 @@ everything while:
   mutant.
 All fixed, each with a test; its lessons for the core are in ROADMAP T9.
 
+### T2d reviews
+
+Three reviews of the Go evaluator's integration with the searches:
+- the proof that confirms a failing search (every prefix dropped as
+  rejected, every merged pair one state) was sound but for a merge of two
+  prefixes of one model state whose processes were numbered otherwise
+  (`{{.process}}` renders the next step differently): the key now holds
+  the numbering;
+- leaving a found order to the run's check (ConfirmByCheck) missed a
+  check failing only an eventual val, an exploration's marked reports
+  (an undecided actor's failure made n/a), and a resolution taken after
+  the evaluator wrongly rejected an earlier placement, whose invariants
+  were then judged on another placement than quint's. All fixed, each
+  with a test and an ablation.
+
+### T7 plan
+
+A planning review ranked T7's eleven capabilities by value against cost:
+pending calls inside the linearization first (every real client history
+has timeouts, and the two searches were refused together), upgrade runs
+second (a new class of bug from the nemesis machinery), a polish batch,
+bounded response, then hidden actions with online validation as one
+item; DPOR, Hegel parallel machines, real-deployment Scripts and an
+Antithesis sink deferred (ROADMAP T7). It proposed an example for each:
+wallet's concurrent pending transfers, quorumkv's NewTiebreak under a
+rolling upgrade, lease's SlowTakeover, quorumkv with handoff unrecorded.
+
 ## Why AGENTS.md's gotchas say what they say
 
 The stories behind some of AGENTS.md's gotchas, moved here so the file

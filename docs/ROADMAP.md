@@ -218,17 +218,35 @@ under a week, M two to four, L more.
   nemesis only another test registered passes it); a woven kind's
   options still the process's (static at init); under gosim, kinds a
   run declared but never chose are unknown to it.
-- **T7. Capabilities (after T2d).** Indeterminate calls searched within
-  the linearization (Jepsen's :info) and a visual of a failing history;
-  hidden actions and partial logs in trace validation; bounded-response
-  liveness during a run (`within:` in virtual time); mixed-version and
-  upgrade runs (`Process.RestartAs`); Hegel parallel state machines that
-  linearize; Exhaust with sleep-set DPOR under a declared ownership mode;
-  a Script against a real deployment and an Antithesis assertion sink;
-  online validation over the set of reachable states; Steer branching
-  from where a feature appeared, features as counts; qhistory's strict
-  serializability and rw-registers; the determinism lint (map ranges,
-  math/rand, multi-case select).
+- **T7. Capabilities (after T2d).** Planned by a review (HISTORY, "T7
+  plan"), in this order:
+  - **a (M). Pending calls inside the linearization** (Jepsen's :info):
+    Linearize with ResolvePending, a pending call an optional node of the
+    search, bounded below by its invocation and above by the first step
+    after a settle that followed it; dropped is "no effect". Checked
+    against brute force (every subset of pending calls, every order);
+    confirmed by the same proof. And `qtrace.HistorySVG`, a failing
+    history drawn (lanes, bars, the failing step). Example: wallet's
+    concurrent pending transfers (NoDedupe's retried timeout).
+  - **b (S–M). Upgrade runs**: `Process.RestartAs`, `Sim.Upgrades` (an
+    `upgrade` nemesis family, Scripts and Exhaust unchanged). Example:
+    quorumkv's NewTiebreak, conforming all-v1 and all-v2, caught mid-
+    rollout.
+  - **c (S). Polish**: Steer cutting where a feature appeared, features as
+    counts; qhistory's strict serializability (real-time edges); qlint
+    flagging math/rand and multi-case select.
+  - **d (M). Bounded response**: a binding's `within:` (after a val,
+    another within a virtual-time bound), n/a for a run cut short.
+    Example: lease's SlowTakeover.
+  - **e (L). Hidden actions and partial logs**, then online validation:
+    the state set closed under hidden actions between recorded steps, by
+    the evaluator, its "no path" confirmed by a proof. Example: quorumkv
+    with handoff unrecorded.
+  - Deferred: map-range lint (qanalysis, typed), qhistory rw-registers,
+    sleep-set DPOR in Exhaust (until raftkv measures Exhaust), Hegel
+    parallel machines (Explore + Choices + Linearize cover it), a Script
+    against a real deployment and an Antithesis sink (modules of their
+    own, when a user asks).
 - **T9. An example: wallet (M, the T5 review's). Done** (examples/wallet):
   transfers on a `qenv.Store` with request-id dedupe, an outbox to a
   ledger, retrying clients over a `qenv.Service`, a credit line two
