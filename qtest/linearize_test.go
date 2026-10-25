@@ -315,3 +315,44 @@ func TestExploreConfirmsTheEvaluatorsOrders(t *testing.T) {
 		}
 	}
 }
+
+// Linearize with ResolvePending searches pending calls inside the order:
+// a write whose caller timed out (pending), a read that saw it, and a
+// write and a read that overlapped returning out of order. Neither search
+// alone explains it (the recorded order puts the read of 2 before its
+// write, and no order of the steps explains the read of 1 without the
+// pending write); both do, and the report says where the pending write
+// took effect. A read of a value nothing wrote fails with both.
+func TestLinearizeResolvesPendingCalls(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	call := func(rec string, from, to int, action string, args, obs map[string]any) []qtrace.Step {
+		inv := qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Time: at(from), Invocation: true, Args: args}
+		done := qtrace.Step{Action: action, Recorder: rec, Seq: 2, Thread: rec, Time: at(to), Call: 1, Args: args, Obs: obs}
+		return []qtrace.Step{inv, done}
+	}
+	history := func(seen int64) []qtrace.Step {
+		var steps []qtrace.Step
+		// the timed-out write: invoked, never completed
+		steps = append(steps, qtrace.Step{Action: "write", Recorder: "t", Seq: 1, Thread: "t", Time: at(0), Invocation: true,
+			Args: map[string]any{"key": "a", "value": int64(1)}})
+		steps = append(steps, call("r", 5, 6, "read", map[string]any{"key": "a"}, map[string]any{"value": seen})...)
+		// overlapping, the read recorded first
+		steps = append(steps, call("w", 10, 14, "write", map[string]any{"key": "a", "value": int64(2)}, nil)...)
+		steps = append(steps, call("q", 11, 12, "read", map[string]any{"key": "a"}, map[string]any{"value": int64(2)})...)
+		return steps
+	}
+	const regs = "testdata/registers.yaml"
+	Validate(t, regs, history(1), Linearize()).Expect(t, Mismatch("read"))
+	Validate(t, regs, history(1), ResolvePending()).Expect(t, Mismatch("read"))
+	run := Validate(t, regs, history(1), Linearize(), ResolvePending())
+	run.Expect(t, Conforms())
+	if msgs := fmt.Sprint(run.Report.Issues); !strings.Contains(msgs, "pending calls taking effect: write") {
+		t.Errorf("issues %v, want where the pending write took effect", msgs)
+	}
+	if Completes().Holds(run) {
+		t.Errorf("the pending write completed: its caller never knew")
+	}
+	Validate(t, regs, history(9), Linearize(), ResolvePending()).Expect(t, Mismatch("read"))
+}

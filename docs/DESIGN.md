@@ -2998,3 +2998,34 @@ to 12 s. `GOTOGETHER_EVAL=quint` turns it off. Every candidate is still
 replayed from init: extending a prefix's held state is the next step
 (ROADMAP T2d).
 
+## 46. Pending calls inside the linearization (T7a)
+
+A client that times out or crashes leaves its call pending: it may have
+taken effect, once, or not at all. ResolvePending searched where in the
+recorded order; Linearize searched orders of the completed steps; a
+client history with timeouts needs both, and they were refused together.
+
+`qtrace.LinearizePending` gives the complete search optional nodes, one
+per pending call, bounded as ResolvePending bounds them: after every step
+recorded before its invocation, before every step recorded after a
+settle that followed it (the system was quiet there). A pending call is
+placed while those bounds allow, and a prefix that passed its upper
+bound leaves it out ("no effect"). An order is complete when every
+recorded step is in it; check tells a complete order by its steps that
+are not assumed (`Ambiguous`), and judges it whole (a settle's eventual
+vals). Two rules keep the memo and the proof sound:
+- a complete order is no prefix's verdict: accepted, it is not marked
+  for its extensions (a prefix is not judged at a settle), and the search
+  judges a complete order before its extensions, so the guard costs
+  nothing;
+- a complete order failing at its last step (which an eventual val
+  does) prunes nothing: a pending call placed after it may make it hold,
+  and its extensions are judged; its rejection is recorded whole in the
+  proof.
+The guided search orders the recorded steps alone (no pending call took
+effect), the cheapest explanation; the complete search places them.
+Validated against brute force on random register histories (every
+subset of the pending writes, every order the bounds allow, with and
+without a settle and a final value some runs require), through the
+complete search alone and under small budgets, each rule ablated.
+

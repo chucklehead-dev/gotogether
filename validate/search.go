@@ -27,8 +27,9 @@ const DefaultResolveBudget = 200
 // SearchOptions choose the search that orders a run's steps before they
 // are checked: Linearize (real time's orders, searched for one the model
 // accepts), by Key (each value's history alone), or ResolvePending (what
-// each call left pending may have done). Linearize and ResolvePending are
-// not combined.
+// each call left pending may have done). With both, a pending call may
+// take effect anywhere real time allows in the order searched, or not at
+// all (qtrace.LinearizePending: Jepsen's indeterminate calls).
 type SearchOptions struct {
 	Linearize bool
 	Key       string // partition each actor's history by this argument
@@ -170,10 +171,6 @@ func passed(a *Result) bool {
 // search's (a step without the Key's argument, a candidate quint could
 // not check), never a verdict.
 func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err error) {
-	if opt.Linearize && opt.ResolvePending {
-		return nil, fmt.Errorf("ResolvePending with Linearize: a resolution keeps the recorded order, and the two searches are not combined; " +
-			"record the steps where they take effect, or resolve the pending calls of a history in its recorded order")
-	}
 	defer func() {
 		if r := recover(); r != nil {
 			e, ok := r.(searchError)
@@ -207,7 +204,7 @@ func (c *Checker) Search(steps []qtrace.Step, opt SearchOptions) (s *Search, err
 		if budget == 0 {
 			budget = DefaultLinearizeBudget
 		}
-		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key)
+		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
 		return s, nil
 	}
 	if opt.ResolvePending {
@@ -281,7 +278,7 @@ func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}
 // gap: steps were lost; a cycle: their constraints contradict each
 // other), for its result: the order checked is re-sequenced onto one
 // thread, where neither shows.
-func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
+func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, resolving bool) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
 	traces, issues := qtrace.Reconstruct(steps) // deduplicated, gaps found across actors
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
 	type job struct {
@@ -319,7 +316,11 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string) (
 					j.panicked = r // a searchError, re-raised on the caller's goroutine
 				}
 			}()
-			j.o, j.issue, j.cut, j.claim = order(jch, jfull, j.part, budget, key != "")
+			var pending, settles []qtrace.Step
+			if resolving {
+				pending, settles = j.part.Pending, settlesOf(steps)
+			}
+			j.o, j.issue, j.cut, j.claim = order(jch, jfull, j.part, pending, settles, budget, key != "")
 		}()
 	}
 	wg.Wait()
@@ -431,7 +432,7 @@ func partitions(tr *qtrace.Trace, key string) []*qtrace.Trace {
 // order finds an order of one actor's steps the model accepts, within
 // budget, and says how it went: an issue, and whether the search was cut
 // short (no verdict).
-func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, budget int, partitioned bool) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 	a := tr.Actor // as messages name it
 	if a == "" {
 		a = "default"
@@ -477,18 +478,30 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 	if len(tr.Steps) == 0 {
 		return nil, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no steps to order", a)}, false, nil
 	}
-	if o, ok := qtrace.ForcedOrder(tr.Steps); ok {
+	// the search, with the pending calls it places (ResolvePending)
+	lin := func(check func([][]qtrace.Step) ([]int, []string)) ([]qtrace.Step, bool, int, bool, *qtrace.Proof) {
+		return qtrace.LinearizePending(tr.Steps, pending, settles, budget, check)
+	}
+	again := func(check func([][]qtrace.Step) ([]int, []string)) func() ([]qtrace.Step, bool, int, bool) {
+		return func() ([]qtrace.Step, bool, int, bool) {
+			o, ok, tried, cut, _ := lin(check)
+			return o, ok, tried, cut
+		}
+	}
+	if o, ok := qtrace.ForcedOrder(tr.Steps); ok && len(pending) == 0 {
 		// one order: a search would check it alone, and the caller checks
 		// the order it gets (Checker.Check of Search.Steps), which judges it
 		// as this search would have; two quint processes saved (the probe
 		// of every account makes many such partitions)
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false, nil
 	}
-	o, ok, tried, cut, proof := qtrace.LinearizeProof(tr.Steps, budget, check)
-	o, ok, tried, cut = ev.decide(o, ok, tried, cut, proof, quintChecker(within(ch, tr), tr, a, false), a,
-		func() ([]qtrace.Step, bool, int, bool) { return qtrace.LinearizeStates(tr.Steps, budget, check) })
+	o, ok, tried, cut, proof := lin(check)
+	o, ok, tried, cut = ev.decide(o, ok, tried, cut, proof, quintChecker(within(ch, tr), tr, a, false), a, again(check))
 	cl := ev.claim(within(ch, tr), tr, o, false)
-	o, issue, cut, cl := orderIssue(ch, full, tr, a, budget, partitioned, checker, ev, o, ok, tried, cut, cl)
+	o, issue, cut, cl := orderIssue(ch, full, tr, a, budget, partitioned, checker, ev, lin, again, o, ok, tried, cut, cl)
+	if len(pending) > 0 {
+		issue.Msg += "; " + effects(o, pending)
+	}
 	return o, ev.note(issue), cut, cl
 }
 
@@ -702,6 +715,8 @@ func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func
 // search for an order that keeps them.
 func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, partitioned bool,
 	checker func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string), ev *evalUse,
+	lin func(func([][]qtrace.Step) ([]int, []string)) ([]qtrace.Step, bool, int, bool, *qtrace.Proof),
+	again func(func([][]qtrace.Step) ([]int, []string)) func() ([]qtrace.Step, bool, int, bool),
 	o []qtrace.Step, ok bool, tried int, cut bool, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 	// with ITF (the invariants' searches write none): a proof's merged
 	// prefixes are confirmed by their states
@@ -720,9 +735,8 @@ func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, parti
 		// not, and a run must not look violating by the order picked
 		inv := checker(full, true)
 		ev.used = false
-		o2, ok2, tried2, cut2, proof2 := qtrace.LinearizeProof(tr.Steps, budget, inv)
-		o2, ok2, tried2, cut2 = ev.decide(o2, ok2, tried2, cut2, proof2, quintInv, a,
-			func() ([]qtrace.Step, bool, int, bool) { return qtrace.LinearizeStates(tr.Steps, budget, inv) })
+		o2, ok2, tried2, cut2, proof2 := lin(inv)
+		o2, ok2, tried2, cut2 = ev.decide(o2, ok2, tried2, cut2, proof2, quintInv, a, again(inv))
 		switch {
 		case ok2:
 			return o2, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms with every invariant holding (%d orders tried, %d with the invariants)", a, len(o2), tried, tried2)}, false,
@@ -846,6 +860,46 @@ func violatedAt(rep *Report, n int) int {
 	return at
 }
 
+// observed counts an order's steps that are not assumed (a pending call's
+// effect a search placed): an order is complete when it has them all.
+func observed(o []qtrace.Step) int {
+	n := 0
+	for _, s := range o {
+		if !s.Ambiguous {
+			n++
+		}
+	}
+	return n
+}
+
+// effects says which of pending a linearization's order assumes took
+// effect, and where; the others took none.
+func effects(o []qtrace.Step, pending []qtrace.Step) string {
+	var took, none []string
+	for _, p := range pending {
+		at := -1
+		for i, s := range o {
+			if s.Ambiguous && s.Action == p.Action && s.Time.Equal(p.Time) && fmt.Sprint(s.Args) == fmt.Sprint(p.Args) {
+				at = i
+				break
+			}
+		}
+		if at < 0 {
+			none = append(none, p.String())
+		} else {
+			took = append(took, fmt.Sprintf("%s at step %d", p.String(), at+1))
+		}
+	}
+	var parts []string
+	if len(took) > 0 {
+		parts = append(parts, "pending calls taking effect: "+strings.Join(took, ", "))
+	}
+	if len(none) > 0 {
+		parts = append(parts, "pending calls with no effect: "+strings.Join(none, ", "))
+	}
+	return strings.Join(parts, "; ")
+}
+
 // partitionHint suggests LinearizeByKey to a search not partitioned.
 func partitionHint(partitioned bool) string {
 	if partitioned {
@@ -863,7 +917,7 @@ func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
 	}
 	out := make([][]qtrace.Step, len(orders))
 	for i, o := range orders {
-		if len(o) < len(tr.Steps) { // a prefix of an order (Linearize's complete search): the run has not ended
+		if observed(o) < len(tr.Steps) { // a prefix of an order (Linearize's complete search): the run has not ended
 			out[i] = o
 			continue
 		}

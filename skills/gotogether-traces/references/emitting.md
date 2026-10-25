@@ -32,7 +32,12 @@ taken effect after one of the steps recorded since its invocation, and
 before the first settle after it (with
 no observation: no expect is checked after it), and the actor conforms if
 one resolution does; an issue says which ("withdraw(amount=3) took
-effect after step 1"). Either way
+effect after step 1"). With `qtest.Linearize()` too (the CLI's
+`-linearize -resolve-pending`) the two are searched together: a pending
+call may take effect anywhere real time allows in an order of the steps,
+or not at all, and the issue says where each did ("pending calls taking
+effect: write(key=a, value=1) at step 2"): a client history with
+timeouts. Either way
 check with `qtest.Linearize()` (the CLI: `gotogether validate -linearize`, `-linearize-key key`, `-resolve-pending`): concurrent operations return in
 another order than they took effect, and the recording order rejects
 correct code (examples/kvstore's client history, every load tried). The

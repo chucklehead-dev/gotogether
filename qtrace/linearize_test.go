@@ -3,6 +3,7 @@ package qtrace
 import (
 	"fmt"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -697,4 +698,234 @@ func TestLinearizeProofAgainstBruteForce(t *testing.T) {
 		t.Errorf("wrong verdicts caught, by oracle: %v: an oracle that gave none never tested a proof", caught)
 	}
 	t.Logf("wrong verdicts caught by their proofs, by oracle: %v", caught)
+}
+
+// registerFinal is register with an eventual property: a complete order
+// (every recorded step in it, assumed steps aside) must leave the
+// register at final (-1: any), failing at its last step otherwise, as a
+// settle's eventual val does.
+func registerFinal(n int, final int64) func(orders [][]Step) ([]int, []string) {
+	return func(orders [][]Step) ([]int, []string) {
+		fs, st := registerStates(orders)
+		for i, o := range orders {
+			if fs[i] >= 0 || final < 0 {
+				continue
+			}
+			c := 0
+			var v int64
+			for _, s := range o {
+				if !s.Ambiguous {
+					c++
+				}
+				if s.Action == "write" {
+					v = s.Args["v"].(int64)
+				}
+			}
+			if c == n && v != final {
+				fs[i], st[i] = len(o)-1, ""
+			}
+		}
+		return fs, st
+	}
+}
+
+// LinearizePending against brute force: every subset of the pending
+// writes, in every order of the steps and those writes that real time and
+// the pending calls' bounds allow (after every step recorded before the
+// invocation, before every step recorded after a settle that followed
+// it), on random register histories with a final value some runs require.
+// With no pending calls it is Linearize; its proofs check out.
+func TestLinearizePendingAgainstBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 8))
+	yes, no, effects := 0, 0, 0
+	for trial := range 500 {
+		var steps []Step
+		next := map[string]int{}
+		written := []int64{0}
+		for i := range 2 + rng.IntN(4) {
+			c := string(rune('a' + rng.IntN(3)))
+			from := next[c] + rng.IntN(3)
+			to := from + 1 + rng.IntN(4)
+			next[c] = to + 1
+			if rng.IntN(2) == 0 {
+				v := int64(i + 1)
+				written = append(written, v)
+				steps = append(steps, op(c, 0, "write", v, from, to))
+			} else {
+				steps = append(steps, op(c, 0, "read", written[rng.IntN(len(written))], from, to))
+			}
+		}
+		// pending writes, each on a client of its own, invoked somewhere in
+		// the history; their values are new, so a read of one needs it
+		var pending []Step
+		for k := range rng.IntN(3) {
+			v := int64(100 + k)
+			p := op(fmt.Sprint("p", k), 1, "write", v, rng.IntN(8), 0)
+			p.Time, p.Invoked, p.Invocation = p.Invoked, time.Time{}, true
+			pending = append(pending, p)
+			if rng.IntN(2) == 0 { // a read that saw it, after its client's calls
+				c := string(rune('a' + rng.IntN(3)))
+				from := next[c] + rng.IntN(3)
+				to := from + 1 + rng.IntN(4)
+				next[c] = to + 1
+				steps = append(steps, op(c, 0, "read", v, from, to))
+			}
+		}
+		seqs := map[string]uint64{}
+		for i := range steps {
+			seqs[steps[i].Recorder]++
+			steps[i].Seq = seqs[steps[i].Recorder]
+		}
+		var settles []Step
+		if rng.IntN(2) == 0 {
+			settles = []Step{{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: time.Unix(0, 0).Add(time.Duration(5+rng.IntN(10)) * 10 * time.Millisecond)}}
+		}
+		final := int64(-1)
+		if rng.IntN(3) == 0 {
+			final = written[rng.IntN(len(written))]
+			if len(pending) > 0 && rng.IntN(2) == 0 {
+				final = pending[0].Args["v"].(int64)
+			}
+		}
+		check := registerFinal(len(steps), final)
+		want := brutePending(steps, pending, settles, check)
+		got, ok, _, cut, proof := LinearizePending(steps, pending, settles, 1000000, check)
+		if cut {
+			t.Fatalf("trial %d: cut with a budget of a million", trial)
+		}
+		if ok != want {
+			t.Fatalf("trial %d: LinearizePending ok %v, brute force %v, for\n%v\npending %v\nsettles %v final %d", trial, ok, want, steps, pending, settles, final)
+		}
+		if ok {
+			yes++
+			fs, _ := check([][]Step{got})
+			if fs[0] >= 0 {
+				t.Fatalf("trial %d: the order returned does not conform: %v", trial, got)
+			}
+			for _, s := range got {
+				if s.Ambiguous {
+					effects++
+					break
+				}
+			}
+		} else {
+			no++
+			var orders [][]Step
+			orders = append(orders, proof.Rejected...)
+			for _, m := range proof.Merged {
+				orders = append(orders, m[0], m[1])
+			}
+			if len(orders) > 0 {
+				fs, st := check(orders)
+				for i := range proof.Rejected {
+					if fs[i] < 0 {
+						t.Fatalf("trial %d: the proof's rejected %v conforms", trial, orders[i])
+					}
+				}
+				for j := range proof.Merged {
+					a, b := len(proof.Rejected)+2*j, len(proof.Rejected)+2*j+1
+					if fs[a] >= 0 || fs[b] >= 0 || st[a] != st[b] {
+						t.Fatalf("trial %d: the proof's merge %v / %v", trial, orders[a], orders[b])
+					}
+				}
+			}
+		}
+		// the complete search alone decides the same; a small budget may cut
+		// the search, but a verdict it gives must be right
+		if _, cok, _, ccut := linearizeWith(steps, pending, settles, 1000000, check, false, &Proof{}); ccut || cok != want {
+			t.Fatalf("trial %d: the complete search alone: ok %v (cut %v), brute force %v", trial, cok, ccut, want)
+		}
+		for _, budget := range []int{1, 3, 10} {
+			if _, bok, _, bcut, _ := LinearizePending(steps, pending, settles, budget, check); !bcut && bok != want {
+				t.Fatalf("trial %d, budget %d: a verdict of ok %v, brute force %v", trial, budget, bok, want)
+			}
+		}
+		if len(pending) == 0 {
+			_, lok, _, _ := LinearizeStates(steps, 1000000, check)
+			if lok != ok {
+				t.Fatalf("trial %d: with no pending calls %v, Linearize %v", trial, ok, lok)
+			}
+		}
+	}
+	if yes == 0 || no == 0 || effects == 0 {
+		t.Errorf("%d linearizable, %d not, %d needing a pending call's effect: the property compared too little", yes, no, effects)
+	}
+	t.Logf("%d linearizable (%d with a pending call's effect), %d not", yes, effects, no)
+}
+
+// brutePending enumerates, for every subset of pending, every order of
+// steps and the subset that mustBefore and the pending calls' bounds
+// allow, for one check accepts whole.
+func brutePending(steps, pending, settles []Step, check func([][]Step) ([]int, []string)) bool {
+	n := len(steps)
+	for mask := range 1 << len(pending) {
+		nodes := slices.Clone(steps)
+		for i, p := range pending {
+			if mask&(1<<i) != 0 {
+				q := p
+				q.Ambiguous, q.Invocation = true, false
+				nodes = append(nodes, q)
+			}
+		}
+		pendingOf := map[int]Step{} // node index -> its pending call, as recorded
+		k := n
+		for i, p := range pending {
+			if mask&(1<<i) != 0 {
+				pendingOf[k] = p
+				k++
+			}
+		}
+		precedes := func(a, b int) bool {
+			pa, aPending := pendingOf[a]
+			pb, bPending := pendingOf[b]
+			switch {
+			case !aPending && !bPending:
+				return mustBefore(nodes[a], nodes[b])
+			case !aPending && bPending:
+				return before(nodes[a], pb)
+			case aPending && !bPending:
+				for _, st := range settles {
+					if before(pa, st) && before(st, nodes[b]) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+		used := make([]bool, len(nodes))
+		var order []Step
+		var rec func() bool
+		rec = func() bool {
+			if len(order) == len(nodes) {
+				fs, _ := check([][]Step{order})
+				return fs[0] < 0
+			}
+			for i := range nodes {
+				if used[i] {
+					continue
+				}
+				ok := true
+				for j := range nodes {
+					if !used[j] && j != i && precedes(j, i) {
+						ok = false
+						break
+					}
+				}
+				if !ok {
+					continue
+				}
+				used[i] = true
+				order = append(order, nodes[i])
+				if rec() {
+					return true
+				}
+				order, used[i] = order[:len(order)-1], false
+			}
+			return false
+		}
+		if rec() {
+			return true
+		}
+	}
+	return false
 }

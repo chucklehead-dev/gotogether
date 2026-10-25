@@ -27,6 +27,14 @@ The first release. What a user meets, by module:
   checks every batch it judges with quint too, and judges each actor of
   every run checked with both, failing on a disagreement (nightly). Two prefixes merge
   only when their processes are numbered alike.
+- `qtest.Linearize()` with `qtest.ResolvePending()` (and the CLI's
+  `-linearize -resolve-pending`), refused together before, search pending
+  calls inside the linearization: each may take effect once anywhere real
+  time allows (after the steps recorded before its invocation, before
+  those after a settle that followed it) or not at all, Jepsen's
+  indeterminate calls (`qtrace.LinearizePending`). Checked against brute
+  force (every subset, every order), its "no order" confirmed by the same
+  proof.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,
   now searched side by side) of such a history checks it without a

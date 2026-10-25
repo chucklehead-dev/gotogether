@@ -121,8 +121,24 @@ type Proof struct {
 // LinearizeProof is LinearizeStates, with the proof of a verdict of no
 // order (nil for any other).
 func LinearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
+	return LinearizePending(steps, nil, nil, budget, check)
+}
+
+// LinearizePending is LinearizeProof with calls left pending (Jepsen's
+// indeterminate calls: a caller that crashed or timed out never learned
+// whether its call took effect), each of which may have taken effect
+// once, anywhere real time allows, or not at all: after every step
+// recorded before its invocation, and before every step recorded after a
+// settle that followed it (the system was quiet there). An order is
+// complete when every step is in it; a pending call in it is an assumed
+// step (Ambiguous, no observation, in the process of the step before it),
+// and one left out took no effect. The guided search orders the steps
+// alone (no pending call took effect); the complete search places the
+// pending calls too. check is told which orders are complete by their
+// steps that are not assumed: as many as steps.
+func LinearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
 	proof = &Proof{}
-	best, ok, tried, cut = linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load(), proof)
+	best, ok, tried, cut = linearizeWith(steps, pending, settles, budget, check, !hooks.CompleteSearchOnly.Load(), proof)
 	if ok || cut {
 		proof = nil
 	}
@@ -195,10 +211,106 @@ func ForcedOrder(steps []Step) ([]Step, bool) {
 // linearize is LinearizeStates; without guided, the complete search alone
 // (for tests of it).
 func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
-	if len(steps) == 0 {
-		return nil, true, 0, false
+	return linearizeWith(steps, nil, nil, budget, check, guided, proof)
+}
+
+// before reports whether a step was recorded before another took effect
+// or was invoked: on one recorder by seq, else by time beyond the slack
+// (ResolvePending's bounds on a pending call).
+func before(a, b Step) bool {
+	if a.Recorder == b.Recorder {
+		return a.Seq < b.Seq
 	}
-	ns, at, mustPrecede, render, _ := constraints(steps)
+	return a.Time.Add(RealTimeSlack).Before(b.Time)
+}
+
+// linearizeWith is LinearizePending: steps are nodes 0..n-1, pending calls
+// n..n+m-1, which no order needs.
+func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
+	if len(steps) == 0 {
+		return nil, true, 0, false // nothing observed: no call need have taken effect
+	}
+	ns, at, required, renderSteps, _ := constraints(steps)
+	n := len(ns)
+	// a pending call's bounds: the steps recorded before its invocation
+	// precede it; it precedes the steps recorded after a settle that
+	// followed it. Pending calls bound no step otherwise, nor each other.
+	bound := map[[2]int]bool{}
+	for pi, p := range pending {
+		i := n + pi
+		for j := range n {
+			if before(ns[j].s, p) {
+				bound[[2]int{j, i}] = true
+			}
+		}
+		for _, st := range settles {
+			if !before(p, st) {
+				continue
+			}
+			for j := range n {
+				if before(st, ns[j].s) {
+					bound[[2]int{i, j}] = true
+				}
+			}
+		}
+	}
+	mustPrecede := func(a, b int) bool {
+		if a < n && b < n {
+			return required(a, b)
+		}
+		return bound[[2]int{a, b}]
+	}
+	actor := ""
+	if n > 0 {
+		actor = steps[0].Actor
+	} else {
+		actor = pending[0].Actor
+	}
+	render := func(order []int) []Step {
+		var req []int
+		for _, k := range order {
+			if k < n {
+				req = append(req, k)
+			}
+		}
+		if len(req) == len(order) {
+			return renderSteps(order)
+		}
+		out := make([]Step, len(order))
+		for i, k := range order {
+			var s Step
+			if k < n {
+				s = ns[k].s
+			} else {
+				s = pending[k-n]
+				s.Invocation, s.Ambiguous, s.Outcome, s.Obs, s.Order = false, true, "", nil, nil
+				// in the process of the step it follows (the first step's, at
+				// the start): a process of its own would read as restarts
+				if i > 0 {
+					s.Process = out[i-1].Process
+				} else if j := slices.IndexFunc(order, func(k int) bool { return k < n }); j >= 0 {
+					s.Process = ns[order[j]].s.Process
+				} else {
+					s.Process = ns[at[0]].s.Process
+				}
+			}
+			s.Recorder, s.Thread, s.Seq, s.Actor = "linearized:"+actor, "linearized", uint64(i+1), actor
+			s.Call = 0
+			out[i] = s
+		}
+		return out
+	}
+	// complete: every step placed (pending calls left out took no effect);
+	// check judges such an order whole, a settle's eventual vals included
+	complete := func(order []int) bool {
+		c := 0
+		for _, k := range order {
+			if k < n {
+				c++
+			}
+		}
+		return c == n
+	}
 	key := func(order []int) string {
 		var b strings.Builder
 		for _, k := range order {
@@ -211,6 +323,10 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 	// fails at step f has its prefixes up to f accepted and the one through
 	// f rejected (an extension of it fails there too); one that conforms,
 	// every prefix accepted. A candidate the memo decides costs no quint.
+	// A complete order is judged whole: accepted, it is no prefix's verdict
+	// (a prefix is not judged at a settle), and failing at its last step it
+	// may fail a settle's eventual val, which a pending call placed after
+	// it may make hold: its extensions are judged.
 	accepted, rejected := map[string]bool{}, map[string]bool{}
 	stateOf := map[string]string{} // an accepted order's state, when check knows it
 	judge := func(orders [][]int) []int {
@@ -218,7 +334,9 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		var ask []int
 		for i, o := range orders {
 			out[i] = -2
-			if accepted[key(o)] {
+			// (a complete order is judged before its extensions, in the
+			// complete search's order: this and the marking below are guards)
+			if accepted[key(o)] && !complete(o) {
 				out[i] = -1
 				continue
 			}
@@ -249,10 +367,14 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 			upTo := len(o)
 			if f >= 0 {
 				upTo = f
-				rejected[key(o[:f+1])] = true
+				if !complete(o) || f < len(o)-1 {
+					rejected[key(o[:f+1])] = true
+				}
 			}
 			for l := 1; l <= upTo; l++ {
-				accepted[key(o[:l])] = true
+				if !complete(o[:l]) {
+					accepted[key(o[:l])] = true
+				}
 			}
 		}
 		return out
@@ -345,7 +467,11 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		placed := slices.Sorted(slices.Values(o))
 		return key(placed) + "|" + st
 	}
-	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge, same, proof); ok || n > 0 {
+	nodes := slices.Clone(at)
+	for i := range pending {
+		nodes = append(nodes, n+i)
+	}
+	if o, ok, n, cutShort := prefixes(n, nodes, mustPrecede, budget, render, judge, same, complete, proof); ok || n > 0 {
 		tried += n
 		if ok {
 			return o, true, tried, false
@@ -373,25 +499,39 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 // allows is a behaviour of the model. Every accepted prefix is kept: a
 // beam of them made five concurrent operations no verdict whatever the
 // budget, and the budget is what a user can raise.
-func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
-	judge func(orders [][]int) []int, same func([]int) string, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
-	n := len(ns)
+//
+// nodes are the steps (0..n-1, in the hard edges' order) and the pending
+// calls (n on), which an order may leave out: one is placed after the
+// steps that must precede it and while none it must precede is placed. A
+// complete order (every step placed) that fails at its last step is
+// extended still: a pending call after it may make a settle's eventual
+// val hold.
+func prefixes(n int, nodes []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
+	judge func(orders [][]int) []int, same func([]int) string, complete func([]int) bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
+	total := len(nodes)
 	level := [][]int{nil}
 	recorded := map[string]bool{} // rejected prefixes in the proof (candidates the memo rejects share them)
-	for k := 0; k < n && tried < budget; k++ {
+	k := 0
+	for ; k < total && tried < budget; k++ {
 		var cands [][]int
 		for _, p := range level {
-			placed := make([]bool, n)
+			placed := make([]bool, total)
 			for _, i := range p {
 				placed[i] = true
 			}
-			for _, i := range base {
+			for _, i := range nodes {
 				if placed[i] {
 					continue
 				}
 				minimal := true
 				for j := 0; j < n && minimal; j++ {
-					minimal = placed[j] || j == i || !mustPrecede(j, i)
+					if i < n {
+						minimal = placed[j] || j == i || !mustPrecede(j, i)
+					} else {
+						// a pending call: after the steps it must follow, and
+						// before every one it must precede
+						minimal = (placed[j] || !mustPrecede(j, i)) && !(placed[j] && mustPrecede(i, j))
+					}
 				}
 				if minimal {
 					cands = append(cands, append(slices.Clip(p), i))
@@ -411,9 +551,12 @@ func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget in
 					recorded[fmt.Sprint(p)] = true
 					proof.Rejected = append(proof.Rejected, render(p))
 				}
+				if complete(cands[i]) && f == len(cands[i])-1 && len(cands[i]) < total {
+					next = append(next, cands[i]) // judged whole: a pending call after it may make it hold
+				}
 				continue
 			}
-			if k == n-1 {
+			if complete(cands[i]) {
 				return render(cands[i]), true, tried, false
 			}
 			if s := same(cands[i]); s != "" {
@@ -431,6 +574,9 @@ func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget in
 			return nil, false, tried, cut
 		}
 		level = next
+	}
+	if k == total {
+		return nil, false, tried, cut // every order tried
 	}
 	return nil, false, tried, true
 }

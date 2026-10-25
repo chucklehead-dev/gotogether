@@ -22,8 +22,11 @@ const DefaultResolveBudget = validate.DefaultResolveBudget
 // search cut short is no verdict, as Linearize's. Pending calls stay
 // pending (Completes still fails of them): their callers never knew.
 //
-// A resolution keeps the recorded order of the steps: with Linearize too
-// it would search both, which it does not; the two are refused together.
+// A resolution keeps the recorded order of the steps. With Linearize (or
+// LinearizeByKey) too, both are searched: a pending call may take effect
+// anywhere real time allows in an order of the steps, or not at all
+// (Jepsen's indeterminate calls, qtrace.LinearizePending), and the report
+// says which did.
 func ResolvePending() Option {
 	return option("ResolvePending", func(c *settings) { c.resolvePending = true })
 }
