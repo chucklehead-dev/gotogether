@@ -250,13 +250,16 @@ under a week, M two to four, L more.
     short; `Checker.Key` for verdict caches. The example moves to T8
     (raftkv's election within a bound of a heal): lease's model has no
     takeover to bound.
-  - **e (L). Hidden actions and partial logs**, then online validation
-    (hidden actions done, nullary ones, judged by the evaluator, DESIGN
-    §49; left: partial logs, online validation, and confirming a verdict
-    with quint):
-    the state set closed under hidden actions between recorded steps, by
-    the evaluator, its "no path" confirmed by a proof. Example: quorumkv
-    with handoff unrecorded.
+  - **e (L). Hidden actions. Done** (DESIGN §49): a binding's `hidden:`
+    (nullary actions no step records), the states they reach between
+    steps (at most `hiddenDepth`) searched by the evaluator, invariants
+    kept on one path, checked against brute force; reviewed (the
+    initial state's violations, joint invariants, shadow mode, lint).
+    Open, offline first: partial logs (a recorder's steps lost at its
+    start or end), online validation (`validate -follow`, judging a
+    growing log), and confirming a hidden verdict with quint (a proof of
+    "no path", as Linearize's). The example moves to T8 (raftkv's
+    messages unrecorded): quorumkv's model is a register, with no handoff to hide.
   - Deferred: map-range lint (qanalysis, typed), qhistory rw-registers,
     sleep-set DPOR in Exhaust (until raftkv measures Exhaust), Hegel
     parallel machines (Explore + Choices + Linearize cover it), a Script
