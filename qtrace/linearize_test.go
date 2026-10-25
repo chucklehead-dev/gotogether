@@ -511,7 +511,7 @@ func TestLinearizeStatesMergesOnlyEqualStates(t *testing.T) {
 				st[i] = state(o)
 			}
 			return fs, st
-		}, false)
+		}, false, nil)
 		if ok || cut {
 			t.Fatalf("ok %v, cut %v: no order reads 9", ok, cut)
 		}
@@ -601,4 +601,100 @@ func countOrders(steps []Step, prec func(a, b Step) bool, limit int) int {
 	}
 	rec(0)
 	return count
+}
+
+// A verdict of no order, from a wrong oracle, is confirmed by its proof
+// only if it is right: a history some order linearizes (brute force says)
+// whose proof the true oracle accepts would be a wrong verdict confirmed.
+// The wrong oracles reject a conforming candidate, or merge prefixes of
+// different states; a right one's proof always checks out.
+func TestLinearizeProofAgainstBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(5, 6))
+	caught := map[int]int{}
+	confirms := func(p *Proof) bool {
+		var orders [][]Step
+		orders = append(orders, p.Rejected...)
+		for _, m := range p.Merged {
+			orders = append(orders, m[0], m[1])
+		}
+		fs, st := registerStates(orders)
+		for i := range p.Rejected {
+			if fs[i] < 0 {
+				return false
+			}
+		}
+		for j := range p.Merged {
+			a, b := len(p.Rejected)+2*j, len(p.Rejected)+2*j+1
+			if fs[a] >= 0 || fs[b] >= 0 || st[a] != st[b] {
+				return false
+			}
+		}
+		return true
+	}
+	for trial := range 600 {
+		var steps []Step
+		next := map[string]int{}
+		written := []int64{0}
+		for i := range 2 + rng.IntN(5) {
+			c := string(rune('a' + rng.IntN(3)))
+			from := next[c] + rng.IntN(3)
+			to := from + 1 + rng.IntN(4)
+			next[c] = to + 1
+			if rng.IntN(2) == 0 {
+				v := int64(i + 1)
+				written = append(written, v)
+				steps = append(steps, op(c, uint64(len(steps)+1), "write", v, from, to))
+			} else {
+				steps = append(steps, op(c, uint64(len(steps)+1), "read", written[rng.IntN(len(written))], from, to))
+			}
+		}
+		seqs := map[string]uint64{}
+		for i := range steps {
+			seqs[steps[i].Recorder]++
+			steps[i].Seq = seqs[steps[i].Recorder]
+		}
+		want := bruteLinearizable(steps)
+		_, ok, _, cut, proof := LinearizeProof(steps, 100000, registerStates)
+		if ok != want || cut || !ok && (proof == nil || !confirms(proof)) {
+			t.Fatalf("trial %d: the true oracle's verdict ok %v (cut %v), brute force %v, or its proof does not check out", trial, ok, cut, want)
+		}
+		wrong := rng.Uint64()
+		oracles := []func([][]Step) ([]int, []string){
+			func(orders [][]Step) ([]int, []string) { // rejects some conforming candidates
+				fs, st := registerStates(orders)
+				for i, o := range orders {
+					if fs[i] < 0 && len(o) > 0 && (wrong>>uint(len(o)%64))&1 == 1 {
+						fs[i], st[i] = len(o)-1, ""
+					}
+				}
+				return fs, st
+			},
+			func(orders [][]Step) ([]int, []string) { // one state for all
+				fs, st := registerStates(orders)
+				for i := range st {
+					if fs[i] < 0 {
+						st[i] = "s"
+					}
+				}
+				return fs, st
+			},
+		}
+		for k, oracle := range oracles {
+			// the complete search alone: the guided one finds most orders
+			// first, and its verdict of no order is the complete search's
+			proof := &Proof{}
+			_, ok, _, cut := linearize(steps, 100000, oracle, false, proof)
+			if ok || cut || !want {
+				continue
+			}
+			if confirms(proof) {
+				t.Fatalf("trial %d, oracle %d: a wrong verdict of no order confirmed by its proof, for\n%v", trial, k, steps)
+			}
+			caught[k]++
+		}
+	}
+	if caught[0] == 0 || caught[1] == 0 {
+		t.Errorf("wrong verdicts caught, by oracle: %v: an oracle that gave none never tested a proof", caught)
+	}
+	t.Logf("wrong verdicts caught by their proofs, by oracle: %v", caught)
 }

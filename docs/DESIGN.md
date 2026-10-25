@@ -2936,11 +2936,21 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   restarts), for the merge of prefixes by state.
 - **Confirmed by quint.** An order the search finds is checked by quint
   (a disagreement searches again with quint alone, and the issue says
-  so); a search that finds none, or is cut short, is decided by quint
-  alone, since no one order confirms that every order fails (the
-  evaluator could have rejected the one that conforms). The same holds
-  for the invariants' second search. The caller's check of the order is
-  quint's, as before.
+  so). A search that finds none is confirmed from its proof
+  (`qtrace.LinearizeProof`), in one quint batch: the complete search
+  drops a candidate only when it is rejected (the prefix through the
+  failing step, which every order it begins shares) or when another
+  prefix of the same steps reached its state, so quint rejecting every
+  dropped prefix (at any step: each order it begins fails) and giving
+  each merged pair one state (its ITF's, written for the invariants'
+  search too) is what "no order" rests on. A candidate the evaluator
+  wrongly accepted needs nothing: its extensions were judged in turn. A
+  proof quint contradicts searches again with quint alone, and says so;
+  a search cut short has no proof, and is quint's. The same holds for
+  the invariants' second search. A guided search the budget stopped
+  before the complete one began is now no verdict (it had claimed one
+  when the budget ran out exactly as its moves did). The caller's check
+  of the order is quint's, as before.
 - **Checked against quint.** Every binding's model, in its binding's
   instance, against `quint run`'s traces (each state one of the
   evaluator's successors of the one before), and a table of builtins at
@@ -2948,13 +2958,10 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   gives the same verdict, and one made wrong is caught by the
   confirmation.
 
-Before negative conclusions went to quint, quorumkv's contended-key
-mutants took 51 s, 337 s with quint alone; they take 214 s now, their
-failing searches quint's, and its faithful exploration 13 s, 20 s with
-quint alone. Confirming a negative conclusion from its evidence (every
-rejected prefix rejected by quint at the same step, every merge of two
-prefixes the same quint state, in one batch) would give the first number
-back soundly: the next step. `GOTOGETHER_EVAL=quint` turns it off. ResolvePending's placements still
+quorumkv's contended-key mutants took 51 s with the evaluator's
+unconfirmed negative verdicts, 214 s with quint searching them again,
+and 62 s with their proofs confirmed (337 s with quint alone); its
+faithful exploration 13 s, 20 s with quint alone. `GOTOGETHER_EVAL=quint` turns it off. ResolvePending's placements still
 go to quint, and every candidate is replayed from init: extending a
 prefix's held state is the next step (ROADMAP T2d).
 

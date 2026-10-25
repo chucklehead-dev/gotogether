@@ -11,10 +11,14 @@ The first release. What a user meets, by module:
 - Linearize's candidates are judged by a Quint evaluator in Go, over the
   IR quint compiles the binding's evaluation module to: an order it finds
   is confirmed by quint (a disagreement searches again with quint, and
-  says so), and a search that finds none is decided by quint alone; what
+  says so), and a search that finds none is confirmed from its proof
+  (`qtrace.LinearizeProof`, `qtrace.Proof`: every prefix it dropped as
+  rejected, every pair it merged as one state) in one quint batch; what
   the evaluator cannot evaluate is quint's. quorumkv's faithful
-  exploration took 13 s, 20 s with quint alone; its mutants' failing
-  searches cost what they did. `GOTOGETHER_EVAL=quint` turns it off.
+  exploration took 13 s, 20 s with quint alone; its contended mutants
+  62 s, 337 s. `binding.EvalModule` writes the module the evaluator
+  reads. `GOTOGETHER_EVAL=quint` turns it off. A guided linearization
+  the budget stops before its complete search begins is no verdict.
 - `qtrace.ForcedOrder`: the one order real time allows a history, when
   there is one. A linearization (and each partition of `LinearizeByKey`,
   now searched side by side) of such a history checks it without a

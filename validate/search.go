@@ -364,8 +364,8 @@ func order(ch, full *Checker, tr *qtrace.Trace, budget int, partitioned bool) ([
 		// of every account makes many such partitions)
 		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false
 	}
-	o, ok, tried, cut := qtrace.LinearizeStates(tr.Steps, budget, check)
-	o, ok, tried, cut = ev.decide(o, ok, tried, cut, quintChecker(within(ch, tr), tr, a, false), a,
+	o, ok, tried, cut, proof := qtrace.LinearizeProof(tr.Steps, budget, check)
+	o, ok, tried, cut = ev.decide(o, ok, tried, cut, proof, quintChecker(within(ch, tr), tr, a, false), a,
 		func() ([]qtrace.Step, bool, int, bool) { return qtrace.LinearizeStates(tr.Steps, budget, check) })
 	o, issue, cut := orderIssue(ch, full, tr, a, budget, partitioned, checker, ev, o, ok, tried, cut)
 	return o, ev.note(issue), cut
@@ -379,12 +379,14 @@ func within(ch *Checker, tr *qtrace.Trace) *Checker {
 }
 
 // decide is a search's conclusion as quint confirms it, when the Go
-// evaluator judged its candidates: an order found is checked by quint (a
-// disagreement searches again with quint alone, and says so); no order
-// found, or a search cut short, is decided by quint alone, since no one
-// order confirms that every order fails (the evaluator could have
-// rejected the one that conforms).
-func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, quint func([][]qtrace.Step) ([]int, []string), a string,
+// evaluator judged its candidates: an order found is checked by quint;
+// no order found, by its proof in one batch (quint rejects every prefix
+// the search dropped as rejected, and gives each pair it merged one
+// state), since no one order confirms that every order fails. A
+// disagreement searches again with quint alone, and says so. A search cut
+// short, or a proof whose states quint did not write, is decided by quint
+// alone.
+func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, proof *qtrace.Proof, quint func([][]qtrace.Step) ([]int, []string), a string,
 	again func() ([]qtrace.Step, bool, int, bool)) ([]qtrace.Step, bool, int, bool) {
 	if !ev.used {
 		return o, ok, tried, cut // quint judged every candidate
@@ -394,15 +396,67 @@ func (ev *evalUse) decide(o []qtrace.Step, ok bool, tried int, cut bool, quint f
 		if fq := first(quint([][]qtrace.Step{o})); fq >= 0 {
 			ev.off, ev.disagreed = true, true
 			ev.why = fmt.Sprintf("the Go evaluator and quint disagree on actor %s's order (quint: %s)", a, verdictOf(fq))
+			searchedAgain.Add(1)
 			return again()
 		}
 		return o, ok, tried, cut
 	}
+	if !cut && proof != nil {
+		switch confirms(proof, quint) {
+		case confirmed:
+			return o, ok, tried, cut
+		case contradicted:
+			ev.off, ev.disagreed = true, true
+			ev.why = fmt.Sprintf("quint does not confirm the Go evaluator's verdict that no order of actor %s's steps conforms", a)
+			searchedAgain.Add(1)
+			return again()
+		}
+	}
 	off := ev.off
 	ev.off = true
+	searchedAgain.Add(1)
 	o, ok, tried, cut = again()
 	ev.off = off
 	return o, ok, tried, cut
+}
+
+// A proof's confirmation by quint.
+const (
+	confirmed = iota
+	contradicted
+	unconfirmed // quint wrote no state for a merged pair
+)
+
+// confirms checks proof with quint, in one batch: every rejected prefix
+// rejected, every merged pair accepted with one state. (A tampered
+// evaluator's proof, the tests' tamperEval, is contradicted here.)
+func confirms(proof *qtrace.Proof, quint func([][]qtrace.Step) ([]int, []string)) int {
+	orders := slices.Clone(proof.Rejected)
+	for _, m := range proof.Merged {
+		orders = append(orders, m[0], m[1])
+	}
+	if len(orders) == 0 {
+		return contradicted // a verdict of no order rests on some rejection
+	}
+	fs, states := quint(orders)
+	for i := range proof.Rejected {
+		if fs[i] < 0 {
+			return contradicted
+		}
+	}
+	verdict := confirmed
+	for j := range proof.Merged {
+		x, y := len(proof.Rejected)+2*j, len(proof.Rejected)+2*j+1
+		switch {
+		case fs[x] >= 0 || fs[y] >= 0:
+			return contradicted
+		case states[x] == "" || states[y] == "":
+			verdict = unconfirmed
+		case states[x] != states[y]:
+			return contradicted
+		}
+	}
+	return verdict
 }
 
 // evalUse is how a search used the Go evaluator.
@@ -479,15 +533,19 @@ func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func
 func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, partitioned bool,
 	checker func(ch *Checker, invariants bool) func(orders [][]qtrace.Step) ([]int, []string), ev *evalUse,
 	o []qtrace.Step, ok bool, tried int, cut bool) ([]qtrace.Step, qtrace.Issue, bool) {
-	quintInv := quintChecker(within(full, tr), tr, a, true)
+	// with ITF (the invariants' searches write none): a proof's merged
+	// prefixes are confirmed by their states
+	inst := within(full, tr)
+	inst.Options.NoITF = false
+	quintInv := quintChecker(inst, tr, a, true)
 	switch {
 	case ok && len(full.Binding.Invariants) > 0 && first(quintInv([][]qtrace.Step{o})) >= 0:
 		// the order found violates an invariant (quint says, one check): another that conforms may
 		// not, and a run must not look violating by the order picked
 		inv := checker(full, true)
 		ev.used = false
-		o2, ok2, tried2, cut2 := qtrace.LinearizeStates(tr.Steps, budget, inv)
-		o2, ok2, tried2, cut2 = ev.decide(o2, ok2, tried2, cut2, quintInv, a,
+		o2, ok2, tried2, cut2, proof2 := qtrace.LinearizeProof(tr.Steps, budget, inv)
+		o2, ok2, tried2, cut2 = ev.decide(o2, ok2, tried2, cut2, proof2, quintInv, a,
 			func() ([]qtrace.Step, bool, int, bool) { return qtrace.LinearizeStates(tr.Steps, budget, inv) })
 		switch {
 		case ok2:

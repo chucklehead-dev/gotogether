@@ -40,6 +40,7 @@ type Binding struct
     field Eventually []string `yaml:"eventually"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
+    method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Generate(m *Model, t *qtrace.Trace, qntPath string) (*Generated, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
@@ -56,11 +57,21 @@ type Call struct
     field Quint string
     field Expect string
     field ExpectTemplate string
+    field ExpectArgs []string
     field Step *qtrace.Step
     field Inferred string
     field Action string
     field Args map[string]string
     field Note string
+type EvalModule struct
+    field Name string
+    field Text string
+    field Init string
+    field Consts map[string]string
+    field Actions map[string]string
+    field Expects map[string]string
+    field Invariants map[string]string
+    field Eventually map[string]string
 type Generated struct
     field Module string
     field Text string
@@ -1377,6 +1388,7 @@ func ForcedOrder(steps []Step) ([]Step, bool)
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func Key(steps []Step) string
 func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool)
+func LinearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof)
 func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool)
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
@@ -1398,6 +1410,9 @@ type Issue struct
     method (Issue) String() string
 type Keyer struct
     method (*Keyer) Step(s *Step) string
+type Proof struct
+    field Rejected [][]Step
+    field Merged [][2][]Step
 type Step struct
     field Action string
     field Seq uint64

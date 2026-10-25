@@ -411,13 +411,22 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	}
 	defer func() { tamperEval = 0 }()
 	tamperEval = 1
-	if w := search("go"); !strings.Contains(w.issues[0].Msg, "conforms") {
-		t.Errorf("an evaluator rejecting every order: %v, want quint's verdict", w.issues)
+	if w := search("go"); !strings.Contains(w.issues[0].Msg, "conforms") || !strings.Contains(w.issues[0].Msg, "does not confirm") {
+		t.Errorf("an evaluator rejecting every order: %v, want its proof contradicted and quint's verdict", w.issues)
 	}
 	tamperEval = 2
 	steps[3].Obs["balance"] = int64(99) // no order leaves 99
 	if w := search("go"); !strings.Contains(w.issues[0].Msg, "disagree") || !strings.Contains(w.issues[0].Msg, "no order") {
 		t.Errorf("an evaluator accepting every order: %v, want the disagreement said and quint's verdict", w.issues)
+	}
+	// a right verdict of no order is confirmed by its proof, in one batch:
+	// quint searches nothing again, and says what it says alone
+	tamperEval = 0
+	q = search("quint")
+	before := searchedAgain.Load()
+	g = search("go")
+	if again := searchedAgain.Load() - before; again != 0 || g.issues[0].Msg != q.issues[0].Msg || !strings.Contains(g.issues[0].Msg, "no order") {
+		t.Errorf("searched again %d times; quint: %v\nthe evaluator: %v", again, q.issues, g.issues)
 	}
 }
 

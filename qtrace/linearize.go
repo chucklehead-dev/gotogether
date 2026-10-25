@@ -89,9 +89,8 @@ const reorderWindow = 8
 //
 // It returns the order that conformed, or that got furthest, whether one
 // conformed, how many orders it checked, and whether the budget cut the
-// search short (cut: it stopped with moves left that might have got
-// further). A search that found none and was not cut stopped because no
-// move got further: the stronger evidence.
+// search short (cut: no verdict). A search that found none and was not
+// cut checked every order, the complete search's proof.
 func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (best []Step, ok bool, tried int, cut bool) {
 	return LinearizeStates(steps, budget, func(orders [][]Step) ([]int, []string) { return check(orders), nil })
 }
@@ -104,7 +103,30 @@ func Linearize(steps []Step, budget int, check func(orders [][]Step) []int) (bes
 // search): what follows them is the same, so a history whose operations
 // overlap is searched in as many prefixes as states, not orders.
 func LinearizeStates(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool) {
-	return linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load())
+	return linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load(), nil)
+}
+
+// A Proof is what a complete search's "no order" rests on: every
+// candidate it dropped as rejected, and every pair of accepted prefixes
+// it merged as one state (the second dropped). An oracle other than the
+// one that judged the search (quint, for the Go evaluator's) confirms the
+// verdict by rejecting each of Rejected and giving each of Merged's pairs
+// one state: a candidate wrongly accepted needs no confirmation, since
+// its extensions were judged in turn.
+type Proof struct {
+	Rejected [][]Step
+	Merged   [][2][]Step
+}
+
+// LinearizeProof is LinearizeStates, with the proof of a verdict of no
+// order (nil for any other).
+func LinearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
+	proof = &Proof{}
+	best, ok, tried, cut = linearize(steps, budget, check, !hooks.CompleteSearchOnly.Load(), proof)
+	if ok || cut {
+		proof = nil
+	}
+	return best, ok, tried, cut, proof
 }
 
 // constraints are steps' nodes, an order of them the hard edges allow (of
@@ -172,7 +194,7 @@ func ForcedOrder(steps []Step) ([]Step, bool) {
 
 // linearize is LinearizeStates; without guided, the complete search alone
 // (for tests of it).
-func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool) (best []Step, ok bool, tried int, cut bool) {
+func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
 	if len(steps) == 0 {
 		return nil, true, 0, false
 	}
@@ -239,7 +261,6 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 	cur := at
 	f := judge([][]int{cur})[0]
 	tried = 1
-	stopped := false // no move left, or none got further
 	for guided && f >= 0 && tried < budget {
 		var cands [][]int
 		add := func(c []int) {
@@ -288,10 +309,8 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 			}
 		}
 		if len(cands) == 0 {
-			stopped = true
-			break
+			break // no move left
 		}
-		all := len(cands)
 		if room := budget - tried; len(cands) > room {
 			cands = cands[:room]
 		}
@@ -306,12 +325,8 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 				bi, bf = i, fi
 			}
 		}
-		if bi < 0 && len(cands) == all {
-			stopped = true
-			break // no move gets further
-		}
 		if bi < 0 {
-			break // none of the moves the budget left room for got further
+			break // no move got further
 		}
 		cur, f = cands[bi], bf
 	}
@@ -330,7 +345,7 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		placed := slices.Sorted(slices.Values(o))
 		return key(placed) + "|" + st
 	}
-	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge, same); ok || n > 0 {
+	if o, ok, n, cutShort := prefixes(ns, at, mustPrecede, budget, render, judge, same, proof); ok || n > 0 {
 		tried += n
 		if ok {
 			return o, true, tried, false
@@ -344,7 +359,9 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 		}
 		return render(cur), false, tried, false
 	}
-	return render(cur), false, tried, !stopped
+	// the budget ran out before the complete search began: whatever stopped
+	// the guided search, no verdict
+	return render(cur), false, tried, true
 }
 
 // prefixes searches the orders the constraints allow level by level (Wing
@@ -357,9 +374,10 @@ func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []s
 // beam of them made five concurrent operations no verdict whatever the
 // budget, and the budget is what a user can raise.
 func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
-	judge func(orders [][]int) []int, same func([]int) string) (best []Step, ok bool, tried int, cut bool) {
+	judge func(orders [][]int) []int, same func([]int) string, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
 	n := len(ns)
 	level := [][]int{nil}
+	recorded := map[string]bool{} // rejected prefixes in the proof (candidates the memo rejects share them)
 	for k := 0; k < n && tried < budget; k++ {
 		var cands [][]int
 		for _, p := range level {
@@ -386,20 +404,28 @@ func prefixes(ns []*node, base []int, mustPrecede func(a, b int) bool, budget in
 		fs := judge(cands)
 		tried += len(cands)
 		var next [][]int
-		kept := map[string]bool{}
+		kept := map[string][]int{}
 		for i, f := range fs {
-			if f < 0 {
-				if k == n-1 {
-					return render(cands[i]), true, tried, false
+			if f >= 0 {
+				if p := cands[i][:min(f+1, len(cands[i]))]; proof != nil && !recorded[fmt.Sprint(p)] {
+					recorded[fmt.Sprint(p)] = true
+					proof.Rejected = append(proof.Rejected, render(p))
 				}
-				if s := same(cands[i]); s != "" {
-					if kept[s] {
-						continue // another prefix of these steps reached this state
-					}
-					kept[s] = true
-				}
-				next = append(next, cands[i])
+				continue
 			}
+			if k == n-1 {
+				return render(cands[i]), true, tried, false
+			}
+			if s := same(cands[i]); s != "" {
+				if first, ok := kept[s]; ok {
+					if proof != nil {
+						proof.Merged = append(proof.Merged, [2][]Step{render(first), render(cands[i])})
+					}
+					continue // another prefix of these steps reached this state
+				}
+				kept[s] = cands[i]
+			}
+			next = append(next, cands[i])
 		}
 		if len(next) == 0 {
 			return nil, false, tried, cut

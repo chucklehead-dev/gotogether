@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
@@ -115,6 +116,10 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 // every candidate at its first step, 2: it accepts every one) to show that
 // quint's confirmation catches it.
 var tamperEval int
+
+// Process-wide: how many searches the Go evaluator judged were searched
+// again by quint (a test's, to see a proof spare one).
+var searchedAgain atomic.Int64
 
 // literal is a rendered Quint literal (an argument, a constant) as a
 // value. ParseQuint reads a capitalised name as a constructor: one that is
