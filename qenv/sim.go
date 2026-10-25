@@ -589,7 +589,7 @@ func pollReal(ctx context.Context, ready func() bool, deadline time.Time) bool {
 		if !deadline.IsZero() && !time.Now().Before(deadline) { //qenv:ok the real wait's deadline
 			return false
 		}
-		select {
+		select { //qenv:ok outside a simulation: a real poll, until the context ends
 		case <-ctx.Done():
 			return ready()
 		case <-tick.C:
@@ -641,7 +641,7 @@ func (g *Signal) waitReal(ctx context.Context, deadline time.Time) bool {
 		defer tm.Stop()
 		timeout = tm.C
 	}
-	select {
+	select { //qenv:ok outside a simulation: a real wait, its notify, timeout or context
 	case <-ch:
 		return true
 	case <-timeout:
@@ -685,7 +685,7 @@ func Now(ctx context.Context) time.Time {
 func Sleep(ctx context.Context, d time.Duration) {
 	t := taskOf(ctx)
 	if t == nil {
-		select {
+		select { //qenv:ok outside a simulation, real time
 		case <-time.After(d): //qenv:ok outside a simulation, real time
 		case <-ctx.Done():
 		}

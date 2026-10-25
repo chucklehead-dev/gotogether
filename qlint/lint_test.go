@@ -123,3 +123,57 @@ func (s *st) acquire() func() {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// Lint finds math/rand's (and crypto/rand's) package functions and a
+// select of two or more cases in simulation code: neither replays. A
+// generator made from a seed, and a select of one case and a default,
+// are left alone.
+func TestLintRandAndSelect(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sim.go"), []byte(`package app
+
+import (
+	crand "crypto/rand"
+	"math/rand/v2"
+
+	"github.com/chucklehead-dev/gotogether/qenv"
+)
+
+func run(s *qenv.Sim, a, b chan int) {
+	_ = rand.IntN(3)
+	g := rand.New(rand.NewPCG(1, 2))
+	_ = g.IntN(3)
+	_, _ = crand.Read(nil)
+	select {
+	case <-a:
+	case <-b:
+	}
+	select {
+	case <-a:
+	default:
+	}
+	select { //qenv:ok only a can be ready here
+	case <-a:
+	case <-b:
+	}
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := qlint.Sim(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range fs {
+		got = append(got, f.Pos[strings.LastIndex(f.Pos, "/")+1:]+" "+f.What)
+	}
+	want := []string{
+		"sim.go:11:6 math/rand/v2.IntN draws from a source seeded at random, so a run does not replay",
+		"sim.go:14:9 crypto/rand.Read draws from a source seeded at random, so a run does not replay",
+		"sim.go:15:2 select with 2 cases: when several are ready Go picks one at random, which no run replays",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

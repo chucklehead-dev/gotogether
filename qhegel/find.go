@@ -297,7 +297,7 @@ func seedFromEnv(t testing.TB) (int64, bool) {
 	var s int64
 	if v == "random" {
 		var b [8]byte
-		_, _ = crand.Read(b[:])
+		_, _ = crand.Read(b[:]) //qenv:ok a fresh Hegel seed, logged, chosen outside any simulation
 		s = int64(binary.LittleEndian.Uint64(b[:]) >> 1)
 	} else {
 		n, err := strconv.ParseInt(v, 10, 64)

@@ -221,7 +221,7 @@ func (t *task) sleepNative(d time.Duration) {
 	} else {
 		// a sleep ends at Close too, which waits for every task
 		tm := time.NewTimer(d) //qenv:ok the native runtime sleeps in real time
-		select {
+		select {               //qenv:ok the native runtime sleeps in real time, until the sleep or Close
 		case <-tm.C:
 		case <-n.closed:
 			tm.Stop()

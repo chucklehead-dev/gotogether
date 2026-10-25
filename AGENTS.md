@@ -403,8 +403,9 @@ working there:
   logged process-wide, where every strict run running sees it. So qtest's tests run in parallel, except those that touch
   process-wide state (Setenv, a global recorder, the process-wide log):
   keep `t.Parallel()` out of those.
-  `gotogether lint -sim .` (in CI) flags `go` statements and wall-clock
-  calls in files that import qenv, tests included; `//qenv:ok` exempts a
+  `gotogether lint -sim .` (in CI) flags `go` statements, wall-clock
+  calls, math/rand's and crypto/rand's package functions and selects of
+  two or more cases in files that import qenv, tests included; `//qenv:ok` exempts a
   line (give the reason after it). The core's own simulated code (qenv, its
   internals, qload, qrole, qobs, qrun, qcover, qmut) is held to it too
   (qlint's TestCoreStaysInTheSimulation), every exemption with its reason.

@@ -55,7 +55,12 @@ func (f Finding) String() string { return f.Pos + ": " + f.What + ": " + f.Fix }
 //   - steps recorded with context.Background() or TODO(): they find their
 //     run through the goroutine (qrun), but the task's context
 //     says so directly, and keeps working if the code moves to a goroutine
-//     of its own.
+//     of its own;
+//   - math/rand's (and math/rand/v2's, crypto/rand's) package functions:
+//     their source is seeded at random, so a run does not replay (a
+//     generator from rand.New with a seed the run chose is fine);
+//   - a select with two or more communication cases: when several are
+//     ready Go picks one at random, which no chooser makes.
 //
 // A line with a //qenv:ok comment is exempt, for code that runs outside
 // the simulation on purpose (a real server next to a simulated client).
@@ -93,6 +98,22 @@ var wallClock = map[string]string{
 	"Tick": "a loop with qenv.Sleep", "NewTimer": "qenv.Sleep, or a Signal with a deadline", "NewTicker": "a loop with qenv.Sleep",
 }
 
+// importName is a package's name as its import path gives it: its last
+// segment, but for a major version's ("math/rand/v2" is rand).
+func importName(p string) string {
+	segs := strings.Split(p, "/")
+	name := segs[len(segs)-1]
+	if len(segs) > 1 && len(name) > 1 && name[0] == 'v' && strings.Trim(name[1:], "0123456789") == "" {
+		name = segs[len(segs)-2]
+	}
+	return name
+}
+
+// randConstructors are the random packages' functions that make a
+// generator from a seed given: deterministic if the seed is.
+// Read-only.
+var randConstructors = map[string]bool{"New": true, "NewSource": true, "NewPCG": true, "NewChaCha8": true, "NewZipf": true}
+
 // SimFile is Sim's check of one parsed file (with comments): nothing
 // unless the file imports qenv.
 func SimFile(fset *token.FileSet, f *ast.File) []Finding { return simFile(fset, f, false) }
@@ -103,7 +124,7 @@ func simFile(fset *token.FileSet, f *ast.File, all bool) []Finding {
 	names := map[string]string{} // import path -> local name
 	for _, im := range f.Imports {
 		p, _ := strconv.Unquote(im.Path.Value)
-		name := p[strings.LastIndex(p, "/")+1:]
+		name := importName(p)
 		if im.Name != nil {
 			name = im.Name.Name
 		}
@@ -143,7 +164,24 @@ func simFile(fset *token.FileSet, f *ast.File, all bool) []Finding {
 		switch n := n.(type) {
 		case *ast.GoStmt:
 			add(n, "goroutine started with `go`, outside the simulation", "start it with qenv.Go(ctx, name, fn)")
+		case *ast.SelectStmt:
+			cases := 0
+			for _, c := range n.Body.List {
+				if cc, ok := c.(*ast.CommClause); ok && cc.Comm != nil {
+					cases++
+				}
+			}
+			if cases >= 2 {
+				add(n, fmt.Sprintf("select with %d cases: when several are ready Go picks one at random, which no run replays", cases),
+					"wait for one thing at a time (qenv.Wait, a qenv.Signal), or mark it //qenv:ok if at most one case can be ready at once")
+			}
 		case *ast.CallExpr:
+			for _, rp := range []string{"math/rand", "math/rand/v2", "crypto/rand"} {
+				if fn, ok := sel(n.Fun, rp); ok && !randConstructors[fn] {
+					add(n, rp+"."+fn+" draws from a source seeded at random, so a run does not replay",
+						"draw from the run's chooser (Sim.Choose(kind, n)), or from rand.New with a seed the run chose")
+				}
+			}
 			if fn, ok := sel(n.Fun, "time"); ok && wallClock[fn] != "" {
 				add(n, "time."+fn+" reads the wall clock, which does not move in a simulation", "use "+wallClock[fn])
 			}

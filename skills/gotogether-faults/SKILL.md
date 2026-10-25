@@ -221,8 +221,10 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
     from any of the simulation's goroutines (its tasks, the one that
     created it), whatever context it was recorded with. From a `go`
     goroutine it has no run, and the exploration fails with the fix.
-  - Run `gotogether lint -sim .` to find `go` statements and wall-clock calls
-    (`time.Now`, `time.Sleep`) in files that import qenv, tests included
+  - Run `gotogether lint -sim .` to find `go` statements, wall-clock calls
+    (`time.Now`, `time.Sleep`), `math/rand`'s package functions (draw from
+    `Sim.Choose` instead) and selects of two or more cases (Go picks among
+    ready ones at random) in files that import qenv, tests included
     (a System's `Run` closure lives there). Mark a deliberate one
     `//qenv:ok <why>`.
 - **Other instances:** `qtest.Constants(map[string]string{"STOCK":

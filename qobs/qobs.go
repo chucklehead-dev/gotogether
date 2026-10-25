@@ -107,7 +107,7 @@ func WithID(id string) Option { return func(r *Recorder) { r.id = id } }
 // NewRecorder returns a Recorder writing to sink.
 func NewRecorder(sink Sink, opts ...Option) *Recorder {
 	var b [6]byte
-	_, _ = rand.Read(b[:])
+	_, _ = rand.Read(b[:]) //qenv:ok a recorder id, unique across processes; explorations compare runs up to renaming it
 	r := &Recorder{id: hex.EncodeToString(b[:]), sink: sink}
 	for _, o := range opts {
 		o(r)
