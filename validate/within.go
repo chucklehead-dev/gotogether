@@ -15,7 +15,7 @@ import (
 // has bounded-response obligations, which are judged on the replay's
 // states.
 func (c *Checker) withinITF(o Options) Options {
-	if len(c.Binding.Within) > 0 && c.within == nil {
+	if len(c.Binding.Within) > 0 && c.within == nil && !c.shadowed {
 		o.NoITF, o.VerdictsOnly = false, false
 	}
 	return o
@@ -33,19 +33,20 @@ func (c *Checker) withinITF(o Options) Options {
 // are the Go evaluator's to compute on quint's states: one it refuses is
 // no verdict, said as an issue.
 func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
-	if len(c.Binding.Within) == 0 || c.within != nil {
+	if len(c.Binding.Within) == 0 || c.within != nil || c.shadowed {
 		return
 	}
+	// not judged: no verdict among the invariants (a conforming run is not
+	// failed for what was not computed), a warning that says why; an
+	// exploration claiming conformance fails if no run judged them
 	none := func(why string) {
-		for _, w := range c.Binding.Within {
-			r.Invariants = append(r.Invariants, InvariantResult{Name: w.Name(), Verdict: NotEvaluated, Within: true})
-		}
-		if why != "" {
-			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "within", Msg: "bounded-response obligations not judged: " + why})
-		}
+		r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "within", Msg: "bounded-response obligations not judged: " + why})
 	}
 	if r.Conforms != Pass {
-		none("") // as invariants of a trace that does not conform
+		for _, w := range c.Binding.Within {
+			// as invariants of a trace that does not conform
+			r.Invariants = append(r.Invariants, InvariantResult{Name: w.Name(), Verdict: NotEvaluated, Within: true})
+		}
 		return
 	}
 	if r.ITF == "" {
@@ -80,16 +81,28 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 		}
 		consts[name] = v
 	}
-	// each state's time and the step that reached it
+	// each state's time (the initial state's, the first step's: the run's
+	// start is unknown) and what reached it
 	times := make([]time.Time, len(trace.States))
 	steps := make([]*qtrace.Step, len(trace.States))
+	names := make([]string, len(trace.States))
+	names[0] = "the initial state"
 	if len(tr.Steps) > 0 {
 		times[0] = tr.Steps[0].Time
 	}
 	for k, call := range r.Calls {
-		times[k+1], steps[k+1] = times[k], steps[k]
+		times[k+1] = times[k]
 		if call.Step != nil {
 			times[k+1], steps[k+1] = call.Step.Time, call.Step
+			names[k+1] = fmt.Sprintf("%s (seq %d)", call.Step.Action, call.Step.Seq)
+		} else {
+			names[k+1] = "an inferred " + call.Action
+		}
+		if times[k+1].Before(times[k]) {
+			// a linearized or Lamport-ordered trace: its order is not its
+			// times', and a duration along it means nothing
+			none(fmt.Sprintf("the steps' times go back along the order checked (%s before %s): a bound is judged on a trace in time order", names[k], names[k+1]))
+			return
 		}
 	}
 	vals := map[string][]bool{}
@@ -117,7 +130,7 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 	}
 	end := times[len(times)-1]
 	for _, w := range c.Binding.Within {
-		res := judgeRule(w, vals[w.After], vals[w.Holds], times, steps, end, tr.Settled)
+		res := judgeRule(w, vals[w.After], vals[w.Holds], times, steps, names, end, tr.Settled)
 		if res.Verdict == NotEvaluated {
 			// a run cut short has work pending by right, as for eventual vals
 			r.Issues = append(r.Issues, qtrace.Issue{Severity: "info", Kind: "within",
@@ -130,19 +143,14 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 
 // judgeRule is one obligation's verdict over the states' values of its
 // vals and their times.
-func judgeRule(w binding.Within, after, holds []bool, times []time.Time, steps []*qtrace.Step, end time.Time, settled bool) InvariantResult {
+func judgeRule(w binding.Within, after, holds []bool, times []time.Time, steps []*qtrace.Step, names []string, end time.Time, settled bool) InvariantResult {
 	res := InvariantResult{Name: w.Name(), Verdict: Pass, Within: true}
 	open := false
 	for k := range after {
 		if !after[k] || k > 0 && after[k-1] {
 			continue // no trigger here: After is false, or was true already
 		}
-		at := func(i int) string {
-			if steps[i] == nil {
-				return "the initial state"
-			}
-			return fmt.Sprintf("%s (seq %d)", steps[i].Action, steps[i].Seq)
-		}
+		at := func(i int) string { return names[i] }
 		met := -1
 		for j := k; j < len(holds); j++ {
 			if holds[j] {
@@ -155,16 +163,16 @@ func judgeRule(w binding.Within, after, holds []bool, times []time.Time, steps [
 			continue
 		case met >= 0:
 			res.Verdict = Fail
-			res.Failure = &Failure{Kind: "within", Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s held only after %s, %s later (bound %s)",
+			res.Failure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s held only after %s, %s later (bound %s)",
 				w.After, at(k), w.Holds, at(met), times[met].Sub(times[k]), w.BoundText)}
 			return res
-		case settled || end.Sub(times[k]) >= w.Bound:
+		case settled || end.Sub(times[k]) > w.Bound: // at the bound, a step of the same instant may still respond
 			res.Verdict = Fail
 			how := "the trace settled"
 			if !settled {
 				how = fmt.Sprintf("the trace went on %s", end.Sub(times[k]))
 			}
-			res.Failure = &Failure{Kind: "within", Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s never held after it (bound %s; %s)",
+			res.Failure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s never held after it (bound %s; %s)",
 				w.After, at(k), w.Holds, w.BoundText, how)}
 			return res
 		default:
@@ -183,13 +191,13 @@ func judgeRule(w binding.Within, after, holds []bool, times []time.Time, steps [
 // steps once shared a verdict). Two runs of one key get one verdict.
 func (c *Checker) Key(steps []qtrace.Step) string {
 	k := qtrace.Key(steps)
-	if len(c.Binding.Within) == 0 {
+	if len(c.Binding.Within) == 0 || len(steps) == 0 {
 		return k
 	}
 	var b strings.Builder
 	b.WriteString(k)
 	for _, s := range steps {
-		fmt.Fprintf(&b, "|%d", s.Time.UnixNano())
+		fmt.Fprintf(&b, "|%d", s.Time.Sub(steps[0].Time)) // relative: runs started at other times share a verdict
 	}
 	return b.String()
 }

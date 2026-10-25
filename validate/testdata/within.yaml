@@ -6,6 +6,8 @@ actions:
   heal: {}
   elect: {}
   tick: {}
+  depose: {}
+  recover: {}
 within:
   - after: healed
     holds: hasLeader

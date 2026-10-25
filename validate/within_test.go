@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -46,6 +47,15 @@ func TestWithin(t *testing.T) {
 		{"never, settled", settled(history("crash", 0, "heal", 1, "tick", 2)), Fail},
 		{"never, past the bound", history("crash", 0, "heal", 1, "tick", 5), Fail},
 		{"the second heal late", history("crash", 0, "heal", 1, "elect", 2, "crash", 3, "heal", 4, "elect", 9), Fail},
+		// the bound is inclusive, and a run that ends at it is not past it
+		{"at the bound", history("crash", 0, "heal", 1, "elect", 4), Pass},
+		{"cut at the bound", history("crash", 0, "heal", 1, "tick", 4), ""},
+		// a trigger is a rising edge: deposed while up opens no obligation
+		{"deposed, no heal", history("crash", 0, "heal", 1, "elect", 2, "depose", 3, "elect", 9), Pass},
+		// a response in the trigger's own state
+		{"recovered", settled(history("crash", 0, "recover", 1)), Pass},
+		// times that go back along the order: not judged
+		{"time back", settled(history("crash", 0, "heal", 10, "tick", 2)), ""},
 	} {
 		rep, err := c.Check(context.Background(), x.steps)
 		if err != nil {
@@ -67,6 +77,18 @@ func TestWithin(t *testing.T) {
 		if x.want == "" && !rep.OK() {
 			t.Errorf("%s: a run cut short fails: %s", x.name, rep.Summary())
 		}
+	}
+	// a val the evaluator does not compute: not judged, said, no failure
+	rc, err := NewChecker("testdata/within_refused.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := rc.Check(context.Background(), settled(history("crash", 0, "heal", 1, "elect", 2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.OK() || !strings.Contains(fmt.Sprint(rep.Actors[0].Issues), "bounded-response obligations not judged") {
+		t.Errorf("a refused val: %s %v", rep.Summary(), rep.Actors[0].Issues)
 	}
 	// a batch judges them as one check does
 	reps, errs := c.CheckBatch(context.Background(), [][]qtrace.Step{history("crash", 0, "heal", 1, "elect", 2), history("crash", 0, "heal", 1, "elect", 5)}, 0)

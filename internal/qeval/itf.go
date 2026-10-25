@@ -88,12 +88,16 @@ func FromITF(v itf.Value) (Value, error) {
 }
 
 // StateOf is an ITF state (quint's) as the model's State: each of its
-// variables by its name's last segment, as ITF names them.
+// variables by its qualified name, else its name's last segment, as ITF
+// names them.
 func StateOf(m *Model, st itf.State) (State, error) {
 	out := State{}
 	for _, v := range m.Vars {
 		short := v[strings.LastIndex(v, ":")+1:]
-		x, ok := st.Vars[short]
+		x, ok := st.Vars[v] // qualified, where two modules' variables share a name
+		if !ok {
+			x, ok = st.Vars[short]
+		}
 		if !ok {
 			return nil, fmt.Errorf("qeval: the ITF state has no %s", short)
 		}

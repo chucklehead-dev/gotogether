@@ -1,0 +1,12 @@
+# within.yaml with a val the Go evaluator does not compute (an infinite
+# set): its obligation is not judged, and no run fails for it
+spec: within_refused.qnt
+module: within_refused
+actions:
+  crash: {}
+  heal: {}
+  elect: {}
+within:
+  - after: healed
+    holds: led
+    bound: 3s

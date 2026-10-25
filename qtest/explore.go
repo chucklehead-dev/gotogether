@@ -801,6 +801,25 @@ func (s *searchTB) Fatalf(format string, a ...any) {
 func (s *searchTB) Fatal(a ...any) { s.Fatalf("%s", fmt.Sprint(a...)) }
 func (s *searchTB) FailNow()       { s.Fatalf("gotogether: a run's search failed") }
 
+// anyWithinJudged reports whether some run's report judged a
+// bounded-response obligation (an obligation open at a trace's end is not
+// judged, nor one whose vals were not computed).
+func anyWithinJudged(runs []*Run) bool {
+	for _, r := range runs {
+		if r == nil || r.Report == nil {
+			continue
+		}
+		for _, a := range r.Report.Actors {
+			for _, inv := range a.Invariants {
+				if inv.Within && inv.Verdict != validate.NotEvaluated {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // unjudged are the eventual vals of the binding es name that no run
 // judged (judged: the invariants the runs' reports have).
 func unjudged(es []Expectation, ch *validate.Checker, judged map[string]bool) []string {
@@ -906,6 +925,18 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		t.Fatalf("gotogether: %s: conformance claimed, and the binding's eventual vals (%s) were judged in none of %d runs: no run's trace ends with a settle. "+
 			"Call Sim.Settle at the end of Run and return its error (or qobs.Settled after a probe), or claim what the runs show: None(Settles()) alongside, for runs that are not to settle",
 			x.ref(), strings.Join(x.checker.Binding.Eventually, ", "), len(x.Runs))
+	}
+	if x.checker != nil && len(x.checker.Binding.Within) > 0 && !anyWithinJudged(x.Runs) && claimsConformance(claims) {
+		// a system that stalls in silence would pass: its obligation open,
+		// unjudged, in every run
+		var names []string
+		for _, w := range x.checker.Binding.Within {
+			names = append(names, w.Name())
+		}
+		t.Fatalf("gotogether: %s: conformance claimed, and the binding's bounded-response obligations (%s) were judged in none of %d runs: "+
+			"each ended before its bound with an obligation open, recording no settle, or its vals were not computed (the reports' issues say which). "+
+			"Call Sim.Settle at the end of Run and return its error: a settled run that never responded fails",
+			x.ref(), strings.Join(names, "; "), len(x.Runs))
 	}
 	if x.alone != nil {
 		// one run: judged only by the claims that hold of every run

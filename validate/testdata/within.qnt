@@ -9,7 +9,11 @@ module within {
   action heal = all { not(up), up' = true, leader' = leader }
   action elect = all { up, up' = up, leader' = true }
   action tick = all { up' = up, leader' = leader }
-  action step = any { crash, heal, elect, tick }
+  // the leader lost while up: no heal, so no new obligation
+  action depose = all { up, up' = up, leader' = false }
+  // healed and leading at once: the response in the trigger's own state
+  action recover = all { not(up), up' = true, leader' = true }
+  action step = any { crash, heal, elect, tick, depose, recover }
 
   val healed = up
   val hasLeader = leader

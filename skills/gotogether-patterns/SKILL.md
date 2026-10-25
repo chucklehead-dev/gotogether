@@ -119,8 +119,12 @@ or went on past the bound; a run cut short before its bound is not
 judged (an info issue says so). Claim it as reports name it:
 `qtest.Violates("within 3s after healed: hasLeader")`. Record the steps
 that make both vals change: a response the code reaches but never
-records counts as late. Its vals are computed by the Go evaluator on
-quint's states; one it cannot evaluate is no verdict, said as an issue.
+records counts as late. Settle the run (`Sim.Settle`): an exploration
+claiming conformance fails if no run judged the obligation, since a run
+that stalls in silence, unsettled, leaves it open. Its vals are computed
+by the Go evaluator on quint's states; one it cannot evaluate, or steps
+whose times go back along the order checked, is no verdict, said as an
+issue.
 
 ## 6. Spec model vs mechanism model, plus a lemma
 

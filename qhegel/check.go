@@ -2,6 +2,8 @@ package qhegel
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -183,7 +185,8 @@ func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
 	if len(cc.Checker.Binding.Within) > 0 {
 		// a bounded response is judged on the steps' times: a prefix's
 		// verdict is no extension's, and the full key needs the times
-		return "within#" + cc.Checker.Key(steps), false
+		sum := sha256.Sum256([]byte(cc.Checker.Key(steps))) // short: prefix keys copy it per step
+		return "within#" + hex.EncodeToString(sum[:]), false
 	}
 	traces, issues := qtrace.Reconstruct(steps)
 	if len(traces) != 1 || len(issues) > 0 || len(traces[0].Issues) > 0 {

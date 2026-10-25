@@ -3082,6 +3082,19 @@ which a cache keyed by the steps alone ignored: qtest's gave a slow run
 the fast one's verdict, so caches key by `Checker.Key`, with the times
 for such a binding, and qhegel does no prefix reuse for one.
 
+A review found: a run that stalls in silence, unsettled, never judged
+(the obligation open at its last step), passing every claim; a refused
+val failing a conforming run; a run ending exactly at its bound failing,
+though a step of the same instant could still respond. Now an
+exploration claiming conformance fails when no run judged an obligation
+(settle the run: a settled run that never responded fails); what is not
+judged (a refused val, no ITF, steps whose times go back along the
+order checked, as a linearized or Lamport-ordered trace's may) is no
+verdict, not a failure, with a warning; the bound is inclusive both ways.
+An obligation is judged on the order checked, so a search's choice of
+order (Linearize's) is not made for it; the initial state's trigger is
+timed at the first step (the run's start is unknown).
+
 ## 49. Hidden actions (T7e)
 
 A production trace records what its code records; some of what the
