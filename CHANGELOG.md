@@ -43,6 +43,9 @@ The first release. What a user meets, by module:
   reaching a new state) is no verdict for a step it cannot take, an
   invariant no path keeps or an eventual val no final state has: it was
   a rejection.
+- A binding's templates are parsed once per process and its functions
+  bound once per plan, not per render: raftkv's 200-operation history
+  linearized in 24 s, from 50 s (template parsing was a third of it).
 - A pending call placed by a search keeps its own process (it rendered
   `{{.process}}` as the step before it's): it infers no restart, and
   qtrace's overlap check skips it.

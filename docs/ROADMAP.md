@@ -76,7 +76,11 @@ more.
   backend; a range counting down refused; raftkv's lost snapshots. Left:
   raftkv may leave a `lead` unrecorded when a vote and a higher term
   arrive in one batch (not reproduced: drain Ready per vote response).
-- **S2. The planner's hot path (S), then measure again.** A profile of
+- **S2. The planner's hot path (S), then measure again.** First part
+  done: templates parsed once per process, functions bound once per plan
+  (raftkv's seed 1, 50 s to 24 s; now planning 28% of the CPU, the
+  evaluator's steps 19%, the garbage collector 25%). Left: the
+  incremental part below. A profile of
   raftkv's 200-operation history: 53% of the CPU in `PlanWithin`, 34% in
   template parsing per candidate, 8% in the evaluator; the "extend from a
   held state" plan targets the wrong layer. Parse once per binding,

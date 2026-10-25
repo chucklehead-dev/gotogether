@@ -182,9 +182,10 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 			return toI(v)
 		},
 	}
+	rd := newRenderer(funcs)
 	plan := &Plan{Actor: t.Actor, Processes: t.Processes, ObservedSteps: len(t.Steps), Constants: map[string]string{}}
 	for _, c := range sortedKeys(b.Constants) {
-		v, err := render(b.Constants[c], nil, funcs)
+		v, err := rd.render(b.Constants[c], nil)
 		if err != nil {
 			return nil, fmt.Errorf("constant %s: %w", c, err)
 		}
@@ -233,7 +234,7 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 		var vals []string
 		for _, p := range params {
 			tpl := ab.Template(p)
-			v, err := render(tpl, data, funcs)
+			v, err := rd.render(tpl, data)
 			if err != nil {
 				if f, ok := missingField(err); ok {
 					return nil, fmt.Errorf("step %d (%s%s): parameter %s of %s reads the step's field %q, which the step does not have (%s). "+
@@ -251,10 +252,10 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 		}
 		if ab.Expect != "" && !s.Ambiguous { // an assumed effect observed nothing
 			c.ExpectTemplate = ab.Expect
-			if parts, holes, err := splitTemplate(ab.Expect); err == nil {
+			if parts, holes, err := splitCached(ab.Expect); err == nil {
 				c.ExpectArgs = []string{} // a template of no fields has none, but has them
 				for i, h := range holes {
-					v, err := render(h, data, funcs)
+					v, err := rd.render(h, data)
 					if err != nil || !atomic(v, parts[i+1]) {
 						c.ExpectArgs = nil
 						break
@@ -262,7 +263,7 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 					c.ExpectArgs = append(c.ExpectArgs, v)
 				}
 			}
-			if c.Expect, err = render(ab.Expect, data, funcs); err != nil {
+			if c.Expect, err = rd.render(ab.Expect, data); err != nil {
 				if f, ok := missingField(err); ok {
 					return nil, fmt.Errorf("step %d (%s%s): the binding's expect for %s reads the step's field %q, which the step does not have (%s): "+
 						"record it with the step (observations as \"obs.NAME\")", i+1, s.Action, where(s), s.Action, f, hasFields(s))

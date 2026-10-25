@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/template/parse"
 )
 
@@ -145,6 +146,25 @@ func (b *Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error) {
 // is an action of the template ({{.obs.x}}, {{toList .F}}) that renders
 // one value; anything else (if, range, with, a variable) cannot be a
 // definition's parameter, and is an error.
+// split caches splitTemplate's results, process-wide: a binding's expect
+// splits the same for every call of every candidate.
+var split sync.Map // process-wide: template text -> splitResult
+
+type splitResult struct {
+	parts, holes []string
+	err          error
+}
+
+func splitCached(tpl string) (parts, holes []string, err error) {
+	if v, ok := split.Load(tpl); ok {
+		r := v.(splitResult)
+		return r.parts, r.holes, r.err
+	}
+	parts, holes, err = splitTemplate(tpl)
+	split.Store(tpl, splitResult{parts, holes, err})
+	return parts, holes, err
+}
+
 func splitTemplate(tpl string) (parts, holes []string, err error) {
 	trees, err := parse.Parse("t", tpl, "{{", "}}", map[string]any{"set": true, "toSet": true, "toList": true, "toMap": true,
 		"max": true, "count": true, "procs": true, "add": true, "atLeast": true}) // the binding's functions, by name: parse checks only that they exist

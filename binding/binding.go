@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"text/template/parse"
 	"time"
@@ -455,9 +456,61 @@ func stepData(s *qtrace.Step, args map[string]any, process int, outcome string) 
 }
 
 func render(tpl string, data any, funcs template.FuncMap) (string, error) {
-	t, err := template.New("").Option("missingkey=error").Funcs(funcs).Parse(tpl)
+	return newRenderer(funcs).render(tpl, data)
+}
+
+// funcNames are the binding's template functions, by name: a template
+// parses against them (which checks only that they exist) once, and runs
+// with each plan's own.
+var funcNames = []string{"set", "toSet", "toList", "toMap", "max", "count", "procs", "add", "atLeast"} // read-only
+
+// parsed caches each template text's parse tree, process-wide (a
+// template parses the same in every plan): parsing it for every
+// candidate a search planned was a third of a long linearization's time.
+var parsed sync.Map // process-wide: template text -> *parse.Tree (or error)
+
+func treeOf(tpl string) (*parse.Tree, error) {
+	if v, ok := parsed.Load(tpl); ok {
+		if err, bad := v.(error); bad {
+			return nil, err
+		}
+		return v.(*parse.Tree), nil
+	}
+	stubs := template.FuncMap{}
+	for _, f := range funcNames {
+		stubs[f] = func(...any) any { return nil }
+	}
+	t, err := template.New("").Funcs(stubs).Parse(tpl)
 	if err != nil {
-		return "", err
+		parsed.Store(tpl, err)
+		return nil, err
+	}
+	parsed.Store(tpl, t.Tree)
+	return t.Tree, nil
+}
+
+// A renderer renders templates with one plan's functions, bound once: a
+// template set with them, each text added to it as a parsed tree.
+type renderer struct {
+	base  *template.Template
+	named map[string]*template.Template
+}
+
+func newRenderer(funcs template.FuncMap) *renderer {
+	return &renderer{base: template.New("").Option("missingkey=error").Funcs(funcs), named: map[string]*template.Template{}}
+}
+
+func (r *renderer) render(tpl string, data any) (string, error) {
+	t := r.named[tpl]
+	if t == nil {
+		tree, err := treeOf(tpl)
+		if err != nil {
+			return "", err
+		}
+		if t, err = r.base.New(tpl).AddParseTree(tpl, tree); err != nil {
+			return "", err
+		}
+		r.named[tpl] = t
 	}
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
