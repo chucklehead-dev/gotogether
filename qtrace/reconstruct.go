@@ -241,6 +241,15 @@ func order(actor string, steps []Step) *Trace {
 		if s.Process == cur {
 			continue
 		}
+		if s.Ambiguous {
+			// a pending call's effect a search placed, in its caller's
+			// process, which did not run there: numbered, no incarnation
+			if !seenP[s.Process] {
+				seenP[s.Process] = true
+				t.Processes = append(t.Processes, s.Process)
+			}
+			continue
+		}
 		if seenP[s.Process] {
 			// an error, not a warning: replayed, the old incarnation's
 			// step is a third boot of the process, and the run passed

@@ -759,6 +759,9 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 			// without ConfirmByCheck quint confirms in the search
 			if s, err := c.Search(x.steps, opt); err != nil || !check(s).OK() {
 				t.Errorf("confirmed in the search: err %v, report %s", err, check(s).Summary())
+			} else if opt.ResolvePending && !strings.Contains(fmt.Sprint(s.issues), "disagree") {
+				// quint's batch decided: said, not silent
+				t.Errorf("a resolution quint rejected, decided by quint in silence: %v", s.issues)
 			}
 			opt.ConfirmByCheck = true
 			s, err := c.Search(x.steps, opt)

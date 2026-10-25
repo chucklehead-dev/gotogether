@@ -153,3 +153,15 @@ func TestOrderDependentFoldRefused(t *testing.T) {
 		t.Errorf("a fold into a list: %v, want Unsupported", err)
 	}
 }
+
+// A range that counts down is refused: quint's Rust backend makes it
+// empty, its TypeScript one counts down (a probe found the evaluator on
+// Rust's side, which a TypeScript batch confirming it would contradict).
+func TestRangeDownRefused(t *testing.T) {
+	m := compile(t, "edges.qnt", "edges", "init", "step")
+	if _, err := m.Eval(nil, nil, "rangeDown"); err == nil {
+		t.Errorf("range(5, 2): no error, want Unsupported")
+	} else if _, ok := err.(*Unsupported); !ok {
+		t.Errorf("range(5, 2): %v, want Unsupported", err)
+	}
+}

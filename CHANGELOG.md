@@ -43,6 +43,16 @@ The first release. What a user meets, by module:
   reaching a new state) is no verdict for a step it cannot take, an
   invariant no path keeps or an eventual val no final state has: it was
   a rejection.
+- A pending call placed by a search keeps its own process (it rendered
+  `{{.process}}` as the step before it's): it infers no restart, and
+  qtrace's overlap check skips it.
+- `within` judges calls recorded with their invocations on their
+  intervals: in time only if every placement of the two effects is, late
+  only if every one is, else no verdict (it judged completions alone).
+- ResolvePending says when quint rejects the evaluator's resolution (it
+  fell back in silence).
+- `Checker.Key` holds the evaluator's mode and quint's backend.
+- The evaluator refuses `range(a, b)` with a > b: quint's backends differ.
 - A run's marked report copies its invariants: `Search.Mark` once wrote
   n/a into the shared verdict cache's, for every later run of the same
   steps.

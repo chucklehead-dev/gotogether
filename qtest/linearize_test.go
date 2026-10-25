@@ -356,3 +356,26 @@ func TestLinearizeResolvesPendingCalls(t *testing.T) {
 	}
 	Validate(t, regs, history(9), Linearize(), ResolvePending()).Expect(t, Mismatch("read"))
 }
+
+// A pending call placed by a search renders as its caller's process: A
+// writes and crashes, its write lands late, after B's first look. It was
+// rendered in the process of the step before it (B's), a write tagged 2,
+// and no placement conformed.
+func TestPendingCallKeepsItsProcess(t *testing.T) {
+	RequireQuint(t)
+	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
+	look := func(proc string, seq uint64, u int, n int64, has1 bool) qtrace.Step {
+		return qtrace.Step{Action: "look", Recorder: "r", Process: proc, Seq: seq, Thread: "r", Time: at(u), Obs: map[string]any{"n": n, "has1": has1}}
+	}
+	steps := []qtrace.Step{
+		look("A", 1, 0, 0, false),
+		{Action: "write", Recorder: "r", Process: "A", Seq: 2, Thread: "r", Invocation: true, Time: at(1)},
+		look("B", 3, 5, 0, false),
+		look("B", 4, 9, 1, true),
+	}
+	for name, opts := range map[string][]Option{"resolve": {ResolvePending()}, "linearize and resolve": {Linearize(), ResolvePending()}} {
+		if r := Validate(t, "testdata/tagged.yaml", steps, opts...); !r.Report.OK() {
+			t.Errorf("%s: a late write of A's, placed between B's looks, does not conform:\n%s", name, r.Report.Summary())
+		}
+	}
+}

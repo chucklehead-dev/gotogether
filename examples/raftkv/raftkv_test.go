@@ -42,6 +42,21 @@ func TestFaithful(t *testing.T) {
 	system(Config{}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 }
 
+// A snapshot lost on the way (a call that failed, or one delivered to a
+// node that crashed before it stepped it) leaves raft waiting for it
+// forever: the leader pauses the peer until it is told the snapshot
+// failed. The first version never told it, and 2 of these 40 runs never
+// converged (a review found it); the node reports failed sends and
+// retries a snapshot left unacknowledged.
+func TestLostSnapshots(t *testing.T) {
+	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("explores 40 runs with compaction under one message fault in ten")
+	}
+	system(Config{Ops: 12}).WithRates(faulty.Set("rpc", 0.1)).Explore(t, qtest.ExploreConfig{Seeds: 40}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
+}
+
 // Through the same faults, no two nodes lead one term, and the settled
 // cluster has a leader.
 func TestClusterFaithful(t *testing.T) {
@@ -50,7 +65,7 @@ func TestClusterFaithful(t *testing.T) {
 }
 
 // A client that gives up after five attempts leaves its call pending: its
-// effect is unknown, and a transfer whose answer was lost took effect.
+// effect is unknown (a transfer whose answer was lost took effect).
 // Linearize alone places no pending call, and the reads and the probe
 // after the settle contradict an order without it; with ResolvePending
 // placing each (or none) every run conforms. A client that retries under
@@ -67,7 +82,7 @@ func TestPendingTransfers(t *testing.T) {
 	both := []qtest.Option{qtest.Linearize(), qtest.ResolvePending()}
 	x := qtest.ExploreConfig{Seeds: 12}
 	system(cfg, both...).WithRates(lossy).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Some(qtest.Pending("transfer")))
-	// 16 runs in 40
+	// 3 runs in 12
 	system(cfg).WithRates(lossy).Explore(t, x).Expect(t, broken)
 	cfg.Mutation = NoRequestID
 	system(cfg, both...).WithRates(lossy).Explore(t, x).Expect(t, broken)
@@ -205,7 +220,7 @@ func TestUnpersistedVote(t *testing.T) {
 	x := qtest.ExploreConfig{Seeds: 30}
 	system(cfg).WithRates(rates).Explore(t, x).
 		Expect(t, qtest.None(qtest.Violates("electionSafety")), qtest.None(qtest.AnyOf(qtest.Rejects("lead"), qtest.Rejects("stepDown"))))
-	// 4 runs in 30 (49 seeds miss it one time in a thousand)
+	// 5 runs in 50 (4 in 30 at first: 49 seeds miss it one time in a thousand)
 	cfg.Mutation = NoPersistVote
 	system(cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 50}).Expect(t, qtest.Some(qtest.Violates("electionSafety")))
 }

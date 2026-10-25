@@ -698,7 +698,13 @@ func withProcess(ch *Checker, state string, order []qtrace.Step) string {
 	}
 	state += "|processes=" + strings.Join(procs, ",")
 	if ch.Binding.Restart != "" {
-		state += "|process=" + order[len(order)-1].Process
+		// the last observed step's: a placed pending call infers no restart
+		for i := len(order) - 1; i >= 0; i-- {
+			if !order[i].Ambiguous {
+				state += "|process=" + order[i].Process
+				break
+			}
+		}
 	}
 	return state
 }
@@ -1133,15 +1139,9 @@ func apply(tr *qtrace.Trace, pl placement) []qtrace.Step {
 		for i, p := range tr.Pending {
 			if pl[i] == pos {
 				s := p
+				// in its own process ({{.process}} is its caller's), which
+				// infers no restart: the binding skips an assumed step's
 				s.Invocation, s.Ambiguous, s.Outcome, s.Obs, s.Order = false, true, "", nil, nil
-				// in the process of the step it follows (the first's, at the
-				// start): its effect landed there, and a process of its own
-				// between them would read as two restarts
-				if pos > 0 {
-					s.Process = tr.Steps[pos-1].Process
-				} else if len(tr.Steps) > 0 {
-					s.Process = tr.Steps[0].Process
-				}
 				out = append(out, s)
 			}
 		}
@@ -1197,6 +1197,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	// it rejected before it (or by the caller's check); none, or a
 	// refusal, and quint checks them all, as a verdict of none needs every
 	// one rejected
+	disagreed := ""
 	if i, ok := resolveEval(ch).first(ch, tr, a, orders); ok {
 		found := func() ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
@@ -1216,7 +1217,11 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 		if agrees {
 			return found()
 		}
-		// quint rejects it: its batch decides, as without the evaluator
+		// quint rejects it: its batch decides, as without the evaluator,
+		// and the issue says so, as the order's search does (it once fell
+		// back in silence, an evaluator bug unseen outside shadow mode)
+		searchedAgain.Add(1)
+		disagreed = fmt.Sprintf("; the Go evaluator and quint disagree on actor %s's resolutions: decided by quint (GOTOGETHER_EVAL=quint checks with quint alone)", a)
 	}
 	reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
 	best, bestAt := 0, -2
@@ -1232,8 +1237,12 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 		}
 		at := failedAt(reps[i], len(orders[i]))
 		if at < 0 {
-			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
-				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note}, false, nil
+			sev := "info"
+			if disagreed != "" {
+				sev = "warn"
+			}
+			return apply(tr, pls[i]), qtrace.Issue{Severity: sev, Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
+				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note + disagreed}, false, nil
 		}
 		if at > bestAt {
 			best, bestAt = i, at
@@ -1244,10 +1253,10 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	}
 	if cut {
 		return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conformed in the %d of the budget: "+
-			"no verdict (conformance n/a); the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note}, true, nil
+			"no verdict (conformance n/a); the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}, true, nil
 	}
 	return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conforms (%d tried): "+
-		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note}, false, nil
+		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}, false, nil
 }
 
 // resolveEval is how a resolution uses the Go evaluator.

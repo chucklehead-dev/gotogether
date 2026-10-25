@@ -1026,6 +1026,11 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		return List(slices.Clone(l[s:t]))
 	case "range":
 		lo, hi := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
+		if lo > hi {
+			// quint's backends differ: Rust's is empty, TypeScript's counts
+			// down ([5, 4, 3] for range(5, 2)); quint, whichever backend runs
+			throw(unsupported(op, "range(%d, %d) counts down in quint's TypeScript backend and is empty in its Rust one", lo, hi))
+		}
 		if hi > lo && (hi-lo > maxSet || hi-lo < 0) {
 			throw(unsupported(op, "more than %d values", maxSet))
 		}

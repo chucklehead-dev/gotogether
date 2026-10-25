@@ -3,13 +3,16 @@ package raftkv
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"go.etcd.io/raft/v3"
 	pb "go.etcd.io/raft/v3/raftpb"
+	"go.etcd.io/raft/v3/tracker"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -78,10 +81,15 @@ type incarnation struct {
 	inbox      []*pb.Message
 	props      [][]byte
 	transferTo uint64 // a leadership transfer the loop is to start (raft's ID)
-	reads      [][]byte
-	readIndex  map[uint64]uint64 // a read's id to the index it must see applied
-	nextRead   uint64
-	outbox     [][]*pb.Message // by peer index
+	// failed are the peers (raft's IDs) a send to failed, and whether the
+	// batch held a snapshot: the loop reports them to raft, which otherwise
+	// waits on a lost snapshot forever (its progress paused)
+	failed    []sendFailure
+	snapWait  map[uint64]int // a peer's ticks in StateSnapshot, the leader's
+	reads     [][]byte
+	readIndex map[uint64]uint64 // a read's id to the index it must see applied
+	nextRead  uint64
+	outbox    [][]*pb.Message // by peer index
 
 	state       raft.StateType
 	lead        uint64
@@ -92,7 +100,12 @@ type incarnation struct {
 }
 
 func (inc *incarnation) work() bool {
-	return len(inc.inbox) > 0 || len(inc.props) > 0 || len(inc.reads) > 0 || inc.transferTo != 0
+	return len(inc.inbox) > 0 || len(inc.props) > 0 || len(inc.reads) > 0 || inc.transferTo != 0 || len(inc.failed) > 0
+}
+
+type sendFailure struct {
+	to   uint64
+	snap bool
 }
 
 // writeVersion is the format this node writes: v1 until the cluster has
@@ -200,6 +213,7 @@ func (n *Node) loop(ctx context.Context, inc *incarnation) {
 				next = now + Tick
 			}
 			n.proposeVersion(ctx, inc)
+			n.retrySnapshots(inc)
 		}
 		inbox, props, reads := inc.inbox, inc.props, inc.reads
 		inc.inbox, inc.props, inc.reads = nil, nil, nil
@@ -216,6 +230,13 @@ func (n *Node) loop(ctx context.Context, inc *incarnation) {
 			inc.rn.TransferLeader(inc.transferTo)
 			inc.transferTo = 0
 		}
+		for _, f := range inc.failed {
+			inc.rn.ReportUnreachable(f.to)
+			if f.snap {
+				inc.rn.ReportSnapshot(f.to, raft.SnapshotFailure)
+			}
+		}
+		inc.failed = nil
 		for inc.rn.HasReady() {
 			n.ready(ctx, inc, inc.rn.Ready())
 		}
@@ -300,6 +321,35 @@ func (n *Node) proposeVersion(ctx context.Context, inc *incarnation) {
 	}
 }
 
+// retrySnapshots reports a snapshot failed when a peer has waited for one
+// for two election timeouts: a snapshot can be lost after its call
+// succeeded (in the peer's inbox when it crashed), and raft resends one
+// only after a failure is reported.
+func (n *Node) retrySnapshots(inc *incarnation) {
+	if inc.state != raft.StateLeader {
+		inc.snapWait = nil
+		return
+	}
+	if inc.snapWait == nil {
+		inc.snapWait = map[uint64]int{}
+	}
+	var stuck []uint64
+	inc.rn.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
+		if pr.State != tracker.StateSnapshot {
+			delete(inc.snapWait, id)
+			return
+		}
+		if inc.snapWait[id]++; inc.snapWait[id] > 2*ElectionTicks {
+			stuck = append(stuck, id)
+		}
+	})
+	slices.Sort(stuck) // WithProgress visits a map
+	for _, id := range stuck {
+		delete(inc.snapWait, id)
+		inc.rn.ReportSnapshot(id, raft.SnapshotFailure)
+	}
+}
+
 // send delivers the node's messages to one peer, a batch per call; a
 // call that fails loses its batch, which raft tolerates.
 func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
@@ -316,7 +366,10 @@ func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
 			env.Msgs = append(env.Msgs, b)
 		}
 		qenv.Sleep(ctx, Latency)
-		_, _ = peer.Raft.Call(ctx, env, RPCTimeout)
+		if _, err := peer.Raft.Call(ctx, env, RPCTimeout); err != nil {
+			snap := slices.ContainsFunc(msgs, func(m *pb.Message) bool { return m.GetType() == pb.MessageType_MsgSnap })
+			inc.failed = append(inc.failed, sendFailure{to: uint64(to + 1), snap: snap})
+		}
 	}
 }
 
@@ -324,7 +377,7 @@ func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
 func (n *Node) receive(ctx context.Context, env Envelope) (struct{}, error) {
 	inc := n.inc
 	if inc == nil {
-		return struct{}{}, nil
+		return struct{}{}, errDown // booting: refused, as a node not yet listening does
 	}
 	inc.peerVersion[env.From] = max(inc.peerVersion[env.From], env.Version)
 	for _, b := range env.Msgs {
@@ -371,6 +424,8 @@ func (n *Node) serve(ctx context.Context, req Request) (Response, error) {
 	}
 	return Response{Result: inc.sm.Sessions[op.Client].Result}, nil
 }
+
+var errDown = errors.New("raftkv: node not up")
 
 func must(err error) {
 	if err != nil {

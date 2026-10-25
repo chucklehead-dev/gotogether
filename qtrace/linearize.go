@@ -289,15 +289,9 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 				s = ns[k].s
 			} else {
 				s = pending[k-n]
+				// in its own process ({{.process}} is its caller's): the
+				// binding infers no restart around an assumed step
 				s.Invocation, s.Ambiguous, s.Outcome, s.Obs, s.Order = false, true, "", nil, nil
-				// in the process of the step it follows (at the start, the
-				// first step's in the hard edges' order, as in a prefix as in
-				// its extensions): a process of its own would read as restarts
-				if i > 0 {
-					s.Process = out[i-1].Process
-				} else {
-					s.Process = ns[at[0]].s.Process
-				}
 			}
 			s.Recorder, s.Thread, s.Seq, s.Actor = "linearized:"+actor, "linearized", uint64(i+1), actor
 			s.Call = 0

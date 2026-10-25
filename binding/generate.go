@@ -195,13 +195,19 @@ func (b *Binding) PlanWithin(m *Model, t, whole *qtrace.Trace) (*Plan, error) {
 	prevProc := ""
 	for i := range t.Steps {
 		s := &t.Steps[i]
-		if prevProc != "" && s.Process != prevProc && b.Restart != "" {
+		switch {
+		case s.Ambiguous:
+			// a pending call's effect, placed by a search: in its caller's
+			// process, which did not run there; it infers no restart
+		case prevProc != "" && s.Process != prevProc && b.Restart != "":
 			plan.Calls = append(plan.Calls, Call{Quint: b.Restart, Action: b.Restart, Args: map[string]string{},
 				Inferred: fmt.Sprintf("restart: process %s -> %s", short(prevProc), short(s.Process))})
-		} else if prevProc != "" && s.Process != prevProc {
+		case prevProc != "" && s.Process != prevProc:
 			return nil, fmt.Errorf("step %d (%s): process changed from %s to %s and the binding has no restart action", i, s.Action, prevProc, s.Process)
 		}
-		prevProc = s.Process
+		if !s.Ambiguous {
+			prevProc = s.Process
+		}
 		ab := b.Actions[s.Action]
 		var params []Param
 		if m != nil {

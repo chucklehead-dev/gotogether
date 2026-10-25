@@ -42,14 +42,15 @@ its own, recorded at each node after its hard state is persisted.
 
 | test | mutant | check | verdict |
 |---|---|---|---|
-| `TestFaithful` | none | 10 seeds, one message fault in twenty, a node crash about every second; linearized | every run conforms, settles and completes every call |
+| `TestFaithful` | none | 10 seeds, one message fault in twenty, a node crash about every second; linearized | every run conforms, settles and completes every call, and every node converges |
 | `TestClusterFaithful` | none | the same faults, the cluster's history | no term has two leaders; the settled cluster has one |
 | `TestElectionAfterHeal` | `SlowElection`: an election timeout ten times as long | every node cut off from the others for 2.5 s, then healed; no other fault | the faithful cluster elects within 300 ms of the heal in every run. The mutant still elects (its `eventually hasLeader` holds), but too late: every run violates `within 300ms after healed: hasLeader` |
-| `TestPendingTransfers` | none, then `NoRequestID`: a retry is a new request | clients give up after five attempts at one message fault in ten | with `Linearize` and `ResolvePending` every run conforms (9 calls left pending in 12 runs). `Linearize` alone takes a pending call as having no effect: 16 of 40 runs fail (on a read, a cas, or `converged`). `NoRequestID` applies a retried transfer twice, which no placement explains: 4 of 12 fail |
+| `TestPendingTransfers` | none, then `NoRequestID`: a retry is a new request | clients give up after five attempts at one message fault in ten | with `Linearize` and `ResolvePending` every run conforms (8 of the 12 leave calls pending). `Linearize` alone takes a pending call as having no effect: 3 of 12 runs fail (on a read or `converged`). `NoRequestID` applies a retried transfer twice, which no placement explains: 6 of 12 fail |
 | `TestLeaseRead` | `LeaseRead`: reads answered on the leader's lease (`ReadOnlyLeaseBased`) | the leadership moved to n1, then n1 cut off for 400 ms; `Exhaust` over every combination of the three clocks' drifts (none, fast, slow at 0.8), 27 runs | the faithful leader (`ReadOnlySafe`) conforms in all 27; the mutant reads stale in 3 |
 | `TestRollingUpgrade` | `EagerV2`: v2 code writes the v2 log format at once | nodes upgraded one every 500 ms while clients write; a full rollout, and one paused after two nodes | the faithful cluster conforms in both and ends on the v2 log after the full one. The mutant, paused, leaves the v1 node skipping entries it cannot read: 8 of 20 runs violate `converged` |
-| `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 4 of 50 mutant runs do |
-| `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, about 20 s a history |
+| `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 5 of 50 mutant runs do |
+| `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
+| `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
 ## What the runs taught
 
@@ -71,6 +72,14 @@ repairs the state. A test of the full rollout as first written caught it
 in 1 run of 32, and later in none (only when the skipped entries were
 compacted into a snapshot before the upgrade). A rollout paused after two
 nodes, as one pauses to watch a canary, catches it in 8 of 20.
+
+**Raft waits for a lost snapshot forever unless told.** A node far
+behind gets a snapshot; when it is lost (a failed call, or delivered to a
+node that crashed before stepping it), the leader pauses that peer until
+the application reports the snapshot failed (`ReportSnapshot`). The
+first version reported nothing, and a review found 2 runs in 40 whose
+follower never caught up: only the probe's `converged` after the settle
+showed it.
 
 **Two faults in the toolkit, found by this example.** A wait timed on
 a drifting clock was rounded down to no time at all, so raft's tick loop

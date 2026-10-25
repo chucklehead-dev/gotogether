@@ -1,0 +1,9 @@
+# a write tagged with its caller's process number
+spec: tagged.qnt
+module: tagged
+restart: restart
+actions:
+  write:
+    args: { p: '"{{.process}}"' }
+  look:
+    expect: 'writes.size() == {{.obs.n}} and writes.contains("1") == {{.obs.has1}}'
