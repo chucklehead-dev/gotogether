@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,5 +69,60 @@ func TestUpgradesRollOutOnceAndReplay(t *testing.T) {
 	again, _, _ := upgraded(t, qenv.Replay(rec.Choices))
 	if !reflect.DeepEqual(log, again) {
 		t.Errorf("replayed %v, ran %v", again, log)
+	}
+}
+
+// An upgrade's new code is in place before its crash: a supervisor that
+// restarts the process from OnCrash boots v2 (it once rebooted v1, the
+// upgrade doing nothing, an exploration never mixing versions).
+func TestUpgradeUnderASupervisor(t *testing.T) {
+	var booted []string
+	s := qenv.New(&qenv.Script{Faults: []qenv.Scripted{{Kind: "nemesis.upgrade.a", After: 1}}, Progress: func() int { return len(booted) }})
+	defer s.Close()
+	node := func(v string) func(ctx context.Context) {
+		return func(ctx context.Context) {
+			booted = append(booted, v)
+			qenv.Sleep(ctx, 5*time.Second)
+		}
+	}
+	a := s.Process("a", false, node("v1"))
+	s.OnCrash(func(p *qenv.Process) { p.Restart() })
+	s.Upgrades("v2", node("v2"), a)
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if a.Version != "v2" || !reflect.DeepEqual(booted, []string{"v1", "v2"}) {
+		t.Errorf("version %q, booted %v: want v1 then v2", a.Version, booted)
+	}
+}
+
+// A process cannot upgrade itself, and a second rollout of one process is
+// refused: each panics with the fix, where they once failed silently (a
+// process down for good; two nemeses undoing each other).
+func TestUpgradeRefusals(t *testing.T) {
+	panics := func(f func()) (msg string) {
+		defer func() { msg = fmt.Sprint(recover()) }()
+		f()
+		return ""
+	}
+	s := qenv.New(qenv.NewSeeded(1))
+	a := s.Process("a", false, func(ctx context.Context) {})
+	s.Upgrades("v2", func(ctx context.Context) {}, a)
+	if msg := panics(func() { s.Upgrades("v3", func(ctx context.Context) {}, a) }); !strings.Contains(msg, "a second rollout of a") {
+		t.Errorf("a second rollout: %q", msg)
+	}
+	s.Close()
+
+	s = qenv.New(qenv.NewSeeded(1))
+	defer s.Close()
+	var msg string
+	b := s.Process("b", false, func(ctx context.Context) {
+		msg = panics(func() { qenv.ProcessOf(ctx).Upgrade("v2", func(ctx context.Context) {}) })
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(msg, "b upgrades itself") || b.Down() {
+		t.Errorf("a self-upgrade: %q, down %v", msg, b.Down())
 	}
 }

@@ -827,24 +827,38 @@ func (p *Process) Restart() {
 // RestartAs boots a crashed process as a new incarnation running start,
 // as version: an upgrade (or a rollback) of its code. What the new code
 // reads of the old's is what the durable components hold, as for a
-// Restart; the same model judges every version.
+// Restart; the same model judges every version. A process that is up is
+// left as it is.
 func (p *Process) RestartAs(version string, start func(ctx context.Context)) {
 	if !p.down {
 		return
 	}
+	p.as(version, start)
+	p.Restart()
+}
+
+// as makes start, as version, what the process runs from its next boot.
+func (p *Process) as(version string, start func(ctx context.Context)) {
 	p.start, p.Version = start, version
 	if p.sim.Log != nil {
 		p.sim.Log(fmt.Sprintf("%v upgrade %s to %q", p.sim.Elapsed(), p.Name, version))
 	}
-	p.Restart()
 }
 
 // Upgrade crashes the process and restarts it as version, running start:
-// one step of a rolling upgrade, made where a test wants it. Call it from
-// another process's task (a task of the process stops in its Crash).
+// one step of a rolling upgrade, made where a test wants it. The new code
+// is in place before the crash, so a supervisor that restarts the process
+// from an OnCrash hook boots it. A process that is down is restarted as
+// version. A task of the process cannot upgrade it (it stops in its own
+// crash): Upgrade panics there with the fix.
 func (p *Process) Upgrade(version string, start func(ctx context.Context)) {
+	if t := taskOf(nil); t != nil && t.proc == p && t.sim == p.sim {
+		panic(fmt.Sprintf("qenv: %s upgrades itself: a task of a process stops in its own crash, before it could restart; "+
+			"upgrade it from another process's task (a supervisor's), or register the rollout with Sim.Upgrades", p.Name))
+	}
+	p.as(version, start)
 	p.Crash()
-	p.RestartAs(version, start)
+	p.Restart() // unless a hook did
 }
 
 // Upgrades registers a rolling upgrade to version as nemeses, one per
@@ -858,6 +872,13 @@ func (p *Process) Upgrade(version string, start func(ctx context.Context)) {
 // before it settles.
 func (s *Sim) Upgrades(version string, start func(ctx context.Context), procs ...*Process) {
 	for _, p := range procs {
+		for _, n := range s.nemeses {
+			if n.name == "upgrade."+p.Name {
+				// two would undo each other, and no Script or recorded choice
+				// could tell them apart
+				panic(fmt.Sprintf("qenv: a second rollout of %s (to %q): one rollout a process a run; for v2 then v3, call Process.Upgrade where the test wants each", p.Name, version))
+			}
+		}
 		s.nemesisOf("upgrade."+p.Name, []*Process{p}, func() bool { return !p.down && p.Version != version },
 			func() { p.Upgrade(version, start) })
 	}

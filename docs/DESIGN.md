@@ -3056,5 +3056,10 @@ every point), Swarm and Without turn it off, and a run's choices replay
 it. A process need not be crashable to be upgraded: crashability is the
 crash nemesis's. Faults stay off after a settle, so a rollout a test
 needs finished calls `Process.Upgrade` itself. The same model judges
-every version; code that differs reads `ProcessOf(ctx).Version`.
+every version; code that differs reads `ProcessOf(ctx).Version`. A
+review found an upgrade doing nothing under a supervisor that restarts
+from an OnCrash hook (it rebooted the old code first): the new code is
+in place before the crash now. A process upgrading itself, and a second
+rollout of one process (two nemeses of one name undoing each other),
+panic with the fix.
 
