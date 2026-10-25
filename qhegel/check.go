@@ -33,7 +33,9 @@ type verdict struct {
 //     the same way: those verdicts depend only on that prefix.
 //
 // Prefix reuse is limited to runs of one actor with no domain clocks
-// (quint.order.*), whose reconstructed order is the recording order.
+// (quint.order.*), whose reconstructed order is the recording order, and
+// to bindings with no bounded-response obligation (Within), whose
+// verdicts depend on the steps' times.
 type caseChecker struct {
 	Checker *validate.Checker
 
@@ -178,6 +180,11 @@ func (cc *caseChecker) Prefetch(ctx context.Context, runs [][]qtrace.Step) ([]ve
 // constants renders the run's instance constants (they may depend on the
 // whole run) and says whether prefix reuse is sound for it.
 func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
+	if len(cc.Checker.Binding.Within) > 0 {
+		// a bounded response is judged on the steps' times: a prefix's
+		// verdict is no extension's, and the full key needs the times
+		return "within#" + cc.Checker.Key(steps), false
+	}
 	traces, issues := qtrace.Reconstruct(steps)
 	if len(traces) != 1 || len(issues) > 0 || len(traces[0].Issues) > 0 {
 		return "", false

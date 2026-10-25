@@ -265,7 +265,7 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		case Each:
 			checkCase(ht, cc, steps)
 		case After:
-			key := qtrace.Key(steps)
+			key := runKey(checker, steps)
 			mu.Lock()
 			if !seen[key] {
 				seen[key] = true
@@ -357,7 +357,7 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 		seen := map[string]bool{}
 		hegel.Test(t, func(ht *hegel.T) {
 			steps := record(ht)
-			key := qtrace.Key(steps)
+			key := runKey(c, steps)
 			mu.Lock()
 			defer mu.Unlock()
 			if !seen[key] {
@@ -406,3 +406,14 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 	t.Logf("qhegel: %d distinct runs in bulk, all satisfy the model (~%d quint processes, %d verdicts from the cache, %v)",
 		total, q, hits, time.Since(start).Round(time.Millisecond)) //qenv:ok reported real time
 }
+
+// runKey is a run's key among a round's runs: two of one key are one
+// check (the checker's Key, with the steps' times for a binding they
+// matter to).
+func runKey(c *validate.Checker, steps []qtrace.Step) string {
+	if c == nil {
+		return qtrace.Key(steps)
+	}
+	return c.Key(steps)
+}
+
