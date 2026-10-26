@@ -134,7 +134,7 @@ type task struct {
 	state     atomic.Int64    // running or parked, and its wakes (wake, handBack): the watchdog's view
 	wakes     int64           // its wakes so far (the scheduler's)
 	back      chan struct{}   // it hands control back to the scheduler (its own: a hung task's late hand-back reaches no other wait)
-	gid       int64           // its goroutine's id, for the stack the watchdog reports (Hang)
+	gid       atomic.Int64    // its goroutine's id, for the stack the watchdog reports (Hang), from the watchdog's goroutine
 	ctx       context.Context // its context (Current)
 	waiting   bool            // parked until ready, a signal, or deadline
 	ready     func() bool     // the predicate waited for, if any
@@ -400,7 +400,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 	s.enqueue(t)
 	go func() { //qenv:ok the task's goroutine, which the scheduler runs one at a time
 		id := goid()
-		t.gid = id // before the first wake: the scheduler reads it only after waking it
+		t.gid.Store(id)
 		own(id, s, t)
 		defer disown(id, s)
 		<-t.wake
@@ -1529,7 +1529,7 @@ func (s *Sim) watch() (stop func()) {
 				if now.Sub(since) < s.Hang {
 					continue
 				}
-				stack := goroutineStack(t.gid) // while it is blocked where it hangs
+				stack := goroutineStack(t.gid.Load()) // while it is blocked where it hangs
 				if !t.state.CompareAndSwap(v, v&^taskStatus|taskAbandoned) {
 					continue // it handed back meanwhile
 				}
