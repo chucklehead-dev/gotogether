@@ -1614,6 +1614,12 @@ Five reviews after T, their findings ROADMAP's S track:
   adapters), a real-deployment nemesis and a per-PR tier are what a team
   shipping a Go service misses most.
 
+### S11: partial logs
+
+Planned by a design review (a lost head is §49's search from another
+first frontier), built in two stages, each reviewed: DESIGN §50. The
+first review's six bugs, three of them wrong verdicts, are listed there.
+
 ### The T track as it closed
 
 ROADMAP's T section when its last item (T8) was done, moved here whole;

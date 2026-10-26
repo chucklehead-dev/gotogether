@@ -42,10 +42,9 @@ green suite proves (X)"). What it left:
   - **Left.** The services' contracts; the history checker public, for a
     real database tier's recorded transactions.
 
-Deferred: online streaming verification (resuming quint from a checkpoint
-is unsound for nondeterministic models; `gotogether validate -follow` over
-rolling windows from `init` if wanted), differential runs (the model is
-already the common oracle), DPOR.
+Deferred: differential runs (the model is already the common oracle),
+DPOR. Online validation is decided (DESIGN §50: windows judged as logs
+that lost their head).
 
 ## Left from Y
 
@@ -159,10 +158,15 @@ more.
   5% of the time by its exploration's own rate, stated in the test's doc
   comment; the full tests run nightly over fresh seeds. ci/test-times.txt
   holds the -short times.
-- **S11. Partial logs (M), then online validation decided.** A trace
-  whose recorders lost a prefix or a suffix judged as a search from a
-  set of states; `-follow` decided in one place (it is deferred below
-  and open in T7e's leftovers).
+- **S11. Partial logs (M), then online validation decided. Done**
+  (DESIGN §50): a lost tail leaves later failures, eventual vals and
+  pending calls unjudged; a lost head starts from a `snapshot:` step or
+  the states a `resume:` action admits (searched by the evaluator, quint
+  confirming); `-lost-prefix`, `-lost-suffix`; kvstore rotates its log
+  with a snapshot at each head; `-follow` not built. Left: a snapshot in
+  the middle of a log is skipped, not checked against the replayed
+  state; a snapshot argument cannot be a map of records; a resume past
+  20000 states, or a failure past 200 confirmed by quint alone.
 - **S12. Adoption (L).** I/O adapters: `database/sql` over a Store (a
   key-value and simple-row subset), `http.RoundTripper` and a server over
   a Service; an existing, unmodified net/http and database/sql service

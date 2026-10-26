@@ -3138,3 +3138,62 @@ hiddenDepth": a probe found a step five hidden actions away rejected at
 the default depth of four, and the brute force, bounded alike, could not
 see it.
 
+
+## 50. Partial logs (S11)
+
+A recorder's log can lose its head (rotation, a collector that started
+late) or its tail (a killed process, a torn last line). Both were judged
+as if nothing was lost: a log starting at seq 40 was replayed from
+`init`, and a lost tail was read as a run that stopped.
+
+A lost tail is a prefix of the run, which every check already allows,
+except where other recorders went on. Their later steps may depend on
+what was lost (a read of a lost write), so a failure at or after the cut
+(by time, with `RealTimeSlack`; a bounded response by the end of its
+window) is no verdict, not a FAIL; a failure before it stands. A lost
+tail leaves the whole run unsettled, since the lost steps may follow any
+settle, so no eventual val is judged; a pending call invoked before a
+cut may have completed in what was lost, so `Completes()` and `None`
+claims count the run as unjudged. A torn line does not name its
+recorder, so a torn log marks every recorder of it: that loses FAILs
+after the tear, never makes a PASS.
+
+A lost head needs a first state. Two ways, both named in the binding:
+- `snapshot:` an action with parameters assigning every variable; a step
+  of it first in a log is that log's start. One state, so every check
+  works as from `init` (quint's replays, the evaluator, Linearize with
+  the snapshot first, partitions, pending calls). A step overlapping the
+  snapshot in real time may already be inside it, which no order can
+  say: an order that conforms stands, a failure is no verdict, and the
+  fix is to record the snapshot when nothing is in flight (kvstore
+  rotates its log under the store's lock).
+- `resume:` a nullary action whose nondet picks admit the states a log
+  may start in. The evaluator searches them (§49's search from a set of
+  states, filtered by the binding's invariants), quint confirms a pass
+  from its witness start and a failure from every start up to 200. A
+  pass means some admitted state explains the rest: sound only if the
+  admitted states are reachable, which is the user's claim, as a
+  template is. Bounded reachability from `init` was rejected: its PASS
+  is sound but its FAIL only once the closure stops growing, which real
+  models do not reach, so every such log would be no verdict.
+
+Verdict caches key a lost log by its steps' times and its start
+(`Checker.Key`), since the cut and the start decide the verdict.
+
+**Online validation (`-follow`): not built.** Judging a growing log
+looked like resuming quint from the last state, which is unsound for a
+nondeterministic model (one resolution kept). The rest of the toolkit
+decides on whole runs too: Reconstruct orders a trace at once (a late
+step of another recorder reorders steps already judged), the plan sizes
+constants from the whole trace, and Linearize, ResolvePending, eventual
+vals and bounded responses judge a run at its end. Online validation is
+instead a window of the log judged as a log that lost its head, from a
+snapshot step or a resume, by the ordinary `gotogether validate`, run as
+often as wanted.
+
+Two reviews: the first found `gotogether itf` dropping the snapshot (a
+false PASS through `ValidateITF`), a bounded response timed by its
+trigger, `None` claims holding over invariants left unjudged, a cache
+key without times, a step concurrent with the snapshot rejected, and a
+disabled snapshot reported as quint's error; all fixed, each with a test
+that fails without its fix.
