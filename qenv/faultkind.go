@@ -20,6 +20,11 @@ type FaultKind struct {
 // at is the kind of a double in process p (SettleCore).
 func (k FaultKind) at(p *Process) FaultKind { k.owner = p; return k }
 
+// At is the kind of a double that lives in process p, for a double built
+// outside qenv (qenv/qhttp's server): a core settle (Sim.SettleCore) goes
+// on faulting it if p is outside the core, as it does qenv's own doubles.
+func (k FaultKind) At(p *Process) FaultKind { return k.at(p) }
+
 // DeclareFaults declares a fault kind: name without the "fault." prefix ("kube.request")
 // and its options in order (choice.Declare: the one registry, which also
 // holds the sites DeclareFault registers). Declaring it again with other

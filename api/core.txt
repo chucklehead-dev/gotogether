@@ -537,6 +537,7 @@ type Entropy = choice.Entropy
 type FaultKind struct
     field Name string
     field Options []string
+    method (FaultKind) At(p *Process) FaultKind
     method (FaultKind) Only(options ...string) FaultKind
 type File struct
     method (*File) Close() error
@@ -730,6 +731,29 @@ var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
 var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
 var ErrUnsettled = errors.New("qenv: not settled")
 var NoFaults = choice.NoFaults
+
+== github.com/chucklehead-dev/gotogether/qenv/qhttp
+const DefaultTimeout = 10 * time.Second
+func NewServer(s *qenv.Sim, name string, p *qenv.Process) *Server
+func NewTransport(servers ...*Server) *Transport
+type Server struct
+    field Name string
+    field Proc *qenv.Process
+    field Service *qenv.Service[[]byte, []byte]
+    method (*Server) Handle(ctx context.Context, h http.Handler)
+    method (*Server) URL() string
+type TimeoutError struct
+    field Host string
+    field After time.Duration
+    field Deadline bool
+    method (*TimeoutError) Error() string
+    method (*TimeoutError) Is(target error) bool
+    method (*TimeoutError) Temporary() bool
+    method (*TimeoutError) Timeout() bool
+type Transport struct
+    field Timeout time.Duration
+    field Refuse bool
+    method (*Transport) RoundTrip(req *http.Request) (*http.Response, error)
 
 == github.com/chucklehead-dev/gotogether/qenv/weave
 func Add(wg *sync.WaitGroup, n int)

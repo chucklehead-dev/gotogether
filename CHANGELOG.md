@@ -8,6 +8,16 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qenv/qhttp`: an unmodified `http.Handler` and `http.Client` in a
+  simulation. `NewServer` (its handler installed by `Handle` at each
+  incarnation, connections refused before it and while the process is
+  down) over a `qenv.Service` carrying wire bytes; `NewTransport`, an
+  `http.RoundTripper` whose outcomes are a real client's (a dial
+  `*net.OpError` with ECONNREFUSED, a `TimeoutError` after virtual time,
+  503 on overload), a request context's deadline converted to virtual
+  time, and the fault kind `http.<name>.conn` (`Transport.Refuse`).
+  `qenv.FaultKind.At` puts a double's kind built outside qenv at its
+  process, for `Sim.SettleCore`.
 - `Sim.Hang` (30 s from New, zero off): a task that runs that long in
   wall time without reaching a seam (blocked on a real channel or lock,
   or in database/sql's pool at SetMaxOpenConns) makes Run panic naming
