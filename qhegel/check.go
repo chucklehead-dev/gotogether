@@ -97,19 +97,23 @@ func (cc *caseChecker) lookup(k keyed) (verdict, bool) {
 	return verdict{}, false
 }
 
-// store remembers the verdict on a run, and its failing prefix.
+// store remembers the verdict on a run, and its failing prefix. What
+// it caches says no ref (Report.WithoutRefs): a later run of the same
+// key has its own refs, which no verdict reads; the run itself is told
+// its own.
 func (cc *caseChecker) store(k keyed, rep *validate.Report) verdict {
 	v := verdict{OK: rep.OK(), Summary: rep.Summary()}
+	cached := verdict{OK: v.OK, Summary: rep.WithoutRefs().Summary()}
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
-	cc.full[k.keys[len(k.keys)-1]] = v
+	cc.full[k.keys[len(k.keys)-1]] = cached
 	if !v.OK && k.prefixable && len(rep.Actors) == 1 && len(rep.Issues) == 0 {
 		if at := failingStep(rep.Actors[0], k.steps); at >= 0 {
 			// the prefix key up to the failing step, in effective steps
 			for j := len(k.effIdx) - 1; j >= 0; j-- {
 				if k.effIdx[j] <= at {
 					if k.effIdx[j] == at {
-						cc.prefixes[k.keys[j]] = v.Summary
+						cc.prefixes[k.keys[j]] = cached.Summary
 					}
 					break
 				}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,5 +86,33 @@ func TestCaseCheckerVerdictMatrix(t *testing.T) {
 		if _, hits := cc.Stats(); hits < 2 {
 			t.Errorf("%s: %d cache hits, want the repeated runs from the cache", x.name, hits)
 		}
+	}
+}
+
+// A cached verdict says no run's ref: a run of the same steps with
+// other refs is not shown the first run's driver line; a run checked
+// afresh is shown its own.
+func TestCaseCheckerCachesNoRefs(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := validate.NewChecker("../validate/testdata/account.yaml", validate.Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cc := newCaseChecker(c)
+	run := func(ref string) []qtrace.Step {
+		return []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Time: time.Unix(1, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(6)}, Ref: ref}}
+	}
+	first, err := cc.Check(context.Background(), run("driver.jsonl:1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := cc.Check(context.Background(), run("driver.jsonl:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(first.Summary, "driver.jsonl:1") || !again.Cached || strings.Contains(again.Summary, "driver.jsonl:1") {
+		t.Errorf("first:\n%s\nagain (cached %v):\n%s", first.Summary, again.Cached, again.Summary)
 	}
 }
