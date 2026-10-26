@@ -1113,6 +1113,7 @@ type Reach struct
 
 == github.com/chucklehead-dev/gotogether/qnemesis
 const DefaultLossTimeout = 500 * time.Millisecond
+const RecorderID = "nemesis"
 func DefaultRecording() Recording
 func FromScript(sc *qenv.Script) Schedule
 func Kinds(family string, names ...string) []string
@@ -1158,7 +1159,9 @@ type Fault struct
 type Journal struct
     field Entries []Entry
     method (*Journal) Dropped() []Entry
+    method (*Journal) LongestCut() time.Duration
     method (*Journal) Script() *qenv.Script
+    method (*Journal) Unreproducible() []string
 type Mix struct
     field Kinds []string
     field Faults int
@@ -1186,14 +1189,20 @@ type Network interface
 type Process struct
     field Name string
     field Cmd func(incarnation int) *exec.Cmd
+    field Recorders func(incarnation int) []string
+    field Logs func(incarnation int) []string
+    field PIDFile string
     method (*Process) Alive() bool
     method (*Process) Close() error
     method (*Process) Exit() error
     method (*Process) Incarnation() int
     method (*Process) Kill(ctx context.Context) error
     method (*Process) Pause(ctx context.Context) error
+    method (*Process) RecordedBy(incarnation int) (recorders, logs []string, started time.Time)
     method (*Process) Resume(context.Context) error
     method (*Process) Start(context.Context) error
+type Recorded interface
+    RecordedBy(incarnation int) (recorders, logs []string, started time.Time)
 type Recording map[string]func(Event) (action string, kv []any)
 type Schedule []Fault
 type Target interface
@@ -1256,6 +1265,7 @@ type Option func(*Recorder)
 type Outcomer interface
     QuintOutcome() string
 type Recorder struct
+    method (*Recorder) Actor() string
     method (*Recorder) Add(steps ...qtrace.Step)
     method (*Recorder) Count() int
     method (*Recorder) ID() string

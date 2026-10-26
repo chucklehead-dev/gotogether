@@ -22,8 +22,22 @@ The first release. What a user meets, by module:
   Jepsen's schedule, `FromScript` a trace's; the journal (`ReadJournal`)
   becomes a qenv Script (`Journal.Script`), so a real run's faults re-run
   in a simulation.
+  A crash of a target naming its recorders (`Recorded`;
+  `Process.Recorders`, `Logs`) declares their tails lost, so a kill
+  between an effect and its step is no verdict, not a false FAIL.
+  `StepsIn` counts the system's steps only (never `RecorderID`'s, nor
+  loss records). Pause waits for the whole group to stop; a crash ends a
+  pause. `Process.PIDFile` sweeps what a killed test binary left of a
+  group. `Journal.Script` keeps heals out of the order (qenv heals a cut
+  after `CutLength`), leaves out heals of links never cut, and
+  `Journal.LongestCut` and `Unreproducible` say what to set and what it
+  cannot make.
 - `qtest.Runs`: claims over runs made one by one (a real deployment's,
-  each validated), judged as an exploration's (`Some`, `All`, `None`).
+  each validated), judged and checked as an exploration's (`Some`, `All`,
+  `None`; misspelled names, eventual vals judged in no run, no runs, and
+  runs of two instances fail).
+- `qobs.Recorder.Actor`. `qtrace.Reconstruct`: a loss record of a
+  recorder with no step reaches the actor it names.
 - `qenv.Unwinding(r)`: whether a recovered panic is qenv unwinding a
   killed task, for an adapter whose caller releases a lock only on a
   normal return (qsql under database/sql's Tx.QueryContext). A seam in

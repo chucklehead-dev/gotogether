@@ -11,9 +11,13 @@ judges it.
 
 ```go
 p1 := &qnemesis.Process{Name: "n1", Cmd: func(inc int) *exec.Cmd {
-	// one step log per incarnation: a killed one's ends where it died
+	// one step log per incarnation, recorder id n1-<inc>: a killed one's ends where it died
 	return exec.Command("./node", "-id", "n1", "-log", fmt.Sprintf("logs/n1.%d.jsonl", inc))
-}}
+},
+	Recorders: func(inc int) []string { return []string{fmt.Sprintf("n1-%d", inc)} }, // a crash declares their tails lost
+	Logs:      func(inc int) []string { return []string{fmt.Sprintf("logs/n1.%d.jsonl", inc)} },
+	PIDFile:   "logs/n1.pgid", // swept at the next start if a killed test left the group
+}
 t.Cleanup(func() { _ = p1.Close() }) // kills the process group: nothing left running
 proxy := &qnemesis.Toxiproxy{URL: "http://127.0.0.1:8474"}
 t.Cleanup(func() { _ = proxy.Close() })
@@ -24,7 +28,7 @@ n := &qnemesis.Nemesis{
 	Net:     proxy,
 	Rec:     rec,
 	Record:  recording,                              // fault family -> model action
-	Steps:   qnemesis.StepsIn("logs/n*.jsonl"),      // for faults that wait for steps (After)
+	Steps:   qnemesis.StepsIn("logs/n*.jsonl"),      // the system's steps (never the nemesis's own), for After
 	Journal: journal,                                // faults.jsonl: every fault's start and end
 }
 err = n.Run(ctx, schedule)
@@ -32,10 +36,19 @@ err = n.Stop(ctx) // heal, clear, resume, start the down: the real settle
 ```
 
 - **Targets**: `Process` (started with its own process group, SIGKILL
-  to the group and reaped on a crash, SIGSTOP/SIGCONT for a pause; on
-  Linux the kernel kills it if the test binary dies), `Container` (the
+  to the group and reaped on a crash, SIGSTOP/SIGCONT for a pause, which
+  returns once every process of the group has stopped), `Container` (the
   docker CLI: kill + wait, start, pause, unpause), or your own behind
-  `Target` (Kill, Start, Pause, Resume, Alive).
+  `Target` (Kill, Start, Pause, Resume, Alive; `Recorded` to name what an
+  incarnation records).
+- **Orphans**: `Close` (a `t.Cleanup`) kills the group. If the test
+  binary itself is killed (kill -9, a CI timeout) no cleanup runs: on
+  Linux the kernel kills the group's leader (Pdeathsig), not what the
+  leader started, which lives on, reparented. Set `PIDFile`: the next
+  start of a Process with that file (the next test run's) kills what an
+  earlier incarnation left of its group (by group id, a reused id left
+  alone). Nothing the kernel offers an unprivileged process kills a whole
+  group when its parent dies (a PID namespace would, with privileges).
 - **Network**: `Toxiproxy`, a small client of toxiproxy's HTTP API
   (`toxiproxy-server` on PATH; `go install
   github.com/Shopify/toxiproxy/v2/cmd/server@latest`, renamed). A cut
@@ -88,6 +101,21 @@ does not reach), no failpoints.
 - A killed incarnation's torn last line is its tail declared lost
   (`qtrace.ReadJSONL`): failures after the cut are no verdict, never a
   FAIL.
+- A kill can land after an effect and before its step: a reply sent, the
+  step recorded on return (`//quint:action`'s), never written. The log
+  ends cleanly, and another recorder's step that saw the effect (a
+  client's) is rejected: a false FAIL. Name the incarnation's recorders
+  (`Process.Recorders`, and `Logs` for where each was cut): the crash
+  declares their tails lost (loss records on the nemesis's recorder,
+  before the crash's step, cut at each recorder's last step, or the
+  incarnation's start), so such a failure is no verdict. The price: a
+  failure after the killed incarnation's last step is no verdict either.
+  A program that records each step before its effect is seen (at the
+  effect's site, before the reply) has no such window and can leave
+  Recorders unset.
+- The nemesis's steps are of its own process (`nemesis`): a binding that
+  judges them in one actor with the system's needs its `restart:` or
+  steps of one process.
 
 ## Judging real runs
 
@@ -98,9 +126,18 @@ Validate each run's logs (the system's and the nemesis's together) with
 qtest.Runs(runs...).Expect(t, qtest.Some(qtest.Rejects("put")), qtest.None(qtest.Violates("agreement")))
 ```
 
+`qtest.Runs` checks its claims as an exploration does: names the model
+or the binding lack, eventual vals no run judged, no runs, and runs of
+two instances fail with the fix.
+
 A failed run's journal re-makes its faults in a simulation:
 `j, _ := qnemesis.ReadJournal(f); sc := j.Script()` is a `qenv.Script`
 (crashes, pauses, partitions and heals by qenv's names, in the order
-they happened, each after the steps before it; `j.Dropped()` lists the
-latency and loss it cannot make). Run it as the chooser of the
-simulated system and explore from there.
+they happened, each after the steps before it). Nothing waits for a
+heal: qenv heals a cut by itself after `CutLength` (1 virtual second),
+so a longer real partition's heal stays in `Remaining`; set
+`sim.Net().CutLength` to `j.LongestCut()` to keep it. `j.Unreproducible()`
+says what the script leaves out or cannot make as it happened (latency
+and loss, a heal of links never cut, pauses' lengths, long cuts), with
+the fix. Run the script as the chooser of the simulated system and
+explore from there.
