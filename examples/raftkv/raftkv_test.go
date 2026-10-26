@@ -259,10 +259,12 @@ func downWhileWriting(ctx context.Context, d *Deployment) {
 	}
 	f.Restart()
 	snapshotting := func() bool {
-		inc := d.Nodes[l].inc
+		inc := d.Nodes[l].inc.Load()
 		if inc == nil || d.Leader() != l {
 			return false
 		}
+		inc.mu.Lock()
+		defer inc.mu.Unlock()
 		pr, ok := inc.rn.Status().Progress[uint64(fi+1)]
 		return ok && pr.State == tracker.StateSnapshot
 	}

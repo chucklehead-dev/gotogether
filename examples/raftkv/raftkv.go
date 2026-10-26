@@ -39,11 +39,11 @@ package raftkv
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"go.etcd.io/raft/v3"
 )
 
 // Mutation injects a bug.
@@ -157,6 +157,7 @@ type Deployment struct {
 	Sim   *qenv.Sim
 	Nodes []*Node
 	cfg   Config
+	kv    KVNet // the clients' network
 }
 
 // Deploy builds the nodes on s: their processes, logs and services.
@@ -164,23 +165,25 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	cfg.defaults()
 	installElectionEntropy()
 	d := &Deployment{Sim: s, cfg: cfg}
+	d.kv = simNet{d}
 	s.Clocks = cfg.Clocks
 	s.NemesisEvery = nemesisEvery
 	for i, name := range Nodes {
-		n := &Node{d: d, Index: i, Name: name}
-		n.WAL = qenv.NewStore(s, "wal-"+name, qenv.Serializable)
-		initialLog(n.WAL, len(Nodes), newSM(Keys, Initial))
+		n := &Node{d: d, Index: i, Name: name, Peers: simNet{d}}
+		wal := qenv.NewStore(s, "wal-"+name, qenv.Serializable)
+		initialLog(wal, len(Nodes), newSM(Keys, Initial))
+		n.WAL = wal
 		d.Nodes = append(d.Nodes, n)
 	}
 	for _, n := range d.Nodes {
 		n.Proc = s.Process(n.Name, true, n.start)
-		n.Raft = qenv.NewService(s, "raft-"+n.Name, n.Proc, n.receive)
-		n.KV = qenv.NewService(s, "kv-"+n.Name, n.Proc, n.serve)
+		n.raftSvc = qenv.NewService(s, "raft-"+n.Name, n.Proc, n.receive)
+		n.kvSvc = qenv.NewService(s, "kv-"+n.Name, n.Proc, n.serve)
 	}
 	s.OnCrash(func(p *qenv.Process) {
 		for _, n := range d.Nodes {
 			if n.Proc == p {
-				n.inc = nil
+				n.inc.Store(nil)
 				if cfg.Record == Cluster {
 					qobs.Record(s.Context(), "stop", nil, "node", n.Name)
 				}
@@ -244,7 +247,11 @@ func (d *Deployment) Heal(ctx context.Context) {
 // a second for i to lead; it reports whether it does.
 func (d *Deployment) TransferLeader(ctx context.Context, i int) bool {
 	if l := d.Leader(); l >= 0 && l != i {
-		d.Nodes[l].inc.transferTo = uint64(i + 1)
+		if inc := d.Nodes[l].inc.Load(); inc != nil {
+			inc.mu.Lock()
+			inc.transferTo = uint64(i + 1)
+			inc.mu.Unlock()
+		}
 	}
 	return qenv.WaitFor(ctx, func() bool { return d.Leader() == i }, time.Second)
 }
@@ -252,7 +259,7 @@ func (d *Deployment) TransferLeader(ctx context.Context, i int) bool {
 // Leader is the index of a node that believes it leads, -1 if none.
 func (d *Deployment) Leader() int {
 	for i, n := range d.Nodes {
-		if n.inc != nil && n.inc.state == raft.StateLeader {
+		if n.leads() {
 			return i
 		}
 	}
@@ -302,11 +309,15 @@ func RunDeployment(c qenv.Chooser, cfg Config) (*Deployment, error) {
 // that the system is still settled.
 func (d *Deployment) Probe(ctx context.Context) {
 	for _, n := range d.Nodes {
-		if n.inc == nil {
+		inc := n.inc.Load()
+		if inc == nil {
 			continue
 		}
+		inc.mu.Lock()
+		kv := maps.Clone(inc.sm.KV)
+		inc.mu.Unlock()
 		for _, k := range Keys {
-			qobs.Invoke(ctx, "observe", "node", n.Name, "key", k, "value", n.inc.sm.KV[k]).Done(nil)
+			qobs.Invoke(ctx, "observe", "node", n.Name, "key", k, "value", kv[k]).Done(nil)
 		}
 	}
 	qobs.Settled(ctx)
@@ -316,8 +327,10 @@ func (d *Deployment) Probe(ctx context.Context) {
 func (d *Deployment) Versions() string {
 	var out string
 	for _, n := range d.Nodes {
-		if n.inc != nil {
-			out += fmt.Sprintf("%s:code v%d log v%d ", n.Name, n.inc.version, n.inc.sm.Version)
+		if inc := n.inc.Load(); inc != nil {
+			inc.mu.Lock()
+			out += fmt.Sprintf("%s:code v%d log v%d ", n.Name, inc.version, inc.sm.Version)
+			inc.mu.Unlock()
 		}
 	}
 	return out

@@ -60,8 +60,7 @@ func (n *Node) persist(ctx context.Context, inc *incarnation, rd raft.Ready) {
 		return nil
 	})
 	if err != nil {
-		// a node that cannot write its log stops, as a real one exits
-		n.Proc.Crash()
+		n.fail(err)
 	}
 	if snap {
 		must(inc.ms.ApplySnapshot(rd.Snapshot))
@@ -78,31 +77,47 @@ func (n *Node) persist(ctx context.Context, inc *incarnation, rd raft.Ready) {
 }
 
 // compact snapshots the state machine once compactEvery entries were
-// applied since the last snapshot, and drops them from the log.
+// applied since the last snapshot, and drops them from the log. It is
+// called with inc.mu held and releases it while it writes the log.
 func (n *Node) compact(ctx context.Context, inc *incarnation) {
 	if inc.applied < inc.snapIndex+compactEvery {
 		return
 	}
-	s, err := inc.ms.CreateSnapshot(inc.applied, inc.cs, inc.sm.encode())
+	applied := inc.applied
+	s, err := inc.ms.CreateSnapshot(applied, inc.cs, inc.sm.encode())
 	must(err)
-	must(inc.ms.Compact(inc.applied))
+	must(inc.ms.Compact(applied))
 	old := inc.snapIndex
-	if err := qenv.Retry(ctx, n.WAL, 5, func(tx qenv.Txn) error {
+	inc.mu.Unlock()
+	err = qenv.Retry(ctx, n.WAL, 5, func(tx qenv.Txn) error {
 		tx.Put("snap", marshal(s))
-		for i := old + 1; i <= inc.applied; i++ {
+		for i := old + 1; i <= applied; i++ {
 			tx.Delete(entryKey(i))
 		}
 		return nil
-	}); err != nil {
-		n.Proc.Crash()
+	})
+	if err != nil {
+		n.fail(err) // unlocked: a simulated crash stops this task here
 	}
-	inc.snapIndex = inc.applied
+	inc.mu.Lock()
+	inc.snapIndex = applied
+}
+
+// fail stops a node that cannot write its log, as a real one exits: in a
+// simulation its process crashes (the calling task stops there), in the
+// real tier the program panics.
+func (n *Node) fail(err error) {
+	if n.Proc != nil {
+		n.Proc.Crash()
+		return
+	}
+	panic(fmt.Sprintf("raftkv: %s cannot write its log: %v", n.Name, err))
 }
 
 // initialLog is every node's log when the cluster is created: a snapshot
 // at index 1 of the three voters and the keys at their initial value, so
 // no node needs raft's bootstrap entries.
-func initialLog(wal *qenv.Store, voters int, sm *SM) {
+func initialLog(wal WAL, voters int, sm *SM) {
 	cs := &pb.ConfState{}
 	for i := range voters {
 		cs.Voters = append(cs.Voters, uint64(i+1))

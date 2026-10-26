@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -51,32 +53,50 @@ type Response struct {
 	Leader int // the leader's index, -1 if unknown
 }
 
-// Node is one replica: a crashable process, its write-ahead log (a
-// Store, durable across crashes), the services peers and clients call,
-// and its volatile state, rebuilt from the log at every start.
+// Node is one replica: a crashable process, its write-ahead log
+// (durable across crashes), the network to its peers, and its volatile
+// state, rebuilt from the log at every start. In a simulation peers and
+// clients call its services (raftSvc, kvSvc); in the real tier its HTTP
+// server (realnet.go) calls the same handlers.
 type Node struct {
 	d     *Deployment
 	Index int
 	Name  string
-	Proc  *qenv.Process
-	WAL   *qenv.Store
-	Raft  *qenv.Service[Envelope, struct{}]
-	KV    *qenv.Service[Request, Response]
-	inc   *incarnation // nil while down
+	Proc  *qenv.Process // nil in the real tier
+	WAL   WAL
+	Peers PeerNet
+	// version is the code's outside a simulation ("v2" or not), where no
+	// qenv.Process carries one
+	version string
+	raftSvc *qenv.Service[Envelope, struct{}]
+	kvSvc   *qenv.Service[Request, Response]
+	// inc is nil while down. Atomic: in the real tier the HTTP handlers
+	// read it while the node boots.
+	inc atomic.Pointer[incarnation]
 }
 
 // incarnation is a node's state from one start to its crash: raft's,
 // the state machine rebuilt from the log, and the work waiting for the
 // loop, which alone touches the RawNode.
+//
+// mu guards what the loop, the senders and the handlers share (every
+// field below it but the loop's own: lastIndex, snapIndex and the
+// MemoryStorage, which has its lock). A simulation runs one task at a
+// time between seams, so there it is never contended; in the real tier
+// they are goroutines. It is never held across a seam (a wait, a call, a
+// transaction): a simulated task frozen there would hold it, and the
+// schedule would change. qenv.Wait's and WaitFor's predicates take it.
 type incarnation struct {
-	version   int // the code's: 1, or 2 after an upgrade
-	rn        *raft.RawNode
+	version   int // the code's: 1, or 2 after an upgrade; set at boot
 	ms        *raft.MemoryStorage
-	cs        *pb.ConfState
-	sm        *SM
-	applied   uint64
 	snapIndex uint64
 	lastIndex uint64 // the last index in the write-ahead log
+
+	mu      sync.Mutex
+	rn      *raft.RawNode
+	cs      *pb.ConfState
+	sm      *SM
+	applied uint64
 
 	inbox      []*pb.Message
 	props      [][]byte
@@ -100,7 +120,18 @@ type incarnation struct {
 }
 
 func (inc *incarnation) work() bool {
+	inc.mu.Lock()
+	defer inc.mu.Unlock()
 	return len(inc.inbox) > 0 || len(inc.props) > 0 || len(inc.reads) > 0 || inc.transferTo != 0 || len(inc.failed) > 0
+}
+
+// locked is ready under mu: a wait's predicate.
+func (inc *incarnation) locked(ready func() bool) func() bool {
+	return func() bool {
+		inc.mu.Lock()
+		defer inc.mu.Unlock()
+		return ready()
+	}
 }
 
 type sendFailure struct {
@@ -129,7 +160,7 @@ func (inc *incarnation) encode(op Op, m Mutation) []byte {
 // each peer, and run the raft loop.
 func (n *Node) start(ctx context.Context) {
 	inc := n.boot(ctx)
-	n.inc = inc
+	n.inc.Store(inc)
 	if n.d.cfg.Record == Cluster {
 		qobs.Record(ctx, "boot", nil, "node", n.Name, "index", int(inc.applied))
 	}
@@ -147,7 +178,7 @@ func (n *Node) start(ctx context.Context) {
 func (n *Node) boot(ctx context.Context) *incarnation {
 	inc := &incarnation{version: 1, ms: raft.NewMemoryStorage(), readIndex: map[uint64]uint64{},
 		outbox: make([][]*pb.Message, len(n.d.Nodes)), peerVersion: make([]int, len(n.d.Nodes)), lead: raft.None}
-	if p := qenv.ProcessOf(ctx); p != nil && p.Version == "v2" {
+	if p := qenv.ProcessOf(ctx); p != nil && p.Version == "v2" || p == nil && n.version == "v2" {
 		inc.version = 2
 	}
 	snap := &pb.Snapshot{}
@@ -209,13 +240,15 @@ func (n *Node) loop(ctx context.Context, inc *incarnation) {
 		if wait := next - qenv.Mono(ctx); wait > 0 {
 			qenv.WaitFor(ctx, inc.work, wait)
 		}
-		if now := qenv.Mono(ctx); now >= next {
+		now := qenv.Mono(ctx)
+		inc.mu.Lock()
+		if now >= next {
 			inc.rn.Tick()
 			next += Tick
 			if next <= now { // a pause: tick once, not for every tick missed
 				next = now + Tick
 			}
-			n.proposeVersion(ctx, inc)
+			n.proposeVersion(now, inc)
 			n.retrySnapshots(inc)
 		}
 		inbox, props, reads := inc.inbox, inc.props, inc.reads
@@ -243,13 +276,17 @@ func (n *Node) loop(ctx context.Context, inc *incarnation) {
 		for inc.rn.HasReady() {
 			n.ready(ctx, inc, inc.rn.Ready())
 		}
+		inc.mu.Unlock()
 	}
 }
 
 // ready handles one Ready in the order raft requires: persist the hard
-// state, the entries and any snapshot, then send, then apply.
+// state, the entries and any snapshot, then send, then apply. It is
+// called with inc.mu held and releases it while it writes the log.
 func (n *Node) ready(ctx context.Context, inc *incarnation, rd raft.Ready) {
+	inc.mu.Unlock()
 	n.persist(ctx, inc, rd)
+	inc.mu.Lock()
 	if rd.SoftState != nil {
 		inc.state, inc.lead = rd.SoftState.RaftState, rd.SoftState.Lead
 	}
@@ -313,7 +350,7 @@ func (n *Node) recordLeadership(ctx context.Context, inc *incarnation) {
 // runs v2 (each says so in its messages): a committed entry, after which
 // every node writes v2. Until then the cluster writes v1, which every
 // version reads.
-func (n *Node) proposeVersion(ctx context.Context, inc *incarnation) {
+func (n *Node) proposeVersion(now time.Duration, inc *incarnation) {
 	if inc.version < 2 || inc.sm.Version >= 2 || inc.state != raft.StateLeader {
 		return
 	}
@@ -322,7 +359,7 @@ func (n *Node) proposeVersion(ctx context.Context, inc *incarnation) {
 			return
 		}
 	}
-	if now := qenv.Mono(ctx); inc.versionAt == 0 || now-inc.versionAt > OpTimeout {
+	if inc.versionAt == 0 || now-inc.versionAt > OpTimeout {
 		inc.versionAt = now
 		inc.props = append(inc.props, encodeV1(Op{Kind: "version", A: 2}))
 	}
@@ -361,37 +398,45 @@ func (n *Node) retrySnapshots(inc *incarnation) {
 // call that fails loses its batch, which raft tolerates.
 func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
 	qenv.Daemon(ctx)
-	peer := n.d.Nodes[to]
 	for {
-		qenv.Wait(ctx, func() bool { return len(inc.outbox[to]) > 0 })
+		qenv.Wait(ctx, inc.locked(func() bool { return len(inc.outbox[to]) > 0 }))
+		inc.mu.Lock()
 		msgs := inc.outbox[to]
 		inc.outbox[to] = nil
+		inc.mu.Unlock()
 		env := Envelope{From: n.Index, Version: inc.version}
 		for _, m := range msgs {
 			b, err := proto.Marshal(m)
 			must(err)
 			env.Msgs = append(env.Msgs, b)
 		}
-		qenv.Sleep(ctx, Latency)
-		if _, err := peer.Raft.Call(ctx, env, RPCTimeout); err != nil {
+		if err := n.Peers.Send(ctx, to, env); err != nil {
 			snap := slices.ContainsFunc(msgs, func(m *pb.Message) bool { return m.GetType() == pb.MessageType_MsgSnap })
+			inc.mu.Lock()
 			inc.failed = append(inc.failed, sendFailure{to: uint64(to + 1), snap: snap})
+			inc.mu.Unlock()
 		}
 	}
 }
 
 // receive is the raft service's handler: the messages go to the loop.
 func (n *Node) receive(ctx context.Context, env Envelope) (struct{}, error) {
-	inc := n.inc
+	inc := n.inc.Load()
 	if inc == nil {
 		return struct{}{}, errDown // booting: refused, as a node not yet listening does
 	}
-	inc.peerVersion[env.From] = max(inc.peerVersion[env.From], env.Version)
+	msgs := make([]*pb.Message, 0, len(env.Msgs))
 	for _, b := range env.Msgs {
 		m := &pb.Message{}
-		must(proto.Unmarshal(b, m))
-		inc.inbox = append(inc.inbox, m)
+		if err := proto.Unmarshal(b, m); err != nil {
+			return struct{}{}, err // only a real peer's bytes can be garbled
+		}
+		msgs = append(msgs, m)
 	}
+	inc.mu.Lock()
+	defer inc.mu.Unlock()
+	inc.peerVersion[env.From] = max(inc.peerVersion[env.From], env.Version)
+	inc.inbox = append(inc.inbox, msgs...)
 	return struct{}{}, nil
 }
 
@@ -401,12 +446,17 @@ func (n *Node) receive(ctx context.Context, env Envelope) (struct{}, error) {
 // applied, which the leader confirms with a quorum (ReadOnlySafe) or, by
 // LeaseRead, with its lease.
 func (n *Node) serve(ctx context.Context, req Request) (Response, error) {
-	inc := n.inc
-	if inc == nil || inc.state != raft.StateLeader {
+	inc := n.inc.Load()
+	if inc == nil {
+		return Response{Err: "not leader", Leader: -1}, nil
+	}
+	inc.mu.Lock()
+	if inc.state != raft.StateLeader {
 		lead := -1
-		if inc != nil && inc.lead != raft.None {
+		if inc.lead != raft.None {
 			lead = int(inc.lead) - 1
 		}
+		inc.mu.Unlock()
 		return Response{Err: "not leader", Leader: lead}, nil
 	}
 	op := req.Op
@@ -415,10 +465,13 @@ func (n *Node) serve(ctx context.Context, req Request) (Response, error) {
 		inc.nextRead++
 		rctx := binary.BigEndian.AppendUint64(nil, id)
 		inc.reads = append(inc.reads, rctx)
-		ok := qenv.WaitFor(ctx, func() bool {
+		inc.mu.Unlock()
+		ok := qenv.WaitFor(ctx, inc.locked(func() bool {
 			idx, ok := inc.readIndex[id]
 			return ok && inc.applied >= idx
-		}, OpTimeout)
+		}), OpTimeout)
+		inc.mu.Lock()
+		defer inc.mu.Unlock()
 		delete(inc.readIndex, id)
 		if !ok {
 			return Response{Err: "timeout", Leader: -1}, nil
@@ -426,13 +479,27 @@ func (n *Node) serve(ctx context.Context, req Request) (Response, error) {
 		return Response{Result: Result{OK: true, Val: inc.sm.KV[op.Key]}}, nil
 	}
 	inc.props = append(inc.props, inc.encode(op, n.d.cfg.Mutation))
-	if !qenv.WaitFor(ctx, func() bool { return inc.sm.Sessions[op.Client].Seq >= op.Seq }, OpTimeout) {
+	inc.mu.Unlock()
+	if !qenv.WaitFor(ctx, inc.locked(func() bool { return inc.sm.Sessions[op.Client].Seq >= op.Seq }), OpTimeout) {
 		return Response{Err: "timeout", Leader: -1}, nil
 	}
+	inc.mu.Lock()
+	defer inc.mu.Unlock()
 	return Response{Result: inc.sm.Sessions[op.Client].Result}, nil
 }
 
 var errDown = errors.New("raftkv: node not up")
+
+// leads is whether the node is up and believes it leads.
+func (n *Node) leads() bool {
+	inc := n.inc.Load()
+	if inc == nil {
+		return false
+	}
+	inc.mu.Lock()
+	defer inc.mu.Unlock()
+	return inc.state == raft.StateLeader
+}
 
 func must(err error) {
 	if err != nil {
