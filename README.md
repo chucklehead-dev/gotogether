@@ -374,7 +374,9 @@ s.Run(20 * time.Second); s.Settle(60 * time.Second)      // faults, then quiet
 
 The app is written against seams: `qenv.DB` and `qenv.Txn`, its own
 broker interfaces, `qenv.Go`, `qenv.Now` and `qenv.Sleep`. Production
-puts real clients behind them. Steps are recorded where effects happen:
+puts real clients behind them. An HTTP service needs no seam: `qenv/qhttp` serves its
+`http.Handler` and gives its `http.Client` a Transport, both unmodified,
+with requests and responses as wire bytes over a `qenv.Service`. Steps are recorded where effects happen:
 `Txn.OnCommit`, a fake API server's interceptor, the provider. Then:
 
 ```go
@@ -518,6 +520,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qenv` | deterministic simulation: scheduler, virtual time, crashable processes, choosers (`NewSeeded`, `NewPCT`, `Replay`, `Script`, `Swarm`, `FromBytes`); doubles `Store` (isolation levels), `Queue`, `Service` (with `Capacity`), `Disk` (fsync, power loss, torn writes, a full disk, a failed fsync, corrupt reads); the network (`Sim.Net`: `Partition`, `Heal`, `PartitionNemesis`); clocks (`Sim.Clocks`: skew, jumps, drift; `Now`, `Mono`, `Since`, `WaitFor`); pauses and gray failures (`Sim.Stalls`); settling (`Sim.Settle`; `Sim.SettleCore`: faults go on outside a core); rolling upgrades (`Sim.Upgrades`, `Process.Upgrade`, `RestartAs`, `Version`); nemesis families (`nemesis.crash`, `.partition`, `.jump`, `.pause`, `.slow`, `.upgrade`); `DeclareFaults`, `FaultPoint`, `CoverageOf`; `NewNative` (the same on goroutines, for gosim); `TimeProfile` |
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `qenv/fault` | the `//quint:fault` aspect: a function's entry a fault choice, with its own errors |
+| `qenv/qhttp` | net/http in a simulation: an unmodified `http.Handler` behind a `Server` (`NewServer`, `Handle` at each incarnation, `URL`) and an unmodified `http.Client` over a `Transport` (`NewTransport`: refused connections, `TimeoutError` after virtual time, 503 on overload), over `qenv.Service`'s faults |
 | `qload` | load on qenv: `Experiment` (open- or closed-loop), `Trigger`, `Recovers`/`Assess`/`Mostly` with `Recovered`/`StaysDegraded`, `Target`, `Simulate` (an abstract server and its clients), `Piecewise` shapes |
 | `qmeta` | the CTMC: `New`, `HittingTimes`, `RecoveryWithin`, `Mean`, `Calibrate`/`CalibrateTimeout`, `Measure`; alerts (`Region`, `Rules`), `Watch` (the flight recorder on alert); imports nothing of the module |
 | `qrole` | load roles (`//quint:serve`, `//quint:operation`, `//quint:call`): u and v as OTel gauges, pprof labels |

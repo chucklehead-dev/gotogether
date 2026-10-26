@@ -7,6 +7,47 @@ recorded in the handler where the write takes effect, or converted from
 the server's OTel spans (`convert` rules), and validated with the
 binding. Run it for real and validate its step log (`run-demo.sh`).
 
+## net/http in a simulation: `qenv/qhttp`
+
+Read this before simulating a service whose API is HTTP, or a client
+that calls one (a payments processor, a webhook): the handler and the
+client stay as they are.
+
+```go
+var srv *qhttp.Server
+p := sim.Process("api", true, func(ctx context.Context) {
+	srv.Handle(ctx, api.NewHandler(store)) // at every incarnation: refused before it
+})
+srv = qhttp.NewServer(sim, "api", p)          // a qenv.Service carries the bytes
+tr := qhttp.NewTransport(srv)                 // an http.RoundTripper, routed by host
+tr.Timeout, tr.Refuse = 2*time.Second, true   // virtual time; "http.api.conn" refused
+client := &http.Client{Transport: tr}         // the SDK's client, unchanged
+sim.Spawn("sdk", func(ctx context.Context) { /* client.Post(srv.URL()+"/payments", ...) */ })
+```
+
+- Requests and responses are wire bytes (`Request.Write`,
+  `http.ReadRequest`; the response as net/http's server writes it: Date
+  from the server's clock, a sniffed Content-Type, Content-Length or
+  chunked), so nothing is shared between client and handler.
+- Outcomes are what a real client sees: a refused connection is a dial
+  `*net.OpError` (`errors.Is(err, syscall.ECONNREFUSED)`: nothing sent, a
+  retry is safe); a missing response a `*qhttp.TimeoutError` (the
+  `*url.Error`'s `Timeout()` is true, `errors.Is(err,
+  context.DeadlineExceeded)`; outcome unknown); a full queue
+  (`srv.Service.Capacity`) a 503. The `rpc.<name>.*` faults, late
+  requests and the crash window (`srv.Service.NoCrashWindow`) are the
+  Service's.
+- Time: the Transport's `Timeout` and a request context's deadline
+  (converted with `Sim.ToVirtual` when sent, rounded up to two
+  significant digits) are virtual. `http.Client.Timeout` reaches it as
+  that deadline; its own timer is real and approximately never fires.
+- A handler runs as a task of the server's process, with the task's
+  context as `r.Context()`: record steps and use the Store in it. Its
+  panic fails the run (net/http would recover it). A handler that starts
+  goroutines (`http.TimeoutHandler` among them) needs weaving or gosim.
+- Not simulated: TLS (https reaches the same server), HTTP/2, trailers,
+  100-continue, Hijack, connection reuse.
+
 ## gRPC services: `simgrpc` (examples/grpcledger)
 
 ```go
