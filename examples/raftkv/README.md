@@ -26,6 +26,7 @@ away, and the cluster also goes through a rolling upgrade.
 | [model/cluster.qnt](model/cluster.qnt) | leadership as the nodes record it: `campaign`, `lead`, `stepDown`, `stop` (a crash), the test's `isolate` and `heal`, and each node's state machine (`boot`, `apply`); `electionSafety` an invariant, `hasLeader`, `healed`, `behind` and `caughtUp` vals |
 | [raftkv.binding.yaml](raftkv.binding.yaml) | a read's value and a cas's or transfer's answer against the model's; `eventually: [converged]` |
 | [cluster.binding.yaml](cluster.binding.yaml) | `invariants: [electionSafety]`, `eventually: [hasLeader]`, `within:` a leader 300ms after a heal, and a restarted node caught up 1s after it booted behind |
+| [cluster.real.binding.yaml](cluster.real.binding.yaml) | the same for real runs, a leader within 500ms of a heal (real timing's tail) |
 | [node.go](node.go) | a node: its raft loop (the RawNode's only user), its senders, the services' handlers, the leadership steps it records |
 | [storage.go](storage.go) | the write-ahead log: hard state, snapshot and entries, persisted before any message is sent |
 | [sm.go](sm.go) | the state machine, its sessions (a retry answered as the first time), the log's two formats (v1 text, v2 binary) |
@@ -53,7 +54,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 5 of 50 mutant runs do |
 | `TestCatchUp` | `NoSnapshotReport`: a snapshot lost on the way is never reported to raft | a follower down while the clients write past a compaction, restarted, and its snapshot lost by a 200 ms cut; the cluster's history | the faithful follower catches up within 1 s in all 20 runs; the mutant's never does in 18 of 20 (`within 1s after behind: caughtUp`), though the cluster settles with a leader |
 | `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
-| `TestRealNemesis`, `TestRealNoRequestID` (`RAFTKV_REAL=1`, toxiproxy) | none; `NoRequestID` | the real cluster under qnemesis (crashes, pauses, isolates, lost client responses), seeded schedules | every faithful run conforms and settles, both histories; some `NoRequestID` run fails as in the simulation ([below](#under-a-nemesis)) |
+| `TestRealNemesis`, `TestRealNoRequestID`, `TestRealSlowElection` (`RAFTKV_REAL=1`, toxiproxy) | none; `NoRequestID`; `SlowElection` | the real cluster under qnemesis (crashes, pauses, isolates, lost client responses, every node cut off), seeded schedules | every faithful run conforms and settles, both histories; some `NoRequestID` run fails as in the simulation; some `SlowElection` run elects past 500ms after a heal ([below](#under-a-nemesis)) |
 | `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs with the harness's settle conform to the cluster's model and settle (`eventually hasLeader` judged); without the settle they do not settle. `TestRealNodeExitsWithParent`: a node whose parent is killed exits |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
@@ -141,30 +142,53 @@ given to the nodes as `-peer`), the clients' links through proxies of
 their own, so an isolate cuts a node off from its peers only, as in the
 simulation. A seeded `qnemesis.Random` schedule crashes, pauses and
 isolates nodes (three faults, one every 800ms, each undone after
-300ms) while four client connections in five lose their responses. The
-nemesis records `stop`, `isolate` and `heal` in the cluster's process
-(one actor's trace, one process), then `Stop` heals and restarts, the
-nodes agree, the probe observes and the harness settles. Each run's
-clients' history is judged by `raftkv.binding.yaml` (linearized,
-pending calls placed) and the nodes' and nemesis's steps by
-`cluster.binding.yaml`, the bindings the simulation uses, the
-`within 300ms` bound included (no run broke it, with `-race` either).
+300ms) while four client calls in five lose their response (each call a
+new connection, since toxiproxy draws a loss per connection and a
+kept-alive one would lose all or none). Then every node is cut off from
+the others for 2.5s, three times, each when the nodes agree, as the
+simulation's `TestElectionAfterHeal` does. The nemesis (and the cuts)
+record `stop`, `isolate` and `heal` in the cluster's process (one
+actor's trace, one process); `Stop` heals and restarts, the nodes agree,
+the probe observes, every node is paused (SIGSTOP, so no late election
+step voids it) and the harness settles. Each run's clients' history is
+judged by `raftkv.binding.yaml` (linearized, pending calls placed) and
+the nodes' and nemesis's steps by
+[cluster.real.binding.yaml](cluster.real.binding.yaml):
+`cluster.binding.yaml` with one bound larger, a leader within 500ms of a
+heal, not 300ms. The faithful cluster's first leader after a heal came
+10 to 170ms after it in 24 runs measured, and once in about 60 with
+`-race` 320ms: real timing's tail, not the model's. SlowElection's came
+317ms to 1.1s after.
 
-| test | mutant | claim | measured |
+| test | mutant | claim | measured (this shape, `-race`) |
 |---|---|---|---|
-| `TestRealNemesis` | none | every run's clients' history conforms and settles; the cluster's conforms and settles | 33 of 33 runs |
-| `TestRealNoRequestID` | `NoRequestID` (the client's) | some run fails as the simulation's does (a read, cas or transfer mismatched, or `converged` violated); the cluster's history conforms | 22 of 24 runs at this loss, 2 of 20 without lost responses: 3 runs a PR (a miss chance of 2%), 5 nightly (0.14%) |
-| `TestRealFaultsInSimulation` | none | a real run's journal (`Journal.Script`) re-made in the simulation: every fault happens, the run conforms | |
+| `TestRealNemesis` | none | both histories conform and settle in every run; a second leader of a term added after the crashes violates `electionSafety` | 24 of 24 runs (18 with `-race`) |
+| `TestRealNoRequestID` | `NoRequestID` (the client's) | some run fails as the simulation's does (a read, cas or transfer mismatched, or `converged` violated); the cluster's history conforms | per seed 5: 3 of 3, 9: 2 of 3, 10: 3 of 3; together they miss at most 3.7% (each at its worst measured rate) |
+| `TestRealSlowElection` | `SlowElection` (the node's) | some run violates `within 500ms after healed: hasLeader`, none `electionSafety`; the clients' history conforms | 11 of 12 runs over six seeds; per seed 5: 5 of 5, 9: 4 of 5, 10: 5 of 5; together at most 0.8% |
+| `TestRealFaultsInSimulation` | none | the per-PR runs' journals (`Journal.Script`) re-made in the simulation: every fault happens (`qnemesis.Unmade`), the runs conform, real and simulated | 15 of 15 journals re-made whole |
 
-Each node names its incarnation's recorder and step log
-(`Process.Recorders`, `Logs`; the logs are `node-<name>.<inc>.jsonl`,
-which no glob of the nodes' matches with the nemesis's `nemesis.jsonl`).
-A crash then declares the killed incarnation's tail lost, up to its
-reaping: a kill that lands between an effect and its step's record
-makes a failure that depends on the missing step no verdict, not a false
-FAIL, and a settle after the reaping still stands. Of the same 8 seeds,
-the 4 with a crash settled once the loss was bounded (qtrace's
-`LostBefore`), where an unbounded loss had voided their settles.
+The per-PR seeds are 5, 9 and 10, each a schedule with a crash; the
+nightly runs fresh seeds, more of them. Not caught under this shape:
+`NoPersistVote` (0 of 6: a node must crash after voting and before the
+election ends, and take a second candidate's request after its restart,
+within one election) and `NoSnapshotReport` (0 of 6: the follower must
+be behind a compaction and its snapshot lost in flight). Both are the
+simulation's (`TestUnpersistedVote`, `TestCatchUp`).
+
+The nodes leave `Process.Recorders` unset. Named, a crash declares the
+killed incarnation's tail lost, which makes every failure after its last
+step no verdict: a second leader in a term added after a crash, which is
+what `NoPersistVote` makes, was judged "no verdict (lost steps)", where
+now it violates `electionSafety` (`TestRealNemesis` checks it). The
+protection is for code that records a step on
+return, after its effect may have been seen; a raftkv node records each
+cluster step under its lock before anything of it is visible (a lead or
+a campaign before any message of its term is sent, an apply before a
+waiting handler can answer), in the file when `Record` returns, so there
+is no such window and nothing to declare. The nodes' logs are
+`node-<name>.<inc>.jsonl`, which no glob of them matches with the
+nemesis's `nemesis.jsonl`. `RAFTKV_REAL_DIR` keeps a test's runs in a
+directory of its own, which must not hold an earlier run's.
 
 A failed faithful run's log names its journal and the command that
 re-makes its faults in the simulation:
@@ -174,13 +198,15 @@ RAFTKV_REAL_JOURNAL=<run>/journal.jsonl go test -run TestRealFaultsInSimulation 
 ```
 
 The script's crashes, pauses and partitions are qenv's nemeses of the
-same names, each after the steps the nodes had recorded; the simulated
-pause and cut last as the real ones did (`Config.Stalls`,
-`Config.CutLength`), and what the script cannot make as it happened is
-logged (`Journal.Unreproducible`); a fault the simulation could not make
-fails the test with its root cause and what waited on it
-(`qnemesis.Unmade`). The clients' lost responses are no
-qenv nemesis: they are left out.
+same names, in the order they happened; the simulated pause lasts as
+the real one did (`Config.Stalls`) and a cut until its scripted heal
+(`Config.CutLength`, ten times `LongestCut`: at `LongestCut` alone qenv
+healed one link of two isolates by itself first, and the scripted heal
+never happened). What the script cannot make as it happened is logged
+(`Journal.Unreproducible`); a fault the simulation could not make fails
+the test with its root cause and what waited on it (`qnemesis.Unmade`).
+The clients' lost responses and the cuts after the schedule are no
+journal's: they are left out.
 
 ```sh
 RAFTKV_REAL=1 go test -race -run TestReal -v .   # toxiproxy-server on PATH: go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0, renamed

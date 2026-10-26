@@ -1,0 +1,48 @@
+# cluster.binding.yaml for real runs (nemesis_test.go), one bound
+# larger: real timing, not the model, is what differs. The faithful
+# cluster's first leader after a heal came within 15-170ms in 24 runs
+# measured, and once (in about 60 runs with -race) 320ms, past the
+# simulation's 300ms: 500ms. SlowElection's came 317ms to 1.1s after.
+# Everything else is cluster.binding.yaml's.
+#
+# The nodes' leadership and the test's partitions as calls of
+# model/cluster.qnt: every parameter is the step's field of its name.
+spec: model/cluster.qnt
+module: cluster
+
+constants:
+  NODES: 'Set("n1", "n2", "n3")'
+
+actions:
+  isolate: {}
+  heal: {}
+  campaign: {}
+  lead: {}
+  stepDown: {}
+  stop: {}
+  boot: {}
+  apply: {}
+
+invariants: [electionSafety]
+eventually: [hasLeader]
+
+# after the network heals, a leader within 500ms (the simulation's 300ms
+# and real timing's tail): a follower cut off pre-campaigns every
+# election timeout (100 to 200ms, randomized), and a pre-vote and a vote
+# take a round trip each, an fsync each on a real disk
+within:
+  - after: healed
+    holds: hasLeader
+    bound: 500ms
+  # a node that boots behind catches up within a second: the leader
+  # probes it within a heartbeat, and a snapshot it lost is sent again
+  # once reported (at most two election timeouts after it was sent)
+  - after: behind
+    holds: caughtUp
+    bound: 1s
+
+# The model on its own (gotogether simulate): electionSafety is the
+# requirement on the code, which the model lets a node that votes twice
+# break (lead takes any term campaigned for).
+simulate:
+  allows: [electionSafety]

@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +18,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qnemesis"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -77,10 +80,29 @@ type nemesisRun struct {
 	// connections (0: none), all through the run: a client that times out
 	// retries, which is what exposes NoRequestID.
 	ClientLoss float64
-	// NoRecorders leaves the nodes' Recorders and Logs unnamed (an
-	// ablation): a crash then declares no tail lost, and a kill between
-	// an effect and its step's record could fail a run falsely.
-	NoRecorders bool
+	// Recorders names each incarnation's recorder and log
+	// (qnemesis.Process's Recorders and Logs), so a crash declares its
+	// tail lost up to the reaping: an ablation. That protection is for a
+	// program that records a step on return, after its effect may have
+	// been seen (a reply sent, then killed before the record), where a
+	// step another recorder saw would be rejected falsely. A raftkv node
+	// has no such window: it records each cluster step under inc.mu
+	// before anything of it is visible (a lead or a campaign before any
+	// message of its term is sent, an apply before a handler waiting on
+	// it can answer), and the step is in the file when Record returns.
+	// Declared, the loss would make every failure after a killed
+	// incarnation's last step no verdict: a second leader of a term after
+	// a crash, which is what NoPersistVote makes, could not be judged.
+	Recorders bool
+	// Cut, if set, cuts every node off from the others for Cut, Cuts
+	// times, once the schedule is done, each when the nodes agree,
+	// recorded as the simulation's TestElectionAfterHeal records it
+	// (isolate each, then heal): the leader steps down, no one can be
+	// elected, and after the heal one must be within the binding's bound.
+	// It is what tells SlowElection from the faithful timeout; each cut
+	// is another chance.
+	Cut  time.Duration
+	Cuts int
 }
 
 // realVerdicts are a run's two checks, and where its logs are.
@@ -175,10 +197,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 				pipes.Unlock()
 				return cmd
 			}}
-		if !cfg.NoRecorders {
-			// a kill may land between an effect and its step: the crash
-			// declares the incarnation's tail lost, up to its reaping (a
-			// settle after it stands)
+		if cfg.Recorders {
 			p.Recorders = func(inc int) []string { return []string{fmt.Sprintf("%s.%d", name, inc)} }
 			p.Logs = func(inc int) []string { return []string{logOf(inc)} }
 		}
@@ -192,7 +211,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 			t.Fatal(err)
 		}
 	}
-	agreed(t, direct, 15*time.Second)
+	agreed(t, direct, dir, 15*time.Second)
 
 	// the nemesis records the faults the cluster's model has, in its
 	// process: one actor's trace whose process does not change
@@ -224,7 +243,10 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 		t.Fatal(err)
 	}
 	cctx := qobs.WithRecorder(ctx, qobs.NewRecorder(sink, qobs.WithID("clients")))
-	client := Client{Net: HTTPNet{Addrs: clientAddr}, Nodes: len(Nodes), Mutation: cfg.Mutation}
+	// a new connection per call: toxiproxy draws a loss per connection,
+	// and a kept-alive one would lose every response or none for the run
+	noKeepAlive := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	client := Client{Net: HTTPNet{Addrs: clientAddr, Client: noKeepAlive}, Nodes: len(Nodes), Mutation: cfg.Mutation}
 	var faulting atomic.Bool
 	faulting.Store(true)
 	var wg sync.WaitGroup
@@ -254,8 +276,30 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	if runErr != nil {
 		t.Fatalf("the nemesis: %v", runErr)
 	}
+	for range cfg.Cuts {
+		agreed(t, direct, dir, 15*time.Second)
+		for i, a := range Nodes {
+			for _, b := range Nodes[i+1:] {
+				if err := peers.Cut(ctx, a, b); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		for _, n := range Nodes { // in effect: recorded after the cut, as qnemesis records one
+			rec.Record(ctx, "isolate", nil, "node", n)
+		}
+		time.Sleep(cfg.Cut)
+		rec.Record(ctx, "heal", nil) // before the heal, as qnemesis records one
+		for i, a := range Nodes {
+			for _, b := range Nodes[i+1:] {
+				if err := peers.Heal(ctx, a, b); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
 	nsink.Close()
-	agreed(t, direct, 15*time.Second)
+	agreed(t, direct, dir, 15*time.Second)
 
 	// the probe and the settles, as TestRealCluster's
 	for i := range Nodes {
@@ -269,6 +313,13 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	}
 	qobs.Settled(cctx)
 	sink.Close()
+	// every node stopped (SIGSTOP) before the settle: a late step (an
+	// election timer firing) between the settle and the kill would void it
+	for _, p := range procs {
+		if err := p.Pause(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
 	hsink, err := qobs.FileSink(filepath.Join(steps, "harness.jsonl"), qobs.PerStep)
 	if err != nil {
 		t.Fatal(err)
@@ -290,7 +341,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	cluster := readSteps(t, filepath.Join(steps, "node-*.jsonl"))
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "nemesis.jsonl"))...)
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "harness.jsonl"))...)
-	v.Cluster = qtest.Validate(t, "cluster.binding.yaml", cluster)
+	v.Cluster = qtest.Validate(t, "cluster.real.binding.yaml", cluster)
 	return v
 }
 
@@ -303,9 +354,9 @@ var noRequestIDCaught = qtest.AnyOf(qtest.Mismatch("read"), qtest.Mismatch("cas"
 
 // agreed waits until every node is up and they agree on the leader, the
 // term and the applied index.
-func agreed(t *testing.T, net HTTPNet, d time.Duration) {
+func agreed(t *testing.T, net HTTPNet, dir string, d time.Duration) {
 	t.Helper()
-	c := &realCluster{t: t, net: net}
+	c := &realCluster{t: t, net: net, dir: dir}
 	c.agreed(context.Background(), d)
 }
 
@@ -327,38 +378,96 @@ var realMix = qnemesis.Mix{Kinds: append(append(qnemesis.Kinds("crash", Nodes...
 	qnemesis.Kinds("isolate", Nodes...)...), Faults: 3}
 
 func realConfig(seed int64, m Mutation) nemesisRun {
-	return nemesisRun{Seed: seed, Mutation: m, Mix: realMix, Interval: 800 * time.Millisecond, For: 300 * time.Millisecond, ClientLoss: 0.8}
+	return nemesisRun{Seed: seed, Mutation: m, Mix: realMix, Interval: 800 * time.Millisecond, For: 300 * time.Millisecond, ClientLoss: 0.8,
+		Cut: 2500 * time.Millisecond, Cuts: 3}
 }
 
-// realRuns runs n real runs of mutation m under the nemesis, seeds 1 to
-// n (after GOTOGETHER_SEED_OFFSET, the nightly's), each in a directory of
-// its own (under RAFTKV_REAL_DIR if set, kept), and returns their
-// verdicts; a faithful run that does not conform has its replay hint
-// logged.
-func realRuns(t *testing.T, n int, m Mutation) (kv, cluster []*qtest.Run) {
+// realRuns runs the real cluster under the nemesis at seeds (seedsOf),
+// cfgOf making each run's shape, each in a directory of its own (under
+// RAFTKV_REAL_DIR if set, kept), and returns their verdicts; a faithful
+// run that does not conform has its replay hint logged.
+func realRuns(t *testing.T, seeds []int64, cfgOf func(seed int64) nemesisRun) []realVerdicts {
 	t.Helper()
 	if os.Getenv("RAFTKV_REAL") != "1" {
 		t.Skip("RAFTKV_REAL=1 runs the real tier: three raftkv-node processes on localhost, toxiproxy-server on PATH")
 	}
 	qtest.RequireQuint(t)
+	dir := realDir(t)
 	url := toxiproxyServer(t)
-	dir := t.TempDir()
-	if keep := os.Getenv("RAFTKV_REAL_DIR"); keep != "" {
-		dir = filepath.Join(keep, t.Name())
-	}
 	bin := buildNode(t, dir)
-	offset := int64(envInt("GOTOGETHER_SEED_OFFSET", 0))
-	for seed := offset + 1; seed <= offset+int64(n); seed++ {
+	var out []realVerdicts
+	for _, seed := range seeds {
 		start := time.Now()
-		v := runUnderNemesis(t, bin, url, filepath.Join(dir, fmt.Sprintf("seed%d", seed)), realConfig(seed, m))
+		cfg := cfgOf(seed)
+		v := runUnderNemesis(t, bin, url, filepath.Join(dir, fmt.Sprintf("seed%d", seed)), cfg)
 		t.Logf("seed %d (%v): the clients' history ok %v (NoRequestID's failure %v), the cluster's ok %v, settled %v", seed,
 			time.Since(start).Round(100*time.Millisecond), v.KV.OK(), noRequestIDCaught.Holds(v.KV), v.Cluster.OK(), qtest.Settles().Holds(v.Cluster))
-		if m == Faithful && (!v.KV.OK() || !v.Cluster.OK()) {
+		if !v.Cluster.OK() {
+			t.Logf("  the cluster's: %s", strings.TrimSpace(v.Cluster.Report.Summary()))
+		}
+		if cfg.Mutation == Faithful && (!v.KV.OK() || !v.Cluster.OK()) {
 			logReplay(t, v)
 		}
-		kv, cluster = append(kv, v.KV), append(cluster, v.Cluster)
+		out = append(out, v)
 	}
-	return kv, cluster
+	return out
+}
+
+// realDir is where a test's real runs write: a new temporary directory,
+// or RAFTKV_REAL_DIR/<test>, which must not hold an earlier run's (its
+// nodes would refuse their step logs, and its logs would be mixed).
+func realDir(t *testing.T) string {
+	t.Helper()
+	keep := os.Getenv("RAFTKV_REAL_DIR")
+	if keep == "" {
+		return t.TempDir()
+	}
+	dir := filepath.Join(keep, t.Name())
+	if es, err := os.ReadDir(dir); err == nil && len(es) > 0 {
+		t.Fatalf("RAFTKV_REAL_DIR: %s holds an earlier run's logs: remove it, or give RAFTKV_REAL_DIR another directory", dir)
+	}
+	return dir
+}
+
+// seedsOf are the seeds a test runs: RAFTKV_REAL_SEEDS (a comma-separated
+// list), else, with GOTOGETHER_SEED_OFFSET (the nightly's), the next
+// $runs seeds after it ($runs the environment's number, len(def) if
+// unset), else def, the per-PR seeds.
+func seedsOf(t *testing.T, runs string, def []int64) []int64 {
+	t.Helper()
+	if list := os.Getenv("RAFTKV_REAL_SEEDS"); list != "" {
+		var out []int64
+		for _, f := range strings.Split(list, ",") {
+			n, err := strconv.ParseInt(strings.TrimSpace(f), 10, 64)
+			if err != nil {
+				t.Fatalf("RAFTKV_REAL_SEEDS=%q: want numbers separated by commas", list)
+			}
+			out = append(out, n)
+		}
+		return out
+	}
+	if off := envInt("GOTOGETHER_SEED_OFFSET", 0); off > 0 {
+		var out []int64
+		for i := range envInt(runs, len(def)) {
+			out = append(out, int64(off+i+1))
+		}
+		return out
+	}
+	return def
+}
+
+func kvOf(vs []realVerdicts) (out []*qtest.Run) {
+	for _, v := range vs {
+		out = append(out, v.KV)
+	}
+	return out
+}
+
+func clusterOf(vs []realVerdicts) (out []*qtest.Run) {
+	for _, v := range vs {
+		out = append(out, v.Cluster)
+	}
+	return out
 }
 
 // logReplay says how to re-make a failed real run's faults in the
@@ -385,36 +494,94 @@ func envInt(name string, def int) int {
 	return def
 }
 
-// Under crashes, pauses and isolated nodes, and clients that lose half
-// their responses, the real cluster's clients see a linearizable store
-// (with the calls a client gave up on placed, ResolvePending) that
-// converges after the faults; the nodes' history with the nemesis's
-// steps has one leader a term, a leader again after the settle and
-// within 300ms of a heal, and a restarted node caught up within 1s.
-// RAFTKV_REAL_RUNS runs (3 by default; CI's nightly 10). Measured: every
-// faithful run conforms and settles, 33 of 33 (16 at this loss, 6 of
-// them with -race; 13 at half of it; 4 without), 6 to 17s each; with the
-// nodes' Recorders named, 8 of 8, the 4 with a crash among them (their
-// losses bounded by the reaping, the settles after it stand).
+// prSeeds are the per-PR runs' seeds: schedules with a crash in each
+// (5: a pause, a crash, an isolate; 9: a crash, a pause, a crash; 10: a
+// pause, a crash, a crash), each catching both mutants below in most
+// runs measured.
+var prSeeds = []int64{5, 9, 10}
+
+// Under crashes, pauses and isolated nodes, every node cut off three
+// times, and clients that lose four responses in five, the real
+// cluster's clients see a linearizable store (with the calls a client
+// gave up on placed, ResolvePending) that converges after the faults;
+// the nodes' history with the nemesis's steps has one leader a term, a
+// leader again after the settle and within 500ms of each heal, and a
+// restarted node caught up within 1s. The per-PR seeds (prSeeds); the
+// nightly's RAFTKV_REAL_RUNS fresh ones. Measured with this shape: 24 of
+// 24 runs conform and settle on both histories (18 with -race), 14 to
+// 22s each. A second leader of a term added to one run's logs after its
+// crashes is a violation of electionSafety: the nodes declare no lost
+// tails (nemesisRun.Recorders), so a crash leaves the steps after it
+// judged.
 func TestRealNemesis(t *testing.T) {
-	kv, cluster := realRuns(t, envInt("RAFTKV_REAL_RUNS", 3), Faithful)
-	qtest.Runs(kv...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	qtest.Runs(cluster...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
+	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	secondLeader(t, vs[0]).Expect(t, qtest.Violates("electionSafety"))
+}
+
+// secondLeader is v's cluster history with a node's lead of a term
+// another node led added at its end, as NoPersistVote makes one, judged.
+func secondLeader(t *testing.T, v realVerdicts) *qtest.Run {
+	t.Helper()
+	dir := filepath.Join(v.Dir, "steps")
+	nodes := readSteps(t, filepath.Join(dir, "node-*.jsonl"))
+	var lead *qtrace.Step
+	for i := range nodes {
+		if s := &nodes[i]; s.Action == "lead" && (lead == nil || s.Time.After(lead.Time)) {
+			lead = s
+		}
+	}
+	if lead == nil {
+		t.Fatalf("%s: no node led", dir)
+	}
+	other := Nodes[(slices.Index(Nodes, lead.Args["node"].(string))+1)%len(Nodes)]
+	var last qtrace.Step // other's last step: the added one follows it in its recorder
+	for _, s := range nodes {
+		if s.Args["node"] == other && (last.Recorder == "" || s.Time.After(last.Time)) {
+			last = s
+		}
+	}
+	at := last.Time
+	if lead.Time.After(at) {
+		at = lead.Time
+	}
+	fake := qtrace.Step{Action: "lead", Recorder: last.Recorder, Seq: last.Seq + 1, Actor: last.Actor, Process: last.Process, Outcome: "ok",
+		Time: at.Add(time.Microsecond), Args: map[string]any{"node": other, "term": lead.Args["term"]}}
+	steps := append(nodes, fake)
+	steps = append(steps, readSteps(t, filepath.Join(dir, "nemesis.jsonl"))...)
+	steps = append(steps, readSteps(t, filepath.Join(dir, "harness.jsonl"))...)
+	return qtest.Validate(t, "cluster.real.binding.yaml", steps)
 }
 
 // A client that retries under a new request id (NoRequestID, the
 // client's: a real client carries it through Client.Do) applies a
 // transfer whose response was lost twice, which no placement of its
 // calls explains: the simulation's claim (TestPendingTransfers), over
-// real runs. Measured at this loss: 22 of 24 runs caught it (10 of 12;
-// 12 of 12 with -race), the nodes' history conforming in all. At half
-// of it 28 of 55 (19 of 30; 9 of 25 with -race, the slower nodes
-// answering in time more often), and without lost responses 2 of 20,
-// which is why the clients lose them. At a rate of 0.73 (the lower 95%
-// bound of 22 of 24) three runs miss it with a chance of 2% and five of
-// 0.14%: RAFTKV_REAL_MUTANT_RUNS is 3 by default, CI's nightly 5.
+// real runs. Each call is a new connection, so toxiproxy draws its loss
+// per call. Measured with this shape and -race, per seed: 5 caught it in
+// 3 of 3 runs, 9 in 2 of 3, 10 in 3 of 3 (and 18 of 18 runs of seeds
+// 4-10 without the cuts and -race): at each seed's worst measured miss
+// rate (1 in 3) the three miss together 3.7% of the time. The nightly
+// runs RAFTKV_REAL_MUTANT_RUNS fresh seeds.
 func TestRealNoRequestID(t *testing.T) {
-	kv, cluster := realRuns(t, envInt("RAFTKV_REAL_MUTANT_RUNS", 3), NoRequestID)
-	qtest.Runs(kv...).Expect(t, qtest.Some(noRequestIDCaught))
-	qtest.Runs(cluster...).Expect(t, qtest.Conforms())
+	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, NoRequestID) })
+	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Some(noRequestIDCaught))
+	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Conforms())
+}
+
+// An election timeout ten times as long (SlowElection, the node's) still
+// elects, too late: after every node was cut off, past the 500ms bound
+// after the heal (cluster.real.binding.yaml), as in the simulation's
+// TestElectionAfterHeal. Measured with this shape and -race: 11 of 12
+// runs over seeds 5, 9, 10, 13, 14, 15; per seed 5 caught it in 5 of 5,
+// 9 in 4 of 5, 10 in 5 of 5 (the faithful cluster's first leader came
+// 10 to 170ms after a heal, SlowElection's 317ms to 1.1s). At each
+// seed's worst measured miss rate (1 in 5) the three miss together 0.8%
+// of the time.
+func TestRealSlowElection(t *testing.T) {
+	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, SlowElection) })
+	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Some(qtest.Violates("within 500ms after healed: hasLeader")),
+		qtest.None(qtest.Violates("electionSafety")))
+	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms())
 }

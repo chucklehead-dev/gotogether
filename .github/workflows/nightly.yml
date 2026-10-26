@@ -228,8 +228,8 @@ jobs:
 
   raftkv-real:
     # raftkv's real tier under qnemesis at fresh seeds (schedules), more
-    # runs: 10 faithful, 5 NoRequestID (a miss chance of 0.14% at the
-    # measured rate), with the race detector
+    # runs: 10 faithful, 5 each of NoRequestID and SlowElection, with the
+    # race detector
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -256,7 +256,7 @@ jobs:
           export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
           echo "seeds $((GOTOGETHER_SEED_OFFSET + 1))..."
           RAFTKV_REAL=1 RAFTKV_REAL_RUNS=10 RAFTKV_REAL_MUTANT_RUNS=5 RAFTKV_REAL_DIR="$RUNNER_TEMP/real" \
-            go test -race -count=1 -timeout 25m -run 'TestRealNemesis|TestRealNoRequestID' -v .
+            go test -race -count=1 -timeout 25m -run 'TestRealNemesis|TestRealNoRequestID|TestRealSlowElection' -v .
       - name: keep the runs' logs and journals (a faithful failure's log names its replay in the simulation)
         if: failure()
         uses: actions/upload-artifact@v4
