@@ -153,9 +153,12 @@ more.
   `NoSnapshotReport` (no ReportSnapshot, no retry) never does in 18,
   though the cluster settles with a leader. Random loss alone lost a
   snapshot in 3 of 40 (a new leader resends one).
-- **S10. A per-PR tier with stated power (S).** Every example's -short
-  under 60 s, each mutant's chance of being caught there printed, at
-  least 0.95; the full searches nightly.
+- **S10. A per-PR tier with stated power (S). Done.** Every example's
+  -short runs per push in under 60 s on CI (checkout 199 s to 49 s,
+  raftkv 54 s, twophase 42 s), each mutant's claim missed there at most
+  5% of the time by its exploration's own rate, stated in the test's doc
+  comment; the full tests run nightly over fresh seeds. ci/test-times.txt
+  holds the -short times.
 - **S11. Partial logs (M), then online validation decided.** A trace
   whose recorders lost a prefix or a suffix judged as a search from a
   set of states; `-follow` decided in one place (it is deferred below
