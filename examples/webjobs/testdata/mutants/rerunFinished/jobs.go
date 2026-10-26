@@ -2,7 +2,7 @@ package webjobs
 
 import (
 	"fmt"
-	"math/rand"
+	"hash/fnv"
 	"sync"
 	"time"
 )
@@ -29,8 +29,8 @@ type Jobs struct {
 	mu    sync.Mutex
 	jobs  map[string]*job
 	byKey map[string]string
-	n     int
-	rng   *rand.Rand
+	made  map[string]int // jobs made per key
+	seed  int64
 	min   time.Duration
 	max   time.Duration
 	rec   recorder
@@ -38,7 +38,26 @@ type Jobs struct {
 }
 
 func newJobs(rec recorder, seed int64, min, max time.Duration) *Jobs {
-	return &Jobs{jobs: map[string]*job{}, byKey: map[string]string{}, rng: rand.New(rand.NewSource(seed)), min: min, max: max, rec: rec}
+	return &Jobs{jobs: map[string]*job{}, byKey: map[string]string{}, made: map[string]int{}, seed: seed, min: min, max: max, rec: rec}
+}
+
+// next names key's next job and draws its run, from the seed, the key and
+// how many jobs the key had alone: a run that drops a submission names
+// and times every other job as before (a shrinker removes actions and
+// reruns the rest). The id is j and the key's hash, then -2, -3, ... for
+// a key's later jobs.
+func (s *Jobs) next(key string) (string, time.Duration) {
+	s.made[key]++
+	n := s.made[key]
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	id := fmt.Sprintf("j%08x", h.Sum32())
+	if n > 1 {
+		id = fmt.Sprintf("%s-%d", id, n)
+	}
+	d := fnv.New64a()
+	fmt.Fprintf(d, "%d\x00%s\x00%d", s.seed, key, n)
+	return id, s.min + time.Duration(d.Sum64()%uint64(s.max-s.min+1))
 }
 
 // Submit creates the job of key, unless key has one already: a page that
@@ -60,11 +79,10 @@ func (s *Jobs) Submit(key string) (id, status string, created bool) {
 		go s.run(j, s.min)
 		return id, j.status, true
 	}
-	s.n++
-	j := &job{id: fmt.Sprintf("j%d", s.n), key: key, status: Accepted, stop: make(chan struct{})}
+	id, work := s.next(key)
+	j := &job{id: id, key: key, status: Accepted, stop: make(chan struct{})}
 	s.jobs[j.id], s.byKey[key] = j, j.id
 	s.rec.record("created", "key", key, "id", j.id)
-	work := s.min + time.Duration(s.rng.Int63n(int64(s.max-s.min)+1))
 	s.wg.Add(1)
 	go s.run(j, work)
 	return j.id, j.status, true

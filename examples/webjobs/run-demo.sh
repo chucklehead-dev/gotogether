@@ -37,9 +37,11 @@ pid=$!
 trap 'kill $pid 2>/dev/null; rm -rf "$dir"' EXIT
 for _ in $(seq 50); do curl -s 127.0.0.1:18090/ > /dev/null && break; sleep 0.1; done
 for _ in 1 2; do
-  curl -s -X POST 127.0.0.1:18090/jobs -d '{"key": "demo-1"}'
+  answer=$(curl -s -X POST 127.0.0.1:18090/jobs -d '{"key": "demo-1"}')
+  echo "$answer"
 done
+id=$(echo "$answer" | sed 's/.*"id":"\([^"]*\)".*/\1/')
 sleep 1.5
-curl -s 127.0.0.1:18090/jobs/j1
+curl -s "127.0.0.1:18090/jobs/$id"
 kill -INT $pid; wait $pid || true
 cut -c1-120 "$dir/server.jsonl"

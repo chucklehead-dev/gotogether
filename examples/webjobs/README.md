@@ -22,6 +22,7 @@ model judges both together.
 | [webjobs.binding.yaml](webjobs.binding.yaml) | every parameter the step's field of its name; `complete: true` (a journey is judged finished); a `within` |
 | [bombadil/spec.ts](bombadil/spec.ts) | Bombadil's spec: custom actions `ui.submit` (a double click) and `ui.cancel`, the `result` extract (`{id, status, key}`), its own properties |
 | [bombadiltrace](bombadiltrace/bombadiltrace.go) | the adapter: trace.jsonl to invocation records and steps |
+| [journey](journey/journey.go) | the page's actions (`Submit{Key, Twice}`, `Cancel`, `Poll`, `AwaitEnd`, `Resubmit`, `Sleep`), `Client.Plan(seed)` and `Client.Play`, recording as bombadiltrace does; [rerun.go](journey/rerun.go): `Rerun` against a fresh server (`InProcess`, or a mutant's `Program`), drained, its steps returned, for a shrinker's reruns |
 | [harness.go](harness.go) | `RunLive` (the server on 127.0.0.1:0, Bombadil headless, the drain), `Steps` (a journey's server log and page steps), run-info.json |
 | [testdata/runs](testdata/runs) | recorded journeys, one faithful and one per mutant: Bombadil's trace, two of its screenshots, the server's log, run-info.json |
 | [testdata/mutants](testdata/mutants) | each mutant's files, replacing webjobs' of the same name |
@@ -92,7 +93,7 @@ model judges both together.
 
 | test | mutant | check | verdict |
 |---|---|---|---|
-| `TestClient` | none | the real server driven through the page's API by a Go client (`Client`: eight journeys, each a double-clicked submission, polls every 20ms, a cancel in half of them, every fourth submission sent once more after its job ended), no browser | `Finishes()` |
+| `TestClient` | none | the real server driven through the page's API by a Go client (`journey.Client`'s plan of eight journeys, each a double-clicked submission, polls every 20ms, a cancel in half of them, every fourth submission sent once more after its job ended), no browser | `Finishes()` |
 | `TestRecorded` | none | the recorded faithful journey (a 6s Bombadil run: 9 jobs, 6 ready, 3 cancelled), then the CLI: `gotogether validate -manifest -run-info` and `validate -replay` | `Finishes()`; the manifest replays |
 | `TestProbes` | none: constructed journeys, each a way a review found the first mapping and model passed | seven runs | a cancel never answered, then a poll's ready: `Pending("cancel")`, `None(Finishes())`; the page stuck at accepted: `Violates(EventuallyName("pageShowsEnds"))`; ready shown 900ms after the commit: the 500ms `within`; finished twice: `finishedOnce`; committed after its cancel: `noCommitAfterCancel`; a double click's second request answered 500: `noFailedRequest`; a key renewed between the snapshot and the click: `Finishes()` (the key is the one sent) |
 | `TestClickWithNoOutcome` | none: the recorded journey cut at its first click, its requests unanswered | one run | `Pending("submit")`, `None(Finishes())` |
@@ -119,7 +120,7 @@ the claim in the table above holding of the run; for the faithful app,
 |---|---|---|---|---|---|---|---|
 | live, 45s (the nightly's) | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 |
 | live, 6s (a recording's) | 10 of 10 | 9 of 10 | 10 of 10 | 9 of 10 | 10 of 10 | 9 of 10 | 10 of 10 |
-| `Client`, seeds 1 to 10 (`-short` runs seed 1) | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 |
+| `journey.Client`, seeds 1 to 10 (`-short` runs seed 1) | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 |
 
 rerunFinished (client only): 10 of 10 seeds. After `createdOnce` and the
 submit's codes were added, six more live 45s faithful runs finished (6
@@ -196,6 +197,26 @@ it killed before, by moving a creation past its submit, are no longer
 made). The survivors left are equivalent by the model's design: answers
 are sets, two submits or a submit and a show commute, and no bound reads
 a request's time or a move this small.
+
+## Keyed jobs, and actions to remove
+
+A job's id and its run are its key's: the id is `j` and the key's hash
+(`-2`, `-3` for a key's later jobs, which only a mutant makes), its run
+drawn from the server's seed, the key and that count. Removing a
+submission from a list of actions renames and retimes no other job
+(`TestJobsKeyed`), so a shrinker can take actions out and rerun the
+rest: the client plays a list (`journey.Client.Play`), its plan is one
+(`Plan(seed)`, which `Run` plays), and `journey.Rerun` plays one
+against a fresh server each time, drained before its steps are returned
+(no reset endpoint). A Bombadil trace becomes such a list
+(`bombadiltrace.Actions`: each click's requests from the page's log, a
+cancel by the key of the job it names, the page's own polling an
+`AwaitEnd` before the next submission, the time before a cancel a
+`Sleep`): `TestRecordedActions` plays the recorded faithful journey's 26
+actions again and it finishes. After the change, the client's per-seed
+rates were measured again: the faithful plan finishes and each mutant
+is caught at 10 of 10 seeds, with 12 alternating journeys (`-short`)
+and with 8 at random.
 
 ## What -short runs, and its miss chance
 

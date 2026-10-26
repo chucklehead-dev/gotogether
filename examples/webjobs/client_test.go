@@ -1,93 +1,47 @@
 package harness
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
-	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/webjobs/webjobs"
-	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/examples/webjobs/bombadiltrace"
+	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
 	"github.com/chucklehead-dev/gotogether/qtest"
-	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
-// client is the Client of a run against base: jobs of 100 to 300ms, a
-// cancel within the first 100ms of a journey that cancels (it finds its
-// job running), journeys alternating under -short.
-func client(base string, rec *qobs.Recorder, seed int64) *Client {
-	return &Client{Base: base, Recorder: rec, Seed: seed,
-		Journeys: clientJourneys(), CancelWithin: 100 * time.Millisecond, Stuck: time.Second, Alternate: testing.Short()}
+// client is the journey.Client of a run: a cancel within the first 100ms
+// of a journey that cancels (it finds its job running: jobs run 100 to
+// 300ms), journeys alternating under -short.
+func client() journey.Client {
+	return journey.Client{Journeys: clientJourneys(), CancelWithin: 100 * time.Millisecond, Stuck: time.Second, Alternate: testing.Short()}
 }
 
-var workOpts = []qobs.Option{qobs.WithActor("webjobs"), qobs.WithProcess("webjobs")}
-
-// clientRun runs the server (as this binary was built: a mutant's
-// overlay or none) behind httptest and drives it with Client, no browser,
-// then stops it, drains it and checks both recorders' steps.
+// clientRun runs seed's plan against the server in this process (as
+// this binary was built: a mutant's overlay or none) and checks both
+// recorders' steps.
 func clientRun(t *testing.T, seed int64) *qtest.Run {
 	t.Helper()
-	mem := &qobs.MemorySink{}
-	app := webjobs.New(webjobs.Config{Recorder: qobs.NewRecorder(mem, append(workOpts, qobs.WithID("server"))...), Seed: seed,
-		MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond})
-	srv := httptest.NewServer(app)
-	err := client(srv.URL, qobs.NewRecorder(mem, append(workOpts, qobs.WithID("ui"))...), seed).Run(t.Context())
-	srv.Close()
-	app.Drain()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return qtest.Validate(t, "webjobs.binding.yaml", mem.Steps())
+	return played(t, journey.InProcess{Seed: seed, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, seed)
 }
 
-// clientRunOf runs the server as the program bin (cmd/webjobs, built with
-// a mutant's overlay: a small binary, linked in a second), drives it with
-// Client from this process, stops it with SIGINT (it drains and settles)
-// and checks its step log with the client's steps.
+// clientRunOf runs it against the program bin (cmd/webjobs, built with a
+// mutant's overlay: a small binary, linked in a second), driven from this
+// process.
 func clientRunOf(t *testing.T, bin string, seed int64) *qtest.Run {
 	t.Helper()
-	log := filepath.Join(t.TempDir(), ServerFile)
-	cmd := exec.Command(bin, "-addr", "127.0.0.1:0", "-steps", log, "-seed", fmt.Sprint(seed), "-min-work", "100ms", "-max-work", "300ms")
-	out, err := cmd.StdoutPipe()
+	return played(t, journey.Program{Bin: bin, Dir: t.TempDir(), Seed: seed, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, seed)
+}
+
+func played(t *testing.T, s journey.Server, seed int64) *qtest.Run {
+	t.Helper()
+	c := client()
+	steps, err := journey.Rerun(t.Context(), s, c, c.Plan(seed))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	line, err := bufio.NewReader(out).ReadString('\n')
-	base, ok := strings.CutPrefix(strings.TrimSpace(line), "webjobs: ")
-	if err != nil || !ok {
-		cmd.Process.Kill()
-		t.Fatalf("%s printed %q (%v), not its address: %s", bin, line, err, stderr.String())
-	}
-	mem := &qobs.MemorySink{}
-	runErr := client(strings.TrimSuffix(base, "/"), qobs.NewRecorder(mem, append(workOpts, qobs.WithID("ui"))...), seed).Run(t.Context())
-	cmd.Process.Signal(os.Interrupt)
-	if err := cmd.Wait(); err != nil {
-		t.Fatalf("%s: %v: %s", bin, err, stderr.String())
-	}
-	if runErr != nil {
-		t.Fatal(runErr)
-	}
-	f, err := os.Open(log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	server, err := qtrace.ReadJSONL(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return qtest.Validate(t, "webjobs.binding.yaml", append(server, mem.Steps()...))
+	return qtest.Validate(t, "webjobs.binding.yaml", steps)
 }
 
 // The real server, driven through the page's API without a browser
@@ -113,4 +67,33 @@ func clientJourneys() int {
 		return 12
 	}
 	return 8
+}
+
+// The recorded faithful journey's actions (bombadiltrace.Actions), played
+// by the client against a fresh server: a finished run, as Bombadil's
+// was. The bridge a Bombadil failure is shrunk through. Full mode.
+func TestRecordedActions(t *testing.T) {
+	if mutant != "" {
+		t.Skip("webjobs as it is")
+	}
+	if testing.Short() {
+		t.Skip("a recorded journey's actions played again (about 6s of them): full mode")
+	}
+	t.Parallel()
+	qtest.RequireQuint(t)
+	f, err := os.Open(filepath.Join("testdata", "runs", "faithful", TraceFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	as, err := bombadiltrace.Actions(f, bombadiltrace.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d actions: %v", len(as), as)
+	steps, err := journey.Rerun(t.Context(), journey.InProcess{Seed: 1, MinWork: 200 * time.Millisecond, MaxWork: 600 * time.Millisecond}, client(), as)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qtest.Validate(t, "webjobs.binding.yaml", steps).Expect(t, qtest.Finishes())
 }

@@ -65,7 +65,7 @@ export const journey = actions(() => {
 // The page's own checks: a result is a job, and a job accepted ends
 // (ready or cancelled) within five seconds.
 export const resultIsAJob = always(
-  () => result.current.text === "" || (/^j[0-9]+$/.test(result.current.id) && ["accepted", "ready", "cancelled"].includes(result.current.status)),
+  () => result.current.text === "" || (/^j[0-9a-f]{8}(-[0-9]+)?$/.test(result.current.id) && ["accepted", "ready", "cancelled"].includes(result.current.status)),
 );
 
 export const acceptedEnds = always(

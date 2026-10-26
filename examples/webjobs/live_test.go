@@ -36,8 +36,8 @@ func bombadil(t *testing.T) (string, []string) {
 	return path, strings.Fields(os.Getenv("BOMBADIL_ARGS"))
 }
 
-// journey is a run checked: its directory, what Bombadil did, the run.
-type journey struct {
+// drive is a run checked: its directory, what Bombadil did, the run.
+type drive struct {
 	name  string
 	dir   string
 	seed  int64
@@ -51,7 +51,7 @@ type journey struct {
 // WEBJOBS_RECORD set: a run to check in), and checks the journey against
 // the binding. The journey's directory is the test's, or one under
 // WEBJOBS_JOURNEYS (kept).
-func live(t *testing.T, name string, l Live) *journey {
+func live(t *testing.T, name string, l Live) *drive {
 	t.Helper()
 	bin, extra := bombadil(t)
 	l.Bombadil, l.Extra = bin, append(extra, l.Extra...)
@@ -85,7 +85,7 @@ func live(t *testing.T, name string, l Live) *journey {
 	if _, err := WriteRunInfo(l.Dir, "webjobs "+name, lr.Driver); err != nil {
 		t.Fatal(err)
 	}
-	j := &journey{name: name, dir: l.Dir, seed: l.Seed, limit: l.TimeLimit, live: lr}
+	j := &drive{name: name, dir: l.Dir, seed: l.Seed, limit: l.TimeLimit, live: lr}
 	j.run = check(t, l.Dir)
 	return j
 }
@@ -119,7 +119,7 @@ func check(t *testing.T, dir string) *qtest.Run {
 // is set: its trace, the server's log and two screenshots (its first
 // answered submission's, and its failing step's or its last's), with a
 // run-info.json naming them.
-func (j *journey) keep(t *testing.T) {
+func (j *drive) keep(t *testing.T) {
 	t.Helper()
 	if os.Getenv("WEBJOBS_RECORD") == "" {
 		return

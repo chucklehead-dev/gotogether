@@ -205,3 +205,27 @@ func (r request) answered(code int, id, status string) request {
 
 // page is a result snapshot: the job shown, and the log.
 func page(id, status string, log ...request) *shown { return &shown{ID: id, Status: status, Log: log} }
+
+// A trace's clicks are the page's actions: a double click's two requests
+// a Submit twice, a cancel the key of the job it names, the page's own
+// polling an await before the next submission (and at the end), and the
+// time between a submission and its cancel a sleep.
+func TestActions(t *testing.T) {
+	s1 := sub(1, "k1").answered(202, "j1", "accepted")
+	s2 := sub(2, "k1").answered(200, "j1", "accepted")
+	trace := strings.Join([]string{
+		line(1000, nil, page("", "")),
+		line(2000, custom("ui.submit"), page("j1", "accepted", s1, s2)),
+		line(3000, "Wait", page("j1", "ready", s1, s2)),
+		line(4000, custom("ui.submit"), page("j2", "accepted", s1, s2, sub(3, "k2").answered(202, "j2", "accepted"))),
+		line(53000, "Wait", page("j2", "accepted", s1, s2, sub(3, "k2").answered(202, "j2", "accepted"))),
+		line(54000, custom("ui.cancel"), page("j2", "cancelled", s2, sub(3, "k2").answered(202, "j2", "accepted"), can(4, "j2").answered(200, "j2", "cancelled"))),
+	}, "")
+	as, err := Actions(strings.NewReader(trace), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fmt.Sprint(as), "[submit k1 twice await k1 submit k2 sleep 50ms cancel k2 await k2]"; got != want {
+		t.Fatalf("actions %s, want %s", got, want)
+	}
+}
