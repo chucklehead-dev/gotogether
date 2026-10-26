@@ -304,6 +304,20 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
 - **E8. External shrinking (L).** ddmin over a driver's actions with a
   reset contract and calibrated reruns; Bombadil's `--reproduce` as the
   rerun.
+- **Left from E1–E5.**
+  - A step's process is per actor: two recorders in one actor (a page and
+    its server) must share one, or Reconstruct reports an overlap, so a
+    client and its server cannot be one actor's distinct locations, and
+    a crash's semantics attach to the shared name (webjobs, raftkv share
+    one by necessity). Separate location from incarnation.
+  - A Go API for a manifest's replay (`validate.Replay`); webjobs' tests
+    shell out to the CLI.
+  - CI's per-package time budgets are measured while packages share the
+    job's CPUs: a package made parallel slowed its neighbours past their
+    budgets four times in a day. Measure CPU time, or run the heavy
+    packages apart.
+  - webjobs' -short takes ~78 s (seven overlay binaries and the client
+    runs), past S10's 60 s.
 
 ## Left from T
 
