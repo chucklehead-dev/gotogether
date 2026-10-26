@@ -309,7 +309,14 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   deposit balance off by one killed, surviving with its expect ablated;
   webjobs' recorded journey (`TestObservationMutants`, full mode and
   nightly): a job created twice and a submit answered 199 survive, two
-  gaps in the model. Left: a mutant per pair of mutations; retime
+  gaps in the model. Review fixes: candidates Reconstruct would refuse
+  left out (a reactor into an actor whose Lamport keys contradict its
+  thread), a mutant refused anyway `FateMalformed`, never killed; a
+  retime never passes its actor's next step (a within judged, not left
+  unjudged), a settle or a watermark, and a survivor with its bounds
+  unjudged is undecided; the brute force a naive enumeration over six
+  shapes (incarnations on two recorders, Lamport keys across actors,
+  watermarks, calls, losses, no seqs). Left: a mutant per pair of mutations; retime
   earlier; a corruption of the outcome and the error text.
 - **E7. Absence diagnostics (M). Done** (DESIGN §53): a watermark record
   (`quint.complete_through_unix_nano`; `qobs.Recorder.CompleteThrough`,

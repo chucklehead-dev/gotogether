@@ -26,6 +26,13 @@ const (
 	// FateUndecided: the mutant has no verdict (a search out of its
 	// budget, a lost tail's eventual val): neither killed nor survived.
 	FateUndecided = "undecided"
+	// FateMalformed: Reconstruct refused the mutant's log with an error
+	// issue (a gap, an overlap, a cycle, a completion before its
+	// invocation): the recorder's checks stopped it, not the model's or
+	// the binding's. qtrace.Mutations leaves out the mutants it can see
+	// would be; one that is anyway is reported with its issue, and
+	// counts in no score.
+	FateMalformed = "malformed"
 )
 
 // A StepMutation is one observation mutant judged (MutateSteps): the
@@ -162,7 +169,6 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 	if cc.Model != nil {
 		used = cc.Binding.UsedFields(cc.Model)
 	}
-	finished := orig.Finished().Verdict == validate.Pass
 	// a mutant the binding cannot plan (a field it reads removed, a
 	// process change it has no restart for) is refused before quint: its
 	// plan's error is the kill, not a tool's failure
@@ -192,7 +198,7 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 				return nil, fmt.Errorf("mutant %s: %w", m.StepMutant, errs[k])
 			}
 			m.Report = js[k].Report
-			m.Fate, m.Why = stepFate(finished, m.Report)
+			m.Fate, m.Why = stepFate(orig, m.Report)
 		}
 	}
 	return rep, nil
@@ -210,17 +216,23 @@ func refused(cc *validate.Checker, steps []qtrace.Step) error {
 	return nil
 }
 
-// stepFate is a mutant's fate by its verdict, the original's being a
-// conforming one (finished, if it finished): killed if it fails, or does
-// not finish where the original did; undecided if it has no verdict.
-func stepFate(finished bool, r *validate.Report) (fate, why string) {
+// stepFate is a mutant's fate by its verdict r, the original's (orig)
+// being a conforming one: malformed if Reconstruct refused it; killed if
+// it fails, or does not finish where the original did; undecided if it
+// has no verdict, or survives with bounds the original's had judged left
+// unjudged (its times go back along the order checked: its survival says
+// nothing of them).
+func stepFate(orig, r *validate.Report) (fate, why string) {
+	if is := malformed(r); is != "" {
+		return FateMalformed, is
+	}
 	switch {
 	case verdictless(r):
 		return FateUndecided, reasonOf(r)
 	case !r.OK():
 		return FateKilled, reasonOf(r)
 	}
-	if finished {
+	if orig.Finished().Verdict == validate.Pass {
 		switch f := r.Finished(); f.Verdict {
 		case validate.Fail:
 			return FateKilled, f.Reason
@@ -228,7 +240,43 @@ func stepFate(finished bool, r *validate.Report) (fate, why string) {
 			return FateUndecided, f.Reason
 		}
 	}
+	if w := withinUnjudged(r); w != "" && withinUnjudged(orig) == "" {
+		return FateUndecided, w
+	}
 	return FateSurvived, ""
+}
+
+// withinUnjudged is why r's bounded-response obligations were not
+// judged, if they were not ("": judged, or none).
+func withinUnjudged(r *validate.Report) string {
+	for _, a := range r.Actors {
+		for _, is := range a.Issues {
+			if is.Kind == "within" && strings.Contains(is.Msg, "not judged") {
+				return is.Msg
+			}
+		}
+	}
+	return ""
+}
+
+// reconstructKinds are the kinds of the error issues Reconstruct
+// raises: a log a recorder could not have written, whatever the model.
+// Read-only.
+var reconstructKinds = map[string]bool{"gap": true, "lost-prefix": true, "duplicate": true, "invocation": true, "overlap": true, "cycle": true}
+
+// malformed is the first error issue Reconstruct raised in r, if any
+// ("": none): the original conforms, so it has none of them.
+func malformed(r *validate.Report) string {
+	issues := slices.Clone(r.Issues)
+	for _, a := range r.Actors {
+		issues = append(issues, a.Issues...)
+	}
+	for _, is := range issues {
+		if is.Severity == "error" && reconstructKinds[is.Kind] {
+			return "refused by Reconstruct: " + is.String()
+		}
+	}
+	return ""
 }
 
 // reasonOf is a report's reason, as validate's result line says it.
@@ -264,6 +312,9 @@ func (r *StepMutationReport) Survived() []StepMutation { return r.ofFate(FateSur
 // Undecided are the mutants with no verdict.
 func (r *StepMutationReport) Undecided() []StepMutation { return r.ofFate(FateUndecided) }
 
+// Malformed are the mutants Reconstruct refused (FateMalformed).
+func (r *StepMutationReport) Malformed() []StepMutation { return r.ofFate(FateMalformed) }
+
 func (r *StepMutationReport) ofFate(f string) []StepMutation {
 	var out []StepMutation
 	for _, m := range r.Mutants {
@@ -287,17 +338,24 @@ func (r *StepMutationReport) Score() float64 {
 // mutants, as Mutate's report lists its survivors.
 func (r *StepMutationReport) String() string {
 	var b strings.Builder
-	k, s, u := len(r.Killed()), len(r.Survived()), len(r.Undecided())
+	k, s, u, x := len(r.Killed()), len(r.Survived()), len(r.Undecided()), len(r.Malformed())
 	fmt.Fprintf(&b, "observation mutants: %d, %d killed (%.0f%%), %d survived", len(r.Mutants), k, 100*r.Score(), s)
 	if u > 0 {
 		fmt.Fprintf(&b, ", %d undecided (no verdict)", u)
+	}
+	if x > 0 {
+		fmt.Fprintf(&b, ", %d malformed (refused by Reconstruct, in no score)", x)
 	}
 	b.WriteString("\n")
 	ops, n := r.counts()
 	fmt.Fprintf(&b, "  %-8s %7s %7s %9s %10s\n", "op", "mutants", "killed", "survived", "undecided")
 	for _, op := range ops {
 		c := n[op]
-		fmt.Fprintf(&b, "  %-8s %7d %7d %9d %10d\n", op, c[FateKilled]+c[FateSurvived]+c[FateUndecided], c[FateKilled], c[FateSurvived], c[FateUndecided])
+		fmt.Fprintf(&b, "  %-8s %7d %7d %9d %10d", op, c[FateKilled]+c[FateSurvived]+c[FateUndecided]+c[FateMalformed], c[FateKilled], c[FateSurvived], c[FateUndecided])
+		if c[FateMalformed] > 0 {
+			fmt.Fprintf(&b, " (%d malformed)", c[FateMalformed])
+		}
+		b.WriteString("\n")
 	}
 	for _, m := range r.Mutants {
 		if m.Fate != FateKilled {
@@ -386,7 +444,8 @@ func (c StepClaim) String() string { return c.sel.String() + " " + c.fate }
 // Expect fails t unless every claim holds: each names at least one
 // mutant (a selector that names none, a misspelled action or field,
 // would hold for nothing), and every one it names has its fate. An
-// undecided mutant meets no claim: raise the search's budget.
+// undecided mutant meets no claim (raise the search's budget), nor does
+// a malformed one (Reconstruct refused it: no question of the model's).
 func (r *StepMutationReport) Expect(t testing.TB, claims ...StepClaim) {
 	t.Helper()
 	for _, c := range claims {

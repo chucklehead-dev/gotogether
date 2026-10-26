@@ -41,7 +41,11 @@ The first release. What a user meets, by module:
   (`.Action`, `.Field`, `.Change`, `.Index`); `qtest.StepMutations`
   narrows it (refused by the other workflows); `qtest.JudgeStepMutants`
   outside a test. `gotogether validate -mutate-steps [-mutate-ops ...]
-  [-mutate-limit n]` prints the table after a pass.
+  [-mutate-limit n]` prints the table after a pass. A mutant Reconstruct
+  would refuse (a Lamport cycle) is left out, and one refused anyway is
+  `FateMalformed` (`Malformed()`), never killed; a retime stays before
+  its actor's next step, settles and watermarks; a survivor whose
+  bounds went unjudged is undecided.
 - `qtest.Undecided(e, because...)`: the claim that a run has no verdict
   for an expectation (a lost tail, a search out of its budget), its
   explanation naming each cause given, so a test states a run that must

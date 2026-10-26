@@ -184,7 +184,7 @@ func TestTimesKept(t *testing.T) {
 
 // The recorded journey's observation mutants (qtest.MutateSteps), four
 // of each op spread over its 59 steps: which recorded fields the model
-// and the binding constrain. Every step dropped is killed (a job no
+// and the binding constrain. Each of the four steps dropped is killed (a job no
 // longer created, finished or shown, an answer no longer seen), and so
 // are a job created twice (createdOnce) and a submit answered 199
 // (noFailedRequest): both survived before the model stated them. What

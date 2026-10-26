@@ -29,8 +29,13 @@ search)`; the mutants alone, `qtrace.Mutations(steps)`.
 ## The ops
 
 Each keeps the recorder's own contract (dense seqs, a completion after
-its invocation record, one incarnation at a time), so the check that
-judges a mutant is the model's and the binding's, not Reconstruct's.
+its invocation record, one incarnation at a time, order keys that agree
+with program order), so the check that judges a mutant is the model's
+and the binding's, not Reconstruct's. A candidate Reconstruct would
+refuse with an error issue the original lacks (a step moved into an
+actor whose Lamport keys contradict its thread's order: a cycle) is
+left out. Watermark, settle, invocation and loss records are never
+mutated; they are renumbered with their recorder's steps.
 
 | op | what changes | a survivor says |
 |---|---|---|
@@ -38,7 +43,7 @@ judges a mutant is the model's and the binding's, not Reconstruct's.
 | `dup` | one step recorded twice, the copy at the next seq (a copy at the same seq is an exporter's retry, deduped) | the action is idempotent in the model, or its copy's observation is not compared |
 | `swap` | two adjacent steps of one recorder and incarnation exchange seqs and times | the two commute in the model, or nothing observes the order |
 | `corrupt` | one argument or observation: ints and floats ±1, bools flipped, strings emptied and changed, the field removed | the binding does not read it (marked `Unread`, from `Binding.UsedFields`), or the model accepts both values |
-| `retime` | one step moved later, past the next step in time | no `within` and no real-time order (`Linearize`) reads its time |
+| `retime` | one step moved later, never past its actor's next step (a within's clock would go back) nor a settle or watermark: past the other actors' steps before it, else later within its gap; its actor's last, past another actor's next step | no `within` and no real-time order (`Linearize`) reads its time |
 | `reactor` | one step moved to another actor, in that actor's process | the actors' models do not tell the step apart |
 
 ## Fates
@@ -49,8 +54,13 @@ judges a mutant is the model's and the binding's, not Reconstruct's.
   finished (`Finishes`), the mutant does not (a completion dropped
   leaves its call pending).
 - **survived**: the same verdict as the original's.
-- **undecided**: no verdict (a search out of its budget, a lost tail):
-  neither. Raise the budget.
+- **undecided**: no verdict (a search out of its budget, a lost tail),
+  or a survivor whose bounds went unjudged where the original's were
+  judged: neither. Raise the budget.
+- **malformed**: Reconstruct refused the mutant's log (a gap, an
+  overlap, a cycle): the recorder's checks stopped it, not the model's.
+  Mutations leaves out what it can see would be; one that is anyway is
+  reported with its issue, in no score, and meets no claim.
 
 The original must conform: a failing run's mutants fail too, and say
 nothing. Verdicts are shared with every check of the test binary (the

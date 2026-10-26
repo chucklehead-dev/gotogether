@@ -1357,6 +1357,7 @@ type Row struct
 == github.com/chucklehead-dev/gotogether/qtest
 const EvidenceFormat = "gotogether.evidence/2"
 const FateKilled = "killed"
+const FateMalformed = "malformed"
 const FateSurvived = "survived"
 const FateUndecided = "undecided"
 const RoleExternal = "external"
@@ -1536,6 +1537,7 @@ type StepMutationReport struct
     field Mutants []StepMutation
     method (*StepMutationReport) Expect(t testing.TB, claims ...StepClaim)
     method (*StepMutationReport) Killed() []StepMutation
+    method (*StepMutationReport) Malformed() []StepMutation
     method (*StepMutationReport) Score() float64
     method (*StepMutationReport) String() string
     method (*StepMutationReport) Survived() []StepMutation

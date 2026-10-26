@@ -100,15 +100,26 @@ func MutateLimit(n int) MutationOption { return func(c *mutationConfig) { c.limi
 //     +1 and -1, a bool flipped, a string emptied (if not empty) and
 //     changed, and every field removed (absent), each its own mutant.
 //   - retime: one step's time (and its invocation time, kept as long
-//     before it) moved later, past the next step in time of any recorder:
-//     to the middle of that step and the one after it, or, past the last,
-//     as far after it as it was before. It moves in the slice to just
-//     after that step. For bindings with within and for real-time order
-//     (Linearize); a check that reads no time is blind to it.
+//     before it) moved later, never past its actor's next step (a
+//     within's clock would go back), nor past a settle or a watermark
+//     record: past every other actor's step before its actor's next, to
+//     the middle of the last of them and that step; with none between,
+//     to the middle of its gap, for a within; its actor's last, past
+//     the next step of another actor (to the middle of it and the one
+//     after, or as far after it as it was before). It moves in the slice
+//     to just after the step it moved past. For bindings with within and
+//     for real-time order (Linearize); a check that reads no time is
+//     blind to it.
 //   - reactor: one step moved to the next actor (in sorted order), when
 //     the log has several, in that actor's process at the time (its
 //     latest step's at or before, else its first), so no actor shows two
 //     incarnations at once.
+//
+// A mutant whose log Reconstruct would refuse with an error issue the
+// original's lacks is left out (wellFormed): a step moved into an actor
+// whose order keys contradict its thread's program order (a cycle), or
+// any other the ops cannot see. A mutant is a question for the model and
+// the binding, not for Reconstruct.
 func Mutations(steps []Step, opts ...MutationOption) []StepMutant {
 	var c mutationConfig
 	for _, o := range opts {
@@ -134,9 +145,49 @@ func Mutations(steps []Step, opts ...MutationOption) []StepMutant {
 		case "reactor":
 			ms = reactors(steps)
 		}
-		out = append(out, spread(ms, c.limit)...)
+		out = append(out, spread(wellFormed(steps, ms), c.limit)...)
 	}
 	return out
+}
+
+// wellFormed are the mutants of ms whose logs Reconstruct raises no
+// error issue of a kind (or more of one) the original's lacks: the ops
+// keep a recorder's contract by construction, and what they cannot see
+// (a step moved into an actor whose order keys contradict its thread's
+// program order: a cycle) is left out here, so every mutant is judged by
+// the model and the binding, never stopped at Reconstruct.
+func wellFormed(steps []Step, ms []StepMutant) []StepMutant {
+	base := errorKinds(steps)
+	out := ms[:0:0]
+	for _, m := range ms {
+		ok := true
+		for k, n := range errorKinds(m.Steps) {
+			if n > base[k] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// errorKinds counts the error issues Reconstruct raises of steps, by
+// kind.
+func errorKinds(steps []Step) map[string]int {
+	traces, issues := Reconstruct(steps)
+	for _, t := range traces {
+		issues = append(issues, t.Issues...)
+	}
+	n := map[string]int{}
+	for _, is := range issues {
+		if is.Severity == "error" {
+			n[is.Kind]++
+		}
+	}
+	return n
 }
 
 // spread is at most n of ms, evenly spaced from the first.
@@ -241,7 +292,7 @@ func swaps(steps []Step) []StepMutant {
 	// each recorder's records in its sequence: seq, then place in the log
 	byRec := map[string][]int{}
 	for i := range steps {
-		if steps[i].Lost == "" {
+		if steps[i].Lost == "" && steps[i].CompleteThrough.IsZero() { // a loss or a watermark is in no sequence
 			byRec[steps[i].Recorder] = append(byRec[steps[i].Recorder], i)
 		}
 	}
@@ -341,37 +392,61 @@ func fmtValue(v any) string {
 }
 
 func retimes(steps []Step) []StepMutant {
-	// the model steps in time, ties by place
-	var order []int
-	for i := range steps {
-		if steps[i].Model() {
-			order = append(order, i)
-		}
-	}
-	sort.SliceStable(order, func(a, b int) bool { return steps[order[a]].Time.Before(steps[order[b]].Time) })
-	// next is the first model step in time strictly after t, as a
-	// position in order (-1: none)
-	next := func(t time.Time) int {
-		k := sort.Search(len(order), func(k int) bool { return steps[order[k]].Time.After(t) })
-		if k == len(order) {
-			return -1
-		}
-		return k
-	}
 	var out []StepMutant
 	for i := range steps {
 		s := &steps[i]
 		if !s.Model() {
 			continue
 		}
-		k := next(s.Time)
-		if k < 0 {
-			continue // the last in time: nothing to move past
+		// the window it may move in: up to its actor's next step, and to
+		// the next settle or watermark record after it (a step past a
+		// settle unsettles the run, which is no question of its time)
+		var end *Step
+		earlier := func(o *Step) bool { return o.Time.After(s.Time) && (end == nil || o.Time.Before(end.Time)) }
+		tied := false // a step of its actor at its very time, after it: no room to move
+		for j := range steps {
+			o := &steps[j]
+			if (o.Model() && o.Actor == s.Actor || o.Settled || !o.CompleteThrough.IsZero()) && earlier(o) {
+				end = o
+			}
+			tied = tied || j != i && o.Model() && o.Actor == s.Actor && o.Time.Equal(s.Time) && (o.Recorder != s.Recorder || o.Seq > s.Seq)
 		}
-		n := &steps[order[k]]
-		at := n.Time.Add(n.Time.Sub(s.Time))
-		if k2 := next(n.Time); k2 >= 0 {
-			at = n.Time.Add(steps[order[k2]].Time.Sub(n.Time) / 2)
+		if tied {
+			continue
+		}
+		// the other actors' steps in it, in time
+		var others []int
+		for j := range steps {
+			o := &steps[j]
+			if o.Model() && o.Actor != s.Actor && o.Time.After(s.Time) && (end == nil || o.Time.Before(end.Time)) {
+				others = append(others, j)
+			}
+		}
+		sort.SliceStable(others, func(a, b int) bool { return steps[others[a]].Time.Before(steps[others[b]].Time) })
+		var at time.Time
+		past := -1 // the step it moves past, in the slice
+		var detail string
+		switch {
+		case end != nil && len(others) > 0:
+			// past every other actor's step before its actor's next
+			past = others[len(others)-1]
+			at = steps[past].Time.Add(end.Time.Sub(steps[past].Time) / 2)
+			detail = fmt.Sprintf("past %s, before %s", steps[past].where(), end.where())
+		case end != nil:
+			// later within its gap, for a within
+			at = s.Time.Add(end.Time.Sub(s.Time) / 2)
+			detail = "before " + end.where()
+		case len(others) > 0:
+			// its actor's last: past the next step of another
+			past = others[0]
+			n := &steps[past]
+			at = n.Time.Add(n.Time.Sub(s.Time))
+			if len(others) > 1 {
+				at = n.Time.Add(steps[others[1]].Time.Sub(n.Time) / 2)
+			}
+			detail = "past " + n.where()
+		default:
+			continue // the last in time: nothing to move past
 		}
 		delta := at.Sub(s.Time)
 		cp := *s
@@ -383,14 +458,13 @@ func retimes(steps []Step) []StepMutant {
 		m[i] = cp
 		// placed just after the step it moved past, so the log's order
 		// says what its times say
-		to := order[k]
-		if to > i {
-			m = slices.Insert(slices.Delete(m, i, i+1), to, cp)
-		} else {
-			m = slices.Insert(slices.Delete(m, i, i+1), to+1, cp)
+		if past > i {
+			m = slices.Insert(slices.Delete(m, i, i+1), past, cp)
+		} else if past >= 0 {
+			m = slices.Insert(slices.Delete(m, i, i+1), past+1, cp)
 		}
 		out = append(out, StepMutant{Op: "retime", Index: i, Action: s.Action,
-			Detail: fmt.Sprintf("of %s: %s later, past %s", s.where(), delta, n.where()), Steps: m})
+			Detail: fmt.Sprintf("of %s: %s later, %s", s.where(), delta, detail), Steps: m})
 	}
 	return out
 }

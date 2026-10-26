@@ -115,7 +115,8 @@ seeds, not by hand.
   is killed when it fails where the original conformed, when the
   binding refuses it (a field it reads removed), or when it does not
   finish where the original finished; it survived with the original's
-  verdict;
+  verdict; one Reconstruct refused (a gap, an overlap, a cycle) is
+  malformed, never killed, and in no score;
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no
   expectation type: assert `err != nil` for a mutant (examples/bank's
   `TestModelDrivenCatchesOnlyDivergence`).
