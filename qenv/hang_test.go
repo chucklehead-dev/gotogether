@@ -79,3 +79,58 @@ func runPanics(t *testing.T, s *qenv.Sim) (msg string) {
 	_ = s.Run(time.Second)
 	return ""
 }
+
+// A hung task let go while Close unwinds another task once ran alongside
+// it, both in the scheduler's state (the run queue: -race flagged it).
+// Abandoned, it unwinds at its next seam touching nothing of the
+// simulation's, while Close unwinds the others.
+func TestHangReleasedDuringClose(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	s.Hang = 50 * time.Millisecond
+	release := make(chan struct{})
+	reached := make(chan struct{})
+	s.Spawn("blocker", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Millisecond) // the other first: its unwinding is what lets this one go
+		blockOnChannel(release)
+		qenv.Yield(ctx) // a seam after the hang: it once enqueued itself, under Close's unwinding
+		close(reached)  // not reached: it unwinds at the seam
+	})
+	s.Spawn("other", func(ctx context.Context) {
+		defer func() {
+			close(release)                    // let the blocker go while this task is still unwinding
+			time.Sleep(20 * time.Millisecond) //qenv:ok holds the unwinding open in real time, for the released task to run in
+		}()
+		qenv.Sleep(ctx, time.Hour)
+	})
+	runPanics(t, s)
+	s.Close()
+	select { //qenv:ok the test waits in wall time
+	case <-reached:
+		t.Fatal("the abandoned task ran on past its seam")
+	case <-time.After(50 * time.Millisecond): //qenv:ok as above
+	}
+}
+
+// BenchmarkBareSteps is the scheduler's cost per step with the watchdog
+// off and on: tasks that only yield.
+func BenchmarkBareSteps(b *testing.B) {
+	for _, hang := range []time.Duration{0, 30 * time.Second} {
+		b.Run(fmt.Sprint("Hang=", hang), func(b *testing.B) {
+			s := qenv.New(qenv.Nominal{})
+			defer s.Close()
+			s.Hang = hang
+			s.MaxSteps = b.N + 100
+			for i := range 4 {
+				s.Spawn(fmt.Sprint("t", i), func(ctx context.Context) {
+					for range b.N / 4 {
+						qenv.Yield(ctx)
+					}
+				})
+			}
+			b.ResetTimer()
+			if err := s.Run(time.Hour); err != nil {
+				b.Fatal(err)
+			}
+		})
+	}
+}
