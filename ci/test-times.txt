@@ -18,7 +18,7 @@ examples/retrystorm 29
 examples/twophase 58
 examples/wallet 50
 binding 142
-cmd/gotogether 90 # 120-145 s on CI with E1-E2 CLI tests (require-settle, the finished matrix rows, strict, evidence -expect)
+cmd/gotogether 130 # 120-145 s on CI with E1-E2 CLI tests (require-settle, the finished matrix rows, strict, evidence -expect); E4 replays every matrix row from its manifest (about 80 s more)
 internal/qeval 188
 internal/simdeps 25 # go list over the workspace: payd (sqlite) and raftkv (bbolt) added modules
 qenv 11
