@@ -421,6 +421,12 @@ func TestValidateManifest(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "nightly: 1 runs, 0 conform, 1 mismatch after deposit (external: not counted below)") {
 		t.Errorf("evidence: exit %d:\n%s", code, out)
 	}
+	// a later version's manifest is skipped, named, not the suite's end
+	os.WriteFile(filepath.Join(dir, "future.json"), []byte(`{"format": "gotogether.run/9"}`), 0o644)
+	if code, out = capture(t, func() (int, error) { return evidence([]string{dir}) }); code != 0 || !strings.Contains(out, `warning: `) || !strings.Contains(out, `"gotogether.run/9"`) {
+		t.Errorf("evidence with a future manifest: exit %d:\n%s", code, out)
+	}
+	os.Remove(filepath.Join(dir, "future.json"))
 	checks := filepath.Join(dir, "checks.txt")
 	os.WriteFile(checks, []byte("nightly\n"), 0o644)
 	if code, out = capture(t, func() (int, error) { return evidence([]string{"-expect", checks, manifest}) }); code != 0 {
@@ -442,12 +448,25 @@ func TestReplayTestManifest(t *testing.T) {
 	t.Setenv("GOTOGETHER_EVIDENCE", dir)
 	steps := []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Args: map[string]any{"amount": int64(110)}, Obs: map[string]any{"balance": int64(110)}}}
 	qtest.Validate(t, "../../validate/testdata/account.yaml", steps, qtest.Constants(map[string]string{"LIMIT": "120"})).Expect(t, qtest.Conforms())
-	manifest := filepath.Join(dir, "cmd", "gotogether", t.Name(), "run1.json")
-	code, out := capture(t, func() (int, error) {
-		return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
-	})
-	if code != 0 || !strings.Contains(out, "the manifest's verdict, reproduced: PASS") {
-		t.Errorf("replay: exit %d:\n%s", code, out)
+	// a complete binding: Validate judges no finish check (a test claims
+	// Finishes), and its manifest says so: the replay judges none either
+	unsettled := []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}}
+	qtest.Validate(t, "../../validate/testdata/funds_complete.yaml", unsettled).Expect(t, qtest.Conforms())
+	// the evidence directory, moved elsewhere, replays from its own
+	// files: they are bundled beside each manifest
+	moved := filepath.Join(t.TempDir(), "ev")
+	if err := os.Rename(dir, moved); err != nil {
+		t.Fatal(err)
+	}
+	dir = moved
+	for _, n := range []string{"run1.json", "run2.json"} {
+		manifest := filepath.Join(dir, "cmd", "gotogether", t.Name(), n)
+		code, out := capture(t, func() (int, error) {
+			return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
+		})
+		if code != 0 || !strings.Contains(out, "the manifest's verdict, reproduced: PASS") || strings.Contains(out, "validate/testdata") {
+			t.Errorf("replay %s: exit %d:\n%s", n, code, out)
+		}
 	}
 	// -expect names it as it names an exploration: by its package's
 	// import path (or its end) and its test
@@ -455,5 +474,64 @@ func TestReplayTestManifest(t *testing.T) {
 	os.WriteFile(checks, []byte("github.com/chucklehead-dev/gotogether/cmd/gotogether "+t.Name()+"\ncmd/gotogether "+t.Name()+"\n"), 0o644)
 	if code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", checks, dir}) }); code != 0 || !strings.Contains(out, "(external: not counted below)") {
 		t.Errorf("evidence -expect: exit %d:\n%s", code, out)
+	}
+}
+
+// An ITF input's manifest records the instance its trace was judged
+// against (the spec it names, hashed with its imports; its constants and
+// invariants): a changed spec is refused on replay. A replay judges on
+// the run's backend: another is refused.
+func TestValidateManifestITF(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	for _, f := range []string{"account.yaml", "account.qnt"} {
+		b, err := os.ReadFile(filepath.Join("../../validate/testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(dir, f), b, 0o644)
+	}
+	var b strings.Builder
+	qtrace.WriteJSONL(&b, []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}})
+	log := filepath.Join(dir, "run.jsonl")
+	os.WriteFile(log, []byte(b.String()), 0o644)
+	if err := toITF([]string{"-binding", filepath.Join(dir, "account.yaml"), "-out", filepath.Join(dir, "itf"), log}); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(dir, "m.json")
+	code, out := capture(t, func() (int, error) {
+		return runValidate([]string{"-dir", filepath.Join(dir, "out"), "-manifest", manifest, filepath.Join(dir, "itf", "default.itf.json")})
+	})
+	if code != 0 {
+		t.Fatalf("validate: exit %d:\n%s", code, out)
+	}
+	m, err := validate.ReadManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := m.Inputs[0].Model
+	if md == nil || md.Spec == nil || md.Spec.Path != filepath.Join(dir, "account.qnt") || md.Module != "account" || len(md.Invariants) != 2 || md.Constants["LIMIT"] != "100" {
+		t.Fatalf("the ITF input's model: %+v", md)
+	}
+	// moved whole: the trace's own spec path is gone, the manifest's is judged
+	moved := filepath.Join(t.TempDir(), "moved")
+	if err := os.Rename(dir, moved); err != nil {
+		t.Fatal(err)
+	}
+	dir, manifest = moved, filepath.Join(moved, "m.json")
+	code, out = capture(t, func() (int, error) {
+		return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
+	})
+	if code != 0 || !strings.Contains(out, "reproduced: PASS") {
+		t.Errorf("replay: exit %d:\n%s", code, out)
+	}
+	if _, err := runValidate([]string{"-replay", manifest, "-backend", "typescript"}); err == nil || !strings.Contains(err.Error(), "verdicts depend on it: drop -backend") {
+		t.Errorf("another backend: %v", err)
+	}
+	f, _ := os.OpenFile(filepath.Join(dir, "account.qnt"), os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString("\n")
+	f.Close()
+	if _, err := runValidate([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "is not the one the run was judged on") {
+		t.Errorf("a changed spec: %v", err)
 	}
 }

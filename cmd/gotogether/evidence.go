@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -57,6 +58,10 @@ func evidence(args []string) (int, error) {
 			var e *qtest.Evidence
 			if validate.IsManifest(path) { // a run gotogether did not drive (Validate's, Record's, validate -manifest's)
 				m, err := validate.ReadManifest(path)
+				if errors.Is(err, validate.ErrManifestFormat) { // another version's: one file, not the whole suite
+					fmt.Printf("warning: %v; skipped\n", err)
+					return nil
+				}
 				if err != nil {
 					return err
 				}

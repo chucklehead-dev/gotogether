@@ -180,8 +180,10 @@ deliberately and say why in the commit and the README.
   `GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence -strict
   -expect checks.txt ev`: a check with no evidence fails, by name.
   Explorations write evidence (Explore, Exhaust, Sweep, Mutate), and
-  Validate and Record runs their manifests (`run<N>.json`, listed as
-  external, named as explorations are); a Hegel search cannot be listed. A test
+  Validate and Record runs their manifests (`run<N>.json` with their
+  files bundled in `run<N>/`, listed as external, named as explorations
+  are); a Hegel search cannot be listed. A bundle holds the run's whole
+  step log, unsanitized: an uploaded evidence directory publishes it. A test
   that skips clears what an earlier run of it left; use a fresh
   directory per run all the same (a renamed test's stays).
 - **A finished run.** Validate a real environment's logs with

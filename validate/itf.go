@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -38,33 +39,9 @@ type ITFOptions struct {
 //
 // and it checks the invariants in every state.
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error) {
-	meta, _ := binding.ReadITFMeta(tr.Meta)
-	if meta == nil {
-		meta = &binding.ITFMeta{}
-	}
-	spec, module, defs, invs := meta.Spec, meta.Module, meta.Defs, meta.Invariants
-	if b := opt.Binding; b != nil {
-		spec, module, defs, invs = b.SpecPath(), b.Module, b.Defs, b.Invariants
-	}
-	if opt.Spec != "" {
-		spec = opt.Spec
-	}
-	if opt.Module != "" {
-		module = opt.Module
-	}
-	if opt.Invariants != nil {
-		invs = opt.Invariants
-	}
-	if spec == "" || module == "" {
-		return nil, fmt.Errorf("the trace does not say which model it is for: give a binding, or spec and module")
-	}
-	if !filepath.IsAbs(spec) {
-		if abs, err := filepath.Abs(spec); err == nil {
-			spec = abs
-		}
-	}
-	if opt.Instance == "" && len(meta.Constants) == 0 && opt.Binding == nil {
-		return nil, fmt.Errorf("no constants for %s: validate against an instance module (Instance) or a gotogether-written trace", module)
+	meta, spec, module, defs, invs, err := itfInstance(tr, opt)
+	if err != nil {
+		return nil, err
 	}
 	o, err := opt.Options.resolve()
 	if err == nil && o.Dir != "" { // a directory of its own, as a check's (dirFor)
@@ -191,4 +168,64 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// itfInstance is the instance an ITF trace is replayed against: the
+// spec, module, defs and invariants the binding gives, else the trace's
+// own metadata, each overridden by opt; and the metadata, its constants.
+func itfInstance(tr *itf.Trace, opt ITFOptions) (meta *binding.ITFMeta, spec, module, defs string, invs []string, err error) {
+	meta, _ = binding.ReadITFMeta(tr.Meta)
+	if meta == nil {
+		meta = &binding.ITFMeta{}
+	}
+	spec, module, defs, invs = meta.Spec, meta.Module, meta.Defs, meta.Invariants
+	if b := opt.Binding; b != nil {
+		spec, module, defs, invs = b.SpecPath(), b.Module, b.Defs, b.Invariants
+	}
+	if opt.Spec != "" {
+		spec = opt.Spec
+	}
+	if opt.Module != "" {
+		module = opt.Module
+	}
+	if opt.Invariants != nil {
+		invs = opt.Invariants
+	}
+	if spec == "" || module == "" {
+		return nil, "", "", "", nil, fmt.Errorf("the trace does not say which model it is for: give a binding, or spec and module")
+	}
+	if !filepath.IsAbs(spec) {
+		if abs, err := filepath.Abs(spec); err == nil {
+			spec = abs
+		}
+	}
+	if opt.Instance == "" && len(meta.Constants) == 0 && opt.Binding == nil {
+		return nil, "", "", "", nil, fmt.Errorf("no constants for %s: validate against an instance module (Instance) or a gotogether-written trace", module)
+	}
+	return meta, spec, module, defs, invs, nil
+}
+
+// ITFModel is the instance ValidateITF replays tr against, for its
+// input's manifest (Input.Model): the spec (the trace's own, the
+// binding's, or opt's) hashed with its imports, the module, the
+// invariants checked, and the constants (the trace's) or the instance
+// module they come from.
+func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error) {
+	meta, spec, module, _, invs, err := itfInstance(tr, opt)
+	if err != nil {
+		return nil, err
+	}
+	m := &RunModel{Module: module, Invariants: append([]string{}, invs...), Instance: opt.Instance}
+	if opt.Instance == "" {
+		m.Constants = maps.Clone(meta.Constants)
+	}
+	if b := opt.Binding; b != nil && b.Path != "" {
+		if m.Binding, err = hashed(b.Path); err != nil {
+			return nil, err
+		}
+	}
+	if m.Spec, m.Imports, err = specFiles(spec); err != nil {
+		return nil, err
+	}
+	return m, nil
 }

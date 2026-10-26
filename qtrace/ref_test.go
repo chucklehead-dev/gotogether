@@ -85,3 +85,19 @@ func TestHistorySVGRef(t *testing.T) {
 		t.Errorf("no ref in the history:\n%s", svg)
 	}
 }
+
+// A step with no time is written with no time key, and read back with
+// none: its UnixNano overflows, and was written as a time in 1677.
+func TestJSONLZeroTime(t *testing.T) {
+	var b strings.Builder
+	if err := WriteJSONL(&b, []Step{{Action: "a", Recorder: "r", Seq: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(b.String(), KeyTime) {
+		t.Errorf("a zero time written: %s", b.String())
+	}
+	got, err := ReadJSONL(strings.NewReader(b.String()))
+	if err != nil || len(got) != 1 || !got[0].Time.IsZero() {
+		t.Errorf("read back: %+v %v", got, err)
+	}
+}

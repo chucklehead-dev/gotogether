@@ -135,10 +135,13 @@ func ManifestEvidence(m *validate.Manifest) *Evidence {
 	if m.Model.Spec != nil {
 		e.Spec = m.Model.Spec.Path + ":" + m.Model.Module
 	}
-	if m.Verdict.Verdict == validate.Pass {
+	switch r := m.Verdict.Reason; {
+	case m.Verdict.Verdict == validate.Pass:
 		e.Conform = 1
-	} else {
-		e.FailingBy[m.Verdict.Reason]++
+	case m.Verdict.Verdict == validate.NotEvaluated && !strings.HasPrefix(r, "no verdict"):
+		e.FailingBy["no verdict ("+r+")"]++ // no verdict, as an exploration's run of none counts
+	default:
+		e.FailingBy[r]++
 	}
 	return e
 }

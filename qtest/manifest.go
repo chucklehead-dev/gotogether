@@ -3,7 +3,6 @@ package qtest
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -36,9 +35,12 @@ func Artifacts(a ...validate.Artifact) Option {
 // are reproduced by GOTOGETHER_RUN instead.
 //
 // Under GOTOGETHER_EVIDENCE each such run writes its manifest itself, as
-// dir/<package>/<test>/run<N>.json (N counting the test's runs from 1)
-// beside a copy of its step log, run<N>.steps.jsonl, which it hashes:
-// the run's own directory may be a test's temporary one.
+// dir/<package>/<test>/run<N>.json (N counting the test's runs from 1),
+// with copies of the files it names in run<N>/ (validate.Manifest.Bundle:
+// its step log, its binding with the spec and the files the spec imports
+// at their places, its artifacts), so the directory travels: a CI job's
+// uploaded evidence replays on another machine. The step log is the
+// run's whole and unsanitized: mind where the directory is uploaded.
 func (r *Run) Manifest() (*validate.Manifest, error) {
 	if r.checker == nil || r.StepLog == "" {
 		return nil, errors.New("gotogether: the run has no manifest: only Validate's and Record's runs have one (an exploration's are reproduced by GOTOGETHER_RUN)")
@@ -69,8 +71,8 @@ func (r *Run) manifest(log string) (*validate.Manifest, error) {
 }
 
 // writeManifest writes run's manifest under GOTOGETHER_EVIDENCE, if set,
-// with a copy of its step log (Run.Manifest says where). A manifest it
-// cannot write is logged, as an exploration's evidence is: the check
+// with its files bundled beside it (Run.Manifest says where). A manifest
+// it cannot write is logged, as an exploration's evidence is: the check
 // itself stands.
 func writeManifest(t testing.TB, run *Run) {
 	dir := evidenceDir(t.Name())
@@ -78,14 +80,9 @@ func writeManifest(t testing.TB, run *Run) {
 		return
 	}
 	n := nextRun(t)
-	log := filepath.Join(dir, fmt.Sprintf("run%d.steps.jsonl", n))
-	err := os.MkdirAll(dir, 0o755)
+	m, err := run.manifest(run.StepLog)
 	if err == nil {
-		err = copyFile(run.StepLog, log)
-	}
-	var m *validate.Manifest
-	if err == nil {
-		m, err = run.manifest(log)
+		err = m.Bundle(filepath.Join(dir, fmt.Sprintf("run%d", n)))
 	}
 	if err == nil {
 		err = m.Write(filepath.Join(dir, fmt.Sprintf("run%d.json", n)))
@@ -93,13 +90,4 @@ func writeManifest(t testing.TB, run *Run) {
 	if err != nil {
 		t.Logf("gotogether: manifest: %v", err)
 	}
-}
-
-// copyFile copies the file at from to to.
-func copyFile(from, to string) error {
-	b, err := os.ReadFile(from)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(to, b, 0o644)
 }

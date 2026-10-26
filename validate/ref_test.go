@@ -44,4 +44,8 @@ func TestFailingStepShowsRef(t *testing.T) {
 	if s := ra.Summary(); !strings.Contains(s, "ref:      bombadil/trace.jsonl:42 screenshot=screenshots/42.webp") {
 		t.Errorf("the failing step's ref is not shown:\n%s", s)
 	}
+	// a summary cached for every run of the steps says no run's ref
+	if s := ra.WithoutRefs().Summary(); strings.Contains(s, "ref:") || !strings.Contains(ra.Summary(), "ref:") {
+		t.Errorf("WithoutRefs:\n%s", s)
+	}
 }

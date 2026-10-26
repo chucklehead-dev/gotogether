@@ -52,8 +52,8 @@ AGENTS.md has the general requirements.
   module, `_` the root), cleared per test, a run alone a replay; a System's `Mutant` marks a
   config's mutation so the suite's gaps leave it out. Each Validate and
   Record run writes its manifest there too (`gotogether.run/1`,
-  run<N>.json, N per test from 1, beside run<N>.steps.jsonl, the step
-  log it hashes; `gotogether validate -replay` judges it again,
+  run<N>.json, N per test from 1, its files bundled in run<N>/: the step
+  log, the binding with its spec and imports, the artifacts; `gotogether validate -replay` judges it again,
   `gotogether evidence` lists it as external).
   `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;

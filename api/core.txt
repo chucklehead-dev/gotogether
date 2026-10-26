@@ -1690,6 +1690,7 @@ const Pass Verdict = "pass"
 func Cached(bindingPath string, o Options) (*Checker, error)
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
+func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error)
 func IsManifest(path string) bool
 func ModuleVersion() string
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
@@ -1764,6 +1765,7 @@ type Input struct
     field Format string `json:"format,omitempty"`
     field Steps int `json:"steps"`
     field Lost []Loss `json:"lost,omitempty"`
+    field Model *RunModel `json:"model,omitempty"`
 type InvariantResult struct
     field Name string
     field Verdict Verdict
@@ -1794,6 +1796,7 @@ type Manifest struct
     method (*Manifest) AddArtifact(name, path string) error
     method (*Manifest) AddConvert(path string) (err error)
     method (*Manifest) AddInput(path, format string, steps []qtrace.Step) error
+    method (*Manifest) Bundle(dir string) error
     method (*Manifest) SetBinding(b *binding.Binding) error
     method (*Manifest) SetSpec(path string) (err error)
     method (*Manifest) Verify() (warnings []string, err error)
@@ -1813,6 +1816,7 @@ type Report struct
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
     method (*Report) Summary() string
+    method (*Report) WithoutRefs() *Report
 type Result struct
     field Actor string
     field Steps int
@@ -1840,13 +1844,14 @@ type RunCheck struct
     field LostPrefix []string `json:"lostPrefix,omitempty"`
     field LostSuffix []string `json:"lostSuffix,omitempty"`
     field Format string `json:"format,omitempty"`
-    field Instance string `json:"instance,omitempty"`
     field NoVars bool `json:"noVars,omitempty"`
     method (RunCheck) SearchOptions() SearchOptions
 type RunModel struct
     field Binding *File `json:"binding,omitempty"`
     field Spec *File `json:"spec,omitempty"`
+    field Imports []File `json:"imports,omitempty"`
     field Module string `json:"module,omitempty"`
+    field Instance string `json:"instance,omitempty"`
     field Convert *File `json:"convert,omitempty"`
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
@@ -1855,7 +1860,7 @@ type RunVerdict struct
     field Reason string `json:"reason,omitempty"`
     field Actors []ActorVerdict `json:"actors"`
     field Failing *FailingStep `json:"failing,omitempty"`
-    method (RunVerdict) Same(w RunVerdict) bool
+    method (RunVerdict) Same(w RunVerdict) (same bool, note string)
     method (RunVerdict) String() string
 type SearchOptions struct
     field Linearize bool
@@ -1874,4 +1879,5 @@ type Tools struct
     field Quint string `json:"quint,omitempty"`
     field Backend string `json:"backend,omitempty"`
 type Verdict string
+var ErrManifestFormat = errors.New("another manifest format")
 

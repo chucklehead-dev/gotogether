@@ -242,7 +242,19 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   binding or spec (a changed artifact warns), takes no flag the manifest
   decides, and exits 1 on another verdict. `gotogether evidence` lists
   manifests (role external), and `-expect` names them as explorations.
-  Left: the spec's imports are not hashed.
+  Review fixes: the spec checked is the one the binding resolves now,
+  with its imports (hashed transitively); an ITF input records its own
+  instance; the check recorded is the one judged (a complete binding's
+  finish check in the CLI, none in qtest); qtest bundles every file
+  (`Manifest.Bundle`), so an evidence directory replays elsewhere;
+  gotogether's version is a dependency's when it is one; the backend is
+  recorded and kept on replay; a reworded reason is the same verdict
+  (`Same` compares kinds); a later version's manifest is skipped by
+  `evidence`. Left: no option sanitizes a manifest itself (sanitize the
+  log, then validate it with -manifest). E3's: a cached verdict's
+  failing step is found with no seq too, its recorder and process
+  rebased; qhegel caches summaries without refs; a zero step time is
+  written as none.
 - **E5. A Bombadil example (M).** examples/webjobs: a standard-library
   web app (submit, accepted, ready, cancel); Bombadil explores it; an
   adapter turns its trace into invocation records completed only by an

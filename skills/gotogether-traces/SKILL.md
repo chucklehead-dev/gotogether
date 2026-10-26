@@ -127,13 +127,24 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   ref), and `-run-info driver.json` adds what gotogether did not see:
   `{"name", "driver": {"name", "version", "seed", "origin", "args"},
   "artifacts": [{"name", "path"}]}` (artifacts hashed). `gotogether
-  validate -replay run.json` judges it again, refusing a changed input
-  (naming it) and exiting 1 if the verdict is not the manifest's. Keep
-  the manifest beside its files: paths under its directory are relative.
-  In code: `Checker.Manifest`, `Manifest.AddInput`, `Write`,
-  `ReadManifest`, `Verify`; in a test, `qtest.Driver`, `qtest.Artifacts`
-  and `Run.Manifest()` (written under `GOTOGETHER_EVIDENCE` as
-  `run<N>.json`).
+  validate -replay run.json` judges it again on the run's backend,
+  refusing a changed input, binding, spec or one of the files it imports
+  (the spec checked is the one the binding resolves now), naming it, and
+  exiting 1 if the verdict is not the manifest's (reasons worded
+  otherwise by a newer gotogether only noted). Keep the manifest beside
+  its files: paths under its directory are relative; `Manifest.Bundle`
+  copies them there. In code: `Checker.Manifest`, `Manifest.AddInput`,
+  `Bundle`, `Write`, `ReadManifest`, `Verify`; in a test, `qtest.Driver`,
+  `qtest.Artifacts` and `Run.Manifest()` (written under
+  `GOTOGETHER_EVIDENCE` as `run<N>.json`, its files bundled in
+  `run<N>/`).
+- What a manifest holds, verbatim: the driver's arguments and origin,
+  absolute paths (often with a user's name), the failing step's ref; its
+  bundle (qtest's under `GOTOGETHER_EVIDENCE`) holds the whole,
+  unsanitized step log, and CI jobs often upload that directory. To
+  share a run, sanitize the log first (`gotogether steps -pseudonymize
+  ... -binding b.yaml -out clean.jsonl`, `qtrace.Filter`) and validate
+  the clean log with `-manifest`.
 - Converted spans: `gotogether convert -rules bank.convert.yaml spans.jsonl > steps.jsonl`.
 
 Before trusting a model's isolation level of a real database, check

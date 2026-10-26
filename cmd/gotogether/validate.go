@@ -23,6 +23,12 @@ type validateRun struct {
 	conv, history                        string
 	novars, verbose, withITF             bool
 	requireSettle                        bool
+	// finishFixed: requireSettle says whether the finish check is judged,
+	// whatever the binding's complete says (a replay: as recorded)
+	finishFixed bool
+	// itfModels are a replay's ITF inputs' instances, by path: each
+	// judged against the spec the manifest hashed for it
+	itfModels map[string]*validate.RunModel
 	// invariants and constants, if set, override the binding's (-invariants;
 	// a replay's, the manifest's instance)
 	invariants []string
@@ -87,8 +93,9 @@ func runValidate(args []string) (int, error) {
 }
 
 // replayFlags are the flags -replay takes besides itself: where its
-// output goes, which quint, the backend (the manifest's by default), a
-// new manifest of the replay. The others are the manifest's to say.
+// output goes, which quint, the backend (only the manifest's: verdicts
+// depend on it), a new manifest of the replay. The others are the
+// manifest's to say.
 // Read-only.
 var replayFlags = map[string]bool{"replay": true, "dir": true, "quint": true, "v": true, "backend": true, "manifest": true, "history": true, "itf": true}
 
@@ -118,20 +125,31 @@ func replayManifest(path string, fset *flag.FlagSet) (int, error) {
 		fmt.Println("warning:", w)
 	}
 	get := func(name string) string { return fset.Lookup(name).Value.String() }
-	v := validateRun{dir: get("dir"), quint: get("quint"), backend: get("backend"), verbose: get("v") == "true", withITF: get("itf") == "true",
-		history: get("history"), manifest: get("manifest"), format: m.Check.Format, instance: m.Check.Instance, novars: m.Check.NoVars,
-		requireSettle: m.Check.RequireSettle, search: m.Check.SearchOptions(), lostPrefix: strings.Join(m.Check.LostPrefix, ","),
-		lostSuffix: strings.Join(m.Check.LostSuffix, ","), module: m.Model.Module, invariants: m.Model.Invariants, constants: m.Model.Constants}
-	if v.backend == "" {
-		v.backend = m.Tools.Backend
+	if b := get("backend"); b != "" && b != m.Tools.Backend {
+		return 2, fmt.Errorf("validate -replay %s -backend %s: the run was judged on backend %q (\"\": the default), and verdicts depend on it: drop -backend", path, b, m.Tools.Backend)
 	}
+	if env := os.Getenv("QUINT_BACKEND"); m.Tools.Backend == "" && env != "" {
+		fmt.Printf("note: QUINT_BACKEND=%s ignored: the run was judged on the default backend\n", env)
+		os.Unsetenv("QUINT_BACKEND")
+	}
+	v := validateRun{dir: get("dir"), quint: get("quint"), backend: m.Tools.Backend, verbose: get("v") == "true", withITF: get("itf") == "true",
+		history: get("history"), manifest: get("manifest"), format: m.Check.Format, novars: m.Check.NoVars,
+		requireSettle: m.Check.RequireSettle, finishFixed: true, search: m.Check.SearchOptions(), lostPrefix: strings.Join(m.Check.LostPrefix, ","),
+		lostSuffix: strings.Join(m.Check.LostSuffix, ","), module: m.Model.Module, invariants: m.Model.Invariants, constants: m.Model.Constants}
 	if v.format == "" {
 		v.format = "auto"
 	}
 	if m.Model.Binding != nil {
 		v.binding = m.Model.Binding.Path
-	} else if m.Model.Spec != nil {
-		v.spec = m.Model.Spec.Path
+	}
+	v.itfModels = map[string]*validate.RunModel{}
+	for _, in := range m.Inputs {
+		if in.Model != nil {
+			v.itfModels[in.Path] = in.Model
+			if in.Model.Binding != nil && v.binding == "" {
+				v.binding = in.Model.Binding.Path
+			}
+		}
 	}
 	if m.Model.Convert != nil {
 		v.conv = m.Model.Convert.Path
@@ -152,7 +170,10 @@ func replayManifest(path string, fset *flag.FlagSet) (int, error) {
 	if err != nil {
 		return code, err
 	}
-	if got.Same(m.Verdict) {
+	if same, note := m.Verdict.Same(got); same {
+		if note != "" {
+			fmt.Println("note:", note)
+		}
 		fmt.Printf("replay: the manifest's verdict, reproduced: %s\n", got)
 		return code, nil
 	}
@@ -235,8 +256,11 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 	incomplete := map[*validate.Result]string{}
 	// a finished run required (-require-settle, a complete binding)
 	finish, finishWhy := v.requireSettle, "-require-settle"
-	if !finish && b != nil && b.Complete {
+	if !finish && !v.finishFixed && b != nil && b.Complete {
 		finish, finishWhy = true, "the binding is complete"
+	}
+	if finish && v.finishFixed && b != nil && b.Complete { // a replay of a complete binding's finish check, said as it was
+		finishWhy = "the binding is complete"
 	}
 	var c *validate.Checker
 	if len(steps) > 0 || len(itfs) == 0 {
@@ -295,15 +319,27 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		}
 		results = append(results, rep.Actors...)
 	}
+	itfModels := map[string]*validate.RunModel{} // each ITF input's instance, for the manifest
 	for i, in := range itfs {
 		o := opts
 		if len(itfs) > 1 {
 			o.Dir = fmt.Sprintf("%s/itf%d", o.Dir, i)
 		}
-		r, err := validate.ValidateITF(context.Background(), in.ITF, validate.ITFOptions{Options: o, Binding: b,
-			Spec: v.spec, Module: v.module, Instance: v.instance, NoVarCheck: v.novars})
+		io := validate.ITFOptions{Options: o, Binding: b, Spec: v.spec, Module: v.module, Instance: v.instance, NoVarCheck: v.novars}
+		if md := v.itfModels[in.Path]; md != nil { // a replay: the spec the manifest hashed, not the trace's old path
+			io.Module, io.Instance = md.Module, md.Instance
+			if md.Binding == nil && md.Spec != nil {
+				io.Spec = md.Spec.Path
+			}
+		}
+		r, err := validate.ValidateITF(context.Background(), in.ITF, io)
 		if err != nil {
 			return 2, none, fmt.Errorf("%s: %w", in.Path, err)
+		}
+		if v.manifest != "" {
+			if itfModels[in.Path], err = validate.ITFModel(in.ITF, io); err != nil {
+				return 2, none, err
+			}
 		}
 		fmt.Print(r.Summary())
 		if v.verbose {
@@ -325,11 +361,12 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 			if m, err = c.Manifest(results, v.search); err != nil {
 				return 2, none, err
 			}
-		} else if m, err = itfManifest(opts, b, v.spec, v.module); err != nil {
+		} else if m, err = itfManifest(opts, b); err != nil {
 			return 2, none, err
 		}
 		m.Verdict = verdict
-		m.Check.RequireSettle, m.Check.Format, m.Check.Instance, m.Check.NoVars = v.requireSettle, v.format, v.instance, v.novars
+		// the check as judged: a complete binding's finish check too
+		m.Check.RequireSettle, m.Check.Format, m.Check.NoVars = finish, v.format, v.novars
 		m.Check.LostPrefix, m.Check.LostSuffix = fields(v.lostPrefix), fields(v.lostSuffix)
 		if v.conv != "" {
 			if err := m.AddConvert(v.conv); err != nil {
@@ -340,6 +377,7 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 			if err := m.AddInput(r.path, r.format, r.steps); err != nil {
 				return 2, none, err
 			}
+			m.Inputs[len(m.Inputs)-1].Model = itfModels[r.path]
 		}
 		if err := addRunInfo(m, v.runInfo); err != nil {
 			return 2, none, err
@@ -360,20 +398,13 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 	return 1, verdict, nil
 }
 
-// itfManifest is the manifest of ITF inputs checked with no checker: the
-// binding, if given, else the spec named.
-func itfManifest(o validate.Options, b *binding.Binding, spec, module string) (*validate.Manifest, error) {
+// itfManifest is the manifest of ITF inputs checked with no checker:
+// the binding, if given; each input's own instance is its Input.Model.
+func itfManifest(o validate.Options, b *binding.Binding) (*validate.Manifest, error) {
 	m := validate.NewManifest(o)
 	m.Model.Invariants = []string{}
 	if b != nil {
 		if err := m.SetBinding(b); err != nil {
-			return nil, err
-		}
-		return m, nil
-	}
-	m.Model.Module = module
-	if spec != "" {
-		if err := m.SetSpec(spec); err != nil {
 			return nil, err
 		}
 	}

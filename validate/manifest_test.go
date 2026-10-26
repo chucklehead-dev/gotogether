@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -114,7 +115,7 @@ func TestManifestVerifyRefusesChanges(t *testing.T) {
 	}{
 		{"run.jsonl", "the input", false},
 		{"account.yaml", "the binding", false},
-		{"account.qnt", "the spec", false},
+		{"account.qnt", "is not the one the run was judged on", false},
 		{"shot.webp", "artifact screenshot", true},
 	} {
 		dir, m := bundle(t)
@@ -131,7 +132,7 @@ func TestManifestVerifyRefusesChanges(t *testing.T) {
 		switch {
 		case c.warn && (err != nil || len(w) != 1 || !strings.Contains(w[0], c.says)):
 			t.Errorf("%s: %v %v", c.file, w, err)
-		case !c.warn && (err == nil || !strings.Contains(err.Error(), c.says+" "+filepath.Join(dir, c.file)+" changed") || !strings.Contains(err.Error(), "restore it")):
+		case !c.warn && (err == nil || !strings.Contains(err.Error(), c.says) || !strings.Contains(err.Error(), filepath.Join(dir, c.file)) || !strings.Contains(err.Error(), "restore it")):
 			t.Errorf("%s: %v", c.file, err)
 		}
 		os.Remove(filepath.Join(dir, c.file))
@@ -165,11 +166,185 @@ func TestVerdictOf(t *testing.T) {
 	}
 	w := VerdictOf([]*Result{pass, none, fail}, nil)
 	w.Failing.Ref = "another run's line"
-	if !v.Same(w) {
-		t.Error("a ref made another verdict")
+	if same, note := v.Same(w); !same || note != "" {
+		t.Errorf("a ref made another verdict: %v %q", same, note)
 	}
+	// reasons worded otherwise (a newer gotogether's) are the same kind
+	w.Reason, w.Actors[2].Reason = "no verdict (steps lost)", "mismatch after the deposit"
+	if same, note := v.Same(w); !same || !strings.Contains(note, "worded otherwise") {
+		t.Errorf("a reworded reason: %v %q", same, note)
+	}
+	w.Reason = v.Reason // an actor's alone reworded
+	if same, note := v.Same(w); !same || !strings.Contains(note, "worded otherwise") {
+		t.Errorf("an actor's reworded reason: %v %q", same, note)
+	}
+	w.Actors[2].Reason = "rejects deposit"
+	if same, _ := v.Same(w); same {
+		t.Error("a rejection is the same verdict as a mismatch")
+	}
+	w = VerdictOf([]*Result{pass, none, fail}, nil)
 	w.Failing.Seq = 3
-	if VerdictOf([]*Result{pass, none, fail}, nil).Same(w) {
+	if same, _ := v.Same(w); same {
 		t.Error("another failing step is the same verdict")
+	}
+	viol := func(inv string) RunVerdict {
+		return RunVerdict{Verdict: Fail, Reason: "violates " + inv, Actors: []ActorVerdict{{"a", Fail, "violates " + inv}}}
+	}
+	if same, _ := viol("underLimit").Same(viol("nonNegative")); same {
+		t.Error("two invariants' violations are one verdict")
+	}
+}
+
+// write writes files (path relative to dir: content) under dir.
+func write(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for p, c := range files {
+		p = filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A model of a binding whose spec is beside it in another directory,
+// importing a file that imports another (and a commented-out import,
+// which imports nothing).
+var layout = map[string]string{
+	"run/b.yaml":         "spec: ../model/m.qnt\nmodule: m\nconstants: { N: '3' }\n",
+	"model/m.qnt":        "module m {\n  /*\n  import extra.* from \"./extra\"\n  */\n  import lib.* from \"./lib\"\n}\n",
+	"model/extra.qnt":    "module extra {}\n",
+	"model/lib.qnt":      "module lib {\n  import base.* from \"sub/base.qnt\"\n}\n",
+	"model/sub/base.qnt": "module base {}\n",
+	"run/steps.jsonl":    `{"quint.action":"a","quint.seq":1,"quint.recorder":"r"}` + "\n",
+}
+
+func layoutManifest(t *testing.T, dir string) *Manifest {
+	t.Helper()
+	write(t, dir, layout)
+	b, err := binding.Load(filepath.Join(dir, "run", "b.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewManifest(Options{Quint: "no-such-quint"})
+	if err := m.SetBinding(b); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.AddInput(filepath.Join(dir, "run", "steps.jsonl"), "steps", nil); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+// The spec's imports are hashed, transitively, as quint resolves them; a
+// replay checks the spec the binding resolves now: a binding moved
+// (with its run) beside another model, or an import changed, is
+// refused, naming it; the same model moved whole is the same.
+func TestManifestVerifiesTheModelReplayed(t *testing.T) {
+	t.Parallel()
+	a := t.TempDir()
+	m := layoutManifest(t, a)
+	var imps []string
+	for _, i := range m.Model.Imports {
+		imps = append(imps, filepath.ToSlash(strings.TrimPrefix(i.Path, a+string(filepath.Separator))))
+	}
+	if strings.Join(imps, " ") != "model/lib.qnt model/sub/base.qnt" {
+		t.Fatalf("imports: %v", imps)
+	}
+	if err := m.Write(filepath.Join(a, "run", "run.json")); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		edit map[string]string // the other place's files beside the copied run/
+		says string
+	}{
+		{"the same model elsewhere", nil, ""},
+		{"another spec", map[string]string{"model/m.qnt": "module m {}\n"}, "is not the one the run was judged on"},
+		{"an import changed", map[string]string{"model/sub/base.qnt": "module base { val x = 1 }\n"}, "import sub/base.qnt (beside"},
+		{"an import more", map[string]string{"model/lib.qnt": "module lib {\n  import base.* from \"sub/base.qnt\"\n  import more.* from \"more\"\n}\n", "model/more.qnt": "module more {}\n"}, "which the run's model did not"},
+	} {
+		b := t.TempDir()
+		files := map[string]string{}
+		for p, s := range layout {
+			if !strings.HasPrefix(p, "run/") {
+				files[p] = s
+			}
+		}
+		for p, s := range c.edit {
+			files[p] = s
+		}
+		write(t, b, files)
+		run, _ := os.ReadFile(filepath.Join(a, "run", "run.json"))
+		write(t, b, map[string]string{"run/run.json": string(run), "run/b.yaml": layout["run/b.yaml"], "run/steps.jsonl": layout["run/steps.jsonl"]})
+		got, err := ReadManifest(filepath.Join(b, "run", "run.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = got.Verify()
+		if c.says == "" && err != nil || c.says != "" && (err == nil || !strings.Contains(err.Error(), c.says)) {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+}
+
+// Bundle copies a manifest's files beside it, the model at its places
+// relative to the binding, so the directory replays anywhere: the
+// originals gone, it verifies.
+func TestManifestBundle(t *testing.T) {
+	t.Parallel()
+	a := t.TempDir()
+	m := layoutManifest(t, a)
+	write(t, a, map[string]string{"shot.webp": "pixels"})
+	if err := m.AddArtifact("screenshot", filepath.Join(a, "shot.webp")); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "ev")
+	if err := m.Bundle(filepath.Join(out, "run1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Write(filepath.Join(out, "run1.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(a); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(t.TempDir(), "moved")
+	if err := os.Rename(out, moved); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadManifest(filepath.Join(moved, "run1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w, err := got.Verify(); err != nil || len(w) > 0 {
+		t.Errorf("a bundle moved: %v %v", w, err)
+	}
+	if !strings.HasPrefix(got.Model.Spec.Path, moved) || !strings.HasPrefix(got.Artifacts[0].Path, moved) || !strings.HasPrefix(got.Inputs[0].Path, moved) {
+		t.Errorf("paths: %+v", got)
+	}
+}
+
+// gotogether's version: a dependency's (a consumer's binary, its test
+// binaries too), a replacement's, a stamped checkout's commit, else
+// (devel).
+func TestModuleVersion(t *testing.T) {
+	t.Parallel()
+	const path = "github.com/chucklehead-dev/gotogether"
+	for _, c := range []struct {
+		bi   debug.BuildInfo
+		want string
+	}{
+		{debug.BuildInfo{Main: debug.Module{Path: "example.com/app"}, Deps: []*debug.Module{{Path: path, Version: "v0.1.0"}}}, "v0.1.0"},
+		{debug.BuildInfo{Main: debug.Module{Path: "example.com/app"}, Deps: []*debug.Module{{Path: path, Version: "v0.1.0", Replace: &debug.Module{Path: "../.."}}}}, "(devel: ../..)"},
+		{debug.BuildInfo{Main: debug.Module{Path: path, Version: "(devel)"}, Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "abc"}}}, "commit abc"},
+		{debug.BuildInfo{Main: debug.Module{Path: path, Version: "v0.2.0"}}, "v0.2.0"},
+		{debug.BuildInfo{Main: debug.Module{Path: path, Version: "(devel)"}}, "(devel)"},
+	} {
+		if got := moduleVersion(&c.bi); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.bi, got, c.want)
+		}
 	}
 }

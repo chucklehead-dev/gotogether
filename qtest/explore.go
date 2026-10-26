@@ -776,33 +776,42 @@ func (v *verdictCache) put(k string, r verdict) {
 
 // rebase is rep, the verdict on the steps from, as the report of to,
 // steps of the same key (qtrace.Key) that may differ in what no verdict
-// reads: each failing step's ref and source are to's, so a run's report
-// links to its own artifacts (a driver's trace line, a screenshot), not
-// those of the run its verdict was first reached on. Steps of one key
-// correspond by position, and a failing step is found in from by its
-// recorder and seq.
+// reads: each failing step's ref, source and identity (its recorder,
+// process and thread ids, random per run) are to's, so a run's report
+// links to its own artifacts (a driver's trace line, a screenshot) and
+// names its own recorder, not those of the run its verdict was first
+// reached on. Steps of one key correspond by position; a failing step is
+// found in from by what it is (recorder, seq, action, time), since seqs
+// may be absent (0) in a log that has none.
 func rebase(rep *validate.Report, from, to []qtrace.Step) *validate.Report {
 	if rep == nil || len(from) != len(to) {
 		return rep
 	}
-	type rs struct {
-		rec string
-		seq uint64
+	type id struct {
+		rec, action string
+		seq         uint64
+		at          int64
 	}
-	at := make(map[rs]int, len(from))
+	idOf := func(s *qtrace.Step) id { return id{s.Recorder, s.Action, s.Seq, s.Time.UnixNano()} }
+	at := make(map[id]int, len(from))
 	for i := range from {
-		at[rs{from[i].Recorder, from[i].Seq}] = i
+		if _, dup := at[idOf(&from[i])]; !dup { // the first of steps alike, as positions go
+			at[idOf(&from[i])] = i
+		}
 	}
 	fix := func(f *validate.Failure) *validate.Failure {
 		if f == nil || f.Step == nil {
 			return f
 		}
-		i, ok := at[rs{f.Step.Recorder, f.Step.Seq}]
-		if !ok || to[i].Ref == f.Step.Ref && to[i].Source == f.Step.Source {
+		i, ok := at[idOf(f.Step)]
+		if !ok {
 			return f
 		}
-		c, s := *f, *f.Step
-		s.Ref, s.Source = to[i].Ref, to[i].Source
+		c, s, t := *f, *f.Step, &to[i]
+		s.Ref, s.Source, s.Recorder, s.Thread = t.Ref, t.Source, t.Recorder, t.Thread
+		if s.Process = t.Process; s.Process == "" {
+			s.Process = t.Recorder // as Reconstruct fills it
+		}
 		c.Step = &s
 		return &c
 	}

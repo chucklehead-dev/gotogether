@@ -22,7 +22,19 @@ The first release. What a user meets, by module:
   `qtest.Artifacts` and `Run.Manifest()` for tests; `gotogether
   evidence` lists manifests (`qtest.RoleExternal`,
   `qtest.ManifestEvidence`) and `-expect` names them. `binding.Binding.Path`
-  is the file a binding was loaded from.
+  is the file a binding was loaded from. Verify checks the spec the
+  binding resolves now and the files it imports (`RunModel.Imports`); an
+  ITF input records its instance (`Input.Model`, `validate.ITFModel`);
+  `Manifest.Bundle` copies a manifest's files beside it (qtest's are
+  bundled in `run<N>/`); the check recorded is the one judged; the
+  backend is kept on replay; `RunVerdict.Same` compares kinds of claims
+  and notes rewording; `ErrManifestFormat`; `Report.WithoutRefs` (what
+  qhegel caches). A manifest records the driver's args, paths and refs
+  verbatim, and a bundle the whole step log: sanitize before sharing.
+  A step with no time is written with no `quint.time_unix_nano` (it was
+  an overflowed one). A cached verdict's failing step names the run's own
+  recorder and process, found with no seq too; qhegel caches its
+  summaries without refs.
 
 - Step references: `quint.ref` (`qtrace.KeyRef`, `Step.Ref`), a step's
   link to its artifact (an external driver's trace line, a screenshot),

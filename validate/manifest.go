@@ -36,7 +36,13 @@ const ManifestFormat = "gotogether.run/1"
 //
 // Paths are absolute in memory. Write stores those under the manifest's
 // directory relative to it, so a directory holding a manifest and its
-// files can be moved whole, and ReadManifest resolves them back.
+// files can be moved whole, and ReadManifest resolves them back; Bundle
+// copies the files there first.
+//
+// A manifest records what it is given verbatim: the driver's arguments
+// and origin, absolute paths (often with a user's name), the failing
+// step's ref, and its inputs are the run's whole step logs. Sanitize logs
+// before sharing them (gotogether steps -pseudonymize, qtrace.Filter).
 type Manifest struct {
 	// Format names this format, ManifestFormat: a reader refuses another.
 	Format string `json:"format"`
@@ -66,9 +72,13 @@ type Manifest struct {
 
 // Tools are the versions a run was judged with.
 type Tools struct {
-	Gotogether string `json:"gotogether"`        // the module's version (build info), or its commit
-	Quint      string `json:"quint,omitempty"`   // `quint --version`
-	Backend    string `json:"backend,omitempty"` // quint's backend, when one was set
+	Gotogether string `json:"gotogether"`      // the module's version (build info), or its commit
+	Quint      string `json:"quint,omitempty"` // `quint --version`
+	// Backend is the quint backend chosen (Options.Backend, else
+	// QUINT_BACKEND); "" is validate's default (rust, typescript for a
+	// batch's chunk). Verdict cache keys depend on it, so a replay judges
+	// on it.
+	Backend string `json:"backend,omitempty"`
 }
 
 // A File is a file a run's verdict depends on, with its hash.
@@ -81,9 +91,14 @@ type File struct {
 type RunModel struct {
 	Binding *File `json:"binding,omitempty"`
 	// Spec is the model's main file (the binding's spec, or an ITF
-	// input's): the files it imports are not hashed.
-	Spec   *File  `json:"spec,omitempty"`
-	Module string `json:"module,omitempty"`
+	// input's), and Imports the files it imports, transitively, as quint
+	// resolves them (relative to the importing file).
+	Spec    *File  `json:"spec,omitempty"`
+	Imports []File `json:"imports,omitempty"`
+	Module  string `json:"module,omitempty"`
+	// Instance is an ITF trace's instance module (validate -instance), if
+	// it was judged against one rather than constants.
+	Instance string `json:"instance,omitempty"`
 	// Convert is the rule file OTLP/JSON inputs were converted with.
 	Convert *File `json:"convert,omitempty"`
 	// Constants are the instance's, the binding's with any override;
@@ -99,17 +114,19 @@ type RunCheck struct {
 	Key            string `json:"linearizeKey,omitempty"`
 	Budget         int    `json:"linearizeBudget,omitempty"`
 	ResolvePending bool   `json:"resolvePending,omitempty"`
-	RequireSettle  bool   `json:"requireSettle,omitempty"`
+	// RequireSettle: the finish check was judged (validate -require-settle,
+	// or a complete binding's default in the CLI; qtest's Validate and
+	// Record judge none, a test claims Finishes). A replay judges it as
+	// recorded, whatever the binding's complete says now.
+	RequireSettle bool `json:"requireSettle,omitempty"`
 	// LostPrefix and LostSuffix are the recorders whose losses were
 	// declared (validate -lost-prefix, -lost-suffix), not in the logs.
 	LostPrefix []string `json:"lostPrefix,omitempty"`
 	LostSuffix []string `json:"lostSuffix,omitempty"`
 	// Format is the inputs' format as given ("auto", "steps", ...).
 	Format string `json:"format,omitempty"`
-	// Instance and NoVars are an ITF input's (validate -instance,
-	// -novars).
-	Instance string `json:"instance,omitempty"`
-	NoVars   bool   `json:"noVars,omitempty"`
+	// NoVars is an ITF input's (validate -novars).
+	NoVars bool `json:"noVars,omitempty"`
 }
 
 // SearchOptions are the searches the check asked for.
@@ -125,6 +142,10 @@ type Input struct {
 	// Lost are the loss records it holds (a torn tail's, MarkLost's
 	// written into it): what its steps cannot show.
 	Lost []Loss `json:"lost,omitempty"`
+	// Model is an ITF input's instance (ITFModel): the spec its trace
+	// names (or the one given), hashed with its imports, its module,
+	// constants and invariants.
+	Model *RunModel `json:"model,omitempty"`
 }
 
 // A Loss is a loss record of an input (qtrace.Step.Lost).
@@ -227,16 +248,49 @@ func firstFailure(r *Result) *Failure {
 	return nil
 }
 
-// Same reports whether v and w are one verdict: overall, by actor, and at
-// the same failing step (its ref aside: no verdict reads it).
-func (v RunVerdict) Same(w RunVerdict) bool {
+// Same reports whether v and w are one verdict: overall, by actor and the
+// kind of each actor's claim (a mismatch, a rejection, which invariant
+// is violated, incomplete, no verdict), and at the same failing step (its
+// ref aside: no verdict reads it). Reasons worded otherwise, as a newer
+// gotogether may word them, are the same verdict: note says so.
+func (v RunVerdict) Same(w RunVerdict) (same bool, note string) {
 	fs := func(f *FailingStep) string {
 		if f == nil {
 			return ""
 		}
 		return fmt.Sprintf("%s|%s|%d|%s", f.Actor, f.Recorder, f.Seq, f.Action)
 	}
-	return v.Verdict == w.Verdict && v.Reason == w.Reason && slices.Equal(v.Actors, w.Actors) && fs(v.Failing) == fs(w.Failing)
+	if v.Verdict != w.Verdict || reasonKind(v.Reason) != reasonKind(w.Reason) || len(v.Actors) != len(w.Actors) || fs(v.Failing) != fs(w.Failing) {
+		return false, ""
+	}
+	worded := v.Reason != w.Reason
+	for i, a := range v.Actors {
+		b := w.Actors[i]
+		if a.Actor != b.Actor || a.Verdict != b.Verdict || reasonKind(a.Reason) != reasonKind(b.Reason) {
+			return false, ""
+		}
+		worded = worded || a.Reason != b.Reason
+	}
+	if worded {
+		note = fmt.Sprintf("the reasons are worded otherwise (%q, now %q): the same kind of verdict, said by another gotogether", v.Reason, w.Reason)
+	}
+	return true, note
+}
+
+// reasonKind is the kind of claim a reason states: its first word (a
+// mismatch, a rejection, incomplete), "no verdict", "evaluation error",
+// or for a violation the invariant violated.
+func reasonKind(r string) string {
+	switch {
+	case strings.HasPrefix(r, "violates "):
+		return r
+	case strings.HasPrefix(r, "no verdict"):
+		return "no verdict"
+	case strings.HasPrefix(r, "evaluation error"):
+		return "evaluation error"
+	}
+	k, _, _ := strings.Cut(r, " ")
+	return k
 }
 
 func (v RunVerdict) String() string {
@@ -274,8 +328,12 @@ func (c *Checker) Manifest(results []*Result, opt SearchOptions) (*Manifest, err
 // (gotogether's version, quint's): what Checker.Manifest starts from, and
 // a caller with no checker (an ITF input's) fills.
 func NewManifest(o Options) *Manifest {
+	backend := o.Backend
+	if backend == "" {
+		backend = os.Getenv("QUINT_BACKEND")
+	}
 	return &Manifest{Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second),
-		Tools: Tools{Gotogether: ModuleVersion(), Quint: QuintVersion(o.Quint), Backend: o.Backend}}
+		Tools: Tools{Gotogether: ModuleVersion(), Quint: QuintVersion(o.Quint), Backend: backend}}
 }
 
 // SetBinding sets the manifest's model to b's instance: the binding and
@@ -298,9 +356,9 @@ func (m *Manifest) SetBinding(b *binding.Binding) error {
 	return nil
 }
 
-// SetSpec sets the model's spec file, hashed.
+// SetSpec sets the model's spec file and the files it imports, hashed.
 func (m *Manifest) SetSpec(path string) (err error) {
-	m.Model.Spec, err = hashed(path)
+	m.Model.Spec, m.Model.Imports, err = specFiles(path)
 	return err
 }
 
@@ -376,9 +434,11 @@ type hashedFile struct {
 // files are the manifest's files: the hashed ones a verdict depends on,
 // then its artifacts.
 func (m *Manifest) files() (inputs []hashedFile, artifacts []*Artifact) {
-	for _, f := range []hashedFile{{"the binding", m.Model.Binding}, {"the spec", m.Model.Spec}, {"the convert rules", m.Model.Convert}} {
-		if f.f != nil {
-			inputs = append(inputs, f)
+	for _, md := range m.models() { // the specs and imports Verify checks as the replay resolves them (verifyModel)
+		for _, f := range []hashedFile{{"the binding", md.Binding}, {"the convert rules", md.Convert}} {
+			if f.f != nil {
+				inputs = append(inputs, f)
+			}
 		}
 	}
 	for i := range m.Inputs {
@@ -391,12 +451,18 @@ func (m *Manifest) files() (inputs []hashedFile, artifacts []*Artifact) {
 }
 
 // Verify checks that the files the run was judged on are the ones the
-// manifest hashed: a changed or missing binding, spec, rule file or input
-// is an error naming each, since a replay would judge another run. A
-// changed artifact (no verdict reads one) is a warning.
+// manifest hashed: a changed or missing binding, spec, import, rule file
+// or input is an error naming each, since a replay would judge another
+// run. The spec checked is the one the replay judges: the binding's spec
+// as it resolves now (a moved binding's relative spec: another file,
+// perhaps), and its imports as quint resolves them. A changed artifact
+// (no verdict reads one) is a warning.
 func (m *Manifest) Verify() (warnings []string, err error) {
 	inputs, artifacts := m.files()
 	var errs []error
+	for _, md := range m.models() {
+		errs = append(errs, md.verify()...)
+	}
 	for _, in := range inputs {
 		h, herr := hashFile(in.f.Path)
 		switch {
@@ -434,7 +500,7 @@ func (m *Manifest) Write(path string) error {
 	}
 	c := m.copy()
 	c.paths(func(p string) string {
-		if rel, err := filepath.Rel(dir, p); err == nil && filepath.IsAbs(p) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if rel, err := filepath.Rel(dir, p); err == nil && filepath.IsAbs(p) && within(dir, p) {
 			return filepath.ToSlash(rel)
 		}
 		return p
@@ -446,9 +512,14 @@ func (m *Manifest) Write(path string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
+// ErrManifestFormat is ReadManifest's error (wrapped) for a manifest of
+// another format version: a tool listing manifests skips it, naming it.
+// Read-only.
+var ErrManifestFormat = errors.New("another manifest format")
+
 // ReadManifest reads a manifest Write wrote, its relative paths resolved
 // against its directory. A file of another format is refused with the
-// fix.
+// fix (ErrManifestFormat).
 func ReadManifest(path string) (*Manifest, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -459,7 +530,7 @@ func ReadManifest(path string) (*Manifest, error) {
 		return nil, fmt.Errorf("%s: %w (want a run manifest, %s: gotogether validate -manifest writes one)", path, err, ManifestFormat)
 	}
 	if m.Format != ManifestFormat {
-		return nil, fmt.Errorf("%s: a file of format %q, not a run manifest of %q: write it anew with this version (gotogether validate -manifest, or the test under GOTOGETHER_EVIDENCE)", path, m.Format, ManifestFormat)
+		return nil, fmt.Errorf("%s: %w: a file of format %q, not a run manifest of %q: write it anew with this version (gotogether validate -manifest, or the test under GOTOGETHER_EVIDENCE)", path, ErrManifestFormat, m.Format, ManifestFormat)
 	}
 	dir, err := filepath.Abs(filepath.Dir(path))
 	if err != nil {
@@ -503,17 +574,44 @@ func (m *Manifest) copy() *Manifest {
 		g := *f
 		return &g
 	}
-	c.Model.Binding, c.Model.Spec, c.Model.Convert = cp(m.Model.Binding), cp(m.Model.Spec), cp(m.Model.Convert)
+	cpModel := func(r RunModel) RunModel {
+		r.Binding, r.Spec, r.Convert = cp(r.Binding), cp(r.Spec), cp(r.Convert)
+		r.Imports = slices.Clone(r.Imports)
+		return r
+	}
+	c.Model = cpModel(m.Model)
 	c.Inputs = slices.Clone(m.Inputs)
+	for i := range c.Inputs {
+		if im := c.Inputs[i].Model; im != nil {
+			cm := cpModel(*im)
+			c.Inputs[i].Model = &cm
+		}
+	}
 	c.Artifacts = slices.Clone(m.Artifacts)
 	return &c
 }
 
+// models are m's models: the run's, then each ITF input's.
+func (m *Manifest) models() []*RunModel {
+	out := []*RunModel{&m.Model}
+	for i := range m.Inputs {
+		if im := m.Inputs[i].Model; im != nil {
+			out = append(out, im)
+		}
+	}
+	return out
+}
+
 // paths rewrites every file path of m with f.
 func (m *Manifest) paths(f func(string) string) {
-	for _, p := range []*File{m.Model.Binding, m.Model.Spec, m.Model.Convert} {
-		if p != nil {
-			p.Path = f(p.Path)
+	for _, md := range m.models() {
+		for _, p := range []*File{md.Binding, md.Spec, md.Convert} {
+			if p != nil {
+				p.Path = f(p.Path)
+			}
+		}
+		for i := range md.Imports {
+			md.Imports[i].Path = f(md.Imports[i].Path)
 		}
 	}
 	for i := range m.Inputs {
@@ -525,35 +623,46 @@ func (m *Manifest) paths(f func(string) string) {
 }
 
 // ModuleVersion is the toolkit's version in this binary, from its build
-// info: the module's version, or its commit when it is built from a
-// checkout ("commit <hash>"), else "(devel)".
+// info (moduleVersion).
 func ModuleVersion() string {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "unknown"
 	}
+	return moduleVersion(bi)
+}
+
+// moduleVersion is the toolkit's version in a binary of build info bi:
+// a dependency's version (a consumer's binary, its test binaries
+// included), a replaced one's replacement ("(devel: ../..)" for a
+// directory); the main module's version, or its commit when built from a
+// checkout ("commit <hash>"); else "(devel)", as the repository's own
+// test binaries are, which carry no version control stamp.
+func moduleVersion(bi *debug.BuildInfo) string {
 	const path = "github.com/chucklehead-dev/gotogether"
-	v := ""
-	if bi.Main.Path == path {
-		v = bi.Main.Version
-	}
 	for _, d := range bi.Deps {
-		if d.Path == path {
-			v = d.Version
-			if d.Replace != nil {
-				v = d.Replace.Version // a replace => ../..: "" (a checkout)
-			}
+		if d.Path != path {
+			continue
 		}
+		if r := d.Replace; r != nil {
+			if r.Version != "" {
+				return r.Path + "@" + r.Version
+			}
+			return "(devel: " + r.Path + ")"
+		}
+		return d.Version
 	}
-	if v == "" || v == "(devel)" {
+	if bi.Main.Path == path && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return bi.Main.Version
+	}
+	if bi.Main.Path == path {
 		for _, s := range bi.Settings {
 			if s.Key == "vcs.revision" {
 				return "commit " + s.Value
 			}
 		}
-		return "(devel)"
 	}
-	return v
+	return "(devel)"
 }
 
 // quintVersions caches `quint --version` by binary: one run per process.

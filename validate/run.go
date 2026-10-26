@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -273,4 +274,32 @@ func (c *Checker) WithInvariants(invariants ...string) (*Checker, error) {
 	cc := *c
 	cc.Binding = &b
 	return &cc, nil
+}
+
+// WithoutRefs is r with its failing steps' refs (qtrace.Step.Ref) left
+// out, on a copy: what a verdict cached for every run of the same steps
+// says (its Summary), since each run's refs are its own and no verdict
+// reads them.
+func (r *Report) WithoutRefs() *Report {
+	fix := func(f *Failure) *Failure {
+		if f == nil || f.Step == nil || f.Step.Ref == "" {
+			return f
+		}
+		c, s := *f, *f.Step
+		s.Ref = ""
+		c.Step = &s
+		return &c
+	}
+	out := *r
+	out.Actors = make([]*Result, len(r.Actors))
+	for i, a := range r.Actors {
+		c := *a
+		c.Failure = fix(a.Failure)
+		c.Invariants = slices.Clone(a.Invariants)
+		for j := range c.Invariants {
+			c.Invariants[j].Failure = fix(c.Invariants[j].Failure)
+		}
+		out.Actors[i] = &c
+	}
+	return &out
 }

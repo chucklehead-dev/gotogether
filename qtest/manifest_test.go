@@ -55,8 +55,13 @@ func TestRunManifests(t *testing.T) {
 		len(m1.Artifacts) != 1 || m1.Artifacts[0].SHA256 == "" || m1.Tools.Quint == "" {
 		t.Errorf("manifest: %+v", m1)
 	}
-	if len(m1.Inputs) != 1 || m1.Inputs[0].Path != filepath.Join(at, "run1.steps.jsonl") || m1.Inputs[0].Steps != 1 {
+	// its files bundled beside it: the directory travels
+	bundled := filepath.Join(at, "run1")
+	if len(m1.Inputs) != 1 || !strings.HasPrefix(m1.Inputs[0].Path, bundled) || m1.Inputs[0].Steps != 1 {
 		t.Errorf("inputs: %+v", m1.Inputs)
+	}
+	if !strings.HasPrefix(m1.Model.Binding.Path, bundled) || !strings.HasPrefix(m1.Model.Spec.Path, bundled) || !strings.HasPrefix(m1.Artifacts[0].Path, bundled) {
+		t.Errorf("not bundled: %+v %+v %+v", m1.Model.Binding, m1.Model.Spec, m1.Artifacts)
 	}
 	if f := m1.Verdict.Failing; m1.Verdict.Verdict != validate.Fail || m1.Verdict.Reason != "mismatch after deposit" || f == nil || f.Ref != "trace.jsonl:42" || f.Seq != 1 {
 		t.Errorf("verdict: %+v", m1.Verdict)
@@ -91,5 +96,19 @@ func TestExploreRefusesDriver(t *testing.T) {
 	<-done
 	if len(f.errs) != 1 || !strings.Contains(f.errs[0], "Driver() does nothing") || !strings.Contains(f.errs[0], "gotogether did not drive") {
 		t.Errorf("%v", f.errs)
+	}
+}
+
+// A manifest's run of no verdict is listed as no verdict, as an
+// exploration's run of none is: not as failing.
+func TestManifestEvidenceNoVerdict(t *testing.T) {
+	t.Parallel()
+	e := ManifestEvidence(&validate.Manifest{Name: "TestX", Verdict: validate.RunVerdict{Verdict: validate.NotEvaluated, Reason: "nothing was checked"}})
+	if e.Conform != 0 || e.FailingBy["no verdict (nothing was checked)"] != 1 || e.Role != RoleExternal {
+		t.Errorf("%+v", e)
+	}
+	e = ManifestEvidence(&validate.Manifest{Name: "TestX", Verdict: validate.RunVerdict{Verdict: validate.NotEvaluated, Reason: "no verdict (lost steps)"}})
+	if e.FailingBy["no verdict (lost steps)"] != 1 {
+		t.Errorf("%+v", e)
 	}
 }

@@ -17,8 +17,10 @@ const KeyTime = "quint.time_unix_nano"
 // attributes an OTel span event carries, plus KeyTime. The native step log
 // is one such object per line.
 func (s *Step) Attributes() map[string]any {
-	m := map[string]any{KeyAction: s.Action, KeySeq: int64(s.Seq), KeyRecorder: s.Recorder, KeyOutcome: s.Outcome,
-		KeyTime: s.Time.UnixNano()}
+	m := map[string]any{KeyAction: s.Action, KeySeq: int64(s.Seq), KeyRecorder: s.Recorder, KeyOutcome: s.Outcome}
+	if !s.Time.IsZero() { // a zero Time's UnixNano overflows: no time is no key, read back as zero
+		m[KeyTime] = s.Time.UnixNano()
+	}
 	for k, v := range map[string]string{KeyActor: s.Actor, KeyProcess: s.Process, KeyThread: s.Thread, KeyError: s.Error, KeyRef: s.Ref} {
 		if v != "" {
 			m[k] = v
