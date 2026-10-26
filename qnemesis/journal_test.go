@@ -40,7 +40,13 @@ func TestJournalRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc := j.Script()
+	// Script keeps the order, not the steps
+	for _, f := range j.Script().Faults {
+		if f.After != 0 {
+			t.Fatalf("Script's %v has After: a real run's step counts are not a simulation's", f)
+		}
+	}
+	sc := j.StepScript()
 	var kinds []string
 	// each fault follows the last before it that is no heal; a heal, the
 	// one before it
@@ -157,7 +163,7 @@ func TestJournalScriptLongPartition(t *testing.T) {
 		}
 	}
 	for _, cut := range []time.Duration{0, j.LongestCut()} {
-		sc := j.Script()
+		sc := j.StepScript() // timed: the heal comes when the steps say
 		if kinds := len(sc.Faults); kinds != 3 {
 			t.Fatalf("script %v; want the partition, its heal and the crash", sc.Faults)
 		}
@@ -223,13 +229,13 @@ func TestUnmadeNamesWhatBlocked(t *testing.T) {
 	if err == nil {
 		t.Fatal("Unmade: nil; the pause and the crash never happened")
 	}
-	for _, want := range []string{"made 0 of the script's 2 faults", `"nemesis.pause.` + a + `" is no fault kind or nemesis the system declared`, "fault 1 (nemesis.crash." + b + "=0 after 1 steps) waits for fault 0 (nemesis.pause." + a + ")"} {
+	for _, want := range []string{"made 0 of the script's 2 faults", "the simulation has no such nemesis: qenv makes it only with Sim.Stalls.Pause set", "fault 1 (nemesis.crash." + b + "=0 after 0 steps) waits for fault 0 (nemesis.pause." + a + ")"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Unmade lacks %q:\n%v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "fault 0 (nemesis.pause."+a+"=0 after 0 steps) never happened") {
-		t.Errorf("a misnamed fault said twice:\n%v", err)
+	if strings.Contains(err.Error(), "fault 0 (nemesis.pause."+a+"=0 after 0 steps) never happened") || strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("a misnamed fault said twice, or with a misleading name:\n%v", err)
 	}
 	// with the pause declared, everything is made
 	sc = j.Script()
@@ -257,3 +263,68 @@ func TestUnmadeNamesWhatBlocked(t *testing.T) {
 // unmadeRuns numbers TestUnmadeNamesWhatBlocked's runs (-count), for
 // names no other run declared.
 var unmadeRuns atomic.Int64
+
+// A real run's journal times its faults by the real run's steps, which a
+// simulated run does not take: Script makes every fault, in order, at its
+// first chance; StepScript, timed by those steps, never reaches the late
+// ones.
+func TestScriptMakesLateFaults(t *testing.T) {
+	t.Parallel()
+	n52, n60, n70 := 52, 60, 70
+	j := &Journal{Entries: []Entry{
+		{Index: 0, Kind: "nemesis.crash.a", Event: "start", Steps: &n52, Recorded: true},
+		{Index: 1, Kind: "nemesis.partition.a.b", Event: "start", Steps: &n60, Recorded: true},
+		{Index: 2, Kind: "nemesis.crash.b", Event: "start", Steps: &n70, Recorded: true},
+	}}
+	run := func(sc *qenv.Script) error {
+		s := qenv.New(sc)
+		defer s.Close()
+		rec := qobs.NewRecorder(&qobs.MemorySink{})
+		sc.Progress = rec.Count
+		a := s.Process("a", true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+		b := s.Process("b", true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+		s.Net().PartitionNemesis(a, b)
+		s.Spawn("work", func(ctx context.Context) {
+			for range 20 { // a simulated run's 20 steps, not the real run's 70
+				qenv.Sleep(ctx, 10*time.Millisecond)
+				rec.Record(ctx, "tick", nil)
+			}
+		})
+		if err := s.Run(5 * time.Second); err != nil {
+			t.Fatal(err)
+		}
+		return Unmade(sc)
+	}
+	if err := run(j.Script()); err != nil {
+		t.Fatalf("Script: %v", err)
+	}
+	if err := run(j.StepScript()); err == nil || !strings.Contains(err.Error(), "(nemesis.crash.a=0 after 52 steps) never happened") {
+		t.Fatalf("StepScript reached faults past the simulation's steps: %v", err)
+	}
+}
+
+// Unreproducible compares the pauses and cuts with the simulation's,
+// within the tolerance: a 301ms pause is a 300ms simulation's, a 400ms one
+// is not; with no simulation every pause is said.
+func TestUnreproduciblePauses(t *testing.T) {
+	t.Parallel()
+	t0 := time.Unix(1000, 0)
+	j := func(d time.Duration) *Journal {
+		return &Journal{Entries: []Entry{
+			{Index: 0, Kind: "nemesis.pause.a", Event: "start", Time: t0},
+			{Index: 0, Kind: "nemesis.resume.a", Event: "end", Time: t0.Add(d)},
+		}}
+	}
+	sim := qenv.New(qenv.Nominal{})
+	defer sim.Close()
+	sim.Stalls = qenv.Stalls{Pause: 300 * time.Millisecond}
+	if u := j(301 * time.Millisecond).Unreproducible(sim); len(u) != 0 {
+		t.Errorf("a 301ms pause against a 300ms simulation's: %v", u)
+	}
+	if u := strings.Join(j(400*time.Millisecond).Unreproducible(sim), "\n"); !strings.Contains(u, "lasted 400ms: a simulated pause lasts Sim.Stalls.Pause, 300ms; set it to about 400ms") {
+		t.Errorf("a 400ms pause against a 300ms simulation's: %s", u)
+	}
+	if u := strings.Join(j(301*time.Millisecond).Unreproducible(), "\n"); !strings.Contains(u, "pauses are off") {
+		t.Errorf("no simulation: %s", u)
+	}
+}

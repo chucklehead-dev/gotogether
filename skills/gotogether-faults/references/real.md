@@ -51,7 +51,8 @@ err = n.Stop(ctx) // heal, clear, resume, start the down: the real settle
   group when its parent dies (a PID namespace would, with privileges).
 - **Network**: `Toxiproxy`, a small client of toxiproxy's HTTP API
   (`toxiproxy-server` on PATH; `go install
-  github.com/Shopify/toxiproxy/v2/cmd/server@latest`, renamed). A cut
+  github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0`, renamed
+  `toxiproxy-server`, as CI does). A cut
   disables the proxies (connections closed, new ones refused), so a
   framed protocol never reads a stream with bytes missing from its
   middle. Latency and loss are toxics on the responses; toxiproxy draws a
@@ -141,15 +142,23 @@ two instances fail with the fix.
 A failed run's journal re-makes its faults in a simulation:
 `j, _ := qnemesis.ReadJournal(f); sc := j.Script()` is a `qenv.Script`
 (crashes, pauses, partitions and heals by qenv's names, in the order
-they happened, each after the steps before it). Nothing waits for a
+they happened, each at its first chance). It keeps the faults' order,
+not their timing against the workload: a real run's step counts (real
+clients, the nodes' own logs) are not a simulated run's, and faults
+timed by them were never reached. `j.StepScript()` keeps the steps
+(`After`), for a journal whose steps are the simulated program's own.
+Nothing waits for a
 heal: qenv heals a cut by itself after `CutLength` (1 virtual second),
 so a longer real partition's heal stays in `Remaining`; set
-`sim.Net().CutLength` to `j.LongestCut()` to keep it. `j.Unreproducible()`
-says what the script leaves out or cannot make as it happened (latency
-and loss, a heal of links never cut, pauses' lengths, long cuts), with
-the fix. The script keeps the run's order, so a fault the simulation
+`sim.Net().CutLength` to `j.LongestCut()` to keep it.
+`j.Unreproducible(sim)` says what the script leaves out or cannot make
+as it happened (latency and loss, a heal of links never cut, pauses of
+another length than `sim.Stalls.Pause`, cuts longer than its
+`CutLength`, within `PauseTolerance`), with the fix. The script keeps the run's order, so a fault the simulation
 cannot make (a pause without `Sim.Stalls.Pause`, a partition without
 `PartitionNemesis`) holds up every fault after it: after the run,
-`qnemesis.Unmade(sc)` names the cause and what waited for it (a qtest
+`qnemesis.Unmade(sc)` names the cause (the configuration qenv needs
+for the nemesis: `Sim.Stalls.Pause`, `PartitionNemesis`, a crashable
+process) and what waited for it (a qtest
 exploration with the script as its chooser fails on them too). Run the script as the chooser of the simulated system and
 explore from there.

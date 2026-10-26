@@ -1114,6 +1114,7 @@ type Reach struct
 
 == github.com/chucklehead-dev/gotogether/qnemesis
 const DefaultLossTimeout = 500 * time.Millisecond
+const PauseTolerance = 20 * time.Millisecond
 const RecorderID = "nemesis"
 func DefaultRecording() Recording
 func FromScript(sc *qenv.Script) Schedule
@@ -1163,7 +1164,8 @@ type Journal struct
     method (*Journal) Dropped() []Entry
     method (*Journal) LongestCut() time.Duration
     method (*Journal) Script() *qenv.Script
-    method (*Journal) Unreproducible() []string
+    method (*Journal) StepScript() *qenv.Script
+    method (*Journal) Unreproducible(sim ...*qenv.Sim) []string
 type Mix struct
     field Kinds []string
     field Faults int

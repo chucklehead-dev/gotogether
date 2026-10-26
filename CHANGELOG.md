@@ -44,7 +44,12 @@ The first release. What a user meets, by module:
   after the bound settles the run, so Recorders and `Settles()` go
   together. Unbounded losses void every settle, as before.
   `qnemesis.Unmade` says which faults of a journal's script a
-  simulation did not make, and why.
+  simulation did not make, and why (for a nemesis qenv makes only when
+  configured, the configuration: `Sim.Stalls.Pause`, `PartitionNemesis`).
+  `Journal.Script` keeps the faults' order only (a real run's step
+  counts are not a simulation's); `Journal.StepScript` keeps their
+  After. `Journal.Unreproducible(sim)` compares pauses and cuts with the
+  simulation's, within `PauseTolerance`.
 - `qenv.Unwinding(r)`: whether a recovered panic is qenv unwinding a
   killed task, for an adapter whose caller releases a lock only on a
   normal return (qsql under database/sql's Tx.QueryContext). A seam in
