@@ -374,6 +374,7 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
 
 Read the reference before using what it covers:
 - [`references/services.md`](references/services.md): HTTP servers and clients (`qenv/qhttp`: an unmodified `http.Handler` and `http.Client` in a simulation), gRPC services (`simgrpc`, otelgrpc spans) and Kafka/Kinesis consumers and publishers (a simulated partitioned log, kfake, a fake Kinesis): the seams and examples.
+- [`references/sql.md`](references/sql.md): a database/sql service over a Store (`qenv/qsql`): the SQL subset, the anomalies of each level, SQLSTATE errors for retry loops, connection faults, database/sql's goroutines.
 - [`references/fuzzing.md`](references/fuzzing.md): coverage-guided exploration over the chooser's bytes (`System.Fuzz`), a shrunk failure as a corpus entry.
 - [`references/fault-points.md`](references/fault-points.md): your own functions as fault points (`//quint:fault`, `qenv.FaultPoint`), and which faults runs reached.
 - [`references/coverage-and-mutants.md`](references/coverage-and-mutants.md): which code each step ran (`qweave -cover`), the one-report `Evidence`, and mutants (`qweave -mutate`, `System.Mutate`).

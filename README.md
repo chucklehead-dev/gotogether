@@ -376,7 +376,8 @@ The app is written against seams: `qenv.DB` and `qenv.Txn`, its own
 broker interfaces, `qenv.Go`, `qenv.Now` and `qenv.Sleep`. Production
 puts real clients behind them. An HTTP service needs no seam: `qenv/qhttp` serves its
 `http.Handler` and gives its `http.Client` a Transport, both unmodified,
-with requests and responses as wire bytes over a `qenv.Service`. Steps are recorded where effects happen:
+with requests and responses as wire bytes over a `qenv.Service`. Nor does a
+`database/sql` one: `qenv/qsql` opens a `*sql.DB` over a Store. Steps are recorded where effects happen:
 `Txn.OnCommit`, a fake API server's interceptor, the provider. Then:
 
 ```go
@@ -521,6 +522,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `qenv/fault` | the `//quint:fault` aspect: a function's entry a fault choice, with its own errors |
 | `qenv/qhttp` | net/http in a simulation: an unmodified `http.Handler` behind a `Server` (`NewServer`, `Handle` at each incarnation, `URL`) and an unmodified `http.Client` over a `Transport` (`NewTransport`: refused connections, `TimeoutError` after virtual time, 503 on overload), over `qenv.Service`'s faults |
+| `qenv/qsql` | database/sql in a simulation: `Open` a `*sql.DB` over a qenv Store (a SQL subset, one table at a time; the Store's isolation level and history check), `*Error` with SQLSTATE for retry loops (40001, 40P01, 23505, 08006), `Options` (`BadConn`, `OnCommit` changes), `Table` |
 | `qload` | load on qenv: `Experiment` (open- or closed-loop), `Trigger`, `Recovers`/`Assess`/`Mostly` with `Recovered`/`StaysDegraded`, `Target`, `Simulate` (an abstract server and its clients), `Piecewise` shapes |
 | `qmeta` | the CTMC: `New`, `HittingTimes`, `RecoveryWithin`, `Mean`, `Calibrate`/`CalibrateTimeout`, `Measure`; alerts (`Region`, `Rules`), `Watch` (the flight recorder on alert); imports nothing of the module |
 | `qrole` | load roles (`//quint:serve`, `//quint:operation`, `//quint:call`): u and v as OTel gauges, pprof labels |
