@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `Sim.Hang` (30 s from New, zero off): a task that runs that long in
+  wall time without reaching a seam (blocked on a real channel or lock,
+  or in database/sql's pool at SetMaxOpenConns) makes Run panic naming
+  the task and its stack, where the test hung until go test's timeout.
 - Linearize's candidates are judged by a Quint evaluator in Go, over the
   IR quint compiles the binding's evaluation module to: an order it finds
   is confirmed by quint (a disagreement searches again with quint, and

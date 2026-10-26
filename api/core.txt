@@ -661,6 +661,7 @@ type Sim struct
     field Check bool
     field Clocks Clocks
     field Stalls Stalls
+    field Hang time.Duration
     method (*Sim) Choose(kind string, n int) int
     method (*Sim) Close()
     method (*Sim) Context() context.Context

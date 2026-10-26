@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
@@ -63,6 +65,16 @@ type Sim struct {
 	// nemeses (stall.go): none by default. Set them before creating
 	// processes.
 	Stalls Stalls
+	// Hang is how long Run waits, in wall time, for a task it woke to
+	// reach its next seam (New sets 30 s; zero turns the watchdog off).
+	// A task blocked outside the simulation (a real channel, a real lock,
+	// database/sql's pool waiting for a connection at SetMaxOpenConns)
+	// can never reach one, because the task that would unblock it is
+	// parked waiting for its turn: without the watchdog the test hangs
+	// until go test's timeout, naming nothing. With it, Run panics naming
+	// the task and its stack. Not on the native runtime, which runs in
+	// real time and has no single task to wait for.
+	Hang time.Duration
 
 	c         Chooser
 	base      context.Context   // every task's context derives from it
@@ -98,7 +110,11 @@ type Sim struct {
 	panicked  any
 	stack     []byte
 	closed    bool
-	nat       *native // the native runtime (native.go), if it runs on one
+	nat       *native       // the native runtime (native.go), if it runs on one
+	hangFire  chan struct{} // closed by Hang's watchdog (watch); nil: none
+	awaits    atomic.Int64  // the scheduler's waits for a task, counted for the watchdog
+	awaiting  atomic.Bool   // the scheduler waits for a task now
+	hung      *task         // the task the watchdog gave up on: Close cannot unwind it
 }
 
 type task struct {
@@ -110,6 +126,7 @@ type task struct {
 	held      bool      // runnable but held while its process stalls (Stalls): off the run queue
 	heldUntil time.Time // when it is released
 	wake      chan struct{}
+	gid       int64           // its goroutine's id, for the stack the watchdog reports (Hang)
 	ctx       context.Context // its context (Current)
 	waiting   bool            // parked until ready, a signal, or deadline
 	ready     func() bool     // the predicate waited for, if any
@@ -201,7 +218,7 @@ func New(c Chooser) *Sim {
 		base = rc // the run it is created in (qrun.Start, an enclosing simulation)
 	}
 	s := &Sim{c: c, base: base, names: hooks.FaultNamesOf(base), now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
-		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid()}
+		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid(), Hang: 30 * time.Second}
 	s.net.sim = s
 	if os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" {
 		s.Clocks, s.Stalls, s.allFaults = allFaultsClocks, allFaultsStalls, true
@@ -375,6 +392,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 	s.enqueue(t)
 	go func() { //qenv:ok the task's goroutine, which the scheduler runs one at a time
 		id := goid()
+		t.gid = id // before the first wake: the scheduler reads it only after waking it
 		own(id, s, t)
 		defer disown(id, s)
 		<-t.wake
@@ -968,6 +986,7 @@ func (s *Sim) Run(d time.Duration) error {
 	if s.nat != nil {
 		return s.runNative(d)
 	}
+	defer s.watch()()
 	horizon := s.now.Add(d)
 	for {
 		if s.steps >= s.MaxSteps {
@@ -1016,7 +1035,7 @@ func (s *Sim) Run(d time.Duration) error {
 		s.ran = t.id
 		s.dequeue(t)
 		t.wake <- struct{}{}
-		<-s.back
+		s.await(t)
 		if s.panicked != nil {
 			p := s.panicked
 			s.panicked = nil
@@ -1415,6 +1434,80 @@ func eachLog(c Chooser, f func(*ChoiceLog)) {
 	}
 }
 
+// await waits for the task t, just woken, to hand control back at a seam
+// or by ending, for at most Hang of wall time (the watchdog's).
+func (s *Sim) await(t *task) {
+	if s.hangFire == nil {
+		<-s.back
+		return
+	}
+	s.awaits.Add(1)
+	s.awaiting.Store(true)
+	select { //qenv:ok the hang watchdog: the scheduler's wait for a task, against the watchdog's wall clock
+	case <-s.back:
+		s.awaiting.Store(false)
+	case <-s.hangFire:
+		s.hung = t
+		panic(fmt.Sprintf("qenv: task %s ran %v of wall time without reaching a seam: blocked outside the simulation "+
+			"(a channel, a lock, database/sql's pool at SetMaxOpenConns); raise the limit (Sim.Hang), weave it (qenv/weave), "+
+			"or run under qgosim\n\n%s", t.name, s.Hang, goroutineStack(t.gid)))
+	}
+}
+
+// watch starts Hang's watchdog for one Run, and returns its stop. It looks
+// a few times per Hang (a timer reset at every step cost 40% of a step) and
+// fires when one await has lasted Hang: the same await seen waiting since.
+func (s *Sim) watch() (stop func()) {
+	if s.Hang <= 0 {
+		s.hangFire = nil
+		return func() {}
+	}
+	fire, done := make(chan struct{}), make(chan struct{})
+	s.hangFire = fire
+	every := max(s.Hang/4, time.Millisecond)
+	go func() { //qenv:ok the hang watchdog: it watches the scheduler in wall time, from outside the simulation
+		tick := time.NewTicker(every) //qenv:ok as above
+		defer tick.Stop()
+		var seen int64
+		var since time.Time
+		for {
+			select { //qenv:ok as above
+			case <-done:
+				return
+			case now := <-tick.C:
+				if n := s.awaits.Load(); n != seen || !s.awaiting.Load() {
+					seen, since = n, now
+				} else if now.Sub(since) >= s.Hang {
+					close(fire)
+					return
+				}
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// goroutineStack is the stack of goroutine id, from a dump of all of them
+// (Go has no call for one other goroutine's).
+func goroutineStack(id int64) string {
+	buf := make([]byte, 1<<16)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	head := fmt.Sprintf("goroutine %d [", id)
+	for _, g := range strings.Split(string(buf), "\n\n") {
+		if strings.HasPrefix(g, head) {
+			return g
+		}
+	}
+	return fmt.Sprintf("(goroutine %d not found)", id)
+}
+
 // notePanic records a task's panic for Run to re-raise, and its stack.
 func (s *Sim) notePanic(r any, stack []byte) {
 	s.panicked, s.stack = r, stack
@@ -1441,11 +1534,24 @@ func (s *Sim) Close() {
 		return
 	}
 	for _, t := range s.tasks {
-		if !t.done {
+		if !t.done && t != s.hung { // a hung task never takes its wake: it is left blocked where it is
 			t.killed = true
 			t.wake <- struct{}{}
 			<-s.back
 		}
+	}
+	if t := s.hung; t != nil {
+		// if whatever blocks it ever lets it go, it reaches a seam (or its
+		// end) with no scheduler left: take its hand-back then and unwind
+		// it, as for the others
+		go func() { //qenv:ok the hung task's unwinding, after Close: no scheduler is left to do it
+			<-s.back
+			if !t.done {
+				t.killed = true
+				t.wake <- struct{}{}
+				<-s.back
+			}
+		}()
 	}
 	s.panicked = nil
 }
