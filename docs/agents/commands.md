@@ -18,6 +18,15 @@ AGENTS.md has the general requirements.
   `go vet -tags sim`.
 - qanalysis (its own module): `cd qanalysis && go test ./...` (the checkout
   comparison weaves and explores checkout: skipped with -short, needs quint).
+- webjobs (its own module): `cd examples/webjobs && go test -short ./...`
+  checks the recorded Bombadil runs (testdata/runs) and builds each
+  mutant's overlay; `go test ./...` adds the live runs, which need
+  `bombadil` (`npm i -g @antithesishq/bombadil@0.7.9`) and a Chrome on
+  PATH (`CHROME=` names one; an older Chromium needs
+  `BOMBADIL_ARGS="--chrome-grant-permissions local-network-access"`).
+  `WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .` records 3s
+  runs into testdata/runs; `WEBJOBS_TIME_LIMIT=10s` shortens a live run;
+  `WEBJOBS_JOURNEYS=dir` keeps the journeys.
 - grpcledger and streams (their own modules): `cd examples/<name> && go test ./...`.
   grpcledger's generated protobuf code is checked in; regenerate with buf
   (no protoc: see its README).
