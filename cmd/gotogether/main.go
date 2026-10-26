@@ -113,7 +113,7 @@ usage:
                    [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
-                   [-convert rules.yaml] [-invariants a,b] [-itf] FILE...
+                   [-convert rules.yaml] [-invariants a,b] [-itf] [-require-settle] FILE...
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
   gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
                    against a simulation's (an exploration's evidence, or qcover.Summary JSON): what ran only for real, only simulated
@@ -433,6 +433,7 @@ func runValidate(args []string) (int, error) {
 	resolvePending := fset.Bool("resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
 	history := fset.String("history", "", "write the history drawn as SVG to this file (lanes of calls, the order checked numbered, the failing step red)")
 	lostPrefix := fset.String("lost-prefix", "", "comma-separated recorders whose logs lost their first steps, which the log cannot show (no seqs): judged as a lost prefix (qtrace.MarkLost)")
+	requireSettle := fset.Bool("require-settle", false, "exit 1 unless every actor's run is finished: it settled (its trace's last record a settle), so its eventual vals were judged, and no call is left pending (unless -resolve-pending judged them); the default for a binding with complete: true. Recorded steps only: an ITF trace records no settle")
 	lostSuffix := fset.String("lost-suffix", "", "comma-separated recorders whose logs lost their last steps, which the log cannot show (a killed process's buffer): their tails judged lost after their last steps (qtrace.MarkLost)")
 	fset.Parse(args)
 	if *noITF {
@@ -497,6 +498,10 @@ func runValidate(args []string) (int, error) {
 	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: !*withITF}
 	ok := true
 	var results []*validate.Result // every actor's and ITF's, for the result line
+	// incomplete are the reasons of actors that pass and are not finished,
+	// under -require-settle (or a complete binding): a prefix of a run
+	// conforms, and would pass
+	incomplete := map[*validate.Result]string{}
 	if len(steps) > 0 || len(itfs) == 0 {
 		if *bpath == "" {
 			return 2, fmt.Errorf("recorded steps need -binding")
@@ -529,6 +534,19 @@ func runValidate(args []string) (int, error) {
 			}
 		}
 		ok = ok && rep.OK()
+		if *requireSettle || c.Binding.Complete {
+			why := "-require-settle"
+			if !*requireSettle {
+				why = "the binding is complete"
+			}
+			for _, a := range rep.Actors {
+				if reason, fix := unfinished(a, c.Binding, *resolvePending); a.OK() && reason != "" {
+					incomplete[a] = reason
+					fmt.Printf("actor %s: %s (%s): %s\n", a.Actor, reason, why, fix)
+					ok = false
+				}
+			}
+		}
 		results = append(results, rep.Actors...)
 	}
 	for i, in := range itfs {
@@ -552,8 +570,26 @@ func runValidate(args []string) (int, error) {
 		fmt.Printf("RESULT: PASS (%s)\n", passSummary(results))
 		return 0, nil
 	}
-	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results))
+	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results, incomplete))
 	return 1, nil
+}
+
+// unfinished says why actor a's run, which passes, is no finished run
+// (validate -require-settle, a complete binding), and the fix; "" when it
+// is one. Its calls first: an actor whose every call is pending has no
+// steps, and so no settle of its own.
+func unfinished(a *validate.Result, b *binding.Binding, resolved bool) (reason, fix string) {
+	switch {
+	case len(a.Pending) > 0 && !resolved:
+		return "incomplete (pending calls)", fmt.Sprintf("%d calls invoked and never completed (the first: %s): answer every call before the settle and record its completion (Call.Done), "+
+			"or judge what each may have done (-resolve-pending)", len(a.Pending), a.Pending[0].String())
+	case !a.Settled && len(b.Eventually) > 0:
+		return "incomplete (eventual vals not judged)", fmt.Sprintf("the run did not end with a settle, so %s were not judged: record qobs.Settled after the driver's calls are answered and the collector drained, with nothing recorded after it",
+			strings.Join(b.Eventually, ", "))
+	case !a.Settled:
+		return "incomplete (no settle)", "the run did not end with a settle: record qobs.Settled after the driver's calls are answered and the collector drained, with nothing recorded after it"
+	}
+	return "", ""
 }
 
 // markLost declares the losses of the comma-separated recorders the
@@ -593,13 +629,17 @@ func markLost(steps []qtrace.Step, recorders string, prefix bool) ([]qtrace.Step
 }
 
 // failSummary says how many of results fail and why, in the claims' words
-// (validate.Result.Reason): "2 of 5 actors: 1 rejects replay, 1 mismatch
-// after apply".
-func failSummary(results []*validate.Result) string {
+// (validate.Result.Reason, else its reason in incomplete): "2 of 5
+// actors: 1 rejects replay, 1 mismatch after apply".
+func failSummary(results []*validate.Result, incomplete map[*validate.Result]string) string {
 	by := map[string]int{}
 	bad := 0
 	for _, r := range results {
-		if why := r.Reason(); why != "" {
+		why := r.Reason()
+		if why == "" {
+			why = incomplete[r]
+		}
+		if why != "" {
 			by[why]++
 			bad++
 		}

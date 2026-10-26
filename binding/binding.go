@@ -63,6 +63,13 @@ type Binding struct {
 	// a run cut short. Every check honours it: explorations, Record,
 	// Validate, qhegel and the CLI.
 	Eventually []string `yaml:"eventually"`
+	// Complete says every run checked against the binding is a finished
+	// one (a whole journey, settled, every call answered), not a prefix:
+	// `gotogether validate` then fails one that is not, as with
+	// -require-settle. It needs an eventual val, the journey's end: without
+	// one a settled prefix would pass. Tests state it as a claim instead
+	// (qtest.Finishes), which this does not change.
+	Complete bool `yaml:"complete"`
 	// Within are bounded-response obligations: each time a val (After)
 	// becomes true, another (Holds) must hold within Bound of virtual (or
 	// recorded) time, in the replay's states, timed by their steps. A
@@ -331,6 +338,9 @@ func (b *Binding) Lint(m *Model) []string {
 		if _, bound := b.Actions[a]; bound {
 			errs = append(errs, fmt.Sprintf("resume %s is bound too: it is no recorded step (record a snapshot for that: snapshot)", a))
 		}
+	}
+	if b.Complete && len(b.Eventually) == 0 {
+		errs = append(errs, "complete with no eventual vals: a settled prefix of a run would pass as complete; state the journey's end as one (eventually: [ended], a ghost flag its last step sets)")
 	}
 	if b.HiddenDepth < 0 {
 		errs = append(errs, "hiddenDepth: negative")

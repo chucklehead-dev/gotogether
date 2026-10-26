@@ -824,9 +824,10 @@ func claimsConformance(claims []Claim) bool {
 	return claimsDesc(claims, Conforms().desc)
 }
 
-// claimsSettling reports whether a claim states whether runs settle.
+// claimsSettling reports whether a claim states whether runs settle
+// (Settles, or Finishes, which includes it).
 func claimsSettling(claims []Claim) bool {
-	return claimsDesc(claims, Settles().desc)
+	return claimsDesc(claims, Settles().desc) || claimsDesc(claims, Finishes().desc)
 }
 
 func claimsDesc(claims []Claim, desc string) bool {
@@ -1127,8 +1128,8 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 				if rs := x.failingReasons(); rs != "" {
 					why = " (of the runs that fail: " + rs + ")"
 				}
-				return fmt.Sprintf("want %s in every run; %d of %d runs do not have it%s%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs),
-					why, x.atStart(), x.describe(t, x.Runs[j.show], true))
+				return fmt.Sprintf("want %s in every run; %d of %d runs do not have it%s%s; the first%s:\n%s", describeClaim(c), j.n, len(x.Runs),
+					why, x.atStart(), claimWhy(c, x.Runs[j.show].Report), x.describe(t, x.Runs[j.show], true))
 			}
 			return fmt.Sprintf("want %s in no run; %d of %d runs have it%s; the first:\n%s", describeClaim(c), j.n, len(x.Runs), x.atStart(), x.describe(t, x.Runs[j.show], true))
 		}}
@@ -1208,6 +1209,25 @@ func runDoes(r string) string {
 }
 
 // describeClaim names what a failing All or None was about.
+// claimWhy is why report r misses the expectations of claim c that say
+// why (Finishes names the part missing): "" for those that do not.
+func claimWhy(c Claim, r *validate.Report) string {
+	var es []Expectation
+	switch c := c.(type) {
+	case Expectation:
+		es = []Expectation{c}
+	case quantified:
+		es = c.es
+	}
+	var out string
+	for _, e := range es {
+		if e.value(r) != yes {
+			out += e.explain(r)
+		}
+	}
+	return out
+}
+
 func describeClaim(c Claim) string {
 	if q, ok := c.(quantified); ok {
 		var d []string

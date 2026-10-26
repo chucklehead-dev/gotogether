@@ -20,6 +20,7 @@ mutants) ends in one of these verdicts.
 | judged from a resume | `issue: info lost-prefix: ... judged from the states R admits (K of them)`, and on a pass `the steps pass from <state>, a state R admits (quint confirms)` | the usual ones | a log that lost its head with no snapshot, judged from every state the binding's `resume` admits: a pass means some admitted state explains the rest; past 20000 states no verdict (`narrow resume, or record a snapshot step`) |
 | no verdict (a search's budget) | `issue: warn linearize: ... no verdict (conformance n/a)`, invariants `n/a` | none: not a `Rejects`, `Mismatch` or `Violates`; a `None(...)` claim fails over it (what the run did is not known), and a mutant with no failing run but such runs is `Undecided`, not killed | Linearize (or ResolvePending) ran out of its budget, or hidden actions past `hiddenDepth` (raise it) before finding an order that conforms, or one in which every invariant holds: raise `qtest.LinearizeBudget`, partition keys (`LinearizeByKey`), or record steps where they take effect |
 | eventual vals not judged | `issue: info eventually: eventual vals not judged (V)` | `qtest.Settles()` states whether runs settled | the trace's last record is no settle (no `Sim.Settle`, a step after it, its error dropped) or another recorder recorded after it (`issue: warn settle`): an exploration claiming `Conforms()` of such runs fails, unless it also claims whether they settle |
+| incomplete (a prefix) | `validate -require-settle` (or `complete: true`): `actor A: incomplete (no settle)`, `incomplete (eventual vals not judged)`, `incomplete (pending calls)`, exit 1 | `qtest.Finishes()` | the run passes and is no finished one: it never settled, so its eventual vals were not judged, or a call was left pending (see "A prefix vs a finished run") |
 | real time bounds nothing | `issue: warn linearize: ... real time bounds none of its N steps` | none: record calls with `qobs.Invoke` and `Call.Done` | no step has an invocation time, so every order of its threads is allowed: sequential consistency, not linearizability |
 | a tool failure | an error, exit 2, no verdict | none: fix the binding or model | a template, a type, a missing field, or quint itself |
 
@@ -30,6 +31,31 @@ is false, `Run.Expect` fails saying so, `Some` is not shown by it and
 `All` and `None` do not hold over it. A report's summary shows the model's state
 around the failing step: read it before deciding whose bug it is (the
 workflow skill's triage table).
+
+## A prefix vs a finished run
+
+A run cut short conforms: three steps of a five-step workflow are a
+behaviour of the model, and `Conforms()` passes them. That is right of a
+run that stopped by right (a load test's horizon, a run with work
+pending) and wrong of a journey that had to finish (a browser driver's
+session, an end-to-end test). Say which:
+
+- the model latches the journey's end in a ghost flag and the binding
+  lists it under `eventually:` (gotogether-patterns, section 5);
+- the run records `qobs.Settled` once the driver's calls are answered
+  and the collector drained (`Sim.Settle` in a simulation), with nothing
+  after it;
+- a test claims `qtest.Finishes()`: conforms, `Settles()`, every eventual
+  val judged and true, `Completes()`. Its failure says which is missing:
+  `the run recorded no settle last`, `eventually V is false where actor A
+  settled: the run stopped short of the journey's end`, `call c (process p)
+  was invoked and never completed`, `the binding states no eventual val`;
+- the CLI says it with `gotogether validate -require-settle`, or the
+  binding's `complete: true` (which needs an eventual val): a passing run
+  that never settled, or left calls pending without `-resolve-pending`,
+  exits 1 as `incomplete (...)`, where without it the run passes with an
+  info issue. `complete` changes only the CLI's exit; a test states
+  `Finishes()` itself.
 
 ## Over many runs: claims
 
@@ -43,6 +69,7 @@ together (`Exploration.Expect`):
 | `qtest.Pending("action")` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
 | `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
+| `qtest.Finishes()` | every run is a finished one: it conforms, settled, every eventual val was judged and holds (a binding with none finishes no run), and every invoked call completed; a run that may have finished in a lost tail has no verdict. A miss names the part missing and the fix |
 | `qtest.Some(a, b)` | one run shows both |
 | `qtest.All(a)` | every run shows it |
 | `qtest.None(a)` | no run shows it, and every run has a verdict for it: one with no verdict on its conformance, or on an invariant (or eventual val) `a` names (a lost tail's, hidden actions past their cap), fails it |

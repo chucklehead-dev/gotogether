@@ -99,6 +99,25 @@ instead); a real deployment records one with `qobs.Settled(ctx)` where it
 knows the system is quiet. On qenv's native runtime and in gosim, Settle
 cannot tell and records none: the val is not judged there.
 
+**The journey's end as an eventual val on a ghost flag.** A run a driver
+cut short (a browser explorer's three clicks of a five-step workflow, a
+load test stopped mid-flight) is a prefix of a behaviour, and a prefix
+conforms. To say a journey must *finish*, latch its last step in a ghost
+and make that an eventual val:
+
+```quint
+var ended: bool                 // ghost: the journey reached its end
+action collect: bool = all { stage == 3, stage' = 4, ended' = true }
+val journeyEnded = ended        // binding: eventually: [journeyEnded]
+```
+
+Then claim `qtest.Finishes()` (conforms, settled, every eventual val
+judged and true, every invoked call completed), not `Conforms()` alone,
+and record `qobs.Settled` only once the driver's calls are answered and
+the collector drained. For the CLI, `gotogether validate
+-require-settle`, or `complete: true` in the binding, fails a run that
+never settled or left calls pending; `complete` needs such a val.
+
 Where nobody records `settle` (real Maelstrom), the property holds
 vacuously. Say so in the README, and rely on the environment's own final
 checks there.
@@ -205,6 +224,8 @@ says when a real run hit the design's limit.
 - [ ] Is every step recorded at its linearization point? (3)
 - [ ] Is each history property checked on arrival, with a ghost? (4)
 - [ ] Is each eventual property conditioned on `settled`, and recorded? (5)
+- [ ] Does a journey that must finish end in a ghost flag, an eventual val
+      claimed with `Finishes()`? (5)
 - [ ] Are outcomes, refusals and restarts modelled? (7)
 - [ ] Are promised and unpromised properties separated? (8)
 - [ ] Is there a mutant per property, showing it can fail? (see gotogether-workflow)

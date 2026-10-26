@@ -8,6 +8,16 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtest.Finishes()`: a run that is a finished journey, not a prefix of
+  one: it conforms, settled, every eventual val was judged and holds, and
+  every invoked call completed; three-valued (a lost tail is no verdict),
+  and its failure names the part missing and the fix. `gotogether
+  validate -require-settle` exits 1 for a passing run that never settled
+  ("incomplete (no settle)", "incomplete (eventual vals not judged)") or
+  left calls pending ("incomplete (pending calls)"); a binding's
+  `complete: true` makes that its default (it needs an eventual val, the
+  journey's end). A conforming three-step prefix passed with Conforms
+  alone. Reported by a pilot outside the repository.
 - `qtrace.ReadJSONL` rejects a line whose object is followed by more (a
   second object, garbage), naming the line: it read the first object and
   dropped the rest, losing a record or hiding a corruption. A cut-off

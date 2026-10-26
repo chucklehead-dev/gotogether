@@ -302,13 +302,15 @@ func bruteGossip(steps []qtrace.Step, depth int) bool {
 }
 
 // The binding's hidden actions are linted: the model's init and step, the
-// restart action, a duplicate, a depth with nothing hidden.
+// restart action, a duplicate, a depth with nothing hidden; and a
+// complete binding with no eventual val, the journey's end.
 func TestHiddenLint(t *testing.T) {
 	t.Parallel()
 	for _, x := range []struct{ yaml, want string }{
 		{"hidden: [step]", "is no action of the system"},
 		{"hidden: [gossipAny, gossipAny]", "listed twice"},
 		{"hiddenDepth: 2", "hiddenDepth with no hidden actions"},
+		{"complete: true", "complete with no eventual vals"},
 	} {
 		dir := t.TempDir()
 		src, _ := os.ReadFile("testdata/gossip.qnt")

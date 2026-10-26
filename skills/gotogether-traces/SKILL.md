@@ -57,6 +57,7 @@ actions:
     expect: 'balances.get({{.account}}) == {{.obs.balance}}'
 invariants: [noOverdraft]
 eventually: [noPending]          # must hold in the last state (a run that settled)
+complete: true                   # validate fails a run that never settled or left calls pending (needs eventually)
 within:                          # bounded response: after a val, another within a time
   - { after: overdrawn, holds: alerted, bound: 5s }
 hidden: [settleAny]              # nullary actions no step records: searched between steps
@@ -100,6 +101,9 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   - `qtest.Rejects("ack")`: a step the model cannot take;
   - `qtest.Mismatch("read")`: a failed `expect`;
   - `qtest.Violates("prop")`: the run conforms and the invariant fails.
+  - `qtest.Finishes()`: the run is a finished journey, not a conforming
+    prefix: settled, every eventual val judged and true, every call
+    completed.
 
   On a miss, the failure message is the report.
 - In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use
@@ -107,7 +111,13 @@ templates (collections, outcomes, ITF), or setting up the analyzers
 - From files: `gotogether validate -binding b.yaml FILE...`. FILE may be
   OTLP/JSON, a step log or ITF, detected by content. Add
   `-convert rules.yaml` for plain app spans. Exit status: 0 OK,
-  1 violation, 2 tool error.
+  1 violation, 2 tool error. A run cut short passes (its eventual vals
+  unjudged, an info issue says so): `-require-settle` (or the binding's
+  `complete: true`) fails it as `incomplete (no settle)`, `incomplete
+  (eventual vals not judged)` or `incomplete (pending calls)`. Other
+  flags: `-linearize`, `-linearize-key k`, `-resolve-pending`,
+  `-lost-prefix r`, `-lost-suffix r`, `-invariants a,b`, `-itf`,
+  `-history out.svg`.
 - Converted spans: `gotogether convert -rules bank.convert.yaml spans.jsonl > steps.jsonl`.
 
 Before trusting a model's isolation level of a real database, check

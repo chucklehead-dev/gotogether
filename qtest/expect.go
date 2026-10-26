@@ -34,6 +34,10 @@ type Expectation struct {
 	// do not say it: met, missed, or unknown (a call that may have
 	// completed in a lost tail), which no claim over it holds by
 	tri func(*validate.Report) tri
+	// why, if set, says why a run misses the expectation or has no verdict
+	// for it, and the fix: a failure prints it (Finishes names the part
+	// missing)
+	why func(*validate.Report) string
 }
 
 // tri is a three-valued verdict of an expectation on a run.
@@ -74,7 +78,7 @@ func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.value(r.Re
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
 func Conforms() Expectation {
-	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, "", nil}
+	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true}
 }
 
 // Settles: the system settled, whatever its steps: the run recorded a
@@ -84,17 +88,21 @@ func Conforms() Expectation {
 // does not settle does not conform either. Over runs, None(Settles())
 // states a livelock.
 func Settles() Expectation {
-	return Expectation{"a system that settles", func(r *validate.Report) bool {
-		if r.Unsettled != "" {
-			return false
-		}
-		for _, a := range r.Actors {
-			if a.Settled {
-				return true
-			}
-		}
+	return Expectation{desc: "a system that settles", check: settled, every: true}
+}
+
+// settled reports whether the run recorded a settle last, and settled
+// when asked to.
+func settled(r *validate.Report) bool {
+	if r.Unsettled != "" {
 		return false
-	}, true, nil, nil, "", nil}
+	}
+	for _, a := range r.Actors {
+		if a.Settled {
+			return true
+		}
+	}
+	return false
 }
 
 // Completes: every operation recorded at its invocation (qobs.Invoke)
@@ -119,6 +127,102 @@ func Completes() Expectation {
 		return v
 	}
 	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool { return completes(r) == yes }, every: true, tri: completes}
+}
+
+// Finishes: the run is a finished journey, not a prefix of one. It
+// conforms, it settled (Settles), every eventual val of the binding was
+// judged at the settle and holds, and every invoked call completed
+// (Completes). Conforms alone passes a prefix: three steps of a five-step
+// workflow, cut short, are a behaviour of the model. A binding with no
+// eventual val says nothing of where a journey ends, so no run finishes
+// by it: state the journey's end as an eventual val on a ghost flag its
+// last step sets. A run with no verdict for a part (a lost tail, which
+// may hold the settle, the end or a call's completion; a search out of
+// its budget) neither meets nor misses it, unless another part is
+// certainly missing. A failure names the part missing and the fix.
+func Finishes() Expectation {
+	value := func(r *validate.Report) tri { v, _ := finishes(r); return v }
+	return Expectation{desc: "a finished run (conforming, settled, every eventual val judged and true, every invoked call completed)",
+		check: func(r *validate.Report) bool { return value(r) == yes }, every: true, tri: value,
+		why: func(r *validate.Report) string { _, why := finishes(r); return why }}
+}
+
+// finishes is Finishes' value of r, and why it is not met: a part
+// certainly missing decides (the first found is named), else a part with
+// no verdict leaves it unknown.
+func finishes(r *validate.Report) (tri, string) {
+	if r.Unsettled != "" {
+		return no, "the system did not settle (" + r.Unsettled + ")"
+	}
+	for _, is := range r.Issues {
+		if is.Severity == "error" {
+			return no, "the steps could not be put in order (" + is.String() + ")"
+		}
+	}
+	if len(r.Actors) == 0 {
+		return no, "the run recorded no step"
+	}
+	var unknowns []string
+	settledRun, lostTail, eventuals := false, false, 0
+	for _, a := range r.Actors {
+		switch a.Conforms {
+		case validate.Fail:
+			return no, fmt.Sprintf("actor %s does not conform (%s)", a.Actor, a.Reason())
+		case validate.NotEvaluated:
+			unknowns = append(unknowns, fmt.Sprintf("actor %s's conformance has no verdict", a.Actor))
+		}
+		for _, is := range a.Issues {
+			if is.Severity == "error" {
+				return no, fmt.Sprintf("actor %s's steps could not be put in order (%s)", a.Actor, is)
+			}
+		}
+		for _, inv := range a.Invariants {
+			switch {
+			case inv.Verdict == validate.Fail && inv.Eventually:
+				return no, fmt.Sprintf("%s is false where actor %s settled: the run stopped short of the journey's end (a prefix of it)", inv.Name, a.Actor)
+			case inv.Verdict == validate.Fail:
+				return no, fmt.Sprintf("actor %s violates %s", a.Actor, inv.Name)
+			case inv.Verdict == validate.NotEvaluated && a.Conforms == validate.Pass:
+				unknowns = append(unknowns, fmt.Sprintf("%s has no verdict in actor %s", inv.Name, a.Actor))
+			}
+			if inv.Eventually {
+				eventuals++
+			}
+		}
+		for _, p := range a.Pending {
+			if !maybeCompleted(a, p) {
+				return no, fmt.Sprintf("call %s (process %s) was invoked and never completed: answer every call before the settle, and record its completion (Call.Done)", p.String(), p.Process)
+			}
+			unknowns = append(unknowns, fmt.Sprintf("call %s may have completed in a lost tail", p.String()))
+		}
+		settledRun = settledRun || a.Settled
+		lostTail = lostTail || len(a.Lost) > 0
+	}
+	switch {
+	case !settledRun && lostTail:
+		unknowns = append(unknowns, "a recorder lost its tail, which may hold the settle")
+	case !settledRun:
+		return no, "the run recorded no settle last, so its eventual vals were not judged: record qobs.Settled after the driver's calls are answered and the collector drained " +
+			"(Sim.Settle in a simulation), with nothing recorded after it"
+	case eventuals == 0 && len(unknowns) == 0:
+		return no, "the binding states no eventual val, so nothing says where the journey ends: add the journey's end as an eventual val on a ghost flag its last step sets (eventually: [ended])"
+	}
+	if len(unknowns) > 0 {
+		return unknown, strings.Join(unknowns, "; ")
+	}
+	return yes, ""
+}
+
+// explain is why r misses e, or has no verdict for it, as a failure
+// appends it ("": e says nothing more than its description).
+func (e Expectation) explain(r *validate.Report) string {
+	if e.why == nil || r == nil {
+		return ""
+	}
+	if w := e.why(r); w != "" {
+		return " (" + w + ")"
+	}
+	return ""
 }
 
 // maybeCompleted reports whether pending call p's completion may be in a
@@ -517,9 +621,9 @@ func expectReport(t testing.TB, r *validate.Report, checks map[string]bool, es .
 	for _, e := range es {
 		switch e.value(r) {
 		case unknown:
-			t.Fatalf("gotogether: want %s: the run has no verdict for it (a lost tail, a search out of its budget), got:\n%s", e, r.Summary())
+			t.Fatalf("gotogether: want %s: the run has no verdict for it (a lost tail, a search out of its budget)%s, got:\n%s", e, e.explain(r), r.Summary())
 		case no:
-			t.Fatalf("gotogether: want %s, got:\n%s", e, r.Summary())
+			t.Fatalf("gotogether: want %s%s, got:\n%s", e, e.explain(r), r.Summary())
 		}
 	}
 }
@@ -567,9 +671,9 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 				for _, k := range keysOf(r.ITF) {
 					itfs = append(itfs, r.ITF[k])
 				}
-				why := ""
+				why := e.explain(r.Report)
 				if v == unknown {
-					why = ": the run has no verdict for it (a lost tail, a search out of its budget)"
+					why = ": the run has no verdict for it (a lost tail, a search out of its budget)" + why
 				}
 				t.Fatalf("gotogether: want %s%s, got:\n%s  step log: %s\n  model-level ITF: %s",
 					e, why, r.Report.Summary(), r.StepLog, strings.Join(itfs, ", "))

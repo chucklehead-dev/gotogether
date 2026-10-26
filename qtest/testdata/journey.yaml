@@ -1,0 +1,8 @@
+spec: journey.qnt
+module: journey
+actions:
+  submit: {}
+  accept: {}
+  ready: {}
+  collect: {}
+eventually: [journeyEnded]

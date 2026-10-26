@@ -181,6 +181,22 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		{"hidden", "gossip.yaml", nil, []qtrace.Step{gossip(1, "a", 1, ""), gossip(2, "b", 0, "[1]")},
 			[]qtrace.Step{gossip(1, "a", 1, ""), gossip(2, "b", 0, "[9]")}, "conformance: FAIL"},
 		{"pending", "account.yaml", []string{"-resolve-pending"}, pending(12), pending(99), "conformance: FAIL"},
+		// -require-settle: a conforming run that is no finished one fails,
+		// saying what it lacks (without the flag, the "eventual" row's
+		// unsettled run passes)
+		{"require-settle: no settle", "account.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+			seq(acct("deposit", 5, 5)), "1 of 1 actor: 1 incomplete (no settle)"},
+		{"require-settle: eventual vals", "funds.binding.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+			seq(acct("deposit", 5, 5)), "1 of 1 actor: 1 incomplete (eventual vals not judged)"},
+		{"require-settle: pending", "account.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+			seq(acct("deposit", 5, 5), qtrace.Step{Action: "withdraw", Invocation: true, Args: map[string]any{"amount": int64(3)}}, settled),
+			"1 of 1 actor: 1 incomplete (pending calls)"},
+		{"require-settle: resolved pending", "account.yaml", []string{"-require-settle", "-resolve-pending"},
+			append(pending(12), qtrace.Step{Action: "settled", Settled: true, Recorder: "c", Seq: 4, Time: ms(4)}), pending(12),
+			"1 incomplete (no settle)"},
+		// complete: true makes it the binding's default
+		{"complete", "funds_complete.yaml", nil, seq(acct("deposit", 5, 5), settled),
+			seq(acct("deposit", 5, 5)), "incomplete (eventual vals not judged) (the binding is complete)"},
 	} {
 		dir := t.TempDir()
 		for _, run := range []struct {

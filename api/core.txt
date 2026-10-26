@@ -34,6 +34,7 @@ type Binding struct
     field Actions map[string]Action `yaml:"actions"`
     field Invariants []string `yaml:"invariants"`
     field Eventually []string `yaml:"eventually"`
+    field Complete bool `yaml:"complete"`
     field Within []Within `yaml:"within"`
     field Hidden []string `yaml:"hidden"`
     field HiddenDepth int `yaml:"hiddenDepth"`
@@ -1359,6 +1360,7 @@ func Conforms() Expectation
 func Constants(m map[string]string) Option
 func Exercised(except ...string) Exercise
 func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qenv.Script, error)
+func Finishes() Expectation
 func Global() Option
 func Invariants(names ...string) Option
 func IsEvidence(path string) bool

@@ -192,11 +192,15 @@ From the feedback of an agent using gotogether in another project (goo:
 an observability app checked with Bombadil, Antithesis's browser
 explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
 
-- **E1. Completion stated (S).** A conforming prefix is not a finished
-  journey: `qtest.Finishes()` (Settles, every eventual val judged and
-  true, Completes), `validate -require-settle` (exit 1 when unsettled or
-  eventual vals or pending calls are unjudged), a binding's `complete:
-  true`; patterns and verdicts docs ("prefix vs finished").
+- **E1. Completion stated (S). Done:** `qtest.Finishes()` (conforms,
+  Settles, every eventual val judged and true, Completes; three-valued; a
+  binding with no eventual val finishes no run; a miss names the part
+  and the fix), `validate -require-settle` (`incomplete (no settle)`,
+  `(eventual vals not judged)`, `(pending calls)`; pending calls judged
+  by `-resolve-pending` count as judged; recorded steps only), a
+  binding's `complete: true` (the CLI's default only, not a test's
+  claim; needs an eventual val); patterns and verdicts docs ("a prefix
+  vs a finished run").
 - **E2. Strict mode (S).** `GOTOGETHER_STRICT=1` turns every toolkit
   skip (no quint, no mutants woven) into a failure with its message;
   `qtest.Optional(t, reason)` for users' own gated skips; `evidence
