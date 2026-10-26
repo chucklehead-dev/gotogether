@@ -79,7 +79,8 @@ model judges both together.
 | `shownIsAJob` | the page shows only jobs the server has |
 | `readyIsCommitted` | a job shown ready is one whose report the server committed |
 | `cancelHonoured` | a cancel acknowledged (200, cancelled) is one the server made, and a job shown cancelled is one it stopped |
-| `noFailedRequest` | every request the page sent was answered, not with a server error |
+| `noFailedRequest` | every request the page sent was answered as its API says: a submit 202 or 200, a cancel 200 or 409; no answer, a server error or any other status is a failure |
+| `createdOnce` | a job id is created once: a server that made a job again would give one id two lives |
 | `finishedOnce` | a job is committed at most once |
 | `noCommitAfterCancel` | a job cancelled is never committed |
 | `allResolved` (eventual) | the server's end: it drained, every job it created ready or cancelled |
@@ -91,7 +92,7 @@ model judges both together.
 
 | test | mutant | check | verdict |
 |---|---|---|---|
-| `TestClient` | none | the real server driven through the page's API by a Go client (`Client`: eight journeys, each a double-clicked submission, polls every 20ms, a cancel in half of them), no browser | `Finishes()` |
+| `TestClient` | none | the real server driven through the page's API by a Go client (`Client`: eight journeys, each a double-clicked submission, polls every 20ms, a cancel in half of them, every fourth submission sent once more after its job ended), no browser | `Finishes()` |
 | `TestRecorded` | none | the recorded faithful journey (a 6s Bombadil run: 9 jobs, 6 ready, 3 cancelled), then the CLI: `gotogether validate -manifest -run-info` and `validate -replay` | `Finishes()`; the manifest replays |
 | `TestProbes` | none: constructed journeys, each a way a review found the first mapping and model passed | seven runs | a cancel never answered, then a poll's ready: `Pending("cancel")`, `None(Finishes())`; the page stuck at accepted: `Violates(EventuallyName("pageShowsEnds"))`; ready shown 900ms after the commit: the 500ms `within`; finished twice: `finishedOnce`; committed after its cancel: `noCommitAfterCancel`; a double click's second request answered 500: `noFailedRequest`; a key renewed between the snapshot and the click: `Finishes()` (the key is the one sent) |
 | `TestClickWithNoOutcome` | none: the recorded journey cut at its first click, its requests unanswered | one run | `Pending("submit")`, `None(Finishes())` |
@@ -103,8 +104,9 @@ model judges both together.
 | `TestMutants/cancelBroken` | a cancel of a running job answers 500 and does nothing; the page ignores the error | the same | `Violates("noFailedRequest")` |
 | `TestMutants/statusStale` | a poll never says ready: the page shows the job running until a cancel's 409 tells it, or for good | the same | `Violates("within 500ms after unseenReady: readySeen")` |
 | `TestMutants/commitAfterCancel` | the report is committed whatever a cancel said | the same | `Violates("noCommitAfterCancel")` |
+| `TestMutants/rerunFinished` | a key asked again once its job ended runs the job again in place: the same id, back to running | the client's run in both tiers (every fourth journey sends its submission once more, late); no page sends a key again once its job ended, so no Bombadil run or recording reaches it | `Violates("createdOnce")` |
 | `TestLive` | none | Bombadil explores the faithful app for 45s; the manifest replays; then `--reproduce` of the run against a new server (the same seed) | `Finishes()`, and Bombadil's own properties hold (its exit 2 fails the run); the reproduction finishes too, or diverges (Bombadil's reproduction is best effort, and the page's timing is not replayed) and what it replayed conforms |
-| `TestObservationMutants` | none: the recorded faithful journey with one mistake in its log (`qtest.MutateSteps`, four mutants of each op spread over its 59 steps); full mode only, and nightly | 20 checks of the journey | every dropped step killed; a submit, a cancel or a job's creation recorded twice, and a submit's code 199, survive (below) |
+| `TestObservationMutants` | none: the recorded faithful journey with one mistake in its log (`qtest.MutateSteps`, four mutants of each op spread over its 59 steps); full mode only, and nightly | 20 checks of the journey | every dropped step killed, a job's creation recorded twice killed (`createdOnce`), a submit's code 199 killed (`noFailedRequest`); a submit or a cancel recorded twice survives (below) |
 | `bombadiltrace` tests | none | constructed traces | the mapping (times, calls, refs), calls completed only by their own answers, each refusal, a torn tail |
 
 Rates were measured on 2026-10-26 in a sandbox with Bombadil 0.7.9 and
@@ -118,6 +120,15 @@ the claim in the table above holding of the run; for the faithful app,
 | live, 45s (the nightly's) | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 | 6 of 6 |
 | live, 6s (a recording's) | 10 of 10 | 9 of 10 | 10 of 10 | 9 of 10 | 10 of 10 | 9 of 10 | 10 of 10 |
 | `Client`, seeds 1 to 10 (`-short` runs seed 1) | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 | 10 of 10 |
+
+rerunFinished (client only): 10 of 10 seeds. After `createdOnce` and the
+submit's codes were added, six more live 45s faithful runs finished (6
+of 6), and the client's faithful runs with the late retry 10 of 10. In
+the first three, two reproductions that diverged failed the 500ms
+`within`: the server committed a job the stopped page never polled for.
+A diverged reproduction is now judged up to its page's last record (a
+prefix of the journey); the next three diverged after 437, 25 and 130
+of their runs' 814, 774 and 848 steps, each prefix conforming.
 
 What the live numbers say: 6 of 6 bounds a 45s run's miss rate below
 39% at 95% confidence, and no more. A sharper estimate needs an
@@ -172,14 +183,17 @@ judges the joined steps with `qtest.MutateSteps`.
 | op | mutants | killed | survived | what the survivors say |
 |---|---|---|---|---|
 | drop | 4 | 4 | 0 | a job's creation dropped leaves its finish rejected; a click's answer dropped leaves its call pending (`Finishes`) |
-| dup | 4 | 0 | 4 | the page's answers and acks are sets, so a submit or a cancel recorded twice changes nothing; `created` puts the job again, with no check that its id is new: recorded twice at once it is the same state. A server that recreated a finished job would reset it to running unseen by any invariant: a gap to close with `created` requiring a new id |
+| dup | 4 | 2 | 2 | the page's answers and acks are sets, so a submit or a cancel recorded twice changes nothing; a creation recorded twice violates `createdOnce` (it survived before the ghost count of creations: a server that recreated a finished job reset it to running unseen; the rerunFinished mutant is that server) |
 | swap | 4 | 2 | 2 | two submits, and a submit and a show, commute; a creation swapped with its job's finish is rejected, and a cancellation swapped with the next job's creation (taking its later time) violates `cancelHonoured` |
-| corrupt | 4 | 3 | 1 | a submit answered 199 is neither an answer (2xx) nor a failure (`noFailedRequest` counts 0 and 5xx): the model takes it as nothing, where the page would show an error. A key emptied violates `answerIsItsJob`; a show's status removed is refused by the binding |
+| corrupt | 4 | 4 | 0 | a submit answered 199 violates `noFailedRequest` (a submit's answer is 202 or 200, anything else a failure; it survived when only 0 and 5xx counted); a key emptied violates `answerIsItsJob`; a show's status removed is refused by the binding |
 | retime | 4 | 2 | 2 | no `within` reads a submit's or a cancel's time (only a job's run and a committed job shown are bounded); a creation moved past the submit it answers violates `answerIsItsJob` |
 
-The 199 and the second creation are the two a reader acts on: each is
-a recording the check would pass that the server never produces today,
-so each is a claim on the model to add, not on the server.
+The 199 and the second creation were the two a reader acts on: each
+was a recording the check passed that the server never produced, so
+each was a claim to add to the model, and both are now (14 of 20
+killed, from 11). The survivors left are equivalent by the model's
+design: answers are sets, two submits or a submit and a show commute,
+and no bound reads a request's time.
 
 ## How it runs
 
@@ -188,7 +202,7 @@ go test -short ./...                       # the client's runs, the recorded jou
 go test ./...                              # adds the live runs: bombadil and a Chrome on PATH
 WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .   # records 6s runs into testdata/runs
 ./run-demo.sh                              # the recorded journeys, then cmd/webjobs answering one key twice
-MUTATION=ready-early ./run-demo.sh         # or double-job, cancel-ignored, cancel-broken, status-stale, commit-after-cancel; LIVE=1 live
+MUTATION=ready-early ./run-demo.sh         # or double-job, cancel-ignored, cancel-broken, status-stale, commit-after-cancel, rerun-finished; LIVE=1 live
 ```
 
 The live tests skip under `-short`, and out of it skip without

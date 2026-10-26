@@ -20,7 +20,7 @@ actions:
   show: {}
 
 invariants: [oneJobPerKey, answerIsItsJob, shownIsAJob, readyIsCommitted, cancelHonoured, noFailedRequest,
-  finishedOnce, noCommitAfterCancel]
+  finishedOnce, noCommitAfterCancel, createdOnce]
 # the journey's end, for the server (drained, every job ended) and for the
 # page (every job it was answered with shown ended)
 eventually: [allResolved, pageShowsEnds]
@@ -49,9 +49,10 @@ antecedents:
   oneJobPerKey: jobs.keys().size() > 1
   finishedOnce: commits.keys().size() > 0
   noCommitAfterCancel: everCancelled.size() > 0
+  createdOnce: creations.keys().size() > 0
 
 # The model on its own (gotogether simulate): it allows every bug the
 # invariants rule out, so none holds by construction.
 simulate:
   allows: [oneJobPerKey, answerIsItsJob, shownIsAJob, readyIsCommitted, cancelHonoured, noFailedRequest,
-    finishedOnce, noCommitAfterCancel]
+    finishedOnce, noCommitAfterCancel, createdOnce]

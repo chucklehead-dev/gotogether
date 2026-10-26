@@ -25,6 +25,8 @@ module webjobs {
   // jobs it ever cancelled
   var commits: str -> int
   var everCancelled: Set[str]
+  // ghost: how often the server created each job id
+  var creations: str -> int
   // the page's: the jobs each submission key was answered with (2xx),
   // the cancels acknowledged (200, cancelled), the requests that failed
   // (no answer, or 5xx), and the status the page last showed of each job
@@ -36,7 +38,7 @@ module webjobs {
   var done: bool
 
   action init = all {
-    jobs' = Map(), commits' = Map(), everCancelled' = Set(),
+    jobs' = Map(), commits' = Map(), everCancelled' = Set(), creations' = Map(),
     answers' = Map(), acked' = Set(), failed' = 0, shown' = Map(),
     done' = false,
   }
@@ -44,12 +46,15 @@ module webjobs {
   pure def statusOf(js: str -> Job, id: str): str = if (js.keys().contains(id)) js.get(id).status else "none"
   pure def countOf(m: str -> int, id: str): int = if (m.keys().contains(id)) m.get(id) else 0
   pure def answersOf(m: str -> Set[str], k: str): Set[str] = if (m.keys().contains(k)) m.get(k) else Set()
-  pure def fails(code: int): bool = code == 0 or code >= 500
+  // a submit is answered 202 (created) or 200 (the key's job); a cancel
+  // 200 (cancelled) or 409 (too late): any other answer, or none, failed
+  pure def submitFails(code: int): bool = code != 202 and code != 200
+  pure def cancelFails(code: int): bool = code != 200 and code != 409
 
   // server: a job created for a submission's key
   action created(key: str, id: str): bool = all {
     jobs' = jobs.put(id, { key: key, status: "running" }),
-    commits' = commits, everCancelled' = everCancelled,
+    commits' = commits, everCancelled' = everCancelled, creations' = creations.put(id, countOf(creations, id) + 1),
     answers' = answers, acked' = acked, failed' = failed, shown' = shown, done' = done,
   }
 
@@ -57,7 +62,7 @@ module webjobs {
   action finished(id: str): bool = all {
     jobs.keys().contains(id),
     jobs' = jobs.set(id, { ...jobs.get(id), status: "ready" }),
-    commits' = commits.put(id, countOf(commits, id) + 1), everCancelled' = everCancelled,
+    commits' = commits.put(id, countOf(commits, id) + 1), everCancelled' = everCancelled, creations' = creations,
     answers' = answers, acked' = acked, failed' = failed, shown' = shown, done' = done,
   }
 
@@ -65,7 +70,7 @@ module webjobs {
   action cancelled(id: str): bool = all {
     jobs.keys().contains(id),
     jobs' = jobs.set(id, { ...jobs.get(id), status: "cancelled" }),
-    commits' = commits, everCancelled' = everCancelled.union(Set(id)),
+    commits' = commits, everCancelled' = everCancelled.union(Set(id)), creations' = creations,
     answers' = answers, acked' = acked, failed' = failed, shown' = shown, done' = done,
   }
 
@@ -73,30 +78,31 @@ module webjobs {
   // allResolved checks)
   action drained: bool = all {
     done' = true,
-    jobs' = jobs, commits' = commits, everCancelled' = everCancelled,
+    jobs' = jobs, commits' = commits, everCancelled' = everCancelled, creations' = creations,
     answers' = answers, acked' = acked, failed' = failed, shown' = shown,
   }
 
   // page: a submission of key answered, with HTTP status code and the
-  // job its answer named (id "" for none)
+  // job its answer named (id "" for none): 202 or 200 is an answer,
+  // anything else a failure
   action submit(key: str, code: int, id: str, status: str): bool = all {
-    answers' = if (200 <= code and code < 300) answers.put(key, answersOf(answers, key).union(Set(id))) else answers,
-    failed' = if (fails(code)) failed + 1 else failed,
-    jobs' = jobs, commits' = commits, everCancelled' = everCancelled, acked' = acked, shown' = shown, done' = done,
+    answers' = if (submitFails(code)) answers else answers.put(key, answersOf(answers, key).union(Set(id))),
+    failed' = if (submitFails(code)) failed + 1 else failed,
+    jobs' = jobs, commits' = commits, everCancelled' = everCancelled, acked' = acked, shown' = shown, done' = done, creations' = creations,
   }
 
   // page: a cancel of job id answered, with code and the status its
   // answer named (409 and the status it had: too late)
   action cancel(id: str, code: int, status: str): bool = all {
     acked' = if (code == 200 and status == "cancelled") acked.union(Set(id)) else acked,
-    failed' = if (fails(code)) failed + 1 else failed,
-    jobs' = jobs, commits' = commits, everCancelled' = everCancelled, answers' = answers, shown' = shown, done' = done,
+    failed' = if (cancelFails(code)) failed + 1 else failed,
+    jobs' = jobs, commits' = commits, everCancelled' = everCancelled, answers' = answers, shown' = shown, done' = done, creations' = creations,
   }
 
   // page: job id shown with status
   action show(id: str, status: str): bool = all {
     shown' = shown.put(id, status),
-    jobs' = jobs, commits' = commits, everCancelled' = everCancelled,
+    jobs' = jobs, commits' = commits, everCancelled' = everCancelled, creations' = creations,
     answers' = answers, acked' = acked, failed' = failed, done' = done,
   }
 
@@ -141,6 +147,10 @@ module webjobs {
 
   // every request the page sent was answered, and not with a server error
   val noFailedRequest: bool = failed == 0
+
+  // a job id is created once: a server that made a job again (reset to
+  // running) would give one id two lives
+  val createdOnce: bool = creations.keys().forall(id => creations.get(id) <= 1)
 
   // a job is committed at most once
   val finishedOnce: bool = commits.keys().forall(id => commits.get(id) <= 1)

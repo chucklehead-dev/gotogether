@@ -3,7 +3,7 @@
 # browser needed: a Go client drives the real server too), or with LIVE=1
 # Bombadil exploring the app for 45s (bombadil and a Chrome on PATH).
 # MUTATION= one of ready-early, double-job, cancel-ignored, cancel-broken,
-# status-stale, commit-after-cancel builds the server with that mutant's overlay
+# status-stale, commit-after-cancel, rerun-finished builds the server with that mutant's overlay
 # (testdata/mutants/) and shows what catches it; without one, the
 # faithful app, then cmd/webjobs answering a submission twice with one
 # job.
@@ -17,6 +17,7 @@ case "${MUTATION:-}" in
   cancel-broken) run='TestMutants$/^cancelBroken$' ;;
   status-stale) run='TestMutants$/^statusStale$' ;;
   commit-after-cancel) run='TestMutants$/^commitAfterCancel$' ;;
+  rerun-finished) run='TestMutants$/^rerunFinished$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 short=-short

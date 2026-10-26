@@ -18,7 +18,8 @@ import (
 // TestMutant under -short). Each journey submits a key twice at once (the
 // page's double click), shows the first answer that names a job, polls
 // every 20ms and shows each change, and in some journeys cancels the job
-// at a random moment. It records what the adapter records of a Bombadil
+// at a random moment; every fourth journey ends with its submission sent
+// once more, late. It records what the adapter records of a Bombadil
 // trace, on recorder "ui": each request an invocation (qobs.Invoke) and
 // its own answer its completion (Call.Done: code, id, status), each
 // change of the job shown a show step. Recorded live, with the client's
@@ -57,9 +58,17 @@ func (c *Client) Run(ctx context.Context) error {
 		if rng.Intn(2) == 0 {
 			cancelAt = time.Duration(rng.Int63n(int64(c.CancelWithin)))
 		}
-		ended, err := c.journey(ctx, fmt.Sprintf("k%d-%d", c.Seed, i+1), cancelAt)
+		key := fmt.Sprintf("k%d-%d", c.Seed, i+1)
+		ended, err := c.journey(ctx, key, cancelAt)
 		if err != nil || !ended {
 			return err
+		}
+		if i%4 == 3 {
+			// a retry of the submission after its job ended (a page that
+			// lost the first answer would send it): the key's job again,
+			// ended, and no new one
+			body, _ := json.Marshal(map[string]string{"key": key})
+			c.request(ctx, "submit", []any{"key", key}, http.MethodPost, c.Base+"/jobs", body)
 		}
 	}
 	return nil

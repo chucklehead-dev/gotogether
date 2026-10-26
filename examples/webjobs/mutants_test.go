@@ -35,7 +35,16 @@ var mutants = map[string]string{
 	"statusStale": "within 500ms after unseenReady: readySeen",
 	// the report is committed whatever a cancel said
 	"commitAfterCancel": "noCommitAfterCancel",
+	// a key asked again once its job ended runs the job again in place,
+	// back to running under the same id (pageless: see below)
+	"rerunFinished": "createdOnce",
 }
+
+// pageless are the mutants no page can show: the page never sends a key
+// again once its job ended (it makes a new one), so neither Bombadil's
+// runs nor a recording reach them; the client's late retry does, in both
+// tiers.
+var pageless = map[string]bool{"rerunFinished": true}
 
 // Overlay writes the go build overlay for mutant m into dir and returns
 // its path: the mutant's files in place of webjobs', and a test file
@@ -116,6 +125,10 @@ func TestMutant(t *testing.T) {
 		t.Fatalf("unknown mutant %q", mutant)
 	}
 	qtest.RequireQuint(t)
+	if pageless[mutant] {
+		clientRun(t, 1).Expect(t, qtest.Violates(inv))
+		return
+	}
 	if testing.Short() {
 		clientRun(t, 1).Expect(t, qtest.Violates(inv))
 		recorded(t, mutant).Expect(t, qtest.Violates(inv))

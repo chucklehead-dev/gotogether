@@ -255,15 +255,22 @@ func TestLive(t *testing.T) {
 		r := live(t, "reproduced", Live{Reproduce: j.dir, Seed: j.seed, TimeLimit: j.limit})
 		if r.live.Diverged {
 			// best effort: what it replayed is a prefix of a journey (its
-			// page stopped mid-job, so the server's settle settles nothing
-			// of the page's): it conforms, judged without the settle
+			// page stopped mid-job, so what the server did after, its
+			// settle included, says nothing of the page's): it conforms,
+			// judged up to the page's last record
 			steps, err := Steps(r.dir)
 			if err != nil {
 				t.Fatal(err)
 			}
+			var end time.Time
+			for _, s := range steps {
+				if s.Recorder == "ui" && s.Time.After(end) {
+					end = s.Time
+				}
+			}
 			var prefix []qtrace.Step
 			for _, s := range steps {
-				if !s.Settled {
+				if !s.Settled && !s.Time.After(end) {
 					prefix = append(prefix, s)
 				}
 			}
