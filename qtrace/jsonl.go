@@ -2,6 +2,7 @@ package qtrace
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -115,7 +116,9 @@ func ReadJSONL(r io.Reader) ([]Step, error) {
 		}
 		s, err := parseLine(line, n)
 		if err != nil {
-			if i == len(lines)-1 { // no newline after it: the writer stopped here
+			// no newline after it: the writer stopped here. A whole object
+			// followed by more is no cut-off line, wherever it is.
+			if i == len(lines)-1 && !errors.Is(err, errTrailing) {
 				return tornAt(out), &TornTail{Line: n, Text: raw}
 			}
 			return nil, err
@@ -131,6 +134,11 @@ func parseLine(line string, n int) (Step, error) {
 	var raw map[string]any
 	if err := dec.Decode(&raw); err != nil {
 		return Step{}, fmt.Errorf("line %d: %w", n, err)
+	}
+	// A line is one object: a second, or anything else after it, was
+	// silently dropped once, losing a record or hiding a corruption.
+	if _, err := dec.Token(); err != io.EOF {
+		return Step{}, fmt.Errorf("line %d: %w after the step's object at offset %d: write one object per line", n, errTrailing, dec.InputOffset())
 	}
 	attrs := map[string]any{}
 	for k, v := range raw {
@@ -156,6 +164,9 @@ func parseLine(line string, n int) (Step, error) {
 	s.Source = fmt.Sprintf("line %d", n)
 	return s, nil
 }
+
+// errTrailing is a line's error when its object is followed by more.
+var errTrailing = errors.New("trailing data") // read-only
 
 // tornAt is a torn log's steps with the loss of each of its recorders'
 // tails declared: the cut line was one of theirs, which the cut may not

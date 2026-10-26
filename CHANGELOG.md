@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtrace.ReadJSONL` rejects a line whose object is followed by more (a
+  second object, garbage), naming the line: it read the first object and
+  dropped the rest, losing a record or hiding a corruption. A cut-off
+  last line is still a `*TornTail`; trailing whitespace is still allowed.
+  Reported by a pilot outside the repository.
 - `qnemesis`: a nemesis for real deployments, standard library only.
   `Nemesis` runs a `Schedule` (qenv Script's names and partial order:
   `nemesis.crash.<p>`, `pause`/`resume`, `partition`/`heal`, `isolate`,
