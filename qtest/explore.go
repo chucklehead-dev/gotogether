@@ -706,8 +706,8 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 		at := map[int]int{}       // run -> index in todo
 		for i, steps := range runs {
 			keys[i] = inst + cc.Key(steps)
-			if rep, ok := verdicts.get(keys[i]); ok {
-				reps[i] = rep
+			if v, ok := verdicts.get(keys[i]); ok {
+				reps[i] = rebase(v.rep, v.steps, steps)
 				*cached++
 				continue
 			}
@@ -729,8 +729,8 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 			if !ok {
 				continue
 			}
-			if reps[i], errs[i] = treps[j], terrs[j]; errs[i] == nil {
-				verdicts.put(keys[i], treps[j])
+			if reps[i], errs[i] = rebase(treps[j], todo[j], runs[i]), terrs[j]; errs[i] == nil {
+				verdicts.put(keys[i], verdict{treps[j], todo[j]})
 			}
 		}
 		return reps, errs
@@ -748,23 +748,76 @@ var verdicts verdictCache
 
 type verdictCache struct {
 	mu sync.Mutex
-	m  map[string]*validate.Report
+	m  map[string]verdict
 }
 
-func (v *verdictCache) get(k string) (*validate.Report, bool) {
+// A verdict is a report and the steps it was reached on, for the runs of
+// the same key it is given to (rebase).
+type verdict struct {
+	rep   *validate.Report
+	steps []qtrace.Step
+}
+
+func (v *verdictCache) get(k string) (verdict, bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	r, ok := v.m[k]
 	return r, ok
 }
 
-func (v *verdictCache) put(k string, r *validate.Report) {
+func (v *verdictCache) put(k string, r verdict) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.m == nil {
-		v.m = map[string]*validate.Report{}
+		v.m = map[string]verdict{}
 	}
 	v.m[k] = r
+}
+
+// rebase is rep, the verdict on the steps from, as the report of to,
+// steps of the same key (qtrace.Key) that may differ in what no verdict
+// reads: each failing step's ref and source are to's, so a run's report
+// links to its own artifacts (a driver's trace line, a screenshot), not
+// those of the run its verdict was first reached on. Steps of one key
+// correspond by position, and a failing step is found in from by its
+// recorder and seq.
+func rebase(rep *validate.Report, from, to []qtrace.Step) *validate.Report {
+	if rep == nil || len(from) != len(to) {
+		return rep
+	}
+	type rs struct {
+		rec string
+		seq uint64
+	}
+	at := make(map[rs]int, len(from))
+	for i := range from {
+		at[rs{from[i].Recorder, from[i].Seq}] = i
+	}
+	fix := func(f *validate.Failure) *validate.Failure {
+		if f == nil || f.Step == nil {
+			return f
+		}
+		i, ok := at[rs{f.Step.Recorder, f.Step.Seq}]
+		if !ok || to[i].Ref == f.Step.Ref && to[i].Source == f.Step.Source {
+			return f
+		}
+		c, s := *f, *f.Step
+		s.Ref, s.Source = to[i].Ref, to[i].Source
+		c.Step = &s
+		return &c
+	}
+	out := *rep
+	out.Actors = make([]*validate.Result, len(rep.Actors))
+	for i, a := range rep.Actors {
+		c := *a
+		c.Failure = fix(a.Failure)
+		c.Invariants = slices.Clone(a.Invariants)
+		for j := range c.Invariants {
+			c.Invariants[j].Failure = fix(c.Invariants[j].Failure)
+		}
+		out.Actors[i] = &c
+	}
+	return &out
 }
 
 // stepsKey is a run's steps as the model sees them: actions, outcomes,

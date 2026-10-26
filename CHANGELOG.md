@@ -8,6 +8,19 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Step references: `quint.ref` (`qtrace.KeyRef`, `Step.Ref`), a step's
+  link to its artifact (an external driver's trace line, a screenshot),
+  recorded with `qobs.Ref(s)` in a key's place (a typed value: a
+  parameter named ref stays an argument), or a log record's `quint.ref`.
+  Kept by step logs, OTel span events (the event's or its span's, never
+  a resource's), a convert rule's `ref:` (default: the span's own
+  `quint.ref`), and from an invocation record to its completion; printed
+  at a failing step (`ref:`), in `-history`'s titles and `steps`'
+  listing. No verdict or cache key reads it, and a verdict taken from the
+  cache shows the run's own failing step's ref and source. `Filter`
+  drops refs when it sanitizes (free text no pseudonym reaches) unless
+  `KeepRefs` (`steps -keep-refs`).
+
 - Strict mode: `GOTOGETHER_STRICT=1` turns every toolkit skip into a
   failure with its message (`qtest.RequireQuint`, `System.Mutate` with no
   mutants woven, `SkipIfEmpty`'s in Record, Explore and `qhegel.Shrink`,

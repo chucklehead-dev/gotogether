@@ -19,7 +19,7 @@ const KeyTime = "quint.time_unix_nano"
 func (s *Step) Attributes() map[string]any {
 	m := map[string]any{KeyAction: s.Action, KeySeq: int64(s.Seq), KeyRecorder: s.Recorder, KeyOutcome: s.Outcome,
 		KeyTime: s.Time.UnixNano()}
-	for k, v := range map[string]string{KeyActor: s.Actor, KeyProcess: s.Process, KeyThread: s.Thread, KeyError: s.Error} {
+	for k, v := range map[string]string{KeyActor: s.Actor, KeyProcess: s.Process, KeyThread: s.Thread, KeyError: s.Error, KeyRef: s.Ref} {
 		if v != "" {
 			m[k] = v
 		}

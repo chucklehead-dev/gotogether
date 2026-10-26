@@ -17,6 +17,7 @@
 //	    where: { rpc.system: grpc }     # attribute filters (string equality)
 //	    action: withdraw
 //	    args: { account: attr:bank.account, amount: attr:bank.amount }
+//	    ref: attr:bank.receipt_url      # the step's link to its artifact (quint.ref)
 //
 // Each matched span (or span event, with `event:`) is one step at the
 // span's end (or the event's time). The step's outcome is "error" when the
@@ -59,7 +60,11 @@ type Rules struct {
 	Actor   string `yaml:"actor"`
 	Process string `yaml:"process"`
 	Thread  string `yaml:"thread"`
-	Rules   []Rule `yaml:"rules"`
+	// Ref, an expression, is each step's link to its artifact
+	// (qtrace.Step.Ref): "attr:app.screenshot", "=trace.jsonl". A span
+	// (or matched event) carrying quint.ref keeps it when no rule sets one.
+	Ref   string `yaml:"ref"`
+	Rules []Rule `yaml:"rules"`
 }
 
 // Rule maps matching spans (or span events) to one model action.
@@ -72,6 +77,7 @@ type Rule struct {
 	Process string            `yaml:"process"`
 	Thread  string            `yaml:"thread"`
 	Outcome string            `yaml:"outcome"`
+	Ref     string            `yaml:"ref"` // the step's ref (Rules.Ref)
 	Args    map[string]string `yaml:"args"`
 	Obs     map[string]string `yaml:"obs"`
 	Order   map[string]string `yaml:"order"`
@@ -340,6 +346,14 @@ func (rs *Rules) step(ru *Rule, c *ctx, t time.Time) (qtrace.Step, string, error
 	}
 	if s.Outcome, err = c.str(ru.Outcome, "status"); err != nil {
 		return s, "", err
+	}
+	if s.Ref, err = c.str(pick(ru.Ref, rs.Ref), ""); err != nil {
+		return s, "", err
+	}
+	if s.Ref == "" && ru.Ref == "" && rs.Ref == "" { // the span's own, never the resource's (every step's)
+		if s.Ref, _ = c.str("event:"+qtrace.KeyRef, ""); s.Ref == "" {
+			s.Ref, _ = c.str("span:"+qtrace.KeyRef, "")
+		}
 	}
 	if c.sp.Status.IsError() {
 		s.Error = c.sp.Status.Message

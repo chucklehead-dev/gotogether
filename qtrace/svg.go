@@ -14,7 +14,8 @@ import (
 // with the call, what it observed and its number in order (the order a
 // search judged, Linearize's: an empty order numbers nothing). A call
 // left pending (invoked, never completed) is a dashed bar to the
-// history's end, numbered if order assumes it took effect. failedAt is
+// history's end, numbered if order assumes it took effect. A call's ref
+// (Step.Ref) is in its bar's title, shown on hover. failedAt is
 // the index in order of the step the check failed at (-1: none), drawn
 // red: where to look first in a history no order explains.
 func HistorySVG(recorded, order []Step, failedAt int) []byte {
@@ -22,7 +23,7 @@ func HistorySVG(recorded, order []Step, failedAt int) []byte {
 	type bar struct {
 		lane          string
 		from, to      time.Time
-		label         string
+		label, ref    string
 		pending, fail bool
 		num           int
 	}
@@ -68,14 +69,14 @@ func HistorySVG(recorded, order []Step, failedAt int) []byte {
 			if len(s.Obs) > 0 {
 				label += " → " + obsString(s.Obs)
 			}
-			bars = append(bars, bar{lane: s.Recorder, from: from, to: s.Time, label: label, num: num[id(s)], fail: failed != "" && id(s) == failed})
+			bars = append(bars, bar{lane: s.Recorder, from: from, to: s.Time, label: label, ref: s.Ref, num: num[id(s)], fail: failed != "" && id(s) == failed})
 		}
 		for i := range tr.Pending {
 			p := tr.Pending[i]
 			widen(p.Time)
 			q := p
 			q.Obs = nil
-			bars = append(bars, bar{lane: p.Recorder, from: p.Time, label: p.String() + " (pending)", pending: true, num: num[id(&q)], fail: failed != "" && id(&q) == failed})
+			bars = append(bars, bar{lane: p.Recorder, from: p.Time, label: p.String() + " (pending)", ref: p.Ref, pending: true, num: num[id(&q)], fail: failed != "" && id(&q) == failed})
 		}
 	}
 	lanes := map[string]int{}
@@ -131,7 +132,11 @@ func HistorySVG(recorded, order []Step, failedAt int) []byte {
 		if b.num > 0 {
 			label = fmt.Sprintf("#%d %s", b.num, label)
 		}
-		fmt.Fprintf(&w, `<text x="%.1f" y="%d"><title>%s</title>%s</text>`+"\n", x0+3, y+12, esc(label), esc(clip(label, int((x1-x0)/6)+12)))
+		title := label
+		if b.ref != "" { // the driver's record of the call, on hover: the bar has no room
+			title += "\nref: " + b.ref
+		}
+		fmt.Fprintf(&w, `<text x="%.1f" y="%d"><title>%s</title>%s</text>`+"\n", x0+3, y+12, esc(title), esc(clip(label, int((x1-x0)/6)+12)))
 	}
 	w.WriteString("</svg>\n")
 	return w.Bytes()

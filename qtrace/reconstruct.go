@@ -221,6 +221,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	// after it (seq), whatever its actor.
 	completed := map[rk]bool{}
 	invokedAt := map[rk]time.Time{}
+	invokedRef := map[rk]string{}
 	lastSettle, last := map[string]uint64{}, map[string]uint64{}
 	for _, s := range uniq {
 		if s.Call != 0 {
@@ -228,6 +229,9 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 		if s.Invocation {
 			invokedAt[rk{s.Recorder, s.Seq}] = s.Time
+			if s.Ref != "" {
+				invokedRef[rk{s.Recorder, s.Seq}] = s.Ref
+			}
 		}
 		if s.Settled {
 			lastSettle[s.Recorder] = max(lastSettle[s.Recorder], s.Seq)
@@ -285,6 +289,9 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			// simulation's true time), whatever "invoked" said
 			if t, ok := invokedAt[rk{s.Recorder, s.Call}]; ok && s.Call != 0 {
 				s.Invoked, s.fromRecord = t, true
+			}
+			if s.Ref == "" && s.Call != 0 { // a driver may link only the call's start to its artifact
+				s.Ref = invokedRef[rk{s.Recorder, s.Call}]
 			}
 			steps = append(steps, s)
 		case !completed[rk{s.Recorder, s.Seq}]:

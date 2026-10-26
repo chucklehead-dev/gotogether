@@ -257,9 +257,56 @@ func Thread(ctx context.Context) context.Context {
 //	              effect (a client's); qtest.Linearize orders by it
 //	anything else an argument of the action (quint.arg.<key>)
 //
-// Values are normalised to string, int64, bool or float64.
+// Values are normalised to string, int64, bool or float64. A Ref, in a
+// key's place, links the step to its artifact (qtrace.Step.Ref).
 func (r *Recorder) Record(ctx context.Context, action string, err error, kv ...any) {
-	r.record(ctx, action, err, kv, 0)
+	r.record(ctx, action, err, expand(kv), 0)
+}
+
+// A StepRef is a step's link to its artifact (Ref).
+type StepRef string
+
+// Ref links the step it is recorded with to its artifact (quint.ref,
+// qtrace.Step.Ref): an external driver's trace line, a screenshot. It
+// stands in a key's place, alone, among Record's (and Invoke's and Done's)
+// keys:
+//
+//	qobs.Record(ctx, "submit", err, qobs.Ref("bombadil/trace.jsonl:42 screenshot=screenshots/42.webp"), "job", id)
+//
+// A typed value, not a "ref" key: a model action may have a parameter
+// named ref. A failing step's report and validate -history show it; no
+// verdict depends on it.
+func Ref(s string) StepRef { return StepRef(s) }
+
+// refKey is the key a Ref is expanded to: no string, so no argument's.
+type refKey struct{}
+
+// expand turns each Ref in a key's place into a key and its value, so
+// the keys are pairs again for everything after.
+func expand(kv []any) []any {
+	n := -1
+	for i := 0; i < len(kv); i += 2 {
+		if _, ok := kv[i].(StepRef); ok {
+			n = i
+			break
+		}
+	}
+	if n < 0 {
+		return kv // the common case: no Ref, no copy
+	}
+	out := append([]any(nil), kv[:n]...)
+	for i := n; i < len(kv); {
+		if ref, ok := kv[i].(StepRef); ok {
+			out = append(out, refKey{}, string(ref))
+			i++
+			continue
+		}
+		if i+1 < len(kv) {
+			out = append(out, kv[i], kv[i+1])
+		}
+		i += 2
+	}
+	return out
 }
 
 // record records a step, the completion of invocation call if not 0.
@@ -324,7 +371,7 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 	if r == nil {
 		return nil
 	}
-	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), kv...)}
+	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), expand(kv)...)}
 	if hooks.Discarding() {
 		return c // interrupted work: its Done, if any, goes to Interrupted
 	}
@@ -353,7 +400,7 @@ func (c *Call) Done(err error, kv ...any) {
 		return
 	}
 	var all []any
-	for _, l := range [][]any{c.kv, kv} {
+	for _, l := range [][]any{c.kv, expand(kv)} {
 		for i := 0; i+1 < len(l); i += 2 {
 			if l[i] != "when" {
 				all = append(all, l[i], l[i+1])
@@ -398,6 +445,10 @@ func (r *Recorder) step(ctx context.Context, action string, err error, kv []any)
 		s.Thread = sc.SpanID().String()
 	}
 	for i := 0; i+1 < len(kv); i += 2 {
+		if _, ok := kv[i].(refKey); ok {
+			s.Ref = kv[i+1].(string)
+			continue
+		}
 		k, _ := kv[i].(string)
 		if t, ok := kv[i+1].(time.Time); ok && k == "invoked" {
 			s.Invoked = t

@@ -110,7 +110,7 @@ usage:
   gotogether lint     -binding b.yaml [-src DIR] [-sim DIR]
   gotogether lint     -sim DIR | -weave DIR
   gotogether steps    [-actors a,b] [-actions a,b] [-since T] [-until T] [-pseudonymize f,g] [-binding b.yaml]
-                   [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
+                   [-keep-refs] [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
                    [-convert rules.yaml] [-invariants a,b] [-itf] [-require-settle] FILE...
@@ -344,6 +344,7 @@ func steps(args []string) error {
 	pseud := fset.String("pseudonymize", "", "fields whose values become salted pseudonyms (arguments, obs.<name>, actor)")
 	bpath := fset.String("binding", "", "keep only the fields this binding reads (and drop error texts)")
 	quint := fset.String("quint", "quint", "quint binary (with -binding)")
+	keepRefs := fset.Bool("keep-refs", false, "keep steps' refs (quint.ref) while sanitizing (-pseudonymize, -binding), which drops them otherwise: a ref is free text, often a path with user data")
 	fset.Parse(args)
 	rules, err := loadRules(*conv)
 	if err != nil {
@@ -354,7 +355,7 @@ func steps(args []string) error {
 		return err
 	}
 	f := qtrace.Filter{Actors: fields(*actors), Actions: fields(*actions),
-		Pseudonymize: fields(*pseud), Salt: os.Getenv("GOTOGETHER_SALT")}
+		Pseudonymize: fields(*pseud), Salt: os.Getenv("GOTOGETHER_SALT"), KeepRefs: *keepRefs}
 	for _, t := range []struct {
 		s  string
 		to *time.Time
@@ -405,7 +406,11 @@ func steps(args []string) error {
 			fmt.Println("  lost:", l)
 		}
 		for i, s := range t.Steps {
-			fmt.Printf("  [%2d] seq %-3d %-10.10s %s\n", i, s.Seq, s.Process, s.String())
+			ref := ""
+			if s.Ref != "" {
+				ref = "  ref " + s.Ref
+			}
+			fmt.Printf("  [%2d] seq %-3d %-10.10s %s%s\n", i, s.Seq, s.Process, s.String(), ref)
 		}
 	}
 	return nil

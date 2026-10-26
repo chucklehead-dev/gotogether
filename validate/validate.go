@@ -800,6 +800,9 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 			where += ", " + s.Source
 		}
 		fmt.Fprintf(b, "%s  observed: %s (%s)\n", pfx, s.String(), where)
+		if s.Ref != "" { // the driver's own record of the step: where a person looks next
+			fmt.Fprintf(b, "%s  ref:      %s\n", pfx, s.Ref)
+		}
 		if len(s.Obs) > 0 {
 			fmt.Fprintf(b, "%s  obs:      %s\n", pfx, obsString(s.Obs))
 		}

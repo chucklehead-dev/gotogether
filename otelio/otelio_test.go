@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -94,5 +95,28 @@ func BenchmarkRecordStepLog(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		r.Record(ctx, "writeTable", nil, "payload", "req-1", "batch", uint64(i), "gen", "g20260924T100000")
+	}
+}
+
+// A step's ref travels as the event's quint.ref, through the SDK's spans
+// and an OTLP/JSON file alike.
+func TestRefRoundTrip(t *testing.T) {
+	var buf bytes.Buffer
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr), sdktrace.WithSyncer(NewFileExporter(&buf)))
+	qobs.NewRecorder(qobs.NewOTelSink(tp)).Record(context.Background(), "submit", nil, qobs.Ref("trace.jsonl:42"), "job", "j1")
+	_ = tp.Shutdown(context.Background())
+	mem, err := StepsFromSpans(sr.Ended())
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := ReadSteps(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, steps := range [][]qtrace.Step{mem, file} {
+		if len(steps) != 1 || steps[0].Ref != "trace.jsonl:42" || steps[0].Args["job"] != "j1" {
+			t.Errorf("steps: %+v", steps)
+		}
 	}
 }

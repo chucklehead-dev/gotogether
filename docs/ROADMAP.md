@@ -215,9 +215,16 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   unwoven mutation tests); evidence a renamed test left in a reused
   directory still counts; Validate, Record and Hegel checks write no
   evidence.
-- **E3. Step references (S).** `quint.ref` (a step's link to its
-  artifact: a driver's trace line, a screenshot), `qobs.Ref`, kept by
-  every reader and shown at the failing step.
+- **E3. Step references (S). Done:** `quint.ref` (`Step.Ref`: a step's
+  link to its artifact, a driver's trace line, a screenshot),
+  `qobs.Ref(s)` in a key's place (a typed value, so a parameter named
+  ref stays an argument) and a log record's `quint.ref`; kept by step
+  logs, OTel events (the event's or span's, never a resource's), convert
+  rules (`ref:`, default the span's own) and from an invocation to its
+  completion; shown at the failing step (`ref:`), in `-history` and
+  `steps`. No verdict or cache key reads it; a cached verdict shows the
+  run's own failing step's ref. `Filter` drops refs when it sanitizes,
+  unless `KeepRefs` (`steps -keep-refs`).
 - **E4. Run manifest (M).** `gotogether.run/1`: tool versions, the
   model, binding and inputs with their hashes, losses, the verdict and
   failing step, the driver (name, version, seed, args) and artifacts;

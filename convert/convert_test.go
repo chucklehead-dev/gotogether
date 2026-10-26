@@ -116,3 +116,56 @@ rules:
 		t.Error("two spans share a thread")
 	}
 }
+
+// A rule's ref (or the rules' default) is each step's link to its
+// artifact; without one a span's own quint.ref is kept, never a
+// resource's, which would link every step.
+func TestConvertRef(t *testing.T) {
+	r, err := Parse([]byte(`
+ref: attr:app.trace_line
+rules:
+  - span: "Shot"
+    action: shot
+    ref: attr:app.screenshot
+  - span: "Line"
+    action: line
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bare, err := Parse([]byte(`
+rules:
+  - span: "*"
+    action: step
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr),
+		sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", "web"), attribute.String("quint.ref", "deployment"))))
+	tr := tp.Tracer("app")
+	_, s := tr.Start(context.Background(), "Shot")
+	s.SetAttributes(attribute.String("app.screenshot", "shots/1.webp"), attribute.String("app.trace_line", "trace.jsonl:1"))
+	s.End()
+	_, s = tr.Start(context.Background(), "Line")
+	s.SetAttributes(attribute.String("app.trace_line", "trace.jsonl:2"), attribute.String("quint.ref", "own"))
+	s.End()
+	_, s = tr.Start(context.Background(), "Plain")
+	s.End()
+	td := []otelio.TracesData{otelio.SpansToTracesData(sr.Ended())}
+	steps, err := r.Steps(td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 2 || steps[0].Ref != "shots/1.webp" || steps[1].Ref != "trace.jsonl:2" {
+		t.Fatalf("refs: %+v", steps)
+	}
+	steps, err = bare.Steps(td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(steps) != 3 || steps[0].Ref != "" || steps[1].Ref != "own" || steps[2].Ref != "" {
+		t.Fatalf("a span's own ref: %+v", steps)
+	}
+}

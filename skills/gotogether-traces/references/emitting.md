@@ -9,6 +9,14 @@ Keys in `Record` and annotations:
   where it returned rather than where it took effect (below);
 - anything else is an argument.
 
+`qobs.Ref("bombadil/trace.jsonl:42 screenshot=screenshots/42.webp")`, in
+a key's place alone, links the step to its artifact (`quint.ref`): an
+external driver's trace line, a screenshot. Every reader keeps it (step
+logs, OTel span events, a convert rule's `ref:`, a log record's
+`quint.ref` through the slog handler), a failing step's report prints it
+(`ref:`), and `-history` shows it on hover. No verdict and no verdict
+cache key depends on it. An invocation's ref goes with its completion.
+
 The final `error` is the outcome. An error can classify itself with a
 `QuintOutcome() string` method (e.g. `"ambiguous"`).
 

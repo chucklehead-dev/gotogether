@@ -224,6 +224,7 @@ type Rule struct
     field Process string `yaml:"process"`
     field Thread string `yaml:"thread"`
     field Outcome string `yaml:"outcome"`
+    field Ref string `yaml:"ref"`
     field Args map[string]string `yaml:"args"`
     field Obs map[string]string `yaml:"obs"`
     field Order map[string]string `yaml:"order"`
@@ -233,6 +234,7 @@ type Rules struct
     field Actor string `yaml:"actor"`
     field Process string `yaml:"process"`
     field Thread string `yaml:"thread"`
+    field Ref string `yaml:"ref"`
     field Rules []Rule `yaml:"rules"`
     method (*Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error)
 
@@ -1244,6 +1246,7 @@ func NewOTelSink(tp trace.TracerProvider) *OTelSink
 func NewRecorder(sink Sink, opts ...Option) *Recorder
 func NewSlogHandler(next slog.Handler) *SlogHandler
 func Record(ctx context.Context, action string, err error, kv ...any)
+func Ref(s string) StepRef
 func SetGlobal(r *Recorder)
 func Settled(ctx context.Context)
 func Thread(ctx context.Context) context.Context
@@ -1287,6 +1290,7 @@ type SlogHandler struct
     method (*SlogHandler) Handle(ctx context.Context, r slog.Record) error
     method (*SlogHandler) WithAttrs(as []slog.Attr) slog.Handler
     method (*SlogHandler) WithGroup(name string) slog.Handler
+type StepRef string
 type Tee []Sink
     method (Tee) Record(ctx context.Context, s *qtrace.Step)
 
@@ -1551,6 +1555,7 @@ const KeyLostBefore = "quint.lost_before_unix_nano"
 const KeyOutcome = "quint.outcome"
 const KeyProcess = "quint.process"
 const KeyRecorder = "quint.recorder"
+const KeyRef = "quint.ref"
 const KeySeq = "quint.seq"
 const KeySettled = "quint.settled"
 const KeyThread = "quint.thread"
@@ -1580,6 +1585,7 @@ type Filter struct
     field Pseudonymize []string
     field Salt string
     field Keep map[string][]string
+    field KeepRefs bool
     method (Filter) Apply(steps []Step) []Step
     method (Filter) Pseudonym(v string) string
 type Issue struct
@@ -1635,6 +1641,7 @@ type Step struct
     field Obs map[string]any
     field Order map[string]int64
     field Source string
+    field Ref string
     method (*Step) Attributes() map[string]any
     method (*Step) Get(name string) (any, bool)
     method (*Step) MarshalLine() ([]byte, error)

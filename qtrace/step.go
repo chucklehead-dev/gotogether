@@ -58,6 +58,10 @@ const (
 	// KeyAssumed marks an assumed step (Step.Ambiguous): a pending call's
 	// effect a resolution placed, with no expect checked after it.
 	KeyAssumed = "quint.assumed"
+	// KeyRef is a step's link to the artifact it came from (Step.Ref): an
+	// external driver's trace line, a screenshot. Free text for people
+	// reading a failure; no check reads it.
+	KeyRef = "quint.ref"
 
 	PrefixArg   = "quint.arg."   // an observed parameter of the action
 	PrefixObs   = "quint.obs."   // an observed projection of the post-state
@@ -107,6 +111,13 @@ type Step struct {
 	// the recorder's own clock, which no other machine's compares with
 	fromRecord bool
 	Source     string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	// Ref is the step's link to its artifact (KeyRef, qobs.Ref): a
+	// driver's trace line, a screenshot ("bombadil/trace.jsonl:42
+	// screenshot=screenshots/42.webp"). Unlike Source, which says where
+	// gotogether read the step, it is written with the step and kept by
+	// every reader. It is no model data: no verdict, and no verdict cache
+	// key (Keyer), depends on it.
+	Ref string
 }
 
 // Model reports whether s is a model step: not an invocation record, a
@@ -164,6 +175,14 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 	}
 	s.Recorder, s.Actor, s.Process, s.Thread = str(KeyRecorder), str(KeyActor), str(KeyProcess), str(KeyThread)
 	s.Outcome, s.Error = str(KeyOutcome), str(KeyError)
+	// a ref is one step's: the event's, else its span's, never the
+	// resource's, which would link every step to one artifact
+	for _, l := range layers[:min(len(layers), 2)] {
+		if v, ok := l[KeyRef]; ok {
+			s.Ref = fmt.Sprint(v)
+			break
+		}
+	}
 	if seq := str(KeySeq); seq != "" {
 		n, err := strconv.ParseUint(seq, 10, 64)
 		if err != nil {

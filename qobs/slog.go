@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // ActionKey is the slog attribute that makes a log record a model step
@@ -16,8 +18,8 @@ const ActionKey = "quint.action"
 // recorded into the run of the record's context (Record), and every record
 // goes on to Next. The record's other attributes are the step's fields as
 // Record takes them ("obs.balance", "order.lamport", arguments by name;
-// groups join with "."), and an attribute named "error" (an error, or a
-// string) is the step's error. So a service that already logs what it did
+// groups join with "."), an attribute named "error" (an error, or a
+// string) is the step's error, and quint.ref its ref (Ref). So a service that already logs what it did
 // becomes checkable without a line of instrumentation besides the key:
 //
 //	slog.InfoContext(ctx, "deposited", "quint.action", "deposit", "account", acct, "amount", n)
@@ -47,6 +49,8 @@ func (h *SlogHandler) Handle(ctx context.Context, r slog.Record) error {
 		switch {
 		case k == ActionKey:
 			action = v.String()
+		case k == qtrace.KeyRef: // the step's link to its artifact (Ref)
+			kv = append(kv, Ref(v.String()))
 		case k == "error":
 			if e, ok := v.Any().(error); ok {
 				err = e

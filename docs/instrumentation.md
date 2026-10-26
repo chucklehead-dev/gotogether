@@ -20,6 +20,7 @@ step log it is one JSON object with the same keys:
 | `quint.thread` | string | program-order key: steps with the same thread are ordered by seq |
 | `quint.outcome` | string | `ok`, `error`, or an error's own classification (`QuintOutcome() string`) |
 | `quint.error` | string | error text |
+| `quint.ref` | string | the step's link to its artifact (a driver's trace line, a screenshot), shown at a failing step; no verdict reads it (`qobs.Ref`) |
 | `quint.arg.<name>` | string, int, bool, double | an observed parameter, in implementation terms |
 | `quint.obs.<name>` | same | an observed projection of the state after the step |
 | `quint.order.<domain>` | int | a domain logical clock |

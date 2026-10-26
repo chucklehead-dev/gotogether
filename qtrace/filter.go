@@ -30,6 +30,12 @@ type Filter struct {
 	// and the error text, is dropped. Steps of actions it does not list
 	// keep only their identity.
 	Keep map[string][]string
+	// KeepRefs keeps steps' refs (Step.Ref) when the filter sanitizes
+	// (Pseudonymize or Keep set), which drops them otherwise: a ref is
+	// free text, often a path or a URL with a user's name or a
+	// customer's id in it, which no pseudonym reaches. A filter that only
+	// selects keeps them.
+	KeepRefs bool
 }
 
 func match(patterns []string, s string) bool {
@@ -74,6 +80,9 @@ func (f Filter) Apply(steps []Step) []Step {
 				keep[k] = true
 			}
 			s.Error, s.Source = "", ""
+		}
+		if (f.Keep != nil || len(f.Pseudonymize) > 0) && !f.KeepRefs {
+			s.Ref = ""
 		}
 		fields := func(m map[string]any, prefix string) map[string]any {
 			if m == nil {
