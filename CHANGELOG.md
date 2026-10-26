@@ -8,6 +8,23 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Observation mutants: which recorded fields the model and the binding
+  constrain. `qtrace.Mutations(steps, opts...)` makes a log's single
+  mutations (`StepMutant`: `Op`, `Index`, `Action`, `Field`, `Change`,
+  `Detail`, `Steps`; `MutationOps`): a step dropped, duplicated (at the
+  next seq, later ones renumbered), swapped with its recorder's next,
+  an argument or observation corrupted (±1, flipped, emptied, changed,
+  removed), retimed past its neighbour, moved to another actor, each
+  keeping the recorder's contract; `MutateOps`, `MutateLimit`.
+  `qtest.MutateSteps(t, binding, steps, opts...)` judges each as
+  Validate would (the verdict cache shared), killed, survived or
+  undecided (`FateKilled`, ...; `StepMutation`, `StepMutationReport`
+  with a table by op), with claims `qtest.Killed(sel)` and
+  `qtest.Survived(sel)` over `qtest.StepOp(op)` selectors
+  (`.Action`, `.Field`, `.Change`, `.Index`); `qtest.StepMutations`
+  narrows it (refused by the other workflows); `qtest.JudgeStepMutants`
+  outside a test. `gotogether validate -mutate-steps [-mutate-ops ...]
+  [-mutate-limit n]` prints the table after a pass.
 - `qtest.Undecided(e, because...)`: the claim that a run has no verdict
   for an expectation (a lost tail, a search out of its budget), its
   explanation naming each cause given, so a test states a run that must

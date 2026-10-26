@@ -103,6 +103,16 @@ seeds, not by hand.
   never a walk of the report's actors;
 - a trigger search: `qhegel.FindTrigger(t, sys, space).Expect(t, qload.SomeTrigger())`
   (or `NoTrigger()`);
+- observation mutants of a conforming log: `qtest.MutateSteps(t, binding,
+  steps).Expect(t, qtest.Killed(sel), qtest.Survived(sel))`, a selector
+  `qtest.StepOp("corrupt").Action("deposit").Field("obs.balance").Change("+1")`
+  (`.Index(i)` for one step). A claim whose selector names no mutant
+  fails (a misspelled action or field), as does one any named mutant
+  contradicts; an undecided mutant (no verdict) meets neither. A mutant
+  is killed when it fails where the original conformed, when the
+  binding refuses it (a field it reads removed), or when it does not
+  finish where the original finished; it survived with the original's
+  verdict;
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no
   expectation type: assert `err != nil` for a mutant (examples/bank's
   `TestModelDrivenCatchesOnlyDivergence`).

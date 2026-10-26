@@ -104,6 +104,7 @@ model judges both together.
 | `TestMutants/statusStale` | a poll never says ready: the page shows the job running until a cancel's 409 tells it, or for good | the same | `Violates("within 500ms after unseenReady: readySeen")` |
 | `TestMutants/commitAfterCancel` | the report is committed whatever a cancel said | the same | `Violates("noCommitAfterCancel")` |
 | `TestLive` | none | Bombadil explores the faithful app for 45s; the manifest replays; then `--reproduce` of the run against a new server (the same seed) | `Finishes()`, and Bombadil's own properties hold (its exit 2 fails the run); the reproduction finishes too, or diverges (Bombadil's reproduction is best effort, and the page's timing is not replayed) and what it replayed conforms |
+| `TestObservationMutants` | none: the recorded faithful journey with one mistake in its log (`qtest.MutateSteps`, four mutants of each op spread over its 59 steps); full mode only, and nightly | 20 checks of the journey | every dropped step killed; a submit, a cancel or a job's creation recorded twice, and a submit's code 199, survive (below) |
 | `bombadiltrace` tests | none | constructed traces | the mapping (times, calls, refs), calls completed only by their own answers, each refusal, a torn tail |
 
 Rates were measured on 2026-10-26 in a sandbox with Bombadil 0.7.9 and
@@ -154,6 +155,31 @@ failed): the page went on submitting until Bombadil stopped. And a
 reproduction that diverged was first judged with the server's settle,
 which a page stopped mid-job does not reach: it is judged as a prefix
 now.
+
+## What the recording is checked for
+
+The overlays plant bugs in the server; observation mutants plant them
+in the log (skills/gotogether-traces/references/observation-mutants.md):
+one step dropped, recorded twice, swapped with its recorder's next, a
+field corrupted, retimed, and ask whether the journey's check still
+passes. `TestObservationMutants` judges four of each op (the journey has
+662), spread over the log, in about 70s. For a step log the CLI prints
+the same table (`gotogether validate -binding webjobs.binding.yaml
+-mutate-steps -mutate-limit 4 steps.jsonl`); the page's half of a
+journey is Bombadil's trace, which only bombadiltrace reads, so the test
+judges the joined steps with `qtest.MutateSteps`.
+
+| op | mutants | killed | survived | what the survivors say |
+|---|---|---|---|---|
+| drop | 4 | 4 | 0 | a job's creation dropped leaves its finish rejected; a click's answer dropped leaves its call pending (`Finishes`) |
+| dup | 4 | 0 | 4 | the page's answers and acks are sets, so a submit or a cancel recorded twice changes nothing; `created` puts the job again, with no check that its id is new: recorded twice at once it is the same state. A server that recreated a finished job would reset it to running unseen by any invariant: a gap to close with `created` requiring a new id |
+| swap | 4 | 2 | 2 | two submits, and a submit and a show, commute; a creation swapped with its job's finish is rejected, and a cancellation swapped with the next job's creation (taking its later time) violates `cancelHonoured` |
+| corrupt | 4 | 3 | 1 | a submit answered 199 is neither an answer (2xx) nor a failure (`noFailedRequest` counts 0 and 5xx): the model takes it as nothing, where the page would show an error. A key emptied violates `answerIsItsJob`; a show's status removed is refused by the binding |
+| retime | 4 | 2 | 2 | no `within` reads a submit's or a cancel's time (only a job's run and a committed job shown are bounded); a creation moved past the submit it answers violates `answerIsItsJob` |
+
+The 199 and the second creation are the two a reader acts on: each is
+a recording the check would pass that the server never produces today,
+so each is a claim on the model to add, not on the server.
 
 ## How it runs
 

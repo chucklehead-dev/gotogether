@@ -293,10 +293,24 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   against its completion. Left: Bombadil's reproduction diverges on a
   timing-dependent page; one host's wall clock orders the page and the
   server.
-- **E6. Observation mutants (S–M).** `qtrace.Mutations` (drop, dup,
-  swap, corrupt, retime, reactor) and `qtest.MutateSteps`: which
-  recorded fields the model and binding constrain; checked against
-  brute force.
+- **E6. Observation mutants (S–M). Done:** `qtrace.Mutations` (drop,
+  dup at the next seq, swap within one recorder and incarnation,
+  corrupt each argument and observation, retime past the next step in
+  time, reactor into the next actor's process; `MutateOps`,
+  `MutateLimit` spread over the log), each keeping the recorder's
+  contract (dense seqs, calls and losses renumbered), checked against
+  every mutation of a small log written out by hand and against
+  Reconstruct's error issues on a log with calls, a settle and a loss.
+  `qtest.MutateSteps`: killed (fails where the original conformed,
+  refused by the binding, or unfinished where the original finished),
+  survived, undecided; `Killed`/`Survived` over `StepOp` selectors; a
+  corruption of a field the binding does not read marked `Unread`;
+  `JudgeStepMutants` and `gotogether validate -mutate-steps`. bank's
+  deposit balance off by one killed, surviving with its expect ablated;
+  webjobs' recorded journey (`TestObservationMutants`, full mode and
+  nightly): a job created twice and a submit answered 199 survive, two
+  gaps in the model. Left: a mutant per pair of mutations; retime
+  earlier; a corruption of the outcome and the error text.
 - **E7. Absence diagnostics (M).** A collector's watermark (`complete
   through T`) and a report section naming each absent step's cause:
   dropped (a gap or loss), uncollected (past the watermark, no settle),

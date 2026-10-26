@@ -86,6 +86,29 @@ Keep a table in the README: mutant, check, how it shows up. If no test
 catches a mutant, the model or the binding is too weak. Strengthen it, or
 document the gap (as glomers does for the scheme model).
 
+Three kinds of mutant, three questions:
+- **code mutants** (`Mutation` options; `System.Mutate` over what
+  `qweave -mutate` wove): does a run of the buggy code fail? For code
+  you own.
+- **overlays** (`go test -overlay`, [references/overlays.md](references/overlays.md)):
+  the same question for code you must not edit.
+- **observation mutants** (`qtest.MutateSteps(t, binding, steps)`,
+  `gotogether validate -mutate-steps`): does the check read what was
+  recorded? One step of a conforming log dropped, duplicated, swapped,
+  a field corrupted, retimed or moved to another actor; a survivor is a
+  field no expect or invariant constrains. Run it once a binding is
+  written and whenever a recorder gains fields, on a recorded run (no
+  program needed, so a production log too). Read
+  [`../gotogether-traces/references/observation-mutants.md`](../gotogether-traces/references/observation-mutants.md)
+  for the ops, the fates and the survivors that are equivalent by right.
+
+```go
+qtest.MutateSteps(t, "m.binding.yaml", steps).Expect(t,
+	qtest.Killed(qtest.StepOp("corrupt").Action("write").Field("obs.value")),
+	qtest.Survived(qtest.StepOp("dup").Action("read")), // an idempotent read
+)
+```
+
 ## 5. Let Hegel explore
 
 - **Faithful code.** `qhegel.Test` in `Batched` mode: cheap while

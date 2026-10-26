@@ -72,6 +72,8 @@ type settings struct {
 	resolvePending bool
 	// mutant is System.Mutant
 	mutant string
+	// stepMutations are StepMutations', for MutateSteps
+	stepMutations []qtrace.MutationOption
 	// driver and artifacts are a run's manifest's (Driver, Artifacts)
 	driver    *validate.Driver
 	artifacts []validate.Artifact
@@ -101,6 +103,7 @@ var (
 	optSkipIfEmpty     = optionID{"SkipIfEmpty"}
 	optDriver          = optionID{"Driver"}
 	optArtifacts       = optionID{"Artifacts"}
+	optStepMutations   = optionID{"StepMutations"}
 )
 
 // option is an option that records its identity, so a workflow that
@@ -134,18 +137,21 @@ var (
 	whyGlobal = "each run records into its own recorder, and a step from a goroutine of none fails the run (start it with qenv.Go, " +
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	whyManifest    = "a manifest is of a run gotogether did not drive, Validate's or Record's; an exploration's runs are its own, each reproduced by GOTOGETHER_RUN"
-	exploreIgnores = map[optionID]string{optGlobal: whyGlobal, optDriver: whyManifest, optArtifacts: whyManifest}
+	whyStepMutants = "it narrows MutateSteps' observation mutants; pass the steps to qtest.MutateSteps"
+	exploreIgnores = map[optionID]string{optGlobal: whyGlobal, optDriver: whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants}
 	whyCaseOrder   = "a case's steps are checked as it records them, in that order; Linearize and ResolvePending are Record's, Validate's and explorations'"
 	casesIgnore    = map[optionID]string{optLinearize: whyCaseOrder, optLinearizeBudget: whyCaseOrder, optLinearizeByKey: whyCaseOrder, optResolvePending: whyCaseOrder,
 		optSkipIfEmpty: "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing",
-		optDriver:      whyManifest, optArtifacts: whyManifest}
+		optDriver:      whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants}
 	whyUnchecked    = "no case is checked against the model"
 	uncheckedIgnore = map[optionID]string{optConstants: whyUnchecked, optInvariants: whyUnchecked, optQuint: whyUnchecked}
 	validateIgnores = map[optionID]string{
 		optGlobal:          "Validate checks steps already recorded: there is no recorder to install",
 		optRecorderOptions: "Validate checks steps already recorded: there is no recorder to configure",
 		optSkipIfEmpty:     "it is Record's and explorations', for an unwoven build that records nothing; skip on len(steps) == 0 instead",
+		optStepMutations:   whyStepMutants,
 	}
+	recordIgnores = map[optionID]string{optStepMutations: whyStepMutants}
 )
 
 // An Option configures a check: Record's, Validate's, a System's
@@ -362,6 +368,7 @@ func config(t testing.TB, opts []Option) settings {
 func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), opts ...Option) *Run {
 	t.Helper()
 	c := config(t, opts)
+	c.refuse(t, "Record", recordIgnores)
 	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

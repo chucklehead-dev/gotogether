@@ -258,6 +258,8 @@ jobs:
           google-chrome --version
       - name: live journeys
         run: WEBJOBS_JOURNEYS="$RUNNER_TEMP/journeys" go test -count=1 -timeout 25m -run 'TestLive$|TestMutants$' -v .
+      - name: the recorded journey's observation mutants (full mode only: a check per mutant)
+        run: go test -count=1 -timeout 15m -run 'TestObservationMutants$' -v .
       - name: keep the journeys (Bombadil's traces and screenshots, the server's logs, run-info.json)
         if: failure()
         uses: actions/upload-artifact@v4

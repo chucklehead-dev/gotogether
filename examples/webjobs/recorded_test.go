@@ -181,3 +181,39 @@ func TestTimesKept(t *testing.T) {
 	}
 	qtest.Runs(qtest.Validate(t, "webjobs.binding.yaml", rerecorded(t, steps))).Expect(t, qtest.None(qtest.Finishes()))
 }
+
+// The recorded journey's observation mutants (qtest.MutateSteps), four
+// of each op spread over its 59 steps: which recorded fields the model
+// and the binding constrain. Every step dropped is killed (a job no
+// longer created, finished or shown, an answer no longer seen). What
+// survives is read in the README: the page's answers and acks are sets,
+// so a submit or a cancel recorded twice changes nothing, and a job
+// created twice at once neither (created does not require a new id);
+// a status code of 199 for a submit is no answer and no failure; no
+// within reads a submit's or a cancel's time. Full mode only: each
+// mutant is a check of the whole journey (about 3 s each).
+func TestObservationMutants(t *testing.T) {
+	if mutant != "" {
+		t.Skip("webjobs as it is")
+	}
+	if testing.Short() {
+		t.Skip("a check of the whole journey per mutant: full mode")
+	}
+	t.Parallel()
+	qtest.RequireQuint(t)
+	steps, err := Steps(filepath.Join("testdata", "runs", "faithful"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := qtest.MutateSteps(t, "webjobs.binding.yaml", steps, qtest.StepMutations(qtrace.MutateLimit(4)))
+	rep.Expect(t,
+		qtest.Killed(qtest.StepOp("drop")),
+		qtest.Survived(qtest.StepOp("dup").Action("submit")),
+		qtest.Survived(qtest.StepOp("dup").Action("cancel")),
+		qtest.Survived(qtest.StepOp("dup").Action("created")),
+		qtest.Survived(qtest.StepOp("corrupt").Action("submit").Field("code").Change("-1")),
+	)
+	for _, m := range rep.Killed() {
+		t.Log(m)
+	}
+}

@@ -121,7 +121,8 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   eventual val, the journey's end. Other
   flags: `-linearize`, `-linearize-key k`, `-resolve-pending`,
   `-lost-prefix r`, `-lost-suffix r`, `-invariants a,b`, `-itf`,
-  `-history out.svg`.
+  `-history out.svg`, `-mutate-steps` (observation mutants after a
+  pass; `-mutate-ops`, `-mutate-limit`).
 - A portable failure: `-manifest run.json` writes the run's manifest
   (`gotogether.run/1`: gotogether's and quint's versions, the binding,
   spec, rules and inputs with their sha256, losses, constants,
@@ -148,6 +149,14 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   ... -binding b.yaml -out clean.jsonl`, `qtrace.Filter`) and validate
   the clean log with `-manifest`.
 - Converted spans: `gotogether convert -rules bank.convert.yaml spans.jsonl > steps.jsonl`.
+
+Once a run conforms, check that the binding reads what the recorder
+wrote: `qtest.MutateSteps(t, binding, steps)` (or `gotogether validate
+-mutate-steps`) judges the log with one mistake planted per mutant (a
+step dropped, duplicated, swapped, a field corrupted, retimed, moved to
+another actor) and lists the survivors, fields no check constrains. Read
+[references/observation-mutants.md](references/observation-mutants.md)
+for the ops, `Killed`/`Survived` claims, and how to read a survivor.
 
 A run another tool drove (a Bombadil exploration, a Playwright suite, a
 replayed session) is checked from the driver's own trace: read

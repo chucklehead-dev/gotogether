@@ -1,0 +1,9 @@
+# ../../validate/testdata/ev.qnt's tick as a call (invoked, then
+# completed) and its incs, eventually small: a journey that finishes when
+# every call completed, for MutateSteps' finish rule.
+spec: ../../validate/testdata/ev.qnt
+module: ev
+actions:
+  inc: {}
+  tick: {}
+eventually: [small]

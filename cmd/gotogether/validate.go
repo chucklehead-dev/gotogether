@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/input"
+	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -41,6 +43,12 @@ type validateRun struct {
 	// manifest, if set, is where to write the run's manifest, with the
 	// driver, artifacts and name runInfo's fragment gives
 	manifest, runInfo string
+	// mutateSteps judges the steps' observation mutants after a pass
+	// (qtest.JudgeStepMutants), narrowed to mutateOps (comma-separated)
+	// and mutateLimit per op
+	mutateSteps bool
+	mutateOps   string
+	mutateLimit int
 	// out is where the report goes (os.Stdout; a test's buffer, so tests
 	// run in parallel)
 	out io.Writer
@@ -76,6 +84,9 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.lostSuffix, "lost-suffix", "", "comma-separated recorders whose logs lost their last steps, which the log cannot show (a killed process's buffer): their tails judged lost after their last steps (qtrace.MarkLost)")
 	fset.StringVar(&v.manifest, "manifest", "", "write the run's manifest (gotogether.run/1) to this file: the tools, model, binding and inputs with their hashes, losses, the verdict and failing step; -replay judges it again")
 	fset.StringVar(&v.runInfo, "run-info", "", "with -manifest: a JSON file of what gotogether did not see, written by the driver: {\"name\": ..., \"driver\": {\"name\", \"version\", \"seed\", \"origin\", \"args\": [...]}, \"artifacts\": [{\"name\", \"path\"}]} (paths relative to the file)")
+	fset.BoolVar(&v.mutateSteps, "mutate-steps", false, "after a pass, judge the steps' observation mutants (a step dropped, duplicated, swapped with its recorder's next, an argument or observation corrupted, retimed past its neighbour, moved to another actor) as the steps were judged, and print a table of them by op, killed and survived: a survivor changed something no check reads (qtest.MutateSteps)")
+	fset.StringVar(&v.mutateOps, "mutate-ops", "", "with -mutate-steps: comma-separated ops to make (drop, dup, swap, corrupt, retime, reactor; default all)")
+	fset.IntVar(&v.mutateLimit, "mutate-limit", 0, "with -mutate-steps: at most this many mutants of each op, spread over the log (default: every one)")
 	replay := fset.String("replay", "", "judge a run again from its manifest (validate -manifest's, or a test's under GOTOGETHER_EVIDENCE), refusing an input whose hash changed; exit as validate does, and 1 if the verdict is not the manifest's")
 	fset.Parse(args)
 	if *noITF {
@@ -86,6 +97,14 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	}
 	if v.runInfo != "" && v.manifest == "" {
 		return 2, fmt.Errorf("validate: -run-info %s says what goes in a manifest: add -manifest out.json", v.runInfo)
+	}
+	if (v.mutateOps != "" || v.mutateLimit != 0) && !v.mutateSteps {
+		return 2, fmt.Errorf("validate: -mutate-ops and -mutate-limit narrow -mutate-steps: add -mutate-steps")
+	}
+	for _, op := range fields(v.mutateOps) {
+		if !slices.Contains(qtrace.MutationOps, op) {
+			return 2, fmt.Errorf("validate -mutate-ops: %q is no mutation; the ops are %s", op, strings.Join(qtrace.MutationOps, ", "))
+		}
 	}
 	v.search.Linearize = *lin || v.search.Key != ""
 	if *invs != "" {
@@ -325,6 +344,11 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 			ok = false
 		}
 		results = append(results, rep.Actors...)
+		if v.mutateSteps {
+			if err := v.mutate(c, steps, ok); err != nil {
+				return 2, none, err
+			}
+		}
 	}
 	itfModels := map[string]*validate.RunModel{} // each ITF input's instance, for the manifest
 	for i, in := range itfs {
@@ -403,6 +427,28 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 	}
 	fmt.Fprintf(v.out, "RESULT: FAIL (%s)\n", failSummary(results, incomplete))
 	return 1, verdict, nil
+}
+
+// mutate judges and prints the observation mutants of steps, after the
+// run passed (ok): a failing run's mutants fail too, and say nothing.
+func (v *validateRun) mutate(c *validate.Checker, steps []qtrace.Step, ok bool) error {
+	if !ok {
+		fmt.Fprintln(v.out, "mutate-steps: none judged: the run does not pass, and a failing run's mutants fail too; fix the run or the model first")
+		return nil
+	}
+	var opts []qtrace.MutationOption
+	if ops := fields(v.mutateOps); len(ops) > 0 {
+		opts = append(opts, qtrace.MutateOps(ops...))
+	}
+	if v.mutateLimit > 0 {
+		opts = append(opts, qtrace.MutateLimit(v.mutateLimit))
+	}
+	rep, err := qtest.JudgeStepMutants(c, steps, v.search, opts...)
+	if err != nil {
+		return fmt.Errorf("validate -mutate-steps: %w", err)
+	}
+	fmt.Fprint(v.out, rep)
+	return nil
 }
 
 // itfManifest is the manifest of ITF inputs checked with no checker:

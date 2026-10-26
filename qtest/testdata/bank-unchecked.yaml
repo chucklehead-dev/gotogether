@@ -1,0 +1,10 @@
+# bank.yaml with the deposit's balance not compared: the ablation of
+# the check that kills a corrupted deposit balance.
+spec: ../../connect/testdata/bank.qnt
+module: bank
+actions:
+  deposit: {}
+  withdraw:
+    expect: 'balances.get({{.account}}) == {{.obs.balance}}'
+  transfer: {}
+invariants: [nonNegative]

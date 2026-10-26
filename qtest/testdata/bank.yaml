@@ -1,0 +1,12 @@
+# Recorded bank steps -> calls of ../../connect/testdata/bank.qnt, each
+# deposit and withdrawal compared with the balance it observed: the
+# binding MutateSteps' tests judge observation mutants with.
+spec: ../../connect/testdata/bank.qnt
+module: bank
+actions:
+  deposit:
+    expect: 'balances.get({{.account}}) == {{.obs.balance}}'
+  withdraw:
+    expect: 'balances.get({{.account}}) == {{.obs.balance}}'
+  transfer: {}
+invariants: [nonNegative]

@@ -1354,6 +1354,9 @@ type Row struct
 
 == github.com/chucklehead-dev/gotogether/qtest
 const EvidenceFormat = "gotogether.evidence/2"
+const FateKilled = "killed"
+const FateSurvived = "survived"
+const FateUndecided = "undecided"
 const RoleExternal = "external"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
@@ -1372,11 +1375,14 @@ func Finishes() Expectation
 func Global() Option
 func Invariants(names ...string) Option
 func IsEvidence(path string) bool
+func JudgeStepMutants(c *validate.Checker, steps []qtrace.Step, opt validate.SearchOptions, mopts ...qtrace.MutationOption) (*StepMutationReport, error)
+func Killed(sel StepSelector) StepClaim
 func Linearize() Option
 func LinearizeBudget(n int) Option
 func LinearizeByKey(arg string) Option
 func ManifestEvidence(m *validate.Manifest) *Evidence
 func Mismatch(action string) Expectation
+func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *StepMutationReport
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim
 func NotVacuous() Claim
@@ -1396,6 +1402,9 @@ func Settles() Expectation
 func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option
 func Some(es ...Expectation) Claim
+func StepMutations(opts ...qtrace.MutationOption) Option
+func StepOp(op string) StepSelector
+func Survived(sel StepSelector) StepClaim
 func Takes(action string) Take
 func Undecided(e Expectation, because ...string) Expectation
 func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
@@ -1510,6 +1519,30 @@ type RunPanic struct
     field Stack string
     field InTask bool
     method (*RunPanic) Error() string
+type StepClaim struct
+    method (StepClaim) String() string
+type StepMutation struct
+    embed qtrace.StepMutant
+    field Fate string
+    field Why string
+    field Unread bool
+    field Report *validate.Report
+    method (StepMutation) String() string
+type StepMutationReport struct
+    field Original *Run
+    field Mutants []StepMutation
+    method (*StepMutationReport) Expect(t testing.TB, claims ...StepClaim)
+    method (*StepMutationReport) Killed() []StepMutation
+    method (*StepMutationReport) Score() float64
+    method (*StepMutationReport) String() string
+    method (*StepMutationReport) Survived() []StepMutation
+    method (*StepMutationReport) Undecided() []StepMutation
+type StepSelector struct
+    method (StepSelector) Action(action string) StepSelector
+    method (StepSelector) Change(change string) StepSelector
+    method (StepSelector) Field(field string) StepSelector
+    method (StepSelector) Index(i int) StepSelector
+    method (StepSelector) String() string
 type SweepConfig struct
     field Factors []qsweep.Factor
     field Strength int
@@ -1581,6 +1614,9 @@ func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
 func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Linearization, err error)
 func MarkLost(steps []Step, l Lost) []Step
+func MutateLimit(n int) MutationOption
+func MutateOps(ops ...string) MutationOption
+func Mutations(steps []Step, opts ...MutationOption) []StepMutant
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
 func WriteJSONL(w io.Writer, steps []Step) error
@@ -1622,6 +1658,7 @@ type Lost struct
     field Before time.Time
     method (Lost) Issue() Issue
     method (Lost) String() string
+type MutationOption func(*mutationConfig)
 type OrderCheck func(orders [][]Step) (failed []int, states []string, err error)
 type Proof struct
     field Rejected [][]Step
@@ -1654,6 +1691,15 @@ type Step struct
     method (*Step) MarshalLine() ([]byte, error)
     method (*Step) Model() bool
     method (*Step) String() string
+type StepMutant struct
+    field Op string
+    field Index int
+    field Action string
+    field Field string
+    field Change string
+    field Detail string
+    field Steps []Step
+    method (StepMutant) String() string
 type TornTail struct
     field Line int
     field Text string
@@ -1666,6 +1712,7 @@ type Trace struct
     field Pending []Step
     field Settled bool
     field Lost []Lost
+var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"}
 
 == github.com/chucklehead-dev/gotogether/skills
 func FS() fs.FS
