@@ -64,7 +64,11 @@ func TestHegelRunsConformToModel(t *testing.T) {
 // The same machine against the SelfTransfer mutant, with each run checked
 // as it finishes (Each): the model rejects the self-transfer, so Hegel
 // shrinks to the shortest run that shows it (a deposit, then a transfer
-// to the same account). The machine's own invariant never fails.
+// to the same account). The machine's own invariant never fails. 200
+// cases, not 50: the nightly's fresh Hegel seeds found 50 too few
+// (seed 7876493013126522266 drew no successful self-transfer in them);
+// Hegel stops at the first violation, so a seed that finds it early
+// costs no more.
 func TestHegelCatchesSelfTransfer(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
@@ -72,7 +76,7 @@ func TestHegelCatchesSelfTransfer(t *testing.T) {
 	}
 	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "bank.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(tc, &machine{bank: New(accounts, WithMutation(SelfTransfer))}, hegel.WithStatefulStepCount(12))
-	}, hegel.WithTestCases(50), hegel.WithSeed(3))
+	}, hegel.WithTestCases(200), hegel.WithSeed(3))
 	var self bool
 	for _, s := range v.Steps {
 		self = self || (s.Action == "transfer" && s.Outcome == "ok" && s.Args["src"] == s.Args["dst"])
