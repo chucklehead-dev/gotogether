@@ -136,10 +136,14 @@ more.
   state across a restart and recording from OnCrash, Retry's commit,
   pending calls and the budget, the delay options, the default actor,
   the CLI from a replace module.
-- **S8. The toolkit's own mutation bar (M).** 288 of qenv's 895 mutants
-  and 56 of qtrace's 167 survive: tests or named equivalents, held by
-  the nightly with a ratchet. Success: qenv under 10% non-equivalent
-  survivors.
+- **S8. The toolkit's own mutation bar (M). Done.** qtrace 55 to 16
+  survivors of 236, qenv 286 to 21 of 892, every one left read and named
+  in the nightly's matrix (its bar): equivalents, a heuristic's
+  tie-break, and two releases only gosim's cooperative runtime can show
+  (a self-crash test in examples/gosim would). Found on the way: the
+  search asked complete orders again (memoized now), a Script's hint
+  suggesting the family it rejected. The nightly mutates qenv with four
+  jobs.
 - **S9. raftkv's catch-up (S). Done.** cluster.qnt records each node's
   state machine (`boot`, `apply`); a node that boots behind owes the
   others' highest index, `within 1s after behind: caughtUp`, with the

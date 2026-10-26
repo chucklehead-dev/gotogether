@@ -91,6 +91,22 @@ jobs:
           # otherwise: another path, the same verdicts.
           - pkg: qtrace
             max: 16
+          # qenv: 21 of 892, each read. Two need gosim's cooperative
+          # runtime, which only its module runs: a release dropped on a
+          # Platform (568: enqueue, 341: a task that crashes its own
+          # process). Equivalent: the history checker's rotation of a cycle
+          # that starts at its closer (22, 23); the profile key's separator
+          # (27: pcs and names never collide); a nominal option's name, ""
+          # either way (102); PCT's depth 1 set to 1 (158); sorts of what
+          # is handled one at a time (193: a disk's files, 815: a crashed
+          # process's transactions); a stopped timer nothing reads (305);
+          # bookkeeping kept past use (363, 882); IDs a queue never repeats
+          # (401); a Notify that wakes no one (433, 442); a step count never
+          # below 0 (470); a finished task never queued (546); stale timer
+          # entries popped elsewhere (704, 722); bounds a case before
+          # already decides (715, 718).
+          - pkg: qenv
+            max: 21
           - pkg: qhistory
             max: 0
           - pkg: internal/depgraph
@@ -103,6 +119,8 @@ jobs:
         with:
           go-version-file: go.mod
       - name: mutants of ${{ matrix.pkg }}
+        env:
+          JOBS: 4 # qenv's 892 mutants, about ten seconds each
         run: ci/mutate-core.sh ${{ matrix.pkg }} ${{ matrix.max }}
 
   fuzz:
