@@ -54,6 +54,8 @@ func TestCorpus(t *testing.T) {
 func rerun(t *testing.T) {
 	explorations.mu.Lock()
 	delete(explorations.n, t.Name())
+	delete(explorations.cleared, t.Name())
+	delete(explorations.runs, t.Name())
 	explorations.mu.Unlock()
 }
 

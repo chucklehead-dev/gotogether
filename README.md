@@ -274,6 +274,8 @@ gotogether validate -binding bank.binding.yaml steps.jsonl                      
 gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl   # an app's plain spans
 gotogether validate -binding bank.binding.yaml -lost-suffix node-2 steps.jsonl      # a log that lost its tail (killed), which it cannot show
 gotogether validate -binding bank.binding.yaml -require-settle steps.jsonl          # a finished run, not a prefix: settled, no call pending
+gotogether validate -binding bank.binding.yaml -manifest run.json -run-info driver.json steps.jsonl  # a portable failure (gotogether.run/1)
+gotogether validate -replay run.json                                                 # judged again: its hashed inputs unchanged, the same verdict
 ```
 
 ```
@@ -639,7 +641,7 @@ More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
 | `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
 | `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
-| `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`) |
+| `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`), and each Validate and Record run's manifest, `run<N>.json` beside a copy of its step log `run<N>.steps.jsonl` (`validate -replay`; listed as external) |
 | `GOTOGETHER_STRICT=1` (or `true`) | every toolkit skip fails instead, with its message (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`), as does `qtest.Optional(t, reason)`, a test's own skip: for CI jobs that install what their tests need. `gotogether evidence -expect checks.txt` fails on a listed check that wrote no evidence |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
 | `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step, every `Store` each commit's dependency cycles against its isolation level, every `Queue` its contract after each operation |

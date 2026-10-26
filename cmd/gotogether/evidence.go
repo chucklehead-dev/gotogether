@@ -9,11 +9,13 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // evidence reads the evidence every exploration writes under
-// GOTOGETHER_EVIDENCE (or GOTOGETHER_KEEP) and reports the suite as a whole: what each test's runs
-// showed, and what no test showed. A model action no test took, a fault
+// GOTOGETHER_EVIDENCE (or GOTOGETHER_KEEP), and the manifests of the runs
+// gotogether did not drive (role external), and reports the suite as a
+// whole: what each test's runs showed, and what no test showed. A model action no test took, a fault
 // point no test reached, a fault kind no test injected: each test's own
 // report says so of itself, but only the suite can say that nothing tried
 // it. With -strict such a gap fails (exit 1). With -expect a check the
@@ -49,11 +51,17 @@ func evidence(args []string) (int, error) {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || path != root && (!strings.HasSuffix(d.Name(), ".json") || !qtest.IsEvidence(path)) {
+			if d.IsDir() || path != root && (!strings.HasSuffix(d.Name(), ".json") || !qtest.IsEvidence(path) && !validate.IsManifest(path)) {
 				return nil // not evidence: an ITF trace, a corpus entry, a summary
 			}
-			e, err := qtest.ReadEvidence(path)
-			if err != nil {
+			var e *qtest.Evidence
+			if validate.IsManifest(path) { // a run gotogether did not drive (Validate's, Record's, validate -manifest's)
+				m, err := validate.ReadManifest(path)
+				if err != nil {
+					return err
+				}
+				e = qtest.ManifestEvidence(m)
+			} else if e, err = qtest.ReadEvidence(path); err != nil {
 				return err
 			}
 			if e.Test == "" {

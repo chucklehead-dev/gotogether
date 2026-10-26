@@ -22,7 +22,8 @@ type Evidence struct {
 	Format string `json:"format"`
 	// Role is what the exploration was: "faithful" (the system as it
 	// is), "mutant" (a System.Mutant's, or Mutate's with a mutant on),
-	// "replay" (one run reproduced alone, GOTOGETHER_RUN). A suite's
+	// "replay" (one run reproduced alone, GOTOGETHER_RUN), "external" (a
+	// run's manifest, ManifestEvidence). A suite's
 	// evidence counts what the faithful ones tried: a mutant takes paths
 	// the system does not.
 	Role string `json:"role"`
@@ -78,6 +79,10 @@ const (
 	RoleFaithful = "faithful"
 	RoleMutant   = "mutant"
 	RoleReplay   = "replay"
+	// RoleExternal is a run gotogether did not drive, as gotogether
+	// evidence lists its manifest (validate.Manifest): Validate's,
+	// Record's, validate -manifest's. Not counted in what the suite tried.
+	RoleExternal = "external"
 )
 
 // ReadEvidence reads an Evidence written by WriteJSON (an exploration's,
@@ -119,6 +124,23 @@ func IsEvidence(path string) bool {
 	}
 	var format string
 	return d.Decode(&format) == nil && strings.HasPrefix(format, "gotogether.evidence/")
+}
+
+// ManifestEvidence is a run's manifest as evidence (RoleExternal): one
+// run, its verdict, its test (or the manifest's name) and package, so
+// gotogether evidence lists it, and -expect finds the check that wrote
+// it.
+func ManifestEvidence(m *validate.Manifest) *Evidence {
+	e := &Evidence{Format: EvidenceFormat, Role: RoleExternal, Package: m.Package, Import: m.Import, Test: m.Name, Runs: 1, FailingBy: map[string]int{}}
+	if m.Model.Spec != nil {
+		e.Spec = m.Model.Spec.Path + ":" + m.Model.Module
+	}
+	if m.Verdict.Verdict == validate.Pass {
+		e.Conform = 1
+	} else {
+		e.FailingBy[m.Verdict.Reason]++
+	}
+	return e
 }
 
 // Evidence is the exploration's report.

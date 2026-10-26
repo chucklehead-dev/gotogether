@@ -120,6 +120,20 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   flags: `-linearize`, `-linearize-key k`, `-resolve-pending`,
   `-lost-prefix r`, `-lost-suffix r`, `-invariants a,b`, `-itf`,
   `-history out.svg`.
+- A portable failure: `-manifest run.json` writes the run's manifest
+  (`gotogether.run/1`: gotogether's and quint's versions, the binding,
+  spec, rules and inputs with their sha256, losses, constants,
+  invariants, how it was judged, the verdict and failing step with its
+  ref), and `-run-info driver.json` adds what gotogether did not see:
+  `{"name", "driver": {"name", "version", "seed", "origin", "args"},
+  "artifacts": [{"name", "path"}]}` (artifacts hashed). `gotogether
+  validate -replay run.json` judges it again, refusing a changed input
+  (naming it) and exiting 1 if the verdict is not the manifest's. Keep
+  the manifest beside its files: paths under its directory are relative.
+  In code: `Checker.Manifest`, `Manifest.AddInput`, `Write`,
+  `ReadManifest`, `Verify`; in a test, `qtest.Driver`, `qtest.Artifacts`
+  and `Run.Manifest()` (written under `GOTOGETHER_EVIDENCE` as
+  `run<N>.json`).
 - Converted spans: `gotogether convert -rules bank.convert.yaml spans.jsonl > steps.jsonl`.
 
 Before trusting a model's isolation level of a real database, check

@@ -8,6 +8,22 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Run manifests: `gotogether.run/1` (`validate.Manifest`), so a failure
+  of a run gotogether did not drive travels: tool versions, the binding,
+  spec, rules and inputs with their sha256 and losses, constants,
+  invariants, how the run was judged, the verdict (`validate.VerdictOf`)
+  and failing step with its ref, and the driver and artifacts the caller
+  names. `gotogether validate -manifest run.json [-run-info
+  driver.json]` writes one, `validate -replay run.json` judges it again
+  (refusing a changed input, binding or spec, naming it; exit 1 if the
+  verdict is not the manifest's). Under `GOTOGETHER_EVIDENCE` each
+  `qtest.Validate` and `qtest.Record` run writes its manifest
+  (`run<N>.json`, beside a copy of its step log); `qtest.Driver`,
+  `qtest.Artifacts` and `Run.Manifest()` for tests; `gotogether
+  evidence` lists manifests (`qtest.RoleExternal`,
+  `qtest.ManifestEvidence`) and `-expect` names them. `binding.Binding.Path`
+  is the file a binding was loaded from.
+
 - Step references: `quint.ref` (`qtrace.KeyRef`, `Step.Ref`), a step's
   link to its artifact (an external driver's trace line, a screenshot),
   recorded with `qobs.Ref(s)` in a key's place (a typed value: a

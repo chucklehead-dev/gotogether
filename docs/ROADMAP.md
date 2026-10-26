@@ -213,8 +213,8 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   and coverage tests (skipped by name) and edgepublish's unwoven run.
   Left: the nightly is not strict (its fresh-seed runs include the
   unwoven mutation tests); evidence a renamed test left in a reused
-  directory still counts; Validate, Record and Hegel checks write no
-  evidence.
+  directory still counts; Hegel checks write no evidence (Validate's and
+  Record's write their manifests, E4).
 - **E3. Step references (S). Done:** `quint.ref` (`Step.Ref`: a step's
   link to its artifact, a driver's trace line, a screenshot),
   `qobs.Ref(s)` in a key's place (a typed value, so a parameter named
@@ -225,11 +225,24 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   `steps`. No verdict or cache key reads it; a cached verdict shows the
   run's own failing step's ref. `Filter` drops refs when it sanitizes,
   unless `KeepRefs` (`steps -keep-refs`).
-- **E4. Run manifest (M).** `gotogether.run/1`: tool versions, the
-  model, binding and inputs with their hashes, losses, the verdict and
-  failing step, the driver (name, version, seed, args) and artifacts;
-  written by `qtest.Validate`/`Runs` and `validate -manifest`, re-judged
-  by `validate -replay` (refusing changed inputs).
+- **E4. Run manifest (M). Done:** `gotogether.run/1`
+  (`validate.Manifest`): gotogether's version (build info) and quint's,
+  the binding, spec and convert rules with their sha256, the instance's
+  constants and invariants, how it was judged (searches,
+  -require-settle, declared losses), each input's path, hash, step count
+  and loss records, the verdict (`VerdictOf`: by actor, its reason, the
+  failing step with its ref), and the caller's driver and artifacts
+  (hashed). Written by `validate -manifest` (driver and artifacts from a
+  `-run-info` JSON file the driver writes), by qtest's Validate and
+  Record runs under GOTOGETHER_EVIDENCE (`run<N>.json` beside a copy of
+  the step log; `qtest.Driver`, `qtest.Artifacts`, `Run.Manifest`, so
+  `Runs` gathers runs that each have one), and by `Checker.Manifest` for
+  callers. Paths under the manifest's directory are relative: the
+  directory moves whole. `validate -replay` refuses a changed input,
+  binding or spec (a changed artifact warns), takes no flag the manifest
+  decides, and exits 1 on another verdict. `gotogether evidence` lists
+  manifests (role external), and `-expect` names them as explorations.
+  Left: the spec's imports are not hashed.
 - **E5. A Bombadil example (M).** examples/webjobs: a standard-library
   web app (submit, accepted, ready, cancel); Bombadil explores it; an
   adapter turns its trace into invocation records completed only by an

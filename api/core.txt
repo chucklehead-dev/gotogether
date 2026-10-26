@@ -42,6 +42,7 @@ type Binding struct
     field Resume string `yaml:"resume"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
+    field Path string `yaml:"-"`
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
@@ -1353,15 +1354,18 @@ type Row struct
 
 == github.com/chucklehead-dev/gotogether/qtest
 const EvidenceFormat = "gotogether.evidence/2"
+const RoleExternal = "external"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
 const RoleReplay = "replay"
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
+func Artifacts(a ...validate.Artifact) Option
 func CheckCases(t testing.TB, workflow, bindingPath string, opts ...Option) CaseCheck
 func Completes() Expectation
 func Conforms() Expectation
 func Constants(m map[string]string) Option
+func Driver(d validate.Driver) Option
 func Exercised(except ...string) Exercise
 func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qenv.Script, error)
 func Finishes() Expectation
@@ -1371,6 +1375,7 @@ func IsEvidence(path string) bool
 func Linearize() Option
 func LinearizeBudget(n int) Option
 func LinearizeByKey(arg string) Option
+func ManifestEvidence(m *validate.Manifest) *Evidence
 func Mismatch(action string) Expectation
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim
@@ -1494,6 +1499,7 @@ type Run struct
     method (*Run) Expect(t testing.TB, cs ...RunClaim)
     method (*Run) Faults() []qenv.Choice
     method (*Run) ID() string
+    method (*Run) Manifest() (*validate.Manifest, error)
     method (*Run) OK() bool
 type RunClaim interface
     Holds(r *Run) bool
@@ -1678,13 +1684,28 @@ const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 const DefaultResolveBudget = 200
 const Fail Verdict = "fail"
+const ManifestFormat = "gotogether.run/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 func Cached(bindingPath string, o Options) (*Checker, error)
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
+func IsManifest(path string) bool
+func ModuleVersion() string
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
+func NewManifest(o Options) *Manifest
+func QuintVersion(bin string) string
+func ReadManifest(path string) (*Manifest, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
+func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict
+type ActorVerdict struct
+    field Actor string `json:"actor"`
+    field Verdict Verdict `json:"verdict"`
+    field Reason string `json:"reason,omitempty"`
+type Artifact struct
+    field Name string `json:"name"`
+    field Path string `json:"path"`
+    field SHA256 string `json:"sha256,omitempty"`
 type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error)
 type Checker struct
     field Binding *binding.Binding
@@ -1696,8 +1717,21 @@ type Checker struct
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
+    method (*Checker) Manifest(results []*Result, opt SearchOptions) (*Manifest, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type Driver struct
+    field Name string `json:"name"`
+    field Version string `json:"version,omitempty"`
+    field Seed string `json:"seed,omitempty"`
+    field Origin string `json:"origin,omitempty"`
+    field Args []string `json:"args,omitempty"`
+type FailingStep struct
+    field Actor string `json:"actor"`
+    field Recorder string `json:"recorder"`
+    field Seq uint64 `json:"seq"`
+    field Action string `json:"action"`
+    field Ref string `json:"ref,omitempty"`
 type Failure struct
     field Note string
     field Kind string
@@ -1709,6 +1743,9 @@ type Failure struct
     field Quint string
     field State map[string]itf.Value
     field StateAfter bool
+type File struct
+    field Path string `json:"path"`
+    field SHA256 string `json:"sha256"`
 type Finish struct
     field Verdict Verdict
     field Reason string
@@ -1722,6 +1759,11 @@ type ITFOptions struct
     field Instance string
     field Invariants []string
     field NoVarCheck bool
+type Input struct
+    embed File
+    field Format string `json:"format,omitempty"`
+    field Steps int `json:"steps"`
+    field Lost []Loss `json:"lost,omitempty"`
 type InvariantResult struct
     field Name string
     field Verdict Verdict
@@ -1731,6 +1773,31 @@ type InvariantResult struct
 type Judgment struct
     field Report *Report
     field Steps []qtrace.Step
+type Loss struct
+    field Recorder string `json:"recorder"`
+    field Kind string `json:"kind"`
+    field After uint64 `json:"after"`
+    field Before time.Time `json:"before,omitzero"`
+type Manifest struct
+    field Format string `json:"format"`
+    field Name string `json:"name,omitempty"`
+    field Package string `json:"package,omitempty"`
+    field Import string `json:"import,omitempty"`
+    field Created time.Time `json:"created"`
+    field Tools Tools `json:"tools"`
+    field Model RunModel `json:"model"`
+    field Check RunCheck `json:"check"`
+    field Inputs []Input `json:"inputs"`
+    field Verdict RunVerdict `json:"verdict"`
+    field Driver *Driver `json:"driver,omitempty"`
+    field Artifacts []Artifact `json:"artifacts,omitempty"`
+    method (*Manifest) AddArtifact(name, path string) error
+    method (*Manifest) AddConvert(path string) (err error)
+    method (*Manifest) AddInput(path, format string, steps []qtrace.Step) error
+    method (*Manifest) SetBinding(b *binding.Binding) error
+    method (*Manifest) SetSpec(path string) (err error)
+    method (*Manifest) Verify() (warnings []string, err error)
+    method (*Manifest) Write(path string) error
 type Options struct
     field Quint string
     field Backend string
@@ -1764,6 +1831,32 @@ type Result struct
     method (*Result) OK() bool
     method (*Result) Reason() string
     method (*Result) Summary() string
+type RunCheck struct
+    field Linearize bool `json:"linearize,omitempty"`
+    field Key string `json:"linearizeKey,omitempty"`
+    field Budget int `json:"linearizeBudget,omitempty"`
+    field ResolvePending bool `json:"resolvePending,omitempty"`
+    field RequireSettle bool `json:"requireSettle,omitempty"`
+    field LostPrefix []string `json:"lostPrefix,omitempty"`
+    field LostSuffix []string `json:"lostSuffix,omitempty"`
+    field Format string `json:"format,omitempty"`
+    field Instance string `json:"instance,omitempty"`
+    field NoVars bool `json:"noVars,omitempty"`
+    method (RunCheck) SearchOptions() SearchOptions
+type RunModel struct
+    field Binding *File `json:"binding,omitempty"`
+    field Spec *File `json:"spec,omitempty"`
+    field Module string `json:"module,omitempty"`
+    field Convert *File `json:"convert,omitempty"`
+    field Constants map[string]string `json:"constants,omitempty"`
+    field Invariants []string `json:"invariants"`
+type RunVerdict struct
+    field Verdict Verdict `json:"verdict"`
+    field Reason string `json:"reason,omitempty"`
+    field Actors []ActorVerdict `json:"actors"`
+    field Failing *FailingStep `json:"failing,omitempty"`
+    method (RunVerdict) Same(w RunVerdict) bool
+    method (RunVerdict) String() string
 type SearchOptions struct
     field Linearize bool
     field Key string
@@ -1776,5 +1869,9 @@ type ToolError struct
     field Msg string
     field Output string
     method (*ToolError) Error() string
+type Tools struct
+    field Gotogether string `json:"gotogether"`
+    field Quint string `json:"quint,omitempty"`
+    field Backend string `json:"backend,omitempty"`
 type Verdict string
 

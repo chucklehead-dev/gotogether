@@ -178,9 +178,10 @@ deliberately and say why in the commit and the README.
   `TestX/sub`, or one, `TestX#2`, either after its package: its import
   path or the end of it, `examples/hello TestX`; `#` comments) and run
   `GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence -strict
-  -expect checks.txt ev`: a check with no evidence fails, by name. Only
-  explorations write evidence (Explore, Exhaust, Sweep, Mutate): a
-  Validate or Record test, or a Hegel search, cannot be listed. A test
+  -expect checks.txt ev`: a check with no evidence fails, by name.
+  Explorations write evidence (Explore, Exhaust, Sweep, Mutate), and
+  Validate and Record runs their manifests (`run<N>.json`, listed as
+  external, named as explorations are); a Hegel search cannot be listed. A test
   that skips clears what an earlier run of it left; use a fresh
   directory per run all the same (a renamed test's stays).
 - **A finished run.** Validate a real environment's logs with

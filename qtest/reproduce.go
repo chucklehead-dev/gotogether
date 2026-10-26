@@ -33,6 +33,10 @@ import (
 var explorations struct {
 	mu sync.Mutex
 	n  map[string]*testRuns
+	// cleared are the tests whose earlier evidence was cleared (clearOnce),
+	// runs how many manifests each wrote (nextRun)
+	cleared map[string]bool
+	runs    map[string]int
 }
 
 type testRuns struct {
@@ -55,7 +59,7 @@ func nextExploration(t testing.TB) int {
 	if tr == nil {
 		tr = &testRuns{}
 		explorations.n[name] = tr
-		clearEvidence(name)
+		clearOnce(t)
 		t.Cleanup(func() {
 			explorations.mu.Lock()
 			defer explorations.mu.Unlock()
@@ -74,6 +78,40 @@ func nextExploration(t testing.TB) int {
 	}
 	tr.n++
 	return tr.n
+}
+
+// nextRun numbers t's next run that writes a manifest (Validate's,
+// Record's) under GOTOGETHER_EVIDENCE.
+func nextRun(t testing.TB) int {
+	explorations.mu.Lock()
+	defer explorations.mu.Unlock()
+	clearOnce(t)
+	if explorations.runs == nil {
+		explorations.runs = map[string]int{}
+	}
+	explorations.runs[t.Name()]++
+	return explorations.runs[t.Name()]
+}
+
+// clearOnce clears the evidence earlier runs of t wrote, at its first
+// exploration or manifest, whichever comes first: the second would
+// otherwise remove what the first wrote. explorations.mu is held.
+func clearOnce(t testing.TB) {
+	name := t.Name()
+	if explorations.cleared[name] {
+		return
+	}
+	if explorations.cleared == nil {
+		explorations.cleared = map[string]bool{}
+	}
+	explorations.cleared[name] = true
+	clearEvidence(name)
+	t.Cleanup(func() { // a test run again (-count) writes its evidence anew
+		explorations.mu.Lock()
+		defer explorations.mu.Unlock()
+		delete(explorations.cleared, name)
+		delete(explorations.runs, name)
+	})
 }
 
 // refTest is the test an exploration's ref names: what precedes its

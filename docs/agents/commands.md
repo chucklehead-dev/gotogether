@@ -50,7 +50,11 @@ AGENTS.md has the general requirements.
   (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as
   dir/<package>/<test>/x<N>.json (the package as its directory in its
   module, `_` the root), cleared per test, a run alone a replay; a System's `Mutant` marks a
-  config's mutation so the suite's gaps leave it out.
+  config's mutation so the suite's gaps leave it out. Each Validate and
+  Record run writes its manifest there too (`gotogether.run/1`,
+  run<N>.json, N per test from 1, beside run<N>.steps.jsonl, the step
+  log it hashes; `gotogether validate -replay` judges it again,
+  `gotogether evidence` lists it as external).
   `GOTOGETHER_CORPUS=dir`
   replays and saves explorations' corpus entries under dir/<test>;
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds

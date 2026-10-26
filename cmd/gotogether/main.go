@@ -9,6 +9,7 @@
 //	gotogether steps    FILE...                            print the reconstructed per-actor traces
 //	gotogether validate [-binding b.yaml] [-dir OUT] FILE...
 //	                                                    reconstruct (or read), replay in Quint, report
+//	gotogether validate -replay run.json               judge a run again from its manifest (validate -manifest's)
 //	gotogether itf      -binding b.yaml -out DIR FILE...   recorded steps -> model-level ITF, per actor
 //	gotogether convert  -rules r.yaml [-out steps.jsonl] FILE...
 //	                                                    an app's own OTLP/JSON spans -> a native step log
@@ -24,7 +25,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -113,7 +113,9 @@ usage:
                    [-keep-refs] [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
-                   [-convert rules.yaml] [-invariants a,b] [-itf] [-require-settle] FILE...
+                   [-convert rules.yaml] [-invariants a,b] [-itf] [-require-settle]
+                   [-manifest run.json [-run-info info.json]] FILE...
+  gotogether validate -replay run.json [-dir OUT]   judge a manifest's run again (its hashed inputs unchanged): the same verdict
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
   gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
                    against a simulation's (an exploration's evidence, or qcover.Summary JSON): what ran only for real, only simulated
@@ -414,185 +416,6 @@ func steps(args []string) error {
 		}
 	}
 	return nil
-}
-
-func runValidate(args []string) (int, error) {
-	fset := commandFlags("validate")
-	bpath := fset.String("binding", "", "binding file (optional for ITF written by gotogether)")
-	dir := fset.String("dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
-	backend := fset.String("backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
-	quint := fset.String("quint", "quint", "quint binary")
-	format := fset.String("format", "auto", "input format: auto, otlp, steps (native step log) or itf")
-	spec := fset.String("spec", "", "ITF input: the model, if neither the trace nor a binding names it")
-	module := fset.String("module", "", "ITF input: the parameterised module")
-	instance := fset.String("instance", "", "ITF input: replay against this instance module (e.g. currentDesign), e.g. for quint run --mbt traces")
-	novars := fset.Bool("novars", false, "ITF input: do not compare model variables carried by the trace")
-	verbose := fset.Bool("v", false, "print quint's output")
-	conv := fset.String("convert", "", "convert OTLP/JSON spans with this rule file (see gotogether convert)")
-	invs := fset.String("invariants", "", "comma-separated model invariants to check instead of the binding's")
-	withITF := fset.Bool("itf", false, "also write the ITF of conforming runs, the model's state at every step (slow for models with a large state); failing runs always get theirs")
-	noITF := fset.Bool("noitf", false, "gone: no ITF for conforming runs is the default")
-	lin := fset.Bool("linearize", false, "check each actor's steps in an order real time allows, searched for one the model accepts (a client history: steps recorded when calls returned)")
-	linKey := fset.String("linearize-key", "", "linearize each actor's history partitioned by this argument's value (independent keys), each partition alone")
-	linBudget := fset.Int("linearize-budget", 0, "orders a linearization checks per actor or partition (default 200)")
-	resolvePending := fset.Bool("resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
-	history := fset.String("history", "", "write the history drawn as SVG to this file (lanes of calls, the order checked numbered, the failing step red)")
-	lostPrefix := fset.String("lost-prefix", "", "comma-separated recorders whose logs lost their first steps, which the log cannot show (no seqs): judged as a lost prefix (qtrace.MarkLost)")
-	requireSettle := fset.Bool("require-settle", false, "exit 1 unless the run is finished, as qtest.Finishes judges it: it settled (its trace's last record a settle), every eventual val held there, and no call was left pending (one -resolve-pending places included: its caller never got the answer); a lost tail is no verdict (exit 1). The binding needs an eventual val, the journey's end; the default for a binding with complete: true. An ITF trace records no settle, so it cannot be judged finished (exit 1)")
-	lostSuffix := fset.String("lost-suffix", "", "comma-separated recorders whose logs lost their last steps, which the log cannot show (a killed process's buffer): their tails judged lost after their last steps (qtrace.MarkLost)")
-	fset.Parse(args)
-	if *noITF {
-		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
-	}
-	rules, err := loadRules(*conv)
-	if err != nil {
-		return 2, err
-	}
-	if fset.NArg() == 0 {
-		usage()
-	}
-	var b *binding.Binding
-	if *bpath != "" {
-		if b, err = binding.Load(*bpath); err != nil {
-			return 2, err
-		}
-	}
-	var steps []qtrace.Step
-	var itfs []*input.File
-	for _, f := range fset.Args() {
-		if rules != nil {
-			cs, ok, err := convertFile(f, rules)
-			if err != nil {
-				return 2, err
-			}
-			if ok {
-				fmt.Printf("input %s: OTLP/JSON spans, converted with %s: %d steps\n", f, *conv, len(cs))
-				steps = append(steps, cs...)
-				continue
-			}
-		}
-		in, err := input.Read(f, input.Format(*format))
-		if err != nil {
-			return 2, err
-		}
-		fmt.Printf("input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
-			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
-		if in.Torn != nil {
-			fmt.Printf("  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
-		}
-		if in.Format == input.ITF {
-			itfs = append(itfs, in)
-		} else {
-			steps = append(steps, in.Steps...)
-		}
-	}
-	if steps, err = markLost(steps, *lostPrefix, true); err != nil {
-		return 2, err
-	}
-	if steps, err = markLost(steps, *lostSuffix, false); err != nil {
-		return 2, err
-	}
-	if *dir == "" { // one root for every actor's and input's modules, named in the output
-		d, err := os.MkdirTemp("", "gotogether-validate-")
-		if err != nil {
-			return 2, err
-		}
-		*dir = d
-	}
-	fmt.Printf("artifacts (generated modules, failing runs' ITF): %s\n", *dir)
-	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: *dir, NoITF: !*withITF}
-	ok := true
-	var results []*validate.Result // every actor's and ITF's, for the result line
-	// a finished run required (-require-settle, a complete binding)
-	finish, finishWhy := *requireSettle, "-require-settle"
-	if !finish && b != nil && b.Complete {
-		finish, finishWhy = true, "the binding is complete"
-	}
-	// incomplete are the reasons of actors that pass and are not finished,
-	// under -require-settle (or a complete binding): a prefix of a run
-	// conforms, and would pass
-	incomplete := map[*validate.Result]string{}
-	if len(steps) > 0 || len(itfs) == 0 {
-		if *bpath == "" {
-			return 2, fmt.Errorf("recorded steps need -binding")
-		}
-		c, err := validate.NewChecker(*bpath, opts)
-		if err != nil {
-			return 2, err
-		}
-		if *invs != "" {
-			if c, err = c.WithInvariants(strings.Split(*invs, ",")...); err != nil {
-				return 2, err
-			}
-		}
-		if err := validate.Finishable(c.Binding); finish && err != nil {
-			return 2, fmt.Errorf("validate %s: %s: %v", finishWhy, *bpath, err) // (a complete binding's lint says so already)
-		}
-		// ordered by the search, checked, the Go evaluator's orders confirmed
-		// by quint where the check fails, and marked
-		j, err := c.Judge(context.Background(), steps, validate.SearchOptions{Linearize: *lin || *linKey != "", Key: *linKey, Budget: *linBudget, ResolvePending: *resolvePending})
-		if err != nil {
-			return 2, err
-		}
-		rep := j.Report
-		if *history != "" {
-			if err := os.WriteFile(*history, rep.HistorySVG(steps, j.Steps), 0o644); err != nil {
-				return 2, err
-			}
-		}
-		fmt.Print(rep.Summary())
-		if *verbose {
-			for _, a := range rep.Actors {
-				fmt.Println(a.Output)
-			}
-		}
-		ok = ok && rep.OK()
-		// one judgment with qtest.Finishes; only a run that passes is
-		// judged so, since one that fails says why already
-		if f := rep.Finished(); finish && rep.OK() && f.Verdict != validate.Pass {
-			who := "the run"
-			for _, a := range rep.Actors {
-				if f.Actor == "" || a.Actor == f.Actor {
-					incomplete[a] = f.Reason
-				}
-			}
-			if f.Actor != "" {
-				who = "actor " + f.Actor
-			}
-			fmt.Printf("%s: %s (%s): %s\n", who, f.Reason, finishWhy, f.Why)
-			ok = false
-		}
-		results = append(results, rep.Actors...)
-	}
-	for i, in := range itfs {
-		o := opts
-		if len(itfs) > 1 {
-			o.Dir = fmt.Sprintf("%s/itf%d", o.Dir, i)
-		}
-		r, err := validate.ValidateITF(context.Background(), in.ITF, validate.ITFOptions{Options: o, Binding: b,
-			Spec: *spec, Module: *module, Instance: *instance, NoVarCheck: *novars})
-		if err != nil {
-			return 2, fmt.Errorf("%s: %w", in.Path, err)
-		}
-		fmt.Print(r.Summary())
-		if *verbose {
-			fmt.Println(r.Output)
-		}
-		ok = ok && r.OK()
-		if finish && r.OK() {
-			// an ITF trace is the model's states alone: no settle, no calls
-			incomplete[r] = "no verdict (ITF trace)"
-			fmt.Printf("%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, finishWhy)
-			ok = false
-		}
-		results = append(results, r)
-	}
-	if ok {
-		fmt.Printf("RESULT: PASS (%s)\n", passSummary(results))
-		return 0, nil
-	}
-	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results, incomplete))
-	return 1, nil
 }
 
 // markLost declares the losses of the comma-separated recorders the

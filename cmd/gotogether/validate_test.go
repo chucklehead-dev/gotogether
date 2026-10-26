@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
+	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // validate ends with how many traces fail and why, in the claims' words:
@@ -187,6 +189,11 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		{"require-settle: resolved pending", "funds.binding.yaml", []string{"-require-settle", "-resolve-pending"},
 			seq(acct("deposit", 5, 5), settled), append(pending(12), qtrace.Step{Action: "settled", Settled: true, Recorder: "c", Seq: 4, Time: ms(4)}),
 			"1 of 1 actor: 1 incomplete (pending calls)"},
+		// the checked invariants and declared losses are the manifest's too:
+		// without them, a replay judges the passing runs otherwise
+		{"invariants", "account.yaml", []string{"-invariants", "nonNegative"}, seq(acct("deposit", 150, 150)), seq(acct("deposit", 5, 6)), "conformance: FAIL"},
+		{"lost suffix", "funds.binding.yaml", []string{"-lost-suffix", "r"}, seq(acct("deposit", 5, 5), acct("withdraw", 5, 0), settled),
+			seq(acct("deposit", 5, 6)), "conformance: FAIL"},
 		// complete: true makes it the binding's default
 		{"complete", "funds_complete.yaml", nil, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "incomplete (no settle) (the binding is complete)"},
@@ -211,13 +218,21 @@ func TestValidateVerdictMatrix(t *testing.T) {
 			}
 			stdout := os.Stdout
 			os.Stdout = w
-			args := append(append([]string{"-binding", td + x.binding, "-dir", filepath.Join(dir, "out")}, x.flags...), log)
+			manifest := filepath.Join(dir, fmt.Sprintf("run%d.manifest.json", run.code))
+			args := append(append([]string{"-binding", td + x.binding, "-dir", filepath.Join(dir, "out"), "-manifest", manifest}, x.flags...), log)
 			code, err := runValidate(args)
 			os.Stdout = stdout
 			w.Close()
 			out, _ := io.ReadAll(r)
 			if err != nil || code != run.code || run.code == 1 && !strings.Contains(string(out), x.says) {
 				t.Errorf("%s: exit %d, %v, want %d (saying %q):\n%s", x.name, code, err, run.code, x.says, out)
+			}
+			// the manifest's run judged again: the same verdict, said the same
+			code, rout := capture(t, func() (int, error) {
+				return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
+			})
+			if code != run.code || !strings.Contains(rout, "the manifest's verdict, reproduced") || run.code == 1 && !strings.Contains(rout, x.says) {
+				t.Errorf("%s: replay: exit %d, want %d (saying %q):\n%s", x.name, code, run.code, x.says, rout)
 			}
 		}
 	}
@@ -347,5 +362,98 @@ func TestValidateResume(t *testing.T) {
 	_, out = capture(t, func() (int, error) { return 0, steps([]string{log}) })
 	if !strings.Contains(out, "lost: recorder r lost seqs 1..2") {
 		t.Errorf("steps:\n%s", out)
+	}
+}
+
+// validate -manifest writes what the driver's -run-info says (name,
+// driver, artifacts hashed); -replay refuses a changed input, flags the
+// manifest decides, and a verdict that is not the manifest's (exit 1);
+// gotogether evidence lists the manifest as an external run, which
+// -expect counts.
+func TestValidateManifest(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	log := filepath.Join(dir, "run.jsonl")
+	steps := []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Time: time.Unix(1, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(6)},
+		Ref: "bombadil/trace.jsonl:42"}}
+	var b strings.Builder
+	if err := qtrace.WriteJSONL(&b, steps); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(log, []byte(b.String()), 0o644)
+	os.WriteFile(filepath.Join(dir, "42.webp"), []byte("pixels"), 0o644)
+	info := filepath.Join(dir, "info.json")
+	os.WriteFile(info, []byte(`{"name": "nightly", "driver": {"name": "bombadil", "version": "0.3", "seed": "42", "origin": "ci", "args": ["--headless"]},
+		"artifacts": [{"name": "screenshot", "path": "42.webp"}]}`), 0o644)
+	manifest := filepath.Join(dir, "m.json")
+	code, out := capture(t, func() (int, error) {
+		return runValidate([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), "-manifest", manifest, "-run-info", info, log})
+	})
+	if code != 1 || !strings.Contains(out, "ref:      bombadil/trace.jsonl:42") {
+		t.Fatalf("validate: exit %d:\n%s", code, out)
+	}
+	m, err := validate.ReadManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Name != "nightly" || m.Driver == nil || m.Driver.Origin != "ci" || len(m.Artifacts) != 1 || m.Artifacts[0].Path != filepath.Join(dir, "42.webp") || m.Artifacts[0].SHA256 == "" ||
+		m.Verdict.Failing == nil || m.Verdict.Failing.Ref != "bombadil/trace.jsonl:42" || m.Tools.Quint == "" || m.Tools.Gotogether == "" {
+		t.Errorf("manifest: %+v", m)
+	}
+	// a flag the manifest decides
+	if _, err := runValidate([]string{"-replay", manifest, "-linearize"}); err == nil || !strings.Contains(err.Error(), "-linearize: the manifest says") {
+		t.Errorf("-replay -linearize: %v", err)
+	}
+	// a verdict that is not the manifest's: exit 1, saying both
+	m.Verdict.Verdict, m.Verdict.Reason, m.Verdict.Failing, m.Verdict.Actors = validate.Pass, "", nil, []validate.ActorVerdict{{Actor: "default", Verdict: validate.Pass}}
+	edited := filepath.Join(dir, "edited.json")
+	if err := m.Write(edited); err != nil {
+		t.Fatal(err)
+	}
+	code, out = capture(t, func() (int, error) {
+		return runValidate([]string{"-replay", edited, "-dir", filepath.Join(dir, "replay")})
+	})
+	if code != 1 || !strings.Contains(out, "the verdict is not the manifest's") || !strings.Contains(out, "manifest: PASS") {
+		t.Errorf("an edited verdict: exit %d:\n%s", code, out)
+	}
+	// the suite's evidence lists it, an external run
+	code, out = capture(t, func() (int, error) { return evidence([]string{dir}) })
+	if code != 0 || !strings.Contains(out, "nightly: 1 runs, 0 conform, 1 mismatch after deposit (external: not counted below)") {
+		t.Errorf("evidence: exit %d:\n%s", code, out)
+	}
+	checks := filepath.Join(dir, "checks.txt")
+	os.WriteFile(checks, []byte("nightly\n"), 0o644)
+	if code, out = capture(t, func() (int, error) { return evidence([]string{"-expect", checks, manifest}) }); code != 0 {
+		t.Errorf("evidence -expect: exit %d:\n%s", code, out)
+	}
+	// a changed log: refused, naming it, with the fix
+	os.WriteFile(log, []byte(strings.Replace(b.String(), `"quint.obs.balance":6`, `"quint.obs.balance":5`, 1)), 0o644)
+	if _, err := runValidate([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "the input "+log+" changed since the run was judged") {
+		t.Errorf("a changed log: %v", err)
+	}
+}
+
+// A test's manifest (qtest under GOTOGETHER_EVIDENCE) is replayed by the
+// CLI with the test's instance: its constants override the binding's
+// (LIMIT 120 admits a deposit of 110, which LIMIT 100 does not).
+func TestReplayTestManifest(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	t.Setenv("GOTOGETHER_EVIDENCE", dir)
+	steps := []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Args: map[string]any{"amount": int64(110)}, Obs: map[string]any{"balance": int64(110)}}}
+	qtest.Validate(t, "../../validate/testdata/account.yaml", steps, qtest.Constants(map[string]string{"LIMIT": "120"})).Expect(t, qtest.Conforms())
+	manifest := filepath.Join(dir, "cmd", "gotogether", t.Name(), "run1.json")
+	code, out := capture(t, func() (int, error) {
+		return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
+	})
+	if code != 0 || !strings.Contains(out, "the manifest's verdict, reproduced: PASS") {
+		t.Errorf("replay: exit %d:\n%s", code, out)
+	}
+	// -expect names it as it names an exploration: by its package's
+	// import path (or its end) and its test
+	checks := filepath.Join(t.TempDir(), "checks.txt")
+	os.WriteFile(checks, []byte("github.com/chucklehead-dev/gotogether/cmd/gotogether "+t.Name()+"\ncmd/gotogether "+t.Name()+"\n"), 0o644)
+	if code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", checks, dir}) }); code != 0 || !strings.Contains(out, "(external: not counted below)") {
+		t.Errorf("evidence -expect: exit %d:\n%s", code, out)
 	}
 }

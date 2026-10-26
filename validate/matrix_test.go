@@ -56,7 +56,7 @@ var (
 	otherFields = map[string]string{
 		"Spec": "the model's file", "Module": "the model's module", "Constants": "the instance", "Intern": "naming",
 		"Outcomes": "templates' values", "Restart": "an inferred step, judged as conformance", "Defs": "templates' helpers",
-		"Antecedents": "vacuity, qtest's report", "Complete": "the CLI's exit (validate -require-settle), not the report", "Simulate": "the model alone (gotogether simulate)", "Dir": "the file's place",
+		"Antecedents": "vacuity, qtest's report", "Complete": "the CLI's exit (validate -require-settle), not the report", "Simulate": "the model alone (gotogether simulate)", "Dir": "the file's place", "Path": "the file a manifest hashes (validate.Manifest), no verdict",
 	}
 )
 

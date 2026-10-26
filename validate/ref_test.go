@@ -2,11 +2,11 @@ package validate
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -15,9 +15,7 @@ import (
 // cache key and a verdict.
 func TestFailingStepShowsRef(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

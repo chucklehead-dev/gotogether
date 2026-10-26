@@ -107,6 +107,9 @@ type Binding struct {
 	Simulate *Simulation `yaml:"simulate"`
 
 	Dir string `yaml:"-"` // directory of the binding file
+	// Path is the binding file, absolute (Load): what a run's manifest
+	// hashes (validate.Manifest).
+	Path string `yaml:"-"`
 }
 
 // A Within is a bounded-response obligation (Binding.Within): after After
@@ -187,7 +190,7 @@ func Load(path string) (*Binding, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	abs, _ := filepath.Abs(path)
-	bd.Dir = filepath.Dir(abs)
+	bd.Dir, bd.Path = filepath.Dir(abs), abs
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
