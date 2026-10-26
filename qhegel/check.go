@@ -196,7 +196,12 @@ func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
 	// a lost tail's verdict depends on the steps after its cut (a failure
 	// there is no verdict), and a snapshot's on where the trace starts: a
 	// prefix's verdict is no extension's
-	if tr := traces[0]; len(tr.Lost) > 0 || cc.Checker.Binding.Snapshot != "" && len(tr.Steps) > 0 && tr.Steps[0].Action == cc.Checker.Binding.Snapshot {
+	if tr := traces[0]; len(tr.Lost) > 0 {
+		// and the full key needs the times its cut is judged by (Checker.Key)
+		sum := sha256.Sum256([]byte(cc.Checker.Key(steps)))
+		return "lost#" + hex.EncodeToString(sum[:]), false
+	}
+	if tr := traces[0]; cc.Checker.Binding.SnapshotFirst(tr) {
 		return "", false
 	}
 	for _, s := range steps {

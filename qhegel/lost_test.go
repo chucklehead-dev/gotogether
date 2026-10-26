@@ -2,6 +2,7 @@ package qhegel
 
 import (
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -33,5 +34,17 @@ func TestCaseKeysLost(t *testing.T) {
 		if k := cc.key(x.steps); k.prefixable != x.prefixable {
 			t.Errorf("%s: prefixable %v, want %v", x.name, k.prefixable, x.prefixable)
 		}
+	}
+	// a lost tail's case is keyed with its times: a step of another
+	// recorder after the cut (no verdict) and before it (a verdict)
+	run := func(ms int64) []qtrace.Step {
+		other := qtrace.Step{Action: "deposit", Recorder: "s", Seq: 1, Time: time.Unix(0, ms*int64(time.Millisecond)), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(10)}}
+		first := deposit
+		first.Time = time.Unix(0, 10*int64(time.Millisecond))
+		return qtrace.MarkLost([]qtrace.Step{first, other}, qtrace.Lost{Recorder: "r", After: 1})
+	}
+	full := func(k keyed) string { return k.keys[len(k.keys)-1] }
+	if full(cc.key(run(30))) == full(cc.key(run(5))) {
+		t.Errorf("a lost tail's cases after and before the cut share a key")
 	}
 }
