@@ -78,6 +78,10 @@ jobs:
           test -z "$(gofmt -l . | tee /dev/stderr)"
           go vet ./...
           GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m ./...
+      # the per-push tier: each example's -short tests, under a minute each
+      # (ci/test-times.txt), every mutant they claim caught with at least
+      # 0.95 (their reports print the chance a claim of Some misses); the
+      # full explorations and searches run nightly, at fresh seeds
       - name: the examples, each its own module
         if: matrix.part == 'examples'
         run: |
@@ -85,7 +89,7 @@ jobs:
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
-              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -count=1 -timeout 30m ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
+              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
             echo "::endgroup::"
           done
           # a test twice as slow as it was (ci/test-times.txt) fails
@@ -279,7 +283,7 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./...
       - name: test (liveness, pending calls, linearized per key, PCT)
         run: |
-          go test -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
           ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
 
   raftkv:
@@ -304,7 +308,7 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/raftkv
       - name: test (linearized whole, pending calls, leadership within a bound, clock drift, rolling upgrades)
         run: |
-          GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
           ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
 
   wallet:
@@ -329,7 +333,7 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/wallet
       - name: test (Exhaust, isolation levels and qhistory, linearized, pending calls, every fault family)
         run: |
-          GOTOGETHER_CHECK=1 go test -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
           ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
       - name: demos
         run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
@@ -376,7 +380,7 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: test (simulated fleet)
-        run: go test -count=1 -timeout 30m ./...
+        run: go test -short -count=1 -timeout 30m ./...
       - name: the real controller on three kwok clusters
         run: |
           # each run's exit status is its verdict: 0 conforms, 1 violation
@@ -410,7 +414,7 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: test (simulated provider, cloud and cluster)
-        run: go test -count=1 -timeout 30m ./...
+        run: go test -short -count=1 -timeout 30m ./...
       - name: the provider on kind with Crossplane
         run: |
           # each run's exit status is its verdict: 0 conforms, 1 violation
@@ -441,7 +445,7 @@ jobs:
           go run -C ../.. ./cmd/gotogether lint -sim examples/grpcledger
       - name: test (simulated through simgrpc, and a real grpc.Server)
         run: |
-          go test -count=1 -timeout 30m ./...
+          go test -short -count=1 -timeout 30m ./...
           go test -race -short -count=1 ./...
           GOTOGETHER_CHECK=1 go test -short -count=1 ./...
       - name: demo (real server, otelgrpc spans converted and validated)
@@ -474,7 +478,7 @@ jobs:
         run: |
           GOTOGETHER_CHECK=1 go test -short -count=1 ./...
           go test -race -short -count=1 ./kafkalog/ ./kinesislog/
-          go test -count=1 -timeout 30m ./...
+          go test -short -count=1 -timeout 30m ./...
       - name: fuzzing the faithful pipeline
         run: go test -run '^$' -fuzz FuzzFaithful -fuzztime 30s .
       - name: demo
