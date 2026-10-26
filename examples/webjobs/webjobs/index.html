@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>webjobs</title>
+<style>
+  body { font: 16px system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+  button { font: inherit; padding: 6px 12px; margin-right: 8px; }
+  #result { font: 14px ui-monospace, monospace; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<h1>Reports</h1>
+<form id="form">
+  <button id="submit" type="submit">Generate report</button>
+  <button id="cancel" type="button" disabled>Cancel</button>
+</form>
+<p id="result" aria-live="polite"></p>
+<script>
+// One submission at a time. Each has a key, made when the form is ready
+// for it and kept until its job ends, so a second click (a double click,
+// a retry) asks for the same job. The result shows the job as the server
+// last answered: {"id", "status"}.
+const form = document.getElementById('form');
+const submit = document.getElementById('submit');
+const cancel = document.getElementById('cancel');
+const result = document.getElementById('result');
+let current = null;     // the job shown
+const answered = new Set(); // keys whose submission was answered
+let polling = null;
+
+function newKey() {
+  form.dataset.key = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function show(job) {
+  // a job's status only moves on: a poll answered after a cancel's
+  // answer is stale
+  if (current && current.id === job.id && current.status !== 'accepted' && job.status === 'accepted') return;
+  current = { id: job.id, status: job.status };
+  result.textContent = JSON.stringify(current);
+  const running = job.status === 'accepted';
+  submit.disabled = running;
+  cancel.disabled = !running;
+  clearTimeout(polling);
+  if (running) polling = setTimeout(poll, 100);
+  else newKey();
+}
+
+async function poll() {
+  const id = current.id;
+  try {
+    const res = await fetch('/jobs/' + id, { cache: 'no-store' });
+    if (res.ok && current.id === id) show(await res.json());
+    else if (current.id === id) polling = setTimeout(poll, 100);
+  } catch (e) {
+    if (current.id === id) polling = setTimeout(poll, 100);
+  }
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const key = form.dataset.key;
+  const res = await fetch('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+  if (!res.ok || answered.has(key)) return; // the first answer for a key is the one shown
+  answered.add(key);
+  show(await res.json());
+});
+
+cancel.addEventListener('click', async () => {
+  if (!current) return;
+  const res = await fetch('/jobs/' + current.id + '/cancel', { method: 'POST' });
+  if (res.ok || res.status === 409) show(await res.json());
+});
+
+newKey();
+</script>
+</body>
+</html>

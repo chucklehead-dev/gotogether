@@ -1,0 +1,45 @@
+# The server's effects (recorded where it makes them: created, finished,
+# cancelled, drained) and the page as Bombadil saw it (bombadiltrace:
+# each click an invocation, completed only by the outcome the page
+# showed; a job shown ready by polling) as calls of model/webjobs.qnt's
+# actions: every parameter is the step's field of its name. The two
+# recorders are ordered by their wall clocks, on one host. Nothing is
+# compared step by step: the invariants judge every state, the eventual
+# val the last state of a run that settled (the server, drained).
+spec: model/webjobs.qnt
+module: webjobs
+
+actions:
+  created: {}
+  finished: {}
+  cancelled: {}
+  drained: {}
+  submit: {}
+  cancel: {}
+  ready: {}
+
+invariants: [oneJobPerKey, answerIsItsJob, shownIsAJob, readyIsCommitted, cancelHonoured]
+eventually: [allResolved]
+
+# a journey is judged whole: gotogether validate fails a run that did not
+# settle, or left a click with no outcome (as -require-settle)
+complete: true
+
+# a job runs for at most 1.2s, then is ready (or was cancelled): with
+# one job at a time, the server is idle again within 3s of starting one
+within:
+  - after: running
+    holds: idle
+    bound: 3s
+
+antecedents:
+  answerIsItsJob: answered.keys().size() > 0
+  shownIsAJob: shown.keys().size() > 0
+  readyIsCommitted: shown.keys().exists(id => shown.get(id) == "ready")
+  cancelHonoured: shown.keys().exists(id => shown.get(id) == "cancelled")
+  oneJobPerKey: jobs.keys().size() > 1
+
+# The model on its own (gotogether simulate): it allows every bug the
+# invariants rule out, so none holds by construction.
+simulate:
+  allows: [oneJobPerKey, answerIsItsJob, shownIsAJob, readyIsCommitted, cancelHonoured]

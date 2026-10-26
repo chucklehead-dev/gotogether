@@ -1,0 +1,42 @@
+{
+  "name": "webjobs faithful",
+  "driver": {
+    "name": "bombadil",
+    "version": "0.7.9",
+    "seed": "server 1793036761185206408",
+    "origin": "vm",
+    "args": [
+      "bombadil",
+      "browser",
+      "test",
+      "--headless",
+      "--no-sandbox",
+      "--output-path",
+      "<journey>/bombadil",
+      "--time-limit",
+      "3s",
+      "--chrome-grant-permissions",
+      "local-network-access",
+      "--width",
+      "320",
+      "--height",
+      "200",
+      "http://127.0.0.1:44765/",
+      "bombadil/spec.ts"
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "bombadil trace",
+      "path": "trace.jsonl"
+    },
+    {
+      "name": "screenshot",
+      "path": "screenshots/1793036762193238.jpeg"
+    },
+    {
+      "name": "screenshot",
+      "path": "screenshots/1793036764199218.jpeg"
+    }
+  ]
+}
