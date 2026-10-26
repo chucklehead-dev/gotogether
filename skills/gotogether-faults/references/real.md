@@ -12,10 +12,10 @@ judges it.
 ```go
 p1 := &qnemesis.Process{Name: "n1", Cmd: func(inc int) *exec.Cmd {
 	// one step log per incarnation, recorder id n1-<inc>: a killed one's ends where it died
-	return exec.Command("./node", "-id", "n1", "-log", fmt.Sprintf("logs/n1.%d.jsonl", inc))
+	return exec.Command("./node", "-id", "n1", "-log", fmt.Sprintf("logs/node-n1.%d.jsonl", inc))
 },
 	Recorders: func(inc int) []string { return []string{fmt.Sprintf("n1-%d", inc)} }, // a crash declares their tails lost
-	Logs:      func(inc int) []string { return []string{fmt.Sprintf("logs/n1.%d.jsonl", inc)} },
+	Logs:      func(inc int) []string { return []string{fmt.Sprintf("logs/node-n1.%d.jsonl", inc)} },
 	PIDFile:   "logs/n1.pgid", // swept at the next start if a killed test left the group
 }
 t.Cleanup(func() { _ = p1.Close() }) // kills the process group: nothing left running
@@ -28,7 +28,7 @@ n := &qnemesis.Nemesis{
 	Net:     proxy,
 	Rec:     rec,
 	Record:  recording,                              // fault family -> model action
-	Steps:   qnemesis.StepsIn("logs/n*.jsonl"),      // the system's steps (never the nemesis's own), for After
+	Steps:   qnemesis.StepsIn("logs/node-*.jsonl"), // the system's logs, which the nemesis's cannot match
 	Journal: journal,                                // faults.jsonl: every fault's start and end
 }
 err = n.Run(ctx, schedule)
@@ -57,6 +57,11 @@ err = n.Stop(ctx) // heal, clear, resume, start the down: the real settle
   middle. Latency and loss are toxics on the responses; toxiproxy draws a
   loss's toxicity per connection, not per message.
 - A pair's faults act on both directions; names cannot contain dots.
+- Name the system's logs so no glob of them matches the nemesis's
+  (`logs/node-*.jsonl` beside `logs/nemesis.jsonl`, not `logs/n*.jsonl`):
+  `StepsIn` leaves the nemesis's steps out by recorder id, but the same
+  glob reading the logs to validate them, with the nemesis's log added,
+  would read its steps twice.
 
 ## Faults and schedules
 
@@ -110,6 +115,9 @@ does not reach), no failpoints.
   before the crash's step, cut at each recorder's last step, or the
   incarnation's start), so such a failure is no verdict. The price: a
   failure after the killed incarnation's last step is no verdict either.
+  The loss is bounded by the reaping (`LostBefore`): a settle recorded
+  after the crash settles the run (`Settles()` holds), one before it does
+  not. A torn tail with no crash stays unbounded and voids every settle.
   A program that records each step before its effect is seen (at the
   effect's site, before the reply) has no such window and can leave
   Recorders unset.
@@ -139,5 +147,9 @@ so a longer real partition's heal stays in `Remaining`; set
 `sim.Net().CutLength` to `j.LongestCut()` to keep it. `j.Unreproducible()`
 says what the script leaves out or cannot make as it happened (latency
 and loss, a heal of links never cut, pauses' lengths, long cuts), with
-the fix. Run the script as the chooser of the simulated system and
+the fix. The script keeps the run's order, so a fault the simulation
+cannot make (a pause without `Sim.Stalls.Pause`, a partition without
+`PartitionNemesis`) holds up every fault after it: after the run,
+`qnemesis.Unmade(sc)` names the cause and what waited for it (a qtest
+exploration with the script as its chooser fails on them too). Run the script as the chooser of the simulated system and
 explore from there.

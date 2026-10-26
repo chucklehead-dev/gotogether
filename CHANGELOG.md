@@ -38,6 +38,13 @@ The first release. What a user meets, by module:
   runs of two instances fail).
 - `qobs.Recorder.Actor`. `qtrace.Reconstruct`: a loss record of a
   recorder with no step reaches the actor it names.
+- A lost tail bounded in time (`qtrace.Step.LostBefore`,
+  `quint.lost_before_unix_nano`, `Lost.Before`; a qnemesis crash's, by
+  its reaping) voids only the settles a lost step may follow: a settle
+  after the bound settles the run, so Recorders and `Settles()` go
+  together. Unbounded losses void every settle, as before.
+  `qnemesis.Unmade` says which faults of a journal's script a
+  simulation did not make, and why.
 - `qenv.Unwinding(r)`: whether a recovered panic is qenv unwinding a
   killed task, for an adapter whose caller releases a lock only on a
   normal return (qsql under database/sql's Tx.QueryContext). A seam in
