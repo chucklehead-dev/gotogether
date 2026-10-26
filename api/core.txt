@@ -1368,6 +1368,7 @@ func Absent(name string, cause validate.Cause) Expectation
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
 func Artifacts(a ...validate.Artifact) Option
+func AtMostActions(n int) ShrinkClaim
 func CheckCases(t testing.TB, workflow, bindingPath string, opts ...Option) CaseCheck
 func Completes() Expectation
 func Conforms() Expectation
@@ -1404,6 +1405,7 @@ func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 func Runs(runs ...*Run) *Exploration
 func SameFailure(r *Run) Expectation
 func Settles() Expectation
+func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *ShrunkActions[A]
 func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option
 func Some(es ...Expectation) Claim
@@ -1414,6 +1416,13 @@ func Takes(action string) Take
 func Undecided(e Expectation, because ...string) Expectation
 func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
 func Violates(invariant string) Expectation
+type ActionShrink[A any] struct
+    field Binding string
+    field Rerun func(ctx context.Context, actions []A) ([]qtrace.Step, error)
+    field Reset Resetter
+    field Keep Expectation
+    field Calibration Calibration
+    field Opts []Option
 type Bound struct
     field Delays int
     field Faults int
@@ -1509,6 +1518,8 @@ type Reach struct
     method (Reach) Faulted() Reach
     method (Reach) InAtLeast(share float64) Reach
     method (Reach) String() string
+type Resetter interface
+    Reset(ctx context.Context) error
 type Run struct
     field Steps []qtrace.Step
     field Recorded []qtrace.Step
@@ -1535,6 +1546,25 @@ type RunPanic struct
     field Stack string
     field InTask bool
     method (*RunPanic) Error() string
+type ShrinkClaim interface
+    String() string
+    holdsShrunk(n int, r *Run) (bool, string)
+type ShrunkActions[A any] struct
+    field Actions []A
+    field Run *Run
+    field Original int
+    field Reruns int
+    field Reproduced int
+    field NotReproduced int
+    field Diverged int
+    field Errors int
+    field Baseline Rate
+    field PerCandidate int
+    field Rate Rate
+    field Minimal bool
+    field NotMinimal string
+    method (*ShrunkActions[A]) Expect(t testing.TB, claims ...ShrinkClaim)
+    method (*ShrunkActions[A]) String() string
 type StepClaim struct
     method (StepClaim) String() string
 type StepMutation struct

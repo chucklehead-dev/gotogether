@@ -1,0 +1,6 @@
+# letters.qnt's one action, its letter the step's argument.
+spec: letters.qnt
+module: letters
+actions:
+  press: {}
+invariants: [noBug]

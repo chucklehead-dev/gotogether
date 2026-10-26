@@ -8,14 +8,25 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
-- External shrinking, its judgment: `qtest.SameFailure(run)`, the
-  expectation that a run fails as run does (each failing actor's first
-  failure's kind and name, whatever seqs, ids and arguments; no verdict
-  with a lost tail or an undecided actor); `qtest.ErrDiverged`, what a
-  rerun returns for actions it could not do (never a pass nor a
-  failure); `qtest.Calibration` (reruns from a baseline's rate at its
-  lower bound, the fewest that miss a failure with chance at most α)
-  and `qtest.Rate`.
+- External shrinking: `qtest.ShrinkActions(t, actions, ActionShrink[A]{Binding,
+  Rerun, Reset, Keep, Calibration, Opts})` shrinks a failing sequence of
+  a driver's actions to a 1-minimal one (ddmin) that still fails the
+  same way, each candidate rerun on the system from the state a
+  `qtest.Resetter` leaves (its contract checked first: a rerun of no
+  actions records nothing, the original's first two reruns fail alike)
+  and its steps checked against the binding; `ShrunkActions[A]`
+  (`Actions`, `Run`, `Original`, `Reruns`, `Reproduced`,
+  `NotReproduced`, `Diverged`, `Errors`, `Baseline`, `PerCandidate`,
+  `Rate`, `Minimal`, `NotMinimal`, `Expect`), `qtest.AtMostActions(n)`
+  (a `ShrinkClaim`), the minimal run's manifest under
+  GOTOGETHER_EVIDENCE with actions.json and shrink.json among its
+  artifacts. `qtest.SameFailure(run)`, the default failure kept (each
+  failing actor's first failure's kind and name, whatever seqs, ids and
+  arguments; no verdict with a lost tail or an undecided actor);
+  `qtest.ErrDiverged`, what a rerun returns for actions it could not do
+  (never a pass nor a failure); `qtest.Calibration` (reruns from the
+  original's rate at its lower bound, the fewest that miss a failure
+  with chance at most α; a budget and a time) and `qtest.Rate`.
 - Absence diagnostics: each step a run was expected to show and does
   not (a within not met or not judged, an eventual val not judged or
   false at the settle, a call never completed) is in the report's
