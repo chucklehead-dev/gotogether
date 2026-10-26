@@ -1402,6 +1402,7 @@ func RequireQuint(t testing.TB)
 func ResolvePending() Option
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 func Runs(runs ...*Run) *Exploration
+func SameFailure(r *Run) Expectation
 func Settles() Expectation
 func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option
@@ -1420,6 +1421,13 @@ type Bound struct
     field MaxRuns int
     field Partial bool
     field Parallel int
+type Calibration struct
+    field Baseline int
+    field Reruns int
+    field Need int
+    field Alpha float64
+    field Budget int
+    field Time time.Duration
 type CaseCheck struct
     field Checker *validate.Checker
     field Recorder []qobs.Option
@@ -1493,6 +1501,10 @@ type MutationReport struct
     method (*MutationReport) Score() float64
     method (*MutationReport) String() string
 type Option func(*settings)
+type Rate struct
+    field Reproduced int
+    field Of int
+    method (Rate) String() string
 type Reach struct
     method (Reach) Faulted() Reach
     method (Reach) InAtLeast(share float64) Reach
@@ -1583,6 +1595,7 @@ type Vacuity struct
     field Antecedent string `json:"antecedent"`
     field Runs int `json:"runs"`
     method (Vacuity) String() string
+var ErrDiverged = errors.New("gotogether: the rerun did not do its actions")
 
 == github.com/chucklehead-dev/gotogether/qtrace
 const AllRecorders = "*"

@@ -8,6 +8,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- External shrinking, its judgment: `qtest.SameFailure(run)`, the
+  expectation that a run fails as run does (each failing actor's first
+  failure's kind and name, whatever seqs, ids and arguments; no verdict
+  with a lost tail or an undecided actor); `qtest.ErrDiverged`, what a
+  rerun returns for actions it could not do (never a pass nor a
+  failure); `qtest.Calibration` (reruns from a baseline's rate at its
+  lower bound, the fewest that miss a failure with chance at most α)
+  and `qtest.Rate`.
 - Absence diagnostics: each step a run was expected to show and does
   not (a within not met or not judged, an eventual val not judged or
   false at the settle, a call never completed) is in the report's
