@@ -464,6 +464,7 @@ func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) erro
 func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
 func Swarm(c Chooser, kinds ...string) Chooser
+func Unwinding(r any) bool
 func Wait(ctx context.Context, ready func() bool)
 func WaitFor(ctx context.Context, ready func() bool, d time.Duration) bool
 func WaitIdle(ctx context.Context, ready func() bool)

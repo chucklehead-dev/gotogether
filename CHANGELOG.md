@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qenv.Unwinding(r)`: whether a recovered panic is qenv unwinding a
+  killed task, for an adapter whose caller releases a lock only on a
+  normal return (qsql under database/sql's Tx.QueryContext). A seam in
+  code that runs while Close unwinds a task (a deferred call) unwinds it
+  on, where it once handed control back early and left the task parked.
 - `qenv/qsql`: a database/sql driver over a `qenv.Store`, for an
   unmodified database/sql service in a simulation (`Open`, `Options`,
   `Change`, `Error`, `Table`): a SQL subset (CREATE TABLE, INSERT [ON

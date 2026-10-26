@@ -134,3 +134,23 @@ func BenchmarkBareSteps(b *testing.B) {
 		})
 	}
 }
+
+// A seam in a killed task's deferred code, as Close unwinds it, handed
+// control back early: Close took that for the task's end, and the task
+// stayed parked forever (TestMain's leak check). It now unwinds on.
+func TestDeferredSeamAtClose(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	ran := false
+	s.Spawn("sleeper", func(ctx context.Context) {
+		defer func() { ran = true }()
+		defer qenv.Sleep(ctx, time.Second) // a seam while it unwinds
+		qenv.Sleep(ctx, time.Hour)
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if !ran {
+		t.Fatal("the deferred code after the seam did not run")
+	}
+}

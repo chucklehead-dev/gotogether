@@ -432,6 +432,18 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 
 type killed struct{}
 
+// Unwinding reports whether r, recovered from a panic, is the one qenv
+// unwinds a killed task with (a crashed process's tasks, every task left
+// at Close). An adapter whose caller holds a lock it releases only on a
+// normal return (database/sql's Tx.QueryContext holds the Tx's closemu)
+// recovers it and returns an error instead, so the caller's deferred
+// cleanup does not wait on that lock forever; the task is unwound again
+// at its next seam. Any other panic it re-raises.
+func Unwinding(r any) bool {
+	_, ok := r.(killed)
+	return ok
+}
+
 // Yield lets the scheduler run another task. Seams call it; code outside a
 // simulation is unaffected.
 func Yield(ctx context.Context) {
@@ -446,6 +458,13 @@ func (t *task) park() {
 	if t.sim.nat != nil {
 		t.yieldNative()
 		return
+	}
+	if t.killed && t.sim.closed {
+		// a seam in code running as Close unwinds the task (a deferred
+		// call, or code after an adapter recovered the unwind): handing
+		// back here would end Close's wait for it early and leave it
+		// parked forever
+		panic(killed{})
 	}
 	if !t.handBack() {
 		panic(killed{}) // abandoned by the watchdog: it unwinds, touching nothing of the simulation's
