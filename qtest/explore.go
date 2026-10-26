@@ -1090,7 +1090,7 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 	case !j.ok && j.unjudged > 0 && j.n == 0:
 		return claimVerdict{say: func(testing.TB) string {
 			return fmt.Sprintf("want %s; %d of %d runs have no verdict (%s), and a claim that no run shows something does not hold of a run whose behaviour is not known: "+
-				"raise the budget (qtest.LinearizeBudget, a binding's hiddenDepth) or shorten the runs", describeClaim(c), j.unjudged, len(x.Runs), x.failingReasons())
+				"raise the budget (qtest.LinearizeBudget, a binding's hiddenDepth), shorten the runs, or check logs that kept their steps (a lost tail)", describeClaim(c), j.unjudged, len(x.Runs), x.failingReasons())
 		}}
 	case j.ok && j.show >= 0 && !every:
 		r := x.Runs[j.show]

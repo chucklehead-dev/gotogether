@@ -54,3 +54,39 @@ func TestClaimsOverLostTails(t *testing.T) {
 		t.Errorf("a run whose only failure has no verdict killed a mutant:\n%s", rep.Summary())
 	}
 }
+
+// A call invoked before its recorder's cut may have completed in the lost
+// tail: it is neither pending nor complete, so neither Completes() nor
+// None(Pending(...)) holds of the run, and Some(Pending(...)) is not
+// shown by it. The same call with no loss is pending.
+func TestPendingOverLostTails(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	c, err := validate.NewChecker("../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
+	steps := []qtrace.Step{
+		{Action: "deposit", Recorder: "a", Seq: 1, Time: at(10), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}},
+		{Action: "withdraw", Recorder: "a", Seq: 2, Time: at(15), Invocation: true, Args: map[string]any{"amount": int64(5)}},
+	}
+	for _, x := range []struct {
+		lost                          bool
+		completes, nonePending, shown bool
+	}{{true, false, false, false}, {false, false, false, true}} {
+		run := steps
+		if x.lost {
+			run = qtrace.MarkLost(steps, qtrace.Lost{Recorder: "a", After: 2})
+		}
+		rep, err := c.Check(context.Background(), run)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reps := []*validate.Report{rep}
+		completes, none, some := All(Completes()).judge(reps), None(Pending("")).judge(reps), Some(Pending("withdraw")).judge(reps)
+		if completes.ok != x.completes || none.ok != x.nonePending || some.ok != x.shown || x.lost && (completes.unjudged != 1 || none.unjudged != 1) {
+			t.Errorf("lost %v: Completes %+v, None(Pending) %+v, Some(Pending) %+v:\n%s", x.lost, completes, none, some, rep.Summary())
+		}
+	}
+}

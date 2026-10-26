@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -29,6 +30,10 @@ type Expectation struct {
 	actions, invariants []string
 	// violates is Violates' invariant, for At
 	violates string
+	// unknown, if set, reports a run whose verdict for the expectation is
+	// not known (a lost tail's): neither met nor missed, so a claim over
+	// it does not hold
+	unknown func(*validate.Report) bool
 }
 
 func (e Expectation) String() string { return e.desc }
@@ -41,7 +46,7 @@ func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.check(r.Re
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
 func Conforms() Expectation {
-	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, ""}
+	return Expectation{"conformance, with every invariant holding", func(r *validate.Report) bool { return r.OK() }, true, nil, nil, "", nil}
 }
 
 // Settles: the system settled, whatever its steps: the run recorded a
@@ -61,7 +66,7 @@ func Settles() Expectation {
 			}
 		}
 		return false
-	}, true, nil, nil, ""}
+	}, true, nil, nil, "", nil}
 }
 
 // Completes: every operation recorded at its invocation (qobs.Invoke)
@@ -69,31 +74,63 @@ func Settles() Expectation {
 // that crashes leaves its call pending by right, so state it of runs
 // whose callers do not crash (the core's clients under
 // qenv.Sim.SettleCore); Some(validate's pending call) is None(Completes()).
+//
+// A call whose completion may be in a recorder's lost tail (invoked before
+// its cut) is neither: a run with one is no verdict for it.
 func Completes() Expectation {
-	return Expectation{"every invoked operation completing", func(r *validate.Report) bool {
+	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool {
 		for _, a := range r.Actors {
-			if len(a.Pending) > 0 {
-				return false
+			for _, p := range a.Pending {
+				if !maybeCompleted(a, p) {
+					return false
+				}
 			}
 		}
 		return true
-	}, true, nil, nil, ""}
+	}, every: true, unknown: func(r *validate.Report) bool { return lostPending(r, "") }}
+}
+
+// maybeCompleted reports whether pending call p's completion may be in a
+// lost tail of a's: it was invoked before the cut of some recorder of a's
+// steps (a search re-sequences the caller's recorder: any lost tail is
+// taken as its).
+func maybeCompleted(a *validate.Result, p qtrace.Step) bool {
+	for _, l := range a.Lost {
+		if !p.Time.After(l.At.Add(qtrace.RealTimeSlack)) {
+			return true
+		}
+	}
+	return false
+}
+
+// lostPending reports whether r has a pending call of action ("": any)
+// whose completion may be lost.
+func lostPending(r *validate.Report, action string) bool {
+	for _, a := range r.Actors {
+		for _, p := range a.Pending {
+			if (action == "" || p.Action == action) && maybeCompleted(a, p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Pending: a call of this action was invoked (qobs.Invoke) and never
 // completed ("" matches any): Some(Pending("put")) states a call left
-// unanswered, None(Pending("")) the same as All(Completes()).
+// unanswered, None(Pending("")) the same as All(Completes()). A call whose
+// completion may be in a lost tail is neither pending nor not.
 func Pending(action string) Expectation {
 	return Expectation{desc: fmt.Sprintf("%s invoked and never completed", aCall(action)), check: func(r *validate.Report) bool {
 		for _, a := range r.Actors {
 			for _, p := range a.Pending {
-				if action == "" || p.Action == action {
+				if (action == "" || p.Action == action) && !maybeCompleted(a, p) {
 					return true
 				}
 			}
 		}
 		return false
-	}, actions: named(action)}
+	}, actions: named(action), unknown: func(r *validate.Report) bool { return lostPending(r, action) }}
 }
 
 // aCall names an action's call in a description.
@@ -181,6 +218,14 @@ func AnyOf(es ...Expectation) Expectation {
 	for _, x := range es {
 		e.actions = append(e.actions, x.actions...)
 		e.invariants = append(e.invariants, x.invariants...)
+	}
+	e.unknown = func(r *validate.Report) bool {
+		for _, x := range es {
+			if x.unknown != nil && x.unknown(r) {
+				return true
+			}
+		}
+		return false
 	}
 	return e
 }
@@ -325,7 +370,10 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 				}
 			}
 		case "all":
-			if !all {
+			switch {
+			case r != nil && q.unknownOf(r):
+				j.unjudged++ // (Completes of a run whose calls may have completed in a lost tail)
+			case !all:
 				j.n++
 				if j.show < 0 {
 					j.show = i
@@ -337,13 +385,24 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 				if j.show < 0 {
 					j.show = i
 				}
-			} else if r == nil || undecided(r) || q.unjudged(r) {
+			} else if r == nil || undecided(r) || q.unjudged(r) || q.unknownOf(r) {
 				j.unjudged++
 			}
 		}
 	}
 	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0
 	return j
+}
+
+// unknownOf reports whether r's verdict for one of q's expectations is
+// unknown (Expectation.unknown).
+func (q quantified) unknownOf(r *validate.Report) bool {
+	for _, e := range q.es {
+		if e.unknown != nil && e.unknown(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // unjudged reports whether r has no verdict for an invariant (or within,
