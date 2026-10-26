@@ -30,18 +30,46 @@ type Expectation struct {
 	actions, invariants []string
 	// violates is Violates' invariant, for At
 	violates string
-	// unknown, if set, reports a run whose verdict for the expectation is
-	// not known (a lost tail's): neither met nor missed, so a claim over
-	// it does not hold
-	unknown func(*validate.Report) bool
+	// tri, if set, is the expectation's value of a run when check's two
+	// do not say it: met, missed, or unknown (a call that may have
+	// completed in a lost tail), which no claim over it holds by
+	tri func(*validate.Report) tri
+}
+
+// tri is a three-valued verdict of an expectation on a run.
+type tri int8
+
+const (
+	no tri = iota
+	yes
+	unknown
+)
+
+// value is e's verdict on r: met, missed, or unknown. Unknown: no report,
+// e's own (tri), or, for one naming an invariant, a conforming actor
+// without a verdict for it (a lost tail's, hidden actions past their
+// cap).
+func (e Expectation) value(r *validate.Report) tri {
+	switch {
+	case r == nil:
+		return unknown
+	case e.tri != nil:
+		return e.tri(r)
+	case e.check(r):
+		return yes
+	case invariantUnknown(e.invariants, r):
+		return unknown
+	}
+	return no
 }
 
 func (e Expectation) String() string { return e.desc }
 
-// Holds reports whether the expectation holds of run r: the one judgment
+// Holds reports whether the expectation holds of run r (not when the run
+// has no verdict for it): the one judgment
 // Run.Expect makes, for a package judging runs it made (qhegel's
 // Violation, whose "nothing found" is a conforming run).
-func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.check(r.Report) }
+func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.value(r.Report) == yes }
 
 // Conforms: every actor's run is a behaviour of the model and satisfies
 // its invariants.
@@ -78,16 +106,19 @@ func Settles() Expectation {
 // A call whose completion may be in a recorder's lost tail (invoked before
 // its cut) is neither: a run with one is no verdict for it.
 func Completes() Expectation {
-	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool {
+	completes := func(r *validate.Report) tri {
+		v := yes
 		for _, a := range r.Actors {
 			for _, p := range a.Pending {
 				if !maybeCompleted(a, p) {
-					return false
+					return no // one certainly pending: missed, whatever the others
 				}
+				v = unknown
 			}
 		}
-		return true
-	}, every: true, unknown: func(r *validate.Report) bool { return lostPending(r, "") }}
+		return v
+	}
+	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool { return completes(r) == yes }, every: true, tri: completes}
 }
 
 // maybeCompleted reports whether pending call p's completion may be in a
@@ -103,34 +134,28 @@ func maybeCompleted(a *validate.Result, p qtrace.Step) bool {
 	return false
 }
 
-// lostPending reports whether r has a pending call of action ("": any)
-// whose completion may be lost.
-func lostPending(r *validate.Report, action string) bool {
-	for _, a := range r.Actors {
-		for _, p := range a.Pending {
-			if (action == "" || p.Action == action) && maybeCompleted(a, p) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // Pending: a call of this action was invoked (qobs.Invoke) and never
 // completed ("" matches any): Some(Pending("put")) states a call left
 // unanswered, None(Pending("")) the same as All(Completes()). A call whose
 // completion may be in a lost tail is neither pending nor not.
 func Pending(action string) Expectation {
-	return Expectation{desc: fmt.Sprintf("%s invoked and never completed", aCall(action)), check: func(r *validate.Report) bool {
+	pending := func(r *validate.Report) tri {
+		v := no
 		for _, a := range r.Actors {
 			for _, p := range a.Pending {
-				if (action == "" || p.Action == action) && !maybeCompleted(a, p) {
-					return true
+				switch {
+				case action != "" && p.Action != action:
+				case !maybeCompleted(a, p):
+					return yes // one certainly pending: met, whatever the others
+				default:
+					v = unknown
 				}
 			}
 		}
-		return false
-	}, actions: named(action), unknown: func(r *validate.Report) bool { return lostPending(r, action) }}
+		return v
+	}
+	return Expectation{desc: fmt.Sprintf("%s invoked and never completed", aCall(action)), check: func(r *validate.Report) bool { return pending(r) == yes },
+		actions: named(action), tri: pending}
 }
 
 // aCall names an action's call in a description.
@@ -207,25 +232,24 @@ func (e Expectation) At(action string) Expectation {
 
 // AnyOf: the report meets at least one of es.
 func AnyOf(es ...Expectation) Expectation {
-	e := Expectation{desc: describeOr(es), check: func(r *validate.Report) bool {
+	// three-valued: met if any part is, unknown if none is and some part
+	// is unknown, else missed
+	anyOf := func(r *validate.Report) tri {
+		v := no
 		for _, e := range es {
-			if e.check(r) {
-				return true
+			switch e.value(r) {
+			case yes:
+				return yes
+			case unknown:
+				v = unknown
 			}
 		}
-		return false
-	}}
+		return v
+	}
+	e := Expectation{desc: describeOr(es), check: func(r *validate.Report) bool { return anyOf(r) == yes }, tri: anyOf}
 	for _, x := range es {
 		e.actions = append(e.actions, x.actions...)
 		e.invariants = append(e.invariants, x.invariants...)
-	}
-	e.unknown = func(r *validate.Report) bool {
-		for _, x := range es {
-			if x.unknown != nil && x.unknown(r) {
-				return true
-			}
-		}
-		return false
 	}
 	return e
 }
@@ -347,12 +371,25 @@ func (q quantified) String() string {
 	return "no run showing " + strings.Join(d, ", or ")
 }
 
-func (q quantified) meets(r *validate.Report) (all, any bool) {
-	all = true
+// meets is the run's value for q's expectations together: all of them
+// (yes if each is, no if one is not, else unknown) and any of them (yes
+// if one is, unknown if none is and one is unknown, else no).
+func (q quantified) meets(r *validate.Report) (all, any tri) {
+	all, any = yes, no
 	for _, e := range q.es {
-		ok := r != nil && e.check(r)
-		all = all && ok
-		any = any || ok
+		switch e.value(r) {
+		case yes:
+			any = yes
+		case no:
+			all = no
+		case unknown:
+			if all == yes {
+				all = unknown
+			}
+			if any == no {
+				any = unknown
+			}
+		}
 	}
 	return all, any
 }
@@ -363,29 +400,30 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 		all, any := q.meets(r)
 		switch q.kind {
 		case "some":
-			if all {
+			if all == yes {
 				j.n++
 				if j.show < 0 {
 					j.show = i
 				}
 			}
 		case "all":
-			switch {
-			case r != nil && q.unknownOf(r):
-				j.unjudged++ // (Completes of a run whose calls may have completed in a lost tail)
-			case !all:
+			switch all {
+			case no:
 				j.n++
 				if j.show < 0 {
 					j.show = i
 				}
+			case unknown:
+				j.unjudged++ // (Completes of a run whose calls may have completed in a lost tail)
 			}
 		case "none":
-			if any {
+			switch {
+			case any == yes:
 				j.n++
 				if j.show < 0 {
 					j.show = i
 				}
-			} else if r == nil || undecided(r) || q.unjudged(r) || q.unknownOf(r) {
+			case any == unknown || undecided(r):
 				j.unjudged++
 			}
 		}
@@ -394,44 +432,31 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 	return j
 }
 
-// unknownOf reports whether r's verdict for one of q's expectations is
-// unknown (Expectation.unknown).
-func (q quantified) unknownOf(r *validate.Report) bool {
-	for _, e := range q.es {
-		if e.unknown != nil && e.unknown(r) {
-			return true
-		}
-	}
-	return false
-}
-
-// unjudged reports whether r has no verdict for an invariant (or within,
-// or eventual val) one of q's expectations names, in an actor that
+// invariantUnknown reports whether r has no verdict for one of
+// invariants (or a within, or an eventual val), in an actor that
 // conforms: one a lost tail left unjudged (validate.Result.Lost), or
 // hidden actions past their cap. That the run does not violate it is not
 // known. (An actor that does not conform violates no invariant, by
 // Violates' definition.)
-func (q quantified) unjudged(r *validate.Report) bool {
-	for _, e := range q.es {
-		for _, name := range e.invariants {
-			for _, a := range r.Actors {
-				if a.Conforms != validate.Pass {
-					continue
-				}
-				found := false
-				for _, inv := range a.Invariants {
-					if inv.Name == name {
-						found = true
-						if inv.Verdict == validate.NotEvaluated {
-							return true
-						}
+func invariantUnknown(invariants []string, r *validate.Report) bool {
+	for _, name := range invariants {
+		for _, a := range r.Actors {
+			if a.Conforms != validate.Pass {
+				continue
+			}
+			found := false
+			for _, inv := range a.Invariants {
+				if inv.Name == name {
+					found = true
+					if inv.Verdict == validate.NotEvaluated {
+						return true
 					}
 				}
-				// an eventual val a lost tail left unjudged is no result at
-				// all: the run might have settled, with the val false
-				if !found && len(a.Lost) > 0 && strings.HasPrefix(name, validate.EventuallyName("")) {
-					return true
-				}
+			}
+			// an eventual val a lost tail left unjudged is no result at
+			// all: the run might have settled, with the val false
+			if !found && len(a.Lost) > 0 && strings.HasPrefix(name, validate.EventuallyName("")) {
+				return true
 			}
 		}
 	}
@@ -490,7 +515,10 @@ func expectReport(t testing.TB, r *validate.Report, checks map[string]bool, es .
 		t.Fatalf("gotogether: the expectation names %s: a misspelled name never matches", strings.Join(u, "; "))
 	}
 	for _, e := range es {
-		if !e.check(r) {
+		switch e.value(r) {
+		case unknown:
+			t.Fatalf("gotogether: want %s: the run has no verdict for it (a lost tail, a search out of its budget), got:\n%s", e, r.Summary())
+		case no:
 			t.Fatalf("gotogether: want %s, got:\n%s", e, r.Summary())
 		}
 	}
@@ -534,13 +562,17 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 	}
 	if r.Report != nil && r.StepLog != "" {
 		for _, e := range es {
-			if !e.check(r.Report) {
+			if v := e.value(r.Report); v != yes {
 				itfs := make([]string, 0, len(r.ITF))
 				for _, k := range keysOf(r.ITF) {
 					itfs = append(itfs, r.ITF[k])
 				}
-				t.Fatalf("gotogether: want %s, got:\n%s  step log: %s\n  model-level ITF: %s",
-					e, r.Report.Summary(), r.StepLog, strings.Join(itfs, ", "))
+				why := ""
+				if v == unknown {
+					why = ": the run has no verdict for it (a lost tail, a search out of its budget)"
+				}
+				t.Fatalf("gotogether: want %s%s, got:\n%s  step log: %s\n  model-level ITF: %s",
+					e, why, r.Report.Summary(), r.StepLog, strings.Join(itfs, ", "))
 			}
 		}
 	}

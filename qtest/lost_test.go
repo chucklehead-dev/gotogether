@@ -90,3 +90,49 @@ func TestPendingOverLostTails(t *testing.T) {
 		}
 	}
 }
+
+// Wherever a claim is read, a run with no verdict for it neither meets
+// nor misses it: Holds is false, Some does not hold and None counts it
+// unjudged; a part that holds decides AnyOf whatever the others; and a
+// call certainly pending misses Completes whatever another may have done.
+func TestUnknownClaimsEverywhere(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	c, err := validate.NewChecker("../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
+	deposit := qtrace.Step{Action: "deposit", Recorder: "a", Seq: 1, Time: at(10), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
+	maybe := qtrace.Step{Action: "withdraw", Recorder: "a", Seq: 2, Time: at(15), Invocation: true, Args: map[string]any{"amount": int64(5)}}
+	certain := qtrace.Step{Action: "withdraw", Recorder: "b", Seq: 1, Time: at(30), Invocation: true, Args: map[string]any{"amount": int64(1)}}
+	lost := qtrace.Lost{Recorder: "a", After: 2}
+	check := func(steps []qtrace.Step) *Run {
+		rep, err := c.Check(context.Background(), qtrace.MarkLost(steps, lost))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Run{Report: rep}
+	}
+	r := check([]qtrace.Step{deposit, maybe})
+	reps := []*validate.Report{r.Report}
+	if Completes().Holds(r) {
+		t.Errorf("Completes holds of a run whose call may have completed")
+	}
+	if j := Some(Completes()).judge(reps); j.ok {
+		t.Errorf("Some(Completes()) %+v", j)
+	}
+	if j := None(Completes()).judge(reps); j.ok || j.n != 0 || j.unjudged != 1 {
+		t.Errorf("None(Completes()) %+v, want unjudged", j)
+	}
+	if j := All(AnyOf(Completes(), Conforms())).judge(reps); !j.ok {
+		t.Errorf("All(AnyOf(Completes(), Conforms())) %+v: Conforms holds", j)
+	}
+	if j := All(AnyOf(Rejects(""), Completes())).judge(reps); j.ok || j.unjudged != 1 {
+		t.Errorf("All(AnyOf(Rejects, Completes())) %+v, want unjudged", j)
+	}
+	r = check([]qtrace.Step{deposit, maybe, certain})
+	if j := All(Completes()).judge([]*validate.Report{r.Report}); j.ok || j.n != 1 || j.unjudged != 0 {
+		t.Errorf("All(Completes()) with a call certainly pending %+v, want missed", j)
+	}
+}
