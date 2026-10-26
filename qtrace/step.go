@@ -45,6 +45,12 @@ const (
 	// then. A trace whose recorder's last record is one is Trace.Settled,
 	// and only such a trace's eventual properties are judged.
 	KeySettled = "quint.settled"
+	// KeyLost marks a loss record (MarkLost, or ReadJSONL for a torn
+	// tail): its recorder lost steps its log cannot show, "suffix" (every
+	// step after KeyLostAfter's seq) or "prefix" (every step up to it). A
+	// record, not a step: Reconstruct keeps it as Trace.Lost.
+	KeyLost      = "quint.lost"
+	KeyLostAfter = "quint.lost_after" // on a loss record: the seq the loss is after (a suffix) or up to (a prefix)
 	// KeyAssumed marks an assumed step (Step.Ambiguous): a pending call's
 	// effect a resolution placed, with no expect checked after it.
 	KeyAssumed = "quint.assumed"
@@ -77,6 +83,11 @@ type Step struct {
 	Call       uint64
 	// Settled marks a settle record (KeySettled), not a step.
 	Settled bool
+	// Lost marks a loss record (KeyLost), not a step: "suffix" (its
+	// recorder lost every step after seq LostAfter) or "prefix" (every
+	// step up to it); "" for any other.
+	Lost      string
+	LostAfter uint64
 	// Ambiguous marks a step whose effect is assumed, not observed: a
 	// pending call resolved as having taken effect (qtest.ResolvePending).
 	// It has no outcome and no observations, and the binding checks no
@@ -91,10 +102,10 @@ type Step struct {
 	Source     string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
 }
 
-// Model reports whether s is a model step: not an invocation record or a
-// settle record, which Reconstruct takes out of the steps. A sink that
-// counts or replays steps skips the others.
-func (s *Step) Model() bool { return !s.Invocation && !s.Settled }
+// Model reports whether s is a model step: not an invocation record, a
+// settle record or a loss record, which Reconstruct takes out of the
+// steps. A sink that counts or replays steps skips the others.
+func (s *Step) Model() bool { return !s.Invocation && !s.Settled && s.Lost == "" }
 
 // Get returns an argument or, with the "obs." prefix, an observation.
 func (s *Step) Get(name string) (any, bool) {
@@ -160,6 +171,19 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 		}
 		if v, ok := layers[0][KeySettled]; ok {
 			s.Settled = v == true || fmt.Sprint(v) == "true"
+		}
+		if v, ok := layers[0][KeyLost]; ok {
+			s.Lost = fmt.Sprint(v)
+			if s.Lost != "suffix" && s.Lost != "prefix" {
+				return s, fmt.Errorf("%s: %s: %q is no loss (\"suffix\" or \"prefix\")", EventName, KeyLost, s.Lost)
+			}
+			if v, ok := layers[0][KeyLostAfter]; ok {
+				n, err := toInt(v)
+				if err != nil || n < 0 {
+					return s, fmt.Errorf("%s: %s: not a seq: %v", EventName, KeyLostAfter, v)
+				}
+				s.LostAfter = uint64(n)
+			}
 		}
 		if v, ok := layers[0][KeyAssumed]; ok {
 			s.Ambiguous = v == true || fmt.Sprint(v) == "true"

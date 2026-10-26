@@ -21,8 +21,13 @@ type Trace struct {
 	// qenv.Sim.Settle that found it quiet) with nothing recorded after it
 	// by that recorder, and this actor took a step. Only then are the
 	// binding's eventual properties judged: a run cut short has work
-	// pending by right.
+	// pending by right. A recorder's lost tail (Lost) leaves it unsettled:
+	// what it recorded after, a settle included, is unknown.
 	Settled bool
+	// Lost are the losses of the recorders of this actor's steps (a log
+	// that starts after seq 1, a torn tail, MarkLost's), by recorder. A
+	// lost prefix is an issue too (Lost.Issue).
+	Lost []Lost
 }
 
 // Issue is something the reconstructor could not make sense of. Severity
@@ -30,7 +35,7 @@ type Trace struct {
 // missing); "warn" means the result is still meaningful.
 type Issue struct {
 	Severity string // "error" | "warn" | "info"
-	Kind     string // "gap", "duplicate", "cycle", "overlap", "unordered"
+	Kind     string // "gap", "lost-prefix", "duplicate", "cycle", "overlap", "unordered"
 	Msg      string
 }
 
@@ -76,31 +81,103 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 
 	// 2. Gaps: seq is dense per recorder, so a hole is a lost step (sampling,
 	// a dropped export, a crash before flush). We cannot tell which actor it
-	// belonged to, so every actor of that recorder is affected.
+	// belonged to, so every actor of that recorder is affected. A log that
+	// starts after seq 1 lost a prefix, not a step: its first state is not
+	// init (Lost.Issue), which a snapshot step at its head can say. Loss
+	// records (MarkLost, a torn tail) declare what a log cannot show.
 	byRec := map[string][]uint64{}
 	recActors := map[string]map[string]bool{}
+	firstAt := map[string]time.Time{} // each recorder's first step's time
+	firstSeq := map[string]uint64{}
+	declared := map[string][]Step{} // loss records, by recorder
 	for _, s := range uniq {
+		if s.Lost != "" {
+			declared[s.Recorder] = append(declared[s.Recorder], s)
+			continue
+		}
 		byRec[s.Recorder] = append(byRec[s.Recorder], s.Seq)
 		if recActors[s.Recorder] == nil {
 			recActors[s.Recorder] = map[string]bool{}
 		}
 		recActors[s.Recorder][s.Actor] = true
+		// the lowest seq, a step without one only if it has none (then the
+		// earliest)
+		if f, ok := firstSeq[s.Recorder]; !ok || s.Seq != 0 && (f == 0 || s.Seq < f) || s.Seq == f && s.Time.Before(firstAt[s.Recorder]) {
+			firstSeq[s.Recorder], firstAt[s.Recorder] = s.Seq, s.Time
+		}
 	}
 	gapActors := map[string][]string{}
-	for rec, seqs := range byRec {
+	lostActors := map[string][]Lost{}
+	lostTail := false // some recorder lost its tail: no settle settles the run
+	recs := make([]string, 0, len(byRec)+len(declared))
+	for rec := range byRec {
+		recs = append(recs, rec)
+	}
+	for rec := range declared {
+		if _, ok := byRec[rec]; !ok {
+			recs = append(recs, rec)
+		}
+	}
+	sort.Strings(recs)
+	for _, rec := range recs {
+		seqs := byRec[rec]
 		sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
 		var missing []uint64
-		next := uint64(1)
+		var first, next uint64 // the first seq, and the one expected next
 		for _, q := range seqs {
+			if q == 0 {
+				continue // a step without a seq: nothing to count
+			}
+			if first == 0 {
+				first, next = q, q
+			}
 			for ; next < q && len(missing) < 20; next++ {
 				missing = append(missing, next)
 			}
 			next = q + 1
 		}
 		if len(missing) > 0 {
-			msg := fmt.Sprintf("recorder %s is missing seq %v (of 1..%d): steps were lost or sampled out", rec, missing, seqs[len(seqs)-1])
+			msg := fmt.Sprintf("recorder %s is missing seq %v (of %d..%d): steps were lost or sampled out", rec, missing, first, seqs[len(seqs)-1])
 			for a := range recActors[rec] {
 				gapActors[a] = append(gapActors[a], msg)
+			}
+		}
+		var losses []Lost
+		if first > 1 {
+			losses = append(losses, Lost{Recorder: rec, Prefix: true, After: first - 1, At: firstAt[rec]})
+		}
+		for _, d := range declared[rec] {
+			l := Lost{Recorder: rec, Prefix: d.Lost == "prefix", After: d.LostAfter, At: d.Time}
+			// one loss of each kind per recorder: the longest prefix, the
+			// earliest cut
+			merged := false
+			for i := range losses {
+				o := &losses[i]
+				if o.Prefix != l.Prefix {
+					continue
+				}
+				merged = true
+				if l.Prefix && l.After > o.After || !l.Prefix && l.After < o.After {
+					o.After = l.After
+				}
+				if l.Prefix && o.At.IsZero() || !l.Prefix && l.At.Before(o.At) {
+					o.At = l.At
+				}
+			}
+			if !merged {
+				if l.Prefix && l.At.IsZero() {
+					l.At = firstAt[rec]
+				}
+				losses = append(losses, l)
+			}
+		}
+		sort.SliceStable(losses, func(i, j int) bool { return losses[i].Prefix && !losses[j].Prefix })
+		for _, l := range losses {
+			// (a recorder whose every step was lost is no actor's: whose
+			// steps they were is unknown; its tail still settles nothing)
+			lostTail = lostTail || !l.Prefix
+			for a := range recActors[rec] {
+				lostActors[a] = append(lostActors[a], l)
 			}
 		}
 	}
@@ -121,7 +198,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 		if s.Settled {
 			lastSettle[s.Recorder] = max(lastSettle[s.Recorder], s.Seq)
-		} else {
+		} else if s.Lost == "" {
 			last[s.Recorder] = max(last[s.Recorder], s.Seq)
 		}
 	}
@@ -141,7 +218,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		var later *Step
 		for i := range uniq {
 			o := &uniq[i]
-			if o.Recorder != rec && !o.Settled && o.Time.After(settleAt[rec].Add(RealTimeSlack)) {
+			if o.Recorder != rec && !o.Settled && o.Lost == "" && o.Time.After(settleAt[rec].Add(RealTimeSlack)) {
 				later = o
 				break
 			}
@@ -153,11 +230,15 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 		settled = true
 	}
+	if settled && lostTail {
+		issues = append(issues, Issue{"warn", "settle", "a recorder lost its tail (Trace.Lost): what it recorded after, a settle or a step after one, is unknown, and the settle settles nothing"})
+		settled = false
+	}
 	pending := map[string][]Step{}
 	steps = uniq[:0:0]
 	for _, s := range uniq {
 		switch {
-		case s.Settled:
+		case s.Settled, s.Lost != "":
 		case !s.Invocation:
 			// a completion was invoked when its invocation record was
 			// written: the recorder's own clock, the one its Time is on (a
@@ -192,6 +273,12 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		t.Pending = pending[a]
 		t.Settled = settled && len(t.Steps) > 0
 		sort.SliceStable(t.Pending, func(i, j int) bool { return t.Pending[i].Time.Before(t.Pending[j].Time) })
+		t.Lost = lostActors[a]
+		for _, l := range t.Lost {
+			if l.Prefix {
+				t.Issues = append(t.Issues, l.Issue())
+			}
+		}
 		for _, m := range gapActors[a] {
 			t.Issues = append(t.Issues, Issue{"error", "gap", m})
 		}

@@ -332,7 +332,7 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 		tr, part, o := j.tr, j.part, j.o
 		actor := part.Actor // as the report names it ("" for no actor)
 		for _, i := range tr.Issues {
-			if i.Kind == "gap" || i.Kind == "cycle" {
+			if i.Kind == "gap" || i.Kind == "lost-prefix" || i.Kind == "cycle" {
 				kept[actor] = append(kept[actor], i)
 			}
 		}
@@ -996,7 +996,7 @@ func resolve(ch *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, i
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
 	for _, tr := range traces {
 		for _, i := range tr.Issues {
-			if i.Kind == "gap" || i.Kind == "cycle" {
+			if i.Kind == "gap" || i.Kind == "lost-prefix" || i.Kind == "cycle" {
 				kept[tr.Actor] = append(kept[tr.Actor], i)
 			}
 		}

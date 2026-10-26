@@ -18,12 +18,14 @@ func (k *Keyer) Step(s *Step) string {
 	if !s.Invoked.IsZero() {
 		times = fmt.Sprintf("|%d-%d", s.Invoked.UnixNano(), s.Time.UnixNano())
 	}
-	var rec string // an invocation (and its completion) or settle record is no step
+	var rec string // an invocation (and its completion), settle or loss record is no step
 	switch {
 	case s.Invocation:
 		rec = "|invoked"
 	case s.Settled:
 		rec = "|settled"
+	case s.Lost != "":
+		rec = fmt.Sprintf("|lost-%s%d", s.Lost, s.LostAfter)
 	case s.Call != 0:
 		rec = fmt.Sprintf("|call%d", s.Call)
 	}

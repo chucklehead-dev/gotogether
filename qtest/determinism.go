@@ -77,7 +77,7 @@ func (r *renaming) same(a, b string) bool {
 func sameStep(a, b qtrace.Step) bool {
 	return a.Action == b.Action && a.Outcome == b.Outcome && a.Error == b.Error && reflect.DeepEqual(a.Args, b.Args) &&
 		reflect.DeepEqual(a.Obs, b.Obs) && reflect.DeepEqual(a.Order, b.Order) &&
-		a.Invocation == b.Invocation && a.Call == b.Call && a.Settled == b.Settled
+		a.Invocation == b.Invocation && a.Call == b.Call && a.Settled == b.Settled && a.Lost == b.Lost && a.LostAfter == b.LostAfter
 }
 
 // checkDeterminism runs seed again and fails t, naming the first

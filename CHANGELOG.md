@@ -290,6 +290,12 @@ The first release. What a user meets, by module:
   after a signal, passed linearized. An actor of which no step has an
   invocation time is warned of (sequential consistency, not
   linearizability).
+- Partial logs (S11): a recorder whose log starts after seq 1 lost a
+  prefix, an error of its own (`lost-prefix`, naming the fix), not a gap;
+  `qtrace.Trace.Lost` lists each recorder's losses (`qtrace.Lost`). A loss
+  record (`quint.lost`, `Step.Lost`) declares one a log cannot show:
+  `qtrace.MarkLost`, and `ReadJSONL` for a torn tail, after each of the
+  log's recorders' last seq. A lost tail leaves the run unsettled.
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

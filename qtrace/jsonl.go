@@ -35,6 +35,9 @@ func (s *Step) Attributes() map[string]any {
 	if s.Settled {
 		m[KeySettled] = true
 	}
+	if s.Lost != "" {
+		m[KeyLost], m[KeyLostAfter] = s.Lost, int64(s.LostAfter)
+	}
 	if s.Ambiguous {
 		m[KeyAssumed] = true
 	}
@@ -90,7 +93,10 @@ func (e *TornTail) Error() string {
 // per line. Blank lines are skipped. A last line that is cut off (no
 // newline, not a whole object) does not lose the log: ReadJSONL returns
 // the steps before it with a *TornTail error, which a caller may report
-// and go on.
+// and go on. The steps then end in a loss record (MarkLost) for the last
+// recorder of the steps kept, after its last seq: the cut step was its,
+// and so is anything it recorded after (a run whose other recorders went
+// on is judged knowing that).
 func ReadJSONL(r io.Reader) ([]Step, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -107,7 +113,7 @@ func ReadJSONL(r io.Reader) ([]Step, error) {
 		s, err := parseLine(line, n)
 		if err != nil {
 			if i == len(lines)-1 { // no newline after it: the writer stopped here
-				return out, &TornTail{Line: n, Text: raw}
+				return tornAt(out), &TornTail{Line: n, Text: raw}
 			}
 			return nil, err
 		}
@@ -146,4 +152,25 @@ func parseLine(line string, n int) (Step, error) {
 	}
 	s.Source = fmt.Sprintf("line %d", n)
 	return s, nil
+}
+
+// tornAt is a torn log's steps with the loss of each of its recorders'
+// tails declared: the cut line was one of theirs, which the cut may not
+// name, and the process writing the log stopped for all of them.
+func tornAt(steps []Step) []Step {
+	last := map[string]uint64{}
+	var recs []string
+	for _, s := range steps {
+		if s.Lost != "" {
+			continue
+		}
+		if _, ok := last[s.Recorder]; !ok {
+			recs = append(recs, s.Recorder)
+		}
+		last[s.Recorder] = max(last[s.Recorder], s.Seq)
+	}
+	for _, r := range recs {
+		steps = MarkLost(steps, Lost{Recorder: r, After: last[r]})
+	}
+	return steps
 }
