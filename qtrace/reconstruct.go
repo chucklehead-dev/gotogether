@@ -279,6 +279,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		settled = false
 	}
 	pending := map[string][]Step{}
+	callIssues := map[string][]Issue{}
 	steps = uniq[:0:0]
 	for _, s := range uniq {
 		switch {
@@ -289,6 +290,15 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			// simulation's true time), whatever "invoked" said
 			if t, ok := invokedAt[rk{s.Recorder, s.Call}]; ok && s.Call != 0 {
 				s.Invoked, s.fromRecord = t, true
+				// the record's time is trusted as the call's start: one
+				// after its completion, or a completion numbered before
+				// its invocation, is an adapter's or a recorder's error
+				switch {
+				case s.Seq != 0 && s.Seq <= s.Call:
+					callIssues[s.Actor] = append(callIssues[s.Actor], Issue{"error", "invocation", fmt.Sprintf("%s (seq %d) completes the invocation of seq %d, which is not before it: a completion follows its invocation record in its recorder's sequence (an adapter numbering records out of order?)", s.Action, s.Seq, s.Call)})
+				case t.After(s.Time.Add(RealTimeSlack)):
+					callIssues[s.Actor] = append(callIssues[s.Actor], Issue{"error", "invocation", fmt.Sprintf("%s (seq %d) completed at %s, before its invocation record (seq %d) at %s: an invocation's time is when the call began, by the clock of its completion (an adapter that timed it after the outcome?)", s.Action, s.Seq, s.Time.Format(time.RFC3339Nano), s.Call, t.Format(time.RFC3339Nano))})
+				}
 			}
 			if s.Ref == "" && s.Call != 0 { // a driver may link only the call's start to its artifact
 				s.Ref = invokedRef[rk{s.Recorder, s.Call}]
@@ -329,6 +339,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		for _, m := range gapActors[a] {
 			t.Issues = append(t.Issues, Issue{"error", "gap", m})
 		}
+		t.Issues = append(t.Issues, callIssues[a]...)
 		out = append(out, t)
 	}
 	return out, issues

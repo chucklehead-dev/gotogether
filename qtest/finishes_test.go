@@ -151,3 +151,32 @@ func TestFinishesWithNoEventualValIsMissed(t *testing.T) {
 		t.Errorf("AnyOf(Finishes(), ...) explains %q", w)
 	}
 }
+
+// Undecided states a run's missing verdict: met by a lost tail's run
+// (naming the loss), missed by a run that finishes and by one that
+// certainly misses, and by a cause it does not name.
+func TestUndecided(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	const journey = "testdata/journey.yaml"
+	lost := Validate(t, journey, qtrace.MarkLost(journeySteps("submit", "accept", "ready"), qtrace.Lost{Recorder: "r", After: 3}))
+	finished := Validate(t, journey, journeySteps("submit", "accept", "ready", "collect", "settled"))
+	prefix := Validate(t, journey, journeySteps("submit", "accept", "ready"))
+	for _, x := range []struct {
+		name string
+		run  *Run
+		e    Expectation
+		met  bool
+	}{
+		{"a lost tail", lost, Undecided(Finishes()), true},
+		{"a lost tail, naming it", lost, Undecided(Finishes(), "lost its tail"), true},
+		{"a lost tail, naming another cause", lost, Undecided(Finishes(), "budget"), false},
+		{"a finished run", finished, Undecided(Finishes()), false},
+		{"a prefix (certainly missing)", prefix, Undecided(Finishes()), false},
+	} {
+		if got := x.e.Holds(x.run); got != x.met {
+			t.Errorf("%s: %s holds %v, want %v:\n%s", x.name, x.e, got, x.met, x.run.Report.Summary())
+		}
+	}
+	lost.Expect(t, Undecided(Finishes(), "lost its tail"))
+}

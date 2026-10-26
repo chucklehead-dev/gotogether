@@ -177,6 +177,41 @@ func (e Expectation) explain(r *validate.Report) string {
 	return ""
 }
 
+// Undecided: the run has no verdict for e (a lost tail, which may hold
+// the settle or a call's answer; a search out of its budget), and e's
+// explanation of it names every one of because ("lost its tail"): the
+// claim a test makes of a run that must neither pass nor fail e, without
+// walking its report. A run that meets e, or misses it, misses this.
+func Undecided(e Expectation, because ...string) Expectation {
+	desc := "no verdict for " + e.desc
+	if len(because) > 0 {
+		desc += " (naming " + strings.Join(because, ", ") + ")"
+	}
+	value := func(r *validate.Report) tri {
+		if e.value(r) != unknown {
+			return no
+		}
+		why := e.explain(r)
+		for _, b := range because {
+			if !strings.Contains(why, b) {
+				return no
+			}
+		}
+		return yes
+	}
+	return Expectation{desc: desc, check: func(r *validate.Report) bool { return value(r) == yes }, every: true,
+		actions: e.actions, invariants: e.invariants, tri: value, undecided: true,
+		why: func(r *validate.Report) string {
+			switch e.value(r) {
+			case yes:
+				return "it meets it"
+			case no:
+				return "it misses it" + e.explain(r)
+			}
+			return "its explanation is" + e.explain(r)
+		}}
+}
+
 // maybeCompleted reports whether pending call p's completion may be in a
 // lost tail of a's: it was invoked before the cut of some recorder of a's
 // steps (a search re-sequences the caller's recorder: any lost tail is

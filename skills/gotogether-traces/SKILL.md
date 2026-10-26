@@ -104,6 +104,8 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   - `qtest.Finishes()`: the run is a finished journey, not a conforming
     prefix: settled, every eventual val judged and true, every call
     completed.
+  - `qtest.Undecided(qtest.Finishes(), "lost its tail")`: the run has no
+    verdict for it (a lost tail), and says why.
 
   On a miss, the failure message is the report.
 - In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use

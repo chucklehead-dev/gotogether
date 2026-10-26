@@ -1397,6 +1397,7 @@ func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option
 func Some(es ...Expectation) Claim
 func Takes(action string) Take
+func Undecided(e Expectation, because ...string) Expectation
 func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
 func Violates(invariant string) Expectation
 type Bound struct

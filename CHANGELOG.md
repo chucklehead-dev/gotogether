@@ -8,6 +8,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtest.Undecided(e, because...)`: the claim that a run has no verdict
+  for an expectation (a lost tail, a search out of its budget), its
+  explanation naming each cause given, so a test states a run that must
+  neither pass nor fail without walking its report. `qtrace.Reconstruct`
+  reports an error issue (kind `invocation`) for a completion timed
+  before its invocation record (by more than `RealTimeSlack`), or
+  numbered at or before it: an invocation record's time is taken as the
+  call's start, and was not checked.
 - Run manifests: `gotogether.run/1` (`validate.Manifest`), so a failure
   of a run gotogether did not drive travels: tool versions, the binding,
   spec, rules and inputs with their sha256 and losses, constants,
