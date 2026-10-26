@@ -66,6 +66,49 @@ func TestHangAllowsAShortRealWait(t *testing.T) {
 
 func blockOnChannel(ch chan struct{}) { <-ch }
 
+// realWait holds the calling task up outside the simulation for d of wall
+// time: a real call that returns.
+func realWait(d time.Duration) {
+	ch := make(chan struct{})
+	go func() { time.Sleep(d); close(ch) }() //qenv:ok a real call that returns, outside the simulation
+	<-ch
+}
+
+// The watchdog measures one wake from the tick that first saw it: a wait
+// shorter than Hang that spans several of its ticks (it looks every Hang/4)
+// is no hang, nor is the task's state changing between ticks (a new wake).
+// Hang is 1s and the wait 600ms: at least two ticks see the same wake,
+// 250ms apart, 400ms short of Hang.
+func TestHangMeasuresOneWakeAcrossTicks(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	s.Hang = time.Second
+	s.Spawn("slow", func(ctx context.Context) {
+		qenv.Yield(ctx)
+		realWait(600 * time.Millisecond)
+		qenv.Yield(ctx)
+	})
+	if err := s.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Hang 0 turns the watchdog off: a task held up in real time for many of
+// the ticks a watchdog would make is let be.
+func TestHangZeroIsOff(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	s.Hang = 0
+	s.Spawn("slow", func(ctx context.Context) {
+		qenv.Yield(ctx)
+		realWait(50 * time.Millisecond)
+	})
+	if err := s.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+
 // runPanics runs s and returns what Run panicked with.
 func runPanics(t *testing.T, s *qenv.Sim) (msg string) {
 	t.Helper()

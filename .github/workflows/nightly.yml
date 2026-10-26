@@ -78,35 +78,42 @@ jobs:
         # (internal/depgraph: sorting the nodes Tarjan visits, whose
         # components are sorted after)
         include:
-          # qtrace: 16 of 236, each read. Equivalent: realTime's loop bounds
-          # (33, 35, 38: earliest[0] is never read, earliest[k] >= k); a seq
-          # equal to a Call or a pending call's own (47, 53: that record is
-          # never among the steps); a rejected order's state (77: never
-          # read); a budget's last turn (85, 110, 113, 114: it checks
-          # nothing); a reorder at the first step (94: nothing to move);
-          # the comparator's < on values never equal (151, 152); the time
-          # key left in a line's attributes (27: nothing reads it); the
-          # assumed mark inverted for every step alike (30: the same groups
-          # of equal keys). 103 ties the guided search's best move
-          # otherwise: another path, the same verdicts.
+          # qtrace: 20 of 279, each read. Equivalent: realTime's loop bounds
+          # (37, 39, 42: earliest[0] is never read, earliest[k] >= k); a seq
+          # equal to a Call or to another step's of its recorder (51, 57:
+          # that record is never among the steps, seqs are deduplicated);
+          # a rejected order's state (83: never read); a budget's last turn
+          # (91, 119, 120: it checks nothing); a complete search that tried
+          # nothing (116: needs a budget under 1, which Linearize never
+          # passes); a move to the front of what is first (67, 100: nothing
+          # to move); the comparator's < on values never equal (189, 190);
+          # the time key left in a line's attributes (29: nothing reads it);
+          # the assumed mark inverted for every step alike (34: the same
+          # groups of equal keys); a recorder's first seq against an equal
+          # one (152: seqs are deduplicated first); a merged loss's After
+          # set to the equal value it has (164, 165). 109 ties the guided
+          # search's best move otherwise: another path, the same verdicts.
           - pkg: qtrace
-            max: 16
-          # qenv: 21 of 892, each read. Two need gosim's cooperative
+            max: 20
+          # qenv: 22 of 914, each read. Two need gosim's cooperative
           # runtime, which only its module runs: a release dropped on a
-          # Platform (568: enqueue, 341: a task that crashes its own
+          # Platform (572: enqueue, 341: a task that crashes its own
           # process). Equivalent: the history checker's rotation of a cycle
           # that starts at its closer (22, 23); the profile key's separator
           # (27: pcs and names never collide); a nominal option's name, ""
           # either way (102); PCT's depth 1 set to 1 (158); sorts of what
-          # is handled one at a time (193: a disk's files, 815: a crashed
+          # is handled one at a time (193: a disk's files, 837: a crashed
           # process's transactions); a stopped timer nothing reads (305);
-          # bookkeeping kept past use (363, 882); IDs a queue never repeats
+          # bookkeeping kept past use (363, 904); IDs a queue never repeats
           # (401); a Notify that wakes no one (433, 442); a step count never
-          # below 0 (470); a finished task never queued (546); stale timer
-          # entries popped elsewhere (704, 722); bounds a case before
-          # already decides (715, 718).
+          # below 0 (470); a finished task never queued (548); stale timer
+          # entries popped elsewhere (711, 729); bounds a case before
+          # already decides (722: the run queue's k-th past its end is an
+          # id above every task's; 725: pos == k returned first); the
+          # watchdog's last task left after Run (789: Run returns only when
+          # every task handed back, and a parked task is skipped).
           - pkg: qenv
-            max: 21
+            max: 22
           - pkg: qhistory
             max: 0
           - pkg: internal/depgraph
@@ -207,6 +214,12 @@ jobs:
         run: ci/install-quint.sh
       - name: the tests, every judgement checked by both
         working-directory: examples/${{ matrix.example }}
+        env:
+          # fleetrollout runs nine explorations: at 500 seeds each, 4500
+          # runs at the 1.0 s a run takes CI's -short tier (49 s for 48),
+          # more with both evaluators, would not fit 110m. 150 seeds (1350
+          # runs, about 35 minutes) still exceed every test's own count.
+          GOTOGETHER_SEEDS: ${{ matrix.example == 'fleetrollout' && '150' || '500' }}
         run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ./...
       - name: the core's searches, checked by both
         if: matrix.example == 'wallet'
