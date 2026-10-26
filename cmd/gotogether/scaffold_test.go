@@ -9,15 +9,14 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // scaffold -system prints a test that compiles as it is, and whose
 // conformance test fails, saying what to do, until Run records steps;
 // its mutant test skips until written, and fails under GOTOGETHER_STRICT=1.
 func TestScaffoldSystem(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	b, err := binding.Load("../../examples/bank/bank.binding.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -71,9 +70,7 @@ func TestScaffoldSystem(t *testing.T) {
 // every run did: its eventual vals are judged only after a settle, and a
 // scaffold without one passed with them unjudged.
 func TestScaffoldSystemSettles(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	b, err := binding.Load("../../examples/quorumkv/quorumkv.binding.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -126,9 +123,7 @@ func TestScaffoldOut(t *testing.T) {
 // it checks every boolean val and classifies them for simulate, and once
 // its constants are set it lints and simulates.
 func TestScaffoldBindingChecks(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	dir := t.TempDir()
 	spec, err := filepath.Abs("../../validate/testdata/account.qnt")
 	if err != nil {

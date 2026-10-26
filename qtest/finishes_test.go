@@ -133,3 +133,21 @@ func TestFinishesOverLostTails(t *testing.T) {
 		t.Errorf("a rejected step before a lost tail: %v:\n%s", v, bad.Summary())
 	}
 }
+
+// A settled run that judged no eventual val finishes by no binding, so
+// it is missed whatever else has no verdict (a search out of its
+// budget): None(Finishes()) holds of it. AnyOf keeps a Finishes part's
+// explanation.
+func TestFinishesWithNoEventualValIsMissed(t *testing.T) {
+	t.Parallel()
+	r := &validate.Report{Actors: []*validate.Result{{Actor: "a", Conforms: validate.NotEvaluated, Settled: true}}}
+	if v, why := finishes(r); v != no || !strings.Contains(why, "no eventual val") {
+		t.Errorf("settled, no eventual val, no verdict on conformance: %v (%s)", v, why)
+	}
+	if j := None(Finishes()).judge([]*validate.Report{r}); !j.ok {
+		t.Errorf("None(Finishes()): %+v", j)
+	}
+	if w := AnyOf(Finishes(), Rejects("x")).explain(r); !strings.Contains(w, "no eventual val") {
+		t.Errorf("AnyOf(Finishes(), ...) explains %q", w)
+	}
+}

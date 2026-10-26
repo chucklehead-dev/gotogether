@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -33,9 +33,7 @@ func gossipStep(seq int, node string, value int, seen []int) qtrace.Step {
 // never written does not, and one two hops away needs a depth of two. The
 // report says the evaluator judged it.
 func TestHiddenActions(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/gossip.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -142,9 +140,7 @@ func TestHiddenActions(t *testing.T) {
 // conforms.
 func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/ticks.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -172,9 +168,7 @@ func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
 // may have brought, some what it could not).
 func TestHiddenAgainstBruteForce(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("checks 60 histories with the evaluator's search")
 	}

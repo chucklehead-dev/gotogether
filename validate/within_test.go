@@ -3,12 +3,12 @@ package validate
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -19,9 +19,7 @@ import (
 // second heal answered late fails though the first was answered in time.
 func TestWithin(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -108,9 +106,7 @@ func TestWithin(t *testing.T) {
 // whose invocation is past the bound fails.
 func TestWithinIntervals(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

@@ -1,19 +1,17 @@
 package binding
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A parameter whose field the step lacks says which field, what the step
 // has, and the args: fix, not text/template's "map has no entry for key".
 func TestMissingFieldMessage(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "testdata/procarg.qnt", "procarg")
 	if err != nil {
 		t.Fatal(err)

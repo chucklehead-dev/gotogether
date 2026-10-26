@@ -1,19 +1,17 @@
 package binding
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A parameter with no template is the step field of its name, converted by
 // the parameter's type, aliases included (gcounter's Vec is str -> int).
 func TestDefaultArgs(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "../examples/glomers/model/gcounter.qnt", "gcounter")
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -310,13 +311,18 @@ func seedFromEnv(t testing.TB) (int64, bool) {
 	return s, true
 }
 
-// optional is qtest.Optional: a skip, a failure under GOTOGETHER_STRICT=1,
-// with the same message. Its own copy, so qhegel needs no core newer than
-// the one it requires to build.
+// optional is qtest.Optional: a skip, a failure under GOTOGETHER_STRICT=1
+// (or true; another value but 0 or false fails, naming it), with the same
+// message. Its own copy, so qhegel needs no core newer than the one it
+// requires to build.
 func optional(t testing.TB, reason string) {
 	t.Helper()
-	if os.Getenv("GOTOGETHER_STRICT") == "1" {
+	switch v := os.Getenv("GOTOGETHER_STRICT"); strings.ToLower(v) {
+	case "", "0", "false":
+		t.Skip(reason)
+	case "1", "true":
 		t.Fatal(reason + " (GOTOGETHER_STRICT is set, so a skip fails: give the job what the test needs, or unset GOTOGETHER_STRICT where the skip is legitimate)")
+	default:
+		t.Fatal(reason + fmt.Sprintf(" (and GOTOGETHER_STRICT=%q: set it to 1 (or true) to make skips fail, or unset it)", v))
 	}
-	t.Skip(reason)
 }

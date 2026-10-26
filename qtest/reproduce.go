@@ -314,6 +314,16 @@ func pkgDir() string {
 	return pkgOnce.dir
 }
 
+// importPath is the test binary's package's import path, "" if the build
+// info does not say (a test binary's path is the package's with ".test").
+func importPath() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	return strings.TrimSuffix(bi.Path, ".test")
+}
+
 // clearEvidence removes the evidence earlier runs of test wrote: under
 // GOTOGETHER_EVIDENCE, and in its kept explorations' directories. A run
 // writes each of its explorations' anew; one an earlier run had and this

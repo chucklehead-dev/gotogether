@@ -2,10 +2,10 @@ package validate
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -14,9 +14,7 @@ import (
 // record with a MemorySink, Check with a Checker.
 func TestAccountModel(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/account.yaml", Options{Backend: "typescript", Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

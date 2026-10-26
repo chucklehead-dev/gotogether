@@ -2,12 +2,12 @@ package validate
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -20,9 +20,7 @@ import (
 // CheckBatch, Judge's linearization.
 func TestLostSuffixOtherRecorder(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
 	acct := func(rec string, seq uint64, ms int, action string, amount, balance int64) qtrace.Step {
 		return qtrace.Step{Action: action, Recorder: rec, Seq: seq, Time: at(ms), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
@@ -117,9 +115,7 @@ func TestLostSuffixOtherRecorder(t *testing.T) {
 // the cut stands.
 func TestLostSuffixWithin(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -174,9 +170,7 @@ func TestLostSuffixKey(t *testing.T) {
 // others quiet) forbade.
 func TestLostSuffixSettleBoundsNothing(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

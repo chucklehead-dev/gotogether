@@ -73,10 +73,12 @@ func TestEvidenceFiles(t *testing.T) {
 // after its package.
 func TestEvidenceExpect(t *testing.T) {
 	dir := t.TempDir()
+	// as explorations write them: examples/hello is a module of its own,
+	// whose root package is "_"
 	for _, e := range []*qtest.Evidence{
-		{Package: "qtest", Test: "TestA#1"},
-		{Package: "qtest", Test: "TestA#2"},
-		{Package: "examples/hello", Test: "TestB/faults#1"},
+		{Package: "qtest", Import: "github.com/chucklehead-dev/gotogether/qtest", Test: "TestA#1"},
+		{Package: "qtest", Import: "github.com/chucklehead-dev/gotogether/qtest", Test: "TestA#2"},
+		{Package: "_", Import: "github.com/chucklehead-dev/gotogether/examples/hello", Test: "TestB/faults#1"},
 	} {
 		e.Format, e.Role, e.Runs, e.Conform = qtest.EvidenceFormat, qtest.RoleFaithful, 1, 1
 		d := filepath.Join(dir, e.Package, strings.ReplaceAll(e.Test, "/", "_"))
@@ -94,6 +96,8 @@ func TestEvidenceExpect(t *testing.T) {
 		{"qtest TestA#2\nexamples/hello TestB/faults\nTestB/faults#1", 0, nil},
 		{"TestA#3\nTestA\nqtest TestB\nTestC   # skipped", 1, []string{"TestA#3", "qtest TestB", "TestC"}},
 		{"TestAB\nTestB/fault", 1, []string{"TestAB", "TestB/fault"}}, // no prefix of a name
+		{"github.com/chucklehead-dev/gotogether/examples/hello TestB\n_ TestB\nhello TestB", 0, nil},
+		{"les/hello TestB\nexamples/bank TestB", 1, []string{"les/hello TestB", "examples/bank TestB"}}, // whole segments only
 	} {
 		f := filepath.Join(t.TempDir(), "checks.txt")
 		if err := os.WriteFile(f, []byte(x.checks), 0o644); err != nil {

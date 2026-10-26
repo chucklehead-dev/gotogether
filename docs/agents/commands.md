@@ -56,13 +56,17 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
   (both nightly). `GOTOGETHER_MUTANT=<id>` turns one woven mutant on for
   the whole process (`=list` prints them; ci/mutate-core.sh).
-  `GOTOGETHER_STRICT=1` turns every toolkit skip into a failure with the
+  `GOTOGETHER_STRICT=1` (or `true`; another value but `0` or `false`
+  fails, naming it) turns every toolkit skip into a failure with the
   skip's message (qtest's RequireQuint, Mutate with no mutants woven,
   Record's and Explore's SkipIfEmpty, qhegel.Shrink's, the scaffold's
   unwritten mutant test) and `qtest.Optional(t, reason)` with them, a
   test's own gated skip; set in CI's jobs that install quint (ci.yml
   says which do not, and why). qhegel keeps its own copy of Optional, so
-  it builds on the core it requires.
+  it builds on the core it requires. The core's own tests skip through
+  internal/skip (`skip.Quint`, `skip.Optional`), never a bare t.Skip
+  for a missing tool; opt-in gates (`-short`, GOTOGETHER_VERIFY,
+  RAFTKV_REAL) stay plain skips.
   `GOTOGETHER_ALL_FAULTS=1` turns every fault family on in
   every simulation (clock faults, stalls, a partition nemesis between
   every two processes): a suite written before a family meets it. A

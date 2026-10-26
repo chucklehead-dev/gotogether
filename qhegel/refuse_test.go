@@ -71,7 +71,7 @@ func TestShrinkRefusesGlobal(t *testing.T) {
 // exploration of its own (which would renumber the test's). Under
 // GOTOGETHER_STRICT=1 the skip fails, with its message.
 func TestShrinkSkipsWhenEmpty(t *testing.T) {
-	for _, strict := range []string{"", "1"} {
+	for _, strict := range []string{"", "1", "true", "yes"} {
 		t.Setenv("GOTOGETHER_STRICT", strict)
 		f := &fatalTB{TB: t}
 		done := make(chan struct{})
@@ -82,7 +82,8 @@ func TestShrinkSkipsWhenEmpty(t *testing.T) {
 		}()
 		<-done
 		skipped := strings.HasPrefix(f.msg, "skip: ")
-		if skipped != (strict == "") || !strings.Contains(f.msg, "recorded no step") || strict == "1" && !strings.Contains(f.msg, "GOTOGETHER_STRICT is set") {
+		says := map[string]string{"1": "GOTOGETHER_STRICT is set", "true": "GOTOGETHER_STRICT is set", "yes": `GOTOGETHER_STRICT="yes": set it to 1`}[strict]
+		if skipped != (strict == "") || !strings.Contains(f.msg, "recorded no step") || !strings.Contains(f.msg, says) {
 			t.Errorf("GOTOGETHER_STRICT=%q: got %q", strict, f.msg)
 		}
 	}

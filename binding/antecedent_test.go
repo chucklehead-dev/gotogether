@@ -1,16 +1,15 @@
 package binding
 
 import (
-	"os/exec"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // An invariant `A implies B` has antecedent A, printed back as Quint;
 // one of another form has none.
 func TestAntecedents(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	for _, c := range []struct{ spec, module, val, want string }{
 		{"../examples/checkout/model/checkout.qnt", "checkout", "settledCorrectly", "settled"},
 		{"../examples/hello/model/hello.qnt", "hello", "exactlyOnce", ""},

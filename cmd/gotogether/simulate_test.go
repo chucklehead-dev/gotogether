@@ -2,12 +2,12 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // The simulation module imports the binding's instance, with its
@@ -36,9 +36,7 @@ func TestSimulationModule(t *testing.T) {
 // hello's exactlyOnce holds in its model; claimed as allowed, it fails,
 // saying the check on the code would prove nothing.
 func TestSimulateClassifies(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	if code, err := simulate([]string{"-binding", "../../examples/hello/hello.binding.yaml", "-samples", "200"}); code != 0 || err != nil {
 		t.Fatalf("hello: exit %d, %v", code, err)
 	}

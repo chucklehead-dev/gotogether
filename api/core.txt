@@ -1410,6 +1410,7 @@ type Evidence struct
     field Role string `json:"role"`
     field Mutant string `json:"mutant,omitempty"`
     field Package string `json:"package,omitempty"`
+    field Import string `json:"import,omitempty"`
     field Test string `json:"test,omitempty"`
     field Spec string `json:"spec,omitempty"`
     field Runs int `json:"runs"`
@@ -1674,6 +1675,7 @@ const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 func Cached(bindingPath string, o Options) (*Checker, error)
 func EventuallyName(val string) string
+func Finishable(b *binding.Binding) error
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error)
@@ -1700,6 +1702,11 @@ type Failure struct
     field Quint string
     field State map[string]itf.Value
     field StateAfter bool
+type Finish struct
+    field Verdict Verdict
+    field Reason string
+    field Actor string
+    field Why string
 type ITFOptions struct
     embed Options
     field Binding *binding.Binding
@@ -1728,6 +1735,7 @@ type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
     field Unsettled string
+    method (*Report) Finished() Finish
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
     method (*Report) Summary() string

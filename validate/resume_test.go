@@ -3,7 +3,6 @@ package validate
 import (
 	"context"
 	"math/rand/v2"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -38,9 +38,7 @@ func lostHead(ops ...[2]int64) []qtrace.Step {
 // saw 3 is a mismatch, not a violation in the initial state.
 func TestResumeLostPrefix(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -110,9 +108,7 @@ func TestResumeLostPrefix(t *testing.T) {
 // holding), or a failure it does not (one that takes no step from any
 // state), is the evaluator's error, never a verdict.
 func TestResumeFailConfirmedByQuint(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -140,9 +136,7 @@ func TestResumeFailConfirmedByQuint(t *testing.T) {
 // the witness start, the only one resumeUp admits.
 func TestResumeWithin(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/within_resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -176,9 +170,7 @@ func TestResumeWithin(t *testing.T) {
 // every balance and keeps every invariant, as plain Go computes it.
 func TestResumeAgainstBruteForce(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/resume_small.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -260,9 +252,7 @@ func TestResumeAgainstBruteForce(t *testing.T) {
 // with the fix: narrow it, or record a snapshot.
 func TestResumeCapIsNoVerdict(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/resume_cap.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -282,9 +272,7 @@ func TestResumeCapIsNoVerdict(t *testing.T) {
 // the Go evaluator's alone (quint cannot replay hidden actions).
 func TestResumeHidden(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/gossip_resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -309,9 +297,7 @@ func TestResumeHidden(t *testing.T) {
 // from 1); one that saw 7 explains nothing.
 func TestResumeRecurringStates(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/ev_counter.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -344,9 +330,7 @@ func TestResumeRecurringStates(t *testing.T) {
 // hidden actions alone.
 func TestHiddenOnePath(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	settled := qtrace.Step{Action: "settled", Recorder: "r", Seq: 9, Settled: true, Time: time.Unix(9, 0)}
 	for _, x := range []struct {
 		binding string

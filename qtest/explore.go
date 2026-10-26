@@ -572,7 +572,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		// an empty run conforms to any model: every run empty is a system
 		// that records nothing yet (or an unwoven build), not a pass
 		if c.SkipIfEmpty {
-			Optional(t, "gotogether: no run recorded a step (SkipIfEmpty)")
+			skipping(t, "gotogether: no run recorded a step (SkipIfEmpty)")
 		}
 		t.Fatalf("gotogether: no run of %d recorded a step: the system's Run deploys nothing that records yet. "+
 			"Record each model step where it takes effect (qobs.Record with the run's context, //quint:action, a double), "+
@@ -1208,7 +1208,6 @@ func runDoes(r string) string {
 	return "has " + r
 }
 
-// describeClaim names what a failing All or None was about.
 // claimWhy is why report r misses the expectations of claim c that say
 // why (Finishes names the part missing): "" for those that do not.
 func claimWhy(c Claim, r *validate.Report) string {
@@ -1228,6 +1227,7 @@ func claimWhy(c Claim, r *validate.Report) string {
 	return out
 }
 
+// describeClaim names what a failing All or None was about.
 func describeClaim(c Claim) string {
 	if q, ok := c.(quantified); ok {
 		var d []string

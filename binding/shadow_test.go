@@ -1,9 +1,9 @@
 package binding
 
 import (
-	"os/exec"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -11,9 +11,7 @@ import (
 // name: it once was the recorder's sequence number, so apply(seq=1)
 // replayed as apply(4). The step's own number stays .step.seq.
 func TestArgumentNamedLikeAStepField(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "testdata/seqarg.qnt", "seqarg")
 	if err != nil {
 		t.Fatal(err)
@@ -41,9 +39,7 @@ func TestArgumentNamedLikeAStepField(t *testing.T) {
 // A parameter named like the step's own .process defaults to the argument
 // (.args.process), not the actor's incarnation, which it once silently was.
 func TestParameterNamedProcess(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "testdata/procarg.qnt", "procarg")
 	if err != nil {
 		t.Fatal(err)

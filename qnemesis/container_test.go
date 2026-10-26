@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // A Container is killed (and waited for), restarted, paused and resumed
@@ -15,10 +17,10 @@ import (
 func TestContainer(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("no docker CLI")
+		skip.Optional(t, "no docker CLI")
 	}
 	if err := exec.Command("docker", "info").Run(); err != nil {
-		t.Skip("no docker daemon")
+		skip.Optional(t, "no docker daemon")
 	}
 	image := os.Getenv("QNEMESIS_IMAGE")
 	if image == "" {
@@ -26,7 +28,7 @@ func TestContainer(t *testing.T) {
 	}
 	name := fmt.Sprintf("qnemesis-test-%d", time.Now().UnixNano())
 	if out, err := exec.Command("docker", "run", "-d", "--name", name, image, "sleep", "600").CombinedOutput(); err != nil {
-		t.Skipf("docker run %s: %v: %s", image, err, out)
+		skip.Optional(t, fmt.Sprintf("docker run %s: %v: %s", image, err, out))
 	}
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
 	c := &Container{Name: name}

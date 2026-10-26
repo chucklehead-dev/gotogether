@@ -1,18 +1,17 @@
 package binding
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // An action other actions call and step never names is a helper: the
 // model knows it, and a lint's list of actions leaves it out (scaffold
 // and lint once offered sameY as a step to record).
 func TestModelHelpers(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "testdata/helpers.qnt", "helpers")
 	if err != nil {
 		t.Fatal(err)

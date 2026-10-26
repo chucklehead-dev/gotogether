@@ -2,12 +2,12 @@ package validate
 
 import (
 	"context"
-	"os/exec"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -39,9 +39,7 @@ func snapshotRuns() (pass, fail, plain []qtrace.Step) {
 // no cached verdict with it.
 func TestSnapshotStart(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	pass, fail, plain := snapshotRuns()
 	c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
@@ -148,9 +146,7 @@ func TestSnapshotStart(t *testing.T) {
 // gossip), which from init it cannot.
 func TestSnapshotStartHidden(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/gossip_snapshot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -175,9 +171,7 @@ func TestSnapshotStartHidden(t *testing.T) {
 // action, not as quint's error at init; and the snapshot is a step.
 func TestSnapshotAlone(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

@@ -31,6 +31,11 @@ type Evidence struct {
 	// Package is the test's package, below its module ("qtest"; "_" the
 	// root): two packages may have tests of one name.
 	Package string `json:"package,omitempty"`
+	// Import is the test's package's import path
+	// ("github.com/x/repo/examples/hello"): Package alone cannot tell two
+	// modules' root packages apart, and evidence -expect names a package
+	// by it, or by its end ("examples/hello").
+	Import string `json:"import,omitempty"`
 	// Test is the exploration (TestX#2), and Spec the binding's spec and
 	// module ("/abs/model/m.qnt:m"): a suite's evidence groups by them
 	// (gotogether evidence).
@@ -120,7 +125,7 @@ func IsEvidence(path string) bool {
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
 	e.Test, e.Spec = x.ref(), x.model
-	e.Format, e.Role, e.Mutant, e.Package = EvidenceFormat, x.role(), x.mutation, pkgDir()
+	e.Format, e.Role, e.Mutant, e.Package, e.Import = EvidenceFormat, x.role(), x.mutation, pkgDir(), importPath()
 	e.Faults = x.faultCoverage()
 	if x.actions != nil {
 		e.Model = modelCoverage(x.Runs, x.actions)

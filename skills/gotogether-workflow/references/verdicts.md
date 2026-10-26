@@ -20,7 +20,7 @@ mutants) ends in one of these verdicts.
 | judged from a resume | `issue: info lost-prefix: ... judged from the states R admits (K of them)`, and on a pass `the steps pass from <state>, a state R admits (quint confirms)` | the usual ones | a log that lost its head with no snapshot, judged from every state the binding's `resume` admits: a pass means some admitted state explains the rest; past 20000 states no verdict (`narrow resume, or record a snapshot step`) |
 | no verdict (a search's budget) | `issue: warn linearize: ... no verdict (conformance n/a)`, invariants `n/a` | none: not a `Rejects`, `Mismatch` or `Violates`; a `None(...)` claim fails over it (what the run did is not known), and a mutant with no failing run but such runs is `Undecided`, not killed | Linearize (or ResolvePending) ran out of its budget, or hidden actions past `hiddenDepth` (raise it) before finding an order that conforms, or one in which every invariant holds: raise `qtest.LinearizeBudget`, partition keys (`LinearizeByKey`), or record steps where they take effect |
 | eventual vals not judged | `issue: info eventually: eventual vals not judged (V)` | `qtest.Settles()` states whether runs settled | the trace's last record is no settle (no `Sim.Settle`, a step after it, its error dropped) or another recorder recorded after it (`issue: warn settle`): an exploration claiming `Conforms()` of such runs fails, unless it also claims whether they settle |
-| incomplete (a prefix) | `validate -require-settle` (or `complete: true`): `actor A: incomplete (no settle)`, `incomplete (eventual vals not judged)`, `incomplete (pending calls)`, exit 1 | `qtest.Finishes()` | the run passes and is no finished one: it never settled, so its eventual vals were not judged, or a call was left pending (see "A prefix vs a finished run") |
+| incomplete (a prefix) | `validate -require-settle` (or `complete: true`): `the run: incomplete (no settle)`, `actor A: incomplete (pending calls)`, exit 1; `no verdict (lost tail)` and `no verdict (ITF trace)`, exit 1 too | `qtest.Finishes()` | the run passes and is no finished one: it never settled, so its eventual vals were not judged, or a call was left pending (one `-resolve-pending` placed included). A lost tail may hold what is missing (no verdict: check a log that kept its steps); an ITF trace records no settle (see "A prefix vs a finished run") |
 | real time bounds nothing | `issue: warn linearize: ... real time bounds none of its N steps` | none: record calls with `qobs.Invoke` and `Call.Done` | no step has an invocation time, so every order of its threads is allowed: sequential consistency, not linearizability |
 | a tool failure | an error, exit 2, no verdict | none: fix the binding or model | a template, a type, a missing field, or quint itself |
 
@@ -51,11 +51,15 @@ session, an end-to-end test). Say which:
   settled: the run stopped short of the journey's end`, `call c (process p)
   was invoked and never completed`, `the binding states no eventual val`;
 - the CLI says it with `gotogether validate -require-settle`, or the
-  binding's `complete: true` (which needs an eventual val): a passing run
-  that never settled, or left calls pending without `-resolve-pending`,
-  exits 1 as `incomplete (...)`, where without it the run passes with an
-  info issue. `complete` changes only the CLI's exit; a test states
-  `Finishes()` itself.
+  binding's `complete: true`: one judgment with `Finishes()`
+  (`validate.Report.Finished`), so the two agree. A passing run that
+  never settled, or left a call pending, exits 1 as `incomplete (...)`,
+  where without the flag it passes with an info issue. A call
+  `-resolve-pending` placed is still unfinished: its caller never got
+  the answer. A lost tail exits 1 as `no verdict (lost tail)`, an ITF
+  input as `no verdict (ITF trace)`, never a pass. A binding with no
+  eventual val is refused (exit 2). `complete` changes only the CLI's
+  exit; a test states `Finishes()` itself.
 
 ## Over many runs: claims
 

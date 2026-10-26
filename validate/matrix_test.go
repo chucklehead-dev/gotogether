@@ -2,12 +2,12 @@ package validate
 
 import (
 	"context"
-	"os/exec"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -179,9 +179,7 @@ func matrixConsumers() []matrixConsumer {
 
 func TestVerdictMatrix(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	features, consumers := matrixFeatures(t), matrixConsumers()
 	// every field of Binding is a kind of verdict the matrix covers, or
 	// says why it makes none

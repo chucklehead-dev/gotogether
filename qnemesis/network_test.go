@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -19,7 +20,7 @@ func toxiproxy(t *testing.T) *Toxiproxy {
 	t.Helper()
 	bin, err := exec.LookPath("toxiproxy-server")
 	if err != nil {
-		t.Skip("toxiproxy-server not on PATH (go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0, renamed toxiproxy-server, as CI does)")
+		skip.Optional(t, "toxiproxy-server not on PATH (go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0, renamed toxiproxy-server, as CI does)")
 	}
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

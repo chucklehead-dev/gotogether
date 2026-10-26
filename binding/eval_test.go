@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -71,9 +72,7 @@ func TestExpectArgsRebuildTheExpect(t *testing.T) {
 // Every binding of the repository has an evaluation module quint
 // compiles, its expects, vals and action wrappers in the compiled IR.
 func TestEvalModuleCompiles(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("compiles every binding's module with quint")
 	}

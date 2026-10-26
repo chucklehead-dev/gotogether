@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/replay"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -176,9 +176,7 @@ func show(steps []qtrace.Step) []string {
 // guided search's among them, where without the states it took 456.
 func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("searches a few hundred orders with quint")
 	}
@@ -244,9 +242,7 @@ func TestResolutionsCrossing(t *testing.T) {
 // ids interned in each candidate's order named one state two ways (B2).
 func TestCompleteSearchAgainstWholeOrders(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("checks every order of each history with quint")
 	}
@@ -368,7 +364,8 @@ func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
 	t.Parallel()
 	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
-		t.Skip(err) // the binding loads its model with quint
+		skip.Quint(t) // the binding loads its model with quint: without it, a skip
+		t.Fatal(err)
 	}
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
 	var steps []qtrace.Step
@@ -395,9 +392,7 @@ func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
 // that accepts every order finds one quint rejects, a disagreement the
 // search says before it searches again with quint.
 func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
 	var steps []qtrace.Step
 	for i, amount := range []int64{1, 2, 4} {
@@ -470,9 +465,7 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 // computed from the steps.
 func TestJudgeAgreesWithQuint(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("checks a few hundred candidates with quint")
 	}
@@ -653,9 +646,7 @@ func TestConfirmsAProof(t *testing.T) {
 // nothing.
 func TestConfirmByCheck(t *testing.T) {
 	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	defer func() { hooks.TamperEval.Store(0) }()
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
 	deposits := func(balance int64) []qtrace.Step {
@@ -767,9 +758,7 @@ func TestConfirmByCheck(t *testing.T) {
 // balance under the limit). Each is checked by quint and searched again.
 func TestConfirmByCheckBeyondConformance(t *testing.T) {
 	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	defer hooks.TamperEval.Store(0)
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
 	step := func(action, rec string, from, to int, args, obs map[string]any) qtrace.Step {
@@ -855,9 +844,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 // order quint rejects there would otherwise stand as no verdict.
 func TestConfirmSeesThroughMark(t *testing.T) {
 	t.Parallel()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -882,9 +869,7 @@ func TestConfirmSeesThroughMark(t *testing.T) {
 // a wrong order of one key's steps is confirmed and searched again.
 func TestConfirmByCheckByKey(t *testing.T) {
 	t.Setenv("GOTOGETHER_EVAL", "go") // a wrong evaluator on purpose: not shadow's to catch
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	hooks.TamperEval.Store(2)
 	defer hooks.TamperEval.Store(0)
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
@@ -919,9 +904,7 @@ func TestConfirmByCheckByKey(t *testing.T) {
 // search's error, naming the candidate, for linearizations and
 // resolutions alike.
 func TestShadowMode(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	t.Setenv("GOTOGETHER_EVAL", "shadow")
 	defer hooks.TamperEval.Store(0)
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * 10 * time.Millisecond) }
@@ -969,9 +952,7 @@ func TestShadowMode(t *testing.T) {
 // binding a run is checked against, not only the searches'. A right
 // evaluator checks as without it; a wrong one is the check's error.
 func TestShadowChecksRuns(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	t.Setenv("GOTOGETHER_EVAL", "shadow")
 	defer hooks.TamperEval.Store(0)
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
@@ -1032,9 +1013,7 @@ func TestSettledAsCountsRecordedSteps(t *testing.T) {
 // A checker made by hand (no Dir, no scratch of its own) searches in a
 // temporary directory of the batch's, never the working directory.
 func TestJudgeBatchOfAHandMadeChecker(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	nc, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

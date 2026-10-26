@@ -640,7 +640,7 @@ More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
 | `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
 | `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`) |
-| `GOTOGETHER_STRICT=1` | every toolkit skip fails instead, with its message (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`), as does `qtest.Optional(t, reason)`, a test's own skip: for CI jobs that install what their tests need. `gotogether evidence -expect checks.txt` fails on a listed check that wrote no evidence |
+| `GOTOGETHER_STRICT=1` (or `true`) | every toolkit skip fails instead, with its message (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`), as does `qtest.Optional(t, reason)`, a test's own skip: for CI jobs that install what their tests need. `gotogether evidence -expect checks.txt` fails on a listed check that wrote no evidence |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
 | `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step, every `Store` each commit's dependency cycles against its isolation level, every `Queue` its contract after each operation |
 | `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |

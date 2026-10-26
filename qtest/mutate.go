@@ -184,7 +184,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 	t.Helper()
 	all := qmut.Mutants()
 	if len(all) == 0 {
-		Optional(t, "no mutants woven: run with qweave -mutate")
+		skipping(t, "no mutants woven: run with qweave -mutate")
 	}
 	spec := exploreSpec{ExploreConfig: cfg, opts: s.opts(), rates: s.FaultRates()}
 	reach := &qmut.Reach{}

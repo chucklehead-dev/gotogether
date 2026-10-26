@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
@@ -75,9 +75,7 @@ func (d *bankDriver) State() (any, error) {
 }
 
 func needQuint(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 }
 
 func TestRunBank(t *testing.T) {

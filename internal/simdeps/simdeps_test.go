@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // The packages a simulation runs: qenv's runtime and doubles, recording,
@@ -166,7 +168,7 @@ var gosimUsers = map[string]bool{"qgosim/go.mod": true, "examples/gosim/go.mod":
 func TestOnlyQgosimRequiresGosim(t *testing.T) {
 	out, err := exec.Command("git", "-C", "../..", "ls-files", "go.mod", "**/go.mod").Output()
 	if err != nil {
-		t.Skipf("no git checkout: %v", err)
+		skip.Optional(t, "no git checkout: "+err.Error())
 	}
 	for _, f := range strings.Fields(string(out)) {
 		data, err := os.ReadFile("../../" + f)

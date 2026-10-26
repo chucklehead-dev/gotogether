@@ -14,17 +14,24 @@ The first release. What a user meets, by module:
   a scaffold's unwritten mutant test); `qtest.Optional(t, reason)` does
   the same for a test's own gated skips. `gotogether evidence -expect
   checks.txt` fails, naming it, on a listed test or exploration that
-  wrote no evidence. CI runs strict. Reported by a pilot outside the
+  wrote no evidence (`Evidence.Import`, the test package's import path,
+  names a package of any module: `examples/hello TestX`); a test that
+  skips clears its earlier evidence. `GOTOGETHER_STRICT` takes 1 or
+  true, and fails on any other value but 0 or false. CI runs strict, the
+  core's own tests too (internal/skip). Reported by a pilot outside the
   repository.
 - `qtest.Finishes()`: a run that is a finished journey, not a prefix of
   one: it conforms, settled, every eventual val was judged and holds, and
   every invoked call completed; three-valued (a lost tail is no verdict),
   and its failure names the part missing and the fix. `gotogether
-  validate -require-settle` exits 1 for a passing run that never settled
-  ("incomplete (no settle)", "incomplete (eventual vals not judged)") or
-  left calls pending ("incomplete (pending calls)"); a binding's
-  `complete: true` makes that its default (it needs an eventual val, the
-  journey's end). A conforming three-step prefix passed with Conforms
+  validate -require-settle` makes the same judgment
+  (`validate.Report.Finished`, a `validate.Finish`): it exits 1 for a
+  passing run that never settled ("incomplete (no settle)") or left a
+  call pending, one `-resolve-pending` placed included ("incomplete
+  (pending calls)"), and for a lost tail ("no verdict (lost tail)") or an
+  ITF input ("no verdict (ITF trace)"); a binding with no eventual val is
+  refused (`validate.Finishable`). A binding's `complete: true` makes
+  that its default. A conforming three-step prefix passed with Conforms
   alone. Reported by a pilot outside the repository.
 - `qtrace.ReadJSONL` rejects a line whose object is followed by more (a
   second object, garbage), naming the line: it read the first object and

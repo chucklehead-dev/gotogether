@@ -3,7 +3,6 @@ package qtest
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -19,9 +18,7 @@ func opts() []Option {
 }
 
 func needQuint(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	RequireQuint(t)
 }
 
 // A deterministic simulation that emits its own trace: no OTel anywhere.

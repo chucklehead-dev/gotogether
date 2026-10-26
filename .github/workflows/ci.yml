@@ -15,9 +15,10 @@ env:
   # every toolkit skip (no quint, no mutants woven, SkipIfEmpty's) fails:
   # each job installs what its tests need, so a skip here is a lost tool or
   # a lost weaving step. Steps where a skip is legitimate say why: the
-  # examples' mutation tests unwoven (skipped by name), edgepublish's
-  # unwoven run. The jobs without quint (consumable, qweave) run no test
-  # that skips.
+  # examples' mutation and coverage tests unwoven (skipped by name),
+  # edgepublish's unwoven run. The jobs without quint (consumable, qweave)
+  # run no test that skips. Opt-in gates (GOTOGETHER_VERIFY, RAFTKV_REAL,
+  # -short) are plain skips, not the toolkit's.
   GOTOGETHER_STRICT: "1"
 
 jobs:
@@ -39,6 +40,12 @@ jobs:
           node-version: 22
       - name: Install quint
         run: ci/install-quint.sh
+      - name: Install toxiproxy-server (qnemesis' network tests, strict here)
+        if: matrix.part == 'core'
+        run: |
+          go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0
+          mv "$(go env GOPATH)/bin/server" "$(go env GOPATH)/bin/toxiproxy-server"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: gofmt
         if: matrix.part == 'core'
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
@@ -86,8 +93,9 @@ jobs:
           go vet ./...
           GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m ./...
       # the per-push tier: each example's -short tests, under a minute each
-      # (TestMutationOf*: Mutate skips with no mutants woven, and strict
-      # mode would fail it; hello's runs woven in the tools part)
+      # (TestMutationOf* and TestCodeCoverage skip unwoven, and strict mode
+      # would fail them: hello's mutants and checkout's coverage run woven
+      # in the tools part)
       # (ci/test-times.txt), every mutant they claim caught with at least
       # 0.95 (their reports print the chance a claim of Some misses); the
       # full explorations and searches run nightly, at fresh seeds
@@ -98,7 +106,7 @@ jobs:
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
-              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m -skip '^TestMutationOf' ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
+              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
             echo "::endgroup::"
           done
           # a test twice as slow as it was (ci/test-times.txt) fails
@@ -109,7 +117,7 @@ jobs:
           done
       - name: the store's histories against its isolation levels (GOTOGETHER_CHECK)
         if: matrix.part == 'examples'
-        run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 -skip '^TestMutationOf' ./...) || exit 1; done
+        run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1; done
       - name: example app demos
         if: matrix.part == 'examples'
         run: |

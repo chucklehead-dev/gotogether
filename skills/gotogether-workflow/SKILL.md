@@ -163,7 +163,8 @@ deliberately and say why in the commit and the README.
 - Install quint and its Rust evaluator in CI (`ci/install-quint.sh`).
   Tests that need quint start with `qtest.RequireQuint(t)`, so they skip
   without it.
-- **Strict mode.** Set `GOTOGETHER_STRICT=1` in every job that installs
+- **Strict mode.** Set `GOTOGETHER_STRICT=1` (or `true`; another value
+  but `0` or `false` fails, naming it) in every job that installs
   what its tests need: each toolkit skip then fails with its message
   (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`'s, a
   scaffold's unwritten mutant test), so a job that lost quint from PATH
@@ -173,11 +174,15 @@ deliberately and say why in the commit and the README.
   legitimate (a laptop's, a matrix row without the tool), and say why.
 - **Expected evidence.** A test that skipped, or that `-run` or a build
   tag left out, writes no evidence and the suite's report does not miss
-  it. List the checks that must run in a file (a test `TestX` or
-  `TestX/sub`, an exploration `TestX#2`, either after its package as the
-  report names it, `examples/hello TestX`; `#` comments) and run
+  it. List the explorations that must run in a file (a test's, `TestX` or
+  `TestX/sub`, or one, `TestX#2`, either after its package: its import
+  path or the end of it, `examples/hello TestX`; `#` comments) and run
   `GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence -strict
-  -expect checks.txt ev`: a check with no evidence fails, by name.
+  -expect checks.txt ev`: a check with no evidence fails, by name. Only
+  explorations write evidence (Explore, Exhaust, Sweep, Mutate): a
+  Validate or Record test, or a Hegel search, cannot be listed. A test
+  that skips clears what an earlier run of it left; use a fresh
+  directory per run all the same (a renamed test's stays).
 - **A finished run.** Validate a real environment's logs with
   `gotogether validate -require-settle` (or `complete: true` in the
   binding), and claim `qtest.Finishes()` of a driver's runs: a run cut

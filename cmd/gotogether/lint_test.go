@@ -3,18 +3,17 @@ package main
 import (
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
 // lint -binding -src reports a literal qobs.Record action the model
 // lacks, with the nearest action, and counts the ones it has as emitted.
 func TestLintRecords(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	dir := t.TempDir()
 	src := `package app
 

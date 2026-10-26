@@ -395,7 +395,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	run.Recorded = run.Steps
 	if len(run.Steps) == 0 {
 		if c.SkipIfEmpty {
-			Optional(t, "gotogether: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
+			skipping(t, "gotogether: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
 		}
 		t.Fatal("gotogether: the scenario recorded no steps")
 	}

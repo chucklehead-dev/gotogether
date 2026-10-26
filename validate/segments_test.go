@@ -2,9 +2,9 @@ package validate
 
 import (
 	"context"
-	"os/exec"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -50,7 +50,5 @@ func TestDisabledStepLocatedInLongRuns(t *testing.T) {
 
 func needQuint(t *testing.T) {
 	t.Helper()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 }

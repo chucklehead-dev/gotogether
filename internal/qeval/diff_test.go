@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
@@ -19,9 +20,7 @@ import (
 // (init for the first). A model the evaluator refuses is reported, not
 // failed; one it disagrees on fails, naming the state.
 func TestAgreesWithQuint(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("runs quint on every model of the repository")
 	}

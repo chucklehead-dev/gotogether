@@ -195,9 +195,10 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
 - **E1. Completion stated (S). Done:** `qtest.Finishes()` (conforms,
   Settles, every eventual val judged and true, Completes; three-valued; a
   binding with no eventual val finishes no run; a miss names the part
-  and the fix), `validate -require-settle` (`incomplete (no settle)`,
-  `(eventual vals not judged)`, `(pending calls)`; pending calls judged
-  by `-resolve-pending` count as judged; recorded steps only), a
+  and the fix), `validate -require-settle` (the same judgment,
+  `Report.Finished`: `incomplete (no settle)`, `(pending calls)`, a call
+  `-resolve-pending` placed included; `no verdict (lost tail)`, `(ITF
+  trace)`, exit 1; a binding with no eventual val refused), a
   binding's `complete: true` (the CLI's default only, not a test's
   claim; needs an eventual val); patterns and verdicts docs ("a prefix
   vs a finished run").
@@ -207,10 +208,13 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   into a failure with its message; `qtest.Optional(t, reason)` for users'
   own gated skips; `evidence -expect checks.txt` (tests, subtests or
   exploration ids, optionally after a package) fails naming a check that
-  wrote no evidence. CI runs strict, but for the examples' unwoven
-  mutation tests (skipped by name) and edgepublish's unwoven run. Left:
-  the nightly is not strict (its fresh-seed runs include the unwoven
-  mutation tests).
+  wrote no evidence (packages by import path). CI runs strict, the core's
+  own tests through internal/skip, but for the examples' unwoven mutation
+  and coverage tests (skipped by name) and edgepublish's unwoven run.
+  Left: the nightly is not strict (its fresh-seed runs include the
+  unwoven mutation tests); evidence a renamed test left in a reused
+  directory still counts; Validate, Record and Hegel checks write no
+  evidence.
 - **E3. Step references (S).** `quint.ref` (a step's link to its
   artifact: a driver's trace line, a screenshot), `qobs.Ref`, kept by
   every reader and shown at the failing step.

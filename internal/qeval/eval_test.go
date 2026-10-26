@@ -7,15 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // compile compiles testdata's module name (with its init and step) to IR.
 func compile(t *testing.T, file, main, init, step string) *Model {
 	t.Helper()
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	out := filepath.Join(t.TempDir(), "ir.json")
 	abs, _ := filepath.Abs(filepath.Join("testdata", file))
 	f, err := os.Create(out)

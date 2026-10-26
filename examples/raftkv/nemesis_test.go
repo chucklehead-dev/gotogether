@@ -34,7 +34,7 @@ func toxiproxyServer(t *testing.T) string {
 	t.Helper()
 	bin, err := exec.LookPath("toxiproxy-server")
 	if err != nil {
-		t.Skip("toxiproxy-server not on PATH (go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0, renamed toxiproxy-server)")
+		qtest.Optional(t, "toxiproxy-server not on PATH (go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0, renamed toxiproxy-server)")
 	}
 	port := freeAddrs(t, 1)[0]
 	host, p, _ := splitHostPort(port)

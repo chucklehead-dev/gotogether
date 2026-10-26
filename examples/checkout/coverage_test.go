@@ -19,7 +19,7 @@ import (
 func TestCodeCoverage(t *testing.T) {
 	qtest.RequireQuint(t)
 	if len(qcover.Blocks()) == 0 {
-		t.Skip("not woven for coverage: run with qweave -cover")
+		qtest.Optional(t, "not woven for coverage: run with qweave -cover")
 	}
 	x := explore(t, checkout.Config{Isolation: qenv.SnapshotIsolation}, crashy, qtest.ExploreConfig{Seeds: 30, Parallel: 4})
 	x.Expect(t, qtest.Conforms())

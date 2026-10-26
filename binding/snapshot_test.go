@@ -1,10 +1,10 @@
 package binding
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -13,9 +13,7 @@ import (
 // every variable (through the actions it calls too) and read none (a
 // trace starts in it from no state): lint says which, and the fix.
 func TestLintSnapshot(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
 	if err != nil {
 		t.Fatal(err)
@@ -40,9 +38,7 @@ func TestLintSnapshot(t *testing.T) {
 // A resume must exist, take no parameters, assign every variable and be
 // no step of the binding's: lint says which, and the fix.
 func TestLintResume(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not on PATH")
-	}
+	skip.Quint(t)
 	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
 	if err != nil {
 		t.Fatal(err)

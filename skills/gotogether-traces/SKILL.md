@@ -113,8 +113,10 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `-convert rules.yaml` for plain app spans. Exit status: 0 OK,
   1 violation, 2 tool error. A run cut short passes (its eventual vals
   unjudged, an info issue says so): `-require-settle` (or the binding's
-  `complete: true`) fails it as `incomplete (no settle)`, `incomplete
-  (eventual vals not judged)` or `incomplete (pending calls)`. Other
+  `complete: true`) fails it as `incomplete (no settle)` or `incomplete
+  (pending calls)`, as `qtest.Finishes()` judges it; a lost tail or an ITF
+  input is `no verdict (...)`, also exit 1. It needs a binding with an
+  eventual val, the journey's end. Other
   flags: `-linearize`, `-linearize-key k`, `-resolve-pending`,
   `-lost-prefix r`, `-lost-suffix r`, `-invariants a,b`, `-itf`,
   `-history out.svg`.

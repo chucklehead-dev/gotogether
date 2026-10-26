@@ -4,21 +4,19 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // validate ends with how many traces fail and why, in the claims' words:
 // it said "VIOLATION" for any failure, a mismatch included.
 func TestValidateResultLine(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	step := func(actor string, seq uint64, action string, amount, balance int64) qtrace.Step {
 		return qtrace.Step{Action: action, Actor: actor, Recorder: actor, Thread: actor, Seq: seq,
 			Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
@@ -78,9 +76,7 @@ func TestValidateResultLine(t *testing.T) {
 // withdrawal that overlapped the deposit it depended on returned first,
 // which recorded order rejects and the order the intervals allow accepts.
 func TestValidateLinearize(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
 	steps := []qtrace.Step{
 		{Action: "deposit", Recorder: "a", Process: "p", Seq: 1, Thread: "a", Invoked: at(0), Time: at(10),
@@ -130,9 +126,7 @@ func TestValidateLinearize(t *testing.T) {
 // the flags it needs. A settle record, an invocation record or a time
 // lost on the way, or a flag not passed to the search, shows here.
 func TestValidateVerdictMatrix(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	at := func(s int) time.Time { return time.Unix(0, 0).Add(time.Duration(s) * time.Second) }
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	seq := func(steps ...qtrace.Step) []qtrace.Step {
@@ -182,21 +176,20 @@ func TestValidateVerdictMatrix(t *testing.T) {
 			[]qtrace.Step{gossip(1, "a", 1, ""), gossip(2, "b", 0, "[9]")}, "conformance: FAIL"},
 		{"pending", "account.yaml", []string{"-resolve-pending"}, pending(12), pending(99), "conformance: FAIL"},
 		// -require-settle: a conforming run that is no finished one fails,
-		// saying what it lacks (without the flag, the "eventual" row's
-		// unsettled run passes)
-		{"require-settle: no settle", "account.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+		// saying what it lacks, as qtest.Finishes does (without the flag,
+		// the "eventual" row's unsettled run passes)
+		{"require-settle: no settle", "funds.binding.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "1 of 1 actor: 1 incomplete (no settle)"},
-		{"require-settle: eventual vals", "funds.binding.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
-			seq(acct("deposit", 5, 5)), "1 of 1 actor: 1 incomplete (eventual vals not judged)"},
-		{"require-settle: pending", "account.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+		{"require-settle: pending", "funds.binding.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5), qtrace.Step{Action: "withdraw", Invocation: true, Args: map[string]any{"amount": int64(3)}}, settled),
 			"1 of 1 actor: 1 incomplete (pending calls)"},
-		{"require-settle: resolved pending", "account.yaml", []string{"-require-settle", "-resolve-pending"},
-			append(pending(12), qtrace.Step{Action: "settled", Settled: true, Recorder: "c", Seq: 4, Time: ms(4)}), pending(12),
-			"1 incomplete (no settle)"},
+		// a call -resolve-pending places was still never answered
+		{"require-settle: resolved pending", "funds.binding.yaml", []string{"-require-settle", "-resolve-pending"},
+			seq(acct("deposit", 5, 5), settled), append(pending(12), qtrace.Step{Action: "settled", Settled: true, Recorder: "c", Seq: 4, Time: ms(4)}),
+			"1 of 1 actor: 1 incomplete (pending calls)"},
 		// complete: true makes it the binding's default
 		{"complete", "funds_complete.yaml", nil, seq(acct("deposit", 5, 5), settled),
-			seq(acct("deposit", 5, 5)), "incomplete (eventual vals not judged) (the binding is complete)"},
+			seq(acct("deposit", 5, 5)), "incomplete (no settle) (the binding is complete)"},
 	} {
 		dir := t.TempDir()
 		for _, run := range []struct {
@@ -237,9 +230,7 @@ func TestValidateVerdictMatrix(t *testing.T) {
 // lacks is an error naming those it has. A torn log says what its lost
 // tail leaves unjudged.
 func TestValidateLost(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	dir := t.TempDir()
 	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
 	write := func(name string, steps []qtrace.Step, cut int) string {
@@ -300,9 +291,7 @@ func TestValidateLost(t *testing.T) {
 // behaviour from there, whatever it is from init. The itf command says
 // where the trace starts, not the lost prefix's error.
 func TestITFSnapshotStart(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	dir := t.TempDir()
 	steps := []qtrace.Step{
 		{Action: "restore", Recorder: "r", Process: "p", Seq: 3, Time: time.Unix(1, 0), Args: map[string]any{"b": int64(50), "n": int64(3)}},
@@ -335,9 +324,7 @@ func TestITFSnapshotStart(t *testing.T) {
 // passes from a state the resume admits, named in the report; steps
 // lists what each recorder lost.
 func TestValidateResume(t *testing.T) {
-	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed")
-	}
+	skip.Quint(t)
 	dir := t.TempDir()
 	recorded := []qtrace.Step{
 		{Action: "deposit", Recorder: "r", Process: "p", Seq: 3, Time: time.Unix(1, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(8)}},
