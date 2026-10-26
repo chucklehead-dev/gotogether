@@ -234,7 +234,7 @@ jobs:
     # instead of skipping. The per-push tier checks the recorded runs
     # (testdata/runs) in the examples loop.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       GOTOGETHER_STRICT: "1"
     defaults:
@@ -258,6 +258,8 @@ jobs:
           google-chrome --version
       - name: live journeys
         run: WEBJOBS_JOURNEYS="$RUNNER_TEMP/journeys" go test -count=1 -timeout 25m -run 'TestLive$|TestMutants$' -v .
+      - name: each mutant's failure shrunk (TestShrink, TestShrinkRecorded)
+        run: go test -count=1 -timeout 30m -run 'TestShrink$|TestShrinkRecorded$' -v .
       - name: "the recorded journey's observation mutants (full mode only, a check per mutant)"
         run: go test -count=1 -timeout 15m -run 'TestObservationMutants$' -v .
       - name: keep the journeys (Bombadil's traces and screenshots, the server's logs, run-info.json)

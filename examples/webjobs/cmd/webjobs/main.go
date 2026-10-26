@@ -37,6 +37,10 @@ func main() {
 		}
 		cfg.Recorder = qobs.NewRecorder(sink, qobs.WithID("server"), qobs.WithActor("webjobs"), qobs.WithProcess("webjobs"))
 	}
+	// before the address is printed: a harness may stop the server as
+	// soon as it reads it
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	app := webjobs.New(cfg)
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -46,8 +50,6 @@ func main() {
 	srv := &http.Server{Handler: app}
 	go srv.Serve(ln)
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

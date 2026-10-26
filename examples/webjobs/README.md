@@ -218,6 +218,49 @@ rates were measured again: the faithful plan finishes and each mutant
 is caught at 10 of 10 seeds, with 12 alternating journeys (`-short`)
 and with 8 at random.
 
+## Shrinking a failure (`TestShrink`)
+
+`qtest.ShrinkActions` takes a failing list of actions, removes actions
+and reruns the rest (`journey.Rerun` against a fresh mutant server, the
+overlay's `cmd/webjobs`, each time) until no single removal still shows
+the failure: by default the first failing rerun's (SameFailure), here
+also stated as the mutant's claim. Each candidate gets as many reruns
+as the original's rate calls for (10 of 10 baseline: 2 per candidate).
+Measured on 2026-10-26, seed 1's plan of 8 journeys (24 actions), all
+seven at once on a 4-core machine at load about 15 (4 to 9 minutes
+each):
+
+| mutant | shrunk to | reruns | reproduced / not | its rate after |
+|---|---|---|---|---|
+| doubleJob | `submit k1-1 twice` (1) | 27 | 24 / 2 | 10 of 10 |
+| statusStale | `submit k1-1 twice` (1): the drain commits the job while the page shows it running, past the 500ms `within` | 27 | 24 / 2 | 10 of 10 |
+| readyEarly | `submit k1-1 twice`, `await k1-1` (2) | 35 | 24 / 10 | 10 of 10 |
+| cancelIgnored | `submit k1-7 twice`, `cancel k1-7` (2) | 37 | 24 / 12 | 10 of 10 |
+| cancelBroken | `submit k1-7 twice`, `cancel k1-7` (2) | 37 | 24 / 12 | 10 of 10 |
+| commitAfterCancel | `submit k1-7 twice`, `cancel k1-7` (2): the commit comes with the drain | 44 | 23 / 20 (baseline 9 of 10: 3 per candidate) | 10 of 10 |
+| rerunFinished | `submit k1-4 twice`, `await k1-4`, `resubmit k1-4` (3) | 38 | 23 / 14 | 10 of 10 |
+
+Every result is 1-minimal (each one-removal rerun its count without the
+failure), no rerun diverged or errored, and each claim
+(`AtMostActions(n)` with the sizes above, and `Violates` of the
+mutant's invariant) holds. Keyed jobs are what makes the reruns
+meaningful: a removed submission renames and retimes no other job.
+Under `-short` only doubleJob runs, from two journeys (6 actions) with a
+baseline of 3 and one rerun a candidate (its failure is deterministic: a
+server that never looks a key up makes a job of each request; 3 of 3
+and 10 of 10 baselines): 10 reruns, about 50s at load 15.
+`TestShrinkRecorded` (full mode) shrinks Bombadil's recorded failures
+the same way, through `bombadiltrace.Actions`: doubleJob's recorded journey (20 actions) to its one double-clicked
+submission in 27 reruns, cancelIgnored's (14) to a submission and its
+cancel in 39, both 1-minimal and reproducing 10 of 10 (about 4 minutes
+each, at load 15).
+
+A rerun of no actions (the shrinker's check that nothing is left
+behind) starts and stops a fresh server, which records its drain and a
+settle at every shutdown; `rerunOf` returns none of those two for an
+empty rerun, since each rerun's server is new and leaves nothing
+behind.
+
 ## What -short runs, and its miss chance
 
 Per push (`go test -short`, the examples loop in CI) runs what can
@@ -226,11 +269,13 @@ regress with a push: `TestClient` (the faithful server, in process),
 and the client drives that program from the test process), `TestRecorded`
 (the real trace format, faithful), three of `TestProbes` (a cancel never
 answered, the page stuck at accepted, the key sent), `TestTimesKept`'s
-readyEarly half, and the adapter's tests. The full run adds the CLI's
+readyEarly half, `TestShrink/doubleJob` (two journeys, 10 reruns) and the
+adapter's tests. The full run adds the CLI's
 manifest replay, the mutants' recorded runs (`TestRecordedMutants`),
 the probes whose claim a mutant's client run states per push too, the
 re-recorded faithful journey, `TestClickWithNoOutcome`, `TestTornTrace`,
-`TestObservationMutants` and the live runs.
+`TestObservationMutants`, the other mutants' shrinks, `TestShrinkRecorded`,
+`TestRecordedActions` and the live runs.
 
 Under -short the client runs 12 journeys at seed 1, alternating between
 running to ready and cancelling (every fourth sent again late). Four
