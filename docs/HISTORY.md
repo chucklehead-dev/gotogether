@@ -1614,6 +1614,13 @@ Five reviews after T, their findings ROADMAP's S track:
   adapters), a real-deployment nemesis and a per-PR tier are what a team
   shipping a Go service misses most.
 
+### S12: adoption
+
+Planned by a design review (what of database/sql and net/http can run
+one task at a time), built as two adapters in parallel and an example,
+each reviewed: DESIGN §51. payd found the adapters' last bug, a query
+unwound by a crash deadlocking its own deferred Rollback.
+
 ### S11: partial logs
 
 Planned by a design review (a lost head is §49's search from another

@@ -3209,3 +3209,72 @@ invariants judged on different paths (with hidden actions alone too: a
 false PASS), and claims of no verdict read as met outside `All` and
 `None` (`Holds`, `Some`, `AnyOf`); claims are now three-valued wherever
 they are read.
+
+## 51. Unmodified net/http and database/sql services (S12)
+
+A team's service is written against `net/http` and `database/sql`, not
+qenv's seams. Two adapters run such a service in a simulation unchanged:
+`qenv/qsql`, a `database/sql` driver over a Store, and `qenv/qhttp`, an
+`http.RoundTripper` and an `http.Handler` server over a Service.
+`examples/payd` is the demonstration: a payments API that imports only
+the standard library, explored at three isolation levels with crashes,
+commit faults, duplicated and late requests, and run for real on SQLite.
+
+**What of the standard library runs.** qenv runs one task at a time and
+switches only at its seams, so a task blocked on a real channel or lock
+stalls the run. Read against Go 1.26's source: `database/sql`'s
+connection opener only connects when the pool is limited and full, its
+`awaitDone` goroutines touch the driver only after a cancel, and a query
+holds a read lock released on its return path, not by a defer.
+`http.Client.Do` calls `RoundTrip` on the caller's goroutine; its
+`Timeout` becomes a request deadline. So: no `SetMaxOpenConns` below the
+tasks' concurrency, rows read whole when a query runs, a cancelled
+transaction rolled back by a reaper task (never the Store touched from a
+goroutine that is not a task), the request body's probe decided on the
+task, a handler served on its Service's task without `http.Server`.
+Pool limits and handlers that start goroutines are qgosim's (§14).
+
+**When a task is unwound inside a statement** (a crash, or Close), qenv's
+unwind panic passed through `database/sql`'s query and leaked its lock,
+and the service's `defer tx.Rollback()` deadlocked: the driver recovers
+the unwind (`qenv.Unwinding`) and returns 08006, so `database/sql`
+releases on its error path, and the task unwinds again at its next seam.
+
+**A task blocked outside the simulation** made Run wait forever, naming
+nothing: `Sim.Hang` (30 s of wall time, zero off) panics with the task
+and its stack. It costs nothing per step: the scheduler receives plainly
+and a watchdog abandons a task it sees running in one wake for `Hang`.
+
+**The SQL subset** is one table per statement, equality conditions,
+`ON CONFLICT DO NOTHING`, `FOR UPDATE`, `c = c ± ?`; anything else is
+42601 naming the subset. Rows and unique indexes are Store keys; a
+locking statement re-checks its condition after a lock wait, as
+PostgreSQL's read committed does. Errors are PostgreSQL's SQLSTATEs,
+read by retry loops through `SQLState()`: 40001, 40P01, 23505 (a
+duplicate key at every level, 40001 only where PostgreSQL gives it),
+08006 for an unknown commit outcome (never `ErrBadConn`, which
+`database/sql` would retry), 25P02 after a failed statement.
+
+**HTTP outcomes** are what a client sees on a wire: refused only when
+nothing was sent, a reset when a sent request found no server, a
+timeout as a `net.Error`, overload as 503. Requests and responses go
+through their wire forms. A context deadline is wall time: the adapter
+converts it to virtual time once, rounded to two significant digits so
+jitter does not change a run, and remembers it, so retries under one
+deadline use it up. A service's own `ctx.Err()` stays on the wall timer.
+
+**payd.** Steps are recorded at the adapters and in test code only: the
+client's transport records requests and responses, qsql's commit hook a
+charge, the processor double a capture. The model asks for no double
+charge or capture, responses matching charges, and every answered or
+captured key charged after a settle. Mutants are build overlays of the
+service's files (`go test -overlay`), since qmut's operators cannot
+write a check-then-insert: the key checked outside the claim, the key
+not forwarded to the processor, a pending key answered "retry later".
+Each is caught; the real tier catches the first two under concurrent
+load.
+
+Three reviews: of the plan (database/sql's pool), of the adapters (a
+refusal for a request already handled, deadlines never used up,
+rounding that flipped, a race at Close, the watchdog's cost, 40001 for
+a duplicate key, a unique lookup between two states), and of payd.

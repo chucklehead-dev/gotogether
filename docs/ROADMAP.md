@@ -167,10 +167,14 @@ more.
   the middle of a log is skipped, not checked against the replayed
   state; a snapshot argument cannot be a map of records; a resume past
   20000 states, or a failure past 200 confirmed by quint alone.
-- **S12. Adoption (L).** I/O adapters: `database/sql` over a Store (a
-  key-value and simple-row subset), `http.RoundTripper` and a server over
-  a Service; an existing, unmodified net/http and database/sql service
-  explored with a planted dedupe mutant caught.
+- **S12. Adoption (L). Done** (DESIGN §51): `qenv/qsql` (database/sql
+  over a Store, a one-table SQL subset with PostgreSQL's SQLSTATEs),
+  `qenv/qhttp` (RoundTripper and Handler over a Service), `Sim.Hang`;
+  examples/payd, a standard-library payments service, unmodified,
+  explored and run on SQLite, three overlay mutants caught. Left: pool
+  limits and goroutine-starting handlers (qgosim's); a query outside a
+  transaction unwound inside the driver is untested; per-transaction
+  isolation levels; a snapshot argument of records (S11).
 - **S13. A real deployment's nemesis (M–L).** A Script against processes
   and containers (kill, pause, toxiproxy partitions and latency,
   failpoints), its faults recorded as steps, the history validated:
