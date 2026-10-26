@@ -145,3 +145,41 @@ func TestCheckerScratchRemovedByClose(t *testing.T) {
 		t.Errorf("%s left after Close: %v", roots[0], err)
 	}
 }
+
+// quint test processes are bounded across the whole process, not per
+// CheckBatch: many batches at once (parallel tests' explorations) run at
+// most GOMAXPROCS of them. A fake quint marks itself running in a
+// directory while it sleeps and logs how many it saw.
+func TestQuintProcessesBoundedProcessWide(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "quint")
+	script := "#!/bin/sh\nd=" + dir + "/running\nmkdir -p $d\ntouch $d/$$\nls $d | wc -l >> " + dir + "/seen\nsleep 0.2\nrm $d/$$\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	limit := runtime.GOMAXPROCS(0)
+	var wg sync.WaitGroup
+	for range 3 * limit {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := quintTest(context.Background(), filepath.Join(dir, "m.qnt"), "m", "b", Options{Quint: fake, Backend: "rust", Dir: dir, NoITF: true}, []string{"t"}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	b, err := os.ReadFile(filepath.Join(dir, "seen"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	most := 0
+	for _, f := range strings.Fields(string(b)) {
+		var n int
+		fmt.Sscan(f, &n)
+		most = max(most, n)
+	}
+	if most == 0 || most > limit {
+		t.Errorf("at most %d quint processes at once, want 1..%d (GOMAXPROCS)", most, limit)
+	}
+}

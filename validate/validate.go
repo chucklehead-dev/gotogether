@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -374,6 +375,14 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 	return errs
 }
 
+// quintSlots bounds the quint test processes of the whole process, not
+// of one CheckBatch: process-wide. Parallel tests' explorations each ran
+// GOMAXPROCS of them, and a batch module of 64 runs takes quint about a
+// gigabyte: fleetrollout's nightly (500 seeds, three explorations at
+// once) reached 13 GB of quint and ended its runner. The processes are
+// CPU-bound, so more of them at once than CPUs gained nothing.
+var quintSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
+
 // quintTest runs the named tests of a written module with `quint test`,
 // returning quint's output. ITF goes to <Dir>/<base>_<test>.itf.json,
 // unless opt.NoITF.
@@ -382,6 +391,12 @@ func quintTest(ctx context.Context, qnt, module, base string, opt Options, tests
 		"--match", "^(" + strings.Join(tests, "|") + ")$"}
 	if !opt.NoITF {
 		args = append(args, "--out-itf", filepath.Join(opt.Dir, base+"_{test}.itf.json"))
+	}
+	select {
+	case quintSlots <- struct{}{}:
+		defer func() { <-quintSlots }()
+	case <-ctx.Done():
+		return "", fmt.Errorf("quint test: %w", ctx.Err())
 	}
 	cmd := exec.CommandContext(ctx, opt.Quint, args...)
 	cmd.Dir = opt.Dir
