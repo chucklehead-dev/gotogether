@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: S1 → S2 → S5 → S3 → S4 → S6 → S7 → S9 → S8 → S10 → S11 → S12, S13;
+Order: S1 → S2 → S5 → S3 → S4 → S6 → S7 → S9 → S8 → S10 → S11 → S12, S13, then E;
 the items left from X, Y and T alongside; R5 when the maintainer says.
 
 ## Release (R5)
@@ -179,6 +179,48 @@ more.
   and containers (kill, pause, toxiproxy partitions and latency,
   failpoints), its faults recorded as steps, the history validated:
   raftkv's NoRequestID over real TCP, rejected by the same binding.
+
+## A run gotogether did not drive (E)
+
+From the feedback of an agent using gotogether in another project (goo:
+an observability app checked with Bombadil, Antithesis's browser
+explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
+
+- **E1. Completion stated (S).** A conforming prefix is not a finished
+  journey: `qtest.Finishes()` (Settles, every eventual val judged and
+  true, Completes), `validate -require-settle` (exit 1 when unsettled or
+  eventual vals or pending calls are unjudged), a binding's `complete:
+  true`; patterns and verdicts docs ("prefix vs finished").
+- **E2. Strict mode (S).** `GOTOGETHER_STRICT=1` turns every toolkit
+  skip (no quint, no mutants woven) into a failure with its message;
+  `qtest.Optional(t, reason)` for users' own gated skips; `evidence
+  -expect checks.txt` fails on a check that wrote no evidence.
+- **E3. Step references (S).** `quint.ref` (a step's link to its
+  artifact: a driver's trace line, a screenshot), `qobs.Ref`, kept by
+  every reader and shown at the failing step.
+- **E4. Run manifest (M).** `gotogether.run/1`: tool versions, the
+  model, binding and inputs with their hashes, losses, the verdict and
+  failing step, the driver (name, version, seed, args) and artifacts;
+  written by `qtest.Validate`/`Runs` and `validate -manifest`, re-judged
+  by `validate -replay` (refusing changed inputs).
+- **E5. A Bombadil example (M).** examples/webjobs: a standard-library
+  web app (submit, accepted, ready, cancel); Bombadil explores it; an
+  adapter turns its trace into invocation records completed only by an
+  observed outcome (a click is never a success), with refs; the server
+  records its own effects; overlay mutants; a recorded run checked
+  offline per push, a live headless run nightly; a reference page for
+  external drivers.
+- **E6. Observation mutants (S–M).** `qtrace.Mutations` (drop, dup,
+  swap, corrupt, retime, reactor) and `qtest.MutateSteps`: which
+  recorded fields the model and binding constrain; checked against
+  brute force.
+- **E7. Absence diagnostics (M).** A collector's watermark (`complete
+  through T`) and a report section naming each absent step's cause:
+  dropped (a gap or loss), uncollected (past the watermark, no settle),
+  or absent by a defect (the only FAIL).
+- **E8. External shrinking (L).** ddmin over a driver's actions with a
+  reset contract and calibrated reruns; Bombadil's `--reproduce` as the
+  rerun.
 
 ## Left from T
 
