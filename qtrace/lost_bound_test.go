@@ -62,3 +62,27 @@ func TestBoundedLossVoidsOnlyEarlierSettles(t *testing.T) {
 		t.Fatalf("read back %+v, %v", got, err)
 	}
 }
+
+// A loss's bound decides whether a settle settles, so it is in the
+// verdict cache's key: two bounds, two keys; and of two bounded losses of
+// one recorder the later bound is kept.
+func TestLossBoundInKeyAndMerge(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	at := func(ms int) time.Time { return t0.Add(time.Duration(ms) * time.Millisecond) }
+	key := func(before time.Time) string {
+		var k Keyer
+		return k.Step(&Step{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: before})
+	}
+	if key(at(10)) == key(at(30)) || key(at(10)) == key(time.Time{}) {
+		t.Errorf("keys %q, %q, %q: a bound is not in the key", key(at(10)), key(at(30)), key(time.Time{}))
+	}
+	steps := []Step{
+		{Action: "inc", Recorder: "srv", Seq: 1, Time: at(0)},
+		{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: at(10)},
+		{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: at(30)},
+		{Action: "settled", Recorder: "client", Seq: 1, Time: at(20), Settled: true},
+	}
+	if trs, _ := Reconstruct(steps); len(trs) != 1 || trs[0].Settled || !trs[0].Lost[0].Before.Equal(at(30)) {
+		t.Errorf("two bounds merged into %+v; want the later (30ms), which the settle at 20ms precedes", trs[0].Lost)
+	}
+}

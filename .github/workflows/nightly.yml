@@ -78,21 +78,22 @@ jobs:
         # (internal/depgraph: sorting the nodes Tarjan visits, whose
         # components are sorted after)
         include:
-          # qtrace: 20 of 279, each read. Equivalent: realTime's loop bounds
-          # (37, 39, 42: earliest[0] is never read, earliest[k] >= k); a seq
-          # equal to a Call or to another step's of its recorder (51, 57:
-          # that record is never among the steps, seqs are deduplicated);
-          # a rejected order's state (83: never read); a budget's last turn
-          # (91, 119, 120: it checks nothing); a complete search that tried
-          # nothing (116: needs a budget under 1, which Linearize never
-          # passes); a move to the front of what is first (67, 100: nothing
-          # to move); the comparator's < on values never equal (189, 190);
-          # the time key left in a line's attributes (29: nothing reads it);
-          # the assumed mark inverted for every step alike (34: the same
-          # groups of equal keys); a recorder's first seq against an equal
-          # one (152: seqs are deduplicated first); a merged loss's After
-          # set to the equal value it has (164, 165). 109 ties the guided
-          # search's best move otherwise: another path, the same verdicts.
+          # qtrace: 20 of 289, each read (ids as of the bounded losses). Equivalent:
+          # realTime's loop bounds (39, 41, 44: earliest[0] is never read,
+          # earliest[k] >= k); a seq equal to a Call or to another step's of
+          # its recorder (53, 59: that record is never among the steps, seqs
+          # are deduplicated); a rejected order's state (85: never read); a
+          # budget's last turn (93, 121, 122: it checks nothing); a complete
+          # search that tried nothing (118: needs a budget under 1, which
+          # Linearize never passes); a move to the front of what is first (69,
+          # 102: nothing to move); the comparator's < on values never equal
+          # (197, 198); the time key left in a line's attributes (30: nothing
+          # reads it); the assumed mark inverted for every step alike (36: the
+          # same groups of equal keys); a recorder's first seq against an
+          # equal one (154: seqs are deduplicated first); a merged loss's
+          # After set to the equal value it has (166, 167). 111 ties the
+          # guided search's best move otherwise: another path, the same
+          # verdicts.
           - pkg: qtrace
             max: 20
           # qenv: 22 of 914, each read. Two need gosim's cooperative
