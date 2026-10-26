@@ -37,19 +37,30 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   23502, 25P02 (a statement after a failed one: the transaction is
   aborted, and its Commit commits nothing), 25006 (a write in a
   `ReadOnly` transaction), 08006 (`qenv.ErrUnknownOutcome`: the commit
-  may have applied; never ErrBadConn, which database/sql would retry),
-  57014 (the transaction's context is done).
+  may have applied; never ErrBadConn, which database/sql would retry).
+  A key another transaction inserted and committed is 23505 at every
+  level, as PostgreSQL's unique check reads the latest rows; 40001
+  instead at serializable if the transaction read the key absent first,
+  and for `ON CONFLICT DO NOTHING` when its snapshot cannot see the
+  other's row.
 - **TxOptions**: `LevelDefault` or any level the Store meets
   (RepeatableRead and Snapshot are snapshot isolation); a stronger one
   fails with the `NewStore` to write.
 - **database/sql's goroutines.** A cancelled context's rollback, which
   database/sql runs from a goroutine of its own, is done by the
-  database's reaper task at the run's next step, so the run does not
-  depend on that goroutine. A context with a wall-clock deadline is wall
+  database's reaper task at the run's next step, so the Store's state does
+  not depend on that goroutine. The errors the caller sees are database/sql's
+  own: a statement in the transaction fails with `sql.ErrTxDone`, and
+  `Commit` with `context.Canceled` or `sql.ErrTxDone`, which of the two
+  depending on that goroutine's timing; treat both as rolled back. A context with a wall-clock deadline is wall
   time: do not let one expire inside a simulation. `SetMaxOpenConns`
   with a full pool blocks a task outside the simulation: the watchdog
   (`Sim.Hang`) panics naming it. The database closes with the
   simulation.
+- **SettleCore.** `sql.<name>.conn` and `store.<name>.commit` belong to no
+  process (the Store is none's): a core settle draws them for a task
+  outside the core and leaves them nominal for one inside it, as for any
+  fault a task makes.
 - Not simulated: joins, aggregates, ranges and OR, RETURNING, DEFAULT,
   upserts (`DO UPDATE`), savepoints, `LastInsertId`, schema changes
   after CREATE TABLE.

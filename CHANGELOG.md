@@ -15,7 +15,11 @@ The first release. What a user meets, by module:
   DELETE; equality only), the Store's isolation level and history check,
   PostgreSQL's SQLSTATEs (`SQLState()`, for retry loops), the fault kind
   `sql.<name>.conn` (`badConn`), commit faults as 08006, and a reaper
-  task for transactions whose context is cancelled.
+  task for transactions whose context is cancelled. A key another
+  transaction committed is 23505 at every level (40001 only after
+  reading it absent at serializable, or for ON CONFLICT DO NOTHING's
+  unseen row), a lookup by a UNIQUE column at read committed sees one
+  state, and statements after a cancel fail with sql.ErrTxDone.
 - `qenv/qhttp`: an unmodified `http.Handler` and `http.Client` in a
   simulation. `NewServer` (its handler installed by `Handle` at each
   incarnation, connections refused before it and while the process is

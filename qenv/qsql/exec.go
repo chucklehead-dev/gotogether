@@ -291,23 +291,39 @@ func (t *tx) find(tb *table, cs []resolved) []row {
 		for _, c := range cs {
 			if c.col.primary {
 				k := tb.rowKey(c.val)
+				t.read[k] = true
 				v, ok := t.txn.Get(k)
 				return pick(row{k, asRow(v)}, ok)
 			}
 		}
 		for _, c := range cs {
-			if c.col.unique {
-				pk, ok := t.txn.Get(tb.indexKey(c.col.name, c.val))
+			if !c.col.unique {
+				continue
+			}
+			// the index, then the row: two reads, two seams. At read
+			// committed a commit between them may have moved the value
+			// to another row (PostgreSQL reads both in the statement's
+			// one snapshot); then the row no longer holds it, and the
+			// index is read again. Under a snapshot both reads are of it.
+			ik := tb.indexKey(c.col.name, c.val)
+			for range 100 {
+				t.read[ik] = true
+				pk, ok := t.txn.Get(ik)
 				if !ok {
 					return nil
 				}
 				k := pk.(string)
+				t.read[k] = true
 				v, ok := t.txn.Get(k)
-				return pick(row{k, asRow(v)}, ok)
+				if ok && equal(asRow(v)[c.col.name], c.val) || t.c.st.Iso != qenv.ReadCommitted {
+					return pick(row{k, asRow(v)}, ok)
+				}
 			}
+			break // the value moves faster than it is read: scan, one read
 		}
 	}
 	var out []row
+	t.scanned = append(t.scanned, tb.name+"/")
 	for _, kv := range t.txn.Scan(tb.name + "/") {
 		if r := asRow(kv.Val); matches(r, cs) {
 			out = append(out, row{kv.Key, r})
@@ -319,6 +335,44 @@ func (t *tx) find(tb *table, cs []resolved) []row {
 func asRow(v any) map[string]any {
 	r, _ := v.(map[string]any)
 	return r
+}
+
+// claim locks key k for a write that must find it free (an INSERT's key,
+// an UPDATE's new unique value) and reports whether it is taken, with
+// PostgreSQL's codes. Under a snapshot the Store's GetForUpdate aborts
+// (ErrConflict) on a key committed after the snapshot, but PostgreSQL's
+// unique check reads the latest committed rows, whatever the level: a
+// key another transaction inserted and committed is a duplicate (23505),
+// unless the transaction had read it and found it absent at serializable
+// (its predicate lock: 40001), or this is ON CONFLICT DO NOTHING's
+// arbiter, whose conflicting row is not in the snapshot (40001, as
+// PostgreSQL's ExecCheckTupleVisible). A key deleted after the snapshot
+// is 40001 here where PostgreSQL would insert: the Store has aborted the
+// transaction by then. Either way the Store aborted it: nothing commits
+// that its level forbids.
+func (t *tx) claim(k string, arbiter bool) (taken bool, err error) {
+	_, exists, err := t.txn.GetForUpdate(k)
+	if err == nil || errors.Is(err, qenv.ErrDeadlock) || !errors.Is(err, qenv.ErrConflict) {
+		return exists, err
+	}
+	if _, live := t.c.st.Read(k); !live || arbiter || t.c.st.Iso == qenv.Serializable && t.wasRead(k) {
+		return false, err
+	}
+	return true, nil
+}
+
+// wasRead reports whether the transaction read key k (a lookup, or a scan
+// of its table).
+func (t *tx) wasRead(k string) bool {
+	if t.read[k] {
+		return true
+	}
+	for _, p := range t.scanned { // a scan read every row, and so every unique value, of its table
+		if tb := strings.TrimSuffix(p, "/"); strings.HasPrefix(k, tb+"/") || strings.HasPrefix(k, tb+"!") {
+			return true
+		}
+	}
+	return false
 }
 
 // lock locks each of rows (GetForUpdate) and keeps those that still meet
@@ -496,12 +550,13 @@ rows:
 			if !c.primary {
 				k = tb.indexKey(c.name, r[c.name])
 			}
-			_, exists, err := t.txn.GetForUpdate(k)
+			arbiter := s.onConflict && (s.target == "" || s.target == c.name)
+			exists, err := t.claim(k, arbiter)
 			if err != nil {
 				return nil, err
 			}
 			if exists {
-				if s.onConflict && (s.target == "" || s.target == c.name) {
+				if arbiter {
 					continue rows
 				}
 				return nil, uniqueViolation(tb, c, r[c.name])
@@ -593,7 +648,7 @@ func (t *tx) update(s *updateStmt, args []any) (*result, error) {
 			}
 			if nr[c.name] != nil {
 				k := tb.indexKey(c.name, nr[c.name])
-				if _, exists, err := t.txn.GetForUpdate(k); err != nil {
+				if exists, err := t.claim(k, false); err != nil {
 					return nil, err
 				} else if exists {
 					return nil, uniqueViolation(tb, c, nr[c.name])

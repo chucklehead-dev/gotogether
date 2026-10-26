@@ -9,6 +9,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -722,5 +723,160 @@ func TestValues(t *testing.T) {
 	}
 	if _, err := w.db.Exec(`UPDATE accounts SET balance = balance + ? WHERE id = 'bob'`, int64(math.MaxInt64)); code(err) != "22003" {
 		t.Errorf("an overflowing addition: got %v, want 22003", err)
+	}
+}
+
+// Two transactions inserting one key: the second to reach it waits for
+// the first, then finds a duplicate (23505) at every level, as
+// PostgreSQL's unique check reads the latest committed rows (the Store's
+// snapshot check gave 40001 in most seeds). ON CONFLICT DO NOTHING does
+// nothing at read committed, and under a snapshot that cannot see the
+// other's row fails with 40001, as PostgreSQL's does. At serializable, a
+// transaction that read the key absent before inserting it gets 40001.
+func TestConcurrentInsertOfOneKey(t *testing.T) {
+	for _, iso := range []qenv.Isolation{qenv.ReadCommitted, qenv.SnapshotIsolation, qenv.Serializable} {
+		for _, tc := range []struct {
+			name, q string
+			check   bool // read the key first
+			second  []string
+		}{
+			{"insert", `INSERT INTO pay (k, v) VALUES ('k1', ?)`, false, []string{"23505"}},
+			{"do nothing", `INSERT INTO pay (k, v) VALUES ('k1', ?) ON CONFLICT DO NOTHING`, false,
+				map[bool][]string{true: {"n=0"}, false: {"n=0", "40001"}}[iso == qenv.ReadCommitted]},
+			{"check then insert", `INSERT INTO pay (k, v) VALUES ('k1', ?)`, true,
+				map[bool][]string{true: {"40001", "found"}, false: {"23505", "found"}}[iso == qenv.Serializable]},
+		} {
+			seen := map[string]bool{}
+			for seed := range uint64(40) {
+				s := qenv.New(qenv.NewSeeded(seed))
+				s.Check = true
+				st := qenv.NewStore(s, "paydb", iso)
+				db := qsql.Open(s, st)
+				if _, err := db.Exec(`CREATE TABLE pay (k TEXT PRIMARY KEY, v INTEGER)`); err != nil {
+					t.Fatal(err)
+				}
+				res := make([]string, 2)
+				for i := range 2 {
+					s.Spawn(fmt.Sprint("t", i), func(ctx context.Context) {
+						res[i] = func() string {
+							tx, err := db.BeginTx(ctx, nil)
+							if err != nil {
+								return code(err)
+							}
+							defer tx.Rollback()
+							if tc.check {
+								var v int64
+								switch err := tx.QueryRowContext(ctx, `SELECT v FROM pay WHERE k = 'k1'`).Scan(&v); err {
+								case nil:
+									return "found" // the other's committed row is visible: nothing to insert
+								case sql.ErrNoRows:
+								default:
+									return code(err)
+								}
+							}
+							r, err := tx.ExecContext(ctx, tc.q, int64(i))
+							if err != nil {
+								return code(err)
+							}
+							n, _ := r.RowsAffected()
+							if err := tx.Commit(); err != nil {
+								return code(err)
+							}
+							return fmt.Sprint("n=", n)
+						}()
+					})
+				}
+				if err := s.Run(time.Minute); err != nil {
+					t.Fatal(err)
+				}
+				s.Close()
+				if res[0] != "n=1" {
+					res[0], res[1] = res[1], res[0] // the second is whichever did not insert
+				}
+				if res[0] != "n=1" || !slices.Contains(tc.second, res[1]) {
+					t.Fatalf("%s, %s, seed %d: got %q; want one n=1 and one of %q", iso, tc.name, seed, res, tc.second)
+				}
+				seen[res[1]] = true
+			}
+			delete(seen, "found") // a seed's schedule, not a code: not required
+			if want := len(slices.DeleteFunc(slices.Clone(tc.second), func(c string) bool { return c == "found" })); len(seen) != want {
+				t.Errorf("%s, %s: the seeds showed %v of %q", iso, tc.name, seen, tc.second)
+			}
+		}
+	}
+}
+
+// A statement at read committed reads as of one moment: a lookup by a
+// UNIQUE column reads the index, then the row, at two seams, and a
+// transaction moving the value from one row to another between them once
+// made a row that always holds it come back missing.
+func TestUniqueLookupSeesOneState(t *testing.T) {
+	for seed := range uint64(200) {
+		s := qenv.New(qenv.NewSeeded(seed))
+		s.Check = true
+		st := qenv.NewStore(s, "paydb", qenv.ReadCommitted)
+		db := qsql.Open(s, st)
+		for _, q := range []string{`CREATE TABLE u (id TEXT PRIMARY KEY, email TEXT UNIQUE)`, `INSERT INTO u VALUES ('u1', 'a@x'), ('u2', 'c@x')`} {
+			if _, err := db.Exec(q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		missing := false
+		s.Spawn("reader", func(ctx context.Context) {
+			for range 30 {
+				var id string
+				if err := db.QueryRowContext(ctx, `SELECT id FROM u WHERE email = 'a@x'`).Scan(&id); err != nil {
+					missing = true
+				}
+			}
+		})
+		s.Spawn("mover", func(ctx context.Context) {
+			tx, _ := db.BeginTx(ctx, nil)
+			for _, q := range []string{`UPDATE u SET email = 'tmp' WHERE id = 'u1'`, `UPDATE u SET email = 'a@x' WHERE id = 'u2'`, `UPDATE u SET email = 'b@x' WHERE id = 'u1'`} {
+				if _, err := tx.ExecContext(ctx, q); err != nil {
+					t.Error(err)
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				t.Error(err)
+			}
+		})
+		if err := s.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		if missing {
+			t.Fatalf("seed %d: a@x, committed on some row throughout, was not found", seed)
+		}
+	}
+}
+
+// After a cancel, a statement in the transaction fails with sql.ErrTxDone
+// whether database/sql's goroutine or the driver answers, and Commit with
+// context.Canceled or sql.ErrTxDone (database/sql's, by its goroutine's
+// timing, before the driver is asked): nothing commits either way.
+func TestErrorsAfterCancel(t *testing.T) {
+	for range 100 {
+		w := newWorld(t, qenv.Nominal{}, qenv.ReadCommitted)
+		var stmtErr, commitErr error
+		w.s.Spawn("c", func(ctx context.Context) {
+			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			tx, err := w.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE accounts SET balance = 1 WHERE id = 'alice'`); err != nil {
+				t.Error(err)
+			}
+			cancel()
+			_, stmtErr = tx.ExecContext(context.Background(), `UPDATE accounts SET balance = 2 WHERE id = 'alice'`)
+			commitErr = tx.Commit()
+		})
+		w.run(t)
+		if !errors.Is(stmtErr, sql.ErrTxDone) || !errors.Is(commitErr, context.Canceled) && !errors.Is(commitErr, sql.ErrTxDone) || w.balance(t, "alice") != 100 {
+			t.Fatalf("statement %v, commit %v, balance %d; want ErrTxDone, Canceled or ErrTxDone, 100", stmtErr, commitErr, w.balance(t, "alice"))
+		}
 	}
 }

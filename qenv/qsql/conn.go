@@ -229,9 +229,11 @@ type tx struct {
 	inc      int
 	readOnly bool
 	created  map[string]*table // tables it created, not yet committed
-	changes  []Change          // for Options.OnCommit
-	failed   error             // the error that aborted it: what 25P02 names
-	ended    bool              // committed or rolled back in the Store
+	read     map[string]bool   // the keys it looked up, and the prefixes it scanned (claim)
+	scanned  []string
+	changes  []Change // for Options.OnCommit
+	failed   error    // the error that aborted it: what 25P02 names
+	ended    bool     // committed or rolled back in the Store
 }
 
 func (c *connector) begin(ctx context.Context, readOnly bool) *tx {
@@ -239,7 +241,7 @@ func (c *connector) begin(ctx context.Context, readOnly bool) *tx {
 	c.txs++
 	id := c.txs
 	c.mu.Unlock()
-	t := &tx{c: c, id: id, ctx: ctx, txn: c.st.Begin(ctx), readOnly: readOnly, created: map[string]*table{}}
+	t := &tx{c: c, id: id, ctx: ctx, txn: c.st.Begin(ctx), readOnly: readOnly, created: map[string]*table{}, read: map[string]bool{}}
 	if p := qenv.ProcessOf(ctx); p != nil {
 		t.proc, t.inc = p, p.Incarnation
 	}
@@ -281,16 +283,18 @@ func (t *tx) end() {
 // usable is the error a statement or Commit gets on a transaction that
 // cannot go on, or nil.
 func (t *tx) usable(ctx context.Context) error {
+	if t.ctx.Err() != nil {
+		// cancelled: the reaper rolls it back at its step. database/sql
+		// answers sql.ErrTxDone itself once its goroutine has rolled the
+		// Tx back, and that goroutine races the task: the same answer
+		// here makes a statement's error the same either way
+		return sql.ErrTxDone
+	}
 	if t.failed != nil {
 		return &Error{Code: "25P02", Message: fmt.Sprintf("current transaction is aborted, commands ignored until end of transaction block (it failed with: %v)", t.failed), Err: t.failed}
 	}
 	if t.ended {
 		return &Error{Code: "25P01", Message: "there is no transaction in progress"}
-	}
-	if err := t.ctx.Err(); err != nil {
-		// cancelled: the reaper rolls it back at its step, whoever gets
-		// here first (this task, or database/sql's goroutine)
-		return canceled(err)
 	}
 	if err := ctx.Err(); err != nil {
 		t.fail(canceled(err)) // the statement's own context, a task's: PostgreSQL aborts the transaction

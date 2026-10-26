@@ -18,8 +18,12 @@
 //
 // Errors are *Error, with PostgreSQL's SQLSTATE (the SQLState method that
 // retry loops look for with errors.As): 40001 for a serialization failure
-// (qenv.ErrConflict), 40P01 for a deadlock, 23505 for a duplicate key,
-// 25P02 for a statement after a failed one in a transaction.
+// (qenv.ErrConflict), 40P01 for a deadlock, 23505 for a duplicate key
+// (a key another transaction committed, at every level, as PostgreSQL's
+// unique check), 25P02 for a statement after a failed one in a
+// transaction. After the transaction's context is cancelled, statements
+// fail with sql.ErrTxDone and Commit with context.Canceled or
+// sql.ErrTxDone (database/sql's own answers, by its goroutine's timing).
 //
 // database/sql's own goroutines stay out of the simulation's way: its
 // connection opener runs only when the pool is limited (SetMaxOpenConns)
@@ -52,7 +56,10 @@ type Options struct {
 	// found broken (driver.ErrBadConn) when a transaction or an
 	// autocommit statement starts, before anything ran. database/sql
 	// retries it on another connection, twice, then on a new one; the
-	// caller sees driver.ErrBadConn only if all three fail.
+	// caller sees driver.ErrBadConn only if all three fail. The kind has
+	// no process (the Store is none's): under Sim.SettleCore it is drawn
+	// for a task outside the core and nominal for one inside, as any fault
+	// a task makes.
 	BadConn bool
 	// OnCommit, if set, runs at each commit that changed rows, with the
 	// rows' changes in order, when the Store applies it: before Commit
