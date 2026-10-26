@@ -28,6 +28,7 @@ func recoveries(r Requeue, tr qload.Trigger, n int) int {
 // against 20, and the storm outlives the dip. The global limit alone
 // saves it. The CTMC agrees.
 func TestControlPlaneRecovers(t *testing.T) {
+	t.Parallel()
 	const n = 4
 	for _, r := range Requeues {
 		got := recoveries(r, Dip, n)

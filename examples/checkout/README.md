@@ -34,7 +34,7 @@ A line-of-business app checked against its model under fault injection.
   way.
 
 ```sh
-go test ./examples/checkout/...                 # explorations of every case below, Hegel shrinking (~2 min)
+go test ./examples/checkout/...                 # explorations of every case below, Hegel shrinking (~2 min; -short: fewer seeds)
 examples/checkout/run-demo.sh                   # simulate, write step logs, gotogether validate them
 MUTATION=lock-without-write ISOLATIONS=snapshot examples/checkout/run-demo.sh
 ```
@@ -43,7 +43,12 @@ MUTATION=lock-without-write ISOLATIONS=snapshot examples/checkout/run-demo.sh
 
 `System.Explore` runs 60–420 seeds per case (a rare bug gets the seeds that
 find it all but once in a thousand) and checks them in one quint
-batch. Each test states the verdict it expects with `.Expect(t, claims...)`.
+batch. Under `-short` (the per-push tier) a mutant's case runs 25–70
+seeds, enough to miss its bug at most one time in twenty, and the faithful
+shop 6 seeds a level; the two bugs found in about one run in fifty
+(`NoLocks`'s stale refusal, `DualWrite`) and the mutants that conform run
+only in full. Each test states the verdict it expects with
+`.Expect(t, claims...)`.
 
 | Code | Serializable | Snapshot isolation | Read committed |
 |---|---|---|---|
@@ -55,11 +60,11 @@ batch. Each test states the verdict it expects with `.Expect(t, claims...)`.
 
 The faithful shop also conforms with its broker partitioned from the
 relay and the consumers (`Config.Partitions`,
-`TestFaithfulConformsUnderPartitions`): a publish waits out a cut, and a
-consumer cut off has its events redelivered (20 redeliveries in 16 of 40
-runs with every other fault and crashes off, measured apart from the
-test, which runs with every fault; none without the cuts),
-which the shop already survives.
+`TestFaithfulConformsUnderPartitions`, not under `-short`): a publish
+waits out a cut, and a consumer cut off has its events redelivered (20
+redeliveries in 16 of 40 runs with every other fault and crashes off,
+measured apart from the test, which runs with every fault; none without
+the cuts), which the shop already survives.
 
 A table like this answers "harness quirk or real bug?" for each finding.
 `LockWithoutWrite` is a real bug if production runs PostgreSQL at

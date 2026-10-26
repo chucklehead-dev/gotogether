@@ -35,13 +35,32 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.05
 
 var levels = []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted}
 
+// seeds is full, or short under -short (the per-push tier): short is
+// chosen so that every claim a test makes keeps a miss chance of at most
+// 5% at the rate measured with full seeds; the nightly runs full.
+func seeds(full, short int) int {
+	if testing.Short() {
+		return short
+	}
+	return full
+}
+
 // The faithful shop is correct at every isolation level, through crashes,
-// lost responses, duplicate requests and redeliveries.
+// lost responses, duplicate requests and redeliveries: 60 seeds a level,
+// which take every fault option. Under -short, 6 seeds a level conform,
+// without the claim that they exercise every option (the rarest delays
+// take more seeds).
 func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 	qtest.RequireQuint(t)
+	t.Parallel()
+	claims := []qtest.Claim{qtest.Conforms(), qtest.NotVacuous()}
+	if !testing.Short() {
+		claims = append(claims, qtest.Exercised())
+	}
 	for _, iso := range levels {
 		t.Run(iso.String(), func(t *testing.T) {
-			explore(t, checkout.Config{Isolation: iso}, crashy, qtest.ExploreConfig{Seeds: 60}).Expect(t, qtest.Conforms(), qtest.NotVacuous(), qtest.Exercised())
+			t.Parallel()
+			explore(t, checkout.Config{Isolation: iso}, crashy, qtest.ExploreConfig{Seeds: seeds(60, 6)}).Expect(t, claims...)
 		})
 	}
 }
@@ -53,8 +72,13 @@ func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 // cancellation's stock returned after it), which the model, judging the
 // refusal where it committed, rejects; a crash after a commit (qenv.Service's
 // window) makes that interleaving reachable.
+//
+// Under -short each case runs the seeds that keep its claim's miss chance
+// at most 5%; the two caught in about one run in fifty need hundreds, and
+// a mutant that conforms claims no catch: they are left to the full run.
 func TestMutants(t *testing.T) {
 	qtest.RequireQuint(t)
+	t.Parallel()
 	shipOrCancel := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
 	cases := []struct {
 		m     shop.Mutation
@@ -62,32 +86,47 @@ func TestMutants(t *testing.T) {
 		rates qenv.Rates
 		want  []qtest.Claim
 		seeds int // 0: 100
+		short int // seeds under -short; 0: skipped there
 	}{
-		{shop.NoLocks, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0},
-		// the stale refusal in about one run in fifty (2 of 100): 350 seeds
-		// miss it about once in a thousand
-		{shop.NoLocks, qenv.SnapshotIsolation, crashy, []qtest.Claim{qtest.Rejects("refuse"), qtest.None(qtest.Rejects("place"))}, 350},
+		{shop.NoLocks, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0, 0},
+		// the stale refusal in about one run in fifty (2 of 100, 4 of 350):
+		// 350 seeds miss it about once in a thousand, and the 260 that
+		// would miss it one time in twenty are too many for -short
+		{shop.NoLocks, qenv.SnapshotIsolation, crashy, []qtest.Claim{qtest.Rejects("refuse"), qtest.None(qtest.Rejects("place"))}, 350, 0},
 		// lost updates: the stock oversold, or a shipment and a cancellation
-		{shop.NoLocks, qenv.ReadCommitted, qenv.DefaultRates, []qtest.Claim{qtest.AnyOf(qtest.Rejects("place"), shipOrCancel)}, 0},
-		{shop.LockWithoutWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0},
-		{shop.LockWithoutWrite, qenv.ReadCommitted, crashy, []qtest.Claim{qtest.Conforms()}, 0},
-		// write skew: a shipment and a cancellation both commit
-		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{shipOrCancel}, 0},
-		// a retry after a lost response charges again
-		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Violates("chargedAtMostOnce")}, 0},
+		// (13 of 100 runs reject one; most others mismatch after place): 25
+		// seeds miss it 3% of the time
+		{shop.NoLocks, qenv.ReadCommitted, qenv.DefaultRates, []qtest.Claim{qtest.AnyOf(qtest.Rejects("place"), shipOrCancel)}, 0, 25},
+		{shop.LockWithoutWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0, 0},
+		{shop.LockWithoutWrite, qenv.ReadCommitted, crashy, []qtest.Claim{qtest.Conforms()}, 0, 0},
+		// write skew: a shipment and a cancellation both commit (9 of 100,
+		// though 3 of the first 50): 70 seeds miss it 0.1% to 1.4% of the
+		// time
+		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{shipOrCancel}, 0, 70},
+		// a retry after a lost response charges again (15 of 100): 25 seeds
+		// miss it 1.7% of the time
+		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Violates("chargedAtMostOnce")}, 0, 25},
 		// a crash between commit and publish loses the order's payment: a
 		// one-step window, found with crashes ten times as often, in about
 		// one run in fifty (5 and 6 of 300, measured with and without late
-		// requests): 420 seeds miss it about once in a thousand
-		{shop.DualWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Violates("settledCorrectly")}, 420},
+		// requests): 420 seeds miss it about once in a thousand; too many
+		// for -short
+		{shop.DualWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Violates("settledCorrectly")}, 420, 0},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
-			seeds := c.seeds
-			if seeds == 0 {
-				seeds = 100
+			t.Parallel()
+			n := c.seeds
+			if n == 0 {
+				n = 100
 			}
-			explore(t, checkout.Config{Isolation: c.iso, Mutation: c.m}, c.rates, qtest.ExploreConfig{Seeds: seeds}).Expect(t, c.want...)
+			if testing.Short() {
+				if c.short == 0 {
+					t.Skip("a rare catch, or a mutant that conforms: the full tests run it")
+				}
+				n = c.short
+			}
+			explore(t, checkout.Config{Isolation: c.iso, Mutation: c.m}, c.rates, qtest.ExploreConfig{Seeds: n}).Expect(t, c.want...)
 		})
 	}
 }
@@ -142,8 +181,14 @@ func TestHegelFaithful(t *testing.T) {
 // (measured apart from this test, with every fault but the cuts off and
 // crashes off, at nemesis rate 0.05: 20 redeliveries in 16 of 40 runs,
 // none without the cuts), and the shop, which already survives
-// redelivery, stays correct under every fault.
+// redelivery, stays correct under every fault: 40 seeds. A conformance
+// claim, not a catch: -short leaves it to the full tests, and the faithful
+// shop conforms at every level there without the cuts.
 func TestFaithfulConformsUnderPartitions(t *testing.T) {
 	qtest.RequireQuint(t)
+	if testing.Short() {
+		t.Skip("conforms under partitions: the full tests run it")
+	}
+	t.Parallel()
 	explore(t, checkout.Config{Isolation: qenv.Serializable, Partitions: true}, crashy, qtest.ExploreConfig{Seeds: 40}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }

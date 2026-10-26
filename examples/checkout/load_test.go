@@ -33,10 +33,16 @@ func consumers(n int) checkout.LoadConfig {
 // redeliveries keep every consumer busy, 6 calls queue at the provider
 // (1.2 s of work against a 1 s timeout), they all time out, and the
 // provider keeps working on calls nobody waits for. The bound is the
-// provider's capacity times the timeout: 5 consumers.
+// provider's capacity times the timeout: 5 consumers. Two runs of each,
+// one under -short.
 func TestConsumersBeyondCapacityCollapse(t *testing.T) {
+	t.Parallel()
+	runs := 2
+	if testing.Short() {
+		runs = 1
+	}
 	for _, c := range []struct{ consumers, maxBacklog, minBacklog int }{{4, 100, 0}, {6, 1 << 30, 200}} {
-		for i, r := range qload.Runs(consumers(c.consumers).System(5*time.Minute), qload.Trigger{}, 2) {
+		for i, r := range qload.Runs(consumers(c.consumers).System(5*time.Minute), qload.Trigger{}, runs) {
 			backlog := r.Series.Last("backlog")
 			t.Logf("%d consumers, seed %d: %d payment events in the backlog after %v", c.consumers, i+1, backlog, r.Series.Points[len(r.Series.Points)-1].T)
 			if backlog > c.maxBacklog || backlog < c.minBacklog {
