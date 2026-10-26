@@ -755,6 +755,26 @@ type Transport struct
     field Refuse bool
     method (*Transport) RoundTrip(req *http.Request) (*http.Response, error)
 
+== github.com/chucklehead-dev/gotogether/qenv/qsql
+func Open(s *qenv.Sim, st *qenv.Store, o ...Options) *sql.DB
+func Table(st *qenv.Store, name string) []map[string]any
+type Change struct
+    field Table string
+    field Op string
+    field Old map[string]any
+    field New map[string]any
+type Error struct
+    field Code string
+    field Message string
+    field Err error
+    method (*Error) Error() string
+    method (*Error) SQLState() string
+    method (*Error) Unwrap() error
+type Options struct
+    field Name string
+    field BadConn bool
+    field OnCommit func(ctx context.Context, changes []Change)
+
 == github.com/chucklehead-dev/gotogether/qenv/weave
 func Add(wg *sync.WaitGroup, n int)
 func Done(wg *sync.WaitGroup)

@@ -8,6 +8,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qenv/qsql`: a database/sql driver over a `qenv.Store`, for an
+  unmodified database/sql service in a simulation (`Open`, `Options`,
+  `Change`, `Error`, `Table`): a SQL subset (CREATE TABLE, INSERT [ON
+  CONFLICT DO NOTHING], SELECT [FOR UPDATE], UPDATE with `c = c ± ?`,
+  DELETE; equality only), the Store's isolation level and history check,
+  PostgreSQL's SQLSTATEs (`SQLState()`, for retry loops), the fault kind
+  `sql.<name>.conn` (`badConn`), commit faults as 08006, and a reaper
+  task for transactions whose context is cancelled.
 - `qenv/qhttp`: an unmodified `http.Handler` and `http.Client` in a
   simulation. `NewServer` (its handler installed by `Handle` at each
   incarnation, connections refused before it and while the process is
