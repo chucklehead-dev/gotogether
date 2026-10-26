@@ -369,6 +369,33 @@ func TestStrictSerializability(t *testing.T) {
 	}
 }
 
+// A real-time cycle is said as the others are, from the real-time edge
+// that closes it: its dependencies with their keys, real time's without,
+// in the cycle's order. Its kind counts real time's edges as writes'
+// (G0-realtime: only ww and rt), so a cycle of two ww and one rt is no
+// G1c. T3 completed before T1 began, and the reads put T1's append to x
+// before T2's and T2's to y before T3's.
+func TestRealTimeCycleText(t *testing.T) {
+	at := func(u int) time.Time { return time.Unix(0, int64(u)) }
+	timed := func(x qhistory.Txn, from, to int) qhistory.Txn {
+		x.Invoked, x.Completed = at(from), at(to)
+		return x
+	}
+	h := []qhistory.Txn{
+		timed(txn(1, app("x", 1)), 2, 3), timed(txn(2, app("x", 2), app("y", 2)), 2, 3), timed(txn(3, app("y", 3)), 0, 1),
+		txn(9, rd("x", 1, 2), rd("y", 2, 3)),
+	}
+	want := `1 anomalies (strict serializability):
+  G0-realtime (forbidden): 3 -rt-> 1 -ww(x)-> 2 -ww(y)-> 3 (rt: completed before the next was invoked)`
+	rep, err := qhistory.Check(qhistory.StrictSerializable, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rep.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 // Check against brute force: a history is (strictly) serializable iff
 // some serial order of its transactions (that real time allows) replays
 // every read exactly. Histories are made by running random transactions
