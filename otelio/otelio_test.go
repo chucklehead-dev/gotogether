@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -117,6 +118,38 @@ func TestRefRoundTrip(t *testing.T) {
 	for _, steps := range [][]qtrace.Step{mem, file} {
 		if len(steps) != 1 || steps[0].Ref != "trace.jsonl:42" || steps[0].Args["job"] != "j1" {
 			t.Errorf("steps: %+v", steps)
+		}
+	}
+}
+
+// A recorder's watermark (Recorder.CompleteThrough) survives OTel, in
+// memory and in an OTLP/JSON file: a record, not a step, with no seq of
+// its own, so the recorder's next step keeps the sequence dense.
+func TestWatermarkRoundTrip(t *testing.T) {
+	var buf bytes.Buffer
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr), sdktrace.WithSyncer(NewFileExporter(&buf)))
+	r := qobs.NewRecorder(qobs.NewOTelSink(tp))
+	through := time.Unix(1_800_000_000, 5)
+	r.Record(context.Background(), "submit", nil, "job", "j1")
+	r.CompleteThrough(context.Background(), through)
+	r.Record(context.Background(), "submit", nil, "job", "j2")
+	_ = tp.Shutdown(context.Background())
+	mem, err := StepsFromSpans(sr.Ended())
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := ReadSteps(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, steps := range [][]qtrace.Step{mem, file} {
+		trs, issues := qtrace.Reconstruct(steps)
+		if len(trs) != 1 || len(trs[0].Steps) != 2 || len(issues) > 0 || len(trs[0].Issues) > 0 {
+			t.Fatalf("steps %+v: %v %v", steps, trs, issues)
+		}
+		if got, every := trs[0].CompleteThrough(); !got.Equal(through) || !every {
+			t.Errorf("complete through %v (every %v), want %v", got, every, through)
 		}
 	}
 }

@@ -29,6 +29,10 @@ func (k *Keyer) Step(s *Step) string {
 		if !s.LostBefore.IsZero() {
 			rec += fmt.Sprintf("<%d", s.LostBefore.UnixNano()) // decides whether a settle settles
 		}
+	case !s.CompleteThrough.IsZero():
+		// its time is the verdict's (validate's Checker.Key, relative to
+		// the run's start): here only that it is one
+		rec = "|complete"
 	case s.Call != 0:
 		rec = fmt.Sprintf("|call%d", s.Call)
 	}

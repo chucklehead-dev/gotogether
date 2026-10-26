@@ -55,6 +55,12 @@ const (
 	// lost step was recorded before it, as a process reaped by then
 	// recorded nothing later (qnemesis's crash). Absent: unbounded.
 	KeyLostBefore = "quint.lost_before_unix_nano"
+	// KeyCompleteThrough marks a watermark record (MarkComplete,
+	// qobs.Recorder.CompleteThrough, validate -complete-through): its
+	// recorder's steps recorded at or before this time (Unix nanoseconds)
+	// are all in the input. Recorder "*" states it of every recorder. A
+	// record, not a step: Reconstruct keeps it as Trace.Collected.
+	KeyCompleteThrough = "quint.complete_through_unix_nano"
 	// KeyAssumed marks an assumed step (Step.Ambiguous): a pending call's
 	// effect a resolution placed, with no expect checked after it.
 	KeyAssumed = "quint.assumed"
@@ -99,6 +105,10 @@ type Step struct {
 	// LostBefore, if set, bounds a lost suffix: its steps were all
 	// recorded before it (KeyLostBefore).
 	LostBefore time.Time
+	// CompleteThrough, if set, marks a watermark record
+	// (KeyCompleteThrough), not a step: its recorder's steps through this
+	// time are all in the input.
+	CompleteThrough time.Time
 	// Ambiguous marks a step whose effect is assumed, not observed: a
 	// pending call resolved as having taken effect (qtest.ResolvePending).
 	// It has no outcome and no observations, and the binding checks no
@@ -121,9 +131,12 @@ type Step struct {
 }
 
 // Model reports whether s is a model step: not an invocation record, a
-// settle record or a loss record, which Reconstruct takes out of the
-// steps. A sink that counts or replays steps skips the others.
-func (s *Step) Model() bool { return !s.Invocation && !s.Settled && s.Lost == "" }
+// settle record, a loss record or a watermark record, which Reconstruct
+// takes out of the steps. A sink that counts or replays steps skips the
+// others.
+func (s *Step) Model() bool {
+	return !s.Invocation && !s.Settled && s.Lost == "" && s.CompleteThrough.IsZero()
+}
 
 // Get returns an argument or, with the "obs." prefix, an observation.
 func (s *Step) Get(name string) (any, bool) {
@@ -217,6 +230,13 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 				}
 				s.LostBefore = time.Unix(0, n)
 			}
+		}
+		if v, ok := layers[0][KeyCompleteThrough]; ok {
+			n, err := toInt(v)
+			if err != nil || n <= 0 {
+				return s, fmt.Errorf("%s: %s: not a time in Unix nanoseconds: %v", EventName, KeyCompleteThrough, v)
+			}
+			s.CompleteThrough = time.Unix(0, n)
 		}
 		if v, ok := layers[0][KeyAssumed]; ok {
 			s.Ambiguous = v == true || fmt.Sprint(v) == "true"

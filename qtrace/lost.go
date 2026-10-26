@@ -72,7 +72,7 @@ func MarkLost(steps []Step, l Lost) []Step {
 	var near *Step
 	for i := range steps {
 		s := &steps[i]
-		if s.Recorder != l.Recorder || s.Lost != "" || !l.Prefix && l.After > 0 && s.Seq > l.After {
+		if s.Recorder != l.Recorder || s.Lost != "" || !s.CompleteThrough.IsZero() || !l.Prefix && l.After > 0 && s.Seq > l.After {
 			continue
 		}
 		if near == nil || l.Prefix && earlier(s, near) || !l.Prefix && earlier(near, s) {

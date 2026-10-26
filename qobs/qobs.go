@@ -432,6 +432,30 @@ func (r *Recorder) Settled(ctx context.Context) {
 	r.sink.Record(ctx, s)
 }
 
+// CompleteThrough records, through the context's recorder (found as
+// Record finds it), that its steps recorded at or before t are all
+// delivered (CompleteThrough of the Recorder). A no-op with no recorder.
+func CompleteThrough(ctx context.Context, t time.Time) {
+	if r := From(ctx); r != nil {
+		r.CompleteThrough(ctx, t)
+	}
+}
+
+// CompleteThrough records a watermark (qtrace.KeyCompleteThrough): every
+// step r recorded at or before t has reached its sink's destination, so
+// a validation that reads the destination may judge an absent step
+// whose window ends by t as absent, not as not collected yet. Write it
+// where delivery is known: after the sink's flush, or a collector's
+// acknowledgement of everything up to t. A watermark is a record, not a
+// step, and takes no seq. A log that states none is taken whole.
+func (r *Recorder) CompleteThrough(ctx context.Context, t time.Time) {
+	if r == nil || hooks.Discarding() || t.IsZero() {
+		return
+	}
+	s := &qtrace.Step{Action: "complete", Recorder: r.id, Actor: r.actor, Process: r.process, CompleteThrough: t, Time: hooks.Now()}
+	r.sink.Record(ctx, s)
+}
+
 // step builds a step from Record's arguments; false if "when" excludes it.
 func (r *Recorder) step(ctx context.Context, action string, err error, kv []any) (*qtrace.Step, bool) {
 	s := qtrace.Step{Action: action, Recorder: r.id, Actor: r.actor, Process: r.process, Outcome: outcome(err)}

@@ -19,6 +19,7 @@ type Filter struct {
 	// matches one of the patterns (path.Match: "checkout-*").
 	Actors, Actions []string
 	// Since and Until, if set, keep the steps recorded in [Since, Until).
+	// A watermark past Until is kept as complete through just before it.
 	Since, Until time.Time
 	// Pseudonymize names the fields (arguments, "obs.<name>", "actor")
 	// whose string values become pseudonyms: a salted hash, the same for
@@ -69,6 +70,16 @@ func (f Filter) Apply(steps []Step) []Step {
 			out = append(out, s) // a loss record is its recorder's, whatever of its steps were kept: what they cannot show
 			continue
 		}
+		if !s.CompleteThrough.IsZero() {
+			// a watermark too, but no later than the window's end: the
+			// steps after Until are taken out, and a watermark past it
+			// would say their absence is the system's
+			if !f.Until.IsZero() && !s.CompleteThrough.Before(f.Until) {
+				s.CompleteThrough = f.Until.Add(-1)
+			}
+			out = append(out, s)
+			continue
+		}
 		if !match(f.Actors, s.Actor) || !match(f.Actions, s.Action) ||
 			(!f.Since.IsZero() && s.Time.Before(f.Since)) || (!f.Until.IsZero() && !s.Time.Before(f.Until)) {
 			continue
@@ -108,5 +119,7 @@ func (f Filter) Apply(steps []Step) []Step {
 		kept[s.Recorder] = true
 		out = append(out, s)
 	}
-	return slices.DeleteFunc(out, func(s Step) bool { return s.Lost != "" && !kept[s.Recorder] })
+	return slices.DeleteFunc(out, func(s Step) bool {
+		return (s.Lost != "" || !s.CompleteThrough.IsZero()) && !kept[s.Recorder] && s.Recorder != AllRecorders
+	})
 }

@@ -106,6 +106,10 @@ templates (collections, outcomes, ITF), or setting up the analyzers
     completed.
   - `qtest.Undecided(qtest.Finishes(), "lost its tail")`: the run has no
     verdict for it (a lost tail), and says why.
+  - `qtest.Absent(name, validate.Uncollected)`: a step it was due to show
+    is missing, for that cause (`Dropped`, `Uncollected`, `Defect`, as
+    the report's `absent:` section says; only a defect is a FAIL):
+    references/partial-logs.md, "Absent steps".
 
   On a miss, the failure message is the report.
 - In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use
@@ -120,7 +124,8 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   input is `no verdict (...)`, also exit 1. It needs a binding with an
   eventual val, the journey's end. Other
   flags: `-linearize`, `-linearize-key k`, `-resolve-pending`,
-  `-lost-prefix r`, `-lost-suffix r`, `-invariants a,b`, `-itf`,
+  `-lost-prefix r`, `-lost-suffix r`, `-complete-through r=T` (a
+  collector's watermark: r's steps through T are all in; `*=T`), `-invariants a,b`, `-itf`,
   `-history out.svg`, `-mutate-steps` (observation mutants after a
   pass; `-mutate-ops`, `-mutate-limit`).
 - A portable failure: `-manifest run.json` writes the run's manifest
@@ -172,7 +177,9 @@ for a list-append workload and `qhistory.Check`.
 A log that lost its head (rotated, truncated, a recorder started
 mid-run) or its tail (torn, killed): read
 [references/partial-logs.md](references/partial-logs.md) for the
-`snapshot` step it starts from and what a lost tail leaves unjudged.
+`snapshot` step it starts from and what a lost tail leaves unjudged;
+read it too when a report has an `absent:` section, or a log is still
+being collected (a watermark: dropped, uncollected or a defect).
 
 Production logs are selected and sanitized before they are checked
 (`gotogether steps -binding ... -pseudonymize ...`): read

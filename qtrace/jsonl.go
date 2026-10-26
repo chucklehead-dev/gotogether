@@ -44,6 +44,9 @@ func (s *Step) Attributes() map[string]any {
 			m[KeyLostBefore] = s.LostBefore.UnixNano()
 		}
 	}
+	if !s.CompleteThrough.IsZero() {
+		m[KeyCompleteThrough] = s.CompleteThrough.UnixNano()
+	}
 	if s.Ambiguous {
 		m[KeyAssumed] = true
 	}
@@ -177,7 +180,7 @@ func tornAt(steps []Step) []Step {
 	last := map[string]uint64{}
 	var recs []string
 	for _, s := range steps {
-		if s.Lost != "" {
+		if s.Lost != "" || !s.CompleteThrough.IsZero() {
 			continue
 		}
 		if _, ok := last[s.Recorder]; !ok {

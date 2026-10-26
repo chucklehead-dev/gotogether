@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
-	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A Finish is whether a run is a finished one, not a prefix of one
@@ -20,7 +20,8 @@ type Finish struct {
 	// Reason names what is missing in a word, as the CLI's result line
 	// counts it: "incomplete (pending calls)", "incomplete (no settle)",
 	// "incomplete (no eventual val)", "incomplete (eventual val false)",
-	// "no verdict (lost tail)", "no verdict"; or the run's own failure
+	// "no verdict (lost tail)", "no verdict (uncollected)" (the
+	// recorders' watermarks reach no settle), "no verdict"; or the run's own failure
 	// (Result.Reason) when it does not conform. "" when finished.
 	Reason string
 	// Actor is the actor the reason is of ("" the whole run).
@@ -66,6 +67,7 @@ func (r *Report) Finished() Finish {
 	var unknowns []string
 	unknownActor := ""
 	settled, lostTail, eventuals := false, false, 0
+	var collecting time.Time // the earliest watermark stated: the log is still being collected
 	for _, a := range r.Actors {
 		if a.Conforms == Fail {
 			return miss(a.Reason(), a.Actor, fmt.Sprintf("actor %s does not conform (%s)", a.Actor, a.Reason()))
@@ -92,14 +94,21 @@ func (r *Report) Finished() Finish {
 			}
 		}
 		for _, p := range a.Pending {
-			if !inLostTail(a, p) {
+			switch a.PendingCause(p) {
+			case Defect:
 				return miss("incomplete (pending calls)", a.Actor, fmt.Sprintf("call %s (process %s) was invoked and never completed: answer every call before the settle, "+
 					"and record its completion (Call.Done); a call ResolvePending places is still one its caller never got the answer to", p.String(), p.Process))
+			case Uncollected:
+				unknowns, unknownActor = append(unknowns, fmt.Sprintf("call %s's completion may not be collected yet", p.String())), a.Actor
+			default:
+				unknowns, unknownActor = append(unknowns, fmt.Sprintf("call %s may have completed in a lost tail", p.String())), a.Actor
 			}
-			unknowns, unknownActor = append(unknowns, fmt.Sprintf("call %s may have completed in a lost tail", p.String())), a.Actor
 		}
 		settled = settled || a.Settled
 		lostTail = lostTail || len(a.Lost) > 0
+		if t, _ := a.collected(); !t.IsZero() && (collecting.IsZero() || t.Before(collecting)) {
+			collecting = t
+		}
 	}
 	switch {
 	case settled && eventuals == 0:
@@ -107,6 +116,10 @@ func (r *Report) Finished() Finish {
 	case !settled && lostTail:
 		return Finish{NotEvaluated, "no verdict (lost tail)", unknownActor, strings.Join(append(unknowns,
 			"a recorder lost its tail, which may hold the settle, the journey's end or a call's completion: no verdict; check a log that kept its steps (a qobs.Synced sink)"), "; ")}
+	case !settled && !collecting.IsZero():
+		return Finish{NotEvaluated, "no verdict (uncollected)", unknownActor, strings.Join(append(unknowns, fmt.Sprintf(
+			"the recorders state watermarks (the earliest %s) that reach no settle: the log is still being collected, and the settle, the journey's end or a call's completion may not be in it yet; "+
+				"validate again once the watermarks pass the run's settle (qobs.Recorder.CompleteThrough, gotogether validate -complete-through)", stamp(collecting))), "; ")}
 	case !settled:
 		return miss("incomplete (no settle)", "", "the run recorded no settle last, so its eventual vals were not judged: record qobs.Settled after the driver's calls are answered and the collector drained "+
 			"(Sim.Settle in a simulation), with nothing recorded after it")
@@ -114,17 +127,4 @@ func (r *Report) Finished() Finish {
 		return Finish{NotEvaluated, "no verdict", unknownActor, strings.Join(unknowns, "; ")}
 	}
 	return Finish{Verdict: Pass}
-}
-
-// inLostTail reports whether pending call p's completion may be in a lost
-// tail of a's: it was invoked before the cut of some recorder of a's
-// steps (a search re-sequences the caller's recorder: any lost tail is
-// taken as its).
-func inLostTail(a *Result, p qtrace.Step) bool {
-	for _, l := range a.Lost {
-		if !p.Time.After(l.At.Add(qtrace.RealTimeSlack)) {
-			return true
-		}
-	}
-	return false
 }

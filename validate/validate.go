@@ -97,6 +97,21 @@ type Result struct {
 	// judged; otherwise they are not among Invariants.
 	Settled bool
 
+	// Gaps are the holes in the seqs of the recorders of its steps
+	// (qtrace.Trace.Gaps; a search's, of the history it ordered), and
+	// Collected their watermarks (qtrace.Trace.Collected): what Absent's
+	// causes are read from.
+	Gaps      []qtrace.Gap
+	Collected []qtrace.Watermark
+
+	// Absent are the steps the run was expected to show and does not,
+	// each with its cause (judgeAbsent): a bounded response not met in
+	// time or not judged, an eventual val not judged or false at the
+	// settle, a call never completed. Only a Defect's is a FAIL (a within's
+	// or an eventual val's among Invariants; a call's, of qtest.Completes
+	// and Finished); one Dropped or Uncollected is no verdict.
+	Absent []Absence
+
 	// Constants are the instance checked against ("NAME = expr"), printed
 	// with a failure: a run that fails at its first step is most often
 	// checked against the wrong instance.
@@ -113,6 +128,9 @@ type Result struct {
 	// resumed: replayed from a resume's witness start, whose obligations
 	// triggered already (a bounded response's) began in the lost prefix
 	resumed bool
+	// withins are the bounded responses judgeWithin found not met or not
+	// judged, for Absent
+	withins []obligation
 }
 
 type Failure struct {
@@ -217,7 +235,8 @@ func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *b
 // did not says so, or a run that never settled (no Settle, a step after
 // it, its error dropped) would pass with them unjudged and no word.
 func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
-	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
+	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList(),
+		Gaps: t.Gaps, Collected: t.Collected}
 	if len(b.Eventually) > 0 && !t.Settled {
 		res.Issues = append(res.Issues, notJudged(b.Eventually, t.Lost))
 	}
@@ -723,6 +742,12 @@ func (r *Result) Summary() string {
 		fmt.Fprintf(&b, "  invariant %s: %s\n", i.Name, v)
 		if i.Failure != nil {
 			fmt.Fprintf(&b, "%s", i.Failure.describe("    "))
+		}
+	}
+	if len(r.Absent) > 0 {
+		fmt.Fprintf(&b, "  absent:\n")
+		for _, a := range r.Absent {
+			fmt.Fprintf(&b, "    %s: %s: %s\n", a.Name, a.Cause.label(), a.Why)
 		}
 	}
 	if !r.OK() && len(r.Constants) > 0 {

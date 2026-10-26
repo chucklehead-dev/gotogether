@@ -119,11 +119,14 @@ recorder sees. It does not say the telemetry is complete: a driver
 whose every call was answered is not a collector that drained. Steps
 still in an exporter's queue, a collector's batch or a log shipper are
 absent from the input, and a run validated before they arrive is judged
-on a prefix that looks settled. Until a collector can state that it is
-complete through a time (a watermark, not built yet: roadmap E7), read
-the steps from files the processes themselves wrote and closed
-(`qobs.FileSink` with `PerStep` or `Synced`), or wait for the pipeline
-by its own means before validating.
+on a prefix that looks settled. Read the steps from files the
+processes themselves wrote and closed (`qobs.FileSink` with `PerStep`
+or `Synced`), or state how far the pipeline has delivered: a watermark
+(`gotogether validate -complete-through r=T`, `*=T` for every recorder;
+`qobs.Recorder.CompleteThrough`) says the recorders' steps through T are
+in. A settle it does not reach then settles nothing, and a step due
+after it is uncollected, no verdict, never a FAIL (partial-logs.md,
+"Absent steps").
 
 ## A journey's manifest
 

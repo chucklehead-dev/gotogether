@@ -174,6 +174,15 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		{"invariants", "account.yaml", []string{"-invariants", "nonNegative"}, seq(acct("deposit", 150, 150)), seq(acct("deposit", 5, 6)), "conformance: FAIL"},
 		{"lost suffix", "funds.binding.yaml", []string{"-lost-suffix", "r"}, seq(acct("deposit", 5, 5), acct("withdraw", 5, 0), settled),
 			seq(acct("deposit", 5, 6)), "conformance: FAIL"},
+		// -complete-through: a watermark past the window judges a run that
+		// never settled, its trace ended before the window (without it the
+		// failing run passes, the obligation open); one before the window
+		// leaves a trace that went on past it no verdict (without it, a
+		// FAIL): absent, uncollected
+		{"complete-through: past the window", "within.yaml", []string{"-complete-through", "r=10000000000"}, seq(timed("crash", 0), timed("heal", 1), timed("elect", 2)),
+			seq(timed("crash", 0), timed("heal", 1), timed("tick", 2)), "hasLeader: FAIL"},
+		{"complete-through: before the window", "within.yaml", []string{"-complete-through", "*=1970-01-01T00:00:03Z"}, seq(timed("crash", 0), timed("heal", 1), timed("elect", 2)),
+			seq(timed("crash", 0), timed("heal", 1), timed("tick", 6)), "1 no verdict (uncollected steps)"},
 		// complete: true makes it the binding's default
 		{"complete", "funds_complete.yaml", nil, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "incomplete (no settle) (the binding is complete)"},
@@ -268,6 +277,9 @@ func TestValidateLost(t *testing.T) {
 		{"as recorded", []string{two}, 1, "RESULT: FAIL (1 of 1 actor: 1 rejects withdraw)", "account.yaml"},
 		{"a's tail lost", []string{"-lost-suffix", "a", two}, 1, "RESULT: FAIL (1 of 1 actor: 1 no verdict (lost steps))", "account.yaml"},
 		{"no such recorder", []string{"-lost-suffix", "z", two}, 2, `validate: -lost-suffix z: no step of recorder "z" in the input: name one of its recorders (a, b)`, "account.yaml"},
+		{"no such recorder's watermark", []string{"-complete-through", "z=1", two}, 2, `validate -complete-through z=1: no step of recorder "z" in the input: name one of its recorders (a, b), or * for every one`, "account.yaml"},
+		{"no time", []string{"-complete-through", "a=soon", two}, 2, `validate -complete-through a=soon: "soon" is no time: give RFC3339 (2026-10-26T12:00:00Z) or Unix nanoseconds`, "account.yaml"},
+		{"no recorder", []string{"-complete-through", "1", two}, 2, `validate -complete-through "1": want recorder=T`, "account.yaml"},
 		{"a snapshot's head lost", []string{"-lost-prefix", "c", snap}, 0, "judged from the state recorded by restore at seq 0 (recorder c lost its first steps)", "snapshot.yaml"},
 		{"a head lost", []string{"-lost-prefix", "c", snap}, 1, "error lost-prefix: recorder c lost its first steps", "account.yaml"},
 		{"torn", []string{torn}, 0, "its recorders' tails are lost after their last steps: eventual vals not judged", "account.yaml"},

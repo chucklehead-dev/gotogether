@@ -311,10 +311,18 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   nightly): a job created twice and a submit answered 199 survive, two
   gaps in the model. Left: a mutant per pair of mutations; retime
   earlier; a corruption of the outcome and the error text.
-- **E7. Absence diagnostics (M).** A collector's watermark (`complete
-  through T`) and a report section naming each absent step's cause:
-  dropped (a gap or loss), uncollected (past the watermark, no settle),
-  or absent by a defect (the only FAIL).
+- **E7. Absence diagnostics (M). Done** (DESIGN §53): a watermark record
+  (`quint.complete_through_unix_nano`; `qobs.Recorder.CompleteThrough`,
+  `qtrace.MarkComplete`, `validate -complete-through r=T`, `*=T`; kept by
+  readers, Filter and searches) and the report's `absent:` section
+  naming each absent step's cause: dropped (a gap, a lost tail), uncollected
+  (past the watermark, or no settle and the trace ended first), or a
+  defect (the only FAIL); `qtest.Absent(name, cause)`. A within is judged
+  where its watermark reaches its window though the run never settled;
+  a settle no watermark reaches settles nothing; a failure a gap may
+  explain is no verdict. A log with no watermark is taken whole, as
+  before. Left: a collector-side writer (an OTel exporter that emits the
+  record after a flush); a pending call's window (a caller's timeout).
 - **E8. External shrinking (L).** ddmin over a driver's actions with a
   reset contract and calibrated reruns; Bombadil's `--reproduce` as the
   rerun.

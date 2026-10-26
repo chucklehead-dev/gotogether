@@ -123,6 +123,9 @@ type RunCheck struct {
 	// declared (validate -lost-prefix, -lost-suffix), not in the logs.
 	LostPrefix []string `json:"lostPrefix,omitempty"`
 	LostSuffix []string `json:"lostSuffix,omitempty"`
+	// CompleteThrough are the watermarks stated (validate
+	// -complete-through), "recorder=T" each, not in the logs.
+	CompleteThrough []string `json:"completeThrough,omitempty"`
 	// Format is the inputs' format as given ("auto", "steps", ...).
 	Format string `json:"format,omitempty"`
 	// NoVars is an ITF input's (validate -novars).

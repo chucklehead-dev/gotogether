@@ -115,8 +115,11 @@ func settled(r *validate.Report) bool {
 // whose callers do not crash (the core's clients under
 // qenv.Sim.SettleCore); Some(validate's pending call) is None(Completes()).
 //
-// A call whose completion may be in a recorder's lost tail (invoked before
-// its cut) is neither: a run with one is no verdict for it.
+// A call whose completion may be out of sight is neither: in a
+// recorder's lost tail (invoked before its cut) or a gap after it, or
+// not collected yet (its recorders state a watermark and the run no
+// settle they reach: validate.Result.PendingCause). A run with one is no
+// verdict for it.
 func Completes() Expectation {
 	completes := func(r *validate.Report) tri {
 		v := yes
@@ -130,7 +133,8 @@ func Completes() Expectation {
 		}
 		return v
 	}
-	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool { return completes(r) == yes }, every: true, tri: completes}
+	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool { return completes(r) == yes }, every: true, tri: completes,
+		why: pendingWhy("")}
 }
 
 // Finishes: the run is a finished journey, not a prefix of one. It
@@ -212,23 +216,66 @@ func Undecided(e Expectation, because ...string) Expectation {
 		}}
 }
 
-// maybeCompleted reports whether pending call p's completion may be in a
-// lost tail of a's: it was invoked before the cut of some recorder of a's
-// steps (a search re-sequences the caller's recorder: any lost tail is
-// taken as its).
+// maybeCompleted reports whether pending call p of a may have completed
+// out of sight: in steps its recorders dropped (a lost tail, a gap after
+// it), or not collected yet (a watermark, no settle), as a's Absent says
+// (validate.Result.PendingCause). Only a Defect's call is certainly
+// pending.
 func maybeCompleted(a *validate.Result, p qtrace.Step) bool {
-	for _, l := range a.Lost {
-		if !p.Time.After(l.At.Add(qtrace.RealTimeSlack)) {
-			return true
+	return a.PendingCause(p) != validate.Defect
+}
+
+// Absent: the run was expected to show a step and does not, for this
+// cause (validate.Dropped, Uncollected or Defect, as the report's absent
+// section says it, validate.Result.Absent): name is a bounded response's
+// (binding.Within.Name), an eventual val's (validate.EventuallyName) or a
+// pending call's action. It states why a step is missing without
+// walking the report: a production trace's late window is
+// Absent(name, validate.Uncollected), never a FAIL, and the same window
+// with its watermark past it Absent(name, validate.Defect), a FAIL.
+func Absent(name string, cause validate.Cause) Expectation {
+	check := func(r *validate.Report) bool {
+		for _, a := range r.Absent() {
+			if a.Name == name && a.Cause == cause {
+				return true
+			}
 		}
+		return false
 	}
-	return false
+	// two-valued: the absent section decides it, whatever verdict the
+	// obligation has (an uncollected within has none, and is Absent)
+	value := func(r *validate.Report) tri {
+		if check(r) {
+			return yes
+		}
+		return no
+	}
+	e := Expectation{desc: fmt.Sprintf("%s absent, %s", name, cause), check: check, tri: value,
+		why: func(r *validate.Report) string {
+			var ws []string
+			for _, a := range r.Absent() {
+				if a.Name == name {
+					ws = append(ws, fmt.Sprintf("it is %s: %s", a.Cause, a.Why))
+				}
+			}
+			if len(ws) == 0 {
+				return "the run shows no absence of it"
+			}
+			return strings.Join(ws, "; ")
+		}}
+	if strings.HasPrefix(name, "within ") || strings.HasPrefix(name, validate.EventuallyName("")) {
+		e.invariants = []string{name}
+	} else {
+		e.actions = named(name)
+	}
+	return e
 }
 
 // Pending: a call of this action was invoked (qobs.Invoke) and never
 // completed ("" matches any): Some(Pending("put")) states a call left
 // unanswered, None(Pending("")) the same as All(Completes()). A call whose
-// completion may be in a lost tail is neither pending nor not.
+// completion may be out of sight (dropped or uncollected, as Completes
+// says) is neither pending nor not.
 func Pending(action string) Expectation {
 	pending := func(r *validate.Report) tri {
 		v := no
@@ -246,7 +293,21 @@ func Pending(action string) Expectation {
 		return v
 	}
 	return Expectation{desc: fmt.Sprintf("%s invoked and never completed", aCall(action)), check: func(r *validate.Report) bool { return pending(r) == yes },
-		actions: named(action), tri: pending}
+		actions: named(action), tri: pending, why: pendingWhy(action)}
+}
+
+// pendingWhy says what the report's absent section says of the run's
+// pending calls of action ("": any): why each is pending, or may not be.
+func pendingWhy(action string) func(*validate.Report) string {
+	return func(r *validate.Report) string {
+		var ws []string
+		for _, a := range r.Absent() {
+			if a.Kind == "pending" && (action == "" || a.Name == action) {
+				ws = append(ws, fmt.Sprintf("%s: %s", a.Cause, a.Why))
+			}
+		}
+		return strings.Join(ws, "; ")
+	}
 }
 
 // aCall names an action's call in a description.
@@ -309,7 +370,18 @@ func violatesAt(invariant, action string) Expectation {
 			}
 		}
 		return false
-	}, invariants: []string{invariant}, actions: named(action), violates: invariant}
+	}, invariants: []string{invariant}, actions: named(action), violates: invariant,
+		// what the absent section says of it: why a within or eventual
+		// val has no verdict (Undecided(Violates(w), "uncollected"))
+		why: func(r *validate.Report) string {
+			var ws []string
+			for _, a := range r.Absent() {
+				if a.Name == invariant {
+					ws = append(ws, fmt.Sprintf("%s: %s", a.Cause, a.Why))
+				}
+			}
+			return strings.Join(ws, "; ")
+		}}
 }
 
 // At narrows Violates(invariant) to a run where the invariant first fails

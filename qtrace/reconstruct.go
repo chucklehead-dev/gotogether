@@ -31,6 +31,17 @@ type Trace struct {
 	// of the model, and a lost step of an actor its recorder never
 	// recorded is in no trace.
 	Lost []Lost
+	// Gaps are the holes in the seqs of the recorders of this actor's
+	// steps (each an error issue "gap" too), with when the lost steps
+	// were recorded: what an absent step's diagnosis reads.
+	Gaps []Gap
+	// Collected are the watermarks of the recorders of this actor's
+	// steps (MarkComplete, qobs.Recorder.CompleteThrough), one per
+	// recorder, Through zero for one that stated none; nil when the input
+	// states no watermark at all (every log taken whole). A settle that a
+	// stated watermark does not reach settles nothing: a step recorded
+	// after it may be uncollected yet.
+	Collected []Watermark
 }
 
 // Issue is something the reconstructor could not make sense of. Severity
@@ -93,7 +104,18 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	firstAt := map[string]time.Time{} // each recorder's first step's time
 	firstSeq := map[string]uint64{}
 	declared := map[string][]Step{} // loss records, by recorder
+	marks := map[string]time.Time{} // watermarks, by recorder (AllRecorders: every one's)
+	seqAt := map[rk]time.Time{}     // each record's time, by its seq: when a gap's steps were lost
 	for _, s := range uniq {
+		if !s.CompleteThrough.IsZero() {
+			if s.CompleteThrough.After(marks[s.Recorder]) { // a watermark only rises
+				marks[s.Recorder] = s.CompleteThrough
+			}
+			continue
+		}
+		if s.Seq != 0 {
+			seqAt[rk{s.Recorder, s.Seq}] = s.Time
+		}
 		if s.Lost != "" {
 			declared[s.Recorder] = append(declared[s.Recorder], s)
 			continue
@@ -110,7 +132,17 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 	}
 	gapActors := map[string][]string{}
+	holesOf := map[string][]Gap{} // each actor's gaps
 	lostActors := map[string][]Lost{}
+	collected := map[string][]Watermark{} // each actor's recorders' watermarks
+	// markOf is rec's watermark: its own or every recorder's, the later
+	markOf := func(rec string) time.Time {
+		w := marks[rec]
+		if all := marks[AllRecorders]; all.After(w) {
+			w = all
+		}
+		return w
+	}
 	// some recorder lost its tail: no settle settles the run, but one
 	// after every bounded loss's Before
 	lostTail := false
@@ -130,7 +162,8 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		seqs := byRec[rec]
 		sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
 		var missing []uint64
-		var first, next uint64 // the first seq, and the one expected next
+		var holes []Gap
+		var first, next, prev uint64 // the first seq, the one expected next, the last seen
 		for _, q := range seqs {
 			if q == 0 {
 				continue // a step without a seq: nothing to count
@@ -138,15 +171,19 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			if first == 0 {
 				first, next = q, q
 			}
+			if q > next {
+				holes = append(holes, Gap{Recorder: rec, First: next, Last: q - 1, After: seqAt[rk{rec, prev}], Before: seqAt[rk{rec, q}]})
+			}
 			for ; next < q && len(missing) < 20; next++ {
 				missing = append(missing, next)
 			}
-			next = q + 1
+			next, prev = q+1, q
 		}
 		if len(missing) > 0 {
 			msg := fmt.Sprintf("recorder %s is missing seq %v (of %d..%d): steps were lost or sampled out", rec, missing, first, seqs[len(seqs)-1])
 			for a := range recActors[rec] {
 				gapActors[a] = append(gapActors[a], msg)
+				holesOf[a] = append(holesOf[a], holes...)
 			}
 		}
 		var losses []Lost
@@ -213,6 +250,11 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 				lostActors[a] = append(lostActors[a], l)
 			}
 		}
+		if len(marks) > 0 { // (no watermark stated: every log whole, as before them)
+			for a := range actors {
+				collected[a] = append(collected[a], Watermark{Recorder: rec, Through: markOf(rec)})
+			}
+		}
 	}
 
 	// 3. Invocation and settle records are no steps: an invocation whose
@@ -235,7 +277,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		}
 		if s.Settled {
 			lastSettle[s.Recorder] = max(lastSettle[s.Recorder], s.Seq)
-		} else if s.Lost == "" {
+		} else if s.Lost == "" && s.CompleteThrough.IsZero() {
 			last[s.Recorder] = max(last[s.Recorder], s.Seq)
 		}
 	}
@@ -247,7 +289,18 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			settleAt[s.Recorder] = s.Time
 		}
 	}
+	// short is a recorder whose stated watermark is before t: a step it
+	// recorded after t may not be collected yet
+	short := func(t time.Time) (string, time.Time, bool) {
+		for _, rec := range recs {
+			if w := markOf(rec); !w.IsZero() && w.Before(t) {
+				return rec, w, true
+			}
+		}
+		return "", time.Time{}, false
+	}
 	settled, voided := false, false
+	uncollected := "" // why a settle a watermark does not reach settles nothing
 	for rec, seq := range lastSettle {
 		if seq <= last[rec] {
 			continue
@@ -255,7 +308,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		var later *Step
 		for i := range uniq {
 			o := &uniq[i]
-			if o.Recorder != rec && !o.Settled && o.Lost == "" && o.Time.After(settleAt[rec].Add(RealTimeSlack)) {
+			if o.Recorder != rec && !o.Settled && o.Lost == "" && o.CompleteThrough.IsZero() && o.Time.After(settleAt[rec].Add(RealTimeSlack)) {
 				later = o
 				break
 			}
@@ -269,7 +322,16 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			voided = true // a lost step may follow it
 			continue
 		}
+		if r, w, ok := short(settleAt[rec]); ok {
+			uncollected = fmt.Sprintf("recorder %s's steps are complete only through %s (its watermark), before recorder %s's settle at %s: a step it recorded after the settle may not be collected yet, "+
+				"and the settle settles nothing until every watermark reaches it (raise them once the collector has the steps: qobs.Recorder.CompleteThrough, gotogether validate -complete-through)",
+				r, w.UTC().Format(time.RFC3339Nano), rec, settleAt[rec].UTC().Format(time.RFC3339Nano))
+			continue
+		}
 		settled = true
+	}
+	if !settled && uncollected != "" {
+		issues = append(issues, Issue{"warn", "settle", uncollected})
 	}
 	if !settled && voided {
 		issues = append(issues, Issue{"warn", "settle", "a recorder lost its tail (Trace.Lost): what it recorded after, a settle or a step after one, is unknown, and the settle settles nothing"})
@@ -283,7 +345,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	steps = uniq[:0:0]
 	for _, s := range uniq {
 		switch {
-		case s.Settled, s.Lost != "":
+		case s.Settled, s.Lost != "", !s.CompleteThrough.IsZero():
 		case !s.Invocation:
 			// a completion was invoked when its invocation record was
 			// written: the recorder's own clock, the one its Time is on (a
@@ -331,6 +393,8 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		t.Settled = settled && len(t.Steps) > 0
 		sort.SliceStable(t.Pending, func(i, j int) bool { return t.Pending[i].Time.Before(t.Pending[j].Time) })
 		t.Lost = lostActors[a]
+		t.Gaps = holesOf[a]
+		t.Collected = collected[a]
 		for _, l := range t.Lost {
 			if l.Prefix {
 				t.Issues = append(t.Issues, l.Issue())

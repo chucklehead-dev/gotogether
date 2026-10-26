@@ -3344,3 +3344,66 @@ orphans, a journal stalling after a long cut, claims over real runs
 skipping checks), and of the harness (node bugs left without a verdict
 by declared losses, replays stranded by step counts, loss drawn per
 connection, weak fixed seeds).
+
+## 53. Absence diagnostics (E7)
+
+A step a run was expected to show and does not was read one way: a
+bounded response never seen in a trace that went on past its window
+was a FAIL, one the trace ended before was nothing, a call never
+completed was pending. A production trace says neither which: its
+exporter may have dropped the response, its collector may not have
+ingested it yet, or the system never answered. Only the last is the
+application's bug.
+
+**Three causes.** Each obligation not met or not judged (a within, an
+eventual val, a pending call) gets one, in `Result.Absent`: dropped (a
+gap, a lost tail or a loss record of a recorder that would hold the
+step, while it was due), uncollected (its window ends past those
+recorders' watermark, or the run recorded no settle and ended first),
+or a defect (they are complete past the window and lost nothing). Only
+a defect is a FAIL; the others are no verdict, their fix named. Which
+recorders would hold a step: those of its actor's steps, the rule a
+gap and a loss already follow (an actor is one instance of the model,
+any of its recorders may record the step that meets an obligation).
+
+**A watermark** is a record, not a step (no seq, so a recorder's
+sequence stays dense): recorder r's steps through T are in the input,
+`*` for every recorder. Two choices made it compose with what was
+there:
+- A log without one is taken whole, as before: nothing changes for the
+  runs every test already judges (a simulation's recorder is in
+  memory, a closed file whole), and the trace's own end still covers a
+  window. Requiring a watermark everywhere would have turned every
+  within the trace went past into no verdict.
+- A watermark is what it states: a recorder's own later steps do not
+  raise it, though dense seqs would prove its earlier ones arrived.
+  The bound a search carries onto the recorder it re-sequences an actor
+  to must give the check of its order the verdict of the steps as
+  recorded, and a bound raised by the order's own last step would not.
+  With some recorders of an actor whole, the carried watermark is no
+  later than the actor's last record, so the whole logs' end still
+  bounds it (conservative, by at most the slack).
+
+So a within never met is judged where the watermark reaches its
+window's end: a production trace, which never settles, is judged
+absent, the capability the item was for. One the trace went past but
+the watermark does not reach is no verdict (`no verdict (uncollected
+steps)`), not the FAIL the trace's end made of it. A settle a stated
+watermark does not reach settles nothing: a step after it may not be
+collected yet, and a settle that a later step voids was the rule
+already. A pending call has no window: with a watermark and no settle
+it is uncollected; in a log taken whole it stays pending (Completes
+misses it), and the report says to state a watermark if the log is
+still growing.
+
+Gaps had been an error issue only: a within's failure, or an eventual
+val false at the settle, that a gap may explain (its missing steps
+recorded while the response was due, by the times of the steps either
+side, `Gap.After` and `Before`) is now no verdict, as one after a lost
+tail's cut was.
+
+`-complete-through r=T` states an external collector's watermark (a
+ClickHouse poll that knows what it ingested) and is in the manifest, so
+a replay judges as the run was. `Filter` keeps a watermark no later
+than its `Until`: steps after it are taken out, and a watermark past it
+would read their absence as the system's.

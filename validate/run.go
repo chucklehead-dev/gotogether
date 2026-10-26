@@ -239,6 +239,7 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 				return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
 			}
 			judgeLost(c.Binding, r, t.Lost)
+			judgeAbsent(c.Binding, r, t.Lost, t.Gaps)
 			rep.Actors = append(rep.Actors, r)
 			continue
 		}
@@ -252,6 +253,7 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 		}
 		c.judgeWithin(t, r)
 		judgeLost(c.Binding, r, t.Lost)
+		judgeAbsent(c.Binding, r, t.Lost, t.Gaps)
 		rep.Actors = append(rep.Actors, r)
 	}
 	if err := c.shadowRuns([][]qtrace.Step{steps})[0]; err != nil {

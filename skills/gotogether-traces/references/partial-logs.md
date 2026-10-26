@@ -131,3 +131,71 @@ by.
 
 `-lost-prefix r` declares a lost head a log without seqs cannot show.
 Both flags take comma-separated recorder ids.
+
+## Absent steps: dropped, uncollected, defect
+
+A step the run was expected to show and does not (a bounded response
+not met in time, an eventual val not judged or false at the settle, a
+call never completed) gets one cause in the report's `absent:` section
+(`validate.Result.Absent`, `Report.Absent()`), so a production trace's
+missing observation is not read as an application bug, nor the bug as
+missing telemetry:
+
+- **dropped** (no verdict): a recorder that would hold the step lost
+  steps while it was due: a gap in its seqs (`Trace.Gaps`, with the
+  times of the steps either side), a lost tail, a loss record. A
+  within's or an eventual val's failure there is no verdict (`issue:
+  warn gap`, Reason `no verdict (lost steps)`); the fix is telemetry
+  that keeps its steps.
+- **uncollected** (no verdict): the window ends past the watermark of
+  those recorders, or the run recorded no settle and ended before the
+  window did; a call whose recorders state a watermark and no settle
+  reaches it. Wait for the collector and state a watermark past the
+  window, or record a settle.
+- **absent (a defect)**: the recorders are complete past the window (a
+  settle, a watermark, or, with no watermark, the trace's own steps
+  going on past it) and lost nothing: the only FAIL.
+
+Which recorders would hold a step: those of its actor's steps. An actor
+is one instance of the model, and any of its recorders may record the
+step that meets an obligation; a call's completion is on its
+invocation's recorder, one of them.
+
+**A watermark** says a recorder's steps recorded at or before T are all
+in the input: a record (`quint.complete_through_unix_nano`, recorder `*`
+for every one) written by `qobs.Recorder.CompleteThrough(ctx, t)` where
+delivery is known (after a flush, a collector's acknowledgement), by
+`qtrace.MarkComplete(steps, r, t)`, or by `gotogether validate
+-complete-through r=T` (repeatable; T in RFC3339 or Unix nanoseconds;
+`*=T`) for an external collector that knows what it ingested (a
+ClickHouse poll). Readers (JSONL, OTel) keep it, and `Filter` keeps it,
+no later than its `Until`. A log with no watermark is taken whole, as
+before: its trace's own end bounds what it shows, and nothing changes.
+With one:
+
+- a within never met is judged where the watermark reaches its window's
+  end (give or take `qtrace.RealTimeSlack`), though the run never
+  settled: what lets a production trace, which never settles, be judged
+  absent. A watermark is what it states: a recorder's own later steps
+  do not raise it;
+- a within whose window it does not reach is no verdict (Reason `no
+  verdict (uncollected steps)`), even where the trace went on past the
+  window, which without a watermark is a FAIL;
+- a settle it does not reach settles nothing (`issue: warn settle:
+  recorder r's steps are complete only through T`): a step after the
+  settle may not be collected yet, so eventual vals are not judged, and
+  `Finished` (`qtest.Finishes()`, `-require-settle`) is `no verdict
+  (uncollected)`;
+- a pending call with no settle is uncollected: neither `Completes()`
+  nor `Pending(...)` holds.
+
+A search (Linearize, ResolvePending) re-sequences an actor onto a
+recorder of its own and carries the actor's watermark onto it, so its
+order is judged as recorded.
+
+Claims: `qtest.Absent(name, validate.Uncollected)` (a within's
+`binding.Within.Name`, `validate.EventuallyName(v)`, or a call's
+action), over runs `None(qtest.Absent(w, validate.Defect))`; and
+`qtest.Undecided(qtest.Violates(w), "uncollected")`,
+`qtest.Undecided(qtest.Completes(), "not be collected yet")`.
+

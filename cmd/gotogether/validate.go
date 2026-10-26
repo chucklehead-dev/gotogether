@@ -9,7 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/input"
@@ -39,7 +42,10 @@ type validateRun struct {
 	search     validate.SearchOptions
 	lostPrefix string // comma-separated recorders
 	lostSuffix string
-	files      []string
+	// completeThrough are -complete-through's watermarks, "recorder=T"
+	// each (recorder "*": every one), as given
+	completeThrough repeated
+	files           []string
 	// manifest, if set, is where to write the run's manifest, with the
 	// driver, artifacts and name runInfo's fragment gives
 	manifest, runInfo string
@@ -82,6 +88,8 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.lostPrefix, "lost-prefix", "", "comma-separated recorders whose logs lost their first steps, which the log cannot show (no seqs): judged as a lost prefix (qtrace.MarkLost)")
 	fset.BoolVar(&v.requireSettle, "require-settle", false, "exit 1 unless the run is finished, as qtest.Finishes judges it: it settled (its trace's last record a settle), every eventual val held there, and no call was left pending (one -resolve-pending places included: its caller never got the answer); a lost tail is no verdict (exit 1). The binding needs an eventual val, the journey's end; the default for a binding with complete: true. An ITF trace records no settle, so it cannot be judged finished (exit 1)")
 	fset.StringVar(&v.lostSuffix, "lost-suffix", "", "comma-separated recorders whose logs lost their last steps, which the log cannot show (a killed process's buffer): their tails judged lost after their last steps (qtrace.MarkLost)")
+	fset.Var(&v.completeThrough, "complete-through", "recorder=T: the recorder's steps recorded at or before T (RFC3339, or Unix nanoseconds) are all in the input, as an external collector knows what it has ingested (a ClickHouse poll, a log shipper's acknowledgement); *=T states it of every recorder. Repeatable. "+
+		"A bounded response due by T is then judged though the run never settled (absent: a FAIL), one due after it is uncollected (no verdict), and a settle it does not reach settles nothing. A log with no watermark is taken whole (qtrace.MarkComplete)")
 	fset.StringVar(&v.manifest, "manifest", "", "write the run's manifest (gotogether.run/1) to this file: the tools, model, binding and inputs with their hashes, losses, the verdict and failing step; -replay judges it again")
 	fset.StringVar(&v.runInfo, "run-info", "", "with -manifest: a JSON file of what gotogether did not see, written by the driver: {\"name\": ..., \"driver\": {\"name\", \"version\", \"seed\", \"origin\", \"args\": [...]}, \"artifacts\": [{\"name\", \"path\"}]} (paths relative to the file)")
 	fset.BoolVar(&v.mutateSteps, "mutate-steps", false, "after a pass, judge the steps' observation mutants (a step dropped, duplicated, swapped with its recorder's next, an argument or observation corrupted, retimed past its neighbour, moved to another actor) as the steps were judged, and print a table of them by op, killed and survived: a survivor changed something no check reads (qtest.MutateSteps)")
@@ -161,7 +169,7 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 	v := validateRun{out: out, dir: get("dir"), quint: get("quint"), backend: m.Tools.Backend, verbose: get("v") == "true", withITF: get("itf") == "true",
 		history: get("history"), manifest: get("manifest"), format: m.Check.Format, novars: m.Check.NoVars,
 		requireSettle: m.Check.RequireSettle, finishFixed: true, search: m.Check.SearchOptions(), lostPrefix: strings.Join(m.Check.LostPrefix, ","),
-		lostSuffix: strings.Join(m.Check.LostSuffix, ","), module: m.Model.Module, invariants: m.Model.Invariants, constants: m.Model.Constants}
+		lostSuffix: strings.Join(m.Check.LostSuffix, ","), completeThrough: m.Check.CompleteThrough, module: m.Model.Module, invariants: m.Model.Invariants, constants: m.Model.Constants}
 	if v.format == "" {
 		v.format = "auto"
 	}
@@ -263,6 +271,9 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		return 2, none, err
 	}
 	if steps, err = markLost(steps, v.lostSuffix, false); err != nil {
+		return 2, none, err
+	}
+	if steps, err = markComplete(steps, v.completeThrough); err != nil {
 		return 2, none, err
 	}
 	if v.dir == "" { // one root for every actor's and input's modules, named in the output
@@ -399,6 +410,7 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		// the check as judged: a complete binding's finish check too
 		m.Check.RequireSettle, m.Check.Format, m.Check.NoVars = finish, v.format, v.novars
 		m.Check.LostPrefix, m.Check.LostSuffix = fields(v.lostPrefix), fields(v.lostSuffix)
+		m.Check.CompleteThrough = v.completeThrough
 		if v.conv != "" {
 			if err := m.AddConvert(v.conv); err != nil {
 				return 2, none, err
@@ -499,4 +511,52 @@ func addRunInfo(m *validate.Manifest, path string) error {
 		}
 	}
 	return nil
+}
+
+// repeated is a flag given any number of times, its values in order.
+type repeated []string
+
+func (r *repeated) String() string { return strings.Join(*r, " ") }
+
+// Set adds a value.
+func (r *repeated) Set(v string) error { *r = append(*r, v); return nil }
+
+// markComplete states -complete-through's watermarks the steps do not
+// carry (qtrace.MarkComplete): each "recorder=T", T in RFC3339 or Unix
+// nanoseconds, recorder "*" for every one.
+func markComplete(steps []qtrace.Step, specs []string) ([]qtrace.Step, error) {
+	if len(specs) == 0 {
+		return steps, nil
+	}
+	recs := map[string]bool{}
+	for _, s := range steps {
+		if s.Model() || s.Invocation || s.Settled {
+			recs[s.Recorder] = true
+		}
+	}
+	for _, spec := range specs {
+		rec, at, ok := strings.Cut(spec, "=")
+		rec, at = strings.TrimSpace(rec), strings.TrimSpace(at)
+		if !ok || rec == "" || at == "" {
+			return nil, fmt.Errorf("validate -complete-through %q: want recorder=T (T in RFC3339 or Unix nanoseconds; *=T for every recorder), e.g. -complete-through 'srv=2026-10-26T12:00:00Z'", spec)
+		}
+		if rec != qtrace.AllRecorders && !recs[rec] {
+			names := make([]string, 0, len(recs))
+			for r := range recs {
+				names = append(names, r)
+			}
+			sort.Strings(names)
+			return nil, fmt.Errorf("validate -complete-through %s: no step of recorder %q in the input: name one of its recorders (%s), or * for every one", spec, rec, strings.Join(names, ", "))
+		}
+		t, err := time.Parse(time.RFC3339Nano, at)
+		if err != nil {
+			n, nerr := strconv.ParseInt(at, 10, 64)
+			if nerr != nil || n <= 0 {
+				return nil, fmt.Errorf("validate -complete-through %s: %q is no time: give RFC3339 (2026-10-26T12:00:00Z) or Unix nanoseconds", spec, at)
+			}
+			t = time.Unix(0, n)
+		}
+		steps = qtrace.MarkComplete(steps, rec, t)
+	}
+	return steps, nil
 }

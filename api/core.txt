@@ -1237,6 +1237,7 @@ const ActionKey = "quint.action"
 const Buffered Durability = iota (spec 2 of its group)
 const PerStep Durability = iota
 const Synced Durability = iota (spec 1 of its group)
+func CompleteThrough(ctx context.Context, t time.Time)
 func FileSink(path string, d Durability) (*JSONLSink, error)
 func From(ctx context.Context) *Recorder
 func Global() *Recorder
@@ -1276,6 +1277,7 @@ type Outcomer interface
 type Recorder struct
     method (*Recorder) Actor() string
     method (*Recorder) Add(steps ...qtrace.Step)
+    method (*Recorder) CompleteThrough(ctx context.Context, t time.Time)
     method (*Recorder) Count() int
     method (*Recorder) ID() string
     method (*Recorder) Interrupted() []qtrace.Step
@@ -1361,6 +1363,7 @@ const RoleExternal = "external"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
 const RoleReplay = "replay"
+func Absent(name string, cause validate.Cause) Expectation
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
 func Artifacts(a ...validate.Artifact) Option
@@ -1580,12 +1583,14 @@ type Vacuity struct
     method (Vacuity) String() string
 
 == github.com/chucklehead-dev/gotogether/qtrace
+const AllRecorders = "*"
 const DefaultLinearizeBudget = 200
 const EventName = "quint.step"
 const KeyAction = "quint.action"
 const KeyActor = "quint.actor"
 const KeyAssumed = "quint.assumed"
 const KeyCall = "quint.call"
+const KeyCompleteThrough = "quint.complete_through_unix_nano"
 const KeyError = "quint.error"
 const KeyInvocation = "quint.invocation"
 const KeyInvoked = "quint.invoked_unix_nano"
@@ -1613,6 +1618,7 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
 func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Linearization, err error)
+func MarkComplete(steps []Step, recorder string, t time.Time) []Step
 func MarkLost(steps []Step, l Lost) []Step
 func MutateLimit(n int) MutationOption
 func MutateOps(ops ...string) MutationOption
@@ -1631,6 +1637,13 @@ type Filter struct
     field KeepRefs bool
     method (Filter) Apply(steps []Step) []Step
     method (Filter) Pseudonym(v string) string
+type Gap struct
+    field Recorder string
+    field First uint64
+    field Last uint64
+    field After time.Time
+    field Before time.Time
+    method (Gap) String() string
 type Issue struct
     field Severity string
     field Kind string
@@ -1680,6 +1693,7 @@ type Step struct
     field Lost string
     field LostAfter uint64
     field LostBefore time.Time
+    field CompleteThrough time.Time
     field Ambiguous bool
     field Args map[string]any
     field Obs map[string]any
@@ -1712,6 +1726,13 @@ type Trace struct
     field Pending []Step
     field Settled bool
     field Lost []Lost
+    field Gaps []Gap
+    field Collected []Watermark
+    method (*Trace) CompleteThrough() (through time.Time, every bool)
+type Watermark struct
+    field Recorder string
+    field Through time.Time
+    method (Watermark) String() string
 var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"}
 
 == github.com/chucklehead-dev/gotogether/skills
@@ -1731,10 +1752,13 @@ var Targets = map[string]string{…}
 const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 const DefaultResolveBudget = 200
+const Defect Cause = "defect"
+const Dropped Cause = "dropped"
 const Fail Verdict = "fail"
 const ManifestFormat = "gotogether.run/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
+const Uncollected Cause = "uncollected"
 func Cached(bindingPath string, o Options) (*Checker, error)
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
@@ -1747,6 +1771,15 @@ func QuintVersion(bin string) string
 func ReadManifest(path string) (*Manifest, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict
+type Absence struct
+    field Actor string
+    field Kind string
+    field Name string
+    field Cause Cause
+    field Step *qtrace.Step
+    field Due time.Time
+    field Why string
+    method (Absence) String() string
 type ActorVerdict struct
     field Actor string `json:"actor"`
     field Verdict Verdict `json:"verdict"`
@@ -1756,6 +1789,7 @@ type Artifact struct
     field Path string `json:"path"`
     field SHA256 string `json:"sha256,omitempty"`
 type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error)
+type Cause string
 type Checker struct
     field Binding *binding.Binding
     field Model *binding.Model
@@ -1860,6 +1894,7 @@ type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
     field Unsettled string
+    method (*Report) Absent() []Absence
     method (*Report) Finished() Finish
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
@@ -1875,12 +1910,16 @@ type Result struct
     field Pending []qtrace.Step
     field Lost []qtrace.Lost
     field Settled bool
+    field Gaps []qtrace.Gap
+    field Collected []qtrace.Watermark
+    field Absent []Absence
     field Constants []string
     field Module string
     field ITF string
     field Calls []binding.Call
     field Output string
     method (*Result) OK() bool
+    method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
     method (*Result) Summary() string
 type RunCheck struct
@@ -1891,6 +1930,7 @@ type RunCheck struct
     field RequireSettle bool `json:"requireSettle,omitempty"`
     field LostPrefix []string `json:"lostPrefix,omitempty"`
     field LostSuffix []string `json:"lostSuffix,omitempty"`
+    field CompleteThrough []string `json:"completeThrough,omitempty"`
     field Format string `json:"format,omitempty"`
     field NoVars bool `json:"noVars,omitempty"`
     method (RunCheck) SearchOptions() SearchOptions

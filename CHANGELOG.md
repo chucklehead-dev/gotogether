@@ -8,6 +8,23 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Absence diagnostics: each step a run was expected to show and does
+  not (a within not met or not judged, an eventual val not judged or
+  false at the settle, a call never completed) is in the report's
+  `absent:` section with its cause (`validate.Absence`, `Result.Absent`,
+  `Report.Absent()`, `Result.PendingCause`; `validate.Cause`: `Dropped`,
+  `Uncollected`, `Defect`), only a defect a FAIL. A watermark record
+  (`qtrace.KeyCompleteThrough`, `Step.CompleteThrough`,
+  `qtrace.MarkComplete`, `qtrace.AllRecorders`, `qtrace.Watermark`,
+  `Trace.Collected`, `Trace.CompleteThrough()`;
+  `qobs.CompleteThrough`, `Recorder.CompleteThrough`; `gotogether
+  validate -complete-through r=T`, in the manifest as
+  `completeThrough`) judges a within whose window it reaches though the
+  run never settled, leaves one it does not reach no verdict, and voids
+  a settle it does not reach. `qtrace.Gap` and `Trace.Gaps`,
+  `Result.Gaps` and `Result.Collected`: a failure a gap may explain is
+  no verdict. `qtest.Absent(name, cause)`; `Violates`, `Completes` and
+  `Pending` explain absences (for `Undecided`).
 - Observation mutants: which recorded fields the model and the binding
   constrain. `qtrace.Mutations(steps, opts...)` makes a log's single
   mutations (`StepMutant`: `Op`, `Index`, `Action`, `Field`, `Change`,

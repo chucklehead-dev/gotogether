@@ -275,6 +275,7 @@ gotogether validate -binding bank.binding.yaml steps.jsonl                      
 gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl   # an app's plain spans
 gotogether validate -binding bank.binding.yaml -lost-suffix node-2 steps.jsonl      # a log that lost its tail (killed), which it cannot show
 gotogether validate -binding bank.binding.yaml -require-settle steps.jsonl          # a finished run, not a prefix: settled, no call pending
+gotogether validate -binding bank.binding.yaml -complete-through '*=2026-10-26T12:00:00Z' steps.jsonl  # a collector's watermark: a step due before it and absent is a defect, after it uncollected
 gotogether validate -binding bank.binding.yaml -manifest run.json -run-info driver.json steps.jsonl  # a portable failure (gotogether.run/1)
 gotogether validate -replay run.json                                                 # judged again: its hashed inputs unchanged, the same verdict
 # a manifest records the driver's args, absolute paths and the failing step's ref verbatim: sanitize a log before sharing it (steps -pseudonymize)
