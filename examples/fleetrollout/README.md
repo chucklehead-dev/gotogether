@@ -33,6 +33,7 @@ semantics:
 
 ```sh
 go test ./...                                                        # in this module: explorations, Hegel (~4 min)
+go test -short ./...                                                 # the per-push tier: 2 to 26 seeds an exploration, no Hegel
 ./kwok-demo.sh                                                       # the real controller on three kwok clusters
 MUTATION=ignore-observed-generation ./kwok-demo.sh
 KILL=1 MUTATION=in-memory-progress ./kwok-demo.sh
@@ -60,7 +61,7 @@ config loader and matches pods with its lifecycle package.
 
 | Controller | Simulated | On kwok |
 |---|---|---|
-| faithful | conforms (30 seeds, with lost responses and crashes) | conforms, including when killed and restarted |
+| faithful | conforms (30 seeds, 3 under `-short`, with lost responses and crashes) | conforms, including when killed and restarted |
 | `IgnoreObservedGeneration`: trusts a status written for the previous generation | **violates** `withinBudget` | **violates** `withinBudget`: m2 patched while m1 had just started |
 | `InMemoryProgress`: counts the clusters it patched, in memory | conforms with no faults; **violates** `withinBudget` after a crash, *or after a lost response* | **violates** `withinBudget` when killed after its first patch |
 

@@ -23,10 +23,10 @@ and the process's sleeps with them.
 |---|---|---|---|
 | `TestFencedConformsUnderClockFaults` | faithful: the store refuses an older epoch (a fencing token) | skews, jumps and drift | every run conforms; every action and fault kind exercised |
 | `TestNoFencingSafeWithTrueClocks` | `NoFencing`: the store accepts every write; the holder stops a margin before its lease ends, timed on its monotonic clock | true, every request on time | every run conforms: a test without clock faults or late messages passes the bug |
-| `TestNoFencingBrokenByAPause` | `NoFencing`, then faithful | true, every request on time, a holder paused 3 s (`qenv.Stalls`, `nemesis.pause`) | `Violates("noStaleWrite")` (5 of 30 runs): the paused holder still trusts its lease; the fenced store refuses its old token |
-| `TestNoFencingBrokenByALateWrite` | `NoFencing`, then faithful | true, a write delivered after its writer's timeout (`rpc.store.delay`) | `Violates("noStaleWrite")` (19 of 100 runs): the late write lands after the next holder's; the fenced store refuses its old token |
-| `TestNoFencingImmuneToSkewAndJumps` | `NoFencing` | skews and jumps; then every run with one jump (`System.Exhaust`, 3209 runs) | every run conforms: a monotonic clock sees neither |
-| `TestWallIntervalBrokenByAClockJump` | `WallInterval`: `NoFencing` timing its lease on the wall clock (`Now().Sub`, as code whose times lost their monotonic reading does); then faithful | jumps; then every run with one jump | `Violates("noStaleWrite")` (half the runs; 306 of the 3209 with one jump): the holder's clock went back; the fenced store survives each |
+| `TestNoFencingBrokenByAPause` | `NoFencing`, then faithful | true, every request on time, a holder paused 3 s (`qenv.Stalls`, `nemesis.pause`) | `Violates("noStaleWrite")` (25 of 90 runs): the paused holder still trusts its lease; the fenced store refuses its old token |
+| `TestNoFencingBrokenByALateWrite` | `NoFencing`, then faithful | true, a write delivered after its writer's timeout (`rpc.store.delay`) | `Violates("noStaleWrite")` (25 of 90 runs): the late write lands after the next holder's; the fenced store refuses its old token |
+| `TestNoFencingImmuneToSkewAndJumps` | `NoFencing` | skews and jumps; then every run with one jump (`System.Exhaust`, 3209 runs; the first 100 under `-short`) | every run conforms: a monotonic clock sees neither |
+| `TestWallIntervalBrokenByAClockJump` | `WallInterval`: `NoFencing` timing its lease on the wall clock (`Now().Sub`, as code whose times lost their monotonic reading does); then faithful | jumps; then every run with one jump | `Violates("noStaleWrite")` (half the runs; 306 of the 3209 with one jump, 9 of the first 100 that `-short` searches): the holder's clock went back; the fenced store survives each |
 | `TestAbsoluteExpiryBrokenBySkew` | `AbsoluteExpiry`: the holder compares the lock's expiry time with its own wall clock | true, then skews only | conforms, then `Violates("noStaleWrite")` (36%); `WallInterval` conforms under the same skews: an interval on one clock is immune to skew |
 | `TestNoFencingBrokenByDrift` | `NoFencing`, then faithful | drift only, at 2%, then 25% | conforms at 2% (the margin left after a pause covers about 5%), `Violates("noStaleWrite")` at 25% (30% of runs): a slow clock under-measures the lease; the fenced store conforms at 25% |
 
@@ -43,6 +43,7 @@ apart.
 
 ```sh
 go test .                                      # needs quint on PATH
+go test -short .                               # the per-push tier: 8 to 15 seeds an exploration, the first 100 runs with one jump
 ./run-demo.sh                                  # 20 seeds, every run conforms
 MUTATION=no-fencing ./run-demo.sh              # still conforms: the clocks are true
 MUTATION=no-fencing CLOCKS=1 ./run-demo.sh     # still conforms: skews and jumps do not move a monotonic clock
