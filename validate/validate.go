@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,7 +191,7 @@ func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *b
 	}
 	base := "observed_" + sanitize(t.Actor)
 	res := newResult(b, t, p)
-	return res, evaluate(ctx, replay.Spec(b, p), [][]binding.Call{p.Calls}, base, opt, []*Result{res})[0]
+	return res, evaluate(ctx, replay.Spec(b, p), [][]binding.Call{p.Calls}, []*binding.Call{p.Start}, base, opt, []*Result{res})[0]
 }
 
 // newResult is a trace's result before its replay. A binding's eventual
@@ -200,7 +199,7 @@ func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *b
 // did not says so, or a run that never settled (no Settle, a step after
 // it, its error dropped) would pass with them unjudged and no word.
 func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
-	res := &Result{Actor: t.Actor, Issues: slices.Clip(t.Issues), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
+	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
 	if len(b.Eventually) > 0 && !t.Settled {
 		res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "eventually",
 			Msg: fmt.Sprintf("eventual vals not judged (%s): the trace's last record is no settle (Sim.Settle, or qobs.Settled after a probe), or another recorder recorded after it", strings.Join(b.Eventually, ", "))})
@@ -240,8 +239,8 @@ func (opt Options) resolve() (Options, error) {
 // run that passes. Only the runs that fail it are replayed again, with a
 // conformance run and a run per invariant (replay.DetailTests), which say
 // which check failed and where. Modules go to <Dir>/<base>.qnt and
-// <base>_detail.qnt.
-func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, base string, opt Options, res []*Result) []error {
+// <base>_detail.qnt. starts are where each run starts (nil: init).
+func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, starts []*binding.Call, base string, opt Options, res []*Result) []error {
 	errs := make([]error, len(runs))
 	fail := func(idx []int, err error) {
 		for _, i := range idx {
@@ -258,8 +257,9 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 		m.Tests = set
 		qnt := filepath.Join(opt.Dir, file+".qnt")
 		sub := make([][]binding.Call, len(idx))
+		m.Start, m.Starts = nil, make([]*binding.Call, len(idx))
 		for j, i := range idx {
-			sub[j] = runs[i]
+			sub[j], m.Starts[j] = runs[i], starts[i]
 		}
 		gs, err := replay.RenderBatch(m, sub, qnt)
 		if err != nil {
@@ -498,13 +498,19 @@ func parseQuintTest(out, qnt string, g *replay.Generated) (map[string]Verdict, m
 			// last call evaluated to false, so the model cannot take it.
 			fl.Kind, i, ok = "disabled", len(g.Calls)-1, true
 		}
-		if ok {
+		switch {
+		case ok:
 			fl.Index = i
 			fl.Call = g.Calls[i].Quint
 			fl.Expect, fl.ExpectTemplate = g.Calls[i].Expect, g.Calls[i].ExpectTemplate
 			fl.Step = g.Calls[i].Step
 			fl.Note = g.Calls[i].Note
-		} else {
+		case g.Start != nil && g.StartLines[line]:
+			// the snapshot the run starts from: disabled, its expect
+			// false, or an invariant false in the state it recorded
+			fl.Call, fl.Step = g.Start.Quint, g.Start.Step
+			fl.Expect, fl.ExpectTemplate = g.Start.Expect, g.Start.ExpectTemplate
+		default:
 			fl.Call = "init" // init.expect(...) of an invariant run
 		}
 		f[name] = fl
@@ -558,13 +564,22 @@ func annotateITF(path string, g *replay.Generated) error {
 		for k, v := range st {
 			ns[strip(k)] = v
 		}
+		// state 0 is init's, or the snapshot's the run starts from; state
+		// i the i-th call's
+		var c *binding.Call
+		switch {
+		case i == 0:
+			c = g.Start
+		case i-1 < len(g.Calls):
+			c = &g.Calls[i-1]
+		}
 		act := "init"
-		if i > 0 && i-1 < len(g.Calls) {
-			act = g.Calls[i-1].Quint
+		ns["mbt::nondetPicks"] = map[string]any{}
+		if c != nil {
+			act = c.Quint
 			if p := strings.IndexByte(act, '('); p >= 0 {
 				act = act[:p]
 			}
-			c := g.Calls[i-1]
 			if c.Step != nil {
 				ns["mbt::observedSeq"] = map[string]any{"#bigint": strconv.FormatUint(c.Step.Seq, 10)}
 			}
@@ -579,9 +594,6 @@ func annotateITF(path string, g *replay.Generated) error {
 			ns["mbt::nondetPicks"] = picks
 		}
 		ns["mbt::actionTaken"] = act
-		if i == 0 {
-			ns["mbt::nondetPicks"] = map[string]any{}
-		}
 		states[i] = ns
 	}
 	out, err := json.Marshal(t)
@@ -676,36 +688,57 @@ func (r *Result) Summary() string {
 
 func (f *Failure) describe(pfx string) string {
 	var b strings.Builder
+	start := f.Index < 0 && f.Step != nil // the snapshot step the replay starts from
+	switch {
+	case start && f.Kind == "disabled":
+		fmt.Fprintf(&b, "%sthe snapshot step the trace starts from is no state of the model: its action is disabled with the values it recorded\n", pfx)
+	case start && f.Kind == "state":
+		fmt.Fprintf(&b, "%sin the state the snapshot step recorded, what it observed does not hold\n", pfx)
+	case start && f.Kind == "invariant":
+		fmt.Fprintf(&b, "%sviolated in the state the snapshot step recorded, where the trace starts\n", pfx)
+	default:
+		f.describeKind(&b, pfx)
+	}
+	return f.describeRest(&b, pfx)
+}
+
+// describeKind says what kind of failure f is, and where.
+func (f *Failure) describeKind(b *strings.Builder, pfx string) {
 	switch f.Kind {
 	case "disabled":
-		fmt.Fprintf(&b, "%sstep %d is not a transition of the model from the state reached\n", pfx, f.Index+1)
+		fmt.Fprintf(b, "%sstep %d is not a transition of the model from the state reached\n", pfx, f.Index+1)
 	case "state":
-		fmt.Fprintf(&b, "%safter step %d the model's state does not match what was observed\n", pfx, f.Index+1)
+		fmt.Fprintf(b, "%safter step %d the model's state does not match what was observed\n", pfx, f.Index+1)
 	case "invariant":
 		if f.Index < 0 {
-			fmt.Fprintf(&b, "%sviolated in the initial state\n", pfx)
+			fmt.Fprintf(b, "%sviolated in the initial state\n", pfx)
 		} else {
-			fmt.Fprintf(&b, "%sviolated after step %d\n", pfx, f.Index+1)
+			fmt.Fprintf(b, "%sviolated after step %d\n", pfx, f.Index+1)
 		}
 	case "within":
 		// the obligation's story: when it opened, and what came of it
-		fmt.Fprintf(&b, "%s%s\n", pfx, f.Note)
+		fmt.Fprintf(b, "%s%s\n", pfx, f.Note)
 	default:
-		fmt.Fprintf(&b, "%sfailed at step %d\n", pfx, f.Index+1)
+		fmt.Fprintf(b, "%sfailed at step %d\n", pfx, f.Index+1)
 	}
+}
+
+// describeRest is the rest of f's description, after its kind: the call,
+// the expect, the step observed, the model's state.
+func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 	if f.Call != "" {
-		fmt.Fprintf(&b, "%s  quint:    %s\n", pfx, f.Call)
+		fmt.Fprintf(b, "%s  quint:    %s\n", pfx, f.Call)
 	}
 	if f.Expect != "" && f.Kind == "state" {
 		// as rendered, the observation is in it ("count == 3"): the
 		// template says which part is the model's
-		fmt.Fprintf(&b, "%s  expect:   %s\n", pfx, f.Expect)
+		fmt.Fprintf(b, "%s  expect:   %s\n", pfx, f.Expect)
 		if t := f.ExpectTemplate; t != "" && t != f.Expect {
-			fmt.Fprintf(&b, "%s  binding:  %s\n", pfx, t)
+			fmt.Fprintf(b, "%s  binding:  %s\n", pfx, t)
 		}
 	}
 	if f.Step == nil && f.Note != "" && f.Kind != "within" {
-		fmt.Fprintf(&b, "%s  observed: %s\n", pfx, f.Note)
+		fmt.Fprintf(b, "%s  observed: %s\n", pfx, f.Note)
 	}
 	if s := f.Step; s != nil {
 		// the step as recorded: its own sequence number, and where it came
@@ -715,28 +748,28 @@ func (f *Failure) describe(pfx string) string {
 		if s.Source != "" {
 			where += ", " + s.Source
 		}
-		fmt.Fprintf(&b, "%s  observed: %s (%s)\n", pfx, s.String(), where)
+		fmt.Fprintf(b, "%s  observed: %s (%s)\n", pfx, s.String(), where)
 		if len(s.Obs) > 0 {
-			fmt.Fprintf(&b, "%s  obs:      %s\n", pfx, obsString(s.Obs))
+			fmt.Fprintf(b, "%s  obs:      %s\n", pfx, obsString(s.Obs))
 		}
 		if s.Error != "" {
-			fmt.Fprintf(&b, "%s  error:    %s\n", pfx, s.Error)
+			fmt.Fprintf(b, "%s  error:    %s\n", pfx, s.Error)
 		}
 	}
 	if f.Kind == "error" {
 		// quint's own message only where the report has no reading of it:
 		// a disabled step, a state mismatch and an invariant are said above
-		fmt.Fprintf(&b, "%s  %s\n", pfx, f.Quint)
+		fmt.Fprintf(b, "%s  %s\n", pfx, f.Quint)
 	}
 	if f.noState != "" && f.Kind != "error" {
-		fmt.Fprintf(&b, "%s  model state: %s\n", pfx, f.noState)
+		fmt.Fprintf(b, "%s  model state: %s\n", pfx, f.noState)
 	}
 	if len(f.State) > 0 {
 		when := "before the step"
 		if f.StateAfter {
 			when = "after the step"
 		}
-		fmt.Fprintf(&b, "%s  model state %s:\n", pfx, when)
+		fmt.Fprintf(b, "%s  model state %s:\n", pfx, when)
 		names := make([]string, 0, len(f.State))
 		for k := range f.State {
 			if !strings.HasPrefix(k, "mbt::") {
@@ -746,14 +779,14 @@ func (f *Failure) describe(pfx string) string {
 		sort.Strings(names)
 		for i, k := range names {
 			if i == 12 {
-				fmt.Fprintf(&b, "%s    ... and %d more variables\n", pfx, len(names)-12)
+				fmt.Fprintf(b, "%s    ... and %d more variables\n", pfx, len(names)-12)
 				break
 			}
 			v := f.State[k].String()
 			if len(v) > 240 {
 				v = v[:240] + " ..."
 			}
-			fmt.Fprintf(&b, "%s    %s = %s\n", pfx, k, v)
+			fmt.Fprintf(b, "%s    %s = %s\n", pfx, k, v)
 		}
 	}
 	return b.String()

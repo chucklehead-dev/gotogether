@@ -66,7 +66,7 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 		// the settles a search is given: those no other recorder worked past
 		// (times 0.5 ms apart, so within RealTimeSlack and beyond it)
 		settles = settlesOf(all)
-		got, cut, crossing := resolutions(tr, settles, 1<<20)
+		got, cut, crossing := resolutions(tr, settles, 1<<20, 0)
 		compared++
 		if len(settles) > 0 {
 			settled++
@@ -221,7 +221,7 @@ func TestResolutionsCrossing(t *testing.T) {
 	p := qtrace.Step{Action: "op", Recorder: "b", Seq: 1, Time: ms(100), Invocation: true}
 	st := qtrace.Step{Action: "settled", Recorder: "b", Seq: 2, Time: ms(0), Settled: true}
 	s := qtrace.Step{Action: "op", Recorder: "a", Seq: 1, Time: ms(50)}
-	got, _, crossing := resolutions(&qtrace.Trace{Steps: []qtrace.Step{s}, Pending: []qtrace.Step{p}}, []qtrace.Step{st}, 100)
+	got, _, crossing := resolutions(&qtrace.Trace{Steps: []qtrace.Step{s}, Pending: []qtrace.Step{p}}, []qtrace.Step{st}, 100, 0)
 	if !slices.Equal(crossing, []int{0}) || len(got) != 1 || got[0][0] != -1 {
 		t.Errorf("placements %v, crossing %v: want only no effect, and the call crossing", got, crossing)
 	}

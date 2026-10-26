@@ -1,0 +1,9 @@
+# gossip.yaml with a snapshot of what a knows at a log's head
+spec: gossip.qnt
+module: gossip
+snapshot: restoreA
+actions:
+  write: {}
+  read:
+    expect: 'known.get({{.node}}) == {{toSet .obs.seen}}'
+hidden: [gossipAny]

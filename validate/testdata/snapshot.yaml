@@ -1,0 +1,13 @@
+# account.yaml with a snapshot: a log that lost its head starts from the
+# state its first step recorded (snapshot_test.go).
+spec: account.qnt
+module: account
+constants:
+  LIMIT: '100'
+snapshot: restore
+actions:
+  deposit:
+    expect: 'balance == {{.obs.balance}}'
+  withdraw:
+    expect: 'balance == {{.obs.balance}}'
+invariants: [nonNegative, underLimit]

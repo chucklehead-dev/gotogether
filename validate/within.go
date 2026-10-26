@@ -221,14 +221,16 @@ func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps 
 // (qtrace.Key), with their times when the binding has bounded-response
 // obligations, judged on them (a slow run and a fast one of the same
 // steps once shared a verdict), and how they are judged (the evaluator's
-// mode, quint's backend). Two runs of one key get one verdict.
+// mode, quint's backend, the snapshot action a trace may start from: the
+// same steps judged from init are another verdict). Two runs of one key
+// get one verdict.
 func (c *Checker) Key(steps []qtrace.Step) string {
 	backend := c.Options.Backend
 	if backend == "" {
 		backend = os.Getenv("QUINT_BACKEND")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "eval=%s|backend=%s|", c.Options.evalMode(), backend)
+	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|", c.Options.evalMode(), backend, c.Binding.Snapshot)
 	b.WriteString(qtrace.Key(steps))
 	if len(c.Binding.Within) == 0 || len(steps) == 0 {
 		return b.String()

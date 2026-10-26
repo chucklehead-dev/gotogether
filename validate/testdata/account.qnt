@@ -8,6 +8,8 @@ module account {
   action init = all { balance' = 0, ops' = 0 }
   action deposit(amount: int): bool = all { amount > 0, balance' = balance + amount, ops' = ops + 1 }
   action withdraw(amount: int): bool = all { amount > 0, amount <= balance, balance' = balance - amount, ops' = ops + 1 }
+  // the whole state, recorded at the head of a log (snapshot.yaml)
+  action restore(b: int, n: int): bool = all { b >= 0, balance' = b, ops' = n }
   action step = { nondet a = 1.to(LIMIT).oneOf() any { deposit(a), withdraw(a) } }
 
   val nonNegative: bool = balance >= 0

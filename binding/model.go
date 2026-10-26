@@ -29,6 +29,38 @@ type Model struct {
 	// list of actions leaves them out. A nested model's real steps, called
 	// through another action, assign something: they are no helpers.
 	Helpers map[string]bool
+	// assigns are the variables each action of the file's modules assigns
+	// itself, and calls are the names it applies: an action's
+	// assignments are its own and its calls' (Assigns)
+	assigns, calls map[string]map[string]bool
+}
+
+// Assigns reports which of the model's variables action assigns, itself
+// or through the actions it calls (on any path: an action that assigns a
+// variable on one branch only is quint's effect checker's to refuse), and
+// whether the model says (a Model made by hand does not).
+func (m *Model) Assigns(action string) (map[string]bool, bool) {
+	if m.assigns == nil {
+		return nil, false
+	}
+	out, seen := map[string]bool{}, map[string]bool{}
+	var walk func(a string)
+	walk = func(a string) {
+		if seen[a] {
+			return
+		}
+		seen[a] = true
+		for v := range m.assigns[a] {
+			out[v] = true
+		}
+		for n := range m.calls[a] {
+			if _, ok := m.assigns[n]; ok {
+				walk(n)
+			}
+		}
+	}
+	walk(action)
+	return out, true
 }
 
 // Param is an action parameter. Shape is the kind of its resolved type
@@ -166,11 +198,22 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 			}
 		}
 	}
+	// every module's actions' assignments and calls, by name: an action
+	// may assign through one it imports
+	assigns, calls := map[string]map[string]bool{}, map[string]map[string]bool{}
+	for _, mod := range tc.Modules {
+		for _, d := range mod.Declarations {
+			if d.Kind == "def" && d.Qualifier == "action" {
+				assigns[d.Name], calls[d.Name] = assigned(d.RawExpr), namesIn(d.RawExpr)
+			}
+		}
+	}
 	for _, mod := range tc.Modules {
 		if mod.Name != module {
 			continue
 		}
-		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{}}
+		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
+			assigns: assigns, calls: calls}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range mod.Declarations {
@@ -276,6 +319,37 @@ func unchanging(raw json.RawMessage) bool {
 		walk(v)
 	}
 	return assigns > 0 && same
+}
+
+// assigned are the variables an expression's IR assigns (x' = e).
+func assigned(raw json.RawMessage) map[string]bool {
+	out := map[string]bool{}
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if x["kind"] == "app" && x["opcode"] == "assign" {
+				if args, _ := x["args"].([]any); len(args) > 0 {
+					if a, ok := args[0].(map[string]any); ok && a["kind"] == "name" {
+						n, _ := a["name"].(string)
+						out[n] = true
+					}
+				}
+			}
+			for _, e := range x {
+				walk(e)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		}
+	}
+	var v any
+	if json.Unmarshal(raw, &v) == nil {
+		walk(v)
+	}
+	return out
 }
 
 // namesIn are the names an expression's IR refers to: operators applied

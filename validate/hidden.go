@@ -48,7 +48,7 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 		}
 		consts[name] = v
 	}
-	h := &hiddenSearch{c: c, e: e, consts: consts, calls: plan.Calls, depth: c.Binding.HiddenDepth}
+	h := &hiddenSearch{c: c, plan: plan, e: e, consts: consts, calls: plan.Calls, depth: c.Binding.HiddenDepth}
 	if h.depth == 0 {
 		h.depth = DefaultHiddenDepth
 	}
@@ -60,6 +60,15 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 		strings.Join(c.Binding.Hidden, ", "), h.depth)
 	res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "hidden", Msg: note})
 	switch {
+	case out.start:
+		st := plan.Start
+		res.Conforms = Fail
+		res.Failure = &Failure{Kind: "disabled", Index: -1, Call: st.Quint, Step: st.Step, Expect: st.Expect, ExpectTemplate: st.ExpectTemplate,
+			Quint: fmt.Sprintf("the snapshot %s is no state of the model: its action is disabled, or its expect false, with the values it recorded", st.Action)}
+		for _, inv := range c.Binding.Invariants {
+			res.Invariants = append(res.Invariants, InvariantResult{Name: inv, Verdict: NotEvaluated})
+		}
+		return res, nil
 	case out.capped:
 		res.Conforms = NotEvaluated
 		res.Issues = append(res.Issues, qtrace.Issue{Severity: "warn", Kind: "hidden",
@@ -103,7 +112,10 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 				ir.Verdict = Fail
 				ir.Failure = &Failure{Kind: "invariant", Index: o.at, Note: why}
 				if o.initial {
-					ir.Failure.Index = -1 // the initial state violates it
+					ir.Failure.Index = -1 // the initial state violates it (the snapshot's, if the trace starts from one)
+					if plan.Start != nil {
+						ir.Failure.Step = plan.Start.Step
+					}
 				} else {
 					ir.Failure.Step = plan.Calls[o.at].Step
 				}
@@ -165,6 +177,7 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 // hiddenSearch is one search over a trace's states.
 type hiddenSearch struct {
 	c      *Checker
+	plan   *binding.Plan
 	e      *evaluator
 	consts map[string]qeval.Value
 	calls  []binding.Call
@@ -178,6 +191,7 @@ type hiddenSearch struct {
 type hiddenOutcome struct {
 	at       int
 	initial  bool // at 0: no initial state keeps the invariants
+	start    bool // the snapshot the trace starts from is no state of the model
 	disabled bool
 	states   []qeval.State
 	final    int
@@ -203,11 +217,27 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 		}
 		return true, nil
 	}
-	frontier, err := h.e.m.Successors(h.consts, nil, h.e.em.Init)
-	if err != nil {
-		return hiddenOutcome{}, err
+	// init's states, or the snapshot's the trace starts from: none is a
+	// snapshot that is no state of the model, a conformance failure
+	var frontier []qeval.State
+	if h.plan.Start == nil {
+		f, err := h.e.m.Successors(h.consts, nil, h.e.em.Init)
+		if err != nil {
+			return hiddenOutcome{}, err
+		}
+		frontier = f
+	} else {
+		f, failed, err := h.e.start(h.c, h.consts, h.plan)
+		if err != nil {
+			return hiddenOutcome{}, err
+		}
+		if failed {
+			return hiddenOutcome{at: -1, start: true}, nil
+		}
+		frontier = f
 	}
-	if frontier, err = filter(frontier, ok); err != nil {
+	frontier, err := filter(frontier, ok)
+	if err != nil {
 		return hiddenOutcome{}, err
 	}
 	if len(frontier) == 0 {

@@ -136,16 +136,17 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			ms := replay.Spec(c.Binding, ch.items[0].plan)
 			ms.Header = []string{fmt.Sprintf("%d traces of instance %s", len(ch.items), strings.Join(ms.Constants, ", "))}
 			calls := make([][]binding.Call, len(ch.items))
+			starts := make([]*binding.Call, len(ch.items))
 			results := make([]*Result, len(ch.items))
 			for i, it := range ch.items {
-				calls[i] = it.plan.Calls
+				calls[i], starts[i] = it.plan.Calls, it.plan.Start
 				results[i] = it.res
 			}
 			copt := opt
 			if !chosen && len(ch.items) > 1 {
 				copt.Backend, copt.detailBackend = "typescript", "rust"
 			}
-			for i, err := range evaluate(ctx, ms, calls, name, copt, results) {
+			for i, err := range evaluate(ctx, ms, calls, starts, name, copt, results) {
 				if err == nil {
 					continue
 				}

@@ -40,6 +40,13 @@ type Plan struct {
 	ObservedSteps int
 	Constants     map[string]string // constant -> Quint expression
 	Calls         []Call
+	// Start is the call the replay starts from instead of init: the
+	// trace's first step, when it is the binding's snapshot action's
+	// (Binding.Snapshot), the state it recorded. Nil: init.
+	Start *Call
+	// Issues are what planning found: a snapshot step not first in its
+	// trace, skipped.
+	Issues []qtrace.Issue
 }
 
 // ConstantList renders the constants as "NAME = expr", sorted.
@@ -238,6 +245,14 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 		if !s.Ambiguous {
 			prevProc = s.Process
 		}
+		snapshot := b.Snapshot != "" && s.Action == b.Snapshot && !s.Ambiguous
+		if snapshot && i > 0 {
+			// the state it recorded may be checked against the replay's one
+			// day; for now a snapshot is where a trace starts, nothing more
+			plan.Issues = append(plan.Issues, qtrace.Issue{Severity: "info", Kind: "snapshot", Msg: fmt.Sprintf(
+				"step %d (%s, seq %d%s) is a snapshot not first in its trace: skipped (a trace starts from its first step's snapshot, a log's head)", i+1, s.Action, s.Seq, where(s))})
+			continue
+		}
 		ab := b.Actions[s.Action]
 		var params []Param
 		if m != nil {
@@ -299,6 +314,10 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 				}
 				return nil, fmt.Errorf("step %d (%s%s): expect: %w", i+1, s.Action, where(s), err)
 			}
+		}
+		if snapshot {
+			plan.Start = &c
+			continue
 		}
 		plan.Calls = append(plan.Calls, c)
 	}

@@ -127,7 +127,7 @@ func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Lineari
 	if budget <= 0 {
 		budget = DefaultLinearizeBudget
 	}
-	best, ok, tried, cut, proof := linearizePending(steps, opt.Pending, opt.Settles, budget, inner)
+	best, ok, tried, cut, proof := linearizePending(steps, opt.Pending, opt.Settles, budget, inner, opt.First)
 	l = &Linearization{Order: best, Tried: tried, Proof: proof}
 	switch {
 	case ok:
@@ -153,6 +153,11 @@ type LinearizeOptions struct {
 	// have taken effect anywhere real time allows, or not at all; Settles
 	// are the settle records that bound them.
 	Pending, Settles []Step
+	// First keeps the first of the steps first in every order, before
+	// every other step and every pending call: a snapshot step, the state
+	// the history starts from (binding's Snapshot), which nothing can
+	// precede.
+	First bool
 }
 
 // An OrderCheck judges candidate orders for Linearize: for each, the index of
@@ -220,13 +225,13 @@ type Proof struct {
 // linearizeProof is linearizeStates with the proof of a verdict of no
 // order (nil for any other).
 func linearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
-	return linearizePending(steps, nil, nil, budget, check)
+	return linearizePending(steps, nil, nil, budget, check, false)
 }
 
 // linearizePending is Linearize's search, its check's errors panics.
-func linearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
+func linearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string), first bool) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
 	proof = &Proof{}
-	best, ok, tried, cut = linearizeWith(steps, pending, settles, budget, check, !hooks.CompleteSearchOnly.Load(), proof)
+	best, ok, tried, cut = linearizeWith(steps, pending, settles, budget, check, !hooks.CompleteSearchOnly.Load(), proof, first)
 	if ok || cut {
 		proof = nil
 	}
@@ -299,7 +304,7 @@ func ForcedOrder(steps []Step) ([]Step, bool) {
 // linearize is linearizeStates; without guided, the complete search alone
 // (for tests of it).
 func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
-	return linearizeWith(steps, nil, nil, budget, check, guided, proof)
+	return linearizeWith(steps, nil, nil, budget, check, guided, proof, false)
 }
 
 // before reports whether a step was recorded before another took effect
@@ -324,8 +329,9 @@ func orderKey(order []int) string {
 }
 
 // linearizeWith is linearizePending: steps are nodes 0..n-1, pending calls
-// n..n+m-1, which no order needs.
-func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
+// n..n+m-1, which no order needs. With first, node 0 precedes every other
+// (LinearizeOptions.First).
+func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof, first bool) (best []Step, ok bool, tried int, cut bool) {
 	if len(steps) == 0 {
 		return nil, true, 0, false // nothing observed: no call need have taken effect
 	}
@@ -359,8 +365,21 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 			}
 		}
 	}
+	if first {
+		// the snapshot first in the order the search starts from too: the
+		// hard edges put no step before it (it was recorded first), but
+		// a time-ordered kahn may
+		if i := slices.Index(at, 0); i > 0 {
+			at = append([]int{0}, slices.Delete(slices.Clone(at), i, i+1)...)
+		}
+	}
 	mustPrecede := func(a, b int) bool {
-		if a < n && b < n {
+		switch {
+		case first && a == 0 && b != 0:
+			return true
+		case first && b == 0:
+			return false
+		case a < n && b < n:
 			return required(a, b)
 		}
 		return bound[[2]int{a, b}]

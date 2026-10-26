@@ -305,12 +305,23 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 	// the deepest prefix of the plan's calls a candidate before this one
 	// was accepted with: its state, judged again from there (each was
 	// replayed from init, a search's cost quadratic in the history)
+	// (a search's candidates share their start, its history's first step:
+	// the memo's keys need not say it)
 	keys := c.memo.keys(plan.Calls)
 	from, s := c.memo.deepest(keys)
+	startAt := n - 1 // quint names no step for init's state
+	if plan.Start != nil {
+		startAt = stepAt([]binding.Call{*plan.Start}, 0, n)
+	}
 	if s == nil {
-		if s, err = e.m.Init(consts, e.em.Init); err != nil {
+		states, failed, err := e.start(c, consts, plan)
+		if err != nil {
 			return 0, "", err
 		}
+		if failed {
+			return startAt, "", nil
+		}
+		s = states[0]
 	}
 	violated := -1
 	check := func(at int) error {
@@ -330,7 +341,7 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 		return nil
 	}
 	if from == 0 {
-		if err := check(n - 1); err != nil { // quint names no step for the initial state
+		if err := check(startAt); err != nil {
 			return 0, "", err
 		}
 	}
@@ -400,6 +411,67 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 		return 0, "", nil
 	}
 	return -1, e.m.Key(s), nil
+}
+
+// start is the states plan's replay starts in: init's, or (plan.Start)
+// those its snapshot step's action reaches from no state, with its
+// expect holding; failed if there are none, the snapshot no state of the
+// model. A snapshot with several successors is Unsupported, as a step's
+// is: quint's replay takes one.
+func (e *evaluator) start(c *Checker, consts map[string]qeval.Value, plan *binding.Plan) (states []qeval.State, failed bool, err error) {
+	if plan.Start == nil {
+		s, err := e.m.Init(consts, e.em.Init)
+		return []qeval.State{s}, false, err
+	}
+	call := plan.Start
+	var args []qeval.Value
+	for _, p := range c.Model.Actions[call.Action] {
+		v, err := e.literal(call.Args[p.Name])
+		if err != nil {
+			return nil, false, err
+		}
+		args = append(args, v)
+	}
+	succ, err := e.m.Successors(consts, nil, e.em.Actions[call.Action], args...)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(succ) > 1 {
+		return nil, false, &qeval.Unsupported{Op: call.Action, Why: fmt.Sprintf("the snapshot has %d successors (it chooses): quint takes one", len(succ))}
+	}
+	for _, s := range succ {
+		ok, err := e.holds(consts, s, call)
+		if err != nil {
+			return nil, false, err
+		}
+		if ok {
+			states = append(states, s)
+		}
+	}
+	return states, len(states) == 0, nil
+}
+
+// holds reports whether call's expect holds in s (no expect: it does).
+func (e *evaluator) holds(consts map[string]qeval.Value, s qeval.State, call *binding.Call) (bool, error) {
+	if call.Expect == "" {
+		return true, nil
+	}
+	if call.ExpectArgs == nil {
+		return false, &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
+	}
+	var xs []qeval.Value
+	for _, a := range call.ExpectArgs {
+		v, err := e.literal(a)
+		if err != nil {
+			return false, err
+		}
+		xs = append(xs, v)
+	}
+	v, err := e.m.Eval(consts, s, e.em.Expects[call.Action], xs...)
+	if err != nil {
+		return false, err
+	}
+	return v == qeval.Bool(true), nil
 }
 
 // stepAt is the order's index of call i: its step's (re-sequenced from

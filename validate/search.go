@@ -290,7 +290,7 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 	}
 	var jobs []*job
 	for _, tr := range traces {
-		for _, part := range partitions(tr, key) {
+		for _, part := range partitions(tr, key, snapshotFirst(ch.Binding, tr)) {
 			jobs = append(jobs, &job{tr: tr, part: part})
 		}
 	}
@@ -331,7 +331,7 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 	for _, j := range jobs {
 		tr, part, o := j.tr, j.part, j.o
 		actor := part.Actor // as the report names it ("" for no actor)
-		for _, i := range tr.Issues {
+		for _, i := range startIssues(ch.Binding, tr) {
 			if i.Kind == "gap" || i.Kind == "lost-prefix" || i.Kind == "cycle" {
 				kept[actor] = append(kept[actor], i)
 			}
@@ -385,8 +385,10 @@ func inDir(ch *Checker, i int) *Checker {
 // partitions splits a trace by the value of argument key, in order of
 // first appearance, each named "<actor> <key>=<value>" (key "": the
 // trace whole). A step without the argument cannot be put in one: it
-// fails the test, as partitioning would be unsound.
-func partitions(tr *qtrace.Trace, key string) []*qtrace.Trace {
+// fails the test, as partitioning would be unsound. With snapshot, the
+// trace's first step is a snapshot of the whole state, every key's: it
+// starts every partition.
+func partitions(tr *qtrace.Trace, key string, snapshot bool) []*qtrace.Trace {
 	if key == "" {
 		return []*qtrace.Trace{tr}
 	}
@@ -415,7 +417,11 @@ func partitions(tr *qtrace.Trace, key string) []*qtrace.Trace {
 		}
 		return p
 	}
-	for _, s := range tr.Steps {
+	steps := tr.Steps
+	if snapshot {
+		steps = steps[1:]
+	}
+	for _, s := range steps {
 		p := of(s)
 		s.Actor = p.Actor
 		p.Steps = append(p.Steps, s)
@@ -424,6 +430,13 @@ func partitions(tr *qtrace.Trace, key string) []*qtrace.Trace {
 		p := of(s)
 		s.Actor = p.Actor
 		p.Pending = append(p.Pending, s)
+	}
+	if snapshot {
+		for _, p := range out {
+			s := tr.Steps[0]
+			s.Actor = p.Actor
+			p.Steps = append([]qtrace.Step{s}, p.Steps...)
+		}
 	}
 	return out
 }
@@ -484,7 +497,7 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 		// a candidate quint could not check ends the search with its error
 		// (fail's searchError), which qtrace returns: raised again here, for
 		// search's recover
-		l, err := qtrace.Linearize(tr.Steps, qtrace.LinearizeOptions{Budget: budget, Pending: pending, Settles: settles},
+		l, err := qtrace.Linearize(tr.Steps, qtrace.LinearizeOptions{Budget: budget, Pending: pending, Settles: settles, First: snapshotFirst(ch.Binding, tr)},
 			func(orders [][]qtrace.Step) (fs []int, states []string, err error) {
 				defer func() {
 					if r := recover(); r != nil {
@@ -509,7 +522,7 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 			return f
 		}
 	}
-	if o, ok := qtrace.ForcedOrder(tr.Steps); ok && len(pending) == 0 {
+	if o, ok := qtrace.ForcedOrder(tr.Steps); ok && len(pending) == 0 && (!snapshotFirst(ch.Binding, tr) || o[0].Action == ch.Binding.Snapshot) {
 		// one order: a search would check it alone, and the caller checks
 		// the order it gets (Checker.Check of search.Steps), which judges it
 		// as this search would have; two quint processes saved (the probe
@@ -995,7 +1008,7 @@ func resolve(ch *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, i
 	traces, issues := qtrace.Reconstruct(steps)
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
 	for _, tr := range traces {
-		for _, i := range tr.Issues {
+		for _, i := range startIssues(ch.Binding, tr) {
 			if i.Kind == "gap" || i.Kind == "lost-prefix" || i.Kind == "cycle" {
 				kept[tr.Actor] = append(kept[tr.Actor], i)
 			}
@@ -1047,16 +1060,18 @@ type placement []int
 // take effect only after the steps recorded before its invocation.
 // crossed are the calls whose bounds cross: invoked after a step recorded
 // after a settle that followed them, which only clocks that disagree
-// make; they take no effect.
-func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget int) (out []placement, cut bool, crossed []int) {
+// make; they take no effect. No call takes effect before position start
+// (1 after a snapshot step: the state the trace starts from).
+func resolutions(tr *qtrace.Trace, settles []qtrace.Step, budget, start int) (out []placement, cut bool, crossed []int) {
 	k := len(tr.Pending)
 	from := make([]int, k) // the earliest position each may take effect at
 	to := make([]int, k)   // the latest
 	for i, p := range tr.Pending {
+		from[i] = start
 		// after every step recorded before its invocation
 		for j, s := range tr.Steps {
 			if before(s, p) {
-				from[i] = j + 1
+				from[i] = max(from[i], j+1)
 			}
 		}
 		// before every step recorded after a settle that followed it: the
@@ -1207,7 +1222,11 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	hc := *ch // its candidates in the history's instance (binding.Planner)
 	hc.mode.history = tr
 	ch = &hc
-	pls, cut, crossed := resolutions(tr, settles, budget)
+	start := 0
+	if snapshotFirst(ch.Binding, tr) {
+		start = 1
+	}
+	pls, cut, crossed := resolutions(tr, settles, budget, start)
 	// a call whose bounds cross is resolved as no effect: say so, a clock
 	// problem otherwise silent
 	var note string

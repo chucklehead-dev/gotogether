@@ -79,6 +79,13 @@ type Binding struct {
 	// unknown.
 	Hidden      []string `yaml:"hidden"`
 	HiddenDepth int      `yaml:"hiddenDepth"`
+	// Snapshot is a model action whose parameters are the whole state
+	// (it assigns every variable from them: restore(balance, ops)): a
+	// step of it first in its trace is the state the trace starts from,
+	// instead of init. A log that lost its prefix (rotated, truncated, a
+	// recorder started mid-run) is judged from the snapshot recorded at
+	// its head; a snapshot step anywhere else is skipped, with an issue.
+	Snapshot string `yaml:"snapshot"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.
 	Simulate *Simulation `yaml:"simulate"`
@@ -254,6 +261,32 @@ func (b *Binding) Lint(m *Model) []string {
 			errs = append(errs, fmt.Sprintf("hidden %s is bound too: an action is recorded (actions) or hidden, not both", h))
 		}
 		seenHidden[h] = true
+	}
+	if a := b.Snapshot; a != "" {
+		ps, ok := m.Actions[a]
+		switch {
+		case a == "init" || a == "step":
+			errs = append(errs, fmt.Sprintf("snapshot %s: the model's %s is no snapshot: name an action whose parameters are the whole state (action restore(b: int, n: int) = all { balance' = b, ops' = n })", a, a))
+		case !ok:
+			errs = append(errs, "snapshot: "+m.notAnAction(a))
+		case a == b.Restart || seenHidden[a]:
+			errs = append(errs, fmt.Sprintf("snapshot %s is the binding's restart or a hidden action: a snapshot is a recorded step of its own", a))
+		case len(ps) == 0:
+			errs = append(errs, fmt.Sprintf("snapshot %s takes no parameters: a snapshot's parameters are the state the trace starts from (action %s(b: int, ...) = all { balance' = b, ... })", a, a))
+		default:
+			if vars, known := m.Assigns(a); known {
+				var left []string
+				for _, v := range m.Vars {
+					if !vars[v] {
+						left = append(left, v)
+					}
+				}
+				if len(left) > 0 {
+					errs = append(errs, fmt.Sprintf("snapshot %s leaves %s unassigned: a snapshot assigns every state variable from its parameters (%s' = ...), the whole state the trace starts from",
+						a, strings.Join(left, ", "), left[0]))
+				}
+			}
+		}
 	}
 	if b.HiddenDepth < 0 {
 		errs = append(errs, "hiddenDepth: negative")

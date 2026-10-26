@@ -50,6 +50,7 @@ var (
 		"Within":      {"within"},
 		"Hidden":      {"hidden"},
 		"HiddenDepth": {"hidden"},
+		"Snapshot":    {"snapshot"},
 	}
 	otherFields = map[string]string{
 		"Spec": "the model's file", "Module": "the model's module", "Constants": "the instance", "Intern": "naming",
@@ -73,6 +74,9 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		return steps
 	}
 	settled := qtrace.Step{Action: "settled", Settled: true}
+	restore := func(balance int64) qtrace.Step {
+		return qtrace.Step{Action: "restore", Args: map[string]any{"b": balance, "n": int64(1)}}
+	}
 	timed := func(action string, s int) qtrace.Step { return qtrace.Step{Action: action, Time: at(s)} }
 	invariant := func(name string) func(*Checker, *Report) bool {
 		return func(_ *Checker, rep *Report) bool {
@@ -112,6 +116,9 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		{name: "hidden", binding: "testdata/gossip.yaml",
 			pass: []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "b", 0, []int{1})}, fail: []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "b", 0, []int{9})},
 			failed: nonconforming},
+		// the deposit's balance alone: the snapshot's plus 5, or init's
+		{name: "snapshot", binding: "testdata/snapshot.yaml",
+			pass: seq(restore(50), acct("deposit", 5, 55)), fail: seq(restore(50), acct("deposit", 5, 5)), failed: nonconforming},
 		// the last balance alone: one the pending withdrawal explains, and one
 		// nothing does
 		{name: "pending", binding: "testdata/account.yaml", pass: pending(12), fail: pending(99), opt: SearchOptions{ResolvePending: true},

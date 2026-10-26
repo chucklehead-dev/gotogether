@@ -296,6 +296,17 @@ The first release. What a user meets, by module:
   record (`quint.lost`, `Step.Lost`) declares one a log cannot show:
   `qtrace.MarkLost`, and `ReadJSONL` for a torn tail, after each of the
   log's recorders' last seq. A lost tail leaves the run unsettled.
+- A snapshot start (S11): a binding's `snapshot: <action>` names a model
+  action whose parameters are the whole state; a trace whose first step
+  is its starts from that state instead of `init` (`binding.Plan.Start`),
+  in every check: the replays, the Go evaluator's and the hidden actions'
+  searches, Linearize (`qtrace.LinearizeOptions.First` keeps it first in
+  every order), ResolvePending and key partitions. Its recorder's lost
+  prefix is then an info (`judged from the state recorded by A at seq
+  N`). Lint refuses an unknown snapshot action or one that leaves a
+  variable unassigned (`binding.Model.Assigns`); a snapshot step not
+  first is skipped, with an issue (`binding.Plan.Issues`).
+  `Checker.Key` names the snapshot.
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

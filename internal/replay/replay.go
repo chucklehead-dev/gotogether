@@ -19,6 +19,12 @@ type Generated struct {
 	LineStep map[int]int    // source line -> index into Calls
 	Calls    []binding.Call // the replayed steps, in order, including inferred ones
 	Tests    GeneratedTests // names of the runs in Text
+	// Start is the call its runs start from (nil: init), and StartLines
+	// the lines it is written at, one per run: a failure there is the
+	// start's (a snapshot whose action is disabled, or whose state fails
+	// a check)
+	Start      *binding.Call
+	StartLines map[int]bool
 }
 
 // GeneratedTests names the runs a generated module holds.
@@ -42,7 +48,7 @@ func Generate(b *binding.Binding, m *binding.Model, t *qtrace.Trace, qntPath str
 	}
 	return RenderModule(ModuleSpec{
 		Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
-		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", t.Actor, len(t.Steps), t.Processes)},
+		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", t.Actor, len(t.Steps), t.Processes)}, Start: p.Start,
 	}, p.Calls, qntPath)
 }
 
@@ -58,6 +64,11 @@ type ModuleSpec struct {
 	InitExpect string   // checked in the initial state, if set
 	Header     []string // comment lines
 	Tests      TestSet  // which runs to write (default: all)
+	// Start is the call every run starts from instead of init (a snapshot
+	// step's: binding.Plan.Start), its expect checked where the steps'
+	// are; Starts, if set, a batch's, one per run (nil: init)
+	Start  *binding.Call
+	Starts []*binding.Call
 }
 
 // TestSet selects the runs of a replay module.
@@ -124,8 +135,37 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 	}
 	out := make([]*Generated, len(runs))
 	for ri, calls := range runs {
-		g := &Generated{Module: "observed", LineStep: map[int]int{}, Calls: calls}
+		start := ms.Start
+		if ms.Starts != nil {
+			start = ms.Starts[ri]
+		}
+		g := &Generated{Module: "observed", LineStep: map[int]int{}, Calls: calls, Start: start, StartLines: map[int]bool{}}
 		out[ri] = g
+		// begin is the run's first state, with checks of it (and the
+		// snapshot's own expect, if checked): init, or the start's call
+		begin := func(checks ...string) string {
+			first := "init"
+			if start != nil {
+				first = start.Quint
+			}
+			var cs []string
+			for _, c := range checks {
+				if c != "" {
+					cs = append(cs, c)
+				}
+			}
+			switch len(cs) {
+			case 0:
+				return first
+			case 1:
+				return fmt.Sprintf("%s.expect(%s)", first, cs[0])
+			}
+			return fmt.Sprintf("%s.expect((%s) and %s)", first, cs[0], strings.Join(cs[1:], " and "))
+		}
+		startExpect := ""
+		if start != nil {
+			startExpect = start.Expect
+		}
 		prefix := ""
 		if len(runs) > 1 {
 			prefix = fmt.Sprintf("r%d_", ri)
@@ -187,6 +227,7 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 				items = next
 			}
 			pr("  run %s =", name)
+			g.StartLines[line] = true
 			pr("    %s", first)
 			for _, it := range items {
 				emit(it, true)
@@ -197,11 +238,7 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 		if separate {
 			g.Tests.Conforms = prefix + "conformsTest"
 			pr("  // The observed steps, each checked against the observed state.")
-			first := "init"
-			if ms.InitExpect != "" {
-				first = fmt.Sprintf("init.expect(%s)", ms.InitExpect)
-			}
-			chain(g.Tests.Conforms, first, func(c binding.Call) string {
+			chain(g.Tests.Conforms, begin(startExpect, ms.InitExpect), func(c binding.Call) string {
 				if c.Expect != "" {
 					return fmt.Sprintf("%s.expect(%s)", c.Quint, c.Expect)
 				}
@@ -213,11 +250,7 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 			all := strings.Join(ms.Invariants, " and ")
 			pr("")
 			pr("  // The steps once, with every check: each step's expect and every invariant.")
-			allFirst := fmt.Sprintf("init.expect(%s)", all)
-			if ms.InitExpect != "" {
-				allFirst = fmt.Sprintf("init.expect(%s and %s)", ms.InitExpect, all)
-			}
-			chain(g.Tests.All, allFirst, func(c binding.Call) string {
+			chain(g.Tests.All, begin(startExpect, ms.InitExpect, all), func(c binding.Call) string {
 				if c.Expect != "" {
 					return fmt.Sprintf("%s.expect((%s) and %s)", c.Quint, c.Expect, all)
 				}
@@ -234,11 +267,12 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 			pr("  // The same steps; %s must hold when they end.", ev)
 			if len(calls) == 0 {
 				pr("  run %s =", name)
-				pr("    init.expect(%s)", ev)
+				g.StartLines[line] = true
+				pr("    %s", begin(ev))
 				continue
 			}
 			n := 0
-			chain(name, "init", func(c binding.Call) string {
+			chain(name, begin(), func(c binding.Call) string {
 				if n++; n == len(calls) {
 					return fmt.Sprintf("%s.expect(%s)", c.Quint, ev)
 				}
@@ -252,7 +286,7 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 				g.Tests.Invariants[inv] = name
 				pr("")
 				pr("  // The same steps; %s must hold in every state.", inv)
-				chain(name, fmt.Sprintf("init.expect(%s)", inv), func(c binding.Call) string {
+				chain(name, begin(inv), func(c binding.Call) string {
 					return fmt.Sprintf("%s.expect(%s)", c.Quint, inv)
 				}, false)
 			}
@@ -268,7 +302,7 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 // Spec is what a replay of plan p with binding b imports and checks.
 func Spec(b *binding.Binding, p *binding.Plan) ModuleSpec {
 	return ModuleSpec{Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
-		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", p.Actor, p.ObservedSteps, p.Processes)}}
+		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", p.Actor, p.ObservedSteps, p.Processes)}, Start: p.Start}
 }
 
 func indent(s, pfx string) string {

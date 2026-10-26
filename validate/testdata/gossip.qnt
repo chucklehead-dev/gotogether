@@ -17,6 +17,9 @@ module gossip {
     known' = known,
   }
 
+  // a snapshot of a log's head (gossip_snapshot.yaml): what a knows
+  action restoreA(a: Set[int]): bool = known' = NODES.mapBy(n => if (n == "a") a else Set())
+
   // neighbours on a line: a - b - c
   pure val LINKS = Set(("a", "b"), ("b", "a"), ("b", "c"), ("c", "b"))
 
