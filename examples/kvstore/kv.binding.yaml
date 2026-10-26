@@ -14,7 +14,13 @@ outcomes:
   conflict: Conflict
   missing: Missing
 
+# A rotated log starts with the store's whole state (kv/rotate.go): a
+# log alone is judged from it, its lost prefix explained. values and
+# versions are recorded maps, rendered by toMap (the parameters' type).
+snapshot: restore
+
 actions:
+  restore: {}
   write:
     expect: 'revision == {{.obs.revision}}'
   cas:

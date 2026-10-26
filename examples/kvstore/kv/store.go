@@ -52,6 +52,14 @@ const (
 	// invoked does not: a read that began after a write returned and did
 	// not see it is stale (not linearizable).
 	StaleRead
+	// LateRevisionOnConflict is RevisionOnConflict from the store's first
+	// log rotation on (RotateEvery): a bug that a later log shows alone,
+	// judged from the snapshot at its head, while the first log conforms.
+	LateRevisionOnConflict
+	// StaleSnapshot writes, at the head of each new log, the snapshot it
+	// wrote at the previous rotation (at the first, the empty store): a
+	// head that misreports the state the log goes on from.
+	StaleSnapshot
 )
 
 // Entry is a stored value and the revision that wrote it.
@@ -79,6 +87,12 @@ type Store struct {
 	snap    map[string]Entry // StaleRead's snapshot, at snapRev
 	snapRev int64
 	reads   int
+
+	every     int64        // RotateEvery's operations per log
+	next      func() error // starts the next log
+	rotations int
+	rotateErr error
+	stale     restore // StaleSnapshot's: the previous rotation's head
 }
 
 // NewStore returns an empty store.
@@ -88,7 +102,9 @@ func NewStore(m Mutation) *Store { return &Store{data: map[string]Entry{}, mutat
 func (s *Store) record(ctx context.Context, action string, err error, kv ...any) Result {
 	s.op++
 	qobs.Record(ctx, action, err, append(kv, "obs.revision", s.revision)...)
-	return Result{Revision: s.revision, Op: s.op}
+	r := Result{Revision: s.revision, Op: s.op}
+	s.rotate(ctx)
+	return r
 }
 
 // Put stores value under key.
@@ -122,7 +138,7 @@ func (s *Store) CAS(ctx context.Context, key string, expected int64, value strin
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e, ok := s.data[key]; !ok || e.Version != expected {
-		if s.mutation == RevisionOnConflict {
+		if s.mutation == RevisionOnConflict || s.mutation == LateRevisionOnConflict && s.rotations > 0 {
 			s.revision++
 		}
 		return s.record(ctx, "cas", ErrConflict, "key", key, "expected", expected, "value", value), ErrConflict
@@ -163,6 +179,7 @@ func (s *Store) Get(ctx context.Context, key string) (Result, error) {
 		}
 		s.op++
 		qobs.Record(ctx, "read", nil, "key", key, "obs.found", ok, "obs.value", e.Value, "obs.version", e.Version, "obs.revision", s.snapRev)
+		s.rotate(ctx)
 		return Result{Revision: s.snapRev, Op: s.op, Entry: e, Found: ok}, err
 	}
 	e, ok := s.data[key]

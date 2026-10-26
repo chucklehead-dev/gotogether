@@ -9,6 +9,14 @@
 //
 //	gotogether validate -binding kv.binding.yaml steps.jsonl
 //	gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl
+//
+// -rotate N rotates the step log every N operations: steps.1.jsonl,
+// steps.2.jsonl, ..., each after the first starting with the store's
+// whole state (the model's restore, the binding's snapshot), so a later
+// file is checked alone:
+//
+//	kvserver -steps steps.jsonl -rotate 100
+//	gotogether validate -binding kv.binding.yaml steps.3.jsonl
 package main
 
 import (
@@ -35,7 +43,8 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	steps := flag.String("steps", "", "write model steps (native step log) here")
 	spans := flag.String("spans", "", "write OTel spans (OTLP/JSON) here")
-	mutation := flag.String("mutation", "", "inject a bug: stale-cas | revision-on-conflict | stale-read")
+	mutation := flag.String("mutation", "", "inject a bug: stale-cas | revision-on-conflict | stale-read | late-revision-on-conflict | stale-snapshot")
+	rotate := flag.Int("rotate", 0, "with -steps: start a new step log (steps.1.jsonl, steps.2.jsonl, ...) every N operations, each headed by a snapshot")
 	flag.Parse()
 
 	m := kv.Faithful
@@ -47,17 +56,39 @@ func main() {
 		m = kv.RevisionOnConflict
 	case "stale-read":
 		m = kv.StaleRead
+	case "late-revision-on-conflict":
+		m = kv.LateRevisionOnConflict
+	case "stale-snapshot":
+		m = kv.StaleSnapshot
 	default:
 		log.Fatalf("unknown mutation %q", *mutation)
 	}
 
-	if *steps != "" {
+	store := kv.NewStore(m)
+	switch {
+	case *steps != "" && *rotate > 0:
+		rl, err := kv.NewRotatingLog(*steps)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() {
+			_ = rl.Close()
+			if err := store.Err(); err != nil {
+				log.Printf("rotation stopped: %v", err)
+			}
+			log.Printf("step logs: %v", rl.Files())
+		}()
+		store.RotateEvery(*rotate, rl.Rotate)
+		qobs.SetGlobal(qobs.NewRecorder(rl, qobs.WithActor("kv"), qobs.WithProcess("kvserver")))
+	case *steps != "":
 		sink, err := qobs.FileSink(*steps, qobs.PerStep)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer sink.Close()
 		qobs.SetGlobal(qobs.NewRecorder(sink, qobs.WithActor("kv"), qobs.WithProcess("kvserver")))
+	case *rotate > 0:
+		log.Fatal("-rotate rotates the step log: give -steps")
 	}
 	var tp trace.TracerProvider
 	if *spans != "" {
@@ -74,7 +105,7 @@ func main() {
 		tp = sdk
 	}
 
-	srv := &http.Server{Handler: kv.NewServer(kv.NewStore(m), tp).Handler()}
+	srv := &http.Server{Handler: kv.NewServer(store, tp).Handler()}
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Fatal(err)

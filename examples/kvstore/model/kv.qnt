@@ -43,6 +43,17 @@ module kv {
   // A read changes nothing; what it returned is checked by the binding.
   action read(key: str): bool = all { KEYS.contains(key), store' = store, revision' = revision }
 
+  // A rotated log's head (the binding's snapshot): the whole state, as
+  // the store recorded it when it started the log. Values and versions
+  // are two maps over the same keys (a recorded map renders as a Quint
+  // map of plain values); every version is at most the revision.
+  action restore(values: str -> str, versions: str -> int, rev: int): bool = all {
+    values.keys() == versions.keys(),
+    versions.keys().forall(k => versions.get(k) >= 1 and versions.get(k) <= rev),
+    store' = values.keys().mapBy(k => { value: values.get(k), version: versions.get(k) }),
+    revision' = rev,
+  }
+
   action step = {
     nondet key = KEYS.oneOf()
     nondet value = VALUES.oneOf()

@@ -3,6 +3,8 @@ package kvstore
 import (
 	"context"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/connect"
@@ -142,6 +144,124 @@ func TestStaleReadNotLinearizable(t *testing.T) {
 		return
 	}
 	t.Fatal("ten loads never read a stale snapshot")
+}
+
+// ---- 1b. a rotated log, checked alone ---------------------------------------
+
+// rotatedLoad puts load on a service whose store rotates its step log
+// every `every` operations (kv.RotatingLog, Store.RotateEvery) and returns
+// the logs, in order: 4 clients of 16 operations, so with every = 40 a
+// first log from init and a second of 24 operations headed by the
+// store's snapshot (restore), seqs going on from the first.
+func rotatedLoad(t *testing.T, m kv.Mutation, every int) [][]qtrace.Step {
+	t.Helper()
+	rl, err := kv.NewRotatingLog(filepath.Join(t.TempDir(), "steps.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := kv.NewStore(m)
+	store.RotateEvery(every, rl.Rotate)
+	// the server's handlers run on its goroutines: they find the
+	// recorder as the global one (so these tests are not parallel)
+	restore, err := qobs.InstallGlobal(qobs.NewRecorder(rl, qobs.WithActor("kv"), qobs.WithProcess("kvserver")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(kv.NewServer(store, nil).Handler())
+	err = kv.Load(context.Background(), srv.URL, 4, 16, []string{"a", "b"}, 1)
+	srv.Close()
+	restore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rl.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Err(); err != nil {
+		t.Fatal(err)
+	}
+	var logs [][]qtrace.Step
+	for _, path := range rl.Files() {
+		f, err := os.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		steps, err := qtrace.ReadJSONL(f)
+		f.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		logs = append(logs, steps)
+	}
+	if len(logs) < 2 || len(logs[len(logs)-1]) < 2 || logs[len(logs)-1][0].Action != "restore" {
+		t.Fatalf("want a rotated log headed by its snapshot and some operations, got %d logs", len(logs))
+	}
+	return logs
+}
+
+// fromHead fails the test unless run was judged from its log's head: a
+// failure a replay from init found (restore taken as an ordinary step)
+// stands beside the lost prefix's error, a verdict nobody should trust.
+func fromHead(t *testing.T, run *qtest.Run) {
+	t.Helper()
+	if lostPrefix(run) {
+		t.Fatalf("the log was judged from init, not its snapshot:\n%s", run.Report.Summary())
+	}
+}
+
+// lostPrefix reports whether the run's verdict is the lost prefix's
+// error: a log that starts after seq 1 with no snapshot to start from.
+func lostPrefix(run *qtest.Run) bool {
+	if run.Report == nil || run.OK() {
+		return false
+	}
+	for _, a := range run.Report.Actors {
+		for _, i := range append(a.Issues, run.Report.Issues...) {
+			if i.Kind == "lost-prefix" && i.Severity == "error" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// The last rotated log alone, as an operator would check it after the
+// earlier ones are gone: its seqs start past 1, and the snapshot at its
+// head (the binding's snapshot: restore) is the state it is judged from.
+// Without that head the same steps are a lost prefix, no verdict to
+// trust: replayed from init, they would be judged against an empty store.
+func TestRotatedLogConformsAlone(t *testing.T) {
+	qtest.RequireQuint(t)
+	logs := rotatedLoad(t, kv.Faithful, 40)
+	last := logs[len(logs)-1]
+	qtest.Validate(t, "kv.binding.yaml", last).Expect(t, qtest.Conforms())
+	if run := qtest.Validate(t, "kv.binding.yaml", last[1:]); !lostPrefix(run) {
+		t.Fatalf("the log without its head: want the lost prefix's error, got:\n%s", run.Report.Summary())
+	}
+}
+
+// LateRevisionOnConflict is the revision bug from the first rotation on,
+// as a deploy between two logs would bring it: the last log alone shows
+// the failed CAS that advanced the revision, judged from the state at its
+// head (the logs before it are the faithful store's).
+func TestLateMutantCaughtInLastLog(t *testing.T) {
+	qtest.RequireQuint(t)
+	logs := rotatedLoad(t, kv.LateRevisionOnConflict, 40)
+	run := qtest.Validate(t, "kv.binding.yaml", logs[len(logs)-1])
+	run.Expect(t, qtest.Mismatch("cas"))
+	fromHead(t, run)
+}
+
+// StaleSnapshot heads each log with the previous rotation's state (the
+// first, the empty store's): the log's first operation disagrees with
+// the state it goes on from, an observation (a revision, a read) or an
+// outcome (a CAS's) the model does not have there.
+func TestStaleSnapshotCaught(t *testing.T) {
+	qtest.RequireQuint(t)
+	logs := rotatedLoad(t, kv.StaleSnapshot, 40)
+	run := qtest.Validate(t, "kv.binding.yaml", logs[len(logs)-1])
+	run.Expect(t, qtest.AnyOf(qtest.Mismatch(""), qtest.Rejects("")))
+	fromHead(t, run)
 }
 
 // ---- 2. the model drives the service ---------------------------------------

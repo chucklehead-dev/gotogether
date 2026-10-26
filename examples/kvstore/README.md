@@ -21,6 +21,8 @@ Run it, put load on it, then check what it recorded:
 MUTATION=stale-cas ./run-demo.sh       # a race: two CAS with the same expected version both win
 MUTATION=revision-on-conflict ./run-demo.sh
 MUTATION=stale-read ./run-demo.sh      # reads from a lagging snapshot
+MUTATION=late-revision-on-conflict ./run-demo.sh   # the revision bug after the first rotation: the last log alone shows it
+MUTATION=stale-snapshot ./run-demo.sh  # a rotated log headed by an old state
 ```
 
 ```
@@ -41,6 +43,10 @@ kill -INT %1
 gotogether validate -binding kv.binding.yaml steps.jsonl                              # the model steps
 gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl     # the plain spans
 ```
+
+The demo then runs the service again with its step log rotated
+(`-rotate 120`) and validates the last file alone (below, *A rotated log,
+checked alone*); the two rotation mutants show only there.
 
 ## What it shows
 
@@ -63,6 +69,25 @@ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.json
   (`obs.found`, `obs.value`, `obs.version`) against the model's store.
 - **Long runs.** A 400-step run is replayed in segments, because Quint's
   Rust evaluator limits `.then` nesting to about 50.
+- **A rotated log, checked alone.** `kvserver -steps steps.jsonl -rotate
+  N` starts a new step log every N operations (`steps.1.jsonl`,
+  `steps.2.jsonl`, ...; `kv/rotate.go`). The recorder is the same, so the
+  seqs go on across files, and a later file alone has lost its prefix:
+  replayed from `init` it would be judged against an empty store, and
+  validation says `error lost-prefix`. So the store heads each new file
+  with its whole state, a step of the model's `restore(values, versions,
+  rev)`, which assigns every state variable from its arguments. It
+  records it under the lock that orders operations, right after the N-th,
+  so no operation is in flight across the head. The binding names it
+  (`snapshot: restore`): a file that starts with it is judged from that
+  state (`info lost-prefix: judged from the state recorded by restore at
+  seq 153`). The store is a map of records, which a recorded map cannot
+  carry (`toMap` renders plain values), so the snapshot records two maps,
+  values and versions, and `restore` zips them. A snapshot inside a
+  longer trace (all the files together) is skipped: only a log's head is
+  trusted as its start. So the head itself is checked only by what
+  follows it: a stale one (`StaleSnapshot`) shows in the next operation,
+  and not at all in the files read together.
 
 ## Tests (`kvstore_test.go`)
 
@@ -73,6 +98,9 @@ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.json
 | `TestStaleCASCaughtUnderLoad` | the race mutant under load | caught as a CAS the model cannot take |
 | `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |
 | `TestStaleReadNotLinearizable` | `StaleRead`: reads from a snapshot refreshed every fourth read, client-recorded | a read no order real time allows explains (`Mismatch("read")`) |
+| `TestRotatedLogConformsAlone` | 4 clients, the log rotated every 40 operations; the last file alone | judged from its head's snapshot it conforms; without the head, the lost prefix's error |
+| `TestLateMutantCaughtInLastLog` | `LateRevisionOnConflict`: the revision bug from the first rotation on | the last file alone shows the failed CAS (`Mismatch("cas")`), judged from its head |
+| `TestStaleSnapshotCaught` | `StaleSnapshot`: each head is the previous rotation's state | the last file's first operation disagrees with its head (`Mismatch` or `Rejects`) |
 | `TestModelDrivesService` | model traces drive the HTTP API (`connect.Run`) | store and revision match the model after every request |
 | `TestHegelDrivesService` | a Hegel state machine over HTTP; runs checked after the test | |
 | `TestHegelShrinksRevisionOnConflict` | the same machine against a mutant, checked per case | Hegel shrinks to one failed CAS |
