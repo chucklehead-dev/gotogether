@@ -55,20 +55,25 @@ func (c *Checker) checkResume(ctx context.Context, tr *qtrace.Trace, plan *bindi
 	a := c.Binding.Resume
 	all, err := h.e.m.Successors(h.consts, nil, h.e.em.Actions[a])
 	if err != nil {
-		return nil, fmt.Errorf("resume %s: the Go evaluator: %w", a, err)
+		return nil, fmt.Errorf("resume %s: the Go evaluator cannot list the states it admits (%w): record a snapshot step at each log's head instead (snapshot: restore)", a, err)
 	}
-	var starts []qeval.State
+	var starts, dropped []qeval.State
+	var violates [][]string // each dropped start's invariants that fail in it
 	for _, s := range all {
-		keep := true
+		var fails []string
 		for _, inv := range c.Binding.Invariants {
 			v, err := h.e.m.Eval(h.consts, s, h.e.em.Invariants[inv])
 			if err != nil {
 				return nil, err
 			}
-			keep = keep && v == qeval.Bool(true)
+			if v != qeval.Bool(true) {
+				fails = append(fails, inv)
+			}
 		}
-		if keep {
+		if len(fails) == 0 {
 			starts = append(starts, s)
+		} else {
+			dropped, violates = append(dropped, s), append(violates, fails)
 		}
 	}
 	noVerdict := func(msg string) (*Result, error) {
@@ -94,6 +99,18 @@ func (c *Checker) checkResume(ctx context.Context, tr *qtrace.Trace, plan *bindi
 	res, w, err := c.judgeHidden(tr, plan, res, h)
 	if err != nil {
 		return nil, err
+	}
+	if res.Conforms == Fail && len(dropped) > 0 && len(dropped) <= hiddenCap {
+		// a start the invariants ruled out may explain the steps: say so,
+		// for the resume (or the model) admits states it should not
+		ruled := *h
+		ruled.starts = dropped
+		if o, err := ruled.run(nil); err == nil && o.at < 0 && len(o.origins) > 0 {
+			i := o.origins[0]
+			res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "resume", Msg: fmt.Sprintf(
+				"the steps are explained only by a start that violates %s (%s, which %s admits): no verdict of the trace's on the invariant, which held where it started; narrow the resume to states the invariants keep",
+				strings.Join(violates[i], ", "), describeState(h, dropped[i]), a)})
+		}
 	}
 	if len(c.Binding.Hidden) > 0 {
 		return res, nil // quint cannot replay hidden actions: the evaluator's verdict, which judgeHidden said

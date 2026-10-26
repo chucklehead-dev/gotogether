@@ -9,9 +9,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
-// A snapshot action must exist, take the state as parameters and assign
-// every variable (through the actions it calls too): lint says which it
-// leaves unassigned, and the fix.
+// A snapshot action must exist, take the state as parameters, assign
+// every variable (through the actions it calls too) and read none (a
+// trace starts in it from no state): lint says which, and the fix.
 func TestLintSnapshot(t *testing.T) {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
@@ -22,7 +22,8 @@ func TestLintSnapshot(t *testing.T) {
 	}
 	for _, c := range []struct{ snapshot, want string }{
 		{"restore", ""},
-		{"setX", ""},
+		// assigns y through sameY (no "leaves y unassigned"), but reads it
+		{"setX", "snapshot setX reads y: a trace starts in it from no state"},
 		{"onlyX", "snapshot onlyX leaves y unassigned: a snapshot assigns every state variable from its parameters (y' = ...)"},
 		{"restor", "snapshot: restor is not an action of snap (did you mean restore?)"},
 		{"init", "snapshot init: the model's init is no snapshot"},
@@ -30,7 +31,7 @@ func TestLintSnapshot(t *testing.T) {
 	} {
 		errs := (&Binding{Snapshot: c.snapshot}).Lint(m)
 		got := strings.Join(errs, "\n")
-		if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) {
+		if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) || c.snapshot == "setX" && strings.Contains(got, "unassigned") {
 			t.Errorf("snapshot %s: lint %q, want %q", c.snapshot, got, c.want)
 		}
 	}
@@ -56,6 +57,8 @@ func TestLintResume(t *testing.T) {
 		{Binding{Resume: "resumAny"}, "resume: resumAny is not an action of snap (did you mean resumeAny?)"},
 		{Binding{Resume: "step"}, "resume step: the model's step is no resume"},
 		{Binding{Resume: "resumeAny", Actions: map[string]Action{"resumeAny": {}}}, "resume resumeAny is bound too"},
+		{Binding{Resume: "resumeY"}, "resume resumeY reads y: a trace starts in it from no state"},
+		{Binding{Snapshot: "restoreY"}, "snapshot restoreY reads y: a trace starts in it from no state"},
 	} {
 		got := strings.Join(c.b.Lint(m), "\n")
 		if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) {

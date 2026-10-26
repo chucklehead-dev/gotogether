@@ -11,5 +11,8 @@ module snap {
   // resumes (snapshot_test.go): resumeAny assigns both, resumeX x alone
   action resumeAny = nondet v = 0.to(2).oneOf() all { x' = v, y' = 0 }
   action resumeX = nondet v = 0.to(2).oneOf() x' = v
+  // reads y, which no state before a trace's start has
+  action resumeY = nondet v = 0.to(y).oneOf() all { x' = v, y' = 0 }
+  action restoreY(a: int): bool = all { x' = a, y' = y }
   action step = nondet v = 1.to(3).oneOf() setX(v)
 }

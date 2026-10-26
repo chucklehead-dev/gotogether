@@ -339,6 +339,17 @@ The first release. What a user meets, by module:
   response open in the start state is not judged. A call invoked before
   a lost tail's cut is neither pending nor complete for `Completes()`
   and `Pending`. `gotogether steps` lists each trace's losses.
+- Resume, reviewed (S11): a search's state carries the start it came
+  from at that step (a state recurring across steps once took another
+  start's, and the witness failed in quint). Conformance, invariants and
+  eventual vals of a search over hidden actions or a resume's states are
+  judged on one path (eventual vals were judged on another path than the
+  invariants': a false PASS with hidden actions alone). Claims are
+  three-valued wherever read: `Holds` is false, `Run.Expect` says no
+  verdict, and `AnyOf` holds if a part does. Lint refuses a snapshot or
+  resume that reads a state variable (`binding.Model.Reads`); a run only
+  a ruled-out start explains says so; a resume's failure is said as the
+  resume's, not hidden actions'.
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

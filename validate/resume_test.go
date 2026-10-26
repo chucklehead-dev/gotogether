@@ -56,8 +56,10 @@ func TestResumeLostPrefix(t *testing.T) {
 			"info lost-prefix: recorder r lost seqs 1..2: judged from the states resumeAny admits (11 of them); a pass means some admitted state explains the rest",
 			"the steps pass from balance = 3, ops = 0, a state resumeAny admits (quint confirms)"}},
 		{"inconsistent", lostHead([2]int64{5, 8}, [2]int64{-2, 7}), "mismatch after withdraw", []string{
-			"quint confirms: from none of the 11 states resumeAny admits do the steps pass"}},
-		{"a start the invariants rule out", lostHead([2]int64{5, 3}), "mismatch after deposit", nil},
+			"quint confirms: from none of the 11 states resumeAny admits do the steps pass",
+			"info resume: withdraw is enabled, but from no state resumeAny admits does its expect hold after it"}},
+		{"a start the invariants rule out", lostHead([2]int64{5, 3}), "mismatch after deposit", []string{
+			"the steps are explained only by a start that violates nonNegative (balance = -2, ops = 0, which resumeAny admits)"}},
 	} {
 		rep, err := c.Check(ctx, x.steps)
 		if err != nil {
@@ -71,6 +73,9 @@ func TestResumeLostPrefix(t *testing.T) {
 			if !strings.Contains(rep.Summary(), w) {
 				t.Errorf("%s: the report does not say %q:\n%s", x.name, w, rep.Summary())
 			}
+		}
+		if strings.Contains(rep.Summary(), "module: \n") {
+			t.Errorf("%s: an empty module line:\n%s", x.name, rep.Summary())
 		}
 		// CheckBatch judges it the same
 		reps, errs := c.CheckBatch(ctx, [][]qtrace.Step{x.steps}, 0)
@@ -294,6 +299,73 @@ func TestResumeHidden(t *testing.T) {
 		}
 		if rep.OK() != x.ok || !strings.Contains(rep.Summary(), "judged from the states resumeA admits (2 of them)") {
 			t.Errorf("c saw %v: OK %v, want %v:\n%s", x.seen, rep.OK(), x.ok, rep.Summary())
+		}
+	}
+}
+
+// A path's start is the one it came from at each step, not the first that
+// ever reached its state: from resumeAny's 0..3, an inc that saw 1 passes
+// from 0, though state 1 is also a start (and two incs that saw 2 and 3,
+// from 1); one that saw 7 explains nothing.
+func TestResumeRecurringStates(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := NewChecker("testdata/ev_counter.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inc := func(seq uint64, x int64) qtrace.Step {
+		return qtrace.Step{Action: "inc", Recorder: "r", Seq: seq, Time: time.Unix(int64(seq), 0), Obs: map[string]any{"x": x}}
+	}
+	for _, x := range []struct {
+		steps []qtrace.Step
+		ok    bool
+		from  string
+	}{
+		{[]qtrace.Step{inc(3, 1)}, true, "from x = 0"},
+		{[]qtrace.Step{inc(3, 2), inc(4, 3)}, true, "from x = 1"},
+		{[]qtrace.Step{inc(3, 7)}, false, ""},
+	} {
+		rep, err := c.Check(context.Background(), x.steps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rep.OK() != x.ok || !strings.Contains(rep.Summary(), x.from) {
+			t.Errorf("%v: OK %v, want %v %s:\n%s", x.steps, rep.OK(), x.ok, x.from, rep.Summary())
+		}
+	}
+}
+
+// Conformance, invariants and eventual vals are judged on one path, as a
+// replay judges them: an eventual val that holds only where an invariant
+// fails (two, past atMostOne) is no pass, from a resume's starts or with
+// hidden actions alone.
+func TestHiddenOnePath(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	settled := qtrace.Step{Action: "settled", Recorder: "r", Seq: 9, Settled: true, Time: time.Unix(9, 0)}
+	for _, x := range []struct {
+		binding string
+		steps   []qtrace.Step
+	}{
+		{"testdata/ev_together.yaml", []qtrace.Step{{Action: "inc", Recorder: "r", Seq: 3, Time: time.Unix(3, 0)}, func() qtrace.Step { s := settled; s.Seq = 4; return s }()}},
+		{"testdata/ev_hidden.yaml", []qtrace.Step{{Action: "tick", Recorder: "r", Seq: 1, Time: time.Unix(1, 0)}, func() qtrace.Step { s := settled; s.Seq = 2; return s }()}},
+	} {
+		c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep, err := c.Check(context.Background(), x.steps)
+		if err != nil {
+			t.Errorf("%s: %v", x.binding, err)
+			continue
+		}
+		if got := rep.Actors[0].Reason(); got != "violates "+EventuallyName("two") {
+			t.Errorf("%s: %q:\n%s", x.binding, got, rep.Summary())
 		}
 	}
 }

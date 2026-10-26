@@ -1,0 +1,8 @@
+# ev.qnt resumed from 0..3, its incs observed: states recur across steps
+spec: ev.qnt
+module: ev
+resume: resumeAny
+actions:
+  inc:
+    expect: 'x == {{.obs.x}}'
+invariants: [small]

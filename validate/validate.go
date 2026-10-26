@@ -713,7 +713,9 @@ func (r *Result) Summary() string {
 	if !r.OK() && len(r.Constants) > 0 {
 		fmt.Fprintf(&b, "  instance: %s\n", strings.Join(r.Constants, ", "))
 	}
-	fmt.Fprintf(&b, "  module: %s\n", r.Module)
+	if r.Module != "" { // (a search's verdict, with no replay of its own)
+		fmt.Fprintf(&b, "  module: %s\n", r.Module)
+	}
 	if r.ITF != "" {
 		fmt.Fprintf(&b, "  itf: %s\n", r.ITF)
 	}

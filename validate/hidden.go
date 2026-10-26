@@ -47,11 +47,11 @@ func (c *Checker) checkHidden(ctx context.Context, tr *qtrace.Trace) (*Result, e
 	}
 	e := evaluatorFor(c)
 	if e.err != nil {
-		what := fmt.Sprintf("hidden actions (%s) are", strings.Join(c.Binding.Hidden, ", "))
+		what, fix := fmt.Sprintf("hidden actions (%s) are", strings.Join(c.Binding.Hidden, ", ")), ""
 		if len(c.Binding.Hidden) == 0 {
-			what = fmt.Sprintf("the states resume %s admits are", c.Binding.Resume)
+			what, fix = fmt.Sprintf("the states resume %s admits are", c.Binding.Resume), ": record a snapshot step at each log's head instead (snapshot: restore)"
 		}
-		return nil, fmt.Errorf("%s searched by the Go evaluator, which has none for this binding: %v", what, e.err)
+		return nil, fmt.Errorf("%s searched by the Go evaluator, which has none for this binding: %v%s", what, e.err, fix)
 	}
 	consts := map[string]qeval.Value{}
 	for k, name := range e.em.Consts {
@@ -114,7 +114,11 @@ func (c *Checker) judgeHidden(tr *qtrace.Trace, plan *binding.Plan, res *Result,
 	case out.at >= 0:
 		res.Conforms = Fail
 		res.Failure = h.failure(out)
-		res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "hidden", Msg: res.Failure.Quint})
+		kind := "hidden"
+		if len(c.Binding.Hidden) == 0 {
+			kind = "resume"
+		}
+		res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: kind, Msg: res.Failure.Quint})
 		for _, inv := range c.Binding.Invariants {
 			res.Invariants = append(res.Invariants, InvariantResult{Name: inv, Verdict: NotEvaluated})
 		}
@@ -130,7 +134,9 @@ func (c *Checker) judgeHidden(tr *qtrace.Trace, plan *binding.Plan, res *Result,
 		if err != nil {
 			return nil, -1, err
 		}
-		final = all
+		if all.at < 0 && !all.capped {
+			final = all // (with none keeping them all the run fails anyway: its eventual vals as before)
+		}
 		verdict := func(o hiddenOutcome, inv, why string) InvariantResult {
 			ir := InvariantResult{Name: inv, Verdict: Pass}
 			switch {
@@ -176,19 +182,34 @@ func (c *Checker) judgeHidden(tr *qtrace.Trace, plan *binding.Plan, res *Result,
 			res.Invariants = append(res.Invariants, irs...)
 		}
 	}
-	if tr.Settled {
+	if tr.Settled && len(c.Binding.Eventually) > 0 {
+		// in the final states of the paths that kept the invariants (final),
+		// all together, as one replay judges them: a val holding on another
+		// path than the invariants', or than another val's, is no pass
+		together := false
+		for _, s := range final.states {
+			ok, err := h.eventualAll(s, true)
+			if err != nil {
+				return nil, -1, err
+			}
+			together = together || ok
+		}
 		for _, ev := range c.Binding.Eventually {
-			ok, err := h.eventually(out.states, ev)
+			ok, err := h.eventually(final.states, ev)
 			if err != nil {
 				return nil, -1, err
 			}
 			ir := InvariantResult{Name: EventuallyName(ev), Verdict: Pass, Eventually: true}
 			switch {
-			case !ok && out.cut: // no final state within the depth has it; one past it may
+			case together:
+			case !ok && final.cut || ok && final.cut: // no final state within the depth has them; one past it may
 				ir.Verdict = NotEvaluated
 			case !ok:
 				ir.Verdict = Fail
-				ir.Failure = &Failure{Kind: "invariant", Index: len(plan.Calls) - 1, Note: fmt.Sprintf("%s holds in no state the run may have settled in, hidden actions after its last step included", ev)}
+				ir.Failure = &Failure{Kind: "invariant", Index: len(plan.Calls) - 1, Note: fmt.Sprintf("%s holds in no state the run may have settled in (on a path keeping the invariants), hidden actions after its last step included", ev)}
+			default:
+				ir.Verdict = Fail
+				ir.Failure = &Failure{Kind: "invariant", Index: len(plan.Calls) - 1, Note: "no one state the run may have settled in (on a path keeping the invariants) has every eventual val"}
 			}
 			res.Invariants = append(res.Invariants, ir)
 		}
@@ -204,7 +225,7 @@ func (c *Checker) judgeHidden(tr *qtrace.Trace, plan *binding.Plan, res *Result,
 	if !passed(res) || res.Conforms != Pass || slices.ContainsFunc(res.Invariants, func(i InvariantResult) bool { return i.Verdict != Pass && !i.Within }) {
 		return res, -1, nil
 	}
-	w, err := h.witness(final.states, tr.Settled)
+	w, err := h.witness(final, tr.Settled)
 	return res, w, err
 }
 
@@ -213,10 +234,8 @@ type hiddenSearch struct {
 	c    *Checker
 	plan *binding.Plan
 	// starts, if set, are the states a resume admits, where the search
-	// starts instead of init; origin maps each state a run reached (by
-	// key) to the start it first came from
+	// starts instead of init (each state it reaches carries its start)
 	starts []qeval.State
-	origin map[string]int
 	e      *evaluator
 	consts map[string]qeval.Value
 	calls  []binding.Call
@@ -233,6 +252,7 @@ type hiddenOutcome struct {
 	start    bool // the snapshot the trace starts from is no state of the model
 	disabled bool
 	states   []qeval.State
+	origins  []int // each final state's start (h.starts' index), -1 without starts
 	final    int
 	capped   bool
 	// cut: a closure the depth ended (one more hidden action reached a new
@@ -260,14 +280,7 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 	// snapshot that is no state of the model, a conformance failure), or
 	// a resume's, each the origin of what it reaches
 	var frontier []qeval.State
-	h.origin = nil
 	if h.starts != nil {
-		h.origin = map[string]int{}
-		for i, s := range h.starts {
-			if k := h.e.m.Key(s); !hasKey(h.origin, k) {
-				h.origin[k] = i
-			}
-		}
 		frontier = h.starts
 	} else if h.plan.Start == nil {
 		f, err := h.e.m.Successors(h.consts, nil, h.e.em.Init)
@@ -286,7 +299,19 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 		}
 		frontier = f
 	}
-	frontier, err := filter(frontier, ok)
+	// each frontier state's start (h.starts' index; -1 without them): the
+	// first that reached it at this step, which the rest of the trace may
+	// take from it as from any other (what follows depends on the state
+	// alone). Kept per step, never across steps: a state that recurs is
+	// another start's at another step.
+	origins := make([]int, len(frontier))
+	for i := range origins {
+		origins[i] = -1
+		if h.starts != nil {
+			origins[i] = i
+		}
+	}
+	frontier, origins, err := filterWith(frontier, origins, ok)
 	if err != nil {
 		return hiddenOutcome{}, err
 	}
@@ -295,7 +320,7 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 	}
 	cut := false // some closure so far was ended by the depth: a failure is no verdict
 	for i, call := range h.calls {
-		closure, capped, c, err := h.close(frontier, ok)
+		closure, from, capped, c, err := h.close(frontier, origins, ok)
 		if err != nil || capped {
 			return hiddenOutcome{at: i, capped: capped}, err
 		}
@@ -324,11 +349,12 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 			}
 		}
 		var next []qeval.State
+		var nextFrom []int
 		seen, enabled := map[string]bool{}, false
 		if hooks.TamperEval.Load() == 4 {
 			closure = nil // a wrong evaluator: no state takes a step
 		}
-		for _, s := range closure {
+		for j, s := range closure {
 			succ, err := h.e.m.Successors(h.consts, s, h.e.em.Actions[call.Action], args...)
 			if err != nil {
 				return hiddenOutcome{}, err
@@ -351,67 +377,66 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 				}
 				if k := h.e.m.Key(s2); !seen[k] {
 					seen[k] = true
-					next = append(next, s2)
-					h.from(k, s)
+					next, nextFrom = append(next, s2), append(nextFrom, from[j])
 				}
 			}
 		}
 		if len(next) == 0 {
 			return hiddenOutcome{at: i, disabled: !enabled, cut: cut}, nil
 		}
-		frontier = next
+		frontier, origins = next, nextFrom
 	}
-	final, capped, c, err := h.close(frontier, ok)
-	return hiddenOutcome{at: -1, states: final, final: len(final), capped: capped, cut: cut || c}, err
+	final, from, capped, c, err := h.close(frontier, origins, ok)
+	return hiddenOutcome{at: -1, states: final, origins: from, final: len(final), capped: capped, cut: cut || c}, err
 }
 
 // close is states with every state the hidden actions reach from them in
 // at most the depth of steps, that keep ok; capped if they passed the cap,
 // cut if one more hidden action reaches a state they do not hold (the
 // depth, not the model, ended the closure).
-func (h *hiddenSearch) close(states []qeval.State, ok func(qeval.State) (bool, error)) (all []qeval.State, capped, cut bool, err error) {
+func (h *hiddenSearch) close(states []qeval.State, origins []int, ok func(qeval.State) (bool, error)) (all []qeval.State, from []int, capped, cut bool, err error) {
 	seen := map[string]bool{}
-	for _, s := range states {
+	for i, s := range states {
 		if k := h.e.m.Key(s); !seen[k] {
 			seen[k] = true
-			all = append(all, s)
+			all, from = append(all, s), append(from, origins[i])
 		}
 	}
-	layer := all
+	layer, layerFrom := all, from
 	for d := 0; d <= h.depth && len(layer) > 0; d++ {
 		var next []qeval.State
-		for _, s := range layer {
+		var nextFrom []int
+		for j, s := range layer {
 			for _, a := range h.c.Binding.Hidden {
 				succ, err := h.e.m.Successors(h.consts, s, h.e.em.Actions[a])
 				if err != nil {
-					return nil, false, false, err
+					return nil, nil, false, false, err
 				}
 				for _, s2 := range succ {
 					if k := h.e.m.Key(s2); !seen[k] {
 						keep, err := ok(s2)
 						if err != nil {
-							return nil, false, false, err
+							return nil, nil, false, false, err
 						}
 						seen[k] = true
 						if !keep {
 							continue
 						}
 						if d == h.depth {
-							return all, false, true, nil // a state one past the depth: cut
+							return all, from, false, true, nil // a state one past the depth: cut
 						}
-						h.from(k, s)
-						all = append(all, s2)
-						next = append(next, s2)
+						all, from = append(all, s2), append(from, layerFrom[j])
+						next, nextFrom = append(next, s2), append(nextFrom, layerFrom[j])
 						if len(all) > hiddenCap {
-							return nil, true, false, nil
+							return nil, nil, true, false, nil
 						}
 					}
 				}
 			}
 		}
-		layer = next
+		layer, layerFrom = next, nextFrom
 	}
-	return all, false, false, nil
+	return all, from, false, false, nil
 }
 
 // eventually reports whether ev holds in some of states.
@@ -432,9 +457,14 @@ func (h *hiddenSearch) eventually(states []qeval.State, ev string) (bool, error)
 func (h *hiddenSearch) failure(o hiddenOutcome) *Failure {
 	call := h.calls[o.at]
 	f := &Failure{Index: o.at, Call: call.Action, Step: call.Step, Expect: call.Expect, ExpectTemplate: call.ExpectTemplate}
-	if o.disabled {
+	switch {
+	case len(h.c.Binding.Hidden) == 0 && o.disabled: // a resume's search
+		f.Kind, f.Quint = "disabled", fmt.Sprintf("from no state %s admits do the steps before it reach a state that enables %s", h.c.Binding.Resume, call.Action)
+	case len(h.c.Binding.Hidden) == 0:
+		f.Kind, f.Quint = "state", fmt.Sprintf("%s is enabled, but from no state %s admits does its expect hold after it", call.Action, h.c.Binding.Resume)
+	case o.disabled:
 		f.Kind, f.Quint = "disabled", fmt.Sprintf("no state the hidden actions reach (at most %d since the step before) enables %s", h.depth, call.Action)
-	} else {
+	default:
 		f.Kind, f.Quint = "state", fmt.Sprintf("%s is enabled, but its expect holds after it in no state the hidden actions reach", call.Action)
 	}
 	return f
@@ -455,41 +485,53 @@ func filter(states []qeval.State, ok func(qeval.State) (bool, error)) ([]qeval.S
 	return out, nil
 }
 
-// from records that the state of key k came from parent, when the search
-// tracks its starts: its origin is parent's, unless it had one already.
-func (h *hiddenSearch) from(k string, parent qeval.State) {
-	if h.origin == nil || hasKey(h.origin, k) {
-		return
-	}
-	if o, ok := h.origin[h.e.m.Key(parent)]; ok {
-		h.origin[k] = o
-	}
-}
-
-func hasKey(m map[string]int, k string) bool { _, ok := m[k]; return ok }
-
-// witness is the start of a path that passes every check: one of states
-// (a run's final states) in which, of a settled trace, every eventual
-// val holds; -1 with no starts.
-func (h *hiddenSearch) witness(states []qeval.State, settled bool) (int, error) {
-	if h.origin == nil {
+// witness is the start of a path that passes every check: o's first
+// final state in which, of a settled trace, every eventual val holds
+// (eventual reports which); -1 with no starts.
+func (h *hiddenSearch) witness(o hiddenOutcome, settled bool) (int, error) {
+	if h.starts == nil {
 		return -1, nil
 	}
-	for _, s := range states {
-		ok := true
-		for _, ev := range h.c.Binding.Eventually {
-			if !settled || !ok {
-				break
-			}
-			v, err := h.e.m.Eval(h.consts, s, h.e.em.Eventually[ev])
-			if err != nil {
-				return -1, err
-			}
-			ok = v == qeval.Bool(true)
-		}
-		if o, known := h.origin[h.e.m.Key(s)]; ok && known {
-			return o, nil
+	for i, s := range o.states {
+		if ok, err := h.eventualAll(s, settled); err != nil {
+			return -1, err
+		} else if ok {
+			return o.origins[i], nil
 		}
 	}
 	return -1, fmt.Errorf("the search over the states %s admits passed with no witness: a bug of the search (validate's hiddenSearch)", h.c.Binding.Resume)
+}
+
+// eventualAll reports whether every eventual val holds in s, of a settled
+// trace (of another, none is judged).
+func (h *hiddenSearch) eventualAll(s qeval.State, settled bool) (bool, error) {
+	if !settled {
+		return true, nil
+	}
+	for _, ev := range h.c.Binding.Eventually {
+		v, err := h.e.m.Eval(h.consts, s, h.e.em.Eventually[ev])
+		if err != nil {
+			return false, err
+		}
+		if v != qeval.Bool(true) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// filterWith keeps the states ok keeps, with their origins.
+func filterWith(states []qeval.State, origins []int, ok func(qeval.State) (bool, error)) ([]qeval.State, []int, error) {
+	var out []qeval.State
+	var from []int
+	for i, s := range states {
+		keep, err := ok(s)
+		if err != nil {
+			return nil, nil, err
+		}
+		if keep {
+			out, from = append(out, s), append(from, origins[i])
+		}
+	}
+	return out, from, nil
 }

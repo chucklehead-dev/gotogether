@@ -1,0 +1,9 @@
+# ev.qnt with unrecorded bumps: an invariant and an eventual val no one
+# path keeps both of
+spec: ev.qnt
+module: ev
+actions:
+  tick: {}
+hidden: [bump]
+invariants: [atMostOne]
+eventually: [two]

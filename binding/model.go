@@ -33,6 +33,42 @@ type Model struct {
 	// itself, and calls are the names it applies: an action's
 	// assignments are its own and its calls' (Assigns)
 	assigns, calls map[string]map[string]bool
+	// reads are the names each action reads outside its assignments'
+	// left sides: of the variables among them, the state it reads
+	reads map[string]map[string]bool
+}
+
+// Reads reports which of the model's variables action reads, itself or
+// through the actions it calls (a snapshot or a resume, which start a
+// trace from no state, must read none), and whether the model says.
+func (m *Model) Reads(action string) (map[string]bool, bool) {
+	if m.reads == nil {
+		return nil, false
+	}
+	vars := map[string]bool{}
+	for _, v := range m.Vars {
+		vars[v] = true
+	}
+	out, seen := map[string]bool{}, map[string]bool{}
+	var walk func(a string)
+	walk = func(a string) {
+		if seen[a] {
+			return
+		}
+		seen[a] = true
+		for n := range m.reads[a] {
+			if vars[n] {
+				out[n] = true
+			}
+		}
+		for n := range m.calls[a] {
+			if _, ok := m.assigns[n]; ok {
+				walk(n)
+			}
+		}
+	}
+	walk(action)
+	return out, true
 }
 
 // Assigns reports which of the model's variables action assigns, itself
@@ -200,11 +236,11 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 	}
 	// every module's actions' assignments and calls, by name: an action
 	// may assign through one it imports
-	assigns, calls := map[string]map[string]bool{}, map[string]map[string]bool{}
+	assigns, calls, reads := map[string]map[string]bool{}, map[string]map[string]bool{}, map[string]map[string]bool{}
 	for _, mod := range tc.Modules {
 		for _, d := range mod.Declarations {
 			if d.Kind == "def" && d.Qualifier == "action" {
-				assigns[d.Name], calls[d.Name] = assigned(d.RawExpr), namesIn(d.RawExpr)
+				assigns[d.Name], calls[d.Name], reads[d.Name] = assigned(d.RawExpr), namesIn(d.RawExpr), readNames(d.RawExpr)
 			}
 		}
 	}
@@ -213,7 +249,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 			continue
 		}
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
-			assigns: assigns, calls: calls}
+			assigns: assigns, calls: calls, reads: reads}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range mod.Declarations {
@@ -335,6 +371,41 @@ func assigned(raw json.RawMessage) map[string]bool {
 						out[n] = true
 					}
 				}
+			}
+			for _, e := range x {
+				walk(e)
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		}
+	}
+	var v any
+	if json.Unmarshal(raw, &v) == nil {
+		walk(v)
+	}
+	return out
+}
+
+// readNames are the names an expression's IR reads: every name but an
+// assignment's left side (x in x' = e).
+func readNames(raw json.RawMessage) map[string]bool {
+	out := map[string]bool{}
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if x["kind"] == "name" {
+				if n, ok := x["name"].(string); ok {
+					out[n] = true
+				}
+			}
+			if x["kind"] == "app" && x["opcode"] == "assign" {
+				if args, _ := x["args"].([]any); len(args) > 1 {
+					walk(args[1])
+				}
+				return
 			}
 			for _, e := range x {
 				walk(e)

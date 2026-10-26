@@ -1,0 +1,10 @@
+# ev.qnt with an invariant and an eventual val no one path keeps both of,
+# resumed (inc recorded) or with hidden bumps (tick recorded)
+spec: ev.qnt
+module: ev
+resume: resumeAny
+actions:
+  inc: {}
+  tick: {}
+invariants: [atMostOne]
+eventually: [two]

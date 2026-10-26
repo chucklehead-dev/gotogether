@@ -23,7 +23,11 @@ mutants) ends in one of these verdicts.
 | real time bounds nothing | `issue: warn linearize: ... real time bounds none of its N steps` | none: record calls with `qobs.Invoke` and `Call.Done` | no step has an invocation time, so every order of its threads is allowed: sequential consistency, not linearizability |
 | a tool failure | an error, exit 2, no verdict | none: fix the binding or model | a template, a type, a missing field, or quint itself |
 
-`qtest.AnyOf(a, b)` is either. A report's summary shows the model's state
+`qtest.AnyOf(a, b)` is either: it holds if one does, and has no verdict
+if neither does and one has none. A run with no verdict for an
+expectation neither meets nor misses it, wherever it is read: `Holds`
+is false, `Run.Expect` fails saying so, `Some` is not shown by it and
+`All` and `None` do not hold over it. A report's summary shows the model's state
 around the failing step: read it before deciding whose bug it is (the
 workflow skill's triage table).
 

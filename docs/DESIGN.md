@@ -3170,7 +3170,14 @@ A lost head needs a first state. Two ways, both named in the binding:
 - `resume:` a nullary action whose nondet picks admit the states a log
   may start in. The evaluator searches them (§49's search from a set of
   states, filtered by the binding's invariants), quint confirms a pass
-  from its witness start and a failure from every start up to 200. A
+  from its witness start and a failure from every start up to 200 (the
+  starts are the evaluator's list of the resume's states: quint has no
+  way to enumerate an action's successors, and the evaluator's agreement
+  with it is tested generally, `TestAgreesWithQuint`). Each state the
+  search reaches carries the start it came from at that step, and
+  conformance, invariants and eventual vals are judged on one path, as a
+  replay judges them (hidden actions alone once judged eventual vals on
+  another path than the invariants', a false PASS). A
   pass means some admitted state explains the rest: sound only if the
   admitted states are reachable, which is the user's claim, as a
   template is. Bounded reachability from `init` was rejected: its PASS
@@ -3196,4 +3203,9 @@ false PASS through `ValidateITF`), a bounded response timed by its
 trigger, `None` claims holding over invariants left unjudged, a cache
 key without times, a step concurrent with the snapshot rejected, and a
 disabled snapshot reported as quint's error; all fixed, each with a test
-that fails without its fix.
+that fails without its fix. The second found a start tracked by state
+across steps (a witness the steps do not pass from), eventual vals and
+invariants judged on different paths (with hidden actions alone too: a
+false PASS), and claims of no verdict read as met outside `All` and
+`None` (`Holds`, `Some`, `AnyOf`); claims are now three-valued wherever
+they are read.

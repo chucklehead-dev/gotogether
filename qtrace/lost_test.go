@@ -22,7 +22,7 @@ func TestLostPrefixIsNoGap(t *testing.T) {
 		kinds[i.Kind] = i
 	}
 	lp, gap := kinds["lost-prefix"], kinds["gap"]
-	if lp.Severity != "error" || !strings.Contains(lp.Msg, "recorder r lost seqs 1..2") || !strings.Contains(lp.Msg, "snapshot") {
+	if lp.Severity != "error" || !strings.Contains(lp.Msg, "recorder r lost seqs 1..2") || !strings.Contains(lp.Msg, "snapshot") || !strings.Contains(lp.Msg, "resume: resumeAny") {
 		t.Errorf("lost prefix: %v", tr.Issues)
 	}
 	if gap.Severity != "error" || !strings.Contains(gap.Msg, "[5]") || !strings.Contains(gap.Msg, "of 3..6") {

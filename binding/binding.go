@@ -295,6 +295,9 @@ func (b *Binding) Lint(m *Model) []string {
 						a, strings.Join(left, ", "), left[0]))
 				}
 			}
+			if r := readVars(m, a); r != "" {
+				errs = append(errs, fmt.Sprintf("snapshot %s reads %s: a trace starts in it from no state, so it assigns every variable from its parameters alone", a, r))
+			}
 		}
 	}
 	if a := b.Resume; a != "" {
@@ -320,6 +323,9 @@ func (b *Binding) Lint(m *Model) []string {
 					errs = append(errs, fmt.Sprintf("resume %s leaves %s unassigned: a resume assigns every state variable (%s' = ...), the whole state a trace may start in",
 						a, strings.Join(left, ", "), left[0]))
 				}
+			}
+			if r := readVars(m, a); r != "" {
+				errs = append(errs, fmt.Sprintf("resume %s reads %s: a trace starts in it from no state, so it picks every variable from constants and values alone (nondet b = 0.to(LIMIT).oneOf())", a, r))
 			}
 		}
 		if _, bound := b.Actions[a]; bound {
@@ -359,6 +365,16 @@ func (b *Binding) Lint(m *Model) []string {
 		}
 	}
 	return errs
+}
+
+// readVars names the state variables action reads ("" for none, or a
+// model that does not say).
+func readVars(m *Model, action string) string {
+	vars, known := m.Reads(action)
+	if !known || len(vars) == 0 {
+		return ""
+	}
+	return strings.Join(sortedKeys(vars), ", ")
 }
 
 // Fields returns the step fields (.name) a template refers to: what the

@@ -78,7 +78,14 @@ resume, or record a snapshot. A bounded response already open in the
 start state opened in the lost prefix and is not judged; one that fails
 from the witness while other starts are admitted is no verdict.
 Linearize and ResolvePending refuse such a trace: record a snapshot
-for them. Lint refuses a resume that takes parameters, leaves a variable
+for them. The starts are the Go evaluator's list of what the resume
+admits (its agreement with quint is tested generally, not per run): a
+pass's witness and the failure's "from every start" are over that list.
+A run that only a start the invariants ruled out explains is a
+mismatch, and the report says which start and invariant ("explained
+only by a start that violates nonNegative"): narrow the resume.
+Conformance, invariants and eventual vals are judged on one path, as a
+replay judges them, with hidden actions too. Lint refuses a resume that takes parameters, leaves a variable
 unassigned, or is a step of the binding. A snapshot step, where there is
 one, is used instead.
 
@@ -115,7 +122,10 @@ model. Claims over runs know it: `None(Violates("I"))` does not hold of
 a run whose `I` (or an eventual val, unjudged for the lost tail) has no
 verdict, and such a run kills no mutant. A call invoked before its
 recorder's cut may have completed in the lost tail: neither `Completes()`
-nor `None(Pending(...))` holds of the run, and it shows no `Pending`. A cached verdict of a run with
+nor `None(Pending(...))` holds of the run, and it shows no `Pending`.
+Wherever a claim is read (`Holds`, `Run.Expect`, `Some`, `All`, `None`),
+a run without a verdict for it neither meets nor misses it; `AnyOf`
+holds if a part holds, whatever another's verdict. A cached verdict of a run with
 a loss record is keyed with its steps' times, which the cut is judged
 by.
 
