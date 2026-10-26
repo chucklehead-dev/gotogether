@@ -54,6 +54,7 @@ type Exploration struct {
 	fuzz      bool              // its run is a fuzz input's (System.Fuzz)
 	mu        sync.Mutex        // guards recheck's report swaps
 	vacuity   *vacuityResult    // computed once (Vacuous)
+	given     bool              // its runs were made one by one and gathered (Runs): no seeds, no choices
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -502,6 +503,8 @@ func (x *Exploration) name(id uint64) string {
 // nameOf is how messages name run r.
 func (x *Exploration) nameOf(r *Run) string {
 	switch {
+	case x.given:
+		return fmt.Sprintf("run %d", slices.Index(x.Runs, r)+1)
 	case x.alone != nil:
 		return x.alone.String()
 	case r.origin.kind == "choices":
@@ -1325,9 +1328,12 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 		x.recheck(t, r)
 	}
 	var b strings.Builder
-	if x.search != nil {
+	switch {
+	case x.given: // a real run's faults are its nemesis's steps, in its report
+		fmt.Fprintf(&b, "%s\n%s", x.nameOf(r), r.Report.Summary())
+	case x.search != nil:
 		fmt.Fprintf(&b, "%s, made otherwise %v\n%s", x.nameOf(r), r.deviations(), r.Report.Summary())
-	} else {
+	default:
 		fmt.Fprintf(&b, "%s, faults %v\n%s", x.nameOf(r), r.Faults(), r.Report.Summary())
 	}
 	if len(r.Steps) == 0 {

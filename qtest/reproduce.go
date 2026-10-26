@@ -149,7 +149,12 @@ func matched(test string) {
 }
 
 // ref is how a reproduce line names the exploration: "TestShop#2".
-func (x *Exploration) ref() string { return fmt.Sprintf("%s#%d", x.test, x.id) }
+func (x *Exploration) ref() string {
+	if x.given {
+		return fmt.Sprintf("%d runs given", len(x.Runs))
+	}
+	return fmt.Sprintf("%s#%d", x.test, x.id)
+}
 
 // A runSpec is GOTOGETHER_RUN parsed: the exploration and the run in it.
 type runSpec struct {

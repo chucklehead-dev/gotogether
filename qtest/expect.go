@@ -592,3 +592,14 @@ func keysOf[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
+// Runs gathers runs made one by one (Validate's, Record's: a real
+// deployment's, each judged from its step logs, its nemesis's faults
+// among its steps) so claims over runs are stated of them as of an
+// exploration's runs, with the same three-valued judgment:
+//
+//	qtest.Runs(runs...).Expect(t, qtest.Some(qtest.Rejects("put")), qtest.None(qtest.Violates("agreement")))
+//
+// The runs have no seeds or choices: a failure names a run by its place
+// among them, with its report.
+func Runs(runs ...*Run) *Exploration { return &Exploration{Runs: runs, given: true} }
