@@ -3,6 +3,7 @@ package qnemesis
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -188,3 +189,71 @@ func TestJournalScriptLongPartition(t *testing.T) {
 		}
 	}
 }
+
+// A fault the simulation cannot make (a pause without Sim.Stalls.Pause)
+// leaves every fault after it unmade, and Unmade says so: the cause as
+// Misnamed names it, and the fault left waiting for it.
+func TestUnmadeNamesWhatBlocked(t *testing.T) {
+	t.Parallel()
+	// names of this run's own: qenv's registry of declared nemeses is
+	// process-wide, and a pause.a another run declared would be known
+	a, b := fmt.Sprintf("ua%d", unmadeRuns.Add(1)), fmt.Sprintf("ub%d", unmadeRuns.Load())
+	zero, one := 0, 1
+	j := &Journal{Entries: []Entry{
+		{Index: 0, Kind: "nemesis.pause." + a, Event: "start", Steps: &zero},
+		{Index: 1, Kind: "nemesis.crash." + b, Event: "start", Steps: &one, Recorded: true},
+	}}
+	sc := j.Script()
+	s := qenv.New(sc)
+	steps := 0
+	sc.Progress = func() int { return steps }
+	s.Process(a, true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+	s.Process(b, true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+	s.Spawn("work", func(ctx context.Context) {
+		for range 5 {
+			qenv.Sleep(ctx, 100*time.Millisecond)
+			steps++
+		}
+	})
+	if err := s.Run(2 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	err := Unmade(sc)
+	if err == nil {
+		t.Fatal("Unmade: nil; the pause and the crash never happened")
+	}
+	for _, want := range []string{"made 0 of the script's 2 faults", `"nemesis.pause.` + a + `" is no fault kind or nemesis the system declared`, "fault 1 (nemesis.crash." + b + "=0 after 1 steps) waits for fault 0 (nemesis.pause." + a + ")"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Unmade lacks %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "fault 0 (nemesis.pause."+a+"=0 after 0 steps) never happened") {
+		t.Errorf("a misnamed fault said twice:\n%v", err)
+	}
+	// with the pause declared, everything is made
+	sc = j.Script()
+	s = qenv.New(sc)
+	s.Stalls = qenv.Stalls{Pause: 10 * time.Millisecond}
+	steps = 0
+	sc.Progress = func() int { return steps }
+	s.Process(a, true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+	s.Process(b, true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+	s.Spawn("work", func(ctx context.Context) {
+		for range 5 {
+			qenv.Sleep(ctx, 100*time.Millisecond)
+			steps++
+		}
+	})
+	if err := s.Run(2 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if err := Unmade(sc); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// unmadeRuns numbers TestUnmadeNamesWhatBlocked's runs (-count), for
+// names no other run declared.
+var unmadeRuns atomic.Int64

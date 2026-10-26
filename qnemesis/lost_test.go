@@ -98,3 +98,32 @@ func TestCrashLossRecordsFromTheLogs(t *testing.T) {
 }
 
 func itoa(n int) string { return string(rune('0' + n)) }
+
+// A crash's lost tail is bounded by the reaping: a settle recorded after
+// the crash settles the run (Settles holds), where an unbounded loss
+// voided every settle and made Recorders and Settles exclusive.
+func TestCrashLossLetsALaterSettleSettle(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	ctx := context.Background()
+	mem := &qobs.MemorySink{}
+	client := qobs.NewRecorder(mem, qobs.WithID("client"), qobs.WithProcess("sys"))
+	client.Record(ctx, "saw", nil, "n", 0)
+	srv := &recordedTarget{fakeTarget: &fakeTarget{name: "srv", c: &calls{start: time.Now()}, alive: true, inc: 1}, started: time.Now(),
+		recorders: func(int) []string { return []string{"srv-1"} }}
+	rc := Recording{"crash": func(Event) (string, []any) { return "crash", nil }, "restart": func(Event) (string, []any) { return "restart", nil }}
+	n := &Nemesis{Targets: map[string]Target{"srv": srv}, Rec: qobs.NewRecorder(mem, qobs.WithID(RecorderID), qobs.WithProcess("sys")), Record: rc}
+	if err := n.Run(ctx, Schedule{{Kind: "nemesis.crash.srv"}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond) // past the slack
+	client.Settled(ctx)
+	steps := mem.Steps()
+	if steps[1].Lost != "suffix" || steps[1].LostBefore.IsZero() {
+		t.Fatalf("the crash's loss record %+v is not bounded", steps[1])
+	}
+	r := qtest.Validate(t, "testdata/ctr.yaml", steps)
+	if !qtest.Settles().Holds(r) {
+		t.Fatalf("a settle after the crash did not settle the run:\n%s", r.Report.Summary())
+	}
+}

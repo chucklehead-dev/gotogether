@@ -3,8 +3,10 @@ package qnemesis
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -94,7 +96,9 @@ func ReadJournal(r io.Reader) (*Journal, error) {
 // in Remaining, where a chain through it would have stopped every fault
 // after it. Set CutLength to LongestCut, or longer, to keep each
 // partition until its heal. What the script cannot make as it happened
-// is in Unreproducible.
+// is in Unreproducible; after the run, Unmade says which faults the
+// simulation did not make, and why (a fault it cannot make holds up every
+// fault after it).
 func (j *Journal) Script() *qenv.Script {
 	sc := &qenv.Script{}
 	recorded := 0
@@ -146,6 +150,60 @@ func (j *Journal) Script() *qenv.Script {
 		}
 	}
 	return sc
+}
+
+// Unmade says why a simulation did not make every fault of a journal's
+// script (nil if it did; ask after the run): each fault the simulation
+// could not make, as Script.Misnamed names it (a pause without
+// Sim.Stalls.Pause, a partition without PartitionNemesis: no such
+// nemesis), each fault left waiting for one that never happened, and
+// each the run never came to. Script keeps the journal's order, so one
+// fault the simulation cannot make leaves every fault after it unmade: a
+// re-make in another order would not be the run's (a crash before the
+// partition it came after), and a Script cannot know the simulation's
+// configuration. A qtest exploration with the script as its chooser
+// fails on the same faults; a test running the script itself asks Unmade.
+func Unmade(sc *qenv.Script) error {
+	rem := sc.Remaining()
+	if len(rem) == 0 {
+		return nil
+	}
+	// Remaining keeps the script's order: its faults' indices
+	undone := map[int]bool{}
+	k := 0
+	for i, f := range sc.Faults {
+		if k < len(rem) && reflect.DeepEqual(f, rem[k]) {
+			undone[i] = true
+			k++
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "qnemesis: the simulation made %d of the script's %d faults", len(sc.Faults)-len(rem), len(sc.Faults))
+	misnamed := map[int]bool{}
+	for _, m := range sc.Misnamed() {
+		b.WriteString("\n  " + m)
+		var i int
+		if _, err := fmt.Sscanf(m, "script fault %d ", &i); err == nil {
+			misnamed[i] = true // said: its cause is named
+		}
+	}
+	for i, f := range sc.Faults {
+		if !undone[i] || misnamed[i] {
+			continue
+		}
+		waits := -1
+		for _, j := range f.Follows {
+			if undone[j] {
+				waits = j
+			}
+		}
+		if waits >= 0 {
+			fmt.Fprintf(&b, "\n  fault %d (%v) waits for fault %d (%s), which never happened", i, f, waits, sc.Faults[waits].Kind)
+		} else {
+			fmt.Fprintf(&b, "\n  fault %d (%v) never happened: the run ended before it, or never reached a choice of its kind after %d steps", i, f, f.After)
+		}
+	}
+	return errors.New(b.String())
 }
 
 // LongestCut is the longest a link stayed cut in the journal (from its

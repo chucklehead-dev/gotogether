@@ -6,7 +6,7 @@
 // one, the faults included.
 //
 //	n := &qnemesis.Nemesis{Targets: map[string]qnemesis.Target{"n1": p1, "n2": p2}, Net: proxy, Rec: rec,
-//		Steps: qnemesis.StepsIn(dir + "/n*.jsonl"), Journal: journal}
+//		Steps: qnemesis.StepsIn(dir + "/node-*.jsonl"), Journal: journal}
 //	err := n.Run(ctx, qnemesis.Random(seed, mix, 2*time.Second, time.Second))
 //	/* ... */
 //	err = n.Stop(ctx) // heal every link, resume the paused, start the down
@@ -119,13 +119,16 @@ func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, *qobs.JSONLS
 }
 
 // StepsIn counts the system's steps in the step logs matching patterns
-// (filepath.Glob's: one log per incarnation, "dir/n*.jsonl"), read anew
+// (filepath.Glob's: one log per incarnation, "dir/node-*.jsonl"), read anew
 // at each call from where the last stopped: a Nemesis's Steps, which a
 // fault's After waits for. It counts the complete lines of every
 // recorder but the nemesis's (RecorderID), whose own log a pattern may
 // match, and no loss records (a crash's, a torn tail's): a qenv run's
 // recorder counts the same (Recorder.Count), so a journal's counts are a
-// simulation's. A torn last line is not counted.
+// simulation's. A torn last line is not counted. Name the system's logs
+// so the pattern cannot match the nemesis's (node-*.jsonl beside
+// nemesis.jsonl, not n*.jsonl): the same glob reading the logs to
+// validate them would read the nemesis's steps twice.
 func StepsIn(patterns ...string) func() int {
 	var mu sync.Mutex
 	files := map[string]*seen{}
@@ -421,7 +424,7 @@ func (n *Nemesis) apply(ctx context.Context, i int) error {
 		if n.Rec != nil {
 			// before the crash's step: what the incarnation never recorded
 			// is lost from its last step on
-			if lost := lossRecords(t, ev.Incarnation, n.Rec.Actor()); len(lost) > 0 {
+			if lost := lossRecords(t, ev.Incarnation, n.Rec.Actor(), time.Now()); len(lost) > 0 {
 				n.Rec.Add(lost...)
 			}
 		}

@@ -11,11 +11,13 @@ import (
 // lossRecords are the loss records of a killed incarnation's recorders
 // (a Recorded target's): each recorder's tail after its last step in the
 // incarnation's logs, cut at that step's time, or, for one with no step
-// there, at the incarnation's start. A recorder found in the logs but
+// there, at the incarnation's start, and bounded by dead (LostBefore):
+// reaped then, the incarnation recorded nothing later, so a settle after
+// it settles the run, while a failure after the cut stays no verdict. A recorder found in the logs but
 // not named is declared too: the logs are the incarnation's. actor is
 // the actor of a recorder whose logs have no step (the nemesis's own:
 // the binding's history), so its loss reaches the run it belongs to.
-func lossRecords(t Target, inc int, actor string) []qtrace.Step {
+func lossRecords(t Target, inc int, actor string, dead time.Time) []qtrace.Step {
 	r, ok := t.(Recorded)
 	if !ok {
 		return nil
@@ -43,7 +45,9 @@ func lossRecords(t Target, inc int, actor string) []qtrace.Step {
 	}
 	var out []qtrace.Step
 	for _, id := range recorders {
-		rec := qtrace.Step{Action: "lost", Recorder: id, Process: id, Actor: actor, Lost: "suffix", Time: started}
+		// bounded: the incarnation, reaped by dead, recorded nothing after
+		// it, so a settle later than dead follows every lost step
+		rec := qtrace.Step{Action: "lost", Recorder: id, Process: id, Actor: actor, Lost: "suffix", Time: started, LostBefore: dead}
 		if l, ok := last[id]; ok {
 			rec.LostAfter, rec.Time, rec.Actor, rec.Process = l.Seq, l.Time, l.Actor, l.Process
 		}
