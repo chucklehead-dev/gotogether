@@ -151,6 +151,71 @@ run.json` warns if one changed. In a test, `qtest.Driver` and
 `qtest.Artifacts` put the same in the manifest written under
 `GOTOGETHER_EVIDENCE`.
 
+## Shrinking a run you did not drive
+
+A driver's failing journey is long (a Bombadil exploration clicks for
+45 s); the failure needs a few of its actions. `qtest.ShrinkActions`
+reruns subsequences of them on the real system and keeps the smallest
+that still fails the same way (ddmin, 1-minimal: every sequence with one
+action fewer was rerun without reproducing it):
+
+```go
+shrunk := qtest.ShrinkActions(t, journey, qtest.ActionShrink[string]{
+	Binding: "webjobs.binding.yaml",
+	Rerun:   play,   // func(ctx, actions) ([]qtrace.Step, error): does them from the initial state
+	Reset:   server, // a qtest.Resetter: clears the system before each rerun
+})
+shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
+```
+
+- **The rerun**: `Rerun` does the actions in order and returns every
+  step the run recorded (the server's and the driver's), as `Validate`
+  would take them. An action it cannot do on the page as it is (a
+  cancel with no job shown, a reproduction that went elsewhere) returns
+  `qtest.ErrDiverged`: the rerun counts for nothing, never a pass. Any
+  other error is a failed rerun, and three in a row end the test with
+  it.
+- **The reset contract**, checked before anything else: a `Reset`, then
+  a rerun of no actions, records no step (nothing left pending: a job
+  still running, a poller), and the original's first two reruns fail
+  alike (state one rerun leaves would change the next). A Resetter that
+  fails either is refused by its type: clear what it names. `Reset` is
+  nil only when `Rerun` builds a fresh environment itself (a new server
+  per rerun).
+- **The failure kept** is the original's (`qtest.SameFailure` of its first
+  failing rerun: each failing actor's first failure's kind and name,
+  whatever ids and arguments), so a shrink does not drift to another
+  bug a smaller sequence shows. `Keep` names another (`Violates(...)`,
+  `Rejects(...)`); one a passing run meets (`Conforms`, `Finishes`) is
+  refused.
+- **Calibration**: the original is rerun `Baseline` (10) times first. A
+  failure that never shows there is refused ("does not reproduce:
+  calibrate the rerun"): make the rerun deterministic (the same actions,
+  the same data, timings that do not race) before shrinking. A failure
+  shown at a rate p is rerun up to n = ⌈ln α / ln(1−p)⌉ times per
+  candidate (p the rate's lower bound at 1−α, α 0.05), stopping at its
+  first reproduction: a candidate that did not reproduce in n reruns is
+  taken as passing, wrongly with chance at most α. A failure seen in
+  every baseline rerun costs two reruns per passing candidate; set
+  `Calibration.Reruns: 1` for a driver known to be deterministic.
+  `Budget` (reruns) and `Time` bound the shrink; at either, or near the
+  test's deadline, it returns the smallest sequence so far with
+  `Minimal` false and `NotMinimal` saying why.
+- **What it reports**: `Actions`, the minimal `Run` (checked as
+  `Validate` checks steps: its report and step log), `Reruns`,
+  `Reproduced`, `NotReproduced`, `Diverged`, `Errors`, the original's
+  `Baseline` rate and the minimal sequence's `Rate` ("8 of 10"). Under
+  `GOTOGETHER_EVIDENCE` the minimal run writes its manifest
+  (`gotogether.run/1`, driver `qtest.ShrinkActions` unless
+  `qtest.Driver` is among `Opts`), with `actions.json` (the shrunk
+  actions) and `shrink.json` (the counts) as hashed artifacts:
+  `validate -replay` judges it again.
+
+A shrunk sequence that does not reproduce is a sequence the failure was
+not seen in, not a pass of it: a rate below 1 says the failure depends on
+more than the actions (timing, data), and a rerun that diverged says
+the driver could not do them.
+
 ## Gating and strict mode
 
 A live driver run needs the driver (and, for Bombadil, a Chrome):

@@ -168,7 +168,8 @@ replayed session) is checked from the driver's own trace: read
 [references/external-drivers.md](references/external-drivers.md) before
 writing its adapter (a click is an invocation, only its request's own answer
 completes it; the journey's own times, call ids and order kept; refs to
-its screenshots; what a settle covers; its manifest and strict gating).
+its screenshots; what a settle covers; its manifest and strict gating;
+shrinking its failing journey with `qtest.ShrinkActions`).
 
 Before trusting a model's isolation level of a real database, check
 the database: read [references/histories.md](references/histories.md)

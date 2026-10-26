@@ -330,9 +330,21 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   explain is no verdict. A log with no watermark is taken whole, as
   before. Left: a collector-side writer (an OTel exporter that emits the
   record after a flush); a pending call's window (a caller's timeout).
-- **E8. External shrinking (L).** ddmin over a driver's actions with a
-  reset contract and calibrated reruns; Bombadil's `--reproduce` as the
-  rerun.
+- **E8. External shrinking (L). Core done:** `qtest.ShrinkActions`
+  (internal/ddmin: ddmin over index sets, three-valued, 1-minimal; each
+  candidate rerun after a `Resetter`, its steps judged through the
+  verdict cache), the reset contract checked first (no actions, no
+  steps; the original's first two reruns fail alike), `SameFailure` the
+  failure kept by default, `ErrDiverged` never a pass, `Calibration`
+  (n = ⌈ln α / ln(1−p)⌉ from the original's 10 reruns, p at its Wilson
+  lower bound: from the rate measured, a half-rate failure reached its
+  1-minimal sequence in 181 of 200 shrinks, under 1−α); the minimal
+  run's manifest with actions.json and shrink.json. Checked against
+  brute force on up to 8 letters, and with quint on letters.qnt. Left:
+  webjobs' integration (keyed durations, `Client` Plan/Play, a
+  `bombadiltrace` bridge to actions); Bombadil's `--reproduce` as the
+  rerun; candidates judged in batches (each is a quint check, a second
+  or two).
 - **Left from E1–E5.**
   - A step's process is per actor: two recorders in one actor (a page and
     its server) must share one, or Reconstruct reports an overlap, so a

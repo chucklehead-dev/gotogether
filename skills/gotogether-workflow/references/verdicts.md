@@ -117,9 +117,35 @@ seeds, not by hand.
   finish where the original finished; it survived with the original's
   verdict; one Reconstruct refused (a gap, an overlap, a cycle) is
   malformed, never killed, and in no score;
+- a shrink of a driver's actions: `qtest.ShrinkActions(t, actions,
+  qtest.ActionShrink[A]{...}).Expect(t, qtest.Violates("inv"),
+  qtest.AtMostActions(n))`, its Expectations judged on the minimal
+  run as `Run.Expect` judges them;
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no
   expectation type: assert `err != nil` for a mutant (examples/bank's
   `TestModelDrivenCatchesOnlyDivergence`).
+
+## Not reproduced, never a pass
+
+A rerun of a shrunk sequence (`qtest.ShrinkActions`) that does not show
+the failure kept is "not reproduced", and that is all it says: the
+failure was not seen in it. It is not a pass of the sequence, and the
+shrink treats it so:
+
+- a rerun with no verdict for the failure kept (a lost tail, which may
+  hold it; a search out of its budget) is not reproduced;
+- a rerun whose Rerun returned `qtest.ErrDiverged` (the driver could not
+  do the actions) is neither reproduced nor not: counted apart, not
+  among a candidate's reruns, and a sequence whose one-removal only ever
+  diverged leaves the result not minimal (`ShrunkActions.NotMinimal`);
+- a candidate is taken as passing only after the calibrated reruns
+  (`Calibration`: n from the original's rate) all missed, wrongly with
+  chance at most α; a rate below 1 at the end (`ShrunkActions.Rate`)
+  says the failure needs more than the actions (timing, data), not
+  that the minimal sequence is wrong;
+- another failure is not a reproduction: `qtest.SameFailure` (the
+  default kept) wants each of the original's failing actors' first
+  failure, kind and name.
 
 ## When it fails
 
