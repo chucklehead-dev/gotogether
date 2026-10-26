@@ -20,9 +20,9 @@ examples/wallet 50
 binding 142
 cmd/gotogether 60
 internal/qeval 188
-internal/simdeps 14
+internal/simdeps 25 # go list over the workspace: payd (sqlite) and raftkv (bbolt) added modules
 qenv 11
 qload 10
 qmeta 23
 qtest 144
-validate 290
+validate 330 # 530 s on CI with S11-S13 tests (partial logs, resume, snapshot)
