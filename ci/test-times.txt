@@ -17,7 +17,7 @@ examples/retrystorm 237
 examples/twophase 168
 examples/wallet 170
 binding 142
-cmd/gotogether 29
+cmd/gotogether 60
 internal/qeval 188
 internal/simdeps 14
 qenv 11
