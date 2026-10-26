@@ -24,7 +24,11 @@ The first release. What a user meets, by module:
   transaction committed is 23505 at every level (40001 only after
   reading it absent at serializable, or for ON CONFLICT DO NOTHING's
   unseen row), a lookup by a UNIQUE column at read committed sees one
-  state, and statements after a cancel fail with sql.ErrTxDone.
+  state, and statements after a cancel fail with sql.ErrTxDone. A task
+  unwound inside a statement (its process crashed, or left at Close) gets
+  08006, so database/sql releases the Tx's lock its deferred Rollback
+  needs; its later calls fail at once, and a loop of them is unwound
+  after 100.
 - `qenv/qhttp`: an unmodified `http.Handler` and `http.Client` in a
   simulation. `NewServer` (its handler installed by `Handle` at each
   incarnation, connections refused before it and while the process is

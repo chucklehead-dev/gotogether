@@ -56,7 +56,8 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   time: do not let one expire inside a simulation. `SetMaxOpenConns`
   with a full pool blocks a task outside the simulation: the watchdog
   (`Sim.Hang`) panics naming it. The database closes with the
-  simulation.
+  simulation. A task killed inside a statement (a crash, or a wait left
+  at Close) gets 08006 there, so its deferred `tx.Rollback` runs.
 - **SettleCore.** `sql.<name>.conn` and `store.<name>.commit` belong to no
   process (the Store is none's): a core settle draws them for a task
   outside the core and leaves them nominal for one inside it, as for any

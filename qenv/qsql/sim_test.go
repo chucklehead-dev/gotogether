@@ -880,3 +880,141 @@ func TestErrorsAfterCancel(t *testing.T) {
 		}
 	}
 }
+
+// closes runs Close, failing if it does not return within 5 s.
+func closes(t *testing.T, s *qenv.Sim, why string) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { s.Close(); close(done) }() //qenv:ok the test watches Close from outside the simulation
+	select {                               //qenv:ok the test waits in wall time
+	case <-done:
+	case <-time.After(5 * time.Second): //qenv:ok as above
+		t.Fatalf("Sim.Close hung: %s", why)
+	}
+}
+
+// A task unwound while its statement waits inside the driver unwinds
+// through database/sql's Tx.QueryContext, which holds the Tx's closemu
+// until the driver returns; its deferred tx.Rollback takes closemu, and
+// Close hung. The driver recovers the unwind and returns 08006, so
+// database/sql lets go. Each of the ways a query reaches a seam, killed
+// by a crash during the run or left waiting at Close.
+func TestUnwoundInsideAStatement(t *testing.T) {
+	queries := map[string]func(ctx context.Context, tx *sql.Tx) error{
+		"QueryRow": func(ctx context.Context, tx *sql.Tx) error {
+			var n int64
+			return tx.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id = 'alice' FOR UPDATE`).Scan(&n)
+		},
+		"Query": func(ctx context.Context, tx *sql.Tx) error {
+			rows, err := tx.QueryContext(ctx, `SELECT balance FROM accounts WHERE id = 'alice' FOR UPDATE`)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+			}
+			return rows.Err()
+		},
+		"Prepared": func(ctx context.Context, tx *sql.Tx) error {
+			st, err := tx.PrepareContext(ctx, `SELECT balance FROM accounts WHERE id = ? FOR UPDATE`)
+			if err != nil {
+				return err
+			}
+			defer st.Close()
+			var n int64
+			return st.QueryRowContext(ctx, "alice").Scan(&n)
+		},
+		"Exec": func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `UPDATE accounts SET balance = 0 WHERE id = 'alice'`)
+			return err
+		},
+	}
+	for name, query := range queries {
+		for _, crash := range []bool{true, false} {
+			t.Run(fmt.Sprint(name, map[bool]string{true: "/crash", false: "/at-close"}[crash]), func(t *testing.T) {
+				w := newWorld(t, qenv.Nominal{}, qenv.ReadCommitted)
+				w.s.Spawn("holder", func(ctx context.Context) {
+					tx, _ := w.db.BeginTx(ctx, nil)
+					defer tx.Rollback()
+					tx.ExecContext(ctx, `UPDATE accounts SET balance = 1 WHERE id = 'alice'`)
+					qenv.Sleep(ctx, time.Hour) // holds the row's lock
+				})
+				var got error
+				p := w.s.Process("svc", crash, func(ctx context.Context) {
+					tx, err := w.db.BeginTx(ctx, nil)
+					if err != nil {
+						return
+					}
+					defer tx.Rollback() // the idiom
+					qenv.Sleep(ctx, time.Second)
+					got = query(ctx, tx) // waits for the holder's lock, inside the driver
+				})
+				if crash {
+					w.s.Spawn("nemesis", func(ctx context.Context) {
+						qenv.Sleep(ctx, 2*time.Second)
+						p.Crash()
+					})
+				}
+				w.run(t)
+				closes(t, w.s, "the unwound task's deferred tx.Rollback waits for the Tx's closemu")
+				if code(got) != "08006" {
+					t.Fatalf("the statement returned %v as it unwound; want 08006", got)
+				}
+			})
+		}
+	}
+}
+
+// A task whose deferred cleanup retries a statement until it succeeds,
+// with no seam of its own: once unwinding, the driver fails each call at
+// once (08006), and after a bound raises the unwind again, so Close ends.
+func TestUnwoundRetryLoopEnds(t *testing.T) {
+	w := newWorld(t, qenv.Nominal{}, qenv.ReadCommitted)
+	calls := 0
+	w.s.Spawn("retrier", func(ctx context.Context) {
+		tx, _ := w.db.BeginTx(ctx, nil)
+		defer func() {
+			for {
+				calls++
+				if _, err := tx.ExecContext(ctx, `UPDATE accounts SET balance = 0 WHERE id = 'alice'`); err == nil {
+					return
+				}
+			}
+		}()
+		qenv.Sleep(ctx, time.Hour)
+	})
+	w.run(t)
+	closes(t, w.s, "a retry loop in deferred code spun on the unwinding task's statements")
+	if calls < 100 || calls > 110 {
+		t.Fatalf("%d calls before the loop was unwound; want about 100", calls)
+	}
+}
+
+// A task killed between two Rows.Next calls, its rows still open (they
+// hold the Tx's closemu): its deferred rows.Close runs before its deferred
+// tx.Rollback, and Close returns.
+func TestUnwoundWithRowsOpen(t *testing.T) {
+	w := newWorld(t, qenv.Nominal{}, qenv.ReadCommitted)
+	p := w.s.Process("svc", true, func(ctx context.Context) {
+		tx, err := w.db.BeginTx(ctx, nil)
+		if err != nil {
+			return
+		}
+		defer tx.Rollback()
+		rows, err := tx.QueryContext(ctx, `SELECT id FROM accounts`)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			qenv.Sleep(ctx, time.Hour) // killed here, between rows
+		}
+	})
+	w.s.Spawn("nemesis", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Second)
+		p.Crash()
+	})
+	w.run(t)
+	closes(t, w.s, "rows left open by a killed task")
+}

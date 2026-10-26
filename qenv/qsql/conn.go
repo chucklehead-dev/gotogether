@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -75,7 +76,11 @@ func (cn *conn) Begin() (driver.Tx, error) {
 // BeginTx starts a transaction of the Store. The Store's isolation level
 // is store-wide: a transaction may ask for it or for any weaker level, and
 // a stronger one fails with the fix.
-func (cn *conn) BeginTx(ctx context.Context, o driver.TxOptions) (driver.Tx, error) {
+func (cn *conn) BeginTx(ctx context.Context, o driver.TxOptions) (_ driver.Tx, err error) {
+	if err := cn.c.dead(); err != nil {
+		return nil, err
+	}
+	defer cn.c.unwound(cn, nil, &err)
 	if cn.bad.Load() {
 		return nil, driver.ErrBadConn
 	}
@@ -136,6 +141,75 @@ func (c *connector) fault(ctx context.Context) error {
 	return nil
 }
 
+// A task unwinding (killed by a crash, or left at Sim.Close) panics at
+// its next seam, and a seam inside the driver is inside database/sql:
+// Tx.QueryContext holds the Tx's closemu, released only when the driver
+// returns, so the task's own deferred tx.Rollback, which takes closemu,
+// waited forever and Close with it. Every driver entry that reaches a
+// seam recovers the unwind (unwound) and returns 08006, the connection
+// lost, so database/sql releases its locks; the task unwinds again at
+// its next seam outside the driver. Its later calls into the driver
+// (deferred cleanup, a retry loop) fail at once, without a seam (dead),
+// and after maxDeadCalls the unwind is raised again, so a loop with no
+// other seam still ends.
+const maxDeadCalls = 100
+
+type killedTask struct {
+	unwind any // the value to raise again
+	calls  int
+}
+
+func killedErr() *Error {
+	return &Error{Code: "08006", Message: "connection lost: the task was killed (its process crashed, or the simulation closed) while the driver was at work"}
+}
+
+// unwound, deferred by a driver entry, turns qenv's unwind into 08006:
+// cn is marked bad and t (if any) ended, the Store's transaction left to
+// the crash that aborted it, or to Close.
+func (c *connector) unwound(cn *conn, t *tx, err *error) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	if !qenv.Unwinding(r) {
+		panic(r)
+	}
+	if cn != nil {
+		cn.bad.Store(true)
+	}
+	if t != nil {
+		t.ended = true
+		if t.failed == nil {
+			t.failed = killedErr()
+		}
+	}
+	c.mu.Lock()
+	c.killed[hooks.GoroutineID()] = &killedTask{unwind: r}
+	c.mu.Unlock()
+	c.anyKilled.Store(true)
+	*err = killedErr()
+}
+
+// dead is the error for a call from a task the driver saw killed, or nil.
+func (c *connector) dead() error {
+	if !c.anyKilled.Load() {
+		return nil
+	}
+	c.mu.Lock()
+	k := c.killed[hooks.GoroutineID()]
+	if k != nil {
+		k.calls++
+	}
+	c.mu.Unlock()
+	if k == nil {
+		return nil
+	}
+	if k.calls > maxDeadCalls {
+		panic(k.unwind) // a loop that only calls the driver: unwind it here
+	}
+	return killedErr()
+}
+
 func canceled(err error) *Error {
 	return &Error{Code: "57014", Message: "canceling statement due to user request (its context is done)", Err: err}
 }
@@ -180,7 +254,11 @@ func (cn *conn) CheckNamedValue(nv *driver.NamedValue) error {
 	return driver.ErrSkip
 }
 
-func (cn *conn) run(ctx context.Context, st statement, nargs []driver.NamedValue) (*result, error) {
+func (cn *conn) run(ctx context.Context, st statement, nargs []driver.NamedValue) (_ *result, err error) {
+	if err := cn.c.dead(); err != nil {
+		return nil, err
+	}
+	defer cn.c.unwound(cn, cn.cur, &err)
 	args := make([]any, len(nargs))
 	for i, a := range nargs {
 		args[i] = a.Value
@@ -324,7 +402,12 @@ func (t *tx) statement(ctx context.Context, st statement, args []any) (*result, 
 // Commit commits it in the Store. After a failed statement it rolls back
 // and returns 25P02 (PostgreSQL answers ROLLBACK): the caller learns that
 // nothing committed.
-func (t *tx) Commit() error {
+func (t *tx) Commit() (err error) {
+	if err := t.c.dead(); err != nil {
+		t.ended = true // the task is unwinding: the Store's transaction is left to its crash or Close
+		return err
+	}
+	defer t.c.unwound(t.cn, t, &err)
 	if t.cn != nil && t.cn.cur == t {
 		t.cn.cur = nil
 	}
@@ -352,6 +435,10 @@ func (t *tx) commit() error {
 // does it at a step of the run's, a task.
 func (t *tx) Rollback() error {
 	if t.ctx.Err() != nil {
+		return nil
+	}
+	if t.c.dead() != nil {
+		t.ended = true // unwinding: the Store is not the dead task's to touch
 		return nil
 	}
 	if t.cn != nil && t.cn.cur == t {
