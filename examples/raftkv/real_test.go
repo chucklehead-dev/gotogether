@@ -259,10 +259,16 @@ func TestRealCluster(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the cluster settled too: the harness says so in a log of its own,
-	// after every node's last step in time (the nodes agree, and an idle
-	// raft records nothing), and the nodes stop before anything else is
-	// recorded; a node's step later than the settle would void it
-	// (Trace.Settled), and the cluster's eventually hasLeader is judged
+	// after every node's last step in time, every node frozen first
+	// (SIGSTOP): a node's step later than the settle would void it
+	// (Trace.Settled), and an apply or an election can come late (CI
+	// once saw n2.2's apply after the settle). The cluster's eventually
+	// hasLeader is judged.
+	for i, p := range c.procs {
+		if err := stopGroup(p); err != nil {
+			t.Fatalf("%s: %v", Nodes[i], err)
+		}
+	}
 	hsink, err := qobs.FileSink(filepath.Join(dir, "steps", "harness.jsonl"), qobs.PerStep)
 	if err != nil {
 		t.Fatal(err)
