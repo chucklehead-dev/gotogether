@@ -157,6 +157,8 @@ func RecorderOptions(opts ...qobs.Option) Option {
 
 // SkipIfEmpty skips the test, rather than failing it, when nothing was
 // recorded: an unwoven build of code that records through //quint:action.
+// Under GOTOGETHER_STRICT=1 the skip fails (Optional): a job that weaves
+// must not pass by recording nothing.
 func SkipIfEmpty() Option { return option(optSkipIfEmpty, func(c *settings) { c.SkipIfEmpty = true }) }
 
 // Global makes Record install its recorder as the global one
@@ -393,7 +395,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	run.Recorded = run.Steps
 	if len(run.Steps) == 0 {
 		if c.SkipIfEmpty {
-			t.Skip("gotogether: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
+			Optional(t, "gotogether: no steps recorded (build with `orchestrion go test` to weave //quint:action)")
 		}
 		t.Fatal("gotogether: the scenario recorded no steps")
 	}

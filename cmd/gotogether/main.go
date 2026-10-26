@@ -105,7 +105,7 @@ usage:
   gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
   gotogether simulate -binding b.yaml [-steps n] [-samples n] [-const N=e] [-seed s] [-verify n]
                    the model alone, with the binding's invariants (-verify: every trace of up to n steps, by Apalache)
-  gotogether evidence [-strict] [DIR|FILE ...]            a suite's explorations (their evidence under GOTOGETHER_EVIDENCE):
+  gotogether evidence [-strict] [-expect checks.txt] [DIR|FILE ...]  a suite's explorations (their evidence under GOTOGETHER_EVIDENCE):
                    each test's verdicts, and the model actions and fault kinds no test tried
   gotogether lint     -binding b.yaml [-src DIR] [-sim DIR]
   gotogether lint     -sim DIR | -weave DIR
@@ -1009,7 +1009,7 @@ func TestConforms(t *testing.T) {
 // fail proves nothing.
 func TestMutantIsCaught(t *testing.T) {
 	qtest.RequireQuint(t)
-	t.Skip("scaffold: inject a bug as Mutant, state how it shows, and remove this line")
+	qtest.Optional(t, "scaffold: inject a bug as Mutant, state how it shows, and remove this line")
 	system(Mutant).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
 }
 `, pkg, bpath, rec.String(), claim, faithful, end)

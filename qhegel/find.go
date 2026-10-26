@@ -224,7 +224,7 @@ func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	// records nothing (qtest.SkipIfEmpty), as an exploration does
 	cases := sys.CheckCases(t, "qhegel.Shrink (its replays are an exploration's runs)")
 	if r := sys.Judge(t, qenv.Nominal{}); r.Err == nil && len(r.Steps) == 0 && cases.SkipIfEmpty {
-		t.Skip("qhegel: the system recorded no step on its nominal run (qtest.SkipIfEmpty): an unwoven build?")
+		optional(t, "qhegel: the system recorded no step on its nominal run (qtest.SkipIfEmpty): an unwoven build?")
 	}
 	v := findViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, cases, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
@@ -308,4 +308,15 @@ func seedFromEnv(t testing.TB) (int64, bool) {
 	}
 	t.Logf("qhegel: Hegel's seed %d (GOTOGETHER_HEGEL_SEED=%d replays this search)", s, s)
 	return s, true
+}
+
+// optional is qtest.Optional: a skip, a failure under GOTOGETHER_STRICT=1,
+// with the same message. Its own copy, so qhegel needs no core newer than
+// the one it requires to build.
+func optional(t testing.TB, reason string) {
+	t.Helper()
+	if os.Getenv("GOTOGETHER_STRICT") == "1" {
+		t.Fatal(reason + " (GOTOGETHER_STRICT is set, so a skip fails: give the job what the test needs, or unset GOTOGETHER_STRICT where the skip is legitimate)")
+	}
+	t.Skip(reason)
 }

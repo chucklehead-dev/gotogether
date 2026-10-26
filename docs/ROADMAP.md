@@ -201,10 +201,16 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   binding's `complete: true` (the CLI's default only, not a test's
   claim; needs an eventual val); patterns and verdicts docs ("a prefix
   vs a finished run").
-- **E2. Strict mode (S).** `GOTOGETHER_STRICT=1` turns every toolkit
-  skip (no quint, no mutants woven) into a failure with its message;
-  `qtest.Optional(t, reason)` for users' own gated skips; `evidence
-  -expect checks.txt` fails on a check that wrote no evidence.
+- **E2. Strict mode (S). Done:** `GOTOGETHER_STRICT=1` turns every
+  toolkit skip (RequireQuint, Mutate with no mutants woven, Record's,
+  Explore's and qhegel.Shrink's SkipIfEmpty, the scaffold's mutant test)
+  into a failure with its message; `qtest.Optional(t, reason)` for users'
+  own gated skips; `evidence -expect checks.txt` (tests, subtests or
+  exploration ids, optionally after a package) fails naming a check that
+  wrote no evidence. CI runs strict, but for the examples' unwoven
+  mutation tests (skipped by name) and edgepublish's unwoven run. Left:
+  the nightly is not strict (its fresh-seed runs include the unwoven
+  mutation tests).
 - **E3. Step references (S).** `quint.ref` (a step's link to its
   artifact: a driver's trace line, a screenshot), `qobs.Ref`, kept by
   every reader and shown at the failing step.

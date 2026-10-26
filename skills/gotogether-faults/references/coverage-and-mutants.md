@@ -43,6 +43,7 @@ it; a test's first exploration clears what earlier runs left), then
 ```sh
 gotogether evidence dir            # each exploration's verdicts, then the gaps
 gotogether evidence -strict dir    # exit 1 on a gap (for CI)
+gotogether evidence -expect checks.txt dir   # exit 1 naming a listed test or exploration that wrote none
 ```
 
 The gaps count faithful explorations only: one of a `System` whose

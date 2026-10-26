@@ -23,6 +23,10 @@ func (f *fatalTB) Fatalf(format string, a ...any) {
 	f.msg = fmt.Sprintf(format, a...)
 	runtime.Goexit()
 }
+func (f *fatalTB) Fatal(a ...any) {
+	f.msg = fmt.Sprint(a...)
+	runtime.Goexit()
+}
 func (f *fatalTB) Skip(a ...any) {
 	f.msg = "skip: " + fmt.Sprint(a...)
 	runtime.Goexit()
@@ -64,18 +68,23 @@ func TestShrinkRefusesGlobal(t *testing.T) {
 
 // Shrink honours a System's SkipIfEmpty: a system that records nothing
 // (an unwoven build) skips the test, before any search and without an
-// exploration of its own (which would renumber the test's).
+// exploration of its own (which would renumber the test's). Under
+// GOTOGETHER_STRICT=1 the skip fails, with its message.
 func TestShrinkSkipsWhenEmpty(t *testing.T) {
-	f := &fatalTB{TB: t}
-	done := make(chan struct{})
-	go func() { //qenv:ok runs outside any simulation; Goexit ends it on Skip
-		defer close(done)
-		sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.SkipIfEmpty()}, Run: func(qenv.Chooser) error { return nil }}
-		qhegel.Shrink(f, sys)
-	}()
-	<-done
-	if !strings.HasPrefix(f.msg, "skip: ") || !strings.Contains(f.msg, "recorded no step") {
-		t.Errorf("got %q", f.msg)
+	for _, strict := range []string{"", "1"} {
+		t.Setenv("GOTOGETHER_STRICT", strict)
+		f := &fatalTB{TB: t}
+		done := make(chan struct{})
+		go func() { //qenv:ok runs outside any simulation; Goexit ends it on Skip
+			defer close(done)
+			sys := qtest.System{Binding: "testdata/bank.yaml", Opts: []qtest.Option{qtest.SkipIfEmpty()}, Run: func(qenv.Chooser) error { return nil }}
+			qhegel.Shrink(f, sys)
+		}()
+		<-done
+		skipped := strings.HasPrefix(f.msg, "skip: ")
+		if skipped != (strict == "") || !strings.Contains(f.msg, "recorded no step") || strict == "1" && !strings.Contains(f.msg, "GOTOGETHER_STRICT is set") {
+			t.Errorf("GOTOGETHER_STRICT=%q: got %q", strict, f.msg)
+		}
 	}
 }
 

@@ -171,7 +171,7 @@ func (r *MutationReport) String() string {
 }
 
 // Mutate explores the system once per woven mutant (qweave -mutate; with
-// none woven it skips): a baseline exploration with every mutant off,
+// none woven it skips, or fails under GOTOGETHER_STRICT=1: Optional): a baseline exploration with every mutant off,
 // which must conform and says which mutants' code is reached, then each
 // reached mutant with cfg's seeds. A mutant is killed
 // when some run is rejected by the model, errs or panics, when no run
@@ -184,7 +184,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 	t.Helper()
 	all := qmut.Mutants()
 	if len(all) == 0 {
-		t.Skip("no mutants woven: run with qweave -mutate")
+		Optional(t, "no mutants woven: run with qweave -mutate")
 	}
 	spec := exploreSpec{ExploreConfig: cfg, opts: s.opts(), rates: s.FaultRates()}
 	reach := &qmut.Reach{}

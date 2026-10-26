@@ -163,3 +163,22 @@ deliberately and say why in the commit and the README.
 - Install quint and its Rust evaluator in CI (`ci/install-quint.sh`).
   Tests that need quint start with `qtest.RequireQuint(t)`, so they skip
   without it.
+- **Strict mode.** Set `GOTOGETHER_STRICT=1` in every job that installs
+  what its tests need: each toolkit skip then fails with its message
+  (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`'s, a
+  scaffold's unwritten mutant test), so a job that lost quint from PATH
+  or a weaving step cannot pass by skipping. Gate your own skips with
+  `qtest.Optional(t, "PG_URL not set: no database")`: a skip normally, a
+  failure under strict mode. Leave it unset only in a job where a skip is
+  legitimate (a laptop's, a matrix row without the tool), and say why.
+- **Expected evidence.** A test that skipped, or that `-run` or a build
+  tag left out, writes no evidence and the suite's report does not miss
+  it. List the checks that must run in a file (a test `TestX` or
+  `TestX/sub`, an exploration `TestX#2`, either after its package as the
+  report names it, `examples/hello TestX`; `#` comments) and run
+  `GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence -strict
+  -expect checks.txt ev`: a check with no evidence fails, by name.
+- **A finished run.** Validate a real environment's logs with
+  `gotogether validate -require-settle` (or `complete: true` in the
+  binding), and claim `qtest.Finishes()` of a driver's runs: a run cut
+  short conforms (verdicts reference, "A prefix vs a finished run").

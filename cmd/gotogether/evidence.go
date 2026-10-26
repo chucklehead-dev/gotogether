@@ -16,11 +16,22 @@ import (
 // showed, and what no test showed. A model action no test took, a fault
 // point no test reached, a fault kind no test injected: each test's own
 // report says so of itself, but only the suite can say that nothing tried
-// it. With -strict such a gap fails (exit 1).
+// it. With -strict such a gap fails (exit 1). With -expect a check the
+// file names that wrote no evidence fails (exit 1): a test that skipped,
+// was left out, or no longer explores says nothing, and its absence would
+// pass unseen.
 func evidence(args []string) (int, error) {
 	fset := commandFlags("evidence")
 	strict := fset.Bool("strict", false, "exit 1 if a model action, fault point or fault kind is untried by every test")
+	expectFile := fset.String("expect", "", "a file of checks that must have written evidence, one per line (a test, TestX or TestX/sub; an exploration, TestX#2; either after its package, as the report names it: examples/hello TestX), # comments (at a line's start or after a space): exit 1 naming each that wrote none")
 	fset.Parse(args)
+	var expected []string
+	if *expectFile != "" {
+		var err error
+		if expected, err = readChecks(*expectFile); err != nil {
+			return 2, err
+		}
+	}
 	roots := fset.Args()
 	if len(roots) == 0 {
 		dir := os.Getenv("GOTOGETHER_EVIDENCE")
@@ -55,15 +66,89 @@ func evidence(args []string) (int, error) {
 			return 2, err
 		}
 	}
-	if len(es) == 0 {
+	if len(es) == 0 && len(expected) == 0 {
 		return 2, fmt.Errorf("no evidence under %s: run the tests with GOTOGETHER_EVIDENCE=dir", strings.Join(roots, ", "))
 	}
 	report, gaps := suiteReport(es)
 	fmt.Print(report)
-	if *strict && gaps > 0 {
+	missing := missingChecks(es, expected)
+	if len(missing) > 0 {
+		fmt.Printf("  expect  %d of %d checks in %s wrote no evidence: %s (each must run an exploration with GOTOGETHER_EVIDENCE set: "+
+			"a test that skipped, was left out by -run or a build tag, or no longer explores writes none; GOTOGETHER_STRICT=1 fails the skips)\n",
+			len(missing), len(expected), *expectFile, strings.Join(missing, ", "))
+	} else if len(expected) > 0 {
+		fmt.Printf("  expect  every one of the %d checks in %s wrote evidence\n", len(expected), *expectFile)
+	}
+	if *strict && gaps > 0 || len(missing) > 0 {
 		return 1, nil
 	}
 	return 0, nil
+}
+
+// readChecks reads an -expect file: a check per line, blank lines and
+// comments left out. A comment is a # at the line's start or after a
+// space: the # of an exploration's id (TestX#2) is no comment.
+func readChecks(path string) ([]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		line, _, _ = strings.Cut(strings.ReplaceAll(line, "\t", " "), " #")
+		if line = strings.Join(strings.Fields(line), " "); line != "" {
+			out = append(out, line)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("evidence -expect %s: no check in it: list a test (TestX) or an exploration (TestX#2) per line", path)
+	}
+	return out, nil
+}
+
+// missingChecks are the expected checks no evidence of es is from, in
+// the file's order.
+func missingChecks(es []*qtest.Evidence, expected []string) []string {
+	var out []string
+	for _, c := range expected {
+		found := false
+		for _, e := range es {
+			if fromCheck(e, c) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// fromCheck reports whether evidence e was written by check: its
+// exploration (TestX#2), its test (TestX), or a test it is a subtest of
+// (TestX for TestX/a#1), each optionally after its package
+// ("examples/hello TestX"; "_" the module's root), as the report names
+// it.
+func fromCheck(e *qtest.Evidence, check string) bool {
+	name := check
+	if pkg, rest, ok := strings.Cut(check, " "); ok {
+		if pkg != e.Package && !(pkg == "_" && e.Package == "") {
+			return false
+		}
+		name = rest
+	}
+	if e.Test == name {
+		return true
+	}
+	test := e.Test
+	if i := strings.LastIndex(test, "#"); i >= 0 && i < len(test)-1 && strings.Trim(test[i+1:], "0123456789") == "" {
+		test = test[:i] // the exploration's number
+	}
+	return test == name || strings.HasPrefix(test, name+"/")
 }
 
 // suiteReport is the suite's evidence: a line per test, then what no test

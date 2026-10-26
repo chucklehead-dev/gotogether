@@ -8,6 +8,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Strict mode: `GOTOGETHER_STRICT=1` turns every toolkit skip into a
+  failure with its message (`qtest.RequireQuint`, `System.Mutate` with no
+  mutants woven, `SkipIfEmpty`'s in Record, Explore and `qhegel.Shrink`,
+  a scaffold's unwritten mutant test); `qtest.Optional(t, reason)` does
+  the same for a test's own gated skips. `gotogether evidence -expect
+  checks.txt` fails, naming it, on a listed test or exploration that
+  wrote no evidence. CI runs strict. Reported by a pilot outside the
+  repository.
 - `qtest.Finishes()`: a run that is a finished journey, not a prefix of
   one: it conforms, settled, every eventual val was judged and holds, and
   every invoked call completed; three-valued (a lost tail is no verdict),

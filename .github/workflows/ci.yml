@@ -12,6 +12,13 @@ env:
   QUINT_VERSION: 0.33.0
   # every module is tested on its own go.mod: go.work is for development
   GOWORK: "off"
+  # every toolkit skip (no quint, no mutants woven, SkipIfEmpty's) fails:
+  # each job installs what its tests need, so a skip here is a lost tool or
+  # a lost weaving step. Steps where a skip is legitimate say why: the
+  # examples' mutation tests unwoven (skipped by name), edgepublish's
+  # unwoven run. The jobs without quint (consumable, qweave) run no test
+  # that skips.
+  GOTOGETHER_STRICT: "1"
 
 jobs:
   test:
@@ -79,6 +86,8 @@ jobs:
           go vet ./...
           GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m ./...
       # the per-push tier: each example's -short tests, under a minute each
+      # (TestMutationOf*: Mutate skips with no mutants woven, and strict
+      # mode would fail it; hello's runs woven in the tools part)
       # (ci/test-times.txt), every mutant they claim caught with at least
       # 0.95 (their reports print the chance a claim of Some misses); the
       # full explorations and searches run nightly, at fresh seeds
@@ -89,7 +98,7 @@ jobs:
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
-              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
+              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m -skip '^TestMutationOf' ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
             echo "::endgroup::"
           done
           # a test twice as slow as it was (ci/test-times.txt) fails
@@ -100,7 +109,7 @@ jobs:
           done
       - name: the store's histories against its isolation levels (GOTOGETHER_CHECK)
         if: matrix.part == 'examples'
-        run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 ./...) || exit 1; done
+        run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 -skip '^TestMutationOf' ./...) || exit 1; done
       - name: example app demos
         if: matrix.part == 'examples'
         run: |
@@ -214,6 +223,10 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: test (unwoven)
+        # its scenarios record nothing unwoven and skip by right
+        # (SkipIfEmpty): strict mode is for the woven run below
+        env:
+          GOTOGETHER_STRICT: ""
         run: go test -count=1 -timeout 30m ./...
       - name: test (woven with Orchestrion)
         run: go run github.com/DataDog/orchestrion go test -timeout 30m -count=1 ./mbt/ ./scenarios/

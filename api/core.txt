@@ -1371,6 +1371,7 @@ func Mismatch(action string) Expectation
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim
 func NotVacuous() Claim
+func Optional(t testing.TB, reason string)
 func Pending(action string) Expectation
 func Quint(o validate.Options) Option
 func Reaches(kind string) Reach

@@ -66,3 +66,56 @@ func TestEvidenceFiles(t *testing.T) {
 		t.Errorf("an old evidence file: %v", err)
 	}
 }
+
+// -expect fails, naming it, on a check that wrote no evidence: a test
+// that skipped or was left out passes otherwise unseen. A check names a
+// test (its explorations and its subtests'), an exploration, or either
+// after its package.
+func TestEvidenceExpect(t *testing.T) {
+	dir := t.TempDir()
+	for _, e := range []*qtest.Evidence{
+		{Package: "qtest", Test: "TestA#1"},
+		{Package: "qtest", Test: "TestA#2"},
+		{Package: "examples/hello", Test: "TestB/faults#1"},
+	} {
+		e.Format, e.Role, e.Runs, e.Conform = qtest.EvidenceFormat, qtest.RoleFaithful, 1, 1
+		d := filepath.Join(dir, e.Package, strings.ReplaceAll(e.Test, "/", "_"))
+		_ = os.MkdirAll(d, 0o755)
+		if err := e.WriteJSON(filepath.Join(d, "x1.json")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, x := range []struct {
+		checks  string
+		code    int
+		missing []string
+	}{
+		{"TestA\nTestB # a subtest's explorations count\n\n  # indented\n", 0, nil},
+		{"qtest TestA#2\nexamples/hello TestB/faults\nTestB/faults#1", 0, nil},
+		{"TestA#3\nTestA\nqtest TestB\nTestC   # skipped", 1, []string{"TestA#3", "qtest TestB", "TestC"}},
+		{"TestAB\nTestB/fault", 1, []string{"TestAB", "TestB/fault"}}, // no prefix of a name
+	} {
+		f := filepath.Join(t.TempDir(), "checks.txt")
+		if err := os.WriteFile(f, []byte(x.checks), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", f, dir}) })
+		if code != x.code {
+			t.Errorf("%q: exit %d, want %d:\n%s", x.checks, code, x.code, out)
+		}
+		if len(x.missing) > 0 && !strings.Contains(out, "wrote no evidence: "+strings.Join(x.missing, ", ")+" (") {
+			t.Errorf("%q: the output does not name %v:\n%s", x.checks, x.missing, out)
+		}
+	}
+	// no evidence at all: every check is missing
+	f := filepath.Join(t.TempDir(), "checks.txt")
+	_ = os.WriteFile(f, []byte("TestA\n"), 0o644)
+	if code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", f, t.TempDir()}) }); code != 1 || !strings.Contains(out, "wrote no evidence: TestA") {
+		t.Errorf("no evidence: exit %d:\n%s", code, out)
+	}
+	// a file that names nothing is an error, not a pass
+	_ = os.WriteFile(f, []byte("# nothing\n"), 0o644)
+	if _, err := evidence([]string{"-expect", f, dir}); err == nil || !strings.Contains(err.Error(), "no check in it") {
+		t.Errorf("an empty file: %v", err)
+	}
+}

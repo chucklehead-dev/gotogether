@@ -12,7 +12,8 @@ import (
 )
 
 // scaffold -system prints a test that compiles as it is, and whose
-// conformance test fails, saying what to do, until Run records steps.
+// conformance test fails, saying what to do, until Run records steps;
+// its mutant test skips until written, and fails under GOTOGETHER_STRICT=1.
 func TestScaffoldSystem(t *testing.T) {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not installed")
@@ -47,12 +48,22 @@ func TestScaffoldSystem(t *testing.T) {
 	}
 	cmd := exec.Command("go", "test", "-count=1", "-v", ".")
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOTOGETHER_STRICT=") // (the last of a name wins)
 	out, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(out), "recorded a step") {
 		t.Fatalf("want TestConforms to fail saying no run recorded a step, got (%v):\n%s", err, out)
 	}
 	if !strings.Contains(string(out), "--- SKIP: TestMutantIsCaught") {
 		t.Fatalf("want it built and the mutant test skipped:\n%s", out)
+	}
+	// under strict mode the unfinished mutant test fails: a scaffold left
+	// as it is cannot pass a strict job
+	cmd = exec.Command("go", "test", "-count=1", "-v", "-run", "TestMutantIsCaught", ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOTOGETHER_STRICT=1")
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "--- FAIL: TestMutantIsCaught") || !strings.Contains(string(out), "GOTOGETHER_STRICT is set") {
+		t.Fatalf("want the mutant test failed under GOTOGETHER_STRICT=1, got (%v):\n%s", err, out)
 	}
 }
 

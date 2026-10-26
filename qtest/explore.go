@@ -572,7 +572,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		// an empty run conforms to any model: every run empty is a system
 		// that records nothing yet (or an unwoven build), not a pass
 		if c.SkipIfEmpty {
-			t.Skipf("gotogether: no run recorded a step (SkipIfEmpty)")
+			Optional(t, "gotogether: no run recorded a step (SkipIfEmpty)")
 		}
 		t.Fatalf("gotogether: no run of %d recorded a step: the system's Run deploys nothing that records yet. "+
 			"Record each model step where it takes effect (qobs.Record with the run's context, //quint:action, a double), "+

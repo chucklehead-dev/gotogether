@@ -11,11 +11,12 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// RequireQuint skips the test when the quint CLI is not installed.
+// RequireQuint skips the test when the quint CLI is not installed, and
+// fails it under GOTOGETHER_STRICT=1 (Optional).
 func RequireQuint(t testing.TB) {
 	t.Helper()
 	if _, err := exec.LookPath("quint"); err != nil {
-		t.Skip("quint not installed (npm i -g @informalsystems/quint)")
+		Optional(t, "quint not installed (npm i -g @informalsystems/quint)")
 	}
 }
 
