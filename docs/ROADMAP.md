@@ -278,9 +278,20 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   faithful app (manifest replayed, `--reproduce` best effort: a
   divergence's prefix must conform) and of each mutant. The reference
   page skills/gotogether-traces/references/external-drivers.md (a
-  settle is not a collector drained: E7). Left: Bombadil's
-  reproduction diverges on a timing-dependent page (0 of 8 45s runs
-  reproduced whole); one host's wall clock orders the page and the
+  settle is not a collector drained: E7). Review fixes: a call is
+  completed only by its own request's answer (the page's `#log` of
+  requests, numbered as sent, read by the extract; the invocation's
+  arguments are what the request sent), never by the next change of the
+  page; the page's end stated (`pageShowsEnds`, a 500ms `within` on a
+  committed job shown; `?until=` ends a live journey's submissions before
+  the time limit); `finishedOnce`, `noCommitAfterCancel`,
+  `noFailedRequest`; Bombadil's exit 2 fails a faithful run; mutants
+  cancelBroken, statusStale and commitAfterCancel; a Go client
+  (`Client`) runs the real server per push, faithful and per overlay;
+  probes of each way the first version passed; core:
+  `qtest.Undecided`, and Reconstruct's check of an invocation record
+  against its completion. Left: Bombadil's reproduction diverges on a
+  timing-dependent page; one host's wall clock orders the page and the
   server.
 - **E6. Observation mutants (S–M).** `qtrace.Mutations` (drop, dup,
   swap, corrupt, retime, reactor) and `qtest.MutateSteps`: which

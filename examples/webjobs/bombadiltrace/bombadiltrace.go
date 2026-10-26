@@ -11,18 +11,22 @@
 // page shows and of the submission the form would send.
 //
 // The mapping:
-//   - a custom action is an invocation record (qtrace.Step.Invocation:
-//     submit with the key the page showed before the click, cancel with
-//     the id), never a step. Its time is the time of the state before
-//     it: the click came after.
-//   - a job's id first shown completes the submissions outstanding for
-//     the key (submit: key, id, status); a job's status changing
-//     completes the cancels outstanding for it (cancel: id, status), or,
-//     with none, is a step of its own if it is ready (ready: id). The
-//     page shows one status per job, so one change answers every click
-//     outstanding on it: a second click's answer can change nothing
-//     there. Its time is the time of the state that shows it.
-//   - a click whose outcome the trace never shows stays an invocation:
+//   - each request a click sent (a submit, a cancel: the page logs each
+//     as it sends it, numbered n from 1, with what it sent) is an
+//     invocation record (qtrace.Step.Invocation), never a step: submit
+//     with the key it sent, cancel with the job's id. Its time is the
+//     time of the state before the click that sent it, which must be the
+//     entry's custom action (ui.submit, ui.cancel).
+//   - the request's own answer, once the log shows it, completes it, and
+//     only that: submit (key, code, id, status), cancel (id, code,
+//     status), with the HTTP status (0: none came) and the job the
+//     answer named ("" for none). Its time is the time of the state that
+//     first shows the answer. Another change of the page (a poll's
+//     answer, a second request's) never completes a call it did not
+//     answer.
+//   - each change of the job the page shows is a step of its own (show:
+//     id, status), whatever caused it.
+//   - a request whose answer the trace never shows stays an invocation:
 //     qtrace.Reconstruct keeps it as pending, so qtest.Finishes (and
 //     validate -require-settle) fails the run. A click is never taken
 //     for its success.
@@ -33,10 +37,10 @@
 // The steps are written as they are (Seq, Call, Time, Ref), never
 // recorded again through a qobs.Recorder, which would stamp them with
 // the time of the conversion and number them in its own order. A trace
-// outside the page's contract (a submit with no result snapshot, an id
-// no submission explains, a status no click or job explains) is refused
-// with the line and what is wrong: no verdict is better than one on
-// steps the adapter made up.
+// the mapping cannot read is refused with the line and what is wrong (a
+// click with no result snapshot, a request no click sent, requests that
+// fell out of the page's log between two snapshots, an answer that
+// changed): no verdict is better than one on steps the adapter made up.
 package bombadiltrace
 
 import (
@@ -95,11 +99,27 @@ type entry struct {
 	} `json:"snapshots"`
 }
 
-// shown is the result snapshot.
+// shown is the result snapshot: the job the page shows, and its log of
+// requests.
 type shown struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-	Key    string `json:"key"`
+	ID     string    `json:"id"`
+	Status string    `json:"status"`
+	Key    string    `json:"key"`
+	Log    []request `json:"log"`
+}
+
+// request is an entry of the page's log: a request as sent, and its own
+// answer once it came (Code nil until then).
+type request struct {
+	N    int    `json:"n"`
+	Op   string `json:"op"`
+	Key  string `json:"key,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Code *int   `json:"code"`
+	Job  *struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	} `json:"job"`
 }
 
 // ReadFile reads the trace at path (Read).
@@ -117,15 +137,15 @@ func ReadFile(path string, opt Options) ([]qtrace.Step, error) {
 // while writing it) is a lost tail: the steps before it, a loss record
 // after them (qtrace.MarkLost) and a *qtrace.TornTail error, which a
 // caller may report and go on with: the run then has no verdict where
-// the lost line could matter. Any other malformed line, or a trace
-// outside the page's contract, is an error and no steps.
+// the lost line could matter. Any other malformed line, or a trace the
+// mapping cannot read, is an error and no steps.
 func Read(r io.Reader, opt Options) ([]qtrace.Step, error) {
 	opt.defaults()
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	c := &converter{opt: opt, seen: map[string]string{}, submits: map[string][]uint64{}, cancels: map[string][]uint64{}}
+	c := &converter{opt: opt, seen: map[string]string{}, calls: map[int]*call{}}
 	lines := bytes.Split(data, []byte("\n"))
 	for i, raw := range lines {
 		n := i + 1
@@ -147,17 +167,26 @@ func Read(r io.Reader, opt Options) ([]qtrace.Step, error) {
 	return c.steps, nil
 }
 
+// call is a request the trace showed sent: its invocation record's seq,
+// and whether its answer was recorded.
+type call struct {
+	seq      uint64
+	op       string
+	key, id  string
+	answered bool
+}
+
 type converter struct {
 	opt   Options
 	steps []qtrace.Step
 	seq   uint64
-	// the state before this entry's action: its result and time
-	prev     *shown
+	// the state before this entry's action: its time and ref
 	prevTime time.Time
 	prevRef  string
-	seen     map[string]string   // job id -> status last shown
-	submits  map[string][]uint64 // key -> invocations outstanding
-	cancels  map[string][]uint64 // id -> invocations outstanding
+	started  bool
+	lastN    int               // the last request seen sent
+	calls    map[int]*call     // by the page's request number
+	seen     map[string]string // job id -> status last shown
 }
 
 func (c *converter) entry(n int, e *entry) error {
@@ -169,20 +198,43 @@ func (c *converter) entry(n int, e *entry) error {
 	if e.State.Screenshot != "" {
 		ref += " screenshot=" + path.Join("screenshots", path.Base(strings.ReplaceAll(e.State.Screenshot, `\`, "/")))
 	}
+	click, err := c.click(e.Action)
+	if err != nil {
+		return err
+	}
 	cur, err := c.result(e)
 	if err != nil {
 		return err
 	}
-	if err := c.action(n, e.Action, cur); err != nil {
+	if cur == nil {
+		if click != "" {
+			return fmt.Errorf("%s with no %s snapshot after it: the spec's extract %q is what says what the click sent and what came of it (export it, and keep its name)", click, c.opt.Snapshot, c.opt.Snapshot)
+		}
+	} else if err := c.observe(click, cur, at, ref); err != nil {
 		return err
 	}
-	if cur != nil {
-		if err := c.observe(cur, at, ref); err != nil {
-			return err
-		}
-	}
-	c.prev, c.prevTime, c.prevRef = cur, at, ref
+	c.prevTime, c.prevRef, c.started = at, ref, true
 	return nil
+}
+
+// click is the entry's custom action, if it is one the mapping knows
+// ("" for Bombadil's own actions: Wait, Click, Reload, ...).
+func (c *converter) click(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
+	}
+	var a struct {
+		Custom *struct {
+			Name string `json:"name"`
+		} `json:"Custom"`
+	}
+	if json.Unmarshal(raw, &a) != nil || a.Custom == nil {
+		return "", nil
+	}
+	if name := a.Custom.Name; name != c.opt.Submit && name != c.opt.Cancel {
+		return "", fmt.Errorf("custom action %s is none the adapter maps (%s, %s): add it to the mapping, or rename it in the spec", name, c.opt.Submit, c.opt.Cancel)
+	}
+	return a.Custom.Name, nil
 }
 
 // result is the entry's result snapshot, or nil if it has none.
@@ -193,110 +245,81 @@ func (c *converter) result(e *entry) (*shown, error) {
 		}
 		var r shown
 		if err := json.Unmarshal(s.Value, &r); err != nil {
-			return nil, fmt.Errorf("snapshot %s is not {id, status, key}: %v", c.opt.Snapshot, err)
+			return nil, fmt.Errorf("snapshot %s is not {id, status, key, log}: %v", c.opt.Snapshot, err)
 		}
 		return &r, nil
 	}
 	return nil, nil
 }
 
-// action records the invocation of the entry's action, if it is one the
-// mapping knows. cur is the entry's result: an action needs the result
-// of the state before it, and of its own, to be read at all.
-func (c *converter) action(n int, raw json.RawMessage, cur *shown) error {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil
-	}
-	var a struct {
-		Custom *struct {
-			Name string `json:"name"`
-		} `json:"Custom"`
-	}
-	if json.Unmarshal(raw, &a) != nil || a.Custom == nil {
-		return nil // Bombadil's own actions (Wait, Click, Reload, ...): no call of the model's
-	}
-	name := a.Custom.Name
-	if name != c.opt.Submit && name != c.opt.Cancel {
-		return fmt.Errorf("custom action %s is none the adapter maps (%s, %s): add it to the mapping, or rename it in the spec", name, c.opt.Submit, c.opt.Cancel)
-	}
-	if c.prev == nil || cur == nil {
-		return fmt.Errorf("%s with no %s snapshot before or after it: the spec's extract %q is what says what was clicked and what came of it (export it, and keep its name)", name, c.opt.Snapshot, c.opt.Snapshot)
-	}
-	switch name {
-	case c.opt.Submit:
-		if c.prev.Key == "" {
-			return fmt.Errorf("%s with no key in the %s snapshot before it: the form's data-key is the submission's", name, c.opt.Snapshot)
+// observe records what the state shows that the one before did not: the
+// requests the entry's click sent, the answers that came, the job shown.
+func (c *converter) observe(click string, cur *shown, at time.Time, ref string) error {
+	// the requests sent since the state before: the click's
+	first := 0
+	for i, r := range cur.Log {
+		if i > 0 && r.N != cur.Log[i-1].N+1 {
+			return fmt.Errorf("the page's log skips from request %d to %d: it lists requests in the order sent, numbered from 1", cur.Log[i-1].N, r.N)
 		}
-		seq := c.invoke("submit", "key", c.prev.Key)
-		c.submits[c.prev.Key] = append(c.submits[c.prev.Key], seq)
-	case c.opt.Cancel:
-		if c.prev.ID == "" {
-			return fmt.Errorf("%s with no job shown before it: a cancel names the job the page shows", name)
+		if i == 0 {
+			first = r.N
 		}
-		seq := c.invoke("cancel", "id", c.prev.ID)
-		c.cancels[c.prev.ID] = append(c.cancels[c.prev.ID], seq)
 	}
-	return nil
-}
-
-// invoke records an invocation at the state before the click.
-func (c *converter) invoke(action, k, v string) uint64 {
-	c.seq++
-	c.steps = append(c.steps, c.step(qtrace.Step{Action: action, Invocation: true, Time: c.prevTime, Ref: c.prevRef,
-		Args: map[string]any{k: v}}))
-	return c.seq
-}
-
-// observe records what the state shows that the one before did not.
-func (c *converter) observe(cur *shown, at time.Time, ref string) error {
-	if cur.ID == "" {
-		return nil // nothing shown (the page as loaded)
+	if len(cur.Log) > 0 && cur.Log[len(cur.Log)-1].N > c.lastN && first > c.lastN+1 {
+		return fmt.Errorf("requests %d to %d fell out of the page's log between two snapshots (it lists the last %d): their answers are unknown", c.lastN+1, first-1, len(cur.Log))
 	}
-	last, known := c.seen[cur.ID]
-	switch {
-	case !known:
-		var key string
-		for k, calls := range c.submits {
-			if len(calls) == 0 {
-				continue
-			}
-			if key != "" {
-				return fmt.Errorf("job %s shown with submissions of two keys outstanding (%s, %s): which one it answers is unknown", cur.ID, key, k)
-			}
-			key = k
+	for _, r := range cur.Log {
+		if r.N <= c.lastN {
+			continue
 		}
-		if key == "" {
-			return fmt.Errorf("job %s shown with no %s outstanding: an id no click explains (a second id for one submission?)", cur.ID, c.opt.Submit)
+		want := map[string]string{"submit": c.opt.Submit, "cancel": c.opt.Cancel}[r.Op]
+		switch {
+		case want == "":
+			return fmt.Errorf("request %d is a %q, which the mapping does not know (submit, cancel)", r.N, r.Op)
+		case click != want:
+			return fmt.Errorf("request %d (%s) was sent with no %s before it: a request no click sent", r.N, r.Op, want)
+		case !c.started:
+			return fmt.Errorf("request %d (%s) in the first state: no state before its click", r.N, r.Op)
 		}
-		for _, call := range c.submits[key] {
-			c.complete(call, "submit", at, ref, "key", key, "id", cur.ID, "status", cur.Status)
+		args := map[string]any{"key": r.Key}
+		if r.Op == "cancel" {
+			args = map[string]any{"id": r.ID}
 		}
-		delete(c.submits, key)
-	case last == cur.Status:
-		return nil
-	case len(c.cancels[cur.ID]) > 0:
-		for _, call := range c.cancels[cur.ID] {
-			c.complete(call, "cancel", at, ref, "id", cur.ID, "status", cur.Status)
-		}
-		delete(c.cancels, cur.ID)
-	case cur.Status == "ready":
 		c.seq++
-		c.steps = append(c.steps, c.step(qtrace.Step{Action: "ready", Time: at, Ref: ref, Args: map[string]any{"id": cur.ID}}))
-	default:
-		return fmt.Errorf("job %s shown %s after %s with no %s outstanding: a change no click or job explains", cur.ID, cur.Status, last, c.opt.Cancel)
+		c.steps = append(c.steps, c.step(qtrace.Step{Action: r.Op, Invocation: true, Time: c.prevTime, Ref: c.prevRef, Args: args}))
+		c.calls[r.N] = &call{seq: c.seq, op: r.Op, key: r.Key, id: r.ID}
+		c.lastN = r.N
 	}
-	c.seen[cur.ID] = cur.Status
+	// the answers that came: each completes its own request alone
+	for _, r := range cur.Log {
+		k := c.calls[r.N]
+		if r.Code == nil || k == nil {
+			continue
+		}
+		if k.answered {
+			continue
+		}
+		k.answered = true
+		id, status := "", ""
+		if r.Job != nil {
+			id, status = r.Job.ID, r.Job.Status
+		}
+		args := map[string]any{"code": int64(*r.Code), "status": status}
+		if k.op == "submit" {
+			args["key"], args["id"] = k.key, id
+		} else {
+			args["id"] = k.id
+		}
+		c.seq++
+		c.steps = append(c.steps, c.step(qtrace.Step{Action: k.op, Call: k.seq, Time: at, Ref: ref, Args: args}))
+	}
+	// the job shown
+	if cur.ID != "" && c.seen[cur.ID] != cur.Status {
+		c.seen[cur.ID] = cur.Status
+		c.seq++
+		c.steps = append(c.steps, c.step(qtrace.Step{Action: "show", Time: at, Ref: ref, Args: map[string]any{"id": cur.ID, "status": cur.Status}}))
+	}
 	return nil
-}
-
-// complete records call's completion: the step, at the state showing it.
-func (c *converter) complete(call uint64, action string, at time.Time, ref string, kv ...string) {
-	args := map[string]any{}
-	for i := 0; i+1 < len(kv); i += 2 {
-		args[kv[i]] = kv[i+1]
-	}
-	c.seq++
-	c.steps = append(c.steps, c.step(qtrace.Step{Action: action, Call: call, Time: at, Ref: ref, Args: args}))
 }
 
 func (c *converter) step(s qtrace.Step) qtrace.Step {

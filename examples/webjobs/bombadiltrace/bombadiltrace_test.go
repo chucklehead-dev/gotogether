@@ -33,19 +33,17 @@ func read(t *testing.T, lines ...string) ([]qtrace.Step, error) {
 	return Read(strings.NewReader(strings.Join(lines, "")), Options{})
 }
 
-// A click is an invocation at the state before it; the outcome the page
-// shows completes it, at the state that shows it, with the line and the
-// screenshot as its ref; a job shown ready by polling is a step of its
-// own; one status change answers every click outstanding on the job.
+// A request a click sent is an invocation at the state before the click;
+// its own answer completes it, at the state that first shows it, with
+// the line and screenshot as its ref; each change of the job shown is a
+// show step. A double click is two calls, each completed by its answer.
 func TestMapping(t *testing.T) {
 	steps, err := read(t,
-		line(1000, nil, &shown{Key: "k1"}),
-		line(2000, custom("ui.submit"), &shown{ID: "j1", Status: "accepted", Key: "k1"}),
-		line(3000, "Wait", &shown{ID: "j1", Status: "ready", Key: "k2"}),
-		line(4000, custom("ui.submit"), &shown{Key: "k2"}), // not answered yet
-		line(5000, "Wait", &shown{ID: "j2", Status: "accepted", Key: "k2"}),
-		line(6000, custom("ui.cancel"), &shown{ID: "j2", Status: "accepted", Key: "k2"}),
-		line(7000, custom("ui.cancel"), &shown{ID: "j2", Status: "cancelled", Key: "k3"}),
+		line(1000, nil, page("", "")),
+		line(2000, custom("ui.submit"), page("j1", "accepted", sub(1, "k1").answered(202, "j1", "accepted"), sub(2, "k1"))),
+		line(3000, "Wait", page("j1", "ready", sub(1, "k1").answered(202, "j1", "accepted"), sub(2, "k1").answered(200, "j1", "accepted"))),
+		line(4000, custom("ui.cancel"), page("j1", "ready", sub(1, "k1").answered(202, "j1", "accepted"), sub(2, "k1").answered(200, "j1", "accepted"), can(3, "j1"))),
+		line(5000, "Wait", page("j1", "ready", sub(1, "k1").answered(202, "j1", "accepted"), sub(2, "k1").answered(200, "j1", "accepted"), can(3, "j1").answered(409, "j1", "ready"))),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -60,14 +58,13 @@ func TestMapping(t *testing.T) {
 	}
 	wants := []want{
 		{"submit", true, 0, 1000, "map[key:k1]", "trace.jsonl:1 screenshot=screenshots/1000.jpeg"},
-		{"submit", false, 1, 2000, "map[id:j1 key:k1 status:accepted]", "trace.jsonl:2 screenshot=screenshots/2000.jpeg"},
-		{"ready", false, 0, 3000, "map[id:j1]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
-		{"submit", true, 0, 3000, "map[key:k2]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
-		{"submit", false, 4, 5000, "map[id:j2 key:k2 status:accepted]", "trace.jsonl:5 screenshot=screenshots/5000.jpeg"},
-		{"cancel", true, 0, 5000, "map[id:j2]", "trace.jsonl:5 screenshot=screenshots/5000.jpeg"},
-		{"cancel", true, 0, 6000, "map[id:j2]", "trace.jsonl:6 screenshot=screenshots/6000.jpeg"},
-		{"cancel", false, 6, 7000, "map[id:j2 status:cancelled]", "trace.jsonl:7 screenshot=screenshots/7000.jpeg"},
-		{"cancel", false, 7, 7000, "map[id:j2 status:cancelled]", "trace.jsonl:7 screenshot=screenshots/7000.jpeg"},
+		{"submit", true, 0, 1000, "map[key:k1]", "trace.jsonl:1 screenshot=screenshots/1000.jpeg"},
+		{"submit", false, 1, 2000, "map[code:202 id:j1 key:k1 status:accepted]", "trace.jsonl:2 screenshot=screenshots/2000.jpeg"},
+		{"show", false, 0, 2000, "map[id:j1 status:accepted]", "trace.jsonl:2 screenshot=screenshots/2000.jpeg"},
+		{"submit", false, 2, 3000, "map[code:200 id:j1 key:k1 status:accepted]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
+		{"show", false, 0, 3000, "map[id:j1 status:ready]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
+		{"cancel", true, 0, 3000, "map[id:j1]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
+		{"cancel", false, 7, 5000, "map[code:409 id:j1 status:ready]", "trace.jsonl:5 screenshot=screenshots/5000.jpeg"},
 	}
 	if len(steps) != len(wants) {
 		t.Fatalf("%d records, want %d: %v", len(steps), len(wants), steps)
@@ -80,7 +77,7 @@ func TestMapping(t *testing.T) {
 		}
 	}
 	traces, issues := qtrace.Reconstruct(steps)
-	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 5 || len(traces[0].Pending) != 0 {
+	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 5 || len(traces[0].Pending) != 0 || len(traces[0].Issues) != 0 {
 		t.Fatalf("reconstructed: %v %+v", issues, traces)
 	}
 	if got := traces[0].Steps[0].Invoked; !got.Equal(time.UnixMicro(1000)) {
@@ -88,54 +85,80 @@ func TestMapping(t *testing.T) {
 	}
 }
 
-// A click the trace never shows the outcome of is pending, not done.
-func TestClickWithNoOutcome(t *testing.T) {
-	steps, err := read(t,
-		line(1000, nil, &shown{Key: "k1"}),
-		line(2000, custom("ui.submit"), &shown{Key: "k1"}),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	traces, _ := qtrace.Reconstruct(steps)
-	if len(traces) != 1 || len(traces[0].Steps) != 0 || len(traces[0].Pending) != 1 || traces[0].Pending[0].Action != "submit" {
-		t.Fatalf("a submit with no outcome: %+v, want it pending", traces)
+// A request the trace never shows answered is pending, whatever else
+// the page shows: a cancel never answered stays pending though a poll
+// then shows the job ready, and a double click's second request stays
+// pending though the first was answered with the job.
+func TestOnlyItsOwnAnswerCompletesACall(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		lines []string
+		want  string // the action pending
+	}{
+		{"a click with no answer", []string{
+			line(1000, nil, page("", "")),
+			line(2000, custom("ui.submit"), page("", "", sub(1, "k1"))),
+		}, "submit"},
+		{"a cancel never answered, then a poll's ready", []string{
+			line(1000, nil, page("", "")),
+			line(2000, custom("ui.submit"), page("j1", "accepted", sub(1, "k1").answered(202, "j1", "accepted"))),
+			line(3000, custom("ui.cancel"), page("j1", "accepted", sub(1, "k1").answered(202, "j1", "accepted"), can(2, "j1"))),
+			line(4000, "Wait", page("j1", "ready", sub(1, "k1").answered(202, "j1", "accepted"), can(2, "j1"))),
+		}, "cancel"},
+		{"a double click's second request unanswered", []string{
+			line(1000, nil, page("", "")),
+			line(2000, custom("ui.submit"), page("j1", "accepted", sub(1, "k1").answered(202, "j1", "accepted"), sub(2, "k1"))),
+			line(3000, "Wait", page("j1", "ready", sub(1, "k1").answered(202, "j1", "accepted"), sub(2, "k1"))),
+		}, "submit"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			steps, err := read(t, c.lines...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			traces, _ := qtrace.Reconstruct(steps)
+			if len(traces) != 1 || len(traces[0].Pending) != 1 || traces[0].Pending[0].Action != c.want {
+				t.Fatalf("%+v, want one %s pending", traces, c.want)
+			}
+		})
 	}
 }
 
-// What the mapping cannot read, or that the page's contract rules out,
-// is refused with the line and the fix.
+// What the mapping cannot read is refused with the line and the fix.
 func TestRefused(t *testing.T) {
+	var full []request
+	for n := 1; n <= 8; n++ {
+		full = append(full, sub(n, "k").answered(500, "", ""))
+	}
 	for _, c := range []struct {
 		name  string
 		lines []string
 		want  string
 	}{
 		{"a submit with no snapshot", []string{
-			line(1000, nil, &shown{Key: "k1"}),
+			line(1000, nil, page("", "")),
 			line(2000, custom("ui.submit"), nil),
 		}, "trace.jsonl:2: ui.submit with no result snapshot"},
-		{"two ids for one submit", []string{
-			line(1000, nil, &shown{Key: "k1"}),
-			line(2000, custom("ui.submit"), &shown{ID: "j1", Status: "accepted", Key: "k1"}),
-			line(3000, "Wait", &shown{ID: "j2", Status: "accepted", Key: "k1"}),
-		}, "trace.jsonl:3: job j2 shown with no ui.submit outstanding"},
-		{"a cancel no click made", []string{
-			line(1000, nil, &shown{Key: "k1"}),
-			line(2000, custom("ui.submit"), &shown{ID: "j1", Status: "accepted", Key: "k1"}),
-			line(3000, "Wait", &shown{ID: "j1", Status: "cancelled", Key: "k2"}),
-		}, "trace.jsonl:3: job j1 shown cancelled after accepted with no ui.cancel outstanding"},
+		{"a request no click sent", []string{
+			line(1000, nil, page("", "")),
+			line(2000, "Wait", page("", "", sub(1, "k1"))),
+		}, "trace.jsonl:2: request 1 (submit) was sent with no ui.submit before it"},
+		{"requests fallen out of the log", []string{
+			line(1000, nil, page("", "")),
+			line(2000, custom("ui.submit"), page("", "", sub(1, "k1"))),
+			line(3000, custom("ui.submit"), page("", "", append(append([]request{}, full[2:]...), sub(9, "k").answered(500, "", ""), sub(10, "k"))...)),
+		}, "trace.jsonl:3: requests 2 to 2 fell out of the page's log"},
+		{"a log out of order", []string{
+			line(1000, nil, page("", "")),
+			line(2000, custom("ui.submit"), page("", "", sub(2, "k1"), sub(1, "k1"))),
+		}, "the page's log skips from request 2 to 1"},
 		{"a custom action not mapped", []string{
-			line(1000, nil, &shown{Key: "k1"}),
-			line(2000, custom("ui.retry"), &shown{Key: "k1"}),
+			line(1000, nil, page("", "")),
+			line(2000, custom("ui.retry"), page("", "")),
 		}, "custom action ui.retry is none the adapter maps"},
-		{"a cancel with no job", []string{
-			line(1000, nil, &shown{Key: "k1"}),
-			line(2000, custom("ui.cancel"), &shown{Key: "k1"}),
-		}, "ui.cancel with no job shown before it"},
 		{"a malformed line", []string{
 			"{not json\n",
-			line(2000, nil, &shown{Key: "k1"}),
+			line(2000, nil, page("", "")),
 		}, "trace.jsonl:1: not a Bombadil trace entry"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -150,17 +173,35 @@ func TestRefused(t *testing.T) {
 // A last line cut off is a lost tail: the steps before it, a loss
 // record after the page's last seq, and the *qtrace.TornTail.
 func TestTornTail(t *testing.T) {
-	last := line(3000, "Wait", &shown{ID: "j1", Status: "ready", Key: "k2"})
+	last := line(3000, "Wait", page("j1", "ready", sub(1, "k1").answered(202, "j1", "accepted")))
 	steps, err := read(t,
-		line(1000, nil, &shown{Key: "k1"}),
-		line(2000, custom("ui.submit"), &shown{ID: "j1", Status: "accepted", Key: "k1"}),
+		line(1000, nil, page("", "")),
+		line(2000, custom("ui.submit"), page("j1", "accepted", sub(1, "k1").answered(202, "j1", "accepted"))),
 		last[:len(last)/2],
 	)
 	var torn *qtrace.TornTail
 	if !errors.As(err, &torn) || torn.Line != 3 {
 		t.Fatalf("err %v, want a torn tail at line 3", err)
 	}
-	if len(steps) != 3 || steps[2].Lost != "suffix" || steps[2].LostAfter != 2 || steps[2].Recorder != "ui" {
-		t.Fatalf("steps %+v, want the submit's two records and a loss after seq 2", steps)
+	if len(steps) != 4 || steps[3].Lost != "suffix" || steps[3].LostAfter != 3 || steps[3].Recorder != "ui" {
+		t.Fatalf("steps %+v, want the submit's records, its show, and a loss after seq 3", steps)
 	}
 }
+
+// sub and can are log entries: request n as sent; answered adds its
+// answer (code, and the job's id and status; "" for none).
+func sub(n int, key string) request { return request{N: n, Op: "submit", Key: key} }
+func can(n int, id string) request  { return request{N: n, Op: "cancel", ID: id} }
+func (r request) answered(code int, id, status string) request {
+	r.Code = &code
+	if id != "" {
+		r.Job = &struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}{id, status}
+	}
+	return r
+}
+
+// page is a result snapshot: the job shown, and the log.
+func page(id, status string, log ...request) *shown { return &shown{ID: id, Status: status, Log: log} }

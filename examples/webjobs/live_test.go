@@ -38,15 +38,16 @@ func bombadil(t *testing.T) (string, []string) {
 
 // journey is a run checked: its directory, what Bombadil did, the run.
 type journey struct {
-	name string
-	dir  string
-	seed int64
-	live *LiveRun
-	run  *qtest.Run
+	name  string
+	dir   string
+	seed  int64
+	limit time.Duration
+	live  *LiveRun
+	run   *qtest.Run
 }
 
 // live runs webjobs (as this binary was built: a mutant's overlay or
-// none) under Bombadil for 45s (WEBJOBS_TIME_LIMIT, else 3s with
+// none) under Bombadil for 45s (WEBJOBS_TIME_LIMIT, else 6s with
 // WEBJOBS_RECORD set: a run to check in), and checks the journey against
 // the binding. The journey's directory is the test's, or one under
 // WEBJOBS_JOURNEYS (kept).
@@ -63,20 +64,28 @@ func live(t *testing.T, name string, l Live) *journey {
 	if d, err := time.ParseDuration(os.Getenv("WEBJOBS_TIME_LIMIT")); err == nil && l.TimeLimit == 0 {
 		l.TimeLimit = d
 	} else if l.TimeLimit == 0 && os.Getenv("WEBJOBS_RECORD") != "" {
-		l.TimeLimit = 3 * time.Second
+		l.TimeLimit = 6 * time.Second
 	}
 	if l.Seed == 0 {
 		l.Seed = time.Now().UnixNano()
+	}
+	if l.TimeLimit == 0 {
+		l.TimeLimit = 45 * time.Second
 	}
 	lr, err := RunLive(t.Context(), l)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("journey: bombadil %s exited %d; %s", lr.Driver.Version, lr.Exit, l.Dir)
+	if lr.Exit == 2 && !l.Violation {
+		// the spec's own properties are part of the check: a violation
+		// Bombadil found fails the run, whatever the model says
+		t.Errorf("bombadil found a violation of the spec's properties (exit 2):\n%s", tail(lr.Output, 3000))
+	}
 	if _, err := WriteRunInfo(l.Dir, "webjobs "+name, lr.Driver); err != nil {
 		t.Fatal(err)
 	}
-	j := &journey{name: name, dir: l.Dir, seed: l.Seed, live: lr}
+	j := &journey{name: name, dir: l.Dir, seed: l.Seed, limit: l.TimeLimit, live: lr}
 	j.run = check(t, l.Dir)
 	return j
 }
@@ -243,15 +252,34 @@ func TestLive(t *testing.T) {
 	t.Run("reproduce", func(t *testing.T) {
 		// the same server seed: the same jobs' durations, so the page
 		// answers as it did when Bombadil chose its actions
-		r := live(t, "reproduced", Live{Reproduce: j.dir, Seed: j.seed})
+		r := live(t, "reproduced", Live{Reproduce: j.dir, Seed: j.seed, TimeLimit: j.limit})
 		if r.live.Diverged {
-			// best effort: what it replayed conforms, and is no journey
-			// (its last click may have no answer)
-			r.run.Expect(t, qtest.Conforms())
+			// best effort: what it replayed is a prefix of a journey (its
+			// page stopped mid-job, so the server's settle settles nothing
+			// of the page's): it conforms, judged without the settle
+			steps, err := Steps(r.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var prefix []qtrace.Step
+			for _, s := range steps {
+				if !s.Settled {
+					prefix = append(prefix, s)
+				}
+			}
+			qtest.Validate(t, "webjobs.binding.yaml", prefix).Expect(t, qtest.Conforms())
 			t.Logf("journey: the reproduction diverged after %d of the run's %d steps (the page's timing is not replayed)", len(r.run.Steps), len(j.run.Steps))
 			return
 		}
 		r.run.Expect(t, qtest.Finishes())
 		t.Logf("journey: reproduced %d of the run's %d steps", len(r.run.Steps), len(j.run.Steps))
 	})
+}
+
+// tail is the end of s, at most n bytes.
+func tail(s string, n int) string {
+	if len(s) > n {
+		return "..." + s[len(s)-n:]
+	}
+	return s
 }

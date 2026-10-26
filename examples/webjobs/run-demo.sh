@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 # webjobs: the recorded Bombadil journeys checked against the model (no
-# browser needed), or with LIVE=1 Bombadil exploring the app for 45s
-# (bombadil and a Chrome on PATH). MUTATION= one of ready-early,
-# double-job, cancel-ignored builds the server with that mutant's overlay
+# browser needed: a Go client drives the real server too), or with LIVE=1
+# Bombadil exploring the app for 45s (bombadil and a Chrome on PATH).
+# MUTATION= one of ready-early, double-job, cancel-ignored, cancel-broken,
+# status-stale, commit-after-cancel builds the server with that mutant's overlay
 # (testdata/mutants/) and shows what catches it; without one, the
 # faithful app, then cmd/webjobs answering a submission twice with one
 # job.
 set -euo pipefail
 cd "$(dirname "$0")"
 case "${MUTATION:-}" in
-  "") run='TestRecorded$|TestClickWithNoOutcome$|TestTornTrace$|TestTimesKept$' ;;
+  "") run='TestClient$|TestRecorded$|TestProbes$|TestClickWithNoOutcome$|TestTornTrace$|TestTimesKept$' ;;
   ready-early) run='TestMutants$/^readyEarly$' ;;
   double-job) run='TestMutants$/^doubleJob$' ;;
   cancel-ignored) run='TestMutants$/^cancelIgnored$' ;;
+  cancel-broken) run='TestMutants$/^cancelBroken$' ;;
+  status-stale) run='TestMutants$/^statusStale$' ;;
+  commit-after-cancel) run='TestMutants$/^commitAfterCancel$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 short=-short

@@ -3,12 +3,15 @@
 // and what it checks of the page by itself. The model checks the rest,
 // from this run's trace.jsonl (package bombadiltrace) and the server's
 // steps. The adapter reads the custom actions by name (ui.submit,
-// ui.cancel) and the `result` snapshot: keep the three as they are.
+// ui.cancel) and the `result` snapshot: keep the three as they are. Its
+// `log` is the page's last requests, each with what it sent and its own
+// answer: the adapter completes a click's call only from its request's
+// answer, never from another change of the page.
 import { always, now, eventually } from "@antithesishq/bombadil";
 import { extract, actions, registerCustomAction } from "@antithesishq/bombadil/browser";
 
-// What the page shows: the job of the last answer, as JSON, and the key
-// of the submission the form would send.
+// What the page shows: the job of the last answer, as JSON, the key of
+// the submission the form would send, and the log of its requests.
 const result = extract(({ document }) => {
   const text = document.querySelector("#result")?.textContent?.trim() ?? "";
   let job: { id?: string; status?: string } = {};
@@ -18,8 +21,15 @@ const result = extract(({ document }) => {
     // shown as it is: the adapter refuses a result it cannot read
   }
   const form = document.querySelector<HTMLFormElement>("#form");
+  let log: any[] = [];
+  try {
+    log = JSON.parse(document.querySelector("#log")?.textContent || "[]");
+  } catch {
+    // the adapter refuses a log it cannot read
+  }
   return {
     text,
+    log,
     id: job.id ?? "",
     status: job.status ?? "",
     key: form?.dataset.key ?? "",

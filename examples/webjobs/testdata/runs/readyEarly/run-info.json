@@ -3,7 +3,7 @@
   "driver": {
     "name": "bombadil",
     "version": "0.7.9",
-    "seed": "server 1793036587187875345",
+    "seed": "server 1793042080321501297",
     "origin": "vm",
     "args": [
       "bombadil",
@@ -14,14 +14,14 @@
       "--output-path",
       "<journey>/bombadil",
       "--time-limit",
-      "3s",
+      "6s",
       "--chrome-grant-permissions",
       "local-network-access",
       "--width",
       "320",
       "--height",
       "200",
-      "http://127.0.0.1:33771/",
+      "http://127.0.0.1:40213/?until=1793042084322",
       "bombadil/spec.ts"
     ]
   },
@@ -32,11 +32,11 @@
     },
     {
       "name": "screenshot",
-      "path": "screenshots/1793036588101061.jpeg"
+      "path": "screenshots/1793042082370584.jpeg"
     },
     {
       "name": "screenshot",
-      "path": "screenshots/1793036588504070.jpeg"
+      "path": "screenshots/1793042083296035.jpeg"
     }
   ]
 }

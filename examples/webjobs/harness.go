@@ -74,6 +74,10 @@ type Live struct {
 	// Extra are more arguments for Bombadil (BOMBADIL_ARGS: an older
 	// Chrome's --chrome-grant-permissions)
 	Extra []string
+	// Violation: the run may end in a violation of the spec's own
+	// properties (Bombadil's exit 2), as a mutant's may; else that fails
+	// the run (live's check)
+	Violation bool
 }
 
 // LiveRun is what a live run did.
@@ -130,7 +134,12 @@ func RunLive(ctx context.Context, l Live) (*LiveRun, error) {
 	}
 	srv := &http.Server{Handler: app}
 	go srv.Serve(ln)
-	origin := "http://" + ln.Addr().String() + "/"
+	// new submissions stop 2s before Bombadil's time limit is up, counted
+	// from now (its start, and the browser's, take some of it), so the
+	// journey ends with every job shown ended (a job runs at most
+	// MaxWork, the page polls every 100ms)
+	until := time.Now().Add(l.TimeLimit - 2*time.Second)
+	origin := fmt.Sprintf("http://%s/?until=%d", ln.Addr(), until.UnixMilli())
 
 	out := filepath.Join(l.Dir, "bombadil")
 	args := []string{"browser", "test", "--headless", "--no-sandbox", "--output-path", out}

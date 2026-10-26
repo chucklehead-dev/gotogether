@@ -1,0 +1,42 @@
+{
+  "name": "webjobs statusStale",
+  "driver": {
+    "name": "bombadil",
+    "version": "0.7.9",
+    "seed": "server 1793042080314787066",
+    "origin": "vm",
+    "args": [
+      "bombadil",
+      "browser",
+      "test",
+      "--headless",
+      "--no-sandbox",
+      "--output-path",
+      "<journey>/bombadil",
+      "--time-limit",
+      "6s",
+      "--chrome-grant-permissions",
+      "local-network-access",
+      "--width",
+      "320",
+      "--height",
+      "200",
+      "http://127.0.0.1:40329/?until=1793042084315",
+      "bombadil/spec.ts"
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "bombadil trace",
+      "path": "trace.jsonl"
+    },
+    {
+      "name": "screenshot",
+      "path": "screenshots/1793042083027717.jpeg"
+    },
+    {
+      "name": "screenshot",
+      "path": "screenshots/1793042084869370.jpeg"
+    }
+  ]
+}

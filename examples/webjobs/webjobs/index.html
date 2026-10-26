@@ -17,21 +17,65 @@
   <button id="cancel" type="button" disabled>Cancel</button>
 </form>
 <p id="result" aria-live="polite"></p>
+<pre id="log" hidden></pre>
 <script>
 // One submission at a time. Each has a key, made when the form is ready
 // for it and kept until its job ends, so a second click (a double click,
 // a retry) asks for the same job. The result shows the job as the server
-// last answered: {"id", "status"}.
+// last answered: {"id", "status"}. #log lists the page's last three requests
+// (submits and cancels, numbered n from 1 as sent) with what each sent
+// and, once answered, its own answer: its HTTP status (0: no answer, a
+// network error) and the job it named. A ?until=<ms since the epoch>
+// stops new submissions then, so a journey a driver runs for a time
+// limit ends with its jobs shown ended.
 const form = document.getElementById('form');
 const submit = document.getElementById('submit');
 const cancel = document.getElementById('cancel');
 const result = document.getElementById('result');
+const logEl = document.getElementById('log');
+const until = Number(new URLSearchParams(location.search).get('until')) || Infinity;
 let current = null;     // the job shown
 const answered = new Set(); // keys whose submission was answered
+const requests = [];
 let polling = null;
 
 function newKey() {
   form.dataset.key = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function enable() {
+  const running = current !== null && current.status === 'accepted';
+  submit.disabled = running || Date.now() >= until;
+  cancel.disabled = !running;
+}
+
+// sent logs a request as it is sent; answer logs its own answer.
+function sent(op, args) {
+  const r = { n: requests.length + 1, op, ...args, code: null, job: null };
+  requests.push(r);
+  logEl.textContent = JSON.stringify(requests.slice(-3));
+  return r;
+}
+
+// the answer is logged whole, its status with its body, once the body
+// is read: a log shown in between holds the request unanswered
+async function answer(r, res) {
+  let job = null;
+  try {
+    const b = res ? await res.json() : null;
+    if (b && b.id) job = { id: b.id, status: b.status };
+  } catch (e) { /* no JSON: the status alone */ }
+  r.code = res ? res.status : 0;
+  r.job = job;
+  logEl.textContent = JSON.stringify(requests.slice(-3));
+  return job;
+}
+
+async function send(op, args, url, init) {
+  const r = sent(op, args);
+  let res = null;
+  try { res = await fetch(url, init); } catch (e) { /* no answer */ }
+  return { ok: res !== null && (res.ok || res.status === 409), job: await answer(r, res) };
 }
 
 function show(job) {
@@ -40,11 +84,9 @@ function show(job) {
   if (current && current.id === job.id && current.status !== 'accepted' && job.status === 'accepted') return;
   current = { id: job.id, status: job.status };
   result.textContent = JSON.stringify(current);
-  const running = job.status === 'accepted';
-  submit.disabled = running;
-  cancel.disabled = !running;
+  enable();
   clearTimeout(polling);
-  if (running) polling = setTimeout(poll, 100);
+  if (job.status === 'accepted') polling = setTimeout(poll, 100);
   else newKey();
 }
 
@@ -61,19 +103,21 @@ async function poll() {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (submit.disabled) return;
   const key = form.dataset.key;
-  const res = await fetch('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
-  if (!res.ok || answered.has(key)) return; // the first answer for a key is the one shown
+  const { ok, job } = await send('submit', { key }, '/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+  if (!ok || !job || answered.has(key)) return; // the first answer for a key is the one shown
   answered.add(key);
-  show(await res.json());
+  show(job);
 });
 
 cancel.addEventListener('click', async () => {
   if (!current) return;
-  const res = await fetch('/jobs/' + current.id + '/cancel', { method: 'POST' });
-  if (res.ok || res.status === 409) show(await res.json());
+  const { ok, job } = await send('cancel', { id: current.id }, '/jobs/' + current.id + '/cancel', { method: 'POST' });
+  if (ok && job) show(job);
 });
 
+if (until !== Infinity) setTimeout(enable, Math.max(0, until - Date.now()));
 newKey();
 </script>
 </body>

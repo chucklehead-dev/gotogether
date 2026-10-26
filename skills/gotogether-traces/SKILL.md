@@ -152,7 +152,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
 A run another tool drove (a Bombadil exploration, a Playwright suite, a
 replayed session) is checked from the driver's own trace: read
 [references/external-drivers.md](references/external-drivers.md) before
-writing its adapter (a click is an invocation, only an observed outcome
+writing its adapter (a click is an invocation, only its request's own answer
 completes it; the journey's own times, call ids and order kept; refs to
 its screenshots; what a settle covers; its manifest and strict gating).
 

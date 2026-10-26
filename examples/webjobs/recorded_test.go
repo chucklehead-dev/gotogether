@@ -11,7 +11,6 @@ import (
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // The journey recorded with the real Bombadil (testdata/runs/faithful):
@@ -55,34 +54,38 @@ func edited(t *testing.T, edit func(n int, line string) *string) string {
 	return dir
 }
 
-// A click whose outcome the page never showed is pending: the recorded
-// journey with its first submission's answer taken out of the trace
-// (the page shows what it showed before, from that line on) does not
-// finish, whatever the server did.
+// A request whose answer the page never showed is pending: the recorded
+// journey cut at its first click, the requests it sent left unanswered
+// in the log, does not finish, whatever the server did.
 func TestClickWithNoOutcome(t *testing.T) {
 	if mutant != "" {
 		t.Skip("webjobs as it is")
 	}
 	t.Parallel()
 	qtest.RequireQuint(t)
-	var before json.RawMessage
 	cut := false
 	dir := edited(t, func(n int, l string) *string {
 		if cut {
 			return nil
 		}
-		var e map[string]json.RawMessage
+		if !strings.Contains(l, `"ui.submit"`) {
+			return &l
+		}
+		var e map[string]any
 		if err := json.Unmarshal([]byte(l), &e); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(e["action"]), `"ui.submit"`) {
-			e["snapshots"], cut = before, true // the click, and no answer seen
-			b, _ := json.Marshal(e)
-			s := string(b) + "\n"
-			return &s
+		for _, sn := range e["snapshots"].([]any) {
+			v := sn.(map[string]any)["value"].(map[string]any)
+			for _, r := range v["log"].([]any) {
+				r.(map[string]any)["code"], r.(map[string]any)["job"] = nil, nil // sent, no answer seen
+			}
+			v["id"], v["status"] = "", ""
 		}
-		before = e["snapshots"]
-		return &l
+		cut = true
+		b, _ := json.Marshal(e)
+		s := string(b) + "\n"
+		return &s
 	})
 	steps, err := Steps(dir)
 	if err != nil {
@@ -91,9 +94,6 @@ func TestClickWithNoOutcome(t *testing.T) {
 	run := qtest.Validate(t, "webjobs.binding.yaml", steps)
 	run.Expect(t, qtest.Pending("submit"))
 	qtest.Runs(run).Expect(t, qtest.None(qtest.Finishes()))
-	if f := run.Report.Finished(); f.Verdict != validate.Fail || !strings.Contains(f.Reason, "pending") {
-		t.Errorf("finished: %+v, want a miss for the pending click", f)
-	}
 }
 
 // A trace whose last line was cut off (Bombadil killed while writing it)
@@ -121,11 +121,7 @@ func TestTornTrace(t *testing.T) {
 	if !errors.As(err, &torn) {
 		t.Fatalf("err %v, want a torn tail", err)
 	}
-	run := qtest.Validate(t, "webjobs.binding.yaml", steps)
-	run.Expect(t, qtest.Conforms())
-	if f := run.Report.Finished(); f.Verdict != validate.NotEvaluated || !strings.Contains(f.Reason, "lost tail") {
-		t.Errorf("finished: %+v, want no verdict (lost tail)", f)
-	}
+	qtest.Validate(t, "webjobs.binding.yaml", steps).Expect(t, qtest.Conforms(), qtest.Undecided(qtest.Finishes(), "lost its tail"))
 }
 
 // rerecorded is what a journey's page steps become when recorded again

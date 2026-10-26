@@ -27,6 +27,14 @@ var mutants = map[string]string{
 	"doubleJob": "oneJobPerKey",
 	// a cancel is answered "cancelled" and the job runs on to ready
 	"cancelIgnored": "cancelHonoured",
+	// a cancel of a running job answers 500 and does nothing (the page
+	// ignores the error, and the job runs on to ready)
+	"cancelBroken": "noFailedRequest",
+	// a poll never says ready: the page shows the job running until a
+	// cancel's answer (409, ready) tells it, or for good
+	"statusStale": "within 500ms after unseenReady: readySeen",
+	// the report is committed whatever a cancel said
+	"commitAfterCancel": "noCommitAfterCancel",
 }
 
 // Overlay writes the go build overlay for mutant m into dir and returns
@@ -96,8 +104,9 @@ func TestMutants(t *testing.T) {
 }
 
 // TestMutant states what catches the mutant this binary was built with:
-// its invariant, violated by its recorded run (under -short) or by a live
-// run (Bombadil exploring the mutant's server for 45s).
+// its invariant (or eventual val) violated by the client's run of the
+// mutant's server and by its recorded Bombadil run (under -short), or by
+// a live run (Bombadil exploring the mutant's server for 45s).
 func TestMutant(t *testing.T) {
 	if mutant == "" {
 		t.Skip("webjobs as it is: TestMutants runs this test built with each mutant's overlay")
@@ -108,10 +117,11 @@ func TestMutant(t *testing.T) {
 	}
 	qtest.RequireQuint(t)
 	if testing.Short() {
+		clientRun(t, 1).Expect(t, qtest.Violates(inv))
 		recorded(t, mutant).Expect(t, qtest.Violates(inv))
 		return
 	}
-	j := live(t, mutant, Live{})
+	j := live(t, mutant, Live{Violation: true}) // Bombadil's own properties may catch it too
 	j.run.Expect(t, qtest.Violates(inv))
 	j.keep(t)
 }
