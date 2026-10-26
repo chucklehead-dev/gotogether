@@ -30,6 +30,8 @@ away, and the cluster also goes through a rolling upgrade.
 | [storage.go](storage.go) | the write-ahead log: hard state, snapshot and entries, persisted before any message is sent |
 | [sm.go](sm.go) | the state machine, its sessions (a retry answered as the first time), the log's two formats (v1 text, v2 binary) |
 | [client.go](client.go) | the clients: calls recorded when invoked and answered, retries with backoff, following the leader's hint |
+| [seams.go](seams.go) | where the node leaves its process: the peers' network, the clients', the log; their simulated implementations |
+| [realnet.go](realnet.go), [boltwal.go](boltwal.go), [cmd/raftkv-node](cmd/raftkv-node/main.go) | the real tier: the same node over HTTP on TCP, its log a bbolt file |
 | [raftkv_test.go](raftkv_test.go) | one `qtest.System` per configuration, explored or searched exhaustively |
 
 A run records one of two histories (`Config.Record`). The clients' calls
@@ -51,6 +53,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 5 of 50 mutant runs do |
 | `TestCatchUp` | `NoSnapshotReport`: a snapshot lost on the way is never reported to raft | a follower down while the clients write past a compaction, restarted, and its snapshot lost by a 200 ms cut; the cluster's history | the faithful follower catches up within 1 s in all 20 runs; the mutant's never does in 18 of 20 (`within 1s after behind: caughtUp`), though the cluster settles with a leader |
 | `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
+| `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs conform to the cluster's model |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
 ## What the runs taught
@@ -90,6 +93,42 @@ Go evaluator judged and that ran out of budget was searched again with
 quint, at the same budget and with the same no-verdict result, at minutes a run.
 It now stays no verdict (validate; DESIGN, the evaluator's
 confirmation).
+
+## Real tier
+
+The node's code also runs as a process of its own
+([cmd/raftkv-node](cmd/raftkv-node/main.go)): raft's messages and the
+clients' requests over HTTP on TCP ([realnet.go](realnet.go)), its log a
+bbolt file fsynced at every commit ([boltwal.go](boltwal.go)). It is the
+same `Node`: the simulation's seams are interfaces (`PeerNet`, `KVNet`,
+`WAL`, in [seams.go](seams.go)) whose simulated implementations are the
+qenv Services and Store, and outside a simulation `qenv.Go`, `Sleep`,
+`WaitFor` and `Mono` are goroutines and real time. The state the loop,
+the senders and the handlers share is under one lock, never held across
+a seam, so the simulated schedules are the ones they were.
+
+```sh
+RAFTKV_REAL=1 go test -run TestRealCluster -v .    # builds the binary, -race builds it with the detector
+go build ./cmd/raftkv-node
+raftkv-node -name n1 -incarnation 1 -listen 127.0.0.1:7001 \
+  -peer n2=127.0.0.1:7002 -peer n3=127.0.0.1:7003 -wal data/n1 -steps logs/n1.1.jsonl
+```
+
+Each node serves `POST /raft` (its peers), `POST /kv` (clients, through
+`HTTPNet` and the simulation's `Client.Do`, so a real client carries
+`NoRequestID`), `GET /status` (applied index, term, state, leader, code
+and log versions) and `GET /state` (its keys: the probe's `observe`).
+`-mutation` takes the mutants' names, `-version v2` is the upgraded code.
+A node records the cluster's history (boot, apply, campaign, lead,
+stepDown) into its `-steps` log, a new one per incarnation (its recorder
+`<name>.<incarnation>`, every node's process `cluster`); the clients
+record theirs. Both are checked by the bindings the simulation uses.
+
+Simulated only, so far: the faults. Nothing loses, delays or duplicates a
+real message, partitions the nodes or skews their clocks; the smoke
+test's one fault is a kill, which no step records (the model's `stop`),
+and the rolling upgrade is the simulation's. Raft's election randomness
+is crypto/rand's, so a real run does not replay.
 
 ## Running it
 
