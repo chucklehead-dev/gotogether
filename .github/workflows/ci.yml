@@ -338,6 +338,34 @@ jobs:
       - name: demos
         run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
 
+  payd:
+    # its own job: an unmodified net/http + database/sql service in qenv
+    # through qsql and qhttp, its mutants built as go test -overlay
+    # binaries, and the same service on SQLite
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/payd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/payd/go.mod
+          cache-dependency-path: examples/payd/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../../ci/install-quint.sh
+      - name: gofmt, vet, lint -sim
+        run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/payd
+      - name: test (three isolation levels, Exhaust within one fault, mutants as overlays, SQLite)
+        run: |
+          GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 30m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
+      - name: demos
+        run: ./run-demo.sh && MUTATION=precheck ./run-demo.sh
+
   maelstrom:
     runs-on: ubuntu-latest
     steps:

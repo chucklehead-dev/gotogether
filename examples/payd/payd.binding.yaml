@@ -1,0 +1,23 @@
+# The clients' requests and responses (recorded by a RoundTripper around
+# the SDK's transport), the charges the database committed (recorded at
+# the commit, from the database's change feed) and the processor's
+# captures as calls of model/payd.qnt's actions: every parameter is the
+# step's field of its name. Nothing is compared step by step: the model's
+# invariants judge every state, and the eventual vals the last state of a
+# run that settled.
+spec: model/payd.qnt
+module: payd
+
+actions:
+  request: {}
+  response: {}
+  charge: {}
+  capture: {}
+
+invariants: [noDoubleCharge, noDoubleCapture, responseMatchesCharge, chargeMatchesRequest]
+eventually: [answeredCharged, capturedCharged]
+
+# The model on its own (gotogether simulate): it allows every bug the
+# invariants rule out, so none holds by construction.
+simulate:
+  allows: [noDoubleCharge, noDoubleCapture, responseMatchesCharge, chargeMatchesRequest]
