@@ -51,8 +51,7 @@ func rerunOf(t *testing.T, bin string) func(ctx context.Context, actions []journ
 // -short, 8 at random out of it) shrinks, by removing actions and
 // rerunning the rest against a fresh server, to the few actions that
 // still show its failure (qtest.ShrinkActions keeps the first failing
-// rerun's failure). Under -short only doubleJob, with a small budget:
-// each candidate is a rerun and a check.
+// rerun's failure). Full mode: each candidate is a rerun and a check.
 func TestShrink(t *testing.T) {
 	t.Parallel()
 	if mutant != "" {
@@ -61,8 +60,8 @@ func TestShrink(t *testing.T) {
 	qtest.RequireQuint(t)
 	for m, most := range shrinks {
 		t.Run(m, func(t *testing.T) {
-			if testing.Short() && m != "doubleJob" {
-				t.Skip("a shrink of each mutant: full mode (doubleJob's per push)")
+			if testing.Short() {
+				t.Skip("a shrink of each mutant: full mode and nightly (the shrinker is tested per push in qtest)")
 			}
 			t.Parallel()
 			bin := filepath.Join(t.TempDir(), "webjobs")
@@ -70,17 +69,8 @@ func TestShrink(t *testing.T) {
 				t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
 			}
 			c := client()
-			cal := qtest.Calibration{}
-			if testing.Short() {
-				// two journeys (7 actions), a baseline of 3, and one rerun a
-				// candidate: doubleJob's failure is deterministic (a server
-				// that never looks a key up makes a job of each of the two
-				// requests, whichever comes first; the full run's 10 of 10
-				// baseline, and these 3 of 3, show it)
-				c.Journeys, cal = 2, qtest.Calibration{Baseline: 3, Reruns: 1, Budget: 15}
-			}
 			s := qtest.ShrinkActions(t, c.Plan(1), qtest.ActionShrink[journey.Action]{
-				Binding: "webjobs.binding.yaml", Rerun: rerunOf(t, bin), Calibration: cal,
+				Binding: "webjobs.binding.yaml", Rerun: rerunOf(t, bin),
 			})
 			s.Expect(t, qtest.Violates(mutants[m]), qtest.AtMostActions(most))
 		})

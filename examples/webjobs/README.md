@@ -245,10 +245,8 @@ failure), no rerun diverged or errored, and each claim
 (`AtMostActions(n)` with the sizes above, and `Violates` of the
 mutant's invariant) holds. Keyed jobs are what makes the reruns
 meaningful: a removed submission renames and retimes no other job.
-Under `-short` only doubleJob runs, from two journeys (6 actions) with a
-baseline of 3 and one rerun a candidate (its failure is deterministic: a
-server that never looks a key up makes a job of each request; 3 of 3
-and 10 of 10 baselines): 10 reruns, about 50s at load 15.
+`TestShrink` is full mode and nightly only: the shrinker itself is
+tested per push in qtest, against brute force.
 `TestShrinkRecorded` (full mode) shrinks Bombadil's recorded failures
 the same way, through `bombadiltrace.Actions`: doubleJob's recorded journey (20 actions) to its one double-clicked
 submission in 27 reruns, cancelIgnored's (14) to a submission and its
@@ -269,12 +267,11 @@ regress with a push: `TestClient` (the faithful server, in process),
 and the client drives that program from the test process), `TestRecorded`
 (the real trace format, faithful), three of `TestProbes` (a cancel never
 answered, the page stuck at accepted, the key sent), `TestTimesKept`'s
-readyEarly half, `TestShrink/doubleJob` (two journeys, 10 reruns) and the
-adapter's tests. The full run adds the CLI's
+readyEarly half, and the adapter's tests. The full run adds the CLI's
 manifest replay, the mutants' recorded runs (`TestRecordedMutants`),
 the probes whose claim a mutant's client run states per push too, the
 re-recorded faithful journey, `TestClickWithNoOutcome`, `TestTornTrace`,
-`TestObservationMutants`, the other mutants' shrinks, `TestShrinkRecorded`,
+`TestObservationMutants`, `TestShrink`, `TestShrinkRecorded`,
 `TestRecordedActions` and the live runs.
 
 Under -short the client runs 12 journeys at seed 1, alternating between
@@ -289,7 +286,9 @@ Measured on 2026-10-26, back to back on a 4-core machine that other
 work loaded to about 16: the -short run took 147s wall and 286 CPU-s
 before this cut (a633d81), and 74s and 146 CPU-s after. With the
 machine near quiet (load 1.4 and 6.6 at their starts), the run before
-took 77s and the run after 43s (`ci/test-times.txt` budgets 45).
+took 77s and the run after 43s. With keyed jobs, the actions and the
+shrinks (full mode) added, it took 38s at load 1.4 (`ci/test-times.txt`
+budgets 40).
 
 ## How it runs
 
