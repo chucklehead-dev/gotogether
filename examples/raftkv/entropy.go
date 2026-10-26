@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"io"
 	"slices"
-	"sync"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
@@ -13,14 +12,12 @@ import (
 // raft randomizes each election timeout with crypto/rand (its globalRand,
 // raft.go), which no Config option replaces: a simulation that left it so
 // would not replay. electionEntropy takes crypto/rand.Reader's place
-// process-wide, once: read from a task of a node's process, it draws
+// process-wide, at init: read from a task of a node's process, it draws
 // each byte from the simulation ("raft.election"); read anywhere else (a
-// recorder's id) it is the real reader.
-var electionOnce sync.Once // process-wide: the reader is installed once
-
-func installElectionEntropy() {
-	electionOnce.Do(func() { rand.Reader = electionEntropy{real: rand.Reader} })
-}
+// recorder's id, the real tier) it is the real reader. It was installed
+// by the first Deploy, which the race detector caught writing the
+// variable while a parallel exploration's recorder read it.
+func init() { rand.Reader = electionEntropy{real: rand.Reader} }
 
 type electionEntropy struct{ real io.Reader }
 

@@ -163,7 +163,6 @@ type Deployment struct {
 // Deploy builds the nodes on s: their processes, logs and services.
 func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	cfg.defaults()
-	installElectionEntropy()
 	d := &Deployment{Sim: s, cfg: cfg}
 	d.kv = simNet{d}
 	s.Clocks = cfg.Clocks
