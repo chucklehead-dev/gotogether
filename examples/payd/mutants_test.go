@@ -7,12 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // mutants are the planted bugs, each a directory of testdata/mutants/ whose files
 // replace payd's of the same name (a go build overlay): payd's own files
 // stay as they are, and each mutant is a whole file to diff against them.
-var mutants = []string{"precheck", "noForwardKey", "pendingConflict"}
+var mutants = []string{"precheck", "noForwardKey", "pendingConflict", "debitFirst", "lostRace", "centsInBody"}
 
 // Overlay writes the go build overlay for mutant m into dir and returns
 // its path: the mutant's files in place of payd's, and a test file that
@@ -63,13 +64,24 @@ func TestMutants(t *testing.T) {
 			if testing.Short() {
 				args = append(args, "-short")
 			}
+			if d, ok := t.Deadline(); ok {
+				args = append(args, "-timeout", time.Until(d).Round(time.Second).String())
+			}
 			cmd := exec.Command("go", append(args, ".")...)
+			// a mutant's claims have their stated miss chance at their own
+			// seeds: a nightly's GOTOGETHER_SEEDS would only make it slow
+			// (fresh seeds, GOTOGETHER_SEED_OFFSET, still apply)
+			for _, e := range os.Environ() {
+				if !strings.HasPrefix(e, "GOTOGETHER_SEEDS=") {
+					cmd.Env = append(cmd.Env, e)
+				}
+			}
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("mutant %s: %v\n%s", m, err, out)
 			}
 			for _, l := range strings.Split(string(out), "\n") {
-				if strings.Contains(l, "runs, ") || strings.HasPrefix(strings.TrimSpace(l), "---") || strings.Contains(l, "charges for") {
+				if strings.Contains(l, "runs, ") || strings.HasPrefix(strings.TrimSpace(l), "---") || strings.Contains(l, "charges for") || strings.Contains(l, "conform") {
 					t.Log(strings.TrimSpace(l))
 				}
 			}

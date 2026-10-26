@@ -29,6 +29,10 @@ type Config struct {
 	Isolation qenv.Isolation
 	// Workload is each client's charges, in order (Shared by default).
 	Workload [][]Op
+	// EditCharge has an operator edit the first charge once the clients
+	// are done (UPDATE charges SET amount = 0): what the change feed must
+	// show the model.
+	EditCharge bool
 	// Check runs the scheduler's and the Store's own checks at every step
 	// and commit (as GOTOGETHER_CHECK=1 does).
 	Check bool
@@ -100,7 +104,7 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	// payd's main, at every incarnation: open the database, migrate,
 	// serve. It is the service's own code from there on.
 	d.Payd = s.Process("payd", true, func(ctx context.Context) {
-		db := qsql.Open(s, d.Store, qsql.Options{BadConn: true, OnCommit: recordCharges})
+		db := qsql.Open(s, d.Store, qsql.Options{BadConn: true, OnCommit: recordCommit})
 		for payd.Migrate(ctx, db) != nil {
 			qenv.Sleep(ctx, 100*time.Millisecond) // as a supervisor restarts a service that failed to start
 		}
@@ -112,18 +116,38 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	return d
 }
 
-// recordCharges is the database's change feed (qsql's OnCommit, CDC in
-// production): a charge step for each charge a commit inserted, at the
-// commit, its linearization point.
-func recordCharges(ctx context.Context, changes []qsql.Change) {
+// recordCommit is the database's change feed (qsql's OnCommit, CDC in
+// production), at the commit, the changes' linearization point: a charge
+// step for each charge a commit inserted, chargeChanged for one it updated
+// or deleted, then a debit for each account whose balance it lowered (by
+// the key of the charge it inserted, "" if none).
+func recordCommit(ctx context.Context, changes []qsql.Change) {
+	key := ""
 	for _, c := range changes {
-		if c.Table == "charges" && c.Op == "insert" {
+		if c.Table != "charges" {
+			continue
+		}
+		switch c.Op {
+		case "insert":
+			key, _ = c.New["idem_key"].(string)
 			qobs.Record(ctx, "charge", nil, "key", c.New["idem_key"], "id", c.New["id"], "account", c.New["account"], "amount", c.New["amount"])
+		default:
+			qobs.Record(ctx, "chargeChanged", nil, "id", c.Old["id"])
+		}
+	}
+	for _, c := range changes {
+		if c.Table == "accounts" && c.Op == "update" {
+			was, _ := c.Old["balance"].(int64)
+			now, _ := c.New["balance"].(int64)
+			if was != now {
+				qobs.Record(ctx, "debit", nil, "account", c.New["id"], "key", key, "amount", was-now)
+			}
 		}
 	}
 }
 
-// Run runs payd and its clients on c, then settles.
+// Run runs payd and its clients on c, settles, and records the accounts'
+// balances.
 func Run(c qenv.Chooser, cfg Config) error {
 	s := qenv.New(c)
 	defer s.Close()
@@ -150,7 +174,26 @@ func Run(c qenv.Chooser, cfg Config) error {
 	if err := s.Run(time.Minute); err != nil {
 		return err
 	}
-	return s.Settle(time.Minute) // an *Unsettled is the run's outcome, judged
+	if cfg.EditCharge {
+		s.Spawn("operator", func(ctx context.Context) {
+			db := qsql.Open(s, d.Store, qsql.Options{Name: "operator", OnCommit: recordCommit})
+			if rows := qsql.Table(d.Store, "charges"); len(rows) > 0 {
+				db.ExecContext(ctx, `UPDATE charges SET amount = 0 WHERE id = ?`, rows[0]["id"])
+			}
+		})
+		if err := s.Run(time.Minute); err != nil {
+			return err
+		}
+	}
+	if err := s.Settle(time.Minute); err != nil {
+		return err // an *Unsettled is the run's outcome, judged
+	}
+	// the balances, once nothing is pending, then that it is still settled
+	for _, r := range qsql.Table(d.Store, "accounts") {
+		qobs.Record(s.Context(), "balance", nil, "account", r["id"], "balance", r["balance"])
+	}
+	qobs.Settled(s.Context())
+	return nil
 }
 
 // Processor is the payment processor's double: POST /v1/captures captures

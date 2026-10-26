@@ -3,7 +3,10 @@
 Read this before simulating a service that uses `database/sql` (a
 payments service, anything written for PostgreSQL or CockroachDB): its
 queries, transactions and retry loops stay as they are, over a
-`qenv.Store`.
+`qenv.Store`. [examples/payd](../../../examples/payd) is a whole service
+done this way, together with qhttp (services.md): its harness (`sim.go`)
+opens the database in the process's start function, records charges and
+debits from `OnCommit`, and probes the balances after the settle.
 
 ```go
 st := qenv.NewStore(sim, "paydb", qenv.ReadCommitted) // the level is the Store's, store-wide
@@ -12,7 +15,7 @@ db := qsql.Open(sim, st, qsql.Options{
 	BadConn:  true, // "sql.paydb.conn": driver.ErrBadConn before anything ran; database/sql retries it
 	OnCommit: func(ctx context.Context, ch []qsql.Change) { /* record the step: the commit is its linearization point */ },
 })
-sim.Process("payd", true, func(ctx context.Context) { /* payd.Serve(ctx, db) */ })
+sim.Process("payd", true, func(ctx context.Context) { /* qsql.Open, payd.Migrate(ctx, db), srv.Handle(ctx, payd.New(db, ...)) */ })
 rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
 ```
 

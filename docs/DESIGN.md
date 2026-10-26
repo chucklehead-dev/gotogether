@@ -3264,15 +3264,23 @@ jitter does not change a run, and remembers it, so retries under one
 deadline use it up. A service's own `ctx.Err()` stays on the wall timer.
 
 **payd.** Steps are recorded at the adapters and in test code only: the
-client's transport records requests and responses, qsql's commit hook a
-charge, the processor double a capture. The model asks for no double
-charge or capture, responses matching charges, and every answered or
-captured key charged after a settle. Mutants are build overlays of the
-service's files (`go test -overlay`), since qmut's operators cannot
-write a check-then-insert: the key checked outside the claim, the key
-not forwarded to the processor, a pending key answered "retry later".
-Each is caught; the real tier catches the first two under concurrent
-load.
+client's transport records requests and responses (what was asked, and
+the charge a 2xx names), qsql's commit hook the charges, edits of charges
+and debits, the processor double the captures, and a probe after the
+settle the balances. The model asks for no double charge or capture,
+responses matching charges by id, account and amount, no refusal of a
+key that was charged, no money leaving an account but by its charges,
+and, after the settle, every answered or captured key charged and every
+valid key answered. Mutants are build overlays of the service's files
+(`go test -overlay`), since qmut's operators cannot write a
+check-then-insert: the key checked outside the claim, the key not
+forwarded to the processor, a pending key answered "retry later", the
+debit ahead of the compare-and-set, the race's loser refused, the
+response's amount in cents. Each is caught; the real tier, where each
+key's senders meet and send together, is claimed to catch all but the
+last under concurrency alone. The review of payd found the model blind to money
+leaving accounts and to refusals: two of those mutants passed every
+test before the debit, balance and refusal properties.
 
 Three reviews: of the plan (database/sql's pool), of the adapters (a
 refusal for a request already handled, deadlines never used up,

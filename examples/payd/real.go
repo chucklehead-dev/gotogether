@@ -78,10 +78,16 @@ type RealCharge struct {
 
 // RunReal runs payd for real: SQLite in dir, payd and the processor
 // behind httptest servers, each client's charges on a goroutine of its
-// own (all at once), recorded by the same Recording as in a simulation.
-// The steps go to the recorder in ctx (and to the global one, for the
-// servers' goroutines); after the clients are done the charges are read
-// from the table and recorded, and the run is settled.
+// own, the clients that send one key sending it together (they wait for
+// each other at the key: a page submitted from several tabs at once),
+// recorded by the same Recording as in a simulation. The steps go to the
+// recorder in ctx (and to the global one, for the servers' goroutines).
+// Once the clients are done and the servers have finished every handler,
+// the charges and the balances are read from the tables and recorded, and
+// the run is settled.
+//
+// What it cannot see: no fault is injected (no crash, no lost response,
+// no commit's answer lost), so only what concurrency alone does shows.
 func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, error) {
 	db, err := OpenSQLite(filepath.Join(dir, "payd.db"))
 	if err != nil {
@@ -97,10 +103,9 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 		}
 	}
 	proc := httptest.NewServer(&RealProcessor{})
-	defer proc.Close()
 	srv := httptest.NewServer(payd.New(db, &http.Client{Timeout: 5 * time.Second}, proc.URL))
-	defer srv.Close()
 
+	together := newBarrier(workload)
 	var wg sync.WaitGroup
 	for i, ops := range workload {
 		name := fmt.Sprintf("client%d", i+1)
@@ -110,11 +115,14 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 		go func() {
 			defer wg.Done()
 			for _, op := range ops {
+				together.arrive(op.Key)
 				sdk.CreateCharge(ctx, op.Key, op.Account, op.Amount) // its outcome is in the steps
 			}
 		}()
 	}
 	wg.Wait()
+	srv.Close() // waits for every handler, those whose client gave up included
+	proc.Close()
 
 	rows, err := db.QueryContext(ctx, `SELECT idem_key, id, account, amount FROM charges ORDER BY id`)
 	if err != nil {
@@ -133,8 +141,50 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	qobs.Settled(ctx) // every client is done: nothing is pending
+	for _, a := range sortedKeys(Accounts) {
+		var b int64
+		if err := db.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id = ?`, a).Scan(&b); err != nil {
+			return nil, err
+		}
+		qobs.Record(ctx, "balance", nil, "account", a, "balance", b)
+	}
+	qobs.Settled(ctx) // every client is done, every handler finished: nothing is pending
 	return res, nil
+}
+
+// barrier holds each key's senders until all of them are there.
+type barrier struct {
+	mu      sync.Mutex
+	want    map[string]int
+	arrived map[string]int
+	open    map[string]chan struct{}
+}
+
+func newBarrier(workload [][]Op) *barrier {
+	b := &barrier{want: map[string]int{}, arrived: map[string]int{}, open: map[string]chan struct{}{}}
+	for _, ops := range workload {
+		for _, op := range ops {
+			b.want[op.Key]++
+		}
+	}
+	return b
+}
+
+// arrive waits until every sender of key has arrived. The senders must
+// meet the keys they share in one order (Concurrent's do).
+func (b *barrier) arrive(key string) {
+	b.mu.Lock()
+	ch, ok := b.open[key]
+	if !ok {
+		ch = make(chan struct{})
+		b.open[key] = ch
+	}
+	b.arrived[key]++
+	if b.arrived[key] == b.want[key] {
+		close(ch)
+	}
+	b.mu.Unlock()
+	<-ch
 }
 
 // Concurrent is a real run's load: n keys, each sent by every one of

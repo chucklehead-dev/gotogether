@@ -7,11 +7,13 @@ recorded in the handler where the write takes effect, or converted from
 the server's OTel spans (`convert` rules), and validated with the
 binding. Run it for real and validate its step log (`run-demo.sh`).
 
-## net/http in a simulation: `qenv/qhttp`
+## net/http in a simulation: `qenv/qhttp` (examples/payd)
 
 Read this before simulating a service whose API is HTTP, or a client
 that calls one (a payments processor, a webhook): the handler and the
-client stay as they are.
+client stay as they are. [examples/payd](../../../examples/payd) is a
+service and its SDK done so: steps recorded by a RoundTripper around the
+SDK's transport and in a processor double, none in the service.
 
 ```go
 var srv *qhttp.Server

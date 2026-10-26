@@ -67,7 +67,11 @@ Add only what isn't a same-named field:
 A conforming verdict means nothing until you have seen the same test
 reject a bug. For each property and each `expect`:
 1. Add a mutant to the implementation: a `Mutation` option, never a
-   build tag, so one binary has them all.
+   build tag, so one binary has them all. Code you must not edit (a
+   service written against the standard library alone, third-party
+   code) takes its mutants as `go test -overlay` files instead: read
+   [references/overlays.md](references/overlays.md) for how, and for when
+   qweave's `-mutate` fits better.
 2. Write the test that states *how* the mutant must show up. "It fails"
    is not enough: a binding error also fails.
 

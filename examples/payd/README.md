@@ -19,11 +19,11 @@ checked against one model. The planted bugs are Go build overlays
 |---|---|
 | [payd/payd.go](payd/payd.go), [charge.go](payd/charge.go), [schema.go](payd/schema.go), [processor.go](payd/processor.go) | the service: `Migrate(ctx, db)`, `New(db, proc, procURL)`; POST /v1/charges with an `Idempotency-Key`, GET /v1/charges/{id} |
 | [payd/client](payd/client/client.go) | the SDK: retries a charge with its key on a timeout, a reset, a refused connection or a 5xx |
-| [model/payd.qnt](model/payd.qnt) | requests, responses, charges and captures by key; `noDoubleCharge`, `noDoubleCapture`, `responseMatchesCharge`, `chargeMatchesRequest` invariants, `answeredCharged` and `capturedCharged` eventual vals |
+| [model/payd.qnt](model/payd.qnt) | requests, responses, charges, debits, captures and the balances after the settle; the properties below |
 | [payd.binding.yaml](payd.binding.yaml) | the steps as the model's actions, every parameter the step's field |
 | [record.go](record.go) | `Recording`, the RoundTripper around the SDK's transport that records each attempt's request and response |
 | [sim.go](sim.go) | the simulated deployment: payd's process (`qsql.Open`, `Migrate`, `srv.Handle(payd.New(...))` at every incarnation), its Store, the processor double, the clients |
-| [real.go](real.go) | the real one: SQLite, `httptest`, clients on goroutines |
+| [real.go](real.go) | the real one: SQLite, `httptest`, clients on goroutines meeting at each key |
 | [testdata/mutants](testdata/mutants) | each mutant's files, replacing payd's of the same name |
 | [cmd/payd](cmd/payd/main.go) | payd on SQLite, with the processor double in process |
 
@@ -60,49 +60,93 @@ Nothing is recorded in payd. Every step is recorded at an adapter or in
 test code:
 
 - `request` and `response` come from `Recording`, wrapped around the SDK's
-  transport. A response with no answer (a timeout, a reset, a refusal) is
-  status 0.
-- `charge` comes from qsql's `Options.OnCommit`, for each row a commit
-  inserted into charges. The commit is the charge's linearization point
-  (change data capture is the production analogue). In the real tier, the
-  charges are read from the table after the run.
+  transport. A response carries what the attempt asked and, for a 2xx,
+  the charge its body names (id, account, amount). An attempt that got no
+  response (a timeout, a reset, a refusal, a body that never arrived) is
+  status 0, and the client gets the same error.
+- `charge`, `chargeChanged` and `debit` come from qsql's `Options.OnCommit`:
+  each row a commit inserted into charges, each charge it updated or
+  deleted, and each account balance it lowered. The commit is their
+  linearization point (change data capture is the production analogue).
+  In the real tier, the charges are read from the table after every
+  handler has finished (`httptest.Server.Close` waits for them).
 - `capture` comes from the processor double, where it commits.
+- `balance` is each account's balance, read once the run settled, in both
+  tiers.
 
 A charge may be recorded before or after the response that names it, so
-the model's invariants are about what was seen, in any order. The
-eventual vals are judged after the run settled.
+the model's invariants are about what was seen, in any order:
+
+| property | what it says |
+|---|---|
+| `noDoubleCharge`, `noDoubleCapture` | a key is charged at most once, and captured at most once |
+| `responseMatchesCharge` | every 2xx for a key names one charge, the key's: its id, account and amount |
+| `chargeMatchesRequest` | a charge is of what its key first asked |
+| `noRefusalOfCharged` | a key refused (4xx) when it asked what it first asked is never charged or captured |
+| `chargesImmutable` | no charge is updated or deleted |
+| `noDebitWithoutCharge` | no account loses more than its charges add up to |
+| `balanceMatchesCharges` | a balance read after the settle is the initial one less the account's charges |
+| `answeredCharged` (eventual) | every key answered 2xx has exactly one charge, the one named, and exactly one capture |
+| `capturedCharged` (eventual) | every captured key was charged |
+| `allAnswered` (eventual) | every key asked for validly was answered 2xx: the SDK retries until it is, and the faults stop at the settle |
+
+The real tier injects no faults (no crash, no lost response, no lost
+commit answer). It shows what concurrency alone does: each key is sent
+by three clients that wait for each other at the key, so they send it
+together.
 
 ## What each test catches
 
+Rates were measured on 2026-10-26. A claim's seeds are chosen so that it
+misses with a chance under 5% at its measured rate. Under `-short` each
+mutant states its cheapest claim; the rest run in the full tests.
+
 | test | mutant | check | verdict |
 |---|---|---|---|
-| `TestFaithful` | none | 20 seeds (4 under `-short`) at read committed, snapshot isolation and serializable, then with a third of payd's requests duplicated or late. Every fault is on: lost, duplicated and late requests and responses to payd and to the processor, refused connections, broken database connections, commits applied with their answer lost (08006), and payd crashing (its crash window included). `Check` (the Store's history checker) is on | every run conforms and settles; in the duplicated runs, at least half duplicate a request and half crash payd (measured: all of them, and 59 of 60) |
+| `TestFaithful` | none | 20 seeds at read committed, snapshot isolation and serializable (2 under `-short`), then 20 (4) with a third of payd's requests duplicated or late. Every fault is on: lost, duplicated and late requests and responses to payd and to the processor, refused connections, broken database connections, commits applied with their answer lost (08006), and payd crashing (its crash window included). The Store's history checker is on | every run conforms and settles; at least half the duplicated runs duplicate a request and crash payd (measured: 60 of 60 and 59 of 60) |
 | `TestOneFault` | none | `Exhaust` within one fault: one client's one charge | all 78 runs conform |
-| `TestReal` | none | SQLite behind real HTTP: 30 keys, each sent by three clients at once | conforms; 30 charges |
+| `TestReal` | none | SQLite behind real HTTP: 30 keys (10 under `-short`), each sent by three clients at once | conforms; one charge per key |
 | `TestKeyReuse` | none | a key sent again, again with another amount, no key, no account | the same 201 replayed, 409, 400, 404; one debit |
-| `TestMutants/precheck` | `precheck`: the key checked by a lookup of its charge, in its own autocommit outside the transaction that makes it, and no UNIQUE on `charges.idem_key` | `Exhaust` within one fault (one charge); two clients sending one key at once with no faults; for real, 10 keys each sent by three clients at once | one run of 66 within one fault charges twice (the duplicated request); every run with two tabs (10 of 10, 2 under `-short`; 40 of 40 measured) charges twice; for real, 14 to 23 charges for 10 keys (10 of 10 runs); never a double capture (`None(Violates("noDoubleCapture"))`: the key still reaches the processor) |
-| `TestMutants/noForwardKey` | `noForwardKey`: the capture sent without the `Idempotency-Key` | `Exhaust` within one fault (one charge); for real, as above | 30 of 76 runs within one fault capture twice (a capture's answer lost, a crash between capture and completion, a duplicate); for real, with no fault, two tabs' requests both drive the key and both capture (5 of 5 runs); never a double charge |
-| `TestMutants/pendingConflict` | `pendingConflict`: a key found pending answers 409 "in progress, retry later" | `Exhaust` within one fault (one charge) | 29 of 78 runs violate `eventually capturedCharged`: the processor captured, payd answered 502, the retry was refused, and after the settle the key has no charge. No invariant fails: only the eventual check sees it. The real tier's concurrent load does not catch it (the second tab's 409 is not retried, and the first completes) |
+| `TestChargeEdited` | none: an operator edits a charge after the run | one run | violates `chargesImmutable` |
+| `TestMutants/precheck` | `precheck`: the key looked up in its own autocommit, outside the transaction that charges; no UNIQUE on `charges.idem_key` | two tabs, no faults; one client with half its requests duplicated; for real (16 keys) | two tabs: 40 of 40 runs charge twice; duplicates: 22 of 60; for real: 15 of 15 runs (14 to 23 charges for 10 keys). Never a double capture: the processor got the key |
+| `TestMutants/noForwardKey` | `noForwardKey`: the capture sent without the key | `Exhaust` within one fault; for real (16 keys) | 30 of 76 runs capture twice; for real, without a fault: 15 of 15 runs. Never a double charge |
+| `TestMutants/pendingConflict` | `pendingConflict`: a key found pending answers 409 "in progress" | two tabs, no faults; `Exhaust` within one fault; for real | two tabs: 40 of 40 runs refuse a key that is charged (`noRefusalOfCharged`); within one fault 29 of 78 runs refuse a captured key, and 5 more never answer it 2xx (`eventually allAnswered`); for real: 15 of 15 |
+| `TestMutants/debitFirst` | `debitFirst`: the debit ahead of the compare-and-set, so the losing attempt debits without a charge | two tabs, no faults; for real | `noDebitWithoutCharge` and `balanceMatchesCharges` in 40 of 40 runs; for real (no debit is seen there) the balances: 15 of 15 |
+| `TestMutants/lostRace` | `lostRace`: the losing attempt answers 409 "already processed" instead of the stored response | two tabs, no faults; for real | `noRefusalOfCharged` in 40 of 40 runs; for real 15 of 15 |
+| `TestMutants/centsInBody` | `centsInBody`: the response's amount in cents | one charge | `responseMatchesCharge` in every run |
 | `TestPaydImportsNoToolkit` | none | `go list -deps ./payd/...` | the standard library alone |
 
-Each mutant fails the faithful tests too: `precheck` fails `TestFaithful`
-(every level), `TestOneFault` and `TestReal`; `noForwardKey` fails all
-three; `pendingConflict` fails `TestFaithful` and `TestOneFault`. Each
-mutant's claims fail on payd as it is: built with only the mutant's name
-and not its files, every `Some` claim finds no run.
+The real runs of 15 of 15 were measured with 10 keys (pendingConflict's
+and noForwardKey's also with 4); the tests use 16 keys. A key's tabs race
+in some runs only (in lostRace's, about one key in four), so a run of
+many keys rarely misses.
 
-The two guards back each other up. With the compare-and-set removed, the
-charges' UNIQUE refuses the second insert (23505, a 500, and the retry
-replays). With the UNIQUE removed, the compare-and-set lets one attempt
-through. Either alone conforms. With both removed, `TestFaithful` (read
-committed, serializable), `TestOneFault` and `TestReal` charge twice.
+**Measured once on 2026-10-26, not asserted.** Built with each mutant's
+overlay, the faithful tests fail:
+- `precheck` fails `TestFaithful` (every level), `TestOneFault` and `TestReal`;
+- `noForwardKey` fails all three;
+- `pendingConflict` fails `TestFaithful` and `TestOneFault`.
+
+Built with only the mutant's name and none of its files, each mutant's
+`Some` claim found no run. Before the model saw money leave accounts and
+refusals, `debitFirst` and `lostRace` passed every test (a review found
+them).
+
+The two guards back each other up (measured the same day). With the
+compare-and-set removed, the charges' UNIQUE refuses the second insert
+(23505, a 500, and the retry replays). With the UNIQUE removed, the
+compare-and-set lets one attempt through. Either alone conforms; with
+both removed, `TestFaithful` (read committed, serializable),
+`TestOneFault` and `TestReal` charge twice.
 
 ## How the mutants run
 
 A mutant is a directory of `testdata/mutants/` whose files replace
 payd's files of the same names. `TestMutants` writes a go build overlay
 for each mutant: the mutant's files, plus a test file that sets
-`mutant`. It then runs `go test -overlay <it> -run '^TestMutant$'`, and
+`mutant`. It then runs `go test -overlay <it> -run '^TestMutant$'` with
+its own `-short` and `-timeout`, and without `GOTOGETHER_SEEDS` (a
+mutant's claims have their stated miss chance at their own seeds).
 `TestMutant` states the mutant's claims with `Expect`. payd's sources
 are never touched, and each mutant is a whole file to diff against
 payd's.
@@ -117,8 +161,8 @@ second, cached after), and leaves the binary the service's own.
 ## Running it
 
 ```sh
-go test -short ./...                 # about 45 s
+go test -short ./...                 # about 50 s
 ./run-demo.sh                        # the faithful service, then cmd/payd answering one key twice
-MUTATION=precheck ./run-demo.sh      # or no-forward-key, pending-conflict
+MUTATION=precheck ./run-demo.sh      # or no-forward-key, pending-conflict, debit-first, lost-race, cents-in-body
 go run ./cmd/payd -db /tmp/payd.db   # then: curl -X POST localhost:8080/v1/charges -H 'Idempotency-Key: k1' -d '{"account": "acct_1", "amount": 250}'
 ```

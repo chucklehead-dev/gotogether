@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # payd, unmodified, explored in a simulation and run for real on SQLite,
 # every run checked against the model. MUTATION= one of precheck,
-# no-forward-key, pending-conflict builds payd with that mutant's overlay
-# (testdata/mutants/) and shows what catches it; without one, the faithful
+# no-forward-key, pending-conflict, debit-first, lost-race, cents-in-body
+# builds payd with that mutant's overlay (testdata/mutants/) and shows
+# what catches it; without one, the faithful
 # service under every fault at three isolation levels, then for real, then
 # cmd/payd answering one key twice with one charge.
 set -euo pipefail
@@ -12,6 +13,9 @@ case "${MUTATION:-}" in
   precheck) run='TestMutants$/^precheck$' ;;
   no-forward-key) run='TestMutants$/^noForwardKey$' ;;
   pending-conflict) run='TestMutants$/^pendingConflict$' ;;
+  debit-first) run='TestMutants$/^debitFirst$' ;;
+  lost-race) run='TestMutants$/^lostRace$' ;;
+  cents-in-body) run='TestMutants$/^centsInBody$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 echo "== payd ${MUTATION:+(mutation $MUTATION)}"

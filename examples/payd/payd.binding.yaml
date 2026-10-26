@@ -1,23 +1,32 @@
 # The clients' requests and responses (recorded by a RoundTripper around
-# the SDK's transport), the charges the database committed (recorded at
-# the commit, from the database's change feed) and the processor's
-# captures as calls of model/payd.qnt's actions: every parameter is the
-# step's field of its name. Nothing is compared step by step: the model's
-# invariants judge every state, and the eventual vals the last state of a
-# run that settled.
+# the SDK's transport), the charges and debits the database committed
+# (recorded at the commit, from the database's change feed, or read from
+# the tables after a real run), the processor's captures and the balances
+# read after the settle as calls of model/payd.qnt's actions: every
+# parameter is the step's field of its name. Nothing is compared step by
+# step: the model's invariants judge every state, and the eventual vals
+# the last state of a run that settled.
 spec: model/payd.qnt
 module: payd
+
+constants:
+  INITIAL: 'Map("acct_1" -> 1000, "acct_2" -> 500)'
 
 actions:
   request: {}
   response: {}
   charge: {}
+  chargeChanged: {}
+  debit: {}
   capture: {}
+  balance: {}
 
-invariants: [noDoubleCharge, noDoubleCapture, responseMatchesCharge, chargeMatchesRequest]
-eventually: [answeredCharged, capturedCharged]
+invariants: [noDoubleCharge, noDoubleCapture, responseMatchesCharge, chargeMatchesRequest, noRefusalOfCharged,
+  chargesImmutable, noDebitWithoutCharge, balanceMatchesCharges]
+eventually: [answeredCharged, capturedCharged, allAnswered]
 
 # The model on its own (gotogether simulate): it allows every bug the
 # invariants rule out, so none holds by construction.
 simulate:
-  allows: [noDoubleCharge, noDoubleCapture, responseMatchesCharge, chargeMatchesRequest]
+  allows: [noDoubleCharge, noDoubleCapture, responseMatchesCharge, chargeMatchesRequest, noRefusalOfCharged,
+    chargesImmutable, noDebitWithoutCharge, balanceMatchesCharges]

@@ -28,29 +28,35 @@ func realRun(t *testing.T, keys, senders int) (*qtest.Run, *RealResult) {
 }
 
 // payd as it is, on SQLite behind real HTTP, every key sent by three
-// clients at once: each charged and captured once, every answer its charge.
+// clients at once (10 under -short): each charged and captured once, every
+// answer its charge, the balances what the charges took.
 func TestReal(t *testing.T) {
 	qtest.RequireQuint(t)
 	if mutant != "" {
 		t.Skip("payd as it is; a mutant's real run is in TestMutant")
 	}
-	run, res := realRun(t, 30, 3)
+	keys := 30
+	if testing.Short() {
+		keys = 10
+	}
+	run, res := realRun(t, keys, 3)
 	run.Expect(t, qtest.Conforms())
-	if len(res.Charges) != 30 {
-		t.Fatalf("%d charges for 30 keys", len(res.Charges))
+	if len(res.Charges) != keys {
+		t.Fatalf("%d charges for %d keys", len(res.Charges), keys)
 	}
 }
 
-// TestRealPrecheck is the precheck mutant's real run (from TestMutant):
-// three clients sending each key at once race the lookup, and some key is
-// charged twice.
-func TestRealPrecheck(t *testing.T) {
-	if mutant != "precheck" {
-		t.Skip("the precheck mutant's: TestMutants runs it")
-	}
-	run, res := realRun(t, 10, 3)
-	run.Expect(t, qtest.Violates("noDoubleCharge"))
-	t.Logf("%d charges for 10 keys", len(res.Charges))
+// realMutant is a mutant's real run (from TestMutant): keys keys, each
+// sent by three clients at once, violating invariant. A key's tabs race
+// in some runs only (lostRace's loser must have captured before the
+// winner completes: about one key in four), so a run of many keys misses
+// rarely: none of 15 runs of 10 keys did, for any mutant (2026-10-26).
+func realMutant(t *testing.T, keys int, invariant string) {
+	t.Run("real", func(t *testing.T) {
+		run, res := realRun(t, keys, 3)
+		run.Expect(t, qtest.Violates(invariant))
+		t.Logf("%d charges for %d keys", len(res.Charges), keys)
+	})
 }
 
 // A key answers as it did the first time, marked replayed; the same key
