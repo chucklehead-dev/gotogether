@@ -42,6 +42,9 @@ type Trace struct {
 	// stated watermark does not reach settles nothing: a step recorded
 	// after it may be uncollected yet.
 	Collected []Watermark
+	// carriedWhole: a search's carried watermark says some recorder of
+	// the actor stated none (CarryWatermark)
+	carriedWhole bool
 }
 
 // Issue is something the reconstructor could not make sense of. Severity
@@ -105,12 +108,14 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	firstSeq := map[string]uint64{}
 	declared := map[string][]Step{} // loss records, by recorder
 	marks := map[string]time.Time{} // watermarks, by recorder (AllRecorders: every one's)
+	whole := map[string]bool{}      // recorders whose carried watermark says a log of the actor was whole
 	seqAt := map[rk]time.Time{}     // each record's time, by its seq: when a gap's steps were lost
 	for _, s := range uniq {
 		if !s.CompleteThrough.IsZero() {
 			if s.CompleteThrough.After(marks[s.Recorder]) { // a watermark only rises
 				marks[s.Recorder] = s.CompleteThrough
 			}
+			whole[s.Recorder] = whole[s.Recorder] || s.carriedWhole
 			continue
 		}
 		if s.Seq != 0 {
@@ -135,14 +140,11 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	holesOf := map[string][]Gap{} // each actor's gaps
 	lostActors := map[string][]Lost{}
 	collected := map[string][]Watermark{} // each actor's recorders' watermarks
-	// markOf is rec's watermark: its own or every recorder's, the later
-	markOf := func(rec string) time.Time {
-		w := marks[rec]
-		if all := marks[AllRecorders]; all.After(w) {
-			w = all
-		}
-		return w
-	}
+	// markOf is how far rec is known collected (CollectedThrough: its
+	// watermark, raised by its own dense seqs), zero if it stated none
+	through := CollectedThrough(uniq)
+	markOf := func(rec string) time.Time { return through[rec] }
+	carriedWhole := map[string]bool{} // actors a carried watermark says had a whole log
 	// some recorder lost its tail: no settle settles the run, but one
 	// after every bounded loss's Before
 	lostTail := false
@@ -253,6 +255,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		if len(marks) > 0 { // (no watermark stated: every log whole, as before them)
 			for a := range actors {
 				collected[a] = append(collected[a], Watermark{Recorder: rec, Through: markOf(rec)})
+				carriedWhole[a] = carriedWhole[a] || whole[rec]
 			}
 		}
 	}
@@ -289,11 +292,12 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			settleAt[s.Recorder] = s.Time
 		}
 	}
-	// short is a recorder whose stated watermark is before t: a step it
-	// recorded after t may not be collected yet
+	// short is a recorder whose stated watermark is before t, by more than
+	// the clocks' slack (a step within it of a settle does not void it
+	// either): a step it recorded after t may not be collected yet
 	short := func(t time.Time) (string, time.Time, bool) {
 		for _, rec := range recs {
-			if w := markOf(rec); !w.IsZero() && w.Before(t) {
+			if w := markOf(rec); !w.IsZero() && w.Before(t.Add(-RealTimeSlack)) {
 				return rec, w, true
 			}
 		}
@@ -395,6 +399,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		t.Lost = lostActors[a]
 		t.Gaps = holesOf[a]
 		t.Collected = collected[a]
+		t.carriedWhole = carriedWhole[a]
 		for _, l := range t.Lost {
 			if l.Prefix {
 				t.Issues = append(t.Issues, l.Issue())

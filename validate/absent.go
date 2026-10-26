@@ -93,7 +93,14 @@ const dropFix = "repair the dropped telemetry (a sink that loses no steps: qobs.
 // one a lost tail may: a response, or the step that would make the val
 // hold, may be among the steps lost. It runs after judgeLost, and again
 // on a search's report (mark), so it rebuilds r.Absent each time.
-func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrace.Gap) {
+//
+// pendingGap is the gap that may hold a pending call's completion (nil:
+// ownGap of gaps, the steps as recorded); a search's order names the
+// call's original, whose recorder and seq it re-sequenced.
+func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrace.Gap, pendingGap func(qtrace.Step) (qtrace.Gap, bool)) {
+	if pendingGap == nil {
+		pendingGap = ownGap(gaps)
+	}
 	r.Gaps, r.Absent = gaps, nil
 	var tails []qtrace.Lost
 	for _, l := range lost {
@@ -200,7 +207,7 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 	for i := range r.Pending {
 		p := &r.Pending[i]
 		a := Absence{Kind: "pending", Name: p.Action, Step: p}
-		g, gapped := gapIn(p.Time, time.Time{})
+		g, gapped := pendingGap(*p)
 		switch {
 		case maybeInTail(r, *p):
 			var l qtrace.Lost
@@ -223,6 +230,22 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 				"state how far it is (-complete-through) and it is uncollected; if the run was cut short, its caller never got the answer", p, p.Process)
 		}
 		add(a)
+	}
+}
+
+// ownGap is the gap of gaps that may hold pending call p's completion:
+// one on p's own recorder (a completion is recorded by its invocation's
+// recorder) missing a seq after p's (a completion follows its
+// invocation in its recorder's sequence). A gap's times would not do:
+// a simulation records many steps at one instant.
+func ownGap(gaps []qtrace.Gap) func(qtrace.Step) (qtrace.Gap, bool) {
+	return func(p qtrace.Step) (qtrace.Gap, bool) {
+		for _, g := range gaps {
+			if g.Recorder == p.Recorder && g.Last > p.Seq {
+				return g, true
+			}
+		}
+		return qtrace.Gap{}, false
 	}
 }
 

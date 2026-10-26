@@ -32,7 +32,11 @@ func TestAbsentClaims(t *testing.T) {
 	absent.Expect(t, Absent(w, validate.Defect), Violates(w))
 	present := Validate(t, bind, qtrace.MarkComplete(steps("elect", 2), "n", at(10)))
 	present.Expect(t, Conforms())
-	late := Validate(t, bind, qtrace.MarkComplete(steps("tick", 6), "n", at(3)))
+	spans := steps("tick", 6) // no seqs (converted spans): the watermark alone says what arrived
+	for i := range spans {
+		spans[i].Seq = 0
+	}
+	late := Validate(t, bind, qtrace.MarkComplete(spans, "n", at(3)))
 	late.Expect(t, Absent(w, validate.Uncollected), Undecided(Violates(w), "uncollected"))
 	Runs(absent, present, late).Expect(t, Some(Absent(w, validate.Defect)), None(Absent(w, validate.Dropped)))
 

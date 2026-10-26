@@ -1615,6 +1615,8 @@ const PrefixOrder = "quint.order."
 const RealTimeSlack = time.Millisecond
 const SpanName = "quint "
 const Undecided LinearizeVerdict = iota (spec 2 of its group)
+func CarryWatermark(recorder, actor string, through time.Time, whole bool) Step
+func CollectedThrough(steps []Step) map[string]time.Time
 func ForcedOrder(steps []Step) ([]Step, bool)
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func HistorySVG(recorded, order []Step, failedAt int) []byte

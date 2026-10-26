@@ -60,12 +60,84 @@ func MarkComplete(steps []Step, recorder string, t time.Time) []Step {
 	return append(slices.Clip(steps), Step{Action: "complete", Recorder: recorder, Process: recorder, Time: t, CompleteThrough: t})
 }
 
+// CarryWatermark is the watermark record a search's order carries for
+// an actor it re-sequences onto recorder (validate's Linearize and
+// ResolvePending): the actor's CompleteThrough as recorded, taken as
+// it is (the order's own dense seqs do not raise it), and with whole
+// set when some recorder of the actor stated none, whose log the
+// trace's own end bounds. The order's check then judges what the steps
+// as recorded were judged.
+func CarryWatermark(recorder, actor string, through time.Time, whole bool) Step {
+	return Step{Action: "complete", Recorder: recorder, Process: recorder, Actor: actor, Time: through, CompleteThrough: through, carried: true, carriedWhole: whole}
+}
+
+// CollectedThrough is how far each recorder of steps that stated a
+// watermark (its own, or AllRecorders') is known collected: the later of
+// the watermark and, for a recorder whose steps carry seqs, its last
+// step before any hole in them (a recorder's seqs are dense, so its
+// step at time t with nothing missing below it says every step it
+// recorded by t is in: a watermark that lags its own steps costs no
+// verdict). Steps without seqs (converted spans) have the watermark
+// alone. A recorder with no step is in no trace, and not here; one that
+// stated no watermark is not here either: its log is taken whole.
+// Reconstruct and a search's settles read watermarks so.
+func CollectedThrough(steps []Step) map[string]time.Time {
+	marks := map[string]time.Time{}
+	carried := map[string]bool{}
+	seqs := map[string][]uint64{}
+	at := map[string]map[uint64]time.Time{}
+	for _, s := range steps {
+		switch {
+		case !s.CompleteThrough.IsZero():
+			if s.CompleteThrough.After(marks[s.Recorder]) { // a watermark only rises
+				marks[s.Recorder] = s.CompleteThrough
+			}
+			carried[s.Recorder] = carried[s.Recorder] || s.carried
+		case s.Lost != "":
+		default:
+			if at[s.Recorder] == nil {
+				at[s.Recorder] = map[uint64]time.Time{}
+			}
+			if s.Seq != 0 {
+				seqs[s.Recorder] = append(seqs[s.Recorder], s.Seq)
+				at[s.Recorder][s.Seq] = s.Time
+			}
+		}
+	}
+	out := map[string]time.Time{}
+	for rec := range at {
+		w := marks[rec]
+		if all := marks[AllRecorders]; all.After(w) && !carried[rec] {
+			w = all
+		}
+		if w.IsZero() {
+			continue
+		}
+		if q := seqs[rec]; len(q) > 0 && !carried[rec] {
+			slices.Sort(q)
+			last := q[0]
+			for _, n := range q[1:] {
+				if n > last+1 {
+					break // a hole: what comes after it is not known complete
+				}
+				last = n
+			}
+			if t := at[rec][last]; t.After(w) {
+				w = t
+			}
+		}
+		out[rec] = w
+	}
+	return out
+}
+
 // CompleteThrough is how far the actor's steps are known collected: the
-// earliest watermark of the recorders of its steps (zero: none stated
-// one), and whether each of them stated one (else those that did not
-// keep logs taken whole, which the trace's own end bounds).
+// earliest watermark of the recorders of its steps, as CollectedThrough
+// raises it (zero: none stated one), and whether each of them stated one
+// (else those that did not keep logs taken whole, which the trace's own
+// end bounds).
 func (t *Trace) CompleteThrough() (through time.Time, every bool) {
-	every = len(t.Collected) > 0
+	every = len(t.Collected) > 0 && !t.carriedWhole
 	for _, w := range t.Collected {
 		if w.Through.IsZero() {
 			every = false

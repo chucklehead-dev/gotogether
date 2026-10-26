@@ -33,6 +33,9 @@ func (k *Keyer) Step(s *Step) string {
 		// its time is the verdict's (validate's Checker.Key, relative to
 		// the run's start): here only that it is one
 		rec = "|complete"
+		if s.carried {
+			rec += fmt.Sprintf("|carried%v", s.carriedWhole)
+		}
 	case s.Call != 0:
 		rec = fmt.Sprintf("|call%d", s.Call)
 	}

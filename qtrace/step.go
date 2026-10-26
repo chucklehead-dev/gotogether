@@ -120,7 +120,11 @@ type Step struct {
 	// fromRecord: Invoked is the invocation record's time (Reconstruct),
 	// the recorder's own clock, which no other machine's compares with
 	fromRecord bool
-	Source     string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	// carried: a watermark record a search's order carries
+	// (CarryWatermark), taken as it is; carriedWhole: some recorder of
+	// the actor stated none
+	carried, carriedWhole bool
+	Source                string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
 	// Ref is the step's link to its artifact (KeyRef, qobs.Ref): a
 	// driver's trace line, a screenshot ("bombadil/trace.jsonl:42
 	// screenshot=screenshots/42.webp"). Unlike Source, which says where

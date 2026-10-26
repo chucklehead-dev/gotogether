@@ -3370,26 +3370,48 @@ any of its recorders may record the step that meets an obligation).
 sequence stays dense): recorder r's steps through T are in the input,
 `*` for every recorder. Two choices made it compose with what was
 there:
-- A log without one is taken whole, as before: nothing changes for the
-  runs every test already judges (a simulation's recorder is in
-  memory, a closed file whole), and the trace's own end still covers a
-  window. Requiring a watermark everywhere would have turned every
-  within the trace went past into no verdict.
-- A watermark is what it states: a recorder's own later steps do not
-  raise it, though dense seqs would prove its earlier ones arrived.
-  The bound a search carries onto the recorder it re-sequences an actor
-  to must give the check of its order the verdict of the steps as
-  recorded, and a bound raised by the order's own last step would not.
-  With some recorders of an actor whole, the carried watermark is no
-  later than the actor's last record, so the whole logs' end still
-  bounds it (conservative, by at most the slack).
+- A log without one is taken whole, as before: the trace's own end
+  still covers a window, so a within the trace went past is judged as
+  it was (a simulation's recorder is in memory, a closed file whole).
+  Requiring a watermark everywhere would have turned every such within
+  into no verdict. What does change without a watermark is the gaps'
+  reading (below): a failure a gap may explain is no verdict now.
+- A recorder's dense seqs raise its watermark: its step at time t with
+  no seq missing below it says every step it recorded by t arrived
+  (`qtrace.CollectedThrough`). A periodic watermark always lags, and
+  without this a stated one cost certain FAILs: one recorder's log
+  going on past a window, its seqs dense, was no verdict for a watermark
+  short of it. Steps without seqs (converted spans) have the watermark
+  alone.
+- A search re-sequences an actor onto a recorder of its own, whose
+  seqs prove nothing of the recorded ones: it carries the actor's
+  collection as it is (`qtrace.CarryWatermark`: the watermark, exempt
+  from its order's seqs, and whether a recorder of the actor was whole,
+  whose log the trace's own end bounds, from invocation times as the
+  check of the recorded steps reads them). The first carry took the
+  actor's last record's completion time as that bound and every
+  recorder as stated, and a slow call completed after the window made a
+  FAIL through a search of a run the plain check left uncollected; a
+  test now judges every row of the absence matrices through
+  ResolvePending and Linearize too, which must agree.
+- The recorders that would hold a step are those of the actor's steps
+  in the input. A recorder that has recorded nothing of it yet (a
+  restarted process's new recorder) has stated no watermark and is in
+  no trace: a per-recorder watermark cannot cover it, `*` (every
+  recorder) does. State `*` where recorders can appear later. Requiring
+  it for a watermark's FAIL after a restart was considered and left to
+  that advice: a restart does not always bring a new recorder, and the
+  rule could not tell one that will record from one that never will.
 
 So a within never met is judged where the watermark reaches its
-window's end: a production trace, which never settles, is judged
+window's end (give or take the clocks' slack): a production trace, which never settles, is judged
 absent, the capability the item was for. One the trace went past but
 the watermark does not reach is no verdict (`no verdict (uncollected
-steps)`), not the FAIL the trace's end made of it. A settle a stated
-watermark does not reach settles nothing: a step after it may not be
+steps)`), not the FAIL the trace's end made of it; so is a response
+held late in what was collected, since an earlier one may not have
+been (with dense seqs on its recorder the watermark reaches it, and it
+stays a FAIL). A settle a stated watermark does not reach, by more
+than the slack (as a step after a settle is given it), settles nothing: a step after it may not be
 collected yet, and a settle that a later step voids was the rule
 already. A pending call has no window: with a watermark and no settle
 it is uncollected; in a log taken whole it stays pending (Completes
@@ -3400,7 +3422,17 @@ Gaps had been an error issue only: a within's failure, or an eventual
 val false at the settle, that a gap may explain (its missing steps
 recorded while the response was due, by the times of the steps either
 side, `Gap.After` and `Before`) is now no verdict, as one after a lost
-tail's cut was.
+tail's cut was. A pending call's completion can be only in a gap of its
+own recorder after its seq: a completion follows its invocation in its
+recorder's sequence, and gaps read by time made a call dropped by a
+hole before it at the same instant (a simulation records many steps at
+one) or by another recorder's.
+
+A review of the first version found the carry above, pending calls
+dropped by gaps that could not hold their completion, a lagging
+watermark losing certain FAILs, a late response judged under a short
+watermark, and the settle check without the slack; each is fixed, with
+a test that fails without its fix.
 
 `-complete-through r=T` states an external collector's watermark (a
 ClickHouse poll that knows what it ingested) and is in the manifest, so

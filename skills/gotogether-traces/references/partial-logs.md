@@ -143,7 +143,9 @@ missing telemetry:
 
 - **dropped** (no verdict): a recorder that would hold the step lost
   steps while it was due: a gap in its seqs (`Trace.Gaps`, with the
-  times of the steps either side), a lost tail, a loss record. A
+  times of the steps either side), a lost tail, a loss record. For a
+  pending call, only a gap on its own recorder after its seq (where its
+  completion would be). A
   within's or an eventual val's failure there is no verdict (`issue:
   warn gap`, Reason `no verdict (lost steps)`); the fix is telemetry
   that keeps its steps.
@@ -156,10 +158,13 @@ missing telemetry:
   settle, a watermark, or, with no watermark, the trace's own steps
   going on past it) and lost nothing: the only FAIL.
 
-Which recorders would hold a step: those of its actor's steps. An actor
-is one instance of the model, and any of its recorders may record the
-step that meets an obligation; a call's completion is on its
-invocation's recorder, one of them.
+Which recorders would hold a step: those of its actor's steps in the
+input. An actor is one instance of the model, and any of its recorders
+may record the step that meets an obligation; a call's completion is
+on its invocation's recorder, one of them. A recorder that has
+recorded nothing of the actor yet (a restarted process's new recorder)
+is in no trace, and a per-recorder watermark cannot cover it: state
+`*` (every recorder) where recorders can appear later.
 
 **A watermark** says a recorder's steps recorded at or before T are all
 in the input: a record (`quint.complete_through_unix_nano`, recorder `*`
@@ -173,15 +178,20 @@ no later than its `Until`. A log with no watermark is taken whole, as
 before: its trace's own end bounds what it shows, and nothing changes.
 With one:
 
+- a recorder whose steps carry seqs is complete through its last step
+  with no seq missing below it, whatever its watermark says
+  (`qtrace.CollectedThrough`): a lagging watermark costs no verdict
+  where the seqs are dense. Steps without seqs have the watermark alone;
 - a within never met is judged where the watermark reaches its window's
   end (give or take `qtrace.RealTimeSlack`), though the run never
   settled: what lets a production trace, which never settles, be judged
-  absent. A watermark is what it states: a recorder's own later steps
-  do not raise it;
+  absent. A response held late in what was collected is no verdict
+  where the watermark falls short of its window (an earlier one may not
+  be collected yet);
 - a within whose window it does not reach is no verdict (Reason `no
   verdict (uncollected steps)`), even where the trace went on past the
   window, which without a watermark is a FAIL;
-- a settle it does not reach settles nothing (`issue: warn settle:
+- a settle it does not reach (by more than the slack) settles nothing (`issue: warn settle:
   recorder r's steps are complete only through T`): a step after the
   settle may not be collected yet, so eventual vals are not judged, and
   `Finished` (`qtest.Finishes()`, `-require-settle`) is `no verdict
@@ -190,8 +200,9 @@ With one:
   nor `Pending(...)` holds.
 
 A search (Linearize, ResolvePending) re-sequences an actor onto a
-recorder of its own and carries the actor's watermark onto it, so its
-order is judged as recorded.
+recorder of its own and carries the actor's collection onto it as it
+is (`qtrace.CarryWatermark`), so its order is judged as the steps as
+recorded are.
 
 Claims: `qtest.Absent(name, validate.Uncollected)` (a within's
 `binding.Within.Name`, `validate.EventuallyName(v)`, or a call's

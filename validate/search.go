@@ -67,8 +67,11 @@ type search struct {
 	// them on the steps as recorded)
 	gaps      map[string][]qtrace.Gap
 	collected map[string][]qtrace.Watermark
-	searched  bool
-	binding   *binding.Binding
+	// pending are each actor's (or partition's) pending calls as
+	// recorded, with the recorder and seq the order re-sequences
+	pending  map[string][]qtrace.Step
+	searched bool
+	binding  *binding.Binding
 	// overlaps are, by actor (or partition), the steps a linearization
 	// kept after the snapshot it starts from though real time lets them
 	// precede it: their effects may be in the snapshot's state, which no
@@ -233,7 +236,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
 		s.lost, s.binding = lostOf(c.Binding, steps, opt.Key), c.Binding
-		s.gaps, s.collected, s.searched = recordedOf(c.Binding, steps, opt.Key)
+		s.gaps, s.collected, s.pending, s.searched = recordedOf(c.Binding, steps, opt.Key)
 		s.overlaps = overlapsOf(c.Binding, steps, opt.Key)
 		return s, nil
 	}
@@ -245,7 +248,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = resolve(lc, steps, budget)
 		s.lost, s.binding = lostOf(c.Binding, steps, ""), c.Binding
-		s.gaps, s.collected, s.searched = recordedOf(c.Binding, steps, "")
+		s.gaps, s.collected, s.pending, s.searched = recordedOf(c.Binding, steps, "")
 		return s, nil
 	}
 	s.Steps, s.intervals = steps, intervals(steps)
@@ -269,45 +272,53 @@ func lostOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]qt
 	return out
 }
 
-// recordedOf is each actor's gaps and watermarks (qtrace.Trace.Gaps,
-// Collected), by the name a search's order gives it, as lostOf its
-// losses; and true, for search.searched.
-func recordedOf(b *binding.Binding, steps []qtrace.Step, key string) (map[string][]qtrace.Gap, map[string][]qtrace.Watermark, bool) {
+// recordedOf is each actor's gaps, watermarks and pending calls
+// (qtrace.Trace.Gaps, Collected, Pending), by the name a search's order
+// gives it, as lostOf its losses; and true, for search.searched.
+func recordedOf(b *binding.Binding, steps []qtrace.Step, key string) (map[string][]qtrace.Gap, map[string][]qtrace.Watermark, map[string][]qtrace.Step, bool) {
 	traces, _ := qtrace.Reconstruct(steps)
-	gaps, marks := map[string][]qtrace.Gap{}, map[string][]qtrace.Watermark{}
+	gaps, marks, pending := map[string][]qtrace.Gap{}, map[string][]qtrace.Watermark{}, map[string][]qtrace.Step{}
 	for _, tr := range traces {
 		for _, p := range partitions(tr, key, snapshotFirst(b, tr)) {
-			gaps[p.Actor], marks[p.Actor] = tr.Gaps, tr.Collected
+			gaps[p.Actor], marks[p.Actor], pending[p.Actor] = tr.Gaps, tr.Collected, p.Pending
 		}
 	}
-	return gaps, marks, true
+	return gaps, marks, pending, true
+}
+
+// pendingGap is the gap of the steps as recorded that may hold a pending
+// call of actor's order (ownGap of its original: the call recorded at
+// the same time, of the same action and arguments). One with no original
+// found takes any gap of the actor's, as a lost tail is taken.
+func (s *search) pendingGap(actor string) func(qtrace.Step) (qtrace.Gap, bool) {
+	own := ownGap(s.gaps[actor])
+	return func(p qtrace.Step) (qtrace.Gap, bool) {
+		for _, o := range s.pending[actor] {
+			if o.Action == p.Action && o.Time.Equal(p.Time) && o.String() == p.String() {
+				return own(o)
+			}
+		}
+		if g := s.gaps[actor]; len(g) > 0 {
+			return g[0], true
+		}
+		return qtrace.Gap{}, false
+	}
 }
 
 // carried is the watermark record a search's order carries for actor
-// tr, on its own recorder rec, if its recorders stated any: the
-// earliest of theirs, and with a log taken whole among them no later
-// than the actor's last record (that log's end bounds what it shows, as
-// the trace's own end does). Without it the order's check would take its
-// one recorder's log whole, and judge an uncollected window absent.
-func carried(tr *qtrace.Trace, rec string, settledAt time.Time) (qtrace.Step, bool) {
+// tr, on its own recorder rec, if its recorders stated any: tr's
+// CompleteThrough as it is, whole if some recorder stated none
+// (qtrace.CarryWatermark). The order's check then judges a window as the
+// steps as recorded were judged: by the watermark, and with a whole log
+// among them by the trace's own end too, which the order's invocation
+// times keep. Without it the order's one recorder would be a log taken
+// whole, and judge an uncollected window absent.
+func carried(tr *qtrace.Trace, rec string) (qtrace.Step, bool) {
 	through, every := tr.CompleteThrough()
 	if through.IsZero() {
 		return qtrace.Step{}, false
 	}
-	if !every {
-		end := settledAt
-		for _, ss := range [][]qtrace.Step{tr.Steps, tr.Pending} {
-			for _, st := range ss {
-				if st.Time.After(end) {
-					end = st.Time
-				}
-			}
-		}
-		if end.Before(through) {
-			through = end
-		}
-	}
-	return qtrace.Step{Action: "complete", Recorder: rec, Process: rec, Actor: tr.Actor, Time: through, CompleteThrough: through}, true
+	return qtrace.CarryWatermark(rec, tr.Actor, through, !every), true
 }
 
 // overlapsOf are, by the name a linearization gives each actor (or
@@ -410,7 +421,7 @@ func (s *search) mark(rep *Report) {
 		judgeOverlaps(a, s.overlaps[a.Actor])
 		if s.searched {
 			a.Collected = s.collected[a.Actor]
-			judgeAbsent(s.binding, a, s.lost[a.Actor], s.gaps[a.Actor])
+			judgeAbsent(s.binding, a, s.lost[a.Actor], s.gaps[a.Actor], s.pendingGap(a.Actor))
 		}
 	}
 }
@@ -517,12 +528,10 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 		for _, p := range part.Pending {
 			after(p)
 		}
-		var settledAt time.Time
 		if part.Settled {
-			settledAt = lastSettle(steps)
-			after(qtrace.Step{Action: "settled", Settled: true, Time: settledAt})
+			after(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
 		}
-		if w, ok := carried(tr, "linearized:"+actor, settledAt); ok {
+		if w, ok := carried(tr, "linearized:"+actor); ok {
 			w.Actor = actor
 			out = append(out, w)
 		}
@@ -1204,12 +1213,10 @@ func resolve(ch *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, i
 		for _, p := range tr.Pending { // still pending: their callers never knew
 			add(p)
 		}
-		var settledAt time.Time
 		if tr.Settled {
-			settledAt = lastSettle(steps)
-			add(qtrace.Step{Action: "settled", Settled: true, Time: settledAt})
+			add(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
 		}
-		if w, ok := carried(tr, "resolved:"+tr.Actor, settledAt); ok {
+		if w, ok := carried(tr, "resolved:"+tr.Actor); ok {
 			out = append(out, w)
 		}
 	}
@@ -1336,26 +1343,18 @@ func settlesOf(steps []qtrace.Step) []qtrace.Step {
 			bound = s.LostBefore
 		}
 	}
-	// and one a stated watermark does not reach settles nothing: a step
-	// after it may not be collected yet (as Reconstruct takes it)
+	// and one a stated watermark does not reach (give or take the
+	// clocks' slack) settles nothing: a step after it may not be collected
+	// yet (as Reconstruct takes it, by qtrace.CollectedThrough)
 	var short time.Time // the earliest watermark of a recorder
-	marks := map[string]time.Time{}
-	for _, s := range steps {
-		if !s.CompleteThrough.IsZero() && s.CompleteThrough.After(marks[s.Recorder]) {
-			marks[s.Recorder] = s.CompleteThrough
-		}
-	}
-	for rec, w := range marks {
-		if all := marks[qtrace.AllRecorders]; rec != qtrace.AllRecorders && all.After(w) {
-			w = all
-		}
+	for _, w := range qtrace.CollectedThrough(steps) {
 		if short.IsZero() || w.Before(short) {
 			short = w
 		}
 	}
 	var out []qtrace.Step
 	for _, s := range steps {
-		if !s.Settled || !bound.IsZero() && !s.Time.After(bound.Add(qtrace.RealTimeSlack)) || !short.IsZero() && short.Before(s.Time) {
+		if !s.Settled || !bound.IsZero() && !s.Time.After(bound.Add(qtrace.RealTimeSlack)) || !short.IsZero() && short.Before(s.Time.Add(-qtrace.RealTimeSlack)) {
 			continue
 		}
 		quiet := true

@@ -16,7 +16,9 @@ The first release. What a user meets, by module:
   `Uncollected`, `Defect`), only a defect a FAIL. A watermark record
   (`qtrace.KeyCompleteThrough`, `Step.CompleteThrough`,
   `qtrace.MarkComplete`, `qtrace.AllRecorders`, `qtrace.Watermark`,
-  `Trace.Collected`, `Trace.CompleteThrough()`;
+  `Trace.Collected`, `Trace.CompleteThrough()`, `qtrace.CollectedThrough`
+  (a watermark raised by the recorder's dense seqs),
+  `qtrace.CarryWatermark` (a search's order's);
   `qobs.CompleteThrough`, `Recorder.CompleteThrough`; `gotogether
   validate -complete-through r=T`, in the manifest as
   `completeThrough`) judges a within whose window it reaches though the

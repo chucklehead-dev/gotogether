@@ -181,8 +181,10 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		// FAIL): absent, uncollected
 		{"complete-through: past the window", "within.yaml", []string{"-complete-through", "r=10000000000"}, seq(timed("crash", 0), timed("heal", 1), timed("elect", 2)),
 			seq(timed("crash", 0), timed("heal", 1), timed("tick", 2)), "hasLeader: FAIL"},
+		// (steps without seqs, converted spans: dense seqs past the watermark
+		// would say the steps there arrived)
 		{"complete-through: before the window", "within.yaml", []string{"-complete-through", "*=1970-01-01T00:00:03Z"}, seq(timed("crash", 0), timed("heal", 1), timed("elect", 2)),
-			seq(timed("crash", 0), timed("heal", 1), timed("tick", 6)), "1 no verdict (uncollected steps)"},
+			[]qtrace.Step{{Action: "crash", Recorder: "r", Time: at(0)}, {Action: "heal", Recorder: "r", Time: at(1)}, {Action: "tick", Recorder: "r", Time: at(6)}}, "1 no verdict (uncollected steps)"},
 		// complete: true makes it the binding's default
 		{"complete", "funds_complete.yaml", nil, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "incomplete (no settle) (the binding is complete)"},

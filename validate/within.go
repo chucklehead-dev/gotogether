@@ -245,6 +245,16 @@ func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps 
 			switch {
 			case longest <= w.Bound:
 				continue
+			case shortest > w.Bound && !settled && !col.covers(hi[k].Add(w.Bound), true):
+				// held, but late, in the steps collected: an earlier
+				// response may be among those not collected yet, where the
+				// recorders' watermarks (and their dense seqs) fall short
+				note := fmt.Sprintf("%s became true after %s, and %s held only after %s, %s later (bound %s), in the steps collected; its recorders are complete only through %s, before the window's end %s: an earlier response may not be collected yet",
+					w.After, at(k), w.Holds, at(met), shortest, w.BoundText, stamp(col.through), stamp(hi[k].Add(w.Bound)))
+				if uncovered == nil {
+					uncovered = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: note, window: hi[k].Add(w.Bound)}
+				}
+				obs = append(obs, obligation{name: w.Name(), trigger: steps[k], at: hi[k], due: hi[k].Add(w.Bound), how: "uncovered", note: note, end: end})
 			case shortest > w.Bound:
 				res.Verdict = Fail
 				res.Failure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s held only after %s, %s later (bound %s)",
