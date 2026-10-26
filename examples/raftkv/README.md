@@ -156,12 +156,15 @@ pending calls placed) and the nodes' and nemesis's steps by
 | `TestRealNoRequestID` | `NoRequestID` (the client's) | some run fails as the simulation's does (a read, cas or transfer mismatched, or `converged` violated); the cluster's history conforms | 22 of 24 runs at this loss, 2 of 20 without lost responses: 3 runs a PR (a miss chance of 2%), 5 nightly (0.14%) |
 | `TestRealFaultsInSimulation` | none | a real run's journal (`Journal.Script`) re-made in the simulation: every fault happens, the run conforms | |
 
-The nodes leave `Process.Recorders` unset. Named, a crash declares the
-killed incarnation's tail lost, and a lost tail voids the run's settle:
-of 8 runs with Recorders, the 4 with a crash did not settle. A raftkv
-node needs no such declaration, since it records each cluster step before
-its effect can be seen (a lead or a campaign before any message of its
-term goes out).
+Each node names its incarnation's recorder and step log
+(`Process.Recorders`, `Logs`; the logs are `node-<name>.<inc>.jsonl`,
+which no glob of the nodes' matches with the nemesis's `nemesis.jsonl`).
+A crash then declares the killed incarnation's tail lost, up to its
+reaping: a kill that lands between an effect and its step's record
+makes a failure that depends on the missing step no verdict, not a false
+FAIL, and a settle after the reaping still stands. Of the same 8 seeds,
+the 4 with a crash settled once the loss was bounded (qtrace's
+`LostBefore`), where an unbounded loss had voided their settles.
 
 A failed faithful run's log names its journal and the command that
 re-makes its faults in the simulation:
@@ -174,7 +177,9 @@ The script's crashes, pauses and partitions are qenv's nemeses of the
 same names, each after the steps the nodes had recorded; the simulated
 pause and cut last as the real ones did (`Config.Stalls`,
 `Config.CutLength`), and what the script cannot make as it happened is
-logged (`Journal.Unreproducible`). The clients' lost responses are no
+logged (`Journal.Unreproducible`); a fault the simulation could not make
+fails the test with its root cause and what waited on it
+(`qnemesis.Unmade`). The clients' lost responses are no
 qenv nemesis: they are left out.
 
 ```sh

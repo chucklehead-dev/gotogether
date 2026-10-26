@@ -77,13 +77,10 @@ type nemesisRun struct {
 	// connections (0: none), all through the run: a client that times out
 	// retries, which is what exposes NoRequestID.
 	ClientLoss float64
-	// Recorders names each incarnation's recorder (qnemesis.Process's
-	// Recorders and Logs), so a crash declares its tail lost. raftkv's
-	// nodes need not: each records its cluster steps before their effect
-	// can be seen (a lead, a campaign before any message of the term is
-	// sent; under the lock a handler waits on, written before Record
-	// returns), and a declared loss voids the run's settle (an ablation).
-	Recorders bool
+	// NoRecorders leaves the nodes' Recorders and Logs unnamed (an
+	// ablation): a crash then declares no tail lost, and a kill between
+	// an effect and its step's record could fail a run falsely.
+	NoRecorders bool
 }
 
 // realVerdicts are a run's two checks, and where its logs are.
@@ -149,7 +146,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	targets := map[string]qnemesis.Target{}
 	var procs []*qnemesis.Process
 	for i, name := range Nodes {
-		logOf := func(inc int) string { return filepath.Join(steps, fmt.Sprintf("%s.%d.jsonl", name, inc)) }
+		logOf := func(inc int) string { return filepath.Join(steps, fmt.Sprintf("node-%s.%d.jsonl", name, inc)) }
 		p := &qnemesis.Process{Name: name, PIDFile: filepath.Join(dir, name+".pgid"),
 			Cmd: func(inc int) *exec.Cmd {
 				args := []string{"-exit-with-parent", "-name", name, "-incarnation", strconv.Itoa(inc), "-listen", addrs[i],
@@ -178,9 +175,10 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 				pipes.Unlock()
 				return cmd
 			}}
-		if cfg.Recorders {
+		if !cfg.NoRecorders {
 			// a kill may land between an effect and its step: the crash
-			// declares the incarnation's tail lost
+			// declares the incarnation's tail lost, up to its reaping (a
+			// settle after it stands)
 			p.Recorders = func(inc int) []string { return []string{fmt.Sprintf("%s.%d", name, inc)} }
 			p.Logs = func(inc int) []string { return []string{logOf(inc)} }
 		}
@@ -207,7 +205,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 		t.Fatal(err)
 	}
 	nem := &qnemesis.Nemesis{Targets: targets, Net: peers, Rec: rec, Journal: journal,
-		Steps: qnemesis.StepsIn(filepath.Join(steps, "n[0-9]*.jsonl")),
+		Steps: qnemesis.StepsIn(filepath.Join(steps, "node-*.jsonl")),
 		Record: qnemesis.Recording{
 			"crash":   func(e qnemesis.Event) (string, []any) { return "stop", []any{"node", e.Names[0]} },
 			"isolate": func(e qnemesis.Event) (string, []any) { return "isolate", []any{"node", e.Names[0]} },
@@ -289,7 +287,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	}
 	v.KV = qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(steps, "clients.jsonl")),
 		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000))
-	cluster := readSteps(t, filepath.Join(steps, "n[0-9]*.jsonl"))
+	cluster := readSteps(t, filepath.Join(steps, "node-*.jsonl"))
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "nemesis.jsonl"))...)
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "harness.jsonl"))...)
 	v.Cluster = qtest.Validate(t, "cluster.binding.yaml", cluster)
@@ -395,7 +393,9 @@ func envInt(name string, def int) int {
 // within 300ms of a heal, and a restarted node caught up within 1s.
 // RAFTKV_REAL_RUNS runs (3 by default; CI's nightly 10). Measured: every
 // faithful run conforms and settles, 33 of 33 (16 at this loss, 6 of
-// them with -race; 13 at half of it; 4 without), 6 to 17s each.
+// them with -race; 13 at half of it; 4 without), 6 to 17s each; with the
+// nodes' Recorders named, 8 of 8, the 4 with a crash among them (their
+// losses bounded by the reaping, the settles after it stand).
 func TestRealNemesis(t *testing.T) {
 	kv, cluster := realRuns(t, envInt("RAFTKV_REAL_RUNS", 3), Faithful)
 	qtest.Runs(kv...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))

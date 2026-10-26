@@ -3,7 +3,6 @@ package raftkv
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 // (crashes, pauses and isolates by qenv's names, each after the steps the
 // nodes had recorded) as the chooser of the simulated cluster, with
 // qenv's pause and cut lasting as the real ones did. Every fault the
-// script names happens (a heal qenv made first aside), and the cluster's
+// script names happens (qnemesis.Unmade), and the cluster's
 // model judges the run as the real one's. RAFTKV_REAL_JOURNAL replays a
 // failed run's journal (its log names it); else a real run makes one.
 func TestRealFaultsInSimulation(t *testing.T) {
@@ -49,10 +48,10 @@ func TestRealFaultsInSimulation(t *testing.T) {
 	sys := system(cfg)
 	sys.Run = func(c qenv.Chooser) error { return Run(c, cfg) }
 	r := sys.Judge(t, sc)
-	for _, f := range sc.Remaining() {
-		if !strings.HasPrefix(f.Kind, "nemesis.heal.") {
-			t.Errorf("the script's %s never happened in the simulation (remaining %v)", f.Kind, sc.Remaining())
-		}
+	// every fault made, a heal included (CutLength keeps each cut until
+	// its heal); else why not, the root cause first
+	if err := qnemesis.Unmade(sc); err != nil {
+		t.Error(err)
 	}
 	r.Expect(t, qtest.Conforms())
 	t.Logf("re-made %d faults: %v", len(sc.Faults)-len(sc.Remaining()), sc.Faults)

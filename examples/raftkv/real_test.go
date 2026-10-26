@@ -37,7 +37,7 @@ func (c *realCluster) start(i int) {
 	c.incs[i]++
 	name := Nodes[i]
 	args := []string{"-exit-with-parent", "-name", name, "-incarnation", fmt.Sprint(c.incs[i]), "-listen", c.addrs[i],
-		"-wal", filepath.Join(c.dir, "wal", name), "-steps", filepath.Join(c.dir, "steps", fmt.Sprintf("%s.%d.jsonl", name, c.incs[i]))}
+		"-wal", filepath.Join(c.dir, "wal", name), "-steps", filepath.Join(c.dir, "steps", fmt.Sprintf("node-%s.%d.jsonl", name, c.incs[i]))}
 	for j, n := range Nodes {
 		if j != i {
 			args = append(args, "-peer", n+"="+c.addrs[j])
@@ -278,7 +278,7 @@ func TestRealCluster(t *testing.T) {
 
 	qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(dir, "steps", "clients.jsonl")),
 		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(5000)).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
-	nodes := readSteps(t, filepath.Join(dir, "steps", "n*.jsonl"))
+	nodes := readSteps(t, filepath.Join(dir, "steps", "node-*.jsonl"))
 	boots := 0
 	for _, s := range nodes {
 		if s.Action == "boot" {
