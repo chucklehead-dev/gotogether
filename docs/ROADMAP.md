@@ -215,7 +215,12 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   observed outcome (a click is never a success), with refs; the server
   records its own effects; overlay mutants; a recorded run checked
   offline per push, a live headless run nightly; a reference page for
-  external drivers.
+  external drivers. That page says exactly what a settle covers (a
+  driver's calls answered is not a collector drained: telemetry's
+  completeness is E7's watermark), and how to map an archived journey's
+  invocation and completion records keeping their own times, call
+  identities and causal order (written as steps, never re-recorded
+  through a Recorder, which would stamp them with validation's time).
 - **E6. Observation mutants (S–M).** `qtrace.Mutations` (drop, dup,
   swap, corrupt, retime, reactor) and `qtest.MutateSteps`: which
   recorded fields the model and binding constrain; checked against
