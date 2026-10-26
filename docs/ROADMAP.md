@@ -175,10 +175,16 @@ more.
   limits and goroutine-starting handlers (qgosim's); a query outside a
   transaction unwound inside the driver is untested; per-transaction
   isolation levels; a snapshot argument of records (S11).
-- **S13. A real deployment's nemesis (M–L).** A Script against processes
-  and containers (kill, pause, toxiproxy partitions and latency,
-  failpoints), its faults recorded as steps, the history validated:
-  raftkv's NoRequestID over real TCP, rejected by the same binding.
+- **S13. A real deployment's nemesis (M–L). Done** (DESIGN §52):
+  `qnemesis` (kill, pause, toxiproxy cut, latency, loss; faults as
+  steps; a journal re-made as a qenv Script), `qtest.Runs`, raftkv's
+  real tier (TCP, bbolt WAL, cmd/raftkv-node) under it: NoRequestID and
+  SlowElection caught, per-PR and nightly. Left: NoPersistVote and
+  NoSnapshotReport need schedules aimed at an election (a crash after a
+  vote) and a snapshot in flight; containers, iptables partitions and
+  failpoints; a lost tail judged by searching the lost steps (as hidden
+  actions of the killed incarnation) instead of no verdict; qhttp's plain
+  context deadlines would be exact with qenv's wake time.
 
 ## A run gotogether did not drive (E)
 

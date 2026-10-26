@@ -98,8 +98,10 @@ func ReadJournal(r io.Reader) (*Journal, error) {
 // partition by itself after Network.CutLength (1 virtual second by
 // default): a heal of a cut already healed so never happens, and stays
 // in Remaining, where a chain through it would have stopped every fault
-// after it. Set CutLength to LongestCut, or longer, to keep each
-// partition until its heal. What the script cannot make as it happened
+// after it. Set CutLength well above LongestCut to keep each partition
+// until its heal: the script's faults come at their first chance, not at
+// their real times, so a cut can last longer in a simulation than it did
+// for real (two isolates sharing a link held it cut past LongestCut). What the script cannot make as it happened
 // is in Unreproducible; after the run, Unmade says which faults the
 // simulation did not make, and why (a fault it cannot make holds up every
 // fault after it).

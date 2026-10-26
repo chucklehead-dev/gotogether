@@ -3286,3 +3286,61 @@ Three reviews: of the plan (database/sql's pool), of the adapters (a
 refusal for a request already handled, deadlines never used up,
 rounding that flipped, a race at Close, the watchdog's cost, 40001 for
 a duplicate key, a unique lookup between two states), and of payd.
+
+## 52. A real deployment's nemesis (S13)
+
+A simulation proves what qenv's doubles allow; a team's question is also
+whether the binary they ship, on real TCP and a real disk, survives a
+crash, a pause and a partition. `qnemesis` (standard library only) is a
+nemesis for processes on one host: kill and restart (a process group,
+reaped), SIGSTOP and SIGCONT (waiting until every thread of the group
+has stopped: SIGSTOP takes effect after kill returns), and through
+toxiproxy a cut, latency or loss per directed link. Schedules keep
+qenv's names and partial order (`Random`, `FromScript`); clock skew is
+out of reach (Go reads the clock through the vDSO, which libfaketime
+cannot intercept) and stays the simulation's.
+
+**Faults are steps.** The nemesis records on its own recorder, on the
+side that keeps the check fair: a crash after the process is reaped, so
+every step of the killed incarnation precedes it; a cut after it takes
+effect; a heal before the call, so a bound covers the API's latency.
+Every process is on one host, so wall times compare within
+`RealTimeSlack`. A kill between a program's effect and its record would
+leave a clean log end, and another recorder's step depending on that
+effect would be rejected: a program that records on return names its
+recorders (`Process.Recorders`), and the crash declares their tails
+lost, bounded by the reap (`Step.LostBefore`), so such a failure is no
+verdict and a later settle still stands. raftkv records each step
+before its effect is visible and does not name them: declaring a loss
+it cannot have would make every cluster failure after a crash no
+verdict.
+
+**A journal is a script.** Every fault's start and end goes to a
+journal; `Script` re-makes them in a simulation in their real order,
+each at its first chance (a real run's step counts are not a
+simulation's; `StepScript` keeps them for a simulated program's own),
+and `Unmade` names what a simulation could not make and the setting it
+needs. A real run is not replayable (real elections, real timing); its
+faults are.
+
+**raftkv's real tier** runs the same node code as three processes over
+HTTP with a bbolt write-ahead log. Its shared state was safe only
+because qenv runs one task at a time: a lock, never held across a seam,
+left 41 simulated runs' logs byte-identical, and without it the race
+detector reported thousands of races. Under random crashes, pauses and
+isolates, client-response loss (one connection per call) and three
+whole-cluster cuts, both histories conform and settle; NoRequestID is
+caught at a per-seed rate stated in the test, and SlowElection by a
+bounded election (500 ms in `cluster.real.binding.yaml`, against the
+simulation's 300 ms: a faithful election once took 320 ms under the race
+detector, said openly). NoPersistVote and NoSnapshotReport need
+interleavings the real schedules did not reach; the simulation catches
+both.
+
+Three reviews: of the plan, of qnemesis and the real tier (a kill
+between effect and record giving a false FAIL, the nemesis's steps
+counted as the system's, a pause recorded before the group stopped,
+orphans, a journal stalling after a long cut, claims over real runs
+skipping checks), and of the harness (node bugs left without a verdict
+by declared losses, replays stranded by step counts, loss drawn per
+connection, weak fixed seeds).

@@ -1614,6 +1614,14 @@ Five reviews after T, their findings ROADMAP's S track:
   adapters), a real-deployment nemesis and a per-PR tier are what a team
   shipping a Go service misses most.
 
+### S13: a real deployment's nemesis
+
+Planned by a design review (qnemesis in the core, raftkv over real TCP),
+built as two parts in parallel and a harness, each reviewed: DESIGN §52.
+The harness's review found the toolkit's own protection (declaring a
+killed process's tail lost) leaving node bugs without a verdict; raftkv,
+which records before its effects, does without it.
+
 ### S12: adoption
 
 Planned by a design review (what of database/sql and net/http can run

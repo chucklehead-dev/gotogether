@@ -150,7 +150,10 @@ timed by them were never reached. `j.StepScript()` keeps the steps
 Nothing waits for a
 heal: qenv heals a cut by itself after `CutLength` (1 virtual second),
 so a longer real partition's heal stays in `Remaining`; set
-`sim.Net().CutLength` to `j.LongestCut()` to keep it.
+`sim.Net().CutLength` well above `j.LongestCut()` to keep it (the
+script's faults come at their first chance, not at their real times, so
+a cut can last longer in the simulation than it did for real: raftkv
+needed 10 × `LongestCut` for two isolates sharing a link).
 `j.Unreproducible(sim)` says what the script leaves out or cannot make
 as it happened (latency and loss, a heal of links never cut, pauses of
 another length than `sim.Stalls.Pause`, cuts longer than its
