@@ -35,9 +35,10 @@ type verdict struct {
 //     the same way: those verdicts depend only on that prefix.
 //
 // Prefix reuse is limited to runs of one actor with no domain clocks
-// (quint.order.*), whose reconstructed order is the recording order, and
-// to bindings with no bounded-response obligation (Within), whose
-// verdicts depend on the steps' times.
+// (quint.order.*), whose reconstructed order is the recording order, no
+// lost steps and no snapshot start, and to bindings with no
+// bounded-response obligation (Within), whose verdicts depend on the
+// steps' times.
 type caseChecker struct {
 	Checker *validate.Checker
 
@@ -190,6 +191,12 @@ func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
 	}
 	traces, issues := qtrace.Reconstruct(steps)
 	if len(traces) != 1 || len(issues) > 0 || len(traces[0].Issues) > 0 {
+		return "", false
+	}
+	// a lost tail's verdict depends on the steps after its cut (a failure
+	// there is no verdict), and a snapshot's on where the trace starts: a
+	// prefix's verdict is no extension's
+	if tr := traces[0]; len(tr.Lost) > 0 || cc.Checker.Binding.Snapshot != "" && len(tr.Steps) > 0 && tr.Steps[0].Action == cc.Checker.Binding.Snapshot {
 		return "", false
 	}
 	for _, s := range steps {
