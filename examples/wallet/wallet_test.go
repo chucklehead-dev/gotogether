@@ -20,16 +20,26 @@ func system(cfg Config, opts ...qtest.Option) qtest.System {
 	return s
 }
 
+// seeds is n, or short under -short (the per-push tier): short is sized
+// so that a claim some runs meet is missed at most one time in twenty.
+func seeds(n, short int) int {
+	if testing.Short() {
+		return short
+	}
+	return n
+}
+
 // faulty loses, duplicates and delays one request or response in ten,
 // and crashes the bank and the ledger.
 var faulty = qenv.DefaultRates.Set("rpc", 0.1)
 
 // Through lost, late and duplicated messages and a crashing bank and
 // ledger, concurrent transfers and reads are linearizable, every call
-// answers, and after the settle every applied request is posted.
+// answers, and after the settle every applied request is posted (10
+// seeds, 4 under -short).
 func TestFaithful(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Config{}, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 10}).
+	system(Config{}, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 }
 
@@ -47,17 +57,19 @@ func TestNoDedupeWithinOneFault(t *testing.T) {
 // Two transfers from one account, each reading it without its lock, both
 // spend what one saw at read committed: a lost update. At snapshot
 // isolation the first committer wins and the other retries; the faithful
-// bank locks the account at every level.
+// bank locks the account at every level. 20 seeds each, 6 under -short
+// (the lost update shows in most runs).
 func TestReadThenWrite(t *testing.T) {
 	qtest.RequireQuint(t)
+	n := seeds(20, 6)
 	rc := Config{Mutation: ReadThenWrite, Isolation: qenv.ReadCommitted, Workload: Contended}
-	system(rc).Explore(t, qtest.ExploreConfig{Seeds: 20}).Expect(t, qtest.Some(qtest.Rejects("observe")))
+	system(rc).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Some(qtest.Rejects("observe")))
 	si := rc
 	si.Isolation = qenv.SnapshotIsolation
-	system(si).Explore(t, qtest.ExploreConfig{Seeds: 20}).Expect(t, qtest.Conforms())
+	system(si).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
 	faithful := rc
 	faithful.Mutation = Faithful
-	system(faithful).Explore(t, qtest.ExploreConfig{Seeds: 20}).Expect(t, qtest.Conforms())
+	system(faithful).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
 }
 
 // quiet is no faults: two transfers that interleave, nothing else.
@@ -70,13 +82,15 @@ var quiet = qenv.DefaultRates.Set("rpc", 0).Set("nemesis", 0).Set("queue", 0).Se
 // first, not on which answered first: the history is linearized. The
 // window is wide: uniform seeds interleave the two in 39 runs of 40 (PCT,
 // which runs a task long before switching, in fewer, sized to the run: it
-// is for a narrow window, as quorumkv's BlindRepair).
+// is for a narrow window, as quorumkv's BlindRepair). 10 seeds each, 2
+// under -short: each linearized run is costly, and the window is that wide.
 func TestWriteSkew(t *testing.T) {
 	qtest.RequireQuint(t)
+	n := seeds(10, 2)
 	skew := Config{Mutation: WriteSkew, Workload: Skew}
-	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Some(qtest.Mismatch("transfer")))
+	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Some(qtest.Mismatch("transfer")))
 	skew.Mutation = Faithful
-	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms())
+	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
 }
 
 // The bank's store's history, read as Elle reads a database's: at
@@ -157,11 +171,12 @@ func TestNoOutbox(t *testing.T) {
 // A request the bank must refuse (a transfer to its own source, to an
 // account it does not hold, of a negative amount; a deposit of nothing) is
 // answered false and moves nothing; a bank that applies them makes and
-// destroys money.
+// destroys money (in every run: 10 seeds, 3 under -short).
 func TestInvalidRequests(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Config{Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms())
-	system(Config{Mutation: NoValidation, Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: 10}).
+	n := seeds(10, 3)
+	system(Config{Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
+	system(Config{Mutation: NoValidation, Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: n}).
 		Expect(t, qtest.All(qtest.Mismatch("transfer")))
 }
 
@@ -169,16 +184,18 @@ func TestInvalidRequests(t *testing.T) {
 // finds no record unless the record is locked: at read committed both
 // deliveries apply it (8 runs of 20 here). Duplicates are half of the
 // requests, and the two deliveries must both read before either commits.
-// The first faithful version of this bank did it.
+// The first faithful version of this bank did it. Under -short, 10 seeds
+// each (6 of them apply it twice).
 func TestUnlockedRecord(t *testing.T) {
 	qtest.RequireQuint(t)
+	n := seeds(20, 10)
 	dups := qenv.DefaultRates.Set("rpc.wallet.request", 0.5)
 	rc := Config{Isolation: qenv.ReadCommitted, Workload: Contended}
-	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: 20}).Expect(t, qtest.Conforms())
+	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
 	rc.Mutation = UnlockedRecord
 	// the request applied twice: its answer is the second's (ok false, the
 	// funds spent by the first) or the balances show it
-	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: 20}).
+	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: n}).
 		Expect(t, qtest.Some(qtest.AnyOf(qtest.Mismatch("transfer"), qtest.Rejects("observe"))))
 }
 

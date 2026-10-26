@@ -19,11 +19,11 @@ func system(cfg streams.Config) qtest.System {
 	}}
 }
 
-// seeds is n, or half of it under -short: every bug here shows in well
-// under half of its seeds.
-func seeds(n int) int {
+// seeds is n, or short under -short (the per-push tier): short is sized
+// so that a claim some runs meet is missed at most one time in twenty.
+func seeds(n, short int) int {
 	if testing.Short() {
-		return n / 2
+		return short
 	}
 	return n
 }
@@ -34,10 +34,11 @@ var faulty = qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.05}
 
 // The faithful pipeline delivers every event exactly once, in key order,
 // through lost produce requests and acknowledgements, lost commits,
-// rewound fetches, evictions mid-batch and consumer crashes.
+// rewound fetches, evictions mid-batch and consumer crashes (80 seeds,
+// 12 under -short, which still fault every kind).
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(streams.Config{}).WithRates(faulty).Explore(t, qtest.ExploreConfig{Seeds: seeds(80)})
+	x := system(streams.Config{}).WithRates(faulty).Explore(t, qtest.ExploreConfig{Seeds: seeds(80, 12)})
 	x.Expect(t, qtest.Conforms(), qtest.NotVacuous())
 	t.Log(x.Evidence())
 }
@@ -57,30 +58,34 @@ func TestExhaustiveOneFault(t *testing.T) {
 }
 
 // Which check catches which bug. Each mutant runs with the faults that
-// make its bug possible; the model names the property it breaks.
+// make its bug possible; the model names the property it breaks. Under
+// -short each runs fewer seeds (short), enough that a claim some runs
+// meet is missed at most one time in twenty; the mutants run in parallel,
+// since the small explorations leave the CPUs idle between quint's phases.
 func TestMutants(t *testing.T) {
 	qtest.RequireQuint(t)
 	cases := []struct {
-		m     pipeline.Mutation
-		seeds int
-		rates qenv.Rates
-		want  qtest.Claim
+		m            pipeline.Mutation
+		seeds, short int
+		rates        qenv.Rates
+		want         qtest.Claim
 	}{
 		// committing a batch before applying it is past unapplied records
 		// at once, crash or not: every run shows it
-		{pipeline.CommitFirst, 10, qenv.DefaultRates, qtest.All(qtest.Violates("committedApplied"))},
+		{pipeline.CommitFirst, 10, 2, qenv.DefaultRates, qtest.All(qtest.Violates("committedApplied"))},
 		// a redelivery (a lost commit, a rewind, an eviction, a crash, a
 		// duplicate write) applies an event twice
-		{pipeline.NoDedupe, 20, qenv.DefaultRates, qtest.Violates("appliedAtMostOnce")},
+		{pipeline.NoDedupe, 20, 8, qenv.DefaultRates, qtest.Violates("appliedAtMostOnce")},
 		// a lost request retried behind the next one: the key's later event
 		// is applied first
-		{pipeline.NonIdempotentProducer, 60, faulty, qtest.Violates("perKeyOrder")},
+		{pipeline.NonIdempotentProducer, 60, 20, faulty, qtest.Violates("perKeyOrder")},
 		// each partition's first record skipped, in every run
-		{pipeline.OffByOne, 10, qenv.DefaultRates, qtest.All(qtest.Violates("committedApplied"))},
+		{pipeline.OffByOne, 10, 2, qenv.DefaultRates, qtest.All(qtest.Violates("committedApplied"))},
 	}
 	for _, c := range cases {
 		t.Run(c.m.String(), func(t *testing.T) {
-			system(streams.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(c.seeds)}).Expect(t, c.want)
+			t.Parallel()
+			system(streams.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(c.seeds, c.short)}).Expect(t, c.want)
 		})
 	}
 }

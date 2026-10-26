@@ -58,8 +58,8 @@ Steps are recorded where they take effect:
 
 | Test | What it shows |
 |---|---|
-| `TestFaithfulConforms` | 80 seeded runs with every fault kind: all conform; `Evidence` shows every kind and pair faulted |
-| `TestMutants` | each mutant violates the property in its row |
+| `TestFaithfulConforms` | 80 seeded runs (12 under `-short`) with every fault kind: all conform; `Evidence` shows every kind and pair faulted |
+| `TestMutants` | each mutant violates the property in its row (under `-short` fewer seeds, each claim still missed under 5% of the time) |
 | `TestExhaustiveOneFault` | every run with one fault (`System.Exhaust`, 435): faithful conforms in all, `no-dedupe` and `non-idempotent-producer` caught; the search complete |
 | `TestPlainTestSeesOnlyOffByOne` | a test of the projection on the nominal run sees one bug of four |
 | `TestHegelShrinksReorder` | Hegel shrinks the reorder to its faults; the shrunk choices replay it step for step |
@@ -69,7 +69,7 @@ Steps are recorded where they take effect:
 | `kinesislog: TestKinesisConforms`, `TestKinesisMutants` | the same on Kinesis (fake endpoint, AWS SDK) |
 
 ```sh
-go test -short ./...                      # quick; skips shrinking and the sweep
+go test -short ./...                      # quick; skips shrinking and the sweep, runs fewer seeds
 go test ./...                             # all
 go test -fuzz FuzzFaithful -fuzztime 60s .
 ./run-demo.sh                             # every backend, checked with gotogether validate

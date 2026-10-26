@@ -36,11 +36,11 @@ an isolation level as it would a real database's.
 
 | test | mutant | check | verdict |
 |---|---|---|---|
-| `TestFaithful` | none | 10 seeds, one message fault in ten, commits answered lost, crashes of the bank and the ledger; transfers, a deposit, reads; linearized | every run conforms, settles and completes every call |
+| `TestFaithful` | none | 10 seeds (4 under `-short`), one message fault in ten, commits answered lost, crashes of the bank and the ledger; transfers, a deposit, reads; linearized | every run conforms, settles and completes every call |
 | `TestNoDedupeWithinOneFault` | `NoDedupe`: a retried request applied again | `Exhaust` within one fault: one client, one transfer | the faithful bank conforms in all 83 runs; with the mutant, the runs that lose a response or a commit's answer move the money twice (24 of 81 reject `observe`) |
-| `TestUnlockedRecord` | `UnlockedRecord`: the request's record read without its lock | two transfers from one account at read committed, half the requests duplicated | a duplicate delivered while the first is in flight is applied twice (8 of 20 runs: a transfer's `ok` or a balance the model cannot have); the faithful bank conforms. Its first version did this |
+| `TestUnlockedRecord` | `UnlockedRecord`: the request's record read without its lock | two transfers from one account at read committed, half the requests duplicated | a duplicate delivered while the first is in flight is applied twice (8 of 20 runs, 6 of the 10 `-short` runs: a transfer's `ok` or a balance the model cannot have); the faithful bank conforms. Its first version did this |
 | `TestInvalidRequests` | `NoValidation`: requests it must refuse applied | a transfer to its own source, to an account it does not hold, of a negative amount; a deposit of nothing | the faithful bank refuses each and conforms; the mutant answers ok where the model refuses (every run) |
-| `TestReadThenWrite` | `ReadThenWrite`: the source account read without its lock | two transfers from one account, at read committed, then at snapshot isolation | at read committed both spend what one saw, a lost update (14 of 20 runs reject `observe`); at snapshot isolation the first committer wins and every run conforms |
+| `TestReadThenWrite` | `ReadThenWrite`: the source account read without its lock | two transfers from one account, at read committed, then at snapshot isolation | at read committed both spend what one saw, a lost update (14 of 20 runs reject `observe`, 4 of the 6 `-short` runs); at snapshot isolation the first committer wins and every run conforms |
 | `TestWriteSkew` | `WriteSkew`: the credit line's other account read without its lock | one transfer from each account of the line, at snapshot isolation, no faults; linearized | the line goes negative: some transfer's `ok` no order explains (every run); the faithful bank conforms |
 | `TestWriteSkewHistory` | `WriteSkew` | the bank's store's history, `qhistory.Check` | serializability forbids it: G2, two anti-dependencies (snapshot isolation allows it); the faithful bank's history, under every fault (commits of unknown outcome included), is serializable |
 | `TestNoOutbox` | `NoOutbox`: the post published after the commit, not through the outbox | `Exhaust` within one fault: one transfer | no transfer's `ok` mismatches, and some run violates `eventually allPosted` (3 of 62): a crash between the commit and the publish lost the post |
@@ -121,7 +121,7 @@ checks the model's own design.
 ## Run it
 
 ```sh
-go test -short .                     # needs quint on PATH; -short skips the slowest searches
+go test -short .                     # needs quint on PATH; -short skips the slowest searches, runs fewer seeds
 ./run-demo.sh                        # the faithful wallet, and under every fault family
 MUTATION=write-skew ./run-demo.sh
 ```
