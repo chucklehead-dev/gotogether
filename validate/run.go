@@ -58,7 +58,7 @@ func NewChecker(bindingPath string, opt Options) (*Checker, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := binding.LoadModel(opt.Quint, b.SpecPath(), b.Module)
+	m, err := loadModel(opt.Quint, b.SpecPath(), b.Module)
 	if err != nil {
 		return nil, err
 	}

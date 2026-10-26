@@ -516,7 +516,11 @@ func plural(n int, what string) string {
 }
 
 // toITF writes one model-level ITF per actor from recorded steps.
-func toITF(args []string) error {
+func toITF(args []string) error { return itfTo(os.Stdout, args) }
+
+// itfTo is the itf command, what it says written to w (a test's own, so
+// its tests run in parallel).
+func itfTo(w io.Writer, args []string) error {
 	fset := commandFlags("itf")
 	bpath := fset.String("binding", "", "binding file")
 	out := fset.String("out", ".", "output directory: <actor>.itf.json per actor")
@@ -539,7 +543,7 @@ func toITF(args []string) error {
 	}
 	traces, issues, err := b.StepsToITF(all)
 	for _, i := range issues {
-		fmt.Println("issue:", i)
+		fmt.Fprintln(w, "issue:", i)
 	}
 	if err != nil {
 		return err
@@ -557,7 +561,7 @@ func toITF(args []string) error {
 		if err := os.WriteFile(f, data, 0o644); err != nil {
 			return err
 		}
-		fmt.Printf("actor %s -> %s\n", actor, f)
+		fmt.Fprintf(w, "actor %s -> %s\n", actor, f)
 	}
 	return nil
 }

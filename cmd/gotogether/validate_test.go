@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 // validate ends with how many traces fail and why, in the claims' words:
 // it said "VIOLATION" for any failure, a mismatch included.
 func TestValidateResultLine(t *testing.T) {
+	t.Parallel()
 	skip.Quint(t)
 	step := func(actor string, seq uint64, action string, amount, balance int64) qtrace.Step {
 		return qtrace.Step{Action: action, Actor: actor, Recorder: actor, Thread: actor, Seq: seq,
@@ -38,16 +40,7 @@ func TestValidateResultLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout := os.Stdout
-	os.Stdout = w
-	code, err := runValidate([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), log})
-	os.Stdout = stdout
-	w.Close()
-	out, _ := io.ReadAll(r)
+	code, out, err := validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), log})
 	if err != nil || code != 1 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}
@@ -63,12 +56,7 @@ func TestValidateResultLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	r, w, _ = os.Pipe()
-	os.Stdout = w
-	code, err = runValidate([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), log})
-	os.Stdout = stdout
-	w.Close()
-	out, _ = io.ReadAll(r)
+	code, out, err = validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), log})
 	if want := "RESULT: PASS (1 actor conforms to the model and satisfies its 2 invariants)"; err != nil || code != 0 || !strings.Contains(string(out), want) {
 		t.Errorf("exit %d, %v; output lacks %q:\n%s", code, err, want, out)
 	}
@@ -78,6 +66,7 @@ func TestValidateResultLine(t *testing.T) {
 // withdrawal that overlapped the deposit it depended on returned first,
 // which recorded order rejects and the order the intervals allow accepts.
 func TestValidateLinearize(t *testing.T) {
+	t.Parallel()
 	skip.Quint(t)
 	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
 	steps := []qtrace.Step{
@@ -100,17 +89,8 @@ func TestValidateLinearize(t *testing.T) {
 		flags []string
 		code  int
 	}{{nil, 1}, {[]string{"-linearize"}, 0}, {[]string{"-history", filepath.Join(dir, "h.svg")}, 1}} {
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatal(err)
-		}
-		stdout := os.Stdout
-		os.Stdout = w
 		args := append(append([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out")}, c.flags...), log)
-		code, err := runValidate(args)
-		os.Stdout = stdout
-		w.Close()
-		out, _ := io.ReadAll(r)
+		code, out, err := validated(args)
 		if err != nil || code != c.code {
 			t.Errorf("%v: exit %d, %v, want %d:\n%s", c.flags, code, err, c.code, out)
 		}
@@ -128,6 +108,7 @@ func TestValidateLinearize(t *testing.T) {
 // the flags it needs. A settle record, an invocation record or a time
 // lost on the way, or a flag not passed to the search, shows here.
 func TestValidateVerdictMatrix(t *testing.T) {
+	t.Parallel()
 	skip.Quint(t)
 	at := func(s int) time.Time { return time.Unix(0, 0).Add(time.Duration(s) * time.Second) }
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
@@ -161,7 +142,6 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		}
 	}
 	settled := qtrace.Step{Action: "settled", Settled: true}
-	td := "../../validate/testdata/"
 	for _, x := range []struct {
 		name, binding string
 		flags         []string
@@ -198,42 +178,47 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		{"complete", "funds_complete.yaml", nil, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "incomplete (no settle) (the binding is complete)"},
 	} {
-		dir := t.TempDir()
-		for _, run := range []struct {
-			steps []qtrace.Step
-			code  int
-		}{{x.pass, 0}, {x.fail, 1}} {
-			log := filepath.Join(dir, fmt.Sprintf("run%d.jsonl", run.code))
-			f, err := os.Create(log)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := qtrace.WriteJSONL(f, run.steps); err != nil {
-				t.Fatal(err)
-			}
-			f.Close()
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatal(err)
-			}
-			stdout := os.Stdout
-			os.Stdout = w
-			manifest := filepath.Join(dir, fmt.Sprintf("run%d.manifest.json", run.code))
-			args := append(append([]string{"-binding", td + x.binding, "-dir", filepath.Join(dir, "out"), "-manifest", manifest}, x.flags...), log)
-			code, err := runValidate(args)
-			os.Stdout = stdout
-			w.Close()
-			out, _ := io.ReadAll(r)
-			if err != nil || code != run.code || run.code == 1 && !strings.Contains(string(out), x.says) {
-				t.Errorf("%s: exit %d, %v, want %d (saying %q):\n%s", x.name, code, err, run.code, x.says, out)
-			}
-			// the manifest's run judged again: the same verdict, said the same
-			code, rout := capture(t, func() (int, error) {
-				return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
-			})
-			if code != run.code || !strings.Contains(rout, "the manifest's verdict, reproduced") || run.code == 1 && !strings.Contains(rout, x.says) {
-				t.Errorf("%s: replay: exit %d, want %d (saying %q):\n%s", x.name, code, run.code, x.says, rout)
-			}
+		t.Run(x.name, func(t *testing.T) {
+			t.Parallel() // each row its own directory, its report its own buffer
+			matrixRow(t, x.binding, x.flags, x.pass, x.fail, x.says)
+		})
+	}
+}
+
+// matrixRow is one row of the CLI's verdict matrix: its passing and
+// failing run validated with a manifest, and each judged again from it.
+// Under -short a passing run is replayed only where something shapes a
+// pass besides the steps (the row's flags, a complete binding): the
+// failing runs replay every kind of verdict.
+func matrixRow(t *testing.T, bind string, flags []string, pass, fail []qtrace.Step, says string) {
+	td := "../../validate/testdata/"
+	dir := t.TempDir()
+	for _, run := range []struct {
+		steps []qtrace.Step
+		code  int
+	}{{pass, 0}, {fail, 1}} {
+		log := filepath.Join(dir, fmt.Sprintf("run%d.jsonl", run.code))
+		f, err := os.Create(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := qtrace.WriteJSONL(f, run.steps); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		manifest := filepath.Join(dir, fmt.Sprintf("run%d.manifest.json", run.code))
+		args := append(append([]string{"-binding", td + bind, "-dir", filepath.Join(dir, "out"), "-manifest", manifest}, flags...), log)
+		code, out, err := validated(args)
+		if err != nil || code != run.code || run.code == 1 && !strings.Contains(string(out), says) {
+			t.Errorf("exit %d, %v, want %d (saying %q):\n%s", code, err, run.code, says, out)
+		}
+		if run.code == 0 && testing.Short() && len(flags) == 0 && !strings.Contains(bind, "complete") {
+			continue
+		}
+		// the manifest's run judged again: the same verdict, said the same
+		code, rout := vcapture(t, []string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
+		if code != run.code || !strings.Contains(rout, "the manifest's verdict, reproduced") || run.code == 1 && !strings.Contains(rout, says) {
+			t.Errorf("replay: exit %d, want %d (saying %q):\n%s", code, run.code, says, rout)
 		}
 	}
 }
@@ -245,6 +230,7 @@ func TestValidateVerdictMatrix(t *testing.T) {
 // lacks is an error naming those it has. A torn log says what its lost
 // tail leaves unjudged.
 func TestValidateLost(t *testing.T) {
+	t.Parallel()
 	skip.Quint(t)
 	dir := t.TempDir()
 	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
@@ -287,13 +273,11 @@ func TestValidateLost(t *testing.T) {
 		{"torn", []string{torn}, 0, "its recorders' tails are lost after their last steps: eventual vals not judged", "account.yaml"},
 	} {
 		args := append([]string{"-binding", "../../validate/testdata/" + c.binding, "-dir", filepath.Join(dir, "out")}, c.args...)
-		code, out := capture(t, func() (int, error) {
-			code, err := runValidate(args)
-			if err != nil {
-				fmt.Println(err)
-			}
-			return code, nil
-		})
+		code, b, err := validated(args)
+		out := string(b)
+		if err != nil {
+			out += err.Error()
+		}
 		if code != c.code || !strings.Contains(out, c.want) {
 			t.Errorf("%s: exit %d, want %d and %q:\n%s", c.name, code, c.code, c.want, out)
 		}
@@ -306,6 +290,7 @@ func TestValidateLost(t *testing.T) {
 // behaviour from there, whatever it is from init. The itf command says
 // where the trace starts, not the lost prefix's error.
 func TestITFSnapshotStart(t *testing.T) {
+	t.Parallel()
 	skip.Quint(t)
 	dir := t.TempDir()
 	steps := []qtrace.Step{
@@ -321,14 +306,16 @@ func TestITFSnapshotStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	bind := "../../validate/testdata/snapshot.yaml"
-	_, out := capture(t, func() (int, error) { return 0, toITF([]string{"-binding", bind, "-out", dir, log}) })
+	var itfOut strings.Builder
+	if err := itfTo(&itfOut, []string{"-binding", bind, "-out", dir, log}); err != nil {
+		t.Fatal(err)
+	}
+	out := itfOut.String()
 	if strings.Contains(out, "error lost-prefix") || !strings.Contains(out, "judged from the state recorded by restore at seq 3") {
 		t.Errorf("itf: %s", out)
 	}
 	for _, in := range []string{log, filepath.Join(dir, "default.itf.json")} {
-		code, out := capture(t, func() (int, error) {
-			return runValidate([]string{"-binding", bind, "-dir", filepath.Join(dir, "out"), in})
-		})
+		code, out := vcapture(t, []string{"-binding", bind, "-dir", filepath.Join(dir, "out"), in})
 		if code != 1 || !strings.Contains(out, "mismatch after deposit") {
 			t.Errorf("validate %s: exit %d:\n%s", filepath.Base(in), code, out)
 		}
@@ -353,9 +340,7 @@ func TestValidateResume(t *testing.T) {
 	if err := os.WriteFile(log, []byte(b.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, out := capture(t, func() (int, error) {
-		return runValidate([]string{"-binding", "../../validate/testdata/resume.yaml", "-dir", filepath.Join(dir, "out"), log})
-	})
+	code, out := vcapture(t, []string{"-binding", "../../validate/testdata/resume.yaml", "-dir", filepath.Join(dir, "out"), log})
 	if code != 0 || !strings.Contains(out, "the steps pass from balance = 3, ops = 0, a state resumeAny admits (quint confirms)") {
 		t.Errorf("validate: exit %d:\n%s", code, out)
 	}
@@ -386,9 +371,7 @@ func TestValidateManifest(t *testing.T) {
 	os.WriteFile(info, []byte(`{"name": "nightly", "driver": {"name": "bombadil", "version": "0.3", "seed": "42", "origin": "ci", "args": ["--headless"]},
 		"artifacts": [{"name": "screenshot", "path": "42.webp"}]}`), 0o644)
 	manifest := filepath.Join(dir, "m.json")
-	code, out := capture(t, func() (int, error) {
-		return runValidate([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), "-manifest", manifest, "-run-info", info, log})
-	})
+	code, out := vcapture(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), "-manifest", manifest, "-run-info", info, log})
 	if code != 1 || !strings.Contains(out, "ref:      bombadil/trace.jsonl:42") {
 		t.Fatalf("validate: exit %d:\n%s", code, out)
 	}
@@ -401,7 +384,7 @@ func TestValidateManifest(t *testing.T) {
 		t.Errorf("manifest: %+v", m)
 	}
 	// a flag the manifest decides
-	if _, err := runValidate([]string{"-replay", manifest, "-linearize"}); err == nil || !strings.Contains(err.Error(), "-linearize: the manifest says") {
+	if _, _, err := validated([]string{"-replay", manifest, "-linearize"}); err == nil || !strings.Contains(err.Error(), "-linearize: the manifest says") {
 		t.Errorf("-replay -linearize: %v", err)
 	}
 	// a verdict that is not the manifest's: exit 1, saying both
@@ -410,9 +393,7 @@ func TestValidateManifest(t *testing.T) {
 	if err := m.Write(edited); err != nil {
 		t.Fatal(err)
 	}
-	code, out = capture(t, func() (int, error) {
-		return runValidate([]string{"-replay", edited, "-dir", filepath.Join(dir, "replay")})
-	})
+	code, out = vcapture(t, []string{"-replay", edited, "-dir", filepath.Join(dir, "replay")})
 	if code != 1 || !strings.Contains(out, "the verdict is not the manifest's") || !strings.Contains(out, "manifest: PASS") {
 		t.Errorf("an edited verdict: exit %d:\n%s", code, out)
 	}
@@ -434,7 +415,7 @@ func TestValidateManifest(t *testing.T) {
 	}
 	// a changed log: refused, naming it, with the fix
 	os.WriteFile(log, []byte(strings.Replace(b.String(), `"quint.obs.balance":6`, `"quint.obs.balance":5`, 1)), 0o644)
-	if _, err := runValidate([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "the input "+log+" changed since the run was judged") {
+	if _, _, err := validated([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "the input "+log+" changed since the run was judged") {
 		t.Errorf("a changed log: %v", err)
 	}
 }
@@ -461,9 +442,7 @@ func TestReplayTestManifest(t *testing.T) {
 	dir = moved
 	for _, n := range []string{"run1.json", "run2.json"} {
 		manifest := filepath.Join(dir, "cmd", "gotogether", t.Name(), n)
-		code, out := capture(t, func() (int, error) {
-			return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
-		})
+		code, out := vcapture(t, []string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
 		if code != 0 || !strings.Contains(out, "the manifest's verdict, reproduced: PASS") || strings.Contains(out, "validate/testdata") {
 			t.Errorf("replay %s: exit %d:\n%s", n, code, out)
 		}
@@ -482,6 +461,7 @@ func TestReplayTestManifest(t *testing.T) {
 // invariants): a changed spec is refused on replay. A replay judges on
 // the run's backend: another is refused.
 func TestValidateManifestITF(t *testing.T) {
+	t.Parallel()
 	skip.Quint(t)
 	dir := t.TempDir()
 	for _, f := range []string{"account.yaml", "account.qnt"} {
@@ -495,13 +475,11 @@ func TestValidateManifestITF(t *testing.T) {
 	qtrace.WriteJSONL(&b, []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}})
 	log := filepath.Join(dir, "run.jsonl")
 	os.WriteFile(log, []byte(b.String()), 0o644)
-	if err := toITF([]string{"-binding", filepath.Join(dir, "account.yaml"), "-out", filepath.Join(dir, "itf"), log}); err != nil {
+	if err := itfTo(io.Discard, []string{"-binding", filepath.Join(dir, "account.yaml"), "-out", filepath.Join(dir, "itf"), log}); err != nil {
 		t.Fatal(err)
 	}
 	manifest := filepath.Join(dir, "m.json")
-	code, out := capture(t, func() (int, error) {
-		return runValidate([]string{"-dir", filepath.Join(dir, "out"), "-manifest", manifest, filepath.Join(dir, "itf", "default.itf.json")})
-	})
+	code, out := vcapture(t, []string{"-dir", filepath.Join(dir, "out"), "-manifest", manifest, filepath.Join(dir, "itf", "default.itf.json")})
 	if code != 0 {
 		t.Fatalf("validate: exit %d:\n%s", code, out)
 	}
@@ -519,19 +497,35 @@ func TestValidateManifestITF(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir, manifest = moved, filepath.Join(moved, "m.json")
-	code, out = capture(t, func() (int, error) {
-		return runValidate([]string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
-	})
+	code, out = vcapture(t, []string{"-replay", manifest, "-dir", filepath.Join(dir, "replay")})
 	if code != 0 || !strings.Contains(out, "reproduced: PASS") {
 		t.Errorf("replay: exit %d:\n%s", code, out)
 	}
-	if _, err := runValidate([]string{"-replay", manifest, "-backend", "typescript"}); err == nil || !strings.Contains(err.Error(), "verdicts depend on it: drop -backend") {
+	if _, _, err := validated([]string{"-replay", manifest, "-backend", "typescript"}); err == nil || !strings.Contains(err.Error(), "verdicts depend on it: drop -backend") {
 		t.Errorf("another backend: %v", err)
 	}
 	f, _ := os.OpenFile(filepath.Join(dir, "account.qnt"), os.O_APPEND|os.O_WRONLY, 0)
 	f.WriteString("\n")
 	f.Close()
-	if _, err := runValidate([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "is not the one the run was judged on") {
+	if _, _, err := validated([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "is not the one the run was judged on") {
 		t.Errorf("a changed spec: %v", err)
 	}
+}
+
+// validated runs the validate command with its report in a buffer, so
+// its tests run in parallel (capture swaps the process's stdout).
+func validated(args []string) (int, []byte, error) {
+	var b bytes.Buffer
+	code, err := validateTo(&b, args)
+	return code, b.Bytes(), err
+}
+
+// vcapture is validated for a run that must not fail with an error.
+func vcapture(t *testing.T, args []string) (int, string) {
+	t.Helper()
+	code, out, err := validated(args)
+	if err != nil {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	return code, string(out)
 }

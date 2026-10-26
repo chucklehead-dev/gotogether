@@ -18,7 +18,7 @@ examples/retrystorm 29
 examples/twophase 58
 examples/wallet 50
 binding 142
-cmd/gotogether 130 # 120-145 s on CI with E1-E2 CLI tests (require-settle, the finished matrix rows, strict, evidence -expect); E4 replays every matrix row from its manifest (about 80 s more)
+cmd/gotogether 120 # 63 s locally with -short (72 s in full), about twice that on CI: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
 internal/qeval 188
 internal/simdeps 25 # go list over the workspace: payd (sqlite) and raftkv (bbolt) added modules
 qenv 11

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,11 +41,17 @@ type validateRun struct {
 	// manifest, if set, is where to write the run's manifest, with the
 	// driver, artifacts and name runInfo's fragment gives
 	manifest, runInfo string
+	// out is where the report goes (os.Stdout; a test's buffer, so tests
+	// run in parallel)
+	out io.Writer
 }
 
-func runValidate(args []string) (int, error) {
+func runValidate(args []string) (int, error) { return validateTo(os.Stdout, args) }
+
+// validateTo is the validate command, its report written to out.
+func validateTo(out io.Writer, args []string) (int, error) {
 	fset := commandFlags("validate")
-	var v validateRun
+	v := validateRun{out: out}
 	fset.StringVar(&v.binding, "binding", "", "binding file (optional for ITF written by gotogether)")
 	fset.StringVar(&v.dir, "dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
 	fset.StringVar(&v.backend, "backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
@@ -75,7 +82,7 @@ func runValidate(args []string) (int, error) {
 		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
 	}
 	if *replay != "" {
-		return replayManifest(*replay, fset)
+		return replayManifest(out, *replay, fset)
 	}
 	if v.runInfo != "" && v.manifest == "" {
 		return 2, fmt.Errorf("validate: -run-info %s says what goes in a manifest: add -manifest out.json", v.runInfo)
@@ -102,7 +109,7 @@ var replayFlags = map[string]bool{"replay": true, "dir": true, "quint": true, "v
 // replayManifest judges the run of the manifest at path again: its files
 // unchanged (refused otherwise, naming each), as it was judged, and
 // reports whether the verdict is the manifest's.
-func replayManifest(path string, fset *flag.FlagSet) (int, error) {
+func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error) {
 	var extra []string
 	fset.Visit(func(f *flag.Flag) {
 		if !replayFlags[f.Name] {
@@ -122,17 +129,17 @@ func replayManifest(path string, fset *flag.FlagSet) (int, error) {
 		return 2, fmt.Errorf("validate -replay %s: %w", path, err)
 	}
 	for _, w := range warns {
-		fmt.Println("warning:", w)
+		fmt.Fprintln(out, "warning:", w)
 	}
 	get := func(name string) string { return fset.Lookup(name).Value.String() }
 	if b := get("backend"); b != "" && b != m.Tools.Backend {
 		return 2, fmt.Errorf("validate -replay %s -backend %s: the run was judged on backend %q (\"\": the default), and verdicts depend on it: drop -backend", path, b, m.Tools.Backend)
 	}
 	if env := os.Getenv("QUINT_BACKEND"); m.Tools.Backend == "" && env != "" {
-		fmt.Printf("note: QUINT_BACKEND=%s ignored: the run was judged on the default backend\n", env)
+		fmt.Fprintf(out, "note: QUINT_BACKEND=%s ignored: the run was judged on the default backend\n", env)
 		os.Unsetenv("QUINT_BACKEND")
 	}
-	v := validateRun{dir: get("dir"), quint: get("quint"), backend: m.Tools.Backend, verbose: get("v") == "true", withITF: get("itf") == "true",
+	v := validateRun{out: out, dir: get("dir"), quint: get("quint"), backend: m.Tools.Backend, verbose: get("v") == "true", withITF: get("itf") == "true",
 		history: get("history"), manifest: get("manifest"), format: m.Check.Format, novars: m.Check.NoVars,
 		requireSettle: m.Check.RequireSettle, finishFixed: true, search: m.Check.SearchOptions(), lostPrefix: strings.Join(m.Check.LostPrefix, ","),
 		lostSuffix: strings.Join(m.Check.LostSuffix, ","), module: m.Model.Module, invariants: m.Model.Invariants, constants: m.Model.Constants}
@@ -161,10 +168,10 @@ func replayManifest(path string, fset *flag.FlagSet) (int, error) {
 		return 2, fmt.Errorf("validate -replay %s: the manifest names no input: it was written for a run with none, and there is nothing to judge", path)
 	}
 	if q := validate.QuintVersion(v.quint); q != m.Tools.Quint {
-		fmt.Printf("note: the run was judged with quint %q, this replay with %q\n", m.Tools.Quint, q)
+		fmt.Fprintf(out, "note: the run was judged with quint %q, this replay with %q\n", m.Tools.Quint, q)
 	}
 	if g := validate.ModuleVersion(); g != m.Tools.Gotogether {
-		fmt.Printf("note: the run was judged with gotogether %s, this replay with %s\n", m.Tools.Gotogether, g)
+		fmt.Fprintf(out, "note: the run was judged with gotogether %s, this replay with %s\n", m.Tools.Gotogether, g)
 	}
 	code, got, err := v.run()
 	if err != nil {
@@ -172,12 +179,12 @@ func replayManifest(path string, fset *flag.FlagSet) (int, error) {
 	}
 	if same, note := m.Verdict.Same(got); same {
 		if note != "" {
-			fmt.Println("note:", note)
+			fmt.Fprintln(out, "note:", note)
 		}
-		fmt.Printf("replay: the manifest's verdict, reproduced: %s\n", got)
+		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", got)
 		return code, nil
 	}
-	fmt.Printf("replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n", m.Verdict, got)
+	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n", m.Verdict, got)
 	return 1, nil
 }
 
@@ -210,7 +217,7 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 				return 2, none, err
 			}
 			if ok {
-				fmt.Printf("input %s: OTLP/JSON spans, converted with %s: %d steps\n", f, v.conv, len(cs))
+				fmt.Fprintf(v.out, "input %s: OTLP/JSON spans, converted with %s: %d steps\n", f, v.conv, len(cs))
 				steps = append(steps, cs...)
 				reads = append(reads, read{f, "otlp", cs})
 				continue
@@ -220,10 +227,10 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		if err != nil {
 			return 2, none, err
 		}
-		fmt.Printf("input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
+		fmt.Fprintf(v.out, "input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
 			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
 		if in.Torn != nil {
-			fmt.Printf("  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
+			fmt.Fprintf(v.out, "  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
 		}
 		if in.Format == input.ITF {
 			itfs = append(itfs, in)
@@ -246,7 +253,7 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		}
 		v.dir = d
 	}
-	fmt.Printf("artifacts (generated modules, failing runs' ITF): %s\n", v.dir)
+	fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", v.dir)
 	opts := validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}
 	ok := true
 	var results []*validate.Result // every actor's and ITF's, for the result line
@@ -295,10 +302,10 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 				return 2, none, err
 			}
 		}
-		fmt.Print(rep.Summary())
+		fmt.Fprint(v.out, rep.Summary())
 		if v.verbose {
 			for _, a := range rep.Actors {
-				fmt.Println(a.Output)
+				fmt.Fprintln(v.out, a.Output)
 			}
 		}
 		ok = ok && rep.OK()
@@ -314,7 +321,7 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 			if f.Actor != "" {
 				who = "actor " + f.Actor
 			}
-			fmt.Printf("%s: %s (%s): %s\n", who, f.Reason, finishWhy, f.Why)
+			fmt.Fprintf(v.out, "%s: %s (%s): %s\n", who, f.Reason, finishWhy, f.Why)
 			ok = false
 		}
 		results = append(results, rep.Actors...)
@@ -341,15 +348,15 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 				return 2, none, err
 			}
 		}
-		fmt.Print(r.Summary())
+		fmt.Fprint(v.out, r.Summary())
 		if v.verbose {
-			fmt.Println(r.Output)
+			fmt.Fprintln(v.out, r.Output)
 		}
 		ok = ok && r.OK()
 		if finish && r.OK() {
 			// an ITF trace is the model's states alone: no settle, no calls
 			incomplete[r] = "no verdict (ITF trace)"
-			fmt.Printf("%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, finishWhy)
+			fmt.Fprintf(v.out, "%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, finishWhy)
 			ok = false
 		}
 		results = append(results, r)
@@ -388,13 +395,13 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		if err := m.Write(v.manifest); err != nil {
 			return 2, none, err
 		}
-		fmt.Printf("manifest: %s (gotogether validate -replay %s judges it again)\n", v.manifest, v.manifest)
+		fmt.Fprintf(v.out, "manifest: %s (gotogether validate -replay %s judges it again)\n", v.manifest, v.manifest)
 	}
 	if ok {
-		fmt.Printf("RESULT: PASS (%s)\n", passSummary(results))
+		fmt.Fprintf(v.out, "RESULT: PASS (%s)\n", passSummary(results))
 		return 0, verdict, nil
 	}
-	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results, incomplete))
+	fmt.Fprintf(v.out, "RESULT: FAIL (%s)\n", failSummary(results, incomplete))
 	return 1, verdict, nil
 }
 

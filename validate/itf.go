@@ -50,7 +50,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 	if err != nil {
 		return nil, err
 	}
-	m, err := binding.LoadModel(o.Quint, spec, module)
+	m, err := loadModel(o.Quint, spec, module)
 	if err != nil {
 		return nil, err
 	}

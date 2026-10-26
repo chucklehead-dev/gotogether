@@ -27,16 +27,7 @@ func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, erro
 		t.Fatal(err)
 	}
 	f.Close()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	stdout := os.Stdout
-	os.Stdout = w
-	code, verr := runValidate(append(append([]string{"-dir", filepath.Join(dir, "out")}, args...), log))
-	os.Stdout = stdout
-	w.Close()
-	out, _ := io.ReadAll(r)
+	code, out, verr := validated(append(append([]string{"-dir", filepath.Join(dir, "out")}, args...), log))
 	return code, verr, string(out)
 }
 
@@ -46,6 +37,7 @@ func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, erro
 // call a lost tail no verdict, refuse a binding with no eventual val with
 // Finishes' fix, and never pass an ITF trace, which records no settle.
 func TestValidateRequireSettle(t *testing.T) {
+	t.Parallel()
 	qtest.RequireQuint(t)
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	funds := "../../validate/testdata/funds.binding.yaml"
@@ -73,15 +65,18 @@ func TestValidateRequireSettle(t *testing.T) {
 			[]string{"no verdict (lost tail)", "check a log that kept its steps", "1 no verdict (lost tail)"}},
 		{"finished", []qtrace.Step{dep("", 1, 5, 5), settle(2)}, nil, 0, []string{"RESULT: PASS"}},
 	} {
-		code, err, out := validateSteps(t, x.steps, append([]string{"-binding", funds, "-require-settle"}, x.args...)...)
-		if err != nil || code != x.code {
-			t.Errorf("%s: exit %d, %v, want %d:\n%s", x.name, code, err, x.code, out)
-		}
-		for _, s := range x.says {
-			if !strings.Contains(out, s) {
-				t.Errorf("%s: no %q in:\n%s", x.name, s, out)
+		t.Run(x.name, func(t *testing.T) {
+			t.Parallel()
+			code, err, out := validateSteps(t, x.steps, append([]string{"-binding", funds, "-require-settle"}, x.args...)...)
+			if err != nil || code != x.code {
+				t.Errorf("exit %d, %v, want %d:\n%s", code, err, x.code, out)
 			}
-		}
+			for _, s := range x.says {
+				if !strings.Contains(out, s) {
+					t.Errorf("no %q in:\n%s", s, out)
+				}
+			}
+		})
 	}
 	// the claim says the same of the resolved call
 	steps := []qtrace.Step{dep("a1", 1, 5, 5), withdraw("a1", 2), settle(3)}
@@ -99,7 +94,7 @@ func TestValidateRequireSettle(t *testing.T) {
 	f, _ := os.Create(log)
 	_ = qtrace.WriteJSONL(f, []qtrace.Step{dep("", 1, 5, 5), settle(2)})
 	f.Close()
-	if err := toITF([]string{"-binding", funds, "-out", dir, log}); err != nil {
+	if err := itfTo(io.Discard, []string{"-binding", funds, "-out", dir, log}); err != nil {
 		t.Fatal(err)
 	}
 	itfs, _ := filepath.Glob(filepath.Join(dir, "*.itf.json"))
@@ -107,13 +102,7 @@ func TestValidateRequireSettle(t *testing.T) {
 		t.Fatalf("itf wrote %v", itfs)
 	}
 	for _, args := range [][]string{{"-binding", funds, "-require-settle"}, {"-binding", "../../validate/testdata/funds_complete.yaml"}} {
-		r, w, _ := os.Pipe()
-		stdout := os.Stdout
-		os.Stdout = w
-		code, err := runValidate(append(append([]string{"-dir", filepath.Join(t.TempDir(), "out")}, args...), itfs[0]))
-		os.Stdout = stdout
-		w.Close()
-		out, _ := io.ReadAll(r)
+		code, out, err := validated(append(append([]string{"-dir", filepath.Join(t.TempDir(), "out")}, args...), itfs[0]))
 		if err != nil || code != 1 || !strings.Contains(string(out), "a finished run can't be judged from an ITF trace") {
 			t.Errorf("%v on an ITF trace: exit %d, %v:\n%s", args, code, err, fmt.Sprint(string(out)))
 		}
