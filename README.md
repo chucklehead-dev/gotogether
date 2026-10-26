@@ -272,6 +272,7 @@ qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { payday(bank.New(acco
 ```sh
 gotogether validate -binding bank.binding.yaml steps.jsonl                          # step log, OTLP/JSON or ITF
 gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl   # an app's plain spans
+gotogether validate -binding bank.binding.yaml -lost-suffix node-2 steps.jsonl      # a log that lost its tail (killed), which it cannot show
 ```
 
 ```
@@ -285,7 +286,8 @@ actor default: 10 steps
 ```
 
 Reconstruction orders steps from many recorders. It uses dense sequence
-numbers (so a lost step is reported), program-order threads, domain
+numbers (so a lost step is reported; a log that starts after seq 1 lost
+its head, and is judged from a `snapshot` step at it), program-order threads, domain
 clocks, and process incarnations, which become the model's restart
 action. See [docs/instrumentation.md](docs/instrumentation.md) and
 [skills/gotogether-traces](skills/gotogether-traces/SKILL.md).
@@ -507,7 +509,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qhegel` (module) | Hegel and the model: `Test` (modes `Each`, `After`, `Batched`, `Off`), `FindViolation` (an expected failure, shrunk), `Shrink` (a `qtest.System` under Hegel), `NewCase`, `Choices` (qenv's choices from a test case), `VaryTraces`, `FindTrigger` |
 | `itf` | ITF traces: `Parse`, `Decode`/`Encode` (Go ⇄ Quint values), `ParseQuint` (Quint literals) |
 | `qobs` | the recorder: `Record`, `Invoke` (a call recorded when invoked, `Call.Done` when it completes), `Settled` (the system was quiet: eventual properties apply), `Thread`, `WithRecorder`, `SlogHandler`; sinks `MemorySink`, `FileSink` and `NewJSONLSink` by durability (`PerStep`: survives a killed process; `Synced`: an fsync per step, a power loss; `Buffered`), `OTelSink`, `Tee`; `SetGlobal` for a program, `InstallGlobal` for a test's run; `orchestrion.yml` |
-| `qtrace` | the step schema, `Reconstruct` (order, gaps, restarts, real-time order from `Invoked`), step logs (`ReadJSONL` keeps a torn tail's steps: `TornTail`), `Linearize`, `Filter` (select and pseudonymize) |
+| `qtrace` | the step schema, `Reconstruct` (order, gaps, restarts, real-time order from `Invoked`), step logs (`ReadJSONL` keeps a torn tail's steps: `TornTail`, the tail declared lost), lost prefixes and tails (`Trace.Lost`, `MarkLost`), `Linearize`, `Filter` (select and pseudonymize) |
 | `otelio` | an OTLP/JSON file exporter and reader; span events to steps |
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |

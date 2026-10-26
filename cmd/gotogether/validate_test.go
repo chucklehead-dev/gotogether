@@ -213,3 +213,67 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		}
 	}
 }
+
+// -lost-suffix and -lost-prefix declare losses a log cannot show: a
+// recorder's tail lost after its last step (a later step of another that
+// fails may depend on it: no verdict), a log without seqs whose head was
+// lost (judged from its snapshot, else an error); a recorder the log
+// lacks is an error naming those it has. A torn log says what its lost
+// tail leaves unjudged.
+func TestValidateLost(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+	dir := t.TempDir()
+	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
+	write := func(name string, steps []qtrace.Step, cut int) string {
+		t.Helper()
+		var b strings.Builder
+		if err := qtrace.WriteJSONL(&b, steps); err != nil {
+			t.Fatal(err)
+		}
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(b.String()[:b.Len()-cut]), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	acct := func(rec string, seq uint64, ms int, action string, args, obs map[string]any) qtrace.Step {
+		return qtrace.Step{Action: action, Recorder: rec, Process: "p", Seq: seq, Time: at(ms), Args: args, Obs: obs}
+	}
+	amount := func(a, balance int64) (map[string]any, map[string]any) {
+		return map[string]any{"amount": a}, map[string]any{"balance": balance}
+	}
+	da, db := amount(5, 5)
+	wa, wb := amount(10, 0)
+	two := write("two.jsonl", []qtrace.Step{acct("a", 1, 10, "deposit", da, db), acct("b", 1, 30, "withdraw", wa, wb)}, 0)
+	ra, rb := amount(5, 55)
+	snap := write("snap.jsonl", []qtrace.Step{acct("c", 0, 10, "restore", map[string]any{"b": int64(50), "n": int64(1)}, nil), acct("c", 0, 20, "deposit", ra, rb)}, 0)
+	torn := write("torn.jsonl", []qtrace.Step{acct("a", 1, 10, "deposit", da, db), acct("a", 2, 20, "deposit", da, db)}, 10)
+	for _, c := range []struct {
+		name    string
+		args    []string
+		code    int
+		want    string
+		binding string
+	}{
+		{"as recorded", []string{two}, 1, "RESULT: FAIL (1 of 1 actor: 1 rejects withdraw)", "account.yaml"},
+		{"a's tail lost", []string{"-lost-suffix", "a", two}, 1, "RESULT: FAIL (1 of 1 actor: 1 no verdict (lost steps))", "account.yaml"},
+		{"no such recorder", []string{"-lost-suffix", "z", two}, 2, `validate: -lost-suffix z: no step of recorder "z" in the input: name one of its recorders (a, b)`, "account.yaml"},
+		{"a snapshot's head lost", []string{"-lost-prefix", "c", snap}, 0, "judged from the state recorded by restore at seq 0 (recorder c lost its first steps)", "snapshot.yaml"},
+		{"a head lost", []string{"-lost-prefix", "c", snap}, 1, "error lost-prefix: recorder c lost its first steps", "account.yaml"},
+		{"torn", []string{torn}, 0, "its recorders' tails are lost after their last steps: eventual vals not judged", "account.yaml"},
+	} {
+		args := append([]string{"-binding", "../../validate/testdata/" + c.binding, "-dir", filepath.Join(dir, "out")}, c.args...)
+		code, out := capture(t, func() (int, error) {
+			code, err := runValidate(args)
+			if err != nil {
+				fmt.Println(err)
+			}
+			return code, nil
+		})
+		if code != c.code || !strings.Contains(out, c.want) {
+			t.Errorf("%s: exit %d, want %d and %q:\n%s", c.name, code, c.code, c.want, out)
+		}
+	}
+}

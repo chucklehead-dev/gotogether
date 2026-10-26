@@ -37,3 +37,28 @@ lacks, one without parameters, or one that leaves a variable unassigned
 (`snapshot restore leaves ops unassigned`), with the fix. A log whose
 steps carry no seqs cannot show a lost prefix: declare it
 (`qtrace.MarkLost(steps, qtrace.Lost{Recorder: r, Prefix: true})`).
+
+## A lost tail: what it leaves unjudged
+
+A recorder that lost its last steps (a torn last line, which `ReadJSONL`
+reads as a loss record after each of the log's recorders' last seq; a
+killed process's `Buffered` sink, which no log shows: declare it with
+`qtrace.MarkLost(steps, qtrace.Lost{Recorder: r, After: n})` or
+`gotogether validate -lost-suffix r`) leaves unknown what it recorded
+after its last kept step. So, in every check:
+
+- the run is unsettled (its settle may have come before a lost step):
+  `issue: info eventually: eventual vals not judged (V): recorder r lost
+  its tail after seq n`. A lost enqueue cannot make a queue's emptiness a
+  false PASS;
+- a failure (conformance, an invariant, a within) at a step recorded at
+  or after the cut, by another recorder that went on, may depend on the
+  lost steps: no verdict (`conformance: N/A`, `issue: warn lost-suffix:
+  ... may depend on r's lost steps after seq n`, Reason `no verdict (lost
+  steps)`), never a FAIL. It is no PASS either: the run is not OK;
+- a failure before the cut stands, and a pass says `issue: info
+  lost-suffix: the recorded steps conform; recorder r lost its tail after
+  seq n`.
+
+`-lost-prefix r` declares a lost head a log without seqs cannot show.
+Both flags take comma-separated recorder ids.

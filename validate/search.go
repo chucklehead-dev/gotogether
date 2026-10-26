@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -55,6 +56,11 @@ type search struct {
 	// confirmed, by actor (byCheck); again searches with quint alone
 	claims map[string]*claim
 	again  func() (*search, error)
+	// lost are each actor's (or partition's) losses as recorded
+	// (qtrace.Trace.Lost), which its re-sequenced order no longer shows:
+	// mark judges the check's verdict by them (judgeLost)
+	lost    map[string][]qtrace.Lost
+	binding *binding.Binding
 }
 
 // A claim is what a search took from the Go evaluator alone: an order of
@@ -204,6 +210,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 			budget = DefaultLinearizeBudget
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
+		s.lost, s.binding = lostOf(c.Binding, steps, opt.Key), c.Binding
 		return s, nil
 	}
 	if opt.ResolvePending {
@@ -213,10 +220,28 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 			budget = DefaultResolveBudget
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = resolve(lc, steps, budget)
+		s.lost, s.binding = lostOf(c.Binding, steps, ""), c.Binding
 		return s, nil
 	}
 	s.Steps, s.intervals = steps, intervals(steps)
 	return s, nil
+}
+
+// lostOf is each actor's losses (qtrace.Trace.Lost), by the name a
+// search's order gives it: with a key, every partition of the actor has
+// them all (whose the lost steps were is unknown).
+func lostOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]qtrace.Lost {
+	traces, _ := qtrace.Reconstruct(steps)
+	out := map[string][]qtrace.Lost{}
+	for _, tr := range traces {
+		if len(tr.Lost) == 0 {
+			continue
+		}
+		for _, p := range partitions(tr, key, snapshotFirst(b, tr)) { // as the search split it, which it did
+			out[p.Actor] = tr.Lost
+		}
+	}
+	return out
 }
 
 // intervals reports whether steps carry invocation times or records: a
@@ -245,6 +270,7 @@ func (s *search) mark(rep *Report) {
 				"check in an order real time allows (qtest.Linearize(), gotogether validate -linearize)"})
 		}
 		a.Issues = append(a.Issues, s.kept[a.Actor]...)
+		judgeLost(s.binding, a, s.lost[a.Actor])
 		if !s.undecided[a.Actor] {
 			continue
 		}

@@ -307,6 +307,14 @@ The first release. What a user meets, by module:
   variable unassigned (`binding.Model.Assigns`); a snapshot step not
   first is skipped, with an issue (`binding.Plan.Issues`).
   `Checker.Key` names the snapshot.
+- A lost tail is judged (S11): a failure at a step recorded at or after
+  a recorder's cut, by a recorder that went on, may depend on the lost
+  steps, and is no verdict (`no verdict (lost steps)`, an issue naming
+  the recorder and its seq), not a FAIL; a pass says the recorded steps
+  conform and what was lost; eventual vals are not judged. `gotogether
+  validate -lost-suffix` and `-lost-prefix` declare losses a log cannot
+  show (`qtrace.MarkLost`), and a torn log's warning says what its lost
+  tail leaves unjudged. `qtrace.Filter` keeps loss records.
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

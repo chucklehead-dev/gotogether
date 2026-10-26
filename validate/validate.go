@@ -98,6 +98,10 @@ type Result struct {
 	ITF    string // ITF of the replayed trace, when it conforms
 	Calls  []binding.Call
 	Output string // quint's output, verbatim
+
+	// noVerdict says why a check that failed is no verdict, when it is
+	// not a search's budget: "lost steps" (judgeLost)
+	noVerdict string
 }
 
 type Failure struct {
@@ -201,8 +205,7 @@ func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *b
 func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
 	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList()}
 	if len(b.Eventually) > 0 && !t.Settled {
-		res.Issues = append(res.Issues, qtrace.Issue{Severity: "info", Kind: "eventually",
-			Msg: fmt.Sprintf("eventual vals not judged (%s): the trace's last record is no settle (Sim.Settle, or qobs.Settled after a probe), or another recorder recorded after it", strings.Join(b.Eventually, ", "))})
+		res.Issues = append(res.Issues, notJudged(b.Eventually, t.Lost))
 	}
 	return res
 }
@@ -621,6 +624,8 @@ func (r *Result) Reason() string {
 	switch {
 	case r.OK():
 		return ""
+	case r.Conforms == NotEvaluated && r.noVerdict != "":
+		return "no verdict (" + r.noVerdict + ")"
 	case r.Conforms == NotEvaluated:
 		return "no verdict (linearize budget)"
 	case r.Conforms != Pass:
@@ -639,6 +644,9 @@ func (r *Result) Reason() string {
 		return "rejects " + action
 	}
 	for _, inv := range r.Invariants {
+		if inv.Verdict == NotEvaluated && r.noVerdict != "" {
+			return "no verdict (" + r.noVerdict + ")"
+		}
 		if inv.Verdict != Pass {
 			return "violates " + inv.Name
 		}
@@ -658,7 +666,10 @@ func (r *Result) Summary() string {
 		fmt.Fprintf(&b, "  invoked, never completed: %s (process %s)\n", p.String(), p.Process)
 	}
 	if f := r.Failure; f != nil {
-		if r.Conforms == NotEvaluated { // a search cut short (qtest.Linearize): its furthest order, not a verdict
+		switch {
+		case r.Conforms == NotEvaluated && r.noVerdict != "": // a failure after a lost tail (judgeLost)
+			fmt.Fprintf(&b, "    no verdict (%s): where it failed, which may depend on what was lost:\n", r.noVerdict)
+		case r.Conforms == NotEvaluated: // a search cut short (qtest.Linearize): its furthest order, not a verdict
 			fmt.Fprintf(&b, "    no verdict: the order checked is the one that got furthest, where it failed:\n")
 		}
 		fmt.Fprintf(&b, "%s", f.describe("    "))
@@ -668,6 +679,8 @@ func (r *Result) Summary() string {
 		switch {
 		case i.Verdict == NotEvaluated && r.Conforms == NotEvaluated:
 			v = "not checked: the run's conformance has no verdict"
+		case i.Verdict == NotEvaluated && r.noVerdict != "" && i.Failure != nil:
+			v = "no verdict (" + r.noVerdict + ")"
 		case i.Verdict == NotEvaluated:
 			v = "not checked: the run does not conform, so the model's states after the failure are not the run's"
 		}

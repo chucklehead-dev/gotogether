@@ -86,14 +86,22 @@ func TestStepLogAcrossPowerLoss(t *testing.T) {
 			t.Fatal(err)
 		}
 		data, _ := d.ReadFile("steps.jsonl")
-		steps, err := qtrace.ReadJSONL(bytes.NewReader(data))
+		read, err := qtrace.ReadJSONL(bytes.NewReader(data))
+		var steps, losses int // a torn tail's steps end in its loss record
+		for _, s := range read {
+			if s.Model() {
+				steps++
+			} else if s.Lost == "suffix" {
+				losses++
+			}
+		}
 		var torn *qtrace.TornTail
 		if synced {
-			if len(steps) < returned {
-				t.Errorf("synced: %d steps in the log, %d recorded (%v)", len(steps), returned, err)
+			if steps < returned {
+				t.Errorf("synced: %d steps in the log, %d recorded (%v)", steps, returned, err)
 			}
-		} else if !errors.As(err, &torn) || len(steps) >= returned {
-			t.Errorf("unsynced: %d steps in the log of %d recorded, err %v: want steps lost and a torn tail", len(steps), returned, err)
+		} else if !errors.As(err, &torn) || steps >= returned || losses != 1 {
+			t.Errorf("unsynced: %d steps in the log of %d recorded, %d loss records, err %v: want steps lost, a torn tail, and its loss", steps, returned, losses, err)
 		}
 		s.Close()
 	}

@@ -57,6 +57,10 @@ func (f Filter) Apply(steps []Step) []Step {
 	}
 	var out []Step
 	for _, s := range steps {
+		if s.Lost != "" {
+			out = append(out, s) // a loss record is its recorder's, whatever the steps kept: what they cannot show
+			continue
+		}
 		if !match(f.Actors, s.Actor) || !match(f.Actions, s.Action) ||
 			(!f.Since.IsZero() && s.Time.Before(f.Since)) || (!f.Until.IsZero() && !s.Time.Before(f.Until)) {
 			continue

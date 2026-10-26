@@ -131,6 +131,7 @@ Production logs are selected and sanitized before they are checked
 | `invariant X: FAIL, violated after step i` | the run is a behaviour of the model, and the model's own property fails on it | a **design** bug the model already allows, now seen in real code |
 | `issue: error gap` | sequence numbers are missing: steps were lost or sampled | fix the pipeline; the pass is unsound |
 | `issue: error lost-prefix` | a log starts after seq 1: its first state is not `init` | record a snapshot step at each log's head and name its action (`snapshot:`) |
+| `issue: warn lost-suffix`, `conformance: N/A` | a recorder lost its tail and a later failure may depend on it: no verdict | check a log that has the steps; record so they survive (`qobs.Synced`) |
 | `issue: error overlap` | an incarnation acted after its successor started | a split brain (fence the old incarnation), or wrong process ids or skewed clocks (order with a domain clock) |
 | `issue: error cycle` | contradictory order keys | instrumentation order keys are wrong |
 

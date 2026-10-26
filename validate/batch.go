@@ -169,6 +169,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		for _, it := range ch.items {
 			if errs[it.run] == nil {
 				c.judgeWithin(it.trace, it.res)
+				judgeLost(c.Binding, it.res, it.trace.Lost)
 			}
 		}
 	}

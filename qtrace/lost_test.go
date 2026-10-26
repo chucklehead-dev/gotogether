@@ -107,6 +107,10 @@ func TestMarkLost(t *testing.T) {
 	if Key(steps) == Key([]Step{a, b}) {
 		t.Errorf("a loss record is not in the key")
 	}
+	// a selection of the steps keeps what they cannot show
+	if kept := (Filter{Actions: []string{"b"}}).Apply(steps); len(kept) != 2 || kept[1].Lost != "suffix" {
+		t.Errorf("filtered: %+v", kept)
+	}
 }
 
 // A completion whose invocation record fell in a lost prefix is bounded

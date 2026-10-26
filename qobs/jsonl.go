@@ -36,7 +36,8 @@ const (
 	// tear the line being written (qtrace.ReadJSONL keeps the steps before
 	// a torn last line, and says so). Steps lost at the end of a log cannot
 	// be detected (no later sequence number reveals the gap), which is why
-	// it is the default.
+	// it is the default; a loss known otherwise is declared to the check
+	// (qtrace.MarkLost, gotogether validate -lost-suffix).
 	PerStep Durability = iota
 	// Synced also syncs after every step (an fsync; the writer's Sync
 	// method for NewJSONLSink): a step is on the disk when Record returns,

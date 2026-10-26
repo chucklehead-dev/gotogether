@@ -429,6 +429,8 @@ func runValidate(args []string) (int, error) {
 	linBudget := fset.Int("linearize-budget", 0, "orders a linearization checks per actor or partition (default 200)")
 	resolvePending := fset.Bool("resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
 	history := fset.String("history", "", "write the history drawn as SVG to this file (lanes of calls, the order checked numbered, the failing step red)")
+	lostPrefix := fset.String("lost-prefix", "", "comma-separated recorders whose logs lost their first steps, which the log cannot show (no seqs): judged as a lost prefix (qtrace.MarkLost)")
+	lostSuffix := fset.String("lost-suffix", "", "comma-separated recorders whose logs lost their last steps, which the log cannot show (a killed process's buffer): their tails judged lost after their last steps (qtrace.MarkLost)")
 	fset.Parse(args)
 	if *noITF {
 		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
@@ -467,13 +469,19 @@ func runValidate(args []string) (int, error) {
 		fmt.Printf("input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
 			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
 		if in.Torn != nil {
-			fmt.Printf("  warning: %v\n", in.Torn)
+			fmt.Printf("  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
 		}
 		if in.Format == input.ITF {
 			itfs = append(itfs, in)
 		} else {
 			steps = append(steps, in.Steps...)
 		}
+	}
+	if steps, err = markLost(steps, *lostPrefix, true); err != nil {
+		return 2, err
+	}
+	if steps, err = markLost(steps, *lostSuffix, false); err != nil {
+		return 2, err
 	}
 	if *dir == "" { // one root for every actor's and input's modules, named in the output
 		d, err := os.MkdirTemp("", "gotogether-validate-")
@@ -543,6 +551,42 @@ func runValidate(args []string) (int, error) {
 	}
 	fmt.Printf("RESULT: FAIL (%s)\n", failSummary(results))
 	return 1, nil
+}
+
+// markLost declares the losses of the comma-separated recorders the
+// steps cannot show (qtrace.MarkLost): a prefix up to each recorder's
+// first seq, a suffix after its last.
+func markLost(steps []qtrace.Step, recorders string, prefix bool) ([]qtrace.Step, error) {
+	if recorders == "" {
+		return steps, nil
+	}
+	flag := map[bool]string{true: "-lost-prefix", false: "-lost-suffix"}[prefix]
+	first, last := map[string]uint64{}, map[string]uint64{}
+	var names []string
+	for _, s := range steps {
+		if s.Lost != "" {
+			continue
+		}
+		if _, ok := last[s.Recorder]; !ok {
+			names = append(names, s.Recorder)
+			first[s.Recorder] = s.Seq
+		}
+		first[s.Recorder] = min(first[s.Recorder], s.Seq)
+		last[s.Recorder] = max(last[s.Recorder], s.Seq)
+	}
+	for _, r := range strings.Split(recorders, ",") {
+		r = strings.TrimSpace(r)
+		if _, ok := last[r]; !ok {
+			sort.Strings(names)
+			return nil, fmt.Errorf("validate: %s %s: no step of recorder %q in the input: name one of its recorders (%s)", flag, recorders, r, strings.Join(names, ", "))
+		}
+		l := qtrace.Lost{Recorder: r, Prefix: prefix, After: last[r]}
+		if prefix {
+			l.After = max(first[r], 1) - 1
+		}
+		steps = qtrace.MarkLost(steps, l)
+	}
+	return steps, nil
 }
 
 // failSummary says how many of results fail and why, in the claims' words
