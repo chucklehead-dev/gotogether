@@ -12,8 +12,10 @@ The first release. What a user meets, by module:
   Rerun, Reset, Keep, Calibration, Opts})` shrinks a failing sequence of
   a driver's actions to a 1-minimal one (ddmin) that still fails the
   same way, each candidate rerun on the system from the state a
-  `qtest.Resetter` leaves (its contract checked first: a rerun of no
-  actions records nothing, the original's first two reruns fail alike)
+  `qtest.Resetter` leaves (its contract checked first: two reruns of no
+  actions record the same steps, up to names and times, so an
+  environment's own shutdown steps pass and a leak does not; the
+  original's first two reruns fail alike)
   and its steps checked against the binding; `ShrunkActions[A]`
   (`Actions`, `Run`, `Original`, `Reruns`, `Reproduced`,
   `NotReproduced`, `Diverged`, `Errors`, `Baseline`, `PerCandidate`,

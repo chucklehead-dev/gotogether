@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -26,10 +27,13 @@ type fakeApp struct {
 	rng     *rand.Rand
 	diverge func(set uint) bool // the rerun cannot do these actions
 	errs    int                 // the next errs reruns fail
-	// leakStep: Reset leaves a job that records a step; leakState: Reset
-	// leaves a count of reruns, and the second shows bugB instead
-	leakStep, leakState bool
-	runs                int
+	// poller: each rerun starts a poller Reset does not stop, recording a
+	// poll in every later rerun; leakState: Reset leaves a count of
+	// reruns, and the second shows bugB instead; shutdown: each rerun's
+	// fresh server records its drain and a settle, under a recorder of
+	// its own, at the time it ends (no leak: the environment's own steps)
+	poller, leakState, shutdown bool
+	runs, pollers, boots        int
 }
 
 type fakeReset struct{ app *fakeApp }
@@ -41,14 +45,24 @@ func (r fakeReset) Reset(context.Context) error {
 	return nil
 }
 
-func (f *fakeApp) rerun(_ context.Context, idx []int) ([]qtrace.Step, error) {
+func (f *fakeApp) rerun(_ context.Context, idx []int) (steps []qtrace.Step, err error) {
 	var set uint
-	var steps []qtrace.Step
 	add := func(action string, args map[string]any) {
 		steps = append(steps, qtrace.Step{Recorder: "app", Seq: uint64(len(steps) + 1), Action: action, Args: args})
 	}
-	if f.leakStep {
-		add("leftover", nil)
+	for range f.pollers {
+		add("poll", nil)
+	}
+	if f.poller {
+		f.pollers++
+	}
+	f.boots++
+	if f.shutdown {
+		server := fmt.Sprintf("server-%d", f.boots)
+		defer func() {
+			steps = append(steps, qtrace.Step{Recorder: server, Seq: 1, Action: "drained", Time: time.Now()},
+				qtrace.Step{Recorder: server, Seq: 2, Settled: true, Time: time.Now()})
+		}()
 	}
 	for _, i := range idx {
 		set |= 1 << i
@@ -246,9 +260,11 @@ func TestShrinkActionsDivergedIsNoPass(t *testing.T) {
 	}
 }
 
-// A Resetter that leaves state behind is refused, naming it: a rerun of
-// no actions that records steps, or a second rerun of the original that
-// fails otherwise than the first.
+// A Resetter that leaves state behind is refused, naming it: two reruns
+// of no actions that record different steps (a poller the first left
+// running), or a second rerun of the original that fails otherwise than
+// the first. An environment whose every run records its own shutdown is
+// no leak.
 func TestShrinkActionsLeakyResetter(t *testing.T) {
 	t.Parallel()
 	bug := func(m uint) bool { return m&1 != 0 }
@@ -256,13 +272,19 @@ func TestShrinkActionsLeakyResetter(t *testing.T) {
 		app  *fakeApp
 		want string
 	}{
-		{&fakeApp{a: bug, leakStep: true}, "after Reset (qtest.fakeReset), a Rerun of no actions recorded 1 steps (leftover): the Resetter left work or state behind"},
+		{&fakeApp{a: bug, poller: true}, "after Reset (qtest.fakeReset), two Reruns of no actions recorded different steps (step 0: the second run recorded one more (poll())): the Resetter left work or state behind that the second saw"},
 		{&fakeApp{a: bug, leakState: true}, "the original's first two reruns failed differently (invariant noBugA; then disabled bugB): Reset (qtest.fakeReset) leaves state"},
 	} {
 		f := &failTB{TB: t}
 		if res := shrinkFake(f, c.app, 4, Expectation{}, Calibration{}); res != nil || len(f.errs) != 1 || !strings.Contains(f.errs[0], c.want) {
 			t.Errorf("errors %q, want %q", f.errs, c.want)
 		}
+	}
+	// a fresh server per rerun records its drain and settle each time,
+	// under its own recorder and at its own time: the same steps
+	res := shrinkFake(t, &fakeApp{a: func(m uint) bool { return m&0b101 == 0b101 }, shutdown: true}, 4, Expectation{}, Calibration{})
+	if maskOf(res.set) != 0b101 || !res.minimal {
+		t.Fatalf("with a shutdown step: got %v minimal %v, want [0 2]", res.set, res.minimal)
 	}
 }
 

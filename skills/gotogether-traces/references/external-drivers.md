@@ -176,12 +176,17 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   other error is a failed rerun, and three in a row end the test with
   it.
 - **The reset contract**, checked before anything else: a `Reset`, then
-  a rerun of no actions, records no step (nothing left pending: a job
-  still running, a poller), and the original's first two reruns fail
-  alike (state one rerun leaves would change the next). A Resetter that
-  fails either is refused by its type: clear what it names. `Reset` is
-  nil only when `Rerun` builds a fresh environment itself (a new server
-  per rerun).
+  a rerun of no actions, twice, records the same steps both times
+  (compared as the model sees them: recorders', actors', processes' and
+  threads' names may differ, as may times). An environment's own steps
+  repeat and pass (a fresh server's `drained` and settle at every
+  shutdown); a leak shows as a difference (a job the first rerun left
+  running, finishing in the second; a poller Reset did not stop). The
+  original's first two reruns must also fail alike (state one rerun
+  leaves would change the next). A Resetter that fails either is
+  refused by its type: clear what the message names. `Reset` is nil
+  only when `Rerun` builds a fresh environment itself (a new server per
+  rerun).
 - **The failure kept** is the original's (`qtest.SameFailure` of its first
   failing rerun: each failing actor's first failure's kind and name,
   whatever ids and arguments), so a shrink does not drift to another

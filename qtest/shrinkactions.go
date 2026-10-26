@@ -18,8 +18,12 @@ import (
 
 // A Resetter returns the system an ActionShrink reruns to its initial
 // state: its data cleared, no work pending. ShrinkActions calls it before
-// every rerun, and checks it first (a Reset, then a rerun of no actions,
-// must record no steps).
+// every rerun, and checks it first: a Reset then a rerun of no actions,
+// twice, must record the same steps both times (up to recorders',
+// actors', processes' and threads' names, and times). An environment's
+// own steps (a fresh server's shutdown drain and settle) repeat and
+// pass; a leak (a job the first left running, finishing in the second)
+// does not.
 type Resetter interface {
 	Reset(ctx context.Context) error
 }
@@ -100,10 +104,10 @@ type ShrunkActions[A any] struct {
 //	})
 //	shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
 //
-// It fails t, naming the fix, when the Resetter leaves state behind (a
-// rerun of no actions records steps, or the original's first two reruns
-// fail differently), when the original never reproduces, and when three
-// reruns in a row fail.
+// It fails t, naming the fix, when the Resetter leaves state behind (two
+// reruns of no actions record different steps, or the original's first
+// two reruns fail differently), when the original never reproduces, and
+// when three reruns in a row fail.
 func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *ShrunkActions[A] {
 	t.Helper()
 	c := config(t, s.Opts)
@@ -415,6 +419,19 @@ func (s *shrinker) candidate(ctx context.Context, idx []int, n int, found map[st
 	return ddmin.Passes
 }
 
+// appSteps are the steps of steps the system made: model steps and
+// invocation records, not the settles, losses and watermarks the
+// recording made.
+func appSteps(steps []qtrace.Step) []qtrace.Step {
+	var out []qtrace.Step
+	for _, st := range steps {
+		if st.Model() || st.Invocation {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
 // shrink checks the Resetter's contract, calibrates on the original and
 // shrinks it.
 func (s *shrinker) shrink() *shrinkResult {
@@ -437,25 +454,25 @@ func (s *shrinker) shrink() *shrinkResult {
 			t.Fatalf("gotogether: ShrinkActions: Keep names %s: a misspelled name never matches", strings.Join(u, "; "))
 		}
 	}
-	// the Resetter's contract: no actions, no steps of the system's
-	s.reruns++
-	err = s.resetErr(ctx)
-	var steps []qtrace.Step
-	if err == nil {
-		steps, err = s.rerun(ctx, nil)
-	}
-	if err != nil {
-		t.Fatalf("gotogether: ShrinkActions: a Reset, then a Rerun of no actions, failed: %v. Rerun must take an empty sequence: it checks that the Resetter leaves nothing behind", err)
-	}
-	var leaked []string
-	for _, st := range steps {
-		if st.Model() || st.Invocation {
-			leaked = append(leaked, st.Action)
+	// the Resetter's contract: no actions, the same steps each time. An
+	// environment's own steps (a server's shutdown drain, its settle)
+	// repeat; what a Reset leaves behind (a job still running, a poller)
+	// shows in the second rerun and not the first.
+	var empty [2][]qtrace.Step
+	for k := range empty {
+		s.reruns++
+		err = s.resetErr(ctx)
+		if err == nil {
+			empty[k], err = s.rerun(ctx, nil)
+		}
+		if err != nil {
+			t.Fatalf("gotogether: ShrinkActions: a Reset, then a Rerun of no actions, failed: %v. Rerun must take an empty sequence: "+
+				"two such reruns check that the Resetter leaves nothing behind", err)
 		}
 	}
-	if len(leaked) > 0 {
-		t.Fatalf("gotogether: ShrinkActions: after Reset (%s), a Rerun of no actions recorded %d steps (%s): the Resetter left work or state behind. "+
-			"Reset must return the system to its initial state, with nothing pending", s.resetter(), len(leaked), strings.Join(leaked, ", "))
+	if d := sameRun(&Run{Steps: appSteps(empty[0])}, &Run{Steps: appSteps(empty[1])}); d != "" {
+		t.Fatalf("gotogether: ShrinkActions: after Reset (%s), two Reruns of no actions recorded different steps (%s): the Resetter left work or state "+
+			"behind that the second saw. Reset must return the system to its initial state, with nothing pending", s.resetter(), d)
 	}
 	// the baseline: the original's rate, and the failure to keep
 	all := make([]int, s.n)

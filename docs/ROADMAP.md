@@ -333,8 +333,10 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
 - **E8. External shrinking (L). Core done:** `qtest.ShrinkActions`
   (internal/ddmin: ddmin over index sets, three-valued, 1-minimal; each
   candidate rerun after a `Resetter`, its steps judged through the
-  verdict cache), the reset contract checked first (no actions, no
-  steps; the original's first two reruns fail alike), `SameFailure` the
+  verdict cache), the reset contract checked first (two reruns of no
+  actions record the same steps, up to names and times, not none: a
+  fresh server's shutdown steps repeat, a leak differs; the original's
+  first two reruns fail alike), `SameFailure` the
   failure kept by default, `ErrDiverged` never a pass, `Calibration`
   (n = ⌈ln α / ln(1−p)⌉ from the original's 10 reruns, p at its Wilson
   lower bound: from the rate measured, a half-rate failure reached its
