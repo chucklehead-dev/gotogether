@@ -11,7 +11,7 @@ examples/hello 13
 examples/jobqueue 14
 examples/kvstore 25
 examples/lease 51
-examples/payd 50
+examples/payd 55
 examples/quorumkv 40
 examples/raftkv 60
 examples/retrystorm 29
