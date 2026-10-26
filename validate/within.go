@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -189,7 +190,7 @@ func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps 
 			case shortest > w.Bound:
 				res.Verdict = Fail
 				res.Failure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s held only after %s, %s later (bound %s)",
-					w.After, at(k), w.Holds, at(met), shortest, w.BoundText)}
+					w.After, at(k), w.Holds, at(met), shortest, w.BoundText), window: hi[k].Add(w.Bound)}
 				return res
 			case unsure == nil:
 				unsure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s and %s held after %s, between %s and %s later as the calls' intervals place their effects (bound %s)",
@@ -202,7 +203,7 @@ func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps 
 				how = fmt.Sprintf("the trace went on %s", end.Sub(hi[k]))
 			}
 			res.Failure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s never held after it (bound %s; %s)",
-				w.After, at(k), w.Holds, w.BoundText, how)}
+				w.After, at(k), w.Holds, w.BoundText, how), window: hi[k].Add(w.Bound)}
 			return res
 		default:
 			open = true // the trace ended before the bound, unsettled
@@ -220,7 +221,8 @@ func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps 
 // Key is a run's key for a cache of its verdict against c: its steps
 // (qtrace.Key), with their times when the binding has bounded-response
 // obligations, judged on them (a slow run and a fast one of the same
-// steps once shared a verdict), and how they are judged (the evaluator's
+// steps once shared a verdict) or a loss record (a failure after its
+// cut is no verdict), and how they are judged (the evaluator's
 // mode, quint's backend, the snapshot action a trace may start from: the
 // same steps judged from init are another verdict). Two runs of one key
 // get one verdict.
@@ -232,7 +234,10 @@ func (c *Checker) Key(steps []qtrace.Step) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|", c.Options.evalMode(), backend, c.Binding.Snapshot)
 	b.WriteString(qtrace.Key(steps))
-	if len(c.Binding.Within) == 0 || len(steps) == 0 {
+	// a lost tail's cut is judged by time (a failure recorded after it is
+	// no verdict): its steps' times, and the loss records', are verdicts'
+	lost := slices.ContainsFunc(steps, func(s qtrace.Step) bool { return s.Lost != "" })
+	if len(c.Binding.Within) == 0 && !lost || len(steps) == 0 {
 		return b.String()
 	}
 	for _, s := range steps {

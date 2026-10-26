@@ -44,8 +44,8 @@ func (l Lost) String() string {
 // no issue of its own: validation says what it leaves unjudged.
 func (l Lost) Issue() Issue {
 	return Issue{"error", "lost-prefix", fmt.Sprintf("%s (a rotated or truncated log, or a recorder started mid-run): its first step's state is not the model's init. "+
-		"Record a snapshot step at the head of each log, the whole state as a model action's parameters, and name that action in the binding (snapshot: restore); "+
-		"or, coming, a resume action", l)}
+		"Record a snapshot step at the head of each log, the whole state as a model action's parameters, and name that action in the binding (snapshot: restore) "+
+		"(no resume from an unknown state is available yet)", l)}
 }
 
 // MarkLost declares a loss a log cannot show (a killed process's

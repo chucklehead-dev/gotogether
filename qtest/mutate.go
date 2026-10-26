@@ -236,7 +236,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 // and no actor without one.
 func decidedFailing(runs []*Run) bool {
 	for _, r := range runs {
-		if !r.Report.OK() && !undecided(r.Report) {
+		if !r.Report.OK() && !verdictless(r.Report) {
 			return true
 		}
 	}
@@ -245,7 +245,7 @@ func decidedFailing(runs []*Run) bool {
 
 func anyUndecided(runs []*Run) bool {
 	for _, r := range runs {
-		if undecided(r.Report) {
+		if verdictless(r.Report) {
 			return true
 		}
 	}

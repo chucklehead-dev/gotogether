@@ -6,8 +6,13 @@ constants:
   LIMIT: '100'
 snapshot: restore
 actions:
+  # templates given: the itf command plans without the model
+  restore:
+    args: { b: '{{.b}}', n: '{{.n}}' }
   deposit:
+    args: { amount: '{{.amount}}' }
     expect: 'balance == {{.obs.balance}}'
   withdraw:
+    args: { amount: '{{.amount}}' }
     expect: 'balance == {{.obs.balance}}'
 invariants: [nonNegative, underLimit]

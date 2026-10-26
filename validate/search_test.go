@@ -25,7 +25,8 @@ import (
 // step surely recorded before its invocation, and before every step
 // surely recorded after a settle that followed it (the system was quiet
 // there), whatever order the actor's steps are in; surely: on one
-// recorder by seq, across recorders by more than RealTimeSlack.
+// recorder by seq, across recorders by more than RealTimeSlack. Some
+// trials start from a snapshot (start 1): no call takes effect before it.
 func TestResolutionsAgainstBruteForce(t *testing.T) {
 	t.Parallel()
 	r := rand.New(rand.NewPCG(5, 6))
@@ -66,7 +67,11 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 		// the settles a search is given: those no other recorder worked past
 		// (times 0.5 ms apart, so within RealTimeSlack and beyond it)
 		settles = settlesOf(all)
-		got, cut, crossing := resolutions(tr, settles, 1<<20, 0)
+		start := 0
+		if len(steps) > 0 && r.IntN(3) == 0 {
+			start = 1
+		}
+		got, cut, crossing := resolutions(tr, settles, 1<<20, start)
 		compared++
 		if len(settles) > 0 {
 			settled++
@@ -87,6 +92,9 @@ func TestResolutionsAgainstBruteForce(t *testing.T) {
 			return b.Time.Sub(a.Time) > slack
 		}
 		allowed := func(p qtrace.Step, pos int) bool {
+			if pos < start {
+				return false
+			}
 			for j, s := range steps {
 				if surely(s, p) && pos <= j {
 					return false

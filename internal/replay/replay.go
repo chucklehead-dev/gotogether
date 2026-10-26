@@ -27,6 +27,15 @@ type Generated struct {
 	StartLines map[int]bool
 }
 
+// Steps counts the run's steps: its calls, and the snapshot it starts
+// from, if any.
+func (g *Generated) Steps() int {
+	if g.Start != nil {
+		return len(g.Calls) + 1
+	}
+	return len(g.Calls)
+}
+
 // GeneratedTests names the runs a generated module holds.
 type GeneratedTests struct {
 	Conforms   string            // replays every step; checks each step's expect

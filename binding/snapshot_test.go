@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -55,5 +56,37 @@ func TestPlanSnapshotStart(t *testing.T) {
 	}
 	if p.Start != nil || len(p.Calls) != 1 || len(p.Issues) != 1 || !strings.Contains(p.Issues[0].Msg, "snapshot not first in its trace: skipped") {
 		t.Fatalf("start %+v calls %v issues %v", p.Start, p.Calls, p.Issues)
+	}
+}
+
+// StepsToITF starts the trace of a log whose head was lost at its
+// snapshot: state 0 is the snapshot's action and picks, and the lost
+// prefix is said as where the trace starts.
+func TestStepsToITFSnapshot(t *testing.T) {
+	b := &Binding{Snapshot: "restore", Actions: map[string]Action{"restore": {Args: map[string]string{"a": "{{.a}}", "b": "{{.b}}"}}, "setX": {Args: map[string]string{"v": "{{.v}}"}}}}
+	steps := []qtrace.Step{
+		{Action: "restore", Seq: 5, Recorder: "r", Process: "p", Args: map[string]any{"a": int64(3), "b": int64(4)}},
+		{Action: "setX", Seq: 6, Recorder: "r", Process: "p", Args: map[string]any{"v": int64(1)}},
+	}
+	out, issues, err := b.StepsToITF(steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("%d traces", len(out))
+	}
+	var data []byte
+	for _, d := range out {
+		data = d
+	}
+	tr, err := itf.Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tr.States) != 2 || tr.States[0].Action != "restore" || tr.States[0].Picks["a"].Quint() != "3" || tr.States[1].Action != "setX" {
+		t.Errorf("states %+v", tr.States)
+	}
+	if len(issues) != 1 || issues[0].Severity != "info" || !strings.Contains(issues[0].Msg, "judged from the state recorded by restore at seq 5") {
+		t.Errorf("issues %v", issues)
 	}
 }

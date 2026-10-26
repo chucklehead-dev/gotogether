@@ -277,3 +277,40 @@ func TestValidateLost(t *testing.T) {
 		}
 	}
 }
+
+// A log that lost its head, written as model-level ITF, starts at its
+// snapshot's state (state 0 is the snapshot), so validating the ITF gives
+// the steps' verdict: a deposit of 5 that saw 5 after restore(50) is no
+// behaviour from there, whatever it is from init. The itf command says
+// where the trace starts, not the lost prefix's error.
+func TestITFSnapshotStart(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+	dir := t.TempDir()
+	steps := []qtrace.Step{
+		{Action: "restore", Recorder: "r", Process: "p", Seq: 3, Time: time.Unix(1, 0), Args: map[string]any{"b": int64(50), "n": int64(3)}},
+		{Action: "deposit", Recorder: "r", Process: "p", Seq: 4, Time: time.Unix(2, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}},
+	}
+	log := filepath.Join(dir, "run.jsonl")
+	var b strings.Builder
+	if err := qtrace.WriteJSONL(&b, steps); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(log, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bind := "../../validate/testdata/snapshot.yaml"
+	_, out := capture(t, func() (int, error) { return 0, toITF([]string{"-binding", bind, "-out", dir, log}) })
+	if strings.Contains(out, "error lost-prefix") || !strings.Contains(out, "judged from the state recorded by restore at seq 3") {
+		t.Errorf("itf: %s", out)
+	}
+	for _, in := range []string{log, filepath.Join(dir, "default.itf.json")} {
+		code, out := capture(t, func() (int, error) {
+			return runValidate([]string{"-binding", bind, "-dir", filepath.Join(dir, "out"), in})
+		})
+		if code != 1 || !strings.Contains(out, "mismatch after deposit") {
+			t.Errorf("validate %s: exit %d:\n%s", filepath.Base(in), code, out)
+		}
+	}
+}

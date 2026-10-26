@@ -30,7 +30,17 @@ each key from it). The lost prefix of its own recorder becomes `issue:
 info lost-prefix: judged from the state recorded by restore at seq 3
 (recorder r lost seqs 1..2)`; another recorder's lost prefix stays an
 error (its lost steps may have come after the snapshot). A snapshot step
-anywhere but first is skipped, with `issue: info snapshot`.
+anywhere but first is skipped, with `issue: info snapshot`. `gotogether
+itf` writes such a trace with state 0 the snapshot's, and validating the
+ITF starts there too.
+
+Record the snapshot when no operation is in flight (under the lock that
+rotates the log). A linearization keeps it first, but a step invoked
+before it completed may have taken effect before it, its effect inside
+the state recorded: an order that conforms with the step after the
+snapshot stands, a failure is no verdict (`issue: warn snapshot: no
+verdict: ... overlapped the snapshot`, Reason `no verdict (snapshot
+overlap)`).
 
 Lint (and `validate.NewChecker`) refuses a snapshot action the model
 lacks, one without parameters, or one that leaves a variable unassigned
@@ -41,7 +51,9 @@ steps carry no seqs cannot show a lost prefix: declare it
 ## A lost tail: what it leaves unjudged
 
 A recorder that lost its last steps (a torn last line, which `ReadJSONL`
-reads as a loss record after each of the log's recorders' last seq; a
+reads as a loss record after each of the log's recorders' last seq,
+every recorder writing the log, since the cut line may not name its
+own; a
 killed process's `Buffered` sink, which no log shows: declare it with
 `qtrace.MarkLost(steps, qtrace.Lost{Recorder: r, After: n})` or
 `gotogether validate -lost-suffix r`) leaves unknown what it recorded
@@ -59,6 +71,17 @@ after its last kept step. So, in every check:
 - a failure before the cut stands, and a pass says `issue: info
   lost-suffix: the recorded steps conform; recorder r lost its tail after
   seq n`.
+
+A step near the cut (within `qtrace.RealTimeSlack` of it, two machines'
+clocks apart) counts as after it, and a within obligation whose window
+(its trigger plus the bound) reaches the cut is no verdict: the response
+may be among the lost steps. A loss is the trace's of each actor its
+recorder recorded, as a gap is: actors are separate instances of the
+model. Claims over runs know it: `None(Violates("I"))` does not hold of
+a run whose `I` (or an eventual val, unjudged for the lost tail) has no
+verdict, and such a run kills no mutant. A cached verdict of a run with
+a loss record is keyed with its steps' times, which the cut is judged
+by.
 
 `-lost-prefix r` declares a lost head a log without seqs cannot show.
 Both flags take comma-separated recorder ids.

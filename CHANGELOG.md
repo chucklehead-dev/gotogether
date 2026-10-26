@@ -315,6 +315,19 @@ The first release. What a user meets, by module:
   validate -lost-suffix` and `-lost-prefix` declare losses a log cannot
   show (`qtrace.MarkLost`), and a torn log's warning says what its lost
   tail leaves unjudged. `qtrace.Filter` keeps loss records.
+- Partial logs, reviewed (S11): `gotogether itf` starts a snapshot's
+  trace at its state (state 0), and `ValidateITF` replays from it;
+  `binding.Binding.SnapshotFirst`, `StartIssues`. A within obligation
+  whose window reaches a lost tail's cut, or a step within
+  `RealTimeSlack` of it, is no verdict. `validate.Result.Lost` names a
+  result's lost tails; `None(...)` over an invariant or eventual val a
+  run left without a verdict fails, and such a run kills no mutant.
+  `Checker.Key` of a run with a loss record has its steps' times. A
+  linearized step overlapping the snapshot makes a failure no verdict
+  (`no verdict (snapshot overlap)`). A snapshot alone that is disabled
+  is `rejects restore`, and counts as a step. A lost tail's settle bounds
+  no pending call; `Filter` drops the loss records of a recorder it
+  drops; a search out of budget no longer says a failure stands.
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

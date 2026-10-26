@@ -26,7 +26,10 @@ type Trace struct {
 	Settled bool
 	// Lost are the losses of the recorders of this actor's steps (a log
 	// that starts after seq 1, a torn tail, MarkLost's), by recorder. A
-	// lost prefix is an issue too (Lost.Issue).
+	// lost prefix is an issue too (Lost.Issue). As for a gap, a loss is
+	// every actor's its recorder recorded: actors are separate instances
+	// of the model, and a lost step of an actor its recorder never
+	// recorded is in no trace.
 	Lost []Lost
 }
 

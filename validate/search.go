@@ -61,6 +61,11 @@ type search struct {
 	// mark judges the check's verdict by them (judgeLost)
 	lost    map[string][]qtrace.Lost
 	binding *binding.Binding
+	// overlaps are, by actor (or partition), the steps a linearization
+	// kept after the snapshot it starts from though real time lets them
+	// precede it: their effects may be in the snapshot's state, which no
+	// order can say, so a failure is no verdict (mark)
+	overlaps map[string][]string
 }
 
 // A claim is what a search took from the Go evaluator alone: an order of
@@ -211,6 +216,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
 		s.lost, s.binding = lostOf(c.Binding, steps, opt.Key), c.Binding
+		s.overlaps = overlapsOf(c.Binding, steps, opt.Key)
 		return s, nil
 	}
 	if opt.ResolvePending {
@@ -244,6 +250,62 @@ func lostOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]qt
 	return out
 }
 
+// overlapsOf are, by the name a linearization gives each actor (or
+// partition) that starts from a snapshot step, the steps real time lets
+// precede it: invoked before it completed (by their invocation record on
+// its recorder, else by time, give or take the slack). A step whose
+// invocation is unknown is taken to follow it, as recorded.
+func overlapsOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]string {
+	traces, _ := qtrace.Reconstruct(steps)
+	out := map[string][]string{}
+	for _, tr := range traces {
+		if !snapshotFirst(b, tr) {
+			continue
+		}
+		for _, p := range partitions(tr, key, true) {
+			snap := p.Steps[0]
+			for _, s := range p.Steps[1:] {
+				var follows bool
+				switch {
+				case s.Recorder == snap.Recorder && s.Call != 0 && snap.Seq != 0:
+					follows = snap.Seq < s.Call
+				case !s.Invoked.IsZero():
+					follows = snap.Time.Add(qtrace.RealTimeSlack).Before(s.Invoked)
+				default:
+					follows = true
+				}
+				if !follows {
+					out[p.Actor] = append(out[p.Actor], fmt.Sprintf("%s (seq %d of recorder %s)", s.String(), s.Seq, s.Recorder))
+				}
+			}
+		}
+	}
+	return out
+}
+
+// judgeOverlaps makes a's failure no verdict when steps overlapped the
+// snapshot its order starts from (overlapsOf): each may have taken
+// effect before the snapshot was taken, its effect in the state it
+// recorded, and replayed after it, applied twice. An order that conforms
+// with them after it stands: it is one real time allows.
+func judgeOverlaps(a *Result, overlaps []string) {
+	if len(overlaps) == 0 || passed(a) {
+		return
+	}
+	a.noVerdict = "snapshot overlap"
+	if a.Conforms == Fail {
+		a.Conforms = NotEvaluated
+	}
+	for i := range a.Invariants {
+		if a.Invariants[i].Verdict == Fail {
+			a.Invariants[i].Verdict = NotEvaluated
+		}
+	}
+	a.Issues = append(a.Issues, qtrace.Issue{Severity: "warn", Kind: "snapshot", Msg: fmt.Sprintf(
+		"no verdict: %s overlapped the snapshot in real time, so its effect may be in the state the snapshot recorded, and replayed after it, twice; "+
+			"record the snapshot when no operation is in flight (under the lock that rotates the log)", strings.Join(overlaps, ", "))})
+}
+
 // intervals reports whether steps carry invocation times or records: a
 // client's history, recorded where calls returned.
 func intervals(steps []qtrace.Step) bool {
@@ -270,20 +332,22 @@ func (s *search) mark(rep *Report) {
 				"check in an order real time allows (qtest.Linearize(), gotogether validate -linearize)"})
 		}
 		a.Issues = append(a.Issues, s.kept[a.Actor]...)
-		judgeLost(s.binding, a, s.lost[a.Actor])
-		if !s.undecided[a.Actor] {
-			continue
-		}
-		// the search ran out of budget: the order shown is no verdict, for
-		// its conformance nor for what it violated (an order that conformed
-		// step by step but failed an eventual val was still a candidate the
-		// search rejected)
-		a.Conforms = NotEvaluated
-		for i := range a.Invariants {
-			if a.Invariants[i].Verdict == Fail {
-				a.Invariants[i].Verdict, a.Invariants[i].Failure = NotEvaluated, nil
+		if s.undecided[a.Actor] {
+			// the search ran out of budget: the order shown is no verdict, for
+			// its conformance nor for what it violated (an order that conformed
+			// step by step but failed an eventual val was still a candidate the
+			// search rejected)
+			a.Conforms = NotEvaluated
+			for i := range a.Invariants {
+				if a.Invariants[i].Verdict == Fail {
+					a.Invariants[i].Verdict, a.Invariants[i].Failure = NotEvaluated, nil
+				}
 			}
 		}
+		// what a lost tail or a step overlapping the snapshot leaves
+		// unjudged, of what the budget did not
+		judgeLost(s.binding, a, s.lost[a.Actor])
+		judgeOverlaps(a, s.overlaps[a.Actor])
 	}
 }
 
@@ -1182,6 +1246,9 @@ func lastSettle(steps []qtrace.Step) time.Time {
 // recorder recorded a step after (a settle that settles nothing bounds
 // nothing).
 func settlesOf(steps []qtrace.Step) []qtrace.Step {
+	if slices.ContainsFunc(steps, func(s qtrace.Step) bool { return s.Lost == "suffix" }) {
+		return nil // a lost tail may have come after any settle: none was quiet (as Reconstruct takes it)
+	}
 	var out []qtrace.Step
 	for _, s := range steps {
 		if !s.Settled {

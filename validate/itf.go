@@ -101,12 +101,12 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 	if len(tr.States) == 0 {
 		return nil, fmt.Errorf("empty trace")
 	}
-	var calls []binding.Call
-	for i, st := range tr.States[1:] {
-		idx := i + 1
+	// call is state idx's call: its action with its picks, its expect and
+	// the variables it carries checked after it
+	call := func(idx int, st itf.State) (binding.Call, error) {
 		ps, ok := m.Actions[st.Action]
 		if !ok {
-			return nil, fmt.Errorf("state %d: %q is not an action of %s", idx, st.Action, module)
+			return binding.Call{}, fmt.Errorf("state %d: %q is not an action of %s", idx, st.Action, module)
 		}
 		c := binding.Call{Action: st.Action, Args: map[string]string{}, Note: fmt.Sprintf("state %d", idx)}
 		if obs, ok := st.Meta["observed"].(string); ok {
@@ -116,7 +116,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		for _, p := range ps {
 			v, ok := st.Picks[p.Name]
 			if !ok {
-				return nil, fmt.Errorf("state %d: %s has no nondet pick named %s (picks are matched to parameters by name)", idx, m.Signature(st.Action), p.Name)
+				return binding.Call{}, fmt.Errorf("state %d: %s has no nondet pick named %s (picks are matched to parameters by name)", idx, m.Signature(st.Action), p.Name)
 			}
 			c.Args[p.Name] = v.Quint()
 			vals = append(vals, v.Quint())
@@ -135,7 +135,25 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		} else if len(checks) > 1 {
 			c.Expect = "and { " + strings.Join(checks, ", ") + " }"
 		}
+		return c, nil
+	}
+	var calls []binding.Call
+	for i, st := range tr.States[1:] {
+		c, err := call(i+1, st)
+		if err != nil {
+			return nil, err
+		}
 		calls = append(calls, c)
+	}
+	// state 0 is init's, or the action of a snapshot the trace starts from
+	// (a trace of a log that lost its head: binding.Plan.Start)
+	var start *binding.Call
+	if a := tr.States[0].Action; a != "" && a != "init" {
+		c, err := call(0, tr.States[0])
+		if err != nil {
+			return nil, err
+		}
+		start = &c
 	}
 	ms := replay.ModuleSpec{Spec: spec, Module: module, Defs: defs, Invariants: invs,
 		Header: []string{fmt.Sprintf("replay of a model-level ITF trace, %d states", len(tr.States))}}
@@ -154,7 +172,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 			ms.Constants = append(ms.Constants, fmt.Sprintf("%s = %s", k, meta.Constants[k]))
 		}
 	}
-	if init := varCheck(tr.States[0]); len(init) > 0 {
+	if init := varCheck(tr.States[0]); len(init) > 0 && start == nil { // (a start's are its expect)
 		ms.InitExpect = "and { " + strings.Join(init, ", ") + " }"
 	}
 	actor := meta.Actor
@@ -163,7 +181,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 	}
 	base := "replay_" + sanitize(actor)
 	res := &Result{Actor: actor}
-	return res, evaluate(ctx, ms, [][]binding.Call{calls}, []*binding.Call{nil}, base, o, []*Result{res})[0]
+	return res, evaluate(ctx, ms, [][]binding.Call{calls}, []*binding.Call{start}, base, o, []*Result{res})[0]
 }
 
 func sortedKeys(m map[string]string) []string {

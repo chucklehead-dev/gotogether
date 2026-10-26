@@ -111,6 +111,10 @@ func TestMarkLost(t *testing.T) {
 	if kept := (Filter{Actions: []string{"b"}}).Apply(steps); len(kept) != 2 || kept[1].Lost != "suffix" {
 		t.Errorf("filtered: %+v", kept)
 	}
+	// and drops them with the recorder whose every step it dropped
+	if kept := (Filter{Actions: []string{"c"}}).Apply(steps); len(kept) != 0 {
+		t.Errorf("filtered: %+v", kept)
+	}
 }
 
 // A completion whose invocation record fell in a lost prefix is bounded
@@ -139,5 +143,31 @@ func TestLinearizeLostInvocation(t *testing.T) {
 	}
 	if got := l.Order[1].Action; got != "write" {
 		t.Errorf("order %v", l.Order)
+	}
+}
+
+// A torn log written by several recorders loses each one's tail: the cut
+// line, whose recorder it may not name, was one of theirs, and the writer
+// stopped for all.
+func TestReadJSONLTornSeveralRecorders(t *testing.T) {
+	var b bytes.Buffer
+	in := []Step{
+		{Action: "a", Recorder: "r", Seq: 1, Time: time.Unix(1, 0)},
+		{Action: "b", Recorder: "s", Seq: 1, Time: time.Unix(2, 0)},
+		{Action: "c", Recorder: "r", Seq: 2, Time: time.Unix(3, 0)},
+		{Action: "d", Recorder: "s", Seq: 2, Time: time.Unix(4, 0)},
+	}
+	if err := WriteJSONL(&b, in); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := ReadJSONL(strings.NewReader(b.String()[:b.Len()-10]))
+	lost := map[string]uint64{}
+	for _, s := range got {
+		if s.Lost == "suffix" {
+			lost[s.Recorder] = s.LostAfter
+		}
+	}
+	if len(lost) != 2 || lost["r"] != 2 || lost["s"] != 1 {
+		t.Errorf("losses %v, want r after 2, s after 1", lost)
 	}
 }

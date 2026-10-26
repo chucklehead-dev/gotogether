@@ -2,41 +2,17 @@ package validate
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
-// snapshotFirst reports whether tr starts with a step of b's snapshot
-// action: the state its replay starts from (binding.Plan.Start), which
-// every order a search tries keeps first.
-func snapshotFirst(b *binding.Binding, tr *qtrace.Trace) bool {
-	return b.Snapshot != "" && len(tr.Steps) > 0 && tr.Steps[0].Action == b.Snapshot && !tr.Steps[0].Ambiguous
-}
+// snapshotFirst is b.SnapshotFirst(tr).
+func snapshotFirst(b *binding.Binding, tr *qtrace.Trace) bool { return b.SnapshotFirst(tr) }
 
-// startIssues are tr's issues as its start says them: the lost prefix of
-// the recorder whose snapshot step the trace starts with is what that
-// step recorded, judged from there (info, no error). Another recorder's
-// lost prefix stays an error: its lost steps may have come after the
-// snapshot.
-func startIssues(b *binding.Binding, tr *qtrace.Trace) []qtrace.Issue {
-	issues := slices.Clone(tr.Issues)
-	if !snapshotFirst(b, tr) {
-		return issues
-	}
-	s := &tr.Steps[0]
-	for _, l := range tr.Lost {
-		if !l.Prefix || l.Recorder != s.Recorder || l.After+1 != s.Seq && !(l.After == 0 && s.Seq == 0) {
-			continue
-		}
-		if i := slices.Index(issues, l.Issue()); i >= 0 {
-			issues[i] = qtrace.Issue{Severity: "info", Kind: "lost-prefix", Msg: fmt.Sprintf("judged from the state recorded by %s at seq %d (%s)", s.Action, s.Seq, l)}
-		}
-	}
-	return issues
-}
+// startIssues is b.StartIssues(tr).
+func startIssues(b *binding.Binding, tr *qtrace.Trace) []qtrace.Issue { return b.StartIssues(tr) }
 
 // judgeLost is r as its trace's lost tails leave it (tr.Lost, or a
 // search's of the history it ordered): a failure at a step recorded at or
@@ -54,6 +30,7 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 	if len(tails) == 0 {
 		return
 	}
+	r.Lost = tails
 	for i, is := range r.Issues {
 		if is.Kind == "eventually" { // (a search's order shows no loss: its result said the generic why)
 			r.Issues[i] = notJudged(b.Eventually, lost)
@@ -69,11 +46,15 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 			s = r.Calls[i].Step // an inferred step (a restart): where the steps before it were
 		}
 		if s == nil {
-			return qtrace.Lost{}, false // the initial state's
+			s = &qtrace.Step{} // the initial state's: before every cut, unless a window says otherwise
 		}
 		for _, l := range tails {
+			// a lost step came after l.At on its recorder's clock: a step of
+			// another recorder at that time, give or take the clocks' slack,
+			// may follow it; a within's response lost before it was due
+			// would have met it
 			own := s.Recorder == l.Recorder && (s.Seq <= l.After || l.After == 0)
-			if s.Time.After(l.At) || s.Time.Equal(l.At) && !own {
+			if !own && !s.Time.Before(l.At.Add(-qtrace.RealTimeSlack)) || !f.window.IsZero() && l.At.Before(f.window) {
 				return l, true
 			}
 		}
@@ -122,9 +103,12 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 	for _, l := range tails {
 		said = append(said, l.String())
 	}
-	msg := strings.Join(said, "; ") + "; the failure comes before it, and stands"
-	if r.Conforms == Pass && passed(r) {
-		msg = "the recorded steps conform; " + strings.Join(said, "; ")
+	msg := strings.Join(said, "; ") // a verdict already none (a search's budget): the loss alone
+	switch {
+	case r.Conforms == Pass && passed(r):
+		msg = "the recorded steps conform; " + msg
+	case !passed(r):
+		msg += "; the failure comes before it, and stands"
 	}
 	r.Issues = append(r.Issues, qtrace.Issue{Severity: "info", Kind: "lost-suffix", Msg: msg})
 }

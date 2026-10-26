@@ -35,6 +35,9 @@ func (c *Checker) checkHidden(tr *qtrace.Trace) (*Result, error) {
 	}
 	res := newResult(c.Binding, tr, plan)
 	res.Calls, res.Steps = plan.Calls, len(plan.Calls)
+	if plan.Start != nil {
+		res.Steps++ // the snapshot it starts from
+	}
 	e := evaluatorFor(c)
 	if e.err != nil {
 		return nil, fmt.Errorf("hidden actions (%s) are searched by the Go evaluator, which has none for this binding: %v",

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path"
+	"slices"
 	"time"
 )
 
@@ -56,9 +57,10 @@ func (f Filter) Apply(steps []Step) []Step {
 		pseud[k] = true
 	}
 	var out []Step
+	kept := map[string]bool{} // recorders with a step kept: their loss records go with them
 	for _, s := range steps {
 		if s.Lost != "" {
-			out = append(out, s) // a loss record is its recorder's, whatever the steps kept: what they cannot show
+			out = append(out, s) // a loss record is its recorder's, whatever of its steps were kept: what they cannot show
 			continue
 		}
 		if !match(f.Actors, s.Actor) || !match(f.Actions, s.Action) ||
@@ -94,7 +96,8 @@ func (f Filter) Apply(steps []Step) []Step {
 		if pseud["actor"] && s.Actor != "" {
 			s.Actor = f.Pseudonym(s.Actor)
 		}
+		kept[s.Recorder] = true
 		out = append(out, s)
 	}
-	return out
+	return slices.DeleteFunc(out, func(s Step) bool { return s.Lost != "" && !kept[s.Recorder] })
 }

@@ -93,10 +93,10 @@ func (e *TornTail) Error() string {
 // per line. Blank lines are skipped. A last line that is cut off (no
 // newline, not a whole object) does not lose the log: ReadJSONL returns
 // the steps before it with a *TornTail error, which a caller may report
-// and go on. The steps then end in a loss record (MarkLost) for the last
-// recorder of the steps kept, after its last seq: the cut step was its,
-// and so is anything it recorded after (a run whose other recorders went
-// on is judged knowing that).
+// and go on. The steps then end in a loss record (MarkLost) for each
+// recorder of the log, after its last seq kept: the cut line was one of
+// theirs, which the cut may not name, and the writer stopped for all of
+// them (a run whose other logs went on is judged knowing that).
 func ReadJSONL(r io.Reader) ([]Step, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {

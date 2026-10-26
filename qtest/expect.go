@@ -337,13 +337,46 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 				if j.show < 0 {
 					j.show = i
 				}
-			} else if r == nil || undecided(r) {
+			} else if r == nil || undecided(r) || q.unjudged(r) {
 				j.unjudged++
 			}
 		}
 	}
 	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0
 	return j
+}
+
+// unjudged reports whether r has no verdict for an invariant (or within,
+// or eventual val) one of q's expectations names, in an actor that
+// conforms: one a lost tail left unjudged (validate.Result.Lost), or
+// hidden actions past their cap. That the run does not violate it is not
+// known. (An actor that does not conform violates no invariant, by
+// Violates' definition.)
+func (q quantified) unjudged(r *validate.Report) bool {
+	for _, e := range q.es {
+		for _, name := range e.invariants {
+			for _, a := range r.Actors {
+				if a.Conforms != validate.Pass {
+					continue
+				}
+				found := false
+				for _, inv := range a.Invariants {
+					if inv.Name == name {
+						found = true
+						if inv.Verdict == validate.NotEvaluated {
+							return true
+						}
+					}
+				}
+				// an eventual val a lost tail left unjudged is no result at
+				// all: the run might have settled, with the val false
+				if !found && len(a.Lost) > 0 && strings.HasPrefix(name, validate.EventuallyName("")) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // undecided reports whether some actor of the run has no verdict on its
@@ -353,6 +386,30 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 func undecided(r *validate.Report) bool {
 	for _, a := range r.Actors {
 		if a.Conforms == validate.NotEvaluated {
+			return true
+		}
+	}
+	return false
+}
+
+// verdictless reports whether the run has no verdict at all: undecided,
+// or an actor that conforms, violates nothing, and has an invariant with
+// no verdict (a lost tail's, hidden actions past their cap). A mutant is
+// not killed by such a run, whose failure is not known.
+func verdictless(r *validate.Report) bool {
+	if undecided(r) {
+		return true
+	}
+	for _, a := range r.Actors {
+		if a.Conforms != validate.Pass {
+			continue
+		}
+		unknown, failed := false, false
+		for _, inv := range a.Invariants {
+			unknown = unknown || inv.Verdict == validate.NotEvaluated
+			failed = failed || inv.Verdict == validate.Fail
+		}
+		if unknown && !failed {
 			return true
 		}
 	}

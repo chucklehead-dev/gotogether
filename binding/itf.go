@@ -44,11 +44,10 @@ func (b *Binding) ObservedITF(t *qtrace.Trace) ([]byte, error) {
 }
 
 func (b *Binding) planITF(p *Plan) ([]byte, error) {
-	states := []map[string]any{{
-		"#meta": map[string]any{"index": 0}, "mbt::actionTaken": "init", "mbt::nondetPicks": map[string]any{},
-	}}
 	varSet := map[string]bool{}
-	for i, c := range p.Calls {
+	// state is call c's: its action, its arguments as picks, its expect
+	// and observations
+	state := func(i int, c Call) (map[string]any, error) {
 		picks := map[string]any{}
 		for name, expr := range c.Args {
 			v, err := itf.ParseQuint(expr)
@@ -75,6 +74,25 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 				st["obs::"+k] = v
 				varSet["obs::"+k] = true
 			}
+		}
+		return st, nil
+	}
+	// state 0 is init's, or the snapshot's the trace starts from
+	states := []map[string]any{{
+		"#meta": map[string]any{"index": 0}, "mbt::actionTaken": "init", "mbt::nondetPicks": map[string]any{},
+	}}
+	if p.Start != nil {
+		st, err := state(-1, *p.Start)
+		if err != nil {
+			return nil, err
+		}
+		st["#meta"].(map[string]any)["index"] = 0
+		states[0] = st
+	}
+	for i, c := range p.Calls {
+		st, err := state(i, c)
+		if err != nil {
+			return nil, err
 		}
 		states = append(states, st)
 	}
@@ -104,7 +122,7 @@ func (b *Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.I
 	traces, issues := qtrace.Reconstruct(steps)
 	out := map[string][]byte{}
 	for _, t := range traces {
-		issues = append(issues, t.Issues...)
+		issues = append(issues, b.StartIssues(t)...)
 		data, err := b.ObservedITF(t)
 		if err != nil {
 			return nil, issues, fmt.Errorf("actor %s: %w", t.Actor, err)

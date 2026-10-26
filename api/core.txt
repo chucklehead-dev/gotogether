@@ -48,7 +48,9 @@ type Binding struct
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
     method (*Binding) Planner(m *Model, whole *qtrace.Trace) *Planner
     method (*Binding) Skips(s *qtrace.Step) bool
+    method (*Binding) SnapshotFirst(tr *qtrace.Trace) bool
     method (*Binding) SpecPath() string
+    method (*Binding) StartIssues(tr *qtrace.Trace) []qtrace.Issue
     method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
     method (*Binding) UsedFields(m *Model) map[string][]string
 type Bound struct
@@ -1564,6 +1566,7 @@ type Result struct
     field Invariants []InvariantResult
     field Issues []qtrace.Issue
     field Pending []qtrace.Step
+    field Lost []qtrace.Lost
     field Settled bool
     field Constants []string
     field Module string

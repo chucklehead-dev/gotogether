@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/replay"
@@ -62,7 +63,7 @@ const (
 // Result is the outcome of validating one actor's trace.
 type Result struct {
 	Actor string
-	Steps int // replayed steps, including inferred ones
+	Steps int // replayed steps, including inferred ones and the snapshot it starts from
 
 	// Conformance: is the observed trace a behaviour of the model, with the
 	// observed state projections holding after each step?
@@ -83,6 +84,12 @@ type Result struct {
 	// (qtrace.Trace.Pending): no step of the replay. qtest.Completes judges
 	// them; OK does not, since a crashed caller's call is pending by right.
 	Pending []qtrace.Step
+
+	// Lost are the lost tails of the recorders of its steps
+	// (qtrace.Trace.Lost; a search's, of the history it ordered): the
+	// failures that may depend on them are no verdict (NotEvaluated), and
+	// its eventual vals were not judged.
+	Lost []qtrace.Lost
 
 	// Settled: the trace recorded that its system settled
 	// (qtrace.Trace.Settled), so the binding's eventual properties were
@@ -121,6 +128,9 @@ type Failure struct {
 	StateAfter bool
 	// noState says why State is empty, where the report would show it
 	noState string
+	// window is when a within failure's response was due (its trigger's
+	// time and the bound): a response lost before it would have met it
+	window time.Time
 }
 
 // failures are r's failures: its conformance's and its invariants'.
@@ -308,7 +318,7 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 				continue
 			}
 			r := res[i]
-			r.Steps, r.Module, r.Calls, r.Output, r.Conforms = len(g.Calls), qnt, g.Calls, out, Pass
+			r.Steps, r.Module, r.Calls, r.Output, r.Conforms = g.Steps(), qnt, g.Calls, out, Pass
 			r.Invariants = nil
 			for _, inv := range ms.Invariants {
 				r.Invariants = append(r.Invariants, InvariantResult{Name: inv, Verdict: Pass})
@@ -383,7 +393,7 @@ func quintTest(ctx context.Context, qnt, module, base string, opt Options, tests
 
 // fill turns quint's output into the verdict on one generated run.
 func fill(g *replay.Generated, output, qnt, itfPattern string, invariants, eventually []string, res *Result) error {
-	res.Steps, res.Module, res.Calls, res.Output = len(g.Calls), qnt, g.Calls, output
+	res.Steps, res.Module, res.Calls, res.Output = g.Steps(), qnt, g.Calls, output
 	verdicts, failures := parseQuintTest(res.Output, qnt, g)
 	if _, ok := verdicts[g.Tests.Conforms]; !ok {
 		return fmt.Errorf("quint test did not report %s:\n%s", g.Tests.Conforms, res.Output)
@@ -496,10 +506,15 @@ func parseQuintTest(out, qnt string, g *replay.Generated) (map[string]Verdict, m
 			fl.Kind = "error"
 		}
 		i, ok := g.LineStep[line]
-		if strings.Contains(msg, "QNT511") && len(g.Calls) > 0 {
+		atStart := g.Start != nil && g.StartLines[line]
+		switch {
+		case strings.Contains(msg, "QNT511") && len(g.Calls) > 0:
 			// "Test ... returned false", located at the run itself: the
 			// last call evaluated to false, so the model cannot take it.
 			fl.Kind, i, ok = "disabled", len(g.Calls)-1, true
+		case strings.Contains(msg, "QNT511") && g.Start != nil:
+			// a run of the snapshot alone, false: the snapshot is no state
+			fl.Kind, atStart = "disabled", true
 		}
 		switch {
 		case ok:
@@ -508,7 +523,7 @@ func parseQuintTest(out, qnt string, g *replay.Generated) (map[string]Verdict, m
 			fl.Expect, fl.ExpectTemplate = g.Calls[i].Expect, g.Calls[i].ExpectTemplate
 			fl.Step = g.Calls[i].Step
 			fl.Note = g.Calls[i].Note
-		case g.Start != nil && g.StartLines[line]:
+		case atStart:
 			// the snapshot the run starts from: disabled, its expect
 			// false, or an invariant false in the state it recorded
 			fl.Call, fl.Step = g.Start.Quint, g.Start.Step
@@ -668,7 +683,7 @@ func (r *Result) Summary() string {
 	if f := r.Failure; f != nil {
 		switch {
 		case r.Conforms == NotEvaluated && r.noVerdict != "": // a failure after a lost tail (judgeLost)
-			fmt.Fprintf(&b, "    no verdict (%s): where it failed, which may depend on what was lost:\n", r.noVerdict)
+			fmt.Fprintf(&b, "    no verdict (%s): the order checked, where it failed (an issue above says why that is no verdict):\n", r.noVerdict)
 		case r.Conforms == NotEvaluated: // a search cut short (qtest.Linearize): its furthest order, not a verdict
 			fmt.Fprintf(&b, "    no verdict: the order checked is the one that got furthest, where it failed:\n")
 		}

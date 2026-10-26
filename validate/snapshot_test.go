@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,14 +15,14 @@ import (
 // starts with the state restore recorded (balance 50), then a deposit of
 // 5 that saw balance (the passing run 55, the failing run 5: what a
 // replay from init would see); and a run with no snapshot. The deposit
-// overlaps the snapshot in real time, on a client of its own: an order
-// that put it first would start from init.
+// is on a client of its own, recorded after the snapshot, its invocation
+// unknown: a linearization that put it first would start from init.
 func snapshotRuns() (pass, fail, plain []qtrace.Step) {
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	run := func(balance int64) []qtrace.Step {
 		return []qtrace.Step{
 			{Action: "restore", Recorder: "r", Seq: 3, Invoked: ms(0), Time: ms(10), Args: map[string]any{"b": int64(50), "n": int64(3)}},
-			{Action: "deposit", Recorder: "c", Seq: 1, Invoked: ms(5), Time: ms(20), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}},
+			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(20), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}},
 		}
 	}
 	plain = []qtrace.Step{{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}}
@@ -89,6 +90,27 @@ func TestSnapshotStart(t *testing.T) {
 		}
 		verdicts("Judge, linearized, eval "+eval, reps...)
 	}
+	// a deposit invoked before the snapshot was recorded may be in the
+	// state it recorded (55 = 50 + 5, then the deposit saw 55): the replay
+	// cannot say so, and its failure is no verdict; a later step's that
+	// conforms after it stands (the passing run, overlapping too)
+	overlap := slices.Clone(pass)
+	overlap[0].Args = map[string]any{"b": int64(55), "n": int64(3)}
+	overlap[1].Invoked = time.Unix(0, int64(5*time.Millisecond))
+	passing := slices.Clone(pass)
+	passing[1].Invoked = overlap[1].Invoked
+	for _, x := range []struct {
+		steps  []qtrace.Step
+		reason string
+	}{{overlap, "no verdict (snapshot overlap)"}, {passing, ""}} {
+		j, err := c.Judge(ctx, x.steps, SearchOptions{Linearize: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := j.Report.Actors[0].Reason(); got != x.reason {
+			t.Errorf("an overlapping deposit: %q, want %q:\n%s", got, x.reason, j.Report.Summary())
+		}
+	}
 	// a history by key starts every key's from the snapshot (it has no key:
 	// the whole state)
 	if j, err := c.Judge(ctx, pass, SearchOptions{Linearize: true, Key: "amount"}); err != nil || !j.Report.OK() {
@@ -100,6 +122,7 @@ func TestSnapshotStart(t *testing.T) {
 	pendingRun := append([]qtrace.Step{
 		{Action: "deposit", Recorder: "p", Seq: 1, Invocation: true, Time: time.Unix(0, int64(time.Millisecond)), Args: map[string]any{"amount": int64(5)}}}, fail...)
 	pendingRun[2].Obs = map[string]any{"balance": int64(10)}
+	pendingRun[2].Invoked = time.Unix(0, int64(15*time.Millisecond)) // after the snapshot: no overlap
 	if j, err := c.Judge(ctx, pendingRun, SearchOptions{ResolvePending: true}); err != nil || j.Report.OK() {
 		t.Errorf("a pending call before the snapshot: %v\n%s", err, j.Report.Summary())
 	}
@@ -143,6 +166,34 @@ func TestSnapshotStartHidden(t *testing.T) {
 		}
 		if rep.OK() != c2.ok || c2.ok && !strings.Contains(rep.Summary(), "judged from the state recorded by restoreA at seq 4") {
 			t.Errorf("c saw %v: OK %v, want %v:\n%s", c2.seen, rep.OK(), c2.ok, rep.Summary())
+		}
+	}
+}
+
+// A trace of its snapshot alone is rejected when the snapshot is no state
+// of the model (restore's balance negative), as any rejection: by its
+// action, not as quint's error at init; and the snapshot is a step.
+func TestSnapshotAlone(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range []int64{-1, 5} {
+		rep, err := c.Check(context.Background(), []qtrace.Step{{Action: "restore", Recorder: "r", Seq: 1, Args: map[string]any{"b": b, "n": int64(0)}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := rep.Actors[0]
+		want := ""
+		if b < 0 {
+			want = "rejects restore"
+		}
+		if a.Reason() != want || a.Steps != 1 || b < 0 && !strings.Contains(a.Summary(), "the snapshot step the trace starts from is no state of the model") {
+			t.Errorf("restore(%d): %q, %d steps, want %q:\n%s", b, a.Reason(), a.Steps, want, a.Summary())
 		}
 	}
 }
