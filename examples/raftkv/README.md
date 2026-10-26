@@ -53,6 +53,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 5 of 50 mutant runs do |
 | `TestCatchUp` | `NoSnapshotReport`: a snapshot lost on the way is never reported to raft | a follower down while the clients write past a compaction, restarted, and its snapshot lost by a 200 ms cut; the cluster's history | the faithful follower catches up within 1 s in all 20 runs; the mutant's never does in 18 of 20 (`within 1s after behind: caughtUp`), though the cluster settles with a leader |
 | `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
+| `TestRealNemesis`, `TestRealNoRequestID` (`RAFTKV_REAL=1`, toxiproxy) | none; `NoRequestID` | the real cluster under qnemesis (crashes, pauses, isolates, lost client responses), seeded schedules | every faithful run conforms and settles, both histories; some `NoRequestID` run fails as in the simulation ([below](#under-a-nemesis)) |
 | `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs with the harness's settle conform to the cluster's model and settle (`eventually hasLeader` judged); without the settle they do not settle. `TestRealNodeExitsWithParent`: a node whose parent is killed exits |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
@@ -131,11 +132,59 @@ harness records the cluster's settle (`qobs.Settled`, in a log of its
 own, after the nodes agree and before they stop), without which the
 cluster model's `eventually hasLeader` is not judged.
 
-Simulated only, so far: the faults. Nothing loses, delays or duplicates a
-real message, partitions the nodes or skews their clocks; the smoke
-test's one fault is a kill, which no step records (the model's `stop`),
-and the rolling upgrade is the simulation's. Raft's election randomness
-is crypto/rand's, so a real run does not replay.
+### Under a nemesis
+
+[nemesis_test.go](nemesis_test.go) runs the real cluster under
+`qnemesis`: each node a `qnemesis.Process` (`-exit-with-parent`, a
+`PIDFile`), its peer links through toxiproxy (a proxy per direction,
+given to the nodes as `-peer`), the clients' links through proxies of
+their own, so an isolate cuts a node off from its peers only, as in the
+simulation. A seeded `qnemesis.Random` schedule crashes, pauses and
+isolates nodes (three faults, one every 800ms, each undone after
+300ms) while four client connections in five lose their responses. The
+nemesis records `stop`, `isolate` and `heal` in the cluster's process
+(one actor's trace, one process), then `Stop` heals and restarts, the
+nodes agree, the probe observes and the harness settles. Each run's
+clients' history is judged by `raftkv.binding.yaml` (linearized,
+pending calls placed) and the nodes' and nemesis's steps by
+`cluster.binding.yaml`, the bindings the simulation uses, the
+`within 300ms` bound included (no run broke it, with `-race` either).
+
+| test | mutant | claim | measured |
+|---|---|---|---|
+| `TestRealNemesis` | none | every run's clients' history conforms and settles; the cluster's conforms and settles | 33 of 33 runs |
+| `TestRealNoRequestID` | `NoRequestID` (the client's) | some run fails as the simulation's does (a read, cas or transfer mismatched, or `converged` violated); the cluster's history conforms | 22 of 24 runs at this loss, 2 of 20 without lost responses: 3 runs a PR (a miss chance of 2%), 5 nightly (0.14%) |
+| `TestRealFaultsInSimulation` | none | a real run's journal (`Journal.Script`) re-made in the simulation: every fault happens, the run conforms | |
+
+The nodes leave `Process.Recorders` unset. Named, a crash declares the
+killed incarnation's tail lost, and a lost tail voids the run's settle:
+of 8 runs with Recorders, the 4 with a crash did not settle. A raftkv
+node needs no such declaration, since it records each cluster step before
+its effect can be seen (a lead or a campaign before any message of its
+term goes out).
+
+A failed faithful run's log names its journal and the command that
+re-makes its faults in the simulation:
+
+```sh
+RAFTKV_REAL_JOURNAL=<run>/journal.jsonl go test -run TestRealFaultsInSimulation -v .
+```
+
+The script's crashes, pauses and partitions are qenv's nemeses of the
+same names, each after the steps the nodes had recorded; the simulated
+pause and cut last as the real ones did (`Config.Stalls`,
+`Config.CutLength`), and what the script cannot make as it happened is
+logged (`Journal.Unreproducible`). The clients' lost responses are no
+qenv nemesis: they are left out.
+
+```sh
+RAFTKV_REAL=1 go test -race -run TestReal -v .   # toxiproxy-server on PATH: go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0, renamed
+```
+
+Simulated only: clock skew (Go reads the time through the vDSO, which
+libfaketime does not reach) and the rolling upgrade. Raft's election
+randomness is crypto/rand's, so a real run does not replay; its seed
+replays its schedule.
 
 ## Running it
 

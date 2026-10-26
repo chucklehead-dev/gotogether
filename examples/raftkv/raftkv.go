@@ -135,6 +135,12 @@ type Config struct {
 	// Readers makes the clients a reader per node, asking it first, reads
 	// of one key only, and one writer of it.
 	Readers bool
+	// Stalls are the nodes' pauses (none by default), and CutLength how
+	// long a partition nemesis cuts (qenv's default if 0): what a real
+	// run's faults, re-made from its journal (qnemesis.Journal.Script),
+	// need of the simulation.
+	Stalls    qenv.Stalls
+	CutLength time.Duration
 }
 
 func (cfg *Config) defaults() {
@@ -166,6 +172,10 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	d := &Deployment{Sim: s, cfg: cfg}
 	d.kv = simNet{d}
 	s.Clocks = cfg.Clocks
+	s.Stalls = cfg.Stalls
+	if cfg.CutLength > 0 {
+		s.Net().CutLength = cfg.CutLength
+	}
 	s.NemesisEvery = nemesisEvery
 	for i, name := range Nodes {
 		n := &Node{d: d, Index: i, Name: name, Peers: simNet{d}}

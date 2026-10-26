@@ -311,6 +311,41 @@ jobs:
           GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
           ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
 
+  raftkv-real:
+    # raftkv's real tier: three raftkv-node processes on localhost under
+    # qnemesis (crashes, pauses, isolated nodes through toxiproxy, lost
+    # client responses), judged by the simulation's bindings; built and
+    # run with the race detector, about four minutes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: examples/raftkv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/raftkv/go.mod
+          cache-dependency-path: examples/raftkv/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../../ci/install-quint.sh
+      - name: Install toxiproxy-server
+        run: |
+          go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0
+          mv "$(go env GOPATH)/bin/server" "$(go env GOPATH)/bin/toxiproxy-server"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: real runs (3 faithful, 3 NoRequestID, a journal re-made in the simulation, a kill -9 and restart)
+        run: RAFTKV_REAL=1 RAFTKV_REAL_DIR="$RUNNER_TEMP/real" go test -race -count=1 -timeout 12m -run 'TestReal' -v .
+      - name: keep the runs' logs and journals
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raftkv-real
+          path: ${{ runner.temp }}/real
+
   wallet:
     # its own job: linearized explorations and resolved pending calls,
     # under the store's own history check
