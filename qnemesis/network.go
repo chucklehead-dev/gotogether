@@ -24,7 +24,7 @@ type Network interface {
 	Cut(ctx context.Context, a, b string) error
 	Heal(ctx context.Context, a, b string) error
 	// Latency delays each response between a and b by d, give or take
-	// jitter (uniformly).
+	// jitter (uniformly). Latency and Loss replace each other on a link.
 	Latency(ctx context.Context, a, b string, d, jitter time.Duration) error
 	// Loss drops the responses of a share (toxicity, from 0 to 1) of the
 	// connections between a and b, closing each after timeout.
@@ -45,7 +45,9 @@ type Network interface {
 // garbage after the heal. Latency is a latency toxic, loss a timeout toxic
 // (both downstream: on the responses) with a toxicity, which toxiproxy
 // draws per connection, not per message: over a pooled connection a loss
-// fault loses every response or none.
+// fault loses every response or none. A link has latency or loss, not
+// both: each replaces the other (toxiproxy deadlocks removing a latency
+// toxic stacked before a timeout toxic that closed its connection).
 type Toxiproxy struct {
 	URL string
 	// Listen is the host proxies listen on (default 127.0.0.1); each
@@ -86,7 +88,8 @@ func (t *Toxiproxy) call(ctx context.Context, method, path string, body any, out
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return fmt.Errorf("qnemesis: toxiproxy at %s: %w (is toxiproxy-server running? set Toxiproxy.URL to its API)", t.base(), err)
+		return fmt.Errorf("qnemesis: toxiproxy at %s: %w (is toxiproxy-server running? set Toxiproxy.URL to its API; a call that times out on a running server hangs in toxiproxy: "+
+			"it deadlocks removing a latency toxic held up by a closed timeout toxic after it, which qnemesis never stacks: check for toxics added by other means)", t.base(), err)
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
@@ -182,7 +185,15 @@ const (
 	lossToxic    = "qnemesis_loss"
 )
 
-// toxic replaces the toxic of that name on every proxy between a and b.
+// toxic replaces the toxics on every proxy between a and b with the one
+// of that name: latency and loss replace each other, never stacked.
+// toxiproxy (v2.12, v2.13) deadlocks removing a latency toxic that holds
+// a response while the timeout toxic after it has closed its connection
+// (the latency toxic's write of the held chunk blocks forever, and the
+// removal waits for it holding the proxy's toxics locked): the DELETE
+// hangs until the API's own 25 s timeout answers 503, and every later
+// call on the proxy hangs too. Under load, a loss's GET left a response
+// in the latency sleep when Clear came.
 func (t *Toxiproxy) toxic(ctx context.Context, a, b, name, typ string, toxicity float64, attrs map[string]any) error {
 	ps, err := t.of(a, b)
 	if err != nil {
@@ -190,8 +201,11 @@ func (t *Toxiproxy) toxic(ctx context.Context, a, b, name, typ string, toxicity 
 	}
 	for _, p := range ps {
 		path := "/proxies/" + url.PathEscape(p) + "/toxics"
-		if err := t.call(ctx, http.MethodDelete, path+"/"+name, nil, nil, http.StatusNoContent, http.StatusNotFound); err != nil {
-			return err
+		// both: a link holds one of them at a time
+		for _, old := range []string{lossToxic, latencyToxic} {
+			if err := t.call(ctx, http.MethodDelete, path+"/"+old, nil, nil, http.StatusNoContent, http.StatusNotFound); err != nil {
+				return err
+			}
 		}
 		in := map[string]any{"name": name, "type": typ, "stream": "downstream", "toxicity": toxicity, "attributes": attrs}
 		if err := t.call(ctx, http.MethodPost, path, in, nil, http.StatusOK); err != nil {
@@ -221,7 +235,7 @@ func (t *Toxiproxy) Clear(ctx context.Context, a, b string) error {
 		return err
 	}
 	for _, p := range ps {
-		for _, name := range []string{latencyToxic, lossToxic} {
+		for _, name := range []string{lossToxic, latencyToxic} {
 			if err := t.call(ctx, http.MethodDelete, "/proxies/"+url.PathEscape(p)+"/toxics/"+name, nil, nil, http.StatusNoContent, http.StatusNotFound); err != nil {
 				return err
 			}

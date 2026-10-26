@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os/exec"
 	"strings"
 	"testing"
@@ -161,5 +162,61 @@ func TestNemesisOverToxiproxy(t *testing.T) {
 	}
 	if want := "isolate map[node:server] heal map[a:c1 b:server] heal map[a:c2 b:server]"; strings.Join(got, " ") != want {
 		t.Fatalf("recorded %s;\nwant %s", strings.Join(got, " "), want)
+	}
+}
+
+// A link holds latency or loss, never both: toxiproxy deadlocks removing
+// a latency toxic that holds a response while a timeout toxic after it
+// has closed the connection (the DELETE hung until toxiproxy's 25 s
+// timeout answered 503, under load, CI run 324). Each replaces the other,
+// and a Clear after a lost response returns at once, however often.
+func TestToxiproxyLatencyAndLossReplaceEachOther(t *testing.T) {
+	t.Parallel()
+	tp := toxiproxy(t)
+	tp.Client = &http.Client{Timeout: 3 * time.Second} // a hang fails fast
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
+	defer up.Close()
+	addr, err := tp.Link("client", "server", strings.TrimPrefix(up.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	toxics := func() []string {
+		var ts []struct {
+			Name string `json:"name"`
+		}
+		if err := tp.call(ctx, http.MethodGet, "/proxies/"+url.PathEscape(proxyName("client", "server"))+"/toxics", nil, &ts, http.StatusOK); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, x := range ts {
+			out = append(out, x.Name)
+		}
+		return out
+	}
+	for i := range 5 {
+		if err := tp.Latency(ctx, "client", "server", 300*time.Millisecond, 0); err != nil {
+			t.Fatal(err)
+		}
+		if got := toxics(); len(got) != 1 || got[0] != latencyToxic {
+			t.Fatalf("round %d, after Latency: toxics %v; want the latency alone", i, got)
+		}
+		go timed(addr, 2*time.Second) // a response held in the latency sleep while the loss is added
+		time.Sleep(20 * time.Millisecond)
+		if err := tp.Loss(ctx, "client", "server", 1, 50*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+		if got := toxics(); len(got) != 1 || got[0] != lossToxic {
+			t.Fatalf("round %d, after Loss: toxics %v; want the loss alone", i, got)
+		}
+		if _, err := timed(addr, 2*time.Second); err == nil {
+			t.Fatal("a response lost was answered")
+		}
+		if err := tp.Clear(ctx, "client", "server"); err != nil {
+			t.Fatalf("round %d: Clear after a lost response: %v", i, err)
+		}
+	}
+	if d, err := timed(addr, 2*time.Second); err != nil || d > 250*time.Millisecond {
+		t.Fatalf("cleared: %v, %v", d, err)
 	}
 }
