@@ -382,6 +382,7 @@ Read the reference before using what it covers:
 - [`references/weaving.md`](references/weaving.md): third-party or legacy code with sync locks and goroutines, simulated by weaving (qweave, Orchestrion).
 - [`references/gosim.md`](references/gosim.md): a whole program, its network and channels, simulated by gosim (qgosim).
 - [`references/workloads.md`](references/workloads.md): a production workload (SimKube traces, `qload.Piecewise`) replayed against the simulation.
+- [`references/real.md`](references/real.md): faults in a real deployment (`qnemesis`: kill, pause and restart processes and containers, toxiproxy partitions, latency and loss, a Random or a trace's schedule), recorded as steps the same binding judges; claims over real runs (`qtest.Runs`); a failed run's faults re-made in a simulation (its journal's `Script`).
 - [`../gotogether-workflow/references/verdicts.md`](../gotogether-workflow/references/verdicts.md): every verdict and expectation (`Rejects`, `Mismatch`, `Violates`, `Some`/`All`/`None`) and what each means.
 
 ## 5. Take the same model to the real environment
@@ -396,6 +397,8 @@ from the same quantiles as the simulated `PodTimes`. Write step logs and
 check them:
 `gotogether validate -binding app.binding.yaml logs/*.jsonl`.
 - A new process is a restart (`restart:` in the binding).
+- Faults on real processes, containers and links, recorded as steps:
+  `qnemesis` ([`references/real.md`](references/real.md)).
 - A final fresh read of every component, then `settle`, makes eventual
   properties meaningful there too.
 

@@ -1111,6 +1111,110 @@ type Mutant struct
 type Reach struct
     method (*Reach) Reached(id int) bool
 
+== github.com/chucklehead-dev/gotogether/qnemesis
+const DefaultLossTimeout = 500 * time.Millisecond
+func DefaultRecording() Recording
+func FromScript(sc *qenv.Script) Schedule
+func Kinds(family string, names ...string) []string
+func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, *qobs.JSONLSink, error)
+func Random(seed int64, mix Mix, interval, dur time.Duration) Schedule
+func ReadJournal(r io.Reader) (*Journal, error)
+func StepsIn(patterns ...string) func() int
+type Container struct
+    field Name string
+    field Docker string
+    method (*Container) Alive() bool
+    method (*Container) Incarnation() int
+    method (*Container) Kill(ctx context.Context) error
+    method (*Container) Pause(ctx context.Context) error
+    method (*Container) Resume(ctx context.Context) error
+    method (*Container) Start(ctx context.Context) error
+type Entry struct
+    field Index int `json:"index"`
+    field Kind string `json:"kind"`
+    field Event string `json:"event"`
+    field Time time.Time `json:"time"`
+    field Steps *int `json:"steps,omitempty"`
+    field Incarnation int `json:"incarnation,omitempty"`
+    field Links [][2]string `json:"links,omitempty"`
+    field Recorded bool `json:"recorded,omitempty"`
+type Event struct
+    field Kind string
+    field Family string
+    field Names []string
+    field Incarnation int
+    field Links [][2]string
+    field Arg time.Duration
+    field Toxicity float64
+type Fault struct
+    field Kind string
+    field At time.Duration
+    field After int
+    field Follows []int
+    field For time.Duration
+    field Arg time.Duration
+    field Toxicity float64
+    method (Fault) String() string
+type Journal struct
+    field Entries []Entry
+    method (*Journal) Dropped() []Entry
+    method (*Journal) Script() *qenv.Script
+type Mix struct
+    field Kinds []string
+    field Faults int
+    field Latency time.Duration
+    field Toxicity float64
+type Nemesis struct
+    field Targets map[string]Target
+    field Net Network
+    field Rec *qobs.Recorder
+    field Record Recording
+    field Steps func() int
+    field Journal io.Writer
+    field Poll time.Duration
+    method (*Nemesis) Misnamed() []string
+    method (*Nemesis) Remaining() []Fault
+    method (*Nemesis) Run(ctx context.Context, s Schedule) error
+    method (*Nemesis) Stop(ctx context.Context) error
+type Network interface
+    Cut(ctx context.Context, a, b string) error
+    Heal(ctx context.Context, a, b string) error
+    Latency(ctx context.Context, a, b string, d, jitter time.Duration) error
+    Loss(ctx context.Context, a, b string, toxicity float64, timeout time.Duration) error
+    Clear(ctx context.Context, a, b string) error
+    Pairs() [][2]string
+type Process struct
+    field Name string
+    field Cmd func(incarnation int) *exec.Cmd
+    method (*Process) Alive() bool
+    method (*Process) Close() error
+    method (*Process) Exit() error
+    method (*Process) Incarnation() int
+    method (*Process) Kill(ctx context.Context) error
+    method (*Process) Pause(ctx context.Context) error
+    method (*Process) Resume(context.Context) error
+    method (*Process) Start(context.Context) error
+type Recording map[string]func(Event) (action string, kv []any)
+type Schedule []Fault
+type Target interface
+    Kill(ctx context.Context) error
+    Start(ctx context.Context) error
+    Pause(ctx context.Context) error
+    Resume(ctx context.Context) error
+    Alive() bool
+type Toxiproxy struct
+    field URL string
+    field Listen string
+    field Client *http.Client
+    method (*Toxiproxy) Clear(ctx context.Context, a, b string) error
+    method (*Toxiproxy) Close() error
+    method (*Toxiproxy) Cut(ctx context.Context, a, b string) error
+    method (*Toxiproxy) Heal(ctx context.Context, a, b string) error
+    method (*Toxiproxy) Latency(ctx context.Context, a, b string, d, jitter time.Duration) error
+    method (*Toxiproxy) Link(from, to, upstream string) (addr string, err error)
+    method (*Toxiproxy) Loss(ctx context.Context, a, b string, toxicity float64, timeout time.Duration) error
+    method (*Toxiproxy) Pairs() [][2]string
+
 == github.com/chucklehead-dev/gotogether/qobs
 const ActionKey = "quint.action"
 const Buffered Durability = iota (spec 2 of its group)
@@ -1261,6 +1365,7 @@ func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
 func ResolvePending() Option
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
+func Runs(runs ...*Run) *Exploration
 func Settles() Expectation
 func ShrunkTo(n int) RunClaim
 func SkipIfEmpty() Option

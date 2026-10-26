@@ -8,6 +8,22 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qnemesis`: a nemesis for real deployments, standard library only.
+  `Nemesis` runs a `Schedule` (qenv Script's names and partial order:
+  `nemesis.crash.<p>`, `pause`/`resume`, `partition`/`heal`, `isolate`,
+  `latency`, `loss`; `At`, `After` steps of the watched logs (`StepsIn`),
+  `Follows`, `For`) on `Process` targets (a process group per
+  incarnation, SIGKILL and reap, SIGSTOP/SIGCONT, no orphans) and
+  `Container`s (the docker CLI), and `Toxiproxy` links (one proxy per
+  directed link); `Stop` heals, resumes and starts the down; `Misnamed`
+  refuses what cannot happen, with the fix. Faults are recorded as model
+  steps (`Recording`, `DefaultRecording`, `NewRecorder`): a crash after
+  the reaping, a cut once in effect, a heal before the call. `Random` is
+  Jepsen's schedule, `FromScript` a trace's; the journal (`ReadJournal`)
+  becomes a qenv Script (`Journal.Script`), so a real run's faults re-run
+  in a simulation.
+- `qtest.Runs`: claims over runs made one by one (a real deployment's,
+  each validated), judged as an exploration's (`Some`, `All`, `None`).
 - `qenv.Unwinding(r)`: whether a recovered panic is qenv unwinding a
   killed task, for an adapter whose caller releases a lock only on a
   normal return (qsql under database/sql's Tx.QueryContext). A seam in

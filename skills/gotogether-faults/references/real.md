@@ -1,0 +1,106 @@
+# Faults in a real deployment: `qnemesis`
+
+Read this before injecting faults into real processes or containers
+(kill, pause, partitions, latency, loss) and judging the run with the
+binding the simulation uses. A real run finds what a simulation cannot:
+the real network stack, the real disk, the real library under real
+timing. Its faults are recorded as model steps, so the same binding
+judges it.
+
+## The pieces
+
+```go
+p1 := &qnemesis.Process{Name: "n1", Cmd: func(inc int) *exec.Cmd {
+	// one step log per incarnation: a killed one's ends where it died
+	return exec.Command("./node", "-id", "n1", "-log", fmt.Sprintf("logs/n1.%d.jsonl", inc))
+}}
+t.Cleanup(func() { _ = p1.Close() }) // kills the process group: nothing left running
+proxy := &qnemesis.Toxiproxy{URL: "http://127.0.0.1:8474"}
+t.Cleanup(func() { _ = proxy.Close() })
+addr, err := proxy.Link("n1", "n2", n2Addr) // n1 dials addr to reach n2; one proxy per direction
+rec, sink, err := qnemesis.NewRecorder("logs/nemesis.jsonl") // id "nemesis", PerStep
+n := &qnemesis.Nemesis{
+	Targets: map[string]qnemesis.Target{"n1": p1, "n2": p2, "n3": p3},
+	Net:     proxy,
+	Rec:     rec,
+	Record:  recording,                              // fault family -> model action
+	Steps:   qnemesis.StepsIn("logs/n*.jsonl"),      // for faults that wait for steps (After)
+	Journal: journal,                                // faults.jsonl: every fault's start and end
+}
+err = n.Run(ctx, schedule)
+err = n.Stop(ctx) // heal, clear, resume, start the down: the real settle
+```
+
+- **Targets**: `Process` (started with its own process group, SIGKILL
+  to the group and reaped on a crash, SIGSTOP/SIGCONT for a pause; on
+  Linux the kernel kills it if the test binary dies), `Container` (the
+  docker CLI: kill + wait, start, pause, unpause), or your own behind
+  `Target` (Kill, Start, Pause, Resume, Alive).
+- **Network**: `Toxiproxy`, a small client of toxiproxy's HTTP API
+  (`toxiproxy-server` on PATH; `go install
+  github.com/Shopify/toxiproxy/v2/cmd/server@latest`, renamed). A cut
+  disables the proxies (connections closed, new ones refused), so a
+  framed protocol never reads a stream with bytes missing from its
+  middle. Latency and loss are toxics on the responses; toxiproxy draws a
+  loss's toxicity per connection, not per message.
+- A pair's faults act on both directions; names cannot contain dots.
+
+## Faults and schedules
+
+The names are qenv Script's: `nemesis.crash.<p>` (restart at once, or
+after `For`), `nemesis.pause.<p>`/`resume.<p>`,
+`nemesis.partition.<a>.<b>`/`heal.<a>.<b>`, `nemesis.isolate.<p>` (all
+of p's links), `heal.<p>`, `nemesis.latency.<a>.<b>` (Arg),
+`nemesis.loss.<a>.<b>` (Toxicity, each connection closed after Arg).
+No clock skew (Go reads the clock through the vDSO, which libfaketime
+does not reach), no failpoints.
+
+- `qnemesis.Random(seed, mix, interval, dur)`: Jepsen's: one fault per
+  interval, undone after dur, before the next. `qnemesis.Kinds("crash",
+  names...)` names a family's faults for the Mix.
+- `qnemesis.FromScript(sc)`: a Quint trace's faults (`qtest.FaultScript`)
+  on the real system. `After` counts lines of the watched step logs: it
+  means the trace's step count only when the trace's steps are the
+  program's own; otherwise time the faults with `At`.
+- A fault is due when `At` has passed, the logs have `After` lines, its
+  kind's earlier faults have happened, and what it `Follows` has happened
+  and ended. `Run` refuses a schedule with a misnamed fault
+  (`Misnamed()`: no such target or link, a double's kind, a family
+  without a name, a cycle, `After` without `Steps`), each with the fix.
+
+## Recording, so the check stays fair
+
+- A crash is recorded after the process is reaped: every step it
+  recorded precedes the crash. A cut, a pause, latency: after the call
+  returns (in effect). A heal, a resume, a restart: before the call (the
+  restarted incarnation's steps follow; a binding's `within` bound covers
+  the API's latency).
+- `Recording` maps a family (crash, restart, pause, resume, partition,
+  isolate, heal, latency, loss, clear) to the model's action and
+  arguments; nil is `DefaultRecording()` (crash(node), partition(a, b),
+  isolate(node), heal(a, b) or heal(node)); pause, latency and loss
+  record nothing unless mapped.
+- The nemesis's steps are ordered against the system's by wall time:
+  one host, one clock, comparable within `qtrace.RealTimeSlack`. Across
+  hosts give the steps order keys.
+- A pause is not a partition: requests sent to a paused process wait in
+  the kernel's queue and are served after the resume.
+- A killed incarnation's torn last line is its tail declared lost
+  (`qtrace.ReadJSONL`): failures after the cut are no verdict, never a
+  FAIL.
+
+## Judging real runs
+
+Validate each run's logs (the system's and the nemesis's together) with
+`qtest.Validate`, then state claims over them:
+
+```go
+qtest.Runs(runs...).Expect(t, qtest.Some(qtest.Rejects("put")), qtest.None(qtest.Violates("agreement")))
+```
+
+A failed run's journal re-makes its faults in a simulation:
+`j, _ := qnemesis.ReadJournal(f); sc := j.Script()` is a `qenv.Script`
+(crashes, pauses, partitions and heals by qenv's names, in the order
+they happened, each after the steps before it; `j.Dropped()` lists the
+latency and loss it cannot make). Run it as the chooser of the
+simulated system and explore from there.
