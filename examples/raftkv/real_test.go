@@ -26,7 +26,8 @@ type realCluster struct {
 	dir   string
 	addrs []string
 	procs []*exec.Cmd
-	incs  []int // each node's incarnation
+	pipes []*os.File // each node's stdin's write end: -exit-with-parent
+	incs  []int      // each node's incarnation
 	net   HTTPNet
 }
 
@@ -35,7 +36,7 @@ func (c *realCluster) start(i int) {
 	c.t.Helper()
 	c.incs[i]++
 	name := Nodes[i]
-	args := []string{"-name", name, "-incarnation", fmt.Sprint(c.incs[i]), "-listen", c.addrs[i],
+	args := []string{"-exit-with-parent", "-name", name, "-incarnation", fmt.Sprint(c.incs[i]), "-listen", c.addrs[i],
 		"-wal", filepath.Join(c.dir, "wal", name), "-steps", filepath.Join(c.dir, "steps", fmt.Sprintf("%s.%d.jsonl", name, c.incs[i]))}
 	for j, n := range Nodes {
 		if j != i {
@@ -46,21 +47,39 @@ func (c *realCluster) start(i int) {
 	if err != nil {
 		c.t.Fatal(err)
 	}
-	cmd := exec.Command(c.bin, args...)
-	cmd.Stdout, cmd.Stderr = out, out
-	if err := cmd.Start(); err != nil {
-		c.t.Fatal(err)
+	cmd, w := startNode(c.t, c.bin, args, out)
+	out.Close()
+	c.procs[i], c.pipes[i] = cmd, w
+}
+
+// startNode starts a raftkv-node with -exit-with-parent's pipe on its
+// stdin, in a process group of its own (nodeSysProcAttr), and returns the
+// pipe's write end: closed, or this process gone (kill -9, a test
+// binary's -timeout, whose panic runs no Cleanup), the node exits.
+func startNode(t *testing.T, bin string, args []string, out *os.File) (*exec.Cmd, *os.File) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
 	}
-	c.procs[i] = cmd
+	cmd := exec.Command(bin, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = r, out, out
+	cmd.SysProcAttr = nodeSysProcAttr()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	r.Close() // the node's copy is the only one: EOF comes when w closes
+	return cmd, w
 }
 
 // kill is kill -9: no deferred code, no flush; what the log committed
 // survives.
 func (c *realCluster) kill(i int) {
 	if p := c.procs[i]; p != nil {
-		_ = p.Process.Kill()
+		killGroup(p)
 		_ = p.Wait()
-		c.procs[i] = nil
+		c.pipes[i].Close()
+		c.procs[i], c.pipes[i] = nil, nil
 	}
 }
 
@@ -109,6 +128,21 @@ func freeAddrs(t *testing.T, n int) []string {
 	return out
 }
 
+// buildNode builds cmd/raftkv-node into dir, with the race detector when
+// the test has it: the nodes' goroutines are where the races would be.
+func buildNode(t *testing.T, dir string) string {
+	t.Helper()
+	bin := filepath.Join(dir, "raftkv-node")
+	build := []string{"build", "-o", bin}
+	if raceBuild {
+		build = append(build, "-race")
+	}
+	if out, err := exec.Command("go", append(build, "./cmd/raftkv-node")...).CombinedOutput(); err != nil {
+		t.Fatalf("go build ./cmd/raftkv-node: %v\n%s", err, out)
+	}
+	return bin
+}
+
 // readSteps reads every step log matching glob.
 func readSteps(t *testing.T, glob string) []qtrace.Step {
 	t.Helper()
@@ -154,15 +188,9 @@ func TestRealCluster(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	bin := filepath.Join(dir, "raftkv-node")
-	build := []string{"build", "-o", bin}
-	if raceBuild {
-		build = append(build, "-race") // the nodes' goroutines are where the races would be
-	}
-	if out, err := exec.Command("go", append(build, "./cmd/raftkv-node")...).CombinedOutput(); err != nil {
-		t.Fatalf("go build ./cmd/raftkv-node: %v\n%s", err, out)
-	}
-	c := &realCluster{t: t, bin: bin, dir: dir, addrs: freeAddrs(t, len(Nodes)), procs: make([]*exec.Cmd, len(Nodes)), incs: make([]int, len(Nodes))}
+	bin := buildNode(t, dir)
+	c := &realCluster{t: t, bin: bin, dir: dir, addrs: freeAddrs(t, len(Nodes)), procs: make([]*exec.Cmd, len(Nodes)),
+		pipes: make([]*os.File, len(Nodes)), incs: make([]int, len(Nodes))}
 	c.net = HTTPNet{Addrs: c.addrs}
 	t.Cleanup(func() {
 		for i := range Nodes {
@@ -230,9 +258,26 @@ func TestRealCluster(t *testing.T) {
 	if err := sink.Close(); err != nil {
 		t.Fatal(err)
 	}
+	// the cluster settled too: the harness says so in a log of its own,
+	// after every node's last step in time (the nodes agree, and an idle
+	// raft records nothing), and the nodes stop before anything else is
+	// recorded; a node's step later than the settle would void it
+	// (Trace.Settled), and the cluster's eventually hasLeader is judged
+	hsink, err := qobs.FileSink(filepath.Join(dir, "steps", "harness.jsonl"), qobs.PerStep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond) // past RealTimeSlack after the nodes' last step
+	qobs.NewRecorder(hsink, qobs.WithID("harness"), qobs.WithProcess("cluster")).Settled(ctx)
+	if err := hsink.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for i := range Nodes {
+		c.kill(i)
+	}
 
 	qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(dir, "steps", "clients.jsonl")),
-		qtest.Linearize(), qtest.ResolvePending()).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
+		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(5000)).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
 	nodes := readSteps(t, filepath.Join(dir, "steps", "n*.jsonl"))
 	boots := 0
 	for _, s := range nodes {
@@ -243,5 +288,63 @@ func TestRealCluster(t *testing.T) {
 	if boots != len(Nodes)+1 {
 		t.Fatalf("the nodes' logs hold %d boots, want %d (three starts and the restart)", boots, len(Nodes)+1)
 	}
-	qtest.Validate(t, "cluster.binding.yaml", nodes).Expect(t, qtest.Conforms())
+	settle := readSteps(t, filepath.Join(dir, "steps", "harness.jsonl"))
+	qtest.Validate(t, "cluster.binding.yaml", append(nodes, settle...)).Expect(t, qtest.Conforms(), qtest.Settles())
+	// without the settle the cluster's liveness is not judged, and the
+	// claim fails: the settle is what makes eventually hasLeader count
+	if r := qtest.Validate(t, "cluster.binding.yaml", nodes); qtest.Settles().Holds(r) {
+		t.Error("the nodes' logs without the harness's settle settle: Settles judges nothing")
+	}
+}
+
+// A node started with -exit-with-parent exits when its parent dies: its
+// stdin's write end is held by a stand-in parent alone (sleep), killed
+// with SIGKILL, as a harness or a test binary at its -timeout dies.
+func TestRealNodeExitsWithParent(t *testing.T) {
+	if os.Getenv("RAFTKV_REAL") != "1" {
+		t.Skip("RAFTKV_REAL=1 runs the real tier")
+	}
+	dir := t.TempDir()
+	bin := buildNode(t, dir)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := exec.Command("sleep", "300")
+	parent.ExtraFiles = []*os.File{w} // the pipe's only writer
+	if err := parent.Start(); err != nil {
+		t.Fatal(err)
+	}
+	addrs := freeAddrs(t, 3)
+	out, err := os.Create(filepath.Join(dir, "n1.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := exec.Command(bin, "-exit-with-parent", "-name", "n1", "-listen", addrs[0], "-wal", filepath.Join(dir, "wal"),
+		"-peer", "n2="+addrs[1], "-peer", "n3="+addrs[2])
+	node.Stdin, node.Stdout, node.Stderr = r, out, out
+	if err := node.Start(); err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	w.Close()
+	t.Cleanup(func() { _ = node.Process.Kill(); _ = parent.Process.Kill() })
+	exited := make(chan error, 1)
+	go func() { exited <- node.Wait() }()
+	select {
+	case err := <-exited:
+		t.Fatalf("the node exited before its parent was killed: %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+	_ = parent.Process.Kill()
+	_ = parent.Wait()
+	select {
+	case <-exited:
+		b, _ := os.ReadFile(out.Name())
+		if !bytes.Contains(b, []byte("the parent is gone")) {
+			t.Errorf("the node exited, not on its parent's end:\n%s", b)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the node outlived its parent by 5s")
+	}
 }

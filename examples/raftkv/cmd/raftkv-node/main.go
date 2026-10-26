@@ -14,6 +14,8 @@
 // recorder's id is "<name>.<incarnation>", each log's sequence numbers its
 // own; every node's process is "cluster", the model's one instance. A kill (kill -9) is the crash the
 // simulation's nemesis makes; what was committed to the log survives it.
+// With -exit-with-parent the node exits when its stdin reaches EOF: a
+// harness gives it a pipe, and a harness killed takes its nodes with it.
 package main
 
 import (
@@ -21,6 +23,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -64,7 +67,18 @@ func run() error {
 	steps := flag.String("steps", "", "the step log to write (a new file per incarnation; none if empty)")
 	mutation := flag.String("mutation", "", "a mutant, by name: "+mutantNames())
 	version := flag.String("version", "v1", "the code's version: v1, or v2 (a rolling upgrade's)")
+	withParent := flag.Bool("exit-with-parent", false, "exit when stdin reaches EOF: give it a pipe from the parent, so the node dies with it")
 	flag.Parse()
+	if *withParent {
+		// a parent killed (kill -9, a test binary's timeout) closes its end
+		// of the pipe, and nothing else would stop a node: no node outlives
+		// the harness that started it, holding its port and its log's lock
+		go func() { //qenv:ok the real tier: a watch on the parent
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			log.Printf("raftkv-node %s: stdin closed, the parent is gone: exiting", *name)
+			os.Exit(3)
+		}()
+	}
 
 	index := slices.Index(raftkv.Nodes, *name)
 	if index < 0 {

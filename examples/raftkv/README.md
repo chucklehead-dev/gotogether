@@ -53,7 +53,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestUnpersistedVote` | `NoPersistVote`: the hard state written without its vote | the leader deposed every 300 ms, crashes and late messages at high rates | no faithful run has two leaders in a term; 5 of 50 mutant runs do |
 | `TestCatchUp` | `NoSnapshotReport`: a snapshot lost on the way is never reported to raft | a follower down while the clients write past a compaction, restarted, and its snapshot lost by a 200 ms cut; the cluster's history | the faithful follower catches up within 1 s in all 20 runs; the mutant's never does in 18 of 20 (`within 1s after behind: caughtUp`), though the cluster settles with a leader |
 | `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
-| `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs conform to the cluster's model |
+| `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs with the harness's settle conform to the cluster's model and settle (`eventually hasLeader` judged); without the settle they do not settle. `TestRealNodeExitsWithParent`: a node whose parent is killed exits |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
 ## What the runs taught
@@ -118,11 +118,18 @@ Each node serves `POST /raft` (its peers), `POST /kv` (clients, through
 `HTTPNet` and the simulation's `Client.Do`, so a real client carries
 `NoRequestID`), `GET /status` (applied index, term, state, leader, code
 and log versions) and `GET /state` (its keys: the probe's `observe`).
-`-mutation` takes the mutants' names, `-version v2` is the upgraded code.
+`-mutation` takes the mutants' names, `-version v2` is the upgraded code,
+and `-exit-with-parent` makes a node exit when its stdin reaches EOF: given
+a pipe from its harness, it dies with it (a kill -9, a test binary's
+`-timeout`, whose panic runs no cleanup), instead of holding its port and
+its log's lock.
 A node records the cluster's history (boot, apply, campaign, lead,
 stepDown) into its `-steps` log, a new one per incarnation (its recorder
 `<name>.<incarnation>`, every node's process `cluster`); the clients
-record theirs. Both are checked by the bindings the simulation uses.
+record theirs. Both are checked by the bindings the simulation uses. The
+harness records the cluster's settle (`qobs.Settled`, in a log of its
+own, after the nodes agree and before they stop), without which the
+cluster model's `eventually hasLeader` is not judged.
 
 Simulated only, so far: the faults. Nothing loses, delays or duplicates a
 real message, partitions the nodes or skews their clocks; the smoke
