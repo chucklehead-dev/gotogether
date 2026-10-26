@@ -92,7 +92,6 @@ type Sim struct {
 	pred      []*task   // tasks waiting on a predicate (evaluated every step)
 	timers    timerHeap // deadlines of waiting tasks
 	nextID    int
-	back      chan struct{}
 	procs     []*Process
 	net       Network // the network between processes (Net)
 	clocksSet *Clocks // Clocks as the first process saw them
@@ -126,6 +125,7 @@ type task struct {
 	held      bool      // runnable but held while its process stalls (Stalls): off the run queue
 	heldUntil time.Time // when it is released
 	wake      chan struct{}
+	back      chan struct{}   // it hands control back to the scheduler (its own: a hung task's late hand-back reaches no other wait)
 	gid       int64           // its goroutine's id, for the stack the watchdog reports (Hang)
 	ctx       context.Context // its context (Current)
 	waiting   bool            // parked until ready, a signal, or deadline
@@ -217,7 +217,7 @@ func New(c Chooser) *Sim {
 	} else if rc, ok := qrun.Current(); ok {
 		base = rc // the run it is created in (qrun.Start, an enclosing simulation)
 	}
-	s := &Sim{c: c, base: base, names: hooks.FaultNamesOf(base), now: Epoch, start: Epoch, back: make(chan struct{}), MaxSteps: 100000,
+	s := &Sim{c: c, base: base, names: hooks.FaultNamesOf(base), now: Epoch, start: Epoch, MaxSteps: 100000,
 		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid(), Hang: 30 * time.Second}
 	s.net.sim = s
 	if os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" {
@@ -378,7 +378,7 @@ func (p *Process) Spawn(name string, fn func(ctx context.Context)) {
 
 func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx context.Context)) {
 	s.nextID++
-	t := &task{sim: s, id: s.nextID, name: name, proc: p, wake: make(chan struct{})}
+	t := &task{sim: s, id: s.nextID, name: name, proc: p, wake: make(chan struct{}), back: make(chan struct{})}
 	if p != nil {
 		t.inc = p.Incarnation
 	}
@@ -409,7 +409,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 			}
 			t.done = true
 			t.sim.unqueue(t)
-			t.sim.back <- struct{}{}
+			t.back <- struct{}{}
 		}()
 		if t.killed {
 			panic(killed{})
@@ -438,7 +438,7 @@ func (t *task) park() {
 	if !t.waiting {
 		t.sim.enqueue(t)
 	}
-	t.sim.back <- struct{}{}
+	t.back <- struct{}{}
 	<-t.wake
 	if t.killed {
 		panic(killed{})
@@ -823,7 +823,7 @@ func (p *Process) Crash() {
 	// and stay frozen until Close, like the others, rather than run on to
 	// its next scheduling point.
 	if t := taskOf(nil); t != nil && t.proc == p && t.sim == p.sim {
-		t.sim.back <- struct{}{}
+		t.back <- struct{}{}
 		<-t.wake
 		panic(killed{})
 	}
@@ -1438,13 +1438,13 @@ func eachLog(c Chooser, f func(*ChoiceLog)) {
 // or by ending, for at most Hang of wall time (the watchdog's).
 func (s *Sim) await(t *task) {
 	if s.hangFire == nil {
-		<-s.back
+		<-t.back
 		return
 	}
 	s.awaits.Add(1)
 	s.awaiting.Store(true)
 	select { //qenv:ok the hang watchdog: the scheduler's wait for a task, against the watchdog's wall clock
-	case <-s.back:
+	case <-t.back:
 		s.awaiting.Store(false)
 	case <-s.hangFire:
 		s.hung = t
@@ -1534,10 +1534,10 @@ func (s *Sim) Close() {
 		return
 	}
 	for _, t := range s.tasks {
-		if !t.done && t != s.hung { // a hung task never takes its wake: it is left blocked where it is
+		if t != s.hung && !t.done { // a hung task never takes its wake: it is left blocked where it is
 			t.killed = true
 			t.wake <- struct{}{}
-			<-s.back
+			<-t.back
 		}
 	}
 	if t := s.hung; t != nil {
@@ -1545,11 +1545,11 @@ func (s *Sim) Close() {
 		// end) with no scheduler left: take its hand-back then and unwind
 		// it, as for the others
 		go func() { //qenv:ok the hung task's unwinding, after Close: no scheduler is left to do it
-			<-s.back
+			<-t.back
 			if !t.done {
 				t.killed = true
 				t.wake <- struct{}{}
-				<-s.back
+				<-t.back
 			}
 		}()
 	}
