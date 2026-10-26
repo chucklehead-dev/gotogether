@@ -40,7 +40,10 @@
 // barely spends, so it approximately never fires. Its deadline does reach
 // the request's context, and the Transport converts a context's deadline
 // to virtual time (Sim.ToVirtual) once, the first time the simulation sees
-// it, and uses it up in virtual time from then: the deadline that applies
+// it, its remaining time rounded up to a grid of round timeouts (150 ms,
+// 1 s; 700 ms becomes 800 ms) so the test process's own jitter does not
+// reach the run, and uses it up in virtual time from then (WithTimeout
+// gives the Transport a timeout exactly): the deadline that applies
 // to a request is the virtual one, Client.Timeout's included. The context
 // itself still ends on its wall timer: ctx.Err() and ctx.Done() of a
 // service's own deadlines are wall time in a simulation, and approximately

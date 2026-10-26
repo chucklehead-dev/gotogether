@@ -426,9 +426,15 @@ func TestHandleFromAnotherProcess(t *testing.T) {
 }
 
 // A seed makes the same choices and the same outcomes every run: nothing
-// in the adapter reads the wall clock or races a goroutine.
+// in the adapter reads the wall clock or races a goroutine, and the real
+// time the test process spends between setting a deadline and sending
+// does not reach the run: a plain context's deadline on the grid (1 s, 3 ms
+// injected in one run of each pair, besides what a loaded runner adds:
+// anything under the 200 ms gap to the grid point below is taken back),
+// or one WithTimeout gives exactly (700 ms, off the grid, with 30 ms
+// injected: no amount changes it, not even one past the wall deadline).
 func TestDeterministic(t *testing.T) {
-	once := func(seed uint64) ([]qenv.Choice, []string) {
+	once := func(seed uint64, jitter time.Duration, exact bool) ([]qenv.Choice, []string) {
 		c := qenv.NewSeeded(seed)
 		c.Rates = qenv.Rates{Default: 0.3, Kinds: map[string]float64{"nemesis": 0.05}}
 		rec := &qenv.ChoiceLog{C: c}
@@ -436,16 +442,23 @@ func TestDeterministic(t *testing.T) {
 		n := 0
 		srv, tr, client := deploy(s, true, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			n++
-			qenv.Sleep(r.Context(), 50*time.Millisecond)
+			qenv.Sleep(r.Context(), 300*time.Millisecond)
 			fmt.Fprintf(w, "%d at %v", n, s.Elapsed())
 		}))
-		tr.Timeout, tr.Refuse = 200*time.Millisecond, true
+		tr.Timeout, tr.Refuse = 2*time.Second, true
 		var out []string
 		for _, name := range []string{"a", "b"} {
 			s.Spawn(name, func(ctx context.Context) {
 				for i := range 5 {
-					ctx, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
-					req, _ := http.NewRequestWithContext(ctx, "POST", srv.URL(), strings.NewReader(fmt.Sprint(name, i)))
+					var cctx context.Context
+					var cancel context.CancelFunc
+					if exact {
+						cctx, cancel = qhttp.WithTimeout(ctx, 700*time.Millisecond)
+					} else {
+						cctx, cancel = context.WithTimeout(ctx, time.Second)
+					}
+					time.Sleep(jitter) //qenv:ok real jitter between setting the deadline and sending, injected
+					req, _ := http.NewRequestWithContext(cctx, "POST", srv.URL(), strings.NewReader(fmt.Sprint(name, i)))
 					resp, err := client.Do(req)
 					cancel()
 					if err != nil {
@@ -463,21 +476,71 @@ func TestDeterministic(t *testing.T) {
 		s.Close()
 		return rec.Choices, out
 	}
-	faults := 0
-	for seed := uint64(1); seed <= 5; seed++ {
-		c1, o1 := once(seed)
-		c2, o2 := once(seed)
-		if !reflect.DeepEqual(c1, c2) || !reflect.DeepEqual(o1, o2) {
-			t.Fatalf("seed %d: two runs differ:\n%v\n%v\n%q\n%q", seed, c1, c2, o1, o2)
-		}
-		for _, c := range c1 {
-			if strings.HasPrefix(c.Kind, "fault.") && c.Value != 0 {
-				faults++
+	for _, exact := range []bool{false, true} {
+		faults, deadlines := 0, 0
+		for seed := uint64(1); seed <= 5; seed++ {
+			c1, o1 := once(seed, 0, exact)
+			jitter := 3 * time.Millisecond
+			if exact {
+				jitter = 30 * time.Millisecond
+			}
+			c2, o2 := once(seed, jitter, exact)
+			if !reflect.DeepEqual(c1, c2) || !reflect.DeepEqual(o1, o2) {
+				t.Fatalf("exact=%v, seed %d: two runs differ:\n%v\n%v\n%q\n%q", exact, seed, c1, c2, o1, o2)
+			}
+			for _, c := range c1 {
+				if strings.HasPrefix(c.Kind, "fault.") && c.Value != 0 {
+					faults++
+				}
+			}
+			for _, o := range o1 {
+				if strings.Contains(o, "deadline") {
+					deadlines++
+				}
 			}
 		}
+		if faults == 0 || deadlines == 0 {
+			t.Errorf("exact=%v: %d faults, %d deadlines reached: the test shows nothing", exact, faults, deadlines)
+		}
 	}
-	if faults == 0 {
-		t.Error("no seed made a fault: the test shows nothing")
+}
+
+// WithTimeout's timeout is exact and counts from the call in virtual
+// time, where a plain context's carries its whole remaining time to the
+// send, rounded up to the grid; a parent's earlier deadline wins.
+func TestWithTimeout(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	srv, _, client := deploy(s, false, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		qenv.Sleep(r.Context(), time.Hour)
+	}))
+	var got []string
+	try := func(ctx context.Context) {
+		start := s.Elapsed()
+		req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL(), nil)
+		_, err := client.Do(req)
+		var te *qhttp.TimeoutError
+		if !errors.As(err, &te) || !te.Deadline {
+			t.Fatalf("got %v, want a TimeoutError of the deadline", err)
+		}
+		got = append(got, fmt.Sprintf("sent at %v, gave up at %v", start, s.Elapsed()))
+	}
+	run(t, s, func(ctx context.Context) {
+		exact, cancel := qhttp.WithTimeout(ctx, 700*time.Millisecond)
+		defer cancel()
+		plain, cancel2 := context.WithTimeout(ctx, 700*time.Millisecond)
+		defer cancel2()
+		qenv.Sleep(ctx, 300*time.Millisecond)
+		try(exact)
+		try(plain)
+		parent, cancel3 := context.WithTimeout(ctx, 200*time.Millisecond)
+		defer cancel3()
+		child, cancel4 := qhttp.WithTimeout(parent, time.Second)
+		defer cancel4()
+		try(child)
+	})
+	want := []string{"sent at 300ms, gave up at 700ms", "sent at 700ms, gave up at 1.5s", "sent at 1.5s, gave up at 1.7s"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -687,5 +750,27 @@ func TestSettleCoreFaultsOutsideTheCore(t *testing.T) {
 	s.Close()
 	if !errors.Is(err, syscall.ECONNREFUSED) {
 		t.Errorf("got %v, want the connection refused: api is outside the core", err)
+	}
+}
+
+// A deadline the wall clock passed before the send, while no virtual time
+// did, does not fail the request: only the virtual deadline applies, so a
+// stalled test process cannot change a run.
+func TestWallDeadlineIgnored(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	srv, _, client := deploy(s, false, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	var err error
+	run(t, s, func(ctx context.Context) {
+		ctx, cancel := qhttp.WithTimeout(ctx, time.Millisecond)
+		defer cancel()
+		<-ctx.Done() //qenv:ok wait for the wall deadline, as a stalled process would
+		req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL(), nil)
+		var resp *http.Response
+		if resp, err = client.Do(req); err == nil {
+			resp.Body.Close()
+		}
+	})
+	if err != nil {
+		t.Errorf("got %v, want the request served: no virtual time passed", err)
 	}
 }

@@ -74,9 +74,11 @@ The first release. What a user meets, by module:
   `*net.OpError` with ECONNREFUSED only when nothing was sent, a read one
   with ECONNRESET for a request that found no one listening, a
   `TimeoutError` after virtual time, 503 on overload), a request
-  context's deadline converted to virtual time once per simulation and
-  used up there (a retry under it fails at once, unsent), and the fault
-  kind `http.<name>.conn` (`Transport.Refuse`).
+  context's deadline converted to virtual time once per simulation (its
+  remaining time rounded up to a grid of round timeouts, so the test
+  process's jitter does not reach the run; `WithTimeout` for an exact
+  one) and used up there (a retry under it fails at once, unsent), and
+  the fault kind `http.<name>.conn` (`Transport.Refuse`).
   `qenv.FaultKind.At` puts a double's kind built outside qenv at its
   process, for `Sim.SettleCore`.
 - `Sim.Hang` (30 s from New, zero off): a task that runs that long in

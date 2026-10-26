@@ -27,8 +27,9 @@ type Transport struct {
 	// Timeout is how long a request waits for its response, in virtual
 	// time (0: DefaultTimeout). A request context's deadline (Client.Timeout's
 	// too) shortens it: converted to virtual time the first time the
-	// simulation sees it, as if it had been set then, and used up in
-	// virtual time from there (see virtualDeadline). A request sent after
+	// simulation sees it, as if it had been set then, rounded up to a grid
+	// of round timeouts, and used up in virtual time from there (see
+	// virtualDeadline; WithTimeout makes it exact). A request sent after
 	// it passed fails at once with a TimeoutError.
 	Timeout time.Duration
 	// Refuse lets the network refuse a connection to a server that
@@ -120,7 +121,11 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("qhttp: %s %s sent outside a task of %s's simulation: send it from a task (Sim.Spawn, Process.Spawn, qenv.Go), "+
 			"where the network and virtual time are", req.Method, req.URL, srv.Name)
 	}
-	if err := ctx.Err(); err != nil {
+	dl, hasDeadline := ctx.Deadline()
+	// a deadline the wall clock passed means nothing here (the virtual one
+	// below applies): a test process stalled between setting it and
+	// sending made the run depend on the stall
+	if err := ctx.Err(); err != nil && !(hasDeadline && errors.Is(err, context.DeadlineExceeded)) {
 		closeBody(req)
 		return nil, err
 	}
@@ -128,7 +133,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	if dl, ok := ctx.Deadline(); ok {
+	if hasDeadline {
 		left := virtualDeadline(s, dl).Sub(s.Now())
 		if left <= 0 { // passed in virtual time: nothing is sent, as for a done context
 			closeBody(req)

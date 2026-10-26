@@ -1,6 +1,7 @@
 package qhttp
 
 import (
+	"context"
 	"runtime"
 	"sync"
 	"time"
@@ -21,15 +22,9 @@ var deadlines = struct {
 	m map[weak.Pointer[qenv.Sim]]map[int64]time.Time
 }{m: map[weak.Pointer[qenv.Sim]]map[int64]time.Time{}}
 
-// virtualDeadline is the virtual instant of the wall-clock deadline dl in
-// s: on first sight, now plus what is left of dl in real time (as if the
-// real clock had kept pace with the simulation; a context made before
-// virtual time passed still carries its whole timeout), rounded by
-// roundNear.
-func virtualDeadline(s *qenv.Sim, dl time.Time) time.Time {
+// table is s's table of deadlines; the caller holds the lock.
+func table(s *qenv.Sim) map[int64]time.Time {
 	key := weak.Make(s)
-	deadlines.Lock()
-	defer deadlines.Unlock()
 	tab := deadlines.m[key]
 	if tab == nil {
 		tab = map[int64]time.Time{}
@@ -40,30 +35,76 @@ func virtualDeadline(s *qenv.Sim, dl time.Time) time.Time {
 			deadlines.Unlock()
 		}, key)
 	}
+	return tab
+}
+
+// virtualDeadline is the virtual instant of the wall-clock deadline dl in
+// s: as WithTimeout recorded it, else, on first sight, now plus what is
+// left of dl in real time (as if the real clock had kept pace with the
+// simulation; a context made before virtual time passed still carries its
+// whole timeout), rounded up by ceilGrid.
+func virtualDeadline(s *qenv.Sim, dl time.Time) time.Time {
+	deadlines.Lock()
+	defer deadlines.Unlock()
+	tab := table(s)
 	v, ok := tab[dl.UnixNano()]
 	if !ok {
-		v = s.Now().Add(roundNear(s.ToVirtual(dl).Sub(s.Now())))
+		v = s.Now().Add(ceilGrid(s.ToVirtual(dl).Sub(s.Now())))
 		tab[dl.UnixNano()] = v
 	}
 	return v
 }
 
-// roundNear rounds what is left of a deadline at its first sight to the
-// nearest two significant digits (148.7 ms to 150 ms, 1.9993 s to 2 s).
-// What it lacks of the timeout set is the real time spent between setting
-// it and sending: jitter of the test process (a pause of the runtime once
-// took 2 ms of a 150 ms deadline), not virtual time, and unrounded, two
-// runs of a seed differed. A timeout of two significant digits is stable
-// under jitter of either sign below half its last digit (0.5% to 5% of
-// it), a power of ten under jitter that shortens it below half the finer
-// digit (9.97 ms is 10 ms). Any other timeout moves by at most that half.
-func roundNear(left time.Duration) time.Duration {
+// WithTimeout is context.WithTimeout, and in a simulation it also tells the
+// Transport the timeout exactly: a request under the context ends d of
+// virtual time after this call, however much virtual time passes before
+// it is sent and whatever real time the test process spends meanwhile.
+// A plain context's deadline is known only as a wall-clock instant, whose
+// remaining time the Transport rounds up to its grid (ceilGrid). A parent
+// whose deadline is earlier keeps it, as with context.WithTimeout.
+func WithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	c, cancel := context.WithTimeout(ctx, d)
+	s := qenv.From(ctx)
+	dl, _ := c.Deadline()
+	if pd, ok := ctx.Deadline(); s == nil || ok && pd.Equal(dl) {
+		return c, cancel // outside a simulation, or the parent's deadline
+	}
+	deadlines.Lock()
+	table(s)[dl.UnixNano()] = s.Now().Add(d)
+	deadlines.Unlock()
+	return c, cancel
+}
+
+// grid are the values, in tenths of a decade, a remaining time is rounded
+// up to: a preferred-number series on which the timeouts code sets lie
+// (100 ms, 150 ms, 250 ms, 1 s, 30 s, 60 s).
+var grid = [...]time.Duration{10, 15, 20, 25, 30, 40, 50, 60, 80, 100} // read-only
+
+// ceilGrid rounds what is left of a deadline at its first sight up to the
+// grid. It is the nominal timeout less the real time spent between setting
+// it and sending: jitter of the test process (10 ms on a loaded CI runner),
+// not virtual time, and unrounded, or rounded to the nearest, two runs of
+// a seed differed. The jitter only shrinks it, so rounding up gives back a
+// timeout on the grid whenever the jitter is less than the gap to the grid
+// point below: at least a sixth of the timeout (20% at a power of ten,
+// 50% at 200 ms), against 10% at a power of ten for one significant digit,
+// where most timeouts are. A timeout off the grid is lengthened to the next
+// point on it (700 ms to 800 ms, 45 s to 50 s); WithTimeout keeps it exact.
+func ceilGrid(left time.Duration) time.Duration {
 	if left <= 0 {
 		return left
 	}
-	g := time.Duration(1)
-	for g*100 <= left {
-		g *= 10
+	p := time.Duration(1)
+	for p*10 <= left {
+		p *= 10
 	}
-	return (left + g/2) / g * g
+	if p < 10 {
+		return left // below 10 ns: no tenths of a decade to round to
+	}
+	for _, m := range grid {
+		if v := m * p / 10; v >= left {
+			return v
+		}
+	}
+	return left // unreachable: 100 tenths of p is 10p > left
 }

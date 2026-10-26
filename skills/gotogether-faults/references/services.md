@@ -42,10 +42,15 @@ sim.Spawn("sdk", func(ctx context.Context) { /* client.Post(srv.URL()+"/payments
   requests and the crash window (`srv.Service.NoCrashWindow`) are the
   Service's.
 - Time: the Transport's `Timeout` and a request context's deadline are
-  virtual. A deadline is converted (`Sim.ToVirtual`, rounded to the
-  nearest two significant digits) the first time the simulation sees it,
-  then used up in virtual time: a retry under it after it passed fails at
-  once, unsent. `http.Client.Timeout` reaches the Transport as such a
+  virtual. A deadline is converted (`Sim.ToVirtual`) the first time the
+  simulation sees it, its remaining time rounded up to a grid of round
+  timeouts (100 ms, 150 ms, 200 ms, 250 ms, 300 ms, 400 ms, 500 ms, 600 ms,
+  800 ms, 1 s, ...: 700 ms becomes 800 ms), which takes back the test
+  process's own jitter, then used up in virtual time: a retry under it
+  after it passed fails at once, unsent. `qhttp.WithTimeout(ctx, d)`, where
+  the code can call it, gives the exact timeout, counted from the call in
+  virtual time. A deadline the wall clock passed while no virtual time
+  did fails nothing. `http.Client.Timeout` reaches the Transport as such a
   deadline. The context's own timer is wall time: `ctx.Err()` approximately
   never fires in a fast run, so a retry loop must stop on the request's
   error (`context.DeadlineExceeded`) or an attempt count, not on

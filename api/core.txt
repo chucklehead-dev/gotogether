@@ -737,6 +737,7 @@ var NoFaults = choice.NoFaults
 const DefaultTimeout = 10 * time.Second
 func NewServer(s *qenv.Sim, name string, p *qenv.Process) *Server
 func NewTransport(servers ...*Server) *Transport
+func WithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc)
 type Server struct
     field Name string
     field Proc *qenv.Process
