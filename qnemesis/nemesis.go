@@ -15,7 +15,10 @@
 // process is reaped (every step it recorded precedes it), a cut after the
 // API call returns (it is in effect), a heal before the call (a binding's
 // within bound covers the API's latency), a restart before the start (the
-// new incarnation's steps follow it). The nemesis records on its own
+// new incarnation's steps follow it). A crash of a target that names its
+// recorders (Recorded: Process.Recorders and Logs) first declares their
+// tails lost, since a kill may land after an effect and before its step
+// was written. The nemesis records on its own
 // recorder (NewRecorder: WithID("nemesis"), a PerStep step log), ordered
 // against the system's steps by wall time: the nemesis and the system on
 // one host, whose clock both read, so their steps are comparable within
@@ -26,6 +29,7 @@
 package qnemesis
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,6 +44,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // An Event is a fault, or its undo, as it happened: what a Recording
@@ -97,8 +102,12 @@ func DefaultRecording() Recording {
 	}
 }
 
+// RecorderID is the id of the nemesis's recorder (NewRecorder): StepsIn
+// leaves its steps out of the system's, whatever log they are in.
+const RecorderID = "nemesis"
+
 // NewRecorder opens the nemesis's step log at path (PerStep: a killed
-// test loses none of it) and returns its recorder, id "nemesis", with
+// test loses none of it) and returns its recorder, id RecorderID, with
 // opts after (qobs.WithActor, for a binding's actor), and the sink to
 // Close.
 func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, *qobs.JSONLSink, error) {
@@ -106,24 +115,23 @@ func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, *qobs.JSONLS
 	if err != nil {
 		return nil, nil, err
 	}
-	return qobs.NewRecorder(sink, append([]qobs.Option{qobs.WithID("nemesis"), qobs.WithProcess("nemesis")}, opts...)...), sink, nil
+	return qobs.NewRecorder(sink, append([]qobs.Option{qobs.WithID(RecorderID), qobs.WithProcess(RecorderID)}, opts...)...), sink, nil
 }
 
-// StepsIn counts the complete lines of the step logs matching patterns
+// StepsIn counts the system's steps in the step logs matching patterns
 // (filepath.Glob's: one log per incarnation, "dir/n*.jsonl"), read anew
 // at each call from where the last stopped: a Nemesis's Steps, which a
-// fault's After waits for. A torn last line is not counted.
+// fault's After waits for. It counts the complete lines of every
+// recorder but the nemesis's (RecorderID), whose own log a pattern may
+// match, and no loss records (a crash's, a torn tail's): a qenv run's
+// recorder counts the same (Recorder.Count), so a journal's counts are a
+// simulation's. A torn last line is not counted.
 func StepsIn(patterns ...string) func() int {
-	type seen struct {
-		off   int64
-		lines int
-	}
 	var mu sync.Mutex
 	files := map[string]*seen{}
 	return func() int {
 		mu.Lock()
 		defer mu.Unlock()
-		total := 0
 		for _, pat := range patterns {
 			paths, _ := filepath.Glob(pat)
 			for _, p := range paths {
@@ -132,23 +140,52 @@ func StepsIn(patterns ...string) func() int {
 					s = &seen{}
 					files[p] = s
 				}
-				if f, err := os.Open(p); err == nil {
-					if _, err := f.Seek(s.off, io.SeekStart); err == nil {
-						b, _ := io.ReadAll(f)
-						if i := strings.LastIndexByte(string(b), '\n'); i >= 0 {
-							s.lines += strings.Count(string(b[:i+1]), "\n")
-							s.off += int64(i + 1)
-						}
-					}
-					f.Close()
-				}
+				s.steps += s.read(p)
 			}
 		}
+		total := 0
 		for _, s := range files {
-			total += s.lines
+			total += s.steps
 		}
 		return total
 	}
+}
+
+// seen is how far StepsIn has read a log, and the steps it counted.
+type seen struct {
+	off   int64
+	steps int
+}
+
+// read counts the system's steps in the complete lines of path after
+// off, and moves off past them.
+func (s *seen) read(path string) int {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	if _, err := f.Seek(s.off, io.SeekStart); err != nil {
+		return 0
+	}
+	b, _ := io.ReadAll(f)
+	i := bytes.LastIndexByte(b, '\n')
+	if i < 0 {
+		return 0
+	}
+	s.off += int64(i + 1)
+	n := 0
+	for _, line := range bytes.Split(b[:i], []byte("\n")) {
+		var m map[string]any
+		if len(bytes.TrimSpace(line)) == 0 || json.Unmarshal(line, &m) != nil {
+			continue
+		}
+		if m[qtrace.KeyRecorder] == RecorderID || m[qtrace.KeyLost] != nil {
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 // A Nemesis makes a Schedule's faults on Targets and Net, records each on
@@ -379,7 +416,15 @@ func (n *Nemesis) apply(ctx context.Context, i int) error {
 		}
 		n.mu.Lock()
 		n.down[p] = i
+		delete(n.paused, p) // a crash ends a pause: no resume of an incarnation never paused
 		n.mu.Unlock()
+		if n.Rec != nil {
+			// before the crash's step: what the incarnation never recorded
+			// is lost from its last step on
+			if lost := lossRecords(t, ev.Incarnation, n.Rec.Actor()); len(lost) > 0 {
+				n.Rec.Add(lost...)
+			}
+		}
 		if err := n.after(ctx, i, ev); err != nil {
 			return err
 		}

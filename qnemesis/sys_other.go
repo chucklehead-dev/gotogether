@@ -23,3 +23,7 @@ const (
 )
 
 func waitStopped(context.Context, int) error { return nil }
+
+func startTime(int) uint64 { return 0 }
+
+func sweep(int, uint64) {}

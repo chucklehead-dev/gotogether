@@ -27,6 +27,16 @@ func TestMain(m *testing.M) {
 	case "sleep":
 		time.Sleep(time.Hour)
 		return
+	case "ticker":
+		// a worker recording as fast as it can, to its own log
+		sink, err := qobs.FileSink(os.Getenv("QNEMESIS_LOG"), qobs.PerStep)
+		if err != nil {
+			panic(err)
+		}
+		rec := qobs.NewRecorder(sink, qobs.WithID("worker"))
+		for {
+			rec.Record(context.Background(), "tick", nil)
+		}
 	}
 	os.Exit(m.Run())
 }
@@ -45,11 +55,15 @@ func serve() {
 	}
 	rec := qobs.NewRecorder(sink, qobs.WithID(name+"-"+inc), qobs.WithProcess(name+"#"+inc))
 	ctx := context.Background()
-	if os.Getenv("QNEMESIS_GRANDCHILD") != "" {
-		// a worker in the incarnation's process group: a crash must take it too
+	if mode := os.Getenv("QNEMESIS_GRANDCHILD"); mode != "" {
+		// a worker in the incarnation's process group: a crash must take
+		// it too, and a pause stop it
 		exe, _ := os.Executable()
 		gc := exec.Command(exe, "-test.run=^$")
 		gc.Env = append(os.Environ(), "QNEMESIS_CHILD=sleep")
+		if mode == "ticker" {
+			gc.Env = append(os.Environ(), "QNEMESIS_CHILD=ticker", "QNEMESIS_LOG="+base+".worker.jsonl")
+		}
 		if err := gc.Start(); err != nil {
 			panic(err)
 		}

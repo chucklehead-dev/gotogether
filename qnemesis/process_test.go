@@ -289,7 +289,7 @@ func TestPauseIsRecordedOnceStopped(t *testing.T) {
 		"resume": func(Event) (string, []any) { return "resume", nil },
 	}
 	n := &Nemesis{Targets: map[string]Target{"n1": p}, Rec: rec, Record: rc}
-	s := Schedule{{Kind: "nemesis.pause.n1", For: 30 * time.Millisecond}, {Kind: "nemesis.pause.n1", At: 60 * time.Millisecond, For: 30 * time.Millisecond}}
+	s := Schedule{{Kind: "nemesis.pause.n1", For: 30 * time.Millisecond}, {Kind: "nemesis.pause.n1", Follows: []int{0}, For: 30 * time.Millisecond}}
 	if err := n.Run(ctx, s); err != nil {
 		t.Fatal(err)
 	}

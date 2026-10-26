@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -32,6 +33,17 @@ type Target interface {
 // crash and a restart record (Event.Incarnation).
 type incarnated interface{ Incarnation() int }
 
+// A Recorded target names what an incarnation recorded: its recorders'
+// ids, its step logs (each recorder's last step there is where its tail
+// was cut) and when it started (the cut, for a recorder whose log has
+// none). A crash of one declares those recorders' tails lost
+// (qtrace.MarkLost's records, on the nemesis's recorder): a failure that
+// may depend on a step the incarnation took and never recorded is no
+// verdict, not a FAIL. Process implements it.
+type Recorded interface {
+	RecordedBy(incarnation int) (recorders, logs []string, started time.Time)
+}
+
 // A Process is a program the nemesis runs, kills and restarts: Cmd makes
 // the command of each incarnation, numbered from 1, so each can write a
 // step log of its own (an incarnation's log ends where it was killed, and
@@ -40,19 +52,51 @@ type incarnated interface{ Incarnation() int }
 //
 // Each incarnation leads a process group of its own; Kill sends SIGKILL
 // to the group and reaps the leader, Pause and Resume send SIGSTOP and
-// SIGCONT to it. On Linux the kernel also kills an incarnation whose
-// parent dies (Pdeathsig); Close kills the current one: register it with
+// SIGCONT to it (Pause returns once every process of the group has
+// stopped, on Linux). Close kills the current one: register it with
 // t.Cleanup so no test leaves a server running.
+//
+// If the test binary itself is killed (kill -9, a CI timeout), no
+// cleanup runs: on Linux the kernel kills the leader (Pdeathsig), not
+// what the leader started. With PIDFile set, Start writes the group's id
+// there and, at the next start, a later test's included, kills what an
+// earlier incarnation left of its group first.
 type Process struct {
 	Name string
 	Cmd  func(incarnation int) *exec.Cmd
+	// Recorders are the ids (qobs.WithID) of the recorders an incarnation
+	// writes, and Logs its step logs. Named, a crash declares their tails
+	// lost (Recorded): the effect of a step the incarnation took but had
+	// not yet recorded (a reply sent, then killed before the record,
+	// which a step recorded on return, //quint:action's, always risks) is
+	// then no verdict where another recorder saw it, rather than a FAIL.
+	Recorders func(incarnation int) []string
+	Logs      func(incarnation int) []string
+	PIDFile   string
 
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	inc    int
-	done   chan struct{} // closed once the current incarnation is reaped
-	exit   error         // its exit, once done
-	closed bool
+	mu      sync.Mutex
+	cmd     *exec.Cmd
+	inc     int
+	started time.Time     // the current incarnation's start
+	done    chan struct{} // closed once the current incarnation is reaped
+	exit    error         // its exit, once done
+	closed  bool
+}
+
+// RecordedBy implements Recorded.
+func (p *Process) RecordedBy(incarnation int) (recorders, logs []string, started time.Time) {
+	if p.Recorders != nil {
+		recorders = p.Recorders(incarnation)
+	}
+	if p.Logs != nil {
+		logs = p.Logs(incarnation)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if incarnation == p.inc {
+		started = p.started
+	}
+	return recorders, logs, started
 }
 
 // Incarnation is the number of the incarnation last started (0: none).
@@ -76,11 +120,19 @@ func (p *Process) Start(context.Context) error {
 		return fmt.Errorf("qnemesis: process %s: Cmd(%d) returned nil", p.Name, p.inc+1)
 	}
 	groupOf(cmd)
+	p.sweep()
+	started := time.Now()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("qnemesis: start process %s (incarnation %d): %w", p.Name, p.inc+1, err)
 	}
 	p.inc++
-	p.cmd = cmd
+	p.cmd, p.started = cmd, started
+	if p.PIDFile != "" {
+		pid := cmd.Process.Pid
+		if err := os.WriteFile(p.PIDFile, []byte(fmt.Sprintf("%d %d\n", pid, startTime(pid))), 0o644); err != nil {
+			return fmt.Errorf("qnemesis: process %s: its PIDFile: %w", p.Name, err)
+		}
+	}
 	done := make(chan struct{})
 	p.done = done
 	go func() {
@@ -92,6 +144,24 @@ func (p *Process) Start(context.Context) error {
 		close(done)
 	}()
 	return nil
+}
+
+// sweep kills what an incarnation left of its group, as PIDFile names
+// it: one a killed test binary could not clean up. p.mu held.
+func (p *Process) sweep() {
+	if p.PIDFile == "" {
+		return
+	}
+	b, err := os.ReadFile(p.PIDFile)
+	if err != nil {
+		return
+	}
+	var pgid int
+	var start uint64
+	if n, _ := fmt.Sscan(string(b), &pgid, &start); n == 2 && pgid > 1 {
+		sweep(pgid, start)
+	}
+	_ = os.Remove(p.PIDFile)
 }
 
 // running reports whether the current incarnation has not been reaped;
@@ -139,9 +209,9 @@ func (p *Process) Kill(ctx context.Context) error {
 	return nil
 }
 
-// Pause implements Target: SIGSTOP to the incarnation's group.
-// It returns once the group's leader has stopped (on Linux; elsewhere
-// once the signal is sent).
+// Pause implements Target: SIGSTOP to the incarnation's group. It
+// returns once every process of the group has stopped (on Linux;
+// elsewhere once the signal is sent).
 func (p *Process) Pause(ctx context.Context) error {
 	if err := p.signal(true); err != nil {
 		return err
@@ -181,7 +251,11 @@ func (p *Process) Close() error {
 	p.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return p.Kill(ctx)
+	err := p.Kill(ctx)
+	if p.PIDFile != "" && err == nil {
+		_ = os.Remove(p.PIDFile) // nothing left to sweep
+	}
+	return err
 }
 
 // A Container is a container the nemesis kills, restarts and pauses

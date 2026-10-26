@@ -1,0 +1,7 @@
+spec: ctr.qnt
+module: ctr
+actions:
+  inc: {}
+  crash: {}
+  restart: {}
+  saw: {}

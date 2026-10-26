@@ -15,3 +15,10 @@ func orphanGuard(*syscall.SysProcAttr) {}
 // process is stopped: a pause is recorded once SIGSTOP is sent, and may
 // precede a step the process takes before it stops.
 func waitStopped(context.Context, int) error { return nil }
+
+// startTime is unknown outside Linux.
+func startTime(int) uint64 { return 0 }
+
+// sweep does nothing outside Linux: without /proc a group's processes
+// cannot be told from another program's that reused the id.
+func sweep(int, uint64) {}

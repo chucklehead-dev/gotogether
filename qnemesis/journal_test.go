@@ -41,10 +41,21 @@ func TestJournalRoundTrip(t *testing.T) {
 	}
 	sc := j.Script()
 	var kinds []string
+	// each fault follows the last before it that is no heal; a heal, the
+	// one before it
+	lastFault := -1
 	for i, f := range sc.Faults {
 		kinds = append(kinds, f.Kind)
-		if i > 0 && !reflect.DeepEqual(f.Follows, []int{i - 1}) {
-			t.Errorf("scripted %d (%v) follows %v; want the one before", i, f, f.Follows)
+		heal := strings.HasPrefix(f.Kind, "nemesis.heal.")
+		want := lastFault
+		if heal {
+			want = i - 1
+		}
+		if i > 0 && !reflect.DeepEqual(f.Follows, []int{want}) {
+			t.Errorf("scripted %d (%v) follows %v; want %d", i, f, f.Follows, want)
+		}
+		if !heal {
+			lastFault = i
 		}
 	}
 	want := []string{"nemesis.crash.a", "nemesis.partition.a.b", "nemesis.heal.a.b", "nemesis.partition.a.c", "nemesis.partition.b.c",
@@ -117,5 +128,63 @@ func TestFromScript(t *testing.T) {
 	want := Schedule{{Kind: "nemesis.crash.a", After: 3}, {Kind: "nemesis.partition.a.b", After: 5, Follows: []int{0}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("FromScript: %+v; want %+v", got, want)
+	}
+}
+
+// A real partition longer than qenv's cuts: its re-made heal never
+// happens (qenv healed the link first), and the faults after it still do,
+// since none waits for a heal; Unreproducible says what to set, and with
+// CutLength at LongestCut the heal happens too. A heal of a link never
+// cut is left out, and said.
+func TestJournalScriptLongPartition(t *testing.T) {
+	t.Parallel()
+	t0 := time.Unix(1000, 0)
+	zero, five, six := 0, 5, 6
+	j := &Journal{Entries: []Entry{
+		{Index: 0, Kind: "nemesis.partition.a.b", Event: "start", Time: t0, Steps: &zero, Recorded: true},
+		{Index: 0, Kind: "nemesis.heal.a.b", Event: "end", Time: t0.Add(3 * time.Second), Steps: &five, Recorded: true},
+		{Index: 1, Kind: "nemesis.heal.a", Event: "start", Time: t0.Add(3 * time.Second), Steps: &five, Links: [][2]string{{"a", "b"}}},
+		{Index: 2, Kind: "nemesis.crash.a", Event: "start", Time: t0.Add(4 * time.Second), Steps: &six, Recorded: true},
+	}}
+	if d := j.LongestCut(); d != 3*time.Second {
+		t.Fatalf("LongestCut %v; want 3s", d)
+	}
+	un := strings.Join(j.Unreproducible(), "\n")
+	for _, want := range []string{"set Sim.Net().CutLength to at least 3s", "nemesis.heal.a (fault 1) healed a.b, which no fault of the journal cut"} {
+		if !strings.Contains(un, want) {
+			t.Errorf("Unreproducible lacks %q:\n%s", want, un)
+		}
+	}
+	for _, cut := range []time.Duration{0, j.LongestCut()} {
+		sc := j.Script()
+		if kinds := len(sc.Faults); kinds != 3 {
+			t.Fatalf("script %v; want the partition, its heal and the crash", sc.Faults)
+		}
+		steps := 0
+		sc.Progress = func() int { return steps }
+		s := qenv.New(sc)
+		if cut > 0 {
+			s.Net().CutLength = cut
+		}
+		a := s.Process("a", true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+		b := s.Process("b", true, func(ctx context.Context) { qenv.Daemon(ctx); qenv.Sleep(ctx, time.Hour) })
+		s.Net().PartitionNemesis(a, b)
+		s.Spawn("work", func(ctx context.Context) {
+			for range 12 {
+				qenv.Sleep(ctx, 500*time.Millisecond) // a step every half second, as the real system took
+				steps++
+			}
+		})
+		if err := s.Run(10 * time.Second); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		r := sc.Remaining()
+		switch {
+		case cut == 0 && (len(r) != 1 || r[0].Kind != "nemesis.heal.a.b"):
+			t.Errorf("default CutLength: remaining %v; want only the heal qenv made first", r)
+		case cut > 0 && len(r) != 0:
+			t.Errorf("CutLength %v: remaining %v; want none", cut, r)
+		}
 	}
 }
