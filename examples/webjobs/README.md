@@ -106,7 +106,7 @@ model judges both together.
 | `TestMutants/commitAfterCancel` | the report is committed whatever a cancel said | the same | `Violates("noCommitAfterCancel")` |
 | `TestMutants/rerunFinished` | a key asked again once its job ended runs the job again in place: the same id, back to running | the client's run in both tiers (every fourth journey sends its submission once more, late); no page sends a key again once its job ended, so no Bombadil run or recording reaches it | `Violates("createdOnce")` |
 | `TestLive` | none | Bombadil explores the faithful app for 45s; the manifest replays; then `--reproduce` of the run against a new server (the same seed) | `Finishes()`, and Bombadil's own properties hold (its exit 2 fails the run); the reproduction finishes too, or diverges (Bombadil's reproduction is best effort, and the page's timing is not replayed) and what it replayed conforms |
-| `TestObservationMutants` | none: the recorded faithful journey with one mistake in its log (`qtest.MutateSteps`, four mutants of each op spread over its 59 steps); full mode only, and nightly | 20 checks of the journey | every dropped step killed, a job's creation recorded twice killed (`createdOnce`), a submit's code 199 killed (`noFailedRequest`); a submit or a cancel recorded twice survives (below) |
+| `TestObservationMutants` | none: the recorded faithful journey with one mistake in its log (`qtest.MutateSteps`, four mutants of each op spread over its 59 steps); full mode only, and nightly | 20 checks of the journey | every dropped step killed, a job's creation recorded twice killed (`createdOnce`), a submit's code 199 killed (`noFailedRequest`); a submit or a cancel recorded twice, and every retime (within its actor's next step), survive (below) |
 | `bombadiltrace` tests | none | constructed traces | the mapping (times, calls, refs), calls completed only by their own answers, each refusal, a torn tail |
 
 Rates were measured on 2026-10-26 in a sandbox with Bombadil 0.7.9 and
@@ -186,19 +186,49 @@ judges the joined steps with `qtest.MutateSteps`.
 | dup | 4 | 2 | 2 | the page's answers and acks are sets, so a submit or a cancel recorded twice changes nothing; a creation recorded twice violates `createdOnce` (it survived before the ghost count of creations: a server that recreated a finished job reset it to running unseen; the rerunFinished mutant is that server) |
 | swap | 4 | 2 | 2 | two submits, and a submit and a show, commute; a creation swapped with its job's finish is rejected, and a cancellation swapped with the next job's creation (taking its later time) violates `cancelHonoured` |
 | corrupt | 4 | 4 | 0 | a submit answered 199 violates `noFailedRequest` (a submit's answer is 202 or 200, anything else a failure; it survived when only 0 and 5xx counted); a key emptied violates `answerIsItsJob`; a show's status removed is refused by the binding |
-| retime | 4 | 2 | 2 | no `within` reads a submit's or a cancel's time (only a job's run and a committed job shown are bounded); a creation moved past the submit it answers violates `answerIsItsJob` |
+| retime | 4 | 0 | 4 | a step moves at most to its actor's next step, so every retime keeps the order the model reads (a creation stays before the submit it answers); only a job's run and a committed job shown are bounded in time, and the four sampled moves (18ms to 111ms, a drain by 28µs) stay within both bounds |
 
 The 199 and the second creation were the two a reader acts on: each
 was a recording the check passed that the server never produced, so
-each was a claim to add to the model, and both are now (14 of 20
-killed, from 11). The survivors left are equivalent by the model's
-design: answers are sets, two submits or a submit and a show commute,
-and no bound reads a request's time.
+each was a claim to add to the model, and both are now (12 of 20
+killed; with retime bounded by its actor's next step, the two retimes
+it killed before, by moving a creation past its submit, are no longer
+made). The survivors left are equivalent by the model's design: answers
+are sets, two submits or a submit and a show commute, and no bound reads
+a request's time or a move this small.
+
+## What -short runs, and its miss chance
+
+Per push (`go test -short`, the examples loop in CI) runs what can
+regress with a push: `TestClient` (the faithful server, in process),
+`TestMutants` (each mutant's overlay builds `cmd/webjobs`, about 1.5s,
+and the client drives that program from the test process), `TestRecorded`
+(the real trace format, faithful), three of `TestProbes` (a cancel never
+answered, the page stuck at accepted, the key sent), `TestTimesKept`'s
+readyEarly half, and the adapter's tests. The full run adds the CLI's
+manifest replay, the mutants' recorded runs (`TestRecordedMutants`),
+the probes whose claim a mutant's client run states per push too, the
+re-recorded faithful journey, `TestClickWithNoOutcome`, `TestTornTrace`,
+`TestObservationMutants` and the live runs.
+
+Under -short the client runs 12 journeys at seed 1, alternating between
+running to ready and cancelling (every fourth sent again late). Four
+such journeys caught each mutant at each of seeds 1 to 10 (10 of 10;
+four at random, without alternating, 8 to 10 of 10), which bounds a
+4-journey block's miss rate below 26% at 95%; 12 journeys are three
+such blocks, so a mutant's miss chance per push is under 0.26^3, about
+2%, if the blocks miss independently (they share a server and a seed).
+
+Measured on 2026-10-26, back to back on a 4-core machine that other
+work loaded to about 16: the -short run took 147s wall and 286 CPU-s
+before this cut (a633d81), and 74s and 146 CPU-s after. With the
+machine near quiet (load 1.4 and 6.6 at their starts), the run before
+took 77s and the run after 43s (`ci/test-times.txt` budgets 45).
 
 ## How it runs
 
 ```sh
-go test -short ./...                       # the client's runs, the recorded journeys, the probes and adapter, each mutant's overlay; about a minute
+go test -short ./...                       # the client's runs (faithful, each mutant's overlay), the faithful recording, three probes, the adapter; about 40 s quiet
 go test ./...                              # adds the live runs: bombadil and a Chrome on PATH
 WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .   # records 6s runs into testdata/runs
 ./run-demo.sh                              # the recorded journeys, then cmd/webjobs answering one key twice

@@ -32,6 +32,9 @@ type Client struct {
 	// CancelWithin bounds when a journey that cancels does, after its
 	// job was shown (default 500ms)
 	CancelWithin time.Duration
+	// Alternate: every second journey cancels (the first runs to ready),
+	// instead of a coin's choice: a short run has both kinds
+	Alternate bool
 	// Stuck is how long a journey waits for its job to end before the
 	// client gives up, as a page stuck at "accepted" would never end it
 	// (default 3s)
@@ -55,7 +58,7 @@ func (c *Client) Run(ctx context.Context) error {
 	rng := rand.New(rand.NewSource(c.Seed))
 	for i := range c.Journeys {
 		cancelAt := time.Duration(-1)
-		if rng.Intn(2) == 0 {
+		if c.Alternate && i%2 == 1 || !c.Alternate && rng.Intn(2) == 0 {
 			cancelAt = time.Duration(rng.Int63n(int64(c.CancelWithin)))
 		}
 		key := fmt.Sprintf("k%d-%d", c.Seed, i+1)

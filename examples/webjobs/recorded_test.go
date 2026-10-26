@@ -24,7 +24,14 @@ func TestRecorded(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	recorded(t, "faithful").Expect(t, qtest.Finishes())
-	t.Run("replays", func(t *testing.T) { replays(t, filepath.Join("testdata", "runs", "faithful")) })
+	t.Run("replays", func(t *testing.T) {
+		if testing.Short() {
+			// the CLI's build and two more checks: TestLive replays a
+			// manifest too, and the full run this one
+			t.Skip("the CLI's manifest and replay: full mode")
+		}
+		replays(t, filepath.Join("testdata", "runs", "faithful"))
+	})
 }
 
 // edited copies the recorded faithful journey into a directory of the
@@ -60,6 +67,9 @@ func edited(t *testing.T, edit func(n int, line string) *string) string {
 func TestClickWithNoOutcome(t *testing.T) {
 	if mutant != "" {
 		t.Skip("webjobs as it is")
+	}
+	if testing.Short() {
+		t.Skip("a pending click's claim, per push in bombadiltrace's TestOnlyItsOwnAnswerCompletesACall and TestProbes' cancel never answered: full mode")
 	}
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -102,6 +112,9 @@ func TestClickWithNoOutcome(t *testing.T) {
 func TestTornTrace(t *testing.T) {
 	if mutant != "" {
 		t.Skip("webjobs as it is")
+	}
+	if testing.Short() {
+		t.Skip("a torn trace's claim, per push in bombadiltrace's TestTornTail: full mode")
 	}
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -168,18 +181,52 @@ func TestTimesKept(t *testing.T) {
 	}
 	t.Parallel()
 	qtest.RequireQuint(t)
-	steps, err := Steps(filepath.Join("testdata", "runs", "readyEarly"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	qtest.Validate(t, "webjobs.binding.yaml", steps).Expect(t, qtest.Violates("readyIsCommitted"))
-	qtest.Validate(t, "webjobs.binding.yaml", rerecorded(t, steps)).Expect(t, qtest.Conforms())
+	// readyEarly's run as written violates readyIsCommitted
+	// (TestRecordedMutants); re-recorded, it conforms
+	t.Run("readyEarly", func(t *testing.T) {
+		t.Parallel()
+		steps, err := Steps(filepath.Join("testdata", "runs", "readyEarly"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		qtest.Validate(t, "webjobs.binding.yaml", rerecorded(t, steps)).Expect(t, qtest.Conforms())
+	})
+	t.Run("faithful", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("the faithful journey re-recorded: full mode (readyEarly's states the point)")
+		}
+		t.Parallel()
+		steps, err := Steps(filepath.Join("testdata", "runs", "faithful"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		qtest.Runs(qtest.Validate(t, "webjobs.binding.yaml", rerecorded(t, steps))).Expect(t, qtest.None(qtest.Finishes()))
+	})
+}
 
-	steps, err = Steps(filepath.Join("testdata", "runs", "faithful"))
-	if err != nil {
-		t.Fatal(err)
+// Each mutant's recorded Bombadil run (testdata/runs/<mutant>) violates
+// its invariant: a recorded trace needs no overlay, so these run here,
+// side by side. Full mode only.
+func TestRecordedMutants(t *testing.T) {
+	if mutant != "" {
+		t.Skip("webjobs as it is")
 	}
-	qtest.Runs(qtest.Validate(t, "webjobs.binding.yaml", rerecorded(t, steps))).Expect(t, qtest.None(qtest.Finishes()))
+	if testing.Short() {
+		// per push each mutant's server is caught by the client
+		// (TestMutants), and the real trace format is TestRecorded's
+		t.Skip("the mutants' recorded runs, regression tests of the adapter and model: full mode")
+	}
+	t.Parallel()
+	qtest.RequireQuint(t)
+	for m, inv := range mutants {
+		if pageless[m] {
+			continue
+		}
+		t.Run(m, func(t *testing.T) {
+			t.Parallel()
+			recorded(t, m).Expect(t, qtest.Violates(inv))
+		})
+	}
 }
 
 // The recorded journey's observation mutants (qtest.MutateSteps), four
@@ -212,6 +259,7 @@ func TestObservationMutants(t *testing.T) {
 		qtest.Survived(qtest.StepOp("dup").Action("cancel")),
 		qtest.Killed(qtest.StepOp("dup").Action("created")),
 		qtest.Killed(qtest.StepOp("corrupt").Action("submit").Field("code").Change("-1")),
+		qtest.Survived(qtest.StepOp("retime")), // within the actor's next step: the order the model reads is kept
 	)
 	for _, m := range rep.Killed() {
 		t.Log(m)

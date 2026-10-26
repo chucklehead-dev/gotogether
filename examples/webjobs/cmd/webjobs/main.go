@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -23,9 +24,11 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address (port 0: any; the address is printed)")
 	steps := flag.String("steps", "", "write the server's steps to this file")
 	seed := flag.Int64("seed", time.Now().UnixNano(), "seed of the jobs' durations")
+	minWork := flag.Duration("min-work", 0, "a job's shortest run (with -max-work; default 300ms to 1.2s)")
+	maxWork := flag.Duration("max-work", 0, "a job's longest run")
 	flag.Parse()
 
-	cfg := webjobs.Config{Seed: *seed}
+	cfg := webjobs.Config{Seed: *seed, MinWork: *minWork, MaxWork: *maxWork}
 	var sink *qobs.JSONLSink
 	if *steps != "" {
 		var err error
@@ -39,7 +42,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("webjobs: http://%s/", ln.Addr())
+	fmt.Printf("webjobs: http://%s/\n", ln.Addr()) // stdout: a harness reads the address
 	srv := &http.Server{Handler: app}
 	go srv.Serve(ln)
 

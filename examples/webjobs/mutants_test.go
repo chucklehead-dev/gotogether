@@ -80,10 +80,10 @@ func Overlay(t testing.TB, m, dir string) string {
 	return path
 }
 
-// Each mutant, built with its overlay, is caught as TestMutant says: the
-// test binary of each runs TestMutant with this one's flags. Under -short
-// it judges the mutant's recorded run (testdata/runs/<mutant>); out of
-// it, a live Bombadil run of the mutant's server.
+// Each mutant, built with its overlay, is caught as its claim says.
+// Under -short the overlay builds cmd/webjobs, which the client drives
+// from this process; out of it, the test binary of each runs TestMutant,
+// a live Bombadil run of the mutant's server.
 func TestMutants(t *testing.T) {
 	t.Parallel() // each mutant's binary is a process of its own
 	if mutant != "" {
@@ -92,10 +92,20 @@ func TestMutants(t *testing.T) {
 	for m := range mutants {
 		t.Run(m, func(t *testing.T) {
 			t.Parallel()
-			args := []string{"test", "-count=1", "-overlay", Overlay(t, m, t.TempDir()), "-run", "^TestMutant$", "-v"}
+			overlay := Overlay(t, m, t.TempDir())
 			if testing.Short() {
-				args = append(args, "-short")
+				// the mutant's server as a program, driven by the client
+				// from here: one small build per mutant, every check in
+				// this process (its recorded run is TestRecordedMutants')
+				qtest.RequireQuint(t)
+				bin := filepath.Join(t.TempDir(), "webjobs")
+				if out, err := exec.Command("go", "build", "-overlay", overlay, "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
+					t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
+				}
+				clientRunOf(t, bin, 1).Expect(t, qtest.Violates(mutants[m]))
+				return
 			}
+			args := []string{"test", "-count=1", "-overlay", overlay, "-run", "^TestMutant$", "-v"}
 			if d, ok := t.Deadline(); ok {
 				args = append(args, "-timeout", time.Until(d).Round(time.Second).String())
 			}
@@ -130,8 +140,8 @@ func TestMutant(t *testing.T) {
 		return
 	}
 	if testing.Short() {
+		// as TestMutants' -short runs it, in this binary
 		clientRun(t, 1).Expect(t, qtest.Violates(inv))
-		recorded(t, mutant).Expect(t, qtest.Violates(inv))
 		return
 	}
 	j := live(t, mutant, Live{Violation: true}) // Bombadil's own properties may catch it too

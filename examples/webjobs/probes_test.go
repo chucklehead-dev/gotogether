@@ -119,6 +119,7 @@ func TestProbes(t *testing.T) {
 	// a cancel never answered (a 500 the page dropped, a hang): a poll
 	// then shows the job ready, which completes nothing
 	t.Run("cancel never answered", func(t *testing.T) {
+		t.Parallel()
 		run := probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{600, "finished", "id", "j1"}), []string{
 			at(0, nil, "", ""),
 			at(200, "ui.submit", "j1", "accepted", s1),
@@ -130,6 +131,7 @@ func TestProbes(t *testing.T) {
 	})
 	// the page stuck at accepted while the server committed and drained
 	t.Run("ready never shown", func(t *testing.T) {
+		t.Parallel()
 		probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{600, "finished", "id", "j1"}), []string{
 			at(0, nil, "", ""),
 			at(200, "ui.submit", "j1", "accepted", s1),
@@ -138,6 +140,8 @@ func TestProbes(t *testing.T) {
 	})
 	// ... or shown ready only long after the commit
 	t.Run("ready shown late", func(t *testing.T) {
+		fullOnly(t)
+		t.Parallel()
 		probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{600, "finished", "id", "j1"}), []string{
 			at(0, nil, "", ""),
 			at(200, "ui.submit", "j1", "accepted", s1),
@@ -145,6 +149,8 @@ func TestProbes(t *testing.T) {
 		}).Expect(t, qtest.Violates("within 500ms after unseenReady: readySeen"))
 	})
 	t.Run("finished twice", func(t *testing.T) {
+		fullOnly(t)
+		t.Parallel()
 		probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{600, "finished", "id", "j1"}, []any{650, "finished", "id", "j1"}), []string{
 			at(0, nil, "", ""),
 			at(200, "ui.submit", "j1", "accepted", s1),
@@ -152,6 +158,8 @@ func TestProbes(t *testing.T) {
 		}).Expect(t, qtest.Violates("finishedOnce"))
 	})
 	t.Run("committed after its cancel", func(t *testing.T) {
+		fullOnly(t)
+		t.Parallel()
 		c := req{2, "cancel", "j1", 200, "j1", "cancelled"}
 		probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{310, "cancelled", "id", "j1"}, []any{600, "finished", "id", "j1"}), []string{
 			at(0, nil, "", ""),
@@ -163,6 +171,8 @@ func TestProbes(t *testing.T) {
 	// a double click's second request answered 500: an answer, and a
 	// failure
 	t.Run("a request answered with a server error", func(t *testing.T) {
+		fullOnly(t)
+		t.Parallel()
 		probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{600, "finished", "id", "j1"}), []string{
 			at(0, nil, "", ""),
 			at(200, "ui.submit", "j1", "accepted", s1, req{2, "submit", "k1", 500, "", ""}),
@@ -173,6 +183,7 @@ func TestProbes(t *testing.T) {
 	// late answer renewed the form's key between Bombadil's snapshot and
 	// its click (the faithful page did this), and the journey finishes
 	t.Run("the key sent, not the key shown", func(t *testing.T) {
+		t.Parallel()
 		s3 := req{3, "submit", "k3", 202, "j2", "accepted"}
 		probe(t, server([]any{150, "created", "key", "k1", "id", "j1"}, []any{350, "finished", "id", "j1"},
 			[]any{520, "created", "key", "k3", "id", "j2"}, []any{800, "finished", "id", "j2"}), []string{
@@ -184,4 +195,14 @@ func TestProbes(t *testing.T) {
 			at(850, "Wait", "j2", "ready", s1, req{2, "cancel", "j1", 409, "j1", "ready"}, s3),
 		}).Expect(t, qtest.Finishes())
 	})
+}
+
+// fullOnly skips a probe under -short whose claim a mutant's client run
+// states per push too: ready shown late (statusStale), finished twice
+// (rerunFinished), committed after its cancel (commitAfterCancel), a
+// request answered 500 (cancelBroken).
+func fullOnly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("a mutant's client run states this per push: full mode")
+	}
 }
