@@ -9,7 +9,7 @@ examples/glomers/kafka 58
 examples/glomers/uniqueids 39
 examples/hello 13
 examples/jobqueue 14
-examples/kvstore 22
+examples/kvstore 25
 examples/lease 51
 examples/quorumkv 40
 examples/raftkv 60
