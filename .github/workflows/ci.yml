@@ -103,7 +103,7 @@ jobs:
         if: matrix.part == 'examples'
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
-          for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase; do
+          for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase webjobs; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
               GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1

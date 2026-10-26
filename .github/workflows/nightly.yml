@@ -226,6 +226,45 @@ jobs:
         if: matrix.example == 'wallet'
         run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 60m ./validate ./qtest
 
+  webjobs-live:
+    # webjobs explored live by Bombadil (headless, ubuntu's Chrome): the
+    # faithful app for 45s (a finished journey, its manifest replayed,
+    # then --reproduce), and each mutant's server for 45s (its invariant
+    # violated). Strict: a bombadil missing from PATH fails the job
+    # instead of skipping. The per-push tier checks the recorded runs
+    # (testdata/runs) in the examples loop.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOTOGETHER_STRICT: "1"
+    defaults:
+      run:
+        working-directory: examples/webjobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: examples/webjobs/go.mod
+          cache-dependency-path: examples/webjobs/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../../ci/install-quint.sh
+      - name: Install Bombadil (pinned)
+        run: |
+          npm i -g @antithesishq/bombadil@0.7.9
+          bombadil --version
+          google-chrome --version
+      - name: live journeys
+        run: WEBJOBS_JOURNEYS="$RUNNER_TEMP/journeys" go test -count=1 -timeout 25m -run 'TestLive$|TestMutants$' -v .
+      - name: keep the journeys (Bombadil's traces and screenshots, the server's logs, run-info.json)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webjobs-journeys
+          path: ${{ runner.temp }}/journeys
+
   raftkv-real:
     # raftkv's real tier under qnemesis at fresh seeds (schedules), more
     # runs: 10 faithful, 5 each of NoRequestID and SlowElection, with the
