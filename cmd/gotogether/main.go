@@ -401,6 +401,9 @@ func steps(args []string) error {
 		for _, i := range t.Issues {
 			fmt.Println("  issue:", i)
 		}
+		for _, l := range t.Lost { // a lost prefix is an issue too; a tail only here
+			fmt.Println("  lost:", l)
+		}
 		for i, s := range t.Steps {
 			fmt.Printf("  [%2d] seq %-3d %-10.10s %s\n", i, s.Seq, s.Process, s.String())
 		}

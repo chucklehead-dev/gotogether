@@ -314,3 +314,35 @@ func TestITFSnapshotStart(t *testing.T) {
 		}
 	}
 }
+
+// A log that lost its head, checked against a binding with a resume,
+// passes from a state the resume admits, named in the report; steps
+// lists what each recorder lost.
+func TestValidateResume(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not installed")
+	}
+	dir := t.TempDir()
+	recorded := []qtrace.Step{
+		{Action: "deposit", Recorder: "r", Process: "p", Seq: 3, Time: time.Unix(1, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(8)}},
+		{Action: "withdraw", Recorder: "r", Process: "p", Seq: 4, Time: time.Unix(2, 0), Args: map[string]any{"amount": int64(2)}, Obs: map[string]any{"balance": int64(6)}},
+	}
+	log := filepath.Join(dir, "run.jsonl")
+	var b strings.Builder
+	if err := qtrace.WriteJSONL(&b, recorded); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(log, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out := capture(t, func() (int, error) {
+		return runValidate([]string{"-binding", "../../validate/testdata/resume.yaml", "-dir", filepath.Join(dir, "out"), log})
+	})
+	if code != 0 || !strings.Contains(out, "the steps pass from balance = 3, ops = 0, a state resumeAny admits (quint confirms)") {
+		t.Errorf("validate: exit %d:\n%s", code, out)
+	}
+	_, out = capture(t, func() (int, error) { return 0, steps([]string{log}) })
+	if !strings.Contains(out, "lost: recorder r lost seqs 1..2") {
+		t.Errorf("steps:\n%s", out)
+	}
+}

@@ -36,6 +36,34 @@ func TestLintSnapshot(t *testing.T) {
 	}
 }
 
+// A resume must exist, take no parameters, assign every variable and be
+// no step of the binding's: lint says which, and the fix.
+func TestLintResume(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		b    Binding
+		want string
+	}{
+		{Binding{Resume: "resumeAny"}, ""},
+		{Binding{Resume: "resumeX"}, "resume resumeX leaves y unassigned: a resume assigns every state variable (y' = ...)"},
+		{Binding{Resume: "restore"}, "resume restore(a: int, b: int) takes parameters"},
+		{Binding{Resume: "resumAny"}, "resume: resumAny is not an action of snap (did you mean resumeAny?)"},
+		{Binding{Resume: "step"}, "resume step: the model's step is no resume"},
+		{Binding{Resume: "resumeAny", Actions: map[string]Action{"resumeAny": {}}}, "resume resumeAny is bound too"},
+	} {
+		got := strings.Join(c.b.Lint(m), "\n")
+		if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("resume %s: lint %q, want %q", c.b.Resume, got, c.want)
+		}
+	}
+}
+
 // A snapshot step first in its trace is the plan's start, not a call; one
 // anywhere else is skipped, with an issue that says so.
 func TestPlanSnapshotStart(t *testing.T) {

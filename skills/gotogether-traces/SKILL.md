@@ -62,6 +62,7 @@ within:                          # bounded response: after a val, another within
 hidden: [settleAny]              # nullary actions no step records: searched between steps
 hiddenDepth: 4                   # at most this many between two recorded steps (default 4)
 snapshot: restore                # an action of the whole state: a trace that starts with one starts from its state
+resume: resumeAny                # without a snapshot: the states a log that lost its head may start in
 ```
 
 `hidden` names actions the system takes without recording them (a
@@ -130,7 +131,7 @@ Production logs are selected and sanitized before they are checked
 | `state does not match what was observed` (QNT508) | the step was possible but `expect` fails; the report shows `expect:`, `obs:` and the model's state after the step | implementation computed a different state, or a wrong `expect`/observation |
 | `invariant X: FAIL, violated after step i` | the run is a behaviour of the model, and the model's own property fails on it | a **design** bug the model already allows, now seen in real code |
 | `issue: error gap` | sequence numbers are missing: steps were lost or sampled | fix the pipeline; the pass is unsound |
-| `issue: error lost-prefix` | a log starts after seq 1: its first state is not `init` | record a snapshot step at each log's head and name its action (`snapshot:`) |
+| `issue: error lost-prefix` | a log starts after seq 1: its first state is not `init` | record a snapshot step at each log's head and name its action (`snapshot:`), or name the states it may start in (`resume:`) |
 | `issue: warn lost-suffix`, `conformance: N/A` | a recorder lost its tail and a later failure may depend on it: no verdict | check a log that has the steps; record so they survive (`qobs.Synced`) |
 | `issue: error overlap` | an incarnation acted after its successor started | a split brain (fence the old incarnation), or wrong process ids or skewed clocks (order with a domain clock) |
 | `issue: error cycle` | contradictory order keys | instrumentation order keys are wrong |

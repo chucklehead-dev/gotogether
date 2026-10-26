@@ -1,0 +1,13 @@
+# account.yaml for a log that lost its head and records no snapshot: it
+# may start in any state resumeAny admits (resume_test.go)
+spec: account.qnt
+module: account
+constants:
+  LIMIT: '10'
+resume: resumeAny
+actions:
+  deposit:
+    expect: 'balance == {{.obs.balance}}'
+  withdraw:
+    expect: 'balance == {{.obs.balance}}'
+invariants: [nonNegative, underLimit]

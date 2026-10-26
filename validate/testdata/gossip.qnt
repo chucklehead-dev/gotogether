@@ -20,6 +20,10 @@ module gossip {
   // a snapshot of a log's head (gossip_snapshot.yaml): what a knows
   action restoreA(a: Set[int]): bool = known' = NODES.mapBy(n => if (n == "a") a else Set())
 
+  // where a log that lost its head may start (gossip_resume.yaml): a
+  // knows nothing, or 1
+  action resumeA = { nondet a = Set(Set(), Set(1)).oneOf() known' = NODES.mapBy(n => if (n == "a") a else Set()) }
+
   // neighbours on a line: a - b - c
   pure val LINKS = Set(("a", "b"), ("b", "a"), ("b", "c"), ("c", "b"))
 

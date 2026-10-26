@@ -27,10 +27,10 @@ type Generated struct {
 	StartLines map[int]bool
 }
 
-// Steps counts the run's steps: its calls, and the snapshot it starts
-// from, if any.
+// Steps counts the run's steps: its calls, and the snapshot step it
+// starts from, if any (a resume's admitted state is none).
 func (g *Generated) Steps() int {
-	if g.Start != nil {
+	if g.Start != nil && g.Start.Step != nil {
 		return len(g.Calls) + 1
 	}
 	return len(g.Calls)

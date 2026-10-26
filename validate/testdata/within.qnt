@@ -13,6 +13,9 @@ module within {
   action depose = all { up, up' = up, leader' = false }
   // healed and leading at once: the response in the trigger's own state
   action recover = all { not(up), up' = true, leader' = true }
+  // where a log that lost its head starts (within_resume.yaml): up, and
+  // no leader yet
+  action resumeUp = all { up' = true, leader' = false }
   action step = any { crash, heal, elect, tick, depose, recover }
 
   val healed = up

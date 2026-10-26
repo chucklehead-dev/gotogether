@@ -51,6 +51,7 @@ var (
 		"Hidden":      {"hidden"},
 		"HiddenDepth": {"hidden"},
 		"Snapshot":    {"snapshot"},
+		"Resume":      {"resume"},
 	}
 	otherFields = map[string]string{
 		"Spec": "the model's file", "Module": "the model's module", "Constants": "the instance", "Intern": "naming",
@@ -119,6 +120,10 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		// the deposit's balance alone: the snapshot's plus 5, or init's
 		{name: "snapshot", binding: "testdata/snapshot.yaml",
 			pass: seq(restore(50), acct("deposit", 5, 55)), fail: seq(restore(50), acct("deposit", 5, 5)), failed: nonconforming},
+		// the withdrawal's balance alone: one a start explains, and one none
+		// does, of a log that lost its head
+		{name: "resume", binding: "testdata/resume.yaml",
+			pass: lostHead([2]int64{5, 8}, [2]int64{-2, 6}), fail: lostHead([2]int64{5, 8}, [2]int64{-2, 7}), failed: nonconforming},
 		// the last balance alone: one the pending withdrawal explains, and one
 		// nothing does
 		{name: "pending", binding: "testdata/account.yaml", pass: pending(12), fail: pending(99), opt: SearchOptions{ResolvePending: true},
@@ -153,6 +158,7 @@ func matrixConsumers() []matrixConsumer {
 		}
 	}
 	hiddenSearch := "a search with hidden actions is refused: each candidate would be a search of their states"
+	resumeSearch := "a search of a log that resumes is refused: each candidate would be a search from the resume's states"
 	return []matrixConsumer{
 		{name: "Check", judge: check(""), na: noSearch},
 		{name: "Check (shadow)", judge: check("shadow"), na: noSearch},
@@ -166,8 +172,8 @@ func matrixConsumers() []matrixConsumer {
 		}, na: noSearch},
 		{name: "Judge", judge: judge("", false)},
 		{name: "Judge (quint alone)", judge: judge("quint", false), na: map[string]string{"hidden": "hidden actions are the Go evaluator's alone: quint cannot replay a step whose choices are unknown"}},
-		{name: "Judge, linearized", judge: judge("", true), na: map[string]string{"hidden": hiddenSearch}},
-		{name: "Judge, linearized (quint alone)", judge: judge("quint", true), na: map[string]string{"hidden": hiddenSearch}},
+		{name: "Judge, linearized", judge: judge("", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch}},
+		{name: "Judge, linearized (quint alone)", judge: judge("quint", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch}},
 	}
 }
 

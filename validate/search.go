@@ -182,6 +182,15 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		return nil, fmt.Errorf("a search (Linearize, ResolvePending) with hidden actions (%s): not combined, each candidate would be a search over the hidden actions' states; check the recorded order, or record the steps the search would order where they take effect",
 			strings.Join(c.Binding.Hidden, ", "))
 	}
+	if opt.Linearize || opt.ResolvePending {
+		traces, _ := qtrace.Reconstruct(steps)
+		for _, tr := range traces {
+			if c.resumes(tr) {
+				return nil, fmt.Errorf("a search (Linearize, ResolvePending) of actor %s, which lost its head and resumes from the states %s admits: not combined, each candidate would be a search over those states; "+
+					"record a snapshot step at each log's head (snapshot: restore), which a search keeps first", nameOf(tr.Actor), c.Binding.Resume)
+			}
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			e, ok := r.(searchError)

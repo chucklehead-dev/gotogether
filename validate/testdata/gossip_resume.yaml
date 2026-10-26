@@ -1,0 +1,9 @@
+# gossip.yaml for a log that lost its head: a may know 1 already
+spec: gossip.qnt
+module: gossip
+resume: resumeA
+actions:
+  write: {}
+  read:
+    expect: 'known.get({{.node}}) == {{toSet .obs.seen}}'
+hidden: [gossipAny]

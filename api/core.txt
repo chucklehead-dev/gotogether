@@ -38,6 +38,7 @@ type Binding struct
     field Hidden []string `yaml:"hidden"`
     field HiddenDepth int `yaml:"hiddenDepth"`
     field Snapshot string `yaml:"snapshot"`
+    field Resume string `yaml:"resume"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)

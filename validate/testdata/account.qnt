@@ -10,6 +10,9 @@ module account {
   action withdraw(amount: int): bool = all { amount > 0, amount <= balance, balance' = balance - amount, ops' = ops + 1 }
   // the whole state, recorded at the head of a log (snapshot.yaml)
   action restore(b: int, n: int): bool = all { b >= 0, balance' = b, ops' = n }
+  // the states a log that lost its head may start in (resume.yaml): any
+  // balance from -2 to LIMIT, the negative ones ruled out by nonNegative
+  action resumeAny = { nondet b = (-2).to(LIMIT).oneOf() all { balance' = b, ops' = 0 } }
   action step = { nondet a = 1.to(LIMIT).oneOf() any { deposit(a), withdraw(a) } }
 
   val nonNegative: bool = balance >= 0

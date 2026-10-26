@@ -328,6 +328,17 @@ The first release. What a user meets, by module:
   is `rejects restore`, and counts as a step. A lost tail's settle bounds
   no pending call; `Filter` drops the loss records of a recorder it
   drops; a search out of budget no longer says a failure stands.
+- Resume (S11): a binding's `resume: <action>` names a nullary action whose
+  nondet picks give the states a log that lost its head may start in. A
+  trace whose first recorder lost its prefix, with no snapshot, is judged
+  from every admitted state the invariants keep, by the Go evaluator's
+  search (with hidden actions too); quint confirms a pass from its
+  witness state and a failure from every start (at most 200), and a
+  disagreement is an error. Lint checks the action; `Checker.Key` names
+  it; Linearize and ResolvePending refuse such a trace; a bounded
+  response open in the start state is not judged. A call invoked before
+  a lost tail's cut is neither pending nor complete for `Completes()`
+  and `Pending`. `gotogether steps` lists each trace's losses.
 - **The core** (`github.com/chucklehead-dev/gotogether`). The model drives
   Go (`connect`); trace validation (`qobs`, `qtrace`, `otelio`, `convert`,
   `binding`, `validate`, `input`); simulated environments with fault

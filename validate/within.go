@@ -144,7 +144,7 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 		}
 	}
 	for _, w := range c.Binding.Within {
-		res := judgeRule(w, vals[w.After], vals[w.Holds], lo, hi, steps, names, end, tr.Settled)
+		res := judgeRule(w, vals[w.After], vals[w.Holds], lo, hi, steps, names, end, tr.Settled, r.resumed)
 		switch {
 		case res.Verdict != NotEvaluated:
 			r.Invariants = append(r.Invariants, res)
@@ -165,13 +165,15 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 // is however they place them (the earliest after the latest); else no
 // verdict, its Failure saying why (it was judged on completion times
 // alone: a slow call's completion read as its effect).
-func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps []*qtrace.Step, names []string, end time.Time, settled bool) InvariantResult {
+// With startLost (a resume's start), an obligation already open in the
+// start state opened in the lost prefix, at a time unknown: not judged.
+func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps []*qtrace.Step, names []string, end time.Time, settled, startLost bool) InvariantResult {
 	res := InvariantResult{Name: w.Name(), Verdict: Pass, Within: true}
 	open := false
 	var unsure *Failure
 	for k := range after {
-		if !after[k] || k > 0 && after[k-1] {
-			continue // no trigger here: After is false, or was true already
+		if !after[k] || k > 0 && after[k-1] || k == 0 && startLost {
+			continue // no trigger here: After is false, or was true already (or since a time lost)
 		}
 		at := func(i int) string { return names[i] }
 		met := -1
@@ -232,7 +234,7 @@ func (c *Checker) Key(steps []qtrace.Step) string {
 		backend = os.Getenv("QUINT_BACKEND")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|", c.Options.evalMode(), backend, c.Binding.Snapshot)
+	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|resume=%s|", c.Options.evalMode(), backend, c.Binding.Snapshot, c.Binding.Resume)
 	b.WriteString(qtrace.Key(steps))
 	// a lost tail's cut is judged by time (a failure recorded after it is
 	// no verdict): its steps' times, and the loss records', are verdicts'

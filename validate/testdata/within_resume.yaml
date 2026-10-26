@@ -1,0 +1,15 @@
+# within.yaml for a log that lost its head: it starts up, without a leader
+spec: within.qnt
+module: within
+resume: resumeUp
+actions:
+  crash: {}
+  heal: {}
+  elect: {}
+  tick: {}
+  depose: {}
+  recover: {}
+within:
+  - after: healed
+    holds: hasLeader
+    bound: 3s

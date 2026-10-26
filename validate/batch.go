@@ -79,6 +79,18 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		traces, issues := qtrace.Reconstruct(steps)
 		reports[i] = &Report{Issues: issues}
 		for _, t := range traces {
+			if c.resumes(t) && c.mode.history == nil {
+				// the evaluator's search from the resume's states, confirmed by
+				// quint on its own: no batch to share
+				r, err := c.checkHidden(ctx, t)
+				if err != nil {
+					errs[i] = fmt.Errorf("actor %s: %w", t.Actor, err)
+					break
+				}
+				judgeLost(c.Binding, r, t.Lost)
+				reports[i].Actors = append(reports[i].Actors, r)
+				continue
+			}
 			whole := t
 			if c.mode.history != nil { // a search's: its candidates are one actor's
 				whole = c.mode.history

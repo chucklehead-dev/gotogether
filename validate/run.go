@@ -232,8 +232,8 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 	traces, issues := qtrace.Reconstruct(steps)
 	rep := &Report{Issues: issues}
 	for _, t := range traces {
-		if len(c.Binding.Hidden) > 0 && c.mode.history == nil {
-			r, err := c.checkHidden(t)
+		if (len(c.Binding.Hidden) > 0 || c.resumes(t)) && c.mode.history == nil {
+			r, err := c.checkHidden(ctx, t)
 			if err != nil {
 				return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
 			}

@@ -86,6 +86,15 @@ type Binding struct {
 	// recorder started mid-run) is judged from the snapshot recorded at
 	// its head; a snapshot step anywhere else is skipped, with an issue.
 	Snapshot string `yaml:"snapshot"`
+	// Resume is a nullary model action whose nondet picks give the states
+	// a trace that lost its prefix may start in (bounded by the model's
+	// constants and invariants: action resumeAny = nondet b = 0.to(LIMIT)
+	// .oneOf() all { balance' = b, ops' = 0 }). A trace whose first
+	// recorder lost its prefix, with no snapshot step at its head, is
+	// judged from those states by the Go evaluator's search (quint
+	// confirms its verdict): it conforms if some admitted state explains
+	// the rest. A snapshot step, where there is one, is used instead.
+	Resume string `yaml:"resume"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.
 	Simulate *Simulation `yaml:"simulate"`
@@ -286,6 +295,35 @@ func (b *Binding) Lint(m *Model) []string {
 						a, strings.Join(left, ", "), left[0]))
 				}
 			}
+		}
+	}
+	if a := b.Resume; a != "" {
+		ps, ok := m.Actions[a]
+		switch {
+		case a == "init" || a == "step":
+			errs = append(errs, fmt.Sprintf("resume %s: the model's %s is no resume: name a nullary action that picks the states a log may start in (action resumeAny = nondet b = 0.to(LIMIT).oneOf() all { balance' = b, ops' = 0 })", a, a))
+		case !ok:
+			errs = append(errs, "resume: "+m.notAnAction(a))
+		case a == b.Restart || seenHidden[a] || a == b.Snapshot:
+			errs = append(errs, fmt.Sprintf("resume %s is the binding's restart, a hidden action or its snapshot: a resume is no step, only the states a trace may start in", a))
+		case len(ps) > 0:
+			errs = append(errs, fmt.Sprintf("resume %s takes parameters: a resume picks the states itself (nondet ... oneOf()), and takes none", m.Signature(a)))
+		default:
+			if vars, known := m.Assigns(a); known {
+				var left []string
+				for _, v := range m.Vars {
+					if !vars[v] {
+						left = append(left, v)
+					}
+				}
+				if len(left) > 0 {
+					errs = append(errs, fmt.Sprintf("resume %s leaves %s unassigned: a resume assigns every state variable (%s' = ...), the whole state a trace may start in",
+						a, strings.Join(left, ", "), left[0]))
+				}
+			}
+		}
+		if _, bound := b.Actions[a]; bound {
+			errs = append(errs, fmt.Sprintf("resume %s is bound too: it is no recorded step (record a snapshot for that: snapshot)", a))
 		}
 	}
 	if b.HiddenDepth < 0 {

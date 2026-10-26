@@ -48,6 +48,40 @@ lacks, one without parameters, or one that leaves a variable unassigned
 steps carry no seqs cannot show a lost prefix: declare it
 (`qtrace.MarkLost(steps, qtrace.Lost{Recorder: r, Prefix: true})`).
 
+## A lost prefix without a snapshot: resume
+
+When a log cannot record a snapshot, name a nullary model action whose
+nondet picks give the states a log may start in, bounded by the model's
+constants:
+
+```quint
+action resumeAny = { nondet b = 0.to(LIMIT).oneOf() all { balance' = b, ops' = 0 } }
+```
+
+```yaml
+resume: resumeAny     # a trace whose first recorder lost its head starts from any of these
+```
+
+A trace whose first step's recorder lost its prefix, with no snapshot
+step at its head, is then judged from every admitted state that keeps
+the invariants checked (a start that violates one is not the trace's to
+blame): `issue: info lost-prefix: recorder r lost seqs 1..2: judged from
+the states resumeAny admits (11 of them); a pass means some admitted
+state explains the rest`. The Go evaluator searches them (with any
+`hidden:` actions); quint confirms a pass by replaying the steps from the
+witness (`the steps pass from balance = 3, ops = 0, a state resumeAny
+admits (quint confirms)`) and a failure by replaying them from every
+start, when there are at most 200 (more: the evaluator's verdict alone,
+said so). Hidden actions leave the verdict the evaluator's, as theirs
+is. More states than the search keeps (20000) is no verdict: narrow the
+resume, or record a snapshot. A bounded response already open in the
+start state opened in the lost prefix and is not judged; one that fails
+from the witness while other starts are admitted is no verdict.
+Linearize and ResolvePending refuse such a trace: record a snapshot
+for them. Lint refuses a resume that takes parameters, leaves a variable
+unassigned, or is a step of the binding. A snapshot step, where there is
+one, is used instead.
+
 ## A lost tail: what it leaves unjudged
 
 A recorder that lost its last steps (a torn last line, which `ReadJSONL`
@@ -79,7 +113,9 @@ may be among the lost steps. A loss is the trace's of each actor its
 recorder recorded, as a gap is: actors are separate instances of the
 model. Claims over runs know it: `None(Violates("I"))` does not hold of
 a run whose `I` (or an eventual val, unjudged for the lost tail) has no
-verdict, and such a run kills no mutant. A cached verdict of a run with
+verdict, and such a run kills no mutant. A call invoked before its
+recorder's cut may have completed in the lost tail: neither `Completes()`
+nor `None(Pending(...))` holds of the run, and it shows no `Pending`. A cached verdict of a run with
 a loss record is keyed with its steps' times, which the cut is judged
 by.
 

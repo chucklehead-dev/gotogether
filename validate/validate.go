@@ -109,6 +109,9 @@ type Result struct {
 	// noVerdict says why a check that failed is no verdict, when it is
 	// not a search's budget: "lost steps" (judgeLost)
 	noVerdict string
+	// resumed: replayed from a resume's witness start, whose obligations
+	// triggered already (a bounded response's) began in the lost prefix
+	resumed bool
 }
 
 type Failure struct {
@@ -597,6 +600,9 @@ func annotateITF(path string, g *replay.Generated) error {
 			act = c.Quint
 			if p := strings.IndexByte(act, '('); p >= 0 {
 				act = act[:p]
+			}
+			if c.Action != "" {
+				act = c.Action // (a resume's start is a literal action, named by the resume)
 			}
 			if c.Step != nil {
 				ns["mbt::observedSeq"] = map[string]any{"#bigint": strconv.FormatUint(c.Step.Seq, 10)}
