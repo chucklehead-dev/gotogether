@@ -108,7 +108,6 @@ func TestHangZeroIsOff(t *testing.T) {
 	}
 }
 
-
 // runPanics runs s and returns what Run panicked with.
 func runPanics(t *testing.T, s *qenv.Sim) (msg string) {
 	t.Helper()

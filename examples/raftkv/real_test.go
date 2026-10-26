@@ -277,7 +277,7 @@ func TestRealCluster(t *testing.T) {
 	}
 
 	qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(dir, "steps", "clients.jsonl")),
-		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(5000)).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
+		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000)).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
 	nodes := readSteps(t, filepath.Join(dir, "steps", "node-*.jsonl"))
 	boots := 0
 	for _, s := range nodes {
