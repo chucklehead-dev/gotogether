@@ -111,7 +111,11 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	}
 	gapActors := map[string][]string{}
 	lostActors := map[string][]Lost{}
-	lostTail := false // some recorder lost its tail: no settle settles the run
+	// some recorder lost its tail: no settle settles the run, but one
+	// after every bounded loss's Before
+	lostTail := false
+	var lostBefore time.Time // the latest bound of the lost tails
+	unbounded := false       // a lost tail with no bound
 	recs := make([]string, 0, len(byRec)+len(declared))
 	for rec := range byRec {
 		recs = append(recs, rec)
@@ -150,7 +154,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			losses = append(losses, Lost{Recorder: rec, Prefix: true, After: first - 1, At: firstAt[rec]})
 		}
 		for _, d := range declared[rec] {
-			l := Lost{Recorder: rec, Prefix: d.Lost == "prefix", After: d.LostAfter, At: d.Time}
+			l := Lost{Recorder: rec, Prefix: d.Lost == "prefix", After: d.LostAfter, At: d.Time, Before: d.LostBefore}
 			// one loss of each kind per recorder: the longest prefix, the
 			// earliest cut
 			merged := false
@@ -165,6 +169,12 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 				}
 				if l.Prefix && o.At.IsZero() || !l.Prefix && l.At.Before(o.At) {
 					o.At = l.At
+				}
+				// the latest bound, and none if one is unbounded
+				if !l.Prefix && (o.Before.IsZero() || l.Before.IsZero()) {
+					o.Before = time.Time{}
+				} else if !l.Prefix && l.Before.After(o.Before) {
+					o.Before = l.Before
 				}
 			}
 			if !merged {
@@ -192,7 +202,13 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			}
 		}
 		for _, l := range losses {
-			lostTail = lostTail || !l.Prefix
+			if !l.Prefix {
+				lostTail = true
+				unbounded = unbounded || l.Before.IsZero()
+				if l.Before.After(lostBefore) {
+					lostBefore = l.Before
+				}
+			}
 			for a := range actors {
 				lostActors[a] = append(lostActors[a], l)
 			}
@@ -227,7 +243,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			settleAt[s.Recorder] = s.Time
 		}
 	}
-	settled := false
+	settled, voided := false, false
 	for rec, seq := range lastSettle {
 		if seq <= last[rec] {
 			continue
@@ -245,9 +261,16 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 				later.Recorder, later.Action, later.Seq, rec)})
 			continue
 		}
+		if lostTail && !unbounded && !settleAt[rec].After(lostBefore.Add(RealTimeSlack)) {
+			voided = true // a lost step may follow it
+			continue
+		}
 		settled = true
 	}
-	if settled && lostTail {
+	if !settled && voided {
+		issues = append(issues, Issue{"warn", "settle", "a recorder lost its tail (Trace.Lost): what it recorded after, a settle or a step after one, is unknown, and the settle settles nothing"})
+	}
+	if settled && lostTail && unbounded {
 		issues = append(issues, Issue{"warn", "settle", "a recorder lost its tail (Trace.Lost): what it recorded after, a settle or a step after one, is unknown, and the settle settles nothing"})
 		settled = false
 	}

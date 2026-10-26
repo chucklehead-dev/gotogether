@@ -1255,12 +1255,24 @@ func lastSettle(steps []qtrace.Step) time.Time {
 // recorder recorded a step after (a settle that settles nothing bounds
 // nothing).
 func settlesOf(steps []qtrace.Step) []qtrace.Step {
-	if slices.ContainsFunc(steps, func(s qtrace.Step) bool { return s.Lost == "suffix" }) {
-		return nil // a lost tail may have come after any settle: none was quiet (as Reconstruct takes it)
+	// a lost tail may have come after any settle, none quiet, unless it
+	// is bounded in time (a crash's): then a settle after the bound is (as
+	// Reconstruct takes it)
+	var bound time.Time
+	for _, s := range steps {
+		if s.Lost != "suffix" {
+			continue
+		}
+		if s.LostBefore.IsZero() {
+			return nil
+		}
+		if s.LostBefore.After(bound) {
+			bound = s.LostBefore
+		}
 	}
 	var out []qtrace.Step
 	for _, s := range steps {
-		if !s.Settled {
+		if !s.Settled || !bound.IsZero() && !s.Time.After(bound.Add(qtrace.RealTimeSlack)) {
 			continue
 		}
 		quiet := true

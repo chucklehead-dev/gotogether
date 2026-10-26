@@ -24,6 +24,13 @@ type Lost struct {
 	// last kept, for a suffix (its lost steps came after), its first, for
 	// a prefix. Zero if it recorded none.
 	At time.Time
+	// Before, if set, bounds a lost suffix: every lost step was recorded
+	// before it (a crash's: the process was dead by then). A settle
+	// recorded later than Before (by more than RealTimeSlack) follows
+	// every lost step, and settles the run; an unbounded loss leaves every
+	// settle unknown. A failure after the cut stays no verdict either way:
+	// a later step may depend on a lost one.
+	Before time.Time
 }
 
 // String says what was lost.
@@ -55,7 +62,7 @@ func (l Lost) Issue() Issue {
 // the loss: for a suffix the last with a seq up to l.After (the last
 // recorded, with After 0), for a prefix its first.
 func MarkLost(steps []Step, l Lost) []Step {
-	rec := Step{Action: "lost", Recorder: l.Recorder, Process: l.Recorder, Lost: "suffix", LostAfter: l.After}
+	rec := Step{Action: "lost", Recorder: l.Recorder, Process: l.Recorder, Lost: "suffix", LostAfter: l.After, LostBefore: l.Before}
 	if l.Prefix {
 		rec.Lost = "prefix"
 	}

@@ -51,6 +51,10 @@ const (
 	// record, not a step: Reconstruct keeps it as Trace.Lost.
 	KeyLost      = "quint.lost"
 	KeyLostAfter = "quint.lost_after" // on a loss record: the seq the loss is after (a suffix) or up to (a prefix)
+	// KeyLostBefore bounds a lost suffix in time (Unix nanoseconds): every
+	// lost step was recorded before it, as a process reaped by then
+	// recorded nothing later (qnemesis's crash). Absent: unbounded.
+	KeyLostBefore = "quint.lost_before_unix_nano"
 	// KeyAssumed marks an assumed step (Step.Ambiguous): a pending call's
 	// effect a resolution placed, with no expect checked after it.
 	KeyAssumed = "quint.assumed"
@@ -88,6 +92,9 @@ type Step struct {
 	// step up to it); "" for any other.
 	Lost      string
 	LostAfter uint64
+	// LostBefore, if set, bounds a lost suffix: its steps were all
+	// recorded before it (KeyLostBefore).
+	LostBefore time.Time
 	// Ambiguous marks a step whose effect is assumed, not observed: a
 	// pending call resolved as having taken effect (qtest.ResolvePending).
 	// It has no outcome and no observations, and the binding checks no
@@ -183,6 +190,13 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 					return s, fmt.Errorf("%s: %s: not a seq: %v", EventName, KeyLostAfter, v)
 				}
 				s.LostAfter = uint64(n)
+			}
+			if v, ok := layers[0][KeyLostBefore]; ok {
+				n, err := toInt(v)
+				if err != nil {
+					return s, fmt.Errorf("%s: %s: %v", EventName, KeyLostBefore, err)
+				}
+				s.LostBefore = time.Unix(0, n)
 			}
 		}
 		if v, ok := layers[0][KeyAssumed]; ok {

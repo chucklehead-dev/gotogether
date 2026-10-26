@@ -37,6 +37,9 @@ func (s *Step) Attributes() map[string]any {
 	}
 	if s.Lost != "" {
 		m[KeyLost], m[KeyLostAfter] = s.Lost, int64(s.LostAfter)
+		if !s.LostBefore.IsZero() {
+			m[KeyLostBefore] = s.LostBefore.UnixNano()
+		}
 	}
 	if s.Ambiguous {
 		m[KeyAssumed] = true

@@ -26,6 +26,9 @@ func (k *Keyer) Step(s *Step) string {
 		rec = "|settled"
 	case s.Lost != "":
 		rec = fmt.Sprintf("|lost-%s%d", s.Lost, s.LostAfter)
+		if !s.LostBefore.IsZero() {
+			rec += fmt.Sprintf("<%d", s.LostBefore.UnixNano()) // decides whether a settle settles
+		}
 	case s.Call != 0:
 		rec = fmt.Sprintf("|call%d", s.Call)
 	}
