@@ -557,18 +557,20 @@ func TestBodyReadOnTheTask(t *testing.T) {
 	}
 }
 
-// A request delayed in the network that arrives after the server restarted
-// and before its start function called Handle finds no one listening: it
-// is refused, not served by the last incarnation's handler.
-func TestLateArrivalAtRestartedServer(t *testing.T) {
-	sc := &qenv.Script{Faults: []qenv.Scripted{{Kind: "rpc.api.delay", Name: "slow"}}} // arrives at half the timeout
+// lateArrival runs a request delayed in the network (it arrives at half
+// the timeout) to a server that crashes and restarts meanwhile, and whose
+// restarted start function calls Handle late: the request finds no one
+// listening. It returns the client's error and how often the handler ran.
+func lateArrival(t *testing.T, faults ...qenv.Scripted) (error, int) {
+	sc := &qenv.Script{Faults: append(faults, qenv.Scripted{Kind: "rpc.api.delay", Name: "slow"})}
 	s := qenv.New(sc)
 	var srv *qhttp.Server
+	applied := 0
 	p := s.Process("api", true, func(ctx context.Context) {
 		if qenv.ProcessOf(ctx).Incarnation > 1 {
 			qenv.Sleep(ctx, time.Second) // a restart takes a while
 		}
-		srv.Handle(ctx, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		srv.Handle(ctx, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { applied++ }))
 	})
 	srv = qhttp.NewServer(s, "api", p)
 	tr := qhttp.NewTransport(srv)
@@ -582,13 +584,80 @@ func TestLateArrivalAtRestartedServer(t *testing.T) {
 	})
 	run(t, s, func(ctx context.Context) {
 		var resp *http.Response
-		if resp, err = client.Get(srv.URL()); err == nil {
+		if resp, err = client.Post(srv.URL(), "text/plain", nil); err == nil {
 			resp.Body.Close()
 		}
 	})
-	if !errors.Is(err, syscall.ECONNREFUSED) || srv.Service.Calls != 1 {
-		t.Errorf("got %v after %d deliveries, want the late arrival refused", err, srv.Service.Calls)
+	if m := sc.Misnamed(); len(m) > 0 {
+		t.Fatalf("the script made none of %v", m)
 	}
+	return err, applied
+}
+
+// A request that was sent and finds no one listening is a reset, outcome
+// unknown, not a refusal (which says nothing was sent), nor served by the
+// last incarnation's handler.
+func TestLateArrivalAtRestartedServer(t *testing.T) {
+	err, applied := lateArrival(t)
+	if !errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || applied != 0 {
+		t.Errorf("got %v with the handler run %d times, want a reset and no effect", err, applied)
+	}
+	var op *net.OpError
+	if !errors.As(err, &op) || op.Op != "read" {
+		t.Errorf("got %#v, want a read *net.OpError", err)
+	}
+}
+
+// Its duplicate, delivered at once, was processed by the first
+// incarnation: a refusal would tell the client it is safe to retry what
+// already took effect.
+func TestLateArrivalAfterItsDuplicateWasProcessed(t *testing.T) {
+	err, applied := lateArrival(t, qenv.Scripted{Kind: "rpc.api.request", Name: "duplicate"})
+	if applied != 1 || errors.Is(err, syscall.ECONNREFUSED) || !errors.Is(err, syscall.ECONNRESET) {
+		t.Errorf("got %v with the handler run %d times, want a reset after the duplicate's effect", err, applied)
+	}
+}
+
+// A context's deadline is used up in virtual time: a retry under it sees
+// the time its first attempt waited, and fails at once, unsent.
+func TestDeadlineUsedUp(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	srv, _, client := deploy(s, false, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		qenv.Sleep(r.Context(), time.Hour) // never answers in time
+	}))
+	other, _, _ := deploy2(s, "other")
+	client.Transport = qhttp.NewTransport(srv, other)
+	var got []string
+	run(t, s, func(ctx context.Context) {
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		for _, u := range []string{srv.URL(), srv.URL(), other.URL()} {
+			req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+			_, err := client.Do(req)
+			var te *qhttp.TimeoutError
+			if !errors.As(err, &te) || !te.Deadline {
+				t.Fatalf("got %v, want a TimeoutError of the deadline", err)
+			}
+			got = append(got, fmt.Sprintf("%v after %v", s.Elapsed(), te.After))
+		}
+	})
+	if want := []string{"1s after 1s", "1s after 0s", "1s after 0s"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q: the deadline passed with the first attempt", got, want)
+	}
+	if srv.Service.Calls != 1 || other.Service.Calls != 0 {
+		t.Errorf("%d and %d handler calls, want 1 and 0: a request past its deadline is not sent", srv.Service.Calls, other.Service.Calls)
+	}
+}
+
+// deploy2 is deploy for a second server, which answers at once.
+func deploy2(s *qenv.Sim, name string) (*qhttp.Server, *qhttp.Transport, *http.Client) {
+	var srv *qhttp.Server
+	p := s.Process(name, false, func(ctx context.Context) {
+		srv.Handle(ctx, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	})
+	srv = qhttp.NewServer(s, name, p)
+	tr := qhttp.NewTransport(srv)
+	return srv, tr, &http.Client{Transport: tr}
 }
 
 // A core settle goes on faulting the server's connections when the

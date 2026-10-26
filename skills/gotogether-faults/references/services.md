@@ -31,16 +31,23 @@ sim.Spawn("sdk", func(ctx context.Context) { /* client.Post(srv.URL()+"/payments
   chunked), so nothing is shared between client and handler.
 - Outcomes are what a real client sees: a refused connection is a dial
   `*net.OpError` (`errors.Is(err, syscall.ECONNREFUSED)`: nothing sent, a
-  retry is safe); a missing response a `*qhttp.TimeoutError` (the
+  retry is safe); a request that reached a restarted server before its
+  `Handle` a read one with `ECONNRESET` (outcome unknown: a duplicate may
+  have taken effect); a missing response a `*qhttp.TimeoutError` (the
   `*url.Error`'s `Timeout()` is true, `errors.Is(err,
   context.DeadlineExceeded)`; outcome unknown); a full queue
   (`srv.Service.Capacity`) a 503. The `rpc.<name>.*` faults, late
   requests and the crash window (`srv.Service.NoCrashWindow`) are the
   Service's.
-- Time: the Transport's `Timeout` and a request context's deadline
-  (converted with `Sim.ToVirtual` when sent, rounded up to two
-  significant digits) are virtual. `http.Client.Timeout` reaches it as
-  that deadline; its own timer is real and approximately never fires.
+- Time: the Transport's `Timeout` and a request context's deadline are
+  virtual. A deadline is converted (`Sim.ToVirtual`, rounded to the
+  nearest two significant digits) the first time the simulation sees it,
+  then used up in virtual time: a retry under it after it passed fails at
+  once, unsent. `http.Client.Timeout` reaches the Transport as such a
+  deadline. The context's own timer is wall time: `ctx.Err()` approximately
+  never fires in a fast run, so a retry loop must stop on the request's
+  error (`context.DeadlineExceeded`) or an attempt count, not on
+  `ctx.Err()`.
 - A handler runs as a task of the server's process, with the task's
   context as `r.Context()`: record steps and use the Store in it. Its
   panic fails the run (net/http would recover it). A handler that starts

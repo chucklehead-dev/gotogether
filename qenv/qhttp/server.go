@@ -15,7 +15,9 @@
 //     down.
 //
 // The client sees each as a real one would: a refused connection is a
-// *net.OpError wrapping ECONNREFUSED, a missing response a *TimeoutError
+// *net.OpError wrapping ECONNREFUSED (only before anything was sent), a
+// request that reaches a restarted server before its Handle one wrapping
+// ECONNRESET (outcome unknown), a missing response a *TimeoutError
 // after Transport.Timeout of virtual time (the *url.Error's Timeout() is
 // true, and the outcome is unknown), a full queue (Service.Capacity) a 503.
 //
@@ -37,8 +39,15 @@
 // waits on time.NewTimer. It measures real time, which a simulated run
 // barely spends, so it approximately never fires. Its deadline does reach
 // the request's context, and the Transport converts a context's deadline
-// to virtual time (Sim.ToVirtual): the deadline that applies in a
-// simulation is the virtual one, Client.Timeout's included.
+// to virtual time (Sim.ToVirtual) once, the first time the simulation sees
+// it, and uses it up in virtual time from then: the deadline that applies
+// to a request is the virtual one, Client.Timeout's included. The context
+// itself still ends on its wall timer: ctx.Err() and ctx.Done() of a
+// service's own deadlines are wall time in a simulation, and approximately
+// never fire in a fast run. A loop that retries until ctx.Err() spins at
+// one virtual instant once the deadline has passed; stop it on the
+// request's error (errors.Is(err, context.DeadlineExceeded), as a real
+// one would see) or bound its attempts.
 //
 // A handler runs as a qenv task in the server's process with the task's
 // context as r.Context(), so qenv's seams (Sleep, Store, Service calls) and
@@ -80,6 +89,8 @@ type Server struct {
 
 // errNotListening is a request arriving (late) at a server whose process
 // restarted and has not called Handle again: no one listens on the port.
+// The request was sent, and a copy of it may have been processed, so the
+// client sees a reset (outcome unknown), never a refusal.
 var errNotListening = errors.New("qhttp: no handler installed")
 
 // NewServer creates a server named name (its host in URLs) in process p of

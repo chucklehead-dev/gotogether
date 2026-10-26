@@ -21,9 +21,12 @@ The first release. What a user meets, by module:
   incarnation, connections refused before it and while the process is
   down) over a `qenv.Service` carrying wire bytes; `NewTransport`, an
   `http.RoundTripper` whose outcomes are a real client's (a dial
-  `*net.OpError` with ECONNREFUSED, a `TimeoutError` after virtual time,
-  503 on overload), a request context's deadline converted to virtual
-  time, and the fault kind `http.<name>.conn` (`Transport.Refuse`).
+  `*net.OpError` with ECONNREFUSED only when nothing was sent, a read one
+  with ECONNRESET for a request that found no one listening, a
+  `TimeoutError` after virtual time, 503 on overload), a request
+  context's deadline converted to virtual time once per simulation and
+  used up there (a retry under it fails at once, unsent), and the fault
+  kind `http.<name>.conn` (`Transport.Refuse`).
   `qenv.FaultKind.At` puts a double's kind built outside qenv at its
   process, for `Sim.SettleCore`.
 - `Sim.Hang` (30 s from New, zero off): a task that runs that long in

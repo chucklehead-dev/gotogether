@@ -26,10 +26,10 @@ const DefaultTimeout = 10 * time.Second
 type Transport struct {
 	// Timeout is how long a request waits for its response, in virtual
 	// time (0: DefaultTimeout). A request context's deadline (Client.Timeout's
-	// too) shortens it: converted to virtual time when the request is
-	// sent, as if it had been set then (a context made before virtual time
-	// passed still carries its whole timeout), and rounded up to two
-	// significant digits.
+	// too) shortens it: converted to virtual time the first time the
+	// simulation sees it, as if it had been set then, and used up in
+	// virtual time from there (see virtualDeadline). A request sent after
+	// it passed fails at once with a TimeoutError.
 	Timeout time.Duration
 	// Refuse lets the network refuse a connection to a server that
 	// listens: the fault kind "http.<name>.conn", option "refused".
@@ -86,9 +86,16 @@ type addr string
 func (a addr) Network() string { return "tcp" }
 func (a addr) String() string  { return string(a) }
 
-// refused is a refused connection, as net's dialer reports it.
+// refused is a refused connection, as net's dialer reports it: nothing
+// was sent.
 func refused(host string) error {
 	return &net.OpError{Op: "dial", Net: "tcp", Addr: addr(host), Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+}
+
+// reset is a request sent on a connection the server dropped: as net
+// reports it, and the outcome is unknown.
+func reset(host string) error {
+	return &net.OpError{Op: "read", Net: "tcp", Addr: addr(host), Err: os.NewSyscallError("read", syscall.ECONNRESET)}
 }
 
 // RoundTrip implements http.RoundTripper.
@@ -117,6 +124,20 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		closeBody(req)
 		return nil, err
 	}
+	timeout, byDeadline := t.Timeout, false
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	if dl, ok := ctx.Deadline(); ok {
+		left := virtualDeadline(s, dl).Sub(s.Now())
+		if left <= 0 { // passed in virtual time: nothing is sent, as for a done context
+			closeBody(req)
+			return nil, &TimeoutError{Host: host, Deadline: true}
+		}
+		if left < timeout {
+			timeout, byDeadline = left, true
+		}
+	}
 	wire, err := writeRequest(req)
 	if err != nil {
 		return nil, err
@@ -124,19 +145,6 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	qenv.Yield(ctx) // the dial: a scheduling point, where the server may crash
 	if !srv.listening() || t.Refuse && s.FaultOf(srv.conn) == "refused" {
 		return nil, refused(host)
-	}
-	timeout, byDeadline := t.Timeout, false
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	if dl, ok := ctx.Deadline(); ok {
-		left := roundUp(s.ToVirtual(dl).Sub(s.Now()))
-		if left <= 0 {
-			return nil, &TimeoutError{Host: host, Deadline: true}
-		}
-		if left < timeout {
-			timeout, byDeadline = left, true
-		}
 	}
 	from := "client:0"
 	if p := qenv.ProcessOf(ctx); p != nil {
@@ -152,31 +160,13 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		resp = w.wire(ctx)
 	case errors.Is(err, errNotListening):
-		return nil, refused(host) // it arrived at a port no one listens on yet
+		// sent, and it found no one listening: a reset, not a refusal,
+		// for another copy of it may have been processed
+		return nil, reset(host)
 	case err != nil:
 		return nil, err
 	}
 	return http.ReadResponse(bufio.NewReader(bytes.NewReader(resp)), req)
-}
-
-// roundUp rounds what is left of a request context's deadline, converted
-// to virtual time as if the real clock had kept pace with the simulation,
-// up to two significant digits (148.7 ms to 150 ms, 1.9993 s to 2 s). What
-// it lacks of the timeout set is the real time spent between setting it
-// and sending, jitter of the test process (a pause of the runtime took
-// 2 ms of a 150 ms deadline), not virtual time: unrounded, two runs of a
-// seed differed. The margin keeps a timeout just under a power of ten
-// (9.7 ms of 10 ms) at the coarser digit. A timeout that is no round
-// number is lengthened by up to a tenth.
-func roundUp(left time.Duration) time.Duration {
-	if left <= 0 {
-		return left
-	}
-	g := time.Duration(1)
-	for g*100 <= left+left/10 {
-		g *= 10
-	}
-	return (left + g - 1) / g * g
 }
 
 // writeRequest is the request's bytes on the wire. Its body is read here,
