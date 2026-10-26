@@ -596,10 +596,38 @@ func keysOf[V any](m map[string]V) []string {
 // Runs gathers runs made one by one (Validate's, Record's: a real
 // deployment's, each judged from its step logs, its nemesis's faults
 // among its steps) so claims over runs are stated of them as of an
-// exploration's runs, with the same three-valued judgment:
+// exploration's runs, with the same three-valued judgment and the same
+// checks of the claims: names the model and the binding lack fail, as do
+// eventual vals no run judged, and no runs at all:
 //
 //	qtest.Runs(runs...).Expect(t, qtest.Some(qtest.Rejects("put")), qtest.None(qtest.Violates("agreement")))
 //
 // The runs have no seeds or choices: a failure names a run by its place
-// among them, with its report.
-func Runs(runs ...*Run) *Exploration { return &Exploration{Runs: runs, given: true} }
+// among them, with its report. They must have been checked against one
+// binding's instance.
+func Runs(runs ...*Run) *Exploration {
+	x := &Exploration{Runs: runs, given: true}
+	for _, r := range runs {
+		switch {
+		case r == nil || r.checker == nil:
+		case x.checker == nil:
+			x.checker = r.checker
+		case !sameInstance(x.checker, r.checker):
+			x.mixed = true
+		}
+	}
+	if x.checker != nil && x.checker.Model != nil {
+		x.actions = map[string]bool{}
+		for a := range x.checker.Model.Actions {
+			x.actions[a] = true
+		}
+	}
+	return x
+}
+
+// sameInstance reports whether two checkers judge one model instance:
+// the same binding's spec and module, with the same constants and invariants.
+func sameInstance(a, b *validate.Checker) bool {
+	return a == b || a.Binding.SpecPath() == b.Binding.SpecPath() && a.Binding.Module == b.Binding.Module &&
+		fmt.Sprint(a.Binding.Constants, a.Binding.Invariants) == fmt.Sprint(b.Binding.Constants, b.Binding.Invariants)
+}

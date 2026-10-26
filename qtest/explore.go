@@ -55,6 +55,7 @@ type Exploration struct {
 	mu        sync.Mutex        // guards recheck's report swaps
 	vacuity   *vacuityResult    // computed once (Vacuous)
 	given     bool              // its runs were made one by one and gathered (Runs): no seeds, no choices
+	mixed     bool              // given runs checked against different instances
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -869,6 +870,14 @@ func anySettled(runs []*Run) bool {
 // runs never faulted.
 func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	t.Helper()
+	switch {
+	case x.given && len(x.Runs) == 0:
+		t.Fatalf("gotogether: qtest.Runs() with no runs: a claim over none holds or fails for nothing; give it the runs Validate or Record made")
+	case x.given && slices.Contains(x.Runs, nil):
+		t.Fatalf("gotogether: qtest.Runs given a nil run")
+	case x.mixed:
+		t.Fatalf("gotogether: qtest.Runs given runs checked against different bindings or constants: a claim over them judges no one instance; gather each instance's runs apart")
+	}
 	if len(claims) == 0 {
 		claims = []Claim{Conforms()}
 	}

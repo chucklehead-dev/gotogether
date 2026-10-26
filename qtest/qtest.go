@@ -268,6 +268,9 @@ type Run struct {
 	Code *qcover.Counts
 	// checks are the invariant names its check judges (checkedNames)
 	checks map[string]bool
+	// checker is the instance it was checked against (Validate's, Record's):
+	// Runs judges claims over such runs by its names
+	checker *validate.Checker
 	// scripted is a run a Script chose for: it makes only its own faults;
 	// misnamed are what is wrong with its script's faults (Script.Misnamed)
 	scripted bool
@@ -443,7 +446,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 		t.Logf("gotogether: no model-level ITF: %v", err)
 	}
 	run.Report = j.Report
-	run.checks = checkedNames(ch)
+	run.checks, run.checker = checkedNames(ch), ch
 	return run
 }
 

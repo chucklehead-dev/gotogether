@@ -43,3 +43,44 @@ func TestRunsGiven(t *testing.T) {
 		}
 	}
 }
+
+// Runs checks its claims as an exploration does: a name the model lacks,
+// an eventual val no run judged, no runs at all, and runs of two
+// instances each fail with the fix, where they once held for nothing.
+func TestRunsGivenAreCheckedAsAnExploration(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	acct, funds := "../validate/testdata/account.yaml", "../validate/testdata/funds.binding.yaml"
+	ctx := context.Background()
+	ok := Record(t, acct, func(r *qobs.Recorder) { r.Record(ctx, "deposit", nil, "amount", 5, "obs.balance", 5) })
+	drained := Record(t, funds, func(r *qobs.Recorder) {
+		r.Record(ctx, "deposit", nil, "amount", 5, "obs.balance", 5)
+		r.Record(ctx, "withdraw", nil, "amount", 5, "obs.balance", 0)
+	})
+	settled := Record(t, funds, func(r *qobs.Recorder) {
+		r.Record(ctx, "deposit", nil, "amount", 5, "obs.balance", 5)
+		r.Settled(ctx)
+	})
+	for _, c := range []struct {
+		name  string
+		x     *Exploration
+		claim Claim
+		want  string
+	}{
+		{"misspelled action", Runs(ok), None(Rejects("withdrw")), "misspelled"},
+		{"misspelled action, Some", Runs(ok), Some(Rejects("withdrw")), "misspelled"},
+		{"eventual val judged in none", Runs(drained), All(Conforms()), "judged in none"},
+		{"no runs, All", Runs(), All(Conforms()), "no runs"},
+		{"no runs, None", Runs(), None(Violates("underLimit")), "no runs"},
+		{"two instances", Runs(ok, drained), All(Conforms()), "different bindings"},
+	} {
+		f := &failTB{TB: t}
+		done := make(chan struct{})
+		go func() { defer close(done); c.x.Expect(f, c.claim) }() //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		<-done
+		if !f.failed || !strings.Contains(strings.Join(f.errs, "\n"), c.want) {
+			t.Errorf("%s: want a failure naming %q, got %v", c.name, c.want, f.errs)
+		}
+	}
+	Runs(settled).Expect(t, All(Conforms()))
+}
