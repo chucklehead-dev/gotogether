@@ -175,11 +175,25 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			}
 		}
 		sort.SliceStable(losses, func(i, j int) bool { return losses[i].Prefix && !losses[j].Prefix })
+		actors := recActors[rec]
+		if len(actors) == 0 {
+			// a recorder whose every step was lost is the actors its loss
+			// records name (a crash's, qnemesis: the incarnation was killed
+			// before it recorded anything, after an effect another recorder
+			// saw), else no actor's: whose steps they were is unknown; its
+			// tail still settles nothing
+			for _, d := range declared[rec] {
+				if d.Actor != "" {
+					if actors == nil {
+						actors = map[string]bool{}
+					}
+					actors[d.Actor] = true
+				}
+			}
+		}
 		for _, l := range losses {
-			// (a recorder whose every step was lost is no actor's: whose
-			// steps they were is unknown; its tail still settles nothing)
 			lostTail = lostTail || !l.Prefix
-			for a := range recActors[rec] {
+			for a := range actors {
 				lostActors[a] = append(lostActors[a], l)
 			}
 		}

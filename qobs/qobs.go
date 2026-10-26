@@ -128,6 +128,9 @@ func (r *Recorder) Count() int { return int(r.seq.Load() + r.added.Load()) }
 // ID is the recorder id (the scope of quint.seq).
 func (r *Recorder) ID() string { return r.id }
 
+// Actor is the recorder's default quint.actor (WithActor; "default").
+func (r *Recorder) Actor() string { return r.actor }
+
 // Add writes steps recorded elsewhere to the recorder's sink as they are,
 // with their own recorder ids and sequence numbers: steps a simulation in
 // another process sent back (gosim's, see examples/gosim).
