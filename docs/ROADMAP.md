@@ -255,18 +255,33 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   failing step is found with no seq too, its recorder and process
   rebased; qhegel caches summaries without refs; a zero step time is
   written as none.
-- **E5. A Bombadil example (M).** examples/webjobs: a standard-library
-  web app (submit, accepted, ready, cancel); Bombadil explores it; an
-  adapter turns its trace into invocation records completed only by an
-  observed outcome (a click is never a success), with refs; the server
-  records its own effects; overlay mutants; a recorded run checked
-  offline per push, a live headless run nightly; a reference page for
-  external drivers. That page says exactly what a settle covers (a
-  driver's calls answered is not a collector drained: telemetry's
-  completeness is E7's watermark), and how to map an archived journey's
-  invocation and completion records keeping their own times, call
-  identities and causal order (written as steps, never re-recorded
-  through a Recorder, which would stamp them with validation's time).
+- **E5. A Bombadil example (M). Done:** examples/webjobs, a
+  standard-library web app (one HTML+JS page: submit, 202 accepted, a
+  background job, poll until ready, cancel) explored by Bombadil 0.7.9
+  (`bombadil/spec.ts`: custom actions ui.submit, a double click, and
+  ui.cancel; the `result` extract). The server records its effects on
+  recorder `server` where it makes them (created, finished at the
+  commit, cancelled, drained, then a settle); `bombadiltrace` turns
+  trace.jsonl into invocation records completed only by what a snapshot
+  first shows (submit by a new id, cancel by a status change; a job
+  shown ready by polling a step of its own), each with `quint.ref`
+  (line and screenshot), Bombadil's own times, call ids and order,
+  written as steps, never re-recorded; a trace outside the page's
+  contract refused, a torn line a lost tail. The model (a ghost `done`,
+  `eventually: allResolved`, a `within`) and a `complete: true`
+  binding. Overlay mutants (readyEarly, doubleJob, cancelIgnored), each
+  caught by its invariant. Per push (the examples loop, -short):
+  recorded 3s runs of the real Bombadil checked offline (faithful
+  `Finishes`, its CLI manifest from `-run-info` replayed; each mutant's
+  claim; a pending click; a torn trace; `TestTimesKept`, goo's point as
+  a test). Nightly (`webjobs-live`, strict): 45s live runs of the
+  faithful app (manifest replayed, `--reproduce` best effort: a
+  divergence's prefix must conform) and of each mutant. The reference
+  page skills/gotogether-traces/references/external-drivers.md (a
+  settle is not a collector drained: E7). Left: Bombadil's
+  reproduction diverges on a timing-dependent page (0 of 8 45s runs
+  reproduced whole); one host's wall clock orders the page and the
+  server.
 - **E6. Observation mutants (S–M).** `qtrace.Mutations` (drop, dup,
   swap, corrupt, retime, reactor) and `qtest.MutateSteps`: which
   recorded fields the model and binding constrain; checked against
