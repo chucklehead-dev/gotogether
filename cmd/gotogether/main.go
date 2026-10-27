@@ -77,7 +77,8 @@ func main() {
 	case "version":
 		fmt.Println("gotogether", version())
 	default:
-		usage()
+		fmt.Fprintln(os.Stderr, "gotogether:", unknownCommand(os.Args[1]))
+		os.Exit(2)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gotogether:", err)
@@ -114,7 +115,10 @@ usage:
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
                    [-convert rules.yaml] [-invariants a,b] [-itf] [-require-settle]
-                   [-manifest run.json [-run-info info.json]] FILE...
+                   [-linearize] [-linearize-key arg] [-linearize-budget n] [-resolve-pending] [-history h.svg]
+                   [-lost-prefix r,s] [-lost-suffix r,s] [-complete-through recorder=T]
+                   [-mutate-steps [-mutate-ops o,p] [-mutate-limit n]] [-quint q] [-v]
+                   [-manifest run.json [-run-info info.json]] FILE...   (validate -h says what each does)
   gotogether validate -replay run.json [-dir OUT]   judge a manifest's run again (its hashed inputs unchanged): the same verdict
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
   gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
@@ -150,37 +154,53 @@ func scaffold(args []string) error {
 	quint := fset.String("quint", "quint", "quint binary")
 	out := fset.String("out", "", "write to this file (not overwritten) instead of standard output")
 	fset.Parse(args)
-	w, done, err := output(*out)
-	if err != nil {
+	if err := checkOut(*out); err != nil {
+		return err // before quint runs: the refusal comes first
+	}
+	// rendered whole before a file is made: a failed scaffold (a model
+	// quint rejects) once left an empty file its retry refused
+	var buf bytes.Buffer
+	if err := scaffoldTo(&buf, *out, *spec, *module, *system, *bpath, *pkg, *quint); err != nil {
 		return err
 	}
-	defer done()
-	if *system {
-		if *bpath == "" {
+	return writeOut(*out, buf.Bytes())
+}
+
+// scaffoldTo writes the scaffold of a binding (or with system, of a
+// qtest.System test) to w, its paths relative to out's directory, where
+// the file is read from (the working directory without out).
+func scaffoldTo(w io.Writer, out, spec, module string, system bool, bpath, pkg, quint string) error {
+	if system {
+		if bpath == "" {
 			return fmt.Errorf("scaffold -system needs -binding (write one first: gotogether scaffold -spec model.qnt -module M)")
 		}
-		b, err := binding.Load(*bpath)
+		b, err := binding.Load(bpath)
 		if err != nil {
 			return err
 		}
-		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
+		if err := b.CheckSpec(); err != nil {
+			return err
+		}
+		m, err := binding.LoadModel(quint, b.SpecPath(), b.Module)
 		if err != nil {
 			return err
 		}
-		if *pkg == "" {
-			*pkg = packageIn(filepath.Dir(*out))
+		if pkg == "" {
+			pkg = packageIn(filepath.Dir(out))
 		}
-		fmt.Fprint(w, systemTest(*pkg, *bpath, b, m))
+		// a test runs in its package's directory, where qtest.System reads
+		// its Binding from
+		fmt.Fprint(w, systemTest(pkg, relativeTo(out, bpath), b, m))
 		return nil
 	}
-	if *spec == "" || *module == "" {
+	if spec == "" || module == "" {
 		return fmt.Errorf("scaffold needs -spec and -module (or -system -binding b.yaml)")
 	}
-	m, err := binding.LoadModel(*quint, *spec, *module)
+	m, err := binding.LoadModel(quint, spec, module)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\nconstants:\n", *module, *spec, *module)
+	fmt.Fprintf(w, "# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\nconstants:\n", module, relativeTo(out, spec), module)
 	for _, c := range sortedKeys(m.Consts) {
 		fmt.Fprintf(w, "  %s: ''   # %s\n", c, m.Consts[c])
 	}
@@ -208,7 +228,7 @@ func scaffold(args []string) error {
 	// every boolean val, checked and classified, so the skeleton checks
 	// what the model says: drop a val that is no invariant
 	vals := strings.Join(sortedKeys(m.Vals), ", ")
-	fmt.Fprintf(w, "\ninvariants: [%s]  # the boolean vals of %s: drop those that are not invariants\n", vals, *module)
+	fmt.Fprintf(w, "\ninvariants: [%s]  # the boolean vals of %s: drop those that are not invariants\n", vals, module)
 	fmt.Fprintf(w, "\nsimulate:        # gotogether simulate: what the model alone does with each invariant\n")
 	fmt.Fprintf(w, "  holds: [%s]   # the model guarantees them (no trace violates them)\n", vals)
 	fmt.Fprintf(w, "  allows: []      # move here those the model lets fail: requirements on the code, which must prevent it\n")
@@ -263,6 +283,9 @@ func lint(args []string) (int, error) {
 	for _, path := range strings.Split(*bpath, ",") {
 		b, err := binding.Load(path)
 		if err != nil {
+			return 2, err
+		}
+		if err := b.CheckSpec(); err != nil {
 			return 2, err
 		}
 		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
@@ -374,6 +397,9 @@ func steps(args []string) error {
 	if *bpath != "" {
 		b, err := binding.Load(*bpath)
 		if err != nil {
+			return err
+		}
+		if err := b.CheckSpec(); err != nil {
 			return err
 		}
 		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
@@ -535,6 +561,9 @@ func itfTo(w io.Writer, args []string) error {
 	}
 	b, err := binding.Load(*bpath)
 	if err != nil {
+		return err
+	}
+	if err := b.CheckSpec(); err != nil {
 		return err
 	}
 	all, err := readSteps(fset.Args(), rules)
@@ -713,20 +742,63 @@ func sortedKeys[V any](m map[string]V) []string {
 
 // output is the file at path, created (an existing one is not
 // overwritten: a scaffold is filled in by hand), or standard output.
-func output(path string) (w io.Writer, done func(), err error) {
+// checkOut refuses an -out that exists: a scaffold is filled in by
+// hand and never overwritten.
+func checkOut(path string) error {
 	if path == "" {
-		return os.Stdout, func() {}, nil
+		return nil
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return fmt.Errorf("scaffold: %s exists (a scaffold never overwrites: remove it or pick another -out)", path)
+	}
+	return nil
+}
+
+// writeOut writes a rendered scaffold to path, a new file, or to
+// standard output without one, and says what it wrote.
+func writeOut(path string, data []byte) error {
+	if path == "" {
+		_, err := os.Stdout.Write(data)
+		return err
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scaffold: %v (a scaffold never overwrites: remove it or pick another -out)", err)
+		return fmt.Errorf("scaffold: %v (a scaffold never overwrites: remove it or pick another -out)", err)
 	}
-	return f, func() {
-		if err := f.Close(); err != nil {
-			fmt.Fprintln(os.Stderr, "gotogether:", err)
-		}
-		fmt.Fprintln(os.Stderr, "wrote", path)
-	}, nil
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(path)
+		return fmt.Errorf("scaffold: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(path)
+		return fmt.Errorf("scaffold: %v", err)
+	}
+	fmt.Fprintln(os.Stderr, "wrote", path)
+	return nil
+}
+
+// relativeTo is path as the file out will read it: relative to out's
+// directory (path given relative to the working directory), as is
+// without out (standard output, read from where it was written) or for
+// an absolute path.
+func relativeTo(out, path string) string {
+	if out == "" || filepath.IsAbs(path) {
+		return path
+	}
+	dir, err := filepath.Abs(filepath.Dir(out))
+	if err != nil {
+		return path
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	rel, err := filepath.Rel(dir, abs)
+	if err != nil {
+		return path
+	}
+	return filepath.ToSlash(rel)
 }
 
 // systemTest is a qtest.System test for the binding: a Run that deploys

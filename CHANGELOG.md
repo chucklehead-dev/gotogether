@@ -152,6 +152,20 @@ The first release. What a user meets, by module:
   dropped the rest, losing a record or hiding a corruption. A cut-off
   last line is still a `*TornTail`; trailing whitespace is still allowed.
   Reported by a pilot outside the repository.
+- The CLI says what it did: `scaffold -out` writes `spec:` and
+  `Binding:` relative to the file written, renders before creating it
+  (a failed scaffold leaves no file), and its -h shows `-system`; a
+  binding whose spec is not where it says fails in every command
+  (`Binding.CheckSpec`) naming the file, the spec as resolved and the
+  path to write, and `binding.LoadModel` names a missing spec instead of
+  quint's chdir failure; plan errors
+  number steps from 1 with their seq and source, and a process change
+  without a restart says to add `restart: <action>` with the model's
+  candidates; -h prints no zero default nor one its usage states; an
+  unknown command says so (did you mean); the usage lists every flag of
+  validate; validate's temporary directory is made only when there is
+  something to judge and removed when the run passes (kept on failure,
+  and with -dir or -itf).
 - `qnemesis`: a nemesis for real deployments, standard library only.
   `Nemesis` runs a `Schedule` (qenv Script's names and partial order:
   `nemesis.crash.<p>`, `pause`/`resume`, `partition`/`heal`, `isolate`,

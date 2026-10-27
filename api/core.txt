@@ -43,6 +43,7 @@ type Binding struct
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     field Path string `yaml:"-"`
+    method (*Binding) CheckSpec() error
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)

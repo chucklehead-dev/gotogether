@@ -218,8 +218,20 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 // run judges the inputs, prints the report and the result line, and
 // writes the manifest if asked: exit status 0 if every actor passes, 1
 // if not.
-func (v *validateRun) run() (int, validate.RunVerdict, error) {
+//
+// Without -dir the artifacts go to a temporary directory made once the
+// inputs are read and the binding is known to be needed and given, and
+// removed when the run passes (unless -itf asked for its ITF): one was
+// left behind by every run, tool errors included. A failing run's, or a
+// tool error's after it was made, is kept: the report names it.
+func (v *validateRun) run() (code int, _ validate.RunVerdict, _ error) {
 	var none validate.RunVerdict
+	temp := ""
+	defer func() {
+		if temp != "" && code == 0 && !v.withITF {
+			os.RemoveAll(temp)
+		}
+	}()
 	rules, err := loadRules(v.conv)
 	if err != nil {
 		return 2, none, err
@@ -227,6 +239,9 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 	var b *binding.Binding
 	if v.binding != "" {
 		if b, err = binding.Load(v.binding); err != nil {
+			return 2, none, err
+		}
+		if err := b.CheckSpec(); err != nil {
 			return 2, none, err
 		}
 	}
@@ -276,14 +291,20 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 	if steps, err = markComplete(steps, v.completeThrough); err != nil {
 		return 2, none, err
 	}
+	needChecker := len(steps) > 0 || len(itfs) == 0
+	if needChecker && v.binding == "" {
+		return 2, none, fmt.Errorf("recorded steps need -binding")
+	}
 	if v.dir == "" { // one root for every actor's and input's modules, named in the output
 		d, err := os.MkdirTemp("", "gotogether-validate-")
 		if err != nil {
 			return 2, none, err
 		}
-		v.dir = d
+		v.dir, temp = d, d
+		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s (removed if the run passes; -dir keeps them)\n", v.dir)
+	} else {
+		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", v.dir)
 	}
-	fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", v.dir)
 	opts := validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}
 	ok := true
 	var results []*validate.Result // every actor's and ITF's, for the result line
@@ -300,10 +321,7 @@ func (v *validateRun) run() (int, validate.RunVerdict, error) {
 		finishWhy = "the binding is complete"
 	}
 	var c *validate.Checker
-	if len(steps) > 0 || len(itfs) == 0 {
-		if v.binding == "" {
-			return 2, none, fmt.Errorf("recorded steps need -binding")
-		}
+	if needChecker {
 		if c, err = validate.NewChecker(v.binding, opts); err != nil {
 			return 2, none, err
 		}

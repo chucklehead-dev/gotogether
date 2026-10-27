@@ -7,7 +7,9 @@ package binding
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -211,6 +213,44 @@ func (b *Binding) SpecPath() string {
 		return b.Spec
 	}
 	return filepath.Join(b.Dir, b.Spec)
+}
+
+// CheckSpec fails when the spec is not where the binding says, naming
+// the binding file, the spec as it resolves from there, and, when the
+// spec is found relative to the working directory instead, the path to
+// write: quint's own error was a bare chdir failure. Load does not
+// check, since a binding is read (a manifest's) whose model is gone.
+func (b *Binding) CheckSpec() error {
+	resolved := b.SpecPath()
+	if _, err := os.Stat(resolved); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	fix := "fix spec: it is relative to the binding file's directory"
+	if !filepath.IsAbs(b.Spec) {
+		if abs, err := filepath.Abs(b.Spec); err == nil {
+			if _, err := os.Stat(abs); err == nil {
+				if rel, err := filepath.Rel(b.Dir, abs); err == nil {
+					fix = fmt.Sprintf("it is relative to the binding file's directory, not the working directory: write spec: %s", filepath.ToSlash(rel))
+				}
+			}
+		}
+	}
+	return fmt.Errorf("%s: spec %s resolves to %s, which does not exist (%s)", b.relPath(), b.Spec, resolved, fix)
+}
+
+// relPath is the binding's file relative to the working directory when
+// it is below it, else absolute; "binding" for one not loaded from a
+// file.
+func (b *Binding) relPath() string {
+	if b.Path == "" {
+		return "binding"
+	}
+	if wd, err := os.Getwd(); err == nil {
+		if r, err := filepath.Rel(wd, b.Path); err == nil && !strings.HasPrefix(r, "..") {
+			return r
+		}
+	}
+	return b.Path
 }
 
 // Lint checks the binding against the model: every bound action exists and

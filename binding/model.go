@@ -2,7 +2,9 @@ package binding
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -153,6 +155,10 @@ func (m *Model) ActionNames() []string {
 func LoadModel(quint, spec, module string) (*Model, error) {
 	if quint == "" {
 		quint = "quint"
+	}
+	if _, err := os.Stat(spec); errors.Is(err, fs.ErrNotExist) {
+		// quint's error would be the chdir into its missing directory
+		return nil, fmt.Errorf("quint typecheck: the spec %s does not exist (a binding's spec is relative to the binding file's directory; gotogether lint -binding names the path to write)", spec)
 	}
 	tmp, err := os.CreateTemp("", "gotogether-typecheck-*.json")
 	if err != nil {

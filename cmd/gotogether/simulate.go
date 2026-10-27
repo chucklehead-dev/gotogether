@@ -44,6 +44,9 @@ func simulate(args []string) (int, error) {
 	if err != nil {
 		return 2, err
 	}
+	if err := b.CheckSpec(); err != nil {
+		return 2, err
+	}
 	sim := b.Simulate
 	if sim == nil {
 		sim = &binding.Simulation{}

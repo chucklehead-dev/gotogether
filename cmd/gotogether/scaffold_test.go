@@ -104,17 +104,137 @@ func TestScaffoldSystemSettles(t *testing.T) {
 // filled in by hand.
 func TestScaffoldOut(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "system_test.go")
-	w, done, err := output(path)
-	if err != nil {
+	if err := writeOut(path, []byte("package app\n")); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = w.Write([]byte("package app\n"))
-	done()
-	if _, _, err := output(path); err == nil || !strings.Contains(err.Error(), "never overwrites") {
+	if err := checkOut(path); err == nil || !strings.Contains(err.Error(), "never overwrites") {
 		t.Errorf("a second scaffold to %s: %v, want it refused", path, err)
+	}
+	if err := writeOut(path, []byte("package other\n")); err == nil || !strings.Contains(err.Error(), "never overwrites") {
+		t.Errorf("a second write to %s: %v, want it refused", path, err)
 	}
 	if b, _ := os.ReadFile(path); string(b) != "package app\n" {
 		t.Errorf("the file holds %q", b)
+	}
+}
+
+// A scaffold that fails (here quint cannot run; a model quint rejects
+// fails the same way) leaves no file: an empty one once made its retry
+// fail with "never overwrites".
+func TestScaffoldFailedLeavesNoFile(t *testing.T) {
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "m.qnt")
+	if err := os.WriteFile(spec, []byte("module m {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "m.binding.yaml")
+	if err := scaffold([]string{"-spec", spec, "-module", "m", "-quint", filepath.Join(dir, "no-quint"), "-out", out}); err == nil {
+		t.Fatal("scaffold without quint succeeded")
+	}
+	if _, err := os.Lstat(out); err == nil {
+		t.Errorf("a failed scaffold left %s", out)
+	}
+}
+
+// A scaffold's paths are relative to the file it writes, as the binding
+// and the test read them: written relative to the working directory, a
+// binding in a subdirectory named a spec that is not there.
+func TestScaffoldPathsRelativeToOut(t *testing.T) {
+	for _, c := range []struct{ out, path, want string }{
+		{"sub/b.yaml", "model/stock.qnt", "../model/stock.qnt"},
+		{"b.yaml", "model/stock.qnt", "model/stock.qnt"},
+		{"sub/x_test.go", "stock.binding.yaml", "../stock.binding.yaml"},
+		{"", "model/stock.qnt", "model/stock.qnt"}, // standard output: as given
+		{"sub/b.yaml", "/abs/stock.qnt", "/abs/stock.qnt"},
+	} {
+		if got := relativeTo(c.out, c.path); got != c.want {
+			t.Errorf("relativeTo(%q, %q) = %q, want %q", c.out, c.path, got, c.want)
+		}
+	}
+}
+
+// A binding scaffolded into a subdirectory lints there: its spec is
+// written relative to it.
+func TestScaffoldIntoSubdirectory(t *testing.T) {
+	skip.Quint(t)
+	spec, err := filepath.Abs("../../validate/testdata/account.qnt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "model"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "model", "account.qnt"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-out", "sub/b.yaml"}); err == nil {
+		t.Fatal("scaffold into a missing directory succeeded")
+	}
+	if err := os.Mkdir("sub", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-out", "sub/b.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("sub/b.yaml")
+	if err != nil || !strings.Contains(string(b), "spec: ../model/account.qnt") {
+		t.Fatalf("the skeleton (%v):\n%s", err, b)
+	}
+	set := strings.Replace(string(b), "LIMIT: ''", "LIMIT: '100'", 1)
+	if err := os.WriteFile("sub/b.yaml", []byte(set), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := capture(t, func() (int, error) { return lint([]string{"-binding", "sub/b.yaml"}) }); code != 0 {
+		t.Errorf("lint from the working directory: exit %d:\n%s", code, out)
+	}
+}
+
+// A binding whose spec is not where it says names the file, the spec as
+// resolved, and, when the spec is relative to the working directory
+// instead, the path to write: quint's error was a bare chdir failure.
+func TestBindingSpecNotFound(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	for _, d := range []string{"model", "sub"} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile("model/stock.qnt", []byte("module stock {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("sub/b.yaml", []byte("spec: model/stock.qnt\nmodule: stock\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("run.jsonl", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolved := filepath.Join(dir, "sub", "model", "stock.qnt")
+	for name, run := range map[string]func() (int, error){
+		"lint":     func() (int, error) { return lint([]string{"-binding", "sub/b.yaml"}) },
+		"simulate": func() (int, error) { return simulate([]string{"-binding", "sub/b.yaml"}) },
+		"validate": func() (int, error) {
+			code, _, err := validated([]string{"-binding", "sub/b.yaml", "run.jsonl"})
+			return code, err
+		},
+	} {
+		code, err := run()
+		for _, want := range []string{"sub/b.yaml: spec model/stock.qnt resolves to " + resolved + ", which does not exist",
+			"write spec: ../model/stock.qnt"} {
+			if code != 2 || err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: exit %d, %v: want %q", name, code, err, want)
+			}
+		}
+	}
+	// what the model cache and every other caller of LoadModel see
+	if _, err := binding.LoadModel("quint", resolved, "stock"); err == nil || !strings.Contains(err.Error(), "the spec "+resolved+" does not exist") || strings.Contains(err.Error(), "chdir") {
+		t.Errorf("LoadModel: %v", err)
 	}
 }
 

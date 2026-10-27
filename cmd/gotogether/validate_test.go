@@ -543,3 +543,52 @@ func vcapture(t *testing.T, args []string) (int, string) {
 	}
 	return code, string(out)
 }
+
+// Without -dir validate's temporary directory is made only when there is
+// something to judge, removed when the run passes and kept, named, when
+// it fails: one was left behind by every run, and made before a missing
+// -binding was refused. (Not parallel: it sets TMPDIR.)
+func TestValidateTempDir(t *testing.T) {
+	skip.Quint(t)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	left := func() []string {
+		m, _ := filepath.Glob(filepath.Join(tmp, "gotogether-validate-*"))
+		return m
+	}
+	dir := t.TempDir()
+	log := filepath.Join(dir, "run.jsonl")
+	write := func(steps ...qtrace.Step) {
+		t.Helper()
+		f, err := os.Create(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := qtrace.WriteJSONL(f, steps); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+	}
+	step := qtrace.Step{Action: "deposit", Actor: "a", Recorder: "a", Thread: "a", Seq: 1,
+		Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
+	write(step)
+	if code, out, err := validated([]string{log}); code != 2 || err == nil || !strings.Contains(err.Error(), "recorded steps need -binding") || strings.Contains(string(out), "artifacts") {
+		t.Errorf("no -binding: exit %d, %v:\n%s", code, err, out)
+	}
+	if l := left(); len(l) > 0 {
+		t.Errorf("a refused run left %v", l)
+	}
+	if code, out := vcapture(t, []string{"-binding", "../../validate/testdata/account.yaml", log}); code != 0 || !strings.Contains(out, "removed if the run passes") {
+		t.Errorf("a passing run: exit %d:\n%s", code, out)
+	}
+	if l := left(); len(l) > 0 {
+		t.Errorf("a passing run left %v", l)
+	}
+	step.Obs = map[string]any{"balance": int64(6)} // a mismatch
+	write(step)
+	code, out := vcapture(t, []string{"-binding", "../../validate/testdata/account.yaml", log})
+	l := left()
+	if code != 1 || len(l) != 1 || !strings.Contains(out, l[0]) {
+		t.Errorf("a failing run: exit %d, left %v:\n%s", code, l, out)
+	}
+}

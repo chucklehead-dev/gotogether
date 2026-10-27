@@ -241,7 +241,9 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 			plan.Calls = append(plan.Calls, Call{Quint: b.Restart, Action: b.Restart, Args: map[string]string{},
 				Inferred: fmt.Sprintf("restart: process %s -> %s", short(prevProc), short(s.Process))})
 		case prevProc != "" && s.Process != prevProc:
-			return nil, fmt.Errorf("step %d (%s): process changed from %s to %s and the binding has no restart action", i, s.Action, prevProc, s.Process)
+			return nil, fmt.Errorf("step %d (%s, seq %d%s): process changed from %s to %s and the binding has no restart action: "+
+				"add `restart: <action>` to the binding, the model's parameterless action for a process's crash and restart%s",
+				i+1, s.Action, s.Seq, where(s), short(prevProc), short(s.Process), restartCandidates(m))
 		}
 		if !s.Ambiguous {
 			prevProc = s.Process
@@ -269,7 +271,7 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 		}
 		outcome, err := b.outcome(ab, s)
 		if err != nil {
-			return nil, fmt.Errorf("step %d: %w", i, err)
+			return nil, fmt.Errorf("step %d (seq %d%s): %w", i+1, s.Seq, where(s), err)
 		}
 		if outcome == "skip" {
 			continue
@@ -397,6 +399,25 @@ func (c Call) String() string {
 	}
 	s := c.Step
 	return fmt.Sprintf("seq %d %s %s", s.Seq, short(s.Process), s.String())
+}
+
+// restartCandidates names the model's parameterless actions, those a
+// binding's restart may name, for the error of a process change without
+// one; nothing without a model.
+func restartCandidates(m *Model) string {
+	if m == nil {
+		return ""
+	}
+	var cs []string
+	for _, a := range m.ActionNames() {
+		if len(m.Actions[a]) == 0 && a != "init" && a != "step" && !m.Helpers[a] {
+			cs = append(cs, a)
+		}
+	}
+	if len(cs) == 0 {
+		return " (the model has none: add one that models the restart)"
+	}
+	return " (the model's: " + strings.Join(cs, ", ") + ")"
 }
 
 func short(s string) string {
