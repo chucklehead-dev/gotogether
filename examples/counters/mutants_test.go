@@ -10,11 +10,13 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// mutants are grain's two bugs and an effect checkpointed first, each a directory of testdata/mutants/
+// mutants are grain's two bugs, an effect checkpointed first, a payout
+// without its outcome, a retirement by anyone and a payout of the wrong
+// amount, each a directory of testdata/mutants/
 // whose files replace the app's of the same name (a go build overlay):
 // the app's own files stay as they are, and each mutant is a whole file
 // to diff against them.
-var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires"}
+var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires", "wrongAmount"}
 
 // fullOnly are the mutants built and run in full mode only: their claim
 // repeats a mechanism a per-push test checks (checkpointFirst: the
@@ -115,6 +117,14 @@ func TestMutant(t *testing.T) {
 		// faults 6 of 6
 		system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
 			Expect(t, qtest.Some(qtest.Rejects("retireCounter")))
+	case "wrongAmount":
+		// the payout paying one more than the retired total: the bank's call,
+		// recorded where the payout makes it, asks for an amount the model's
+		// rule (payoutBankPay) does not, Some(Rejects("bankPay")), without
+		// faults 4 of 4 runs (every run that retires); TestPayoutAmount is
+		// its contrast
+		system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 2)}).
+			Expect(t, qtest.Some(qtest.Rejects("bankPay")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

@@ -6,8 +6,8 @@
 // itself about what a read model holds.
 
 // The rules: each command's outcome, events and the reads it needs, the
-// query's answer, the processors' events, the bank's guard, and the read
-// models' folds.
+// query's answer, the processors' events, the payout's request of the
+// bank, and the read models' folds.
 module countersRules {
   import grist.* from "./grist"
   import countersEvents.* from "./counters_gen"
@@ -63,8 +63,11 @@ module countersRules {
   // a retirement's payout names the retirement, so each one's outcome is its own
   pure def payoutSuccess(prefix: List[Event], trigger: int): List[Event] = [paidOut(counterRetiredCounter(prefix[trigger - 1]), trigger)]
   pure def payoutSkips(prefix: List[Event], trigger: int): bool = false
-  // the bank records every payment it makes, duplicates included
-  pure def bankPaysAdmits(records: List[BankPaysRecord], r: BankPaysRecord): bool = true
+  // a retirement's payout pays the retired counter its total, as of the
+  // retirement (the bank applies each key once: Pay is Keyed, and the
+  // generated bankPayAdmits says so)
+  pure def payoutBankPay(prefix: List[Event], trigger: int): BankPayRequest =
+    { counter: counterRetiredCounter(prefix[trigger - 1]), amount: counterRetiredTotal(prefix[trigger - 1]) }
 
   // the design's: every created name is created once (as many distinct
   // names as creates: linear in the log)
@@ -110,14 +113,14 @@ module counters {
     log.indices().forall(i => log[i].typ == "counter-retired" implies checkpoints.get("payout") >= i + 1)
 
   // test-only: every retirement paid out exactly once, by the bank's own
-  // record of its payments under the retirement's effect key. At most once
-  // allows none, by right (a crash between the checkpoint and the
-  // payment); an application that must pay needs another guarantee.
+  // record of its payments (its served records, each naming its trigger).
+  // At most once allows none, by right (a crash between the checkpoint
+  // and the payment); an application that must pay needs another
+  // guarantee.
   // grist: eventually exactly
   val everyRetirementPaidOnce =
     log.indices().forall(i => log[i].typ == "counter-retired" implies
-      effects.indices().exists(j => effects[j]._1 == "payout" and effects[j]._2 == i + 1 and
-        bankPaysRecords.select(p => p.key == effects[j]._3).length() == 1))
+      bankPayRecords.select(p => p.trigger == i + 1 and p.result == "ok").length() == 1)
 
   // test-only: every payment step's outcome is in the log (paid-out after
   // an ok one, grist.failed or grist.unknown after a failed one): a crash

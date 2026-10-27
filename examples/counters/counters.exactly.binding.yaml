@@ -11,8 +11,10 @@ module: counters
 
 outcomes:
   ok: '"ok"'
+  declined: '"declined"'
   name-taken: '"name-taken"'
   not-creator: '"not-creator"'
+  unknown: '"unknown"'
   unknown-counter: '"unknown-counter"'
   conflict: '"conflict"'
   idempotency-key-reused: '"idempotency-key-reused"'
@@ -34,7 +36,10 @@ actions:
   payout: {}
   payoutEffect: {}
   payoutOutcome: {}
-  bankPays: {}
+  bankPay:
+    args: { result: '{{.outcome}}' }
+  bankPayServed:
+    args: { result: '{{.outcome}}' }
 
 invariants: []
 eventually: [everyRetirementPaidOnce, everyPayoutOutcomeLogged]

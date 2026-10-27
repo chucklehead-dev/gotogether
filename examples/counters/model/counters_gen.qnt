@@ -72,8 +72,10 @@ module countersEvents {
   type RetireCounterArgs = { counter: str, principal: str }
   type ShowCounterArgs = { counter: str, principal: str }
   type ShowCounterResult = { total: int, names: int }
-  // site bank-pays: a record of the effect, made where it takes place
-  type BankPaysRecord = { key: str, counter: str, amount: int }
+  // call bank/pay: its request and response, and a step of it (the caller's or the site's: the outcome as result)
+  type BankPayRequest = { counter: str, amount: int }
+  type BankPayResponse = { ref: str }
+  type BankPayRecord = { processor: str, trigger: int, key: str, request: BankPayRequest, result: str, response: BankPayResponse }
 }
 
 // The store's side (counters.binding.yaml): every step where it took effect, one
@@ -98,8 +100,10 @@ module countersGen {
   var effects: List[Effect]
   // the command ids answered so far, by a commit or a committed refusal
   var answered: Set[str]
-  // what the bank-pays site recorded, in order
-  var bankPaysRecords: List[BankPaysRecord]
+  // the calls of bank/pay as their callers saw them (Call.Do), and as the dependency
+  // applied them (its served records), in order
+  var bankPayCalls: List[BankPayRecord]
+  var bankPayRecords: List[BankPayRecord]
 
   action init = all {
     log' = [],
@@ -107,7 +111,8 @@ module countersGen {
     appended' = [],
     effects' = [],
     answered' = Set(),
-    bankPaysRecords' = [],
+    bankPayCalls' = [],
+    bankPayRecords' = [],
   }
 
   // the identities and effect keys the model on its own draws
@@ -121,7 +126,8 @@ module countersGen {
     appended' = b,
     effects' = effects,
     answered' = answered.union(Set(id)),
-    bankPaysRecords' = bankPaysRecords,
+    bankPayCalls' = bankPayCalls,
+    bankPayRecords' = bankPayRecords,
   }
 
   // a committed refusal: its marker answers id, nothing is appended; it
@@ -140,7 +146,8 @@ module countersGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
-    bankPaysRecords' = bankPaysRecords,
+    bankPayCalls' = bankPayCalls,
+    bankPayRecords' = bankPayRecords,
   }
 
   // a processor's handling of trigger, appending b with its checkpoint
@@ -150,7 +157,8 @@ module countersGen {
     appended' = b,
     effects' = effects,
     answered' = answered,
-    bankPaysRecords' = bankPaysRecords,
+    bankPayCalls' = bankPayCalls,
+    bankPayRecords' = bankPayRecords,
   }
 
   // an effect step of processor p for trigger, under key (the same on every
@@ -162,7 +170,8 @@ module countersGen {
     appended' = [],
     effects' = effects.append((p, trigger, key, ok)),
     answered' = answered,
-    bankPaysRecords' = bankPaysRecords,
+    bankPayCalls' = bankPayCalls,
+    bankPayRecords' = bankPayRecords,
   }
 
   // create-counter: conditioned on its reads; refusals name-taken. Every
@@ -285,7 +294,8 @@ module countersGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
-    bankPaysRecords' = bankPaysRecords,
+    bankPayCalls' = bankPayCalls,
+    bankPayRecords' = bankPayRecords,
   }
 
   // payout's success event for trigger, caused by it (payoutSuccess's)
@@ -338,23 +348,70 @@ module countersGen {
         appended' = b,
         effects' = effects,
         answered' = answered,
-        bankPaysRecords' = bankPaysRecords,
+        bankPayCalls' = bankPayCalls,
+        bankPayRecords' = bankPayRecords,
       },
     }
   }
 
-  // the bank-pays site's record, made where its effect took place: any number,
-  // in any order with the steps that asked for them, as bankPaysAdmits allows
-  action bankPays(key: str, counter: str, amount: int): bool = {
-    val rec_: BankPaysRecord = { key: key, counter: counter, amount: amount }
+  // the keys of bank/pay's steps: (processor, trigger, key)
+  pure def bankPayKeys(l: List[BankPayRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))
+
+  // the bank dependency applies each key once (Keyed): no earlier record of
+  // the key; the application's rules may define bankPayAdmits instead,
+  // reading only prefix (the log through the trigger)
+  pure def bankPayAdmits(prefix: List[Event], records: List[BankPayRecord], r: BankPayRecord): bool = not(keyCalled(bankPayKeys(records), r.key))
+
+  // bank/pay as its caller saw it (Call.Do: invoked before the request, done
+  // with the answer, the outcome ok, a declared refusal or unknown): from an
+  // effect of a processor that uses it, for one of its triggers before the
+  // effect step, under the trigger's key (callKeyStable), its request the
+  // processor's rule's, at most once with no earlier call of the key
+  action bankPay(processor: str, trigger: int, key: str, counter: str, amount: int, result: str, ref: str): bool = {
+    val rec_: BankPayRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, amount: amount }, result: result, response: { ref: ref } }
     all {
-      bankPaysAdmits(bankPaysRecords, rec_),
+      or {
+        processor == "payout" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "counter-retired",
+          rec_.request == payoutBankPay(log.slice(0, trigger), trigger),
+          not(payoutSkips(log.slice(0, trigger), trigger)),
+          checkpoints.get("payout") >= trigger,
+          triesOf(effects, "payout", trigger) == 0,
+          not(keyCalled(bankPayKeys(bankPayCalls), key)),
+        } else false),
+      },
+      callKeyStable(effects, bankPayKeys(bankPayCalls), processor, trigger, key),
       log' = log,
       checkpoints' = checkpoints,
       appended' = [],
       effects' = effects,
       answered' = answered,
-      bankPaysRecords' = bankPaysRecords.append(rec_),
+      bankPayCalls' = bankPayCalls.append(rec_),
+      bankPayRecords' = bankPayRecords,
+    }
+  }
+
+  // bank/pay as the dependency applied it (its served record, placed at its
+  // cause: after the commit holding its trigger): for one of a user's
+  // triggers, as bankPayAdmits allows given the log through the trigger. Its
+  // request is the caller's to judge (its step, recorded where grist makes
+  // the call)
+  action bankPayServed(processor: str, trigger: int, key: str, counter: str, amount: int, result: str, ref: str): bool = {
+    val rec_: BankPayRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, amount: amount }, result: result, response: { ref: ref } }
+    all {
+      or {
+        processor == "payout" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "counter-retired",
+          bankPayAdmits(log.slice(0, trigger), bankPayRecords, rec_),
+        } else false),
+      },
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      bankPayCalls' = bankPayCalls,
+      bankPayRecords' = bankPayRecords.append(rec_),
     }
   }
 
@@ -426,10 +483,24 @@ module countersGen {
         payoutOutcome(trigger_, ok_, known_, "lost")
       },
       {
-        nondet key = STRS.oneOf()
-        nondet counter = STRS.oneOf()
-        nondet amount = INTS.oneOf()
-        bankPays(key, counter, amount)
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "declined", "unknown").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: BankPayRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-retired") payoutBankPay(log.slice(0, trigger_), trigger_) else { counter: "", amount: 0 }
+          bankPay("payout", trigger_, key_, req_.counter, req_.amount, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "declined").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: BankPayRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-retired") payoutBankPay(log.slice(0, trigger_), trigger_) else { counter: "", amount: 0 }
+          bankPayServed("payout", trigger_, key_, req_.counter, req_.amount, result_, ref)
+        }
       },
     }
   }

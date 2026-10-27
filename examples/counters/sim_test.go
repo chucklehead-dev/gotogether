@@ -17,10 +17,34 @@ import (
 // setup gives every run a mailer of its own, and the store (for the
 // dispatchDirect mutant's raw append).
 func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
-	m, b := NewSimMailer(s), NewSimBank(s)
+	m := NewSimMailer(s)
 	return func(ctx context.Context) context.Context {
-		return StoreDep.With(BankDep.With(MailerDep.With(ctx, m), b), st)
+		return StoreDep.With(MailerDep.With(ctx, m), st)
 	}
+}
+
+// doubles are a run's bank, which gristsim serves as the qenv.Service
+// bank: it pays each key once (Pay is Keyed), answering a retry of a key
+// from its first answer (grist.Replayed: no second served record), and
+// declines a payment over 100. grist records each payment it makes at its
+// site (bankPayServed), so a payment made twice, or made while its answer
+// was lost, is in the trace whatever the payout saw.
+func doubles() gristsim.Doubles {
+	paid := map[string]PayReceipt{}
+	return gristsim.Doubles{Bank: grist.Handlers{
+		Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
+			key := grist.CallKey(ctx)
+			if rc, ok := paid[key]; ok {
+				grist.Replayed(ctx)
+				return rc, nil
+			}
+			if r.Amount > 100 {
+				return PayReceipt{}, ErrDeclined
+			}
+			paid[key] = PayReceipt{Ref: key}
+			return paid[key], nil
+		}),
+	}}
 }
 
 // The bindings: the commit side's, its test-only variant judging one
@@ -39,7 +63,7 @@ const (
 
 // system is the app under cfg, judged by binding, with faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
-	cfg.Setup = setup
+	cfg.Setup, cfg.Doubles = setup, doubles
 	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
@@ -226,6 +250,29 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 		base.Rates = qenv.NoFaults
 		return &qenv.Script{Base: base, Faults: faults}
 	}
+}
+
+// The payout pays what the retirement says: grist records the bank's
+// call where the payout makes it (bankPay: its request, the trigger, the
+// key) and the payment where the bank makes it (bankPayServed), and the
+// model's rule (payoutBankPay: the retired counter and its total) judges
+// the request. One client creating and retiring counter a, without
+// faults: every run conforms and some run pays. With the payout paying one
+// more (the wrongAmount mutant) 4 of 4 runs reject bankPay, where
+// nothing the store records differs. Then through the bank's own faults
+// (its requests lost, duplicated and late, its answers lost, at three in
+// ten): a duplicate the bank answers from its first answer is not a second
+// payment (bankPayAdmits: no second served record of a key), a lost answer
+// an unknown outcome (grist.unknown).
+func TestPayoutAmount(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("bankPay")), qtest.All(qtest.Settles()),
+			qtest.Takes("bankPay").Outcome("ok"), qtest.Takes("bankPayServed"))
+	bank := qenv.NoFaults.Set("rpc.bank.request", 0.3).Set("rpc.bank.delay", 0.3).Set("rpc.bank.response", 0.3)
+	system(retiring, retirements).WithRates(bank).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.request").Faulted(), qtest.Takes("bankPay").Outcome("unknown"))
 }
 
 // The payout is at most once, seen and judged. A crash after its

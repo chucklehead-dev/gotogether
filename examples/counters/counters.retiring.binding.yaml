@@ -11,8 +11,10 @@ module: counters
 
 outcomes:
   ok: '"ok"'
+  declined: '"declined"'
   name-taken: '"name-taken"'
   not-creator: '"not-creator"'
+  unknown: '"unknown"'
   unknown-counter: '"unknown-counter"'
   conflict: '"conflict"'
   idempotency-key-reused: '"idempotency-key-reused"'
@@ -44,7 +46,10 @@ actions:
   payoutEffect: {}
   payoutOutcome:
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
-  bankPays: {}
+  bankPay:
+    args: { result: '{{.outcome}}' }
+  bankPayServed:
+    args: { result: '{{.outcome}}' }
 
 invariants: [uniqueNames, averageAsOfTrigger]
 eventually: [everyCounterWelcomedOrFailed, everyRetirementHandled]
