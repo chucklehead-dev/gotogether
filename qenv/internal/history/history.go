@@ -7,8 +7,8 @@
 //   - ww: T2 installed the version after T1's of a key;
 //   - wr: T2 read a version T1 installed;
 //   - rw (anti-dependency): T2 installed the version after the one T1
-//     read, or a version of a key matching a prefix T1 scanned, after
-//     T1's view of it.
+//     read, or a version of a key in a range T1 scanned (a prefix, or
+//     a range within one), after T1's view of it.
 //
 // A read of a version no committed transaction installed is G1a (a dirty
 // read), forbidden at every level. A cycle is classified as qhistory
@@ -46,12 +46,22 @@ type Read struct {
 	Version Version
 }
 
-// A Scan is a prefix a transaction read every key of, as of Limit: it saw,
-// for each key with the prefix, the last version at or before Limit
-// (none: the key did not exist yet).
+// A Scan is a range of keys a transaction read every key of, as of Limit:
+// it saw, for each key in the range, the last version at or before Limit
+// (none: the key did not exist yet). The range is the keys with Prefix,
+// at or after From and before To ("": unbounded): a range scan is a
+// predicate read of its range alone, so a key inserted outside it is no
+// phantom of it.
 type Scan struct {
 	Prefix string
 	Limit  Version
+	From   string
+	To     string
+}
+
+// covers reports whether key is in the scan's range.
+func (s Scan) covers(key string) bool {
+	return strings.HasPrefix(key, s.Prefix) && key >= s.From && (s.To == "" || key < s.To)
 }
 
 // A Txn is a committed transaction.
@@ -129,7 +139,7 @@ func (h *History) Commit(t Txn) error {
 	reads := append([]Read(nil), t.Reads...)
 	for _, s := range t.Scans {
 		for key := range h.versions {
-			if strings.HasPrefix(key, s.Prefix) {
+			if s.covers(key) {
 				reads = append(reads, Read{key, h.at(key, s.Limit)})
 			}
 		}
@@ -166,7 +176,7 @@ func (h *History) Commit(t Txn) error {
 			}
 			if prev == 0 { // a new key: a phantom for earlier scans of its prefix
 				for _, s := range h.scans {
-					if strings.HasPrefix(key, s.Prefix) && s.Limit < t.Commit {
+					if s.covers(key) && s.Limit < t.Commit {
 						h.add(s.tx, t.ID, "rw", key)
 					}
 				}

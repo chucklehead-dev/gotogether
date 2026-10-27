@@ -144,7 +144,7 @@ type tx struct {
 	id     int64
 	snap   int64
 	reads  map[string]bool
-	scans  []string
+	scans  []KeyRange
 	writes map[string]*version
 	order  []string // write order, for determinism
 	locked []string
@@ -271,25 +271,70 @@ type KV struct {
 // Scan returns the keys with prefix, sorted, as Get would read them.
 // Under Serializable, a later commit that writes a key with the prefix
 // aborts the transaction (no phantoms).
-func (tx *tx) Scan(prefix string) []KV {
+func (tx *tx) Scan(prefix string) []KV { return tx.ScanRange(KeyRange{Prefix: prefix}) }
+
+// KeyRange is the keys with Prefix, at or after From and before To, in
+// string order ("": unbounded). A range within a prefix is what an ordered
+// key encoding makes of a predicate on a key's last column (qsql's
+// `WHERE tenant = ? AND pos > ?`).
+type KeyRange struct {
+	Prefix string
+	From   string // inclusive; "": from the prefix's first key
+	To     string // exclusive; "": through its last
+}
+
+// Contains reports whether key is in the range.
+func (r KeyRange) Contains(key string) bool {
+	return strings.HasPrefix(key, r.Prefix) && key >= r.From && (r.To == "" || key < r.To)
+}
+
+// RangeScanner is a Txn that scans a range within a prefix as a
+// predicate read of the range alone. A Store's transactions are; an
+// adapter's may be (ScanRange falls back to Scan for one that is not).
+type RangeScanner interface {
+	ScanRange(r KeyRange) []KV
+}
+
+// ScanRange returns the keys of t in r, sorted, as Get would read them:
+// through t's ScanRange if it has one, else its Scan of r.Prefix,
+// filtered (a predicate read of the whole prefix, which is sound but
+// conflicts with more).
+func ScanRange(t Txn, r KeyRange) []KV {
+	if rs, ok := t.(RangeScanner); ok {
+		return rs.ScanRange(r)
+	}
+	var out []KV
+	for _, kv := range t.Scan(r.Prefix) {
+		if r.Contains(kv.Key) {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// ScanRange is Scan of a range: under Serializable, a later commit that
+// writes a key in r aborts the transaction, and one that writes a key
+// outside it, under the same prefix, does not; the history checker
+// (Sim.Check) sees the scan as a predicate read of r.
+func (tx *tx) ScanRange(r KeyRange) []KV {
 	tx.check()
 	Yield(tx.ctx)
-	tx.scans = append(tx.scans, prefix)
+	tx.scans = append(tx.scans, r)
 	if tx.st.hist != nil {
 		limit := tx.snap
 		if tx.st.Iso == ReadCommitted {
 			limit = tx.st.seq
 		}
-		tx.scanned = append(tx.scanned, history.Scan{Prefix: prefix, Limit: history.Version(limit)})
+		tx.scanned = append(tx.scanned, history.Scan{Prefix: r.Prefix, From: r.From, To: r.To, Limit: history.Version(limit)})
 	}
 	keys := map[string]bool{}
 	for k := range tx.st.rows {
-		if strings.HasPrefix(k, prefix) {
+		if r.Contains(k) {
 			keys[k] = true
 		}
 	}
 	for k := range tx.writes {
-		if strings.HasPrefix(k, prefix) {
+		if r.Contains(k) {
 			keys[k] = true
 		}
 	}
@@ -400,9 +445,9 @@ func (tx *tx) Commit() error {
 				return ErrConflict
 			}
 		}
-		for _, p := range tx.scans {
+		for _, r := range tx.scans {
 			for k, vs := range st.rows {
-				if strings.HasPrefix(k, p) && vs[len(vs)-1].seq > tx.snap {
+				if r.Contains(k) && vs[len(vs)-1].seq > tx.snap {
 					tx.end()
 					return ErrConflict
 				}

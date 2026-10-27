@@ -470,6 +470,7 @@ func Now(ctx context.Context) time.Time
 func ProcessOf(ctx context.Context) *Process
 func Replay(choices []Choice) *Replayer
 func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error
+func ScanRange(t Txn, r KeyRange) []KV
 func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
 func Swarm(c Chooser, kinds ...string) Chooser
@@ -562,6 +563,11 @@ type Isolation int
 type KV struct
     field Key string
     field Val any
+type KeyRange struct
+    field Prefix string
+    field From string
+    field To string
+    method (KeyRange) Contains(key string) bool
 type Machine interface
     Crash()
     Restart()
@@ -621,6 +627,8 @@ type Queue struct
     method (*Queue) Pending() int
     method (*Queue) Publish(ctx context.Context, body any)
     method (*Queue) Receive(ctx context.Context) *Delivery
+type RangeScanner interface
+    ScanRange(r KeyRange) []KV
 type Rates = choice.Rates
     field Default float64
     field Kinds map[string]float64

@@ -7,10 +7,21 @@
 //	db.ExecContext(ctx, `CREATE TABLE accounts (id TEXT PRIMARY KEY, balance BIGINT NOT NULL)`)
 //	db.ExecContext(ctx, `UPDATE accounts SET balance = balance - ? WHERE id = ?`, 10, "alice")
 //
-// The SQL is a subset (one table at a time, equality only; the error for
-// anything else names the subset). Rows are keyed in the Store by primary
-// key, so the Store's history checker (GOTOGETHER_CHECK=1) judges every
-// commit, and its fault kinds apply: "store.<name>.commit" (a commit
+// The SQL is a subset (one table at a time, equality, and ranges on a
+// key column whose earlier key columns are fixed; upserts and RETURNING;
+// the error for anything else names the subset):
+//
+//	CREATE TABLE grist_events (tenant TEXT NOT NULL, pos BIGINT NOT NULL, body BLOB, PRIMARY KEY (tenant, pos))
+//	UPDATE grist_heads SET head = head + $1 WHERE tenant = $2 RETURNING head
+//	SELECT pos, body FROM grist_events WHERE tenant = $1 AND pos > $2 AND pos <= $3 ORDER BY pos DESC LIMIT $4
+//	INSERT INTO grist_checkpoints (tenant, processor, pos) VALUES ($1, $2, $3)
+//		ON CONFLICT (tenant, processor) DO UPDATE SET pos = excluded.pos WHERE grist_checkpoints.pos = $4
+//
+// Rows are keyed in the Store by primary key, encoded so that keys sort as
+// the key's tuples do: a range is a range of the Store's keys, a predicate
+// read of that range alone (qenv.KeyRange), so Serializable aborts a
+// phantom in it and not beside it. The Store's history checker
+// (GOTOGETHER_CHECK=1) judges every commit, and its fault kinds apply: "store.<name>.commit" (a commit
 // applied, the connection lost: SQLSTATE 08006) with Store.CommitFaults,
 // and "sql.<name>.conn" ("badConn": driver.ErrBadConn before a
 // transaction or statement ran, which database/sql retries on another
@@ -167,7 +178,8 @@ type connector struct {
 	// the reaper. Only tasks touch it, and the scheduler's predicate
 	// (cancelled) between their steps.
 	live     map[*tx]bool
-	scanOnly bool // tests: every WHERE by scan, for the plan's brute-force check
+	scanOnly bool                // tests: every WHERE by scan, for the plan's brute-force check
+	scanHook func(qenv.KeyRange) // tests: each scan's range, for the plan's precision check
 }
 
 func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {

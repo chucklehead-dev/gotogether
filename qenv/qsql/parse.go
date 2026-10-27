@@ -9,12 +9,14 @@ import (
 // subset is what the parser accepts, for every error that finds something
 // else: the fix is to write the statement in it, or to keep the query out
 // of the simulation.
-const subset = "qsql runs one table at a time with equality only: " +
-	"CREATE TABLE [IF NOT EXISTS] t (col TYPE [PRIMARY KEY] [UNIQUE] [NOT NULL], ...) with TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP; " +
-	"INSERT INTO t [(cols)] VALUES (...)[, (...)] [ON CONFLICT [(col)] DO NOTHING]; " +
-	"SELECT cols|* FROM t [WHERE col = ? AND ...] [ORDER BY pk [ASC|DESC]] [LIMIT n] [FOR UPDATE]; " +
-	"UPDATE t SET col = ? | col = col + ? | col = col - ?, ... [WHERE ...]; " +
-	"DELETE FROM t [WHERE ...]; placeholders ? or $n, transactions with BeginTx"
+const subset = "qsql runs one table at a time, with equality, and ranges on a key column: " +
+	"CREATE TABLE [IF NOT EXISTS] t (col TYPE [PRIMARY KEY] [UNIQUE] [NOT NULL], ... [, PRIMARY KEY (col, ...)]) with TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP; " +
+	"INSERT INTO t [(cols)] VALUES (...)[, (...)] [ON CONFLICT [(cols)] DO NOTHING | ON CONFLICT (cols) DO UPDATE SET col = ? | col = excluded.col | col = col + ?, ... [WHERE ...]] [RETURNING cols|*]; " +
+	"SELECT cols|* FROM t [WHERE col = ? AND ... [AND k > ? AND k <= ? | AND k BETWEEN ? AND ?]] [ORDER BY key cols [ASC|DESC]] [LIMIT n] [FOR UPDATE]; " +
+	"UPDATE t SET col = ? | col = col + ? | col = col - ?, ... [WHERE ...] [RETURNING cols|*]; " +
+	"DELETE FROM t [WHERE ...] [RETURNING cols|*]; " +
+	"a range (<, <=, >, >=, BETWEEN) is on one column of the PRIMARY KEY, every key column before it fixed by equality; " +
+	"placeholders ? or $n, transactions with BeginTx"
 
 // ---- lexer ------------------------------------------------------------------
 
@@ -142,12 +144,16 @@ func syntaxErr(q string, pos int, found string) *Error {
 type statement interface{ params() int }
 
 type expr struct {
-	param int // 1-based argument number; 0: lit
-	lit   any // nil (NULL), int64, string, bool
+	param int    // 1-based argument number; 0: lit or ref
+	lit   any    // nil (NULL), int64, string, bool
+	ref   string // DO UPDATE's excluded.<ref>: a column of the row the INSERT proposed
 }
 
+// cond is one conjunct of a WHERE clause: col op val. BETWEEN a AND b is
+// two, >= a and <= b.
 type cond struct {
 	col string
+	op  string // "=", "<", "<=", ">", ">="
 	val expr
 }
 
@@ -161,6 +167,13 @@ type createStmt struct {
 	table       string
 	ifNotExists bool
 	cols        []colDef
+	key         []string // PRIMARY KEY (a, b, ...), the table constraint; nil: a column's PRIMARY KEY
+}
+
+// returning is a RETURNING clause: on, with its columns (nil: *).
+type returning struct {
+	on   bool
+	cols []string
 }
 
 type insertStmt struct {
@@ -169,7 +182,16 @@ type insertStmt struct {
 	cols       []string // nil: every column, in the table's order
 	rows       [][]expr
 	onConflict bool
-	target     string // ON CONFLICT (target); "": any unique constraint
+	target     []string    // ON CONFLICT (target); nil: any unique constraint (DO NOTHING only)
+	doUpdate   []setClause // ON CONFLICT ... DO UPDATE SET; nil: DO NOTHING
+	updWhere   []cond      // DO UPDATE ... WHERE, on the existing row
+	ret        returning
+}
+
+// orderTerm is one column of ORDER BY.
+type orderTerm struct {
+	col  string
+	desc bool
 }
 
 type selectStmt struct {
@@ -177,8 +199,7 @@ type selectStmt struct {
 	table     string
 	cols      []string // nil: *
 	where     []cond
-	orderBy   string
-	desc      bool
+	orderBy   []orderTerm
 	limit     *expr
 	forUpdate bool
 }
@@ -194,12 +215,14 @@ type updateStmt struct {
 	table string
 	sets  []setClause
 	where []cond
+	ret   returning
 }
 
 type deleteStmt struct {
 	n     int
 	table string
 	where []cond
+	ret   returning
 }
 
 func (s *createStmt) params() int { return s.n }
@@ -285,6 +308,16 @@ func (p *parser) punct(c string) bool {
 	return false
 }
 
+// adjacent reports whether the next token is the punctuation c written
+// right after the previous one (the "=" of "<=").
+func (p *parser) adjacent(c string) bool {
+	if t := p.peek(); t.kind == tPunct && t.text == c && t.pos == p.toks[p.i-1].pos+1 {
+		p.i++
+		return true
+	}
+	return false
+}
+
 func (p *parser) expectPunct(c string) error {
 	if !p.punct(c) {
 		return p.unexpected(p.peek(), fmt.Sprintf("%q", c))
@@ -300,6 +333,7 @@ var reserved = map[string]bool{
 	"delete": true, "create": true, "table": true, "on": true, "conflict": true, "do": true, "nothing": true,
 	"null": true, "true": true, "false": true, "join": true, "group": true, "having": true, "returning": true,
 	"as": true, "in": true, "is": true, "like": true, "offset": true, "union": true, "distinct": true,
+	"between": true, "primary": true,
 }
 
 func (p *parser) name(what string) (string, error) {
@@ -309,6 +343,23 @@ func (p *parser) name(what string) (string, error) {
 	}
 	p.i++
 	return t.text, nil
+}
+
+// column reads a column's name, which may be qualified by the statement's
+// table (t.col).
+func (p *parser) column(table, what string) (string, error) {
+	n, err := p.name(what)
+	if err != nil {
+		return "", err
+	}
+	if t := p.peek(); t.kind == tPunct && t.text == "." {
+		p.i++
+		if n != table {
+			return "", syntaxErr(p.q, t.pos, fmt.Sprintf("the qualifier %s. (columns of the statement's table %s only: one table at a time)", n, table))
+		}
+		return p.name(what)
+	}
+	return n, nil
 }
 
 func (p *parser) statement() (statement, error) {
@@ -349,53 +400,76 @@ func (p *parser) create() (statement, error) {
 		return nil, err
 	}
 	for {
-		if t := p.peek(); isKw(t, "primary") || isKw(t, "unique") || isKw(t, "constraint") || isKw(t, "foreign") || isKw(t, "check") {
-			return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("the table constraint %s (declare PRIMARY KEY and UNIQUE on one column each)", t))
-		}
-		var c colDef
-		if c.name, err = p.name("a column name"); err != nil {
-			return nil, err
-		}
-		tt := p.peek()
-		typ, ok := types[tt.text]
-		if tt.kind != tIdent || tt.quoted || !ok {
-			return nil, p.unexpected(tt, "a column type (TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP)")
-		}
-		p.i++
-		c.typ = typ
-	constraints:
-		for {
-			t := p.peek()
-			switch {
-			case isKw(t, "primary"):
-				p.i++
-				if err := p.expectKw("key"); err != nil {
-					return nil, err
-				}
-				c.primary = true
-			case isKw(t, "unique"):
-				p.i++
-				c.unique = true
-			case isKw(t, "not"):
-				p.i++
-				if err := p.expectKw("null"); err != nil {
-					return nil, err
-				}
-				c.notNull = true
-			case isKw(t, "null"):
-				p.i++
-			case t.kind == tPunct && (t.text == "," || t.text == ")"):
-				break constraints
-			default:
-				return nil, p.unexpected(t, "PRIMARY KEY, UNIQUE, NOT NULL, \",\" or \")\"")
+		if t := p.peek(); isKw(t, "primary") {
+			// the table constraint PRIMARY KEY (a, b, ...): a key of several columns
+			p.i++
+			if err := p.expectKw("key"); err != nil {
+				return nil, err
 			}
+			if s.key != nil {
+				return nil, syntaxErr(p.q, t.pos, "a second PRIMARY KEY (a table has one)")
+			}
+			if err := p.expectPunct("("); err != nil {
+				return nil, err
+			}
+			if s.key, err = p.names(); err != nil {
+				return nil, err
+			}
+		} else if isKw(t, "unique") || isKw(t, "constraint") || isKw(t, "foreign") || isKw(t, "check") {
+			return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("the table constraint %s (PRIMARY KEY (cols) is the one table constraint; declare UNIQUE on one column)", t))
+		} else {
+			c, err := p.colDef()
+			if err != nil {
+				return nil, err
+			}
+			s.cols = append(s.cols, c)
 		}
-		s.cols = append(s.cols, c)
 		if p.punct(")") {
 			return s, nil
 		}
 		if err := p.expectPunct(","); err != nil {
 			return nil, err
+		}
+	}
+}
+
+func (p *parser) colDef() (colDef, error) {
+	var c colDef
+	var err error
+	if c.name, err = p.name("a column name"); err != nil {
+		return c, err
+	}
+	tt := p.peek()
+	typ, ok := types[tt.text]
+	if tt.kind != tIdent || tt.quoted || !ok {
+		return c, p.unexpected(tt, "a column type (TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP)")
+	}
+	p.i++
+	c.typ = typ
+	for {
+		t := p.peek()
+		switch {
+		case isKw(t, "primary"):
+			p.i++
+			if err := p.expectKw("key"); err != nil {
+				return c, err
+			}
+			c.primary = true
+		case isKw(t, "unique"):
+			p.i++
+			c.unique = true
+		case isKw(t, "not"):
+			p.i++
+			if err := p.expectKw("null"); err != nil {
+				return c, err
+			}
+			c.notNull = true
+		case isKw(t, "null"):
+			p.i++
+		case t.kind == tPunct && (t.text == "," || t.text == ")"):
+			return c, nil
+		default:
+			return c, p.unexpected(t, "PRIMARY KEY, UNIQUE, NOT NULL, \",\" or \")\"")
 		}
 	}
 }
@@ -450,33 +524,65 @@ func (p *parser) insert() (statement, error) {
 			break
 		}
 	}
-	if p.kw("on") {
+	if on := p.peek(); p.kw("on") {
 		if err := p.expectKw("conflict"); err != nil {
 			return nil, err
 		}
 		if p.punct("(") {
-			cols, err := p.names()
-			if err != nil {
+			if s.target, err = p.names(); err != nil {
 				return nil, err
 			}
-			if len(cols) != 1 {
-				return nil, syntaxErr(p.q, p.toks[p.i-1].pos, fmt.Sprintf("ON CONFLICT on %d columns (name one column: its PRIMARY KEY or a UNIQUE one)", len(cols)))
-			}
-			s.target = cols[0]
 		}
 		if err := p.expectKw("do"); err != nil {
 			return nil, err
 		}
-		if t := p.peek(); isKw(t, "update") {
-			return nil, syntaxErr(p.q, t.pos, "ON CONFLICT ... DO UPDATE (an upsert: DO NOTHING, then an UPDATE)")
-		}
-		if err := p.expectKw("nothing"); err != nil {
-			return nil, err
-		}
 		s.onConflict = true
+		if p.kw("update") {
+			if s.target == nil {
+				return nil, syntaxErr(p.q, on.pos, "ON CONFLICT DO UPDATE without a target (name the key's columns or a UNIQUE one: ON CONFLICT (cols) DO UPDATE)")
+			}
+			if err := p.expectKw("set"); err != nil {
+				return nil, err
+			}
+			if s.doUpdate, err = p.sets(s.table, true); err != nil {
+				return nil, err
+			}
+			if s.updWhere, err = p.where(s.table); err != nil {
+				return nil, err
+			}
+		} else if err := p.expectKw("nothing"); err != nil {
+			return nil, p.unexpected(p.peek(), "NOTHING or UPDATE SET")
+		}
+	}
+	if s.ret, err = p.returning(); err != nil {
+		return nil, err
 	}
 	s.n = p.max
 	return s, nil
+}
+
+// returning reads an optional RETURNING clause: column names or *.
+func (p *parser) returning() (returning, error) {
+	if !p.kw("returning") {
+		return returning{}, nil
+	}
+	if p.punct("*") {
+		return returning{on: true}, nil
+	}
+	r := returning{on: true}
+	for {
+		n, err := p.name("a column name or * (RETURNING returns columns)")
+		if err != nil {
+			return r, err
+		}
+		if t := p.peek(); t.kind == tPunct && (t.text == "(" || t.text == "+" || t.text == "-") {
+			return r, syntaxErr(p.q, t.pos, fmt.Sprintf("an expression after RETURNING %s (RETURNING returns columns)", n))
+		}
+		r.cols = append(r.cols, n)
+		if !p.punct(",") {
+			return r, nil
+		}
+	}
 }
 
 // names reads a parenthesized list of names, after its "(".
@@ -521,20 +627,27 @@ func (p *parser) selectStmt() (statement, error) {
 	if s.table, err = p.name("a table name"); err != nil {
 		return nil, err
 	}
-	if s.where, err = p.where(); err != nil {
+	if s.where, err = p.where(s.table); err != nil {
 		return nil, err
 	}
 	if p.kw("order") {
 		if err := p.expectKw("by"); err != nil {
 			return nil, err
 		}
-		if s.orderBy, err = p.name("the primary key's column"); err != nil {
-			return nil, err
-		}
-		if p.kw("desc") {
-			s.desc = true
-		} else {
-			p.kw("asc")
+		for {
+			var o orderTerm
+			if o.col, err = p.column(s.table, "the primary key's column"); err != nil {
+				return nil, err
+			}
+			if p.kw("desc") {
+				o.desc = true
+			} else {
+				p.kw("asc")
+			}
+			s.orderBy = append(s.orderBy, o)
+			if !p.punct(",") {
+				break
+			}
 		}
 	}
 	if p.kw("limit") {
@@ -554,29 +667,112 @@ func (p *parser) selectStmt() (statement, error) {
 	return s, nil
 }
 
-func (p *parser) where() ([]cond, error) {
+// where reads an optional WHERE clause: conjuncts col = value, col < value
+// (<=, >, >=) and col BETWEEN value AND value.
+func (p *parser) where(table string) ([]cond, error) {
 	if !p.kw("where") {
 		return nil, nil
 	}
 	var out []cond
 	for {
-		col, err := p.name("a column name")
+		col, err := p.column(table, "a column name")
 		if err != nil {
 			return nil, err
 		}
-		if t := p.peek(); !(t.kind == tPunct && t.text == "=") {
-			return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("%s after %s (equality only: col = value)", t, col))
+		t := p.peek()
+		var op string
+		switch {
+		case isKw(t, "between"):
+			p.i++
+			lo, err := p.expr()
+			if err != nil {
+				return nil, err
+			}
+			if err := p.expectKw("and"); err != nil {
+				return nil, err
+			}
+			hi, err := p.expr()
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, cond{col, ">=", lo}, cond{col, "<=", hi})
+			if !p.kw("and") {
+				return out, nil
+			}
+			continue
+		case t.kind == tPunct && t.text == "=":
+			p.i++
+			op = "="
+		case t.kind == tPunct && (t.text == "<" || t.text == ">"):
+			p.i++
+			op = t.text
+			if p.adjacent("=") {
+				op += "="
+			} else if t.text == "<" && p.adjacent(">") {
+				return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("\"<>\" after %s (equality and ranges only: =, <, <=, >, >=, BETWEEN)", col))
+			}
+		default:
+			return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("%s after %s (equality and ranges only: col = value, col < value, <=, >, >=, BETWEEN)", t, col))
 		}
-		p.i++
 		e, err := p.expr()
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, cond{col: col, val: e})
+		out = append(out, cond{col: col, op: op, val: e})
 		if !p.kw("and") {
 			return out, nil
 		}
 	}
+}
+
+// sets reads SET's assignments: col = value, col = col ± value, and in an
+// upsert's DO UPDATE, excluded.col for a value.
+func (p *parser) sets(table string, upsert bool) ([]setClause, error) {
+	var out []setClause
+	for {
+		col, err := p.name("a column name")
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expectPunct("="); err != nil {
+			return nil, err
+		}
+		set := setClause{col: col, op: '='}
+		if t := p.peek(); (t.kind == tIdent && !reserved[t.text] || t.quoted) && !(upsert && isExcluded(p)) {
+			// col = itself ± value
+			self, err := p.column(table, "a column name")
+			if err != nil {
+				return nil, err
+			}
+			if self != col {
+				return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("%s = %s ... (a column is set to a value, or to itself plus or minus one)", col, t))
+			}
+			op := p.peek()
+			if op.kind != tPunct || (op.text != "+" && op.text != "-") {
+				return nil, p.unexpected(op, "+ or -")
+			}
+			p.i++
+			set.op = op.text[0]
+		}
+		if upsert && isExcluded(p) {
+			p.i += 2
+			if set.val.ref, err = p.name("a column of excluded"); err != nil {
+				return nil, err
+			}
+		} else if set.val, err = p.expr(); err != nil {
+			return nil, err
+		}
+		out = append(out, set)
+		if !p.punct(",") {
+			return out, nil
+		}
+	}
+}
+
+// isExcluded reports whether the next tokens are "excluded.".
+func isExcluded(p *parser) bool {
+	t, dot := p.peek(), p.toks[min(p.i+1, len(p.toks)-1)]
+	return isKw(t, "excluded") && dot.kind == tPunct && dot.text == "."
 }
 
 func (p *parser) update() (statement, error) {
@@ -588,40 +784,16 @@ func (p *parser) update() (statement, error) {
 	if err := p.expectKw("set"); err != nil {
 		return nil, err
 	}
-	for {
-		col, err := p.name("a column name")
-		if err != nil {
-			return nil, err
-		}
-		if err := p.expectPunct("="); err != nil {
-			return nil, err
-		}
-		set := setClause{col: col, op: '='}
-		if t := p.peek(); t.kind == tIdent && !reserved[t.text] || t.quoted {
-			// col = other ± value
-			p.i++
-			if t.text != col {
-				return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("%s = %s ... (a column is set to a value, or to itself plus or minus one)", col, t))
-			}
-			op := p.peek()
-			if op.kind != tPunct || (op.text != "+" && op.text != "-") {
-				return nil, p.unexpected(op, "+ or -")
-			}
-			p.i++
-			set.op = op.text[0]
-		}
-		if set.val, err = p.expr(); err != nil {
-			return nil, err
-		}
-		s.sets = append(s.sets, set)
-		if !p.punct(",") {
-			break
-		}
+	if s.sets, err = p.sets(s.table, false); err != nil {
+		return nil, err
 	}
 	if t := p.peek(); isKw(t, "from") {
 		return nil, syntaxErr(p.q, t.pos, "UPDATE ... FROM (one table at a time)")
 	}
-	if s.where, err = p.where(); err != nil {
+	if s.where, err = p.where(s.table); err != nil {
+		return nil, err
+	}
+	if s.ret, err = p.returning(); err != nil {
 		return nil, err
 	}
 	s.n = p.max
@@ -637,7 +809,10 @@ func (p *parser) delete() (statement, error) {
 	if s.table, err = p.name("a table name"); err != nil {
 		return nil, err
 	}
-	if s.where, err = p.where(); err != nil {
+	if s.where, err = p.where(s.table); err != nil {
+		return nil, err
+	}
+	if s.ret, err = p.returning(); err != nil {
 		return nil, err
 	}
 	s.n = p.max

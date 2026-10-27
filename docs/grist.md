@@ -50,10 +50,11 @@ version of this note:
 - **A settle is voided by a later step on any recorder**, not only its
   own (beyond `RealTimeSlack`): probes on a separate recorder are sound
   only while they take no virtual time, so §3.6 settles again after them.
-- **qsql already has `ORDER BY pk [ASC|DESC]` and `LIMIT`.** It lacks
+- **qsql already has `ORDER BY pk [ASC|DESC]` and `LIMIT`.** It lacked
   keys of several columns (42P16, "qsql keys rows by one column": the
   first note's tables were keyed by two and three), ranges, `RETURNING`
-  and `DO UPDATE`; its isolation is store-wide (§8.2).
+  and `DO UPDATE`, which slice 2's first core item added (§8.2); its
+  isolation is store-wide.
 - **`qenv.FaultPoint` has one crash option**, `crash`: the effect's two
   crash points are a `DeclareFaults` kind and `Sim.FaultOf` (§3.5).
 - **qobs encodes structs with `fmt.Sprint`**, not JSON, and binding's
@@ -1287,6 +1288,27 @@ model and binding are generated.
    tests, and an `...AgainstBruteForce` test of the range plan against a
    filtered full scan on small random tables, failing with the plan
    turned off.
+   **Done** (qenv/qsql): `PRIMARY KEY (a, b, c)` as a table constraint,
+   encoded into the Store's key component by component (each value's
+   order-preserving encoding, NUL escaped, then NUL 0x01), so a scan is
+   in tuple order and the rows whose leading key columns are fixed are
+   one prefix; a range (`<`, `<=`, `>`, `>=`, `BETWEEN`) on the next key
+   column is a `qenv.KeyRange` within it, scanned by the Store's new
+   `ScanRange` and seen by Serializable's validation and the history
+   checker as a predicate read of the range alone (a phantom in the
+   range aborts the scanner, an insert beside it does not:
+   `TestRangePhantom`, in qsql and in qenv with the validation broken);
+   `ORDER BY` the key's columns after those fixed, one direction, with
+   `LIMIT`; `INSERT ... ON CONFLICT (cols) DO NOTHING | DO UPDATE SET c =
+   ? | c = excluded.c | c = c ± ? [WHERE ...]`; `RETURNING` on INSERT,
+   UPDATE and DELETE. Every statement §2.10 names runs as written
+   (`TestEventStoreStatements`). Checked by `TestRangePlanAgainstBruteForce`
+   (the plan and a scan-only connector against a brute force in Go,
+   rows sorted as tuples; each range scanned holds exactly the rows its
+   key conditions select, which fails with the plan off), the encoding's
+   own brute force, and examples/payd's `TestQsqlAgainstSQLite`, a
+   differential test of random statements of these shapes against
+   modernc.org/sqlite. A one-column key keeps its encoding.
 2. **The typed template function** (`toQuint`, §3.2), with float and
    time refused, its tests against `itf`'s round trip.
 3. **An actor filter** for a System's binding (`qtest.Actors(...)`, or a

@@ -307,11 +307,11 @@ type tx struct {
 	inc      int
 	readOnly bool
 	created  map[string]*table // tables it created, not yet committed
-	read     map[string]bool   // the keys it looked up, and the prefixes it scanned (claim)
-	scanned  []string
-	changes  []Change // for Options.OnCommit
-	failed   error    // the error that aborted it: what 25P02 names
-	ended    bool     // committed or rolled back in the Store
+	read     map[string]bool   // the keys it looked up (claim)
+	scanned  []qenv.KeyRange   // the ranges it scanned (claim)
+	changes  []Change          // for Options.OnCommit
+	failed   error             // the error that aborted it: what 25P02 names
+	ended    bool              // committed or rolled back in the Store
 }
 
 func (c *connector) begin(ctx context.Context, readOnly bool) *tx {

@@ -19,14 +19,27 @@ sim.Process("payd", true, func(ctx context.Context) { /* qsql.Open, payd.Migrate
 rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
 ```
 
-- **The SQL is a subset**, one table at a time, equality only: `CREATE
-  TABLE [IF NOT EXISTS]` (TEXT, INTEGER/BIGINT, BOOLEAN, BLOB/BYTEA,
-  TIMESTAMP; one-column PRIMARY KEY, UNIQUE, NOT NULL), `INSERT ...
-  [ON CONFLICT [(col)] DO NOTHING]`, `SELECT ... [WHERE a = ? AND ...]
-  [ORDER BY pk [DESC]] [LIMIT n] [FOR UPDATE]`, `UPDATE ... SET c = ? |
-  c = c + ? | c = c - ?`, `DELETE`; `?` or `$n`. Anything else fails
+- **The SQL is a subset**, one table at a time: `CREATE TABLE [IF NOT
+  EXISTS]` (TEXT, INTEGER/BIGINT, BOOLEAN, BLOB/BYTEA, TIMESTAMP; a
+  column's PRIMARY KEY or the table constraint `PRIMARY KEY (a, b, ...)`,
+  UNIQUE on one column, NOT NULL), `INSERT ... [ON CONFLICT [(cols)] DO
+  NOTHING | ON CONFLICT (cols) DO UPDATE SET c = ? | c = excluded.c | c =
+  c ± ? [WHERE ...]] [RETURNING cols|*]`, `SELECT ... [WHERE a = ? AND
+  ... AND k > ? AND k <= ? | k BETWEEN ? AND ?] [ORDER BY key cols
+  [DESC]] [LIMIT n] [FOR UPDATE]`, `UPDATE ... SET c = ? | c = c + ? | c
+  = c - ? [WHERE ...] [RETURNING ...]`, `DELETE ... [RETURNING ...]`; `?`
+  or `$n`. A range (`<`, `<=`, `>`, `>=`, `BETWEEN`) is on one key
+  column, every key column before it fixed by equality (`WHERE tenant =
+  ? AND pos > ?` over `PRIMARY KEY (tenant, pos)`), and is a predicate
+  read of that range alone: serializable aborts a transaction whose
+  range another commit inserted into (a phantom), not one whose range it
+  wrote beside. ORDER BY names the key's columns in key order (those
+  fixed by equality may be skipped), one direction. Anything else fails
   with 42601 naming what it found and the subset: rewrite the query, or
-  keep that code out of the simulation.
+  keep that code out of the simulation. qsql is checked against SQLite
+  on these shapes (examples/payd's `TestQsqlAgainstSQLite`); in
+  PostgreSQL write `t.c` in a DO UPDATE's expressions, as it finds a bare
+  `c` ambiguous.
 - **Anomalies are the Store's level's** and every commit is judged by its
   history checker under `GOTOGETHER_CHECK=1`. Read committed loses an
   update written as read-then-write (`SELECT balance`, then `SET balance =
@@ -65,6 +78,6 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   process (the Store is none's): a core settle draws them for a task
   outside the core and leaves them nominal for one inside it, as for any
   fault a task makes.
-- Not simulated: joins, aggregates, ranges and OR, RETURNING, DEFAULT,
-  upserts (`DO UPDATE`), savepoints, `LastInsertId`, schema changes
-  after CREATE TABLE.
+- Not simulated: joins, aggregates, OR, ranges on a non-key column,
+  ORDER BY a non-key column, expressions in RETURNING, DEFAULT,
+  savepoints, `LastInsertId`, schema changes after CREATE TABLE.

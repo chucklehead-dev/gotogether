@@ -67,16 +67,40 @@ func TestPhantom(t *testing.T) {
 	h.Load("cfg", 1)
 	// T1 scans job/ (empty at version 1) and writes cfg
 	// T2 reads cfg's version 1 and inserts job/1
-	commit(t, h, Txn{ID: 1, Commit: 2, Scans: []Scan{{"job/", 1}}, Writes: []string{"cfg"}})
+	commit(t, h, Txn{ID: 1, Commit: 2, Scans: []Scan{{Prefix: "job/", Limit: 1}}, Writes: []string{"cfg"}})
 	got := commit(t, h, Txn{ID: 2, Commit: 3, Reads: []Read{{"cfg", 1}}, Writes: []string{"job/1"}})
 	if !strings.HasPrefix(got, "G2") {
 		t.Errorf("%q, want G2", got)
 	}
 	if h2 := New(SnapshotIsolation); true {
 		h2.Load("cfg", 1)
-		commit(t, h2, Txn{ID: 1, Commit: 2, Scans: []Scan{{"job/", 1}}, Writes: []string{"cfg"}})
+		commit(t, h2, Txn{ID: 1, Commit: 2, Scans: []Scan{{Prefix: "job/", Limit: 1}}, Writes: []string{"cfg"}})
 		if got := commit(t, h2, Txn{ID: 2, Commit: 3, Reads: []Read{{"cfg", 1}}, Writes: []string{"job/1"}}); got != "" {
 			t.Errorf("snapshot isolation: %q, want none", got)
+		}
+	}
+}
+
+// A range scan is a predicate read of its range alone: a key inserted
+// into the range is a phantom (G2, as for a prefix), one inserted beside
+// it, under the same prefix, is not.
+func TestRangePhantom(t *testing.T) {
+	scan := Scan{Prefix: "e/a/", Limit: 1, From: "e/a/05", To: "e/a/10"}
+	for _, c := range []struct {
+		key, want string
+	}{
+		{"e/a/07", "G2"}, // in [05, 10)
+		{"e/a/05", "G2"}, // From is inclusive
+		{"e/a/10", ""},   // To is exclusive
+		{"e/a/03", ""},   // below the range, in the prefix
+		{"e/b/07", ""},   // another prefix
+	} {
+		h := New(Serializable)
+		h.Load("cfg", 1)
+		commit(t, h, Txn{ID: 1, Commit: 2, Scans: []Scan{scan}, Writes: []string{"cfg"}})
+		got := commit(t, h, Txn{ID: 2, Commit: 3, Reads: []Read{{"cfg", 1}}, Writes: []string{c.key}})
+		if !strings.HasPrefix(got, c.want) || (c.want == "") != (got == "") {
+			t.Errorf("an insert of %s after a scan of [05, 10): %q, want %q", c.key, got, c.want)
 		}
 	}
 }

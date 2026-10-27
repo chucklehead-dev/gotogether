@@ -41,6 +41,21 @@ The first release. What a user meets, by module:
   event's cause (`obs.causes`) and an effect checkpoint's `ok`; grist.qnt
   has `covers`, `freshKey` (was `freshCause`), `keyStable`,
   `atLeastOnceDone` and `readsOf`, its `Read` is `{ typ, tags }`.
+- qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
+  several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
+  42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose
+  earlier key columns are fixed by equality, planned as a range of the
+  Store's keys, `ORDER BY` the key's columns (after those fixed) in one
+  direction, with `LIMIT`; `ON CONFLICT (cols) DO UPDATE SET c = ? |
+  c = excluded.c | c = c ± ? [WHERE ...]` (21000 for a row hit twice);
+  `RETURNING` on INSERT, UPDATE and DELETE. Anything else still fails
+  with 42601 naming the subset. The Store scans a range as a predicate
+  read of the range alone: `qenv.KeyRange`, `qenv.RangeScanner` (a
+  Store's transactions are one), `qenv.ScanRange` (an adapter's Txn
+  without it scans the prefix); Serializable aborts a phantom in the
+  range and not beside it, and the history checker sees the same. Keys
+  of one column keep their encoding. Checked against brute force in Go
+  and differentially against SQLite (examples/payd).
 - API trim before the tags (G6). `validate.Command`, `Judged` and
   `Replay` move to package `validate/cli` as `cli.Check`, `cli.Judged`,
   `cli.Replay`: the check reads OTLP/JSON, and in validate it brought

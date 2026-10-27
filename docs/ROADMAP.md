@@ -107,6 +107,10 @@ item reviewed before the next. Sizes as in S.
   a non-key column with LIMIT, SKIP LOCKED, RETURNING, COUNT, a
   transaction's own isolation; each checked against SQLite
   differentially. The outbox claim and the conditional debit need them.
+  Ranges on a key column, ORDER BY the key with LIMIT, RETURNING and
+  upserts are done (grist's slice 2, against SQLite in examples/payd);
+  ranges on other columns, SKIP LOCKED, COUNT and a transaction's own
+  isolation are open.
 - **G10. The reviewers' example: examples/shopfront (M-L).** A Go
   storefront on a real database, its steps through an OTel collector
   that drops some, driven by Playwright from another host and by a Go
