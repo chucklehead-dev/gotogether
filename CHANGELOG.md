@@ -61,9 +61,10 @@ The first release. What a user meets, by module:
   c = excluded.c | c = t.c ± ? [WHERE ...]` (21000 for a row hit twice);
   `RETURNING` on INSERT, UPDATE and DELETE. Anything else still fails
   with 42601 naming the subset. The Store scans a range as a predicate
-  read of the range alone: `qenv.KeyRange`, `qenv.RangeScanner` (a
-  Store's transactions are one), `qenv.ScanRange` (an adapter's Txn
-  without it scans the prefix); Serializable aborts a phantom in the
+  read of the range alone: `qenv.KeyRange` (From and To whole keys,
+  not suffixes after the prefix), `Txn.ScanRange` (every Txn has it; an
+  adapter's without range reads gives `qenv.ScanPrefix`, a declared read
+  of the whole prefix); Serializable aborts a phantom in the
   range and not beside it, and the history checker sees the same. Keys
   of one column keep their encoding. Checked against brute force in Go
   and differentially against SQLite (examples/payd).
@@ -83,6 +84,18 @@ The first release. What a user meets, by module:
   left out, and a binding matching none of a run's actors has no verdict
   and says so. `System.WithBinding(path, opts...)`: the same runs judged
   by another binding.
+- qsql after its review: in `ON CONFLICT ... DO UPDATE` a column on the
+  value side or in the WHERE is `t.c` or `excluded.c`; a bare one fails
+  with 42702 naming both (PostgreSQL refuses it; qsql accepted `SET n =
+  n + 1` and `WHERE n = 1`). `LIMIT NULL` (or a nil argument) is no
+  limit; `ORDER BY` may name a column fixed by equality anywhere, in
+  either direction. A table name with `/` or `!`, or the `_qsql` prefix,
+  is refused (42602, 42939): its keys would collide with another
+  table's. `qenv.ScanRange` (a free function falling back, silently, to
+  a scan of the whole prefix for a Txn without range reads) and
+  `RangeScanner` are `Txn.ScanRange`, a method of every Txn, the
+  fallback the adapter's own `qenv.ScanPrefix`; `KeyRange.From` and `To`
+  are documented as whole keys.
 - Two records of one (recorder, seq) that differ are no copy: an error
   issue (`duplicate`) of each actor of either, naming both and the fix,
   where `qtrace.Reconstruct` kept the first and said so as info (two

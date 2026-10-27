@@ -2,6 +2,7 @@ package harness
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"slices"
@@ -93,6 +94,14 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 					stmt += " RETURNING a, b, c, v"
 				}
 				both(false, stmt, args...)
+				// unqualified, SQLite takes the existing row's v; Postgres
+				// refuses it (42702), and so does qsql
+				if bare := strings.NewReplacer("t.v + ", "v + ", "WHERE t.v", "WHERE v").Replace(stmt); bare != stmt {
+					var e *qsql.Error
+					if _, err := q.Exec(bare, args...); !errors.As(err, &e) || e.Code != "42702" {
+						t.Fatalf("round %d: %s: got %v, want 42702 (ambiguous, as Postgres says)", round, bare, err)
+					}
+				}
 			case 4: // the head lock, on a tenant that exists or not
 				tenant := texts[r.IntN(3)]
 				both(false, "INSERT INTO h (tenant, head) VALUES (?, 0) ON CONFLICT (tenant) DO NOTHING", tenant)

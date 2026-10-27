@@ -1298,14 +1298,16 @@ model and binding are generated.
    order-preserving encoding, NUL escaped, then NUL 0x01), so a scan is
    in tuple order and the rows whose leading key columns are fixed are
    one prefix; a range (`<`, `<=`, `>`, `>=`, `BETWEEN`) on the next key
-   column is a `qenv.KeyRange` within it, scanned by the Store's new
-   `ScanRange` and seen by Serializable's validation and the history
+   column is a `qenv.KeyRange` within it, scanned by the new
+   `Txn.ScanRange` and seen by Serializable's validation and the history
    checker as a predicate read of the range alone (a phantom in the
    range aborts the scanner, an insert beside it does not:
    `TestRangePhantom`, in qsql and in qenv with the validation broken);
    `ORDER BY` the key's columns after those fixed, one direction, with
    `LIMIT`; `INSERT ... ON CONFLICT (cols) DO NOTHING | DO UPDATE SET c =
-   ? | c = excluded.c | c = c ± ? [WHERE ...]`; `RETURNING` on INSERT,
+   ? | c = excluded.c | c = t.c ± ? [WHERE t.c ...]` (a column on the
+   value side or in the WHERE qualified, `t.c` or `excluded.c`, as
+   PostgreSQL requires: a bare one is 42702, ambiguous); `RETURNING` on INSERT,
    UPDATE and DELETE. Every statement §2.10 names runs as written
    (`TestEventStoreStatements`). Checked by `TestRangePlanAgainstBruteForce`
    (the plan and a scan-only connector against a brute force in Go,

@@ -55,6 +55,10 @@ func (tx *memTx) Put(key string, val any) { tx.writes[key] = val; delete(tx.dele
 
 func (tx *memTx) Delete(key string) { tx.deleted[key] = true; delete(tx.writes, key) }
 
+// ScanRange reads the whole prefix and filters it (qenv.ScanPrefix):
+// nothing here tracks a range read on its own.
+func (tx *memTx) ScanRange(r qenv.KeyRange) []qenv.KV { return qenv.ScanPrefix(tx, r) }
+
 func (tx *memTx) Scan(prefix string) []qenv.KV {
 	var keys []string
 	for k := range tx.db.rows {

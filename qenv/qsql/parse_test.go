@@ -46,7 +46,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM e WHERE e.tenant = ? AND pos BETWEEN ? AND ? AND pos<=5 AND pos >= 1 AND pos < 9 ORDER BY tenant DESC, pos DESC`,
 			&selectStmt{n: 3, table: "e", where: []cond{{"tenant", "=", expr{param: 1}}, {"pos", ">=", expr{param: 2}}, {"pos", "<=", expr{param: 3}}, {"pos", "<=", expr{lit: int64(5)}}, {"pos", ">=", expr{lit: int64(1)}}, {"pos", "<", expr{lit: int64(9)}}},
 				orderBy: []orderTerm{{"tenant", true}, {"pos", true}}}},
-		{`INSERT INTO grist_checkpoints (tenant, processor, pos) VALUES (?, ?, ?) ON CONFLICT (tenant, processor) DO UPDATE SET pos = excluded.pos, n = n + 1 WHERE grist_checkpoints.pos = ? RETURNING *`,
+		{`INSERT INTO grist_checkpoints (tenant, processor, pos) VALUES (?, ?, ?) ON CONFLICT (tenant, processor) DO UPDATE SET pos = excluded.pos, n = grist_checkpoints.n + 1 WHERE grist_checkpoints.pos = ? RETURNING *`,
 			&insertStmt{n: 4, table: "grist_checkpoints", cols: []string{"tenant", "processor", "pos"}, rows: [][]expr{{{param: 1}, {param: 2}, {param: 3}}}, onConflict: true,
 				target: []string{"tenant", "processor"}, doUpdate: []setClause{{"pos", '=', expr{ref: "pos"}}, {"n", '+', expr{lit: int64(1)}}},
 				updWhere: []cond{{"pos", "=", expr{param: 4}}}, ret: returning{on: true}}},
@@ -62,6 +62,42 @@ func TestParse(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s:\n got %#v\nwant %#v", tc.q, got, tc.want)
+		}
+	}
+}
+
+// In ON CONFLICT DO UPDATE's values and WHERE a column unqualified is
+// ambiguous, the existing row's or the proposed row's: Postgres refuses
+// it with 42702 (SQLite takes the existing row's), and so does qsql,
+// naming both qualified forms. qsql once accepted SET n = n + 1 and
+// WHERE n = 1, which the database it stands for refuses.
+func TestUpsertAmbiguous(t *testing.T) {
+	for _, tc := range []struct{ q, col string }{
+		{`INSERT INTO c (k, n) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = n + 1`, "n"},
+		{`INSERT INTO c (k, n) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = n - excluded.n`, "n"},
+		{`INSERT INTO c (k, n) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = excluded.n WHERE n = 1`, "n"},
+		{`INSERT INTO c (k, n, m) VALUES (?, ?, ?) ON CONFLICT (k) DO UPDATE SET n = excluded.n WHERE c.m = 1 AND n < 3`, "n"},
+	} {
+		_, err := parse(tc.q)
+		var e *Error
+		if !errors.As(err, &e) || e.Code != "42702" {
+			t.Errorf("%s: got %v, want a 42702", tc.q, err)
+			continue
+		}
+		for _, want := range []string{`column reference "` + tc.col + `" is ambiguous`, "write c." + tc.col, "excluded." + tc.col} {
+			if !strings.Contains(e.Message, want) {
+				t.Errorf("%s: the error does not say %q:\n%s", tc.q, want, e.Message)
+			}
+		}
+	}
+	// the qualified forms, and an unqualified column outside DO UPDATE
+	for _, q := range []string{
+		`INSERT INTO c (k, n) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = c.n + 1 WHERE c.n = 1`,
+		`INSERT INTO c (k, n) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = excluded.n RETURNING n`,
+		`UPDATE c SET n = n + 1 WHERE n = 1`,
+	} {
+		if _, err := parse(q); err != nil {
+			t.Errorf("%s: %v", q, err)
 		}
 	}
 }

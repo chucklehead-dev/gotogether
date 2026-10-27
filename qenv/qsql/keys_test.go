@@ -266,7 +266,7 @@ func TestUpsert(t *testing.T) {
 	if got := q(`INSERT INTO counts VALUES ('x', 1, NULL), ('y', 2, 'y@') ON CONFLICT (k) DO UPDATE SET n = counts.n + excluded.n RETURNING k, n`); !slices.Equal(got, []string{"x1", "y2"}) {
 		t.Errorf("inserted: %q", got)
 	}
-	if got := q(`INSERT INTO counts VALUES ('x', 5, NULL), ('z', 1, NULL) ON CONFLICT (k) DO UPDATE SET n = n + excluded.n RETURNING *`); !slices.Equal(got, []string{"x6 <nil>", "z1 <nil>"}) {
+	if got := q(`INSERT INTO counts VALUES ('x', 5, NULL), ('z', 1, NULL) ON CONFLICT (k) DO UPDATE SET n = counts.n + excluded.n RETURNING *`); !slices.Equal(got, []string{"x6 <nil>", "z1 <nil>"}) {
 		t.Errorf("x upserted, z inserted: %q", got)
 	}
 	if got := q(`INSERT INTO counts VALUES ('w', 1, 'y@') ON CONFLICT (email) DO UPDATE SET n = 100 RETURNING k, n`); !slices.Equal(got, []string{"y100"}) {
@@ -276,6 +276,10 @@ func TestUpsert(t *testing.T) {
 		t.Errorf("DO NOTHING returns the inserted rows only: %q", got)
 	}
 	for _, tc := range []struct{ q, code, says string }{
+		{`INSERT INTO counts VALUES ('x', 1, NULL) ON CONFLICT (k) DO UPDATE SET n = n + 1`, "42702", `column reference "n" is ambiguous`},
+		{`CREATE TABLE _qsqlx (k TEXT PRIMARY KEY)`, "42939", "without the _qsql prefix"},
+		{`CREATE TABLE "a/b" (k TEXT PRIMARY KEY)`, "42602", `table name "a/b" has a "/"`},
+		{`CREATE TABLE "counts!email" (k TEXT PRIMARY KEY)`, "42602", `has a "!"`},
 		{`INSERT INTO counts VALUES ('m', 1, NULL), ('m', 2, NULL) ON CONFLICT (k) DO UPDATE SET n = excluded.n`, "21000", "cannot affect row a second time"},
 		{`INSERT INTO counts VALUES ('x', 1, 'y@') ON CONFLICT (k) DO UPDATE SET email = excluded.email`, "23505", `Key (email)=(y@) already exists`},
 		{`INSERT INTO counts VALUES ('x', 1, NULL) ON CONFLICT (n) DO UPDATE SET n = 1`, "42P10", "name the PRIMARY KEY's columns (k) or one UNIQUE column"},
@@ -359,7 +363,7 @@ func TestRangeRefusals(t *testing.T) {
 		{`DELETE FROM grist_events WHERE pos <= 3`, `not all fixed by equality`},
 		{`UPDATE grist_events SET type = 'x' WHERE body > 'a'`, `body is not in the PRIMARY KEY`},
 		{`SELECT * FROM grist_events ORDER BY type`, `ORDER BY type: rows come in primary-key order only (ORDER BY tenant, pos [DESC]); type is not a key column`},
-		{`SELECT * FROM grist_events WHERE tenant = 'a' ORDER BY pos, tenant`, `the key's columns go in key order`},
+		{`SELECT * FROM grist_events ORDER BY tenant, pos, tenant`, `the key's columns go in key order`},
 		{`SELECT * FROM grist_events ORDER BY pos`, `skips the key column tenant, which the WHERE clause does not fix by equality`},
 		{`SELECT * FROM grist_events WHERE tenant > 'a' ORDER BY pos`, `skips the key column tenant`},
 		{`SELECT * FROM grist_events ORDER BY tenant, pos DESC`, `pos's direction differs from tenant's`},
@@ -375,6 +379,12 @@ func TestRangeRefusals(t *testing.T) {
 		`SELECT * FROM grist_events WHERE tenant = 'a' AND type = 'x' AND pos >= 2 ORDER BY tenant, pos`,
 		`SELECT * FROM grist_index WHERE tenant = 'a' AND k > 'x' ORDER BY k DESC, pos DESC`,
 		`SELECT * FROM grist_events WHERE tenant = 'a' AND tenant < 'b' AND pos < 3`,
+		// a column fixed by equality orders nothing: any direction, anywhere
+		`SELECT * FROM grist_events WHERE tenant = 'a' ORDER BY tenant DESC, pos`,
+		`SELECT * FROM grist_events WHERE tenant = 'a' ORDER BY pos DESC, tenant`,
+		`SELECT * FROM grist_events WHERE tenant = 'a' AND type = 'x' ORDER BY type DESC, pos`,
+		`SELECT * FROM grist_events WHERE tenant = 'a' ORDER BY tenant DESC`,
+		`SELECT * FROM grist_events WHERE tenant = 'a' LIMIT NULL`,
 	} {
 		if _, err := w.db.Exec(q); err != nil {
 			t.Errorf("%s: %v", q, err)

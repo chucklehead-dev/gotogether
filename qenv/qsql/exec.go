@@ -271,8 +271,13 @@ func (t *tx) create(s *createStmt) (*result, error) {
 	if err := t.writable("CREATE TABLE"); err != nil {
 		return nil, err
 	}
-	if s.table == "_qsql" {
-		return nil, &Error{Code: "42939", Message: `table name "_qsql" is reserved: qsql keeps its schemas under it`}
+	switch {
+	case strings.HasPrefix(s.table, "_qsql"):
+		return nil, &Error{Code: "42939", Message: fmt.Sprintf("table name %q is reserved: qsql keeps its schemas under _qsql/; name the table without the _qsql prefix", s.table)}
+	case strings.ContainsAny(s.table, "/!"):
+		// a table's rows are keys <t>/..., its unique values <t>!<col>/...:
+		// a "/" or "!" in its name would put its keys among another table's
+		return nil, &Error{Code: "42602", Message: fmt.Sprintf("table name %q has a %q: qsql keys a table's rows <table>/<key> and its unique values <table>!<column>/<value> in one Store, where it would collide with another table's; name the table without / or !", s.table, string(s.table[strings.IndexAny(s.table, "/!")]))}
 	}
 	tb := &table{name: s.table, cols: slices.Clone(s.cols)}
 	seen := map[string]bool{}
@@ -540,7 +545,7 @@ func (t *tx) find(tb *table, cs []resolved) []row {
 	if t.c.scanHook != nil {
 		t.c.scanHook(scan)
 	}
-	for _, kv := range qenv.ScanRange(t.txn, scan) {
+	for _, kv := range t.txn.ScanRange(scan) {
 		if r := asRow(kv.Val); matches(r, cs) {
 			out = append(out, row{kv.Key, r})
 		}
@@ -622,7 +627,11 @@ func (t *tx) limit(s *selectStmt, args []any) (int64, error) {
 	if s.limit == nil {
 		return -1, nil
 	}
-	n, ok := s.limit.value(args).(int64)
+	v := s.limit.value(args)
+	if v == nil {
+		return -1, nil // LIMIT NULL, or a nil argument: no limit, as in Postgres
+	}
+	n, ok := v.(int64)
 	if !ok || n < 0 {
 		return 0, &Error{Code: "2201W", Message: fmt.Sprintf("LIMIT must be a non-negative integer; got %T %v", s.limit.value(args), s.limit.value(args))}
 	}
@@ -634,10 +643,10 @@ func (t *tx) limit(s *selectStmt, args []any) (int64, error) {
 // key order, one direction for all, every key column it skips before
 // its last fixed by equality: then key order is the order asked for
 // (ties in the columns after it in key order too, reversed with DESC).
+// A column fixed by equality (a key's or any other) holds one value in
+// every row, so it orders nothing: it may be named anywhere, in either
+// direction.
 func order(tb *table, terms []orderTerm, cs []resolved) (desc bool, err error) {
-	if len(terms) == 0 {
-		return false, nil
-	}
 	refuse := func(why string) (bool, error) {
 		var cols []string
 		for _, o := range terms {
@@ -652,10 +661,14 @@ func order(tb *table, terms []orderTerm, cs []resolved) (desc bool, err error) {
 		}
 	}
 	at := -1
+	var first *orderTerm // the first term that orders: its direction is every one's
 	for _, o := range terms {
 		i, ok := tb.col(o.col)
 		if !ok {
 			return false, undefinedColumn(tb, o.col)
+		}
+		if fixed[i] {
+			continue
 		}
 		p := tb.keyPos(i)
 		if p < 0 {
@@ -669,12 +682,15 @@ func order(tb *table, terms []orderTerm, cs []resolved) (desc bool, err error) {
 				return refuse(fmt.Sprintf("ORDER BY skips the key column %s, which the WHERE clause does not fix by equality", tb.cols[j].name))
 			}
 		}
-		if o.desc != terms[0].desc {
-			return refuse(fmt.Sprintf("%s's direction differs from %s's (one direction for all)", o.col, terms[0].col))
+		if first == nil {
+			first = &o
+		}
+		if o.desc != first.desc {
+			return refuse(fmt.Sprintf("%s's direction differs from %s's (one direction for all the columns not fixed by equality)", o.col, first.col))
 		}
 		at = p
 	}
-	return terms[0].desc, nil
+	return first != nil && first.desc, nil
 }
 
 func (t *tx) query(s *selectStmt, args []any) (*result, error) {

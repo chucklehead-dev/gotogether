@@ -152,6 +152,10 @@ func (t *boltTxn) Delete(key string) {
 	}
 }
 
+// ScanRange reads the whole prefix and filters it (qenv.ScanPrefix):
+// nothing here tracks a range read on its own.
+func (t *boltTxn) ScanRange(r qenv.KeyRange) []qenv.KV { return qenv.ScanPrefix(t, r) }
+
 func (t *boltTxn) Scan(prefix string) []qenv.KV {
 	b := t.bucket()
 	if b == nil {

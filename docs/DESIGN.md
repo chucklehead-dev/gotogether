@@ -3287,6 +3287,24 @@ refusal for a request already handled, deadlines never used up,
 rounding that flipped, a race at Close, the watchdog's cost, 40001 for
 a duplicate key, a unique lookup between two states), and of payd.
 
+The review of the keys of several columns, ranges and upserts found
+qsql more lenient than the database it stands for: `ON CONFLICT ... DO
+UPDATE SET n = n + 1` and `... WHERE n = 1`, which PostgreSQL 16 refuses
+(42702: `n` is the existing row's or the proposed row's), ran (as in
+SQLite, which takes the existing row's). A simulation must not pass SQL
+the real database refuses, so a bare column on the value side or in the
+WHERE of a DO UPDATE is 42702 naming `t.n` and `excluded.n`, and payd's
+differential test runs each upsert's bare form against qsql alone.
+`LIMIT NULL` is no limit, as in PostgreSQL; ORDER BY may name a column
+fixed by equality anywhere (it orders nothing); a table name with `/`
+or `!` (its keys' separators) or the `_qsql` prefix is refused. The
+range read was a free function, `qenv.ScanRange(tx, r)`, whose fallback
+for a Txn without range reads silently scanned the whole prefix: it is
+`Txn.ScanRange`, every Txn's, and an adapter without range reads says
+so by calling `qenv.ScanPrefix`. A KeyRange's From and To are whole
+keys, not suffixes after its prefix (a choice documented rather than
+changed: qsql builds them from whole encoded keys).
+
 ## 52. A real deployment's nemesis (S13)
 
 A simulation proves what qenv's doubles allow; a team's question is also

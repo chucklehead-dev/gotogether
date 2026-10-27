@@ -11,7 +11,7 @@ import (
 // of the simulation.
 const subset = "qsql runs one table at a time, with equality, and ranges on a key column: " +
 	"CREATE TABLE [IF NOT EXISTS] t (col TYPE [PRIMARY KEY] [UNIQUE] [NOT NULL], ... [, PRIMARY KEY (col, ...)]) with TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP; " +
-	"INSERT INTO t [(cols)] VALUES (...)[, (...)] [ON CONFLICT [(cols)] DO NOTHING | ON CONFLICT (cols) DO UPDATE SET col = ? | col = excluded.col | col = col + ?, ... [WHERE ...]] [RETURNING cols|*]; " +
+	"INSERT INTO t [(cols)] VALUES (...)[, (...)] [ON CONFLICT [(cols)] DO NOTHING | ON CONFLICT (cols) DO UPDATE SET col = ? | col = excluded.col | col = t.col + ?, ... [WHERE t.col ...]] [RETURNING cols|*]; " +
 	"SELECT cols|* FROM t [WHERE col = ? AND ... [AND k > ? AND k <= ? | AND k BETWEEN ? AND ?]] [ORDER BY key cols [ASC|DESC]] [LIMIT n] [FOR UPDATE]; " +
 	"UPDATE t SET col = ? | col = col + ? | col = col - ?, ... [WHERE ...] [RETURNING cols|*]; " +
 	"DELETE FROM t [WHERE ...] [RETURNING cols|*]; " +
@@ -241,6 +241,10 @@ type parser struct {
 	max    int  // the highest parameter number
 	dollar bool // $n seen
 	quest  bool // ? seen
+	// upsert: parsing an ON CONFLICT DO UPDATE's SET values and WHERE,
+	// where a column is the existing row's (t.col) or the proposed row's
+	// (excluded.col), and Postgres refuses one unqualified (42702)
+	upsert bool
 }
 
 // parse parses one statement of the subset.
@@ -348,6 +352,7 @@ func (p *parser) name(what string) (string, error) {
 // column reads a column's name, which may be qualified by the statement's
 // table (t.col).
 func (p *parser) column(table, what string) (string, error) {
+	at := p.peek()
 	n, err := p.name(what)
 	if err != nil {
 		return "", err
@@ -359,7 +364,19 @@ func (p *parser) column(table, what string) (string, error) {
 		}
 		return p.name(what)
 	}
+	if p.upsert {
+		return "", ambiguous(p.q, at.pos, table, n)
+	}
 	return n, nil
+}
+
+// ambiguous is Postgres's 42702 for a column named unqualified in ON
+// CONFLICT DO UPDATE's values or WHERE, where both the existing row and
+// the proposed one (excluded) have it. SQLite takes the existing row's;
+// qsql refuses it, as the database the simulation stands for does.
+func ambiguous(q string, pos int, table, col string) *Error {
+	return &Error{Code: "42702", Message: fmt.Sprintf("column reference %q is ambiguous at offset %d of %q: in ON CONFLICT ... DO UPDATE both the existing row and the proposed one have it; "+
+		"write %s.%s for the existing row's value, excluded.%s for the proposed row's", col, pos, q, table, col, col)}
 }
 
 func (p *parser) statement() (statement, error) {
@@ -547,7 +564,10 @@ func (p *parser) insert() (statement, error) {
 			if s.doUpdate, err = p.sets(s.table, true); err != nil {
 				return nil, err
 			}
-			if s.updWhere, err = p.where(s.table); err != nil {
+			p.upsert = true
+			s.updWhere, err = p.where(s.table)
+			p.upsert = false
+			if err != nil {
 				return nil, err
 			}
 		} else if err := p.expectKw("nothing"); err != nil {
@@ -739,8 +759,10 @@ func (p *parser) sets(table string, upsert bool) ([]setClause, error) {
 		}
 		set := setClause{col: col, op: '='}
 		if t := p.peek(); (t.kind == tIdent && !reserved[t.text] || t.quoted) && !(upsert && isExcluded(p)) {
-			// col = itself ± value
+			// col = itself ± value (in an upsert, t.col: the existing row's)
+			p.upsert = upsert
 			self, err := p.column(table, "a column name")
+			p.upsert = false
 			if err != nil {
 				return nil, err
 			}

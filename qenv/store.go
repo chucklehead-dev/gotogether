@@ -62,6 +62,14 @@ type Txn interface {
 	Put(key string, val any)
 	Delete(key string)
 	Scan(prefix string) []KV
+	// ScanRange is Scan of a range within a prefix (KeyRange), sorted,
+	// as Get would read them, and a predicate read of the range alone: a
+	// Store's Serializable aborts the transaction for a later commit that
+	// writes a key in r, not one beside it under the same prefix. An
+	// adapter without range reads may filter its Scan of r.Prefix (a read
+	// of the whole prefix: sound, conflicting with more); it must not
+	// read less than r.
+	ScanRange(r KeyRange) []KV
 	Commit() error
 	Rollback()
 	// OnCommit runs fn when the commit is applied, before Commit returns,
@@ -274,13 +282,17 @@ type KV struct {
 func (tx *tx) Scan(prefix string) []KV { return tx.ScanRange(KeyRange{Prefix: prefix}) }
 
 // KeyRange is the keys with Prefix, at or after From and before To, in
-// string order ("": unbounded). A range within a prefix is what an ordered
-// key encoding makes of a predicate on a key's last column (qsql's
-// `WHERE tenant = ? AND pos > ?`).
+// string order ("": unbounded). From and To are whole keys, compared with
+// the key as it is, not suffixes after Prefix: the range of `pos > 3`
+// within tenant a's events is {Prefix: "e/a/", From: "e/a/4"}, and a From
+// before Prefix (or a To after every key with it) bounds nothing. A
+// range within a prefix is what an ordered key encoding makes of a
+// predicate on a key's last column (qsql's `WHERE tenant = ? AND pos >
+// ?`).
 type KeyRange struct {
 	Prefix string
-	From   string // inclusive; "": from the prefix's first key
-	To     string // exclusive; "": through its last
+	From   string // inclusive, a whole key; "": from the prefix's first key
+	To     string // exclusive, a whole key; "": through its last
 }
 
 // Contains reports whether key is in the range.
@@ -288,21 +300,11 @@ func (r KeyRange) Contains(key string) bool {
 	return strings.HasPrefix(key, r.Prefix) && key >= r.From && (r.To == "" || key < r.To)
 }
 
-// RangeScanner is a Txn that scans a range within a prefix as a
-// predicate read of the range alone. A Store's transactions are; an
-// adapter's may be (ScanRange falls back to Scan for one that is not).
-type RangeScanner interface {
-	ScanRange(r KeyRange) []KV
-}
-
-// ScanRange returns the keys of t in r, sorted, as Get would read them:
-// through t's ScanRange if it has one, else its Scan of r.Prefix,
-// filtered (a predicate read of the whole prefix, which is sound but
-// conflicts with more).
-func ScanRange(t Txn, r KeyRange) []KV {
-	if rs, ok := t.(RangeScanner); ok {
-		return rs.ScanRange(r)
-	}
+// ScanPrefix is ScanRange for an adapter's Txn without range reads: its
+// Scan of r.Prefix, filtered to r. It reads the whole prefix (a
+// Serializable store conflicts on every key under it), which is sound,
+// and says so by its name where an adapter's ScanRange calls it.
+func ScanPrefix(t Txn, r KeyRange) []KV {
 	var out []KV
 	for _, kv := range t.Scan(r.Prefix) {
 		if r.Contains(kv.Key) {

@@ -179,6 +179,9 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		// G7: the driver adapters published
 		{"bombadiltrace.", "package qdriver/bombadil (journey.Bombadil, journey.FromTrace in webjobs)"},
 		{"[bombadiltrace]", "package qdriver/bombadil"},
+		// the review of qsql, qdriver, toQuint and actors
+		{"qenv.RangeScanner", "Txn.ScanRange (every Txn has it)"},
+		{"qenv.ScanRange(", "tx.ScanRange(r), or qenv.ScanPrefix in an adapter's own Txn"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

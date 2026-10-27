@@ -60,6 +60,10 @@ func (t *memTx) GetForUpdate(key string) (any, bool, error) {
 func (t *memTx) Put(key string, val any) { t.writes[key] = &val }
 func (t *memTx) Delete(key string)       { t.writes[key] = nil }
 
+// ScanRange reads the whole prefix and filters it (qenv.ScanPrefix):
+// nothing here tracks a range read on its own.
+func (t *memTx) ScanRange(r qenv.KeyRange) []qenv.KV { return qenv.ScanPrefix(t, r) }
+
 func (t *memTx) Scan(prefix string) []qenv.KV {
 	keys := map[string]bool{}
 	for k := range t.db.rows {

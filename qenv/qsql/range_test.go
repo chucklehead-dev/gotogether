@@ -193,7 +193,8 @@ func TestRangePlanAgainstBruteForce(t *testing.T) {
 			if fixed > 0 && r.IntN(5) == 0 { // a range on a fixed column: a filter
 				add(bfCond{keyCols[0], ">=", val(keyCols[0])}, false)
 			}
-			if r.IntN(4) == 0 {
+			vFixed := r.IntN(4) == 0
+			if vFixed {
 				add(bfCond{"v", "=", int64(r.IntN(3))}, false)
 			}
 			if r.IntN(3) == 0 { // a DML statement: what it changes, against the brute force
@@ -208,17 +209,32 @@ func TestRangePlanAgainstBruteForce(t *testing.T) {
 			if r.IntN(3) > 0 { // ORDER BY key columns from one at or before the first unfixed
 				from := r.IntN(min(fixed, 2) + 1)
 				to := from + r.IntN(3-from)
-				desc = r.IntN(2) == 0
+				d := r.IntN(2) == 0
+				dir := func(desc bool) string {
+					return map[bool]string{true: " DESC", false: []string{"", " ASC"}[r.IntN(2)]}[desc]
+				}
 				var terms []string
-				for _, col := range keyCols[from : to+1] {
-					terms = append(terms, col+map[bool]string{true: " DESC", false: []string{"", " ASC"}[r.IntN(2)]}[desc])
+				for i, col := range keyCols[from : to+1] {
+					if from+i < fixed { // fixed by equality: it orders nothing, in either direction
+						terms = append(terms, col+dir(r.IntN(2) == 0))
+						continue
+					}
+					terms = append(terms, col+dir(d))
+					desc = d
+				}
+				if vFixed && r.IntN(2) == 0 { // a column fixed by equality, not the key's, anywhere
+					at := r.IntN(len(terms) + 1)
+					terms = slices.Insert(terms, at, "v"+dir(r.IntN(2) == 0))
 				}
 				query += " ORDER BY " + strings.Join(terms, ", ")
 			}
 			limit := -1
-			if r.IntN(2) == 0 {
+			switch r.IntN(4) {
+			case 0, 1:
 				limit = r.IntN(4)
 				query += fmt.Sprintf(" LIMIT %d", limit)
+			case 2:
+				query += " LIMIT NULL" // no limit, as in Postgres
 			}
 			if r.IntN(3) == 0 {
 				query += " FOR UPDATE"

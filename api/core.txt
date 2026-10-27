@@ -551,7 +551,7 @@ func Now(ctx context.Context) time.Time
 func ProcessOf(ctx context.Context) *Process
 func Replay(choices []Choice) *Replayer
 func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error
-func ScanRange(t Txn, r KeyRange) []KV
+func ScanPrefix(t Txn, r KeyRange) []KV
 func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
 func Swarm(c Chooser, kinds ...string) Chooser
@@ -708,8 +708,6 @@ type Queue struct
     method (*Queue) Pending() int
     method (*Queue) Publish(ctx context.Context, body any)
     method (*Queue) Receive(ctx context.Context) *Delivery
-type RangeScanner interface
-    ScanRange(r KeyRange) []KV
 type Rates = choice.Rates
     field Default float64
     field Kinds map[string]float64
@@ -804,6 +802,7 @@ type Txn interface
     Put(key string, val any)
     Delete(key string)
     Scan(prefix string) []KV
+    ScanRange(r KeyRange) []KV
     Commit() error
     Rollback()
     OnCommit(fn func())
