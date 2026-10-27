@@ -187,6 +187,21 @@ The first release. What a user meets, by module:
   `retire-counter` refuses another actor (`not-creator`), the model judges
   both, the calls model knows `denied`; `TestRetireByCreatorOnly` and the
   `anyoneRetires` mutant.
+- grist after wallet-grist's trial (docs/grist.md §0.8; api/grist.txt):
+  `Unconditioned` is documented as unprotected at every isolation level
+  (its reads precede its append's transaction; Serializable only makes
+  a loser whose append overlapped decide again), pinned by
+  `TestUnconditionedAtEveryLevel`; the skill and examples/counters said
+  the window closed under Serializable. `grist.Main serve` records a
+  settle on shutdown once the node's pollers are idle and its relay
+  caught up (`SettleTimeout`), so a served run's eventual vals are
+  judged. The grist skill's model rules and multi-entity commands are
+  reference pages. examples/wallet-grist's `readThenWrite` is claimed at
+  Serializable too.
+- An exploration's summary names the model actions no run took ("model
+  actions taken 5 of 11 (never: ...)"), frame helpers left out of the
+  count; `qtest`'s "no model-level ITF" log says the verdict is
+  unaffected (only the `Run.ITF` file needs literal arguments).
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

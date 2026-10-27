@@ -21,7 +21,10 @@ examples/counters is the walk-through: read its README's table first.
    times), read models (`NewReadModel`, `NewKeyedReadModel` with one key,
    which must be a tag of every handler's type), commands (a decision:
    `*Reads` and arguments in, events or a `grist.Rejection` out), queries,
-   processors. Reads: `X.Get(r)`, `X.For(r, key)`, `r.Exists(Event,
+   processors (a command over several entities: one event per entity
+   touched, a keyed read model per entity kind; read
+   [`references/entities.md`](references/entities.md) when a command
+   touches more than one). Reads: `X.Get(r)`, `X.For(r, key)`, `r.Exists(Event,
    grist.Tag(k, v))`, `grist.Events(r, Event, tags...)` (typed),
    `r.Select(grist.Selector{...})` (raw), and `r.Actor()` (the
    envelope's actor, recorded in every command's and query's step as
@@ -37,46 +40,18 @@ examples/counters is the walk-through: read its README's table first.
    string) bool`) or `Internal()`: blocks are denied by default, and the
    HTTP adapter refuses an App with a block that has neither. `App.Verify()` names every problem and its fix;
    `App.Catalog()` is the registry as data.
-2. **Model first**: `model/<app>.qnt` imports a vendored `grist.qnt`
-   (copy `grist/model/grist.qnt`) and `export`s it. State: `log`,
-   `checkpoints`, `appended` (the last batch), `effects` ((processor,
-   trigger, key, ok)), `answered` (the command ids with an outcome). A
-   command's action takes its fields, `id`, `readPos`, `reads` (Reads,
-   `{ typ, tags }`), `principal` (the actor, when its rule needs it) and
-   `result` (`{{.outcome}}` in the binding); a client-side model takes
-   `denied` (a 403: nothing appended, the key unanswered). Every
-   committed outcome requires `freshKey(answered, id)` and adds the id
-   (a rejection and a conflict commit their marker: a key's first answer
-   is final), `covers(reads, need)` for what its rule reads (so a lost
-   read is caught at every commit), and `conditionHolds(log, readPos,
-   reads)` (a conflict: its negation); a commit appends, a refusal
-   requires `readPos <= log.length()` and its reason; `idempotency-key-
-   reused` requires the id answered and commits nothing. Event causes are
-   pairs, `("command", id)` or `("processor", name)`. A processor action
-   takes `trigger == nextOf(log, checkpoints.get(p), type)` and reads
-   `log.slice(0, trigger)`; an at-least-once effect step requires
-   `keyStable`, its checkpoint `welcome(trigger, ok)` requires
-   `atLeastOnceDone(effects, p, trigger, ok, EFFECT_TRIES)` and appends
-   `atLeastOnceOutcome(p, trigger, ok, [success])` (the run that
-   committed decides: notified after an ok send, `grist.failed` after the
-   tries). An at-most-once effect (`grist.AtMostOnce`: checkpoint first,
-   f once, then its outcome in a commit of its own, step
-   `<processor>Outcome`) has three actions: the checkpoint
-   `p(trigger, ok)` requiring `atMostOnceFirst(effects, p, trigger, ok)`
-   and appending nothing, the effect step requiring
-   `atMostOnceEffect(effects, checkpoints.get(p), p, trigger)`, and the
-   outcome `pOutcome(trigger, ok, known, error)` requiring
-   `atMostOnceDone(log, effects, p, trigger, ok, [success])` (the success
-   event must name the trigger) and appending `atMostOnceOutcome(p,
-   trigger, ok, known, error, [success])`: after a failed effect
-   `grist.failed` if f returned `grist.NotApplied(err)` (it did not
-   happen), else `grist.unknown` with the error's text (it may have: a
-   lost answer). A lost effect or outcome is admitted; an application
-   that needs exactly once states it with test-only eventual vals
-   (examples/counters' `payout`, `counters.exactly.binding.yaml`: the
-   dependency's own record of each effect, made at its site, counted
-   per key, and grist's `atMostOnceOutcomesLogged` for outcomes owed).
-   Check it with two pollers: `gristsim.Config.Nodes: 2`. Read models are defs over the log. Check it alone:
+2. **Model first**: `model/<app>.qnt`, one tenant's log, imports and
+   `export`s a vendored `grist.qnt` (copy `grist/model/grist.qnt`);
+   state `log`, `checkpoints`, `appended`, `effects`, `answered`; read
+   models are defs over the log. Each command's action takes its
+   fields, `id`, `readPos`, `reads`, `principal` and `result`, and
+   requires `freshKey`, `covers` and `conditionHolds` per outcome; each
+   processor's actions follow its declared delivery (at least once: an
+   effect step and a checkpoint; at most once: checkpoint, effect,
+   outcome). **Read [`references/model.md`](references/model.md) before
+   writing or changing a model**: every rule, the Quint names a Go
+   field must avoid (`to`, `of`, `type`, `size`, ...), exactly-once
+   claims, and how a double records its own effect. Check it alone:
    `gotogether simulate -binding <app>.binding.yaml`.
 3. **Bind**: every parameter the same-named step field, but `reads:
    'readsOf({{toList .reads}})'` (slice 1 records triples); `expect:` for
@@ -85,7 +60,10 @@ examples/counters is the walk-through: read its README's table first.
    {{toList .obs.ints}}, {{toList .obs.causes}})`, for a query the read
    models' defs against `.obs.*`. Outcomes include `conflict` and
    `idempotency-key-reused`. No `restart`: every step's process is the
-   store.
+   store. `qtest.Validate` logs "no model-level ITF ... readsOf is not a
+   literal" for such a binding: harmless, the verdict is quint's, which
+   evaluates `readsOf`; only the ITF file written beside the step log
+   for inspection (`Run.ITF`) is skipped.
 4. **Explore**: `qtest.System{Binding: ..., Rates: ..., Run: func(c
    qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}`;
    `gristsim.Config` sets the isolation level (Serializable and
@@ -95,7 +73,9 @@ examples/counters is the walk-through: read its README's table first.
    nemesis acts per scheduling step and qsql has more of them, so raise
    `store.<app>.commit`'s rate to reach commit faults in few seeds), `Tenants` and `Alphabet` (one tenant and two
    letters for contention), `CommitFaults`, `Check`, `Send`, `Setup` (the
-   app's doubles, reached through a processor's ctx). Every run records
+   app's doubles, reached through a processor's ctx; a double records
+   its own effect with `actor` the tenant and `process` the App's name:
+   [`references/model.md`](references/model.md)). Every run records
    both sides: the store's steps (actor the tenant: commits relayed from
    the step log) and the clients' calls (`gristsim.ClientsActor`,
    `<tenant>/clients`: no tenant name holds a slash, `grist.CheckTenant`);
@@ -112,17 +92,30 @@ examples/counters is the walk-through: read its README's table first.
    as examples/counters' `blind` and `dispatchDirect`), and the faithful
    app at the mutant's configuration with the opposite claim
    (`None(Rejects("createCounter"))`): an `Unconditioned` create is
-   `Rejects` when the race hits (at ReadCommitted: under Serializable the
-   race's loser retries a transient conflict and decides again), a raw append
+   `Rejects` when the race hits, at every isolation level (its reads
+   come before its append's transaction, so no level protects it; under
+   Serializable a loser whose append overlaps the winner's retries and
+   decides again, which narrows the window: claim it at ReadCommitted,
+   where it is wide, or with many seeds), a raw append
    from a processor is `Mismatch`, an at-least-once effect's duplicate
    is admitted and a test-only invariant over `effects` judges it
    (`qenv.Script` of `grist.<processor>.effect`'s `crashAfter`); an
    at-most-once effect's loss (`crashBefore`, after its checkpoint) is
    admitted and a test-only exactly-once eventual val rejects it; an
    effect declared at most once where the model says at least once is
-   `Rejects(<processor>)` (counters' `checkpointFirst`).
+   `Rejects(<processor>)` (counters' `checkpointFirst`). A declared
+   guarantee contradicting the model is rejected at its first step,
+   before what it would cause (wallet-grist's `noOutbox` is
+   `Rejects("post")`, never a lost post): a mutant of the declaration
+   shows the mismatch, not its consequence.
 
 ## Triage
+
+- An exploration's summary says "model actions taken N of M (never:
+  ...)": M counts the model's actions but `init`, `step` and frame
+  helpers, so helper actions other actions call (`appends`, `refuses`)
+  are in it and always listed as never taken; read the list for the
+  commands and processors no run reached.
 
 - `Rejects(command)`: a commit the model's precondition forbids: the
   decision's rule, its condition, a read missing from the read set
@@ -166,7 +159,8 @@ examples/counters is the walk-through: read its README's table first.
   `qobs.FileSink(path, qobs.PerStep)`; clients record their calls with
   `grist/client`'s `Client.Do` over HTTP, or `gristsim.Do` in process (as a run's clients do); before recording a settle, wait
   for the processors' checkpoints and `Relay.Behind(ctx) == 0`, failing
-  on `Relay.Err()`; validate the file with both bindings
+  on `Relay.Err()` (`grist.Main serve` does so itself on shutdown and
+  records the settle); validate the file with both bindings
   (`qtest.Validate(t, binding, steps)`, the clients' with
   `qtest.Linearize()`), and check each client's answer has its store-side
   step (a lost refusal step passes both bindings). examples/counters'
@@ -210,3 +204,15 @@ examples/counters is the walk-through: read its README's table first.
   `GRIST_POSTGRES=<pgx dsn>` (CI's grist job has a postgres:16 service;
   locally a scratch server: `initdb -D dir`, then `postgres -D dir -k
   sockdir`).
+
+## References
+
+- [`references/model.md`](references/model.md): read before writing or
+  changing a model: the state, every command's and processor's rules
+  (at least once, at most once, exactly once by test-only vals), the
+  Quint names fields must avoid, a declaration the model contradicts,
+  and a double's record of its own effect.
+- [`references/entities.md`](references/entities.md): read when a
+  command reads or changes more than one entity (a transfer, an order
+  of several items): events per entity, keyed read models per entity
+  kind, the read set and `needs`.

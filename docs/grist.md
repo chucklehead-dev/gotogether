@@ -5,7 +5,7 @@ building it changed here, §0.2 what its review changed); slice 2's SQL
 store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
 on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
 `grist.Main` built (§0.5), `AtMostOnce` built (§0.6), their review's
-fixes (§0.7), its generator and
+fixes (§0.7), a newcomer's trial's fixes (§0.8), its generator and
 gristflow design, as is slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -94,9 +94,14 @@ or incomplete in these places; each is fixed where it stands below.
   whose retry starts again at the marker and decides again on fresh
   reads: that closes most of the blind create's window (2 of 40 runs
   race). At ReadCommitted the loser waits for the head's lock and
-  commits blind (25 of 40). After slice 1's review the window is closed
-  under Serializable (0 of 120 runs) and claim 1 is ReadCommitted's
-  alone (30 of 40, §8.1).
+  commits blind (25 of 40). After slice 1's review counters' shape
+  showed none under Serializable (0 of 120 runs) and claim 1 is
+  ReadCommitted's (30 of 40, §8.1). **The window is narrowed, not
+  closed** (§0.8): a decision's reads are taken before its append's
+  transaction begins, so no isolation level protects an `Unconditioned`
+  decision; examples/wallet-grist's `readThenWrite` commits an overdraft
+  at Serializable, and counters' `blind` a second create of a name at
+  four clients.
 - **The read set's step fields are `readPos` and `reads`**, not
   `read.pos` and `read.queries`: a model parameter is a Quint identifier,
   and a binding gives templates only where a parameter is not the
@@ -832,6 +837,54 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   nothing). It shows a declaration contradicting the model, not a lost
   mail; the lost effect at most once is `payout`'s claim.
 
+## 0.8 What wallet-grist's trial changed
+
+A newcomer agent built examples/wallet's bank on grist
+(examples/wallet-grist, its TRIAL.md) from the skill and the docs alone.
+What it found, each fixed where it stands:
+
+- **`Unconditioned` is unprotected at every isolation level.** The
+  skill and counters' README said the race's loser retries a transient
+  conflict under Serializable and decides again, so the window closes;
+  `readThenWrite` (wallet's `transfer` `Unconditioned`) committed an
+  overdraft at Serializable in 2 of 20 runs (3 of 60 re-measured), a
+  transfer decided at position 0 committing after the other's. A
+  decision's reads are store reads of their own, pinned before the
+  append, whose transaction begins after them (simstore takes its
+  snapshot at `Begin`): a loser retries only when the two appends
+  overlap. counters' 0 of 120 was its shape's luck, not a property:
+  `blind` at Serializable with four clients creating three counters each
+  commits a second create of a name in 2 of 60 runs.
+  `TestUnconditionedAtEveryLevel` (grist) pins it: a create of a name
+  another create took between the read and the append commits blind on
+  simstore at Serializable, Snapshot and ReadCommitted, and is refused
+  conditioned. wallet-grist's `readThenWrite` claim at Serializable is
+  `Some(Rejects("transfer"))`. Reads inside the append's transaction were
+  not built: the condition already protects at every level and on every
+  store (§2.4).
+- **`grist.Main serve` records a settle** on shutdown, once the server
+  drained, every poller of the node waits with nothing after its
+  checkpoint (an effect in flight is work: an at-most-once one's
+  outcome is waited for) and the relay caught up (`SettleTimeout`; none,
+  said on stderr, if the node does not quiet): a served run's eventual
+  vals are judged (`TestMainServeSettles`; counters' `SERVE=1` demo).
+- **An exploration's summary names the untaken actions**: "model
+  actions taken 5 of 11 (never: ...)", of the model's actions but `init`,
+  `step` and frame helpers. An action only other actions call (a grist
+  model's `appends`, `refuses`) is one of them and shows as never taken.
+- **The real tier's "no model-level ITF" log says the verdict is
+  unaffected**: the ITF file (`Run.ITF`) is written in-process from
+  literal arguments only, and `readsOf(...)` is a call; quint, which
+  judges, evaluates it.
+- **The skill** links reference pages (the model's rules, multi-entity
+  commands), says that a declared guarantee contradicting the model is
+  rejected at its first step (the lost effect it would cause is never
+  reached), documents a double's site record (`actor` the tenant,
+  `process` the App's name), and names Quint's reserved and built-in
+  names (`to`, `of`, `type`, `size`, `map`, ...), which a Go field's JSON
+  name must avoid. `Catalog`'s doc comment no longer reads as if the
+  generator (§3.2) were built.
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
 Both were read in grain's code (research notes, 2026-10-27); slice 1
@@ -1016,6 +1069,18 @@ purpose:
 var CreateBlind = grist.NewCommand(App, "create-counter", decideCreate,
 	grist.Unconditioned("names are advisory here"))
 ```
+
+**No isolation level protects an `Unconditioned` decision**, by design
+(§0.8). Its reads are pinned at P, each a store read of its own, and its
+append is a transaction that begins after them: the store's level
+orders appends, never a decision's reads with another's append. Under
+Serializable and Snapshot a loser whose append overlaps the winner's
+gets a transient conflict and decides again on fresh reads, which
+narrows the window; a decision that read before the winner's commit and
+began its append after it commits blind, as at ReadCommitted. Reading
+inside the append's transaction would close it at Serializable, and is
+not done: the condition gives that protection at every level, on every
+store, and `Unconditioned` exists to admit the race on purpose.
 
 The other consistency options: `grist.Within(Totals)` narrows the
 condition to some of the reads (the rest are advisory, the option's
@@ -1882,10 +1947,13 @@ for a miss chance under 5% (payd's discipline):
    no faults, names colliding: `qtest.Some(qtest.Rejects("createCounter"))`:
    the second create commits where the model's precondition is false.
    At ReadCommitted, 30 of 40 runs (measured after slice 1's review);
-   under Serializable not at all (0 of 120 runs in three configurations,
-   up to four clients and two letters; 2 of 40 before the review), since
-   the race's loser gets a transient conflict whose retry decides again
-   (§0.1): the claim is ReadCommitted's. **Its contrast**: the
+   under Serializable rarely (0 of 120 runs in three configurations
+   after the review, 2 of 40 before it; 2 of 60 at four clients and
+   three creates each, §0.8): the race's loser gets a transient conflict
+   whose retry decides again only when the two appends' transactions
+   overlap, and a decision whose reads came before the other's commit
+   and whose append began after it commits blind at every level. The
+   claim is ReadCommitted's, where every race is lost. **Its contrast**: the
    faithful app at the same configuration,
    `qtest.None(qtest.Rejects("createCounter"))` (0 of 40 at both
    levels), which fails in 13 of 20 runs with the runtime's condition

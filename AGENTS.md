@@ -253,8 +253,19 @@ working there:
   parameter of a reserved name defaults to it (`{{.args.process}}`).
 - A step's observed values may be negative (an overdraft's balance): never
   use -1 as "not observed". Pass the observation or nothing.
-- `quint` reserves `to` (and other built-in names): a parameter named `to`
-  fails to parse (QNT101). grpcledger's model says `src`/`dest`.
+- `quint` refuses its built-in operators' names as identifiers (QNT101:
+  `to`, `of`, `in`, `not`, `then`, `with`, `map`, `filter`, `fold`,
+  `keys`, `get`, `put`, `set`, `size`, `length`, `head`, `tail`, `nth`,
+  `range`, `select`, `union`, `contains`, `exists`, `forall`, `next`,
+  `fail`, `assert`, `reps`, `always`, `eventually`, `enabled`, the type
+  names `Set`, `List`, `Map`, `Int`, `Bool`, `Nat`) and its keywords
+  (QNT008 or a parse error: `and`, `or`, `iff`, `implies`, `match`,
+  `import`, `export`, `type`, `if`, `else`, `all`, `any`, `val`, `def`,
+  `var`, `const`, `action`, `run`, `pure`, `nondet`, `module`,
+  `assume`, `true`, `false`), checked with quint 0.33 on a parameter of
+  each name. A step field becomes a parameter by its name (a grist
+  command's or event's Go field by its JSON name): grpcledger's model
+  says `src`/`dest`, wallet-grist's `posting` constructor `at` for the event's `of`.
 - A crashable process whose restart redoes its whole job (a publisher that
   republishes everything) livelocks a run under per-step crash rates:
   every restart adds work at the same virtual instant. Give it durable
