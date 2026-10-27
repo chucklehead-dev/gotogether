@@ -483,7 +483,7 @@ var templateFuncs = template.FuncMap{
 	"set": func(...string) string { return "" }, "max": func(string) int64 { return 0 }, "count": func(string) int { return 0 },
 	"procs": func() int { return 0 }, "add": func(a, b any) int64 { return 0 }, "atLeast": func(lo, v any) int64 { return 0 },
 	"toSet": func(any) (string, error) { return "", nil }, "toList": func(any) (string, error) { return "", nil },
-	"toMap": func(any) (string, error) { return "", nil },
+	"toMap": func(any) (string, error) { return "", nil }, "toQuint": func(string, any) (string, error) { return "", nil },
 }
 
 func parseTpl(s string) (*template.Template, error) {
@@ -578,7 +578,7 @@ func stepData(s *qtrace.Step, args map[string]any, process int, outcome string) 
 	d["seq"] = s.Seq
 	as := map[string]any{}
 	for k, v := range args {
-		d[k] = qlit(quintLit(v))
+		d[k] = fieldValue(v)
 		as[k] = d[k]
 	}
 	// set after the arguments: these names are the step's, and an argument
@@ -587,12 +587,21 @@ func stepData(s *qtrace.Step, args map[string]any, process int, outcome string) 
 	d["step"] = map[string]any{"action": s.Action, "seq": s.Seq}
 	obs := map[string]any{}
 	for k, v := range s.Obs {
-		obs[k] = qlit(quintLit(v))
+		obs[k] = fieldValue(v)
 	}
 	d["obs"] = obs
 	d["process"] = qlit(strconv.Itoa(process))
 	d["outcome"] = qlit(outcome)
 	return d
+}
+
+// fieldValue is a step field as templates see it: Quint text, but a
+// float kept whole (printed truncated, as before) for toQuint to refuse.
+func fieldValue(v any) any {
+	if f, ok := v.(float64); ok {
+		return qfloat(f)
+	}
+	return qlit(quintLit(v))
 }
 
 func render(tpl string, data any, funcs template.FuncMap) (string, error) {
@@ -602,7 +611,7 @@ func render(tpl string, data any, funcs template.FuncMap) (string, error) {
 // funcNames are the binding's template functions, by name: a template
 // parses against them (which checks only that they exist) once, and runs
 // with each plan's own.
-var funcNames = []string{"set", "toSet", "toList", "toMap", "max", "count", "procs", "add", "atLeast"} // read-only
+var funcNames = []string{"set", "toSet", "toList", "toMap", "toQuint", "max", "count", "procs", "add", "atLeast"} // read-only
 
 // parsed caches each template text's parse tree, process-wide (a
 // template parses the same in every plan): parsing it for every

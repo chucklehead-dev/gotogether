@@ -1,0 +1,7 @@
+# binding/testdata/typed.qnt, its parameters left to their defaults (toQuint
+# by the model's types) and its expect a typed comparison of the log.
+spec: ../../binding/testdata/typed.qnt
+module: typed
+actions:
+  commit:
+    expect: 'log == {{ toQuint "List[Event]" .obs.log }} and reads == {{ toQuint "Set[Read]" .obs.reads }}'

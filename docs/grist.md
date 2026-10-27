@@ -59,7 +59,8 @@ version of this note:
   crash points are a `DeclareFaults` kind and `Sim.FaultOf` (§3.5).
 - **qobs encodes structs with `fmt.Sprint`**, not JSON, and binding's
   `jsonElem` renders objects as quoted strings and floats truncated:
-  grist encodes events itself, and binding needs a typed function (§3.2).
+  grist encodes events itself, and binding needs a typed function (§3.2;
+  `toQuint`, added for slice 2, §8.2).
 - **One System has one binding, and qtest has no actor filter**: a
   run records commit steps or client steps, not both (§3.1).
 - **`Scan` walks every row of the store** (a Serializable commit again
@@ -1311,6 +1312,30 @@ model and binding are generated.
    modernc.org/sqlite. A one-column key keeps its encoding.
 2. **The typed template function** (`toQuint`, §3.2), with float and
    time refused, its tests against `itf`'s round trip.
+   **Done** (binding): `{{ toQuint "T" .field }}`, T in Quint's syntax
+   (`int`, `str`, `bool`, `Set[T]`, `List[T]`, `K -> V`, tuples,
+   records, the model's aliases, parametric ones applied, and a sum's
+   alternatives written out, `Some(str) | None`), resolved against the
+   model's typedefs (quint typecheck's IR); the field's JSON is decoded by
+   it into an `itf.Value` and printed. A record is an object whose keys
+   are its fields (exactly, or as Go names them), every one and no
+   other; a sum's value is `"Tag"`, `{"Tag": v}`, `{"tag": "Tag",
+   "value": v}` (ITF's) or `{"tag": "Tag", ...the payload's fields}` (an
+   event as grist writes it), `null` its `None`; a map an object or a
+   list of pairs; a nil slice empty. A number with a fraction or an
+   exponent (a float recorded whole included: templates now see floats
+   as floats, printed truncated as before) and a time string are refused
+   with the path and the fix (an integer unit). `Param.Type` prints the
+   full type (it printed `{...}` for a record), and `DefaultTemplate` is
+   `toQuint` for a parameter whose type holds a record or a sum, or a
+   collection the older functions misrender (a map's non-scalar values),
+   so a generated binding needs no template for the read set (`Set[Read]`)
+   or a batch (`List[Event]`). Tests: binding's on testdata/typed.qnt
+   (every parameter's default, a qobs-recorded run planned to values
+   equal to itf's and parsing back with `itf.ParseQuint`, the refusals),
+   a random round trip of types, values and encodings
+   (`TestToQuintRoundTripAgainstBruteForce`), and validate's
+   `TestTypedFieldsChecked` (a conforming run and a mismatch).
 3. **An actor filter** for a System's binding (`qtest.Actors(...)`, or a
    binding's `actors:` pattern), so one run checks commit steps and
    client steps with their two bindings (§3.1).

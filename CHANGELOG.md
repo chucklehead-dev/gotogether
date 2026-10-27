@@ -67,6 +67,14 @@ The first release. What a user meets, by module:
   range and not beside it, and the history checker sees the same. Keys
   of one column keep their encoding. Checked against brute force in Go
   and differentially against SQLite (examples/payd).
+- binding's `toQuint` template function (docs/grist.md §8.2, item 2):
+  `{{ toQuint "List[Event]" .obs.events }}` decodes a step field's JSON
+  by a type of the model (records, sums, tuples, sets, lists, maps, its
+  aliases) into a Quint value, refusing a number with a fraction and a
+  time with the fix (an integer unit). A parameter whose type holds a
+  record or a sum defaults to it; `Param.Type` prints the whole type
+  (`{ typ: str, tags: Set[(str, str)] }`, was `{...}`); a float field
+  reaches templates whole (printed truncated, as before).
 - API trim before the tags (G6). `validate.Command`, `Judged` and
   `Replay` move to package `validate/cli` as `cli.Check`, `cli.Judged`,
   `cli.Replay`: the check reads OTLP/JSON, and in validate it brought

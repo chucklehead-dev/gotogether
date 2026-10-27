@@ -27,7 +27,8 @@
     service, not at the client that hears back later.
   - Record collections (sets of values, vectors) as slices or maps.
     They travel as JSON, and `toSet`, `toList` and `toMap` turn them into
-    Quint values in templates.
+    Quint values in templates; `toQuint "T"` does it by a model's type T,
+    records and sums included.
 - **Model the environment you run on.** If the code depends on a
   service's guarantees (seq-kv's consistency), the model must not assume
   stronger ones. Check against the real environment too: examples/glomers

@@ -207,8 +207,9 @@ says when a real run hit the design's limit.
   are then sized per run from templates (`{{ set "node" }}`,
   `{{ atLeast 5 (max "amount") }}`).
 - **Collections.** Record sets, lists and maps as Go slices and maps. A
-  parameter of set, list or map type is converted by default. In
-  `expect`, use `toSet`, `toList` or `toMap`.
+  parameter of set, list or map type is converted by default, one of
+  records or sums by its type (`toQuint`). In `expect`, use `toSet`,
+  `toList`, `toMap`, or `toQuint "List[Event]"` for anything typed.
 - **Cost.** Cost per step is roughly the state size times the invariants'
   work. For long runs:
   - prefer ghosts to scans (4) and bounded mechanism state (6);

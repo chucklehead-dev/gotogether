@@ -166,7 +166,7 @@ func splitCached(tpl string) (parts, holes []string, err error) {
 }
 
 func splitTemplate(tpl string) (parts, holes []string, err error) {
-	trees, err := parse.Parse("t", tpl, "{{", "}}", map[string]any{"set": true, "toSet": true, "toList": true, "toMap": true,
+	trees, err := parse.Parse("t", tpl, "{{", "}}", map[string]any{"set": true, "toSet": true, "toList": true, "toMap": true, "toQuint": true,
 		"max": true, "count": true, "procs": true, "add": true, "atLeast": true}) // the binding's functions, by name: parse checks only that they exist
 	if err != nil {
 		return nil, nil, err

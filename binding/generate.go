@@ -108,9 +108,10 @@ func (b *Binding) Planner(m *Model, whole *qtrace.Trace) *Planner {
 			sort.Strings(vs)
 			return "Set(" + strings.Join(vs, ", ") + ")"
 		},
-		"toSet":  func(v any) (string, error) { return jsonQuint(v, "Set") },
-		"toList": func(v any) (string, error) { return jsonQuint(v, "List") },
-		"toMap":  func(v any) (string, error) { return jsonQuint(v, "Map") },
+		"toSet":   func(v any) (string, error) { return jsonQuint(v, "Set") },
+		"toList":  func(v any) (string, error) { return jsonQuint(v, "List") },
+		"toMap":   func(v any) (string, error) { return jsonQuint(v, "Map") },
+		"toQuint": func(typ string, v any) (string, error) { return toQuint(m, typ, v) },
 		"max": func(arg string) int64 {
 			var mx int64
 			for _, a := range all {

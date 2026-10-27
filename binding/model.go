@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 // Model is what gotogether needs to know about a Quint module: its actions with
@@ -38,6 +40,10 @@ type Model struct {
 	// reads are the names each action reads outside its assignments'
 	// left sides: of the variables among them, the state it reads
 	reads map[string]map[string]bool
+	// typedefs are the type aliases of the file's modules, for toQuint;
+	// types caches the types its templates name (src -> *qtype or error)
+	typedefs map[string]typedef
+	types    *sync.Map
 }
 
 // Reads reports which of the model's variables action reads, itself or
@@ -101,19 +107,30 @@ func (m *Model) Assigns(action string) (map[string]bool, bool) {
 	return out, true
 }
 
-// Param is an action parameter. Shape is the kind of its resolved type
-// (type aliases expanded): "set", "list", "map", or "" for anything else.
-type Param struct{ Name, Type, Shape string }
+// Param is an action parameter. Type is its type as Quint writes it
+// (aliases by name). Shape is the kind of its resolved type (type aliases
+// expanded): "set", "list", "map", or "" for anything else.
+type Param struct {
+	Name, Type, Shape string
+
+	typ *qtype // the resolved type, when the model gave it
+}
 
 // DefaultTemplate is the template of a parameter the binding does not
 // give: the step field of the same name, converted from its recorded JSON
-// form when the parameter is a set, list or map. A parameter named like
-// one of the step's own fields (process, outcome, obs, step, args) is the
-// argument, through .args: {{.process}} is the actor's incarnation.
+// form when the parameter is a set, list or map. A parameter whose type
+// holds a record or a sum, or a collection toSet, toList and toMap do not
+// render (of collections, of records), is converted by the model's type:
+// {{ toQuint "List[Event]" .events }}. A parameter named like one of the
+// step's own fields (process, outcome, obs, step, args) is the argument,
+// through .args: {{.process}} is the actor's incarnation.
 func (p Param) DefaultTemplate() string {
 	f := "." + p.Name
 	if reserved[p.Name] {
 		f = ".args." + p.Name
+	}
+	if p.typ != nil && p.typ.structured() {
+		return "{{ toQuint " + strconv.Quote(p.Type) + " " + f + " }}"
 	}
 	switch p.Shape {
 	case "set":
@@ -196,7 +213,8 @@ type tcDecl struct {
 	Expr      *tcExpr         `json:"expr"`
 	RawExpr   json.RawMessage `json:"-"`
 	Type      json.RawMessage `json:"typeAnnotation"`
-	Def       json.RawMessage `json:"type"` // of a typedef
+	Def       json.RawMessage `json:"type"`   // of a typedef
+	TypeVars  []string        `json:"params"` // of a typedef
 }
 
 type tcOut struct {
@@ -233,10 +251,12 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 	}
 	// type aliases, from every module: a parameter's Shape looks through them
 	aliases := map[string]json.RawMessage{}
+	typedefs := map[string]typedef{}
 	for _, mod := range tc.Modules {
 		for _, d := range mod.Declarations {
 			if d.Kind == "typedef" && len(d.Def) > 0 {
 				aliases[d.Name] = d.Def
+				typedefs[d.Name] = typedef{params: d.TypeVars, def: d.Def}
 			}
 		}
 	}
@@ -255,7 +275,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 			continue
 		}
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
-			assigns: assigns, calls: calls, reads: reads}
+			assigns: assigns, calls: calls, reads: reads, typedefs: typedefs, types: &sync.Map{}}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range mod.Declarations {
@@ -279,14 +299,19 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 						}
 					}
 					for i, p := range d.Expr.Params {
-						typ, shape := renderType(p.Type), typeShape(p.Type, aliases)
+						raw := p.Type
+						typ, shape := renderType(raw), typeShape(raw, aliases)
 						if i < len(inferred) {
 							if typ == "?" {
-								typ = renderType(inferred[i])
+								raw, typ = inferred[i], renderType(inferred[i])
 							}
 							shape = typeShape(inferred[i], aliases)
 						}
-						ps = append(ps, Param{Name: p.Name, Type: typ, Shape: shape})
+						param := Param{Name: p.Name, Type: typ, Shape: shape}
+						if t, err := irType(raw, typedefs, nil, 0); err == nil {
+							param.typ = t
+						}
+						ps = append(ps, param)
 					}
 				}
 				m.Actions[d.Name] = ps
@@ -463,39 +488,14 @@ func namesIn(raw json.RawMessage) map[string]bool {
 	return out
 }
 
-// renderType prints a Quint type from its JSON IR (enough for messages).
+// renderType prints a Quint type from its JSON IR, aliases by name: as
+// toQuint's type argument writes it ("?" for what it cannot print).
 func renderType(raw json.RawMessage) string {
-	if len(raw) == 0 {
+	t, err := irType(raw, nil, nil, 0)
+	if err != nil {
 		return "?"
 	}
-	var t struct {
-		Kind   string            `json:"kind"`
-		Name   string            `json:"name"`
-		Elem   json.RawMessage   `json:"elem"`
-		Args   []json.RawMessage `json:"args"`
-		Res    json.RawMessage   `json:"res"`
-		Fields json.RawMessage   `json:"fields"`
-	}
-	if json.Unmarshal(raw, &t) != nil {
-		return "?"
-	}
-	switch t.Kind {
-	case "const", "var":
-		return t.Name
-	case "int", "bool", "str":
-		return t.Kind
-	case "set":
-		return "Set[" + renderType(t.Elem) + "]"
-	case "list":
-		return "List[" + renderType(t.Elem) + "]"
-	case "rec":
-		return "{...}"
-	case "sum":
-		return "(sum type)"
-	case "fun":
-		return "(" + renderType(firstArg(t.Args)) + " -> ...)"
-	}
-	return t.Kind
+	return t.String()
 }
 
 // typeShape is the Param.Shape of a Quint type's JSON IR.
@@ -521,13 +521,6 @@ func typeShape(raw json.RawMessage, aliases map[string]json.RawMessage) string {
 		return "map"
 	}
 	return ""
-}
-
-func firstArg(a []json.RawMessage) json.RawMessage {
-	if len(a) == 0 {
-		return nil
-	}
-	return a[0]
 }
 
 // antecedent is A of a val `A implies B`, rendered as Quint, if the

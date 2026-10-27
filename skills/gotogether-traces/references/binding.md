@@ -3,7 +3,18 @@
 Rules:
 - A parameter with no template is the step field of its name, rendered as
   a Quint literal. Set, list and map parameters (type aliases included)
-  are converted from the recorded JSON by `toSet`, `toList` and `toMap`.
+  are converted from the recorded JSON by `toSet`, `toList` and `toMap`;
+  one whose type holds a record or a sum (or a collection of
+  collections) by `toQuint`, which decodes the field's JSON by a type of
+  the model: `{{ toQuint "List[Event]" .obs.events }}` in an `expect`.
+  Records are JSON objects (keys the fields' names, or Go's field names),
+  every field and no other; a sum's value is `"Tag"`, `{"Tag": v}`,
+  `{"tag": "Tag", "value": v}` or the payload record's fields beside
+  `"tag"`, and `null` is `None`; a map is an object or a list of `[key,
+  value]` pairs; a nil slice is empty. It refuses a number with a
+  fraction and a time, naming where: record an integer unit (cents,
+  `time.UnixMilli`). qobs records a slice or a map as JSON but a struct
+  by `fmt.Sprint`: record a struct's `json.Marshal` text, or a slice.
   Give a template only to map a field differently, e.g.
   `args: { o: '{{.outcome}}' }`. An action that needs nothing else can
   be `name: {}`.
