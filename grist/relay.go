@@ -251,7 +251,7 @@ func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.Step
 		return &rowError{fmt.Errorf("grist: tenant %s's step row %d: %w", t, row.Seq, err)}
 	}
 	for _, s := range steps {
-		p.scratch.Record(context.Background(), s.action, nil, s.kv...)
+		p.scratch.Record(context.Background(), s.action, s.err, s.kv...) // an error's step keeps its kv's outcome
 	}
 	out := p.sink.Steps()
 	p.sink.Reset()
@@ -299,6 +299,11 @@ type rowStep struct {
 	Action string  `json:"action"`
 	KV     [][]any `json:"kv"`
 	Events int     `json:"events"`
+	// Error is the step's error text, if it has one beside its outcome: a
+	// refusal of a command that declares none (Refuses) says what to
+	// declare, so the binding's "no mapping" names the fix. A grist that
+	// does not know the field records the step without it.
+	Error string `json:"error,omitempty"`
 }
 
 // stepRowVersion is the version of the step rows this grist writes and
@@ -337,6 +342,7 @@ type relayStep struct {
 	action string
 	kv     []any
 	time   time.Time
+	err    error
 }
 
 // decodeRow is a row's steps with the fields the head gives: each step's
@@ -371,7 +377,11 @@ func decodeRow(row store.StepRow) ([]relayStep, error) {
 			kv = append(kv, p[0], numbers(p[1]))
 		}
 		kv = append(kv, "obs.head", int64(head), "order.pos", commitOrder(s.Events, head))
-		out = append(out, relayStep{action: s.Action, kv: kv, time: time.Unix(0, row.Time)})
+		var err error
+		if s.Error != "" {
+			err = errors.New(s.Error)
+		}
+		out = append(out, relayStep{action: s.Action, kv: kv, time: time.Unix(0, row.Time), err: err})
 	}
 	return out, nil
 }

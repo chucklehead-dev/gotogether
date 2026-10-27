@@ -3,12 +3,15 @@ package grist_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // A command's declared refusals (Refuses) are the ones its decision may
@@ -210,5 +213,55 @@ func TestDep(t *testing.T) {
 	}
 	if b.Of(ctx).Send("x") != "none" {
 		t.Error("another Dep of the same type sees the first's value: want its own fallback")
+	}
+}
+
+// A command that declares no refusals and refuses at run time is still
+// refused (the step's outcome the rejection's name, the key answered),
+// but its step's error says to declare it with grist.Refuses, so the
+// generated binding's "no mapping" for the outcome names the fix and the
+// command, not only the binding.
+func TestUndeclaredRefusalNamesRefuses(t *testing.T) {
+	a := grist.New("counters")
+	ev := grist.NewEvent[Created](a, "counter-created")
+	full := grist.Rejection("full")
+	cmd := grist.NewCommand(a, "create-counter", func(r *grist.Reads, c Create) ([]grist.Event, error) {
+		if c.Name == "full" {
+			return nil, full
+		}
+		return decide(ev)(r, c)
+	}, grist.Authorize(grist.Authenticated))
+	s := newStore(t)
+	ctx, steps := recorded(t, s)
+	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1", Actor: "a"}, Create{Counter: "a", Name: "full"}); !errors.Is(err, full) {
+		t.Fatalf("the refusal: %v, want it refused", err)
+	}
+	var refused *qtrace.Step
+	for _, st := range steps() {
+		if st.Args["id"] == "c1" {
+			refused = &st
+		}
+	}
+	if refused == nil || refused.Outcome != "full" || !strings.Contains(refused.Error, "grist.Refuses") || !strings.Contains(refused.Error, "create-counter") {
+		t.Fatalf("the refusal's step %v: want outcome full, its error naming grist.Refuses and the command", refused)
+	}
+	// the generated binding has no outcome for it, and its error says why
+	dir := t.TempDir()
+	g, err := grist.Generate(a, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Write(dir); err != nil {
+		t.Fatal(err)
+	}
+	b, err := binding.Load(filepath.Join(dir, "counters.binding.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &binding.Model{Actions: map[string][]binding.Param{"createCounter": {{Name: "counter", Type: "str"}, {Name: "name", Type: "str"},
+		{Name: "id", Type: "str"}, {Name: "principal", Type: "str"}, {Name: "readPos", Type: "int"}, {Name: "reads", Type: "Set[(str, str, str)]"}, {Name: "result", Type: "str"}}}}
+	_, err = b.Plan(m, &qtrace.Trace{Actor: "t1", Steps: []qtrace.Step{*refused}})
+	if err == nil || !strings.Contains(err.Error(), `outcome "full" has no mapping`) || !strings.Contains(err.Error(), "grist.Refuses(...) on its NewCommand") {
+		t.Errorf("the binding's error: %v, want no mapping, naming grist.Refuses", err)
 	}
 }

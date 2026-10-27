@@ -304,6 +304,12 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 		// once committed (Relay): no hook, so a node that dies between the
 		// commit and its record loses no step
 		step := newRowStep(c.info.quint, len(events), append(kv, c.app.batchObs(events, "command", env.ID)...)...)
+		if o.refuses == nil && outcome != "" && outcome != conflictOutcome {
+			// a refusal of a command that declares none: still a refusal
+			// (remembered, answered), but its binding has no outcome for it,
+			// and says so; the step's error says why and what to declare
+			step.Error = fmt.Sprintf("grist: command %s refused %s and declares no refusals: declare them with grist.Refuses(...) on its NewCommand and regenerate the model, so its model and binding have the outcome", c.info.name, outcome)
+		}
 		b := store.Batch{Events: events, Marker: &store.Marker{ID: env.ID, Hash: hash, Outcome: outcome},
 			Time: qenv.Now(ctx).UnixMilli(), Cause: env.ID, Step: encodeRow([]rowStep{step})}
 		if o.unconditioned == "" && outcome != conflictOutcome {
