@@ -664,12 +664,33 @@ func undecided(r *validate.Report) bool {
 	return false
 }
 
-// verdictless reports whether the run has no verdict at all: undecided,
+// decidedFail reports whether an actor of r FAILs: its conformance, or
+// an invariant, failed with a verdict (validate's Reason "rejects",
+// "mismatch", "violates"), whatever another actor or check has none of.
+func decidedFail(r *validate.Report) bool {
+	for _, a := range r.Actors {
+		if a.Conforms == validate.Fail {
+			return true
+		}
+		for _, inv := range a.Invariants {
+			if inv.Verdict == validate.Fail {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// verdictless reports whether the run has no verdict at all: no actor
+// FAILs (decidedFail), and it is undecided,
 // or an actor that conforms, violates nothing, and has an invariant with
 // no verdict (a lost tail's, hidden actions past their cap) or a gap in
 // its recorders' seqs. A mutant is
 // not killed by such a run, whose failure is not known.
 func verdictless(r *validate.Report) bool {
+	if decidedFail(r) {
+		return false // a FAIL anywhere is the run's: a mutant it fails is killed
+	}
 	if undecided(r) {
 		return true
 	}
@@ -677,14 +698,13 @@ func verdictless(r *validate.Report) bool {
 		if a.Conforms != validate.Pass {
 			continue
 		}
-		unknown, failed := false, false
+		unknown := false
 		for _, inv := range a.Invariants {
 			unknown = unknown || inv.Verdict == validate.NotEvaluated
-			failed = failed || inv.Verdict == validate.Fail
 		}
 		// dropped steps beside recorded ones that pass: what was dropped
 		// is unknown (validate's "no verdict (dropped steps)")
-		if (unknown || len(a.Gaps) > 0) && !failed {
+		if unknown || len(a.Gaps) > 0 {
 			return true
 		}
 	}

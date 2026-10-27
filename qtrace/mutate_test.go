@@ -114,6 +114,13 @@ func TestGapMutants(t *testing.T) {
 	if len(trs) != 1 || len(trs[0].Gaps) != 1 || trs[0].Gaps[0].First != 2 || trs[0].Gaps[0].Last != 2 {
 		t.Errorf("the mutant's gaps %v, want recorder a's seq 2", trs[0].Gaps)
 	}
+	// only when named: by default its mutants (only ever undecided)
+	// were noise in every report
+	for _, m := range Mutations([]Step{a1, b1, a2, a3}) {
+		if m.Op == "gap" {
+			t.Errorf("a gap mutant by default: %v", m)
+		}
+	}
 }
 
 // contractLog is a log with what a recorder's contract is about:
@@ -540,7 +547,7 @@ func TestMutationsAgainstBruteForce(t *testing.T) {
 	logs := shapes()
 	logs["small"] = small
 	for name, log := range logs {
-		got, want := Mutations(log), naiveMutations(log)
+		got, want := Mutations(log, MutateOps(MutationOps...)), naiveMutations(log)
 		key := func(m StepMutant) string { return fmt.Sprintf("%s %d %s %s", m.Op, m.Index, m.Field, m.Change) }
 		if len(got) != len(want) {
 			var g, w []string
@@ -612,7 +619,7 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 			return false
 		}
 		byOp := map[string]int{}
-		for _, m := range Mutations(log) {
+		for _, m := range Mutations(log, MutateOps(MutationOps...)) {
 			byOp[m.Op]++
 			// a settle still settles: no step moved past it
 			if settled(log) && !settled(m.Steps) {

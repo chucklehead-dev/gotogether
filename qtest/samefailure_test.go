@@ -10,7 +10,9 @@ import (
 
 // SameFailure keeps each failing actor's first failure's kind and name,
 // whatever the arguments and actors' names, and has no verdict on a run
-// with a lost tail or an undecided actor.
+// with an undecided actor, a gap beside an actor that fails nowhere, or
+// a check with no verdict that failed before a FAIL; beside a FAIL that
+// stands, a gap or a lost tail decides nothing.
 func TestSameFailure(t *testing.T) {
 	t.Parallel()
 	step := func(action string, arg int) *qtrace.Step {
@@ -35,6 +37,16 @@ func TestSameFailure(t *testing.T) {
 	lost.Lost = []qtrace.Lost{{Recorder: "x"}}
 	undecided := disabled("acct-1", 5)
 	undecided.Conforms = validate.NotEvaluated
+	// failures that stand beside a gap precede what it dropped (validate
+	// judged them so): a FAIL, as Check says, not unknown as it once was
+	gapped := violates("x", "solvent", "within 1s")
+	gapped.Gaps = []qtrace.Gap{{Recorder: "x", First: 3, Last: 3}}
+	// a check with no verdict (a gap's) that failed before them: unknown
+	earlier := violates("x", "solvent", "within 1s")
+	earlier.Gaps = gapped.Gaps
+	earlier.Invariants = append(earlier.Invariants, validate.InvariantResult{Name: "fewOps", Verdict: validate.NotEvaluated, Failure: &validate.Failure{Index: 1}})
+	// a gap beside an actor that fails nowhere: it may hold a failure
+	passing := &validate.Result{Actor: "y", Conforms: validate.Pass, Gaps: gapped.Gaps}
 	for _, c := range []struct {
 		rep  *validate.Report
 		want tri
@@ -43,7 +55,10 @@ func TestSameFailure(t *testing.T) {
 		{rep(violates("b", "within 1s"), disabled("a", 1), violates("c", "solvent")), yes},
 		{rep(disabled("acct-1", 5)), no},
 		{rep(disabled("acct-1", 5), violates("acct-2", "solvent")), no}, // the first invariant failing is another
-		{rep(disabled("acct-1", 5), lost), unknown},
+		{rep(disabled("acct-1", 5), lost), yes},                         // the lost tail is after them
+		{rep(disabled("acct-1", 5), gapped), yes},
+		{rep(disabled("acct-1", 5), earlier), unknown},
+		{rep(disabled("acct-1", 5), violates("acct-2", "within 1s"), passing), unknown},
 		{rep(undecided, violates("acct-2", "within 1s")), unknown},
 		{nil, unknown},
 	} {

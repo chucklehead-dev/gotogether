@@ -45,6 +45,7 @@ mutated; they are renumbered with their recorder's steps.
 | `corrupt` | one argument or observation: ints and floats ±1, bools flipped, strings emptied and changed, the field removed | the binding does not read it (marked `Unread`, from `Binding.UsedFields`), or the model accepts both values |
 | `retime` | one step moved later, never past its actor's next step (a within's clock would go back) nor a settle or watermark: past the other actors' steps before it, else later within its gap; its actor's last, past another actor's next step | no `within` and no real-time order (`Linearize`) reads its time |
 | `reactor` | one step moved to another actor, in that actor's process | the actors' models do not tell the step apart |
+| `gap` (only when named: `-mutate-ops gap`, `MutateOps("gap")`) | one step out, its recorder's later seqs kept: a hole, as a sink that dropped it writes | nothing: its mutants are undecided by design (a failure the dropped step may explain is no verdict); it tests the absence path, not the run |
 
 ## Fates
 

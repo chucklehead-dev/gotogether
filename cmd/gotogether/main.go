@@ -742,8 +742,9 @@ func sortedKeys[V any](m map[string]V) []string {
 
 // output is the file at path, created (an existing one is not
 // overwritten: a scaffold is filled in by hand), or standard output.
-// checkOut refuses an -out that exists: a scaffold is filled in by
-// hand and never overwritten.
+// checkOut refuses an -out that exists (a scaffold is filled in by hand
+// and never overwritten) or whose directory does not, before quint runs:
+// a missing directory once failed after it, as if the file existed.
 func checkOut(path string) error {
 	if path == "" {
 		return nil
@@ -751,7 +752,15 @@ func checkOut(path string) error {
 	if _, err := os.Lstat(path); err == nil {
 		return fmt.Errorf("scaffold: %s exists (a scaffold never overwrites: remove it or pick another -out)", path)
 	}
+	if dir := filepath.Dir(path); !isDir(dir) {
+		return fmt.Errorf("scaffold: -out %s: directory %s does not exist (create it, or pick another -out)", path, dir)
+	}
 	return nil
+}
+
+func isDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
 }
 
 // writeOut writes a rendered scaffold to path, a new file, or to
@@ -781,7 +790,10 @@ func writeOut(path string, data []byte) error {
 // relativeTo is path as the file out will read it: relative to out's
 // directory (path given relative to the working directory), as is
 // without out (standard output, read from where it was written) or for
-// an absolute path.
+// an absolute path. Where a symlink makes the path relative to out's
+// directory as named differ from the one relative to it as resolved
+// (out in link/, link -> far/real: ../m.qnt from link/ is ../../proj/m.qnt
+// from far/real), it is absolute, right from either.
 func relativeTo(out, path string) string {
 	if out == "" || filepath.IsAbs(path) {
 		return path
@@ -797,6 +809,14 @@ func relativeTo(out, path string) string {
 	rel, err := filepath.Rel(dir, abs)
 	if err != nil {
 		return path
+	}
+	rdir, err1 := filepath.EvalSymlinks(dir)
+	rabs, err2 := filepath.EvalSymlinks(abs)
+	if err1 != nil || err2 != nil {
+		return filepath.ToSlash(rel) // (a path not there yet: as named)
+	}
+	if real, err := filepath.Rel(rdir, rabs); err != nil || real != rel {
+		return abs
 	}
 	return filepath.ToSlash(rel)
 }

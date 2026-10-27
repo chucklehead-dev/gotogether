@@ -142,10 +142,26 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 		}
 		return nil
 	}
-	// downgrade makes inv's failure no verdict: lost steps may explain it
+	// downgrade makes inv's failure no verdict: the steps a gap dropped
+	// may explain it. (A judgement again, on a search's report, finds it
+	// downgraded already: gapFailed.)
 	downgrade := func(inv *InvariantResult, why string) {
-		inv.Verdict, r.noVerdict = NotEvaluated, "lost steps"
+		if inv.Verdict != Fail {
+			return
+		}
+		inv.Verdict, inv.cause = NotEvaluated, droppedSteps
+		if r.noVerdict == "" {
+			r.noVerdict = droppedSteps
+		}
 		r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "gap", Msg: fmt.Sprintf("%s not evaluated: %s", inv.Name, why)})
+	}
+	// gapFailed: inv failed, or failed and a gap made it no verdict
+	gapFailed := func(inv *InvariantResult) bool {
+		return inv != nil && (inv.Verdict == Fail || inv.Verdict == NotEvaluated && inv.cause == droppedSteps)
+	}
+	// lostFailed: inv failed and a lost tail made it no verdict (judgeLost)
+	lostFailed := func(inv *InvariantResult) bool {
+		return inv != nil && inv.Verdict == NotEvaluated && inv.cause == lostSteps
 	}
 	if r.Conforms == Pass || r.noVerdict != "" {
 		for _, o := range r.withins {
@@ -155,10 +171,10 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 			g, gapped := gapIn(o.at, o.due)
 			l, cut := tailBy(o.due)
 			switch {
-			case failed && inv != nil && inv.Verdict == Fail && gapped:
+			case failed && gapFailed(inv) && gapped:
 				downgrade(inv, fmt.Sprintf("%s while its response was due (%s): the response may be among them", g, stamp(o.due)))
 				a.Cause, a.Why = Dropped, fmt.Sprintf("%s while the response was due (by %s): it may be among them; %s", g, stamp(o.due), dropFix)
-			case failed && inv != nil && inv.Verdict == NotEvaluated && r.noVerdict == "lost steps" && len(tails) > 0:
+			case failed && lostFailed(inv) && len(tails) > 0:
 				l, _ := tailBy(time.Time{})
 				if c, ok := tailBy(o.due); ok {
 					l = c
@@ -188,12 +204,12 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 			switch {
 			case inv != nil && inv.Verdict == Pass:
 				continue
-			case inv != nil && inv.Verdict == Fail && len(gaps) > 0:
+			case gapFailed(inv) && len(gaps) > 0:
 				downgrade(inv, fmt.Sprintf("%s: the step that makes it hold may be among them", gaps[0]))
 				a.Cause, a.Why = Dropped, fmt.Sprintf("false where the run settled, but %s: the step that makes it hold may be among them; %s", gaps[0], dropFix)
 			case inv != nil && inv.Verdict == Fail:
 				a.Cause, a.Why = Defect, "false where the run settled, and its recorders lost nothing"
-			case inv != nil && r.noVerdict == "lost steps":
+			case lostFailed(inv) && len(tails) > 0:
 				l, _ := tailBy(time.Time{})
 				a.Cause, a.Why = Dropped, fmt.Sprintf("its failure may depend on lost steps (%s); %s", l, dropFix)
 			case inv != nil:
@@ -252,21 +268,25 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 // search's (nil: the steps checked are they). A step of a search's order
 // is placed by its original (the recorded steps of its action, time,
 // arguments and observations: one of them after a gap is enough). A
-// resolution keeps the recorded order; a linearization does not: it may
-// put the dropped step, whose invocation and thread are unknown, before
-// any step but one of the dropped step's own thread, earlier in its
-// program order. So a linearized failure stands only where the actor's
-// steps are all one thread of one recorder, whose program order is the
-// recorded one; else it is no verdict (a FAIL lost, never a PASS made).
+// resolution keeps the recorded order.
+//
+// Two orders do not keep the dropped step where its seq was, and there
+// every failure but the initial state's is no verdict (a FAIL lost,
+// never a PASS made):
+//   - a linearization: the dropped step's invocation and thread are
+//     unknown, so it may be placed before any recorded step (its thread
+//     may be one no recorded step has, its invocation as early as any);
+//   - an actor whose steps carry a domain clock (quint.order.*): the
+//     dropped step's values are unknown, so the clock may order it before
+//     any recorded step of its process, whatever its seq. Placing it by
+//     position in the order checked (after the steps of later seqs) is
+//     not enough: a dropped step of a lower clock value than every
+//     recorded one comes first.
 func judgeGaps(r *Result, gaps []qtrace.Gap, recorded []qtrace.Step) {
 	if len(gaps) == 0 {
 		return
 	}
-	// oneThread: the actor's recorded steps are one thread of one recorder
-	oneThread := len(recorded) > 0 && recorded[0].Thread != ""
-	for _, o := range recorded {
-		oneThread = oneThread && o.Recorder == recorded[0].Recorder && o.Thread == recorded[0].Thread
-	}
+	unplaced := clocked(r, recorded)
 	// originals are the recorded steps s may be (s itself, if the order
 	// checked is the recorded one)
 	originals := func(s *qtrace.Step) []qtrace.Step {
@@ -293,7 +313,7 @@ func judgeGaps(r *Result, gaps []qtrace.Gap, recorded []qtrace.Step) {
 		if s == nil {
 			return qtrace.Gap{}, nil, false // the initial state's: before every gap
 		}
-		if strings.HasPrefix(s.Recorder, "linearized:") && !oneThread {
+		if unplaced || strings.HasPrefix(s.Recorder, "linearized:") {
 			return gaps[0], s, true
 		}
 		for _, o := range originals(s) {
@@ -317,7 +337,7 @@ func judgeGaps(r *Result, gaps []qtrace.Gap, recorded []qtrace.Step) {
 	}
 	if r.Conforms == Fail {
 		if g, s, ok := gapBefore(r.Failure); ok {
-			r.Conforms, r.noVerdict = NotEvaluated, "dropped steps"
+			r.Conforms, r.noVerdict = NotEvaluated, droppedSteps
 			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "gap", Msg: fmt.Sprintf(
 				"conformance not evaluated: the failure at %s comes after %s, which may explain it; %s", at(r.Failure, s), g, dropFix)})
 			for i := range r.Invariants {
@@ -333,11 +353,31 @@ func judgeGaps(r *Result, gaps []qtrace.Gap, recorded []qtrace.Step) {
 			continue
 		}
 		if g, s, ok := gapBefore(inv.Failure); ok {
-			inv.Verdict, r.noVerdict = NotEvaluated, "dropped steps"
+			inv.Verdict, inv.cause = NotEvaluated, droppedSteps
+			if r.noVerdict == "" {
+				r.noVerdict = droppedSteps
+			}
 			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "gap", Msg: fmt.Sprintf(
 				"%s not evaluated: its violation at %s comes after %s, which may explain it; %s", inv.Name, at(inv.Failure, s), g, dropFix)})
 		}
 	}
+}
+
+// clocked reports whether the actor's steps carry a domain clock (the
+// steps as recorded, else those r checked), which orders a step lost
+// from them wherever its unknown value falls.
+func clocked(r *Result, recorded []qtrace.Step) bool {
+	for _, o := range recorded {
+		if len(o.Order) > 0 {
+			return true
+		}
+	}
+	for _, c := range r.Calls {
+		if c.Step != nil && len(c.Step.Order) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ownGap is the gap of gaps that may hold pending call p's completion:

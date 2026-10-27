@@ -173,7 +173,7 @@ func (c *Checker) confirmWitness(ctx context.Context, tr *qtrace.Trace, plan *bi
 		if iv := &res.Invariants[i]; iv.Within && iv.Verdict == Fail && len(h.starts) > 1 {
 			// one start's: another the resume admits may meet it (with one
 			// start, the witness is every start)
-			iv.Verdict, res.noVerdict = NotEvaluated, "another admitted start"
+			iv.Verdict, iv.cause, res.noVerdict = NotEvaluated, "another admitted start", "another admitted start"
 			res.Issues = append(res.Issues, qtrace.Issue{Severity: "warn", Kind: "within", Msg: fmt.Sprintf(
 				"%s: not judged: it fails from the witness start, and another state %s admits may meet it", iv.Name, c.Binding.Resume)})
 		}

@@ -17,13 +17,19 @@ import (
 // failure before the cut stands; and the run is unsettled, its eventual
 // vals not judged (a lost withdrawal would leave the account empty, which
 // the recorded steps hide: no false PASS). Every check says so: Check,
-// CheckBatch, Judge's linearization.
+// CheckBatch, Judge's linearization, except that a linearization may
+// place a lost step, whose invocation is unknown, before any recorded
+// one: there the failure before the cut is no verdict too.
 func TestLostSuffixOtherRecorder(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
 	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
 	acct := func(rec string, seq uint64, ms int, action string, amount, balance int64) qtrace.Step {
 		return qtrace.Step{Action: action, Recorder: rec, Seq: seq, Time: at(ms), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
+	}
+	clock := func(s qtrace.Step, batch int64) qtrace.Step {
+		s.Process, s.Order = "p", map[string]int64{"batch": batch}
+		return s
 	}
 	lostA := func(steps ...qtrace.Step) []qtrace.Step {
 		return qtrace.MarkLost(steps, qtrace.Lost{Recorder: "a", After: 1})
@@ -44,6 +50,10 @@ func TestLostSuffixOtherRecorder(t *testing.T) {
 			"no verdict (lost steps)", "underLimit not evaluated: its violation at step 2"},
 		{"a failure before the cut", lostA(acct("b", 1, 5, "withdraw", 10, 0), acct("a", 1, 10, "deposit", 5, 5)),
 			"rejects withdraw", "recorder a lost its tail after seq 1; the failure comes before it, and stands"},
+		// a domain clock orders a step lost after the cut wherever its
+		// value falls: a deposit of batch 0 would fund the withdrawal
+		{"a clocked failure before the cut", lostA(clock(acct("a", 1, 10, "deposit", 5, 5), 1), clock(acct("b", 1, 5, "withdraw", 10, 0), 2)),
+			"no verdict (lost steps)", "may depend on a's lost steps after seq 1"},
 		{"a lost withdrawal", lostA(acct("a", 1, 10, "deposit", 5, 5), settle),
 			"", "eventual vals not judged (funded): recorder a lost its tail after seq 1"},
 	}
@@ -55,6 +65,10 @@ func TestLostSuffixOtherRecorder(t *testing.T) {
 	judge := func(name string, rep *Report, k int) {
 		t.Helper()
 		cs := cases[k]
+		if name == "Judge, linearized" && cs.name == "a failure before the cut" {
+			// a lost deposit linearized first funds the withdrawal
+			cs.reason, cs.says = "no verdict (lost steps)", "may depend on a's lost steps after seq 1"
+		}
 		a := rep.Actors[0]
 		if a.Reason() != cs.reason || !strings.Contains(a.Summary(), cs.says) {
 			t.Errorf("%s, %s: %q, want %q and %q:\n%s", name, cs.name, a.Reason(), cs.reason, cs.says, rep.Summary())

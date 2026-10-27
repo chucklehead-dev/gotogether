@@ -156,18 +156,27 @@ type Failure struct {
 	window time.Time
 }
 
-// failures are r's failures: its conformance's and its invariants'.
+// failures are r's failures: its conformance's and its invariants',
+// those that FAIL first (as Reason: an invariant violated before a gap
+// is r's failing step, ahead of another's no verdict after it).
 func (r *Result) failures() []*Failure {
-	var out []*Failure
+	var out, none []*Failure
 	if r.Failure != nil {
-		out = append(out, r.Failure)
-	}
-	for _, i := range r.Invariants {
-		if i.Failure != nil {
-			out = append(out, i.Failure)
+		if r.Conforms == Fail {
+			out = append(out, r.Failure)
+		} else {
+			none = append(none, r.Failure)
 		}
 	}
-	return out
+	for _, i := range r.Invariants {
+		switch {
+		case i.Failure != nil && i.Verdict == Fail:
+			out = append(out, i.Failure)
+		case i.Failure != nil:
+			none = append(none, i.Failure)
+		}
+	}
+	return append(out, none...)
 }
 
 // InvariantResult is one invariant's, or eventual val's, verdict in a replay.
@@ -181,6 +190,12 @@ type InvariantResult struct {
 	// Within: a bounded-response obligation (binding's Within), judged on
 	// the replay's timed states, named by binding.Within.Name
 	Within bool
+	// cause says why a failure is no verdict, when it is one (Verdict
+	// NotEvaluated, its Failure kept): "lost steps", "dropped steps",
+	// "uncollected steps", "another admitted start". Each invariant has
+	// its own: one result's may differ (a within downgraded by a gap
+	// beside another by an uncollected window).
+	cause string
 }
 
 // EventuallyName is how a result names an eventual val (binding's
@@ -679,15 +694,13 @@ func sanitize(s string) string {
 // recorders, which a dropped step may explain, or recorded steps that
 // pass beside one: only a failure before every gap is a FAIL), or "issue"
 // (another reconstruction error: a cycle, an overlap); "" when it is OK.
+// A failure anywhere wins over no verdict: an invariant violated before
+// every gap or cut is "violates I" though another check has none.
 func (r *Result) Reason() string {
 	switch {
 	case r.OK():
 		return ""
-	case r.Conforms == NotEvaluated && r.noVerdict != "":
-		return "no verdict (" + r.noVerdict + ")"
-	case r.Conforms == NotEvaluated:
-		return "no verdict (linearize budget)"
-	case r.Conforms != Pass:
+	case r.Conforms == Fail:
 		action := "a step"
 		if f := r.Failure; f != nil && f.Step != nil {
 			action = f.Step.Action
@@ -702,11 +715,27 @@ func (r *Result) Reason() string {
 		}
 		return "rejects " + action
 	}
+	// a failure anywhere is a FAIL, whatever else has no verdict: an
+	// invariant violated before every gap is a defect, though another's
+	// violation after one is no verdict
 	for _, inv := range r.Invariants {
-		if inv.Verdict == NotEvaluated && r.noVerdict != "" {
-			return "no verdict (" + r.noVerdict + ")"
+		if inv.Verdict == Fail {
+			return "violates " + inv.Name
 		}
-		if inv.Verdict != Pass {
+	}
+	switch {
+	case r.Conforms == NotEvaluated && r.noVerdict != "":
+		return "no verdict (" + r.noVerdict + ")"
+	case r.Conforms == NotEvaluated:
+		return "no verdict (linearize budget)"
+	}
+	for _, inv := range r.Invariants {
+		switch {
+		case inv.Verdict == NotEvaluated && inv.cause != "":
+			return "no verdict (" + inv.cause + ")"
+		case inv.Verdict == NotEvaluated && r.noVerdict != "":
+			return "no verdict (" + r.noVerdict + ")"
+		case inv.Verdict != Pass:
 			return "violates " + inv.Name
 		}
 	}
@@ -746,6 +775,8 @@ func (r *Result) Summary() string {
 		switch {
 		case i.Verdict == NotEvaluated && r.Conforms == NotEvaluated:
 			v = "not checked: the run's conformance has no verdict"
+		case i.Verdict == NotEvaluated && i.cause != "" && i.Failure != nil:
+			v = "no verdict (" + i.cause + ")"
 		case i.Verdict == NotEvaluated && r.noVerdict != "" && i.Failure != nil:
 			v = "no verdict (" + r.noVerdict + ")"
 		case i.Verdict == NotEvaluated:
@@ -765,7 +796,10 @@ func (r *Result) Summary() string {
 	if !r.OK() && len(r.Constants) > 0 {
 		fmt.Fprintf(&b, "  instance: %s\n", strings.Join(r.Constants, ", "))
 	}
-	if r.Module != "" { // (a search's verdict, with no replay of its own)
+	// a failing actor's module, to replay it by hand; a passing one's is
+	// none to look at, and the CLI removes its temporary directory
+	// (gotogether validate printed a path that was gone)
+	if r.Module != "" && !r.OK() { // (a search's verdict, with no replay of its own)
 		fmt.Fprintf(&b, "  module: %s\n", r.Module)
 	}
 	if r.ITF != "" {

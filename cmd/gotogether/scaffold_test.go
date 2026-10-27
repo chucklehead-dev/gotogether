@@ -153,6 +153,38 @@ func TestScaffoldPathsRelativeToOut(t *testing.T) {
 	}
 }
 
+// Through a symlink to a directory elsewhere, a path relative to out as
+// named is not one relative to it as resolved: absolute (the binding
+// once named ../funds.qnt, wrong from far/real). -out into a missing
+// directory fails before quint runs, saying so (it once failed after,
+// with "a scaffold never overwrites").
+func TestScaffoldOutSymlinkAndMissingDir(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"proj", "far/real"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "proj", "funds.qnt"), []byte("module funds {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "far", "real"), filepath.Join(dir, "proj", "link")); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	t.Chdir(filepath.Join(dir, "proj"))
+	abs, _ := filepath.Abs("funds.qnt")
+	if got := relativeTo("link/b.yaml", "funds.qnt"); got != abs {
+		t.Errorf("relativeTo through a symlink = %q, want %q", got, abs)
+	}
+	if got := relativeTo("sub/b.yaml", "funds.qnt"); got != "../funds.qnt" {
+		t.Errorf("relativeTo without a symlink = %q", got)
+	}
+	err := checkOut("nodir/b.yaml")
+	if err == nil || !strings.Contains(err.Error(), "directory nodir does not exist") {
+		t.Errorf("checkOut into a missing directory: %v", err)
+	}
+}
+
 // A binding scaffolded into a subdirectory lints there: its spec is
 // written relative to it.
 func TestScaffoldIntoSubdirectory(t *testing.T) {

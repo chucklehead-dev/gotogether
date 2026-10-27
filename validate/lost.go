@@ -14,12 +14,22 @@ func snapshotFirst(b *binding.Binding, tr *qtrace.Trace) bool { return b.Snapsho
 // startIssues is b.StartIssues(tr).
 func startIssues(b *binding.Binding, tr *qtrace.Trace) []qtrace.Issue { return b.StartIssues(tr) }
 
+// The causes of no verdict a lost tail and a gap give (Reason's "no
+// verdict (lost steps)", "no verdict (dropped steps)").
+const (
+	lostSteps    = "lost steps"
+	droppedSteps = "dropped steps"
+)
+
 // judgeLost is r as its trace's lost tails leave it (tr.Lost, or a
 // search's of the history it ordered): a failure at a step recorded at or
 // after a cut (when the recorder lost its tail) may depend on the steps it
 // lost, so it is no verdict, said so; a verdict before every cut stands,
 // and says what was lost. The eventual vals of such a trace were not
-// judged (Reconstruct leaves it unsettled).
+// judged (Reconstruct leaves it unsettled). Where the order checked
+// does not keep a lost step after the cut (a linearization; steps that a
+// domain clock orders), every failure but the initial state's is no
+// verdict, as after a gap (judgeGaps).
 func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 	var tails []qtrace.Lost
 	for _, l := range lost {
@@ -36,6 +46,7 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 			r.Issues[i] = notJudged(b.Eventually, lost)
 		}
 	}
+	unplaced := clocked(r, nil)
 	// cutBy is the lost tail f's step may depend on, if any
 	cutBy := func(f *Failure) (qtrace.Lost, bool) {
 		if f == nil {
@@ -47,6 +58,11 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 		}
 		if s == nil {
 			s = &qtrace.Step{} // the initial state's: before every cut, unless a window says otherwise
+		} else if unplaced || strings.HasPrefix(s.Recorder, "linearized:") {
+			// a lost step may be ordered before any recorded one, as a
+			// dropped one may (judgeGaps): its clock value, or its
+			// invocation and thread, are unknown
+			return tails[0], true
 		}
 		for _, l := range tails {
 			// a lost step came after l.At on its recorder's clock: a step of
@@ -73,7 +89,7 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 	downgraded := false
 	if r.Conforms == Fail {
 		if l, ok := cutBy(r.Failure); ok {
-			r.Conforms, r.noVerdict, downgraded = NotEvaluated, "lost steps", true
+			r.Conforms, r.noVerdict, downgraded = NotEvaluated, lostSteps, true
 			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "lost-suffix", Msg: fmt.Sprintf(
 				"conformance not evaluated: the failure at %s may depend on %s's lost steps after seq %d (%s): record so the steps survive (a qobs.Synced sink; a Buffered one loses its tail when its process dies), or check a log that has them",
 				at(r.Failure), l.Recorder, l.After, l)})
@@ -92,8 +108,10 @@ func judgeLost(b *binding.Binding, r *Result, lost []qtrace.Lost) {
 		if l, ok := cutBy(inv.Failure); ok {
 			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "lost-suffix", Msg: fmt.Sprintf(
 				"%s not evaluated: its violation at %s may depend on %s's lost steps after seq %d (%s)", inv.Name, at(inv.Failure), l.Recorder, l.After, l)})
-			inv.Verdict, downgraded = NotEvaluated, true
-			r.noVerdict = "lost steps"
+			inv.Verdict, inv.cause, downgraded = NotEvaluated, lostSteps, true
+			if r.noVerdict == "" {
+				r.noVerdict = lostSteps
+			}
 		}
 	}
 	if downgraded {

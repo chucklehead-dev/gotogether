@@ -378,6 +378,95 @@ func TestWatermarkReachesSettle(t *testing.T) {
 // with steps on the gap's recorder placed by time alone, "before the
 // gap, at its instant" is no verdict; with originals not looked up, the
 // linearized FAILs are.
+// TestGapFailureWins: a failure before every gap or cut is a FAIL,
+// whatever another check's failure after it (no verdict) says, by
+// Reason, the run's verdict and Finished alike. gapinv.yaml's first
+// invariant, fewOps, fails after the gap (or the cut), its second,
+// underLimit, before it: Reason once returned at the first invariant
+// with no verdict, and the CLI printed "invariant underLimit: FAIL"
+// above "RESULT: NO VERDICT".
+func TestGapFailureWins(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("testdata/gapinv.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep := func(rec string, seq uint64, at int, amount, balance int64) qtrace.Step {
+		return qtrace.Step{Action: "deposit", Recorder: rec, Thread: rec, Seq: seq, Time: atSec(at), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
+	}
+	rows := []struct {
+		name, nv string
+		steps    []qtrace.Step
+	}{
+		{"a gap", "no verdict (dropped steps)", []qtrace.Step{dep("r", 1, 1, 60, 60), dep("r", 2, 2, 60, 120), dep("r", 4, 4, 1, 121)}},
+		// q's step at 5s is after r's cut, its fewOps no verdict; r's
+		// underLimit at seq 2 is before it
+		{"a lost tail", "no verdict (lost steps)", qtrace.MarkLost([]qtrace.Step{dep("r", 1, 1, 60, 60), dep("r", 2, 2, 60, 120), dep("q", 1, 5, 1, 121)}, qtrace.Lost{Recorder: "r", After: 2})},
+	}
+	for _, x := range rows {
+		rep, err := c.Check(context.Background(), x.steps)
+		if err != nil {
+			t.Fatalf("%s: %v", x.name, err)
+		}
+		if len(rep.Actors) != 1 {
+			t.Fatalf("%s: %d actors", x.name, len(rep.Actors))
+		}
+		a := rep.Actors[0]
+		if got := a.Reason(); got != "violates underLimit" {
+			t.Errorf("%s: %q, want violates underLimit:\n%s", x.name, got, rep.Summary())
+		}
+		// the failing step is underLimit's (seq 2), not fewOps's after it
+		if v := VerdictOf(rep.Actors, nil); v.Verdict != Fail || v.Failing == nil || v.Failing.Recorder != "r" || v.Failing.Seq != 2 {
+			t.Errorf("%s: run verdict %v (%s) at %+v, want fail at seq 2 of r", x.name, v.Verdict, v.Reason, v.Failing)
+		}
+		if f := rep.Finished(); f.Verdict != Fail || f.Reason != "violates underLimit" {
+			t.Errorf("%s: finished %v (%s), want fail (violates underLimit)", x.name, f.Verdict, f.Reason)
+		}
+		if !strings.Contains(rep.Summary(), "invariant fewOps: "+x.nv) {
+			t.Errorf("%s: want fewOps %s:\n%s", x.name, x.nv, rep.Summary())
+		}
+	}
+}
+
+// TestGapLinearizedOtherThread: a linearization judges a gapped log no
+// verdict though its recorded steps are one thread: the dropped step's
+// thread may be one no recorded step has. Here t2's deposit (seq 3),
+// invoked before t1's seq 2 completed, explains seq 2's balance, and the
+// complete log conforms; with it dropped the log was once a FAIL.
+func TestGapLinearizedOtherThread(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms := func(n int) time.Time { return time.Unix(0, 0).Add(time.Duration(n) * time.Millisecond) }
+	st := func(seq uint64, th string, inv, at int, balance int64) qtrace.Step {
+		return qtrace.Step{Action: "deposit", Recorder: "r", Thread: th, Seq: seq, Invoked: ms(inv), Time: ms(at), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}}
+	}
+	full := []qtrace.Step{st(1, "t1", 0, 1000, 5), st(2, "t1", 2000, 3000, 15), st(3, "t2", 1500, 4000, 10), st(4, "t1", 4500, 5000, 20)}
+	for _, x := range []struct {
+		name   string
+		steps  []qtrace.Step
+		reason string
+	}{{"complete", full, ""}, {"seq 3 dropped", []qtrace.Step{full[0], full[1], full[3]}, "no verdict (dropped steps)"}} {
+		j, err := c.Judge(context.Background(), x.steps, SearchOptions{Linearize: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := j.Report.Actors[0].Reason(); got != x.reason {
+			t.Errorf("%s: %q, want %q:\n%s", x.name, got, x.reason, j.Report.Summary())
+		}
+		// a passing actor's module is not named: the CLI removes its
+		// temporary directory (it once printed a path that was gone)
+		sum := j.Report.Summary()
+		if named, want := strings.Contains(sum, "module: "), x.reason != ""; named != want {
+			t.Errorf("%s: module named %v, want %v:\n%s", x.name, named, want, sum)
+		}
+	}
+}
+
 func TestGapFailures(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
@@ -392,6 +481,17 @@ func TestGapFailures(t *testing.T) {
 	settle := func(rec string, seq uint64, at int) qtrace.Step {
 		return qtrace.Step{Action: "settled", Settled: true, Recorder: rec, Thread: rec, Seq: seq, Time: atSec(at)}
 	}
+	wd := func(seq uint64, amount, balance int64) qtrace.Step {
+		s := dep(seq, amount, balance)
+		s.Action = "withdraw"
+		return s
+	}
+	// clocked steps: one process's, ordered by a batch clock, not by seq
+	clocked := func(seq uint64, batch int64, balance int64) qtrace.Step {
+		s := dep(seq, 5, balance)
+		s.Thread, s.Process, s.Order = "", "p", map[string]int64{"batch": batch}
+		return s
+	}
 	dropped := "no verdict (dropped steps)"
 	rows := []struct {
 		name   string
@@ -405,10 +505,20 @@ func TestGapFailures(t *testing.T) {
 		{"a mismatch after the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 10), dep(4, 5, 20), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
 		{"a violation after the gap", []qtrace.Step{dep(1, 50, 50), dep(2, 40, 90), dep(4, 20, 110), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
 		{"passing beside the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 10), dep(4, 5, 15), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
-		{"a mismatch before the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 11), dep(4, 5, 20), settle("r", 5, 5)}, "mismatch after deposit", Fail, ""},
-		{"a violation before the gap", []qtrace.Step{dep(1, 50, 50), dep(2, 60, 110), dep(4, 5, 115), settle("r", 5, 5)}, "violates underLimit", Fail, ""},
+		// a linearization may place the dropped step, of a thread and an
+		// invocation unknown, before any recorded one
+		{"a mismatch before the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 11), dep(4, 5, 20), settle("r", 5, 5)}, "mismatch after deposit", Fail, dropped},
+		{"a violation before the gap", []qtrace.Step{dep(1, 50, 50), dep(2, 60, 110), dep(4, 5, 115), settle("r", 5, 5)}, "violates underLimit", Fail, dropped},
 		// one instant: the seqs order them
-		{"a mismatch before the gap, at its instant", []qtrace.Step{depAt("r", 1, 1, 5, 5), depAt("r", 2, 1, 5, 11), depAt("r", 4, 1, 5, 20), settle("r", 5, 1)}, "mismatch after deposit", Fail, ""},
+		{"a mismatch before the gap, at its instant", []qtrace.Step{depAt("r", 1, 1, 5, 5), depAt("r", 2, 1, 5, 11), depAt("r", 4, 1, 5, 20), settle("r", 5, 1)}, "mismatch after deposit", Fail, dropped},
+		// the label is the gap's, as Finished's (it once said lost steps)
+		{"an eventual val false after the gap", []qtrace.Step{dep(1, 5, 5), wd(3, 5, 0), settle("r", 4, 4)}, dropped, NotEvaluated, ""},
+		// batch 4 (seq 2) is checked last, after seq 4's batch 2; the
+		// dropped seq 3 may be batch 3, the deposit that explains it, or
+		// batch 0, before every recorded step: under a domain clock no
+		// failure stands after a gap (it once was a mismatch, a FAIL)
+		{"a mismatch a clock orders after the gap", []qtrace.Step{clocked(1, 1, 5), clocked(2, 4, 20), clocked(4, 2, 10), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
+		{"a mismatch a clock orders first", []qtrace.Step{clocked(1, 1, 6), clocked(2, 2, 10), clocked(4, 3, 15), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
 		// recorder q lost seq 2 between 10s and 12s: r's mismatch at 3s
 		// precedes it, at 11s it may follow it
 		{"a mismatch before another recorder's gap", []qtrace.Step{dep(1, 5, 5), depAt("r", 2, 3, 5, 11), depAt("q", 1, 10, 5, 15), depAt("q", 3, 12, 5, 20), settle("q", 4, 13)}, "mismatch after deposit", Fail, dropped},

@@ -156,6 +156,7 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 			// do not reach the window's end: the response may be in what is
 			// not collected yet. No verdict, which the run's end once read as
 			// a FAIL
+			res.cause = "uncollected steps"
 			r.Invariants = append(r.Invariants, res)
 			r.noVerdict = "uncollected steps"
 			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "within", Msg: w.Name() + ": no verdict: " + res.Failure.Note})

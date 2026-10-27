@@ -3429,15 +3429,47 @@ invariant's at or after a gap of the actor's recorders (`no verdict
 seq on the gap's recorder, a later time (by the slack) on another. A
 failure before every gap stands. Recorded steps that pass beside a gap
 are no verdict too, not a PASS, and `Finished` reads a gap as no
-verdict, not as an issue. A linearization places the dropped step,
-whose invocation and thread are unknown, anywhere but before its own
-thread's earlier steps, so a linearized failure stands only where the
-actor is one thread of one recorder (a FAIL lost, never a PASS made);
-a resolution keeps the recorded order, and a failure of its order is
-placed by its original. The gap op of `qtrace.Mutations` drops a step
-without renumbering, so the absence path is mutation-tested: its
-mutants are undecided, never killed (nor malformed: a gap is no longer
-among the issues that make one).
+verdict, not as an issue. A resolution keeps the recorded order, and a
+failure of its order is placed by its original. Two orders do not keep
+the dropped step where its seq was, and there no failure but the
+initial state's stands beside a gap (a FAIL lost, never a PASS made):
+- A linearization: the dropped step's invocation and thread are
+  unknown. Its thread may be one no recorded step has, so the recorded
+  steps' being one thread says nothing (the first version let a
+  failure stand there, and a review's log whose dropped step was
+  another thread's conformed whole and FAILed gapped); its invocation
+  may be as early as any, so it may be placed before any recorded step.
+  Invocation records would bound it (a dropped call's record is in the
+  gap too, after the step before it), but only if the recorder writes
+  one for every call, which no log shows of the step it lost.
+- A domain clock (`quint.order.*`) on the actor's steps: the dropped
+  step's value is unknown, so the clock may order it before any step of
+  its process, whatever its seq. Placing it by position in the order
+  checked (a failure after any step of a later seq than the gap's) is
+  not enough: a dropped step whose value is below every recorded one
+  comes first, and explains a failure at the first step. The rule is
+  the actor's, not the gap's recorder's: domain edges join a process's
+  recorders.
+A lost tail's cut (§50) is read the same way in those two orders: a
+lost step's invocation, or its clock value, is as unknown.
+
+A failure anywhere wins over no verdict: an invariant violated before
+every gap is a FAIL though another check's failure after it is none
+(`Reason`, and with it the manifest and the CLI's result line, once
+said no verdict there while `Finished` said FAIL), for a lost tail too;
+each check carries its own cause, so a within or an eventual val a gap
+explains says `dropped steps`, as `Finished` does, not `lost steps`.
+qtest reads it so: a run's first failure is known where every check
+with no verdict failed after it (`SameFailure`, `ShrinkActions`), and a
+FAIL of any actor kills a mutant, whatever another actor has no
+verdict of.
+
+The gap op of `qtrace.Mutations` drops a step without renumbering, so
+the absence path is mutation-tested: its mutants are undecided, never
+killed (nor malformed: a gap is no longer among the issues that make
+one). It is made only when named (`MutateOps("gap")`, `-mutate-ops
+gap`): undecided by design, it said nothing of a run and filled every
+report.
 
 A pending call's completion can be only in a gap of its
 own recorder after its seq: a completion follows its invocation in its

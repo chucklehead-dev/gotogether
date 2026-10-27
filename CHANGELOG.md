@@ -8,6 +8,27 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A failure that stands beside a gap or a lost tail is a FAIL, whatever
+  another check's failure after it (no verdict) says: `Result.Reason`
+  returned at the first invariant with no verdict, so the CLI printed
+  `invariant underLimit: FAIL` above `RESULT: NO VERDICT`. Each check
+  says its own cause (a within or an eventual val a gap explains is
+  `no verdict (dropped steps)`, as `Finished` says, not `lost steps`).
+  Under a domain clock (`quint.order.*`) or a linearization, no failure
+  after the initial state stands beside a gap or a lost tail: the lost
+  step's clock value, or its thread and invocation, may place it before
+  any recorded step (DESIGN §53). qtest agrees: `SameFailure` and
+  `ShrinkActions` know a FAIL that stands before every gap, and a FAIL
+  of any actor kills a mutant though another actor has no verdict.
+- `qtrace.Mutations` (and `-mutate-steps`) makes the gap op's mutants
+  only when named (`MutateOps("gap")`, `-mutate-ops gap`): they are
+  only ever undecided.
+- `gotogether scaffold -out`: a path through a symlinked directory is
+  written absolute where a relative one would read differently from
+  the link and its target; a missing -out directory fails before quint
+  runs, saying so. `validate`'s report names a passing actor's module
+  no more (the CLI removes its temporary directory).
+
 - A run's verdict (`validate.VerdictOf`, the manifest's, the CLI's
   result line) takes its reason and failing step from its first FAILing
   actor, else its first with no verdict: an earlier actor's no verdict

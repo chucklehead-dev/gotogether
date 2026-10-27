@@ -161,6 +161,7 @@ func TestClaimsOverGaps(t *testing.T) {
 	denseSettle := settle
 	denseSettle.Seq = 4
 	dense := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 10), dep(3, 20), denseSettle})
+	denseBefore := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 11), dep(3, 16), denseSettle})
 	for _, x := range []struct {
 		name string
 		e    Expectation
@@ -175,6 +176,10 @@ func TestClaimsOverGaps(t *testing.T) {
 		{"SameFailure beside the gap", SameFailure(dense), beside, unknown},
 		{"Mismatch before the gap", Mismatch("deposit"), before, yes},
 		{"Finishes before the gap", Finishes(), before, no},
+		// the failure stands, and the gap after it decides nothing (it
+		// once made every failure beside a gap unknown, while Check
+		// said FAIL)
+		{"SameFailure before the gap", SameFailure(denseBefore), before, yes},
 	} {
 		if got := x.e.value(x.run.Report); got != x.want {
 			t.Errorf("%s: %v, want %v:\n%s", x.name, got, x.want, x.run.Report.Summary())
@@ -185,6 +190,12 @@ func TestClaimsOverGaps(t *testing.T) {
 	}
 	if runs := []*Run{gapped}; decidedFailing(runs) || !anyUndecided(runs) {
 		t.Errorf("a run whose only failure a gap explains killed a mutant:\n%s", gapped.Report.Summary())
+	}
+	// a FAIL anywhere kills: one actor with no verdict beside another
+	// that fails (it once made the mutant undecided)
+	both := &Run{Report: &validate.Report{Actors: []*validate.Result{gapped.Report.Actors[0], before.Report.Actors[0]}}}
+	if runs := []*Run{both}; !decidedFailing(runs) || anyUndecided(runs) {
+		t.Errorf("a run with a FAILing actor beside one with no verdict killed no mutant:\n%s", both.Report.Summary())
 	}
 	if got := gapped.Report.Actors[0].Reason(); got != "no verdict (dropped steps)" {
 		t.Errorf("the gapped run's reason %q", got)

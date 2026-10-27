@@ -93,7 +93,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.manifest, "manifest", "", "write the run's manifest (gotogether.run/1) to this file: the tools, model, binding and inputs with their hashes, losses, the verdict and failing step; -replay judges it again")
 	fset.StringVar(&v.runInfo, "run-info", "", "with -manifest: a JSON file of what gotogether did not see, written by the driver: {\"name\": ..., \"driver\": {\"name\", \"version\", \"seed\", \"origin\", \"args\": [...]}, \"artifacts\": [{\"name\", \"path\"}]} (paths relative to the file)")
 	fset.BoolVar(&v.mutateSteps, "mutate-steps", false, "after a pass, judge the steps' observation mutants (a step dropped, duplicated, swapped with its recorder's next, an argument or observation corrupted, retimed past its neighbour, moved to another actor) as the steps were judged, and print a table of them by op, killed and survived: a survivor changed something no check reads (qtest.MutateSteps)")
-	fset.StringVar(&v.mutateOps, "mutate-ops", "", "with -mutate-steps: comma-separated ops to make (drop, dup, swap, corrupt, retime, reactor; default all)")
+	fset.StringVar(&v.mutateOps, "mutate-ops", "", "with -mutate-steps: comma-separated ops to make (drop, dup, swap, corrupt, retime, reactor, gap; default all but gap, whose mutants are only ever undecided)")
 	fset.IntVar(&v.mutateLimit, "mutate-limit", 0, "with -mutate-steps: at most this many mutants of each op, spread over the log (default: every one)")
 	replay := fset.String("replay", "", "judge a run again from its manifest (validate -manifest's, or a test's under GOTOGETHER_EVIDENCE), refusing an input whose hash changed; exit as validate does, and 1 if the verdict is not the manifest's")
 	fset.Parse(args)

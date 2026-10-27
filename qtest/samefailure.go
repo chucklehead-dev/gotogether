@@ -64,27 +64,70 @@ func SameFailure(r *Run) Expectation {
 }
 
 // unjudgedFailure reports whether rep lacks a verdict that its actors' first
-// failures depend on: an actor whose conformance is undecided, a lost
-// tail or a gap (either may hold an earlier failure), or a conforming actor's
-// invariant, within or eventual val with no verdict (which may have
-// failed first). A non-conforming actor's invariants are judged by no
-// check (the replay stops at its failure): its first failure is the
-// conformance failure.
+// failures depend on (unjudgedActor), as validate's Reason reads them: a
+// failure that stands is the actor's first unless a check with no
+// verdict failed before it.
 func unjudgedFailure(rep *validate.Report) bool {
-	if undecided(rep) {
-		return true
-	}
 	for _, a := range rep.Actors {
-		if len(a.Lost) > 0 || len(a.Gaps) > 0 {
+		if unjudgedActor(a) {
 			return true
 		}
-		if a.Conforms != validate.Pass {
-			continue
+	}
+	return false
+}
+
+// unjudgedActor reports whether a's first failure is unknown. With no
+// failure that stands (a FAIL): when its conformance is undecided, it lost
+// a tail or has a gap (either may hold a failure), or it conforms and an
+// invariant, within or eventual val has no verdict. With one: when a
+// check with no verdict failed before it, or a conforming actor's check
+// was not judged at all (it may have failed first). A failure that
+// stands beside a gap or a lost tail precedes what they lost (validate
+// judged it so), and a non-conforming actor's invariants are judged by
+// no check (the replay stops at its failure): its first failure is the
+// conformance failure.
+func unjudgedActor(a *validate.Result) bool {
+	at := func(f *validate.Failure) int {
+		if f == nil {
+			return int(^uint(0) >> 1)
+		}
+		return f.Index
+	}
+	first, failed := 0, false
+	stand := func(f *validate.Failure) {
+		if !failed || at(f) < first {
+			first, failed = at(f), true
+		}
+	}
+	if a.Conforms == validate.Fail {
+		stand(a.Failure)
+	}
+	for _, inv := range a.Invariants {
+		if inv.Verdict == validate.Fail {
+			stand(inv.Failure)
+		}
+	}
+	if !failed {
+		if a.Conforms == validate.NotEvaluated || len(a.Lost) > 0 || len(a.Gaps) > 0 {
+			return true
 		}
 		for _, inv := range a.Invariants {
-			if inv.Verdict == validate.NotEvaluated {
+			if a.Conforms == validate.Pass && inv.Verdict == validate.NotEvaluated {
 				return true
 			}
+		}
+		return false
+	}
+	if a.Conforms == validate.NotEvaluated && at(a.Failure) < first {
+		return true
+	}
+	for _, inv := range a.Invariants {
+		switch {
+		case inv.Verdict != validate.NotEvaluated:
+		case inv.Failure != nil && at(inv.Failure) < first:
+			return true
+		case inv.Failure == nil && a.Conforms == validate.Pass:
+			return true
 		}
 	}
 	return false

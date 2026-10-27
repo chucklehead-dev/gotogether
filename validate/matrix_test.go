@@ -181,6 +181,8 @@ func matrixConsumers() []matrixConsumer {
 	}
 	hiddenSearch := "a search with hidden actions is refused: each candidate would be a search of their states"
 	resumeSearch := "a search of a log that resumes is refused: each candidate would be a search from the resume's states"
+	// (TestGapLinearizedOtherThread, TestGapFailures judge it so)
+	gapSearch := "a linearization may place a dropped step, its thread and invocation unknown, before any recorded one: no failure after the initial state stands beside a gap (DESIGN §53)"
 	return []matrixConsumer{
 		{name: "Check", judge: check(""), na: noSearch},
 		{name: "Check (shadow)", judge: check("shadow"), na: noSearch},
@@ -194,8 +196,8 @@ func matrixConsumers() []matrixConsumer {
 		}, na: noSearch},
 		{name: "Judge", judge: judge("", false)},
 		{name: "Judge (quint alone)", judge: judge("quint", false), na: map[string]string{"hidden": "hidden actions are the Go evaluator's alone: quint cannot replay a step whose choices are unknown"}},
-		{name: "Judge, linearized", judge: judge("", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch}},
-		{name: "Judge, linearized (quint alone)", judge: judge("quint", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch}},
+		{name: "Judge, linearized", judge: judge("", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch, "gap": gapSearch}},
+		{name: "Judge, linearized (quint alone)", judge: judge("quint", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch, "gap": gapSearch}},
 	}
 }
 

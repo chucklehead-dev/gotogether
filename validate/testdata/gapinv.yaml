@@ -1,0 +1,9 @@
+spec: gapinv.qnt
+module: gapinv
+actions:
+  deposit:
+    args: { amount: '{{.amount}}' }
+    expect: 'balance == {{.obs.balance}}'
+# fewOps first: its failure after a gap or a cut must not hide
+# underLimit's before it
+invariants: [fewOps, underLimit]

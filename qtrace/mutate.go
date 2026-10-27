@@ -39,8 +39,11 @@ type StepMutant struct {
 
 func (m StepMutant) String() string { return m.Op + " " + m.Detail }
 
-// The mutations, in the order Mutations makes them.
-// Read-only.
+// The mutations, in the order Mutations makes them. Every one but gap
+// is made by default; gap only when named (MutateOps("gap")): its
+// mutants can only be undecided (a failure a dropped step may explain is
+// no verdict), so it tests the absence path, not the run, and in every
+// report it was noise. Read-only.
 var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap"}
 
 // A MutationOption narrows Mutations.
@@ -51,8 +54,9 @@ type mutationConfig struct {
 	limit int             // per op; 0: none
 }
 
-// MutateOps makes only these ops' mutants (MutationOps names them). An
-// unknown op panics, naming the ops: a misspelled one would make none.
+// MutateOps makes only these ops' mutants (MutationOps names them; gap
+// is made only so). An unknown op panics, naming the ops: a misspelled
+// one would make none.
 func MutateOps(ops ...string) MutationOption {
 	for _, op := range ops {
 		if !slices.Contains(MutationOps, op) {
@@ -76,7 +80,8 @@ func MutateOps(ops ...string) MutationOption {
 func MutateLimit(n int) MutationOption { return func(c *mutationConfig) { c.limit = n } }
 
 // Mutations are steps' single mutations, each a whole log (StepMutant),
-// in a fixed order: by op (drop, dup, swap, corrupt, retime, reactor, gap),
+// in a fixed order: by op (drop, dup, swap, corrupt, retime, reactor, and
+// gap when MutateOps names it),
 // then by the step's index, then by field and change. Only model steps
 // (Step.Model) are mutated; invocation, settle and loss records stay, and
 // are renumbered with their recorder's steps. Each op keeps the
@@ -136,7 +141,7 @@ func Mutations(steps []Step, opts ...MutationOption) []StepMutant {
 	}
 	var out []StepMutant
 	for _, op := range MutationOps {
-		if c.ops != nil && !c.ops[op] {
+		if c.ops != nil && !c.ops[op] || c.ops == nil && op == "gap" {
 			continue
 		}
 		var ms []StepMutant
