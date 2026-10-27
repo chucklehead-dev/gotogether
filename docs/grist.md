@@ -3,10 +3,12 @@
 Status: design, nothing built. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
-alongside). This note says what to build and in what order; the Go
-below is **proposed API** of packages that do not exist yet (`grist`,
-`grist/simstore`, ...), written so that it parses. Every name it takes
-from an existing package (`qenv`, `qobs`, `qtest`, ...) exists today.
+alongside); revised the same day after a review, every point of which
+was checked against the code (§0). This note says what to build and in
+what order (§8: three slices); the Go below is **proposed API** of
+packages that do not exist yet (`grist`, `grist/simstore`, ...), written
+so that it parses. Every name it takes from an existing package (`qenv`,
+`qobs`, `qtest`, ...) exists today. "grist" is a codename (§10.5).
 
 grist takes the shape of ObneyAI/grain (Clojure): an application is a
 fixed set of blocks (commands, events, read models, queries,
@@ -20,31 +22,78 @@ checked against a Quint model, explored in a simulation, shrunk and
 mutated without one annotation of its own. What the application writes
 is its decisions and folds; what it gets is gotogether.
 
+## 0. What the review changed, and where the code disagreed
+
+Adopted: tenants as actors with one fixed process and a domain clock
+(§3.1); reads pinned to one position (§2.3); processors reading as of
+their trigger (§2.6); checkpoints in a table (§2.6, §10.2); verdicts as
+Rejects and Mismatch where the model's precondition or expectation is
+what fails (§3.2); qsql's real prerequisite as its own item (§8.2); the
+SQL tier's isolation, retries and timeouts (§2.10); idempotency in full
+(§2.4); the binding's typed values and recorded read set (§3.2);
+client-side steps (§3.1); three slices instead of one spike (§8).
+
+Where the code said something other than the review, or than the first
+version of this note:
+
+- **The ordering rule is DESIGN §3 and §4, not §6.** `qtrace.build`
+  orders by a domain clock only within one (actor, process), equal
+  values concurrent, every step of a value before every step of a
+  larger one; hence the fixed process (§3.1). Thread (program order)
+  edges apply too, so the encoding must agree with each task's order:
+  the review's 2·P+1 holds for queries and rejections, but a
+  processor's checkpoint-only step at 2·T+1 (T its trigger) would make
+  a cycle (emit at 7 for trigger 5, then checkpoint trigger 6: 14
+  before 13 on one thread). §3.1 uses the head its transaction read.
+- **A settle is voided by a later step on any recorder**, not only its
+  own (beyond `RealTimeSlack`): probes on a separate recorder are sound
+  only while they take no virtual time, so §3.6 settles again after them.
+- **qsql already has `ORDER BY pk [ASC|DESC]` and `LIMIT`.** It lacks
+  keys of several columns (42P16, "qsql keys rows by one column": the
+  first note's tables were keyed by two and three), ranges, `RETURNING`
+  and `DO UPDATE`; its isolation is store-wide (§8.2).
+- **`qenv.FaultPoint` has one crash option**, `crash`: the effect's two
+  crash points are a `DeclareFaults` kind and `Sim.FaultOf` (§3.5).
+- **qobs encodes structs with `fmt.Sprint`**, not JSON, and binding's
+  `jsonElem` renders objects as quoted strings and floats truncated:
+  grist encodes events itself, and binding needs a typed function (§3.2).
+- **One System has one binding, and qtest has no actor filter**: a
+  run records commit steps or client steps, not both (§3.1).
+- **`Scan` walks every row of the store** (a Serializable commit again
+  per scanned prefix), with no range: simstore's cost grows with the
+  store, not the tenant (§2.10).
+- **`GetForUpdate` under Snapshot and Serializable aborts with
+  ErrConflict** if the key changed since the snapshot: a lost race for
+  the head is transient, not a failed condition (§2.4).
+- **qlint has no map-range rule**: gristpure needs one written (§4.1).
+- **`GOTOGETHER_STRICT=1` turns toolkit skips into failures**
+  (`qtest.Optional` included), nothing more: stubs fail under it only if
+  reported through `qtest.Optional` (§3.2).
+
+Decided differently from the review: rejections are not remembered
+under their idempotency key (§2.4); `leakTenant` is dropped, tenant
+isolation being a contract-suite test with a mutant store (§3.3).
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
-Both were read in grain's code (scratchpad research, 2026-10-27), and
-the spike (§8) reproduces both before it fixes them.
+Both were read in grain's code (research notes, 2026-10-27); slice 1
+(§8.1) reproduces both before it fixes them.
 
-1. **The unique-name race.** grain's own example `create-counter`
-   checks that no counter has the name by projecting a read model, then
-   appends with no `:cas`. Two concurrent creates both see no counter
-   and both append: the invariant its spec claims (`UniqueCounterName`)
-   is false, and nothing in grain can find it (no concurrent test, no
-   exploration). In grain the safe version is opt-in (a hand-written CAS
-   query that must cover what the handler read); the unsafe one is the
-   short one.
+1. **The unique-name race.** grain's example `create-counter` checks
+   that no counter has the name by projecting a read model, then appends
+   with no `:cas`: two concurrent creates both append, and the invariant
+   its spec claims (`UniqueCounterName`) is false, with nothing in grain
+   to find it. The safe version is opt-in; the unsafe one is the short one.
 2. **The duplicated effect.** grain's example processor calls
    `process-command` directly and returns `{}`: the command's events and
-   the processor's checkpoint are two appends, and a crash between them
-   runs the command again on restart. grain's spec accepts duplicates,
-   which is how the gap was papered over.
+   the checkpoint are two appends, and a crash between them runs the
+   command again. grain's spec accepts duplicates.
 
-grist's answers, which shape everything below: **an append is
-conditioned on everything its decision read, unless the code says
-otherwise in words**; and **a processor's own appends carry its
-checkpoint in the same transaction**, so the only duplicates left are
-external effects, whose delivery guarantee is declared, recorded and
-judged.
+grist's answers: **an append is conditioned on everything its decision
+read, unless the code says otherwise in words**; and **a processor's own
+appends carry its checkpoint in the same transaction**, so the only
+duplicates left are external effects, whose delivery guarantee is
+declared, recorded and judged.
 
 ## 2. The blocks
 
@@ -52,23 +101,30 @@ Registration is typed generic Go: package-level values built by
 constructors on an `*grist.App`, no code generation for the runtime
 (grain's macros become constructors; their def-site facts become what
 the analyzer reads, §4). Code generation is for the model and the
-binding only (§3.2), from the registry.
+binding only (§3.2), from the registry, by `cmd/grist` (§7).
 
 ### 2.1 Events
 
 An event is a Go struct registered under a stable name and a version.
 The name, not the Go type's, is what is stored, so a type can be
-renamed. Tags (grain's `#{[entity-type uuid]}`) are fields marked
-`grist:"tag"`; the tag's name is the field's JSON name. The schema is
-the type: JSON encoding through `encoding/json`, a JSON Schema derived
-by reflection for the catalog and the API, and a schema hash per
-(name, version) kept in `grist.lock` (checked in).
+renamed. Tags are fields marked `grist:"tag"`; a tag is a (key, value)
+pair, the key the field's JSON name. A tag that exists to make a value
+unique, DCB's `name:x`, is an ordinary tag: `CounterCreated`'s `Name`
+is tagged, so "no counter has this name" is a read of one tag value,
+not of every name (§2.3). The schema is the type: JSON through
+`encoding/json`, a JSON Schema derived by reflection for the catalog
+and the API, and a schema hash per (name, version) kept in `grist.lock`
+(checked in). Field types are what the model can hold: strings,
+integers, booleans, slices, maps, structs, string enums
+(`grist:"enum"`). `float32`, `float64` and `time.Time` are refused at
+registration, with the fix: integers in a stated unit (cents, basis
+points, Unix milliseconds); `grist.Meta` carries the append's time.
 
 ```go
 // proposed: package counters, an application
 type CounterCreated struct {
 	Counter string `json:"counter" grist:"tag"`
-	Name    string `json:"name"`
+	Name    string `json:"name" grist:"tag"`
 }
 
 type CounterIncremented struct {
@@ -83,24 +139,20 @@ var (
 )
 ```
 
-**Versioning.** A change to a registered (name, version)'s schema hash
-fails `grist verify` and boot: "counter-created v1 changed (field name
-renamed to title): register v2 and an upcaster". Old versions stay
-registered as their own types with an upcaster to the next version:
-
-```go
-// proposed
-var CreatedV2 = grist.NewEvent[CounterCreatedV2](App, "counter-created", grist.Version(2),
-	grist.UpcastFrom(Created, func(v1 CounterCreated) CounterCreatedV2 {
-		return CounterCreatedV2{Counter: v1.Counter, Title: v1.Name}
-	}))
-```
-
-Reads upcast stored events to the latest version before any fold or
-handler sees them; appends write the latest version only. Upcasters are
-pure (§4). A stored event's envelope (`grist.Meta`) is the store's:
-tenant, position, time, the command or trigger that caused it, and the
-transaction it belongs to.
+**Versioning** (slice 3). A change to a registered (name, version)'s
+schema hash fails `grist verify` and boot ("counter-created v1 changed:
+register v2 and an upcaster"). Old versions stay registered with a pure
+upcaster to the next (`grist.UpcastFrom(Created, func(v1
+CounterCreated) CounterCreatedV2 {...})`); reads upcast before any fold
+or handler sees an event, appends write the latest version only.
+**Upcasters must not change tags**: the index is written at append time
+from the stored version's tags, so an upcaster that adds, drops or
+changes one makes queries disagree with folds. `grist verify` runs each
+upcaster over generated values and refuses one whose output's tags
+differ from its input's, unless the new version is registered with
+`grist.Reindex()`, which rewrites the index under the tenant's lock at
+boot. A stored event's envelope (`grist.Meta`) is the store's: tenant,
+position, time, and the command or trigger that caused it.
 
 ### 2.2 Read models
 
@@ -118,21 +170,43 @@ var CounterNames = grist.NewReadModel(App, "counter-names", 1, func() Names { re
 		return s
 	}))
 
-var Totals = grist.NewKeyedReadModel(App, "totals", 1, "counter", func() int { return 0 },
+var Totals = grist.NewKeyedReadModel(App, "totals", 1, grist.Keys("counter"), func() int { return 0 },
 	grist.On(Incremented, func(s int, e CounterIncremented, m grist.Meta) int { return s + e.By }))
 ```
 
 A plain read model folds the tenant's events of its types; a keyed one
-(`NewKeyedReadModel`, keyed by a tag) folds only the events carrying one
-value of that tag, so a decision about counter c reads, and is
-conditioned on, counter c's events alone. The version is the cache's:
-bump it when the fold changes. The spike folds from the log on every
-read (no cache). The cache, when it comes, stores snapshots encoded, as
-JSON with the position they fold through, and decodes a fresh value per
-read, so a fold that mutates its state in place (a map, as above) is
-safe and no state is shared between two decisions.
+folds only the events carrying the given values of its key tags
+(`grist.Keys("counter")`, or several: `grist.Keys("account", "currency")`
+folds the events tagged with both), so a decision about counter c reads,
+and is conditioned on, counter c's events alone. The version is the
+cache's: bump it when the fold changes. Slices 1 and 2 fold from the log
+on every read (no cache); snapshots are a gap (§9).
 
-### 2.3 Commands
+### 2.3 Reads: one position, a set of queries
+
+`*grist.Reads` is a decision's only access to state. **Its first read
+pins the position**: the head at that read, P. Every later read of the
+same `Reads` folds through P, never past it, so a decision sees one
+state, whatever commits while it runs. Every read is recorded as a
+query: an event type set and a tag set (all must match), through P.
+The reads are:
+
+- `X.Get(r)`, a plain read model: a query of its types;
+- `X.For(r, keys...)`, a keyed read model: its types and those tag
+  values;
+- `r.Exists(Event, tags...)`: whether an event of that type with those
+  tags exists through P, a query that folds nothing (the uniqueness
+  check);
+- `r.Events(q)`: a raw query, `grist.Query{Types, Tags, Reverse,
+  Limit}` (newest first with a limit is the "latest of" read grain has).
+
+The **condition** of the decision's append is DCB's form, one position
+and the union of the queries: it commits only if no event matching any
+of them was appended after P. A read with `Reverse` or `Limit`
+conditions on its whole query, not on the events it returned: a later
+event matching it would have changed the answer.
+
+### 2.4 Commands
 
 A command is a struct (its arguments) and a decision: **reads and a
 command in, events or an error out**.
@@ -146,110 +220,134 @@ type CreateCounter struct {
 
 var ErrNameTaken = grist.Rejection("name-taken")
 
-var Create = grist.NewCommand(App, "create-counter",
-	func(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
-		if _, taken := CounterNames.Get(r)[c.Name]; taken {
-			return nil, ErrNameTaken
-		}
-		return grist.Emit(Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name})), nil
-	},
-	grist.Authorize(grist.Role("editor")))
+func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
+	if r.Exists(Created, grist.Tag("name", c.Name)) {
+		return nil, ErrNameTaken
+	}
+	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name})}, nil
+}
+
+var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Authorize(grist.Role("editor")))
 ```
 
-`r` is the decision's only access to state. Every read through it
-(`CounterNames.Get(r)`, `Totals.For(r, id)`, a raw `r.Events(q)`) is
-recorded as a query (types, tags) folded through a position P. **The
-append is conditioned on that read set**: it commits only if no event
-matching any of those queries was appended after P. Otherwise the
-runtime folds again from the new position and decides again (5 tries by
-default, then `grist.ErrConflict`, a 409 at the API). This is the
-dynamic consistency boundary of the "kill the aggregate" pattern, and
-it is the default because it is derived, not declared: a decision that
-reads names is conditioned on names whether or not its author thought
-about concurrency. grain's race cannot be written by accident; it can be
-written on purpose:
+**The append is conditioned on the read set** (§2.3). When the
+condition fails, the runtime reads again at the new head and decides
+again (5 tries by default, then `grist.ErrConflict`, a 409 at the API).
+This is the dynamic consistency boundary of the "kill the aggregate"
+pattern, and it is the default because it is derived, not declared: a
+decision that reads names is conditioned on names whether or not its
+author thought about concurrency. Contention follows the reads: the
+create above conflicts only with a create of the same name, an
+increment read through `Totals.For(r, c)` only with increments of c.
+grain's race cannot be written by accident; it can be written on
+purpose:
 
 ```go
-// proposed: the unsafe variant, which the analyzer flags (§4) and the spike's exploration rejects (§8)
+// proposed: the unsafe variant, which gristflow flags (§4.1) and slice 1's exploration rejects (§8.1)
 var CreateBlind = grist.NewCommand(App, "create-counter", decideCreate,
 	grist.Unconditioned("names are advisory here"))
 ```
 
 The other consistency options: `grist.Within(Totals)` narrows the
-condition to some of the reads (the rest are advisory: the decision is
-still correct if they are stale, and the option's reason says why);
-`grist.Also(q)` adds a query the decision did not read (rare: a
-command whose correctness depends on an event's absence it does not
-fold). No option widens beyond the tenant: there are no cross-tenant
+condition to some of the reads (the rest are advisory, the option's
+reason says why); `grist.Also(q)` adds a query the decision did not read.
+No option widens beyond the tenant: there are no cross-tenant
 transactions, as in grain.
+
+**Transient errors are not failed conditions.** A lost race for the
+tenant's lock (the simstore's ErrConflict under Snapshot or
+Serializable; SQLSTATE 40001 and 40P01 on PostgreSQL; SQLITE_BUSY after
+`busy_timeout`) and a commit of unknown outcome are retried from the
+idempotency check (below), with backoff in virtual time, on a budget of
+their own (10 by default), and never count as one of the 5 condition
+tries. Only `*grist.ConditionFailed` (an event matching the read set
+after P) means "decide again".
 
 **Rejections and errors.** A decision returns either events or an
 error. A `grist.Rejection` (a named, expected refusal) is a result:
 recorded as the step's outcome, a 422 with its name at the API. Any
 other error is a fault of the code (a 500), recorded with its text.
 
-**Identity and idempotence.** Every command carries an envelope
-(`grist.Envelope`: command id, tenant, actor, time), the id chosen by
-the caller (the API requires it as `Idempotency-Key`). The transaction
-marker the store writes with each batch (§2.9) is tagged with the
-command id, and the append's condition includes "no marker with this
-id". A retried command whose first attempt committed (a lost response,
-the case payd's dedupe is for) gets the first attempt's result back,
-read from its marker, and appends nothing. Event ids that a decision
-needs (a new counter's id when the caller gives none) come from
-`r.ID(n)`: a UUIDv5 of the command id and n, so a decision stays a
+**Idempotency.** Every command carries an envelope (`grist.Envelope`:
+command id, tenant, actor, time), the id chosen by the caller (the API
+requires it as `Idempotency-Key`). Each committed batch writes a marker
+keyed by the command id, holding the hash of the command's canonical
+JSON and the command's result. Every try, the first and each retry,
+begins by reading the marker (a keyed read, so the marker is in the read
+set and the append's condition covers "no marker with this id"):
+
+- a marker with the same hash: the first attempt committed (a lost
+  response, the case payd's dedupe is for); its result is returned and
+  nothing is appended or recorded;
+- a marker with another hash: a 422 `idempotency-key-reused`, recorded
+  as a rejection;
+- no marker: decide.
+
+**A command's result** is what its marker holds: the batch's last
+position and an `EventRef{Tenant, Pos}` per event (§10.3), never a value
+the decision computes, so the marker needs nothing of the application
+and a retry's answer is the first attempt's exactly. **Rejections are
+not remembered**: a refusal commits nothing (remembering it would turn
+every refusal into a contended append on the tenant's lock), so a retry
+of a refused command decides again on fresh reads, and may succeed if
+the state changed. A key names at most one committed outcome. Event ids a
+decision needs (a new counter's id when the caller gives none) come
+from `r.ID(n)`: a UUIDv5 of the command id and n, so a decision stays a
 function of its inputs and its retries mint the same ids.
 
 **Composition.** grain's `skip-event-storage` (a parent command running
 children) becomes `grist.Sub(r, Child, c)`: the child decides on the
-parent's `Reads`, its reads join the parent's condition, its events the
-parent's batch. One append, one step per command (the child's step
-records its parent).
+parent's `Reads` (the same P), its queries join the parent's condition,
+its events the parent's batch. One append, one step (the parent's,
+naming the children).
 
-### 2.4 Queries
+### 2.5 Queries
 
 A query is reads and arguments in, a result out; it never appends.
 
 ```go
 // proposed
-type CounterView struct {
-	Name  string `json:"name"`
-	Total int    `json:"total"`
-}
-
 var Show = grist.NewQuery(App, "show-counter",
 	func(r *grist.Reads, q struct{ Counter string }) (CounterView, error) {
-		/* look the counter up in CounterNames.Get(r), total from Totals.For(r, q.Counter) */
-		return CounterView{}, nil
-	},
-	grist.Authorize(grist.Role("viewer")))
+		return CounterView{ /* CounterNames.Get(r), Totals.For(r, q.Counter) */ }, nil
+	}, grist.Authorize(grist.Role("viewer")))
 ```
 
-Its step (§3.1) records the result as an observation and the position
-it was read through, so the model can check that the answer is the
-fold of the log at that position.
+Its step (§3.1) records the result and the pinned position P, so the
+model checks that the answer is the fold of the log through P.
 
-### 2.5 Processors
+### 2.6 Processors
 
 A processor subscribes to event types and handles each event (in
-position order, per tenant) from its checkpoint. Its handler returns
-one of four results, grain's four delivery shapes with the gap of the
-fourth closed:
+position order, per tenant) after its checkpoint. **Its handler reads
+as of the trigger's position T, unconditioned**: positions are dense and
+committed in order (§2.10), so the prefix through T never changes, and a
+read through it needs no condition. The only condition on a processor's
+own commit is its checkpoint's. The results:
 
 | result | what commits | guarantee |
 | --- | --- | --- |
-| `grist.Emit(events...)` | the events and the checkpoint, one append, conditioned on the handler's reads and on the checkpoint | exactly once in the log |
-| `grist.Dispatch(cmd, c)` | the command's decision, run on the processor's reads, its events and the checkpoint in one append | exactly once in the log |
-| `grist.Effect(f, grist.AtLeastOnce)` | f runs, then the checkpoint (and f's outcome event) | at least once outside the log |
-| `grist.Effect(f, grist.AtMostOnce)` | the checkpoint first, then f, then f's outcome event | at most once outside the log |
+| `grist.Emit(events...)` | the events and the checkpoint, one transaction, conditioned on the checkpoint alone | exactly once in the log |
+| `grist.Dispatch(cmd, c)` | the command decided on fresh reads at the head, conditioned on them as any command is, with the checkpoint in the same transaction | exactly once in the log |
+| `grist.Effect(f, grist.AtLeastOnce)` | f runs, then the checkpoint (and an outcome event, `grist.OnSuccess(e)`) | at least once outside the log |
+| `grist.Effect(f, grist.AtMostOnce)` | the checkpoint first, then f, then the outcome event | at most once outside the log |
 
-`grist.Skip()` checkpoints and does nothing. A handler error is retried
-with backoff (3 tries by default, in virtual time in a simulation),
-then checkpointed with a `grist.failed` event naming the trigger, so a
-poison event stops nothing and is visible (grain checkpoints a failed
-effect silently and never retries). `Dispatch` is what grain's example
-should have done: the command's events and the checkpoint cannot be
-split by a crash.
+`Dispatch` decides at the head, not at T, because a command's rule is
+about the state it commits into (a welcome command must not create a
+second account just because the trigger is old); a failed condition is
+retried as a command's is, under the idempotency key (processor,
+tenant, T), so a crash and a retry dispatch once. `grist.Skip()`
+checkpoints and does nothing.
+
+**Errors.** A handler's or an effect's error is retried with backoff (3
+tries by default, in virtual time in a simulation), then checkpointed
+with a `grist.failed` event naming the trigger, so a poison event stops
+nothing and is visible (grain checkpoints a failed effect silently and
+never retries). `grist.OnError(grist.RetryForever)` is grain's
+`retry-on-error?`: the processor stops at the event and retries it until
+it succeeds, its lag growing (§9's metrics show it). Transient store
+errors (§2.4) are retried apart and never count toward the handler's
+tries: a failover must not turn into `grist.failed` events.
 
 ```go
 // proposed
@@ -261,170 +359,170 @@ var Welcome = grist.NewProcessor(App, "welcome", Created,
 	})
 ```
 
-`grist.EffectKey(ctx)` is (processor, tenant, trigger position): the
-idempotency key an at-least-once effect hands its dependency, so the
-dependency can make "at least once" "once" where it supports keys.
+`grist.EffectKey(ctx)` is (processor, tenant, T): the idempotency key an
+at-least-once effect hands its dependency, so the dependency can make
+"at least once" "once" where it supports keys.
 
-**The checkpoint is an event**, `grist.checkpoint`, tagged with the
-processor's name, carrying the position it is through. A processor's
-read of its own checkpoint is a read like any other, so the CAS on the
-checkpoint is the read-set condition of §2.3, not a second mechanism:
-two pollers of one processor (two nodes, before leases) cannot both
-advance it; the loser's append fails its condition, and it re-reads.
-Monotonicity rests on positions being dense and in commit order within
-a tenant, which the store guarantees (§2.9). The poller reads batches of
-100 after the checkpoint, every 250 ms or when the store signals an
-append (a `qenv.Signal` in a simulation), and checkpoints per batch for
-`Emit`, per event for `Dispatch` and effects.
+**Checkpoints are rows** (§10.2): `t/<tenant>/c/<processor>` in the
+simstore, `grist_checkpoints(tenant, processor, pos)` in SQL, read with
+`GetForUpdate` (`SELECT ... FOR UPDATE`) and written in the same
+transaction as the processor's events: a compare-and-set, so two
+pollers of one processor (two nodes, before leases) cannot both advance
+it; the loser's transaction sees another position and re-reads. The
+checkpoint is in every processor step's observations, so the model sees
+it move. The poller reads batches of 100 after the checkpoint, every
+250 ms or when the store signals an append (a `qenv.Signal` in a
+simulation). An `Emit` batch commits several triggers' events and the
+checkpoint in one transaction, but records **one step per trigger**
+(§3.1), so the model's handling is per event whatever the batching.
 
-### 2.6 Periodic tasks
+### 2.7 Periodic tasks (slice 3)
 
-```go
-// proposed
-var Report = grist.NewPeriodic(App, "daily-totals", grist.Every(24*time.Hour),
-	func(ctx context.Context, r *grist.Reads, tick time.Time) grist.Result {
-		/* fold Totals, emit a report event */
-		return grist.Skip()
-	})
-```
+`grist.NewPeriodic(App, "daily-totals", grist.Every(24*time.Hour),
+handler)`, the handler given the tick's time and a `Reads`. Its commit
+for (task, tenant, slot) carries a tick row and is conditioned on its
+absence, so every node may wake for every slot (as in grain) and one
+commit wins. A tick is written only when the task appends or runs an
+effect: a `Skip` writes nothing, and running it twice is harmless. A
+periodic effect runs **only after its tick commits**, so it is at most
+once per slot. Tenants run one by one, each in its own transaction;
+missed slots run once, for the latest (`grist.CatchUp(grist.Latest)`);
+schedules are `Every(d)` and `Cron(spec)`, in virtual time in a
+simulation.
 
-A periodic task runs once per tenant per slot, by construction: its
-result's append is conditioned on "no `grist.tick` event for (task,
-slot)", and the tick event is in the batch. Every node may wake for
-every slot (as in grain); only one append wins, whatever the handler
-does. Tenants are run one by one, each in its own transaction, so one
-tenant's failure is that tenant's `grist.failed` event, not a skipped
-round. Missed slots (a node down over midnight) run once, for the
-latest missed slot (`grist.CatchUp(grist.Latest)`, the default;
-`grist.All` runs each). Schedules are `Every(d)` and `Cron(spec)`, read
-in virtual time inside a simulation (`qenv.Now`, `qenv.Sleep`).
-
-### 2.7 Screens
+### 2.8 Screens (slice 3)
 
 A screen is queries and commands in a page (§5): its declaration names
 the queries it renders and the commands its actions send, and
-`Render(results) string` is a pure function. Screens are optional;
-the spike has none.
+`Render(results) string` is a pure function.
 
-### 2.8 Topology and boot verification
+### 2.9 Topology and boot verification
 
-There is no separate model file to keep in step with the code (grain's
-EDN event model). The registry is the topology: each block's edges are
-what its constructor was given (a read model's handlers, a processor's
-subscriptions, a screen's queries and commands) and what the analyzer
-proves the code can emit and read (§4), checked in as `grist.topology`
-(one line per edge, generated by `grist topology -w`, diffed in CI so a
-change of wiring is a reviewed change). `app.Verify()` runs at boot and
-in every test's setup, and refuses to start, naming the block and the
-fix, when:
+The registry is the topology (no separate EDN model to keep in step):
+each block's edges are what its constructor was given and what the
+analyzer proves the code emits and reads (§4), checked in as
+`grist.topology` (`grist topology -w`, diffed in CI). `app.Verify()`
+runs at boot and in every test's setup, and refuses to start, naming
+the block and the fix, when an edge breaks grain's flow grammar
+(command → event; event → read model | processor; read model → command
+| query | processor; query → screen; screen → command; processor and
+periodic → command | event); an event is produced or consumed by nothing
+(a warning; `grist.Sink` for audit-only events); the analyzer's edges
+differ from `grist.topology`; a schema differs from `grist.lock`, an old
+version lacks an upcaster, or an upcaster changes tags without
+`Reindex`; an event field is a float or a time; a command or query has
+neither `Authorize` nor `Internal()`; or two blocks share a name, or a
+name is not a valid Quint identifier once mapped (`create-counter`
+becomes `createCounter`; `to` is reserved).
 
-- an edge breaks grain's flow grammar: command → event; event →
-  read model | processor; read model → command | query | processor;
-  query → screen; screen → command; processor → command | event;
-  periodic → command | event;
-- an event is produced by nothing, or a produced event consumed by
-  nothing (a warning, `grist.Sink` silences it for audit-only events);
-- a block's analyzer-derived produces or reads differ from
-  `grist.topology`;
-- a (name, version)'s schema differs from `grist.lock`, or an old
-  version lacks an upcaster;
-- a command or query has neither `Authorize` nor `Internal()` (§4.3);
-- two blocks share a name, or a name is not a valid Quint identifier
-  once mapped (§3.2: `create-counter` becomes `createCounter`).
-
-### 2.9 The store
+### 2.10 The store
 
 grist owns its store interface; it does not reuse hallgren/eventsourcing's
-`core.EventStore`. That interface appends by aggregate and version
-(`Save` of an aggregate's events at an expected version, `Get` by
-aggregate id after a version). grist has no aggregates: its condition is
-a query over types and tags through a position, its order is one
-sequence per tenant, and a batch carries a transaction marker and
-checkpoints. An adapter over hallgren's would have to fake all four. The
-interface is small enough to own:
+`core.EventStore`, which appends by aggregate and version. grist has no
+aggregates: its condition is a set of queries through a position, its
+order one sequence per tenant, and a batch carries a marker and a
+checkpoint. The interface:
 
 ```go
 // proposed
 type Store interface {
-	// Read returns the tenant's events matching q, in position order.
-	Read(ctx context.Context, tenant string, q grist.Query) ([]grist.Stored, error)
-	// Append commits the batch at the next positions of the tenant, if
-	// every condition holds, atomically with its transaction marker, and
-	// returns the batch's last position. A failed condition is
-	// *grist.ConditionFailed naming the query and the event that broke it.
+	CreateTenant(ctx context.Context, tenant string) error // its head, at 0
+	Tenants(ctx context.Context) ([]string, error)
+	// Read: events matching q through at (0: the head, returned), in position
+	// order or newest first (q.Reverse), at most q.Limit.
+	Read(ctx context.Context, tenant string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error)
+	// Append commits the batch at the next positions if its condition holds and
+	// its checkpoint is as expected, with its marker; *grist.ConditionFailed
+	// names the query and event that broke it, anything else is transient.
 	Append(ctx context.Context, tenant string, b grist.Batch) (grist.Position, error)
-	// Head is the tenant's last position; Wait returns when it passes p.
-	Head(ctx context.Context, tenant string) (grist.Position, error)
+	Heads(ctx context.Context) (map[string]grist.Position, error) // every tenant's: a change feed's poll
 	Wait(ctx context.Context, tenant string, p grist.Position) error
 }
 ```
 
-`Query` is types, tags (all must match), after and through positions,
-and a limit. A `Condition` is a query and a position: "no event matching
-it after this position". Positions are int64, dense and assigned under
-the tenant's lock, so within a tenant the position order is the commit
-order. This is the property processors' checkpoints rest on, and the
-reason positions are not a database sequence: a PostgreSQL `bigserial`
-is drawn before commit, so a reader can see position 12 committed while
-11 is still in flight, and a checkpoint at 12 skips 11 forever. Time is
-one value per append, `qenv.Now` (virtual in a simulation, the clock's
-outside). Each append writes a `grist.tx` marker event listing the
-batch, the command or trigger, and the result.
+Positions are int64, dense and assigned under the tenant's lock, so
+within a tenant the position order is the commit order. This is the
+property processors' trigger-position reads and checkpoints rest on,
+and the reason positions are not a database sequence: a `bigserial` is
+drawn before commit, so a reader can see 12 committed while 11 is in
+flight, and a checkpoint at 12 skips 11 forever. Time is one value per
+append, `qenv.Now` (virtual in a simulation).
 
-Four tiers, one contract test suite (`grist/storetest`) run against each:
+One contract suite (`grist/storetest`) runs against every tier, and
+holds what the model takes for granted (§3.3): dense positions,
+conditions honoured (checked against a brute-force filter over every
+event, on small random histories), checkpoints' compare-and-set,
+markers, reverse and limit, and **tenant isolation**: a read of t1 never
+returns t2's events, an append to t1 never moves t2's head. A mutant
+store that ignores the tenant in `Read` fails the suite, so the test is
+shown to see it.
 
-- **memstore**: maps and a mutex per tenant, for a unit test of a fold
-  or a decision. Not for simulations (a real mutex).
-- **simstore**: over `qenv.Store`. Keys `t/<tenant>/head`,
-  `t/<tenant>/e/<position, 20 digits>`, and index keys
-  `t/<tenant>/i/<type>/<position>` and `t/<tenant>/g/<tag>=<value>/<position>`.
+- **memstore**: maps and a mutex, for unit tests of a fold or a
+  decision. Not for simulations (a real mutex).
+- **simstore** (slice 1): over `qenv.Store`. Keys `t/<tenant>/head`,
+  `t/<tenant>/e/<position, 20 digits>`, index keys
+  `t/<tenant>/i/<type>/<position>` and
+  `t/<tenant>/g/<type>/<key>=<value>/<position>`, markers
+  `t/<tenant>/m/<command id>`, checkpoints `t/<tenant>/c/<processor>`.
   An append takes the head with `GetForUpdate` (the tenant's lock),
-  checks each condition with `Scan` over its index prefix, puts the
-  events, the indexes and the head, and commits; the step is recorded
-  in `Txn.OnCommit` (§3.1). At every isolation level the head lock
-  serializes a tenant's appends, and the Store's own checker
-  (`GOTOGETHER_CHECK=1`) judges every commit. The store's fault kinds
-  apply unchanged: `store.<name>.commit` (applied, answer lost: the
-  command's dedupe makes the retry safe) and crashes.
-- **sqlstore**: `database/sql`, two dialects (PostgreSQL, SQLite), the
-  driver the application's (pgx's stdlib, modernc.org/sqlite: no cgo).
-  Tables `grist_heads(tenant, head)`, `grist_events(tenant, pos, type,
-  version, at, meta, body)` keyed by (tenant, pos), and
-  `grist_index(tenant, k, pos)` keyed by all three (k a type or a
-  tag=value). An append's **first statement** is `UPDATE grist_heads SET
-  head = head + ? WHERE tenant = ?`: in PostgreSQL it takes the row's
-  lock (no advisory locks, which are invisible to the simulation and to
-  `qhistory`), in SQLite it takes the write lock before any read, so the
-  deferred-to-write upgrade that returns SQLITE_BUSY cannot happen.
-  Then the head is read back, the conditions are checked (`SELECT pos
-  FROM grist_index WHERE tenant = ? AND k = ? AND pos > ? ORDER BY pos
-  LIMIT 1`, then the event's other tags), and the rows inserted.
-  PostgreSQL runs at read committed: every statement after the lock
-  sees every commit before it.
-- **sqlstore on qsql**: the same code on `qsql.Open` over a
+  checks the condition with `Scan` over each query's index prefix,
+  writes, and commits; the step is recorded in `Txn.OnCommit`, whose
+  hooks run before `ErrUnknownOutcome` is returned, so a commit whose
+  answer is lost is recorded. The head lock serializes a tenant's
+  appends; under Snapshot and Serializable the loser of a race gets
+  `ErrConflict` from `GetForUpdate`, transient (§2.4). The Store's
+  checker (`GOTOGETHER_CHECK=1`) and fault kinds apply. **Cost**: `Scan`
+  walks every row of the store (no range), and a Serializable commit
+  walks them again per scanned prefix: an append is O(rows in the store),
+  every tenant's included. Fine for explorations of hundreds of events;
+  a ranged `Scan` in `qenv.Store` is the fix if §10.4's measurements say
+  so.
+- **sqlstore** (slice 2): `database/sql`, two dialects, the driver the
+  application's (pgx's stdlib, modernc.org/sqlite: no cgo). Tables
+  `grist_heads(tenant, head)`, `grist_events(tenant, pos, type, version,
+  at, meta, body)`, `grist_index(tenant, k, pos)` (k a type or a
+  type/tag=value), `grist_markers(tenant, id, hash, result)`,
+  `grist_checkpoints(tenant, processor, pos)`. An append's **first
+  statement** is `UPDATE grist_heads SET head = head + $1 WHERE tenant =
+  $2 RETURNING head`: it takes the row's lock and reads the new head in
+  one round trip (no advisory locks, which are invisible to the
+  simulation and to `qhistory`). Then the conditions (`SELECT pos FROM
+  grist_index WHERE tenant = $1 AND k = $2 AND pos > $3 ORDER BY pos
+  LIMIT 1`), then the rows.
+  - **PostgreSQL**: `BeginTx` with `sql.LevelReadCommitted` stated, not
+    the server's default: after the lock every statement sees every
+    commit before it, which the condition check needs. 40001 and 40P01
+    are transient (§2.4), never failed conditions. Each transaction
+    sets `lock_timeout` (5 s, grain's) so a stuck holder is an error,
+    not a hang, and the pool's connections set
+    `idle_in_transaction_session_timeout` so a crashed node's open
+    transaction releases the tenant's lock. Row-level security (`SET
+    LOCAL grist.tenant`) is the second fence.
+  - **SQLite**: one writer for the whole database, whatever the tenant,
+    so tenants do not append in parallel. `_txlock=immediate` (`BEGIN
+    IMMEDIATE`: the write lock before the first read, so the deferred
+    upgrade that fails with SQLITE_BUSY cannot happen), WAL (readers
+    do not block the writer), `busy_timeout` (a writer waits for the
+    lock instead of failing at once). `RETURNING` needs SQLite 3.35.
+  - **Change feeds**: processors and screens learn of appends by
+    polling `grist_heads` (`Heads`), one query for every tenant, every
+    250 ms; `LISTEN/NOTIFY` is an optimisation for later.
+- **sqlstore on qsql** (slice 2): the same code on `qsql.Open` over a
   `qenv.Store`, so the SQL tier is explored with qsql's anomalies,
-  SQLSTATEs and commit faults. This needs one extension of qsql's
-  subset, which is the first item of the build (§8.1): a range
-  condition on the last primary-key column, with `ORDER BY` that column
-  and `LIMIT`, planned as a `Scan` of the key prefix. Everything else
-  the store says is in the subset today (`c = c + ?`, equality, `ON
-  CONFLICT DO NOTHING`).
+  SQLSTATEs and commit faults. It needs qsql extended first (§8.2), and
+  a `qsql` dialect that leaves out the `SET` statements qsql does not
+  parse.
 
-Tenants: every read and append names its tenant, taken from the
-envelope, never from a handler's argument. PostgreSQL row-level security
-(`SET LOCAL grist.tenant`) is the real tier's second fence, added after
-the spike. One reserved tenant, `grist`, holds the control plane
-(leases, §3.4).
-
-**The path to state in tables.** A read model is a fold; a table is a
-fold persisted. Phase two adds `grist.Table(rm)`: the read model's state
-written in the append's own transaction (the sqlstore's), keyed by its
-key, so queries read rows and decisions stay as they are. Its condition
-becomes the rows' versions instead of a query over events. The model
-does not change: the table is the fold, and §3.2's binding reads it the
-same way. Storing state alone (no events) is a third phase, an
-`outbox`-style event table kept only for processors; this note does not
-design it.
+**Retention and erasure** (a gap, §9). History is kept forever by
+default. grain's one bounded policy is inert until an operator
+activates it durably; compaction then deletes old events of a tagged
+kind under the tenant's lock and appends a receipt, and processors may
+not subscribe to bounded events (a deleted trigger cannot be handled).
+grist takes that shape: positions are never renumbered, and erasure of
+personal data is such a deletion or crypto-shredding (fields encrypted
+with a per-subject key, the key deleted). **State in tables** comes
+later: `grist.Table(rm)` writes a read model's state in the append's
+transaction, conditioned on the rows' versions; the model is unchanged.
 
 ## 3. What a grist application gets from gotogether
 
@@ -434,142 +532,229 @@ application gets by being built of grist's blocks, with nothing written.
 ### 3.1 Every block records its step, by construction
 
 grist records through `qobs` at the place each effect takes effect (as
-payd's adapters do), never by annotation:
+payd's adapters do), never by annotation. **Every step of tenant t has
+actor t and process the store's name**, whatever node or task recorded
+it: commits happen at the store, so the store is the process, and a
+node's crash and restart change no step's process. The binding has no
+`restart` action (a process change would be an error, binding.go's
+`Restart`, and none can happen), and each tenant's trace is checked as
+its own instance of the model from init.
+
+**Order: one domain clock on every tier.** Each step carries
+`quint.order.pos` (`"order.pos"` in `qobs.Record`'s pairs):
+
+- a step that commits a batch ending at position P: **2·P**;
+- a step that reads through P and commits nothing (a query, a
+  rejection): **2·P+1**, after the commit of P and before the commit of
+  P+1, concurrent only with other reads through P, which commute;
+- a processor step that commits only its checkpoint (`Skip`, an
+  effect's checkpoint, a `failed` with no event): **2·H+1**, H the head
+  its own transaction read, not its trigger T: a poller that emitted at
+  7 for trigger 5 then checkpoints trigger 6 records 14 then at least
+  15, in its program order (with T, 13: a cycle with its thread);
+- an effect step (`<processor>.effect`): 2·H+1, H the head the worker
+  read before running it;
+- in an `Emit` batch of several triggers, each trigger's step gets 2·
+  the last position of its own events, or, if it emitted none, 2·(the
+  last position before it in the batch)+1: one step per trigger, in
+  trigger order, inside one transaction.
+
+Each processor's steps also carry `quint.order.p.<processor>` = T,
+ordering them among themselves across nodes and incarnations. Both
+domains agree with program order (a task's steps have increasing
+positions), so `qtrace.build` finds no cycle, and the steps of a
+simulation, a SQLite file or a fleet of PostgreSQL nodes reconstruct to
+one order without trusting a clock.
 
 | step action | recorded | arguments | observations |
 | --- | --- | --- | --- |
-| the command's name | in the append's commit hook (`Txn.OnCommit`, qsql's `OnCommit`, the sqlstore's post-commit) | the command's fields, tenant, actor, command id | the events appended (type, position, tags, fields); the result |
+| the command's name | in the append's commit hook (`Txn.OnCommit`, qsql's, the sqlstore's post-commit) | the command's fields, command id, the read set (`read.pos`, `read.queries`) | the events appended, the head; the result |
 | the command's name, with outcome | on return, when refused | as above | the rejection's name, or `conflict` after the tries |
-| the query's name | on return | the query's fields, tenant | the result; the position read through |
-| `<processor>` | at the checkpoint's commit | trigger position and type | the events appended; the checkpoint |
-| `<processor>.effect` | at the effect's site: the double or service, or grist's wrapper when the dependency records nothing | the effect key | the effect's outcome |
-| `<periodic>` | at the tick's commit | tenant, slot | the events appended |
-| `grist.lease` | at the lease event's commit | node, tenant, term | |
+| the query's name | on return | the query's fields | the result; the position read through |
+| `<processor>` | at its commit | the trigger's position and type | the events appended, the checkpoint |
+| `<processor>.effect` | grist's wrapper, after f returns, before the checkpoint | the effect key | f's outcome |
+| `<periodic>` | at its commit (slice 3) | slot | the events appended |
 
 A rejection is recorded on return because nothing committed; a commit
-is recorded at the commit because the caller may never be told (an
-08006, a crash between commit and response), and the model must see it
-(AGENTS.md: an effect the model must see whether or not its caller
-survives belongs at the effect's site). A retried command that finds its
-marker records nothing: its effect was recorded once. Steps carry the
-tenant as the actor's suffix (`counters/t1`), so tenants are separate
-actors and tenant isolation is a property of the binding's actors, not
-of hope.
+at the commit, because the caller may never be told (an 08006, a crash
+between commit and response), and the model must see it. A retried
+command that finds its marker records nothing: its effect was recorded
+once. **A raw append** (application code calling the store, which
+gristflow flags, §4.1) records nothing: the model's log then lacks
+events the store holds, and the first later step whose recorded head or
+events the model computes otherwise is a Mismatch: a raw append is
+caught by the next step of its tenant, not where it happened.
 
-### 3.2 A model skeleton and a binding, generated
+**The read set is a step argument**: `read.pos` (P) and `read.queries`
+(a list of (type, tag key, tag value) triples; key "" for a type-only
+query), so grist.qnt's conditional-append property (§3.3) is checked
+against what the decision read, not assumed. Without them the property
+would hold vacuously.
 
-`grist model` writes two files from the registry (never edited by hand,
-regenerated in CI and diffed):
+**Client steps.** gristsim's workload (§3.6) can instead record each
+command and query where the client sees it: `qobs.Invoke` before the
+request, `Call.Done` with the answer, the idempotency key as `id`, every
+retry of a lost or late response inside the one call; checked with
+`qtest.Linearize()`, a duplicate a retry created shows as a later read's
+Mismatch, a call never answered as `Pending` (`qtest.Completes()`).
+Every binding sees every actor of a run, so a run records one side
+(`gristsim.Config.Record`: `AtCommits`, the default, or `AtClients`,
+commands and queries only), the client side checked by a second binding
+of the same model (`counters.calls.binding.yaml`: no positions, no
+processors' eventual vals). Both sides in one run need an actor filter
+in qtest (§8.2).
 
-- `model/<app>_gen.qnt`: a sum type per event (its fields, Quint types
-  from Go: `string` → `str`, ints → `int`, slices → `List`, maps →
-  `a -> b`, structs → records, a `grist:"enum"` string → a sum type);
-  the state, which is **the log** (`var log: str -> List[Event]`, per
-  tenant), the checkpoints and the effects; one action per command,
-  processor and periodic task, with its arguments as parameters and
-  `nondet` picks for `step`; and one `def` per read model, its fold
-  over the log. Read models are defs, not variables: the model cannot
-  disagree with itself about what a read model holds, and a query's
-  observation is checked against the def at the recorded position.
-- `<app>.binding.yaml`: each step action to its model action, every
-  parameter the same-named step field (so no templates), the tenant
-  actors, observations to the defs they must equal, and the eventual
-  vals for processors (below).
+### 3.2 The model and its binding
 
-The application writes `model/<app>.qnt`, which imports both the
-generated module and grist's (§3.3) and says what the generator cannot:
-each command's precondition (when it is allowed) and the events it
-appends, as a function of the read-model defs, and the invariants.
-For the counter, the whole hand-written part of `createCounter`:
+**The model's state is one tenant's log**: `var log: List[Event]` and
+`var checkpoints: str -> int`, each tenant's trace its own instance.
+Read models are defs over the log (`counterNames(log)`), not variables:
+the model cannot disagree with itself about what a read model holds,
+and a query's observation is checked against the def at its position.
+Cross-tenant properties are none of the model's (§3.3).
+
+**Verdicts follow one convention.** Hand-written command and processor
+actions keep their preconditions, so a committed step the model's
+precondition disables is **Rejects** (the model cannot take it), and a
+step whose observations differ from the model's (`expect:` over the
+events appended, the head, a query's result) is **Mismatch**. Violates
+is for what the model admits and an invariant forbids: a property of
+the design, or a test-only invariant stating what a declared guarantee
+allows but an application must not do (§8.1's `welcomedOnce`). Claims
+then say `Some(Rejects("createCounter"))`, `Some(Mismatch("average"))`.
+The precondition is evaluated in the step's state, the log at its
+commit: for a conditioned decision that equals its state at P for every
+query it read (nothing matching was appended between), and for a blind
+one it is the check that the blind decision skipped. A command
+declared `Unconditioned` on purpose must have a precondition that does
+not depend on the advisory reads.
 
 ```quint
-action createCounter(t: str, counter: str, name: str): bool = all {
-  not(counterNames(t).has(name)),
-  append(t, [CounterCreated({ counter: counter, name: name })]),
+// model/counters.qnt, hand-written in slice 1 (a sketch)
+action createCounter(counter: str, name: str, readPos: int, reads: List[(str, str, str)]): bool = all {
+  not(exists(log, "counter-created", "name", name)),
+  grist::conditionHolds(log, readPos, reads),
+  append([created(counter, name)]),
 }
-// every created counter has a name of its own: the names' fold has one entry per creation
-val uniqueNames = tenants.forall(t => counterNames(t).keys().size() == createdCount(t))
+// the design guarantees it: every created name is created once
+val uniqueNames = createdNames(log).size() == createdCount(log)
 ```
 
-A rejected step maps to the action's refusal (the precondition false),
-as payd's refusals do. The generated module's stub of an action the
-application has not written appends what the step recorded and checks
-nothing, so a new command is accepted until its author states it; `grist
-verify` lists such stubs, and `GOTOGETHER_STRICT=1` fails on them.
+**The binding** maps each step action to its model action, every
+parameter the same-named step field, with `expect:` over the
+observations. Slice 1's is hand-written: its events' fields are scalars
+and its read sets lists of triples, which `toList` renders today (JSON
+arrays become tuples). Slice 2's generator (`grist model`, in
+`cmd/grist`) writes it with a model skeleton (`model/<app>_gen.qnt`: a
+sum type per event, one action per block, one def per read model), and
+needs a **typed template function** in binding, `{{ toQuint
+"List[Event]" .obs.events }}`: the step's JSON decoded by a Quint type of
+the model (records, sum types by tag, collections of them, aliases
+resolved) through `itf`'s values, and used by `Param.DefaultTemplate`
+for record- and variant-typed parameters. Today `jsonElem` renders an
+object as a quoted string and truncates a float. The function refuses a
+number with a fraction and a time string, naming the field and the fix
+(an integer unit). A generated stub of an action the application has
+not written appends what the step recorded and checks nothing; `grist
+verify` lists stubs, and `gristtest` reports them through
+`qtest.Optional`, so `GOTOGETHER_STRICT=1` fails on them.
 
 ### 3.3 grist's guarantees as a Quint module
 
-`grist/model/grist.qnt`, vendored into an application's `model/` by
-`grist model` (as examples/twophase vendors choreo.qnt), states what the
-framework promises and every generated model includes:
+`grist/model/grist.qnt`, vendored into an application's `model/` (as
+examples/twophase vendors choreo.qnt), states what the framework
+promises, in the per-tenant state above:
 
-- **Positions**: per tenant, dense, increasing, commit order.
-- **Conditional append**: an append whose condition was false is not in
-  the log (the model's `append` takes the read set; the binding gives it
-  from the step).
+- **Positions**: dense, increasing, commit order (a commit's recorded
+  head is `log.length()` after it).
+- **Conditional append**: `conditionHolds(log, readPos, reads)`, no
+  event after `readPos` matching a recorded query; part of every
+  conditioned commit's precondition, with the read set from the step.
+- **Processor reads**: a handler's action evaluates its reads on
+  `log.slice(0, trigger)`, so the model states the trigger-position
+  rule rather than assuming it; `Dispatch` evaluates the command's
+  action on the current log, with the command's precondition.
 - **Checkpoint monotonicity**: a processor's checkpoint never moves back
-  and never passes an event it has not handled (`Emit`, `Dispatch`:
-  exactly one handling step per event; `Skip` and `failed` count).
-- **Effects**: per trigger, `AtLeastOnce` admits one or more effect steps
-  and requires one after a settle (`eventually`); `AtMostOnce` admits
-  zero or one and, after a settle, requires the outcome event to agree
-  with the effect seen. An application whose effect must not repeat
-  says so with an invariant over its own effect steps; the framework's
-  module allows exactly what the declared guarantee allows.
-- **Tenant isolation**: a step of tenant t reads and appends only t's
-  log (an event tagged with another tenant's id is no violation; an
-  event in another tenant's log is).
-- **Periodic**: at most one tick per (task, tenant, slot).
-- **Leases** (once there are nodes, §3.4): at most one holder per tenant
-  per term, and a processor's checkpoint advanced only by the holder.
+  and never passes an event it has not handled: exactly one handling
+  step per subscribed event (`Emit`, `Dispatch`, `Skip`, `failed`).
+- **Effects**: `AtLeastOnce` admits one or more effect steps per trigger,
+  its checkpoint step only after one, and **eventually** (after a settle) each trigger has an ok effect step
+  or a `grist.failed`; `AtMostOnce` admits zero or one, and **an outcome
+  event, if present, agrees with the one effect step** (it may be absent:
+  a crash between checkpoint and effect loses it, by right). An
+  application whose effect must not repeat states it with an invariant
+  over its own effect steps.
+- **Periodic** (slice 3): at most one tick per (task, slot).
+- **Leases** (slice 3, §3.4): checkpoints advanced only under the
+  newest term.
+
+**Tenant isolation is not a model invariant**: each tenant is its own
+instance, so the model cannot see one tenant's events in another's log.
+It is held by the store contract suite (§2.10), with a mutant store
+shown to fail it, and by every read and append taking its tenant from
+the envelope, never from a handler's argument.
 
 This module is checked once, in grist's own tests, against grist's own
-runtime (the contract suite's runs bound to it), so an application's
-failure is its own or its model's, not the framework's.
+runtime, so an application's failure is its own or its model's, not the
+framework's.
 
-### 3.4 Choreo for the multi-node parts
+### 3.4 Leases, in plain Quint (slice 3)
 
-Single-node grist has no distributed protocol: the store serializes.
-The parts with one are the control plane's (grain's): heartbeats,
-coordinator election (the live node with the smallest id), tenant
-leases as events in the reserved tenant, and routing to the owner (503
-with `Retry-After`). That protocol is modeled once, in Choreo
-(`grist/model/leases.qnt`, on the choreo.qnt examples/twophase
-vendors), each transition a named action of its node
-(`choreo::step_with`, the twophase gotcha), and checked against grist's
-node runtime by `connect` and by explorations with partitions and
-crashes. Applications do not model it; they import its invariant
-(one holder per term) through grist.qnt. Leases are not in the spike.
+Several nodes need one tenant's processors run by one node at a time.
+Each tenant's lease term is written into **that tenant's own log**
+(`grist.lease{node, term}`, a conditioned append), and every processor
+commit's condition includes "no lease event with a newer term": a node
+that lost its lease cannot advance a checkpoint, whatever its clock
+says, because the fence is in the transaction it commits. Heartbeats and
+the coordinator's assignments are events in the reserved tenant `grist`.
+
+The maintainer asked for Quint, or Choreo for distributed parts. This
+protocol is plain Quint (`grist/model/leases.qnt`): its only
+communication is the shared log, read and appended under the store's
+serialization, which is Quint's state-machine form, and Choreo's
+strengths (local states, messages in flight) have nothing to model.
+Choreo becomes the language if message-passing parts appear (routing to
+the owner, a gossip of heads, a node-to-node handoff), each transition a
+named action of its node (`choreo::step_with`, the twophase gotcha).
 
 ### 3.5 Every seam simulated
 
-grist's runtime is written against qenv's seams, and the lint
-(`gotogether lint -sim`) holds grist's own packages to it, as
-`TestCoreStaysInTheSimulation` holds the core:
+grist's runtime is written against qenv's seams, and `gotogether lint
+-sim` holds grist's packages to it, as `TestCoreStaysInTheSimulation`
+holds the core. Pollers, the effect worker and the scheduler are tasks
+(`qenv.Go`) waiting with `qenv.Sleep` and `qenv.Wait` on the store's
+signal, marked `qenv.Daemon`; a node is a `qenv.Process`
+(`Sim.Process(name, true, start)`), restarted from its checkpoints; the
+store's isolation, commit faults and lost answers are the qenv.Store's
+or qsql's; an effect's dependencies are `qenv.Service`s or HTTP clients
+through `qhttp.NewTransport`; the API runs on `qhttp.NewServer` (slice
+2). The effect's crash points are one declared kind,
+`qenv.DeclareFaults("grist.<processor>.effect", "crashBefore",
+"crashAfter")`, chosen with `Sim.FaultOf` before f (through
+`Only("crashBefore")`) and after it, the crash made with
+`ProcessOf(ctx).Crash()`; `qenv.FaultPoint` cannot name two crashes (two
+kinds, `...effect.before` and `...effect.after`, are the alternative).
+The crash that duplicates an at-least-once effect is then one named
+option, which a `qenv.Script` asks for and `Exhaust` reaches with one
+fault.
 
-- pollers, the effect worker and the periodic scheduler are tasks
-  (`qenv.Go`), waiting with `qenv.Sleep`, `qenv.Wait` on the store's
-  signal, marked `qenv.Daemon`;
-- a node is a `qenv.Process` (`Sim.Process(name, true, start)`); a crash
-  kills its tasks; restart replays from checkpoints;
-- the effect's two crash points are fault points grist declares,
-  `grist.<processor>.effect` with options nominal, `crashBefore`,
-  `crashAfter` (after the effect, before its checkpoint): the crash
-  that duplicates an at-least-once effect is one named option, which a
-  `qenv.Script` can ask for and `Exhaust` reaches with one fault;
-- the store's isolation level, commit faults and lost answers are the
-  qenv.Store's or qsql's;
-- dependencies an effect calls are `qenv.Service`s, or real HTTP
-  clients through `qhttp.NewTransport`, so lost and late responses are
-  explored;
-- the API handler runs on a `qhttp.NewServer`, so a client's retries,
-  duplicates and timeouts reach commands as on a wire.
+### 3.6 gristsim.Run, and settling
 
-`gristsim.Run(c qenv.Chooser, app, cfg)` builds all of that (one
-simstore or qsql-backed sqlstore, n nodes, the API server, a workload
-of clients sending commands through it), settles, and probes every
-read model through the queries. Its signature is a `qtest.System`'s
-`Run`, so:
+`gristsim.Run(c qenv.Chooser, app, cfg)` builds a simulation from c, a
+simstore (or, slice 2, a qsql-backed sqlstore) at `cfg.Isolation`, n
+nodes, a workload of clients, and runs it. Its end is ordered so the
+eventual vals are judged:
+
+the clients finish; **schedulers stop** (periodic tasks would append
+forever, and no settle would find the system quiet); `Sim.Settle`
+(processors, daemons on the signal, drain to the head; faults stay off
+from here); probes run every read model through its queries; and
+**`Sim.Settle` again**, so the run's last record is a settle. A step
+after a settle voids it, on its recorder or on any other later in time
+(`qtrace.Reconstruct`), so probes on a separate recorder work only while
+they take no virtual time; the second settle always works.
+
+Its signature is a `qtest.System`'s `Run`:
 
 ```go
 // proposed: an application's test
@@ -579,199 +764,112 @@ func system(cfg gristsim.Config) qtest.System {
 }
 ```
 
-### 3.6 Explorations, Hegel, shrinking and mutants
+The workload defaults to clients sending random commands of the
+registry, arguments drawn from the command's type by `gristsim.Gen`
+(strings from a small alphabet so names collide, which is what finds
+races); an application overrides one command's generator, never writes
+a workload loop. Clients send through `qobs.Invoke`/`Call.Done` under
+`AtClients` (§3.1), and retry a lost response with the same key either
+way.
 
-- **Explore and Exhaust**: `system(cfg).Explore(t, qtest.ExploreConfig{...}).Expect(...)`
-  and `Exhaust(t, qtest.Bound{Faults: 1})`, with every claim of today:
-  `Conforms`, `Settles`, `Violates`, `Reaches` (grist's fault kinds by
-  name).
-- **Workloads from the registry**: `gristsim.Config.Workload` defaults
-  to clients sending random commands of the registry, arguments drawn
-  from the command's type by a `gristsim.Gen` (reflection, bounded:
-  strings from a small alphabet so names collide, which is what finds
-  races). An application overrides one command's generator, never
-  writes a workload loop.
-- **Hegel state machines from the registry**: `gristhegel` (a module of
-  its own, §7) turns the command registry into a `hegel.RunStateful`
-  machine: one rule per command (Hegel draws the arguments and the
-  tenant), the model judging each prefix through qhegel's `Case`, the
-  chooser from `qhegel.Choices` so faults shrink with the commands.
-  `qhegel.Shrink(t, sys)` already shrinks a System's runs.
-- **ShrinkActions over command sequences**: a failing real-tier run's
-  commands (read from its steps) are the actions; `Rerun` replays them
-  through the API on a fresh store. `gristtest.ShrinkCommands(t, app,
-  steps)` is `qtest.ShrinkActions` with that Rerun, and its
-  `ErrDiverged` for a command whose arguments name an id the shorter
-  run never created.
-- **Mutants over read models and decisions**: qweave `-mutate` on the
-  application's package mutates folds and decisions (one build, a
-  mutant per run, `System.Mutate`); `qtest.MutateSteps` over a run's
-  steps asks whether the binding reads each query observation and each
-  appended event (a corrupted `obs.result` that survives is a query the
-  model does not check).
-- **qload on processors**: a processor is a server whose queue is the
-  log behind its checkpoint and whose service is its handler. grist
-  registers qrole roles for each processor (`u`, its handler's
-  utilization; `v`, the lag behind the head waiting for retry) and for
-  the API, so `qload` simulations and `qmeta` alert rules apply to a
-  processor whose effect retries against a slow dependency, the shape
-  of a retry storm.
+### 3.7 Explorations, Hegel, shrinking and mutants
 
-### 3.7 The real tier, checked by the same binding
+Explore and Exhaust with every claim of today across the Store's three
+isolation levels; `qhegel.Shrink` on a System's runs; qweave `-mutate`
+on the application's folds and decisions (`System.Mutate`) and
+`qtest.MutateSteps` on its observations. Later: `gristhegel` (a module
+of its own) turns the command registry into a `hegel.RunStateful`
+machine judged through qhegel's `Case`; `gristtest.ShrinkCommands` is
+`qtest.ShrinkActions` over a real run's commands replayed through the
+API; qrole roles per processor (its lag as the queue) bring qload and
+qmeta to an effect retrying against a slow dependency.
 
-`grist.Main(app)` serves the application on sqlstore (PostgreSQL or
-SQLite) and writes its steps with `qobs.FileSink(path, qobs.PerStep)`;
-a real deployment's runs go through `gotogether validate` with the same
-binding. `qnemesis` kills and pauses nodes and cuts links; grist's
-recording sides follow §52's rule (commits recorded at the commit, so a
-kill loses no committed step and `Process.Recorders` is not needed for
-commands; an effect recorded by grist's wrapper on return is declared
-lost on a kill, `Step.LostBefore`). `qnemesis.FromScript` replays a
-simulation's fault script against the real deployment and
-`qnemesis.Unmade` names what it could not make.
+### 3.8 The real tier, checked by the same binding (slice 2)
+
+`grist.Main(app)` serves the application on sqlstore and writes its
+steps with `qobs.FileSink(path, qobs.PerStep)`, validated with the same
+binding. Commits are recorded at the commit and ordered by the domain
+clock across nodes, so a killed node loses no committed step; an effect
+step lost between f and its record is one the model allows to be unseen.
+`qnemesis.FromScript` replays a simulation's fault script against it.
 
 ## 4. Constraints enforced
 
 ### 4.1 Analyzers (qanalysis, `quintvet`)
 
-Two analyzers, `gristpure` and `gristflow`, in qanalysis (it already has
-x/tools and the golangci plugin), recognizing grist's constructors by
-type:
+Two analyzers in qanalysis (it has x/tools and the golangci plugin),
+recognizing grist's constructors by import path and type:
 
-- **gristpure**: the functions given as decisions, folds, upcasters,
-  query functions and screen renders (and every function of the package
-  they call, transitively) do not: call `time.Now`, `qenv.Now`,
-  math/rand or crypto/rand, I/O (`os`, `net`, `database/sql`, `io`
-  writers other than strings.Builder and bytes.Buffer), `qobs`; start
-  goroutines or use channels; write package-level variables; range over
-  a map where the result depends on the order (a map range whose body
-  appends to a slice or emits, unless the keys were sorted: the lint's
-  existing rule); reach a store or the `Reads` outside its own
-  parameter. A call it cannot see (a function value, an interface
-  method of another package) is reported as unverifiable, exempted with
-  `//grist:pure <reason>`. Handlers of processors and periodic tasks are
-  not pure (their effects are the point) but their `Reads` are, and
-  their effect is only through `grist.Effect`'s function.
-- **gristflow**: from each decision's and handler's return statements,
-  the event types it can emit (`Created.Of(...)` literals reaching a
-  return through `grist.Emit`), the read models it reads (`X.Get(r)`,
-  `X.For(r, ...)`), the commands it dispatches; written to
-  `grist.topology` by `grist topology -w` and compared at boot (§2.8).
-  It also reports: **a decision that returns a rejection or an error
-  under a condition on a read whose append is not conditioned on it**
-  (`Unconditioned`, or a `Within` that leaves the read out): "create-counter
-  refuses ErrNameTaken on counter-names, which its append is not
-  conditioned on: two concurrent create-counter can both pass; remove
-  Unconditioned, or exempt with //grist:advisory <reason>". This is
-  grain's race as a lint; §8 asserts it fires on the unsafe variant.
-  And it reports a processor handler that calls a command's function or
-  the store directly instead of returning `Dispatch` (grain's
-  duplicate).
+- **gristflow** (slice 2): from each decision's and handler's returns,
+  the event types it can emit, the read models it reads, the commands
+  it dispatches; written to `grist.topology` and compared at boot
+  (§2.9). It reports **a decision that rejects under a condition on a
+  read its append is not conditioned on** (`Unconditioned`, or a
+  `Within` leaving the read out): "create-counter refuses ErrNameTaken
+  on Exists(counter-created, name), which its append is not conditioned
+  on: two concurrent create-counter can both pass; remove Unconditioned,
+  or exempt with //grist:advisory <reason>". And a processor handler or
+  decision that reaches a `grist.Store` (a raw append, grain's
+  duplicate) instead of returning `Dispatch` or `Emit`.
+- **gristpure** (slice 3): decisions, folds, upcasters, queries and
+  renders (and what they call in their package) call no clock, rand,
+  I/O or `qobs`, start no goroutine, use no channel, write no
+  package-level variable, reach no store or other `Reads`, and range
+  over no map where the order reaches the result (unless the keys were
+  sorted). **The map rule is new**: qlint has none (its `-sim` rules
+  are `go` statements, wall clocks, rand functions, background contexts
+  and selects); it is written for gristpure and offered to `lint -sim`
+  after. An unseen call is unverifiable, exempted with `//grist:pure
+  <reason>`.
 
 ### 4.2 Boot verification
 
-§2.8's list, run by `app.Verify()` at `grist.Main`'s start, by
+§2.9's list, run by `app.Verify()` at `grist.Main`'s start, by
 `gristsim.Run` before every run (cheap: maps of names), and by `grist
-verify` in CI with the analyzers' output. A refusal is an error naming
-the block, what differs, and the command that fixes it.
+verify` in CI with the analyzers' output.
 
 ### 4.3 Authorization, denied by default
 
-Every command and query is denied at every adapter (HTTP, Datastar)
-unless it declares `grist.Authorize(p)`, a predicate over the envelope's
-actor and the tenant (`grist.Role`, `grist.Any`, `grist.All`, or a
-function). `grist.Internal()` marks one no adapter serves (only
-processors dispatch it). Boot refuses a block with neither. As in grain
-the check is in the adapters, not in the decision, so a processor's
-`Dispatch` is not subject to a user's roles; unlike grain, an internal
-command is unreachable from HTTP by construction, not by omission. A
-denial is recorded as a refused step (`outcome: denied`), so a model can
-state who may do what, and an exploration with actors of several roles
-checks it.
+Every command and query is denied at every adapter unless it declares
+`grist.Authorize(p)`, a predicate over the envelope's actor and the
+tenant; `grist.Internal()` marks one no adapter serves (only processors
+dispatch it); boot refuses a block with neither. The check is in the
+adapters (as grain's), so a `Dispatch` is not subject to a user's roles.
+A denial is a refused step (`outcome: denied`).
 
 ## 5. The API layer and Datastar
 
-**HTTP/JSON** (`grist/api`, `net/http` only):
-`POST /t/{tenant}/commands/{name}` with the command as JSON and
-`Idempotency-Key`; 200 with `{position, result}`, 422 with a rejection's
-name, 409 on conflict after the tries, 403 when denied, 503 with
-`Retry-After` when the tenant's lease is elsewhere.
-`GET /t/{tenant}/queries/{name}?...` (arguments as query parameters by
-their JSON names) or `POST` with a body; the response carries the
-position read through. `GET /catalog` serves the registry as JSON
-(schemas, topology), disabled unless `grist.DevEndpoints` is set.
-Authentication is the application's middleware, which puts the actor in
-the context (`grist.WithActor`). The handler is a plain `http.Handler`,
-so `qhttp.NewServer` serves it in a simulation and `qobshttp.Handler`
-records its client-facing steps into a test's run.
+**HTTP/JSON** (`grist/api`, slice 2, `net/http` only): `POST
+/t/{tenant}/commands/{name}` with `Idempotency-Key`: 200 with the
+marker's result, 422 with a rejection's name (or
+`idempotency-key-reused`), 409 on conflict after the tries, 403 when
+denied, 503 with `Retry-After` when the tenant's lease is elsewhere.
+`GET /t/{tenant}/queries/{name}` returns the result and the position
+read through; `GET /catalog`, behind `grist.DevEndpoints`, the registry.
+Authentication is the application's middleware (`grist.WithActor`). A
+plain `http.Handler`, so `qhttp.NewServer` serves it in a simulation.
 
-**Datastar** (`grist/screen`, the only package that imports
-`github.com/starfederation/datastar-go/datastar`, v1.2.2 or the latest
-when built; its API: `NewSSE(w, r)`, `PatchElements`, `PatchSignals`,
-`ReadSignals`, `ExecuteScript`). A screen is:
-
-```go
-// proposed
-var CounterPage = screen.New(App, "counter",
-	screen.Queries(Show),
-	screen.Commands(Create),
-	screen.Render(func(v CounterView) string { return "<div id=\"counter\">" /* ... */ + "</div>" }))
-```
-
-`GET /t/{tenant}/screens/counter` opens an SSE stream: grist runs the
-screen's queries, patches the rendered elements, then waits on the
-tenant's head (`Store.Wait`) and re-renders when a consumed read model's
-position moved. An action posts signals (`ReadSignals`) as a command's
-arguments, through the same command path (authorization, idempotency,
-recording). Rendering is pure (gristpure), so what a screen shows is a
-function of its queries' results, which are recorded. A screen's steps
-are its queries' (with the screen's name), plus `screen.<name>.patch`
-with the positions rendered. The model checks a screen through them:
-every patch shows a fold at a recorded position, and after a settle the
-last patch shows the head (an eventual val: a screen that stops
-following is caught, as webjobs' page is). The browser itself is the
-real tier's (examples/webjobs' Bombadil route, §54 E5), not the
-simulation's: qhttp passes whole responses, so in a simulation the
-stream is driven by a test client that reads patches as a page would,
-through `screen.Client`.
+**Datastar** (`grist/screen`, slice 3, the only importer of
+`github.com/starfederation/datastar-go/datastar`): a screen's SSE stream
+renders its queries, waits on the tenant's head and re-renders when a
+consumed read model moved; its actions post signals through the command
+path. Its steps are its queries' plus `screen.<name>.patch` with the
+positions rendered, and after a settle the last patch shows the head (an
+eventual val).
 
 ## 6. The agent workflow
 
 A skill, `skills/grist/SKILL.md` (symlinked into `.agents/skills` and
-`.claude/skills`, front-matter `name: grist`), grain's `/grain` loop
-with gotogether's checks in place of generated tests:
-
-1. **Elicit** the blocks as a table (commands, events, read models,
-   queries, processors with delivery, periodic tasks, screens) and the
-   invariants in words.
-2. **Declare** them in Go (events, read models, command signatures with
-   stub decisions that return `grist.Todo`), run `grist verify` until
-   the topology is clean, `grist model` to generate the skeleton and the
-   binding.
-3. **Model first**: write each action's precondition and the invariants
-   in `model/<app>.qnt`; `quint run` the model's invariants.
-4. **Implement red first**: `gristtest.Explore` on the stub fails by the
-   model (`Rejects`); write decisions and folds until it conforms.
-5. **Prove the checks can fail**: one mutant per invariant (an overlay
-   or a qmut schema), `.Expect(t, qtest.Some(qtest.Violates(...)))`.
-6. **Tend**: on every change `grist verify`, the analyzers, the
-   exploration; a changed event is a new version with an upcaster.
-
-References under `skills/grist/references/`: blocks.md (the Go shapes),
-delivery.md (choosing a processor's result), consistency.md (reads,
-`Within`, `Unconditioned`), testing.md (the Systems and claims).
-`gotogether-start`'s table gets a row: an event-sourced application
-from scratch → grist.
-
-**The catalog CLI** is grist's own, `grist` (`grist/cmd/grist`: the core's
-`gotogether` cannot import grist, which requires the core).
-`grist.Main(app)` gives every application the subcommands, and `grist
-<sub> ./cmd/app` builds and runs the application's main with them (argv,
-no shell): `catalog` (blocks, schemas, topology, delivery and
-authorization, as text or `-json`), `verify`, `model`, `topology -w`,
-`invoke <command> <json>` and `query <name> <json>` against a memstore
-or a SQLite file, `events -tenant t` and `fold <read model> -tenant t`.
-These are grain's nREPL tools as commands an agent can run and read.
+`.claude/skills`), grain's `/grain` loop with gotogether's checks:
+**elicit** the blocks and invariants; **declare** them with stub
+decisions (`grist.Todo`) until `grist verify` is clean; **model first**
+(preconditions, invariants, `quint run`); **implement red first** (the
+stub's exploration fails by `Rejects`); **prove each check can fail**
+(a mutant per claim); **tend** (verify, analyzers, exploration on every
+change). The CLI (`grist`, `cmd/grist`, which alone links the generator,
+binding and validate): `catalog`, `verify`, `model`, `topology -w`,
+`invoke`, `query`, `events`, `fold`, against a memstore or a SQLite
+file. `gotogether-start`'s table gets a row.
 
 ## 7. Module layout
 
@@ -779,183 +877,242 @@ These are grain's nREPL tools as commands an agent can run and read.
 grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mod; published like qhegel)
   grist.go             App, events, read models, commands, queries, processors, periodic, Reads, Result
   runtime/             the node: pollers, effect worker, scheduler, dispatcher (qenv seams only)
-  store/               Store, Query, Batch, Condition, Position; storetest (the contract suite)
+  store/               Store, Query, Batch, Position, EventRef; storetest (the contract suite)
   memstore/ simstore/ sqlstore/
   api/                 HTTP/JSON adapter
   screen/              Datastar adapter (the only datastar-go import)
-  gristsim/            Run(chooser, app, cfg): nodes, store, API, workload, settle, probes
-  gristtest/           ShrinkCommands, contract claims, storetest helpers
-  model/               grist.qnt, leases.qnt (Choreo), the generator's templates
-  cmd/grist/           the CLI
+  gristsim/            Run(chooser, app, cfg): nodes, store, workload, settles, probes
+  gristtest/           ShrinkCommands, stub reports, storetest helpers (imports qtest)
+  model/               grist.qnt, leases.qnt, the generator's templates
+  cmd/grist/           the CLI and the generator (imports binding, validate)
 grist/gristhegel/      module of its own: registry-driven Hegel machines (requires grist, qhegel)
-qanalysis/             + gristpure, gristflow (recognize grist by import path; no dependency on grist)
+qanalysis/             + gristflow, gristpure (recognize grist by import path; no dependency on grist)
 skills/grist/          the skill
-examples/counters/     the spike (§8), a module with replace => ../..
+examples/counters/     slice 1's application, a module with replace => ../..
 ```
 
-grist requires the core (qenv, qobs, qtrace, itf for value encoding,
-binding and validate for the generator, qtest and qrole) and nothing
-else but datastar-go, imported by `screen` alone. No Hegel (gristhegel
-is its own module, so gosim's `internal/simdeps` rule, nothing that
-imports qenv depends on Hegel, holds for grist), no SQL driver (the
-application's), no Orchestrion (grist's blocks record themselves; there
-is nothing to weave), no OTel beyond the core's. It joins `go.work`,
-gets `api/grist.txt` from internal/apisurface, and CI tests it with
-`GOWORK=off` like qhegel.
+**A production binary links** `grist`, `runtime`, `store`, its tier
+and `api`, and of the core qenv, qobs and qrole; never binding, validate
+or qtest, imported only by `cmd/grist`, `gristsim` and `gristtest`
+(`internal/linkcheck` fails if `grist`'s or `api`'s graph reaches them).
+No Hegel (so `internal/simdeps`'s rule holds), no SQL driver, no
+Orchestrion. It joins `go.work`, gets `api/grist.txt`, and CI tests it
+with `GOWORK=off`.
 
-## 8. The first spike
+## 8. Three slices
 
-### 8.1 Prerequisites in the core
+### 8.1 Slice 1: the thesis
 
-1. qsql: a range on the last primary-key column with `ORDER BY` it and
-   `LIMIT` (a `Scan` over the key prefix), with the Store's history
-   checker seeing the scan as a predicate read; its parse and plan
-   tests, and an `...AgainstBruteForce` test of the range plan against a
-   filtered full scan.
-2. Nothing else: Txn.OnCommit, qenv.Signal, FaultPoint, Service, Process,
-   System and the claims exist.
+That a grist application is checked by its model, and that grain's two
+bugs are caught, on a simulated store.
 
-### 8.2 Scope
+**Core prerequisites**: none. `Txn.OnCommit`, `qenv.Signal`,
+`DeclareFaults`, `Sim.FaultOf`, `Process.Crash`, `qenv.Service`,
+`Script`, `System`, `qobs.Invoke` and the claims exist; slice 1's
+binding needs only scalars and `toList`.
 
-grist with: events (one version, no upcasting yet), plain and keyed
-read models (no cache), commands with the read-set condition,
-`Unconditioned`, idempotency by command id, queries, processors with
-`Emit` and `Effect(AtLeastOnce)` and `Effect(AtMostOnce)`, periodic
-`Every`, boot verification of names and edges (not the schema lock),
-memstore and simstore (sqlstore on qsql and SQLite in the spike's second
-week), the HTTP API without Datastar, `gristsim.Run`, the model
-generator, `gristflow`'s unconditioned-rejection check (gristpure
-after). One node. No leases, no screens, no gristhegel, no qload.
+**grist**: events with one version (no upcasting); plain and keyed read
+models (no cache); pinned `Reads` with `Get`, `For`, `Exists` and
+`Events` (reverse, limit); commands with read-set conditions,
+`Unconditioned`, transient retries apart from condition retries, and
+idempotency (marker first, payload hash, results as positions and
+refs); queries; processors with `Emit` and `Effect(AtLeastOnce)`,
+trigger-position reads and checkpoints in a table; memstore and
+simstore, with the store contract suite over both (and its mutant);
+`gristsim.Run` with workload clients (`AtCommits`, and `AtClients` with
+`Invoke`/`Done`), stopped schedulers and two settles; every step with
+actor tenant, process the store's name and `order.pos`; boot
+verification of names and edges. One node. No API, no periodic tasks,
+no generator, no analyzers.
 
-`examples/counters`, grain's counter example:
+**examples/counters**, grain's counter example, without float averages:
 
-- events `counter-created`, `counter-incremented`, `average-computed`,
-  `notified`;
+- events `counter-created` (tags `counter`, `name`),
+  `counter-incremented` (tag `counter`), `average-computed` (`sum`,
+  `count`: integers, the mean is the reader's), `notified`;
 - read models `counter-names` (plain) and `totals` (keyed by counter);
-- commands `create-counter` (unique name, the read-set default),
-  `increment-counter` (refused for an unknown counter);
-- query `show-counter`;
-- processor `average` (`Emit`: on each increment, the tenant's average
-  as `average-computed`) and processor `welcome` (`Effect(AtLeastOnce)`
-  calling a `qenv.Service` "mailer" that records `mailer.send` with the
-  effect key);
-- periodic `report` (`Every(time.Minute)`, emits the tenant's total);
-- two tenants, `t1` and `t2`, with clients sending to both, names drawn
-  from three letters so they collide;
-- the model `model/counters.qnt` over the generated skeleton and
-  grist.qnt, with invariants `uniqueNames`, `averageIsMean` (each
-  `average-computed` equals the mean at its position), `oneReportPerSlot`
-  (grist.qnt's), tenant isolation (grist.qnt's), and the eventual val
-  `everyCounterWelcomed`;
-- mutants (overlays of the example's files, as payd's): `blind` (create
-  with `Unconditioned`), `checkpointFirst` (welcome declared
-  `AtMostOnce` while the model says at least once: a crash after the
-  checkpoint loses the welcome), `leakTenant` (the average folds both
-  tenants' increments: a fold given the wrong tenant's reads, through a
-  test-only hook), `dispatchDirect` (average calls the store itself and
-  returns `Skip`, grain's example).
+- commands `create-counter` (`Exists` on the name tag) and
+  `increment-counter` (refused for an unknown counter, read through
+  `Totals.For`); query `show-counter`;
+- processors `average` (`Emit`: on each increment, the tenant's sum and
+  count as of the trigger) and `welcome` (`Effect(AtLeastOnce)` calling
+  a `qenv.Service` "mailer", `OnSuccess(notified)`);
+- two tenants, clients sending to both, names from three letters;
+- a hand-written `model/counters.qnt` over a hand-written first
+  grist.qnt, and `counters.binding.yaml`, with `uniqueNames` (the
+  design's, `simulate: holds`), `averageAsOfTrigger` (each
+  `average-computed` is the sum and count at its trigger) and the eventual
+  val `everyCounterWelcomedOrFailed`;
+- mutants (overlays of the example's files, as payd's): `blind`
+  (create `Unconditioned`), `dispatchDirect` (average appends through the
+  store itself and returns `Skip`, grain's example).
 
-### 8.3 Claims it must demonstrate
+Claims, each a test with `.Expect`, its rate measured and seeds chosen
+for a miss chance under 5% (payd's discipline):
 
-Each a test, with `.Expect`, its rate measured and its seeds chosen for
-a miss chance under 5% (payd's discipline):
+1. **The race is found in the unsafe variant.** `blind`, two clients,
+   no faults, names colliding: `qtest.Some(qtest.Rejects("createCounter"))`:
+   the second create commits where the model's precondition is false.
+2. **The safe default passes, through every fault.** The faithful app
+   at each of the simstore's three isolation levels, with store commit
+   faults and node crashes: `qtest.Conforms()`,
+   `qtest.All(qtest.Settles())`, and
+   `qtest.Reaches("store.counters.commit").Faulted()` so the faults
+   happened. The same under `AtClients` with `qtest.Linearize()`.
+3. **The duplicated welcome is the declared guarantee's, seen and
+   judged.** A `qenv.Script` asking for `grist.welcome.effect`'s
+   `crashAfter` (and `Exhaust` with one fault reaching it): the
+   restarted node sends the welcome again under the same effect key. The
+   model admits it (`qtest.Conforms()`); a test-only model variant with
+   the invariant `welcomedOnce` (one ok effect step per trigger) rejects
+   exactly those runs: `qtest.Some(qtest.Violates("welcomedOnce"))`.
+4. **grain's processor duplicate is caught.** `dispatchDirect`, with and
+   without crashes: `qtest.Some(qtest.Mismatch("average"))`: the
+   processor's step records no events where the model's action appends
+   one, and the raw append shifts every later head (§3.1). The faithful
+   `Emit` never does (claim 2).
+5. **The store keeps its contract.** `storetest` over memstore and
+   simstore passes; over the mutant store that ignores tenants, it
+   fails, naming the isolation check.
 
-1. **The race is found in the unsafe variant.** `blind`: two clients,
-   no faults, `Explore` with names colliding:
-   `qtest.Some(qtest.Violates("uniqueNames"))`.
-2. **The analyzer flags it.** gristflow's analysistest fixture of the
-   blind create reports the unconditioned rejection, with the message
-   of §4.1; the safe create reports nothing.
-3. **The safe default passes.** The faithful app, at every isolation
-   level of the simstore and through all faults (crashes, commit faults,
-   lost and duplicated API requests): `qtest.Conforms()`,
-   `qtest.All(qtest.Settles())`, and `qtest.Reaches("store.counters.commit").Faulted()`
-   so the faults happened.
-4. **The duplicated effect is visible and judged.** `Exhaust` with one
-   fault reaches `grist.welcome.effect`'s `crashAfter`: the restarted
-   node sends the welcome again under the same effect key. The model
-   admits it (`AtLeastOnce`: `qtest.Conforms()`), and an application
-   invariant `welcomedOnce` added in a test-only model variant rejects
-   exactly those runs (`qtest.Some(qtest.Violates("welcomedOnce"))`,
-   `qtest.Reaches("grist.welcome.effect").Faulted()`): the duplicate is
-   the declared guarantee's, seen and judged, not hidden.
-5. **At most once loses, visibly.** `checkpointFirst`, with one fault:
-   `qtest.Some(qtest.Violates(validate.EventuallyName("everyCounterWelcomed")))`.
-6. **Tenants stay apart.** `leakTenant`: `qtest.Some(qtest.Violates("tenantIsolation"))`,
-   and `averageIsMean` in the faithful runs.
-7. **grain's processor duplicate is gone.** `dispatchDirect` with one
-   crash duplicates `average-computed` for one increment:
-   `qtest.Some(qtest.Violates("oneHandlingPerEvent"))` (grist.qnt's);
-   the faithful `Emit` never does (claim 3), and gristflow flags the
-   direct store call.
-8. **The periodic task runs once per slot** under two schedulers (the
-   spike's one node runs the scheduler twice, as two nodes would) and
-   crashes: `qtest.None(qtest.Violates("oneReportPerSlot"))`.
-9. **One binding, two tiers.** The same binding validates a run of
-   `grist.Main` on SQLite driven by a Go client (`real_test.go`), and
-   the `blind` mutant is caught there by concurrency alone, at a rate
-   stated in the test.
+Done when the five pass in CI, the README's table names which check
+catches which mutant, `run-demo.sh` shows claims 1 and 3, and the
+skill's first version walks through the example.
 
-Done when the nine pass in CI, the README's table names which check
-catches which mutant, `run-demo.sh` shows claims 1 and 4, and the skill's
-first version walks through the example.
+### 8.2 Slice 2: the real tier
 
-## 9. Open questions for the maintainer
+That one binding checks a simulation and a real database, and that the
+model and binding are generated.
 
-1. **Read-set conditions by default, even for writes that need none.**
-   An increment conditioned on its counter's events conflicts with
-   every concurrent increment of that counter (retried, but contended).
-   The recommendation is to keep the default and let `Within` narrow
-   it; the alternative is a per-command declaration with no default.
-   Is contention on hot keys acceptable as the price of the safe
-   default?
-2. **Checkpoint events in the log.** One `grist.checkpoint` per batch
-   per processor grows the log (grain does the same). Keep them as
-   events (one mechanism, visible to the model and to `grist events`),
-   or move checkpoints to a table of their own updated in the same
-   transaction?
-3. **Positions without global ids.** Events are identified by (tenant,
-   position); grain also gives each a UUIDv7. Is a global id needed
-   (cross-tenant references, export), or can it wait for retention?
-4. **The model's state is the log.** Read models as folds over the log
-   make the model faithful but its states long; validation of long runs
-   may need a model variant that keeps the folds as variables (a
-   mechanism-level model with a Hegel-tested lemma, the
-   gotogether-patterns way). Generate both from the start, or only when
-   a run is slow?
-5. **The name.** "grist" also names gristlabs' spreadsheet product
-   (grist-core); the Go import path is ours, but a search is not. Keep
-   it, or pick another before the module is published?
+**Core prerequisites**, each its own item, before grist uses it:
 
-## 10. Rejected, and why
+1. **qsql's extension.** Today: one table at a time, a single-column
+   `PRIMARY KEY`, equality only, `ORDER BY pk [ASC|DESC]`, `LIMIT n`,
+   `ON CONFLICT [(col)] DO NOTHING`, `UPDATE ... SET c = c + ?`. sqlstore
+   needs: a key of several columns (a composite `PRIMARY KEY (tenant,
+   pos)`, encoded into the Store's key so that `Scan` returns rows in key
+   order; or, smaller, an encoded `TEXT` key with a prefix range, which
+   the sqlstore would then write itself); a range (`>`, `>=`, `<`, `<=`)
+   on the last key column, with the others equal, planned as a `Scan` of
+   the key prefix and seen by the Store's history checker as a predicate
+   read; `UPDATE ... RETURNING` (the head) and `ON CONFLICT (cols) DO
+   UPDATE` (checkpoints) as the store's statements need. Parse and plan
+   tests, and an `...AgainstBruteForce` test of the range plan against a
+   filtered full scan on small random tables, failing with the plan
+   turned off.
+2. **The typed template function** (`toQuint`, §3.2), with float and
+   time refused, its tests against `itf`'s round trip.
+3. **An actor filter** for a System's binding (`qtest.Actors(...)`, or a
+   binding's `actors:` pattern), so one run checks commit steps and
+   client steps with their two bindings (§3.1).
+
+**grist**: sqlstore on qsql (explored like the simstore, claims 1–4
+again on it) and on SQLite (`real_test.go`: `grist.Main` on a SQLite file
+driven by a Go client over HTTP, validated by the same binding; `blind`
+caught there by concurrency alone, at a rate stated in the test); the
+HTTP API on `qhttp`, with lost and duplicated requests; `AtMostOnce`,
+with the mutant `checkpointFirst` (welcome declared `AtMostOnce` while
+the model says at least once): `qtest.Some(qtest.Rejects("welcome"))`,
+its checkpoint step before any effect step, and with a crash between
+them `qtest.Some(qtest.Violates(validate.EventuallyName("everyCounterWelcomedOrFailed")))`
+in a model variant whose welcome is at most once;
+the generator (`grist model`) and its diff in CI; gristflow's
+unconditioned-rejection and raw-append checks, with analysistest
+fixtures of the blind create and dispatchDirect.
+
+### 8.3 Slice 3: the rest of grain
+
+Periodic tasks (`Every`, `Cron`, ticks, catch-up, a claim of one report
+per slot under two schedulers and crashes); upcasting with the tag rule
+and `Reindex`; read-model snapshots (§9); gristpure, with the new
+map-range rule and a `Facts` export of each pure function for
+gristflow; gristhegel; PostgreSQL (row-level security, `lock_timeout`,
+the idle timeout, a claim under a real failover); leases (§3.4) and
+several nodes; screens and Datastar.
+
+## 9. Gaps a real app hits first
+
+Not designed yet, in the order an application would meet them:
+
+- **Snapshots, before the second app.** Folding the log on every read
+  is fine for counters and slow at 10⁵ events. A cache stores a read
+  model's state encoded (JSON) with its position, keyed by (name,
+  version, tenant, key), decoding a fresh value per read so a fold that
+  mutates in place is safe; the model is unchanged.
+- **Schema evolution beyond upcasting**: splitting an event, merging
+  kinds, a field whose meaning changed: a migration appending new
+  events, a read-model version bump, and an answer for processors that
+  handled the old ones.
+- **Cross-tenant queries** (an operator's report): never in a decision;
+  a read-only loop over `Tenants`, or an export, outside the model.
+- **Per-entity timers and sagas** ("cancel if unpaid in 24 h"): a
+  `timer-set{due}` event and a processor polling due timers, firing a
+  `Dispatch` keyed by (timer, due) so it fires once.
+- **Inbound webhooks**: the command id is the provider's event id,
+  namespaced (`stripe:evt_...`), so §2.4's marker dedupes redeliveries.
+- **Erasure**: §2.10's retention shape, or crypto-shredding.
+- **Operations**: each processor's lag (head minus checkpoint, per
+  tenant) and oldest unhandled event's age as qrole metrics;
+  `grist.failed` events as a dead-letter list (`grist events -type
+  grist.failed`), with a command to re-run one after a fix.
+
+## 10. Open questions, with defaults
+
+Each default is the review's recommendation; **default, the maintainer
+may override** each.
+
+1. **Read-set conditions by default** (default, the maintainer may
+   override). Contention is handled by the reads: keyed reads (`For`),
+   existence reads (`Exists`) and uniqueness tags make a decision
+   conflict only with writes to what it read. A per-command declaration
+   with no default would bring grain's race back.
+2. **Checkpoints in a table** (default, the maintainer may override): a
+   row per (tenant, processor), compare-and-set in the processor's
+   transaction, its position in every processor step. Ticks are written
+   only when a periodic task appends or runs an effect. The log stays
+   the application's events.
+3. **`EventRef{Tenant, Pos}`, never renumbered** (default, the maintainer
+   may override); retention deletes, never renumbers. A global id
+   (grain's UUIDv7) waits for export or cross-tenant references.
+4. **The log model only** (default, the maintainer may override): read
+   models as defs over the log, validation time measured at 200 and 1000
+   steps per tenant (slice 1's explorations and a long SQLite run)
+   before any variant keeping folds as variables (a mechanism-level model
+   with a Hegel-tested lemma, the gotogether-patterns way).
+5. **"grist" is a codename** (default, the maintainer may override): it
+   also names gristlabs' spreadsheet (grist-core); renamed before the
+   module's first tag.
+
+## 11. Rejected, and why
 
 - **hallgren/eventsourcing's store, or goes, or eventhorizon as the
-  core**: aggregate- and version-based concurrency, which is the wrong
-  boundary for a decision over read models; owning a four-method
-  interface costs less than adapting one.
-- **Watermill for processors**: an at-least-once message bus between
-  the log and its readers adds a second delivery semantics to model;
+  core**: aggregate- and version-based concurrency, the wrong boundary
+  for a decision over read models; owning a small interface costs less
+  than adapting one.
+- **Watermill for processors**: a second delivery semantics to model;
   the log, read from a checkpoint, is the bus.
 - **Temporal, Restate, DBOS, River for processors and periodic tasks**:
   each brings its own scheduler, clock or server, which qenv cannot
-  simulate; River's transactional enqueue is what `Dispatch` gives
-  without it.
-- **Code generation for the runtime (Encore-style)**: typed generic
-  constructors carry the same facts, and the analyzer reads them;
-  generation is kept for the model and binding, which are not Go.
-- **Optimistic version checks per stream**: grain's insight, kept, is
-  that a condition is a query; streams would bring back aggregates.
+  simulate; River's transactional enqueue is what `Dispatch` gives.
+- **Optimistic version checks per stream**: streams bring back
+  aggregates; a condition is a set of queries.
 - **Advisory locks for the tenant's serialization**: invisible to the
   simulation's Store and to qhistory; the head row's update is a lock
-  both see, on PostgreSQL and SQLite alike.
+  both see.
 - **A database sequence for positions**: drawn before commit, so not in
-  commit order; a checkpoint would skip an in-flight event (§2.9).
+  commit order (§2.10).
+- **Checkpoints as events in the log** (the first version of this note,
+  and grain's): one mechanism, but the log grows by a checkpoint per
+  batch per processor, and a processor's read of its checkpoint joined
+  every condition on the log; a row's compare-and-set is the same
+  guarantee (§10.2).
+- **One model instance for every tenant** (`log: str -> List[Event]`,
+  the first version of this note): each tenant's trace is independent,
+  so an instance per tenant is smaller and its order exact; isolation is
+  the store's contract, tested where it is implemented.
 - **Annotations (`//quint:action`) on grist's blocks**: the framework
   calls every block, so it records them; an annotation could only
   disagree.
-- **Allium or prose specs linked by name** (grain's): the user's
-  decision is Quint, and Choreo for distributed parts; a spec gotogether
-  cannot run against the code is documentation.
-- **A REPL for agents** (grain's nREPL tools): Go has none worth
-  relying on; the same tools are CLI subcommands of the application's
-  own binary.
+- **Allium or prose specs linked by name, a REPL for agents** (grain's):
+  a spec gotogether cannot run is documentation; the REPL's tools are
+  CLI subcommands.

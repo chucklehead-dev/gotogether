@@ -16,6 +16,22 @@ Standing decisions, with the maintainer:
 Order: G1 → G2 → G3 → G4 → G5 → G6 → G7 → G8 → G9 → G10 → G11 → G12; the
 items left from S, X, Y, T and E alongside; R5 when the maintainer says.
 
+## grist (codename)
+
+The grist track, alongside G: an event-sourced framework checked by its
+model, designed in docs/grist.md (§8 for the slices).
+
+- **Slice 1, the thesis**: the core blocks on memstore and simstore,
+  pinned reads and read-set conditions, idempotency, `Emit` and
+  `Effect(AtLeastOnce)` processors, gristsim, examples/counters with a
+  hand-written model; grain's race and duplicate caught.
+- **Slice 2, the real tier**: qsql extended (its own core item, with a
+  brute-force test), the typed template function, an actor filter;
+  sqlstore on qsql and SQLite, the HTTP API, `AtMostOnce`, the
+  generator, gristflow.
+- **Slice 3, the rest of grain**: periodic tasks, upcasting, snapshots,
+  gristpure, gristhegel, PostgreSQL, leases, screens and Datastar.
+
 ## Release (R5)
 
 R1–R4 are done (HISTORY, "Release readiness (R)").
