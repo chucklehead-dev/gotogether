@@ -417,15 +417,17 @@ module countersGen {
 
   // mailer/send as the dependency applied it (its served record, placed at
   // its cause: after the commit holding its trigger): for one of a user's
-  // triggers, as mailerSendAdmits allows given the log through the trigger.
-  // Its request is the caller's to judge (its step, recorded where grist
-  // makes the call)
+  // triggers, its request the processor's rule's (as the caller's: a caller
+  // crashed during the call leaves the served record the request's only one),
+  // as mailerSendAdmits allows given the log through the trigger
   action mailerSendServed(processor: str, trigger: int, key: str, counter: str, name: str, result: str): bool = {
     val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, name: name }, result: result, response: { unit: true } }
     all {
       or {
         processor == "welcome" and (if (trigger > 0 and trigger <= log.length()) and {
           log[trigger - 1].typ == "counter-created",
+          rec_.request == welcomeMailerSend(log.slice(0, trigger), trigger),
+          not(welcomeSkips(log.slice(0, trigger), trigger)),
           mailerSendAdmits(log.slice(0, trigger), mailerSendRecords, rec_),
         } else false),
       },
@@ -504,15 +506,17 @@ module countersGen {
 
   // bank/pay as the dependency applied it (its served record, placed at its
   // cause: after the commit holding its trigger): for one of a user's
-  // triggers, as bankPayAdmits allows given the log through the trigger. Its
-  // request is the caller's to judge (its step, recorded where grist makes
-  // the call)
+  // triggers, its request the processor's rule's (as the caller's: a caller
+  // crashed during the call leaves the served record the request's only one),
+  // as bankPayAdmits allows given the log through the trigger
   action bankPayServed(processor: str, trigger: int, key: str, counter: str, amount: int, result: str, ref: str): bool = {
     val rec_: BankPayRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, amount: amount }, result: result, response: { ref: ref } }
     all {
       or {
         processor == "payout" and (if (trigger > 0 and trigger <= log.length()) and {
           log[trigger - 1].typ == "counter-retired",
+          rec_.request == payoutBankPay(log.slice(0, trigger), trigger),
+          not(payoutSkips(log.slice(0, trigger), trigger)),
           bankPayAdmits(log.slice(0, trigger), bankPayRecords, rec_),
         } else false),
       },

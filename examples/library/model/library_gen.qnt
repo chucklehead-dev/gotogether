@@ -330,15 +330,17 @@ module libraryGen {
 
   // mailer/send as the dependency applied it (its served record, placed at
   // its cause: after the commit holding its trigger): for one of a user's
-  // triggers, as mailerSendAdmits allows given the log through the trigger.
-  // Its request is the caller's to judge (its step, recorded where grist
-  // makes the call)
+  // triggers, its request the processor's rule's (as the caller's: a caller
+  // crashed during the call leaves the served record the request's only one),
+  // as mailerSendAdmits allows given the log through the trigger
   action mailerSendServed(processor: str, trigger: int, key: str, member: str, book: str, result: str): bool = {
     val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { member: member, book: book }, result: result, response: { unit: true } }
     all {
       or {
         processor == "receipts" and (if (trigger > 0 and trigger <= log.length()) and {
           log[trigger - 1].typ == "book-borrowed",
+          rec_.request == receiptsMailerSend(log.slice(0, trigger), trigger),
+          not(receiptsSkips(log.slice(0, trigger), trigger)),
           mailerSendAdmits(log.slice(0, trigger), mailerSendRecords, rec_),
         } else false),
       },

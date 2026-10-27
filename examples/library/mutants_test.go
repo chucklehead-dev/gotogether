@@ -34,19 +34,19 @@ func TestMutant(t *testing.T) {
 		// receipt mailed again after the scripted crash is a second served
 		// record of its key, which the generated mailerSendAdmits refuses
 		// (Send is Keyed; no rule of the app's says so; TestReceiptOnce is
-		// the contrast)
-		system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3), Chooser: crashAfterMail}).
-			Expect(t, qtest.Some(qtest.Rejects("mailerSendServed")))
+		// the contrast). Every run crashes so (lending's every run borrows):
+		// every run rejects, at one seed per push
+		system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1), Chooser: crashAfterMail}).
+			Expect(t, qtest.All(qtest.Rejects("mailerSendServed")))
 	case "wrongReceipt":
-		// the receipt's member and book swapped: a receipt for no borrow,
-		// refused where the effect asks for it (mailerSend: the request is
-		// not receiptsMailerSend's for the trigger). A rejected run is not
-		// one Violates(everyReceiptForABorrow) claims (a conforming run's
-		// violation): grist records the mailer's record with the bytes its
-		// caller sent, so the caller's rule refuses every such run (TestFaithful
-		// is the contrast)
-		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).
-			Expect(t, qtest.Some(qtest.Rejects("mailerSend")))
+		// the receipt's member and book swapped: a receipt for no borrow.
+		// The mailer's record of it comes first (recorded inside the call,
+		// before the effect's completion), and the generated
+		// mailerSendServed takes only the request receiptsMailerSend makes
+		// for its trigger: lending's every run borrows, so every run rejects
+		// it, at one seed per push (TestFaithful is the contrast)
+		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
+			Expect(t, qtest.All(qtest.Rejects("mailerSendServed")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

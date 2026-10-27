@@ -20,7 +20,7 @@ of building it as a newcomer to grist.
 | file | what it is |
 |---|---|
 | [app.go](app.go), [commands.go](commands.go), [queries.go](queries.go), [processors.go](processors.go), [mailer.go](mailer.go) | the events, the read models (`books` keyed by book, `loans` keyed by member), the commands, the query, the processor, the mailer's declaration (no double: gristsim serves its default) |
-| [model/library.qnt](model/library.qnt) | written by hand: the rules the skeleton calls (the receipt a borrow asks the mailer for, `receiptsMailerSend`) and the invariants (copies on loan within the book's copies, at most three loans, every receipt for a borrow that happened, at every step; every borrow receipted, after a settle) |
+| [model/library.qnt](model/library.qnt) | written by hand: the rules the skeleton calls (the receipt a borrow asks the mailer for, `receiptsMailerSend`) and the invariants (copies on loan within the book's copies, at most three loans, at every step; every borrow receipted, after a settle). That every receipt is for a borrow that happened is the generated `mailerSendServed`'s own guard, not an invariant |
 | [doubles_test.go](doubles_test.go) | the runs' doubles: none (the `noDedupe` mutant replaces it) |
 | [model/library_gen.qnt](model/library_gen.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale) |
 | [cmd/library](cmd/library/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
@@ -37,8 +37,8 @@ of building it as a newcomer to grist.
 | `TestGreedy` | one member and three books opened by a prologue, three clients borrowing at ReadCommitted, no faults | nothing: `None(Rejects("borrow"))` (`staleLimit`'s contrast), a borrow refused at the `limit` |
 | `TestMutant` (`staleLimit`) | the same, the borrow `Unconditioned` | `Some(Rejects("borrow"))`: a fourth loan commits on a stale read of the member's loans, where the model's rule says `limit` |
 | `TestReceiptOnce` | a scripted crash just after a receipt's mail, before its checkpoint | nothing: `Conforms` (the mail sent again, the mailer replaying its first answer), `All(Settles)`, the crash reached |
-| `TestMutant` (`noDedupe`) | the same, a mailer double sending every try | `Some(Rejects("mailerSendServed"))`: a second served record of one key, which the generated `mailerSendAdmits` refuses (`Send` is `Keyed`; no rule written by hand) |
-| `TestMutant` (`wrongReceipt`) | borrows, no faults | `Some(Rejects("mailerSend"))`: a receipt naming no borrow (member and book swapped), refused where the effect asks for it |
+| `TestMutant` (`noDedupe`) | the same, a mailer double sending every try | `All(Rejects("mailerSendServed"))`: a second served record of one key, which the generated `mailerSendAdmits` refuses (`Send` is `Keyed`; no rule written by hand) |
+| `TestMutant` (`wrongReceipt`) | borrows, no faults | `All(Rejects("mailerSendServed"))`: a receipt naming no borrow (member and book swapped), refused where the mailer sends it (its request not `receiptsMailerSend`'s for its trigger), the first record of it |
 | `TestRealHTTP` | the real tier: SQLite, real HTTP, the mailer's default double in process (`grist.Local`), every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |
 | `TestGenerated` | the generated files against the catalog | a block changed without regenerating |
 

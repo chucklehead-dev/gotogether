@@ -263,6 +263,22 @@ var paying = func() gristsim.Config {
 	return cfg
 }()
 
+// payOnce is paying's prologue alone (its client only creates): the run's
+// one payment is the prologue's retirement's, so a script's fault on the
+// bank's call lands on it.
+var payOnce = func() gristsim.Config {
+	cfg := paying
+	cfg.Ops = 1
+	cfg.Send = []string{"create-counter"}
+	return cfg
+}()
+
+// lostThenCrash is a script of the bank's answer lost, then the node
+// crashed while the payout waits for it: the payout's call is left
+// pending (at most once: never made again), the bank's served record the
+// only record of the payment.
+var lostThenCrash = scripted(qenv.Scripted{Kind: "rpc.bank.response", Name: "lost"}, qenv.Scripted{Kind: "nemesis.crash.node", Follows: []int{0}})
+
 // contested is two clients creating and retiring counter a, six times
 // each: one's retirement of a counter only the other created is refused
 // (not-creator).
@@ -282,7 +298,8 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 // call where the payout makes it (bankPay: its request, the trigger, the
 // key) and the payment where the bank makes it (bankPayServed), and the
 // model's rule (payoutBankPay: the retired counter and its total) judges
-// the request. Through the bank's own faults (its requests lost,
+// the request at both ends (the bank's record is the request's only one
+// when the payout's node crashes during the call). Through the bank's own faults (its requests lost,
 // duplicated and late at three in ten; its answers lost at that rate too,
 // though no run here reaches one, 0 of 10: TestPayoutTwoNodes' faulty
 // runs claim them per push, TestPayoutAtMostOnce scripts one): a duplicate
@@ -294,9 +311,12 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 // (bankDouble(true)) is caught at its replay in every run. Without
 // faults at paying's shape every run conforms and pays; with the payout
 // paying one more (the wrongAmount mutant, at that shape) every run
-// rejects bankPay, where nothing the store records differs. The two
-// contrasts are full mode: per push TestPayoutTwoNodes' runs take
-// bankPay ok without faults and a replay under faults, and conform.
+// rejects bankPayServed, where nothing the store records differs (and
+// with its answer lost and the node crashed during the call, the payout's
+// step left pending, every run still rejects the bank's record: the third
+// contrast, lostThenCrash, conforms). The three contrasts are full mode:
+// per push TestPayoutTwoNodes' runs take bankPay ok without faults and a
+// replay under faults, and conform.
 func TestPayoutAmount(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -315,6 +335,10 @@ func TestPayoutAmount(t *testing.T) {
 	system(retiring, paying).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6}).
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("bankPay")), qtest.All(qtest.Settles()),
 			qtest.Takes("bankPay").Outcome("ok"), qtest.Takes("bankPayServed"))
+	// the contrast of wrongAmount's pending payment: the bank's record
+	// alone, its request the rule's
+	system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: 4, Chooser: lostThenCrash}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("bankPayServed"))
 }
 
 // The payout is at most once, seen and judged. A crash after its

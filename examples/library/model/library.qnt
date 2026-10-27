@@ -109,14 +109,10 @@ module library {
   // grist: invariant
   val withinLimit = withinLimitIn(log)
 
-  // every receipt the mailer sent is for a borrow that happened: the
-  // borrow at its trigger, of its member and book. An invariant: grist
-  // places the mailer's record at its cause, after the commit holding its
-  // trigger
-  // grist: invariant
-  val everyReceiptForABorrow = mailerSendRecords.foldl(true, (ok, r) => ok and
-    1 <= r.trigger and r.trigger <= log.length() and log[r.trigger - 1].typ == "book-borrowed"
-      and bookBorrowedMember(log[r.trigger - 1]) == r.request.member and bookBorrowedBook(log[r.trigger - 1]) == r.request.book)
+  // every receipt the mailer sent is for a borrow that happened, of its
+  // member and book: no invariant, but the generated mailerSendServed's
+  // own guard (its request receiptsMailerSend's for its trigger, a borrow
+  // in the log), which rejects the mailer's record of any other receipt
 
   // after a settle: every borrow's receipt sent
   // grist: eventually

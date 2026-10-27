@@ -269,15 +269,17 @@ module walletGen {
 
   // ledger/post as the dependency applied it (its served record, placed at
   // its cause: after the commit holding its trigger): for one of a user's
-  // triggers, as ledgerPostAdmits allows given the log through the trigger.
-  // Its request is the caller's to judge (its step, recorded where grist
-  // makes the call)
+  // triggers, its request the processor's rule's (as the caller's: a caller
+  // crashed during the call leaves the served record the request's only one),
+  // as ledgerPostAdmits allows given the log through the trigger
   action ledgerPostServed(processor: str, trigger: int, key: str, account: str, amount: int, result: str): bool = {
     val rec_: LedgerPostRecord = { processor: processor, trigger: trigger, key: key, request: { account: account, amount: amount }, result: result, response: { unit: true } }
     all {
       or {
         processor == "post" and (if (trigger > 0 and trigger <= log.length()) and {
           log[trigger - 1].typ == "moved",
+          rec_.request == postLedgerPost(log.slice(0, trigger), trigger),
+          not(postSkips(log.slice(0, trigger), trigger)),
           ledgerPostAdmits(log.slice(0, trigger), ledgerPostRecords, rec_),
         } else false),
       },

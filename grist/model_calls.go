@@ -177,7 +177,11 @@ func (g *gen) callActions(b *strings.Builder) {
 				cond = append(cond, fmt.Sprintf("checkpoints.get(%q) >= trigger", p.Name), fmt.Sprintf("triesOf(effects, %q, trigger) == 0", p.Name), fmt.Sprintf("not(keyCalled(%s(%sCalls), key))", keys, c.Quint))
 			}
 			callers = append(callers, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) and {\n          %s,\n        } else false)", p.Name, strings.Join(cond, ",\n          ")))
-			sites = append(sites, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) and {\n          log[trigger - 1].typ == %q,\n          %sAdmits(log.slice(0, trigger), %sRecords, rec_),\n        } else false)", p.Name, p.On, c.Quint, c.Quint))
+			// the site judges the request too: where a caller's step is never
+			// completed (its node crashed after the dependency applied the
+			// call, and an at-most-once effect never calls again) the served
+			// record is the only one of the request
+			sites = append(sites, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) and {\n          %s,\n          %s,\n          %s,\n          %sAdmits(log.slice(0, trigger), %sRecords, rec_),\n        } else false)", p.Name, cond[0], cond[1], cond[2], c.Quint, c.Quint))
 			replays = append(replays, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == %q else false)", p.Name, p.On))
 		}
 		or := func(xs []string) string {
@@ -197,7 +201,7 @@ func (g *gen) callActions(b *strings.Builder) {
 			c.Quint, ps, t, rec, or(callers), keys, c.Quint)
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", c.Quint + "Calls": c.Quint + "Calls.append(rec_)"}))
 		b.WriteString("    }\n  }\n")
-		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s as the dependency applied it (its served record, placed at its cause: after the commit holding its trigger): for one of a user's triggers, as %sAdmits allows given the log through the trigger. Its request is the caller's to judge (its step, recorded where grist makes the call)", c.label(), c.Quint)))
+		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s as the dependency applied it (its served record, placed at its cause: after the commit holding its trigger): for one of a user's triggers, its request the processor's rule's (as the caller's: a caller crashed during the call leaves the served record the request's only one), as %sAdmits allows given the log through the trigger", c.label(), c.Quint)))
 		fmt.Fprintf(b, "  action %sServed(%s): bool = {\n    val rec_: %sRecord = %s\n    all {\n      %s,\n", c.Quint, ps, t, rec, or(sites))
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", c.Quint + "Records": c.Quint + "Records.append(rec_)"}))
 		b.WriteString("    }\n  }\n")

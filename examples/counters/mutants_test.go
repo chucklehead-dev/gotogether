@@ -118,13 +118,26 @@ func TestMutant(t *testing.T) {
 		system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
 			Expect(t, qtest.Some(qtest.Rejects("retireCounter")))
 	case "wrongAmount":
-		// the payout paying one more than the retired total: the bank's call,
-		// recorded where the payout makes it, asks for an amount the model's
-		// rule (payoutBankPay) does not, without faults in every run that
-		// retires: paying's prologue retires a counter, so every run
-		// rejects bankPay, at one seed per push; TestPayoutAmount is its
-		// contrast
+		// the payout paying one more than the retired total: a request the
+		// model's rule (payoutBankPay) does not make, judged wherever it is
+		// recorded. Without faults at paying's shape (every run retires) the
+		// bank's served record comes first (it is recorded inside the call,
+		// before the payout's completion): every run rejects bankPayServed.
 		system(retiring, paying).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1)}).
+			Expect(t, qtest.All(qtest.Rejects("bankPayServed")))
+		// the bank's answer lost and the node crashed while the payout
+		// waits: the payout's call stays pending (at most once: never made
+		// again), so the bank's record is the only one of the wrong payment.
+		// Every run rejects bankPayServed; with the site judging no request
+		// (as slice 2 built it) every run conformed
+		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1), Chooser: lostThenCrash}).
+			Expect(t, qtest.All(qtest.Rejects("bankPayServed")))
+		// the request lost: the bank applies nothing, and the payout's own
+		// step (outcome unknown) is the only record of what it asked, as on
+		// a tier where the dependency is a third party's (no site): every
+		// run rejects bankPay
+		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1), Chooser: scripted(
+			qenv.Scripted{Kind: "rpc.bank.request", Name: "drop"})}).
 			Expect(t, qtest.All(qtest.Rejects("bankPay")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)

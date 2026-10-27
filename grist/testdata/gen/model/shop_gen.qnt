@@ -379,19 +379,23 @@ module shopGen {
 
   // warehouse/hold as the dependency applied it (its served record, placed at
   // its cause: after the commit holding its trigger): for one of a user's
-  // triggers, as warehouseHoldAdmits allows given the log through the
-  // trigger. Its request is the caller's to judge (its step, recorded where
-  // grist makes the call)
+  // triggers, its request the processor's rule's (as the caller's: a caller
+  // crashed during the call leaves the served record the request's only one),
+  // as warehouseHoldAdmits allows given the log through the trigger
   action warehouseHoldServed(processor: str, trigger: int, key: str, item_: str, qty: int, result: str, ref: str): bool = {
     val rec_: WarehouseHoldRecord = { processor: processor, trigger: trigger, key: key, request: { item: item_, qty: qty }, result: result, response: { ref: ref } }
     all {
       or {
         processor == "notify" and (if (trigger > 0 and trigger <= log.length()) and {
           log[trigger - 1].typ == "item-added",
+          rec_.request == notifyWarehouseHold(log.slice(0, trigger), trigger),
+          not(notifySkips(log.slice(0, trigger), trigger)),
           warehouseHoldAdmits(log.slice(0, trigger), warehouseHoldRecords, rec_),
         } else false),
         processor == "charge" and (if (trigger > 0 and trigger <= log.length()) and {
           log[trigger - 1].typ == "item-shipped",
+          rec_.request == chargeWarehouseHold(log.slice(0, trigger), trigger),
+          not(chargeSkips(log.slice(0, trigger), trigger)),
           warehouseHoldAdmits(log.slice(0, trigger), warehouseHoldRecords, rec_),
         } else false),
       },

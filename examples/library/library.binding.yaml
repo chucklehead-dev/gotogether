@@ -48,9 +48,9 @@ actions:
   mailerSendReplayed:
     args: { result: '{{.outcome}}' }
 
-invariants: [copiesHeld, withinLimit, everyReceiptForABorrow]
+invariants: [copiesHeld, withinLimit]
 eventually: [everyBorrowReceipted]
 
 # The model on its own (gotogether simulate)
 simulate:
-  holds: [copiesHeld, withinLimit, everyReceiptForABorrow]
+  holds: [copiesHeld, withinLimit]

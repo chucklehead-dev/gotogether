@@ -68,9 +68,10 @@ func TestMutant(t *testing.T) {
 		// and the checkpoint the restarted node posts again under the same
 		// key, and the ledger posts twice, a second served record of the
 		// key, which the generated ledgerPostAdmits refuses (PostEntry is
-		// Keyed; no rule of the app's says so)
-		system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2), Chooser: crashAfterPost}).
-			Expect(t, qtest.Some(qtest.Rejects("ledgerPostServed")))
+		// Keyed; no rule of the app's says so). Every run deposits and
+		// crashes so: every run rejects, at one seed per push
+		system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1), Chooser: crashAfterPost}).
+			Expect(t, qtest.All(qtest.Rejects("ledgerPostServed")))
 	case "replicaRead":
 		// a balance read from the ledger's postings misses a deposit not
 		// posted yet
