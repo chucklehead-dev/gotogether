@@ -69,7 +69,11 @@ type search struct {
 	collected map[string][]qtrace.Watermark
 	// pending are each actor's (or partition's) pending calls as
 	// recorded, with the recorder and seq the order re-sequences
-	pending  map[string][]qtrace.Step
+	pending map[string][]qtrace.Step
+	// recorded are each actor's (or partition's) steps as recorded, which
+	// the order re-sequences: mark places a failure among its gaps by
+	// them (judgeGaps)
+	recorded map[string][]qtrace.Step
 	searched bool
 	binding  *binding.Binding
 	// overlaps are, by actor (or partition), the steps a linearization
@@ -236,7 +240,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
 		s.lost, s.binding = lostOf(c.Binding, steps, opt.Key), c.Binding
-		s.gaps, s.collected, s.pending, s.searched = recordedOf(c.Binding, steps, opt.Key)
+		s.gaps, s.collected, s.pending, s.recorded, s.searched = recordedOf(c.Binding, steps, opt.Key)
 		s.overlaps = overlapsOf(c.Binding, steps, opt.Key)
 		return s, nil
 	}
@@ -248,7 +252,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		}
 		s.Steps, s.issues, s.undecided, s.kept, s.claims = resolve(lc, steps, budget)
 		s.lost, s.binding = lostOf(c.Binding, steps, ""), c.Binding
-		s.gaps, s.collected, s.pending, s.searched = recordedOf(c.Binding, steps, "")
+		s.gaps, s.collected, s.pending, s.recorded, s.searched = recordedOf(c.Binding, steps, "")
 		return s, nil
 	}
 	s.Steps, s.intervals = steps, intervals(steps)
@@ -272,18 +276,18 @@ func lostOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]qt
 	return out
 }
 
-// recordedOf is each actor's gaps, watermarks and pending calls
-// (qtrace.Trace.Gaps, Collected, Pending), by the name a search's order
-// gives it, as lostOf its losses; and true, for search.searched.
-func recordedOf(b *binding.Binding, steps []qtrace.Step, key string) (map[string][]qtrace.Gap, map[string][]qtrace.Watermark, map[string][]qtrace.Step, bool) {
+// recordedOf is each actor's gaps, watermarks, pending calls and steps
+// (qtrace.Trace.Gaps, Collected, Pending, Steps), by the name a search's
+// order gives it, as lostOf its losses; and true, for search.searched.
+func recordedOf(b *binding.Binding, steps []qtrace.Step, key string) (map[string][]qtrace.Gap, map[string][]qtrace.Watermark, map[string][]qtrace.Step, map[string][]qtrace.Step, bool) {
 	traces, _ := qtrace.Reconstruct(steps)
-	gaps, marks, pending := map[string][]qtrace.Gap{}, map[string][]qtrace.Watermark{}, map[string][]qtrace.Step{}
+	gaps, marks, pending, recorded := map[string][]qtrace.Gap{}, map[string][]qtrace.Watermark{}, map[string][]qtrace.Step{}, map[string][]qtrace.Step{}
 	for _, tr := range traces {
 		for _, p := range partitions(tr, key, snapshotFirst(b, tr)) {
-			gaps[p.Actor], marks[p.Actor], pending[p.Actor] = tr.Gaps, tr.Collected, p.Pending
+			gaps[p.Actor], marks[p.Actor], pending[p.Actor], recorded[p.Actor] = tr.Gaps, tr.Collected, p.Pending, p.Steps
 		}
 	}
-	return gaps, marks, pending, true
+	return gaps, marks, pending, recorded, true
 }
 
 // pendingGap is the gap of the steps as recorded that may hold a pending
@@ -421,7 +425,7 @@ func (s *search) mark(rep *Report) {
 		judgeOverlaps(a, s.overlaps[a.Actor])
 		if s.searched {
 			a.Collected = s.collected[a.Actor]
-			judgeAbsent(s.binding, a, s.lost[a.Actor], s.gaps[a.Actor], s.pendingGap(a.Actor))
+			judgeAbsent(s.binding, a, s.lost[a.Actor], s.gaps[a.Actor], s.pendingGap(a.Actor), s.recorded[a.Actor])
 		}
 	}
 }

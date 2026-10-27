@@ -88,7 +88,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 					break
 				}
 				judgeLost(c.Binding, r, t.Lost)
-				judgeAbsent(c.Binding, r, t.Lost, t.Gaps, nil)
+				judgeAbsent(c.Binding, r, t.Lost, t.Gaps, nil, nil)
 				reports[i].Actors = append(reports[i].Actors, r)
 				continue
 			}
@@ -183,7 +183,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			if errs[it.run] == nil {
 				c.judgeWithin(it.trace, it.res)
 				judgeLost(c.Binding, it.res, it.trace.Lost)
-				judgeAbsent(c.Binding, it.res, it.trace.Lost, it.trace.Gaps, nil)
+				judgeAbsent(c.Binding, it.res, it.trace.Lost, it.trace.Gaps, nil, nil)
 			}
 		}
 	}

@@ -3422,7 +3422,24 @@ Gaps had been an error issue only: a within's failure, or an eventual
 val false at the settle, that a gap may explain (its missing steps
 recorded while the response was due, by the times of the steps either
 side, `Gap.After` and `Before`) is now no verdict, as one after a lost
-tail's cut was. A pending call's completion can be only in a gap of its
+tail's cut was. So, since a review found the log of deposits seq 1, 2
+and 4 judged "mismatch after deposit", is a conformance failure or an
+invariant's at or after a gap of the actor's recorders (`no verdict
+(dropped steps)`, `judgeGaps`): after it in the order checked, a later
+seq on the gap's recorder, a later time (by the slack) on another. A
+failure before every gap stands. Recorded steps that pass beside a gap
+are no verdict too, not a PASS, and `Finished` reads a gap as no
+verdict, not as an issue. A linearization places the dropped step,
+whose invocation and thread are unknown, anywhere but before its own
+thread's earlier steps, so a linearized failure stands only where the
+actor is one thread of one recorder (a FAIL lost, never a PASS made);
+a resolution keeps the recorded order, and a failure of its order is
+placed by its original. The gap op of `qtrace.Mutations` drops a step
+without renumbering, so the absence path is mutation-tested: its
+mutants are undecided, never killed (nor malformed: a gap is no longer
+among the issues that make one).
+
+A pending call's completion can be only in a gap of its
 own recorder after its seq: a completion follows its invocation in its
 recorder's sequence, and gaps read by time made a call dropped by a
 hole before it at the same instant (a simulation records many steps at

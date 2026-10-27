@@ -666,7 +666,8 @@ func undecided(r *validate.Report) bool {
 
 // verdictless reports whether the run has no verdict at all: undecided,
 // or an actor that conforms, violates nothing, and has an invariant with
-// no verdict (a lost tail's, hidden actions past their cap). A mutant is
+// no verdict (a lost tail's, hidden actions past their cap) or a gap in
+// its recorders' seqs. A mutant is
 // not killed by such a run, whose failure is not known.
 func verdictless(r *validate.Report) bool {
 	if undecided(r) {
@@ -681,7 +682,9 @@ func verdictless(r *validate.Report) bool {
 			unknown = unknown || inv.Verdict == validate.NotEvaluated
 			failed = failed || inv.Verdict == validate.Fail
 		}
-		if unknown && !failed {
+		// dropped steps beside recorded ones that pass: what was dropped
+		// is unknown (validate's "no verdict (dropped steps)")
+		if (unknown || len(a.Gaps) > 0) && !failed {
 			return true
 		}
 	}

@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -261,7 +262,7 @@ func TestAbsentPending(t *testing.T) {
 	}{
 		{absentRun{"settled", []qtrace.Step{dep(1, 5), inv(2), dep(3, 10), settle(4)}, "withdraw", Defect, ""}, Fail},
 		{absentRun{"whole, no settle", []qtrace.Step{dep(1, 5), inv(2), dep(3, 10)}, "withdraw", Defect, ""}, Fail},
-		{absentRun{"a gap after it", []qtrace.Step{dep(1, 5), inv(2), dep(4, 10), settle(5)}, "withdraw", Dropped, ""}, Fail}, // (the gap is an issue: missed as such)
+		{absentRun{"a gap after it", []qtrace.Step{dep(1, 5), inv(2), dep(4, 10), settle(5)}, "withdraw", Dropped, ""}, NotEvaluated},
 		{absentRun{"a gap before it, at its instant", []qtrace.Step{depOn("r", 1, 1, 5), invAt(3, 3), depOn("r", 4, 3, 10), settleAt(5, 4)}, "withdraw", Defect, ""}, Fail},
 		{absentRun{"a gap on another recorder", []qtrace.Step{dep(1, 5), inv(2), dep(3, 10), depOn("q", 1, 4, 15), depOn("q", 3, 5, 20), settleAt(4, 6)}, "withdraw", Defect, ""}, Fail},
 		{absentRun{"a lost tail", qtrace.MarkLost([]qtrace.Step{dep(1, 5), inv(2), dep(3, 10)}, qtrace.Lost{Recorder: "r", After: 3}), "withdraw", Dropped, ""}, NotEvaluated},
@@ -359,5 +360,100 @@ func TestWatermarkReachesSettle(t *testing.T) {
 		if trs[0].Settled != x.settled || (len(settlesOf(x.steps)) > 0) != x.settled {
 			t.Errorf("%s: Reconstruct settled %v, a search's settles %v; want %v", x.name, trs[0].Settled, settlesOf(x.steps), x.settled)
 		}
+	}
+}
+
+// A failure at or after a gap of the actor's recorders is no verdict
+// (dropped steps), as one after a lost tail's cut is: the dropped step
+// may explain it (the review's log, deposits seq 1, 2, 4 and a settle at
+// 5, was "mismatch after deposit", a FAIL). A failure before every gap
+// stands; after it means a later seq on the gap's recorder, a time the
+// lost steps' may precede on another. Recorded steps that pass beside a
+// gap are no verdict too, and Finished agrees with Reason in every row.
+// Every row is judged again through ResolvePending and Linearize (a
+// search's order re-sequences the steps: its failure is placed by its
+// original), which agree but where a linearization may put the dropped
+// step, its invocation and thread unknown, before another thread's step
+// (linearized). Ablation: with judgeGaps off the "after" rows are FAILs;
+// with steps on the gap's recorder placed by time alone, "before the
+// gap, at its instant" is no verdict; with originals not looked up, the
+// linearized FAILs are.
+func TestGapFailures(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	depAt := func(rec string, seq uint64, at int, amount, balance int64) qtrace.Step {
+		return qtrace.Step{Action: "deposit", Recorder: rec, Thread: rec, Seq: seq, Time: atSec(at), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
+	}
+	dep := func(seq uint64, amount, balance int64) qtrace.Step { return depAt("r", seq, int(seq), amount, balance) }
+	settle := func(rec string, seq uint64, at int) qtrace.Step {
+		return qtrace.Step{Action: "settled", Settled: true, Recorder: rec, Thread: rec, Seq: seq, Time: atSec(at)}
+	}
+	dropped := "no verdict (dropped steps)"
+	rows := []struct {
+		name   string
+		steps  []qtrace.Step
+		reason string
+		finish Verdict
+		// linearized, if set, is the reason through Linearize (its
+		// Finished no verdict)
+		linearized string
+	}{
+		{"a mismatch after the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 10), dep(4, 5, 20), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
+		{"a violation after the gap", []qtrace.Step{dep(1, 50, 50), dep(2, 40, 90), dep(4, 20, 110), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
+		{"passing beside the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 10), dep(4, 5, 15), settle("r", 5, 5)}, dropped, NotEvaluated, ""},
+		{"a mismatch before the gap", []qtrace.Step{dep(1, 5, 5), dep(2, 5, 11), dep(4, 5, 20), settle("r", 5, 5)}, "mismatch after deposit", Fail, ""},
+		{"a violation before the gap", []qtrace.Step{dep(1, 50, 50), dep(2, 60, 110), dep(4, 5, 115), settle("r", 5, 5)}, "violates underLimit", Fail, ""},
+		// one instant: the seqs order them
+		{"a mismatch before the gap, at its instant", []qtrace.Step{depAt("r", 1, 1, 5, 5), depAt("r", 2, 1, 5, 11), depAt("r", 4, 1, 5, 20), settle("r", 5, 1)}, "mismatch after deposit", Fail, ""},
+		// recorder q lost seq 2 between 10s and 12s: r's mismatch at 3s
+		// precedes it, at 11s it may follow it
+		{"a mismatch before another recorder's gap", []qtrace.Step{dep(1, 5, 5), depAt("r", 2, 3, 5, 11), depAt("q", 1, 10, 5, 15), depAt("q", 3, 12, 5, 20), settle("q", 4, 13)}, "mismatch after deposit", Fail, dropped},
+		{"a mismatch after another recorder's gap", []qtrace.Step{dep(1, 5, 5), depAt("q", 1, 10, 5, 10), depAt("r", 2, 11, 5, 99), depAt("q", 3, 12, 5, 20), settle("q", 4, 13)}, dropped, NotEvaluated, ""},
+	}
+	runs := make([][]qtrace.Step, len(rows))
+	for i, x := range rows {
+		runs[i] = x.steps
+	}
+	judge := func(how string, linearized bool, reps []*Report) {
+		for i, x := range rows {
+			rep := reps[i]
+			if linearized && x.linearized != "" {
+				x.reason, x.finish = x.linearized, NotEvaluated
+			}
+			if len(rep.Actors) != 1 {
+				t.Fatalf("%s (%s): %d actors", x.name, how, len(rep.Actors))
+			}
+			if got := rep.Actors[0].Reason(); got != x.reason {
+				t.Errorf("%s (%s): %q, want %q:\n%s", x.name, how, got, x.reason, rep.Summary())
+			}
+			if f := rep.Finished(); f.Verdict != x.finish {
+				t.Errorf("%s (%s): finished %v (%s), want %v:\n%s", x.name, how, f.Verdict, f.Reason, x.finish, rep.Summary())
+			}
+			if v := VerdictOf(rep.Actors, nil); x.reason == dropped && v.Verdict != NotEvaluated {
+				t.Errorf("%s (%s): run verdict %v, want no verdict", x.name, how, v.Verdict)
+			}
+		}
+	}
+	reps, errs := c.CheckBatch(context.Background(), runs, 0)
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("%s: %v", rows[i].name, err)
+		}
+	}
+	judge("as recorded", false, reps)
+	for _, so := range searches() {
+		js, errs := c.JudgeBatch(context.Background(), runs, so, nil)
+		reps := make([]*Report, len(js))
+		for i, j := range js {
+			if errs[i] != nil {
+				t.Fatalf("%s, %+v: %v", rows[i].name, so, errs[i])
+			}
+			reps[i] = j.Report
+		}
+		judge(fmt.Sprintf("%+v", so), so.Linearize, reps)
 	}
 }

@@ -24,14 +24,15 @@ const (
 	// does not read what it changed.
 	FateSurvived = "survived"
 	// FateUndecided: the mutant has no verdict (a search out of its
-	// budget, a lost tail's eventual val): neither killed nor survived.
+	// budget, a lost tail's eventual val, a failure a dropped step may
+	// explain: the gap op's): neither killed nor survived.
 	FateUndecided = "undecided"
 	// FateMalformed: Reconstruct refused the mutant's log with an error
-	// issue (a gap, an overlap, a cycle, a completion before its
-	// invocation): the recorder's checks stopped it, not the model's or
-	// the binding's. qtrace.Mutations leaves out the mutants it can see
-	// would be; one that is anyway is reported with its issue, and
-	// counts in no score.
+	// issue (an overlap, a cycle, a completion before its invocation; a
+	// gap is the verdict's, dropped steps): the recorder's checks stopped
+	// it, not the model's or the binding's. qtrace.Mutations leaves out
+	// the mutants it can see would be; one that is anyway is reported
+	// with its issue, and counts in no score.
 	FateMalformed = "malformed"
 )
 
@@ -93,9 +94,9 @@ var mutateStepsIgnores = map[optionID]string{
 
 // MutateSteps judges each observation mutant of steps (qtrace.Mutations:
 // a step dropped, duplicated, swapped with its neighbour, a field
-// corrupted, retimed, moved to another actor) as Validate judges the
-// steps themselves, with the same options and searches, sharing verdicts
-// with every check of the test binary. It asks which recorded fields the
+// corrupted, retimed, moved to another actor, lost leaving a gap) as
+// Validate judges the steps themselves, with the same options and
+// searches, sharing verdicts with every check of the test binary. It asks which recorded fields the
 // model and the binding constrain: a mutant whose verdict is the
 // original's survived, and what it changed is something no check reads.
 // The original must conform (it fails t otherwise): a failing run's
@@ -262,7 +263,9 @@ func withinUnjudged(r *validate.Report) string {
 // reconstructKinds are the kinds of the error issues Reconstruct
 // raises: a log a recorder could not have written, whatever the model.
 // Read-only.
-var reconstructKinds = map[string]bool{"gap": true, "lost-prefix": true, "duplicate": true, "invocation": true, "overlap": true, "cycle": true}
+// A gap is not one: a recorder may drop a step (the gap op), and the
+// verdict reads it as dropped steps, no verdict (validate.Result.Reason).
+var reconstructKinds = map[string]bool{"lost-prefix": true, "duplicate": true, "invocation": true, "overlap": true, "cycle": true}
 
 // malformed is the first error issue Reconstruct raised in r, if any
 // ("": none): the original conforms, so it has none of them.

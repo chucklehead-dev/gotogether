@@ -21,7 +21,8 @@ type Finish struct {
 	// counts it: "incomplete (pending calls)", "incomplete (no settle)",
 	// "incomplete (no eventual val)", "incomplete (eventual val false)",
 	// "no verdict (lost tail)", "no verdict (uncollected)" (the
-	// recorders' watermarks reach no settle), "no verdict"; or the run's own failure
+	// recorders' watermarks reach no settle), "no verdict (dropped
+	// steps)" (a gap in a recorder's seqs), "no verdict"; or the run's own failure
 	// (Result.Reason) when it does not conform. "" when finished.
 	Reason string
 	// Actor is the actor the reason is of ("" the whole run).
@@ -66,14 +67,21 @@ func (r *Report) Finished() Finish {
 	}
 	var unknowns []string
 	unknownActor := ""
-	settled, lostTail, eventuals := false, false, 0
+	settled, lostTail, gapped, eventuals := false, false, false, 0
 	var collecting time.Time // the earliest watermark stated: the log is still being collected
 	for _, a := range r.Actors {
 		if a.Conforms == Fail {
 			return miss(a.Reason(), a.Actor, fmt.Sprintf("actor %s does not conform (%s)", a.Actor, a.Reason()))
 		}
 		for _, is := range a.Issues {
-			if is.Severity == "error" {
+			switch {
+			case is.Severity == "error" && is.Kind == "gap":
+				// dropped steps (§53): no defect, and no proof of a finish
+				// either, since what was dropped is unknown
+				if !gapped {
+					unknowns, unknownActor, gapped = append(unknowns, fmt.Sprintf("actor %s lost steps (%s): %s", a.Actor, is.Msg, dropFix)), a.Actor, true
+				}
+			case is.Severity == "error":
 				return miss("issue", a.Actor, fmt.Sprintf("actor %s's steps could not be put in order (%s)", a.Actor, is))
 			}
 		}
@@ -123,6 +131,8 @@ func (r *Report) Finished() Finish {
 	case !settled:
 		return miss("incomplete (no settle)", "", "the run recorded no settle last, so its eventual vals were not judged: record qobs.Settled after the driver's calls are answered and the collector drained "+
 			"(Sim.Settle in a simulation), with nothing recorded after it")
+	case gapped:
+		return Finish{NotEvaluated, "no verdict (dropped steps)", unknownActor, strings.Join(unknowns, "; ")}
 	case len(unknowns) > 0:
 		return Finish{NotEvaluated, "no verdict", unknownActor, strings.Join(unknowns, "; ")}
 	}

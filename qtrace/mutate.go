@@ -16,8 +16,8 @@ import (
 // is the original's survived, and what it changed is something the check
 // does not read.
 type StepMutant struct {
-	// Op is the mutation: "drop", "dup", "swap", "corrupt", "retime" or
-	// "reactor" (MutationOps).
+	// Op is the mutation: "drop", "dup", "swap", "corrupt", "retime",
+	// "reactor" or "gap" (MutationOps).
 	Op string
 	// Index is the step mutated, in the original steps (for a swap, the
 	// earlier of the two).
@@ -32,7 +32,8 @@ type StepMutant struct {
 	// seq, and the values.
 	Detail string
 	// Steps are the mutated log: the original's steps, one changed,
-	// dropped, added or moved, and every recorder's sequence kept dense.
+	// dropped, added or moved, and every recorder's sequence kept dense
+	// (but a gap's, whose hole is the mutation).
 	Steps []Step
 }
 
@@ -40,7 +41,7 @@ func (m StepMutant) String() string { return m.Op + " " + m.Detail }
 
 // The mutations, in the order Mutations makes them.
 // Read-only.
-var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"}
+var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap"}
 
 // A MutationOption narrows Mutations.
 type MutationOption func(*mutationConfig)
@@ -75,7 +76,7 @@ func MutateOps(ops ...string) MutationOption {
 func MutateLimit(n int) MutationOption { return func(c *mutationConfig) { c.limit = n } }
 
 // Mutations are steps' single mutations, each a whole log (StepMutant),
-// in a fixed order: by op (drop, dup, swap, corrupt, retime, reactor),
+// in a fixed order: by op (drop, dup, swap, corrupt, retime, reactor, gap),
 // then by the step's index, then by field and change. Only model steps
 // (Step.Model) are mutated; invocation, settle and loss records stay, and
 // are renumbered with their recorder's steps. Each op keeps the
@@ -114,9 +115,17 @@ func MutateLimit(n int) MutationOption { return func(c *mutationConfig) { c.limi
 //     the log has several, in that actor's process at the time (its
 //     latest step's at or before, else its first), so no actor shows two
 //     incarnations at once.
+//   - gap: one step taken out and nothing renumbered, so its recorder's
+//     seqs show the hole: the log of a sink or an exporter that dropped
+//     it. Not a question of the model's but of the absence path's: a
+//     failure the dropped step may explain is no verdict (dropped steps),
+//     never a FAIL, so a gap mutant is judged undecided, not killed. Only
+//     a step with a seq between two records of its recorder: a dropped
+//     first step is a lost head, a dropped last one a shorter log
+//     (drop's).
 //
 // A mutant whose log Reconstruct would refuse with an error issue the
-// original's lacks is left out (wellFormed): a step moved into an actor
+// original's lacks (but a gap op's gap) is left out (wellFormed): a step moved into an actor
 // whose order keys contradict its thread's program order (a cycle), or
 // any other the ops cannot see. A mutant is a question for the model and
 // the binding, not for Reconstruct.
@@ -144,8 +153,14 @@ func Mutations(steps []Step, opts ...MutationOption) []StepMutant {
 			ms = retimes(steps)
 		case "reactor":
 			ms = reactors(steps)
+		case "gap":
+			ms = holes(steps)
 		}
-		out = append(out, spread(wellFormed(steps, ms), c.limit)...)
+		exempt := ""
+		if op == "gap" {
+			exempt = "gap" // the mutation itself
+		}
+		out = append(out, spread(wellFormed(steps, ms, exempt), c.limit)...)
 	}
 	return out
 }
@@ -155,14 +170,15 @@ func Mutations(steps []Step, opts ...MutationOption) []StepMutant {
 // keep a recorder's contract by construction, and what they cannot see
 // (a step moved into an actor whose order keys contradict its thread's
 // program order: a cycle) is left out here, so every mutant is judged by
-// the model and the binding, never stopped at Reconstruct.
-func wellFormed(steps []Step, ms []StepMutant) []StepMutant {
+// the model and the binding, never stopped at Reconstruct. exempt is a
+// kind the op raises by design (the gap op's gap), not counted.
+func wellFormed(steps []Step, ms []StepMutant, exempt string) []StepMutant {
 	base := errorKinds(steps)
 	out := ms[:0:0]
 	for _, m := range ms {
 		ok := true
 		for k, n := range errorKinds(m.Steps) {
-			if n > base[k] {
+			if k != exempt && n > base[k] {
 				ok = false
 				break
 			}
@@ -255,6 +271,34 @@ func drops(steps []Step) []StepMutant {
 			detail += ", the recorder's later seqs moved down one"
 		}
 		out = append(out, StepMutant{Op: "drop", Index: i, Action: s.Action, Detail: detail, Steps: m})
+	}
+	return out
+}
+
+// holes are the gap op's mutants: one step taken out, its recorder's
+// later seqs left as they were.
+func holes(steps []Step) []StepMutant {
+	var out []StepMutant
+	for i := range steps {
+		s := &steps[i]
+		if !s.Model() || s.Seq == 0 {
+			continue
+		}
+		// an earlier and a later record of its recorder: the hole shows
+		// between them (its first dropped is a lost head, its last a
+		// shorter log)
+		earlier, later := false, false
+		for j := range steps {
+			o := &steps[j]
+			if o.Recorder == s.Recorder && o.Lost == "" && o.CompleteThrough.IsZero() && o.Seq != 0 {
+				earlier, later = earlier || o.Seq < s.Seq, later || o.Seq > s.Seq
+			}
+		}
+		if !earlier || !later {
+			continue
+		}
+		m := slices.Delete(slices.Clone(steps), i, i+1)
+		out = append(out, StepMutant{Op: "gap", Index: i, Action: s.Action, Detail: "of " + s.where() + ", the recorder's later seqs kept: a hole", Steps: m})
 	}
 	return out
 }

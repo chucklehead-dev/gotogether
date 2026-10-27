@@ -1782,7 +1782,7 @@ type Watermark struct
     field Recorder string
     field Through time.Time
     method (Watermark) String() string
-var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"}
+var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap"}
 
 == github.com/chucklehead-dev/gotogether/skills
 func FS() fs.FS

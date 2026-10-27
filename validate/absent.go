@@ -97,11 +97,16 @@ const dropFix = "repair the dropped telemetry (a sink that loses no steps: qobs.
 // pendingGap is the gap that may hold a pending call's completion (nil:
 // ownGap of gaps, the steps as recorded); a search's order names the
 // call's original, whose recorder and seq it re-sequenced.
-func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrace.Gap, pendingGap func(qtrace.Step) (qtrace.Gap, bool)) {
+//
+// recorded is the actor's steps as recorded, when the order checked is a
+// search's that re-sequenced them (nil: the steps checked are they), by
+// which judgeGaps places a failure.
+func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrace.Gap, pendingGap func(qtrace.Step) (qtrace.Gap, bool), recorded []qtrace.Step) {
 	if pendingGap == nil {
 		pendingGap = ownGap(gaps)
 	}
 	r.Gaps, r.Absent = gaps, nil
+	judgeGaps(r, gaps, recorded)
 	var tails []qtrace.Lost
 	for _, l := range lost {
 		if !l.Prefix {
@@ -230,6 +235,108 @@ func judgeAbsent(b *binding.Binding, r *Result, lost []qtrace.Lost, gaps []qtrac
 				"state how far it is (-complete-through) and it is uncollected; if the run was cut short, its caller never got the answer", p, p.Process)
 		}
 		add(a)
+	}
+}
+
+// judgeGaps makes a conformance failure, or an invariant's (a within's
+// and an eventual val's are judgeAbsent's, by their windows), at or after
+// a gap of the actor's recorders no verdict, as judgeLost makes one after
+// a lost tail's cut: a dropped step may explain it (the deposit a later
+// balance counts). A failure before every gap stands, a FAIL: the steps
+// lost came after it in the order checked. Before a gap, in the order of
+// the steps as recorded: on the gap's own recorder, an earlier seq (its
+// sequence orders them, even at one instant); on another, a time before
+// the lost steps', by more than the clocks' slack.
+//
+// recorded is the actor's steps as recorded when the order checked is a
+// search's (nil: the steps checked are they). A step of a search's order
+// is placed by its original (the recorded steps of its action, time,
+// arguments and observations: one of them after a gap is enough). A
+// resolution keeps the recorded order; a linearization does not: it may
+// put the dropped step, whose invocation and thread are unknown, before
+// any step but one of the dropped step's own thread, earlier in its
+// program order. So a linearized failure stands only where the actor's
+// steps are all one thread of one recorder, whose program order is the
+// recorded one; else it is no verdict (a FAIL lost, never a PASS made).
+func judgeGaps(r *Result, gaps []qtrace.Gap, recorded []qtrace.Step) {
+	if len(gaps) == 0 {
+		return
+	}
+	// oneThread: the actor's recorded steps are one thread of one recorder
+	oneThread := len(recorded) > 0 && recorded[0].Thread != ""
+	for _, o := range recorded {
+		oneThread = oneThread && o.Recorder == recorded[0].Recorder && o.Thread == recorded[0].Thread
+	}
+	// originals are the recorded steps s may be (s itself, if the order
+	// checked is the recorded one)
+	originals := func(s *qtrace.Step) []qtrace.Step {
+		var out []qtrace.Step
+		for _, o := range recorded {
+			if o.Action == s.Action && o.Time.Equal(s.Time) && o.String() == s.String() && fmt.Sprint(o.Obs) == fmt.Sprint(s.Obs) {
+				out = append(out, o)
+			}
+		}
+		if len(out) == 0 {
+			return []qtrace.Step{*s} // (a search's own step: placed by its time)
+		}
+		return out
+	}
+	// gapBefore is a gap f's step may follow, if any
+	gapBefore := func(f *Failure) (qtrace.Gap, *qtrace.Step, bool) {
+		if f == nil {
+			return qtrace.Gap{}, nil, false
+		}
+		s := f.Step
+		for i := min(f.Index, len(r.Calls)-1); s == nil && i >= 0; i-- {
+			s = r.Calls[i].Step // an inferred step (a restart): where the steps before it were
+		}
+		if s == nil {
+			return qtrace.Gap{}, nil, false // the initial state's: before every gap
+		}
+		if strings.HasPrefix(s.Recorder, "linearized:") && !oneThread {
+			return gaps[0], s, true
+		}
+		for _, o := range originals(s) {
+			for _, g := range gaps {
+				after := !o.Time.Before(g.After.Add(-qtrace.RealTimeSlack))
+				if o.Recorder == g.Recorder && o.Seq != 0 {
+					after = o.Seq > g.Last
+				}
+				if after {
+					return g, s, true
+				}
+			}
+		}
+		return qtrace.Gap{}, nil, false
+	}
+	at := func(f *Failure, s *qtrace.Step) string {
+		if strings.HasPrefix(s.Recorder, "linearized:") || strings.HasPrefix(s.Recorder, "resolved:") {
+			return fmt.Sprintf("step %d (%s)", f.Index+1, s.Action) // a search's order: its seqs are the order's
+		}
+		return fmt.Sprintf("step %d (%s, seq %d of recorder %s)", f.Index+1, s.Action, s.Seq, s.Recorder)
+	}
+	if r.Conforms == Fail {
+		if g, s, ok := gapBefore(r.Failure); ok {
+			r.Conforms, r.noVerdict = NotEvaluated, "dropped steps"
+			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "gap", Msg: fmt.Sprintf(
+				"conformance not evaluated: the failure at %s comes after %s, which may explain it; %s", at(r.Failure, s), g, dropFix)})
+			for i := range r.Invariants {
+				if r.Invariants[i].Verdict == Fail {
+					r.Invariants[i].Verdict, r.Invariants[i].Failure = NotEvaluated, nil
+				}
+			}
+		}
+	}
+	for i := range r.Invariants {
+		inv := &r.Invariants[i]
+		if inv.Verdict != Fail || inv.Within || inv.Eventually {
+			continue
+		}
+		if g, s, ok := gapBefore(inv.Failure); ok {
+			inv.Verdict, r.noVerdict = NotEvaluated, "dropped steps"
+			r.Issues = append(r.Issues, qtrace.Issue{Severity: "warn", Kind: "gap", Msg: fmt.Sprintf(
+				"%s not evaluated: its violation at %s comes after %s, which may explain it; %s", inv.Name, at(inv.Failure, s), g, dropFix)})
+		}
 	}
 }
 

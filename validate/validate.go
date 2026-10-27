@@ -123,7 +123,8 @@ type Result struct {
 	Output string // quint's output, verbatim
 
 	// noVerdict says why a check that failed is no verdict, when it is
-	// not a search's budget: "lost steps" (judgeLost)
+	// not a search's budget: "lost steps" (judgeLost), "dropped steps"
+	// (judgeGaps)
 	noVerdict string
 	// resumed: replayed from a resume's witness start, whose obligations
 	// triggered already (a bounded response's) began in the lost prefix
@@ -673,8 +674,11 @@ func sanitize(s string) string {
 // Reason says why the result is not OK, in the claims' words: "rejects
 // apply" (a step the model cannot take), "mismatch after apply" (the
 // state after it differs), "violates I", "evaluation error at apply"
-// (quint failed on the step), "no verdict (linearize budget)", or "issue"
-// (a reconstruction error: a gap, a cycle, an overlap); "" when it is OK.
+// (quint failed on the step), "no verdict (linearize budget)", "no
+// verdict (dropped steps)" (a failure after a gap of the actor's
+// recorders, which a dropped step may explain, or recorded steps that
+// pass beside one: only a failure before every gap is a FAIL), or "issue"
+// (another reconstruction error: a cycle, an overlap); "" when it is OK.
 func (r *Result) Reason() string {
 	switch {
 	case r.OK():
@@ -706,6 +710,14 @@ func (r *Result) Reason() string {
 			return "violates " + inv.Name
 		}
 	}
+	for _, i := range r.Issues {
+		if i.Severity == "error" && i.Kind != "gap" {
+			return "issue"
+		}
+	}
+	if len(r.Gaps) > 0 { // the recorded steps pass, and the dropped ones are unknown
+		return "no verdict (dropped steps)"
+	}
 	return "issue"
 }
 
@@ -722,7 +734,7 @@ func (r *Result) Summary() string {
 	}
 	if f := r.Failure; f != nil {
 		switch {
-		case r.Conforms == NotEvaluated && r.noVerdict != "": // a failure after a lost tail (judgeLost)
+		case r.Conforms == NotEvaluated && r.noVerdict != "": // a failure after a lost tail or a gap (judgeLost, judgeGaps)
 			fmt.Fprintf(&b, "    no verdict (%s): the order checked, where it failed (an issue above says why that is no verdict):\n", r.noVerdict)
 		case r.Conforms == NotEvaluated: // a search cut short (qtest.Linearize): its furthest order, not a verdict
 			fmt.Fprintf(&b, "    no verdict: the order checked is the one that got furthest, where it failed:\n")

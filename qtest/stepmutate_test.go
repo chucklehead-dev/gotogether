@@ -203,3 +203,23 @@ func TestStepFateMalformed(t *testing.T) {
 		t.Errorf("score %v, %d malformed", rep.Score(), len(rep.Malformed()))
 	}
 }
+
+// A step lost from the middle of a recorder's log (the gap op: its seq
+// left a hole) is no verdict, never killed: the bank's bob deposit or
+// alice's withdrawal dropped leaves steps that conform, and what was
+// dropped is unknown (validate's "no verdict (dropped steps)"). Once
+// such a mutant was malformed (Reconstruct's gap), and with the gap
+// read as a FAIL, killed. The first and last steps have no gap mutant.
+func TestMutateStepsGap(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	rep := MutateSteps(t, "testdata/bank.yaml", bankLog(), StepMutations(qtrace.MutateOps("gap")))
+	if len(rep.Mutants) != 2 {
+		t.Fatalf("%d gap mutants, want 2 (seqs 2 and 3):\n%s", len(rep.Mutants), rep)
+	}
+	for _, m := range rep.Mutants {
+		if m.Fate != FateUndecided || m.Why != "no verdict (dropped steps)" {
+			t.Errorf("%s: want undecided, no verdict (dropped steps)", m)
+		}
+	}
+}

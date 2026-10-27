@@ -67,6 +67,7 @@ func TestMutationsOfASmallLog(t *testing.T) {
 		{"reactor", 0, "", "", []Step{actor(s0, "B", "b"), s1, s2}},
 		{"reactor", 1, "", "", []Step{s0, actor(s1, "A", "a"), s2}},
 		{"reactor", 2, "", "", []Step{s0, s1, actor(s2, "B", "b")}},
+		// no gap: each step is its recorder's first or last
 	}
 	got := Mutations(log)
 	if len(got) != len(want) {
@@ -92,6 +93,26 @@ func TestMutationsOfASmallLog(t *testing.T) {
 	// the original is untouched
 	if !reflect.DeepEqual(log, []Step{s0, s1, s2}) || s0.Args["n"] != int64(1) || s2.Obs["v"] != true {
 		t.Errorf("Mutations changed its input: %v", log)
+	}
+}
+
+// The gap op drops a step between two of its recorder's and renumbers
+// nothing: the hole is the mutation, a log a sink that dropped the step
+// writes, where drop's renumbered log shows no loss.
+func TestGapMutants(t *testing.T) {
+	t.Parallel()
+	t0 := time.Unix(1000, 0)
+	step := func(seq uint64, rec string) Step {
+		return Step{Action: "inc", Seq: seq, Recorder: rec, Actor: "A", Process: rec, Thread: rec, Time: t0.Add(time.Duration(seq) * time.Millisecond)}
+	}
+	a1, a2, a3, b1 := step(1, "a"), step(2, "a"), step(3, "a"), step(1, "b")
+	got := Mutations([]Step{a1, b1, a2, a3}, MutateOps("gap"))
+	if len(got) != 1 || got[0].Index != 2 || !reflect.DeepEqual(got[0].Steps, []Step{a1, b1, a3}) {
+		t.Fatalf("gap mutants %v, want a2 alone dropped, a3 keeping seq 3", got)
+	}
+	trs, _ := Reconstruct(got[0].Steps)
+	if len(trs) != 1 || len(trs[0].Gaps) != 1 || trs[0].Gaps[0].First != 2 || trs[0].Gaps[0].Last != 2 {
+		t.Errorf("the mutant's gaps %v, want recorder a's seq 2", trs[0].Gaps)
 	}
 }
 
@@ -234,7 +255,7 @@ func naiveMutations(steps []Step) []StepMutant {
 		slices.SortStableFunc(idx, func(a, b int) int { return int(log[a].Seq) - int(log[b].Seq) })
 		return idx
 	}
-	var drops, dups, swaps, corrupts, retimes, reactors []StepMutant
+	var drops, dups, swaps, corrupts, retimes, reactors, gaps []StepMutant
 	for i, s := range steps {
 		if !model(s) {
 			continue
@@ -462,6 +483,22 @@ func naiveMutations(steps []Step) []StepMutant {
 			reactors = append(reactors, StepMutant{Op: "reactor", Index: i, Action: s.Action, Steps: m})
 		}
 	}
+	// gap: a model step with a seq taken out, nothing renumbered, when
+	// records of its recorder's sequence have a smaller and a larger seq
+	for i, s := range steps {
+		if !model(s) || s.Seq == 0 {
+			continue
+		}
+		earlier, later := false, false
+		for _, o := range steps {
+			if o.Recorder == s.Recorder && inSeq(o) && o.Seq != 0 {
+				earlier, later = earlier || o.Seq < s.Seq, later || o.Seq > s.Seq
+			}
+		}
+		if earlier && later {
+			gaps = append(gaps, StepMutant{Op: "gap", Index: i, Action: s.Action, Steps: append(clone()[:i:i], steps[i+1:]...)})
+		}
+	}
 	kinds := func(log []Step) map[string]int {
 		n := map[string]int{}
 		trs, is := Reconstruct(log)
@@ -477,11 +514,11 @@ func naiveMutations(steps []Step) []StepMutant {
 	}
 	base := kinds(steps)
 	var out []StepMutant
-	for _, ms := range [][]StepMutant{drops, dups, swaps, corrupts, retimes, reactors} {
+	for _, ms := range [][]StepMutant{drops, dups, swaps, corrupts, retimes, reactors, gaps} {
 		for _, m := range ms {
 			ok := true
 			for k, n := range kinds(m.Steps) {
-				ok = ok && n <= base[k]
+				ok = ok && (n <= base[k] || m.Op == "gap" && k == "gap")
 			}
 			if ok {
 				out = append(out, m)
@@ -549,7 +586,7 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 		}
 		return n
 	}
-	raw := map[string]func([]Step) []StepMutant{"drop": drops, "dup": dups, "swap": swaps, "corrupt": corruptions, "retime": retimes, "reactor": reactors}
+	raw := map[string]func([]Step) []StepMutant{"drop": drops, "dup": dups, "swap": swaps, "corrupt": corruptions, "retime": retimes, "reactor": reactors, "gap": holes}
 	filtered := map[string]map[string]int{"lamport": {"reactor": 2}}
 	for name, log := range shapes() {
 		if base := reconstructErrors(log); len(base) > 0 {
@@ -557,7 +594,11 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 		}
 		for _, op := range MutationOps {
 			ms := raw[op](log)
-			if left := len(ms) - len(wellFormed(log, ms)); left != filtered[name][op] {
+			exempt := ""
+			if op == "gap" {
+				exempt = "gap"
+			}
+			if left := len(ms) - len(wellFormed(log, ms, exempt)); left != filtered[name][op] {
 				t.Errorf("%s: %d %s mutants Reconstruct refuses, want %d", name, left, op, filtered[name][op])
 			}
 		}
@@ -577,7 +618,18 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 			if settled(log) && !settled(m.Steps) {
 				t.Errorf("%s: %s unsettles the run", name, m)
 			}
-			if errs := reconstructErrors(m.Steps); len(errs) > 0 {
+			errs := reconstructErrors(m.Steps)
+			if m.Op == "gap" {
+				// its one new issue is the hole it made, of the step's seq
+				d := log[m.Index]
+				want := fmt.Sprintf("missing seq [%d]", d.Seq)
+				errs = slices.Compact(errs) // (one per actor of the recorder)
+				if len(errs) != 1 || !strings.Contains(errs[0], want) || models(m.Steps) != models(log)-1 {
+					t.Errorf("%s: %s: %v, want one gap issue (%s) and one model step fewer", name, m, errs, want)
+				}
+				errs = nil
+			}
+			if len(errs) > 0 {
 				t.Errorf("%s: %s: %v", name, m, errs)
 			}
 			switch m.Op {
@@ -632,6 +684,9 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 		}
 		// every op makes some mutant of each shape it applies to
 		for _, op := range MutationOps {
+			if op == "gap" && len(holes(log)) == 0 {
+				continue // no recorder with a step between two of its records
+			}
 			if byOp[op] == 0 {
 				t.Errorf("%s: no %s mutant", name, op)
 			}

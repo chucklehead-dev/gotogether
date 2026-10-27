@@ -136,3 +136,57 @@ func TestUnknownClaimsEverywhere(t *testing.T) {
 		t.Errorf("All(Completes()) with a call certainly pending %+v, want missed", j)
 	}
 }
+
+// A mismatch after a gap is no verdict, for every claim that reads it:
+// the review's log (deposits seq 1, 2 and 4, a settle at 5, seq 3
+// dropped) once met Mismatch("deposit") and the SameFailure of a run
+// that does mismatch there, and Finishes read it as certainly not
+// finished; one that conforms beside the gap neither shows the failure
+// nor certainly lacks it. A run that mismatches before the gap still
+// meets both, and is certainly not finished. Over runs, None(Mismatch) does not hold of
+// it, and it kills no mutant. Ablation: with validate's gap judgment off
+// every claim below reads the gapped run as a FAIL.
+func TestClaimsOverGaps(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	dep := func(seq uint64, balance int64) qtrace.Step {
+		return qtrace.Step{Action: "deposit", Recorder: "a", Thread: "a", Seq: seq, Time: time.Unix(int64(seq), 0),
+			Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}}
+	}
+	settle := qtrace.Step{Action: "settled", Settled: true, Recorder: "a", Thread: "a", Seq: 5, Time: time.Unix(5, 0)}
+	funds := "../validate/testdata/funds.binding.yaml"
+	gapped := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 20), settle})
+	beside := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 15), settle}) // conforms as recorded
+	before := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 11), dep(4, 21), settle})
+	denseSettle := settle
+	denseSettle.Seq = 4
+	dense := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 10), dep(3, 20), denseSettle})
+	for _, x := range []struct {
+		name string
+		e    Expectation
+		run  *Run
+		want tri
+	}{
+		{"Mismatch after the gap", Mismatch("deposit"), gapped, no},
+		{"SameFailure after the gap", SameFailure(dense), gapped, unknown},
+		{"Finishes after the gap", Finishes(), gapped, unknown},
+		// no failure shown, but the dropped step may have been it: a
+		// shrink's candidate that does not reproduce, not one that passes
+		{"SameFailure beside the gap", SameFailure(dense), beside, unknown},
+		{"Mismatch before the gap", Mismatch("deposit"), before, yes},
+		{"Finishes before the gap", Finishes(), before, no},
+	} {
+		if got := x.e.value(x.run.Report); got != x.want {
+			t.Errorf("%s: %v, want %v:\n%s", x.name, got, x.want, x.run.Report.Summary())
+		}
+	}
+	if j := None(Mismatch("deposit")).judge([]*validate.Report{gapped.Report}); j.ok || j.unjudged != 1 {
+		t.Errorf("None(Mismatch) over the gapped run: %+v, want unjudged", j)
+	}
+	if runs := []*Run{gapped}; decidedFailing(runs) || !anyUndecided(runs) {
+		t.Errorf("a run whose only failure a gap explains killed a mutant:\n%s", gapped.Report.Summary())
+	}
+	if got := gapped.Report.Actors[0].Reason(); got != "no verdict (dropped steps)" {
+		t.Errorf("the gapped run's reason %q", got)
+	}
+}

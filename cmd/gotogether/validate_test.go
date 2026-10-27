@@ -239,7 +239,7 @@ func matrixRow(t *testing.T, bind string, flags []string, pass, fail []qtrace.St
 // fails may depend on it: no verdict), a log without seqs whose head was
 // lost (judged from its snapshot, else an error); a recorder the log
 // lacks is an error naming those it has. A torn log says what its lost
-// tail leaves unjudged.
+// tail leaves unjudged; a gap's mismatch after it is no verdict.
 func TestValidateLost(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
@@ -269,6 +269,13 @@ func TestValidateLost(t *testing.T) {
 	ra, rb := amount(5, 55)
 	snap := write("snap.jsonl", []qtrace.Step{acct("c", 0, 10, "restore", map[string]any{"b": int64(50), "n": int64(1)}, nil), acct("c", 0, 20, "deposit", ra, rb)}, 0)
 	torn := write("torn.jsonl", []qtrace.Step{acct("a", 1, 10, "deposit", da, db), acct("a", 2, 20, "deposit", da, db)}, 10)
+	// a review's log: seq 3 dropped, the balance after it counting its
+	// deposit: no verdict (dropped steps), once a FAIL (DESIGN §53)
+	dep := func(seq uint64, balance int64) qtrace.Step {
+		a, o := amount(5, balance)
+		return acct("a", seq, int(seq)*10, "deposit", a, o)
+	}
+	gap := write("gap.jsonl", []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 20), {Action: "settled", Settled: true, Recorder: "a", Process: "p", Seq: 5, Time: at(50)}}, 0)
 	for _, c := range []struct {
 		name    string
 		args    []string
@@ -284,6 +291,7 @@ func TestValidateLost(t *testing.T) {
 		{"no recorder", []string{"-complete-through", "1", two}, 2, `validate -complete-through "1": want recorder=T`, "account.yaml"},
 		{"a snapshot's head lost", []string{"-lost-prefix", "c", snap}, 0, "judged from the state recorded by restore at seq 0 (recorder c lost its first steps)", "snapshot.yaml"},
 		{"a head lost", []string{"-lost-prefix", "c", snap}, 1, "error lost-prefix: recorder c lost its first steps", "account.yaml"},
+		{"a gap", []string{gap}, 1, "RESULT: FAIL (1 of 1 actor: 1 no verdict (dropped steps))", "funds.binding.yaml"},
 		{"torn", []string{torn}, 0, "its recorders' tails are lost after their last steps: eventual vals not judged", "account.yaml"},
 	} {
 		args := append([]string{"-binding", "../../validate/testdata/" + c.binding, "-dir", filepath.Join(dir, "out")}, c.args...)

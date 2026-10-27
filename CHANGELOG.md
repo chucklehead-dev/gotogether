@@ -54,7 +54,13 @@ The first release. What a user meets, by module:
   run never settled, leaves one it does not reach no verdict, and voids
   a settle it does not reach. `qtrace.Gap` and `Trace.Gaps`,
   `Result.Gaps` and `Result.Collected`: a failure a gap may explain is
-  no verdict. `qtest.Absent(name, cause)`; `Violates`, `Completes` and
+  no verdict, a conformance failure or an invariant's included (one at
+  or after a gap of the actor's recorders: `no verdict (dropped
+  steps)`, in `Reason`, `Report.Finished` and the CLI's result line; it
+  was a FAIL, and `Mismatch`, `SameFailure` and `Finishes` read it so;
+  a failure before every gap stands, and recorded steps that pass beside
+  a gap are no verdict too). `qtest.Absent(name, cause)`; `Violates`,
+  `Completes` and
   `Pending` explain absences (for `Undecided`).
 - Observation mutants: which recorded fields the model and the binding
   constrain. `qtrace.Mutations(steps, opts...)` makes a log's single
@@ -63,7 +69,9 @@ The first release. What a user meets, by module:
   next seq, later ones renumbered), swapped with its recorder's next,
   an argument or observation corrupted (±1, flipped, emptied, changed,
   removed), retimed past its neighbour, moved to another actor, each
-  keeping the recorder's contract; `MutateOps`, `MutateLimit`.
+  keeping the recorder's contract, or lost leaving a gap (`gap`: its
+  recorder's seqs left with the hole, a mutant of the absence path,
+  judged undecided, never killed); `MutateOps`, `MutateLimit`.
   `qtest.MutateSteps(t, binding, steps, opts...)` judges each as
   Validate would (the verdict cache shared), killed, survived or
   undecided (`FateKilled`, ...; `StepMutation`, `StepMutationReport`

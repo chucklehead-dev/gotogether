@@ -18,13 +18,19 @@ import (
 // hidden search read as a rejection). Each feature is a pair of runs that
 // differ only in what the feature judges: the passing one must pass and
 // the failing one fail for the feature's reason, in every consumer; a
-// consumer that cannot judge a feature says why (na).
+// consumer that cannot judge a feature says why (na). A feature of the
+// log's own (a gap) has a third run, one every consumer must judge no
+// verdict, for the reason it names.
 
 // A matrixFeature is one kind of verdict, as a pair of runs.
 type matrixFeature struct {
 	name, binding string
 	pass, fail    []qtrace.Step
 	opt           SearchOptions // the search the feature needs, if any
+	// unjudged, if set, is a run every consumer must judge no verdict,
+	// for the reason noVerdict (Result.Reason, and Finished's)
+	unjudged  []qtrace.Step
+	noVerdict string
 	// failed reports whether rep fails for the feature's reason
 	failed func(c *Checker, rep *Report) bool
 }
@@ -79,6 +85,15 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		return qtrace.Step{Action: "restore", Args: map[string]any{"b": balance, "n": int64(1)}}
 	}
 	timed := func(action string, s int) qtrace.Step { return qtrace.Step{Action: action, Time: at(s)} }
+	// seq 3 lost, not renumbered; one thread, whose program order a
+	// linearization keeps (judgeGaps)
+	threaded := func(steps []qtrace.Step) []qtrace.Step {
+		for i := range steps {
+			steps[i].Thread = "r"
+		}
+		return steps
+	}
+	gapped := func(steps []qtrace.Step) []qtrace.Step { return threaded(append(steps[:2:2], steps[3:]...)) }
 	invariant := func(name string) func(*Checker, *Report) bool {
 		return func(_ *Checker, rep *Report) bool {
 			for _, a := range rep.Actors {
@@ -128,6 +143,13 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		// nothing does
 		{name: "pending", binding: "testdata/account.yaml", pass: pending(12), fail: pending(99), opt: SearchOptions{ResolvePending: true},
 			failed: nonconforming},
+		// seq 3 dropped (DESIGN §53): a mismatch before the gap is a FAIL,
+		// one after it no verdict, since the dropped deposit may explain
+		// it (the review's log: a FAIL by every consumer)
+		{name: "gap", binding: "testdata/funds.binding.yaml",
+			pass: threaded(seq(acct("deposit", 5, 5), acct("deposit", 5, 10), acct("deposit", 5, 15), acct("deposit", 5, 20), settled)),
+			fail: gapped(seq(acct("deposit", 5, 5), acct("deposit", 5, 11), acct("deposit", 5, 15), acct("deposit", 5, 20), settled)), failed: nonconforming,
+			unjudged: gapped(seq(acct("deposit", 5, 5), acct("deposit", 5, 10), acct("deposit", 5, 15), acct("deposit", 5, 20), settled)), noVerdict: "no verdict (dropped steps)"},
 	}
 }
 
@@ -223,6 +245,13 @@ func TestVerdictMatrix(t *testing.T) {
 				}
 				if rep := k.judge(t, c, f, f.fail); rep.OK() || !f.failed(c, rep) {
 					t.Errorf("the failing run does not fail by its %s (OK %v):\n%s", f.name, rep.OK(), rep.Summary())
+				}
+				if f.unjudged == nil {
+					return
+				}
+				rep := k.judge(t, c, f, f.unjudged)
+				if len(rep.Actors) != 1 || rep.Actors[0].Reason() != f.noVerdict || rep.Finished().Verdict != NotEvaluated || rep.Finished().Reason != f.noVerdict {
+					t.Errorf("the unjudged run is not %s (finished: %+v):\n%s", f.noVerdict, rep.Finished(), rep.Summary())
 				}
 			})
 		}

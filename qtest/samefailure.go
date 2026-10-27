@@ -22,7 +22,7 @@ import (
 // another way, or not at all, does not, so a shrink does not drift to
 // another bug its smaller sequences show. A run with no verdict for a
 // part the first failure is judged by (an undecided actor, a lost tail,
-// an invariant of a conforming actor left unjudged, which may have
+// a gap, an invariant of a conforming actor left unjudged, which may have
 // failed first) has no verdict for it: not reproduced, never a pass.
 func SameFailure(r *Run) Expectation {
 	var want []string
@@ -53,7 +53,7 @@ func SameFailure(r *Run) Expectation {
 	return Expectation{desc: desc, check: func(rep *validate.Report) bool { return value(rep) == yes }, tri: value,
 		why: func(rep *validate.Report) string {
 			if rep != nil && unjudgedFailure(rep) {
-				return "it has no verdict for a part a failure is judged by (an undecided actor, a lost tail, an invariant not judged)"
+				return "it has no verdict for a part a failure is judged by (an undecided actor, a lost tail, dropped steps, an invariant not judged)"
 			}
 			got := firstFailures(rep)
 			if len(got) == 0 {
@@ -65,7 +65,7 @@ func SameFailure(r *Run) Expectation {
 
 // unjudgedFailure reports whether rep lacks a verdict that its actors' first
 // failures depend on: an actor whose conformance is undecided, a lost
-// tail (which may hold an earlier failure), or a conforming actor's
+// tail or a gap (either may hold an earlier failure), or a conforming actor's
 // invariant, within or eventual val with no verdict (which may have
 // failed first). A non-conforming actor's invariants are judged by no
 // check (the replay stops at its failure): its first failure is the
@@ -75,7 +75,7 @@ func unjudgedFailure(rep *validate.Report) bool {
 		return true
 	}
 	for _, a := range rep.Actors {
-		if len(a.Lost) > 0 {
+		if len(a.Lost) > 0 || len(a.Gaps) > 0 {
 			return true
 		}
 		if a.Conforms != validate.Pass {

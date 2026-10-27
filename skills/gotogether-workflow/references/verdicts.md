@@ -13,7 +13,8 @@ mutants) ends in one of these verdicts.
 | a state mismatch | `does not match` with `expect:` and `obs:` | `qtest.Mismatch("action")` | the step was allowed, but the observed state (`obs.*`) differs from the model's after it |
 | an eventual val false at the end | `invariant eventually V: FAIL` | `qtest.Violates(validate.EventuallyName("V"))` | the run ended (settled, in a simulation) with work the model says is pending: a livelock or lost work |
 | an invariant violated | `conformance: PASS`, `invariant I: FAIL` | `qtest.Violates("I")` | the model allows the behaviour and the property rules it out: a design bug, or a property stronger than the requirement |
-| an issue | `issue: ...` (gaps, cycles in the recorded order, an order real time contradicts) | none: fix the recording | the steps could not be put in one order; a pass would mean little |
+| an issue | `issue: ...` (cycles in the recorded order, an order real time contradicts) | none: fix the recording | the steps could not be put in one order; a pass would mean little |
+| no verdict (dropped steps) | `issue: error gap: recorder r is missing seq [n]`, a failure after it `issue: warn gap: conformance not evaluated: the failure at step i ... comes after recorder r lost seq n`, Reason `no verdict (dropped steps)` | none: not a `Rejects`, `Mismatch` or `Violates`, not OK, `Finishes()` and `SameFailure` unknown | a recorder lost a step mid-log (a sampled or dropped export): a failure at or after the gap (a later seq of its recorder, a later time on another; any linearized failure but one of a single thread) may be the dropped step's doing; a failure before every gap stands, a FAIL; recorded steps that pass beside it are no verdict too; repair the telemetry |
 | a lost prefix | `issue: error lost-prefix` | none: record a snapshot | a log starts after seq 1 (rotated, truncated): its first state is not `init`; a trace that starts with the binding's `snapshot` step is judged from its state instead (`issue: info lost-prefix: judged from the state recorded by A at seq N`) |
 | no verdict (a lost tail) | `issue: warn lost-suffix: ... may depend on r's lost steps after seq n`, `conformance: N/A` (or the invariant's), Reason `no verdict (lost steps)` | none: not a `Rejects`, `Mismatch` or `Violates`, and not OK | a recorder lost its tail (a torn log, `MarkLost`, `-lost-suffix`) and the failure is at a step recorded after the cut; a failure before it stands, a pass says `the recorded steps conform; recorder r lost its tail after seq n`, and eventual vals are not judged |
 | no verdict (a snapshot overlap) | `issue: warn snapshot: no verdict: ... overlapped the snapshot`, Reason `no verdict (snapshot overlap)` | none, as for a lost tail | a linearized step invoked before the snapshot completed may be inside its state; record the snapshot when no operation is in flight |
@@ -115,7 +116,7 @@ seeds, not by hand.
   is killed when it fails where the original conformed, when the
   binding refuses it (a field it reads removed), or when it does not
   finish where the original finished; it survived with the original's
-  verdict; one Reconstruct refused (a gap, an overlap, a cycle) is
+  verdict; one Reconstruct refused (an overlap, a cycle) is
   malformed, never killed, and in no score;
 - a shrink of a driver's actions: `qtest.ShrinkActions(t, actions,
   qtest.ActionShrink[A]{...}).Expect(t, qtest.Violates("inv"),
