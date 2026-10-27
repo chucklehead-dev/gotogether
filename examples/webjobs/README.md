@@ -73,12 +73,13 @@ same page too (`TestPlaywright`), through the toolkit's adapter
     that fell out of the log between two snapshots, a log out of order,
     an unmapped custom action. A torn last line is a lost tail: the
     steps before it, and no verdict for the finish.
-- **Playwright's page** (`TestPlaywright`, recorder `ui` too) is a
+- **Playwright's page** (`TestPlaywright`, recorder `ui-<pid>-1`: the
+  adapter makes each log's recorder its own) is a
   request log the adapter writes as the test runs: each call when
   Playwright routes it, before the browser sends it on (Playwright's own
   `request` event came 1ms after the server's record of the request:
   an invocation after its effect), with an `x-request-id` the server
-  sees; its own response when Playwright reports it; each change of
+  sees; its own response when its body has been read; each change of
   `#result` a show step. Measured on 2026-10-27 with Playwright 1.56.1
   and its Chromium 141: the double click's second request was answered
   first (202, the first 200), and the log pairs each with its own. A

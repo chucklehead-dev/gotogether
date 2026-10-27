@@ -95,7 +95,9 @@ type Input struct {
 	Steps []qtrace.Step
 	// Torn is a step log whose last line was cut off.
 	Torn *qtrace.TornTail
-	file *input.File
+	// Warnings are reading's (input.File.Warnings).
+	Warnings []string
+	file     *input.File
 }
 
 // Judged is what a Check found: the inputs read, the steps' judgment,
@@ -198,7 +200,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		if err != nil {
 			return nil, err
 		}
-		j.Inputs = append(j.Inputs, Input{Path: f, Format: in.Format, Steps: in.Steps, Torn: in.Torn, file: in})
+		j.Inputs = append(j.Inputs, Input{Path: f, Format: in.Format, Steps: in.Steps, Torn: in.Torn, Warnings: in.Warnings, file: in})
 		if in.Format != input.ITF {
 			steps = append(steps, in.Steps...)
 		}

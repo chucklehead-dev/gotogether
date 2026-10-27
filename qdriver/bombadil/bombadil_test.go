@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ var webjobs = Options{
 
 func read(t *testing.T, lines ...string) ([]qtrace.Step, error) {
 	t.Helper()
-	return Read(strings.NewReader(strings.Join(lines, "")), webjobs)
+	return stepsOf(strings.NewReader(strings.Join(lines, "")), webjobs)
 }
 
 // A request a click sent is an invocation at the state before the click;
@@ -75,7 +76,7 @@ func TestMapping(t *testing.T) {
 		{"submit", false, 2, 3000, "map[code:200 id:j1 key:k1 status:accepted]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
 		{"show", false, 0, 3000, "map[id:j1 status:ready]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
 		{"cancel", true, 0, 3000, "map[id:j1]", "trace.jsonl:3 screenshot=screenshots/3000.jpeg"},
-		{"cancel", false, 7, 5000, "map[code:409 id:j1 status:ready]", "trace.jsonl:5 screenshot=screenshots/5000.jpeg"},
+		{"cancel", false, 7, 5000, "map[answer_id:j1 code:409 id:j1 status:ready]", "trace.jsonl:5 screenshot=screenshots/5000.jpeg"},
 	}
 	if len(steps) != len(wants) {
 		t.Fatalf("%d records, want %d: %v", len(steps), len(wants), steps)
@@ -259,7 +260,7 @@ func TestDefaults(t *testing.T) {
 			entry(2, "audit", nil, 0, nil)))+`}]`, 1),
 	}, "")
 	opt := Options{Snapshot: "page", Clicks: map[string][]string{"ui.save": {"put", "audit"}}}
-	steps, err := Read(strings.NewReader(trace), opt)
+	steps, err := stepsOf(strings.NewReader(trace), opt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,10 +297,10 @@ func TestDefaults(t *testing.T) {
 		}
 	}
 	// the spec's own names are required
-	if _, err := Read(strings.NewReader(trace), Options{}); err == nil || !strings.Contains(err.Error(), "names no Snapshot") {
+	if _, err := stepsOf(strings.NewReader(trace), Options{}); err == nil || !strings.Contains(err.Error(), "names no Snapshot") {
 		t.Errorf("no snapshot named: %v", err)
 	}
-	if _, err := Read(strings.NewReader(trace), Options{Snapshot: "page"}); err == nil || !strings.Contains(err.Error(), "custom action ui.save is none the adapter maps") {
+	if _, err := stepsOf(strings.NewReader(trace), Options{Snapshot: "page"}); err == nil || !strings.Contains(err.Error(), "custom action ui.save is none the adapter maps") {
 		t.Errorf("no clicks named: %v", err)
 	}
 }
@@ -310,4 +311,15 @@ func mustJSON(v any) string {
 		panic(err)
 	}
 	return string(b)
+}
+
+// stepsOf is a trace's steps (Log, then its Steps), a torn one's with its
+// *qtrace.TornTail.
+func stepsOf(r io.Reader, opt Options) ([]qtrace.Step, error) {
+	l, err := Log(r, opt)
+	var torn *qtrace.TornTail
+	if err != nil && !errors.As(err, &torn) {
+		return nil, err
+	}
+	return l.Steps(), err
 }

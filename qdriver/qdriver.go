@@ -35,8 +35,12 @@
 //     call. code is required: the answer's status (an HTTP status), 0 if
 //     none came (a network error, which error may say). args are the
 //     answer's fields the model reads; the completion's arguments are
-//     what the request sent, then the answer's fields it did not send,
-//     then code. outcome is the step's (default "ok": the call completed
+//     what the request sent, the answer's fields it did not send, the
+//     answer's value of each field it did send as answer_<field>
+//     (AnswerPrefix: a server that applied another value than the one
+//     sent; Log.Warnings names each that differs), then code (a request
+//     may not send an argument named code). Nested values are JSON text,
+//     as qobs records them. outcome is the step's (default "ok": the call completed
 //     with the code it got, and the model judges the code). A response
 //     of no request, or a second one, is refused; a request with none
 //     stays pending (qtrace.Trace.Pending), so a run that needs every
@@ -84,6 +88,8 @@ import (
 	"io"
 	"maps"
 	"os"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -98,11 +104,14 @@ const Protocol = "gotogether.requests/1"
 // version is a request log this package cannot read, not some other file.
 const protocolFamily = "gotogether.requests/"
 
-// The kinds of record (Record.Event).
+// Event is a record's kind (Record.Event), as the log writes it.
+type Event string
+
+// The kinds of record.
 const (
-	Request  = "request"  // the driver sent a request: an invocation
-	Response = "response" // its own answer: the call's completion
-	Observed = "step"     // something seen that answers no request: a step of its own
+	Request  Event = "request"  // the driver sent a request: an invocation
+	Response Event = "response" // its own answer: the call's completion
+	Step     Event = "step"     // something seen that answers no request: a step of its own
 )
 
 // Header is a log's first line: the protocol's version and the names its
@@ -120,7 +129,7 @@ type Header struct {
 // Record is one line after the header: a request, a response or a step
 // (Event). Which fields each kind takes is the package's doc's.
 type Record struct {
-	Event  string    `json:"event"`
+	Event  Event     `json:"event"`
 	Req    string    `json:"req,omitempty"`
 	Action string    `json:"action,omitempty"`
 	Time   time.Time `json:"time"`
@@ -137,7 +146,17 @@ type Record struct {
 }
 
 // CodeArg is the completion's argument that carries a response's code.
+// A request may not send an argument of that name, nor a response
+// answer one.
 const CodeArg = "code"
+
+// AnswerPrefix names the completion's arguments that keep a response's
+// fields the request sent too: the request's value is the call's
+// argument (what was sent), the answer's is answer_<name> beside it, so
+// a model can see a server that applied another value than the one
+// sent (a binding reads it as {{.answer_key}}). Log.Warnings names each
+// one whose values differ.
+const AnswerPrefix = "answer_"
 
 // Log is a request log: its header and records, checked against the
 // protocol (New, Read).
@@ -298,6 +317,9 @@ func (l *Log) check(at func(int) string) error {
 			case r.Code != nil || r.Error != "" || r.Outcome != "" || r.Obs != nil:
 				return bad("request %s carries an answer (code, error, outcome or obs): its answer is a response of its own", r.Req)
 			}
+			if _, ok := r.Args[CodeArg]; ok {
+				return bad("request %s has an argument %q, the name of the completion's code (CodeArg), which would replace it: name the argument otherwise (the model's parameter too)", r.Req, CodeArg)
+			}
 			reqs[r.Req] = i + 1
 		case Response:
 			switch {
@@ -319,8 +341,21 @@ func (l *Log) check(at func(int) string) error {
 			if _, ok := r.Args[CodeArg]; ok {
 				return bad("the response to request %s has an argument %q: the code is the response's own field", r.Req, CodeArg)
 			}
+			sent := l.Records[reqs[r.Req]-1].Args
+			for k := range r.Args {
+				if _, both := sent[k]; !both {
+					continue
+				}
+				a := AnswerPrefix + k
+				if _, ok := sent[a]; ok {
+					return bad("request %s sent both %s and %s, and its response answers %s, whose value is the completion's %s: name the request's %s otherwise", r.Req, k, a, k, a, a)
+				}
+				if _, ok := r.Args[a]; ok {
+					return bad("the response to request %s answers both %s, which the request sent, and %s, the name the answer's %s is kept under: name the answer's %s otherwise", r.Req, k, a, k, a)
+				}
+			}
 			answered[r.Req] = true
-		case Observed:
+		case Step:
 			switch {
 			case r.Action == "":
 				return bad("a step names no action")
@@ -328,17 +363,17 @@ func (l *Log) check(at func(int) string) error {
 				return bad("step %s names a request (req, code or corr): a step answers none; a request's answer is a response", r.Action)
 			}
 		default:
-			return bad("event %q is none of the protocol's (%s, %s, %s)", r.Event, Request, Response, Observed)
+			return bad("event %q is none of the protocol's (%s, %s, %s)", r.Event, Request, Response, Step)
 		}
 	}
 	return nil
 }
 
-func orRecord(event string) string {
+func orRecord(event Event) string {
 	if event == "" {
 		return "record"
 	}
-	return event
+	return string(event)
 }
 
 // Steps turns the log into steps and records, numbered from 1 in the
@@ -391,13 +426,18 @@ func (l *Log) Steps() []qtrace.Step {
 				s.Outcome = "ok"
 			}
 			s.Args = values(r.Args)
-			maps.Copy(s.Args, values(req.rec.Args)) // what the request sent, whatever the answer says
+			for k, v := range req.rec.Args { // what the request sent, whatever the answer says
+				if a, both := s.Args[k]; both {
+					s.Args[AnswerPrefix+k] = a // and what the answer says, beside it
+				}
+				s.Args[k] = value(v)
+			}
 			s.Args[CodeArg] = *r.Code
 			if s.Ref == "" {
 				s.Ref = req.rec.Ref
 			}
 			s.Ref = withCorr(s.Ref, req.rec.Corr)
-		case Observed:
+		case Step:
 			s.Outcome = "ok"
 			s.Args = values(r.Args)
 		}
@@ -407,6 +447,49 @@ func (l *Log) Steps() []qtrace.Step {
 		out = qtrace.MarkLost(out, qtrace.Lost{Recorder: h.Recorder, After: uint64(len(out))})
 	}
 	return out
+}
+
+// Warnings are what a reader of the log should know that is no defect
+// of it: each response whose answer names another value of a field than
+// its request sent, which the completion keeps as answer_<name>
+// (AnswerPrefix) beside the request's.
+func (l *Log) Warnings() []string {
+	var out []string
+	sent := map[string]*Record{}
+	for i := range l.Records {
+		r := &l.Records[i]
+		switch r.Event {
+		case Request:
+			sent[r.Req] = r
+		case Response:
+			q := sent[r.Req]
+			if q == nil {
+				continue
+			}
+			for _, k := range slices.Sorted(maps.Keys(r.Args)) {
+				v, ok := q.Args[k]
+				if !ok || reflect.DeepEqual(value(v), value(r.Args[k])) {
+					continue
+				}
+				at := fmt.Sprintf("record %d", i)
+				if l.lines != nil {
+					at = fmt.Sprintf("line %d", l.lines[i])
+				}
+				out = append(out, fmt.Sprintf("%s: the response to request %s (%s) answers %s=%v, the request sent %v: the completion's %s is what was sent, the answer's is %s%s (a binding that should see the server's value reads it)",
+					at, r.Req, q.Action, k, jsonText(r.Args[k]), jsonText(v), k, AnswerPrefix, k))
+			}
+		}
+	}
+	return out
+}
+
+// jsonText is v as the log wrote it.
+func jsonText(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(b)
 }
 
 // withCorr adds a request's corr to a ref.
@@ -437,8 +520,11 @@ func (l *Log) Write(w io.Writer) error {
 }
 
 // values copies a record's arguments or observations as a step holds
-// them: a JSON number an int64 if it is whole, else a float64, and a Go
-// int an int64 (a record built with New), at any depth.
+// them (qtrace.Step.Args: scalars), as qobs records them: a JSON number
+// an int64 if it is whole and fits, else a json.Number if it is whole (an
+// integer past int64, kept whole), else a float64; a Go
+// int an int64 (a record built with New); an object or an array its
+// JSON text, numbers as written (toQuint, toSet and toList read it).
 func values(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {
@@ -449,9 +535,14 @@ func values(m map[string]any) map[string]any {
 
 func value(v any) any {
 	switch x := v.(type) {
+	case nil, string, bool, int64, float64:
+		return v
 	case json.Number:
 		if i, err := x.Int64(); err == nil {
 			return i
+		}
+		if !strings.ContainsAny(string(x), ".eE") {
+			return x // an integer past int64, whole (a float64 would round it): qtrace.Step.Args
 		}
 		if f, err := x.Float64(); err == nil {
 			return f
@@ -459,16 +550,25 @@ func value(v any) any {
 		return x.String()
 	case int:
 		return int64(x)
+	case int8:
+		return int64(x)
+	case int16:
+		return int64(x)
 	case int32:
 		return int64(x)
-	case map[string]any:
-		return values(x)
-	case []any:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = value(e)
-		}
-		return out
+	case uint8:
+		return int64(x)
+	case uint16:
+		return int64(x)
+	case uint32:
+		return int64(x)
+	case float32:
+		return float64(x)
 	}
-	return v
+	// a collection, or any other Go value: its JSON text, as qobs
+	// records a slice or a map (json.Number's as written)
+	if b, err := json.Marshal(v); err == nil {
+		return string(b)
+	}
+	return fmt.Sprint(v)
 }

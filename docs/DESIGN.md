@@ -3779,7 +3779,8 @@ invocation with what the request sent; a `response` names its request
 seen that answers no request, and names none. A response's arguments
 are the answer's fields, under the request's: the call's arguments are
 what was sent, whatever the answer says (an answer naming another key
-does not change the call). Decisions:
+does not change the call), and the answer's value of a field the
+request sent is `answer_<field>` beside it. Decisions:
 
 - **A header, required, versioned exactly.** It names the recorder the
   records are numbered in, so two logs joined cannot share one by
@@ -3853,3 +3854,29 @@ gave would be the input's, which the issue names. The CLI refuses two
 request logs naming one recorder before reading further (a tool error,
 exit 2, `input.Distinct`), and the Playwright adapter makes each log's
 recorder its own (`ui-<pid>-<n>`).
+
+The review found three more of the protocol's mappings losing what the
+model needed. A request argument named `code` was replaced by the
+answer's status, silently: it is refused, naming `CodeArg`. An answer's
+field the request had sent too was dropped (the request's value kept),
+so no model could see a server that applied another value than the one
+sent; refusing such a log would have made a misbehaving server a tool
+error, so both are kept: the request's under its name (the call's
+argument is what was sent), the answer's as `answer_<field>`, always
+(a binding reads one parameter whatever the values), and a warning when
+they differ. And nested arguments reached steps as Go maps and slices,
+which `Step.Args` (scalars) does not hold and no template function read:
+they are JSON text, as qobs records a collection, decoded by toQuint
+(an integer past int64 is a `json.Number`, whole, in a step log too).
+The Playwright adapter chained its records in the order of Playwright's
+events, so every line after a response waited for that answer's body: a
+test killed while one was read lost them all, where the README promised
+a torn last line at worst. Each record is now written when its event
+happens, a response when its body has been read (its time then: the
+driver had the whole answer, about 50 ms after the headers here, so the
+call is wider than it was, never narrower). Its mock and cookie
+suspicions were checked against Chromium 141 and are in its README's
+limits: a mocked answer registered before the adapter's route is
+written as the server's, one after it is never seen; cookies reached
+the server though the adapter re-sends a call with `request.headers()`,
+which lists none.

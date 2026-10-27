@@ -114,9 +114,12 @@ type Step struct {
 	// It has no outcome and no observations, and the binding checks no
 	// expect after it.
 	Ambiguous bool
-	Args      map[string]any // string, int64, bool or float64
-	Obs       map[string]any
-	Order     map[string]int64
+	// Args are scalars: string, int64, bool, float64, or json.Number
+	// for an integer past int64 (a step log's, a request log's), kept
+	// whole. A collection is its JSON text, as qobs records one.
+	Args  map[string]any
+	Obs   map[string]any
+	Order map[string]int64
 	// fromRecord: Invoked is the invocation record's time (Reconstruct),
 	// the recorder's own clock, which no other machine's compares with
 	fromRecord bool

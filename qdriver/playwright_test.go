@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
@@ -105,4 +106,48 @@ func diffLines(a, b []byte) string {
 		}
 	}
 	return ""
+}
+
+// Every record the adapter has seen happen is on disk at once, none
+// queued behind an answer's body: a test killed while a body is read
+// keeps the step and the call that came meanwhile (a first version
+// lost them, its README promising a torn last line at worst). The
+// response, written when its body is read, comes last, its time after
+// theirs, and the recorder is made the log's own (ui-<pid>-<n>).
+func TestPlaywrightDurable(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		skip.Optional(t, "node not on PATH: the adapter's writes are not checked")
+		return
+	}
+	dir := filepath.Join("..", "adapters", "playwright")
+	out, err := exec.Command(node, filepath.Join(dir, "testdata", "durable.cjs"), filepath.Join(dir, "gotogether-requests.cjs"), t.TempDir()).CombinedOutput()
+	if err != nil {
+		t.Fatalf("durable.cjs: %v\n%s", err, out)
+	}
+	before, after, ok := bytes.Cut(out, []byte("--\n"))
+	if !ok {
+		t.Fatalf("output:\n%s", out)
+	}
+	l, err := Read(bytes.NewReader(before))
+	if err != nil {
+		t.Fatalf("the log while a body is read: %v\n%s", err, before)
+	}
+	var events []string
+	for _, r := range l.Records {
+		events = append(events, string(r.Event)+" "+r.Req)
+	}
+	if got := fmt.Sprint(events); got != "[request 1 step  request 2]" {
+		t.Errorf("on disk while the body is read: %s, want both requests and the step\n%s", got, before)
+	}
+	if !strings.HasPrefix(l.Header.Recorder, "ui-") || l.Header.Recorder == "ui-" {
+		t.Errorf("recorder %q, want ui-<pid>-<n>", l.Header.Recorder)
+	}
+	l, err = Read(bytes.NewReader(after))
+	if err != nil {
+		t.Fatalf("the closed log: %v\n%s", err, after)
+	}
+	if n := len(l.Records); n != 4 || l.Records[3].Event != Response || l.Records[3].Req != "1" || l.Records[3].Args["id"] != "j1" {
+		t.Errorf("the closed log: %+v, want the response to request 1 last, with its body's fields", l.Records)
+	}
 }

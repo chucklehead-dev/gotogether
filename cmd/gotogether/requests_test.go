@@ -12,8 +12,11 @@ import (
 // gotogether validate reads a driver's request log (package qdriver) as
 // it reads a step log, detected by its header: each request an
 // invocation, completed by its own response with what the request sent
-// (an answer naming another amount does not change the call's), its
-// observations judged.
+// (an answer naming another amount does not change the call's: the
+// answer's is answer_amount beside it, and a warning says so), its
+// observations judged. A binding that reads answer_amount sees the
+// server's value (the first version dropped it: no model could see a
+// server that applied another amount than the one sent).
 func TestValidateRequestLog(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
@@ -35,11 +38,27 @@ func TestValidateRequestLog(t *testing.T) {
 			t.Errorf("exit %d, output lacks %q:\n%s", code, want, out)
 		}
 	}
+	if want := "warning: line 3: the response to request 1 (deposit) answers amount=7, the request sent 5: the completion's amount is what was sent, the answer's is answer_amount"; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q:\n%s", want, out)
+	}
 	code, out = vcapture(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), log("6")})
 	for _, want := range []string{"RESULT: FAIL (1 of 1 actor: 1 mismatch after deposit)", "corr=t1"} {
 		if code != 1 || !strings.Contains(out, want) {
 			t.Errorf("exit %d, output lacks %q:\n%s", code, want, out)
 		}
+	}
+	// the server's amount, 7, read by a binding: a balance of 5 is a mismatch
+	spec, err := filepath.Abs("../../validate/testdata/account.qnt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	answered := filepath.Join(dir, "answered.yaml")
+	if err := os.WriteFile(answered, []byte("spec: "+spec+"\nmodule: account\nconstants: {LIMIT: '100'}\nactions:\n  deposit:\n    args: { amount: '{{.answer_amount}}' }\n    expect: 'balance == {{.obs.balance}}'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out = vcapture(t, []string{"-binding", answered, "-dir", filepath.Join(dir, "out3"), log("5")})
+	if want := "RESULT: FAIL (1 of 1 actor: 1 mismatch after deposit)"; code != 1 || !strings.Contains(out, want) {
+		t.Errorf("the answer's amount: exit %d, output lacks %q:\n%s", code, want, out)
 	}
 }
 

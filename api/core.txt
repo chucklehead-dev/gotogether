@@ -262,6 +262,7 @@ type File struct
     field ITF *itf.Trace
     field Torn *qtrace.TornTail
     field Recorder string
+    field Warnings []string
 type Format string
 var StepLogExample = fmt.Sprintf(`{%q:"deposit",%q:1,%q:"r",%q:5,%q:5}`, qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder, qtrace.PrefixArg+"amount", qtrace.PrefixObs+"balance")
 
@@ -443,15 +444,17 @@ type Summary struct
     method (*Summary) Uncovered() []Block
 
 == github.com/chucklehead-dev/gotogether/qdriver
+const AnswerPrefix = "answer_"
 const CodeArg = "code"
-const Observed = "step"
 const Protocol = "gotogether.requests/1"
-const Request = "request"
-const Response = "response"
+const Request Event = "request"
+const Response Event = "response"
+const Step Event = "step"
 func New(h Header, records []Record) (*Log, error)
 func Read(r io.Reader) (*Log, error)
 func ReadFile(path string) (*Log, error)
 func Sniff(data []byte) bool
+type Event string
 type Header struct
     field Protocol string `json:"protocol"`
     field Recorder string `json:"recorder"`
@@ -464,9 +467,10 @@ type Log struct
     field Records []Record
     field Torn *qtrace.TornTail
     method (*Log) Steps() []qtrace.Step
+    method (*Log) Warnings() []string
     method (*Log) Write(w io.Writer) error
 type Record struct
-    field Event string `json:"event"`
+    field Event Event `json:"event"`
     field Req string `json:"req,omitempty"`
     field Action string `json:"action,omitempty"`
     field Time time.Time `json:"time"`
@@ -482,8 +486,7 @@ type Record struct
 
 == github.com/chucklehead-dev/gotogether/qdriver/bombadil
 func Log(r io.Reader, opt Options) (*qdriver.Log, error)
-func Read(r io.Reader, opt Options) ([]qtrace.Step, error)
-func ReadFile(path string, opt Options) ([]qtrace.Step, error)
+func LogFile(path string, opt Options) (*qdriver.Log, error)
 func States(r io.Reader, opt Options) ([]State, error)
 type Fields struct
     field Number string
@@ -2210,6 +2213,7 @@ type Input struct
     field Converted bool
     field Steps []qtrace.Step
     field Torn *qtrace.TornTail
+    field Warnings []string
 type Judged struct
     field Inputs []Input
     field Dir string

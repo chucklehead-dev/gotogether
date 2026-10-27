@@ -15,9 +15,9 @@ The first release. What a user meets, by module:
   request an invocation record, completed only by its own response.
   `gotogether validate` and package input read it by its header
   (`input.Requests`, `-format requests`). Package `qdriver/bombadil`
-  reads Bombadil's trace with a page that logs its requests (`Read`,
-  `ReadFile`, `Log`, `States`, `Options`); it was examples/webjobs'
-  bombadiltrace. adapters/playwright writes the log from a Playwright
+  reads Bombadil's trace with a page that logs its requests (`Log`,
+  `LogFile`, `Options`; `States`, `State` and `Request` experimental);
+  it was examples/webjobs' bombadiltrace. adapters/playwright writes the log from a Playwright
   page's routed requests (DESIGN §55).
 - grist, a new module (api/grist.txt): an event-sourced framework whose
   applications are checked against their Quint model with nothing
@@ -84,6 +84,24 @@ The first release. What a user meets, by module:
   left out, and a binding matching none of a run's actors has no verdict
   and says so. `System.WithBinding(path, opts...)`: the same runs judged
   by another binding.
+- qdriver after its review: a record's kind is a typed `qdriver.Event`
+  (`Request`, `Response`, `Step`, was the string `Observed`); a request
+  argument named `code` is refused (it was replaced by the answer's
+  status); an answer's field the request sent too is kept as
+  `answer_<field>` (`qdriver.AnswerPrefix`) beside the request's, with a
+  warning when they differ (`Log.Warnings`, printed by `gotogether
+  validate`; it was dropped, so no model saw a server apply another
+  value); nested arguments and observations are JSON text, as qobs
+  records them (they were Go maps and slices), and an integer past int64
+  is a `json.Number`, whole, in a request log and a step log alike
+  (`qtrace.Step.Args`; binding prints it). `bombadil.Read` and
+  `ReadFile` are gone: `bombadil.Log` or `LogFile`, then `Steps`. The
+  Playwright adapter writes each record when its event happens (a
+  response once its body is read), where every line after a response
+  waited for its body and a killed test lost them; its recorder is the
+  header's (default `playwright`) with `-<pid>-<n>` after it
+  (`uniqueRecorder: false` keeps it as given); its README's limits say
+  what a mocked answer and cookies do.
 - qsql after its review: in `ON CONFLICT ... DO UPDATE` a column on the
   value side or in the WHERE is `t.c` or `excluded.c`; a bare one fails
   with 42702 naming both (PostgreSQL refuses it; qsql accepted `SET n =

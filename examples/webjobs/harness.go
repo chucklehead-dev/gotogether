@@ -20,7 +20,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
 	"github.com/chucklehead-dev/gotogether/examples/webjobs/webjobs"
-	bombadiltrace "github.com/chucklehead-dev/gotogether/qdriver/bombadil"
+	qbombadil "github.com/chucklehead-dev/gotogether/qdriver/bombadil"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -52,11 +52,11 @@ func Steps(dir string) ([]qtrace.Step, error) {
 	if serr != nil && !errors.As(serr, &torn) {
 		return nil, fmt.Errorf("%s: %w", ServerFile, serr)
 	}
-	page, perr := bombadiltrace.ReadFile(filepath.Join(dir, TraceFile), journey.Bombadil)
+	page, perr := qbombadil.LogFile(filepath.Join(dir, TraceFile), journey.Bombadil)
 	if perr != nil && !errors.As(perr, &torn) {
 		return nil, perr
 	}
-	return append(server, page...), errors.Join(serr, perr)
+	return append(server, page.Steps()...), errors.Join(serr, perr)
 }
 
 // Live is a live run's configuration.

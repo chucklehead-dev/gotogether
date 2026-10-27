@@ -7,9 +7,11 @@ package binding
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"math/big"
 	"os"
 	"path"
 	"path/filepath"
@@ -591,6 +593,12 @@ func quintLit(v any) string {
 		return strconv.FormatBool(x)
 	case float64:
 		return strconv.FormatInt(int64(x), 10)
+	case json.Number: // an integer past int64, kept whole (qtrace.Step.Args)
+		if _, ok := new(big.Int).SetString(string(x), 10); ok {
+			return string(x)
+		}
+		f, _ := x.Float64()
+		return strconv.FormatInt(int64(f), 10)
 	case string:
 		return strconv.Quote(x)
 	case qlit:

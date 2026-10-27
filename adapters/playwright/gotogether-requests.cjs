@@ -5,8 +5,11 @@
 // Each request the test's classify names a model call is an invocation,
 // written when Playwright routes it (before the browser sends it on, so
 // before the server can act on it), with what it sent. Only that
-// request's own response completes it, written when Playwright reports
-// the response: its status and the answer's fields. A request that
+// request's own response completes it, written when its body has been
+// read (the driver had the whole answer then): its status and the
+// answer's fields. Every record is written when its event happens, none
+// waiting behind another's body, so a killed test loses at most the
+// line being written. A request that
 // failed (no answer) is answered with code 0 and the error. A request
 // with no response stays pending, so a run that must finish does not.
 // What the page then shows is a step of its own (watch, step), which
@@ -83,7 +86,8 @@ function correlation(corr, id, req) {
 // page's events, and replay a recorded sequence of them.
 //
 // opts:
-//   header       the log's header: recorder (required), actor, process, thread
+//   header       the log's header: recorder (required here; requestLog's
+//                default is "playwright"), actor, process, thread
 //   classify     (req) => {action, args, thread?} | null: which requests are
 //                model calls, and what each sent (never what the page showed
 //                before); req is {url, method, headers, body}
@@ -159,18 +163,25 @@ class RequestLog {
 
 // requestLog records page's calls into the request log at opts.path
 // (RequestLog's options, and):
-//   path     the log's file (written line by line: a killed test keeps
-//            what it wrote, a torn last line at worst)
+//   path     the log's file, each line written when its event happens (a
+//            killed test keeps every record of what happened before, a
+//            torn last line at worst)
 //   match    the route pattern of the requests to look at (default '**/*')
 //   bodyTimeout  how long an answer's body is waited for (default 10s:
 //            a stream that never ends is answered with no body)
 //   events   a file to write the events to as well (JSON lines), for
 //            replay: a recording a test without a browser can feed
 //            through RequestLog again
+//   uniqueRecorder  false keeps header.recorder as given; by default the
+//            recorder is header.recorder (default "playwright") with
+//            -<pid>-<n> after it, n counting this process's logs: two
+//            pages, or two workers, never number their records in one
+//            recorder (gotogether validate refuses two logs naming one)
 // It returns {step(action, args, extra), watch(selector, map), close()}:
 // step writes a step now; watch writes map(text)'s {action, args} each
 // time the selector's text changes in the page (null: no step); close
 // stops routing, waits for the answers being read and closes the files.
+let logs = 0; // requestLog's calls in this process: a recorder's suffix
 async function requestLog(page, opts) {
   const fd = fs.openSync(opts.path, 'w');
   const efd = opts.events ? fs.openSync(opts.events, 'w') : null;
@@ -181,20 +192,26 @@ async function requestLog(page, opts) {
   } catch {
     // a version is free text: the name alone
   }
-  const log = new RequestLog({ ...opts, header: { driver, ...opts.header } }, (s) => fs.writeSync(fd, s));
+  const header = { driver, ...opts.header };
+  header.recorder = header.recorder || 'playwright';
+  logs++;
+  if (opts.uniqueRecorder !== false) header.recorder += `-${process.pid}-${logs}`;
+  const log = new RequestLog({ ...opts, header }, (s) => fs.writeSync(fd, s));
   event({ type: 'start', header: log.opts.header, correlation: log.corr });
-  // events are written in the order they happened, though an answer's
-  // body is read later: each takes its place in the chain at once
-  let chain = Promise.resolve();
-  const inOrder = (f) => {
-    const p = chain.then(f);
-    chain = p.catch(() => {});
-    return p;
+  // each record is written when its event happens, on the clock read
+  // then, so the log's times are in order and nothing waits in memory
+  // behind another: a response when its body has been read (the driver
+  // had the whole answer then), other lines meanwhile
+  const record = (e, write) => {
+    event(e);
+    write();
   };
+  const reading = new Set(); // bodies being read: close waits for them
   // a call is recorded when routed, before the browser sends it on: the
   // server cannot have acted on it yet (Playwright's request event comes
   // after the browser sent it, often after the server took it)
   const ids = new WeakMap();
+  const answering = new Set(); // calls whose answer came: a later requestfailed (the body's load) is not theirs
   let next = 0;
   const handler = async (route) => {
     const r = route.request();
@@ -205,10 +222,7 @@ async function requestLog(page, opts) {
     const id = ++next;
     ids.set(r, id);
     const corr = correlation(log.corr, id, req);
-    inOrder(() => {
-      event({ type: 'request', id, time, request: req });
-      log.request(id, time, req, call, corr);
-    });
+    record({ type: 'request', id, time, request: req }, () => log.request(id, time, req, call, corr));
     const given = req.headers[log.corr.header];
     await route.fallback(given ? undefined : { headers: { ...r.headers(), [log.corr.header]: corr } });
   };
@@ -216,37 +230,35 @@ async function requestLog(page, opts) {
   const onResponse = (res) => {
     const id = ids.get(res.request());
     if (id === undefined) return;
-    const time = now();
+    answering.add(id);
     let timer;
     const wait = new Promise((done) => {
       timer = setTimeout(done, opts.bodyTimeout || 10000, null);
       timer.unref();
     });
-    const body = Promise.race([res.text().then(parse, () => null), wait]).finally(() => clearTimeout(timer));
-    inOrder(async () => {
-      const r = { status: res.status(), headers: res.headers(), body: await body };
-      event({ type: 'response', id, time, response: r });
-      log.response(id, time, r);
-    });
+    const p = Promise.race([res.text().then(parse, () => null), wait])
+      .finally(() => clearTimeout(timer))
+      .then((body) => {
+        const time = now();
+        const r = { status: res.status(), headers: res.headers(), body };
+        record({ type: 'response', id, time, response: r }, () => log.response(id, time, r));
+      })
+      .finally(() => reading.delete(p));
+    reading.add(p);
   };
   const onFailed = (r) => {
     const id = ids.get(r);
-    if (id === undefined) return;
+    if (id === undefined || answering.has(id)) return;
     const time = now();
     const error = (r.failure() || {}).errorText || 'no answer';
-    inOrder(() => {
-      event({ type: 'failed', id, time, error });
-      log.failed(id, time, error);
-    });
+    record({ type: 'failed', id, time, error }, () => log.failed(id, time, error));
   };
   page.on('response', onResponse);
   page.on('requestfailed', onFailed);
   const step = (action, args, extra, at) => {
     const time = at === undefined ? now() : at;
-    return inOrder(() => {
-      event({ type: 'step', time, action, args, extra });
-      log.step(time, action, args, extra);
-    });
+    record({ type: 'step', time, action, args, extra }, () => log.step(time, action, args, extra));
+    return Promise.resolve();
   };
   let watches = 0;
   return {
@@ -282,7 +294,7 @@ async function requestLog(page, opts) {
       await page.unroute(opts.match || '**/*', handler).catch(() => {});
       page.off('response', onResponse);
       page.off('requestfailed', onFailed);
-      await chain;
+      await Promise.all([...reading]);
       fs.closeSync(fd);
       if (efd !== null) fs.closeSync(efd);
     },

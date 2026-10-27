@@ -150,6 +150,8 @@ func parseLine(line string, n int) (Step, error) {
 		if num, ok := v.(json.Number); ok {
 			if i, err := num.Int64(); err == nil {
 				attrs[k] = i
+			} else if !strings.ContainsAny(string(num), ".eE") {
+				attrs[k] = num // an integer past int64, whole: a float64 would round it
 			} else if f, err := num.Float64(); err == nil {
 				attrs[k] = f
 			}

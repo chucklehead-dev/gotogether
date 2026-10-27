@@ -37,10 +37,12 @@ export interface Step {
 }
 
 export interface Options {
-  /** the log's file, written line by line */
+  /** the log's file, each line written when its event happens */
   path: string;
-  /** the log's header: recorder required */
-  header: { recorder: string; actor?: string; process?: string; thread?: string; driver?: string };
+  /** the log's header (recorder default "playwright", made unique unless uniqueRecorder is false) */
+  header: { recorder?: string; actor?: string; process?: string; thread?: string; driver?: string };
+  /** false: the recorder exactly as given; by default -<pid>-<n> is appended, n counting the process's logs */
+  uniqueRecorder?: boolean;
   /** which requests are model calls, and what each sent (null: not one) */
   classify: (req: Req) => Call | null | undefined;
   /** the answer's fields the model reads (default: the JSON body's scalar fields) */
@@ -70,5 +72,6 @@ export const PROTOCOL: 'gotogether.requests/1';
 export function requestLog(page: Page, opts: Options): Promise<RequestLogHandle>;
 export function replay(events: string, opts: Pick<Options, 'classify' | 'answer' | 'ref'>, write: (s: string) => void): void;
 export class RequestLog {
-  constructor(opts: Omit<Options, 'path' | 'match' | 'events' | 'bodyTimeout'>, write: (s: string) => void);
+  /** header.recorder is required here, used as given */
+  constructor(opts: Omit<Options, 'path' | 'match' | 'events' | 'bodyTimeout' | 'uniqueRecorder'>, write: (s: string) => void);
 }

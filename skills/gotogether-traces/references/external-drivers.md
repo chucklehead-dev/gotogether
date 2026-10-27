@@ -73,7 +73,7 @@ back, naming the line; a torn last line is a lost tail.
 | field | on | what it is |
 |---|---|---|
 | `protocol` | header | `gotogether.requests/1`, exactly (required) |
-| `recorder` | header | the steps' recorder (required): numbered in it, so two logs joined must not share one |
+| `recorder` | header | the steps' recorder (required): numbered in it, so two logs joined must not share one (`gotogether validate` refuses two that do; Playwright's adapter makes each its own) |
 | `actor`, `process`, `thread` | header | default `default`, the recorder, the recorder (one tab's program order) |
 | `driver` | header | free text |
 | `event` | record | `request`, `response` or `step` |
@@ -90,9 +90,16 @@ back, naming the line; a torn last line is a lost tail.
 | `order` | any | domain clocks (`qtrace.Step.Order`) |
 | `ref` | any | the artifact it came from (a screenshot, a trace line); a response without one takes its request's |
 
-A completion's arguments are what the request sent, then the answer's
-fields it did not send, then `code`: the call's arguments are the
-request's, whatever its answer says. Its steps keep the driver's times
+A completion's arguments are what the request sent, the answer's fields
+it did not send, the answer's value of each field it did send as
+`answer_<field>` (a server that applied another key than the one sent:
+read `{{.answer_key}}` to judge it; `Log.Warnings` and the validator
+name each that differs), then `code`: the call's arguments are the
+request's, whatever its answer says. A request may not send an argument
+named `code`. Nested values (an object, an array) are a step's JSON
+text, as qobs records them: `toQuint` (a structured parameter's
+default) reads them by the model's type, and an integer past int64
+stays whole. Its steps keep the driver's times
 and order: `Seq` is the record's line among records, a completion's
 `Call` its request's, its `Invoked` the request's time.
 
@@ -120,7 +127,7 @@ function sent(action, args) { const r = { n: requests.length + 1, action, ...arg
 ```
 
 ```go
-steps, err := bombadil.ReadFile("journey/trace.jsonl", bombadil.Options{
+log, err := bombadil.LogFile("journey/trace.jsonl", bombadil.Options{ // log.Steps() for qtest.Validate
 	Header:   qdriver.Header{Recorder: "ui", Actor: "webjobs", Process: "webjobs"},
 	Snapshot: "result",                                   // the spec's extract with the log
 	Clicks:   map[string][]string{"ui.submit": {"submit"}, "ui.cancel": {"cancel"}}, // custom action -> what it sends
@@ -141,10 +148,11 @@ steps, err := bombadil.ReadFile("journey/trace.jsonl", bombadil.Options{
 - Refused, naming the line: a click with no snapshot, requests that fell
   out of the page's log between two snapshots (it lists only the last
   few), a log out of order. A torn last line is a lost tail.
-- `bombadil.Log` gives the request log (`Log.Write` it, and `gotogether
-  validate` reads it); `bombadil.States` the trace's states as read,
-  for your own mapping (webjobs' `journey.FromTrace` makes a rerunnable
-  list of actions from them).
+- `bombadil.Log` (`LogFile`) gives the request log: its `Steps` for
+  `qtest.Validate`, or `Log.Write` it and `gotogether validate` reads it.
+  `bombadil.States` (experimental: Bombadil's format is not versioned)
+  gives the trace's states as read, for your own mapping (webjobs'
+  `journey.FromTrace` makes a rerunnable list of actions from them).
 
 Running it: `bombadil browser test --headless --no-sandbox
 --time-limit 45s --output-path DIR ORIGIN spec.ts` exits 0 (no

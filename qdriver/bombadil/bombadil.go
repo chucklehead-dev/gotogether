@@ -148,6 +148,12 @@ func (o *Options) defaults() error {
 }
 
 // State is one line of a trace, as the mapping reads it.
+//
+// Experimental: State, Request and States are the shape of Bombadil's
+// trace as this package reads it, for a mapping of one's own (webjobs'
+// rerunnable action lists); they follow Bombadil's format, which is not
+// versioned, and may change without notice. Log and the request log it
+// gives are the stable way in.
 type State struct {
 	Line int       // its line in the trace, from 1
 	Time time.Time // Bombadil's timestamp
@@ -164,7 +170,7 @@ type State struct {
 }
 
 // Request is an entry of the page's log: a request as sent, and its own
-// answer once it came.
+// answer once it came. Experimental, as State is.
 type Request struct {
 	N      int
 	Action string
@@ -189,7 +195,7 @@ type entry struct {
 // States reads a trace's lines. A last line cut off (no newline, not a
 // whole object: Bombadil killed while writing it) returns the states
 // before it with a *qtrace.TornTail error; any other malformed line is
-// an error and no states.
+// an error and no states. Experimental, as State is.
 func States(r io.Reader, opt Options) ([]State, error) {
 	if err := opt.defaults(); err != nil {
 		return nil, err
@@ -359,33 +365,22 @@ func number(v any) any {
 	return n.String()
 }
 
-// ReadFile reads the trace at path (Read).
-func ReadFile(path string, opt Options) ([]qtrace.Step, error) {
+// LogFile reads the trace at path (Log).
+func LogFile(path string, opt Options) (*qdriver.Log, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return Read(f, opt)
+	return Log(f, opt)
 }
 
-// Read reads a trace.jsonl and returns its steps and invocation records
-// (Log, then qdriver.Log.Steps). A torn last line returns the steps
-// before it, a loss record after them and the *qtrace.TornTail, which a
-// caller may report and go on with: the run then has no verdict where
-// the lost line could matter.
-func Read(r io.Reader, opt Options) ([]qtrace.Step, error) {
-	l, err := Log(r, opt)
-	var torn *qtrace.TornTail
-	if err != nil && !errors.As(err, &torn) {
-		return nil, err
-	}
-	return l.Steps(), err
-}
-
-// Log reads a trace.jsonl as a request log: what gotogether validate
-// reads when it is written (qdriver.Log.Write). A torn last line returns
-// the log of the lines before it with the *qtrace.TornTail (Log.Torn).
+// Log reads a trace.jsonl as a request log: its steps are Log.Steps
+// (qtest.Validate's), and gotogether validate reads it once written
+// (qdriver.Log.Write). A torn last line returns the log of the lines
+// before it with the *qtrace.TornTail (Log.Torn), which a caller may
+// report and go on with: its steps end with a loss record, and the run
+// has no verdict where the lost line could matter.
 func Log(r io.Reader, opt Options) (*qdriver.Log, error) {
 	if err := opt.defaults(); err != nil {
 		return nil, err
@@ -495,7 +490,7 @@ func (c *converter) state(s *State, started bool) error {
 		key := fmt.Sprint(show[c.opt.Show.Key])
 		if now := fmt.Sprint(show); c.shown[key] != now {
 			c.shown[key] = now
-			c.records = append(c.records, qdriver.Record{Event: qdriver.Observed, Action: c.opt.Show.Action, Time: s.Time, Ref: s.Ref, Args: show})
+			c.records = append(c.records, qdriver.Record{Event: qdriver.Step, Action: c.opt.Show.Action, Time: s.Time, Ref: s.Ref, Args: show})
 		}
 	}
 	return nil

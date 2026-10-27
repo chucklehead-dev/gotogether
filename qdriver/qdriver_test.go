@@ -2,12 +2,16 @@ package qdriver
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/skip"
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -23,10 +27,13 @@ func read(t *testing.T, lines ...string) (*Log, error) {
 }
 
 // A request is an invocation record at its own time, its response the
-// completion (Call its seq) with what the request sent, then the
-// answer's fields it did not send, then the code; a step completes
-// nothing; refs carry the request's corr; a request with no answer is
-// pending.
+// completion (Call its seq) with what the request sent, the answer's
+// fields it did not send, the answer's value of each field the request
+// sent too as answer_<field> (an answer naming another key: the server
+// applied another value, which the model must be able to see, and a
+// warning names it; the first version dropped it), then the code; a
+// step completes nothing; refs carry the request's corr; a request with
+// no answer is pending.
 func TestSteps(t *testing.T) {
 	l, err := read(t,
 		`{"event":"request","req":"1","action":"submit","time":"`+at(0)+`","args":{"key":"k1"},"corr":"t-1","ref":"shot-0.png"}`,
@@ -52,7 +59,7 @@ func TestSteps(t *testing.T) {
 	wants := []want{
 		{"submit", true, 0, 0, "map[key:k1]", "shot-0.png corr=t-1", "page"},
 		{"submit", true, 0, 1, "map[key:k1]", "corr=t-2", "page"},
-		{"submit", false, 1, 40, "map[code:202 id:j1 key:k1 status:accepted]", "shot-40.png corr=t-1", "page"},
+		{"submit", false, 1, 40, "map[answer_key:other code:202 id:j1 key:k1 status:accepted]", "shot-40.png corr=t-1", "page"},
 		{"show", false, 0, 41, "map[id:j1 status:accepted]", "", "page"},
 		{"cancel", true, 0, 50, "map[id:j1]", "", "tab2"},
 		{"cancel", false, 5, 60, "map[code:0 id:j1]", "", "tab2"},
@@ -72,6 +79,10 @@ func TestSteps(t *testing.T) {
 	}
 	if steps[2].Args["code"] != int64(202) || steps[3].Obs["n"] != 1.5 || steps[5].Error != "net::ERR_ABORTED" {
 		t.Errorf("values: code %T %v, obs %v, error %q", steps[2].Args["code"], steps[2].Args["code"], steps[3].Obs, steps[5].Error)
+	}
+	ws := l.Warnings()
+	if len(ws) != 1 || !strings.Contains(ws[0], `line 4: the response to request 1 (submit) answers key="other", the request sent "k1": the completion's key is what was sent, the answer's is answer_key`) {
+		t.Errorf("warnings %q, want the answer's other key named", ws)
 	}
 	traces, issues := qtrace.Reconstruct(steps)
 	if len(issues) > 0 || len(traces) != 1 {
@@ -125,6 +136,9 @@ func TestRefused(t *testing.T) {
 		{"no time", "", []string{`{"event":"step","action":"show"}`}, "line 2: a step with no time"},
 		{"an unknown event", "", []string{`{"event":"click","action":"a","time":"` + at(0) + `"}`}, `line 2: event "click" is none of the protocol's (request, response, step)`},
 		{"the code as an argument", "", []string{req("1", 0), `{"event":"response","req":"1","time":"` + at(1) + `","code":200,"args":{"code":1}}`}, `line 3: the response to request 1 has an argument "code"`},
+		{"a request's argument named code", "", []string{`{"event":"request","req":"1","action":"a","time":"` + at(0) + `","args":{"code":"SAVE10"}}`}, `line 2: request 1 has an argument "code", the name of the completion's code (CodeArg), which would replace it`},
+		{"an answer's field under the answer's name", "", []string{req("1", 0), `{"event":"response","req":"1","time":"` + at(1) + `","code":200,"args":{"key":"x","answer_key":"y"}}`}, "line 3: the response to request 1 answers both key, which the request sent, and answer_key"},
+		{"a request's field under the answer's name", "", []string{`{"event":"request","req":"1","action":"a","time":"` + at(0) + `","args":{"key":"k","answer_key":"y"}}`, `{"event":"response","req":"1","time":"` + at(1) + `","code":200,"args":{"key":"x"}}`}, "line 3: request 1 sent both key and answer_key"},
 		{"two objects on a line", "", []string{req("1", 0) + req("2", 1), req("3", 2)}, "line 2: not a record of a request log (gotogether.requests/1): trailing data"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -199,6 +213,57 @@ func TestWriteSniff(t *testing.T) {
 	for _, s := range []string{`{"quint.action":"a"}`, `{"protocol":"other/1"}`, `not json`} {
 		if Sniff([]byte(s)) {
 			t.Errorf("%s sniffed", s)
+		}
+	}
+}
+
+// A record's arguments and observations are a step's scalars, as qobs
+// records them: an object or an array its JSON text (numbers as
+// written), an integer past int64 a json.Number, whole (a float64 would
+// round it). They were Go maps and slices, which no template function
+// reads; toQuint, a structured parameter's default, now decodes them by
+// the model's type.
+func TestNestedValues(t *testing.T) {
+	big := "123456789012345678901234567890"
+	l, err := read(t,
+		`{"event":"request","req":"1","action":"commit","time":"`+at(0)+`","args":{"rs":[{"typ":"counter","tags":[["name","x"]]}],"pair":[7,true],"tally":{"a":[1,2]},"nested":{"a":{"b":[[1,"one"]]}},"n":`+big+`}}`,
+		`{"event":"response","req":"1","time":"`+at(1)+`","code":200,"args":{"batch":{"events":[{"tag":"Created","counter":"c","name":"n"},"Reset"],"at":1,"cause":null}},"obs":{"log":["Reset"]}}`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := l.Steps()
+	inv, done := steps[0], steps[1]
+	for k, want := range map[string]any{"rs": `[{"tags":[["name","x"]],"typ":"counter"}]`, "pair": `[7,true]`, "nested": `{"a":{"b":[[1,"one"]]}}`, "n": json.Number(big)} {
+		if inv.Args[k] != want || done.Args[k] != want {
+			t.Errorf("%s: %T %v and %T %v, want %T %v", k, inv.Args[k], inv.Args[k], done.Args[k], done.Args[k], want, want)
+		}
+	}
+	if done.Obs["log"] != `["Reset"]` {
+		t.Errorf("obs %v", done.Obs)
+	}
+	skip.Quint(t)
+	m, err := binding.LoadModel("quint", "../binding/testdata/typed.qnt", "typed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &binding.Binding{Spec: "typed.qnt", Module: "typed", Actions: map[string]binding.Action{"commit": {}}}
+	tr := &qtrace.Trace{Actor: "webjobs", Processes: []string{"webjobs"}, Steps: []qtrace.Step{done}}
+	plan, err := b.Plan(m, tr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := itf.VariantOf("Created", itf.RecordOf("counter", itf.StrOf("c"), "name", itf.StrOf("n")))
+	for name, want := range map[string]string{
+		"batch":  itf.RecordOf("events", itf.ListOf(created, itf.Enum("Reset")), "at", itf.IntOf(1), "cause", itf.Enum("None")).String(),
+		"rs":     itf.SetOf(itf.RecordOf("typ", itf.StrOf("counter"), "tags", itf.SetOf(itf.TupleOf(itf.StrOf("name"), itf.StrOf("x"))))).String(),
+		"pair":   itf.TupleOf(itf.IntOf(7), itf.BoolOf(true)).String(),
+		"tally":  `Map("a" -> [1, 2])`,
+		"nested": itf.RecordOf("a", itf.RecordOf("b", itf.ListOf(itf.TupleOf(itf.IntOf(1), itf.StrOf("one"))))).String(),
+		"n":      big,
+	} {
+		if got := plan.Calls[0].Args[name]; got != want {
+			t.Errorf("%s: %s, want %s", name, got, want)
 		}
 	}
 }

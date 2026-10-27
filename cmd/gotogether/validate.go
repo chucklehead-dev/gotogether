@@ -216,6 +216,9 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 		if in.Torn != nil {
 			fmt.Fprintf(v.out, "  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
 		}
+		for _, w := range in.Warnings {
+			fmt.Fprintf(v.out, "  warning: %s\n", w)
+		}
 	}
 	if j.Dir == "" {
 		return 2, jerr

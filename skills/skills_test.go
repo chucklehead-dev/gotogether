@@ -182,6 +182,9 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		// the review of qsql, qdriver, toQuint and actors
 		{"qenv.RangeScanner", "Txn.ScanRange (every Txn has it)"},
 		{"qenv.ScanRange(", "tx.ScanRange(r), or qenv.ScanPrefix in an adapter's own Txn"},
+		{"qdriver.Observed", "qdriver.Step (an Event)"},
+		{"bombadil.ReadFile", "bombadil.LogFile(path, opts) and its Steps()"},
+		{"bombadil.Read(", "bombadil.Log(r, opts) and its Steps()"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

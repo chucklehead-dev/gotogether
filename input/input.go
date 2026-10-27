@@ -65,6 +65,9 @@ type File struct {
 	// Recorder is a request log's header's recorder ("" for any other
 	// format): its records are numbered in it (Distinct).
 	Recorder string
+	// Warnings are what reading it found that a reader should know and
+	// that decides nothing (qdriver.Log.Warnings).
+	Warnings []string
 }
 
 // Distinct refuses two request logs naming one recorder: their records
@@ -111,7 +114,7 @@ func Read(path string, format Format) (*File, error) {
 			err = nil
 		}
 		if err == nil {
-			in.Steps, in.Recorder = l.Steps(), l.Header.Recorder
+			in.Steps, in.Recorder, in.Warnings = l.Steps(), l.Header.Recorder, l.Warnings()
 		}
 	case ITF:
 		in.ITF, err = itf.Parse(data)
