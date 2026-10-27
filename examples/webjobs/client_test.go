@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,7 +39,11 @@ func played(t *testing.T, s journey.Server, seed int64) *qtest.Run {
 	t.Helper()
 	c := client()
 	steps, err := journey.Rerun(t.Context(), s, c, c.Plan(seed))
-	if err != nil {
+	if errors.Is(err, journey.ErrStuck) {
+		// the page shows a job running for good (statusStale's): the
+		// run ends there, and its steps are what the page did
+		t.Logf("journey: %v", err)
+	} else if err != nil {
 		t.Fatal(err)
 	}
 	return qtest.Validate(t, "webjobs.binding.yaml", steps)

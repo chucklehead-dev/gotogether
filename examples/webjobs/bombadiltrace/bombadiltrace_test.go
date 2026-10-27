@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -227,5 +228,31 @@ func TestActions(t *testing.T) {
 	}
 	if got, want := fmt.Sprint(as), "[submit k1 twice await k1 submit k2 sleep 50ms cancel k2 await k2]"; got != want {
 		t.Fatalf("actions %s, want %s", got, want)
+	}
+}
+
+// Every request of an entry is an action, in the order sent: two
+// submissions of other keys two Submits, a cancel beside a submission
+// and two cancels each a Cancel; an await polls at the page's 100ms.
+func TestActionsEveryRequest(t *testing.T) {
+	a1 := sub(1, "k1").answered(202, "j1", "accepted")
+	b2 := sub(2, "k2").answered(202, "j2", "accepted")
+	trace := strings.Join([]string{
+		line(1000, nil, page("", "")),
+		line(2000, custom("ui.submit"), page("j1", "accepted", a1, b2)),
+		line(3000, custom("ui.cancel"), page("j1", "cancelled", a1, b2, can(3, "j1").answered(200, "j1", "cancelled"))),
+		line(4000, custom("ui.cancel"), page("j2", "cancelled", can(3, "j1").answered(200, "j1", "cancelled"), can(4, "j2").answered(200, "j2", "cancelled"), can(5, "j1").answered(409, "j1", "cancelled"))),
+	}, "")
+	as, err := Actions(strings.NewReader(trace), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fmt.Sprint(as), "[submit k1 await k1 submit k2 sleep 1ms cancel k1 sleep 1ms cancel k2 cancel k1 await k2]"; got != want {
+		t.Fatalf("actions %s, want %s", got, want)
+	}
+	for _, a := range as {
+		if w, ok := a.(journey.AwaitEnd); ok && w.Every != 100*time.Millisecond {
+			t.Errorf("%v polls every %v, want the page's 100ms", w, w.Every)
+		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -44,10 +45,14 @@ type Cancel struct{ Key string }
 // Poll asks for key's job once; a change is shown.
 type Poll struct{ Key string }
 
-// AwaitEnd polls key's job every 20ms until it is shown ended, or for
-// Client.Stuck: a job that never ends stops the play there, as the page
-// would show it running for good.
-type AwaitEnd struct{ Key string }
+// AwaitEnd polls key's job every Every (default 20ms; the page polls
+// every 100ms) until it is shown ended, or for Client.Stuck: a job that
+// never ends stops the play there, as the page would show it running
+// for good (ErrStuck if actions remained).
+type AwaitEnd struct {
+	Key   string
+	Every time.Duration
+}
 
 // Resubmit sends key's submission once more, late (a page that lost the
 // first answer would): its answer is not shown.
@@ -124,17 +129,41 @@ func (c *Client) Plan(seed int64) []Action {
 	return out
 }
 
+// ErrStuck is Play's error when an AwaitEnd's job never ended and
+// actions remained, which the play did not do: the page showed the job
+// running for good. A shrinker's rerun that returns it did not do its
+// actions (qtest.ErrDiverged).
+var ErrStuck = errors.New("journey: a job never ended; the actions after its await were not played")
+
 // Run plays seed's plan.
 func (c *Client) Run(ctx context.Context, seed int64) error { return c.Play(ctx, c.Plan(seed)) }
 
-// Play plays actions in order. It returns early, with no error, at an
-// AwaitEnd whose job never ended.
+// Play plays actions in order, then, as a page left open does, awaits
+// the job it shows: a run ends with its last job shown ended (so a list
+// that lost its last await is no failure of its own). It stops at an
+// AwaitEnd whose job never ended: with actions left, with ErrStuck.
 func (c *Client) Play(ctx context.Context, actions []Action) error {
 	c.defaults()
 	ctx = qobs.WithRecorder(ctx, c.Recorder)
 	p := &page{rec: ctx}
 	ids := map[string]string{} // key -> its job, once an answer named one
-	for _, a := range actions {
+	await := func(id string, every time.Duration) (bool, error) {
+		if every == 0 {
+			every = 20 * time.Millisecond
+		}
+		start := time.Now()
+		for p.shown(id) != "ready" && p.shown(id) != "cancelled" {
+			if time.Since(start) > c.Stuck {
+				return false, nil
+			}
+			if err := c.poll(p, id); err != nil {
+				return false, err
+			}
+			time.Sleep(every)
+		}
+		return true, nil
+	}
+	for i, a := range actions {
 		switch a := a.(type) {
 		case Submit:
 			n := 1
@@ -176,21 +205,24 @@ func (c *Client) Play(ctx context.Context, actions []Action) error {
 			if !ok {
 				continue
 			}
-			start := time.Now()
-			for p.shown(id) != "ready" && p.shown(id) != "cancelled" {
-				if time.Since(start) > c.Stuck {
-					return nil // the page shows it running for good
-				}
-				if err := c.poll(p, id); err != nil {
-					return err
-				}
-				time.Sleep(20 * time.Millisecond)
+			ended, err := await(id, a.Every)
+			switch {
+			case err != nil:
+				return err
+			case !ended && i < len(actions)-1:
+				return ErrStuck
+			case !ended:
+				return nil // the page shows it running for good
 			}
 		case Sleep:
 			time.Sleep(a.D)
 		default:
 			return fmt.Errorf("journey: action %v (%T) is none Play knows", a, a)
 		}
+	}
+	if id := p.current(); id != "" {
+		_, err := await(id, 0) // the page, left open, polls its job to its end
+		return err
 	}
 	return nil
 }
@@ -235,6 +267,13 @@ func (p *page) show(id, status string) {
 		p.id, p.last = id, status
 		qobs.Record(p.rec, "show", nil, "id", id, "status", status)
 	}
+}
+
+// current is the job shown ("" for none).
+func (p *page) current() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.id
 }
 
 // shown is the status shown of job id ("" if another is shown).

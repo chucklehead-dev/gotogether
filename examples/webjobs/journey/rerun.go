@@ -106,7 +106,8 @@ func (s Program) Start(ctx context.Context) (string, func() ([]qtrace.Step, erro
 
 // Rerun plays actions as c against a fresh server s and returns both
 // recorders' steps once the server drained: the run a shrinker reruns
-// after removing actions. c's Base and Recorder are its own.
+// after removing actions. c's Base and Recorder are its own. A play that
+// got stuck (ErrStuck) returns its steps with the error.
 func Rerun(ctx context.Context, s Server, c Client, actions []Action) ([]qtrace.Step, error) {
 	base, stop, err := s.Start(ctx)
 	if err != nil {
@@ -116,8 +117,9 @@ func Rerun(ctx context.Context, s Server, c Client, actions []Action) ([]qtrace.
 	c.Base, c.Recorder = base, qobs.NewRecorder(mem, append(Opts, qobs.WithID("ui"))...)
 	playErr := c.Play(ctx, actions)
 	server, stopErr := stop()
-	if err := errors.Join(playErr, stopErr); err != nil {
-		return nil, err
+	if stopErr != nil || playErr != nil && !errors.Is(playErr, ErrStuck) {
+		return nil, errors.Join(playErr, stopErr)
 	}
-	return append(server, mem.Steps()...), nil
+	// with ErrStuck, the steps of the play up to its stuck await
+	return append(server, mem.Steps()...), playErr
 }

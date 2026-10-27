@@ -224,34 +224,43 @@ and with 8 at random.
 and reruns the rest (`journey.Rerun` against a fresh mutant server, the
 overlay's `cmd/webjobs`, each time) until no single removal still shows
 the failure: by default the first failing rerun's (SameFailure), here
-also stated as the mutant's claim. Each candidate gets as many reruns
-as the original's rate calls for (10 of 10 baseline: 2 per candidate).
-Measured on 2026-10-26, seed 1's plan of 8 journeys (24 actions), all
-seven at once on a 4-core machine at load about 15 (4 to 9 minutes
-each):
+also stated as the mutant's claim. A rerun ends as a page left open
+does: it polls the job it shows to its end before the server drains, so
+a list that lost its last await shows no bound of its own (a review
+found `submit k1-1 twice` "failing" the 500ms `within` on the faithful
+server that way). Each case then checks that its shrunk list finishes
+on the faithful server, three times: what it shows is the mutant's bug.
+An await whose job never ends with actions after it is a divergence
+(`qtest.ErrDiverged`: the rerun did not do its actions), so statusStale,
+whose page never sees a job end, shrinks from what a page can do before
+that: its plan up to its first await. Each candidate gets as many
+reruns as the original's rate calls for (10 of 10 baseline: 2 per
+candidate). Measured on 2026-10-27, seed 1's plan of 8 journeys (24
+actions), all at once on a 4-core machine (6 to 7 minutes each):
 
 | mutant | shrunk to | reruns | reproduced / not | its rate after |
 |---|---|---|---|---|
-| doubleJob | `submit k1-1 twice` (1) | 27 | 24 / 2 | 10 of 10 |
-| statusStale | `submit k1-1 twice` (1): the drain commits the job while the page shows it running, past the 500ms `within` | 27 | 24 / 2 | 10 of 10 |
-| readyEarly | `submit k1-1 twice`, `await k1-1` (2) | 35 | 24 / 10 | 10 of 10 |
-| cancelIgnored | `submit k1-7 twice`, `cancel k1-7` (2) | 37 | 24 / 12 | 10 of 10 |
-| cancelBroken | `submit k1-7 twice`, `cancel k1-7` (2) | 37 | 24 / 12 | 10 of 10 |
-| commitAfterCancel | `submit k1-7 twice`, `cancel k1-7` (2): the commit comes with the drain | 44 | 23 / 20 (baseline 9 of 10: 3 per candidate) | 10 of 10 |
-| rerunFinished | `submit k1-4 twice`, `await k1-4`, `resubmit k1-4` (3) | 38 | 23 / 14 | 10 of 10 |
+| doubleJob | `submit k1-1 twice` (1) | 28 | 24 / 2 | 10 of 10 |
+| readyEarly | `submit k1-1 twice` (1): the open page polls it to its end and sees ready before the commit | 28 | 24 / 2 | 10 of 10 |
+| statusStale | `submit k1-1 twice` (1), from its 2 actions up to the first await: the open page never sees the job end | 25 | 21 / 2 | 10 of 10 |
+| cancelIgnored | `submit k1-7 twice`, `cancel k1-7` (2) | 38 | 24 / 12 | 10 of 10 |
+| cancelBroken | `submit k1-7 twice`, `cancel k1-7` (2) | 38 | 24 / 12 | 10 of 10 |
+| commitAfterCancel | `submit k1-7 twice`, `cancel k1-7` (2) | 38 | 24 / 12 | 10 of 10 |
+| rerunFinished | `submit k1-4 twice`, `await k1-4`, `resubmit k1-4` (3) | 39 | 23 / 14 | 10 of 10 |
 
-Every result is 1-minimal (each one-removal rerun its count without the
-failure), no rerun diverged or errored, and each claim
+Every result is 1-minimal, no rerun diverged or errored, each claim
 (`AtMostActions(n)` with the sizes above, and `Violates` of the
-mutant's invariant) holds. Keyed jobs are what makes the reruns
+mutant's invariant) holds, and each shrunk list finishes on the
+faithful server (3 of 3). Keyed jobs are what makes the reruns
 meaningful: a removed submission renames and retimes no other job.
 `TestShrink` is full mode and nightly only: the shrinker itself is
 tested per push in qtest, against brute force.
 `TestShrinkRecorded` (full mode) shrinks Bombadil's recorded failures
-the same way, through `bombadiltrace.Actions`: doubleJob's recorded journey (20 actions) to its one double-clicked
-submission in 27 reruns, cancelIgnored's (14) to a submission and its
-cancel in 39, both 1-minimal and reproducing 10 of 10 (about 4 minutes
-each, at load 15).
+the same way, through `bombadiltrace.Actions` (each request of a click
+its own action, the page's polling at its 100ms): doubleJob's recorded
+journey (20 actions) to its one double-clicked submission in 28 reruns,
+cancelIgnored's (14) to a submission and its cancel in 40, both
+1-minimal, reproducing 10 of 10 and finishing on the faithful server.
 
 A rerun of no actions (the shrinker's check that a reset leaves
 nothing behind) starts and stops a fresh server, which records its

@@ -2,6 +2,8 @@ package harness
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,8 +23,8 @@ var shrinks = map[string]int{
 	"cancelIgnored":     2, // a submission, its cancel (answered cancelled, never made)
 	"cancelBroken":      2, // a submission, its cancel
 	"commitAfterCancel": 2, // a submission, its cancel: the commit comes with the drain
-	"readyEarly":        2, // a submission, its end
-	"statusStale":       1, // a submission: the drain commits it while the page shows it running
+	"readyEarly":        1, // a submission: the page, left open, polls it to its end
+	"statusStale":       1, // a submission: the page, left open, never sees its job end
 	"rerunFinished":     3, // a submission, its end, a resubmission
 }
 
@@ -32,7 +34,13 @@ var shrinks = map[string]int{
 // same each time, as the shrinker's reset check wants.
 func rerunOf(t *testing.T, bin string) func(ctx context.Context, actions []journey.Action) ([]qtrace.Step, error) {
 	return func(ctx context.Context, actions []journey.Action) ([]qtrace.Step, error) {
-		return journey.Rerun(ctx, journey.Program{Bin: bin, Dir: t.TempDir(), Seed: 1, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, client(), actions)
+		steps, err := journey.Rerun(ctx, journey.Program{Bin: bin, Dir: t.TempDir(), Seed: 1, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, client(), actions)
+		if errors.Is(err, journey.ErrStuck) {
+			// an await never ended and actions after it were not played:
+			// the rerun did not do its actions
+			return nil, fmt.Errorf("%w: %v", qtest.ErrDiverged, err)
+		}
+		return steps, err
 	}
 }
 
@@ -58,11 +66,33 @@ func TestShrink(t *testing.T) {
 				t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
 			}
 			c := client()
-			s := qtest.ShrinkActions(t, c.Plan(1), qtest.ActionShrink[journey.Action]{
+			original := c.Plan(1)
+			if m == "statusStale" {
+				// its page never sees a job end: no play gets past the
+				// first await (the rest would be ErrStuck, a divergence),
+				// so the sequence is what a page can do, up to there
+				original = upToFirstAwait(original)
+			}
+			s := qtest.ShrinkActions(t, original, qtest.ActionShrink[journey.Action]{
 				Binding: "webjobs.binding.yaml", Rerun: rerunOf(t, bin),
 			})
 			s.Expect(t, qtest.Violates(mutants[m]), qtest.AtMostActions(most))
+			faithful(t, s.Actions)
 		})
+	}
+}
+
+// faithful checks that a shrunk sequence passes on the faithful server:
+// what it shows is the mutant's bug, not the harness's (a rerun that
+// stopped short of a job's end once "showed" a bound past it).
+func faithful(t *testing.T, actions []journey.Action) {
+	t.Helper()
+	for range 3 {
+		steps, err := journey.Rerun(t.Context(), journey.InProcess{Seed: 1, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, client(), actions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		qtest.Validate(t, "webjobs.binding.yaml", steps).Expect(t, qtest.Finishes())
 	}
 }
 
@@ -97,6 +127,17 @@ func TestShrinkRecorded(t *testing.T) {
 			}
 			s := qtest.ShrinkActions(t, original, qtest.ActionShrink[journey.Action]{Binding: "webjobs.binding.yaml", Rerun: rerunOf(t, bin)})
 			s.Expect(t, qtest.Violates(mutants[m]), qtest.AtMostActions(shrinks[m]))
+			faithful(t, s.Actions)
 		})
 	}
+}
+
+// upToFirstAwait is actions up to and with the first AwaitEnd.
+func upToFirstAwait(actions []journey.Action) []journey.Action {
+	for i, a := range actions {
+		if _, ok := a.(journey.AwaitEnd); ok {
+			return actions[:i+1]
+		}
+	}
+	return actions
 }
