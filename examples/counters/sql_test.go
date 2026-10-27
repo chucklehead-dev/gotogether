@@ -14,11 +14,18 @@ import (
 // node crashes. One run is judged by both bindings: the store's steps
 // (commits relayed from the step log) and the clients' calls, linearized.
 // Under Serializable a lost race for the head lock is qsql's 40001,
-// retried from the key's marker.
+// retried from the key's marker. Under -short (every push) ReadCommitted
+// alone: the head lock's wait and both bindings over one run;
+// Serializable's 40001 is full mode's (and the contract's, on qsql at
+// every level, in grist/sqlstore).
 func TestSQLTier(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.ReadCommitted} {
+	levels := []qenv.Isolation{qenv.Serializable, qenv.ReadCommitted}
+	if testing.Short() {
+		levels = levels[1:]
+	}
+	for _, iso := range levels {
 		t.Run(iso.String(), func(t *testing.T) {
 			cfg := contended
 			cfg.Isolation, cfg.SQL = iso, true
@@ -40,9 +47,14 @@ func TestSQLTier(t *testing.T) {
 // Duplicated and late requests on the SQL tier: a key's first answer is
 // final there too, at the store and at the clients. Without grist's
 // markers 20 of 20 runs fail at the store, without refusal markers 16 of
-// 20 (3 seeds miss with chance under 1%).
+// 20 (3 seeds miss with chance under 1%). Full mode: the markers'
+// mechanism is the same code on every tier, checked per push by
+// TestDuplicateRequests on simstore.
 func TestSQLDuplicateRequests(t *testing.T) {
 	t.Parallel()
+	if testing.Short() {
+		t.Skip("full mode: TestDuplicateRequests checks the markers per push")
+	}
 	qtest.RequireQuint(t)
 	rates := qenv.NoFaults.Set("rpc.api.delay", 0.3).Set("rpc.api.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"}, SQL: true,
@@ -57,8 +69,14 @@ func TestSQLDuplicateRequests(t *testing.T) {
 // configuration never commits a create the model refuses, where the
 // blind mutant does (TestMutant). With grist's condition taken out of
 // the runtime it fails in 11 of 20 runs (6 seeds miss with chance 1%).
+// Full mode: TestFaithfulAtClaim1 is the contrast per push, and the
+// condition under the head lock is the contract's on qsql
+// (ConcurrentAgainstBruteForce, grist/sqlstore).
 func TestSQLFaithfulAtClaim1(t *testing.T) {
 	t.Parallel()
+	if testing.Short() {
+		t.Skip("full mode: TestFaithfulAtClaim1 is claim 1's contrast per push")
+	}
 	qtest.RequireQuint(t)
 	system(commits, gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}, SQL: true}).
 		WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 6)}).

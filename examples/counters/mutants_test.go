@@ -47,7 +47,11 @@ func TestMutant(t *testing.T) {
 			Expect(t, qtest.Some(qtest.Rejects("createCounter")))
 		// the same on the SQL tier (sqlstore over qsql at read committed:
 		// the loser of the race for the head lock waits for it, then
-		// commits blind): 25 of 40 runs, 4 seeds miss with chance 2%
+		// commits blind): 25 of 40 runs, 4 seeds miss with chance 2%.
+		// Full mode: the race is the runtime's, on every tier
+		if testing.Short() {
+			return
+		}
 		claim1.SQL = true
 		system(commits, claim1).
 			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
@@ -65,7 +69,11 @@ func TestMutant(t *testing.T) {
 		system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
 		// the same on the SQL tier, without faults: 18 of 30 runs (4 seeds
-		// miss with chance 3%)
+		// miss with chance 3%). Full mode: the raw append is the mutant's,
+		// on every tier
+		if testing.Short() {
+			return
+		}
 		cfg.CommitFaults, cfg.SQL = false, true
 		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))

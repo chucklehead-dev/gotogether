@@ -330,8 +330,8 @@ where it stands below.
   at Serializable, Snapshot and ReadCommitted with the Store's history
   checker on, on SQLite (a temp file, goroutines appending at once), and
   on PostgreSQL 16 (a scratch server on /dev/shm, `GRIST_POSTGRES`, at
-  read committed, repeatable read and serializable; not in CI, which has
-  no server), with `TestPostgresLockTimeout` (a stuck holder of the head
+  read committed, repeatable read and serializable; in CI since §0.4, a
+  service container of the grist job), with `TestPostgresLockTimeout` (a stuck holder of the head
   lock makes an append 55P03 after `lock_timeout`). The head lock taken
   after the condition instead fails `ConcurrentAgainstBruteForce` at read
   committed on qsql and on PostgreSQL (SQLite's single writer passes:
@@ -450,6 +450,13 @@ fix (ablated before committing), and stated where it stands below.
   binding needs a way to start the model there, or the prefix's file is
   validated with it). Until then, keep a node's step files together and
   validate them as one run.
+- **Cost**: examples/counters' SQL-tier claims that repeat a mechanism
+  another per-push test covers run in full mode only
+  (`TestSQLDuplicateRequests`, `TestSQLFaithfulAtClaim1`, `blind`'s and
+  `dispatchDirect`'s SQL-tier halves, `TestSQLTier`'s Serializable half,
+  `TestFaithfulAtClients`); its -short CPU went from 303 to 206 s here.
+  The grist job runs PostgreSQL 16 as a service container, so the
+  PostgreSQL contract runs in CI.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -1653,7 +1660,7 @@ with the runtime's condition taken out; `blind` 25 of 40 and
 `dispatchDirect` 18 of 30 on the SQL tier) and `TestRealSQLite`, the
 real tier on a SQLite file judged by `counters.binding.yaml`, its
 clients goroutines calling `App.Execute` through `gristsim.Do` (since
-§0.4). **Left**: `grist.Main` and the
+§0.4, which moved the SQL tier's repeated claims to full mode). **Left**: `grist.Main` and the
 HTTP API on `qhttp` (so the real test drives no HTTP, and `blind` on the
 real tier is not measured), `AtMostOnce` and `checkpointFirst`, the
 generator, gristflow.

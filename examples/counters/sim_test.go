@@ -111,9 +111,13 @@ func TestDuplicateRequests(t *testing.T) {
 
 // Claim 2, at the clients: the same runs recorded where the clients see
 // them, linearized against the client-side model: a duplicate a retry
-// created would show as a later read's mismatch.
+// created would show as a later read's mismatch. Full mode: the client
+// side is judged per push by TestDuplicateRequests and TestSQLTier.
 func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
+	if testing.Short() {
+		t.Skip("full mode: TestDuplicateRequests and TestSQLTier judge the clients' side per push")
+	}
 	qtest.RequireQuint(t)
 	cfg := contended
 	system(calls, cfg, qtest.Linearize()).

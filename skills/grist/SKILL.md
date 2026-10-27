@@ -145,5 +145,6 @@ examples/counters is the walk-through: read its README's table first.
 - **PostgreSQL**: `sqlstore.Postgres` states read committed and sets
   `lock_timeout` and `idle_in_transaction_session_timeout` per
   transaction; grist/sqlstore's contract test runs against one with
-  `GRIST_POSTGRES=<pgx dsn>` (a scratch server: `initdb -D dir`, then
-  `postgres -D dir -k sockdir`).
+  `GRIST_POSTGRES=<pgx dsn>` (CI's grist job has a postgres:16 service;
+  locally a scratch server: `initdb -D dir`, then `postgres -D dir -k
+  sockdir`).

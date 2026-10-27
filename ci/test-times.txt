@@ -11,7 +11,7 @@
 # the reason; packages under ten CPU seconds have none.
 examples/bank 80
 examples/checkout 165
-examples/counters 600 # 297 CPU s here, where the line's last measure was 191 (385 on CI): the SQL tier's claims (sqlstore over qsql, both bindings over one run, its mutants), the real tier on SQLite (modernc built for the mutants' overlays too), the relay's tasks in every run; under -short, Exhaust skipped
+examples/counters 420 # 201-206 CPU s here (CI about twice: 400-410), down from 297-303 when the SQL tier repeated per push what other claims cover; its full-mode claims (TestSQLDuplicateRequests, TestSQLFaithfulAtClaim1, the mutants' SQL halves, TestSQLTier's Serializable, TestFaithfulAtClients) are skipped under -short; TestRealSQLite (a killed node, both bindings) about 11 s of wall, mostly its mailer's 20 ms sends
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51

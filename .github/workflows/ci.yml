@@ -410,10 +410,22 @@ jobs:
 
   grist:
     # its own module (published like qhegel): the framework's stores
-    # against the contract suite, its commands and processors on a
+    # against the contract suite (PostgreSQL 16 among them, a service
+    # container: GRIST_POSTGRES), its commands and processors on a
     # simulated store, the scheduler's and the Store's checks on, and
     # grist.qnt checked by quint (model/model_test.go)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
+    env:
+      GRIST_POSTGRES: "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
     defaults:
       run:
         working-directory: grist

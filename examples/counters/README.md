@@ -59,11 +59,16 @@ settle.
 | `TestSQLDuplicateRequests` | `TestDuplicateRequests` on the SQL tier | nothing; without grist's markers 20 of 20 runs reject, without refusal markers 16 of 20 | 40 of 40 on each side |
 | `TestSQLFaithfulAtClaim1` | claim 1's contrast on the SQL tier | `None(Rejects("createCounter"))`; with grist's condition taken out, 11 of 20 runs reject | 40 of 40 |
 | `TestRealSQLite` | the real tier: the node and four clients as goroutines on a SQLite file, the clients recording their calls (`gristsim.Do`), steps to a `PerStep` file sink; the first node killed mid-phase (its sink dead at once, its relay behind), a second with a relay of its own, new counters in the second phase, a mailer taking 20 ms, a settle once the processors and the relay caught up | nothing: the file conforms to `counters.binding.yaml` (and settles) and, linearized, to `counters.calls.binding.yaml`; every client's answer has its store-side step; the second relay records what the first never did, its copies of the first's records dropped as duplicates. A refusal's step dropped fails the answers' check; the settle recorded without waiting fails `everyCounterWelcomedOrFailed` | every run |
-| `grist/storetest` (grist's own tests) | memstore, simstore and sqlstore (on qsql at three levels, SQLite, PostgreSQL with `GRIST_POSTGRES`); mutant stores whose `Read` ignores the tenant, whose conditions are checked outside the lock, whose `Wait` returns at once, whose `WaitSteps` waits on the head, whose rows' times are not in commit order, whose `WaitTenants` returns at once, that honour one tag of two | each mutant fails its check (`TenantIsolation`, `ConcurrentAgainstBruteForce`, `WaitWakes`, `StepLog`, `TenantFeed`, `ReadsAgainstBruteForce` and `ConditionsAgainstBruteForce`), the rest pass | every run |
+| `grist/storetest` (grist's own tests) | memstore, simstore and sqlstore (on qsql at three levels, SQLite, PostgreSQL with `GRIST_POSTGRES`, in CI); mutant stores whose `Read` ignores the tenant, whose conditions are checked outside the lock, whose `Wait` returns at once, whose `WaitSteps` waits on the head, whose rows' times are not in commit order, whose `WaitTenants` returns at once, that honour one tag of two | each mutant fails its check (`TenantIsolation`, `ConcurrentAgainstBruteForce`, `WaitWakes`, `StepLog`, `TenantFeed`, `ReadsAgainstBruteForce` and `ConditionsAgainstBruteForce`), the rest pass | every run |
 
 `TestMutants` builds the test binary with each mutant's overlay and runs
 `TestMutant` in it. Under `-short` (every push) each claim runs at fewer
-seeds, each with a miss chance under 5%.
+seeds, each with a miss chance under 5%, and the SQL tier's claims that
+repeat a mechanism a per-push test covers run in full mode only:
+`TestSQLDuplicateRequests`, `TestSQLFaithfulAtClaim1`, `blind`'s and
+`dispatchDirect`'s SQL-tier halves, `TestSQLTier`'s Serializable half and
+`TestFaithfulAtClients` (the clients' side is judged per push by
+`TestDuplicateRequests` and `TestSQLTier`).
 
 ## Run it
 
