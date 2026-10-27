@@ -60,7 +60,7 @@ func count(t *testing.T, s grist.Store, typ string) int {
 func TestRefusalIsFinal(t *testing.T) {
 	_, open, bump, _, _ := bumpApp()
 	s := newStore(t)
-	ctx, steps := recorded()
+	ctx, steps := recorded(t, s)
 	env := grist.Envelope{ID: "k1", Tenant: "t1"}
 	if _, err := bump.Execute(ctx, s, env, Bump{Counter: "x"}); !errors.Is(err, errUnknown) {
 		t.Fatalf("a bump of a counter never opened: %v, want unknown-counter", err)
@@ -149,8 +149,8 @@ func TestUnknownOutcomeAtBudget(t *testing.T) {
 }
 
 // A commit writes its step in the batch's transaction: the store's step
-// log has it, with the command's fields (slice 2's sqlstore records from
-// these rows).
+// log has it, with the command's fields but those its head gives
+// (obs.head, order.pos), which the relay adds.
 func TestStepInTheTransaction(t *testing.T) {
 	_, _, cmd := app(false)
 	s := newStore(t)
@@ -162,11 +162,22 @@ func TestStepInTheTransaction(t *testing.T) {
 		t.Fatalf("step rows %v (%v), want one at head 1", rows, err)
 	}
 	var row struct {
-		Action string
-		Fields map[string]any
+		Steps []struct {
+			Action string
+			KV     [][]any
+			Events int
+		}
 	}
-	if err := json.Unmarshal(rows[0].Step, &row); err != nil || row.Action != "createCounter" || row.Fields["id"] != "c1" || row.Fields["name"] != "a" {
-		t.Errorf("step row %s (%v): want createCounter with its id and arguments", rows[0].Step, err)
+	err = json.Unmarshal(rows[0].Step, &row)
+	fields := map[string]any{}
+	if err == nil && len(row.Steps) == 1 {
+		for _, kv := range row.Steps[0].KV {
+			fields[kv[0].(string)] = kv[1]
+		}
+	}
+	if err != nil || len(row.Steps) != 1 || row.Steps[0].Action != "createCounter" || row.Steps[0].Events != 1 ||
+		fields["id"] != "c1" || fields["name"] != "a" || fields["obs.head"] != nil || fields["order.pos"] != nil {
+		t.Errorf("step row %s (%v): want createCounter's one step, with its id and arguments, its event, and no field the head gives", rows[0].Step, err)
 	}
 }
 

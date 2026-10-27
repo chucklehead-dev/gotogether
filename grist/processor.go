@@ -2,6 +2,7 @@ package grist
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
@@ -136,7 +137,9 @@ func EffectFaults(processor string) qenv.FaultKind {
 	return qenv.DeclareFaults("grist."+processor+".effect", "crashBefore", "crashAfter")
 }
 
-// Start starts the App's processors on s, one poller task per processor
+// Start starts the App's node on s: the relay that records every
+// commit's step from s's step log (one task per tenant: Relay; s must be
+// a store.StepLog), and the processors, one poller task per processor
 // and tenant (qenv.Go: a task of the caller's process in a simulation, a
 // goroutine outside one), each a daemon waiting on the store's appends.
 // Tenants are the store's at the start (slice 1: one node, tenants
@@ -157,6 +160,9 @@ func (a *App) Start(ctx context.Context, s Store) error {
 			return err
 		}
 		backoff(ctx, try)
+	}
+	if err := a.relay(ctx, s, tenants); err != nil {
+		return err
 	}
 	for _, p := range a.processors {
 		for _, t := range tenants {
@@ -294,17 +300,14 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 		events = append(events, g.events...)
 		triggers = append(triggers, int64(g.trigger))
 	}
-	// the step row of a batch of triggers names them all: one step each
-	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
-		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name,
-		Step: stepRow(pl.p.quint, append([]any{"triggers", triggers}, kv...))}
-	b.OnCommit = func(head Position) {
-		p := head - Position(len(events)) // the head before the batch
-		for _, g := range group {
-			p += Position(len(g.events))
-			pl.step(ctx, g.trigger, g.events, p, kv...)
-		}
+	// the batch's row holds one step per trigger, in trigger order, each
+	// with its own events: the relay gives each the head after them
+	steps := make([]rowStep, 0, len(group))
+	for _, g := range group {
+		steps = append(steps, pl.step(g.trigger, g.events, kv...))
 	}
+	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
+		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(ctx, steps)}
 	for {
 		head, err := pl.s.Append(ctx, pl.tenant, b)
 		if err == nil {
@@ -312,6 +315,10 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 			return head, true
 		}
 		if !store.Transient(err) {
+			var cm *store.CheckpointMoved
+			if !errors.As(err, &cm) {
+				pl.pause(ctx) // a permanent error: read again, but not at once
+			}
 			return 0, false // the checkpoint moved: another poller's
 		}
 		pl.pause(ctx)
@@ -323,13 +330,16 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 	}
 }
 
-// step records a processor's handling of trigger, committed with events
-// ending at head (or, with none, reading through head); extra are the
-// step's other fields (an effect's checkpoint records ok).
-func (pl *poller) step(ctx context.Context, trigger Position, events []Event, head Position, extra ...any) {
-	kv := append(append([]any{"trigger", int64(trigger)}, extra...), pl.app.batchObs(events, head, "processor", pl.p.name)...)
-	kv = append(kv, "obs.checkpoint", int64(trigger), "order.pos", commitOrder(len(events), head), "order.p."+pl.p.quint, int64(trigger))
-	record(ctx, pl.s, pl.tenant, pl.p.quint, nil, kv...)
+// step is a processor's handling of trigger, committing events, as its
+// batch's row holds it (the relay adds obs.head and order.pos); extra
+// are the step's other fields (an effect's checkpoint records ok). Its
+// order among the processor's steps is 2·trigger+1, after the trigger's
+// effect steps (2·trigger): a checkpoint and an effect may share a head,
+// and are recorded on two threads (the relay's and the poller's).
+func (pl *poller) step(trigger Position, events []Event, extra ...any) rowStep {
+	kv := append(append([]any{"trigger", int64(trigger)}, extra...), pl.app.batchObs(events, "processor", pl.p.name)...)
+	kv = append(kv, "obs.checkpoint", int64(trigger), "order.p."+pl.p.quint, 2*int64(trigger)+1)
+	return newRowStep(pl.p.quint, len(events), kv...)
 }
 
 // effect runs an Effect for trigger e (checkpoint cp before it, head
@@ -347,7 +357,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 		}
 		err := res.effect(context.WithValue(ctx, effectKey{}, key))
 		record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
-			"order.pos", readOrder(head), "order.p."+pl.p.quint, int64(e.Pos))
+			"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos))
 		if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
 			proc.Crash()
 		}

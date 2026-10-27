@@ -1,22 +1,12 @@
-// Package rec is what grist's packages share about recording steps: the
-// quiet context (gristsim's AtClients, where the clients record a run and
-// grist records nothing) and a value's step fields.
+// Package rec is what grist's packages share about recording steps: a
+// value's step fields, and a struct field's JSON name.
 package rec
 
 import (
-	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
 )
-
-type quietKey struct{}
-
-// Quiet returns a context under which grist records no step.
-func Quiet(ctx context.Context) context.Context { return context.WithValue(ctx, quietKey{}, true) }
-
-// IsQuiet reports whether ctx is Quiet's.
-func IsQuiet(ctx context.Context) bool { v, _ := ctx.Value(quietKey{}).(bool); return v }
 
 // JSONName is a struct field's JSON name.
 func JSONName(f reflect.StructField) string {

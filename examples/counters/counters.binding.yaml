@@ -1,4 +1,4 @@
-# The steps grist records at the store (gristsim's AtCommits) as calls of
+# The steps grist records at the store (actor the tenant) as calls of
 # model/counters.qnt's actions: every parameter is the step's field of its
 # name (a command's fields, its id, the read set it read and committed
 # under: readPos and reads, slice 1's triples turned into grist.qnt's Reads
@@ -9,6 +9,9 @@
 # models' defs at its position. Every step of a tenant has actor the
 # tenant and process the store, so a node's crash changes no process:
 # there is no restart action.
+# the store's steps (actor the tenant): the clients' calls, recorded in the
+# same run under <tenant>.clients, are counters.calls.binding.yaml's
+actors: ['!*.clients']
 spec: model/counters.qnt
 module: counters
 

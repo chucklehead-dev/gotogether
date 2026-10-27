@@ -181,7 +181,8 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 	// code's error): it reads through r's position and appends nothing
 	onReturn := func(r *Reads, outcome error, kv ...any) {
 		all := append(append(fields(r), kv...), "order.pos", readOrder(r.pos))
-		record(ctx, s, env.Tenant, c.info.quint, outcome, append(all, c.app.batchObs(nil, r.pos, "command", env.ID)...)...)
+		all = append(all, "obs.head", int64(r.pos))
+		record(ctx, s, env.Tenant, c.info.quint, outcome, append(all, c.app.batchObs(nil, "command", env.ID)...)...)
 	}
 	answer := func(m store.Marker) (Receipt, error) {
 		if m.Hash != hash {
@@ -263,14 +264,14 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 		if outcome != "" {
 			kv = append(kv, "outcome", outcome)
 		}
+		// the step is the batch's row, recorded from the store's step log
+		// once committed (Relay): no hook, so a node that dies between the
+		// commit and its record loses no step
+		step := newRowStep(c.info.quint, len(events), append(kv, c.app.batchObs(events, "command", env.ID)...)...)
 		b := store.Batch{Events: events, Marker: &store.Marker{ID: env.ID, Hash: hash, Outcome: outcome},
-			Time: qenv.Now(ctx).UnixMilli(), Cause: env.ID, Step: stepRow(c.info.quint, kv)}
+			Time: qenv.Now(ctx).UnixMilli(), Cause: env.ID, Step: encodeRow(ctx, []rowStep{step})}
 		if o.unconditioned == "" && outcome != conflictOutcome {
 			b.Condition = &store.Condition{After: r.pos, Selectors: r.sels}
-		}
-		b.OnCommit = func(head Position) {
-			all := append(append(kv, c.app.batchObs(events, head, "command", env.ID)...), "order.pos", commitOrder(len(events), head))
-			record(ctx, s, env.Tenant, c.info.quint, nil, all...)
 		}
 		head, err := s.Append(ctx, env.Tenant, b)
 		if err == nil {

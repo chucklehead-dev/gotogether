@@ -52,6 +52,23 @@ The first release. What a user meets, by module:
   event's cause (`obs.causes`) and an effect checkpoint's `ok`; grist.qnt
   has `covers`, `freshKey` (was `freshCause`), `keyStable`,
   `atLeastOnceDone` and `readsOf`, its `Read` is `{ typ, tags }`.
+- grist records every commit's step from the store's step log (docs/grist.md
+  §0.3; api/grist.txt): `grist.Relay` (`NewRelay`, `Flush`, `WithRelay`,
+  `RecorderID`) reads each tenant's committed step rows in order and
+  records them under a recorder of their own (`grist/<store>/<tenant>`,
+  numbered by the row and timed by the batch, so a second relay's copies
+  are Reconstruct's duplicates), started by `App.Start` (one daemon per
+  tenant), which now needs a `store.StepLog`. `store.Batch.OnCommit` is
+  gone: a node that dies between its COMMIT and a hook loses no step.
+  `store.StepLog` gains `WaitSteps` (a refusal's step moves no head);
+  `store.Permanent` (`*PermanentError`) is an error no retry fixes, which
+  `store.Transient` excludes. A processor's steps are ordered by
+  `order.p.<processor>` 2·T for T's effect steps and 2·T+1 for its
+  handling (was T for both, ordered by the poller's thread). gristsim
+  records both sides of every run, the clients under
+  `gristsim.ClientsActor` (`<tenant>.clients`): `Config.Record`,
+  `AtCommits` and `AtClients` are gone, a binding's `actors:` picks its
+  side. The storetest suite requires a step log and checks `WaitSteps`.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

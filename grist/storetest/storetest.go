@@ -148,8 +148,8 @@ func positions(evs []store.Stored) []store.Position {
 }
 
 // DensePositions: batches are appended at the next positions, 1, 2, ...;
-// Append returns the head after each, OnCommit runs once with it, and a
-// read through the head returns every event in order with its envelope.
+// Append returns the head after each, and a read through the head returns
+// every event in order with its envelope.
 func DensePositions(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
@@ -161,18 +161,13 @@ func DensePositions(ctx context.Context, s store.Store) error {
 		for j := range batch {
 			batch[j] = randEvent(r)
 		}
-		hooks, hookHead := 0, store.Position(-1)
-		head, err := s.Append(ctx, "t1", store.Batch{Events: batch, Time: int64(1000 + i), Cause: fmt.Sprint("c", i),
-			OnCommit: func(h store.Position) { hooks++; hookHead = h }})
+		head, err := s.Append(ctx, "t1", store.Batch{Events: batch, Time: int64(1000 + i), Cause: fmt.Sprint("c", i)})
 		if err != nil {
 			return err
 		}
 		want = append(want, stored("t1", store.Position(len(want)), batch, int64(1000+i), fmt.Sprint("c", i))...)
 		if head != store.Position(len(want)) {
 			return fmt.Errorf("dense positions: batch %d of %d events: head %d, want %d", i, len(batch), head, len(want))
-		}
-		if hooks != 1 || hookHead != head {
-			return fmt.Errorf("dense positions: batch %d: OnCommit ran %d times with head %d; want once with %d", i, hooks, hookHead, head)
 		}
 	}
 	got, at, err := s.Read(ctx, "t1", store.Selector{Types: types}, 0)
@@ -550,13 +545,15 @@ func NoSharedSlices(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// StepLog: a store.StepLog keeps each committed batch's step, in commit
-// order with the head after it, and none of a refused batch. A store that
-// is no StepLog passes (it must then run Batch.OnCommit at its commit).
+// StepLog: the store is a store.StepLog (grist records every commit's
+// step from it), keeping each committed batch's step, in commit order
+// with the head after it, and none of a refused batch; and WaitSteps
+// wakes for a refusal's step, which commits its marker without moving
+// the head (a WaitSteps that waits on the head sleeps through it).
 func StepLog(ctx context.Context, s store.Store) error {
 	sl, ok := s.(store.StepLog)
 	if !ok {
-		return nil
+		return fmt.Errorf("step log: %T is no store.StepLog: grist records every commit's step from the step rows it keeps in the commit's transaction (Steps, WaitSteps)", s)
 	}
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
@@ -594,6 +591,32 @@ func StepLog(ctx context.Context, s store.Store) error {
 	}
 	if after, _ := sl.Steps(ctx, "t1", 1, 1); len(after) != 1 || after[0].Seq != 2 {
 		return fmt.Errorf("step log: the rows after 1, at most 1: %v, want row 2", after)
+	}
+	if err := sl.WaitSteps(ctx, "t1", int64(len(want)-1)); err != nil { // past it already: returns at once
+		return fmt.Errorf("step log: WaitSteps after %d with %d rows: %v", len(want)-1, len(want), err)
+	}
+	// a waiter on the last row, woken by a refusal: its marker and its
+	// step commit, the head stays
+	var woke, waiting atomic.Bool
+	last := int64(len(want))
+	qenv.Go(ctx, "storetest.stepwaiter", func(ctx context.Context) {
+		waiting.Store(true)
+		if sl.WaitSteps(ctx, "t1", last) == nil {
+			woke.Store(true)
+		}
+	})
+	if !qenv.WaitFor(ctx, waiting.Load, 10*time.Second) {
+		return fmt.Errorf("step log: the waiter never started")
+	}
+	qenv.Sleep(ctx, 50*time.Millisecond)
+	if woke.Load() {
+		return fmt.Errorf("step log: WaitSteps(t1, %d) returned with %d rows, before any commit", last, last)
+	}
+	if _, err := s.Append(ctx, "t1", store.Batch{Marker: &store.Marker{ID: "m3", Outcome: "no"}, Step: []byte(`{"n":6}`)}); err != nil {
+		return err
+	}
+	if !qenv.WaitFor(ctx, woke.Load, 10*time.Second) {
+		return fmt.Errorf("step log: WaitSteps(t1, %d) did not return after a refusal committed its step (the head did not move: a wait on the head sleeps through it)", last)
 	}
 	return nil
 }

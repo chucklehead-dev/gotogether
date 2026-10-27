@@ -116,9 +116,6 @@ func (s *Store) Append(_ context.Context, t string, b store.Batch) (store.Positi
 	close(s.changed)
 	s.changed = make(chan struct{})
 	s.mu.Unlock()
-	if b.OnCommit != nil {
-		b.OnCommit(head)
-	}
 	return head, nil
 }
 
@@ -177,6 +174,16 @@ func (s *Store) Heads(context.Context) (map[string]store.Position, error) {
 
 // Wait implements store.Store.
 func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
+	return s.wait(ctx, t, func(tn *tenant) bool { return store.Position(len(tn.log)) > p })
+}
+
+// WaitSteps implements store.StepLog.
+func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
+	return s.wait(ctx, t, func(tn *tenant) bool { return int64(len(tn.steps)) > after })
+}
+
+// wait waits until done holds of t, woken by every append.
+func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) error {
 	for {
 		s.mu.Lock()
 		tn := s.tenants[t]
@@ -184,7 +191,7 @@ func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 			s.mu.Unlock()
 			return store.ErrUnknownTenant
 		}
-		if store.Position(len(tn.log)) > p {
+		if done(tn) {
 			s.mu.Unlock()
 			return nil
 		}

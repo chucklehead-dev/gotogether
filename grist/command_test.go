@@ -48,10 +48,28 @@ func app(unconditioned bool) (*grist.App, *grist.EventType[Created], *grist.Comm
 	return a, ev, grist.NewCommand(a, "create-counter", decide(ev), opts...)
 }
 
-// recorded is a context recording into a fresh recorder, and its steps.
-func recorded() (context.Context, func() []qtrace.Step) {
+// recorded is a context recording into a fresh recorder, and its steps
+// once every commit's step is relayed from s's step log (as a node's
+// relay records them), in the order Reconstruct gives them.
+func recorded(t *testing.T, s grist.Store) (context.Context, func() []qtrace.Step) {
+	t.Helper()
 	sink := &qobs.MemorySink{}
-	return qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink)), sink.Steps
+	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
+	relay, err := grist.NewRelay(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ctx, func() []qtrace.Step {
+		if err := relay.Flush(ctx); err != nil {
+			t.Fatal(err)
+		}
+		traces, _ := qtrace.Reconstruct(sink.Steps())
+		var out []qtrace.Step
+		for _, tr := range traces {
+			out = append(out, tr.Steps...)
+		}
+		return out
+	}
 }
 
 func newStore(t *testing.T) *memstore.Store {
@@ -163,7 +181,7 @@ func equal(a, b []int) bool {
 func TestIdempotency(t *testing.T) {
 	_, _, cmd := app(false)
 	s := newStore(t)
-	ctx, steps := recorded()
+	ctx, steps := recorded(t, s)
 	env := grist.Envelope{ID: "c1", Tenant: "t1"}
 	r1, err := cmd.Execute(ctx, s, env, Create{Counter: "x", Name: "a"})
 	if err != nil {
@@ -194,7 +212,7 @@ func TestIdempotency(t *testing.T) {
 func TestTransientRetried(t *testing.T) {
 	_, _, cmd := app(false)
 	s := &flaky{Store: newStore(t), transient: 3}
-	ctx, steps := recorded()
+	ctx, steps := recorded(t, s)
 	rec, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "x", Name: "a"})
 	if err != nil || rec.Pos != 1 {
 		t.Fatalf("after 3 transient errors and a lost answer: %+v, %v; want the receipt of position 1", rec, err)
@@ -240,7 +258,7 @@ func TestConflictAfterTries(t *testing.T) {
 	s.before = func(int) {
 		s.Store.Append(context.Background(), "t1", store.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "z"})}})
 	}
-	ctx, steps := recorded()
+	ctx, steps := recorded(t, s)
 	_, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "y", Name: "a"})
 	if !errors.Is(err, grist.ErrConflict) || s.n != 5+1 {
 		t.Errorf("%v after %d appends; want grist.ErrConflict after 5 tries and the conflict's marker", err, s.n)
@@ -260,7 +278,7 @@ func TestConflictAfterTries(t *testing.T) {
 func TestCommandSteps(t *testing.T) {
 	_, _, cmd := app(false)
 	s := newStore(t)
-	ctx, steps := recorded()
+	ctx, steps := recorded(t, s)
 	for i, name := range []string{"a", "a"} {
 		cmd.Execute(ctx, s, grist.Envelope{ID: []string{"c1", "c2"}[i], Tenant: "t1"}, Create{Counter: "x", Name: name})
 	}

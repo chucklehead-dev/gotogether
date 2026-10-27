@@ -2,48 +2,28 @@ package grist
 
 import (
 	"context"
-	"encoding/json"
 
-	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
-// record records a step of tenant at store: actor the tenant, process
-// the store's name, whatever node or task records it (commits happen at
-// the store, so a node's crash changes no step's process). Under a
-// quiet context (gristsim's AtClients) it records nothing.
+// record records a step of tenant at store that commits nothing (a
+// query, a reused key, the code's error, an effect): actor the tenant,
+// process the store's name, whatever node or task records it (commits
+// happen at the store, so a node's crash changes no step's process). A
+// commit's step is not recorded here but from its step row (Relay), with
+// the same actor and process.
 func record(ctx context.Context, s Store, tenant, action string, err error, kv ...any) {
-	if rec.IsQuiet(ctx) {
-		return
-	}
 	qobs.Record(ctx, action, err, append([]any{"actor", tenant, "process", s.Name()}, kv...)...)
 }
 
-// stepRow is a commit's step as its batch carries it (Batch.Step): the
-// action and its fields but those the head gives (obs.head, the events'
-// observations, order.pos), which a StepLog's row has. Slice 1 records
-// from Batch.OnCommit; slice 2's sqlstore records from these rows.
-func stepRow(action string, kv []any) json.RawMessage {
-	fields := map[string]any{}
-	for i := 0; i+1 < len(kv); i += 2 {
-		if k, ok := kv[i].(string); ok {
-			fields[k] = kv[i+1]
-		}
-	}
-	b, err := json.Marshal(map[string]any{"action": action, "fields": fields})
-	if err != nil {
-		return nil
-	}
-	return b
-}
-
-// batchObs are a commit's observations: the head after it, and the
-// events it appended (their types, string fields, integer fields and
-// causes, in order: slice 1's binding takes scalars and lists,
-// docs/grist.md §3.2). A cause is a (kind, name) pair: ("command", the
-// command id) or ("processor", the processor's name), what the store
-// stamps as the id or "processor:<name>".
-func (a *App) batchObs(events []Event, head Position, causeKind, causeName string) []any {
+// batchObs are a commit's observations but its head (obs.head, which
+// the relay adds from the step row): the events it appended (their
+// types, string fields, integer fields and causes, in order: slice 1's
+// binding takes scalars and lists, docs/grist.md §3.2). A cause is a
+// (kind, name) pair: ("command", the command id) or ("processor", the
+// processor's name), what the store stamps as the id or
+// "processor:<name>".
+func (a *App) batchObs(events []Event, causeKind, causeName string) []any {
 	types, strs, ints, causes := []string{}, []string{}, []int64{}, [][]string{}
 	for _, e := range events {
 		types = append(types, e.Type)
@@ -57,7 +37,7 @@ func (a *App) batchObs(events []Event, head Position, causeKind, causeName strin
 			strs, ints = append(strs, s...), append(ints, n...)
 		}
 	}
-	return []any{"obs.head", int64(head), "obs.events", types, "obs.strs", strs, "obs.ints", ints, "obs.causes", causes}
+	return []any{"obs.events", types, "obs.strs", strs, "obs.ints", ints, "obs.causes", causes}
 }
 
 // commitOrder is a commit step's place on the tenant's domain clock

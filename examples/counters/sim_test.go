@@ -106,7 +106,6 @@ func TestDuplicateRequests(t *testing.T) {
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
 	system(commits, cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
-	cfg.Record = gristsim.AtClients
 	system(calls, cfg, qtest.Linearize()).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 4)}).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
 }
@@ -118,7 +117,6 @@ func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	cfg := contended
-	cfg.Record = gristsim.AtClients
 	system(calls, cfg, qtest.Linearize()).
 		Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted())

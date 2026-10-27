@@ -1,9 +1,12 @@
-# The clients' calls (gristsim's AtClients: qobs.Invoke before the first
+# The clients' calls (actor <tenant>.clients: qobs.Invoke before the first
 # request, Call.Done with the answer, every retry of a lost answer inside
 # the one call) as calls of model/counters.qnt's client-side module,
 # linearized by qtest.Linearize: no positions, no processors. A command's
 # outcome is its result; a query's answer is compared with the read models'
 # defs where it linearizes.
+# the clients' calls (actor <tenant>.clients), recorded in the same run as
+# the store's steps, which are counters.binding.yaml's
+actors: ['*.clients']
 spec: model/counters.qnt
 module: countersCalls
 

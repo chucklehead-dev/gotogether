@@ -137,7 +137,8 @@ func (q Selector) String() string {
 // selectors through a position). Every implementation passes
 // grist/storetest's contract suite. Methods added later are optional
 // interfaces (StepLog), found by a type assertion, so a store written
-// against this one keeps compiling.
+// against this one keeps compiling; a node (grist.App.Start) needs a
+// StepLog, since it records commits from it.
 type Store interface {
 	// Name is the store's name: the process of every step recorded at it
 	// (docs/grist.md §3.1).
@@ -173,13 +174,18 @@ type Store interface {
 // batch's own transaction, readable after the commit: what makes a
 // commit's step durable where no hook can run at the commit (a database
 // whose COMMIT returns and whose process then dies before the hook, a
-// database/sql store). memstore and simstore keep one; slice 2's sqlstore
-// will (a grist_steps row), and its node records steps from it rather
-// than from Batch.OnCommit (docs/grist.md §2.10, §3.1).
+// database/sql store). Every tier keeps one (memstore, simstore,
+// sqlstore's grist_steps rows), and grist records every commit's step
+// from it, never from Batch.OnCommit (grist.Relay; docs/grist.md §2.10,
+// §3.1).
 type StepLog interface {
 	// Steps are tenant's step rows after seq (0: from the first), in commit
 	// order, at most limit (0: all).
 	Steps(ctx context.Context, tenant string, after int64, limit int) ([]StepRow, error)
+	// WaitSteps blocks until tenant's step log has a row after seq, or ctx
+	// is done. A refusal commits its marker and its step without moving
+	// the head, so Store.Wait would sleep through it.
+	WaitSteps(ctx context.Context, tenant string, after int64) error
 }
 
 // A StepRow is one committed batch's step as a StepLog keeps it.
@@ -218,16 +224,12 @@ type Batch struct {
 	// Cause is what the events are stamped with (Stored.Cause).
 	Cause string
 	// Step, if set, is the step the batch's commit records (JSON, opaque
-	// to the store). A StepLog writes it in the batch's transaction.
+	// to the store). A StepLog writes it in the batch's transaction, and
+	// grist records the step from that row: there is no commit hook, since
+	// a database/sql store's process can die between its COMMIT and any
+	// hook (slice 1's Batch.OnCommit, which only a simulation could run
+	// even when the caller was told the outcome is unknown).
 	Step json.RawMessage
-	// OnCommit, if set, runs at the commit, with the head after it, before
-	// Append returns. memstore and simstore run it even when the caller is
-	// then told the outcome is unknown (qenv.Txn.OnCommit's hooks run
-	// before ErrUnknownOutcome is returned), which is why slice 1 records
-	// a commit's step there. A store whose process can die between its
-	// commit and the hook (database/sql) cannot promise that: it keeps a
-	// StepLog, and the step is recorded from the row.
-	OnCommit func(head Position)
 }
 
 // A Marker is a key's committed outcome: the hash of the command (its
@@ -304,16 +306,40 @@ func (e *CheckpointMoved) Error() string {
 	return fmt.Sprintf("grist: checkpoint of %s is %d, not %d: another poller moved it; re-read it", e.Processor, e.Found, e.Expected)
 }
 
+// PermanentError is a store error no retry can fix (a statement the
+// database cannot run, a missing table): Transient is false for it, so
+// grist returns it at once instead of spending its transient budget and
+// answering "outcome unknown". A tier wraps what it knows to be such
+// (Permanent); anything it does not know stays transient.
+type PermanentError struct{ Err error }
+
+func (e *PermanentError) Error() string {
+	return "grist: store: " + e.Err.Error() + " (permanent: no retry fixes it)"
+}
+
+// Unwrap is Err.
+func (e *PermanentError) Unwrap() error { return e.Err }
+
+// Permanent wraps err as a *PermanentError (nil stays nil).
+func Permanent(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &PermanentError{Err: err}
+}
+
 // ErrUnknownTenant is a read or append of a tenant never created.
 var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
 
 // Transient reports whether err is a store error worth retrying: neither
 // a failed condition nor a moved checkpoint nor an unknown tenant nor a
-// canceled context.
+// permanent error nor a canceled context.
 func Transient(err error) bool {
 	var cf *ConditionFailed
 	var cm *CheckpointMoved
-	return err != nil && !errors.As(err, &cf) && !errors.As(err, &cm) && !errors.Is(err, ErrUnknownTenant) && !errors.Is(err, context.Canceled)
+	var pe *PermanentError
+	return err != nil && !errors.As(err, &cf) && !errors.As(err, &cm) && !errors.As(err, &pe) &&
+		!errors.Is(err, ErrUnknownTenant) && !errors.Is(err, context.Canceled)
 }
 
 // CheckCondition is the reference evaluation of c over a tenant's whole

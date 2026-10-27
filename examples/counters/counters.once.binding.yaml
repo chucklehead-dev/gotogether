@@ -3,6 +3,8 @@
 # guarantee (at least once) allows and an application whose mail must not
 # repeat would forbid. The duplicate a crash after the send makes is
 # admitted by counters.binding.yaml and rejected here.
+# the store's steps, as counters.binding.yaml's
+actors: ['!*.clients']
 spec: model/counters.qnt
 module: counters
 

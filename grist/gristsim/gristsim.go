@@ -30,20 +30,15 @@ import (
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
-// Recording says which side of a run records its steps: one binding sees
-// every actor of a run, so a run records one (docs/grist.md §3.1).
-type Recording int
-
-const (
-	// AtCommits: grist records each command and processor step at its
-	// commit, each refusal and query on return (the default).
-	AtCommits Recording = iota
-	// AtClients: the clients record each command and query where they see
-	// it, qobs.Invoke before the first request and Call.Done with the
-	// answer, every retry of a lost or late response inside the one call,
-	// for qtest.Linearize. Processors record nothing.
-	AtClients
-)
+// ClientsActor is the actor of tenant's client-side steps: a run records
+// every command and query twice, at the store (actor tenant: commits from
+// the step log, refusals at their commit, queries on return) and where
+// the clients see them (actor tenant + ".clients": qobs.Invoke before the
+// first request and Call.Done with the answer, every retry of a lost or
+// late response inside the one call), so a commits binding (actors:
+// ['!*.clients']) and a clients binding (actors: ['*.clients'], with
+// qtest.Linearize) judge one run (System.WithBinding; docs/grist.md §3.1).
+func ClientsActor(tenant string) string { return tenant + ".clients" }
 
 // Config is a run's shape.
 type Config struct {
@@ -58,8 +53,6 @@ type Config struct {
 	// Send are the commands and queries the clients send, by name
 	// (default: every one of the registry).
 	Send []string
-	// Record is the side that records the run (AtCommits by default).
-	Record Recording
 	// CommitFaults turns on the store's commit faults
 	// (store.<app>.commit: a commit applied whose answer is lost).
 	CommitFaults bool
@@ -131,6 +124,13 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	s.Log = cfg.Log
 	db := qenv.NewStore(s, app.Name, cfg.Isolation)
 	st := simstore.New(db)
+	// one relay for every incarnation of the node: a restarted node's
+	// relay resumes where the crashed one stopped, and records what it
+	// committed and did not record
+	relay, err := grist.NewRelay(st)
+	if err != nil {
+		return err
+	}
 	setup := s.Context()
 	for _, t := range cfg.Tenants {
 		if err := st.CreateTenant(setup, t); err != nil {
@@ -144,13 +144,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			deps = d
 		}
 	}
-	nodeCtx := func(ctx context.Context) context.Context {
-		ctx = deps(ctx)
-		if cfg.Record == AtClients {
-			ctx = rec.Quiet(ctx)
-		}
-		return ctx
-	}
+	nodeCtx := func(ctx context.Context) context.Context { return grist.WithRelay(deps(ctx), relay) }
 	node := s.Process("node", true, func(ctx context.Context) {
 		if err := app.Start(nodeCtx(ctx), st); err != nil {
 			panic(fmt.Sprintf("gristsim: the node could not start: %v", err))
@@ -198,11 +192,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			for _, q := range app.Queries() {
 				for k, args := range w.all(app.ArgsType(q)) {
 					req := request{Query: true, Name: q, Env: grist.Envelope{ID: fmt.Sprintf("%s-probe-%s-%d", t, q, k), Tenant: t, Actor: "probe"}, Args: args}
-					if cfg.Record == AtClients {
-						w.record(ctx, req, func() response { return serve(deps(rec.Quiet(ctx)), app, st, req) })
-					} else {
-						serve(deps(ctx), app, st, req)
-					}
+					w.record(ctx, req, func() response { return serve(deps(ctx), app, st, req) })
 				}
 			}
 		}
@@ -352,7 +342,7 @@ func (w *workload) all(typ reflect.Type) []json.RawMessage {
 
 // call sends req until it is answered (at most MaxAttempts tries, the
 // same id each time: a lost or late answer, or one saying the outcome is
-// unknown, is sent again), recording it under AtClients.
+// unknown, is sent again), recording it as a client's call.
 func (w *workload) call(ctx context.Context, req request) {
 	send := func() (response, bool) {
 		for try := 1; try <= MaxAttempts; try++ {
@@ -363,10 +353,6 @@ func (w *workload) call(ctx context.Context, req request) {
 			qenv.Sleep(ctx, RetryDelay)
 		}
 		return response{}, false
-	}
-	if w.cfg.Record != AtClients {
-		send()
-		return
 	}
 	w.record(ctx, req, func() response {
 		resp, ok := send()
@@ -381,7 +367,7 @@ func (w *workload) call(ctx context.Context, req request) {
 // answer do gives (pending if none came).
 func (w *workload) record(ctx context.Context, req request, do func() response) {
 	q, _ := grist.QuintName(req.Name)
-	kv := append([]any{"actor", req.Env.Tenant, "process", w.app.Name}, rec.StepFields(w.app.ArgsType(req.Name), req.Args, "")...)
+	kv := append([]any{"actor", ClientsActor(req.Env.Tenant), "process", w.app.Name}, rec.StepFields(w.app.ArgsType(req.Name), req.Args, "")...)
 	if !req.Query {
 		kv = append(kv, "id", req.Env.ID)
 	}

@@ -14,8 +14,8 @@
 // An append takes the head with GetForUpdate (the tenant's lock),
 // checks the marker, the checkpoint and the condition (a Scan of each
 // selector's index prefix), writes (the batch's step row among the rows)
-// and commits; the step is recorded in Txn.OnCommit, whose hooks run
-// before ErrUnknownOutcome is returned. Events are cloned on the way in
+// and commits; grist records the step from its row (grist.Relay), as on
+// every tier. Events are cloned on the way in
 // and out, so neither a writer nor a reader shares a slice with the
 // store. Under Snapshot and Serializable
 // the loser of a race for the head gets ErrConflict from GetForUpdate,
@@ -226,12 +226,7 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 		tx.Put(stepSeqKey(t), seq)
 		tx.Put(stepKey(t, seq), store.StepRow{Seq: seq, Head: h, Step: append([]byte(nil), b.Step...)})
 	}
-	tx.OnCommit(func() {
-		s.changed.Notify()
-		if b.OnCommit != nil {
-			b.OnCommit(h)
-		}
-	})
+	tx.OnCommit(s.changed.Notify)
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -307,12 +302,28 @@ func (s *Store) Heads(ctx context.Context) (map[string]store.Position, error) {
 // at every append's commit, so a poller costs the scheduler nothing
 // while the tenant is quiet.
 func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
+	return s.wait(ctx, headKey(t), true, func(v any) bool { return v.(store.Position) > p })
+}
+
+// WaitSteps implements store.StepLog, as Wait does on the step log's
+// sequence.
+func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
+	if _, ok := s.db.Read(headKey(t)); !ok {
+		return store.ErrUnknownTenant
+	}
+	return s.wait(ctx, stepSeqKey(t), false, func(v any) bool { n, _ := v.(int64); return n > after })
+}
+
+// wait waits on the signal until done holds of key's committed value
+// (nil if absent: a tenant with no step yet; the unknown tenant's error
+// if must).
+func (s *Store) wait(ctx context.Context, key string, must bool, done func(any) bool) error {
 	for {
-		v, ok := s.db.Read(headKey(t))
-		if !ok {
+		v, ok := s.db.Read(key)
+		if !ok && must {
 			return store.ErrUnknownTenant
 		}
-		if v.(store.Position) > p {
+		if done(v) {
 			return nil
 		}
 		if ctx.Err() != nil {

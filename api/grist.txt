@@ -17,14 +17,17 @@ func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames,
 func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result, opts ...Option) *Processor
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
 func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
+func NewRelay(s Store) (*Relay, error)
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
 func QuintName(name string) (string, error)
+func RecorderID(storeName, tenant string) string
 func Rejection(name string) error
 func Skip() Result
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
+func WithRelay(ctx context.Context, r *Relay) context.Context
 type App struct
     field Name string
     method (*App) ArgsType(name string) reflect.Type
@@ -114,6 +117,8 @@ type Rejected struct
     field Name string
     method (*Rejected) Error() string
     method (*Rejected) Is(target error) bool
+type Relay struct
+    method (*Relay) Flush(ctx context.Context) error
 type Result struct
 type Selector = store.Selector
 type Store = store.Store
@@ -125,11 +130,10 @@ var ErrOutcomeUnknown = errors.New("grist: the command's outcome is unknown (an 
 var ErrUnavailable = errors.New("grist: the store kept failing before anything committed: retry later")
 
 == github.com/chucklehead-dev/gotogether/grist/gristsim
-const AtClients Recording = iota (spec 1 of its group)
-const AtCommits Recording = iota
 const CallTimeout = 2 * time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
+func ClientsActor(tenant string) string
 func Gen(typ reflect.Type, alphabet []string, pick func(n int) int) any
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error
 type Config struct
@@ -138,7 +142,6 @@ type Config struct
     field Clients int
     field Ops int
     field Send []string
-    field Record Recording
     field CommitFaults bool
     field Check bool
     field Alphabet []string
@@ -146,7 +149,6 @@ type Config struct
     field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
     field Horizon time.Duration
     field Log func(string)
-type Recording int
 
 == github.com/chucklehead-dev/gotogether/grist/memstore
 func New(name string) *Store
@@ -161,6 +163,7 @@ type Store struct
     method (*Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(context.Context) ([]string, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
+    method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
 
 == github.com/chucklehead-dev/gotogether/grist/simstore
 func New(db *qenv.Store) *Store
@@ -175,10 +178,12 @@ type Store struct
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
+    method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
 
 == github.com/chucklehead-dev/gotogether/grist/store
 func CheckCondition(log []Stored, c Condition) error
 func NewReceipt(tenant string, head Position, n int) Receipt
+func Permanent(err error) error
 func Select(log []Stored, q Selector, at Position) []Stored
 func Transient(err error) bool
 type Batch struct
@@ -189,7 +194,6 @@ type Batch struct
     field Time int64
     field Cause string
     field Step json.RawMessage
-    field OnCommit func(head Position)
 type CheckpointMove struct
     field Processor string
     field From Position
@@ -227,6 +231,10 @@ type Meta struct
     field Pos Position
     field Time int64
     field Cause string
+type PermanentError struct
+    field Err error
+    method (*PermanentError) Error() string
+    method (*PermanentError) Unwrap() error
 type Position int64
 type Receipt struct
     field Pos Position
@@ -241,6 +249,7 @@ type Selector struct
     method (Selector) String() string
 type StepLog interface
     Steps(ctx context.Context, tenant string, after int64, limit int) ([]StepRow, error)
+    WaitSteps(ctx context.Context, tenant string, after int64) error
 type StepRow struct
     field Seq int64
     field Head Position

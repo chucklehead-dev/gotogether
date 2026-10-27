@@ -64,8 +64,13 @@ examples/counters is the walk-through: read its README's table first.
    ReadCommitted: Snapshot's runs are Serializable's, every append
    writing the head), `Tenants` and `Alphabet` (one tenant and two
    letters for contention), `CommitFaults`, `Check`, `Send`, `Setup` (the
-   app's doubles, reached through a processor's ctx) and `Record`
-   (`AtClients` with `qtest.Linearize()` and a client-side model module).
+   app's doubles, reached through a processor's ctx). Every run records
+   both sides: the store's steps (actor the tenant: commits relayed from
+   the step log) and the clients' calls (`gristsim.ClientsActor`,
+   `<tenant>.clients`); the commits binding says `actors: ['!*.clients']`,
+   a client-side one `actors: ['*.clients']`, judged with
+   `sys.WithBinding(calls, qtest.Linearize())` over a client-side model
+   module.
    Duplicated and late requests: `rpc.api.request` and `rpc.api.delay`
    rates.
 5. **Prove each check can fail** with a mutant per claim (overlay files,

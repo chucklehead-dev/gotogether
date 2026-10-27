@@ -110,8 +110,8 @@ func TestEmitAsOfTrigger(t *testing.T) {
 	for _, s := range steps {
 		if s.Action == "sum" {
 			orders, triggers = append(orders, s.Order["pos"]), append(triggers, s.Args["trigger"].(int64))
-			if s.Obs["checkpoint"] != s.Args["trigger"] || s.Order["p.sum"] != s.Args["trigger"] {
-				t.Errorf("step %v: its checkpoint and its order.p.sum are its trigger", s)
+			if s.Obs["checkpoint"] != s.Args["trigger"] || s.Order["p.sum"] != 2*s.Args["trigger"].(int64)+1 {
+				t.Errorf("step %v: its checkpoint is its trigger T, its order.p.sum 2·T+1 (after T's effect steps, at 2·T)", s)
 			}
 		}
 	}
@@ -151,6 +151,13 @@ func TestEffectAtLeastOnce(t *testing.T) {
 	}
 	effects := 0
 	for _, s := range steps {
+		trigger, _ := s.Args["trigger"].(int64)
+		switch {
+		case s.Action == "noteEffect" && s.Order["p.note"] != 2*trigger:
+			t.Errorf("effect step %v: want order.p.note 2·trigger, before the trigger's checkpoint (2·trigger+1)", s)
+		case s.Action == "note" && s.Order["p.note"] != 2*trigger+1:
+			t.Errorf("checkpoint step %v: want order.p.note 2·trigger+1", s)
+		}
 		if s.Action == "noteEffect" {
 			effects++
 		}

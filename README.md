@@ -560,11 +560,11 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |
 | `qgosim` (module) | qenv and whole programs in gosim (the fork, `github.com/chucklehead-dev/gosim`) |
-| `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`, checked against the App; `Unconditioned`; idempotent by `Envelope.ID`, a key's first answer final), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce`, `EffectKey`), `Events`, options (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`), `Catalog`; every step recorded by the framework |
-| `grist/store` | grist's store contract: `Store`, `Batch`, `Condition`, `Marker`, `Selector`, `StepLog` (a commit's step in its transaction), the errors, and the reference evaluations `CheckCondition` and `Select` |
+| `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`, checked against the App; `Unconditioned`; idempotent by `Envelope.ID`, a key's first answer final), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce`, `EffectKey`), `Events`, options (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`), `Catalog`; every step recorded by the framework, each commit's from the store's step log (`Relay`, `WithRelay`) |
+| `grist/store` | grist's store contract: `Store`, `Batch`, `Condition`, `Marker`, `Selector`, `StepLog` (a commit's step in its transaction, what grist records it from), the errors (`Permanent`), and the reference evaluations `CheckCondition` and `Select` |
 | `grist/memstore`, `grist/simstore` | grist's stores: in memory for unit tests; over a `qenv.Store` for simulations |
 | `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions, reads and concurrent appends against brute force, checkpoints, markers, a waiter woken, copies, the step log, tenant isolation |
-| `grist/gristsim` | `Run`: a grist app in a simulation as a `qtest.System`'s run (a node, a lossy API, clients `AtCommits` or `AtClients`, two settles) |
+| `grist/gristsim` | `Run`: a grist app in a simulation as a `qtest.System`'s run (a node, a lossy API, clients recorded under `ClientsActor` beside the store's steps, two settles) |
 
 ## Example apps
 

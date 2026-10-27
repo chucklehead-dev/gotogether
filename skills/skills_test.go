@@ -173,7 +173,11 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"grist.Query{", "grist.Selector{ (Reads.Select), or grist.Events(r, t, tags...)"},
 		{"freshCause", "freshKey(answered, id) (grist.qnt: a refusal answers its key too)"},
 		{"grist.StepFields", "nothing: grist records the steps (internal/rec)"},
-		{"grist.Quiet", "gristsim.Config.Record (AtClients)"},
+		// grist slice 2: commits recorded from the step log, both sides in every run
+		{"gristsim.AtClients", "nothing: every run records both sides; a binding's actors: picks one (gristsim.ClientsActor)"},
+		{"gristsim.AtCommits", "nothing: every run records both sides; a binding's actors: picks one"},
+		{"Batch.OnCommit", "the step log: Batch.Step, recorded by grist.Relay"},
+		{"grist.Quiet", "nothing: every gristsim run records both sides (gristsim.ClientsActor)"},
 		{"grist.PosKey", "nothing: a store's own key layout (internal/poskey)"},
 		{"grist.CheckCondition", "store.CheckCondition (package grist/store)"},
 		// G7: the driver adapters published

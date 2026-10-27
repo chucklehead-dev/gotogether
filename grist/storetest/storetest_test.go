@@ -69,9 +69,28 @@ type eager struct{ *memstore.Store }
 
 func (eager) Wait(context.Context, string, store.Position) error { return nil }
 
+// headSteps is a mutant store whose WaitSteps waits on the head, as a
+// relay polling Wait would: it sleeps through a refusal's step.
+type headSteps struct{ *memstore.Store }
+
+func (s headSteps) WaitSteps(ctx context.Context, t string, after int64) error {
+	_, head, err := s.Read(ctx, t, store.Selector{}, 0)
+	if err != nil {
+		return err
+	}
+	if rows, _ := s.Steps(ctx, t, after, 1); len(rows) > 0 {
+		return nil
+	}
+	return s.Wait(ctx, t, head)
+}
+
+// noSteps is a store that keeps no step log.
+type noSteps struct{ store.Store }
+
 // The suite sees a store that checks conditions outside its lock
-// (ConcurrentAgainstBruteForce) and one whose Wait does not wait
-// (WaitWakes).
+// (ConcurrentAgainstBruteForce), one whose Wait does not wait
+// (WaitWakes), one whose WaitSteps waits for the head and one with no
+// step log (StepLog).
 func TestSuiteCatchesConcurrencyMutants(t *testing.T) {
 	for _, c := range []struct {
 		check string
@@ -79,6 +98,8 @@ func TestSuiteCatchesConcurrencyMutants(t *testing.T) {
 	}{
 		{"ConcurrentAgainstBruteForce", racy{memstore.New("grist")}},
 		{"WaitWakes", eager{memstore.New("grist")}},
+		{"StepLog", headSteps{memstore.New("grist")}},
+		{"StepLog", noSteps{memstore.New("grist")}},
 	} {
 		for _, k := range storetest.Checks() {
 			if k.Name == c.check {

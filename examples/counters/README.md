@@ -17,7 +17,7 @@ writes is its decisions and folds.
 | [model/grist.qnt](model/grist.qnt) | grist's guarantees (conditions, triggers, checkpoints, effects), vendored from [grist/model](../../grist/model/grist.qnt) |
 | [counters.binding.yaml](counters.binding.yaml) | the commit-side steps: every parameter the step's field, the outcome as `result`, each commit's head and batch compared with the model's |
 | [counters.once.binding.yaml](counters.once.binding.yaml) | the same steps judged by the test-only `welcomedOnce` |
-| [counters.calls.binding.yaml](counters.calls.binding.yaml) | the clients' calls (`gristsim.AtClients`), linearized |
+| [counters.calls.binding.yaml](counters.calls.binding.yaml) | the clients' calls (actor `<tenant>.clients`, recorded in every run beside the store's steps), linearized |
 | [testdata/mutants](testdata/mutants) | grain's two bugs, each a file replacing the app's of its name (a `go test -overlay`) |
 
 ## The model
