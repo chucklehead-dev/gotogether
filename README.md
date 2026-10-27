@@ -558,6 +558,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`; `Unconditioned`; idempotent by `Envelope.ID`), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce`, `EffectKey`), `Store`; every step recorded by the framework |
 | `grist/memstore`, `grist/simstore` | grist's stores: in memory for unit tests; over a `qenv.Store` for simulations |
 | `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions and reads against brute force, checkpoints, markers, tenant isolation |
+| `grist/gristsim` | `Run`: a grist app in a simulation as a `qtest.System`'s run (a node, a lossy API, clients `AtCommits` or `AtClients`, two settles) |
 
 ## Example apps
 

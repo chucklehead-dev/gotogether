@@ -166,6 +166,41 @@ var ErrConflict = errors.New("grist: conflict: the decision's reads changed on e
 var ErrKeyReused = Rejection("idempotency-key-reused")
 var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
 
+== github.com/chucklehead-dev/gotogether/grist/gristsim
+const AtClients Recording = iota (spec 1 of its group)
+const AtCommits Recording = iota
+const CallTimeout = 2 * time.Second
+const MaxAttempts = 50
+const RetryDelay = 100 * time.Millisecond
+func Gen(typ reflect.Type, alphabet []string, pick func(n int) int) any
+func Run(c qenv.Chooser, app *grist.App, cfg Config) error
+type Config struct
+    field Isolation qenv.Isolation
+    field Tenants []string
+    field Clients int
+    field Ops int
+    field Send []string
+    field Record Recording
+    field CommitFaults bool
+    field Check bool
+    field Alphabet []string
+    field Gen map[string]func(pick func(n int) int) any
+    field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
+    field Horizon time.Duration
+    field Log func(string)
+type Recording int
+type Request struct
+    field Query bool
+    field Name string
+    field Env grist.Envelope
+    field Args json.RawMessage
+type Response struct
+    field Receipt grist.Receipt
+    field Result json.RawMessage
+    field Pos grist.Position
+    field Rejected string
+    field Err string
+
 == github.com/chucklehead-dev/gotogether/grist/memstore
 func New(name string) *Store
 type Store struct

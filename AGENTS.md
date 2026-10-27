@@ -49,7 +49,7 @@ qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per
 qhistory/     a real database's isolation level from a list-append workload's history (Elle's; Adya's anomalies)
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
 grist/        separate module (published): an event-sourced framework checked by its model (docs/grist.md, slice 1);
-              memstore/ simstore/ storetest/ (the store contract)
+              memstore/ simstore/ storetest/ (the store contract) gristsim/ (an app as a qtest.System's run), model/grist.qnt
 qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspects in orchestrion.yml): u and v as gauges
 cmd/gotogether/  CLI
 skills/       agent skills, the source of truth (embedded by package skills;
