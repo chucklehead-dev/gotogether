@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -174,21 +173,14 @@ func (p *qparser) expr() (Value, error) {
 		p.i = j
 		return Value{Kind: Int, I: n}, nil
 	case c == '"':
-		j := p.i + 1
-		for j < len(p.s) && p.s[j] != '"' {
-			if p.s[j] == '\\' {
-				j++
-			}
-			j++
-		}
-		if j >= len(p.s) {
+		// a Quint string: its characters as they are, to the next
+		// quote (Quint has no escapes)
+		j := strings.IndexByte(p.s[p.i+1:], '"')
+		if j < 0 {
 			return Value{}, p.errf("unterminated string")
 		}
-		str, err := strconv.Unquote(p.s[p.i : j+1])
-		if err != nil {
-			return Value{}, p.errf("bad string")
-		}
-		p.i = j + 1
+		str := p.s[p.i+1 : p.i+1+j]
+		p.i += j + 2
 		return Value{Kind: Str, S: str}, nil
 	case c == '{':
 		p.i++

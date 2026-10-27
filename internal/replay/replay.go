@@ -202,7 +202,9 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 				text := it.ref
 				if it.call >= 0 {
 					if comment {
-						pr("    // step %d: %s", it.call+1, calls[it.call])
+						// a comment is one line: a recorded newline (a
+						// string's, which Quint writes as it is) would end it
+						pr("    // step %d: %s", it.call+1, oneLine(calls[it.call].String()))
 					}
 					text = step(calls[it.call])
 				}
@@ -323,3 +325,6 @@ func indent(s, pfx string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// oneLine is s with its line breaks written as \n and \r, for a comment.
+func oneLine(s string) string { return strings.NewReplacer("\n", `\n`, "\r", `\r`).Replace(s) }

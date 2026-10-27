@@ -542,10 +542,12 @@ func jsonOf(v any, t *qtype) (any, error) {
 	switch x := v.(type) {
 	case qfloat:
 		return json.Number(strconv.FormatFloat(float64(x), 'g', -1, 64)), nil
+	case qstr:
+		v = string(x)
 	case qlit:
 		s := string(x)
-		if u, err := strconv.Unquote(s); err == nil && strings.HasPrefix(s, `"`) {
-			v = u
+		if len(s) >= 2 && strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
+			v = s[1 : len(s)-1] // a Quint string literal: its text as it is
 		} else {
 			v = json.Number(s) // an integer or a boolean literal
 			if s == "true" || s == "false" {
@@ -622,6 +624,9 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 		}
 		if isTime(s) {
 			return fail("%q is a time: Quint has none; record an integer unit (time.UnixMilli) and type the field int", s)
+		}
+		if strings.Contains(s, `"`) {
+			return itf.Value{}, &itf.UnquotableError{At: where(), S: s}
 		}
 		return itf.StrOf(s), nil
 	case "bool":

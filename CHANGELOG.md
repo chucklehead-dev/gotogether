@@ -84,6 +84,14 @@ The first release. What a user meets, by module:
   left out, and a binding matching none of a run's actors has no verdict
   and says so. `System.WithBinding(path, opts...)`: the same runs judged
   by another binding.
+- Strings are written as Quint writes them: their characters between
+  quotes, as they are (`itf.Value.String`, a template's string field,
+  `toQuint`, `toSet`, `toList`, `toMap`, `itf.ParseQuint`). They were
+  Go's escapes (`%q`), which Quint has none of: `"a\tb"` is a backslash
+  and a t there, and a quote ended the literal. A string holding a double
+  quote, which no Quint literal can, is refused naming the field or the
+  path (`itf.UnquotableError`, `itf.Value.Literal`). A replay's comment
+  naming a step keeps a recorded newline out of the module's code.
 - qdriver after its review: a record's kind is a typed `qdriver.Event`
   (`Request`, `Response`, `Step`, was the string `Observed`); a request
   argument named `code` is refused (it was replaced by the answer's

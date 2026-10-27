@@ -12,6 +12,7 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -444,12 +445,15 @@ func toI(v any) int64 {
 // as JSON) as a Quint Set(...) or List(...); nested arrays become tuples.
 func jsonQuint(v any, kind string) (string, error) {
 	text := fmt.Sprint(v)
-	if q, ok := v.(qlit); ok {
-		u, err := strconv.Unquote(string(q))
-		if err != nil {
+	switch q := v.(type) {
+	case qstr:
+		text = string(q)
+	case qlit:
+		s := string(q)
+		if len(s) < 2 || !strings.HasPrefix(s, `"`) || !strings.HasSuffix(s, `"`) {
 			return "", fmt.Errorf("to%s: %s is not a recorded JSON array", kind, q)
 		}
-		text = u
+		text = s[1 : len(s)-1]
 	}
 	if kind == "Map" {
 		var m map[string]any
@@ -463,7 +467,14 @@ func jsonQuint(v any, kind string) (string, error) {
 		sort.Strings(keys)
 		parts := make([]string, len(keys))
 		for i, k := range keys {
-			parts[i] = strconv.Quote(k) + " -> " + jsonElem(m[k])
+			e, err := jsonElem(m[k], fmt.Sprintf("[%q]", k))
+			if err != nil {
+				return "", fmt.Errorf("toMap: %w", err)
+			}
+			if strings.Contains(k, `"`) {
+				return "", fmt.Errorf("toMap: %w", &itf.UnquotableError{At: "a key", S: k})
+			}
+			parts[i] = quintStr(k) + " -> " + e
 		}
 		return "Map(" + strings.Join(parts, ", ") + ")", nil
 	}
@@ -473,7 +484,11 @@ func jsonQuint(v any, kind string) (string, error) {
 	}
 	parts := make([]string, len(xs))
 	for i, x := range xs {
-		parts[i] = jsonElem(x)
+		e, err := jsonElem(x, fmt.Sprintf("[%d]", i))
+		if err != nil {
+			return "", fmt.Errorf("to%s: %w", kind, err)
+		}
+		parts[i] = e
 	}
 	if kind == "List" {
 		return "[" + strings.Join(parts, ", ") + "]", nil
@@ -481,23 +496,33 @@ func jsonQuint(v any, kind string) (string, error) {
 	return "Set(" + strings.Join(parts, ", ") + ")", nil
 }
 
-// jsonElem renders a decoded JSON value as Quint: arrays become tuples.
-func jsonElem(x any) string {
+// jsonElem renders a decoded JSON value as Quint: arrays become tuples;
+// at is its path, for a string no Quint literal holds.
+func jsonElem(x any, at string) (string, error) {
 	switch y := x.(type) {
 	case []any:
 		parts := make([]string, len(y))
 		for i, e := range y {
-			parts[i] = jsonElem(e)
+			p, err := jsonElem(e, fmt.Sprintf("%s[%d]", at, i))
+			if err != nil {
+				return "", err
+			}
+			parts[i] = p
 		}
-		return "(" + strings.Join(parts, ", ") + ")"
+		return "(" + strings.Join(parts, ", ") + ")", nil
 	case float64:
-		return strconv.FormatInt(int64(y), 10)
-	case string:
-		return strconv.Quote(y)
+		return strconv.FormatInt(int64(y), 10), nil
 	case bool:
-		return strconv.FormatBool(y)
+		return strconv.FormatBool(y), nil
 	}
-	return strconv.Quote(fmt.Sprint(x))
+	s, ok := x.(string)
+	if !ok {
+		s = fmt.Sprint(x)
+	}
+	if strings.Contains(s, `"`) {
+		return "", &itf.UnquotableError{At: at, S: s}
+	}
+	return quintStr(s), nil
 }
 
 // sig is an action's signature, if the model is known.

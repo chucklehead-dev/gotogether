@@ -250,7 +250,7 @@ func randValue(r *rand.Rand, t *qtype, depth int) itf.Value {
 	case "int":
 		return itf.Value{Kind: itf.Int, I: big.NewInt(r.Int64N(2000) - 1000)}
 	case "str":
-		return itf.StrOf([]string{"", "a", "x y", "é", `q"uote`, "2026"}[r.IntN(6)])
+		return itf.StrOf([]string{"", "a", "x y", "é", `back\slash`, "a\tb", "two\nlines", `\t`, "2026"}[r.IntN(9)])
 	case "bool":
 		return itf.BoolOf(r.IntN(2) == 0)
 	case "set", "list":

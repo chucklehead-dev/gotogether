@@ -313,6 +313,10 @@ type Trace struct
     field States []State
 type Unmarshaler interface
     UnmarshalITF(v Value) error
+type UnquotableError struct
+    field At string
+    field S string
+    method (*UnquotableError) Error() string
 type Value struct
     field Kind Kind
     field I *big.Int
@@ -327,6 +331,7 @@ type Value struct
     method (Value) Get(field string) Value
     method (Value) Go() any
     method (Value) Int64() int64
+    method (Value) Literal(at string) (string, error)
     method (Value) Lookup(key Value) (Value, bool)
     method (Value) MarshalJSON() ([]byte, error)
     method (Value) Quint() string

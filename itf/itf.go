@@ -238,8 +238,77 @@ func (v Value) Lookup(key Value) (Value, bool) {
 	return Value{}, false
 }
 
+// Literal is the value as a Quint expression (String), or an
+// *UnquotableError naming where a string holds a double quote, which no
+// Quint string literal can (Quint has no escapes): at is the value's
+// path, for the error.
+func (v Value) Literal(at string) (string, error) {
+	if err := v.quotable(at); err != nil {
+		return "", err
+	}
+	return v.String(), nil
+}
+
+func (v Value) quotable(at string) error {
+	if at == "" {
+		at = "the value"
+	}
+	switch v.Kind {
+	case Str:
+		if strings.Contains(v.S, `"`) {
+			return &UnquotableError{At: at, S: v.S}
+		}
+	case List, Tuple, Set:
+		for i, e := range v.Elems {
+			if err := e.quotable(fmt.Sprintf("%s[%d]", at, i)); err != nil {
+				return err
+			}
+		}
+	case Record:
+		keys := make([]string, 0, len(v.Fields))
+		for k := range v.Fields {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if err := v.Fields[k].quotable(at + "." + k); err != nil {
+				return err
+			}
+		}
+	case Variant:
+		if v.Inner != nil {
+			return v.Inner.quotable(at + "." + v.Tag)
+		}
+	case Map:
+		for i, p := range v.Pairs {
+			for j, e := range p {
+				if err := e.quotable(fmt.Sprintf("%s[%d][%d]", at, i, j)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// UnquotableError is a string with a double quote, which no Quint string
+// literal can hold: Quint has no escapes, and the quote ends the literal.
+type UnquotableError struct {
+	At string // where it is: a field, a path in a value
+	S  string
+}
+
+func (e *UnquotableError) Error() string {
+	return fmt.Sprintf("at %s: %q holds a double quote, which a Quint string cannot (a Quint string literal has no escapes): record the value without it (an id, a code, the text with the quote replaced), or leave the field out of what the binding renders", e.At, e.S)
+}
+
 // String renders the value in Quint-like syntax, with sets and record
-// fields sorted, so equal values render equally.
+// fields sorted, so equal values render equally. A string is written as
+// Quint writes one: its characters between double quotes, as they are,
+// since a Quint string literal has no escapes ("a\tb" is a backslash
+// and a t, a tab is written as itself). A string holding a double quote
+// has no Quint literal: String writes it anyway, and Quint is the text
+// to use where it must parse (it refuses one).
 func (v Value) String() string {
 	switch v.Kind {
 	case Int:
@@ -247,7 +316,7 @@ func (v Value) String() string {
 	case Bool:
 		return fmt.Sprint(v.B)
 	case Str:
-		return fmt.Sprintf("%q", v.S)
+		return `"` + v.S + `"`
 	case List, Tuple:
 		parts := make([]string, len(v.Elems))
 		for i, e := range v.Elems {

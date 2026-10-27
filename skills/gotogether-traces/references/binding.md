@@ -15,6 +15,10 @@ Rules:
   fraction and a time, naming where: record an integer unit (cents,
   `time.UnixMilli`). qobs records a slice or a map as JSON but a struct
   by `fmt.Sprint`: record a struct's `json.Marshal` text, or a slice.
+  A string is written as Quint writes one, its characters as they are
+  between quotes (Quint has no escapes: a tab, a newline, a backslash
+  are themselves); one holding a double quote has no Quint literal and
+  is refused, naming the field: record an id or a code instead.
   Give a template only to map a field differently, e.g.
   `args: { o: '{{.outcome}}' }`. An action that needs nothing else can
   be `name: {}`.

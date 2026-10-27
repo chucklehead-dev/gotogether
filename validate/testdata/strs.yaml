@@ -1,0 +1,7 @@
+# validate/testdata/strs.qnt: name passed as recorded, the model's names
+# compared with the recorded ones.
+spec: strs.qnt
+module: strs
+actions:
+  named:
+    expect: 'names == {{ toQuint "List[str]" .obs.names }}'

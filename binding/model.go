@@ -565,10 +565,10 @@ func renderIR(raw json.RawMessage) (string, bool) {
 		return string(e.Value), len(e.Value) > 0
 	case "str":
 		var s string
-		if json.Unmarshal(e.Value, &s) != nil {
+		if json.Unmarshal(e.Value, &s) != nil || strings.Contains(s, `"`) {
 			return "", false
 		}
-		return fmt.Sprintf("%q", s), true
+		return quintStr(s), true
 	case "lambda":
 		body, ok := renderIR(e.Expr)
 		if !ok || len(e.Params) == 0 {

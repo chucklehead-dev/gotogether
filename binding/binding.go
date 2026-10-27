@@ -23,6 +23,7 @@ import (
 	"text/template/parse"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"gopkg.in/yaml.v3"
 )
@@ -600,12 +601,36 @@ func quintLit(v any) string {
 		f, _ := x.Float64()
 		return strconv.FormatInt(int64(f), 10)
 	case string:
-		return strconv.Quote(x)
+		return quintStr(x)
 	case qlit:
 		return string(x)
 	}
-	return strconv.Quote(fmt.Sprint(v))
+	return quintStr(fmt.Sprint(v))
 }
+
+// quintStr is s as a Quint string literal: its characters between double
+// quotes, as they are, since Quint has no escapes ("a\tb" is a backslash
+// and a t, a tab is itself). A string with a double quote has none; the
+// renderer refuses one a template prints (qstr), and toQuint and toList
+// refuse one inside a value.
+func quintStr(s string) string { return `"` + s + `"` }
+
+// qstr is a recorded string as templates see it: printed as its Quint
+// literal (quintStr), its own text for toQuint, toList and the others
+// to decode. One with a double quote prints marked (unquotable), and
+// the renderer refuses the result, naming the field.
+type qstr string
+
+func (s qstr) String() string {
+	if strings.Contains(string(s), `"`) {
+		return unquotable + string(s) + unquotable
+	}
+	return quintStr(string(s))
+}
+
+// unquotable brackets a printed string that no Quint literal can hold:
+// a renderer finding it fails, naming the field.
+const unquotable = "\x00gotogether:unquotable\x00"
 
 // qlit is a value that is already Quint text.
 type qlit string
@@ -650,8 +675,11 @@ func stepData(s *qtrace.Step, args map[string]any, process int, outcome string) 
 // fieldValue is a step field as templates see it: Quint text, but a
 // float kept whole (printed truncated, as before) for toQuint to refuse.
 func fieldValue(v any) any {
-	if f, ok := v.(float64); ok {
-		return qfloat(f)
+	switch x := v.(type) {
+	case float64:
+		return qfloat(x)
+	case string:
+		return qstr(x)
 	}
 	return qlit(quintLit(v))
 }
@@ -717,7 +745,40 @@ func (r *renderer) render(tpl string, data any) (string, error) {
 	if err := t.Execute(&buf, data); err != nil {
 		return "", err
 	}
-	return buf.String(), nil
+	out := buf.String()
+	if i := strings.Index(out, unquotable); i >= 0 {
+		rest := out[i+len(unquotable):]
+		s, _, _ := strings.Cut(rest, unquotable)
+		return "", fmt.Errorf("%s: %w (in %s)", fieldNamed(data, s), &itf.UnquotableError{At: "the template's output", S: s}, tpl)
+	}
+	return out, nil
+}
+
+// fieldNamed names the step field of data (stepData's) that holds s: "the
+// step's field x", "obs.x", or "a step field" if none does.
+func fieldNamed(data any, s string) string {
+	d, ok := data.(map[string]any)
+	if !ok {
+		return "a step field"
+	}
+	var names []string
+	for k, v := range d {
+		if v == qstr(s) && k != "args" {
+			names = append(names, k)
+		}
+	}
+	if obs, ok := d["obs"].(map[string]any); ok {
+		for k, v := range obs {
+			if v == qstr(s) {
+				names = append(names, "obs."+k)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return "a step field"
+	}
+	sort.Strings(names)
+	return "the step's field " + strings.Join(names, ", ")
 }
 
 // UsedFields lists, for each action of the model, the step fields the

@@ -3880,3 +3880,14 @@ limits: a mocked answer registered before the adapter's route is
 written as the server's, one after it is never seen; cookies reached
 the server though the adapter re-sends a call with `request.headers()`,
 which lists none.
+
+Strings went to quint with Go's escapes (`%q` in `itf.Value.String` and
+the binding's literals), and a Quint string literal has none: its
+lexer takes everything to the next double quote, so `"a\tb"` is a
+backslash and a t, a tab is written as itself (quint 0.33, checked by
+`TestQuintStrings` against its own ITF), and a quote cannot be written
+at all. A string is now its characters between quotes; one with a
+double quote is refused, naming the field or the path inside a value,
+rather than escaped some way Quint does not read. The replay module's
+comments, which named each step with its arguments, were the one place a
+raw newline then broke: they are one line each.
