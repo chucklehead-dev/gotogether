@@ -1,6 +1,6 @@
 # Roadmap
 
-What is open. What is done (the A–D, U, V, W, R1–R4, X, Y, Z and T tracks,
+What is open. What is done (the A–D, U, V, W, R1–R4, X, Y, Z, T and E tracks,
 the move to gotogether) and the reviews that shaped it are in
 docs/HISTORY.md; why the code is the way it is, in DESIGN.md.
 
@@ -13,8 +13,8 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: S1 → S2 → S5 → S3 → S4 → S6 → S7 → S9 → S8 → S10 → S11 → S12, S13, then E;
-the items left from X, Y and T alongside; R5 when the maintainer says.
+Order: S1 → S2 → S5 → S3 → S4 → S6 → S7 → S9 → S8 → S10 → S11 → S12, S13;
+the items left from X, Y, T and E alongside; R5 when the maintainer says.
 
 ## Release (R5)
 
@@ -186,198 +186,38 @@ more.
   actions of the killed incarnation) instead of no verdict; qhttp's plain
   context deadlines would be exact with qenv's wake time.
 
-## A run gotogether did not drive (E)
+## Left from E
 
-From the feedback of an agent using gotogether in another project (goo:
-an observability app checked with Bombadil, Antithesis's browser
-explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
-
-- **E1. Completion stated (S). Done:** `qtest.Finishes()` (conforms,
-  Settles, every eventual val judged and true, Completes; three-valued; a
-  binding with no eventual val finishes no run; a miss names the part
-  and the fix), `validate -require-settle` (the same judgment,
-  `Report.Finished`: `incomplete (no settle)`, `(pending calls)`, a call
-  `-resolve-pending` placed included; `no verdict (lost tail)`, `(ITF
-  trace)`, exit 1; a binding with no eventual val refused), a
-  binding's `complete: true` (the CLI's default only, not a test's
-  claim; needs an eventual val); patterns and verdicts docs ("a prefix
-  vs a finished run").
-- **E2. Strict mode (S). Done:** `GOTOGETHER_STRICT=1` turns every
-  toolkit skip (RequireQuint, Mutate with no mutants woven, Record's,
-  Explore's and qhegel.Shrink's SkipIfEmpty, the scaffold's mutant test)
-  into a failure with its message; `qtest.Optional(t, reason)` for users'
-  own gated skips; `evidence -expect checks.txt` (tests, subtests or
-  exploration ids, optionally after a package) fails naming a check that
-  wrote no evidence (packages by import path). CI runs strict, the core's
-  own tests through internal/skip, but for the examples' unwoven mutation
-  and coverage tests (skipped by name) and edgepublish's unwoven run.
-  Left: the nightly is not strict (its fresh-seed runs include the
-  unwoven mutation tests); evidence a renamed test left in a reused
-  directory still counts; Hegel checks write no evidence (Validate's and
-  Record's write their manifests, E4).
-- **E3. Step references (S). Done:** `quint.ref` (`Step.Ref`: a step's
-  link to its artifact, a driver's trace line, a screenshot),
-  `qobs.Ref(s)` in a key's place (a typed value, so a parameter named
-  ref stays an argument) and a log record's `quint.ref`; kept by step
-  logs, OTel events (the event's or span's, never a resource's), convert
-  rules (`ref:`, default the span's own) and from an invocation to its
-  completion; shown at the failing step (`ref:`), in `-history` and
-  `steps`. No verdict or cache key reads it; a cached verdict shows the
-  run's own failing step's ref. `Filter` drops refs when it sanitizes,
-  unless `KeepRefs` (`steps -keep-refs`).
-- **E4. Run manifest (M). Done:** `gotogether.run/1`
-  (`validate.Manifest`): gotogether's version (build info) and quint's,
-  the binding, spec and convert rules with their sha256, the instance's
-  constants and invariants, how it was judged (searches,
-  -require-settle, declared losses), each input's path, hash, step count
-  and loss records, the verdict (`VerdictOf`: by actor, its reason, the
-  failing step with its ref), and the caller's driver and artifacts
-  (hashed). Written by `validate -manifest` (driver and artifacts from a
-  `-run-info` JSON file the driver writes), by qtest's Validate and
-  Record runs under GOTOGETHER_EVIDENCE (`run<N>.json` beside a copy of
-  the step log; `qtest.Driver`, `qtest.Artifacts`, `Run.Manifest`, so
-  `Runs` gathers runs that each have one), and by `Checker.Manifest` for
-  callers. Paths under the manifest's directory are relative: the
-  directory moves whole. `validate -replay` refuses a changed input,
-  binding or spec (a changed artifact warns), takes no flag the manifest
-  decides, and exits 1 on another verdict. `gotogether evidence` lists
-  manifests (role external), and `-expect` names them as explorations.
-  Review fixes: the spec checked is the one the binding resolves now,
-  with its imports (hashed transitively); an ITF input records its own
-  instance; the check recorded is the one judged (a complete binding's
-  finish check in the CLI, none in qtest); qtest bundles every file
-  (`Manifest.Bundle`), so an evidence directory replays elsewhere;
-  gotogether's version is a dependency's when it is one; the backend is
-  recorded and kept on replay; a reworded reason is the same verdict
-  (`Same` compares kinds); a later version's manifest is skipped by
-  `evidence`. Left: no option sanitizes a manifest itself (sanitize the
-  log, then validate it with -manifest). E3's: a cached verdict's
-  failing step is found with no seq too, its recorder and process
-  rebased; qhegel caches summaries without refs; a zero step time is
-  written as none.
-- **E5. A Bombadil example (M). Done:** examples/webjobs, a
-  standard-library web app (one HTML+JS page: submit, 202 accepted, a
-  background job, poll until ready, cancel) explored by Bombadil 0.7.9
-  (`bombadil/spec.ts`: custom actions ui.submit, a double click, and
-  ui.cancel; the `result` extract). The server records its effects on
-  recorder `server` where it makes them (created, finished at the
-  commit, cancelled, drained, then a settle); `bombadiltrace` turns
-  trace.jsonl into invocation records completed only by what a snapshot
-  first shows (submit by a new id, cancel by a status change; a job
-  shown ready by polling a step of its own), each with `quint.ref`
-  (line and screenshot), Bombadil's own times, call ids and order,
-  written as steps, never re-recorded; a trace outside the page's
-  contract refused, a torn line a lost tail. The model (a ghost `done`,
-  `eventually: allResolved`, a `within`) and a `complete: true`
-  binding. Overlay mutants (readyEarly, doubleJob, cancelIgnored), each
-  caught by its invariant. Per push (the examples loop, -short):
-  recorded 3s runs of the real Bombadil checked offline (faithful
-  `Finishes`, its CLI manifest from `-run-info` replayed; each mutant's
-  claim; a pending click; a torn trace; `TestTimesKept`, goo's point as
-  a test). Nightly (`webjobs-live`, strict): 45s live runs of the
-  faithful app (manifest replayed, `--reproduce` best effort: a
-  divergence's prefix must conform) and of each mutant. The reference
-  page skills/gotogether-traces/references/external-drivers.md (a
-  settle is not a collector drained: E7). Review fixes: a call is
-  completed only by its own request's answer (the page's `#log` of
-  requests, numbered as sent, read by the extract; the invocation's
-  arguments are what the request sent), never by the next change of the
-  page; the page's end stated (`pageShowsEnds`, a 500ms `within` on a
-  committed job shown; `?until=` ends a live journey's submissions before
-  the time limit); `finishedOnce`, `noCommitAfterCancel`,
-  `noFailedRequest`; Bombadil's exit 2 fails a faithful run; mutants
-  cancelBroken, statusStale and commitAfterCancel; a Go client
-  (`Client`) runs the real server per push, faithful and per overlay;
-  probes of each way the first version passed; core:
-  `qtest.Undecided`, and Reconstruct's check of an invocation record
-  against its completion. Left: Bombadil's reproduction diverges on a
+The E track (E1–E8, a run gotogether did not drive) is done: DESIGN §54
+(§53 for E7), HISTORY ("E: a run gotogether did not drive"). What it
+left:
+- **A step's process is per actor.** Two recorders in one actor (a page
+  and its server) must share one, or Reconstruct reports an overlap, so
+  a client and its server cannot be one actor's distinct locations, and
+  a crash's semantics attach to the shared name (webjobs, raftkv share
+  one by necessity). Separate location from incarnation.
+- **A Go API for a manifest's replay** (`validate.Replay`); webjobs'
+  tests shell out to the CLI.
+- **Strict mode and evidence (E2).** The nightly is not strict (its
+  fresh-seed runs include the unwoven mutation tests); evidence a
+  renamed test left in a reused directory still counts; Hegel checks
+  write no evidence.
+- **Manifests (E4).** No option sanitizes a manifest itself (sanitize
+  the log, then validate it with -manifest).
+- **webjobs (E5).** Bombadil's reproduction diverges on a
   timing-dependent page; one host's wall clock orders the page and the
   server.
-- **E6. Observation mutants (S–M). Done:** `qtrace.Mutations` (drop,
-  dup at the next seq, swap within one recorder and incarnation,
-  corrupt each argument and observation, retime past the next step in
-  time, reactor into the next actor's process; `MutateOps`,
-  `MutateLimit` spread over the log), each keeping the recorder's
-  contract (dense seqs, calls and losses renumbered), checked against
-  every mutation of a small log written out by hand and against
-  Reconstruct's error issues on a log with calls, a settle and a loss.
-  `qtest.MutateSteps`: killed (fails where the original conformed,
-  refused by the binding, or unfinished where the original finished),
-  survived, undecided; `Killed`/`Survived` over `StepOp` selectors; a
-  corruption of a field the binding does not read marked `Unread`;
-  `JudgeStepMutants` and `gotogether validate -mutate-steps`. bank's
-  deposit balance off by one killed, surviving with its expect ablated;
-  webjobs' recorded journey (`TestObservationMutants`, full mode and
-  nightly): a job created twice and a submit answered 199 survive, two
-  gaps in the model. Review fixes: candidates Reconstruct would refuse
-  left out (a reactor into an actor whose Lamport keys contradict its
-  thread), a mutant refused anyway `FateMalformed`, never killed; a
-  retime never passes its actor's next step (a within judged, not left
-  unjudged), a settle or a watermark, and a survivor with its bounds
-  unjudged is undecided; the brute force a naive enumeration over six
-  shapes (incarnations on two recorders, Lamport keys across actors,
-  watermarks, calls, losses, no seqs). Left: a mutant per pair of mutations; retime
+- **Observation mutants (E6).** A mutant per pair of mutations; retime
   earlier; a corruption of the outcome and the error text.
-- **E7. Absence diagnostics (M). Done** (DESIGN §53): a watermark record
-  (`quint.complete_through_unix_nano`; `qobs.Recorder.CompleteThrough`,
-  `qtrace.MarkComplete`, `validate -complete-through r=T`, `*=T`; kept by
-  readers, Filter and searches) and the report's `absent:` section
-  naming each absent step's cause: dropped (a gap, a lost tail), uncollected
-  (past the watermark, or no settle and the trace ended first), or a
-  defect (the only FAIL); `qtest.Absent(name, cause)`. A within is judged
-  where its watermark reaches its window though the run never settled;
-  a settle no watermark reaches settles nothing; a failure a gap may
-  explain is no verdict. A log with no watermark is taken whole, as
-  before. Left: a collector-side writer (an OTel exporter that emits the
-  record after a flush); a pending call's window (a caller's timeout).
-- **E8. External shrinking (L). Core done:** `qtest.ShrinkActions`
-  (internal/ddmin: ddmin over index sets, three-valued, 1-minimal; each
-  candidate rerun after a `Resetter`, its steps judged through the
-  verdict cache), the reset contract checked first (two reruns of no
-  actions record the same steps, up to names and times, not none: a
-  fresh server's shutdown steps repeat, a leak differs; the original's
-  first two reruns fail alike), `SameFailure` the
-  failure kept by default, `ErrDiverged` never a pass, `Calibration`
-  (n = ⌈ln α / ln(1−p)⌉ from the original's 10 reruns, p at its Wilson
-  lower bound: from the rate measured, a half-rate failure reached its
-  1-minimal sequence in 933 of 1000 shrinks, under 1−α, the bound in
-  987); the minimal run's manifest with actions.json and shrink.json.
-  Review fixes: a rerun with no verdict for the failure is undecided,
-  never a miss (SameFailure unknown with a lost tail, an undecided actor
-  or a conforming actor's invariant unjudged); the empty rerun repeated
-  after the baseline and at the end (leaked work), the empty sequence
-  never a failure, a shrunk sequence's rate far below the original's
-  not minimal; Keep's default from the first decided failure, two ways
-  of failing asking for Keep; SameFailure by the replay's order and a
-  mismatch's fields; each shrink's artifacts apart. Left: state the
-  actions leave without a step of its own (a counter Reset forgets)
-  passes every check: only a fresh environment per rerun is safe. Checked against
-  brute force on up to 8 letters, and with quint on letters.qnt. Left:
-  webjobs' integration (keyed durations, `Client` Plan/Play, a
-  `bombadiltrace` bridge to actions); Bombadil's `--reproduce` as the
-  rerun; candidates judged in batches (each is a quint check, a second
-  or two).
-- **Left from E1–E5.**
-  - A step's process is per actor: two recorders in one actor (a page and
-    its server) must share one, or Reconstruct reports an overlap, so a
-    client and its server cannot be one actor's distinct locations, and
-    a crash's semantics attach to the shared name (webjobs, raftkv share
-    one by necessity). Separate location from incarnation.
-  - A Go API for a manifest's replay (`validate.Replay`); webjobs' tests
-    shell out to the CLI.
-  - CI's per-package time budgets were measured while packages share the
-    job's CPUs: a package made parallel slowed its neighbours past their
-    budgets five times in a day. Done: the budgets are CPU seconds, the
-    test binary's and its descendants' (quint, node, its evaluator),
-    counted by internal/cputime under `go test -exec`. On 4 cores binding
-    took 107 s wall alone and 287-324 s in the full run, its CPU
-    165-193 s; validate's CPU stayed within 1168-1366 s, its wall
-    750-1000 s. Left: the lines come from this machine's cores, so CI's
-    first run with them resets them from the sorted file each job prints;
-    a regression that only waits (a longer sleep, a real-time poll) costs
-    no CPU and is left to the job's timeout.
-  - webjobs' -short takes ~78 s (seven overlay binaries and the client
-    runs), past S10's 60 s.
+- **Absence (E7).** A collector-side writer (an OTel exporter that emits
+  the watermark record after a flush); a pending call's window (a
+  caller's timeout).
+- **Shrinking (E8).** Bombadil's `--reproduce` as the rerun (webjobs
+  reruns through its Go client, from `bombadiltrace.Actions`);
+  candidates judged in batches (each is a quint check, a second or
+  two). State the actions leave without a step of its own (a counter
+  Reset forgets) passes every check of the reset contract: only a fresh
+  environment per rerun is safe, and nothing yet detects the other.
 
 ## Left from T
 
