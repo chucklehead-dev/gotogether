@@ -52,7 +52,7 @@ if ! helm status crossplane -n crossplane-system >/dev/null 2>&1; then
     "${ca[@]}" --wait --timeout 6m >/dev/null
 fi
 
-kubectl apply -f - >/dev/null <<'EOF'
+function=$(cat <<'EOF'
 apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
@@ -60,14 +60,25 @@ metadata:
 spec:
   package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.9.0
 EOF
-# The package is pulled from xpkg.crossplane.io; a wait that times out
-# says why (the pull, the revision, the function's pod), not only that.
-if ! kubectl wait function/function-patch-and-transform --for=condition=Healthy --timeout=300s >/dev/null; then
-  kubectl describe function/function-patch-and-transform >&2 || true
-  kubectl get functionrevisions -o wide >&2 || true
-  kubectl -n crossplane-system get pods -o wide >&2 || true
-  kubectl -n crossplane-system get events --sort-by=.lastTimestamp 2>&1 | tail -40 >&2 || true
-  exit 1
+)
+# The package is fetched from xpkg.crossplane.io, whose fetches fail now
+# and then ("cannot resolve ... to digest: failed to fetch package", CI
+# runs 379, 393, 417) while Crossplane's own retries back off past the
+# wait. So a wait that times out re-creates the Function once; the second
+# timeout says why (the pull, the revision, the function's pod).
+healthy() { kubectl wait function/function-patch-and-transform --for=condition=Healthy --timeout=300s >/dev/null; }
+echo "$function" | kubectl apply -f - >/dev/null
+if ! healthy; then
+  echo "function-patch-and-transform not healthy after 300s: re-creating it once" >&2
+  kubectl delete function/function-patch-and-transform --wait=true >/dev/null || true
+  echo "$function" | kubectl apply -f - >/dev/null
+  if ! healthy; then
+    kubectl describe function/function-patch-and-transform >&2 || true
+    kubectl get functionrevisions -o wide >&2 || true
+    kubectl -n crossplane-system get pods -o wide >&2 || true
+    kubectl -n crossplane-system get events --sort-by=.lastTimestamp 2>&1 | tail -40 >&2 || true
+    exit 1
+  fi
 fi
 kubectl apply -f package/crds/ >/dev/null
 kubectl apply -f kind/platform.yaml >/dev/null
