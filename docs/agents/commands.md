@@ -88,3 +88,22 @@ AGENTS.md has the general requirements.
   under it searches every family's faults: bound its Faults. `GOTOGETHER_VERBOSE=1` shows
   Hegel's output for expected failures (FindViolation and Shrink capture
   os.Stdout while Hegel runs, since Hegel writes nowhere else).
+- CI's time budgets (ci/test-times.txt) are CPU seconds: each test binary
+  runs under internal/cputime (`go test -exec`), which appends its
+  package directory, CPU seconds and wall seconds to the file
+  `GOTOGETHER_CPU_TIMES` names, its children's time included (quint, node
+  and its evaluator, go builds; orphans too, cputime being their
+  subreaper on Linux), and `ci/time-budget.sh < file` fails a package
+  costing more than twice its line. CPU time, because CI runs a module's
+  packages at once on four cores: validate's wall time there was
+  binding's and qtest's too, and five budgets were "fixed" in a day by
+  raising them. To measure a package as CI does:
+  ```sh
+  go build -o /tmp/cputime ./internal/cputime
+  GOTOGETHER_CPU_TIMES=/tmp/cpu.txt go test -exec /tmp/cputime -count=1 ./validate/
+  ci/time-budget.sh < /tmp/cpu.txt; sort -k2,2nr /tmp/cpu.txt
+  ```
+  A deliberate change of a package's cost sets its line to the CPU
+  seconds the job printed (each budgeted job prints its file sorted, CPU
+  second column) with the reason after `#`; a laptop's numbers differ
+  from CI's by its cores' speed, not by what runs beside the tests.

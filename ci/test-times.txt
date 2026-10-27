@@ -1,29 +1,35 @@
-# Each package's test time in CI (seconds, `ok` lines of go test), from a
-# green run: ci/time-budget.sh fails a package that takes more than twice
-# its time. A deliberate change of a test's cost updates its line.
-examples/bank 30
-examples/checkout 50
+# Each package's tests' cost in CPU seconds: the test binary's and its
+# descendants' (quint, node and its evaluator, go builds), counted by
+# internal/cputime under go test -exec. ci/time-budget.sh fails a package
+# costing more than twice its line. CPU, not wall: CI runs a module's
+# packages at once on four cores, where a package's wall time is its
+# neighbours' too (binding: 107 s alone, 287-324 s in the full run; its
+# CPU 165-193 s). Lines are the most of three runs on a 4-core machine
+# (alone, the core's full parallel run, examples four at a time under
+# outside load), within 15% of each other. A deliberate change of a
+# package's cost sets its line from the sorted file the job prints, with
+# the reason; packages under ten CPU seconds have none.
+examples/bank 80
+examples/checkout 165
 examples/glomers/broadcast 51
-examples/glomers/gcounter 50
-examples/glomers/kafka 58
-examples/glomers/uniqueids 39
-examples/hello 13
-examples/jobqueue 14
-examples/kvstore 25
-examples/lease 51
-examples/payd 55
-examples/quorumkv 40
-examples/raftkv 60
-examples/retrystorm 29
-examples/twophase 58
-examples/wallet 50
-examples/webjobs 40 # 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each; TestShrink is full mode): 38 s locally at load 1.4
-binding 200 # 266-322 s on CI (runs 334-338) with the core job's CPUs shared: see ROADMAP, CI budgets under shared CPUs
-cmd/gotogether 120 # 63 s locally with -short (72 s in full), about twice that on CI: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
-internal/qeval 188
-internal/simdeps 25 # go list over the workspace: payd (sqlite) and raftkv (bbolt) added modules
-qenv 11
-qload 15 # 25 s on CI (run 329), sharing the CPUs as binding does
-qmeta 23
-qtest 144
-validate 330 # 530 s on CI with S11-S13 tests (partial logs, resume, snapshot)
+examples/glomers/gcounter 47
+examples/glomers/kafka 51
+examples/glomers/uniqueids 33
+examples/hello 39
+examples/jobqueue 33
+examples/kvstore 61
+examples/lease 156
+examples/payd 150
+examples/quorumkv 128
+examples/raftkv 145
+examples/retrystorm 51
+examples/twophase 156
+examples/wallet 119
+examples/webjobs 156 # 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, its compile counted; TestShrink is full mode): 135-155 CPU s
+binding 195 # 165-193 CPU s; wall on CI 266-322 s (runs 334-338) with the core job's CPUs shared, 107 s alone here
+cmd/gotogether 200 # 176-195 CPU s: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
+internal/qeval 210 # 180-206 CPU s (wall 194 s alone, 343-361 s in the full run)
+qload 13 # 8-12 CPU s
+qmeta 15
+qtest 440 # 375-435 CPU s (415 with ShrinkActions)
+validate 1370 # 1168-1366 CPU s with S11-S13 tests (partial logs, resume, snapshot): quint processes most of it

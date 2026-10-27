@@ -355,10 +355,17 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
     one by necessity). Separate location from incarnation.
   - A Go API for a manifest's replay (`validate.Replay`); webjobs' tests
     shell out to the CLI.
-  - CI's per-package time budgets are measured while packages share the
+  - CI's per-package time budgets were measured while packages share the
     job's CPUs: a package made parallel slowed its neighbours past their
-    budgets four times in a day. Measure CPU time, or run the heavy
-    packages apart.
+    budgets five times in a day. Done: the budgets are CPU seconds, the
+    test binary's and its descendants' (quint, node, its evaluator),
+    counted by internal/cputime under `go test -exec`. On 4 cores binding
+    took 107 s wall alone and 287-324 s in the full run, its CPU
+    165-193 s; validate's CPU stayed within 1168-1366 s, its wall
+    750-1000 s. Left: the lines come from this machine's cores, so CI's
+    first run with them resets them from the sorted file each job prints;
+    a regression that only waits (a longer sleep, a real-time poll) costs
+    no CPU and is left to the job's timeout.
   - webjobs' -short takes ~78 s (seven overlay binaries and the client
     runs), past S10's 60 s.
 

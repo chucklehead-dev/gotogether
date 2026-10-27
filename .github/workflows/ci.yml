@@ -55,9 +55,13 @@ jobs:
       - name: test
         if: matrix.part == 'core'
         run: |
-          go test -count=1 -timeout 30m ./... | tee "$RUNNER_TEMP/core-times.txt"; test "${PIPESTATUS[0]}" = 0
-          # a core package twice as slow as it was (ci/test-times.txt) fails
-          ci/time-budget.sh < "$RUNNER_TEMP/core-times.txt"
+          # every test binary run under cputime, which counts its CPU time
+          # and its quint processes' (wall times here are the neighbours' too)
+          go build -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/core-cpu.txt" go test -exec "$RUNNER_TEMP/cputime" -count=1 -timeout 30m ./...
+          # a core package costing twice the CPU seconds it did (ci/test-times.txt) fails
+          sort -k2,2nr "$RUNNER_TEMP/core-cpu.txt"
+          ci/time-budget.sh < "$RUNNER_TEMP/core-cpu.txt"
       - name: every module tidy on its own go.mod
         if: matrix.part == 'core'
         run: |
@@ -103,14 +107,17 @@ jobs:
         if: matrix.part == 'examples'
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
+          go build -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          export GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt"
           for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase webjobs; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
-              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./... | tee -a "$RUNNER_TEMP/times.txt"; exit "${PIPESTATUS[0]}") || exit 1
+              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1
             echo "::endgroup::"
           done
-          # a test twice as slow as it was (ci/test-times.txt) fails
-          ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
+          # a package costing twice the CPU seconds it did (ci/test-times.txt) fails
+          sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
+          ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
           # what no faithful exploration of the example tried fails: an action, a fault point, a kind
           for m in hello checkout; do
             "$RUNNER_TEMP/gotogether" evidence -strict "$RUNNER_TEMP/evidence/$m" || exit 1
@@ -304,8 +311,10 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./...
       - name: test (liveness, pending calls, linearized per key, PCT)
         run: |
-          go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
-          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
+          go build -C ../.. -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 45m ./...
+          sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
 
   raftkv:
     # its own job: etcd's raft library on qenv, histories linearized whole
@@ -329,8 +338,10 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/raftkv
       - name: test (linearized whole, pending calls, leadership within a bound, clock drift, rolling upgrades)
         run: |
-          GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
-          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
+          go build -C ../.. -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          GOTOGETHER_CHECK=1 GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 45m ./...
+          sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
 
   raftkv-real:
     # raftkv's real tier: three raftkv-node processes on localhost under
@@ -389,8 +400,10 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/wallet
       - name: test (Exhaust, isolation levels and qhistory, linearized, pending calls, every fault family)
         run: |
-          GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 45m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
-          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
+          go build -C ../.. -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          GOTOGETHER_CHECK=1 GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 45m ./...
+          sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
       - name: demos
         run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
 
@@ -417,8 +430,10 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C ../.. ./cmd/gotogether lint -sim examples/payd
       - name: test (three isolation levels, Exhaust within one fault, mutants as overlays, SQLite)
         run: |
-          GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 30m ./... | tee "$RUNNER_TEMP/times.txt"; test "${PIPESTATUS[0]}" = 0
-          ../../ci/time-budget.sh < "$RUNNER_TEMP/times.txt"
+          go build -C ../.. -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          GOTOGETHER_CHECK=1 GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m ./...
+          sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
       - name: demos
         run: ./run-demo.sh && MUTATION=precheck ./run-demo.sh
 

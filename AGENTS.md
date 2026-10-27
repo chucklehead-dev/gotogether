@@ -116,9 +116,12 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - `go vet ./... && gofmt -l .`: both must be clean.
 - `go test -short ./...` takes a few minutes (validate's and qtest's
   quint processes most of it). `go test ./...` adds the
-  shrinking-against-the-model tests, about ten on CI; each core package
-  over ten seconds has its time in ci/test-times.txt, and CI fails one
-  twice as slow. Both cover the root
+  shrinking-against-the-model tests, about ten on CI; each package
+  costing over ten CPU seconds has that cost in ci/test-times.txt (the
+  test binary's and its quint processes', counted by internal/cputime
+  under `go test -exec`: wall times on CI's shared cores are the
+  neighbours' too), and CI fails one costing twice that
+  (docs/agents/commands.md says how to update a line). Both cover the root
   module only: every example is a module, tested in its directory (`cd
   examples/hello && go test ./...`; CI loops over them).
 - Each module's own commands (edgepublish woven, gosim, qanalysis,
