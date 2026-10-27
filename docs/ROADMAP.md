@@ -48,8 +48,21 @@ item reviewed before the next. Sizes as in S.
   - `RunVerdict.Same` compares a reason's first word and the first
     failing actor only; MutateSteps counts a binding's refusal (a tool
     error on a real log) as killed.
-  - Suspicions: webjobs' within read from Bombadil's snapshot times, not
-    the page's; `RealTimeSlack` fixed at 1 ms across hosts (G8).
+  - Suspicions: `RealTimeSlack` fixed at 1 ms across hosts (G8).
+    webjobs' 500 ms within, settled: a show's time (and an answer's) is
+    the Bombadil state that first shows it, so it is later than the page
+    showed it by under one state interval (the page changed after the
+    state before). Faithful's state intervals are 30-61 ms (median 44);
+    commit to ready shown is 27-128 ms in faithful (at most 160 ms in the
+    mutants' recordings but statusStale), so the margin is over 300 ms, and the
+    checked-in recordings judge alike on any host. A live run is at risk
+    only if Bombadil's interval passes about 350 ms (a slow Chrome's
+    screenshots); statusStale's 753 ms (677 ms from the state before)
+    fails whichever time is read. Fix, when live runs flake: the page
+    stamps `at` (Date.now()) on #result and each answer in #log, spec.ts
+    extracts it, bombadiltrace reads it in place of the state's time
+    (refusing one outside the two states' interval), recordings without
+    it read as now.
 - **G2. The CLI says what it did (S).** scaffold writes `spec:` and
   `Binding:` relative to the working directory, not the file; a failed
   scaffold leaves an empty file its retry refuses; binding errors number

@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A run's verdict (`validate.VerdictOf`, the manifest's, the CLI's
+  result line) takes its reason and failing step from its first FAILing
+  actor, else its first with no verdict: an earlier actor's no verdict
+  gave a defect's FAIL its reason ("FAIL (no verdict (dropped steps))").
 - `qtest.MutateSteps` and `gotogether validate -mutate-steps`: a mutant
   the binding refuses (a field it reads removed) is `FateMalformed`, in
   no score, not killed: a real log like it is a tool error (exit 2), no

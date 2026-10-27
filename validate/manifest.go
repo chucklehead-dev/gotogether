@@ -164,8 +164,8 @@ type RunVerdict struct {
 	// Verdict is Fail if an actor fails, else NotEvaluated if one has no
 	// verdict, else Pass.
 	Verdict Verdict `json:"verdict"`
-	// Reason is the first actor's that did not pass (Result.Reason, or
-	// why it is incomplete).
+	// Reason is the first failing actor's (Result.Reason, or why it is
+	// incomplete), else the first's with no verdict.
 	Reason  string         `json:"reason,omitempty"`
 	Actors  []ActorVerdict `json:"actors"`
 	Failing *FailingStep   `json:"failing,omitempty"`
@@ -183,7 +183,8 @@ type ActorVerdict struct {
 	Action string `json:"action,omitempty"`
 }
 
-// FailingStep is the step a run's first failure is at, as recorded.
+// FailingStep is the step a run's first failure is at, as recorded: the
+// actor's whose reason is the run's (RunVerdict.Reason).
 type FailingStep struct {
 	Actor    string `json:"actor"`
 	Recorder string `json:"recorder"`
@@ -230,18 +231,18 @@ func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict {
 		case a.Reason != "":
 			a.Verdict = Fail
 		}
-		if a.Verdict != Pass && v.Reason == "" {
-			v.Reason = a.Reason
-		}
-		if a.Verdict == Fail || a.Verdict == NotEvaluated && v.Verdict == Pass {
-			v.Verdict = a.Verdict
-		}
 		if a.Verdict == Fail {
 			a.Action = r.failingAction()
 		}
-		if f := firstFailure(r); f != nil && f.Step != nil && v.Failing == nil && a.Verdict != Pass {
-			s := f.Step
-			v.Failing = &FailingStep{Actor: a.Actor, Recorder: s.Recorder, Seq: s.Seq, Action: s.Action, Ref: s.Ref}
+		// the run's reason and failing step are its first actor's of the
+		// run's verdict: a defect anywhere is the run's, ahead of an
+		// earlier actor's no verdict (which once gave a FAIL its reason)
+		if a.Verdict == Fail && v.Verdict != Fail || a.Verdict == NotEvaluated && v.Verdict == Pass {
+			v.Verdict, v.Reason, v.Failing = a.Verdict, a.Reason, nil
+			if f := firstFailure(r); f != nil && f.Step != nil {
+				s := f.Step
+				v.Failing = &FailingStep{Actor: a.Actor, Recorder: s.Recorder, Seq: s.Seq, Action: s.Action, Ref: s.Ref}
+			}
 		}
 		v.Actors = append(v.Actors, a)
 	}
@@ -301,6 +302,21 @@ func (v RunVerdict) Same(w RunVerdict) (same bool, note string) {
 		note = fmt.Sprintf("the reasons are worded otherwise (%q, now %q): the same kind of verdict, said by another gotogether", v.Reason, w.Reason)
 	}
 	return true, note
+}
+
+// failingAction is the action of the step r first fails at, its
+// conformance's or an invariant's (ActorVerdict.Action): the step's, or
+// for an inferred step (a restart) the model's call's, as Reason names
+// it; "" if none.
+func (r *Result) failingAction() string {
+	switch f := firstFailure(r); {
+	case f != nil && f.Step != nil:
+		return f.Step.Action
+	case f != nil && f.Call != "":
+		action, _, _ := strings.Cut(f.Call, "(")
+		return action
+	}
+	return ""
 }
 
 // failingAction is the action a failing actor fails at: Action, or for

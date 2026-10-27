@@ -152,11 +152,22 @@ func TestVerdictOf(t *testing.T) {
 	fail := &Result{Actor: "b", Conforms: Fail, Failure: &Failure{Kind: "state", Step: step}}
 	none := &Result{Actor: "c", Conforms: NotEvaluated, noVerdict: "lost steps"}
 	v := VerdictOf([]*Result{pass, none, fail}, nil)
-	if v.Verdict != Fail || v.Reason != "no verdict (lost steps)" || v.Failing == nil || v.Failing.Actor != "b" || v.Failing.Ref != "trace.jsonl:2" || len(v.Actors) != 3 || v.Actors[1].Verdict != NotEvaluated {
+	if v.Verdict != Fail || v.Reason != "mismatch after deposit" || v.Failing == nil || v.Failing.Actor != "b" || v.Failing.Ref != "trace.jsonl:2" || len(v.Actors) != 3 || v.Actors[1].Verdict != NotEvaluated {
 		t.Errorf("%+v", v)
 	}
 	if v.Actors[2].Action != "deposit" || v.Actors[1].Action != "" {
 		t.Errorf("the actors' failing actions: %+v", v.Actors)
+	}
+	// a defect after an actor with no verdict is the run's reason and
+	// failing step, not the no verdict's (which once read "FAIL (no
+	// verdict (dropped steps))"), however the no verdict failed
+	gapped := &Result{Actor: "c", Conforms: NotEvaluated, noVerdict: "dropped steps",
+		Failure: &Failure{Kind: "state", Step: &qtrace.Step{Action: "withdraw", Recorder: "r", Seq: 1}}}
+	if v := VerdictOf([]*Result{gapped, fail}, nil); v.Verdict != Fail || v.Reason != "mismatch after deposit" || v.Failing == nil || v.Failing.Actor != "b" {
+		t.Errorf("a defect after a no verdict: %v", v)
+	}
+	if v := VerdictOf([]*Result{gapped, pass}, nil); v.Verdict != NotEvaluated || v.Reason != "no verdict (dropped steps)" || v.Failing == nil || v.Failing.Actor != "c" {
+		t.Errorf("no verdict alone: %v", v)
 	}
 	if v := VerdictOf([]*Result{pass, none}, nil); v.Verdict != NotEvaluated || v.Failing != nil {
 		t.Errorf("no verdict: %+v", v)
@@ -173,7 +184,7 @@ func TestVerdictOf(t *testing.T) {
 		t.Errorf("a ref made another verdict: %v %q", same, note)
 	}
 	// reasons worded otherwise (a newer gotogether's) are the same kind
-	w.Reason, w.Actors[2].Reason = "no verdict (steps lost)", "mismatch after the deposit"
+	w.Reason, w.Actors[1].Reason, w.Actors[2].Reason = "mismatch after the deposit", "no verdict (steps lost)", "mismatch after the deposit"
 	if same, note := v.Same(w); !same || !strings.Contains(note, "worded otherwise") {
 		t.Errorf("a reworded reason: %v %q", same, note)
 	}

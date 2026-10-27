@@ -688,9 +688,11 @@ func (r *Result) Reason() string {
 	case r.Conforms == NotEvaluated:
 		return "no verdict (linearize budget)"
 	case r.Conforms != Pass:
-		action := failureAction(r.Failure)
-		if action == "" {
-			action = "a step"
+		action := "a step"
+		if f := r.Failure; f != nil && f.Step != nil {
+			action = f.Step.Action
+		} else if f != nil && f.Call != "" { // an inferred step (a restart): the model's call
+			action, _, _ = strings.Cut(f.Call, "(")
 		}
 		switch {
 		case r.Failure != nil && r.Failure.Kind == "state":
@@ -717,25 +719,6 @@ func (r *Result) Reason() string {
 		return "no verdict (dropped steps)"
 	}
 	return "issue"
-}
-
-// failureAction is the action of the step f is at: the step's, or for
-// an inferred step (a restart) the model's call's; "" if f names none.
-func failureAction(f *Failure) string {
-	switch {
-	case f != nil && f.Step != nil:
-		return f.Step.Action
-	case f != nil && f.Call != "":
-		action, _, _ := strings.Cut(f.Call, "(")
-		return action
-	}
-	return ""
-}
-
-// failingAction is the action of the step r first fails at, its
-// conformance's or an invariant's (ActorVerdict.Action).
-func (r *Result) failingAction() string {
-	return failureAction(firstFailure(r))
 }
 
 // Summary renders a result for humans.
