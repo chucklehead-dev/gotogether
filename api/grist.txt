@@ -137,6 +137,7 @@ type ReadModel[S any] struct
     method (*ReadModel[S]) Get(r *Reads) S
     method (*ReadModel[S]) Name() string
 type Reads struct
+    method (*Reads) Actor() string
     method (*Reads) Exists(t EventName, tags ...TagPair) bool
     method (*Reads) ID(n int) string
     method (*Reads) Position() Position

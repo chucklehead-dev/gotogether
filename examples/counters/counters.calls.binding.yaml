@@ -14,7 +14,9 @@ outcomes:
   ok: '"ok"'
   name-taken: '"name-taken"'
   unknown-counter: '"unknown-counter"'
+  not-creator: '"not-creator"'
   conflict: '"conflict"'
+  denied: '"denied"'
 
 actions:
   createCounter:

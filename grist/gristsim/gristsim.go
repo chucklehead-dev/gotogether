@@ -229,8 +229,13 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		srv = qhttp.NewServer(s, "api", node)
 		tr := qhttp.NewTransport(srv)
 		tr.Timeout = CallTimeout
+		// a budget every call refills: the workload's calls are judged by a
+		// client-side model, and a call the default budget left pending
+		// after its effect committed is one the model cannot place (each
+		// call is still bounded by MaxAttempts; the budget's own test is
+		// grist's TestClientBackoffAndBudget)
 		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, ActorHeader: ActorHeader,
-			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay}
+			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
 	} else {
 		w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
 			return serve(deps(ctx), app, st, req), nil

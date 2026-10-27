@@ -206,10 +206,18 @@ func TestWelcomeDuplicate(t *testing.T) {
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }
 
-// retirements is the payout claims' shape: two clients creating and
-// retiring counter a, six times each, so a run retires a counter that
-// exists unless every retirement comes before every create.
-var retirements = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 6, Alphabet: []string{"a"},
+// retirements is the payout claims' shape: one client creating and
+// retiring counter a, eight times, so a run retires a counter that
+// exists unless no create comes before a retire (a counter is retired by
+// its creator only: with two clients, one's retirements of the other's
+// counter are refused, and a run could pay nothing).
+var retirements = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 8, Alphabet: []string{"a"},
+	Send: []string{"create-counter", "retire-counter"}}
+
+// contested is two clients creating and retiring counter a, six times
+// each: one's retirement of a counter only the other created is refused
+// (not-creator).
+var contested = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 6, Alphabet: []string{"a"},
 	Send: []string{"create-counter", "retire-counter"}}
 
 // scripted is a script of faults over seed's choices, no other fault.
@@ -309,4 +317,30 @@ func TestPayoutTwoNodes(t *testing.T) {
 	faults.CommitFaults = true
 	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted())
+}
+
+// Only a counter's creator retires it: the decision reads the creator
+// recorded in counter-created (Reads.Actor at its creation) and refuses
+// another actor (not-creator, a committed refusal recorded at the
+// store), and the model's retireCounter judges it by the step's
+// principal: ok needs createdBy, not-creator its negation. Two clients
+// creating and retiring counter a (contested), without faults: every run conforms,
+// and some retire is refused as a non-creator's. Without the check (the
+// anyoneRetires mutant, full mode) 6 of 6 runs reject retireCounter.
+func TestRetireByCreatorOnly(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	x := system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)})
+	x.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	refused := 0
+	for _, run := range x.Runs {
+		for _, s := range run.Steps {
+			if s.Action == "retireCounter" && s.Outcome == "not-creator" && !strings.HasSuffix(s.Actor, "/clients") {
+				refused++
+			}
+		}
+	}
+	if refused == 0 {
+		t.Error("no retirement was refused as a non-creator's at the store: the claim's case never happened")
+	}
 }

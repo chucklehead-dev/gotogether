@@ -99,7 +99,7 @@ type Command[C any] struct {
 
 // reservedArgs are step fields grist records with every command: a
 // command's argument may not take their names. Read-only.
-var reservedArgs = map[string]bool{"id": true, "readPos": true, "reads": true, "result": true, "trigger": true, "key": true, "ok": true}
+var reservedArgs = map[string]bool{"id": true, "principal": true, "readPos": true, "reads": true, "result": true, "trigger": true, "key": true, "ok": true}
 
 // NewCommand registers a command: its decision is conditioned on its
 // read set unless Unconditioned. Its options are Unconditioned,
@@ -203,7 +203,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 	hash := c.hash(body)
 	o := c.info.opts
 	fields := func(r *Reads) []any {
-		return append(append([]any{}, argKV...), "id", env.ID, "readPos", int64(r.pos), "reads", triples(r.sels))
+		return append(append([]any{}, argKV...), "id", env.ID, "principal", env.Actor, "readPos", int64(r.pos), "reads", triples(r.sels))
 	}
 	// onReturn records a step that commits nothing (a reused key, the
 	// code's error): it reads through r's position and appends nothing
@@ -214,7 +214,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 	}
 	answer := func(m store.Marker) (Receipt, error) {
 		if m.Hash != hash {
-			r := newReads(ctx, c.app, s, env.Tenant, env.ID)
+			r := newReads(ctx, c.app, s, env)
 			r.Position()
 			onReturn(r, nil, "outcome", ErrKeyReused.(*Rejected).Name)
 			return Receipt{}, ErrKeyReused
@@ -256,7 +256,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 		if err == nil && conflicted != nil {
 			r, outcome = conflicted, conflictOutcome
 		} else if err == nil {
-			r = newReads(ctx, c.app, s, env.Tenant, env.ID)
+			r = newReads(ctx, c.app, s, env)
 			var derr error
 			events, derr = c.decide(r, args)
 			if err = r.err; err == nil {

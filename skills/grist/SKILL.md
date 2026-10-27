@@ -23,7 +23,11 @@ examples/counters is the walk-through: read its README's table first.
    `*Reads` and arguments in, events or a `grist.Rejection` out), queries,
    processors. Reads: `X.Get(r)`, `X.For(r, key)`, `r.Exists(Event,
    grist.Tag(k, v))`, `grist.Events(r, Event, tags...)` (typed),
-   `r.Select(grist.Selector{...})` (raw). A read of a type the App does
+   `r.Select(grist.Selector{...})` (raw), and `r.Actor()` (the
+   envelope's actor, recorded in every command's and query's step as
+   `principal`: a rule over who asks, such as only a counter's creator
+   retiring it, is the decision's `Rejection` and the model's, by
+   `principal`; a `Policy` sees only the actor and the tenant). A read of a type the App does
    not register, or of a tag key the type has none of, is the decision's
    error, never an empty answer. Options (one `grist.Option` type):
    `Unconditioned(reason)`, `ConditionTries(n)`, `TransientTries(n)` on
@@ -38,7 +42,9 @@ examples/counters is the walk-through: read its README's table first.
    `checkpoints`, `appended` (the last batch), `effects` ((processor,
    trigger, key, ok)), `answered` (the command ids with an outcome). A
    command's action takes its fields, `id`, `readPos`, `reads` (Reads,
-   `{ typ, tags }`) and `result` (`{{.outcome}}` in the binding). Every
+   `{ typ, tags }`), `principal` (the actor, when its rule needs it) and
+   `result` (`{{.outcome}}` in the binding); a client-side model takes
+   `denied` (a 403: nothing appended, the key unanswered). Every
    committed outcome requires `freshKey(answered, id)` and adds the id
    (a rejection and a conflict commit their marker: a key's first answer
    is final), `covers(reads, need)` for what its rule reads (so a lost

@@ -77,7 +77,7 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 		return zero, 0, badArgs("query "+b.info.name, "%v", err)
 	}
 	for try := 1; ; try++ {
-		r := newReads(ctx, b.app, s, env.Tenant, env.ID)
+		r := newReads(ctx, b.app, s, env)
 		res, err := b.f(r, q)
 		if r.err != nil && store.Transient(r.err) {
 			if try < b.info.opts.transientTries {
@@ -93,7 +93,7 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 			err = r.bad
 		}
 		r.Position()
-		kv := append(append([]any{}, argKV...), "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
+		kv := append(append([]any{}, argKV...), "principal", env.Actor, "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
 		var obs []any
 		if err == nil {
 			body, _ := json.Marshal(res)

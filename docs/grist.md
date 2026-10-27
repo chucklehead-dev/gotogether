@@ -509,7 +509,9 @@ stated where it stands below.
   nothing committed, and the server records only what its blocks do
   (commits from the step log, refusals at their commit, queries and
   reused keys on return): the handler records nothing of its own. The
-  client records its 403 as its call's outcome, `denied`.
+  client records its 403 as its call's outcome, `denied` (§0.7: a
+  client-side model's outcome; a refusal that depends on the state, a
+  counter's creator, is the decision's, `Reads.Actor`).
 - **The client records its side**: `grist/client`'s `Client.Do` records
   each call as gristsim's clients do (`<tenant>/clients`, invoked before
   the first request, done with the answer, a lost answer or a 503 sent
@@ -718,6 +720,11 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   bare 503) was a final `StatusError`, so a command whose answer a proxy
   lost was told failed: it is now an unknown outcome, sent again under
   its key (a query's: unavailable). `TestClientBackoffAndBudget`.
+  gristsim's HTTP tier gives its clients a budget every call refills
+  (`MaxAttempts` still bounds each): its calls are judged by a
+  client-side model, and a call the default budget left pending after
+  its effect committed is one that model cannot place (a full-mode run
+  of `TestHTTPTier` found one).
 - **The real tier exercises the same-key retry.** `TestRealHTTP` lost no
   answer, so its clients never retried a command under its key. Its
   server now loses every fifth command's answer after serving it (the
@@ -796,6 +803,27 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   payment made twice inside f, or made while its answer was lost, is
   seen whatever the effect step says (with the answer lost: paid once,
   both vals hold). `Bank.Pay` takes the tenant.
+- **Decisions see the actor, and steps record it.** A decision or query
+  could not tell who asked (`Envelope.Actor` reached the policy only),
+  and no step recorded it, so no model could judge a rule over the
+  actor. `Reads.Actor()` is the envelope's actor ("" for a processor's
+  handler), and every command's and query's step records it as
+  **`principal`** (a reserved argument name), the store's side and the
+  client's alike (`TestActorInDecisionsAndSteps`). examples/counters'
+  `retire-counter` is its creator's only: `counter-created` records its
+  `creator` (`Reads.Actor` at creation), and another actor's retire is
+  refused `not-creator`, a decision's refusal (422, committed as the
+  key's answer and recorded at the store; a `Policy` sees the actor and
+  the tenant, not the counter). The model's `retireCounter(counter, id,
+  principal, ...)` requires `createdBy(log, counter, principal)` for ok
+  and its negation for `not-creator`; `TestRetireByCreatorOnly`: two
+  clients creating and retiring conform, and some retire is refused so;
+  without the check (the `anyoneRetires` mutant, full mode) 6 of 6 runs
+  reject `retireCounter`. A policy's denial (403) still records nothing
+  at the store (nothing ran); `denied` is now an outcome the calls
+  binding knows (`countersCalls`' `denied` action: nothing appended, the
+  key unanswered), so a client-side run with a denial is judged rather
+  than failing on an unknown outcome.
 - **`checkpointFirst`'s claim says what it shows.** `Some(Rejects("welcome"))`
   is the at-least-once model refusing a checkpoint step before any
   effect step of its trigger (`atLeastOnceDone`): the mutant's every

@@ -8,8 +8,9 @@
 module countersLib {
   import grist.* from "./grist"
 
-  pure def created(counter: str, name: str, id: str): Event =
-    { typ: "counter-created", strs: [counter, name], ints: [], tags: Set(("counter", counter), ("name", name)), cause: ("command", id) }
+  // creator: the actor that created it (the step's principal)
+  pure def created(counter: str, name: str, creator: str, id: str): Event =
+    { typ: "counter-created", strs: [counter, name, creator], ints: [], tags: Set(("counter", counter), ("name", name)), cause: ("command", id) }
   pure def incremented(counter: str, by: int, id: str): Event =
     { typ: "counter-incremented", strs: [counter], ints: [by], tags: Set(("counter", counter)), cause: ("command", id) }
   pure def averageComputed(sum: int, count: int): Event =
@@ -23,6 +24,10 @@ module countersLib {
   // it (grist's covers), whatever else the decision read
   pure def nameRead(name: str): Read = { typ: "counter-created", tags: Set(("name", name)) }
   pure def counterRead(counter: str): Read = { typ: "counter-created", tags: Set(("counter", counter)) }
+
+  // actor created counter under some name: the one actor who may retire it
+  pure def createdBy(log: List[Event], counter: str, actor: str): bool =
+    log.indices().exists(i => log[i].typ == "counter-created" and log[i].strs[0] == counter and log[i].strs[2] == actor)
 
   // totals, keyed by counter: the sum of its increments
   pure def total(log: List[Event], counter: str): int =
@@ -109,7 +114,7 @@ module counters {
   // condition to have held (nothing it read changed since readPos); a
   // conflict needs it not to have (the reads kept changing), and commits
   // unconditioned. A reused key commits nothing and needs the key taken.
-  action createCounter(counter: str, name: str, id: str, readPos: int, reads: List[Read], result: str): bool =
+  action createCounter(counter: str, name: str, id: str, principal: str, readPos: int, reads: List[Read], result: str): bool =
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else if (result == "conflict") all {
       freshKey(answered, id),
@@ -122,7 +127,7 @@ module counters {
       conditionHolds(log, readPos, reads),
       if (result == "ok") all {
         not(existsTagged(log, "counter-created", "name", name)),
-        appends([created(counter, name, id)], id),
+        appends([created(counter, name, principal, id)], id),
       } else all {
         result == "name-taken",
         existsTagged(log, "counter-created", "name", name),
@@ -218,10 +223,11 @@ module counters {
     { typ: "paid-out", strs: [counter], ints: [retiredAt], tags: Set(("counter", counter)), cause: ("processor", "payout") }
 
 
-  // retire-counter: refused for an unknown counter, else the counter's
+  // retire-counter: refused for an unknown counter, and for an actor that
+  // is not its creator (principal: the step's actor), else the counter's
   // total as of the commit (its read of the counter's increments is in
   // its condition)
-  action retireCounter(counter: str, id: str, readPos: int, reads: List[Read], result: str): bool =
+  action retireCounter(counter: str, id: str, principal: str, readPos: int, reads: List[Read], result: str): bool =
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else if (result == "conflict") all {
       freshKey(answered, id),
@@ -233,8 +239,12 @@ module counters {
       covers(reads, counterRead(counter)),
       conditionHolds(log, readPos, reads),
       if (result == "ok") all {
-        existsTagged(log, "counter-created", "counter", counter),
+        createdBy(log, counter, principal),
         appends([retired(counter, total(log, counter), id)], id),
+      } else if (result == "not-creator") all {
+        existsTagged(log, "counter-created", "counter", counter),
+        not(createdBy(log, counter, principal)),
+        refuses(readPos, id),
       } else all {
         result == "unknown-counter",
         not(existsTagged(log, "counter-created", "counter", counter)),
@@ -307,16 +317,18 @@ module counters {
     nondet id = Set("i1", "i2", "i3", "i4").oneOf()
     nondet key = Set("k1", "k2", "k3").oneOf()
     nondet ok = Bool.oneOf()
+    nondet principal = Set("p1", "p2").oneOf()
     any {
-      createCounter(counter, name, id, log.length(), [nameRead(name)], "ok"),
-      createCounter(counter, name, id, log.length(), [nameRead(name)], "name-taken"),
+      createCounter(counter, name, id, principal, log.length(), [nameRead(name)], "ok"),
+      createCounter(counter, name, id, principal, log.length(), [nameRead(name)], "name-taken"),
       incrementCounter(counter, by, id, log.length(), [counterRead(counter), { typ: "counter-incremented", tags: Set(("counter", counter)) }], "ok"),
       incrementCounter(counter, by, id, log.length(), [counterRead(counter)], "unknown-counter"),
       showCounter(counter, log.length()),
       average(nextOf(log, checkpoints.get("average"), "counter-incremented")),
       welcomeEffect(nextOf(log, checkpoints.get("welcome"), "counter-created"), key, ok),
       welcome(nextOf(log, checkpoints.get("welcome"), "counter-created"), ok),
-      retireCounter(counter, id, log.length(), [counterRead(counter), { typ: "counter-incremented", tags: Set(("counter", counter)) }], "ok"),
+      retireCounter(counter, id, principal, log.length(), [counterRead(counter), { typ: "counter-incremented", tags: Set(("counter", counter)) }], "ok"),
+      retireCounter(counter, id, principal, log.length(), [counterRead(counter)], "not-creator"),
       payout(nextOf(log, checkpoints.get("payout"), "counter-retired"), false),
       nondet trigger = 1.to(log.length() + 1).oneOf()
       nondet known = Bool.oneOf()
@@ -399,17 +411,23 @@ module countersCalls {
     answered' = answered.union(Set(id)),
   }
 
-  action createCounter(counter: str, name: str, id: str, result: str): bool =
-    if (result == "ok") all {
+  // a call the API refused (403: the block's policy refused the actor)
+  // ran nothing and answers nothing: its key stays unanswered
+  action denied: bool = all { log' = log, answered' = answered }
+
+  action createCounter(counter: str, name: str, id: str, principal: str, result: str): bool =
+    if (result == "denied") denied
+    else if (result == "ok") all {
       not(existsTagged(log, "counter-created", "name", name)),
-      answers([created(counter, name, id)], id),
+      answers([created(counter, name, principal, id)], id),
     } else if (result == "name-taken") all {
       existsTagged(log, "counter-created", "name", name),
       answers([], id),
     } else all { result == "conflict", answers([], id) }
 
   action incrementCounter(counter: str, by: int, id: str, result: str): bool =
-    if (result == "ok") all {
+    if (result == "denied") denied
+    else if (result == "ok") all {
       existsTagged(log, "counter-created", "counter", counter),
       answers([incremented(counter, by, id)], id),
     } else if (result == "unknown-counter") all {
@@ -417,10 +435,15 @@ module countersCalls {
       answers([], id),
     } else all { result == "conflict", answers([], id) }
 
-  action retireCounter(counter: str, id: str, result: str): bool =
-    if (result == "ok") all {
-      existsTagged(log, "counter-created", "counter", counter),
+  action retireCounter(counter: str, id: str, principal: str, result: str): bool =
+    if (result == "denied") denied
+    else if (result == "ok") all {
+      createdBy(log, counter, principal),
       answers([retired(counter, total(log, counter), id)], id),
+    } else if (result == "not-creator") all {
+      existsTagged(log, "counter-created", "counter", counter),
+      not(createdBy(log, counter, principal)),
+      answers([], id),
     } else if (result == "unknown-counter") all {
       not(existsTagged(log, "counter-created", "counter", counter)),
       answers([], id),
@@ -433,12 +456,14 @@ module countersCalls {
     nondet name = Set("a", "b").oneOf()
     nondet by = 1.to(2).oneOf()
     nondet id = Set("i1", "i2", "i3").oneOf()
+    nondet principal = Set("p1", "p2").oneOf()
     any {
-      createCounter(counter, name, id, "ok"),
-      createCounter(counter, name, id, "name-taken"),
+      createCounter(counter, name, id, principal, "ok"),
+      createCounter(counter, name, id, principal, "name-taken"),
       incrementCounter(counter, by, id, "ok"),
       incrementCounter(counter, by, id, "unknown-counter"),
-      retireCounter(counter, id, "ok"),
+      retireCounter(counter, id, principal, "ok"),
+      retireCounter(counter, id, principal, "not-creator"),
       showCounter(counter),
     }
   }

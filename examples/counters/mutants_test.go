@@ -19,14 +19,14 @@ import (
 // whose files replace the app's of the same name (a go build overlay):
 // the app's own files stay as they are, and each mutant is a whole file
 // to diff against them.
-var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout"}
+var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires"}
 
 // fullOnly are the mutants built and run in full mode only: their claim
 // repeats a mechanism a per-push test checks (checkpointFirst: the
 // at-least-once model refusing a checkpoint before its effect, which
 // grist's TestEffectAtMostOnce orders and TestPayoutAtMostOnce judges),
 // and building a mutant's binary is most of its cost.
-var fullOnly = map[string]bool{"checkpointFirst": true, "silentPayout": true}
+var fullOnly = map[string]bool{"checkpointFirst": true, "silentPayout": true, "anyoneRetires": true}
 
 // TestMutant states what catches the mutant this binary was built with;
 // TestMutants builds and runs it once per mutant. Rates measured on
@@ -107,6 +107,13 @@ func TestMutant(t *testing.T) {
 			Expect(t, qtest.Conforms())
 		system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
 			Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("everyPayoutOutcomeLogged"))))
+	case "anyoneRetires":
+		// retire-counter without its creator check: a client retires the
+		// other's counter, which the model's ok requires createdBy of
+		// (the step's principal): Some(Rejects("retireCounter")), without
+		// faults 6 of 6
+		system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+			Expect(t, qtest.Some(qtest.Rejects("retireCounter")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

@@ -11,7 +11,7 @@
 # the reason; packages under ten CPU seconds have none.
 examples/bank 80
 examples/checkout 165
-examples/counters 520 # 255-270 CPU s here on a loaded machine (the parent commit measured 199-211 beside it; CI about twice), up from 201-206: the HTTP tier's client side per push (TestHTTPTier, its store side in full mode), the payout's admitted loss per push (TestPayoutAtMostOnce, its exactly-once judgments in full mode), and a payout poller, a bank and a larger model in every run (each claim about 10% dearer); full mode adds TestHTTPDuplicateRequests, TestFaithfulRetiring and the checkpointFirst mutant, beside the SQL tier's repeated claims and TestFaithfulAtClients; TestRealHTTP about 11 s of wall, mostly its mailer's 20 ms sends
+examples/counters 640 # 319-320 CPU s here on a loaded machine (load 13-21 on 4 cores; the parent commit measured 274 at load 8-13; CI about twice), up from 255-270: grist's review (docs/grist.md §0.7) adds per push TestPayoutTwoNodes (two nodes without faults, then through commit faults and crashes), TestRetireByCreatorOnly, a poller's checkpoint re-read and TestHTTPTier's answers lost at 0.15, and TestRealHTTP losing every fifth answer; full mode adds the payout's exactly-once and outcome judgments, the silentPayout and anyoneRetires mutants, beside TestHTTPDuplicateRequests, TestFaithfulRetiring, the checkpointFirst mutant, the SQL tier's repeated claims and TestFaithfulAtClients; TestRealHTTP about 20 s of wall, mostly its mailer's 20 ms sends
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51

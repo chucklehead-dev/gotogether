@@ -15,7 +15,7 @@ in `TestRealHTTP` and `cmd/counters`).
 | file | what it is |
 |---|---|
 | [counters.go](counters.go) | the events (`counter-created` tagged by counter and name, `counter-incremented`, `average-computed` with integer sum and count, `notified`) and read models (`counter-names`, plain; `totals`, keyed by counter) |
-| [commands.go](commands.go) | `create-counter` (refused when `Exists(counter-created, name)`), `increment-counter` (refused for an unknown counter, read through `Totals.For`), the query `show-counter` |
+| [commands.go](commands.go) | `create-counter` (refused when `Exists(counter-created, name)`; the event records its creator, `Reads.Actor`), `increment-counter` (refused for an unknown counter, read through `Totals.For`), `retire-counter` (its creator's only: `not-creator` for another actor), the query `show-counter` |
 | [processors.go](processors.go) | `average` (`Emit`: the tenant's sum and count as of each increment), `welcome` (`Effect` at least once: a mail through the `mailer` service, then `notified`), `payout` (`Effect` at most once: a retired counter's total paid through the `bank` service, then `paid-out`) |
 | [deps.go](deps.go) | the dependencies a processor reaches through its context: a simulated mailer and a simulated bank (`qenv.Service`s; the bank records each payment it makes, `bankPays`), the store (for the `dispatchDirect` mutant only) |
 | [model/counters.qnt](model/counters.qnt) | one tenant's log: `counters` (the commit side), `countersCalls` (the client side), the read models as defs over the log |
@@ -49,6 +49,9 @@ after an ok send, `grist.failed` after three failed ones).
 and its outcome, if present, agrees with the payment
 (`payoutOutcome`, `atMostOnceDone`); a lost payment or outcome is
 admitted.
+A retirement's ok requires its `principal` (the step's actor) to have
+created the counter (`createdBy`), `not-creator` the negation; the
+bank's own record of each payment (`bankPays`) is in `payments`.
 `uniqueNames` and `averageAsOfTrigger` are the design's (`simulate:
 holds`); `everyCounterWelcomedOrFailed` is judged after the run's last
 settle.
@@ -67,10 +70,12 @@ settle.
 | `TestSQLTier` | claim 2 on the SQL tier (sqlstore over qsql) at Serializable and ReadCommitted, commit faults at 15 in 100, node crashes; both bindings over the same runs | nothing: `Conforms`, `All(Settles)` at the store and at the clients, both faults reached | 40 of 40 on each side, at each level |
 | `TestSQLDuplicateRequests` | `TestDuplicateRequests` on the SQL tier | nothing; without grist's markers 20 of 20 runs reject, without refusal markers 16 of 20 | 40 of 40 on each side |
 | `TestSQLFaithfulAtClaim1` | claim 1's contrast on the SQL tier | `None(Rejects("createCounter"))`; with grist's condition taken out, 11 of 20 runs reject | 40 of 40 |
-| `TestPayoutAtMostOnce` | two clients creating and retiring counter `a`; a `qenv.Script` of `grist.payout.effect`'s `crashBefore` (after the checkpoint, before the payment), then `crashAfter`, then no faults | the lost payment: admitted by `counters.retiring.binding.yaml` (`Conforms`, `All(Settles)`), `All(Violates(eventually everyRetirementPaidOnce))` under `counters.exactly.binding.yaml` (the bank's own record of its payments: `bankPays`), `everyPayoutOutcomeLogged` holding; after the payment, `All(Violates(eventually everyPayoutOutcomeLogged))` (its paid-out lost) and nothing paid twice; without faults, or with the bank's answer lost (`grist.unknown`), both hold. With grist skipping an ok effect's outcome, every run violates `everyPayoutOutcomeLogged`. With grist's `AtMostOnce` run as at least once, 10 of 10 runs reject `payoutEffect` | 10 of 10 each |
+| `TestPayoutAtMostOnce` | one client creating and retiring counter `a`; a `qenv.Script` of `grist.payout.effect`'s `crashBefore` (after the checkpoint, before the payment), then `crashAfter`, then no faults | the lost payment: admitted by `counters.retiring.binding.yaml` (`Conforms`, `All(Settles)`), `All(Violates(eventually everyRetirementPaidOnce))` under `counters.exactly.binding.yaml` (the bank's own record of its payments: `bankPays`), `everyPayoutOutcomeLogged` holding; after the payment, `All(Violates(eventually everyPayoutOutcomeLogged))` (its paid-out lost) and nothing paid twice; without faults, or with the bank's answer lost (`grist.unknown`), both hold. With grist skipping an ok effect's outcome, every run violates `everyPayoutOutcomeLogged`. With grist's `AtMostOnce` run as at least once, 10 of 10 runs reject `payoutEffect` | 10 of 10 each |
 | `TestMutant` (`checkpointFirst`: welcome declared `AtMostOnce` while the model says at least once) | one client creating in one tenant, no faults (full mode) | `Some(Rejects("welcome"))`: its checkpoint step comes before any effect step (`atLeastOnceDone`), which the faithful app never records: a declaration contradicting the model, not a lost mail | 10 of 10 |
-| `TestMutant` (`silentPayout`: the payout without `OnSuccess`) | two clients creating and retiring, no faults (full mode) | admitted by `counters.retiring.binding.yaml` (the outcome is optional); `Some(Violates(eventually everyPayoutOutcomeLogged))` under `counters.exactly.binding.yaml` | 6 of 6 |
+| `TestMutant` (`silentPayout`: the payout without `OnSuccess`) | one client creating and retiring, no faults (full mode) | admitted by `counters.retiring.binding.yaml` (the outcome is optional); `Some(Violates(eventually everyPayoutOutcomeLogged))` under `counters.exactly.binding.yaml` | 6 of 6 |
 | `TestPayoutTwoNodes` | `retirements` on two nodes (`gristsim.Config.Nodes`), their payout pollers racing; without faults, then with commit faults and crashes | nothing: `Conforms`, `All(Settles)`, exactly once without faults; a checkpoint left to the other poller after a failed append is reached (counted from the run's log); with grist taking the moved checkpoint for its own, the loser pays too: 10 of 10 runs reject `payoutEffect` | 10 of 10 each |
+| `TestRetireByCreatorOnly` | two clients creating and retiring counter `a`, no faults | nothing: `Conforms`, `All(Settles)`, some retire refused `not-creator` at the store (the model's `retireCounter` judges it by the step's `principal`) | 6 of 6 |
+| `TestMutant` (`anyoneRetires`: retire-counter without its creator check) | the same (full mode) | `Some(Rejects("retireCounter"))`: a retire by a non-creator commits | 6 of 6 |
 | `TestFaithfulRetiring` | claim 2 with every command (retirements and the at-most-once payout among them), commit faults and crashes (full mode) | nothing: `Conforms`, `All(Settles)` under `counters.retiring.binding.yaml` | 20 of 20 |
 | `TestHTTPTier` | claim 2 on the HTTP tier: the node's API (`grist.NewHandler`) on a `qhttp.Server`, the clients calling it with `grist/client` over qhttp's Transport (the API's 503s and refusals, requests dropped, duplicated and late, answers lost, at 0.15, crashes with requests in flight), commit faults; both bindings over the same runs (the store's in full mode) | nothing: `Conforms`, `All(Settles)` at the store and at the clients, answers lost and crashes reached; with the client sending each request under a new key, 12 of 20 runs fail at the clients (the store's side admits each key as a new command) | 40 of 40 on each side |
 | `TestHTTPDuplicateRequests` | `TestDuplicateRequests` on the HTTP tier | nothing; with a new key per retry 9 of 20 runs fail at the clients | 40 of 40 on each side |
@@ -81,7 +86,7 @@ settle.
 `TestMutant` in it. Under `-short` (every push) each claim runs at fewer
 seeds, each with a miss chance under 5%, and the SQL tier's claims that
 repeat a mechanism a per-push test covers run in full mode only:
-`TestSQLDuplicateRequests`, `TestHTTPDuplicateRequests`, `TestHTTPTier`'s store side, `TestPayoutTwoNodes`' exactly-once half, the `silentPayout` mutant, `TestSQLFaithfulAtClaim1`, `TestFaithfulRetiring`, `TestPayoutAtMostOnce`'s exactly-once judgments, the `checkpointFirst` mutant, `blind`'s and
+`TestSQLDuplicateRequests`, `TestHTTPDuplicateRequests`, `TestHTTPTier`'s store side, `TestPayoutTwoNodes`' exactly-once half, the `silentPayout` and `anyoneRetires` mutants, `TestSQLFaithfulAtClaim1`, `TestFaithfulRetiring`, `TestPayoutAtMostOnce`'s exactly-once judgments, the `checkpointFirst` mutant, `blind`'s and
 `dispatchDirect`'s SQL-tier halves, `TestSQLTier`'s Serializable half and
 `TestFaithfulAtClients` (the clients' side is judged per push by
 `TestDuplicateRequests` and `TestSQLTier`).

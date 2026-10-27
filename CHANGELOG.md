@@ -180,6 +180,13 @@ The first release. What a user meets, by module:
   examples/counters: the bank records its payments (`bankPays`;
   `Bank.Pay` takes the tenant), `everyPayoutOutcomeLogged`,
   `TestPayoutTwoNodes`, the `silentPayout` mutant.
+- grist's actor in decisions (docs/grist.md §0.7; api/grist.txt):
+  `Reads.Actor()`, and every command's and query's step records the
+  actor as `principal` (a reserved argument name), client-side steps
+  too. examples/counters: `counter-created` records its `creator`,
+  `retire-counter` refuses another actor (`not-creator`), the model judges
+  both, the calls model knows `denied`; `TestRetireByCreatorOnly` and the
+  `anyoneRetires` mutant.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose
