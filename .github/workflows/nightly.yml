@@ -78,24 +78,29 @@ jobs:
         # (internal/depgraph: sorting the nodes Tarjan visits, whose
         # components are sorted after)
         include:
-          # qtrace: 20 of 289, each read (ids as of the bounded losses). Equivalent:
-          # realTime's loop bounds (39, 41, 44: earliest[0] is never read,
-          # earliest[k] >= k); a seq equal to a Call or to another step's of
-          # its recorder (53, 59: that record is never among the steps, seqs
-          # are deduplicated); a rejected order's state (85: never read); a
-          # budget's last turn (93, 121, 122: it checks nothing); a complete
-          # search that tried nothing (118: needs a budget under 1, which
-          # Linearize never passes); a move to the front of what is first (69,
-          # 102: nothing to move); the comparator's < on values never equal
-          # (197, 198); the time key left in a line's attributes (30: nothing
-          # reads it); the assumed mark inverted for every step alike (36: the
-          # same groups of equal keys); a recorder's first seq against an
-          # equal one (154: seqs are deduplicated first); a merged loss's
-          # After set to the equal value it has (166, 167). 111 ties the
-          # guided search's best move otherwise: another path, the same
-          # verdicts.
+          # qtrace: 24 of 405, each read (ids as of the watermarks' and the
+          # observation mutants' tests). Equivalent: realTime's loop bounds
+          # (47, 49, 52: earliest[0] is never read, earliest[k] >= k); a seq
+          # equal to a Call or to another step's of its recorder (61, 67, 279:
+          # that record is never among the steps, seqs are deduplicated, and a
+          # completion numbered as its invocation is that record's duplicate);
+          # a rejected order's state (93: never read); a budget's last turn
+          # (101, 129, 130: it checks nothing); a complete search that tried
+          # nothing (126: needs a budget under 1, which Linearize never
+          # passes); a move to the front of what is first (77, 110: nothing to
+          # move); the comparator's < on values never equal (295, 296); the
+          # time key left in a line's attributes (37: nothing reads it); the
+          # assumed mark inverted for every step alike (44: the same groups of
+          # equal keys); a recorder's first seq against an equal one (235: seqs
+          # are deduplicated first); a merged loss's After set to the equal
+          # value it has (249, 250); UncorruptedFields' two passes in the other
+          # order (198: the same fields); a retime's tie with its own copy (208:
+          # what the retime of either would break, wellFormed leaves out) and a
+          # step moved past itself (215: the others are other actors'). 119
+          # ties the guided search's best move otherwise: another path, the
+          # same verdicts.
           - pkg: qtrace
-            max: 20
+            max: 24
           # qenv: 22 of 914, each read. Two need gosim's cooperative
           # runtime, which only its module runs: a release dropped on a
           # Platform (572: enqueue, 341: a task that crashes its own
