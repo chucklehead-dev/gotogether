@@ -59,19 +59,33 @@ var gen = map[string]func(pick func(int) int) any{
 	"member-loans": func(p func(int) int) any { return MemberLoans{Member: of(p, "a", "b", "c")} },
 }
 
-// contended is one tenant, three clients of five operations each, borrows
-// weighted two to one (a name listed twice in Send).
-var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, CommitFaults: true, Gen: gen,
+// opened is the library as a prologue leaves it before the clients start:
+// a and b members, one copy each of x and y, and an addition refused as
+// invalid. A borrow needs a join and an
+// addition before it, which random sends mostly lacked (the first
+// TestFaithful's runs never committed one).
+var opened = []gristsim.Call{
+	{Name: "join", Args: Join{Member: "a"}}, {Name: "join", Args: Join{Member: "b"}},
+	{Name: "add-book", Args: AddBook{Book: "x", Copies: 1}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 1}},
+	{Name: "add-book", Args: AddBook{Book: "z", Copies: 0}}, // refused: invalid, which random sends seldom are
+}
+
+// contended is one tenant, three clients of five operations each after the
+// opening, borrows weighted two to one (a name listed twice in Send).
+var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, CommitFaults: true, Gen: gen, Prologue: opened,
 	Send: []string{"join", "add-book", "borrow", "borrow", "return-book", "member-loans"}}
 
 // TestFaithful: through commit faults, node crashes and a lossy API, every
-// run conforms at the store and settles (every borrow's receipt sent), and
-// the commit faults happened.
+// run conforms at the store and settles (every borrow's receipt sent), the
+// commit faults happened, and the runs took every block of the catalog by
+// each of its outcomes but the limit refusal, which three borrows of one
+// member in fifteen random operations seldom reach (TestGreedy claims it).
 func TestFaithful(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(), qtest.Takes("borrow"))
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(),
+			gristtest.Exercised(App, "borrow.limit"))
 }
 
 // TestFaithfulAtClients: the same runs judged where the clients saw them,
@@ -99,18 +113,21 @@ func TestScarce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(commits, scarce).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
-		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow"))
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("unavailable"))
 }
 
-// greedy is one member borrowing from three books of three copies each, at
-// ReadCommitted, no faults: three clients race for the member's last loans.
-// The staleLimit mutant's shape.
-var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, Isolation: qenv.ReadCommitted,
-	Send: []string{"join", "add-book", "borrow", "borrow", "borrow"},
+// greedy is one member borrowing from three books of three copies each
+// (joined and catalogued by a prologue), at ReadCommitted, no faults:
+// three clients race for the member's last loans, nine borrows for three.
+// The staleLimit mutant's shape. (With the join and the additions among
+// the random sends, no run of the first version reached the limit at all:
+// Takes(...).Outcome("limit") said so.)
+var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Isolation: qenv.ReadCommitted,
+	Send: []string{"borrow"},
+	Prologue: []gristsim.Call{{Name: "join", Args: Join{Member: "a"}},
+		{Name: "add-book", Args: AddBook{Book: "x", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "z", Copies: 3}}},
 	Gen: map[string]func(pick func(int) int) any{
-		"join":     func(p func(int) int) any { return Join{Member: "a"} },
-		"add-book": func(p func(int) int) any { return AddBook{Book: of(p, "x", "y", "z"), Copies: 3} },
-		"borrow":   func(p func(int) int) any { return Borrow{Member: "a", Book: of(p, "x", "y", "z")} },
+		"borrow": func(p func(int) int) any { return Borrow{Member: "a", Book: of(p, "x", "y", "z")} },
 	}}
 
 // TestGreedy: the faithful app at the mutant's shape holds the limit, and
@@ -119,7 +136,7 @@ func TestGreedy(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
-		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow"))
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("limit"))
 }
 
 // crashAfterMail crashes the node just after the first receipt's mail,
@@ -130,14 +147,15 @@ func crashAfterMail(seed uint64) qenv.Chooser {
 		Faults: []qenv.Scripted{{Kind: "grist.receipts.effect", Name: "crashAfter"}}}
 }
 
-// lending is a and b borrowing x and y, enough copies, no other faults;
-// borrows weighted three to one (a name listed thrice in Send), so that
-// every run borrows after a join and an addition.
-var lending = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, Send: []string{"join", "add-book", "borrow", "borrow", "borrow"},
+// lending is a and b borrowing x and y after a prologue that joins them
+// and adds two copies of each, no other faults: every run borrows.
+var lending = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Send: []string{"borrow"},
+	Prologue: []gristsim.Call{
+		{Name: "join", Args: Join{Member: "a"}}, {Name: "join", Args: Join{Member: "b"}},
+		{Name: "add-book", Args: AddBook{Book: "x", Copies: 2}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 2}},
+	},
 	Gen: map[string]func(pick func(int) int) any{
-		"join":     func(p func(int) int) any { return Join{Member: of(p, "a", "b")} },
-		"add-book": func(p func(int) int) any { return AddBook{Book: of(p, "x", "y"), Copies: 2} },
-		"borrow":   func(p func(int) int) any { return Borrow{Member: of(p, "a", "b"), Book: of(p, "x", "y")} },
+		"borrow": func(p func(int) int) any { return Borrow{Member: of(p, "a", "b"), Book: of(p, "x", "y")} },
 	}}
 
 // TestReceiptOnce: after a crash between a receipt's mail and its

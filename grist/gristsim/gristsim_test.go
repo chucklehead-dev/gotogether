@@ -154,3 +154,42 @@ func TestDo(t *testing.T) {
 		t.Errorf("client-side steps %v: want the note and the count each invoked and done, the count answering 1", calls)
 	}
 }
+
+// A Prologue's calls are made in order, each to each tenant (or the one
+// it names), before any client's first call: every client's invocation
+// comes after the last prologue call's completion, in the recording.
+func TestPrologue(t *testing.T) {
+	for _, cfg := range []gristsim.Config{{}, {HTTP: true}} {
+		cfg.Prologue = []gristsim.Call{{Name: "note", Args: Note{Key: "p"}}, {Tenant: "t2", Name: "note", Args: []byte(`{"topic":"q"}`)}, {Name: "count", Args: nil}}
+		var order []string
+		lastPrologue, firstClient := -1, -1
+		for i, s := range run(t, cfg) {
+			if !s.Invocation && s.Call == 0 {
+				continue
+			}
+			id, _ := s.Args["id"].(string)
+			switch {
+			case s.Invocation && strings.Contains(id, "-prologue-") && s.Action == "note":
+				order = append(order, id+":"+fmtAny(s.Args["topic"]))
+			case s.Args["principal"] == "prologue" || strings.Contains(id, "-prologue-"):
+			case s.Invocation && firstClient < 0 && !strings.HasPrefix(fmtAny(s.Args["principal"]), "probe"):
+				firstClient = i
+			}
+			if s.Args["principal"] == "prologue" && !s.Invocation {
+				lastPrologue = i
+			}
+		}
+		if want := []string{"t1-prologue-1:p", "t2-prologue-1:p", "t2-prologue-2:q"}; !reflect.DeepEqual(order, want) {
+			t.Errorf("HTTP %v: the prologue's notes %v, want %v (in order, each to each tenant but the one naming t2)", cfg.HTTP, order, want)
+		}
+		if lastPrologue < 0 || firstClient < 0 || firstClient < lastPrologue {
+			t.Errorf("HTTP %v: the prologue's last completion at %d, the clients' first call at %d: want the clients after it", cfg.HTTP, lastPrologue, firstClient)
+		}
+	}
+	err := gristsim.Run(qenv.NewSeeded(1), app(), gristsim.Config{Prologue: []gristsim.Call{{Name: "nope"}}})
+	if err == nil || !strings.Contains(err.Error(), `"nope" is no command or query`) {
+		t.Errorf("an unknown name in the prologue: %v, want the Config's error naming it", err)
+	}
+}
+
+func fmtAny(v any) string { s, _ := v.(string); return s }

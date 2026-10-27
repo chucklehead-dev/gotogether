@@ -26,11 +26,11 @@ of building it as a newcomer to grist.
 
 | test | configuration | catches |
 |---|---|---|
-| `TestFaithful` | one tenant, three clients, commit faults, node crashes, a lossy API | nothing: `Conforms`, `All(Settles)`, commit faults reached, `borrow` taken |
+| `TestFaithful` | one tenant, a prologue (two members, a copy of two books, an invalid addition), three clients, commit faults, node crashes, a lossy API | nothing: `Conforms`, `All(Settles)`, commit faults reached, every block of the catalog taken by each outcome but `borrow.limit` (`gristtest.Exercised`) |
 | `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
-| `TestScarce` | members borrowing one book added a copy at a time, no faults | nothing: `None(Rejects("borrow"))` (`noCopyCheck`'s contrast) |
+| `TestScarce` | members borrowing one book added a copy at a time, no faults | nothing: `None(Rejects("borrow"))` (`noCopyCheck`'s contrast), a borrow refused `unavailable` (`Takes("borrow").Outcome("unavailable")`) |
 | `TestMutant` (`noCopyCheck`) | the same | `Some(Rejects("borrow"))`: a borrow with no copy free commits where the model's rule says `unavailable` (and its read set misses the shelf) |
-| `TestGreedy` | one member, three clients borrowing at ReadCommitted, no faults | nothing: `None(Rejects("borrow"))` (`staleLimit`'s contrast) |
+| `TestGreedy` | one member and three books opened by a prologue, three clients borrowing at ReadCommitted, no faults | nothing: `None(Rejects("borrow"))` (`staleLimit`'s contrast), a borrow refused at the `limit` |
 | `TestMutant` (`staleLimit`) | the same, the borrow `Unconditioned` | `Some(Rejects("borrow"))`: a fourth loan commits on a stale read of the member's loans, where the model's rule says `limit` |
 | `TestReceiptOnce` | a scripted crash just after a receipt's mail, before its checkpoint | nothing: `Conforms` (the mail sent again, the mailer dropping it), `All(Settles)`, the crash reached |
 | `TestMutant` (`noDedupe`) | the same, the mailer without its dedupe | `Some(Rejects("mailerSends"))`: a second record of one key, which the mailer's rule (`mailerSendsAdmits`) refuses |

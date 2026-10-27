@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
@@ -59,8 +60,18 @@ type Config struct {
 	// queries (default 2 and 4).
 	Clients, Ops int
 	// Send are the commands and queries the clients send, by name
-	// (default: every one of the registry).
+	// (default: every one of the registry). Each operation draws one
+	// uniformly from the list, so a name listed twice is sent about twice
+	// as often.
 	Send []string
+	// Prologue are calls made in order, each answered (or left pending
+	// after MaxAttempts tries) before the next, before any client sends
+	// its first: the state the workload's random operations need (a member
+	// joined, a book catalogued), which random sends of a command that
+	// needs earlier ones mostly refuse. Its calls are recorded as every
+	// client's are (actor "prologue", ids <tenant>-prologue-<k>) and go
+	// through the same faults; the clients wait for it.
+	Prologue []Call
 	// SQL runs the app on grist/sqlstore over qsql (qsql.Open on the run's
 	// qenv.Store) instead of simstore: the statements the real tier runs
 	// on PostgreSQL and SQLite, interleaved statement by statement at
@@ -107,6 +118,16 @@ type Config struct {
 	// Log, if set, receives the simulation's log (crashes, upgrades:
 	// qenv.Sim.Log), for a failing run's story.
 	Log func(string)
+}
+
+// A Call is one call of a Prologue: a command or query by name, with its
+// arguments (a value of its arguments' type, or their JSON as a
+// json.RawMessage or []byte; nil draws them as the workload does: Gen, else
+// generated), to Tenant ("": each tenant, in Config.Tenants' order).
+type Call struct {
+	Tenant string
+	Name   string
+	Args   any
 }
 
 // request is a client's request to the node.
@@ -245,9 +266,25 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	if len(names) == 0 {
 		names = append(app.Commands(), app.Queries()...)
 	}
+	// the prologue, if any, before every client's first call
+	prologue, err := w.prologue()
+	if err != nil {
+		return err
+	}
+	done := len(prologue) == 0
+	if !done {
+		s.Spawn("prologue", func(ctx context.Context) {
+			ctx = qobs.Thread(ctx)
+			for _, req := range prologue {
+				w.call(ctx, req)
+			}
+			done = true
+		})
+	}
 	for i := 1; i <= cfg.Clients; i++ {
 		s.Spawn(fmt.Sprintf("client%d", i), func(ctx context.Context) {
 			ctx = qobs.Thread(ctx)
+			qenv.Wait(ctx, func() bool { return done })
 			for op := 1; op <= cfg.Ops; op++ {
 				tenant := cfg.Tenants[s.Choose("gristsim.tenant", len(cfg.Tenants))]
 				name := names[s.Choose("gristsim.op", len(names))]
@@ -349,6 +386,49 @@ type workload struct {
 	api *qenv.Service[request, response]
 	// http is the HTTP tier's client (Config.HTTP), api nil
 	http *client.Client
+}
+
+// prologue are the Prologue's requests, in order, each call to each of
+// its tenants: an unknown name, an unknown tenant or arguments that do
+// not encode are the Config's error.
+func (w *workload) prologue() ([]request, error) {
+	var out []request
+	known := map[string]bool{}
+	for _, n := range append(w.app.Commands(), w.app.Queries()...) {
+		known[n] = true
+	}
+	for k, c := range w.cfg.Prologue {
+		if !known[c.Name] {
+			return nil, fmt.Errorf("gristsim: Config.Prologue[%d]: %q is no command or query of %s (its blocks: %v)", k, c.Name, w.app.Name, append(w.app.Commands(), w.app.Queries()...))
+		}
+		tenants := w.cfg.Tenants
+		if c.Tenant != "" {
+			if !slices.Contains(tenants, c.Tenant) {
+				return nil, fmt.Errorf("gristsim: Config.Prologue[%d]: tenant %q is not one of Config.Tenants %v", k, c.Tenant, tenants)
+			}
+			tenants = []string{c.Tenant}
+		}
+		for _, t := range tenants {
+			var args json.RawMessage
+			switch a := c.Args.(type) {
+			case nil:
+				args = w.gen(c.Name)
+			case json.RawMessage:
+				args = a
+			case []byte:
+				args = a
+			default:
+				b, err := json.Marshal(a)
+				if err != nil {
+					return nil, fmt.Errorf("gristsim: Config.Prologue[%d] (%s): its arguments: %w", k, c.Name, err)
+				}
+				args = b
+			}
+			out = append(out, request{Query: isQuery(w.app, c.Name), Name: c.Name, Args: args,
+				Env: grist.Envelope{ID: fmt.Sprintf("%s-prologue-%d", t, k+1), Tenant: t, Actor: "prologue"}})
+		}
+	}
+	return out, nil
 }
 
 // gen draws name's arguments through the run's Chooser.

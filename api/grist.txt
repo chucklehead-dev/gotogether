@@ -249,12 +249,17 @@ func ClientsActor(tenant string) string
 func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope, name string, args json.RawMessage) error
 func Gen(typ reflect.Type, alphabet []string, pick func(n int) int) any
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error
+type Call struct
+    field Tenant string
+    field Name string
+    field Args any
 type Config struct
     field Isolation qenv.Isolation
     field Tenants []string
     field Clients int
     field Ops int
     field Send []string
+    field Prologue []Call
     field SQL bool
     field HTTP bool
     field Nodes int
@@ -269,9 +274,11 @@ type Config struct
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 const MutantEnv = "GRIST_MUTANT"
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
+func Exercised(app *grist.App, except ...string) qtest.Claim
 func Generated(t testing.TB, app *grist.App)
 func Mutant() string
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
+func Takes(app *grist.App) []qtest.Take
 type Mutants struct
     field Names []string
     field FullOnly []string
