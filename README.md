@@ -555,6 +555,9 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |
 | `qgosim` (module) | qenv and whole programs in gosim (the fork, `github.com/chucklehead-dev/gosim`) |
+| `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1; built over a few commits): `New`, `NewEvent`, the store interface (`Store`, `Query`, `Batch`, `Condition`; `CheckCondition` and `Select`, the reference evaluations) |
+| `grist/memstore`, `grist/simstore` | grist's stores: in memory for unit tests; over a `qenv.Store` for simulations |
+| `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions and reads against brute force, checkpoints, markers, tenant isolation |
 
 ## Example apps
 

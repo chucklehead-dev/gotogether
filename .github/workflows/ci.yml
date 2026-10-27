@@ -187,7 +187,7 @@ jobs:
         run: ci/install-quint.sh
       - name: vet and test each published module in the workspace
         run: |
-          for m in qhegel qweave qanalysis qgosim; do
+          for m in qhegel qweave qanalysis qgosim grist; do
             echo "::group::$m"
             (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
@@ -406,6 +406,25 @@ jobs:
           ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
       - name: demos
         run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
+
+  grist:
+    # its own module (published like qhegel): the framework's stores
+    # against the contract suite, its commands and processors on a
+    # simulated store, the scheduler's and the Store's checks on
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: grist
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: grist/go.mod
+          cache-dependency-path: grist/go.sum
+      - name: gofmt, vet, lint -sim
+        run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C .. ./cmd/gotogether lint -sim grist
+      - name: test (GOTOGETHER_CHECK)
+        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m ./...
 
   payd:
     # its own job: an unmodified net/http + database/sql service in qenv

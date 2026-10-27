@@ -23,6 +23,7 @@ use (
 	./examples/sktrace
 	./examples/streams
 	./examples/twophase
+	./grist
 	./internal/hegelprops
 	./qanalysis
 	./qgosim

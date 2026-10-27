@@ -38,13 +38,14 @@ type Module struct {
 }
 
 // Modules are the published modules (AGENTS.md: the core, qhegel, qweave,
-// qanalysis, qgosim).
+// qanalysis, qgosim, grist).
 // Read-only.
 var Modules = []Module{
 	{Dir: ".", Path: "github.com/chucklehead-dev/gotogether", File: "api/core.txt"},
 	{Dir: "qhegel", Path: "github.com/chucklehead-dev/gotogether/qhegel", File: "api/qhegel.txt"},
 	{Dir: "qweave", Path: "github.com/chucklehead-dev/gotogether/qweave", File: "api/qweave.txt"},
 	{Dir: "qanalysis", Path: "github.com/chucklehead-dev/gotogether/qanalysis", File: "api/qanalysis.txt"},
+	{Dir: "grist", Path: "github.com/chucklehead-dev/gotogether/grist", File: "api/grist.txt"},
 	{Dir: "qgosim", Path: "github.com/chucklehead-dev/gotogether/qgosim", File: "api/qgosim.txt", Tags: []string{"sim"}},
 }
 

@@ -1,6 +1,6 @@
 # Changelog
 
-Every published module (the core, qhegel, qweave, qanalysis, qgosim) is
+Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist) is
 versioned together; the examples are not published. A change to the
 core's exported API updates `api/core.txt` and adds a line here.
 
@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist, a new module (api/grist.txt): an event-sourced framework whose
+  applications are checked against their Quint model (docs/grist.md,
+  slice 1, built over a few commits): its store interface (`Store`,
+  `Query`, `Batch`, `Condition`, the reference `CheckCondition` and
+  `Select`), events, the stores `memstore` and `simstore`, and the
+  store contract suite `storetest`.
 - After the review of G3–G5: `validate -replay -itf` keeps the ITF it
   names; `gotogether shrink` sets each command's `WaitDelay` (a child
   left running with the driver's output open once hung it), takes

@@ -1,0 +1,144 @@
+== github.com/chucklehead-dev/gotogether/grist
+const ConditionTries = 5
+const TransientTries = 10
+func CheckCondition(log []Stored, c Condition) error
+func New(name string) *App
+func NewEvent[E any](app *App, name string) *EventType[E]
+func NewReceipt(tenant string, head Position, n int) Receipt
+func ParsePosKey(s string) (Position, error)
+func PosKey(p Position) string
+func QuintName(name string) (string, error)
+func Select(log []Stored, q Query, at Position) []Stored
+func StepFields(typ reflect.Type, body []byte, prefix string) []any
+func Tag(key string, value any) TagPair
+func Transient(err error) bool
+type App struct
+    field Name string
+    method (*App) Verify() error
+type Batch struct
+    field Events []Event
+    field Condition *Condition
+    field Marker *Marker
+    field Checkpoint *CheckpointMove
+    field Time int64
+    field Cause string
+    field OnCommit func(head Position)
+type CheckpointMove struct
+    field Processor string
+    field From Position
+    field To Position
+type CheckpointMoved struct
+    field Processor string
+    field Expected Position
+    field Found Position
+    method (*CheckpointMoved) Error() string
+type Condition struct
+    field After Position
+    field Queries []Query
+type ConditionFailed struct
+    field Query Query
+    field Event Position
+    field Marker string
+    method (*ConditionFailed) Error() string
+type Event struct
+    field Type string
+    field Version int
+    field Tags []TagPair
+    field Body json.RawMessage
+    method (Event) Tagged(tags []TagPair) bool
+type EventName interface
+    Name() string
+type EventRef struct
+    field Tenant string
+    field Pos Position
+type EventType[E any] struct
+    method (*EventType[E]) Decode(s Stored) (E, error)
+    method (*EventType[E]) Name() string
+    method (*EventType[E]) Of(e E) Event
+type Failed struct
+    field Processor string `json:"processor" grist:"tag"`
+    field Trigger int64 `json:"trigger"`
+type Marker struct
+    field ID string
+    field Hash string
+    field Receipt Receipt
+type Meta struct
+    field Tenant string
+    field Pos Position
+    field Time int64
+    field Cause string
+type Position int64
+type Query struct
+    field Types []string
+    field Tags []TagPair
+    field After Position
+    field Reverse bool
+    field Limit int
+    method (Query) Matches(e Event) bool
+    method (Query) String() string
+type Receipt struct
+    field Pos Position
+    field Events []EventRef
+type Store interface
+    Name() string
+    CreateTenant(ctx context.Context, tenant string) error
+    Tenants(ctx context.Context) ([]string, error)
+    Read(ctx context.Context, tenant string, q Query, at Position) ([]Stored, Position, error)
+    Append(ctx context.Context, tenant string, b Batch) (Position, error)
+    Marker(ctx context.Context, tenant, id string) (Marker, bool, error)
+    Checkpoint(ctx context.Context, tenant, processor string) (Position, error)
+    Heads(ctx context.Context) (map[string]Position, error)
+    Wait(ctx context.Context, tenant string, p Position) error
+type Stored struct
+    embed Event
+    field Tenant string
+    field Pos Position
+    field Time int64
+    field Cause string
+    method (Stored) Meta() Meta
+type TagPair struct
+    field Key string
+    field Value string
+var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
+
+== github.com/chucklehead-dev/gotogether/grist/memstore
+func New(name string) *Store
+type Store struct
+    method (*Store) Append(_ context.Context, t string, b grist.Batch) (grist.Position, error)
+    method (*Store) Checkpoint(_ context.Context, t, processor string) (grist.Position, error)
+    method (*Store) CreateTenant(_ context.Context, t string) error
+    method (*Store) Heads(context.Context) (map[string]grist.Position, error)
+    method (*Store) Marker(_ context.Context, t, id string) (grist.Marker, bool, error)
+    method (*Store) Name() string
+    method (*Store) Read(_ context.Context, t string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error)
+    method (*Store) Tenants(context.Context) ([]string, error)
+    method (*Store) Wait(ctx context.Context, t string, p grist.Position) error
+
+== github.com/chucklehead-dev/gotogether/grist/simstore
+func New(db *qenv.Store) *Store
+type Store struct
+    method (*Store) Append(ctx context.Context, t string, b grist.Batch) (grist.Position, error)
+    method (*Store) Checkpoint(ctx context.Context, t, processor string) (grist.Position, error)
+    method (*Store) CreateTenant(ctx context.Context, t string) error
+    method (*Store) Heads(ctx context.Context) (map[string]grist.Position, error)
+    method (*Store) Marker(ctx context.Context, t, id string) (grist.Marker, bool, error)
+    method (*Store) Name() string
+    method (*Store) Read(ctx context.Context, t string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error)
+    method (*Store) Tenants(ctx context.Context) ([]string, error)
+    method (*Store) Wait(ctx context.Context, t string, p grist.Position) error
+
+== github.com/chucklehead-dev/gotogether/grist/storetest
+func Checkpoints(ctx context.Context, s grist.Store) error
+func ConditionsAgainstBruteForce(ctx context.Context, s grist.Store) error
+func DensePositions(ctx context.Context, s grist.Store) error
+func Markers(ctx context.Context, s grist.Store) error
+func ReadsAgainstBruteForce(ctx context.Context, s grist.Store) error
+func Run(t *testing.T, h Harness)
+func TenantIsolation(ctx context.Context, s grist.Store) error
+func UnknownTenant(ctx context.Context, s grist.Store) error
+type Check struct
+    field Name string
+    field Run func(ctx context.Context, s grist.Store) error
+type Harness func(t *testing.T, body func(ctx context.Context, s grist.Store) error)
+var Checks = []Check{…}
+
