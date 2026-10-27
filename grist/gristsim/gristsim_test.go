@@ -3,6 +3,7 @@ package gristsim_test
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist"
@@ -30,10 +31,10 @@ func app() *grist.App {
 	noted := grist.NewEvent[Noted](a, "noted")
 	grist.NewCommand(a, "note", func(r *grist.Reads, c Note) ([]grist.Event, error) {
 		return []grist.Event{noted.Of(Noted{Key: c.Key})}, nil
-	})
+	}, grist.Authorize(grist.Authenticated))
 	grist.NewQuery(a, "count", func(r *grist.Reads, q Note) (Count, error) {
 		return Count{N: len(r.Select(grist.Selector{Types: []string{"noted"}, Tags: []grist.TagPair{grist.Tag("topic", q.Key)}}))}, nil
-	})
+	}, grist.Authorize(grist.Authenticated))
 	return a
 }
 
@@ -51,11 +52,26 @@ func run(t *testing.T, cfg gristsim.Config) []qtrace.Step {
 // the alphabet on every tenant), so the binding's eventual vals are
 // judged. It records both sides: at the store, every step is the store's,
 // of its tenant, the commits relayed from the step log under the tenant's
-// own recorder, on simstore and on sqlstore over qsql alike; at the clients, every command and query is a call
-// (invoked, then done) of actor <tenant>/clients.
+// own recorder, on simstore and on sqlstore over qsql alike, the clients
+// calling over a qenv.Service or the HTTP API; at the clients, every
+// command and query is a call (invoked, then done) of actor
+// <tenant>/clients.
 func TestBothSides(t *testing.T) {
-	for _, sql := range []bool{false, true} {
-		bothSides(t, run(t, gristsim.Config{Check: true, SQL: sql}))
+	for _, cfg := range []gristsim.Config{{Check: true}, {Check: true, SQL: true}, {Check: true, HTTP: true}, {Check: true, SQL: true, HTTP: true}} {
+		bothSides(t, run(t, cfg))
+	}
+}
+
+// The HTTP tier refuses an App whose blocks declare no policy: every
+// block is denied by default.
+func TestHTTPNeedsPolicies(t *testing.T) {
+	a := grist.New("open")
+	noted := grist.NewEvent[Noted](a, "noted")
+	grist.NewCommand(a, "note", func(r *grist.Reads, c Note) ([]grist.Event, error) {
+		return []grist.Event{noted.Of(Noted{Key: c.Key})}, nil
+	})
+	if err := gristsim.Run(qenv.NewSeeded(1), a, gristsim.Config{HTTP: true}); err == nil || !strings.Contains(err.Error(), "Authorize") {
+		t.Errorf("an App without policies on the HTTP tier: %v, want NewHandler's refusal", err)
 	}
 }
 

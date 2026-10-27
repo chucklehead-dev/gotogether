@@ -1,8 +1,17 @@
 == github.com/chucklehead-dev/gotogether/grist
 const AtLeastOnce Delivery = iota + 1
+const MaxBody = 1 << 20
+const RetryAfter = 1
+func ActorFromHeader(name string) ServeOption
+func ActorOf(ctx context.Context) string
+func Actors(names ...string) Policy
+func Authenticated(actor, tenant string) bool
+func Authorize(p Policy) Option
 func BatchSize(n int) Option
 func CheckTenant(t string) error
 func ConditionTries(n int) Option
+func Dependencies(f func(context.Context) context.Context) ServeOption
+func DevEndpoints() ServeOption
 func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result
 func EffectFaults(processor string) qenv.FaultKind
 func EffectKey(ctx context.Context) string
@@ -10,10 +19,15 @@ func EffectTries(n int) Option
 func Emit(events ...Event) Result
 func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
+func Internal() Option
 func Keys(names ...string) KeyNames
+func Main(app *App, opts ...ServeOption)
+func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error
+func Middleware(m func(http.Handler) http.Handler) ServeOption
 func New(name string) *App
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewEvent[E any](app *App, name string) *EventType[E]
+func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
 func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result, opts ...Option) *Processor
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
@@ -21,13 +35,16 @@ func NewReadModel[S any](app *App, name string, version int, init func() S, hand
 func NewRelay(s Store) (*Relay, error)
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
+func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error)
 func QuintName(name string) (string, error)
 func RecorderID(storeName, tenant string) string
 func Rejection(name string) error
+func Schema(typ reflect.Type) map[string]any
 func Skip() Result
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
+func WithActor(ctx context.Context, actor string) context.Context
 func WithRelay(r *Relay) StartOption
 type App struct
     field Name string
@@ -42,33 +59,37 @@ type App struct
     method (*App) Start(ctx context.Context, s Store, opts ...StartOption) error
     method (*App) Verify() error
 type Catalog struct
-    field Name string
-    field Events []CatalogEvent
-    field ReadModels []CatalogReadModel
-    field Commands []CatalogBlock
-    field Queries []CatalogBlock
-    field Processors []CatalogProcessor
+    field Name string `json:"name"`
+    field Events []CatalogEvent `json:"events"`
+    field ReadModels []CatalogReadModel `json:"readModels"`
+    field Commands []CatalogBlock `json:"commands"`
+    field Queries []CatalogBlock `json:"queries"`
+    field Processors []CatalogProcessor `json:"processors"`
 type CatalogBlock struct
     field Name string
     field Quint string
     field Args reflect.Type
     field Result reflect.Type
     field Unconditioned string
+    field Authorized bool
+    field Internal bool
+    method (CatalogBlock) MarshalJSON() ([]byte, error)
 type CatalogEvent struct
     field Name string
     field Version int
     field Body reflect.Type
     field Tags []string
+    method (CatalogEvent) MarshalJSON() ([]byte, error)
 type CatalogProcessor struct
-    field Name string
-    field Quint string
-    field On string
-    field EffectTries int
+    field Name string `json:"name"`
+    field Quint string `json:"quint"`
+    field On string `json:"on"`
+    field EffectTries int `json:"effectTries"`
 type CatalogReadModel struct
-    field Name string
-    field Version int
-    field Types []string
-    field Keys []string
+    field Name string `json:"name"`
+    field Version int `json:"version"`
+    field Types []string `json:"types"`
+    field Keys []string `json:"keys"`
 type Command[C any] struct
     method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
     method (*Command[C]) Name() string
@@ -97,6 +118,7 @@ type KeyedReadModel[S any] struct
     method (*KeyedReadModel[S]) For(r *Reads, values ...string) S
 type Meta = store.Meta
 type Option struct
+type Policy func(actor, tenant string) bool
 type Position = store.Position
 type Processor struct
     method (*Processor) Name() string
@@ -124,16 +146,41 @@ type Relay struct
     method (*Relay) Flush(ctx context.Context) error
 type Result struct
 type Selector = store.Selector
+type ServeOption struct
 type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
 type TagPair = store.TagPair
+type UsageError struct
+    field Msg string
+    method (*UsageError) Error() string
 var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later under a new id")
+var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor, or the block is Internal")
 var ErrKeyReused = Rejection("idempotency-key-reused")
 var ErrOutcomeUnknown = errors.New("grist: the command's outcome is unknown (an append may have committed): retry it with the same id")
 var ErrUnavailable = errors.New("grist: the store kept failing before anything committed: retry later")
 
+== github.com/chucklehead-dev/gotogether/grist/client
+const DefaultMaxAttempts = 50
+const DefaultRetryDelay = 100 * time.Millisecond
+func Params(args json.RawMessage) (url.Values, error)
+type Client struct
+    field App *grist.App
+    field URL string
+    field HTTP *http.Client
+    field ActorHeader string
+    field MaxAttempts int
+    field RetryDelay time.Duration
+    method (*Client) Command(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (grist.Receipt, error)
+    method (*Client) Do(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) error
+    method (*Client) Query(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (json.RawMessage, grist.Position, error)
+type StatusError struct
+    field Code int
+    field Message string
+    method (*StatusError) Error() string
+
 == github.com/chucklehead-dev/gotogether/grist/gristsim
+const ActorHeader = "X-Gristsim-Actor"
 const CallTimeout = 2 * time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
@@ -148,6 +195,7 @@ type Config struct
     field Ops int
     field Send []string
     field SQL bool
+    field HTTP bool
     field CommitFaults bool
     field Check bool
     field Alphabet []string

@@ -7,17 +7,20 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	_ "modernc.org/sqlite" // the real tier's driver
 
 	"github.com/chucklehead-dev/gotogether/grist"
-	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/grist/client"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
@@ -65,27 +68,29 @@ func (k *killable) kill() {
 }
 
 // The real tier, judged by the same bindings: the app on SQLite (a temp
-// file, sqlstore), a node (App.Start: the relay, the tenant watcher and
-// the pollers, goroutines), four clients appending to two tenants at
-// once and recording their calls as a run's clients do
-// (gristsim.Do: <tenant>/clients), every step written to one file
-// (qobs.FileSink, PerStep) and validated with counters.binding.yaml
-// (the store's side) and counters.calls.binding.yaml (the clients',
-// linearized), as a simulation's are. Halfway through the first phase
-// the first node is killed: its sink dies at that instant (whatever its
-// relay had not recorded is lost with it, as with kill -9) and its
-// goroutines are stopped, while the clients go on committing. A second
-// node, with a relay of its own, records the step log from its first
-// row (its copies of the first node's records are Reconstruct's
-// duplicates) and every row the first never recorded (its relay is
-// behind when it dies), and the second phase creates new counters, whose
+// file, sqlstore) served over real HTTP (grist.NewHandler behind a real
+// http.Server on a loopback port), a node (App.Start: the relay, the
+// tenant watcher and the pollers, goroutines), four clients calling the
+// API at once over TCP (grist/client: each call recorded where the
+// client sees it, <tenant>/clients, retried under its Idempotency-Key),
+// every step written to one file (qobs.FileSink, PerStep) and validated
+// with counters.binding.yaml (the store's side) and
+// counters.calls.binding.yaml (the clients', linearized), as a
+// simulation's are. Halfway through the first phase the first node is
+// killed: its sink dies at that instant (whatever its relay had not
+// recorded is lost with it, as with kill -9), its goroutines are
+// stopped, and a second node takes the server's traffic, with a relay of
+// its own that records the step log from its first row (its copies of
+// the first node's records are Reconstruct's duplicates) and every row
+// the first never recorded. The second phase creates new counters, whose
 // welcomes only the second node sends. The harness then waits for the
-// processors and the relay (quiet), probes every counter and records the
-// settle, so the eventual val (every counter welcomed) is judged; and
-// every answer a client got is checked against the store's side: each
-// command answered has its step there, with the same outcome (a refusal's
-// included: one the store did not record would pass both bindings).
-func TestRealSQLite(t *testing.T) {
+// processors and the relay (quiet), probes every counter over the API and
+// records the settle, so the eventual val (every counter welcomed) is
+// judged; and every answer a client got is checked against the store's
+// side: each command answered has its step there, with the same outcome
+// (a refusal's included: one the store did not record would pass both
+// bindings).
+func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
 	dir := t.TempDir()
 	db, err := sql.Open("sqlite", sqlstore.SQLiteDSN(filepath.Join(dir, "counters.db"), 5*time.Second))
@@ -112,19 +117,44 @@ func TestRealSQLite(t *testing.T) {
 	deps := WithDeps(ctx, Deps{Mailer: &realMailer{}, Store: st})
 	clientsCtx := qobs.WithRecorder(deps, qobs.NewRecorder(sink, qobs.WithID("clients")))
 
+	// the server: one listener, its traffic handed to the current node's
+	// API, which records what it answers on return (queries) to that
+	// node's recorder
+	var current atomic.Pointer[http.Handler]
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := current.Load()
+		if h == nil {
+			http.Error(w, `{"error":"no node"}`, http.StatusServiceUnavailable)
+			return
+		}
+		(*h).ServeHTTP(w, r)
+	}))
+	defer srv.Close()
 	// start is a node recording to its own sink: its relay (returned, to
-	// wait for) and pollers, until stop
+	// wait for) and pollers until stop, and its API taking the server's
+	// traffic
 	start := func(id string, to qobs.Sink) (relay *grist.Relay, stop func()) {
 		relay, err := grist.NewRelay(st)
 		if err != nil {
 			t.Fatal(err)
 		}
-		nctx, cancel := context.WithCancel(qobs.WithRecorder(deps, qobs.NewRecorder(to, qobs.WithID(id))))
+		rec := qobs.NewRecorder(to, qobs.WithID(id))
+		nctx, cancel := context.WithCancel(qobs.WithRecorder(deps, rec))
 		if err := App.Start(nctx, st, grist.WithRelay(relay)); err != nil {
 			t.Fatal(err)
 		}
+		api, err := grist.NewHandler(App, st, grist.ActorFromHeader("X-Actor"), grist.Middleware(func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				h.ServeHTTP(w, r.WithContext(qobs.WithRecorder(r.Context(), rec)))
+			})
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		current.Store(&api)
 		return relay, cancel
 	}
+	cl := &client.Client{App: App, URL: srv.URL, ActorHeader: "X-Actor", RetryDelay: 10 * time.Millisecond}
 	// clients runs four clients of 8 operations each on counters, names
 	// from names; after the first client's half, kill runs (if set)
 	clients := func(phase int, counters, names []string, kill func()) {
@@ -151,7 +181,7 @@ func TestRealSQLite(t *testing.T) {
 						cmd, args = "show-counter", ShowCounter{Counter: counter}
 					}
 					b, _ := json.Marshal(args)
-					err := gristsim.Do(ctx, App, st, env, cmd, b)
+					err := cl.Do(ctx, env, cmd, b)
 					var rej *grist.Rejected
 					if err != nil && !errors.As(err, &rej) && !errors.Is(err, grist.ErrConflict) {
 						t.Errorf("%s %s: %v", cmd, env.ID, err)
@@ -164,7 +194,13 @@ func TestRealSQLite(t *testing.T) {
 
 	first := &killable{s: sink}
 	relay1, stop1 := start("node1", first)
-	clients(1, []string{"a", "b", "c"}, []string{"a", "b"}, func() { first.kill(); stop1() })
+	var relay *grist.Relay
+	var stop func()
+	clients(1, []string{"a", "b", "c"}, []string{"a", "b"}, func() {
+		first.kill()
+		stop1()
+		relay, stop = start("node2", sink) // its relay records the step log from its first row
+	})
 	behind, err := relay1.Behind(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -172,13 +208,12 @@ func TestRealSQLite(t *testing.T) {
 	if behind == 0 {
 		t.Fatal("the killed node's relay recorded every row: the second node's relay has nothing of its own to record, and this run proves nothing of it")
 	}
-	relay, stop := start("node2", sink) // its relay records the step log from its first row
 	clients(2, []string{"d", "e", "f"}, []string{"c", "d"}, nil)
 	quiet(t, st, relay, tenants)
 	for _, tn := range tenants { // the probe: every counter, on the settled system
 		for i, c := range []string{"a", "b", "c", "d", "e", "f"} {
 			b, _ := json.Marshal(ShowCounter{Counter: c})
-			if err := gristsim.Do(clientsCtx, App, st, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: tn, Actor: "probe"}, "show-counter", b); err != nil {
+			if err := cl.Do(clientsCtx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: tn, Actor: "probe"}, "show-counter", b); err != nil {
 				t.Fatal(err)
 			}
 		}

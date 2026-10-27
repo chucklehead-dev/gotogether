@@ -6,10 +6,10 @@ import (
 )
 
 // An Option configures a block (a command, a query or a processor). One
-// type serves every block, so an option later blocks need (Authorize for
-// commands and queries, slice 2) is one more constructor; an option given
-// to a block it does not apply to is a problem Verify reports. The zero
-// Option is invalid.
+// type serves every block (Authorize and Internal for commands and
+// queries too), so an option a later block needs is one more
+// constructor; an option given to a block it does not apply to is a
+// problem Verify reports. The zero Option is invalid.
 type Option struct {
 	name  string
 	kinds []string // the blocks it applies to
@@ -24,6 +24,11 @@ type options struct {
 	transientTries int
 	effectTries    int
 	batchSize      int
+	// authorize is who an adapter serves the block to (Authorize);
+	// internal says no adapter serves it (Internal). Neither: an adapter
+	// refuses to serve the App (deny by default, docs/grist.md §4.3)
+	authorize Policy
+	internal  bool
 }
 
 // The defaults of the tries and the batch size.
@@ -45,7 +50,7 @@ func (a *App) options(kind, name string, opts []Option) options {
 	o := defaultOptions()
 	for _, opt := range opts {
 		if opt.apply == nil {
-			a.problems = append(a.problems, fmt.Sprintf("%s %q: a zero grist.Option: build one with Unconditioned, ConditionTries, TransientTries, EffectTries or BatchSize", kind, name))
+			a.problems = append(a.problems, fmt.Sprintf("%s %q: a zero grist.Option: build one with Authorize, Internal, Unconditioned, ConditionTries, TransientTries, EffectTries or BatchSize", kind, name))
 			continue
 		}
 		ok := false
@@ -59,6 +64,9 @@ func (a *App) options(kind, name string, opts []Option) options {
 		if p := opt.apply(&o); p != "" {
 			a.problems = append(a.problems, fmt.Sprintf("%s %q: option %s: %s", kind, name, opt.name, p))
 		}
+	}
+	if o.authorize != nil && o.internal {
+		a.problems = append(a.problems, fmt.Sprintf("%s %q: both Authorize and Internal: an internal block is served to no one; drop one", kind, name))
 	}
 	return o
 }
@@ -80,7 +88,51 @@ func kindsOf(option string) []string {
 	case "EffectTries", "BatchSize":
 		return []string{"processor"}
 	}
-	return []string{"command", "query"} // TransientTries: a poller retries a transient error forever
+	return []string{"command", "query"} // TransientTries (a poller retries a transient error forever), Authorize, Internal
+}
+
+// A Policy is who an adapter (the HTTP API, NewHandler) serves a command
+// or query to: a predicate over the request's actor (WithActor, set by
+// the application's authentication) and its tenant. It runs in the
+// adapter, never in a decision: a processor's dispatch is subject to no
+// user's policy.
+type Policy func(actor, tenant string) bool
+
+// Authenticated is the policy of any authenticated actor: one whose
+// request carries an actor (WithActor), whatever the tenant.
+func Authenticated(actor, tenant string) bool { return actor != "" }
+
+// Actors is the policy of the named actors only, in every tenant.
+func Actors(names ...string) Policy {
+	set := map[string]bool{}
+	for _, n := range names {
+		set[n] = true
+	}
+	return func(actor, tenant string) bool { return actor != "" && set[actor] }
+}
+
+// Authorize serves a command or query to the actors p admits, at every
+// adapter. Every command and query is denied by default: an adapter
+// refuses to serve an App with a block that has neither Authorize nor
+// Internal (NewHandler's error), and answers a request p refuses with
+// 403 (ErrDenied).
+func Authorize(p Policy) Option {
+	return Option{name: "Authorize", kinds: kindsOf("Authorize"), apply: func(o *options) string {
+		if p == nil {
+			return "a nil Policy: give one (Authenticated, Actors, or a func(actor, tenant string) bool)"
+		}
+		o.authorize = p
+		return ""
+	}}
+}
+
+// Internal marks a command or query no adapter serves: only processors
+// dispatch it, and tests call it directly (App.Execute, App.Query).
+func Internal() Option {
+	return Option{name: "Internal", kinds: kindsOf("Internal"), apply: func(o *options) string {
+		o.internal = true
+		return ""
+	}}
 }
 
 // Unconditioned appends a command's events whatever commits while it

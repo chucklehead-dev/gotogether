@@ -114,6 +114,30 @@ The first release. What a user meets, by module:
   `_txlock=immediate`. storetest draws selectors of two tags and checks
   `TenantFeed`. `gristsim.Do` runs and records a client's call in
   process, and `gristsim.Run` returns a relay's error.
+- grist's HTTP API and binary entry (docs/grist.md §0.5, §5;
+  api/grist.txt): `grist.NewHandler(app, store, opts...)`, a plain
+  `http.Handler` (`POST /t/{tenant}/commands/{name}` under an
+  `Idempotency-Key`, the command id; `GET /t/{tenant}/queries/{name}`
+  with the arguments as URL parameters, `QueryArgs`; `GET /catalog` with
+  `DevEndpoints`): 200 with the receipt (the key's first answer on every
+  retry), 422 with a rejection's name or `idempotency-key-reused`, 409 on
+  a conflict, 503 with `Retry-After` when the outcome is unknown or
+  nothing committed, 400, 403 (`ErrDenied`), 404, 500. Every command and
+  query is denied by default: options `Authorize(Policy)` (policies
+  `Authenticated`, `Actors`) and `Internal()`, and `NewHandler` refuses
+  an App with a block that has neither; the actor is the request's
+  (`WithActor`, `ActorOf`; `Middleware`, `ActorFromHeader`,
+  `Dependencies`). Package `grist/client` calls the API and records each
+  call where its client sees it (`Client.Do`, retrying under the same
+  key), as gristsim's clients do. `gristsim.Config.HTTP` serves the
+  node's API on a `qhttp.Server` and its clients call it over qhttp's
+  Transport. `grist.Main(app, opts...)` (`MainArgs`, `UsageError`) is an
+  application binary's entry: `catalog` (the registry as JSON, each type
+  a JSON Schema: `Schema`, the catalog's `MarshalJSON`), `verify`,
+  `serve -db sqlite:PATH|postgres:DSN` (the API and the node on
+  grist/sqlstore, every step to a `-steps` file). The catalog's types
+  carry JSON tags, and its blocks `Authorized` and `Internal`. Command
+  ids starting with `grist:` are refused (grist's own markers).
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

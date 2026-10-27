@@ -1,13 +1,13 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least once), options, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore or the SQL tier, a real-tier run on SQLite judged by the same binding, a hand-written model over one tenant's log and its bindings (store side and client side, actors:). Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, a hand-written model over one tenant's log and its bindings (store side and client side, actors:). Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
 
 grist (module `github.com/chucklehead-dev/gotogether/grist`, design in
-docs/grist.md, slice 1 built, slice 2's SQL store built; §0.2, §0.3 and §0.4
-say what changed) records every block's step itself: each commit and
+docs/grist.md, slice 1 built, slice 2's SQL store and HTTP API built;
+§0.2 to §0.5 say what changed) records every block's step itself: each commit and
 committed refusal from the row it wrote in its own transaction (the
 store's step log, read back by `grist.Relay`), each query on return,
 each effect. The application writes
@@ -28,7 +28,10 @@ examples/counters is the walk-through: read its README's table first.
    error, never an empty answer. Options (one `grist.Option` type):
    `Unconditioned(reason)`, `ConditionTries(n)`, `TransientTries(n)` on
    commands (and queries), `EffectTries(n)`, `BatchSize(n)` on
-   processors. `App.Verify()` names every problem and its fix;
+   processors, and on every command and query `Authorize(policy)`
+   (`grist.Authenticated`, `grist.Actors(...)`, or a `func(actor, tenant
+   string) bool`) or `Internal()`: blocks are denied by default, and the
+   HTTP adapter refuses an App with a block that has neither. `App.Verify()` names every problem and its fix;
    `App.Catalog()` is the registry as data.
 2. **Model first**: `model/<app>.qnt` imports a vendored `grist.qnt`
    (copy `grist/model/grist.qnt`) and `export`s it. State: `log`,
@@ -78,7 +81,10 @@ examples/counters is the walk-through: read its README's table first.
    `sys.WithBinding(calls, qtest.Linearize())` over a client-side model
    module.
    Duplicated and late requests: `rpc.api.request` and `rpc.api.delay`
-   rates.
+   rates. `HTTP: true` serves the node's HTTP API on qhttp and its
+   clients call it with `grist/client` (the API's codes and the
+   network's faults, `rpc.api.response` among them, under the same
+   kinds).
 5. **Prove each check can fail** with a mutant per claim (overlay files,
    as examples/counters' `blind` and `dispatchDirect`), and the faithful
    app at the mutant's configuration with the opposite claim
@@ -131,17 +137,37 @@ examples/counters is the walk-through: read its README's table first.
   a transaction at it);
   `App.Start(ctx, st, grist.WithRelay(relay))` with a recorder writing
   `qobs.FileSink(path, qobs.PerStep)`; clients record their calls with
-  `gristsim.Do` (as a run's clients do); before recording a settle, wait
+  `grist/client`'s `Client.Do` over HTTP, or `gristsim.Do` in process (as a run's clients do); before recording a settle, wait
   for the processors' checkpoints and `Relay.Behind(ctx) == 0`, failing
   on `Relay.Err()`; validate the file with both bindings
   (`qtest.Validate(t, binding, steps)`, the clients' with
   `qtest.Linearize()`), and check each client's answer has its store-side
   step (a lost refusal step passes both bindings). examples/counters'
-  `TestRealSQLite` is the walk-through (a node killed mid-run, a second
+  `TestRealHTTP` is the walk-through (a node killed mid-run, a second
   one recording what it never did). A second node's relay records the
   log again from its first row; Reconstruct drops the copies (info
   issues "seen twice"); a durable relay cursor is designed, not built
   (docs/grist.md §0.4), so validate a node's step files together.
+- **The HTTP API**: `grist.NewHandler(app, st, opts...)` serves `POST
+  /t/{tenant}/commands/{name}` (header `Idempotency-Key`: the command id)
+  and `GET /t/{tenant}/queries/{name}?field=value`; 200 with the receipt
+  (the same on every retry of the key), 422 `{"rejected": name}` (a
+  rejection, `idempotency-key-reused`), 409 conflict, 503 with
+  `Retry-After` (`{"retry": "outcome-unknown"|"unavailable"}`: send it
+  again under the same key), 400, 403 (`denied`), 404, 500. The actor is
+  `grist.WithActor`'s, set by `grist.Middleware` (the app's
+  authentication) or `grist.ActorFromHeader` (tests, behind a proxy);
+  `grist.Dependencies` attaches the app's doubles. `grist/client`'s
+  `Client.Do` calls it and records the call as a client's (retrying
+  under the key); the handler records nothing of its own.
+  examples/counters' `TestRealHTTP` is the walk-through of a real tier
+  over HTTP.
+- **An app's binary**: `func main() { grist.Main(app, opts...) }` with
+  the driver imported: `catalog` (the registry as JSON, types as JSON
+  Schemas), `verify`, `serve -db sqlite:PATH|postgres:DSN -tenant t1
+  -steps steps.jsonl [-actor-header X-Actor]`; validate the steps file
+  with the app's binding (`gotogether validate -binding ...`).
+  examples/counters' `cmd/counters` and `SERVE=1 ./run-demo.sh`.
 - **PostgreSQL**: `sqlstore.Postgres` states read committed and sets
   `lock_timeout` and `idle_in_transaction_session_timeout` per
   transaction; grist/sqlstore's contract test runs against one with

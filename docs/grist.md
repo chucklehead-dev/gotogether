@@ -3,7 +3,8 @@
 Status: slice 1 built (grist/, examples/counters; §0.1 says what
 building it changed here, §0.2 what its review changed); slice 2's SQL
 store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
-on SQLite: §0.3; its review: §0.4), its API, `AtMostOnce`, generator and gristflow design,
+on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
+`grist.Main` built (§0.5), its `AtMostOnce`, generator and gristflow design,
 as is slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -457,6 +458,87 @@ fix (ablated before committing), and stated where it stands below.
   `TestFaithfulAtClients`); its -short CPU went from 303 to 206 s here.
   The grist job runs PostgreSQL 16 as a service container, so the
   PostgreSQL contract runs in CI.
+
+## 0.5 What building slice 2's API changed
+
+Slice 2's second part (the HTTP API, `grist/client`, gristsim's HTTP
+tier, `grist.Main`, examples/counters over HTTP) decided these; each is
+stated where it stands below.
+
+- **The adapter is package grist's, not `grist/api`.** `grist.Main`
+  serves it, and the adapter reads what a block declares (its policy,
+  `Internal`), which a separate package could only read through exported
+  hooks: `grist.NewHandler(app, store, opts...)` is a plain
+  `http.Handler` (net/http only), served by `qhttp.NewServer` in a
+  simulation and by `http.Server` on the real tier. grist imports
+  `grist/sqlstore` for Main (no driver: the binary imports one).
+- **Routes and codes** (§5): `POST /t/{tenant}/commands/{name}`, the
+  `Idempotency-Key` header the command id (required: 400 without it);
+  `GET /t/{tenant}/queries/{name}`, the arguments as URL parameters by
+  JSON name (a string as it is, anything else as JSON: `QueryArgs`, and
+  `client.Params` its inverse). A command's receipt is **200** on its
+  first answer and on every retry: the key's answer is the same
+  response, which a 201 for the first and a 200 for a replay would not
+  be (grist cannot tell them apart: a retry after a lost answer finds
+  the marker). A rejection is **422** with its name; a reused key is
+  **422** `idempotency-key-reused` too (the IETF Idempotency-Key draft's
+  code for a key sent with another payload; the key's own answer
+  stands); a conflict after the tries **409**; `ErrOutcomeUnknown` and
+  `ErrUnavailable` **503** with `Retry-After: 1` and `{"retry":
+  "outcome-unknown" | "unavailable"}`, to be sent again under the same
+  key; arguments that do not decode (a misspelled field included: the
+  body is decoded strictly) 400; an unknown block or tenant 404; the
+  decision's own error 500.
+- **Deny by default, at the adapter** (§4.3): one `grist.Option`,
+  `Authorize(Policy)` (a `func(actor, tenant string) bool`; policies
+  `Authenticated`, `Actors(...)`) or `Internal()`, on commands and
+  queries; both on one block is a Verify problem. `NewHandler` refuses
+  an App with a block that has neither, naming each (the adapter's
+  boot): `App.Verify` does not, since gristsim's in-process clients and
+  tests call blocks directly. A refused request is 403 (`ErrDenied`).
+  The actor is the request context's (`WithActor`), set by the
+  application's authentication (`Middleware`) or, behind an
+  authenticating proxy and in tests, `ActorFromHeader`.
+- **A denial records nothing at the store.** The note had it a refused
+  step (`outcome: denied`); but nothing ran, nothing was read and
+  nothing committed, and the server records only what its blocks do
+  (commits from the step log, refusals at their commit, queries and
+  reused keys on return): the handler records nothing of its own. The
+  client records its 403 as its call's outcome, `denied`.
+- **The client records its side**: `grist/client`'s `Client.Do` records
+  each call as gristsim's clients do (`<tenant>/clients`, invoked before
+  the first request, done with the answer, a lost answer or a 503 sent
+  again under the same key after `RetryDelay` or the `Retry-After`; at
+  most `MaxAttempts`, then pending), one recording with gristsim's
+  (`grist/internal/calls`). A request that got no answer is
+  `ErrOutcomeUnknown` for a command (it may have committed),
+  `ErrUnavailable` for a query.
+- **gristsim's HTTP tier** (`Config.HTTP`): the node serves
+  `NewHandler` on a `qhttp.Server` named `api` from its start function
+  (every incarnation listens again), the clients are `client.Client`s
+  over qhttp's Transport (2 s of virtual time per request), so the
+  network's faults are qhttp's under the same kinds as the Service
+  tier's (`rpc.api.request`, `rpc.api.delay`, `rpc.api.response`, the
+  node's crashes). examples/counters' `TestHTTPTier` is claim 2 there.
+- **The real tier is HTTP**: examples/counters' `TestRealHTTP` (was
+  `TestRealSQLite`, whose clients called `App.Execute` in process) serves
+  `NewHandler` on a real `http.Server` (a loopback port) over a SQLite
+  file, four clients calling it with `grist/client`; when the first node
+  is killed the second takes the server's traffic at once, and both
+  bindings judge the file.
+- **`grist.Main(app, opts...)`**: `catalog` (the registry as JSON, each
+  type a JSON Schema derived by reflection: `grist.Schema`, the
+  catalog's `MarshalJSON`), `verify`, and `serve -db sqlite:PATH |
+  postgres:DSN -addr -tenant -steps -actor-header -poll`: the API and the
+  node on sqlstore, every step to a `PerStep` file (a new one each
+  start), the application's dependencies attached by `Dependencies`;
+  SIGINT or SIGTERM shut it down, the relay flushed into the file first
+  (`Relay.Flush`: a row the relay had not reached would otherwise be
+  only the next node's, in its own file). `MainArgs` is the testable
+  form. examples/counters' `cmd/counters` is one, and `SERVE=1
+  ./run-demo.sh` serves it, drives it with curl and validates its file.
+- **Ids starting with `grist:` are grist's** (an at-most-once outcome's
+  marker, §2.6): a command under one is refused (400 at the API).
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -1320,7 +1402,11 @@ node's records Reconstruct drops), creates new counters in the second
 phase, waits for the processors and the relay (`Relay.Behind`,
 `Relay.Err`), probes, records the settle, checks every client's answer
 against the store's steps, and validates the file with
-`counters.binding.yaml` and, linearized, `counters.calls.binding.yaml`. `grist.Main` and the HTTP API are not built.
+`counters.binding.yaml` and, linearized, `counters.calls.binding.yaml`.
+Since §0.5 it is `TestRealHTTP`: the clients call `grist.NewHandler` on a
+real `http.Server` over `grist/client`, the second node taking the
+server's traffic when the first is killed; `grist.Main` serves an app's
+binary (`serve -db sqlite:PATH -steps FILE`).
 
 ## 4. Constraints enforced
 
@@ -1361,22 +1447,32 @@ verify` in CI with the analyzers' output.
 
 Every command and query is denied at every adapter unless it declares
 `grist.Authorize(p)`, a predicate over the envelope's actor and the
-tenant; `grist.Internal()` marks one no adapter serves (only processors
-dispatch it); boot refuses a block with neither. The check is in the
-adapters (as grain's), so a `Dispatch` is not subject to a user's roles.
-A denial is a refused step (`outcome: denied`).
+tenant (`grist.Policy`; `grist.Authenticated`, `grist.Actors(...)`);
+`grist.Internal()` marks one no adapter serves (only processors
+dispatch it); the adapter's boot (`NewHandler`) refuses an App with a
+block that has neither (§0.5: `App.Verify` does not, for in-process
+callers). The check is in the adapters (as grain's), so a `Dispatch` is
+not subject to a user's roles. A denial is a 403 that records nothing
+at the store (nothing ran); its client records the outcome `denied`.
 
 ## 5. The API layer and Datastar
 
-**HTTP/JSON** (`grist/api`, slice 2, `net/http` only): `POST
-/t/{tenant}/commands/{name}` with `Idempotency-Key`: 200 with the
-marker's result, 422 with a rejection's name (or
-`idempotency-key-reused`), 409 on conflict after the tries, 403 when
-denied, 503 with `Retry-After` when the tenant's lease is elsewhere.
-`GET /t/{tenant}/queries/{name}` returns the result and the position
-read through; `GET /catalog`, behind `grist.DevEndpoints`, the registry.
-Authentication is the application's middleware (`grist.WithActor`). A
-plain `http.Handler`, so `qhttp.NewServer` serves it in a simulation.
+**HTTP/JSON** (slice 2, built: `grist.NewHandler`, package grist's,
+`net/http` only, §0.5): `POST /t/{tenant}/commands/{name}` with
+`Idempotency-Key` (the command id; 400 without): 200 with the marker's
+result (`{"pos", "events": [{"tenant", "pos"}]}`, on every retry of the
+key), 422 with a rejection's name (or `idempotency-key-reused`), 409 on
+conflict after the tries, 403 when denied, 503 with `Retry-After` when
+the outcome is unknown or nothing committed (retry under the same key;
+later, when the tenant's lease is elsewhere), 400 for arguments that do
+not decode, 404 for an unknown block or tenant, 500 for the decision's
+error. `GET /t/{tenant}/queries/{name}?field=value` returns `{"result",
+"pos"}`, the position read through; `GET /catalog`, behind
+`grist.DevEndpoints`, the registry. Authentication is the application's
+middleware (`grist.WithActor`; `grist.Middleware`, or
+`grist.ActorFromHeader` behind a proxy). A plain `http.Handler`, so
+`qhttp.NewServer` serves it in a simulation (`gristsim.Config.HTTP`).
+`grist/client` calls it and records each call as a client's.
 
 **Datastar** (`grist/screen`, slice 3, the only importer of
 `github.com/starfederation/datastar-go/datastar`): a screen's SSE stream
@@ -1413,7 +1509,8 @@ grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mo
   runtime/             (later) the node: pollers, effect worker, scheduler, dispatcher (qenv seams only)
   storetest/           the contract suite
   memstore/ simstore/ sqlstore/
-  api/                 HTTP/JSON adapter
+  (api)                the HTTP/JSON adapter is package grist's (NewHandler, §0.5); Main is too
+  client/              the API's client, recording each call as a client's
   screen/              Datastar adapter (the only datastar-go import)
   gristsim/            Run(chooser, app, cfg): nodes, store, workload, settles, probes
   gristtest/           ShrinkCommands, stub reports, storetest helpers (imports qtest)
@@ -1660,10 +1757,14 @@ with the runtime's condition taken out; `blind` 25 of 40 and
 `dispatchDirect` 18 of 30 on the SQL tier) and `TestRealSQLite`, the
 real tier on a SQLite file judged by `counters.binding.yaml`, its
 clients goroutines calling `App.Execute` through `gristsim.Do` (since
-§0.4, which moved the SQL tier's repeated claims to full mode). **Left**: `grist.Main` and the
-HTTP API on `qhttp` (so the real test drives no HTTP, and `blind` on the
-real tier is not measured), `AtMostOnce` and `checkpointFirst`, the
-generator, gristflow.
+§0.4, which moved the SQL tier's repeated claims to full mode).
+**Done (the API, §0.5)**: `grist.NewHandler` with deny-by-default
+policies, `grist/client`, gristsim's HTTP tier (`TestHTTPTier`, claim 2
+over qhttp with its network's faults, both sides; `TestHTTPDuplicateRequests`),
+`TestRealHTTP` (the real tier over real HTTP), `grist.Main` and
+examples/counters' `cmd/counters`. **Left**: `AtMostOnce` and
+`checkpointFirst`, the generator, gristflow, and `blind` measured on the
+real tier.
 
 ### 8.3 Slice 3: the rest of grain
 

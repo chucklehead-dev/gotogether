@@ -2,7 +2,7 @@
 // simstore, or the SQL tier's sqlstore over qsql (Config.SQL), at a
 // chosen isolation level, one node (a crashable process
 // running the App's processors and serving its commands and queries over
-// a lossy qenv.Service), and a workload of clients sending random
+// a lossy qenv.Service, or over its HTTP API on qhttp: Config.HTTP), and a workload of clients sending random
 // commands and queries of the registry to every tenant. Run's signature
 // is a qtest.System's Run, so an application is explored, exhausted and
 // shrunk with every claim of qtest:
@@ -21,14 +21,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
-	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
+	"github.com/chucklehead-dev/gotogether/grist/client"
+	"github.com/chucklehead-dev/gotogether/grist/internal/calls"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/qhttp"
 	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
@@ -43,7 +46,7 @@ import (
 // qtest.Linearize) judge one run (System.WithBinding; docs/grist.md §3.1).
 // No tenant's name holds a slash (grist.CheckTenant), so no tenant is
 // another's clients.
-func ClientsActor(tenant string) string { return tenant + "/clients" }
+func ClientsActor(tenant string) string { return calls.Actor(tenant) }
 
 // Config is a run's shape.
 type Config struct {
@@ -64,6 +67,16 @@ type Config struct {
 	// Isolation, with qsql's SQLSTATEs (a lost race for the head lock is
 	// a 40001 under Snapshot and Serializable) and the same commit faults.
 	SQL bool
+	// HTTP serves the node's commands and queries over its HTTP API
+	// (grist.NewHandler on a qhttp.Server, "api") instead of a
+	// qenv.Service of requests, the clients calling it through
+	// grist/client over qhttp's Transport: the API's codes, its
+	// Idempotency-Key and its 503s are what the clients see, and the
+	// network's faults are qhttp's (rpc.api.request, rpc.api.delay,
+	// rpc.api.response, the node's crashes). Every command and query the
+	// clients send must declare Authorize (grist denies by default); a
+	// client is its Envelope's actor (ActorHeader).
+	HTTP bool
 	// CommitFaults turns on the store's commit faults
 	// (store.<app>.commit: a commit applied whose answer is lost).
 	CommitFaults bool
@@ -109,6 +122,10 @@ type response struct {
 	Err      string
 	Retry    bool
 }
+
+// ActorHeader is the header the HTTP tier's clients name their actor in
+// (grist.ActorFromHeader).
+const ActorHeader = "X-Gristsim-Actor"
 
 // Timeouts: a client waits CallTimeout for an answer, then retries the
 // same request (same id) after RetryDelay.
@@ -167,9 +184,21 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			deps = d
 		}
 	}
+	var srv *qhttp.Server
+	var handler http.Handler
+	if cfg.HTTP {
+		h, err := grist.NewHandler(app, st, grist.ActorFromHeader(ActorHeader))
+		if err != nil {
+			return fmt.Errorf("gristsim: Config.HTTP: %w", err)
+		}
+		handler = h
+	}
 	node := s.Process("node", true, func(ctx context.Context) {
 		if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
 			panic(fmt.Sprintf("gristsim: the node could not start: %v", err))
+		}
+		if srv != nil {
+			srv.Handle(ctx, handler) // every incarnation listens again
 		}
 	})
 	// a supervisor: a node that crashed itself (an effect's crash point)
@@ -179,10 +208,18 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			p.Restart()
 		}
 	})
-	api := qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
-		return serve(deps(ctx), app, st, req), nil
-	})
-	w := &workload{app: app, cfg: cfg, s: s, api: api}
+	w := &workload{app: app, cfg: cfg, s: s}
+	if cfg.HTTP {
+		srv = qhttp.NewServer(s, "api", node)
+		tr := qhttp.NewTransport(srv)
+		tr.Timeout = CallTimeout
+		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, ActorHeader: ActorHeader,
+			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay}
+	} else {
+		w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
+			return serve(deps(ctx), app, st, req), nil
+		})
+	}
 	names := cfg.Send
 	if len(names) == 0 {
 		names = append(app.Commands(), app.Queries()...)
@@ -230,14 +267,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	return relay.Err()
 }
 
-func isQuery(app *grist.App, name string) bool {
-	for _, q := range app.Queries() {
-		if q == name {
-			return true
-		}
-	}
-	return false
-}
+func isQuery(app *grist.App, name string) bool { return calls.IsQuery(app, name) }
 
 func defaults(cfg Config) Config {
 	if len(cfg.Tenants) == 0 {
@@ -293,6 +323,8 @@ type workload struct {
 	cfg Config
 	s   *qenv.Sim
 	api *qenv.Service[request, response]
+	// http is the HTTP tier's client (Config.HTTP), api nil
+	http *client.Client
 }
 
 // gen draws name's arguments through the run's Chooser.
@@ -371,6 +403,10 @@ func (w *workload) all(typ reflect.Type) []json.RawMessage {
 // same id each time: a lost or late answer, or one saying the outcome is
 // unknown, is sent again), recording it as a client's call.
 func (w *workload) call(ctx context.Context, req request) {
+	if w.http != nil {
+		w.http.Do(ctx, req.Env, req.Name, req.Args) // it records the call as below, retrying under the same key
+		return
+	}
 	send := func() (response, bool) {
 		for try := 1; try <= MaxAttempts; try++ {
 			resp, err := w.api.Call(ctx, req, CallTimeout)
@@ -428,23 +464,19 @@ func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope,
 // record records req as a client's call: invoked before, done with the
 // answer do gives (pending if none came).
 func (w *workload) record(ctx context.Context, req request, do func() response) {
-	q, _ := grist.QuintName(req.Name)
-	kv := append([]any{"actor", ClientsActor(req.Env.Tenant), "process", w.app.Name}, rec.StepFields(w.app.ArgsType(req.Name), req.Args, "")...)
-	if !req.Query {
-		kv = append(kv, "id", req.Env.ID)
-	}
-	call := qobs.Invoke(ctx, q, kv...)
-	resp := do()
+	calls.Record(ctx, w.app, req.Env, req.Name, req.Args, func() calls.Answer { return answerOf(do()) })
+}
+
+// answerOf is a response as its client saw it: a Retry or an unanswered
+// request is pending.
+func answerOf(r response) calls.Answer {
 	switch {
-	case resp.Err == "unanswered", resp.Retry:
-		return // pending: the caller never learned the outcome
-	case resp.Err != "":
-		call.Done(errors.New(resp.Err))
-	case resp.Rejected != "":
-		call.Done(nil, "outcome", resp.Rejected)
-	case req.Query:
-		call.Done(nil, rec.StepFields(w.app.ResultType(req.Name), resp.Result, "obs.")...)
-	default:
-		call.Done(nil)
+	case r.Err == "unanswered", r.Retry:
+		return calls.Answer{Pending: true}
+	case r.Err != "":
+		return calls.Answer{Err: r.Err}
+	case r.Rejected != "":
+		return calls.Answer{Rejected: r.Rejected}
 	}
+	return calls.Answer{Result: r.Result}
 }

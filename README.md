@@ -564,7 +564,8 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `grist/store` | grist's store contract: `Store`, `Batch`, `Condition`, `Marker`, `Selector`, `StepLog` (a commit's step in its transaction, what grist records it from), the errors (`Permanent`), and the reference evaluations `CheckCondition` and `Select` |
 | `grist/memstore`, `grist/simstore` | grist's stores: in memory for unit tests; over a `qenv.Store` for simulations |
 | `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions, reads and concurrent appends against brute force, checkpoints, markers, a waiter woken, copies, the step log, tenant isolation |
-| `grist/gristsim` | `Run`: a grist app in a simulation as a `qtest.System`'s run (a node, a lossy API, clients recorded under `ClientsActor` beside the store's steps, two settles) |
+| `grist/gristsim` | `Run`: a grist app in a simulation as a `qtest.System`'s run (a node, a lossy API or its HTTP API on qhttp, clients recorded under `ClientsActor` beside the store's steps, two settles) |
+| `grist` HTTP API, `grist/client`, `grist.Main` | `NewHandler` (commands under an `Idempotency-Key`, queries as GET, deny by default: `Authorize`, `Internal`), `client.Client` (calls it, recording each call as a client's), `Main` (an app's binary: `catalog`, `verify`, `serve` on sqlstore) |
 
 ## Example apps
 

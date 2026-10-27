@@ -8,7 +8,9 @@ the store, each query on return, each effect), so what the application
 writes is its decisions and folds. It runs on three tiers: grist's
 simulated store (simstore), the SQL tier in simulation (grist/sqlstore
 over qsql: the real tier's statements), and SQLite (a real file), each
-judged by the same bindings.
+judged by the same bindings; its clients call the app in process, over
+a simulated network, or over its HTTP API (simulated on qhttp, and real
+in `TestRealHTTP` and `cmd/counters`).
 
 | file | what it is |
 |---|---|
@@ -21,7 +23,8 @@ judged by the same bindings.
 | [counters.binding.yaml](counters.binding.yaml) | the commit-side steps: every parameter the step's field, the outcome as `result`, each commit's head and batch compared with the model's |
 | [counters.once.binding.yaml](counters.once.binding.yaml) | the same steps judged by the test-only `welcomedOnce` |
 | [counters.calls.binding.yaml](counters.calls.binding.yaml) | the clients' calls (actor `<tenant>/clients`, recorded in every run beside the store's steps), linearized |
-| [sql_test.go](sql_test.go), [real_test.go](real_test.go) | the claims on the SQL tier (`gristsim.Config.SQL`), and the real tier on SQLite |
+| [sql_test.go](sql_test.go), [http_test.go](http_test.go), [real_test.go](real_test.go) | the claims on the SQL tier (`gristsim.Config.SQL`) and the HTTP tier (`gristsim.Config.HTTP`), and the real tier over HTTP on SQLite |
+| [cmd/counters](cmd/counters/main.go) | the app's binary (`grist.Main`): `catalog`, `verify`, `serve -db sqlite:PATH` |
 | [testdata/mutants](testdata/mutants) | grain's two bugs, each a file replacing the app's of its name (a `go test -overlay`) |
 
 ## The model
@@ -58,14 +61,16 @@ settle.
 | `TestSQLTier` | claim 2 on the SQL tier (sqlstore over qsql) at Serializable and ReadCommitted, commit faults at 15 in 100, node crashes; both bindings over the same runs | nothing: `Conforms`, `All(Settles)` at the store and at the clients, both faults reached | 40 of 40 on each side, at each level |
 | `TestSQLDuplicateRequests` | `TestDuplicateRequests` on the SQL tier | nothing; without grist's markers 20 of 20 runs reject, without refusal markers 16 of 20 | 40 of 40 on each side |
 | `TestSQLFaithfulAtClaim1` | claim 1's contrast on the SQL tier | `None(Rejects("createCounter"))`; with grist's condition taken out, 11 of 20 runs reject | 40 of 40 |
-| `TestRealSQLite` | the real tier: the node and four clients as goroutines on a SQLite file, the clients recording their calls (`gristsim.Do`), steps to a `PerStep` file sink; the first node killed mid-phase (its sink dead at once, its relay behind), a second with a relay of its own, new counters in the second phase, a mailer taking 20 ms, a settle once the processors and the relay caught up | nothing: the file conforms to `counters.binding.yaml` (and settles) and, linearized, to `counters.calls.binding.yaml`; every client's answer has its store-side step; the second relay records what the first never did, its copies of the first's records dropped as duplicates. A refusal's step dropped fails the answers' check; the settle recorded without waiting fails `everyCounterWelcomedOrFailed` | every run |
+| `TestHTTPTier` | claim 2 on the HTTP tier: the node's API (`grist.NewHandler`) on a `qhttp.Server`, the clients calling it with `grist/client` over qhttp's Transport (the API's 503s and refusals, requests dropped, duplicated and late, answers lost, crashes with requests in flight), commit faults; both bindings over the same runs | nothing: `Conforms`, `All(Settles)` at the store and at the clients, answers lost and crashes reached; with the client sending each retry under a new key, 9 of 20 runs fail at the clients (the store's side admits each key as a new command) | 40 of 40 on each side |
+| `TestHTTPDuplicateRequests` | `TestDuplicateRequests` on the HTTP tier | nothing; with a new key per retry 9 of 20 runs fail at the clients | 40 of 40 on each side |
+| `TestRealHTTP` | the real tier: `grist.NewHandler` on a real `http.Server` (a loopback port) over a SQLite file, four clients calling it with `grist/client` (each call recorded where the client sees it), steps to a `PerStep` file sink; the first node killed mid-phase (its sink dead at once, its relay behind), a second, with a relay of its own, taking the server's traffic at once; new counters in the second phase, a mailer taking 20 ms, a settle once the processors and the relay caught up | nothing: the file conforms to `counters.binding.yaml` (and settles) and, linearized, to `counters.calls.binding.yaml`; every client's answer has its store-side step; the second relay records what the first never did, its copies of the first's records dropped as duplicates. A refusal's step dropped fails the answers' check; the settle recorded without waiting fails `everyCounterWelcomedOrFailed` | every run |
 | `grist/storetest` (grist's own tests) | memstore, simstore and sqlstore (on qsql at three levels, SQLite, PostgreSQL with `GRIST_POSTGRES`, in CI); mutant stores whose `Read` ignores the tenant, whose conditions are checked outside the lock, whose `Wait` returns at once, whose `WaitSteps` waits on the head, whose rows' times are not in commit order, whose `WaitTenants` returns at once, that honour one tag of two | each mutant fails its check (`TenantIsolation`, `ConcurrentAgainstBruteForce`, `WaitWakes`, `StepLog`, `TenantFeed`, `ReadsAgainstBruteForce` and `ConditionsAgainstBruteForce`), the rest pass | every run |
 
 `TestMutants` builds the test binary with each mutant's overlay and runs
 `TestMutant` in it. Under `-short` (every push) each claim runs at fewer
 seeds, each with a miss chance under 5%, and the SQL tier's claims that
 repeat a mechanism a per-push test covers run in full mode only:
-`TestSQLDuplicateRequests`, `TestSQLFaithfulAtClaim1`, `blind`'s and
+`TestSQLDuplicateRequests`, `TestHTTPDuplicateRequests`, `TestSQLFaithfulAtClaim1`, `blind`'s and
 `dispatchDirect`'s SQL-tier halves, `TestSQLTier`'s Serializable half and
 `TestFaithfulAtClients` (the clients' side is judged per push by
 `TestDuplicateRequests` and `TestSQLTier`).
@@ -77,6 +82,7 @@ go test -short ./...                 # every claim, at CI's seeds
 ./run-demo.sh                        # claims 2 and 3
 MUTATION=blind ./run-demo.sh         # claim 1
 MUTATION=dispatch-direct ./run-demo.sh
+SERVE=1 ./run-demo.sh                # cmd/counters served on SQLite, driven with curl, its steps validated
 COUNTERS_COST=752 go test -run TestValidationCost -v .   # a run of about 1000 steps, judged
 ```
 

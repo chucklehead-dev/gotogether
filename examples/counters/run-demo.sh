@@ -7,8 +7,42 @@
 # levels, at claim 1's configuration, through duplicated and late
 # requests, and the welcome's duplicate after a crash (claims 2 and 3 of
 # docs/grist.md §8.1, and claim 1's contrast; MUTATION=blind is claim 1).
+#
+# SERVE=1 instead builds cmd/counters (grist.Main), serves the app's HTTP
+# API on a SQLite file, drives it with curl (a command, its retry under
+# the same Idempotency-Key, a refusal, a reused key, a query), stops it
+# and validates the steps it recorded with counters.binding.yaml.
 set -euo pipefail
 cd "$(dirname "$0")"
+if [ -n "${SERVE:-}" ]; then
+  dir=$(mktemp -d)
+  trap 'kill "${pid:-}" 2>/dev/null || true; rm -rf "$dir"' EXIT
+  port=${PORT:-18080}
+  go build -o "$dir/counters" ./cmd/counters
+  "$dir/counters" serve -db "sqlite:$dir/counters.db" -addr "127.0.0.1:$port" -tenant t1 \
+    -steps "$dir/steps.jsonl" -actor-header X-Actor -poll 50ms &
+  pid=$!
+  api="http://127.0.0.1:$port/t/t1"
+  for _ in $(seq 100); do curl -fs "$api/queries/show-counter?counter=a" -H 'X-Actor: demo' >/dev/null && break; sleep 0.1; done
+  post() { # post COMMAND KEY BODY: the status and the answer
+    curl -s -w ' %{http_code}\n' -X POST "$api/commands/$1" -H 'X-Actor: demo' -H "Idempotency-Key: $2" -d "$3"; }
+  echo "== create a under the name x (k1), then k1 again: the same receipt"
+  post create-counter k1 '{"counter":"a","name":"x"}'
+  post create-counter k1 '{"counter":"a","name":"x"}'
+  echo "== create b under x (k2): 422 name-taken; k1 with other arguments: 422 idempotency-key-reused"
+  post create-counter k2 '{"counter":"b","name":"x"}'
+  post create-counter k1 '{"counter":"b","name":"y"}'
+  echo "== increment a by 2 (k3), then show it"
+  post increment-counter k3 '{"counter":"a","by":2}'
+  curl -s -w ' %{http_code}\n' "$api/queries/show-counter?counter=a" -H 'X-Actor: demo'
+  echo "== without an actor: 403"
+  curl -s -w ' %{http_code}\n' -X POST "$api/commands/increment-counter" -H 'Idempotency-Key: k4' -d '{"counter":"a","by":1}'
+  sleep 0.5 # the welcome's mail and checkpoint
+  kill -INT "$pid"; wait "$pid" || true; pid=
+  echo "== the steps the server recorded, validated with counters.binding.yaml"
+  (cd ../.. && go run ./cmd/gotogether validate -binding examples/counters/counters.binding.yaml "$dir/steps.jsonl")
+  exit
+fi
 case "${MUTATION:-}" in
   "") run='TestFaithful$|TestFaithfulAtClaim1$|TestDuplicateRequests$|TestWelcomeDuplicate$' ;;
   blind) run='TestMutants$/^blind$' ;;

@@ -23,7 +23,7 @@ func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
 }
 
 // Create is the create-counter command.
-var Create = grist.NewCommand(App, "create-counter", decideCreate)
+var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Authorize(grist.Authenticated))
 
 // IncrementCounter adds By to a counter's total.
 type IncrementCounter struct {
@@ -43,7 +43,7 @@ func decideIncrement(r *grist.Reads, c IncrementCounter) ([]grist.Event, error) 
 }
 
 // Increment is the increment-counter command.
-var Increment = grist.NewCommand(App, "increment-counter", decideIncrement)
+var Increment = grist.NewCommand(App, "increment-counter", decideIncrement, grist.Authorize(grist.Authenticated))
 
 // ShowCounter asks for a counter.
 type ShowCounter struct {
@@ -60,4 +60,4 @@ type CounterView struct {
 // Show is the show-counter query.
 var Show = grist.NewQuery(App, "show-counter", func(r *grist.Reads, q ShowCounter) (CounterView, error) {
 	return CounterView{Total: Totals.For(r, q.Counter), Names: NamesOf(CounterNames.Get(r), q.Counter)}, nil
-})
+}, grist.Authorize(grist.Authenticated))

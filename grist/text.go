@@ -47,7 +47,24 @@ func checkEnvelope(env Envelope) error {
 	if err := CheckTenant(env.Tenant); err != nil {
 		return err
 	}
-	return checkText("id", env.ID)
+	return checkID(env.ID)
+}
+
+// reservedID is the prefix of the ids grist gives its own markers (an
+// at-most-once effect's outcome, keyed by its effect key): no command
+// takes one.
+const reservedID = "grist:"
+
+// checkID is the error of a command id (an idempotency key) grist
+// refuses: text no store holds alike, or an id of grist's own.
+func checkID(id string) error {
+	if err := checkText("id", id); err != nil {
+		return err
+	}
+	if strings.HasPrefix(id, reservedID) {
+		return fmt.Errorf("grist: id %q starts with %q, which grist keeps for its own markers: choose another id", id, reservedID)
+	}
+	return nil
 }
 
 // checkEvents is the error of an event a block emits whose tag value no
