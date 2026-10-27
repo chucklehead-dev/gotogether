@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -110,5 +112,87 @@ func TestShrinkCommandRefusals(t *testing.T) {
 		if code != 2 || err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%v: exit %d, %v; want %q", c.args, code, err, c.want)
 		}
+	}
+}
+
+// A driver that misbehaves does not hang the shrink nor lose its paths:
+// a child it leaves running with its output open (a server started in
+// the background) once held the rerun forever; a rerun that runs past
+// -rerun-timeout is killed and named; a driver that changes its directory
+// is given absolute paths though -out is relative; a torn step log is
+// counted and named, its rerun no verdict. -diverged-exit 0 is refused. Ctrl-C ends it, cleaning up. (Not
+// parallel: it changes the directory and waitDelay, and signals the
+// process.)
+func TestShrinkCommandMisbehavingDriver(t *testing.T) {
+	skip.Quint(t)
+	driver := bankDriver(t)
+	bind, err := filepath.Abs("../../qtest/testdata/bank.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	journey := filepath.Join(dir, "journey.json")
+	_ = os.WriteFile(journey, []byte(`[{"op": "deposit", "account": "alice", "amount": 3}, {"op": "withdraw", "account": "alice", "amount": 5}]`), 0o644)
+	t.Chdir(dir)
+	old := waitDelay
+	waitDelay = 200 * time.Millisecond
+	defer func() { waitDelay = old }()
+	shrink := func(flags []string, driverFlags ...string) (int, string, error) {
+		var b bytes.Buffer
+		args := append([]string{"-binding", bind, "-actions", journey, "-baseline", "2", "-reruns", "1"}, flags...)
+		args = append(append(append(args, "--", driver), driverFlags...), "-actions", "{actions}", "-steps", "{steps}")
+		code, err := shrinkTo(&b, args)
+		return code, b.String(), err
+	}
+	done := make(chan struct{})
+	go func() { //qenv:ok a watchdog: the shrink once never returned
+		defer close(done)
+		if code, out, err := shrink([]string{"-out", "bg"}, "-background"); code != 0 || err != nil || !strings.Contains(out, "(1-minimal)") {
+			t.Errorf("a driver leaving a child: exit %d, %v:\n%s", code, err, out)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("a driver leaving a child holding its output hung the shrink")
+	}
+	if code, out, err := shrink([]string{"-out", "slow", "-rerun-timeout", "300ms"}, "-hang", "10s"); code != 2 || err == nil ||
+		!strings.Contains(err.Error(), "timed out after 300ms (-rerun-timeout): it was killed") {
+		t.Errorf("a rerun past -rerun-timeout: exit %d, %v:\n%s", code, err, out)
+	}
+	// relative -out, a driver that changes its directory
+	if code, out, err := shrink([]string{"-out", "rel"}, "-cd", os.TempDir()); code != 0 || err != nil {
+		t.Errorf("a driver changing its directory: exit %d, %v:\n%s", code, err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rel", "actions.json")); err != nil {
+		t.Errorf("relative -out: %v", err)
+	}
+	// each rerun of one action has a torn log: the one-removals never decide
+	code, out, err := shrink([]string{"-out", "torn", "-v"}, "-tear-single")
+	if code != 1 || err != nil || !strings.Contains(out, "reruns' step logs were torn (reruns ") || !strings.Contains(out, "its step log is torn: line 2") ||
+		!strings.Contains(out, "not minimal: a sequence with one action fewer was never decided") {
+		t.Errorf("torn reruns: exit %d, %v:\n%s", code, err, out)
+	}
+	// Ctrl-C ends the shrink, its reruns' files removed
+	type result struct {
+		code int
+		err  error
+	}
+	interrupted := make(chan result)
+	go func() { //qenv:ok the shrink, interrupted from the test
+		code, _, err := shrink([]string{"-out", "int"}, "-hang", "1s")
+		interrupted <- result{code, err}
+	}()
+	time.Sleep(1500 * time.Millisecond) // into the first rerun
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	r := <-interrupted
+	left, _ := filepath.Glob(filepath.Join(dir, "int", "reruns-*"))
+	if r.code != 2 || r.err == nil || !strings.Contains(r.err.Error(), "shrink: interrupted after") || len(left) > 0 {
+		t.Errorf("an interrupted shrink: exit %d, %v, left %v", r.code, r.err, left)
+	}
+	if code, _, err := shrink([]string{"-out", "zero", "-diverged-exit", "0"}); code != 2 || err == nil || !strings.Contains(err.Error(), "exit status 0 is a rerun that did its actions") {
+		t.Errorf("-diverged-exit 0: exit %d, %v", code, err)
 	}
 }

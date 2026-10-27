@@ -5,9 +5,12 @@ package nearest
 
 import "strings"
 
-// Name is the name of names nearest to name by edit distance, ignoring
-// case, if it is near enough to be a misspelling of it (at most 2 edits,
-// or a third of name's length), else "". Of equally near names the first
+// Name is the name of names nearest to name by edit distance (Distance),
+// ignoring case, if it is near enough to be a misspelling of it, else "":
+// one edit for a name shorter than 8 bytes, two for a longer one, and
+// fewer edits than either name has bytes. A looser bound once offered
+// unrelated short names ("p1" for "q2", "put" for "pop"): a suggestion
+// that is wrong costs more than none. Of equally near names the first
 // wins.
 func Name(name string, names []string) string {
 	best, bestD := "", -1
@@ -16,29 +19,40 @@ func Name(name string, names []string) string {
 			best, bestD = n, d
 		}
 	}
-	if bestD >= 0 && bestD <= max(2, len(name)/3) {
+	bound := 1
+	if len(name) >= 8 {
+		bound = 2
+	}
+	if bestD >= 0 && bestD <= bound && bestD < len(name) && bestD < len(best) {
 		return best
 	}
 	return ""
 }
 
-// Distance is the Levenshtein distance between a and b, in bytes.
+// Distance is the optimal string alignment distance between a and b, in
+// bytes: insertions, deletions, substitutions and transpositions of
+// adjacent bytes ("depsoit" is one edit from "deposit", the typo a hand
+// makes most).
 func Distance(a, b string) int {
-	prev := make([]int, len(b)+1)
-	cur := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
+	d := make([][]int, len(a)+1)
+	for i := range d {
+		d[i] = make([]int, len(b)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
 	}
 	for i := 1; i <= len(a); i++ {
-		cur[0] = i
 		for j := 1; j <= len(b); j++ {
-			sub := prev[j-1]
+			sub := d[i-1][j-1]
 			if a[i-1] != b[j-1] {
 				sub++
 			}
-			cur[j] = min(sub, prev[j]+1, cur[j-1]+1)
+			d[i][j] = min(sub, d[i-1][j]+1, d[i][j-1]+1)
+			if i > 1 && j > 1 && a[i-1] == b[j-2] && a[i-2] == b[j-1] {
+				d[i][j] = min(d[i][j], d[i-2][j-2]+1)
+			}
 		}
-		prev, cur = cur, prev
 	}
-	return prev[len(b)]
+	return d[len(a)][len(b)]
 }

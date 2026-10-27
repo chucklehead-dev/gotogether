@@ -292,7 +292,15 @@ gotogether shrink -binding app.binding.yaml -actions journey.json -out shrunk \
   (`GOTOGETHER_ACTIONS`, `GOTOGETHER_STEPS`). Exit 0 is a rerun that
   ran; the `-diverged-exit` status is one that could not do its actions
   (`ErrDiverged`: counted, never a pass); any other is a failed rerun
-  (three in a row end the shrink, exit 2).
+  (three in a row end the shrink, exit 2). The paths it is given are
+  absolute (a driver may change its directory); a rerun or reset past
+  `-rerun-timeout` is killed and counts as a failed rerun, named; a child
+  the driver leaves running (a server) may keep its output open for 5 s,
+  no longer. A torn step log (its last line cut off) is read up to the
+  cut, its recorders' tails lost (no verdict): the report counts and
+  names such reruns (`-v` prints each), and one torn before its first
+  step is a failed rerun. Ctrl-C ends the shrink and removes its reruns'
+  files.
 - `-reset` (a program, or a JSON array of its argv) runs before every
   rerun; without it each rerun must start its own fresh system, the only
   setup safe against leaked state.

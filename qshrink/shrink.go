@@ -241,6 +241,8 @@ func (s *shrinker) out() string {
 		return fmt.Sprintf("its budget of %d reruns ran out (raise Calibration.Budget)", s.cal.Budget)
 	case s.cal.Time > 0 && time.Since(s.start) >= s.cal.Time:
 		return fmt.Sprintf("its time of %v ran out (raise Calibration.Time)", s.cal.Time)
+	case s.ctx.Err() != nil && !errors.Is(s.ctx.Err(), context.DeadlineExceeded):
+		return "it was interrupted (its context was canceled)"
 	}
 	if dl, ok := s.ctx.Deadline(); ok && time.Until(dl) < 2*s.longest+5*time.Second {
 		return "the deadline is near (a test's: raise go test's -timeout; or set Calibration.Time)"

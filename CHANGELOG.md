@@ -8,6 +8,25 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- After the review of G3–G5: `validate -replay -itf` keeps the ITF it
+  names; `gotogether shrink` sets each command's `WaitDelay` (a child
+  left running with the driver's output open once hung it), takes
+  `-rerun-timeout` (a rerun or reset past it is killed, a failed rerun
+  named), cleans up on Ctrl-C, hands the driver absolute paths, counts
+  and names torn reruns' step logs (`-v` prints each), and refuses
+  `-diverged-exit 0`; a step log torn in its first line reads as torn,
+  not as an unknown format. `qobshttp.Handler` returns a `*Recording`
+  whose `Wait` waits for the requests it serves, hijacked connections'
+  included, which `srv.Close()` does not. `qobs.Recorder.Close` and
+  `Late`: qtest.Record closes its run's recorder when the scenario
+  returns, and a later step fails the test, named (after the test, it is
+  logged as escaped) instead of vanishing. An escaped step is told to
+  use qenv.Go only when its goroutine is a simulation's or one started
+  it, not whenever a simulation is open in the process. "Did you mean"
+  suggests within one edit for names under 8 bytes, two for longer (a
+  transposition is one), and a claim naming an action as an invariant
+  (or the reverse) says so. qtest's own tests leave nothing in the
+  temporary directory but the evaluator's cache.
 - Shrinking and replay outside `go test` (G5): the CLI no longer imports
   qtest, and with it `testing` and qenv. Package `qshrink` is
   ShrinkActions' core: `Shrink{Actions, Rerun, Reset, Judge, Keep,

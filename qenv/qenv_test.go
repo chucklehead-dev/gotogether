@@ -447,7 +447,7 @@ func TestBackgroundStepsFindTheirRun(t *testing.T) {
 // do. It once panicked, on a goroutine no run owns, which killed the test
 // binary instead of failing the run.
 func TestStrictStepWithNowhereToGo(t *testing.T) {
-	s := qenv.New(qenv.Nominal{}) // open: the advice is qenv's only in a process simulating
+	s := qenv.New(qenv.Nominal{}) // this goroutine's: the advice is qenv's for a simulation's goroutine
 	defer s.Close()
 	release := hooks.Strict()
 	defer release()
@@ -456,6 +456,33 @@ func TestStrictStepWithNowhereToGo(t *testing.T) {
 	n, msgs := hooks.Escaped(mark)
 	if n != mark+1 || len(msgs) != 1 || !strings.Contains(msgs[0], "qenv.Go") {
 		t.Fatalf("got %d escaped since %d: %v; want one naming qenv.Go", n, mark, msgs)
+	}
+}
+
+// The advice follows the escaped step's goroutine, not the process: one
+// no simulation started is not told to use qenv.Go though a simulation
+// is open elsewhere (a test of a real server beside an exploration).
+func TestEscapeAdviceFollowsTheGoroutine(t *testing.T) {
+	opened, done := make(chan struct{}), make(chan struct{})
+	go func() { //qenv:ok another test's simulation, open meanwhile
+		s := qenv.New(qenv.Nominal{})
+		close(opened)
+		<-done
+		s.Close()
+	}()
+	<-opened
+	defer close(done)
+	release := hooks.Strict()
+	defer release()
+	mark, _ := hooks.Escaped(0)
+	recorded := make(chan struct{})
+	go func() { //qenv:ok a goroutine of no simulation
+		defer close(recorded)
+		qobs.Record(context.Background(), "lost", nil)
+	}()
+	<-recorded
+	if _, msgs := hooks.Escaped(mark); len(msgs) != 1 || strings.Contains(msgs[0], "qenv.Go") || !strings.Contains(msgs[0], "qobs.WithRecorder(ctx, rec)") {
+		t.Fatalf("escaped: %q; want the advice of a goroutine outside any simulation", msgs)
 	}
 }
 

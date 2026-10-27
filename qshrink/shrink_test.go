@@ -562,3 +562,33 @@ func TestSameFailureFieldsAndOrder(t *testing.T) {
 func violatesOne(actor, name string) *validate.Result {
 	return &validate.Result{Actor: actor, Conforms: validate.Pass, Invariants: []validate.InvariantResult{{Name: name, Verdict: validate.Fail, Failure: &validate.Failure{Index: 1}}}}
 }
+
+// namedReset is a Resetter that names itself.
+type namedReset struct{ fakeReset }
+
+func (namedReset) String() string { return "the command ./reset.sh" }
+
+// The messages G5 rewrote when ShrinkActions' core moved here, kept as
+// they now read: a context's deadline is anyone's (a test's, a CLI's),
+// so the reason says whose it may be; two ways of failing name both
+// remedies (Keep in Go, one failure per rerun for the CLI); a Resetter
+// that is a fmt.Stringer is named by its String (a reset command by its
+// argv), any other by its type.
+func TestShrinkMessages(t *testing.T) {
+	t.Parallel()
+	bug := func(m uint) bool { return m&1 != 0 }
+	app := &fakeApp{a: bug, p: 1, rng: rand.New(rand.NewPCG(1, 1))}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second) // within 5s of the deadline from the start
+	defer cancel()
+	res, err := Shrink{Actions: 4, Rerun: app.rerun, Reset: fakeReset{app}, Judge: fakeJudge}.Run(ctx)
+	if err != nil || res.Minimal || res.NotMinimal != "the deadline is near (a test's: raise go test's -timeout; or set Calibration.Time)" {
+		t.Errorf("near the deadline: %v, %+v", err, res)
+	}
+	app = &fakeApp{a: bug, leakState: true, p: 1, rng: rand.New(rand.NewPCG(1, 1))}
+	_, err = Shrink{Actions: 4, Rerun: app.rerun, Reset: namedReset{fakeReset{app}}, Judge: fakeJudge}.Run(context.Background())
+	if want := "the original's reruns fail two ways (invariant noBugA; then disabled bugB): either the system fails both ways, " +
+		"and Keep must name the one to shrink (qtest.Violates(...), qtest.Rejects(...); gotogether shrink keeps the first failure alone: " +
+		"make its reruns fail one way), or Reset (the command ./reset.sh) leaves state one rerun sees and the next does not, and must clear it"; err == nil || err.Error() != want {
+		t.Errorf("two ways:\n got %v\nwant %s", err, want)
+	}
+}

@@ -138,7 +138,7 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 		return 2, err
 	}
 	get := func(name string) string { return fset.Lookup(name).Value.String() }
-	v := validateRun{out: out, verbose: get("v") == "true", history: get("history"), manifest: get("manifest")}
+	v := validateRun{out: out, verbose: get("v") == "true", history: get("history"), manifest: get("manifest"), withITF: get("itf") == "true"}
 	r, err := validate.Replay(context.Background(), m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
 	if r == nil && err != nil {
 		return 2, fmt.Errorf("validate -replay %s: %w", path, err)
@@ -210,9 +210,12 @@ func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error)
 	if j.Dir == "" {
 		return 2, jerr
 	}
-	if j.Temp {
+	switch {
+	case j.Temp && v.withITF:
+		fmt.Fprintf(v.out, "artifacts (generated modules, every run's ITF): %s (kept: -itf)\n", j.Dir)
+	case j.Temp:
 		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s (removed if the run passes; -dir keeps them)\n", j.Dir)
-	} else {
+	default:
 		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", j.Dir)
 	}
 	if jd := j.Judgment; jd != nil {

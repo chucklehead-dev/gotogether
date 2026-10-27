@@ -52,20 +52,25 @@ func Strict() (release func()) {
 // StrictOn reports whether a strict run is on.
 func StrictOn() bool { return strict.Load() > 0 }
 
-// Process-wide: installed by qenv.
-var simulating atomic.Pointer[func() bool]
-
-// SetSimulating installs how to tell whether a simulation is open in the
-// process: qenv's count of simulations not yet closed. An escaped step's
-// message advises qenv.Go only then: outside any simulation (a test
-// recording a real server) that advice is noise.
-func SetSimulating(f func() bool) { simulating.Store(&f) }
-
-// Simulating reports whether a simulation is open in the process
-// (SetSimulating's check; false without qenv).
-func Simulating() bool {
-	f := simulating.Load()
-	return f != nil && (*f)()
+// FromSimulation reports whether the calling goroutine is a simulation's
+// (a task, or the goroutine that created one) or was started by one with
+// `go`: where an escaped step's message advises qenv.Go. It asks the
+// goroutine's origin, not whether any simulation is open in the process:
+// a test recording a real server in parallel with an exploration is told
+// what fits it.
+func FromSimulation() bool {
+	f := creatorRun.Load()
+	if f == nil {
+		return false
+	}
+	if _, ok := (*f)(GoroutineID()); ok {
+		return true
+	}
+	if id, ok := creatorID(); ok {
+		_, ok := (*f)(id)
+		return ok
+	}
+	return false
 }
 
 // escaped logs the steps strict runs could not place, process-wide: their

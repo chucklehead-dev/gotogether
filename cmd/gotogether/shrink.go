@@ -9,8 +9,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/input"
 	"github.com/chucklehead-dev/gotogether/qshrink"
@@ -48,11 +52,18 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 	dir := fset.String("dir", "", "where generated modules go (default: a temporary directory, removed at the end)")
 	quint := fset.String("quint", "quint", "quint binary")
 	backend := fset.String("backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
-	verbose := fset.Bool("v", false, "print each rerun's command and exit status")
+	verbose := fset.Bool("v", false, "print each rerun's command and exit status, and each torn step log")
+	rerunTimeout := fset.Duration("rerun-timeout", 0, "the longest one rerun (or reset) may take: one that runs longer is killed and counts as a failed rerun, named (0: no limit)")
 	fset.Parse(args)
 	argv := fset.Args()
 	if *bpath == "" || *actionsPath == "" || len(argv) == 0 {
 		return 2, fmt.Errorf("shrink needs -binding, -actions and the rerun's command after the flags: gotogether shrink -binding b.yaml -actions journey.json -- ./driver -play {actions} -steps {steps}")
+	}
+	if *diverged == 0 {
+		return 2, fmt.Errorf("shrink -diverged-exit 0: exit status 0 is a rerun that did its actions; give the status the driver exits with when it could not (e.g. -diverged-exit 3), or -1 for none")
+	}
+	if *diverged < -1 {
+		return 2, fmt.Errorf("shrink -diverged-exit %d: no exit status; give the one the driver exits with when it could not do its actions (e.g. 3), or -1 for none", *diverged)
 	}
 	search.Linearize = *lin || search.Key != ""
 	data, err := os.ReadFile(*actionsPath)
@@ -72,6 +83,13 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 			return 2, fmt.Errorf("shrink -reset: %w", err)
 		}
 	}
+	// absolute: the driver is given the paths in work, and one that
+	// changes its directory must still find them
+	abs, err := filepath.Abs(*outDir)
+	if err != nil {
+		return 2, err
+	}
+	*outDir = abs
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		return 2, err
 	}
@@ -80,6 +98,10 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 		return 2, err
 	}
 	defer os.RemoveAll(work)
+	// Ctrl-C ends the reruns (their commands are killed) and the shrink,
+	// so the deferred removal of work runs
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	quintDir := *dir
 	if quintDir == "" {
 		quintDir = filepath.Join(work, "quint")
@@ -96,7 +118,7 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 			return 2, err
 		}
 	}
-	d := &driver{argv: argv, work: work, diverged: *diverged, verbose: *verbose, out: out}
+	d := &driver{argv: argv, work: work, diverged: *diverged, verbose: *verbose, out: out, timeout: *rerunTimeout}
 	s := qshrink.Shrink{Actions: len(original),
 		Rerun: func(ctx context.Context, idx []int) ([]qtrace.Step, error) {
 			return d.rerun(ctx, pickRaw(original, idx))
@@ -110,11 +132,23 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 		},
 		Calibration: qshrink.Calibration{Baseline: *baseline, Reruns: *reruns, Need: *need, Alpha: *alpha, Budget: *budget, Time: *limit}}
 	if resetArgv != nil {
-		s.Reset = &resetCommand{argv: resetArgv, verbose: *verbose, out: out}
+		s.Reset = &resetCommand{argv: resetArgv, verbose: *verbose, out: out, timeout: *rerunTimeout}
 	}
-	res, err := s.Run(context.Background())
+	res, err := s.Run(ctx)
+	if ctx.Err() != nil {
+		return 2, fmt.Errorf("shrink: interrupted after %d reruns; nothing written (the reruns' files removed)", d.n)
+	}
 	if err != nil {
 		return 2, fmt.Errorf("shrink: %w", err)
+	}
+	if len(d.torn) > 0 {
+		// a torn log's recorders lost their tails: no verdict for what
+		// they held, so such reruns decided nothing of the failure
+		torn := fmt.Sprintf("%d reruns' step logs were torn (reruns %s): their last lines cut off, their recorders' tails lost and judged with no verdict", len(d.torn), joinInts(d.torn))
+		if !res.Minimal {
+			res.NotMinimal += "; " + torn
+		}
+		defer fmt.Fprintf(out, "torn: %s\n", torn)
 	}
 	fmt.Fprintf(out, "%s\n", res)
 	// the shrunk sequence, what the shrink did, a rerun of it that showed
@@ -133,7 +167,7 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 		return 2, err
 	}
 	cmd := validate.Command{Binding: *bpath, Files: []string{stepsPath}, Invariants: invariants, Search: search, Options: opts}
-	j, err := cmd.Judge(context.Background())
+	j, err := cmd.Judge(ctx)
 	if err != nil {
 		return 2, fmt.Errorf("shrink: judging the shrunk sequence's rerun: %w", err)
 	}
@@ -191,7 +225,44 @@ type driver struct {
 	diverged int
 	verbose  bool
 	out      io.Writer
+	timeout  time.Duration // a rerun's longest (0: none)
 	n        int
+	torn     []int // the reruns whose step logs were torn
+}
+
+// waitDelay is how long a command's output is waited for after it exits:
+// a child it started in the background that inherited its output (a
+// server left running) would hold the pipe open, and the shrink with it,
+// forever. Process-wide: TestShrinkCommandMisbehavingDriver shortens it.
+var waitDelay = 5 * time.Second
+
+// run runs argv with ctx and the timeout (0: none) and its output in
+// output: the command's exit status, or an error naming it (timed out:
+// a failed run).
+func run(ctx context.Context, argv []string, env []string, timeout time.Duration, output io.Writer) (int, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = env
+	cmd.Stdout, cmd.Stderr = output, output
+	cmd.WaitDelay = waitDelay
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return 0, fmt.Errorf("%s timed out after %v (-rerun-timeout): it was killed", strings.Join(argv, " "), timeout)
+	}
+	var exit *exec.ExitError
+	switch {
+	case errors.As(err, &exit):
+		return exit.ExitCode(), nil
+	case errors.Is(err, exec.ErrWaitDelay):
+		return 0, nil // it exited 0; a child kept its output open, and what it wrote after is not read
+	case err != nil:
+		return 0, fmt.Errorf("%s: %w", strings.Join(argv, " "), err)
+	}
+	return 0, nil
 }
 
 // rerun runs the driver on actions and reads the steps it wrote: its
@@ -216,17 +287,10 @@ func (d *driver) rerun(ctx context.Context, actions []json.RawMessage) ([]qtrace
 	for i, a := range d.argv {
 		argv[i] = strings.NewReplacer("{actions}", actionsPath, "{steps}", stepsPath).Replace(a)
 	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Env = append(os.Environ(), "GOTOGETHER_ACTIONS="+actionsPath, "GOTOGETHER_STEPS="+stepsPath)
 	var output bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &output, &output
-	err = cmd.Run()
-	code := 0
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		code = exit.ExitCode()
-	} else if err != nil {
-		return nil, fmt.Errorf("the rerun %s: %w", strings.Join(argv, " "), err)
+	code, err := run(ctx, argv, append(os.Environ(), "GOTOGETHER_ACTIONS="+actionsPath, "GOTOGETHER_STEPS="+stepsPath), d.timeout, &output)
+	if err != nil {
+		return nil, fmt.Errorf("the rerun %w", err)
 	}
 	if d.verbose {
 		fmt.Fprintf(d.out, "rerun %d: %d actions: exit %d\n", d.n, len(actions), code)
@@ -246,6 +310,15 @@ func (d *driver) rerun(ctx context.Context, actions []json.RawMessage) ([]qtrace
 	}
 	if in.Format == input.ITF {
 		return nil, fmt.Errorf("the rerun wrote an ITF trace at {steps}: want the steps it recorded (a native step log, or OTLP/JSON)")
+	}
+	if in.Torn != nil {
+		d.torn = append(d.torn, d.n)
+		if d.verbose {
+			fmt.Fprintf(d.out, "rerun %d: its step log is torn: %v\n", d.n, in.Torn)
+		}
+		if len(in.Steps) == 0 {
+			return nil, fmt.Errorf("the rerun's step log is torn before its first step (%v): nothing it recorded can be judged; the driver must finish writing the log before it exits", in.Torn)
+		}
 	}
 	return in.Steps, nil
 }
@@ -267,18 +340,23 @@ type resetCommand struct {
 	argv    []string
 	verbose bool
 	out     io.Writer
+	timeout time.Duration
 }
 
 func (r *resetCommand) String() string { return "the command " + strings.Join(r.argv, " ") }
 
 // Reset runs the command: its exit status 0 is a reset.
 func (r *resetCommand) Reset(ctx context.Context) error {
-	out, err := exec.CommandContext(ctx, r.argv[0], r.argv[1:]...).CombinedOutput()
+	var out bytes.Buffer
+	code, err := run(ctx, r.argv, os.Environ(), r.timeout, &out)
+	if err == nil && code != 0 {
+		err = fmt.Errorf("exit status %d", code)
+	}
 	if r.verbose {
 		fmt.Fprintf(r.out, "reset: %v\n", err)
 	}
 	if err != nil {
-		return fmt.Errorf("%w: %s", err, tail(string(out)))
+		return fmt.Errorf("%w: %s", err, tail(out.String()))
 	}
 	return nil
 }
@@ -290,4 +368,13 @@ func writeSteps(path string, steps []qtrace.Step) error {
 		return err
 	}
 	return errors.Join(qtrace.WriteJSONL(f, steps), f.Close())
+}
+
+// joinInts is ns as "3, 7".
+func joinInts(ns []int) string {
+	parts := make([]string, len(ns))
+	for i, n := range ns {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ", ")
 }

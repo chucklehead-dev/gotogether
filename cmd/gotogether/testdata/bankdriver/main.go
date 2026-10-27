@@ -5,7 +5,11 @@
 // step log for qtest/testdata/bank.yaml. A cancel undoes the account's
 // last deposit; with no deposit to undo it cannot be done, and the
 // driver exits 3 (gotogether shrink -diverged-exit 3). With -reset FILE
-// it only appends a line to FILE: a reset that counts itself.
+// it only appends a line to FILE: a reset that counts itself. The other
+// flags misbehave as drivers do: -background leaves a child running that
+// holds its output open, -hang sleeps before playing, -cd plays from
+// another directory, -tear-single ends the log of a run of one action in
+// a line cut off.
 package main
 
 import (
@@ -14,6 +18,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -28,7 +34,20 @@ func main() {
 	actionsPath := flag.String("actions", "", "the actions to play, a JSON array")
 	stepsPath := flag.String("steps", "", "where to write the steps")
 	reset := flag.String("reset", "", "append a line to this file and exit")
+	background := flag.Bool("background", false, "leave a child running that holds stdout open")
+	hang := flag.Duration("hang", 0, "sleep this long first")
+	cd := flag.String("cd", "", "change to this directory first")
+	tear := flag.Bool("tear-single", false, "cut off the last line of a run of one action's log")
 	flag.Parse()
+	if *background {
+		child := exec.Command("sleep", "30")
+		child.Stdout = os.Stdout
+		exit(child.Start())
+	}
+	time.Sleep(*hang)
+	if *cd != "" {
+		exit(os.Chdir(*cd))
+	}
 	if *reset != "" {
 		f, err := os.OpenFile(*reset, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err == nil {
@@ -78,6 +97,12 @@ func main() {
 	f, err := os.Create(*stepsPath)
 	exit(err)
 	exit(errors.Join(qtrace.WriteJSONL(f, steps), f.Close()))
+	if *tear && len(actions) == 1 && len(steps) > 0 { // a next step's line, cut off
+		f, err := os.OpenFile(*stepsPath, os.O_APPEND|os.O_WRONLY, 0o644)
+		exit(err)
+		_, err = f.WriteString(`{"quint.action":"depo`)
+		exit(errors.Join(err, f.Close()))
+	}
 }
 
 func exit(err error) {

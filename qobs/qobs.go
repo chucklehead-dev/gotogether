@@ -54,6 +54,48 @@ type Recorder struct {
 	interrupted []qtrace.Step    // SetDiscard
 	threads     map[string]int64 // a Thread's goroutine
 	issues      []string
+	late        []qtrace.Step // recorded after Close
+
+	// closing makes Close wait for the writes under way: a step is in the
+	// sink, or late, never written to a sink its owner has closed
+	closing sync.RWMutex
+	closed  bool
+}
+
+// Close ends the recorder's run: a step recorded after it (by work the
+// run left running: a handler, a goroutine) is written to no sink, since
+// the run was judged without it. It is kept (Late) and logged as escaped
+// (strict runs fail on it), never dropped silently. qtest.Record closes
+// its run's recorder when the scenario returns. Close waits for the
+// writes under way.
+func (r *Recorder) Close() {
+	r.closing.Lock()
+	defer r.closing.Unlock()
+	r.closed = true
+}
+
+// Late returns the steps recorded after Close, in the order recorded.
+func (r *Recorder) Late() []qtrace.Step {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]qtrace.Step(nil), r.late...)
+}
+
+// write hands s to the sink, or, after Close, keeps it as late and logs
+// it as escaped.
+func (r *Recorder) write(ctx context.Context, s *qtrace.Step) {
+	r.closing.RLock()
+	defer r.closing.RUnlock()
+	if !r.closed {
+		r.sink.Record(ctx, s)
+		return
+	}
+	r.mu.Lock()
+	r.late = append(r.late, *s)
+	r.mu.Unlock()
+	hooks.Escape(fmt.Sprintf("qobs: step %q was recorded on recorder %s after its run ended (Recorder.Close: qtest.Record judged the run "+
+		"without it): wait for the work that records it before the run ends (an HTTP server's handlers: close the server, then "+
+		"qobshttp's Recording.Wait; a goroutine: wait for it)", s.Action, r.id))
 }
 
 // Issues are what the recorder found wrong with how it was used, as it
@@ -142,7 +184,7 @@ func (r *Recorder) Actor() string { return r.actor }
 // another process sent back (gosim's, see examples/gosim).
 func (r *Recorder) Add(steps ...qtrace.Step) {
 	for i := range steps {
-		r.sink.Record(context.Background(), &steps[i])
+		r.write(context.Background(), &steps[i])
 		r.added.Add(1)
 	}
 }
@@ -242,7 +284,7 @@ func Record(ctx context.Context, action string, err error, kv ...any) {
 // escapeAdvice is what to do about a step that escaped a strict run,
 // for the goroutine it came from: an HTTP handler's (net/http serves
 // each connection on a goroutine of its own) is told to wrap the
-// handler, one in a process running a simulation to start it with
+// handler, one a simulation started (or its task) to start it with
 // qenv.Go, any other to be given the run's context. It reads the
 // goroutine's stack, on this path only.
 func escapeAdvice() string {
@@ -254,7 +296,7 @@ func escapeAdvice() string {
 			"so that its requests carry the run's recorder (qobshttp.Handler(h, rec), rec the run's: qtest.Record's " +
 			"scenario's argument), or pass qtest.Global(), which keeps tests from running in parallel. A goroutine the " +
 			"handler starts must record through the request's context (r.Context())."
-	case hooks.Simulating():
+	case hooks.FromSimulation():
 		return "A goroutine started with `go` is outside the simulation: start it with qenv.Go, or record through " +
 			"a context from the run (qenv.WithContext)."
 	}
@@ -359,7 +401,7 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 	// Two concurrent steps may be numbered in either order, but their
 	// times are in the same one (stamp).
 	s.Seq, s.Time = r.stamp()
-	r.sink.Record(ctx, s)
+	r.write(ctx, s)
 }
 
 // stamp takes the next seq and the time together, so a recorder's seq
@@ -423,7 +465,7 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 	s.Invocation, s.Outcome = true, ""
 	c.seq, s.Time = r.stamp()
 	s.Seq = c.seq
-	r.sink.Record(ctx, s)
+	r.write(ctx, s)
 	return c
 }
 
@@ -467,7 +509,7 @@ func (r *Recorder) Settled(ctx context.Context) {
 	}
 	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Settled: true}
 	s.Seq, s.Time = r.stamp()
-	r.sink.Record(ctx, s)
+	r.write(ctx, s)
 }
 
 // CompleteThrough records, through the context's recorder (found as
@@ -491,7 +533,7 @@ func (r *Recorder) CompleteThrough(ctx context.Context, t time.Time) {
 		return
 	}
 	s := &qtrace.Step{Action: "complete", Recorder: r.id, Actor: r.actor, Process: r.process, CompleteThrough: t, Time: hooks.Now()}
-	r.sink.Record(ctx, s)
+	r.write(ctx, s)
 }
 
 // step builds a step from Record's arguments; false if "when" excludes it.

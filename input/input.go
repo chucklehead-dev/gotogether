@@ -62,7 +62,9 @@ func Read(path string, format Format) (*File, error) {
 		return nil, err
 	}
 	if format == "" || format == "auto" {
-		format = Sniff(data)
+		if format = Sniff(data); format == Unknown && tornFirstLine(data) {
+			format = StepLog // its one line cut off: ReadJSONL says it is torn
+		}
 	}
 	in := &File{Path: path, Format: format}
 	switch format {
@@ -118,4 +120,12 @@ func firstKeys(data []byte) string {
 	}
 	sort.Strings(keys)
 	return "has the keys " + strings.Join(keys, ", ")
+}
+
+// tornFirstLine reports whether data is one line, an object begun and
+// cut off (not whole, no newline after it): a step log whose writer
+// stopped in its first step, which is torn, not of an unknown format.
+func tornFirstLine(data []byte) bool {
+	line := bytes.TrimLeft(data, " \t\r\n")
+	return len(line) > 0 && line[0] == '{' && !bytes.ContainsRune(line, '\n') && !json.Valid(line)
 }

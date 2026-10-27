@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -164,5 +165,50 @@ func TestEscapedHandlerStepNamesTheFix(t *testing.T) {
 	_, msgs := hooks.Escaped(mark)
 	if len(msgs) != 1 || !strings.Contains(msgs[0], "qobshttp.Handler(h, rec)") || strings.Contains(msgs[0], "qenv") {
 		t.Fatalf("escaped: %q; want one naming qobshttp.Handler and not qenv", msgs)
+	}
+}
+
+// A handler that hijacks its connection (an Upgrade, a websocket) runs on
+// after the server's Close returns, which forgets hijacked connections:
+// its later steps would miss the run. Wait waits for it.
+func TestWaitForAHijackedHandler(t *testing.T) {
+	sink := &qobs.MemorySink{}
+	release, hijacked := make(chan struct{}), make(chan struct{})
+	h := qobshttp.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, buf, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		buf.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n")
+		buf.Flush()
+		close(hijacked)
+		<-release // the upgraded protocol's loop
+		qobs.Record(r.Context(), "closed", nil)
+		conn.Close()
+	}), qobs.NewRecorder(sink))
+	srv := httptest.NewServer(h)
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n")
+	<-hijacked
+	srv.Close() // returns with the handler still running
+	waited := make(chan struct{})
+	go func() { //qenv:ok waits for the handler, which the test releases
+		defer close(waited)
+		h.Wait()
+	}()
+	select {
+	case <-waited:
+		t.Fatal("Wait returned while the hijacked handler was running")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	<-waited
+	if steps := sink.Steps(); len(steps) != 1 || steps[0].Action != "closed" {
+		t.Errorf("after Wait: %+v, want the hijacked handler's step", steps)
 	}
 }

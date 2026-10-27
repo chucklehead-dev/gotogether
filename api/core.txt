@@ -1278,12 +1278,14 @@ type Outcomer interface
 type Recorder struct
     method (*Recorder) Actor() string
     method (*Recorder) Add(steps ...qtrace.Step)
+    method (*Recorder) Close()
     method (*Recorder) CompleteThrough(ctx context.Context, t time.Time)
     method (*Recorder) Count() int
     method (*Recorder) ID() string
     method (*Recorder) Interrupted() []qtrace.Step
     method (*Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call
     method (*Recorder) Issues() []string
+    method (*Recorder) Late() []qtrace.Step
     method (*Recorder) Record(ctx context.Context, action string, err error, kv ...any)
     method (*Recorder) Settled(ctx context.Context)
 type Sink interface
@@ -1299,7 +1301,10 @@ type Tee []Sink
     method (Tee) Record(ctx context.Context, s *qtrace.Step)
 
 == github.com/chucklehead-dev/gotogether/qobs/qobshttp
-func Handler(h http.Handler, rec *qobs.Recorder) http.Handler
+func Handler(h http.Handler, rec *qobs.Recorder) *Recording
+type Recording struct
+    method (*Recording) ServeHTTP(w http.ResponseWriter, r *http.Request)
+    method (*Recording) Wait()
 
 == github.com/chucklehead-dev/gotogether/qrole
 const MetricAttempts = "quint.call.attempts"

@@ -9,13 +9,21 @@
 // never mix.
 //
 //	qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
-//		srv := httptest.NewServer(qobshttp.Handler(api, rec))
-//		defer srv.Close() // waits for the handlers: their steps are in the run
+//		h := qobshttp.Handler(api, rec)
+//		srv := httptest.NewServer(h)
+//		defer h.Wait()    // the handlers still running (a hijacked connection's): their steps are in the run
+//		defer srv.Close() // the requests in flight
 //		/* drive srv.URL; the client's own steps, on this goroutine, are in the run too */
 //	}).Expect(t, qtest.Conforms())
 //
 // Start the server inside the run and close it before the run ends: a
-// step recorded after the scenario returns is in no run. Each run (a
+// step recorded after the scenario returns is in no run (qtest.Record
+// fails the test that made it, naming the step). httptest.Server.Close
+// and http.Server.Shutdown wait for the requests in flight, but not for
+// a handler that hijacked its connection (an Upgrade, a websocket's
+// read loop): the server forgets the connection once hijacked, and its
+// handler runs on. Recording.Wait waits for every request the handler
+// is serving, hijacked or not. Each run (a
 // rerun of ShrinkActions included) gets a server of its own; one shared
 // across runs records into the recorder it was wrapped with, whichever
 // run sent the request. A server built elsewhere is wrapped in place
@@ -34,10 +42,23 @@ package qobshttp
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qrun"
 )
+
+// A Recording is Handler's handler: h with its requests' steps recorded
+// into rec, counting the requests it is serving so that Wait can wait
+// for them.
+type Recording struct {
+	h   http.Handler
+	rec *qobs.Recorder
+
+	mu       sync.Mutex
+	idle     *sync.Cond
+	inFlight int
+}
 
 // Handler returns h with every request's steps recorded into rec: the
 // request's context carries rec (qobs.WithRecorder), so code recording
@@ -47,15 +68,44 @@ import (
 // goroutine (a library's, woven //quint:action advice without a context)
 // finds it too. The recorder is the request's, not the connection's: a
 // keep-alive connection carries no recorder from one request to the
-// next. A nil rec returns h.
-func Handler(h http.Handler, rec *qobs.Recorder) http.Handler {
-	if rec == nil {
-		return h
+// next. A nil rec records nothing (h serves alone), and Wait still
+// waits.
+func Handler(h http.Handler, rec *qobs.Recorder) *Recording {
+	r := &Recording{h: h, rec: rec}
+	r.idle = sync.NewCond(&r.mu)
+	return r
+}
+
+// ServeHTTP serves the request with h, its steps into the recorder.
+func (h *Recording) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	h.inFlight++
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		if h.inFlight--; h.inFlight == 0 {
+			h.idle.Broadcast()
+		}
+		h.mu.Unlock()
+	}()
+	if h.rec == nil {
+		h.h.ServeHTTP(w, r)
+		return
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := qobs.WithRecorder(r.Context(), rec)
-		end := qrun.Start(ctx)
-		defer end()
-		h.ServeHTTP(w, r.WithContext(ctx))
-	})
+	ctx := qobs.WithRecorder(r.Context(), h.rec)
+	end := qrun.Start(ctx)
+	defer end()
+	h.h.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// Wait waits until no request is being served: every handler called has
+// returned, a hijacked connection's included, which the server's own
+// Close and Shutdown do not wait for. Call it after the server is closed
+// (no new request can arrive), before the run ends.
+func (h *Recording) Wait() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for h.inFlight > 0 {
+		h.idle.Wait()
+	}
 }

@@ -95,6 +95,11 @@ func TestRunClaimNamesSayWhyTheyNeverMatch(t *testing.T) {
 		{Violates("nonNegativ"), "nonNegativ is not an invariant of the run (did you mean nonNegative?; checked: nonNegative, underLimit)"},
 		{Rejects("withdrw"), "withdrw is not an action of the model (did you mean withdraw?"},
 		{Rejects("zzz"), "zzz is not an action of the model (its actions: "},
+		// a name of the other kind, said as such: a lax "did you mean"
+		// once offered an unrelated name instead
+		{Violates("withdraw"), `withdraw is an action, not an invariant (Rejects("withdraw") or Mismatch("withdraw") name an action`},
+		{Mismatch("nonNegative"), `nonNegative is an invariant, not an action (Violates("nonNegative") names an invariant`},
+		{Rejects("dep"), "dep is not an action of the model (its actions: "}, // not "did you mean"
 	} {
 		f := &failTB{TB: t}
 		done := make(chan struct{})

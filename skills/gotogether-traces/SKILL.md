@@ -100,8 +100,10 @@ templates (collections, outcomes, ITF), or setting up the analyzers
 
   ```go
   qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
-      srv := httptest.NewServer(qobshttp.Handler(api, rec))
-      defer srv.Close() // waits for the handlers: their steps are in the run
+      h := qobshttp.Handler(api, rec)
+      srv := httptest.NewServer(h)
+      defer h.Wait()    // hijacked connections' handlers too (srv.Close forgets them)
+      defer srv.Close() // the requests in flight
       /* drive srv.URL */
   }).Expect(t, qtest.Conforms())
   ```

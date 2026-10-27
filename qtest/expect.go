@@ -445,13 +445,23 @@ func named(action string) []string {
 func unknownNames(es []Expectation, actions, invariants map[string]bool, of string) []string {
 	var out []string
 	for _, e := range es {
+		// a name of the other kind is said first: a misspelling's
+		// suggestion would be of a name the claim did not mean
 		for _, a := range e.actions {
-			if actions != nil && !actions[a] {
+			switch {
+			case actions == nil || actions[a]:
+			case invariants[a]:
+				out = append(out, fmt.Sprintf("%s is an invariant, not an action (Violates(%q) names an invariant; Rejects and Mismatch an action: its actions: %s)", a, a, strings.Join(keysOf(actions), ", ")))
+			default:
 				out = append(out, fmt.Sprintf("%s is not an action of the model (%sits actions: %s)", a, didYouMean(a, actions), strings.Join(keysOf(actions), ", ")))
 			}
 		}
 		for _, i := range e.invariants {
-			if invariants != nil && !invariants[i] {
+			switch {
+			case invariants == nil || invariants[i]:
+			case actions[i]:
+				out = append(out, fmt.Sprintf("%s is an action, not an invariant (Rejects(%q) or Mismatch(%q) name an action; Violates an invariant: checked: %s)", i, i, i, strings.Join(keysOf(invariants), ", ")))
+			default:
 				out = append(out, fmt.Sprintf("%s is not an invariant of %s (%schecked: %s)", i, of, didYouMean(i, invariants), strings.Join(keysOf(invariants), ", ")))
 			}
 		}

@@ -49,3 +49,24 @@ func TestStepSourceNamesFile(t *testing.T) {
 		t.Fatalf("steps %+v", f.Steps)
 	}
 }
+
+// A step log cut off in its first line is torn, as one cut off later is,
+// not a file of no known shape: a rerun killed while writing its first
+// step was once told its log is "not OTLP/JSON, a step log or ITF".
+func TestTornFirstLine(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "run.jsonl")
+	if err := os.WriteFile(p, []byte(StepLogExample[:len(StepLogExample)/2]), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Read(p, "")
+	if err != nil || f.Torn == nil || f.Torn.Line != 1 || len(f.Steps) != 0 || f.Format != StepLog {
+		t.Fatalf("a torn first line: %v %+v", err, f)
+	}
+	// a whole object of no known shape on one line is still refused
+	if err := os.WriteFile(p, []byte(`{"action":"reserve"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read(p, ""); err == nil || !strings.Contains(err.Error(), "not OTLP/JSON, a step log or ITF") {
+		t.Errorf("a whole object: %v", err)
+	}
+}

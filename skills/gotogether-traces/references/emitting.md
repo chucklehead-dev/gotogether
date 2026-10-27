@@ -112,8 +112,10 @@ context) land in the run:
 
 ```go
 qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
-	srv := httptest.NewServer(qobshttp.Handler(api, rec))
-	defer srv.Close() // waits for the handlers: their steps are in the run
+	h := qobshttp.Handler(api, rec)
+	srv := httptest.NewServer(h)
+	defer h.Wait()    // handlers still running (a hijacked connection's)
+	defer srv.Close() // the requests in flight
 	/* drive srv.URL */
 }).Expect(t, qtest.Conforms())
 ```
@@ -126,7 +128,11 @@ qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
   you cannot wrap its handler).
 - **Lifetime.** Start the server inside the scenario and close it before
   the scenario returns (`defer srv.Close()`, not `t.Cleanup`, which runs
-  after the run was judged): a step recorded later is in no run. An
+  after the run was judged): a step recorded later is in no run, and
+  fails the test, named. `srv.Close()` waits for the requests in flight
+  but not for a handler that hijacked its connection (an Upgrade, a
+  websocket's loop), which the server forgets: `Wait` on the handler
+  `qobshttp.Handler` returns waits for every request it serves. An
   `http.Server` you configure yourself takes the wrapper in place
   (`srv.Config.Handler = qobshttp.Handler(srv.Config.Handler, rec)` before
   `Start`). The recorder is the request's, not the connection's: a

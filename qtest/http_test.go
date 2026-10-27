@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qobs/qobshttp"
 )
@@ -91,5 +92,34 @@ func TestRecordHTTPServiceInParallel(t *testing.T) {
 	<-done
 	if len(f.errs) == 0 || !strings.Contains(f.errs[0], "qobshttp.Handler(h, rec)") || strings.Contains(f.errs[0], "qenv.Go") {
 		t.Errorf("unwrapped: errors %q, want the escaped steps named with the HTTP fix", f.errs)
+	}
+}
+
+// A step recorded on a run's recorder after Record judged the run (a
+// handler still running, here a step made after the scenario returned)
+// fails the test when it ends, named, and later ones are logged as
+// escaped: they were once written to the run's memory and lost silently.
+func TestRecordLateStep(t *testing.T) {
+	needQuint(t)
+	f := &failTB{}
+	var rec *qobs.Recorder
+	t.Run("late", func(sub *testing.T) {
+		f.TB = sub
+		Record(f, account, func(r *qobs.Recorder) {
+			rec = r
+			r.Record(context.Background(), "deposit", nil, "amount", 1, "obs.balance", 1)
+		}, opts()...).Expect(sub, Conforms())
+		rec.Record(context.Background(), "deposit", nil, "amount", 2, "obs.balance", 3) //qenv:ok after the run
+	})
+	if len(f.errs) != 1 || !strings.Contains(f.errs[0], "1 steps were recorded on the run's recorder after the scenario returned (the first: deposit") ||
+		!strings.Contains(f.errs[0], "qobshttp's Recording.Wait") {
+		t.Errorf("errors %q, want the late step named", f.errs)
+	}
+	release := hooks.Strict()
+	defer release()
+	mark, _ := hooks.Escaped(0)
+	rec.Record(context.Background(), "deposit", nil, "amount", 3, "obs.balance", 6) //qenv:ok after the test
+	if _, msgs := hooks.Escaped(mark); len(msgs) != 1 || !strings.Contains(msgs[0], "after its run ended (Recorder.Close") {
+		t.Errorf("escaped: %q, want the step after the test", msgs)
 	}
 }

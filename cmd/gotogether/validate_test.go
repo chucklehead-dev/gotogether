@@ -592,6 +592,26 @@ func TestValidateTempDir(t *testing.T) {
 	if l := left(); len(l) > 0 {
 		t.Errorf("a passing run left %v", l)
 	}
+	// -itf keeps the ITF it names, a replay's too: a passing replay once
+	// removed the directory its report had just printed
+	manifest := filepath.Join(dir, "m.json")
+	if code, out := vcapture(t, []string{"-binding", "../../validate/testdata/account.yaml", "-manifest", manifest, log}); code != 0 {
+		t.Fatalf("a passing run's manifest: exit %d:\n%s", code, out)
+	}
+	for _, args := range [][]string{{"-binding", "../../validate/testdata/account.yaml", "-itf", log}, {"-replay", manifest, "-itf"}} {
+		code, out := vcapture(t, args)
+		l := left()
+		itfs, _ := filepath.Glob(filepath.Join(tmp, "gotogether-validate-*", "*", "*.itf.json"))
+		if code != 0 || len(l) != 1 || !strings.Contains(out, l[0]+" (kept: -itf)") || len(itfs) == 0 {
+			t.Errorf("%v: exit %d, left %v, ITF %v:\n%s", args, code, l, itfs, out)
+		}
+		for _, d := range l {
+			os.RemoveAll(d)
+		}
+	}
+	if code, out := vcapture(t, []string{"-replay", manifest}); code != 0 || len(left()) > 0 {
+		t.Errorf("a passing replay: exit %d, left %v:\n%s", code, left(), out)
+	}
 	step.Obs = map[string]any{"balance": int64(6)} // a mismatch
 	write(step)
 	code, out := vcapture(t, []string{"-binding", "../../validate/testdata/account.yaml", log})
