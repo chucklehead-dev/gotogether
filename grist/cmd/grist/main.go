@@ -52,8 +52,9 @@ const help = `usage: grist new [-dir DIR] [-module PATH] [-replace REPO] [-no-ge
   NAME           the app's name: lower-case words joined by dashes (its store's, its model's)
   -dir DIR       where to write the module (default ./NAME)
   -module PATH   its module path (default example.com/NAME)
-  -replace REPO  require gotogether and grist from a checkout at REPO (a replace directive),
-                 not at the version this grist was built from
+  -replace REPO  require gotogether and grist from a checkout at REPO (resolved against the
+                 current directory; go.mod's replace says it relative to the module, as
+                 an example's ../..), not at the version this grist was built from
   -no-generate   write the files only: skip go mod tidy and the app's model command`
 
 // run runs grist's command line.
@@ -90,6 +91,15 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	if entries, err := os.ReadDir(*dir); err == nil && len(entries) > 0 {
 		return fmt.Errorf("grist new: %s exists and is not empty: give another -dir", *dir)
+	}
+	if *replace != "" {
+		// checked before anything is written: a bad path once left a
+		// half-written module behind, failing in go's words
+		for _, m := range []string{"go.mod", filepath.Join("grist", "go.mod")} {
+			if _, err := os.Stat(filepath.Join(*replace, m)); err != nil {
+				return usage(fmt.Sprintf("grist new: -replace %s: no %s there: give the gotogether checkout's root (resolved against the current directory)", *replace, m))
+			}
+		}
 	}
 	data := struct{ Name, Pkg, Q, Module string }{name, strings.ReplaceAll(name, "-", ""), q, *module}
 	if err := write(*dir, data); err != nil {
@@ -164,12 +174,25 @@ func writeGoMod(dir, module, replace string) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", module)
 	if replace != "" {
+		// relative to the module, as an example's `replace => ../..`: the
+		// go.mod stays right when the checkout moves with it
 		abs, err := filepath.Abs(replace)
 		if err != nil {
 			return err
 		}
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			return err
+		}
+		rel := abs
+		if r, err := filepath.Rel(absDir, abs); err == nil {
+			rel = filepath.ToSlash(r)
+			if !strings.HasPrefix(rel, ".") {
+				rel = "./" + rel
+			}
+		}
 		fmt.Fprintf(&b, "\nrequire (\n\tgithub.com/chucklehead-dev/gotogether v0.0.0\n\tgithub.com/chucklehead-dev/gotogether/grist v0.0.0\n)\n")
-		fmt.Fprintf(&b, "\nreplace (\n\tgithub.com/chucklehead-dev/gotogether => %s\n\tgithub.com/chucklehead-dev/gotogether/grist => %s\n)\n", abs, filepath.Join(abs, "grist"))
+		fmt.Fprintf(&b, "\nreplace (\n\tgithub.com/chucklehead-dev/gotogether => %s\n\tgithub.com/chucklehead-dev/gotogether/grist => %s/grist\n)\n", rel, rel)
 	}
 	return os.WriteFile(filepath.Join(dir, "go.mod"), []byte(b.String()), 0o644)
 }

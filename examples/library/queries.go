@@ -9,10 +9,10 @@ type MemberLoans struct {
 
 // LoansView is a member's loans as shown: how many, and the books held in
 // the order borrowed (a book once per copy held). The model compares a
-// result's scalar fields only (Count), not the list.
+// result's scalar fields only (Count): the list says so (grist:"-").
 type LoansView struct {
 	Count int      `json:"count"`
-	Books []string `json:"books"`
+	Books []string `json:"books" grist:"-"`
 }
 
 // LoansQuery is the member-loans query: the member's loans through the position it

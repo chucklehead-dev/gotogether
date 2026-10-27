@@ -34,7 +34,12 @@ The first release. What a user meets, by module:
   (`readsOf`, `triplesOf`, `covers`, `conditionHolds` over
   `Set[Read]`; a command action's `reads: Set[(str, str, str)]`), and
   each branch of a generated `step` draws its own arguments, so the
-  model is in the Go evaluator's fragment.
+  model is in the Go evaluator's fragment. A field no step records (a
+  list, a struct) of an event, arguments, a result or a site record is
+  the generator's error unless tagged `grist:"-"`; `grist new -replace`
+  checks the checkout first and writes the replace relative to the
+  module. qtest: a claim `Violates("v")` of an eventual val says to name
+  it `validate.EventuallyName("v")`.
 - A binding's module may re-export another whole (`export lib.*`): its
   actions, variables and vals are the exported module's too
   (`binding.LoadModel` follows the exports transitively, its own names

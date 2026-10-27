@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,25 @@ func TestNewRefuses(t *testing.T) {
 	// an app named grist would have the vendored library's model file
 	if err := run([]string{"new", "-dir", filepath.Join(t.TempDir(), "g"), "-no-generate", "grist"}, &out, &out); err == nil || !strings.Contains(err.Error(), "library") {
 		t.Errorf("an app named grist: %v, want refused", err)
+	}
+	// a -replace with no checkout there is refused before anything is
+	// written; a good one is written relative to the module
+	bad := filepath.Join(t.TempDir(), "bad")
+	if err := run([]string{"new", "-dir", bad, "-no-generate", "-replace", t.TempDir(), "app"}, &out, &out); err == nil || !strings.Contains(err.Error(), "no go.mod there") {
+		t.Errorf("a -replace with no checkout: %v", err)
+	}
+	if _, err := os.Stat(bad); err == nil {
+		t.Errorf("a refused -replace left %s behind", bad)
+	}
+	repo, _ := filepath.Abs(filepath.Join("..", "..", ".."))
+	mod := filepath.Join(t.TempDir(), "app")
+	if err := run([]string{"new", "-dir", mod, "-no-generate", "-replace", repo, "app"}, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(mod, "go.mod"))
+	m := regexp.MustCompile(`gotogether => (\S+)\n\s+github.com/chucklehead-dev/gotogether/grist => (\S+)\n`).FindStringSubmatch(string(b))
+	if m == nil || filepath.IsAbs(m[1]) || filepath.Join(mod, m[1]) != repo || filepath.Join(mod, m[2]) != filepath.Join(repo, "grist") {
+		t.Errorf("go.mod with -replace: want both paths relative to the module, resolving to %s:\n%s", repo, b)
 	}
 	fresh := filepath.Join(t.TempDir(), "app")
 	if err := run([]string{"new", "-dir", fresh, "-no-generate", "app"}, &out, &out); err != nil {

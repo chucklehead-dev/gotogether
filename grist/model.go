@@ -323,8 +323,9 @@ var quintIdent = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 // scalarFields are t's top-level scalar fields, as a step records them
 // (rec.StepFields): non-scalar fields are not recorded, and so not
-// modelled. A pointer field is refused (recorded only when set, so a step
-// may lack its parameter), as is a JSON name that is no Quint identifier.
+// modelled, and each must say so (`grist:"-"`), or it is refused. A
+// pointer field is refused (recorded only when set, so a step may lack
+// its parameter), as is a JSON name that is no Quint identifier.
 func scalarFields(t reflect.Type) ([]field, error) {
 	if t == nil || t.Kind() != reflect.Struct {
 		return nil, nil
@@ -341,7 +342,12 @@ func scalarFields(t reflect.Type) ([]field, error) {
 		}
 		q := quintScalar(f.Type)
 		if q == "" {
-			continue
+			// a step records scalars only: a list or a struct dropped
+			// without a word once left a query's answer uncompared
+			if f.Tag.Get("grist") == "-" {
+				continue
+			}
+			return nil, fmt.Errorf("field %s is a %v, which no step records and so no model compares: give the model scalar fields (a count, a joined string), or tag it `grist:\"-\"` to say the model leaves it out", f.Name, f.Type)
 		}
 		if !quintIdent.MatchString(n) {
 			return nil, fmt.Errorf("field %s's JSON name %q is no Quint identifier: rename it (letters, digits and _)", f.Name, n)

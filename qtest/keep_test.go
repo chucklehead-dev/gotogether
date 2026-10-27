@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // failureIn runs f in a subtest with a failTB and returns its failure
@@ -108,5 +109,16 @@ func TestRunClaimNamesSayWhyTheyNeverMatch(t *testing.T) {
 		if msg := strings.Join(f.errs, "\n"); len(f.errs) != 1 || !strings.Contains(msg, c.want) || strings.Contains(msg, "got:") {
 			t.Errorf("%s: want a failure saying %q, got %v", c.e, c.want, f.errs)
 		}
+	}
+}
+
+// A claim naming an eventual val without its prefix says the name to
+// write: the verdict of an eventual val is "eventually <val>".
+func TestClaimNamesEventualVal(t *testing.T) {
+	t.Parallel()
+	got := unknownNames([]Expectation{Violates("allPosted")}, map[string]bool{"post": true},
+		map[string]bool{"noOverdraft": true, validate.EventuallyName("allPosted"): true}, "the runs")
+	if len(got) != 1 || !strings.Contains(got[0], `Violates(validate.EventuallyName("allPosted"))`) {
+		t.Errorf("Violates(\"allPosted\") of an eventual val: %v, want the claim to write", got)
 	}
 }

@@ -58,7 +58,11 @@ Then, in order, each item reviewed before the next:
   green on first run, `TestNewIsGreen`), grist/gristtest's harnesses
   (`Mutants`, `Tier`), `NewDep` and `NewSite`; counters and wallet-grist
   generated (their bindings no longer hand-written); reviewed (§0.10).
-  Left: a Delivers processor's Skip in its generated model, gristflow
+  Left: a Delivers processor's Skip in its generated model; from the
+  library trial, a site record ordered after the commit that triggered
+  it, an ordered gristsim workload, a claim that every block of the
+  catalog was taken (the summary's "never" list apart from grist's
+  helpers), `Takes` by outcome; gristflow
   (an append its reads do not cover, a rejection on an unconditioned
   read, a raw store call), and a trial agent building a new app from
   `grist new` to confirm it writes no binding by hand.

@@ -72,7 +72,15 @@ is the log through the trigger, `prefix[trigger - 1]` the trigger; a
 success event names the trigger (`paidOut(counter, trigger)`) so each
 trigger's outcome is its own. Per site `s`: `<s>Admits(records, r)`, the
 dependency's own rule (a ledger's dedupe by key; `true` for a bank that
-records every payment). `STRS` and `INTS`: what `step` (`gotogether
+records every payment). A site's records are ordered with no commit of
+the tenant's log (a record may be reconstructed before the commit that
+asked for it), and `<s>Admits` sees the records, not the log: a relation
+between them and the log ("every receipt is for a borrow") is an
+eventual val (`// grist: eventually`), judged after a settle, never an
+invariant. A read `r.Exists(T, grist.Tag("k", v))` records the read the
+generator names `<t>ByK(v)` (`r.Exists(T)`: `<t>Read`), what `<c>Needs`
+returns for it. A field the model leaves out (a list in a query's
+answer) is tagged `grist:"-"`; an untagged one is the generator's error. `STRS` and `INTS`: what `step` (`gotogether
 simulate`) draws arguments from. Read models' folds are yours (Go
 closures cannot be translated): write a def over the generated
 selection (`totalsEvents(log, c).foldl(0, (s, e) => s + counterIncrementedBy(e))`).
@@ -88,7 +96,9 @@ clients'), each marked on the line before it:
 
 - `// grist: invariant [bindings]`: judged at every step, and held by
   the model on its own (`simulate: holds`);
-- `// grist: eventually [bindings]`: judged after the run's last settle;
+- `// grist: eventually [bindings]`: judged after the run's last settle
+  (a claim names its verdict `qtest.Violates(validate.EventuallyName("v"))`,
+  "eventually v", not `Violates("v")`);
 - `// grist: violable [bindings]`: a test-only invariant the design
   allows to fail (`simulate: allows`), such as one ok welcome per counter
   under at least once.

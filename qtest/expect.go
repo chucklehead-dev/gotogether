@@ -461,6 +461,10 @@ func unknownNames(es []Expectation, actions, invariants map[string]bool, of stri
 			case invariants == nil || invariants[i]:
 			case actions[i]:
 				out = append(out, fmt.Sprintf("%s is an action, not an invariant (Rejects(%q) or Mismatch(%q) name an action; Violates an invariant: checked: %s)", i, i, i, strings.Join(keysOf(invariants), ", ")))
+			case invariants[validate.EventuallyName(i)]:
+				// an eventual val's verdict is named apart from an
+				// invariant's of the same val
+				out = append(out, fmt.Sprintf("%s is an eventual val of %s, judged after a settle: name it Violates(validate.EventuallyName(%q)), %q (checked: %s)", i, of, i, validate.EventuallyName(i), strings.Join(keysOf(invariants), ", ")))
 			default:
 				out = append(out, fmt.Sprintf("%s is not an invariant of %s (%schecked: %s)", i, of, didYouMean(i, invariants), strings.Join(keysOf(invariants), ", ")))
 			}

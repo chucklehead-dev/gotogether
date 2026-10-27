@@ -1060,6 +1060,25 @@ without it:
   -init` writes one, and names the files it writes
   (`TestMainModel`, the model command's first test). `gristtest.Overlay`
   is unexported: it is `Mutants`' mechanics.
+- **The library trial** (examples/library, TRIAL.md), from `grist new`
+  and the docs alone: a query result's `[]string` field was dropped by
+  the generator without a word (`MemberLoansResult = { unit: bool }`),
+  so the answer compared nothing of it. A field of an event, arguments,
+  result or site record that no step records (a list, a struct) is now
+  the generator's error with the fix, unless tagged `grist:"-"` (the
+  model leaves it out, said where it is declared; library's `Books`).
+  `grist new -replace` checks the checkout before writing anything and
+  writes the replace relative to the module (`../..` in an example), not
+  an absolute path. A claim `Violates("x")` of an eventual val x says to
+  write `Violates(validate.EventuallyName("x"))`. §2.4's `Within` and
+  `Also` are marked designed, not built. Documented (skills/grist): a
+  site's records are ordered with no commit of the tenant's log, so a
+  relation between them and the log is an eventual val (`// grist:
+  eventually`); gristsim's `Send` draws uniformly from its list, so a
+  name listed twice is sent about twice as often, and there is no
+  ordered prologue; `r.Exists(T, Tag(k, v))` records the read `<t>By<K>(v)`
+  (`Exists(T)`: `<t>Read`); a `NewDep`'s T is best an interface, whose
+  fallback refuses every call.
 - **Left**: a `Delivers` processor's Skip or handler Fail (the runtime
   allows both) commits a checkpoint with no effect step and no `ok`,
   which its generated actions cannot take: the binding fails on the
@@ -1069,7 +1088,13 @@ without it:
   so meanwhile (Delivers, skills/grist's model reference). And a
   command that declares no `Refuses` but refuses at run time fails in
   the binding ("outcome has no mapping"), an error that names the
-  binding, not `grist.Refuses`.
+  binding, not `grist.Refuses`. From the trial: a site record carrying
+  the position of the commit that triggered its effect (an order edge,
+  so a relation to the log is an invariant), an ordered workload in
+  gristsim, a claim that every block of the catalog was taken (qtest's
+  `Exercised` counts grist's helper actions too, and the summary's
+  "never" list mixes them with the app's and truncates), and an outcome
+  filter on `Takes`: each a design change of its own, in the ROADMAP.
 - **Cost**: counters' `-short` measured 359.5 CPU s here (load 10-25 on
   4 cores; ci/test-times.txt says 354): 90 `quint test` processes, 4
   typechecks and one compile. Each `quint test` of a counters replay
@@ -1280,10 +1305,11 @@ inside the append's transaction would close it at Serializable, and is
 not done: the condition gives that protection at every level, on every
 store, and `Unconditioned` exists to admit the race on purpose.
 
-The other consistency options: `grist.Within(Totals)` narrows the
-condition to some of the reads (the rest are advisory, the option's
-reason says why); `grist.Also(q)` adds a query the decision did not read.
-No option widens beyond the tenant: there are no cross-tenant
+Two consistency options are designed, not built (no such symbols yet:
+`Unconditioned` is the one way to make reads advisory today):
+`grist.Within(Totals)` would narrow the condition to some of the reads
+(the rest advisory, the option's reason saying why); `grist.Also(q)`
+would add a query the decision did not read. No option widens beyond the tenant: there are no cross-tenant
 transactions, as in grain.
 
 **Transient errors are not failed conditions.** A lost race for the
@@ -1980,7 +2006,7 @@ recognizing grist's constructors by import path and type:
   it dispatches; written to `grist.topology` and compared at boot
   (§2.9). It reports **a decision that rejects under a condition on a
   read its append is not conditioned on** (`Unconditioned`, or a
-  `Within` leaving the read out): "create-counter refuses ErrNameTaken
+  `Within`, once built, leaving the read out): "create-counter refuses ErrNameTaken
   on Exists(counter-created, name), which its append is not conditioned
   on: two concurrent create-counter can both pass; remove Unconditioned,
   or exempt with //grist:advisory <reason>". And a processor handler or

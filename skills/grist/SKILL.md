@@ -58,7 +58,8 @@ for it. No binding is written by hand.
    decision's error), each processor's result (`grist.Emits(Type)` or
    `grist.Delivers(grist.AtLeastOnce|grist.AtMostOnce, SuccessType)`;
    another result fails the trigger), a dependency as a typed
-   `grist.NewDep[T](name, fallback)` (`Dep.Of(ctx)` in an effect,
+   `grist.NewDep[T](name, fallback)` (T best an interface, its fallback a
+   stand-in refusing every call with the fix; `Dep.Of(ctx)` in an effect,
    `Dep.With(ctx, v)` where the node starts: gristsim's `Setup`,
    `grist.Dependencies`), and a double's own record of its effects as a
    `grist.NewSite[T](App, name)` (`Site.Record(ctx, tenant, v)`). Then
@@ -92,7 +93,11 @@ for it. No binding is written by hand.
    real tier's statements, qsql's SQLSTATEs and commit faults; the
    nemesis acts per scheduling step and qsql has more of them, so raise
    `store.<app>.commit`'s rate to reach commit faults in few seeds), `Tenants` and `Alphabet` (one tenant and two
-   letters for contention), `CommitFaults`, `Check`, `Send`, `Setup` (the
+   letters for contention), `CommitFaults`, `Check`, `Send` (each op drawn
+   uniformly from the list: a name listed twice is sent about twice as
+   often; there is no ordered prologue, so a block that needs others
+   first may be weighted, and a claim that it was reached, `Takes`,
+   keeps a run that never reached it from passing), `Setup` (the
    app's doubles, reached through a processor's ctx; a double records
    its own effect with `actor` the tenant and `process` the App's name:
    [`references/model.md`](references/model.md)). Every run records

@@ -22,10 +22,10 @@ import (
 // most once without; a site.
 type (
 	itemAdded struct {
-		Item string `json:"item" grist:"tag"`
-		Qty  int    `json:"qty"`
-		Gift bool   `json:"gift" grist:"tag"`
-		Tags []string
+		Item string   `json:"item" grist:"tag"`
+		Qty  int      `json:"qty"`
+		Gift bool     `json:"gift" grist:"tag"`
+		Tags []string `grist:"-"`
 	}
 	itemShipped struct {
 		Item string `json:"item" grist:"tag"`
@@ -210,8 +210,14 @@ func TestGenerateRefuses(t *testing.T) {
 	ev := grist.NewEvent[tagged](a, "tagged")
 	grist.NewCommand(a, "c", func(r *grist.Reads, c ptr) ([]grist.Event, error) { return nil, nil }, grist.Internal())
 	grist.NewProcessor(a, "p", ev, func(ctx context.Context, r *grist.Reads, e tagged, m grist.Meta) grist.Result { return grist.Skip() })
+	type listed struct {
+		Books []string `json:"books"`
+	}
+	grist.NewQuery(a, "q", func(r *grist.Reads, q struct{}) (listed, error) { return listed{}, nil }, grist.Internal())
 	_, err := grist.Generate(a, t.TempDir())
-	for _, want := range []string{"declares no result shape", "tag n is an integer", "is a pointer"} {
+	// a list in a query's answer, which no step records: once dropped
+	// without a word, the answer then compared on nothing
+	for _, want := range []string{"declares no result shape", "tag n is an integer", "is a pointer", "field Books is a []string", "grist:\"-\""} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Generate: %v, want %q", err, want)
 		}
@@ -282,7 +288,7 @@ func TestGenerateRefusesGristsName(t *testing.T) {
 // `model -init` typechecks.
 func TestStarterEmptyResult(t *testing.T) {
 	type tags struct {
-		Tags []string `json:"tags"`
+		Tags []string `json:"tags" grist:"-"`
 	}
 	a := grist.New("tagger")
 	grist.NewEvent[itemNoted](a, "noted")
