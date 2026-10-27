@@ -104,7 +104,16 @@ func Setup(n *maelstrom.Node, mut Mutation) {
 				for o := start; o < len(log) && o < start+10; o++ {
 					msgs = append(msgs, [2]int{o, log[o]})
 				}
-				out[k] = msgs
+				// a key with nothing at its offset is left out, as the
+				// protocol allows: Maelstrom's kafka checker reads an ok poll
+				// of k as having read some value of k, and one that read
+				// none of a key no send was acknowledged on (a key polled
+				// before its first send landed) ended its lost-write
+				// analysis in an IndexOutOfBoundsException ("Errors occurred
+				// during analysis")
+				if len(msgs) > 0 {
+					out[k] = msgs
+				}
 				n.Step("pollOk", nil, "node", n.ID(), "key", k, "from", from, "obs.msgs", msgs)
 				next(i + 1)
 			})

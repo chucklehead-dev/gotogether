@@ -457,6 +457,13 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y gnuplot-nox
       - name: Gossip Glomers under Maelstrom, step logs checked by gotogether
         run: OUT=$RUNNER_TEMP/maelstrom examples/glomers/maelstrom.sh
+      - name: Maelstrom's stores (results.edn, jepsen.log, history)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maelstrom-store
+          path: ${{ runner.temp }}/maelstrom/store
+          retention-days: 14
 
   fleetrollout:
     runs-on: ubuntu-latest

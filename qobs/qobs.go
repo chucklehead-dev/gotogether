@@ -39,9 +39,13 @@ type Outcomer interface{ QuintOutcome() string }
 
 // Recorder assigns each step a dense sequence number and hands it to a sink.
 type Recorder struct {
-	id      string
-	seq     atomic.Uint64
-	added   atomic.Uint64 // steps written by Add
+	id    string
+	seq   atomic.Uint64
+	added atomic.Uint64 // steps written by Add
+	// stampMu makes a step's seq and time one stamp (stamp): taken apart,
+	// two goroutines' steps were numbered in one order and timed in the
+	// other, and a bound judged along seq order saw time go back
+	stampMu sync.Mutex
 	sink    Sink
 	actor   string
 	process string
@@ -352,11 +356,20 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 		return
 	}
 	// seq is taken here, after the effect the step describes has happened.
-	// Two concurrent steps may be numbered in either order; the
-	// reconstructor only relies on seq within a thread (see qtrace).
-	s.Seq = r.seq.Add(1)
-	s.Time = hooks.Now()
+	// Two concurrent steps may be numbered in either order, but their
+	// times are in the same one (stamp).
+	s.Seq, s.Time = r.stamp()
 	r.sink.Record(ctx, s)
+}
+
+// stamp takes the next seq and the time together, so a recorder's seq
+// order is its steps' time order: qtrace orders one recorder's steps by
+// seq, Linearize reads its records' order as the calls' real-time order,
+// and a within bound is judged along that order on the steps' times.
+func (r *Recorder) stamp() (uint64, time.Time) {
+	r.stampMu.Lock()
+	defer r.stampMu.Unlock()
+	return r.seq.Add(1), hooks.Now()
 }
 
 // A Call is an operation recorded when it is invoked (Invoke): its
@@ -408,8 +421,8 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 	}
 	s, _ := r.step(ctx, action, nil, keys)
 	s.Invocation, s.Outcome = true, ""
-	c.seq = r.seq.Add(1)
-	s.Seq, s.Time = c.seq, hooks.Now()
+	c.seq, s.Time = r.stamp()
+	s.Seq = c.seq
 	r.sink.Record(ctx, s)
 	return c
 }
@@ -453,7 +466,7 @@ func (r *Recorder) Settled(ctx context.Context) {
 		return
 	}
 	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Settled: true}
-	s.Seq, s.Time = r.seq.Add(1), hooks.Now()
+	s.Seq, s.Time = r.stamp()
 	r.sink.Record(ctx, s)
 }
 

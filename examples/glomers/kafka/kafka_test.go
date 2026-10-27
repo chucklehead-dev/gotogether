@@ -1,9 +1,11 @@
 package kafka
 
 import (
-	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom/hegelnet"
 	"math/rand/v2"
+	"reflect"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom/hegelnet"
 
 	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
 	"github.com/chucklehead-dev/gotogether/qhegel"
@@ -69,6 +71,29 @@ func TestBlindAppendLosesSends(t *testing.T) {
 func TestPollSkipsRejected(t *testing.T) {
 	qtest.RequireQuint(t)
 	record(t, PollSkips).Expect(t, qtest.Mismatch("pollOk"))
+}
+
+// A poll answers only the keys it has messages for: an empty list for a
+// key no send reached made Maelstrom's kafka checker throw (CI run 358,
+// "Errors occurred during analysis, but no anomalies found").
+func TestPollOmitsKeysWithoutMessages(t *testing.T) {
+	s := cluster(Faithful)
+	s.Request("c1", "n1", map[string]any{"type": "send", "key": "k1", "msg": 7}, nil)
+	s.Run(nil, 1000)
+	var got map[string][][2]int
+	s.Request("c2", "n2", map[string]any{"type": "poll", "offsets": map[string]int{"k1": 0, "k2": 0}}, func(r maelstrom.Message) {
+		var b struct {
+			Msgs map[string][][2]int `json:"msgs"`
+		}
+		if err := r.Decode(&b); err != nil {
+			t.Fatal(err)
+		}
+		got = b.Msgs
+	})
+	s.Run(nil, 1000)
+	if want := map[string][][2]int{"k1": {{0, 7}}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("poll_ok msgs = %v, want %v (no k2: nothing was sent to it)", got, want)
+	}
 }
 
 type machine struct {

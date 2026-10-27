@@ -36,7 +36,16 @@ for c in ${@:-echo uniqueids broadcast gcounter kafka}; do
   esac
   echo "=== $c: maelstrom test ${args[*]}"
   (cd "$OUT" && GOTOGETHER_STEPS_DIR="$steps" "$MAELSTROM" test --bin "$OUT/bin/$c" "${args[@]}" 2>&1 | tail -1) | tee "$OUT/$c.result"
-  grep -q "Everything looks good" "$OUT/$c.result" || status=1
+  if ! grep -q "Everything looks good" "$OUT/$c.result"; then
+    status=1
+    # the last line says only that the analysis is invalid or errored: say
+    # what (an "Errors occurred during analysis" is a checker's exception,
+    # whose stack is in jepsen.log; CI uploads the store)
+    store=$(cd "$OUT/store/latest" 2>/dev/null && pwd -P)
+    echo "--- $c: Maelstrom's store $store"
+    grep -E ':valid\? (false|:unknown)|:error|bad-error-types|:type' "$store/results.edn" | head -40
+    grep -A30 -E "Error while checking history|Exception" "$store/jepsen.log" | head -80
+  fi
   [ "$c" = kafka ] && continue
   for b in "$c"/*.binding.yaml; do
     [ -f "$b" ] && ls "$steps"/*.jsonl >/dev/null 2>&1 || continue

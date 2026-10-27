@@ -37,6 +37,12 @@ The first release. What a user meets, by module:
   `Notes`); a run judged on the default backend replays on it whatever
   QUINT_BACKEND says, without touching the environment. webjobs' tests
   replay their manifest through it, per push.
+- A `qobs.Recorder`'s seq order is its steps' time order: two goroutines
+  recording at once could take seq and time in opposite orders (a
+  double-clicked submit's two answers), so a `within` bound judged along
+  seq order read time going back and gave no verdict, and Linearize took
+  the records' order for a real-time order it was not. Seq and time are
+  now one stamp.
 - qtest's failure reports name files that outlive the test: Record's and
   Validate's `Run.Expect` (and a `Runs` claim's) copies the run's step
   log, ITF and modules out of the test's `t.TempDir()` into
