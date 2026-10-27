@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -93,12 +94,13 @@ func TestCallOverHTTP(t *testing.T) {
 }
 
 // ServeCalls answers what it cannot serve without applying or recording
-// anything, and OverHTTP takes each answer for what it says: a request
-// without its cause or key, of another App, or that does not decode, and
-// a call the dependency does not declare, are refusals (NotApplied: the
-// call did not happen); a method other than POST is 405. A key answered
-// before is the bank's replay (Replayed: <call>Replayed, its first
-// answer).
+// anything, and OverHTTP takes each such answer for an unknown outcome
+// (only a declared refusal says the call did not happen): a request
+// without its cause or key, of another App, of a processor that does not
+// use the call, under a key that is not its effect's, or that does not
+// decode, and a call the dependency does not declare; a method other
+// than POST is 405. A key answered before is the bank's replay
+// (Replayed: <call>Replayed, its first answer).
 func TestServeCallsRefuses(t *testing.T) {
 	_, bank, pay := callsApp(grist.AtMostOnce, true)
 	srv, sink := serveBank(t, bank, bankHandlers(pay))
@@ -112,20 +114,34 @@ func TestServeCallsRefuses(t *testing.T) {
 			t.Fatalf("try %d: %s, %v: want the bank's receipt", i, out, err)
 		}
 	}
-	notApplied := func(what string, err error) {
+	unknown := func(what string, err error) {
 		t.Helper()
-		if err == nil || errors.Is(err, grist.ErrOutcomeUnknown) {
-			t.Errorf("%s: %v: want a refusal (NotApplied), not an unknown outcome", what, err)
+		var rej *grist.Rejected
+		if !errors.Is(err, grist.ErrOutcomeUnknown) || errors.As(err, &rej) {
+			t.Errorf("%s: %v: want an unknown outcome (no declared refusal)", what, err)
 		}
 	}
 	other := info
 	other.App = "another"
 	_, err := grist.OverHTTP(srv.URL, nil).Call(ctx, other, "pay", body)
-	notApplied("another App's call", err)
+	unknown("another App's call", err)
 	_, err = tr.Call(ctx, info, "pay", []byte("{not json"))
-	notApplied("an undecodable request", err)
+	unknown("an undecodable request", err)
 	_, err = tr.Call(ctx, info, "refund", body)
-	notApplied("an undeclared call", err)
+	unknown("an undeclared call", err)
+	// a forged or misbuilt cause: a processor that makes no such call, a
+	// key that is not the trigger's effect key (its record would be a
+	// second application of trigger 1 under a key of its own)
+	notUser := info
+	notUser.Processor, notUser.Key = "refunder", "refunder/t1/1"
+	_, err = tr.Call(ctx, notUser, "pay", body)
+	unknown("a processor that does not use the call", err)
+	for _, k := range []string{"payer/t1/2", "payer/t2/1", "other-key"} {
+		forged := info
+		forged.Key = k
+		_, err = tr.Call(ctx, forged, "pay", body)
+		unknown("key "+k, err)
+	}
 	for _, h := range []map[string]string{{}, {grist.CauseHeader: "calls/t1/payer/1/3"}, {"Idempotency-Key": "k"}, {grist.CauseHeader: "calls/t1/payer/5/3", "Idempotency-Key": "k"}} {
 		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/pay", strings.NewReader(string(body)))
 		for k, v := range h {
@@ -153,13 +169,17 @@ func TestServeCallsRefuses(t *testing.T) {
 	}
 }
 
-// OverHTTP maps a dependency's answers as grist/client does, whoever
-// answers (a third party's service, a proxy): 2xx the response, 422 with
-// a rejection's name the refusal, another 4xx a refusal of no name
-// (NotApplied), a 5xx or a dropped connection an unknown outcome
-// (ErrOutcomeUnknown). It sends the call's key and cause.
+// OverHTTP maps a dependency's answers, whoever answers (a third party's
+// service, a proxy): 2xx the response, 422 with a rejection's name the
+// refusal, anything else an unknown outcome (ErrOutcomeUnknown): a 5xx,
+// a dropped connection, another 4xx (no declared refusal says nothing
+// happened) and a redirect, which it does not follow (a POST answered
+// 303 may have been applied, and a 307 followed would send the call
+// again, its key and cause with it, to wherever it points). It sends the
+// call's key and cause.
 func TestOverHTTPAnswers(t *testing.T) {
 	var got http.Header
+	var followed atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Clone()
 		switch r.URL.Path {
@@ -175,6 +195,12 @@ func TestOverHTTPAnswers(t *testing.T) {
 		case "/reset":
 			conn, _, _ := w.(http.Hijacker).Hijack()
 			conn.Close()
+		case "/moved", "/seeother":
+			code := map[string]int{"/moved": http.StatusTemporaryRedirect, "/seeother": http.StatusSeeOther}[r.URL.Path]
+			http.Redirect(w, r, "/elsewhere", code)
+		case "/elsewhere":
+			followed.Add(1)
+			w.Write([]byte(`{"ref":"r2"}`))
 		}
 	}))
 	defer srv.Close()
@@ -191,13 +217,21 @@ func TestOverHTTPAnswers(t *testing.T) {
 	if _, err := tr.Call(ctx, info, "declined", nil); !errors.As(err, &rej) || rej.Name != "declined" {
 		t.Errorf("422: %v, want the rejection declined", err)
 	}
-	if _, err := tr.Call(ctx, info, "bad", nil); err == nil || errors.Is(err, grist.ErrOutcomeUnknown) || errors.As(err, &rej) {
-		t.Errorf("400: %v, want a refusal of no name", err)
-	}
-	for _, p := range []string{"proxy", "reset"} {
-		if _, err := tr.Call(ctx, info, p, nil); !errors.Is(err, grist.ErrOutcomeUnknown) {
+	for _, p := range []string{"bad", "proxy", "reset", "moved", "seeother"} {
+		_, err := tr.Call(ctx, info, p, []byte(`{}`))
+		if !errors.Is(err, grist.ErrOutcomeUnknown) || errors.As(err, &rej) {
 			t.Errorf("%s: %v, want an unknown outcome", p, err)
 		}
+		if err != nil && strings.Contains(err.Error(), "retry it with the same id") {
+			t.Errorf("%s: %v: a command's advice, which an at-most-once call must not take", p, err)
+		}
+	}
+	// a client of the caller's own that follows redirects follows none here
+	if _, err := grist.OverHTTP(srv.URL, &http.Client{}).Call(ctx, info, "moved", []byte(`{}`)); !errors.Is(err, grist.ErrOutcomeUnknown) {
+		t.Errorf("307 with the caller's client: %v, want an unknown outcome", err)
+	}
+	if n := followed.Load(); n != 0 {
+		t.Errorf("redirects followed %d times: want none (a second send of the call)", n)
 	}
 }
 
@@ -244,10 +278,13 @@ func TestServeCallsDefault(t *testing.T) {
 	}
 	a := grist.New("acks")
 	mailer := grist.NewDependency(a, "mailer")
-	grist.NewCall[payReq, struct{}](mailer, "send", grist.Keyed())
+	send := grist.NewCall[payReq, struct{}](mailer, "send", grist.Keyed())
+	grist.NewProcessor(a, "p", grist.NewEvent[amount](a, "amount"), func(ctx context.Context, r *grist.Reads, e amount, m grist.Meta) grist.Result {
+		return grist.Effect(func(ctx context.Context) error { _, err := send.Do(ctx, payReq{Amount: e.N}); return err }, grist.AtLeastOnce)
+	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(send))
 	srv, sink := serveBank(t, mailer, nil)
 	tr := grist.OverHTTP(srv.URL, nil)
-	info := grist.CallInfo{App: "acks", Tenant: "t1", Processor: "p", Trigger: 1, Head: 1, Key: "k"}
+	info := grist.CallInfo{App: "acks", Tenant: "t1", Processor: "p", Trigger: 1, Head: 1, Key: "p/t1/1"}
 	for range 2 {
 		if out, err := tr.Call(context.Background(), info, "send", []byte(`{"amount":1}`)); err != nil || string(out) != "{}" {
 			t.Fatalf("%s, %v: want the acknowledgement", out, err)
@@ -256,4 +293,69 @@ func TestServeCallsDefault(t *testing.T) {
 	if len(byAction(sink.Steps(), "mailerSendServed")) != 1 || len(byAction(sink.Steps(), "mailerSendReplayed")) != 1 {
 		t.Errorf("recorded %v: want the default's one application and its replay", sink.Steps())
 	}
+}
+
+// A dependency's answer that is no declared refusal leaves an at-most-once
+// effect's outcome unknown, the caller's step and the outcome event alike:
+// a 4xx of no name or a redirect over HTTP, and a transport's own
+// NotApplied (grist.failed beside a call recorded unknown once said "not
+// paid" of a payment nothing said was not made).
+func TestCallAnswerOfNoRefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Idempotency-Key") == "payer/t1/2" {
+			http.Redirect(w, r, "/elsewhere", http.StatusSeeOther)
+			return
+		}
+		http.Error(w, "conflict", http.StatusConflict)
+	}))
+	defer srv.Close()
+	notApplied := transportFunc(func(context.Context, grist.CallInfo, string, json.RawMessage) (json.RawMessage, error) {
+		return nil, grist.NotApplied(errors.New("the transport's word"))
+	})
+	for name, tr := range map[string]grist.Transport{"http": grist.OverHTTP(srv.URL, nil), "NotApplied": notApplied} {
+		t.Run(name, func(t *testing.T) {
+			a, bank, _ := callsApp(grist.AtMostOnce, true)
+			st := newStoreNamed(t, a.Name)
+			sink := &qobs.MemorySink{}
+			ctx, cancel := context.WithCancel(qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink)))
+			defer cancel()
+			if err := a.Start(bank.With(ctx, tr), st); err != nil {
+				t.Fatal(err)
+			}
+			for i, n := range []int{5, 6} {
+				body, _ := json.Marshal(addAmounts{A: n})
+				if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprint("c", i), Tenant: "t1", Actor: "u"}, "add", body); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var log []grist.Stored
+			for deadline := time.Now().Add(10 * time.Second); len(log) < 2; {
+				if time.Now().After(deadline) {
+					t.Fatalf("outcomes %v: want two within 10 s", outcomes(log))
+				}
+				time.Sleep(5 * time.Millisecond)
+				var err error
+				if log, _, err = st.Read(context.Background(), "t1", grist.Selector{Types: []string{"grist.failed", "grist.unknown"}}, 0); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, o := range outcomes(log) {
+				if !strings.HasPrefix(o, "grist.unknown") {
+					t.Errorf("outcome %s: want grist.unknown (no declared refusal)", o)
+				}
+			}
+			for _, c := range byAction(sink.Steps(), "bankPay") {
+				if c.Outcome != "unknown" {
+					t.Errorf("caller step %v: want outcome unknown", c)
+				}
+			}
+		})
+	}
+}
+
+// transportFunc is f as a grist.Transport.
+type transportFunc func(ctx context.Context, c grist.CallInfo, call string, req json.RawMessage) (json.RawMessage, error)
+
+func (f transportFunc) Call(ctx context.Context, c grist.CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
+	return f(ctx, c, call, req)
 }

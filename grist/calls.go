@@ -210,7 +210,9 @@ type CallInfo struct {
 // A Transport answers a dependency's calls: JSON requests and responses,
 // so grist imports nothing heavy (gristsim's is a qenv.Service; Local
 // serves Handlers in process). An error that is a *Rejected is the
-// dependency's refusal; any other leaves the outcome unknown. A
+// dependency's refusal; any other leaves the outcome unknown, a
+// NotApplied one too (Do records the call unknown, and the effect sees
+// an unknown outcome, never grist.failed, beside it). A
 // transport never retries an unknown outcome: an at-most-once effect's
 // one call would become several.
 type Transport interface {
@@ -282,6 +284,14 @@ func (c *Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error) {
 		return zero, NotApplied(rej)
 	case err != nil:
 		call.Done(nil, append([]any{"outcome", unknownOutcome}, zeroKV...)...)
+		var na *notApplied
+		if errors.As(err, &na) {
+			// the step says unknown, so the effect's outcome must too: only a
+			// declared refusal is the dependency's word that nothing
+			// happened (a transport's NotApplied would make an at-most-once
+			// outcome grist.failed beside a call recorded unknown)
+			err = unknownCall("call %s: %v, which no refusal the call declares", ci.label(), na.err)
+		}
 		return zero, err
 	}
 	var resp Resp
@@ -417,7 +427,8 @@ func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, er
 
 // undecoded is a request a handler could not decode: answered with it,
 // recorded nowhere (no application happened, and its fields are unknown);
-// ServeCalls answers it 400, which OverHTTP takes for NotApplied.
+// ServeCalls answers it 400, which OverHTTP takes for an unknown outcome
+// (no declared refusal says nothing happened).
 type undecoded struct{ error }
 
 // unencoded is a response a handler could not encode: recorded with it.

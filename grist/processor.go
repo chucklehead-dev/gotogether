@@ -466,7 +466,13 @@ func (pl *poller) effectContext(ctx context.Context, trigger, head Position, key
 	return context.WithValue(ctx, causeKey{}, &effectCause{app: pl.app, s: pl.s, p: pl.p, tenant: pl.tenant, trigger: trigger, head: head, key: key, slot: slot})
 }
 
-func (pl *poller) key(t Position) string { return fmt.Sprintf("%s/%s/%d", pl.p.name, pl.tenant, t) }
+func (pl *poller) key(t Position) string { return effectKeyOf(pl.p.name, pl.tenant, t) }
+
+// effectKeyOf is the effect key of processor's effect for trigger t in
+// tenant (EffectKey): what ServeCalls requires a call's key to be.
+func effectKeyOf(processor, tenant string, t Position) string {
+	return fmt.Sprintf("%s/%s/%d", processor, tenant, t)
+}
 
 // commit appends a group's events with the checkpoint moved from cp to
 // its last trigger, recording one step per trigger (with kv, an effect's

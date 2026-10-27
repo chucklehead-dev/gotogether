@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -242,6 +243,11 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 			return &UsageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL", v)}
 		case d == nil:
 			return &UsageError{Msg: fmt.Sprintf("-dependency %q: %s has no dependency %q (it has %v)", v, app.Name, name, depNames(app))}
+		}
+		// checked here: a URL no request can be made to would leave every
+		// call's outcome unknown (an at-most-once effect's grist.unknown)
+		if pu, err := url.Parse(u); err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
+			return &UsageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL, the URL http:// or https:// with a host (as http://bank.internal:8080)", v)}
 		}
 		overHTTP[d] = OverHTTP(u, nil)
 	}

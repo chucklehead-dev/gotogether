@@ -303,7 +303,8 @@ func payApp() (*grist.App, *grist.Dependency, *grist.Call[payReq, payResp]) {
 // loopback port and the node calls it over HTTP, the bank's records in
 // the steps file under a recorder of their own; -dependency bank=URL
 // calls URL instead (its records there, none in the file); a
-// -dependency naming no dependency is a usage error.
+// -dependency naming no dependency, or no http(s) URL with a host, is a
+// usage error.
 func TestMainServesDependency(t *testing.T) {
 	run := func(extra []string) []qtrace.Step {
 		t.Helper()
@@ -351,7 +352,7 @@ func TestMainServesDependency(t *testing.T) {
 
 	a, _, _ := payApp()
 	var usage *grist.UsageError
-	for _, flag := range []string{"nope=http://x", "bank"} {
+	for _, flag := range []string{"nope=http://x", "bank", "bank=localhost:8080", "bank=ftp://x", "bank=http://", "bank=http://x y"} {
 		err := grist.MainArgs(context.Background(), a, []string{"serve", "-db", "sqlite:" + filepath.Join(t.TempDir(), "x.db"), "-dependency", flag}, io.Discard, io.Discard)
 		if !errors.As(err, &usage) {
 			t.Errorf("-dependency %s: %v, want a usage error", flag, err)

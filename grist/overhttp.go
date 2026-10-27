@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,20 +32,29 @@ const CallTimeout = 10 * time.Second
 // Idempotency-Key and its cause as Grist-Cause (CauseHeader), so a
 // dependency the team owns serves it with ServeCalls and a third party
 // deduplicates by the key. c is the client (nil: one bounded by
-// CallTimeout). Its answers map as grist/client's do: a 2xx is the
-// response (its body); a 422 with {"rejected": name} the dependency's
-// refusal (a *Rejected: Do's declared refusal, if the call declares it);
-// another 4xx a refusal of no name, NotApplied (the request was refused
-// before anything ran: an undecodable request, an unknown call); a 5xx,
-// a reset or a timeout an unknown outcome (ErrOutcomeUnknown: the call
-// may have happened). It makes one attempt: a transport never retries an
-// unknown outcome (an at-most-once effect's one call would become
-// several).
+// CallTimeout); OverHTTP uses a copy of it that follows no redirect. Its
+// answers: a 2xx is the response (its body); a 422 with {"rejected":
+// name} the dependency's refusal (a *Rejected: Do's declared refusal, if
+// the call declares it); anything else an unknown outcome
+// (ErrOutcomeUnknown: the call may have happened): a 5xx, a reset, a
+// timeout, and also a 3xx (a redirect may follow an application, as
+// POST-redirect-GET does, and following it would send the call's key,
+// cause and body to another URL: a second send) and another 4xx. A 4xx
+// of no declared name says the request was refused, but nothing the
+// call declares says that nothing happened (a third party's 409 for a
+// key in use, a gateway's 429): only a declared refusal is the
+// dependency's word that it did not, so only it is the effect's
+// grist.failed, and the caller's step, which records unknown for every
+// answer that is no declared refusal, agrees with the outcome event. It
+// makes one attempt: a transport never retries an unknown outcome (an
+// at-most-once effect's one call would become several).
 func OverHTTP(base string, c *http.Client) Transport {
 	if c == nil {
 		c = &http.Client{Timeout: CallTimeout}
 	}
-	return &overHTTP{base: strings.TrimSuffix(base, "/"), c: c}
+	cc := *c
+	cc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &overHTTP{base: strings.TrimSuffix(base, "/"), c: &cc}
 }
 
 type overHTTP struct {
@@ -55,7 +65,9 @@ type overHTTP struct {
 func (o *overHTTP) Call(ctx context.Context, ci CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, o.base+"/"+url.PathEscape(call), bytes.NewReader(req))
 	if err != nil {
-		return nil, NotApplied(fmt.Errorf("grist: call %s over HTTP: %w", call, err))
+		// never sent, but Do recorded the call's invocation, and its step
+		// records unknown for every answer that is no declared refusal
+		return nil, unknownCall("call %s to %s: its request: %v", call, o.base, err)
 	}
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Idempotency-Key", ci.Key)
@@ -63,15 +75,15 @@ func (o *overHTTP) Call(ctx context.Context, ci CallInfo, call string, req json.
 	resp, err := o.c.Do(r)
 	if err != nil {
 		// no answer: the request may have reached the dependency
-		return nil, fmt.Errorf("%w: call %s to %s: %v", ErrOutcomeUnknown, call, o.base, err)
+		return nil, unknownCall("call %s to %s: %v", call, o.base, err)
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxBody+1))
 	switch {
 	case err != nil:
-		return nil, fmt.Errorf("%w: call %s to %s: its answer was cut: %v", ErrOutcomeUnknown, call, o.base, err)
+		return nil, unknownCall("call %s to %s: its answer was cut: %v", call, o.base, err)
 	case len(b) > DefaultMaxBody:
-		return nil, fmt.Errorf("%w: call %s to %s: an answer past %d bytes", ErrOutcomeUnknown, call, o.base, DefaultMaxBody)
+		return nil, unknownCall("call %s to %s: an answer past %d bytes", call, o.base, DefaultMaxBody)
 	}
 	var e apiError
 	_ = json.Unmarshal(b, &e)
@@ -80,16 +92,40 @@ func (o *overHTTP) Call(ctx context.Context, ci CallInfo, call string, req json.
 		return b, nil
 	case c == http.StatusUnprocessableEntity && e.Rejected != "":
 		return nil, &Rejected{Name: e.Rejected}
+	case c >= 300 && c < 400:
+		return nil, unknownCall("call %s to %s answered %d, a redirect (to %s), which a call does not follow: give the dependency's own URL", call, o.base, c, resp.Header.Get("Location"))
 	case c >= 400 && c < 500:
-		return nil, NotApplied(fmt.Errorf("grist: call %s to %s refused (%d): %.200s", call, o.base, c, strings.TrimSpace(string(b))))
+		return nil, unknownCall("call %s to %s answered %d, no refusal the call declares: %.200s", call, o.base, c, strings.TrimSpace(string(b)))
 	}
-	return nil, fmt.Errorf("%w: call %s to %s answered %d: %.200s", ErrOutcomeUnknown, call, o.base, resp.StatusCode, strings.TrimSpace(string(b)))
+	return nil, unknownCall("call %s to %s answered %d: %.200s", call, o.base, resp.StatusCode, strings.TrimSpace(string(b)))
 }
+
+// unknownCall is a call's unknown outcome: errors.Is ErrOutcomeUnknown,
+// in words of its own (ErrOutcomeUnknown's are a command's, whose advice,
+// a retry under the same id, an at-most-once effect must not take). Its
+// text is what an at-most-once effect's grist.unknown carries.
+func unknownCall(format string, args ...any) error {
+	return &callUnknown{msg: "grist: " + fmt.Sprintf(format, args...) + ": its outcome is unknown (the call may have happened)"}
+}
+
+type callUnknown struct{ msg string }
+
+func (e *callUnknown) Error() string        { return e.msg }
+func (e *callUnknown) Is(target error) bool { return target == ErrOutcomeUnknown }
 
 // encodeCause is c as CauseHeader's value.
 func encodeCause(c CallInfo) string {
 	return strings.Join([]string{url.PathEscape(c.App), url.PathEscape(c.Tenant), url.PathEscape(c.Processor),
 		strconv.FormatInt(int64(c.Trigger), 10), strconv.FormatInt(int64(c.Head), 10)}, "/")
+}
+
+// userNames are the names of the processors that use ci.
+func userNames(ci *callInfo) []string {
+	out := make([]string, len(ci.users))
+	for i, p := range ci.users {
+		out[i] = p.name
+	}
+	return out
 }
 
 // decodeCause is CauseHeader's value v and the key as a CallInfo.
@@ -138,10 +174,19 @@ func decodeCause(v, key string) (CallInfo, error) {
 //
 // It answers 200 with the response, 422 with {"rejected": name} for a
 // declared refusal, 400 for a request without its cause or key, of
-// another App, or that does not decode (nothing recorded: nothing was
-// applied), 404 for a call d does not declare, 405 for another method
-// than POST, and 500 for a handler's error that is no declared refusal
-// (recorded with it).
+// another App, of a processor that does not use the call (Uses), whose
+// key is not its effect's (EffectKey: processor/tenant/trigger, as a
+// grist caller sends it), or that does not decode (nothing recorded:
+// nothing was applied), 404 for a call d does not declare, 405 for
+// another method than POST, and 500 for a handler's error that is no
+// declared refusal (recorded with it). OverHTTP takes every answer but
+// 2xx and a declared refusal for an unknown outcome.
+//
+// ServeCalls authenticates nobody: the cause is the caller's word, and
+// whoever reaches it makes the dependency apply calls, recorded as the
+// App's. Serve it where only the App's nodes reach it (Main's
+// ServeDependency listens on loopback), or behind the service's own
+// authentication (mutual TLS, a token checked in a wrapping handler).
 //
 // nil h serves d's default double (DefaultHandlers), which panics for a
 // call answering a response with fields, naming the fix. It panics too
@@ -177,8 +222,18 @@ func (s *callServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info, err := decodeCause(r.Header.Get(CauseHeader), r.Header.Get("Idempotency-Key"))
-	if err == nil && info.App != s.d.app.Name {
+	ci := s.local.by[call].call
+	switch {
+	case err != nil:
+	case info.App != s.d.app.Name:
 		err = fmt.Errorf("a call of App %q: dependency %s serves App %s's calls, whose trace its records join", info.App, s.d.name, s.d.app.Name)
+	case !slices.ContainsFunc(ci.users, func(p *processorInfo) bool { return p.name == info.Processor }):
+		// its record would name a processor no rule makes the call for
+		err = fmt.Errorf("a call of processor %q, which does not use call %s (grist.Uses): its users are %v", info.Processor, ci.label(), userNames(ci))
+	case info.Key != effectKeyOf(info.Processor, info.Tenant, info.Trigger):
+		// a grist caller's key is its effect's: another would record a
+		// second application of the trigger under a key of its own
+		err = fmt.Errorf("Idempotency-Key %q: a call for processor %s's trigger %d in tenant %s carries its effect's key, %s (grist.EffectKey)", info.Key, info.Processor, info.Trigger, info.Tenant, effectKeyOf(info.Processor, info.Tenant, info.Trigger))
 	}
 	if err != nil {
 		fail(w, http.StatusBadRequest, "grist: dependency %s: %v", s.d.name, err)
