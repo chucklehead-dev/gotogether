@@ -18,13 +18,17 @@ The first release. What a user meets, by module:
   original's first two reruns fail alike)
   and its steps checked against the binding; `ShrunkActions[A]`
   (`Actions`, `Run`, `Original`, `Reruns`, `Reproduced`,
-  `NotReproduced`, `Diverged`, `Errors`, `Baseline`, `PerCandidate`,
+  `NotReproduced`, `Undecided` (reruns with no verdict for the failure,
+  never a miss), `Diverged`, `Errors`, `Baseline`, `PerCandidate`,
   `Rate`, `Minimal`, `NotMinimal`, `Expect`), `qtest.AtMostActions(n)`
   (a `ShrinkClaim`), the minimal run's manifest under
   GOTOGETHER_EVIDENCE with actions.json and shrink.json among its
   artifacts. `qtest.SameFailure(run)`, the default failure kept (each
-  failing actor's first failure's kind and name, whatever seqs, ids and
-  arguments; no verdict with a lost tail or an undecided actor);
+  failing actor's first failure in the replay's order, its kind and
+  name, a state mismatch with the observed fields that differ, whatever
+  seqs, ids and arguments; no verdict with a lost tail, an undecided
+  actor or a conforming actor's invariant unjudged), Keep's default from
+  the original's first rerun with a decided failure;
   `qtest.ErrDiverged`, what a rerun returns for actions it could not do
   (never a pass nor a failure); `qtest.Calibration` (reruns from the
   original's rate at its lower bound, the fewest that miss a failure

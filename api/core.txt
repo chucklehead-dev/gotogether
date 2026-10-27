@@ -1556,6 +1556,7 @@ type ShrunkActions[A any] struct
     field Reruns int
     field Reproduced int
     field NotReproduced int
+    field Undecided int
     field Diverged int
     field Errors int
     field Baseline Rate

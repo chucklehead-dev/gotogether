@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -211,7 +212,7 @@ func TestShrinkActionsAgainstBruteForce(t *testing.T) {
 	}
 
 	// a flaky failure: a, c and f needed, shown half the time
-	const trials, alpha = 200, 0.05
+	const trials, alpha = 1000, 0.05
 	fails := func(m uint) bool { return m&0b100101 == 0b100101 }
 	good := 0
 	for trial := range trials {
@@ -255,7 +256,7 @@ func TestShrinkActionsDivergedIsNoPass(t *testing.T) {
 	// the failure needs c alone, but c without a cannot be done
 	app := &fakeApp{a: func(m uint) bool { return m&0b100 != 0 }, diverge: func(m uint) bool { return m&0b100 != 0 && m&1 == 0 }}
 	res := shrinkFake(t, app, 4, Expectation{}, Calibration{})
-	if maskOf(res.set) != 0b101 || res.minimal || res.diverged == 0 || !strings.Contains(res.notMinimal, "never ran") {
+	if maskOf(res.set) != 0b101 || res.minimal || res.diverged == 0 || !strings.Contains(res.notMinimal, "never decided") {
 		t.Fatalf("got %v minimal %v (%d diverged, %q), want [0 2], not minimal: [2] never ran", res.set, res.minimal, res.diverged, res.notMinimal)
 	}
 }
@@ -272,8 +273,8 @@ func TestShrinkActionsLeakyResetter(t *testing.T) {
 		app  *fakeApp
 		want string
 	}{
-		{&fakeApp{a: bug, poller: true}, "after Reset (qtest.fakeReset), two Reruns of no actions recorded different steps (step 0: the second run recorded one more (poll())): the Resetter left work or state behind that the second saw"},
-		{&fakeApp{a: bug, leakState: true}, "the original's first two reruns failed differently (invariant noBugA; then disabled bugB): Reset (qtest.fakeReset) leaves state"},
+		{&fakeApp{a: bug, poller: true}, "after Reset (qtest.fakeReset), a Rerun of no actions (the second) recorded other steps than the first (step 0: the second run recorded one more (poll())): the Resetter left work or state behind"},
+		{&fakeApp{a: bug, leakState: true}, "the original's reruns fail two ways (invariant noBugA; then disabled bugB): either the system fails both ways, and Keep must name the one to shrink"},
 	} {
 		f := &failTB{TB: t}
 		if res := shrinkFake(f, c.app, 4, Expectation{}, Calibration{}); res != nil || len(f.errs) != 1 || !strings.Contains(f.errs[0], c.want) {
@@ -298,8 +299,8 @@ func TestShrinkActionsRefusals(t *testing.T) {
 		keep Expectation
 		want string
 	}{
-		{&fakeApp{a: func(uint) bool { return false }}, Expectation{}, "the original's 4 actions do not reproduce a failure in 10 reruns: calibrate the rerun"},
-		{&fakeApp{a: func(uint) bool { return false }}, Violates("noBugA"), "do not reproduce a violation of noBugA (the run conforming) in 10 reruns: calibrate the rerun"},
+		{&fakeApp{a: func(uint) bool { return false }}, Expectation{}, "the original's 4 actions do not reproduce a decided failure in 10 reruns (0 without a verdict): calibrate the rerun"},
+		{&fakeApp{a: func(uint) bool { return false }}, Violates("noBugA"), "do not reproduce a violation of noBugA (the run conforming) in 10 reruns (0 without a verdict): calibrate the rerun"},
 		{&fakeApp{a: func(m uint) bool { return m != 0 }}, Conforms(), "Keep conformance, with every invariant holding describes a passing run"},
 		{&fakeApp{a: func(m uint) bool { return m != 0 }}, Finishes(), "describes a passing run"},
 		{&fakeApp{a: func(m uint) bool { return m != 0 }, errs: 3}, Expectation{}, "three reruns in a row failed, the last of 4 actions with: the browser crashed"},
@@ -411,4 +412,210 @@ func TestShrinkActions(t *testing.T) {
 		t.Fatalf("Keep Violates(noBug): got %s", violation)
 	}
 	violation.Expect(t, Violates("noBug"), AtMostActions(2))
+}
+
+// judgeWith is fakeJudge with its report changed by edit for the reruns
+// of n letters.
+func judgeWith(n int, edit func(*validate.Result)) func(context.Context, []qtrace.Step) (*validate.Report, []qtrace.Step, error) {
+	return func(ctx context.Context, steps []qtrace.Step) (*validate.Report, []qtrace.Step, error) {
+		rep, st, err := fakeJudge(ctx, steps)
+		k := 0
+		for _, s := range steps {
+			if s.Action == "do" {
+				k++
+			}
+		}
+		if k == n {
+			edit(rep.Actors[0])
+		}
+		return rep, st, err
+	}
+}
+
+// A rerun with no verdict for the failure kept (a lost tail, an
+// invariant left unjudged, an undecided actor) is no pass: a one-removal
+// decided by such reruns alone leaves the result not minimal, though the
+// failure needs one action and every rerun of it hides it.
+func TestShrinkActionsUnknownIsNoPass(t *testing.T) {
+	t.Parallel()
+	for mode, edit := range map[string]func(*validate.Result){
+		"lost tail": func(r *validate.Result) {
+			r.Lost = []qtrace.Lost{{Recorder: "app"}}
+			r.Invariants[0].Verdict, r.Invariants[0].Failure = validate.NotEvaluated, nil
+		},
+		"invariant unjudged": func(r *validate.Result) {
+			r.Invariants[0].Verdict, r.Invariants[0].Failure = validate.NotEvaluated, nil
+		},
+		"undecided": func(r *validate.Result) {
+			r.Conforms = validate.NotEvaluated
+			r.Invariants[0].Verdict, r.Invariants[0].Failure = validate.NotEvaluated, nil
+		},
+	} {
+		app := &fakeApp{a: func(m uint) bool { return m&1 != 0 }, p: 1, rng: rand.New(rand.NewPCG(1, 1))}
+		s := &shrinker{t: t, n: 2, rerun: app.rerun, reset: fakeReset{app}, judge: judgeWith(1, edit)}
+		res := s.shrink()
+		if maskOf(res.set) != 0b11 || res.minimal || res.undecided == 0 || !strings.Contains(res.notMinimal, "never decided") {
+			t.Errorf("%s: got %v minimal %v (%d undecided, %q), want [0 1], not minimal", mode, res.set, res.minimal, res.undecided, res.notMinimal)
+		}
+	}
+}
+
+// Keep's default is the first baseline rerun with a decided failure: one
+// whose tail was lost is neither the failure kept nor a second way of
+// failing.
+func TestShrinkActionsKeepFromDecided(t *testing.T) {
+	t.Parallel()
+	for _, lostAt := range []int{1, 2} {
+		app := &fakeApp{a: func(m uint) bool { return m&1 != 0 }, p: 1, rng: rand.New(rand.NewPCG(1, 1))}
+		full := 0
+		judge := judgeWith(3, func(r *validate.Result) {
+			if full++; full == lostAt {
+				r.Lost = []qtrace.Lost{{Recorder: "app"}}
+				r.Invariants[0].Verdict, r.Invariants[0].Failure = validate.NotEvaluated, nil
+			}
+		})
+		s := &shrinker{t: t, n: 3, rerun: app.rerun, reset: fakeReset{app}, judge: judge}
+		res := s.shrink()
+		if res.keep.String() != "the same failure (invariant noBugA)" || maskOf(res.set) != 1 || res.baseline != (Rate{9, 9}) {
+			t.Errorf("lost at %d: kept %s, got %v, baseline %s", lostAt, res.keep, res.set, res.baseline)
+		}
+	}
+}
+
+// leakApp is a system whose Reset clears nothing the actions leave: a
+// run with a leaves a job that records bugA in the next run (job), every
+// run records bugA (always), or bugA shows with a only for the first
+// shows reruns (fading: state the reruns used up), or every run records
+// bugA after the first after reruns (state the reruns built up).
+type leakApp struct {
+	job, always        bool
+	shows, after, runs int
+	pending            bool
+}
+
+func (l *leakApp) Reset(context.Context) error { return nil }
+
+func (l *leakApp) rerun(_ context.Context, idx []int) ([]qtrace.Step, error) {
+	l.runs++
+	var steps []qtrace.Step
+	add := func(a string) {
+		steps = append(steps, qtrace.Step{Recorder: "app", Seq: uint64(len(steps) + 1), Action: a})
+	}
+	if l.pending {
+		add("bugA")
+		l.pending = false
+	}
+	var m uint
+	for _, i := range idx {
+		m |= 1 << i
+		add("do")
+	}
+	switch {
+	case l.always, l.after > 0 && l.runs > l.after:
+		add("bugA")
+	case l.job && m&0b111 == 0b111:
+		add("bugA")
+	case l.shows > 0 && m&1 != 0 && l.runs <= l.shows:
+		add("bugA")
+	}
+	if l.job && m&1 != 0 {
+		l.pending = true
+	}
+	return steps, nil
+}
+
+// A leak that only the actions make is caught by the reruns of no
+// actions after the baseline (work left pending, or a failure the empty
+// sequence shows), and a shrunk sequence that no longer reproduces after
+// the shrink is not minimal: the failure it showed came from state.
+func TestShrinkActionsLeaksOfTheActions(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		app  *leakApp
+		n    int
+		want string
+	}{
+		{&leakApp{job: true}, 6, "a Rerun of no actions (after the original's reruns) recorded other steps than the first (step 0: the second run recorded one more (bugA()))"},
+		{&leakApp{always: true}, 6, "a Rerun of no actions (after the original's reruns) reproduced the same failure (invariant noBugA): the failure needs none of the actions"},
+		// past the checks of no actions: two, the baseline's ten, one
+		{&leakApp{after: 13, shows: 1000}, 2, "a rerun of no actions reproduced the same failure (invariant noBugA), after reruns of the original did not show it there"},
+	} {
+		f := &failTB{TB: t}
+		var res *shrinkResult
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			res = (&shrinker{t: f, n: c.n, rerun: c.app.rerun, reset: c.app, judge: fakeJudge}).shrink()
+		}()
+		<-done
+		if res != nil || len(f.errs) != 1 || !strings.Contains(f.errs[0], c.want) {
+			t.Errorf("errors %q, want %q", f.errs, c.want)
+		}
+	}
+	// bugA with a during the first 20 reruns only: the shrink reaches [a],
+	// which then reproduces 3 times of 10 (below what 10 of 10 allows), or
+	// with 17 never again
+	for shows, want := range map[int]string{20: "reproduced 3 of 10 after the shrink, the original 10 of 10", 17: "reproduced 0 of 10 after the shrink"} {
+		l := &leakApp{shows: shows}
+		res := (&shrinker{t: t, n: 4, rerun: l.rerun, reset: l, judge: fakeJudge}).shrink()
+		if maskOf(res.set) != 1 || res.minimal || !strings.Contains(res.notMinimal, want) {
+			t.Errorf("shows %d: got %v minimal %v rate %s (%q)", shows, res.set, res.minimal, res.rate, res.notMinimal)
+		}
+	}
+}
+
+// A state mismatch is known by the observed fields that differ from the
+// model's, and an actor's first failure is the earliest in the replay.
+func TestSameFailureFieldsAndOrder(t *testing.T) {
+	t.Parallel()
+	mismatch := func(balance, count int64) *validate.Report {
+		return &validate.Report{Actors: []*validate.Result{{Actor: "a", Conforms: validate.Fail, Failure: &validate.Failure{Kind: "state", Index: 3,
+			ExpectTemplate: "balance == {{.obs.balance}} and count == {{.obs.count}}",
+			State:          map[string]itf.Value{"balance": itf.IntOf(10), "count": itf.IntOf(2)},
+			Step:           &qtrace.Step{Action: "deposit", Obs: map[string]any{"balance": balance, "count": count}}}}}}
+	}
+	balance := SameFailure(&Run{Report: mismatch(11, 2)})
+	if want := "the same failure (state deposit (obs.balance))"; balance.String() != want {
+		t.Fatalf("got %q, want %q", balance, want)
+	}
+	if balance.value(mismatch(12, 2)) != yes || balance.value(mismatch(10, 3)) != no || balance.value(mismatch(11, 3)) != no {
+		t.Error("a mismatch of another field matched, or the same field's did not")
+	}
+	// a conformance failure at call 5, an invariant failing at call 2
+	both := &validate.Report{Actors: []*validate.Result{{Actor: "a", Conforms: validate.Fail,
+		Failure:    &validate.Failure{Kind: "disabled", Index: 5, Call: "bugB"},
+		Invariants: []validate.InvariantResult{{Name: "noBugA", Verdict: validate.Fail, Failure: &validate.Failure{Index: 2}}}}}}
+	if got := SameFailure(&Run{Report: both}).String(); got != "the same failure (invariant noBugA)" {
+		t.Errorf("got %q, want the invariant, the earlier", got)
+	}
+	// a conforming actor with an invariant unjudged may have failed first
+	unjudged := violatesOne("a", "noBugA")
+	unjudged.Invariants = append(unjudged.Invariants, validate.InvariantResult{Name: "within 1s", Verdict: validate.NotEvaluated, Within: true})
+	if v := SameFailure(&Run{Report: &validate.Report{Actors: []*validate.Result{violatesOne("a", "noBugA")}}}).value(&validate.Report{Actors: []*validate.Result{unjudged}}); v != unknown {
+		t.Errorf("an unjudged within beside the failure: %v, want unknown", v)
+	}
+}
+
+func violatesOne(actor, name string) *validate.Result {
+	return &validate.Result{Actor: actor, Conforms: validate.Pass, Invariants: []validate.InvariantResult{{Name: name, Verdict: validate.Fail, Failure: &validate.Failure{Index: 1}}}}
+}
+
+// Two shrinks in one test keep their own artifacts: the first's manifest
+// hashes files the second does not overwrite.
+func TestShrinkArtifactsPerShrink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var first string
+	for _, acts := range [][]string{{"b", "d"}, {"a", "c", "e"}} {
+		arts, err := (&ShrunkActions[string]{Actions: acts, Original: 5}).writeArtifacts(t, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first == "" {
+			first = arts[0].Path
+		}
+	}
+	if data, err := os.ReadFile(first); err != nil || strings.Join(strings.Fields(string(data)), "") != `["b","d"]` {
+		t.Errorf("the first shrink's actions.json: %q, %v", data, err)
+	}
 }

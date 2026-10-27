@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +18,11 @@ import (
 )
 
 // A Resetter returns the system an ActionShrink reruns to its initial
-// state: its data cleared, no work pending. ShrinkActions calls it before
+// state: its data cleared, no work pending. Only a fresh environment per
+// rerun (Reset nil, Rerun building it) is safe against leaked state:
+// ShrinkActions' checks catch leaked work (steps a rerun of no actions
+// records anew, a failure it shows), not state that changes later
+// reruns without a step of its own (a counter Reset forgets). ShrinkActions calls it before
 // every rerun, and checks it first: a Reset then a rerun of no actions,
 // twice, must record the same steps both times (up to recorders',
 // actors', processes' and threads' names, and times). An environment's
@@ -69,9 +74,10 @@ type ShrunkActions[A any] struct {
 	Original int
 	// Reruns are every rerun made; Reproduced those that showed the
 	// failure, NotReproduced those that ran and did not (a pass, another
-	// failure, no verdict), Diverged those whose Rerun returned
+	// failure), Undecided those with no verdict for it (a lost tail, an
+	// invariant not judged), Diverged those whose Rerun returned
 	// ErrDiverged, Errors those that failed otherwise.
-	Reruns, Reproduced, NotReproduced, Diverged, Errors int
+	Reruns, Reproduced, NotReproduced, Undecided, Diverged, Errors int
 	// Baseline is the original's rate (Calibration.Baseline reruns), and
 	// PerCandidate the reruns a candidate got before it counted as
 	// passing.
@@ -81,7 +87,9 @@ type ShrunkActions[A any] struct {
 	// shrink.
 	Rate Rate
 	// Minimal: every sequence of Actions with one action fewer was rerun
-	// PerCandidate times without reproducing the failure (1-minimal).
+	// PerCandidate times without reproducing the failure (1-minimal, each
+	// removal with chance at least 1−α), and Actions reproduced after the
+	// shrink at a rate the original's allows.
 	// False when the budget or time ran out (Actions is the smallest so
 	// far) or a one-removal never ran (each rerun diverged); NotMinimal
 	// says which.
@@ -139,7 +147,7 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	}
 	res := core.shrink()
 	out := &ShrunkActions[A]{Actions: pick(original, res.set), Original: len(original)}
-	res.fill(&out.Reruns, &out.Reproduced, &out.NotReproduced, &out.Diverged, &out.Errors)
+	out.Reruns, out.Reproduced, out.NotReproduced, out.Undecided, out.Diverged, out.Errors = res.reruns, res.reproduced, res.notReproduced, res.undecided, res.diverged, res.errs
 	out.Baseline, out.PerCandidate, out.Rate, out.Minimal, out.NotMinimal, out.keep = res.baseline, res.perCandidate, res.rate, res.minimal, res.notMinimal, res.keep
 	// the minimal run, checked as Validate checks it, with what the
 	// shrink did as its manifest's artifacts
@@ -147,7 +155,7 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	if c.driver == nil {
 		opts = append(opts, Driver(validate.Driver{Name: "qtest.ShrinkActions", Args: []string{fmt.Sprintf("actions=%d of %d", len(out.Actions), out.Original)}}))
 	}
-	if arts, err := out.writeArtifacts(c.Dir); err != nil {
+	if arts, err := out.writeArtifacts(t, c.Dir); err != nil {
 		t.Logf("gotogether: ShrinkActions: artifacts: %v", err)
 	} else {
 		opts = append(opts, Artifacts(arts...))
@@ -163,8 +171,8 @@ func (s *ShrunkActions[A]) String() string {
 	if !s.Minimal {
 		m = "not minimal: " + s.NotMinimal
 	}
-	return fmt.Sprintf("shrunk %d actions to %d (%s), reproducing %s: %v; %d reruns (%d reproduced, %d not, %d diverged, %d errors), the original's rate %s, %d per candidate",
-		s.Original, len(s.Actions), m, s.Rate, s.Actions, s.Reruns, s.Reproduced, s.NotReproduced, s.Diverged, s.Errors, s.Baseline, s.PerCandidate)
+	return fmt.Sprintf("shrunk %d actions to %d (%s), reproducing %s: %v; %d reruns (%d reproduced, %d not, %d undecided, %d diverged, %d errors), the original's rate %s, %d per candidate",
+		s.Original, len(s.Actions), m, s.Rate, s.Actions, s.Reruns, s.Reproduced, s.NotReproduced, s.Undecided, s.Diverged, s.Errors, s.Baseline, s.PerCandidate)
 }
 
 // shrinkRecord is shrink.json, a manifest's artifact: what the shrink did.
@@ -175,6 +183,7 @@ type shrinkRecord struct {
 	Reruns        int    `json:"reruns"`
 	Reproduced    int    `json:"reproduced"`
 	NotReproduced int    `json:"notReproduced"`
+	Undecided     int    `json:"undecided"`
 	Diverged      int    `json:"diverged"`
 	Errors        int    `json:"errors"`
 	Baseline      Rate   `json:"baseline"`
@@ -186,8 +195,11 @@ type shrinkRecord struct {
 
 // writeArtifacts writes actions.json (the shrunk actions, as JSON, or
 // each as Go prints it when they do not marshal) and shrink.json into
-// dir, for the minimal run's manifest.
-func (s *ShrunkActions[A]) writeArtifacts(dir string) ([]validate.Artifact, error) {
+// dir/shrink<N>, N counting t's shrinks, for the minimal run's manifest:
+// two shrinks in one directory (GOTOGETHER_KEEP's is the test's) would
+// overwrite the files an earlier run's manifest hashed.
+func (s *ShrunkActions[A]) writeArtifacts(t testing.TB, dir string) ([]validate.Artifact, error) {
+	dir = filepath.Join(dir, fmt.Sprintf("shrink%d", nextShrink(t)))
 	acts, err := json.MarshalIndent(s.Actions, "", "  ")
 	if err != nil {
 		printed := make([]string, len(s.Actions))
@@ -197,7 +209,7 @@ func (s *ShrunkActions[A]) writeArtifacts(dir string) ([]validate.Artifact, erro
 		acts, _ = json.MarshalIndent(printed, "", "  ")
 	}
 	rec, err := json.MarshalIndent(shrinkRecord{Original: s.Original, Actions: len(s.Actions), Keep: s.keep.String(), Reruns: s.Reruns, Reproduced: s.Reproduced,
-		NotReproduced: s.NotReproduced, Diverged: s.Diverged, Errors: s.Errors, Baseline: s.Baseline, PerCandidate: s.PerCandidate, Rate: s.Rate,
+		NotReproduced: s.NotReproduced, Undecided: s.Undecided, Diverged: s.Diverged, Errors: s.Errors, Baseline: s.Baseline, PerCandidate: s.PerCandidate, Rate: s.Rate,
 		Minimal: s.Minimal, NotMinimal: s.NotMinimal}, "", "  ")
 	if err != nil {
 		return nil, err
@@ -207,6 +219,9 @@ func (s *ShrunkActions[A]) writeArtifacts(dir string) ([]validate.Artifact, erro
 		name string
 		data []byte
 	}{{"actions", acts}, {"shrink", rec}} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
 		p := filepath.Join(dir, f.name+".json")
 		if err := os.WriteFile(p, append(f.data, '\n'), 0o644); err != nil {
 			return nil, err
@@ -214,6 +229,24 @@ func (s *ShrunkActions[A]) writeArtifacts(dir string) ([]validate.Artifact, erro
 		arts = append(arts, validate.Artifact{Name: f.name, Path: p})
 	}
 	return arts, nil
+}
+
+// shrinks counts each test's shrinks, for their artifacts' directories.
+// Process-wide.
+var shrinks struct {
+	mu sync.Mutex
+	n  map[string]int
+}
+
+// nextShrink is the number of t's shrink starting, from 1.
+func nextShrink(t testing.TB) int {
+	shrinks.mu.Lock()
+	defer shrinks.mu.Unlock()
+	if shrinks.n == nil {
+		shrinks.n = map[string]int{}
+	}
+	shrinks.n[t.Name()]++
+	return shrinks.n[t.Name()]
 }
 
 // A ShrinkClaim is what a test expects of a shrink (ShrunkActions.Expect):
@@ -280,34 +313,33 @@ type shrinker struct {
 	// model's (nil: not known), for Keep's: a misspelled one never holds
 	names, actions map[string]bool
 
-	start                                             time.Time
-	reruns, reproduced, notReproduced, diverged, errs int
-	inARow                                            int           // failed reruns in a row
-	longest                                           time.Duration // the longest rerun, for the test's deadline
+	start time.Time
+	// empty are the steps a rerun of no actions records (the
+	// environment's own), which every later one must repeat
+	empty                                                        []qtrace.Step
+	reruns, reproduced, notReproduced, undecided, diverged, errs int
+	inARow                                                       int           // failed reruns in a row
+	longest                                                      time.Duration // the longest rerun, for the test's deadline
 }
 
 // shrinkResult is a shrink's outcome, for ShrunkActions.
 type shrinkResult struct {
-	set                                               []int
-	steps                                             []qtrace.Step // a rerun of set that reproduced
-	reruns, reproduced, notReproduced, diverged, errs int
-	baseline, rate                                    Rate
-	perCandidate                                      int
-	minimal                                           bool
-	notMinimal                                        string
-	keep                                              Expectation
-}
-
-func (r *shrinkResult) fill(reruns, reproduced, notReproduced, diverged, errs *int) {
-	*reruns, *reproduced, *notReproduced, *diverged, *errs = r.reruns, r.reproduced, r.notReproduced, r.diverged, r.errs
+	set                                                          []int
+	steps                                                        []qtrace.Step // a rerun of set that reproduced
+	reruns, reproduced, notReproduced, undecided, diverged, errs int
+	baseline, rate                                               Rate
+	perCandidate                                                 int
+	minimal                                                      bool
+	notMinimal                                                   string
+	keep                                                         Expectation
 }
 
 // attempt is one rerun's outcome.
 type attempt struct {
-	ran        bool // it ran and was judged: not diverged, not an error
-	reproduced bool
-	steps      []qtrace.Step // as recorded
-	rep        *validate.Report
+	ran   bool // it ran and was judged: not diverged, not an error
+	v     tri  // Keep's value of it (unknown before Keep is known)
+	steps []qtrace.Step
+	rep   *validate.Report
 }
 
 // out says why the shrink must stop ("": it need not): its budget, its
@@ -327,8 +359,9 @@ func (s *shrinker) out() string {
 	return ""
 }
 
-// once resets the system and reruns idx, judging what it recorded.
-// Three failed reruns in a row end the test.
+// once resets the system and reruns idx, judging what it recorded, and
+// counts it by Keep's value (once Keep is known). Three failed reruns in
+// a row end the test.
 func (s *shrinker) once(ctx context.Context, idx []int) attempt {
 	s.t.Helper()
 	s.reruns++
@@ -359,15 +392,26 @@ func (s *shrinker) once(ctx context.Context, idx []int) attempt {
 		return attempt{}
 	}
 	s.inARow = 0
-	// before the baseline names the failure (Keep's default), no rerun
-	// reproduces: shrink recounts the baseline's
-	a := attempt{ran: true, steps: steps, rep: rep, reproduced: s.keep.check != nil && s.keep.value(rep) == yes}
-	if a.reproduced {
-		s.reproduced++
-	} else {
-		s.notReproduced++
+	a := attempt{ran: true, v: unknown, steps: steps, rep: rep}
+	if s.keep.check != nil {
+		a.v = s.keep.value(rep)
+		s.count(a.v)
 	}
 	return a
+}
+
+// count counts a judged rerun by Keep's value of it: a rerun with no
+// verdict for the failure (a lost tail, an invariant not judged) is
+// neither reproduced nor not.
+func (s *shrinker) count(v tri) {
+	switch v {
+	case yes:
+		s.reproduced++
+	case no:
+		s.notReproduced++
+	default:
+		s.undecided++
+	}
 }
 
 // resetter names the Resetter for a message.
@@ -390,8 +434,9 @@ func (s *shrinker) resetErr(ctx context.Context) error {
 
 // candidate reruns idx up to n times: it fails at its need-th
 // reproduction, passes once the reruns left cannot reach it, and is
-// unknown when too few reruns ran (each diverged, the budget out).
-// found keeps a reproducing rerun's steps.
+// unknown when too few reruns decided (each diverged or had no verdict
+// for the failure, the budget out). found keeps a reproducing rerun's
+// steps. The empty sequence failing contradicts the Resetter's contract.
 func (s *shrinker) candidate(ctx context.Context, idx []int, n int, found map[string][]qtrace.Step) ddmin.Outcome {
 	got, ran := 0, 0
 	for tries := 0; tries < 2*n && ran < n; tries++ {
@@ -399,11 +444,15 @@ func (s *shrinker) candidate(ctx context.Context, idx []int, n int, found map[st
 			return ddmin.Unknown
 		}
 		a := s.once(ctx, idx)
-		if !a.ran {
+		if !a.ran || a.v == unknown {
 			continue
 		}
 		ran++
-		if a.reproduced {
+		if a.v == yes {
+			if len(idx) == 0 {
+				s.t.Fatalf("gotogether: ShrinkActions: a rerun of no actions reproduced %s, after reruns of the original did not show it there: "+
+					"state or work the actions leave survives Reset (%s). Make Reset clear it, or build a fresh environment per rerun (Reset nil)", s.keep, s.resetter())
+			}
 			if got++; got >= s.cal.Need {
 				found[fmt.Sprint(idx)] = a.steps
 				return ddmin.Fails
@@ -432,6 +481,51 @@ func appSteps(steps []qtrace.Step) []qtrace.Step {
 	return out
 }
 
+// emptyRerun resets and reruns no actions, and fails t when it records
+// other steps than the first such rerun (when, says which) or, Keep
+// known, reproduces the failure: work a rerun left that Reset did not
+// clear (a job finishing later, a poller), shown by the next.
+func (s *shrinker) emptyRerun(ctx context.Context, when string) {
+	t := s.t
+	t.Helper()
+	s.reruns++
+	err := s.resetErr(ctx)
+	var steps []qtrace.Step
+	if err == nil {
+		steps, err = s.rerun(ctx, nil)
+	}
+	if err != nil {
+		t.Fatalf("gotogether: ShrinkActions: a Reset, then a Rerun of no actions (%s), failed: %v. Rerun must take an empty sequence: "+
+			"such reruns check that the Resetter leaves nothing behind", when, err)
+	}
+	if s.empty == nil {
+		s.empty = append([]qtrace.Step{}, appSteps(steps)...) // non-nil: the first is taken
+		return
+	}
+	if d := sameRun(&Run{Steps: s.empty}, &Run{Steps: appSteps(steps)}); d != "" {
+		t.Fatalf("gotogether: ShrinkActions: after Reset (%s), a Rerun of no actions (%s) recorded other steps than the first (%s): the Resetter "+
+			"left work or state behind that it saw. Reset must return the system to its initial state, with nothing pending", s.resetter(), when, d)
+	}
+	if s.keep.check == nil {
+		return
+	}
+	rep, _, err := s.judge(ctx, steps)
+	if err != nil {
+		t.Fatalf("gotogether: ShrinkActions: checking a Rerun of no actions (%s): %v", when, err)
+	}
+	if s.keep.value(rep) == yes {
+		t.Fatalf("gotogether: ShrinkActions: a Rerun of no actions (%s) reproduced %s: "+
+			"the failure needs none of the actions (the environment fails alone: shrink nothing), or state the original's reruns left survives "+
+			"Reset (%s): make Reset clear it, or build a fresh environment per rerun (Reset nil)", when, s.keep, s.resetter())
+	}
+}
+
+// decided reports whether rep has a failure and a verdict for every
+// part a failure is judged by (SameFailure's): the failure to keep.
+func decided(rep *validate.Report) bool {
+	return rep != nil && len(firstFailures(rep)) > 0 && !unjudgedFailure(rep)
+}
+
 // shrink checks the Resetter's contract, calibrates on the original and
 // shrinks it.
 func (s *shrinker) shrink() *shrinkResult {
@@ -457,23 +551,11 @@ func (s *shrinker) shrink() *shrinkResult {
 	// the Resetter's contract: no actions, the same steps each time. An
 	// environment's own steps (a server's shutdown drain, its settle)
 	// repeat; what a Reset leaves behind (a job still running, a poller)
-	// shows in the second rerun and not the first.
-	var empty [2][]qtrace.Step
-	for k := range empty {
-		s.reruns++
-		err = s.resetErr(ctx)
-		if err == nil {
-			empty[k], err = s.rerun(ctx, nil)
-		}
-		if err != nil {
-			t.Fatalf("gotogether: ShrinkActions: a Reset, then a Rerun of no actions, failed: %v. Rerun must take an empty sequence: "+
-				"two such reruns check that the Resetter leaves nothing behind", err)
-		}
-	}
-	if d := sameRun(&Run{Steps: appSteps(empty[0])}, &Run{Steps: appSteps(empty[1])}); d != "" {
-		t.Fatalf("gotogether: ShrinkActions: after Reset (%s), two Reruns of no actions recorded different steps (%s): the Resetter left work or state "+
-			"behind that the second saw. Reset must return the system to its initial state, with nothing pending", s.resetter(), d)
-	}
+	// shows in the second rerun and not the first. The check is repeated
+	// after the baseline and at the end, when the actions' own leftovers
+	// would show.
+	s.emptyRerun(ctx, "the first")
+	s.emptyRerun(ctx, "the second")
 	// the baseline: the original's rate, and the failure to keep
 	all := make([]int, s.n)
 	for i := range all {
@@ -483,18 +565,24 @@ func (s *shrinker) shrink() *shrinkResult {
 	for range cal.Baseline {
 		base = append(base, s.once(ctx, all))
 	}
-	if len(base) >= 2 && base[0].ran && base[1].ran && !base[0].rep.OK() && !base[1].rep.OK() {
-		if a, b := signatureOf(base[0].rep), signatureOf(base[1].rep); a != b {
-			t.Fatalf("gotogether: ShrinkActions: the original's first two reruns failed differently (%s; then %s): Reset (%s) leaves state one rerun "+
-				"sees and the next does not. Make Reset clear it", a, b, s.resetter())
-		}
-	}
 	if !keepGiven {
+		// the first two reruns with a decided failure: a rerun with no
+		// verdict for a part (a lost tail) says nothing of how it fails
+		var first []*validate.Report
 		for _, a := range base {
-			if a.ran && !a.rep.OK() {
-				s.keep = SameFailure(&Run{Report: a.rep})
-				break
+			if a.ran && decided(a.rep) {
+				first = append(first, a.rep)
 			}
+		}
+		if len(first) >= 2 {
+			if a, b := signatureOf(first[0]), signatureOf(first[1]); a != b {
+				t.Fatalf("gotogether: ShrinkActions: the original's reruns fail two ways (%s; then %s): either the system fails both ways, "+
+					"and Keep must name the one to shrink (qtest.Violates(...), qtest.Rejects(...)), or Reset (%s) leaves state one rerun sees "+
+					"and the next does not, and must clear it", a, b, s.resetter())
+			}
+		}
+		if len(first) > 0 {
+			s.keep = SameFailure(&Run{Report: first[0]})
 		}
 	}
 	res := &shrinkResult{keep: s.keep}
@@ -504,27 +592,37 @@ func (s *shrinker) shrink() *shrinkResult {
 			continue
 		}
 		ranAny = true
+		if s.keep.check == nil {
+			continue
+		}
+		v := s.keep.value(a.rep)
+		if !keepGiven {
+			s.count(v) // counted now Keep is known
+		}
+		if v == unknown {
+			continue
+		}
 		res.baseline.Of++
-		if s.keep.check != nil && s.keep.value(a.rep) == yes {
+		if v == yes {
 			res.baseline.Reproduced++
 			if res.steps == nil {
 				res.steps = a.steps
 			}
 		}
 	}
-	// the counts made before Keep was known are recounted
-	s.reproduced, s.notReproduced = res.baseline.Reproduced, s.notReproduced+s.reproduced-res.baseline.Reproduced
 	switch {
 	case !ranAny:
 		t.Fatalf("gotogether: ShrinkActions: none of the original's %d reruns ran (%d diverged, %d failed): fix the Rerun", cal.Baseline, s.diverged, s.errs)
 	case res.baseline.Reproduced == 0:
-		want := "a failure"
+		want := "a decided failure"
 		if s.keep.check != nil {
 			want = s.keep.String()
 		}
-		t.Fatalf("gotogether: ShrinkActions: the original's %d actions do not reproduce %s in %d reruns: calibrate the rerun "+
-			"(make it deterministic: the same actions, timings and data each time; or raise Calibration.Baseline for a rare failure)", s.n, want, res.baseline.Of)
+		t.Fatalf("gotogether: ShrinkActions: the original's %d actions do not reproduce %s in %d reruns (%d without a verdict): calibrate the rerun "+
+			"(make it deterministic: the same actions, timings and data each time, every step collected; or raise Calibration.Baseline for a rare failure)",
+			s.n, want, cal.Baseline, s.undecided)
 	}
+	s.emptyRerun(ctx, "after the original's reruns")
 	n := cal.Reruns
 	if n == 0 {
 		n = rerunsFor(rateBound(res.baseline, cal.Alpha), cal.Need, cal.Alpha)
@@ -540,7 +638,7 @@ func (s *shrinker) shrink() *shrinkResult {
 	case d.Stopped:
 		res.notMinimal = s.out()
 	case !d.Minimal:
-		res.notMinimal = "a sequence with one action fewer never ran (each rerun diverged or failed), so it is not known to pass"
+		res.notMinimal = "a sequence with one action fewer was never decided (each rerun diverged, failed or had no verdict for the failure), so it is not known to pass"
 	}
 	// the shrunk sequence's own rate, as far as the budget allows
 	for range cal.Baseline {
@@ -548,14 +646,25 @@ func (s *shrinker) shrink() *shrinkResult {
 			break
 		}
 		a := s.once(ctx, d.Set)
-		if !a.ran {
+		if !a.ran || a.v == unknown {
 			continue
 		}
 		res.rate.Of++
-		if a.reproduced {
+		if a.v == yes {
 			res.rate.Reproduced++
 		}
 	}
-	res.reruns, res.reproduced, res.notReproduced, res.diverged, res.errs = s.reruns, s.reproduced, s.notReproduced, s.diverged, s.errs
+	if s.out() == "" {
+		s.emptyRerun(ctx, "at the end")
+	}
+	// a shrunk sequence that reproduces far less than the original showed
+	// its failure in the shrink by state an earlier rerun left, or by
+	// chance: not a minimal sequence of the failure
+	if _, high := rateBounds(res.rate, cal.Alpha); res.rate.Of > 0 && (res.rate.Reproduced == 0 || high < rateBound(res.baseline, cal.Alpha)) {
+		res.minimal = false
+		res.notMinimal = fmt.Sprintf("the shrunk sequence reproduced %s after the shrink, the original %s: what it showed in the shrink came from state "+
+			"an earlier rerun left (a Reset that leaks state: build a fresh environment per rerun, Reset nil) or from chance", res.rate, res.baseline)
+	}
+	res.reruns, res.reproduced, res.notReproduced, res.undecided, res.diverged, res.errs = s.reruns, s.reproduced, s.notReproduced, s.undecided, s.diverged, s.errs
 	return res
 }
