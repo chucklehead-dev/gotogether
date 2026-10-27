@@ -19,7 +19,7 @@ and both bindings are generated from the App's catalog.
 
 | test | configuration | catches |
 |---|---|---|
-| `TestFaithful` | one tenant, three clients, commit faults, node crashes, a lossy API | nothing: `Conforms`, `All(Settles)`, commit faults reached |
+| `TestFaithful` | one tenant, three clients, commit faults, node crashes, a lossy API | nothing: `Conforms`, `All(Settles)`, commit faults reached, every block of the catalog taken (`gristtest.Exercised`) |
 | `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
 | `TestFull` | two clients filling one item, no faults | nothing: `None(Rejects("addItem"))` (the mutant's contrast) |
 | `TestMutant` (`noCapacity`) | the same | `Some(Rejects("addItem"))`: an addition past the capacity commits where the model refuses it |

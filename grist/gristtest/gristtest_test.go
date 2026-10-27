@@ -27,6 +27,7 @@ func (r *recTB) Errorf(f string, a ...any) {
 }
 func (r *recTB) Fatalf(f string, a ...any) { r.Errorf(f, a...); runtime.Goexit() }
 func (r *recTB) Fatal(a ...any)            { r.msgs = append(r.msgs, fmt.Sprint(a...)); runtime.Goexit() }
+func (r *recTB) FailNow()                  { runtime.Goexit() }
 
 // run runs f with a recTB, returning its messages.
 func run(t *testing.T, f func(tb testing.TB)) []string {
