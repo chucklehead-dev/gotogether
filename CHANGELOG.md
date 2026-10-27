@@ -8,6 +8,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `gotogether validate -replay` says "not reproduced" (exit 1) for a
+  verdict of another cause or at another action: `RunVerdict.Same`
+  compares incomplete's and no verdict's cause (no settle is not
+  pending calls, a lost tail not uncollected steps; a cause reworded
+  keeps its kind) and every failing actor's action
+  (`ActorVerdict.Action`, new; an older manifest's from its reason),
+  not the reason's first word and the first failing actor's alone. The
+  replay prints where the verdicts differ (`differs:`).
 - Recording an HTTP service in a test: `qobshttp.Handler(h, rec)` (new
   package `qobs/qobshttp`) puts rec in every request's context and makes
   the handler's goroutine rec's run while it serves the request, so a

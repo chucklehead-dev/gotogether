@@ -1836,6 +1836,7 @@ type ActorVerdict struct
     field Actor string `json:"actor"`
     field Verdict Verdict `json:"verdict"`
     field Reason string `json:"reason,omitempty"`
+    field Action string `json:"action,omitempty"`
 type Artifact struct
     field Name string `json:"name"`
     field Path string `json:"path"`

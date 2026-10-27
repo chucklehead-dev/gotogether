@@ -176,6 +176,11 @@ type ActorVerdict struct {
 	Actor   string  `json:"actor"`
 	Verdict Verdict `json:"verdict"`
 	Reason  string  `json:"reason,omitempty"`
+	// Action is the action of the step a failing actor fails at (its
+	// mismatch's, its rejection's, its violation's), as its reason names
+	// it: RunVerdict.Same compares it for every actor, not only the
+	// first, whatever the reason's wording.
+	Action string `json:"action,omitempty"`
 }
 
 // FailingStep is the step a run's first failure is at, as recorded.
@@ -231,6 +236,9 @@ func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict {
 		if a.Verdict == Fail || a.Verdict == NotEvaluated && v.Verdict == Pass {
 			v.Verdict = a.Verdict
 		}
+		if a.Verdict == Fail {
+			a.Action = r.failingAction()
+		}
 		if f := firstFailure(r); f != nil && f.Step != nil && v.Failing == nil && a.Verdict != Pass {
 			s := f.Step
 			v.Failing = &FailingStep{Actor: a.Actor, Recorder: s.Recorder, Seq: s.Seq, Action: s.Action, Ref: s.Ref}
@@ -251,26 +259,41 @@ func firstFailure(r *Result) *Failure {
 	return nil
 }
 
-// Same reports whether v and w are one verdict: overall, by actor and the
+// Same reports whether v and w are one verdict: overall, by actor, the
 // kind of each actor's claim (a mismatch, a rejection, which invariant
-// is violated, incomplete, no verdict), and at the same failing step (its
-// ref aside: no verdict reads it). Reasons worded otherwise, as a newer
-// gotogether may word them, are the same verdict: note says so.
+// is violated, incomplete or no verdict and why: no settle or pending
+// calls, a lost tail or uncollected steps) and the action each failing
+// actor fails at, and at the same failing step (its ref aside: no
+// verdict reads it). Reasons worded otherwise, as a newer gotogether may
+// word them, are the same verdict: note says so. When they are not one
+// verdict, note says where they differ.
 func (v RunVerdict) Same(w RunVerdict) (same bool, note string) {
 	fs := func(f *FailingStep) string {
 		if f == nil {
-			return ""
+			return "none"
 		}
-		return fmt.Sprintf("%s|%s|%d|%s", f.Actor, f.Recorder, f.Seq, f.Action)
+		return fmt.Sprintf("%s at %s, recorder %s seq %d", f.Actor, f.Action, f.Recorder, f.Seq)
 	}
-	if v.Verdict != w.Verdict || reasonKind(v.Reason) != reasonKind(w.Reason) || len(v.Actors) != len(w.Actors) || fs(v.Failing) != fs(w.Failing) {
-		return false, ""
+	switch {
+	case v.Verdict != w.Verdict:
+		return false, fmt.Sprintf("the verdict is %s, now %s", verdictWord(v.Verdict), verdictWord(w.Verdict))
+	case reasonKind(v.Reason) != reasonKind(w.Reason):
+		return false, fmt.Sprintf("the reason is %q, now %q", v.Reason, w.Reason)
+	case len(v.Actors) != len(w.Actors):
+		return false, fmt.Sprintf("%d actors were judged, now %d", len(v.Actors), len(w.Actors))
+	case fs(v.Failing) != fs(w.Failing):
+		return false, fmt.Sprintf("the first failing step is %s, now %s", fs(v.Failing), fs(w.Failing))
 	}
 	worded := v.Reason != w.Reason
 	for i, a := range v.Actors {
 		b := w.Actors[i]
-		if a.Actor != b.Actor || a.Verdict != b.Verdict || reasonKind(a.Reason) != reasonKind(b.Reason) {
-			return false, ""
+		switch {
+		case a.Actor != b.Actor:
+			return false, fmt.Sprintf("actor %d is %s, now %s", i+1, a.Actor, b.Actor)
+		case a.Verdict != b.Verdict || reasonKind(a.Reason) != reasonKind(b.Reason):
+			return false, fmt.Sprintf("actor %s: %s (%s), now %s (%s)", a.Actor, verdictWord(a.Verdict), a.Reason, verdictWord(b.Verdict), b.Reason)
+		case a.failingAction() != b.failingAction():
+			return false, fmt.Sprintf("actor %s fails at %s (%s), now at %s (%s)", a.Actor, a.failingAction(), a.Reason, b.failingAction(), b.Reason)
 		}
 		worded = worded || a.Reason != b.Reason
 	}
@@ -280,15 +303,33 @@ func (v RunVerdict) Same(w RunVerdict) (same bool, note string) {
 	return true, note
 }
 
+// failingAction is the action a failing actor fails at: Action, or for
+// a manifest written before Action was, the one its reason names.
+func (a ActorVerdict) failingAction() string {
+	if a.Verdict != Fail || a.Action != "" {
+		return a.Action
+	}
+	for _, p := range []string{"mismatch after ", "rejects ", "evaluation error at "} {
+		if act, ok := strings.CutPrefix(a.Reason, p); ok {
+			return act
+		}
+	}
+	return ""
+}
+
 // reasonKind is the kind of claim a reason states: its first word (a
-// mismatch, a rejection, incomplete), "no verdict", "evaluation error",
-// or for a violation the invariant violated.
+// mismatch, a rejection), "evaluation error", for a violation the
+// invariant violated, and for incomplete and no verdict their cause
+// (causeKind): a run that never settled is not one with pending calls,
+// nor a lost tail uncollected steps.
 func reasonKind(r string) string {
 	switch {
 	case strings.HasPrefix(r, "violates "):
 		return r
 	case strings.HasPrefix(r, "no verdict"):
-		return "no verdict"
+		return "no verdict" + causeKind(strings.TrimPrefix(r, "no verdict"))
+	case strings.HasPrefix(r, "incomplete"):
+		return "incomplete" + causeKind(strings.TrimPrefix(r, "incomplete"))
 	case strings.HasPrefix(r, "evaluation error"):
 		return "evaluation error"
 	}
@@ -296,11 +337,59 @@ func reasonKind(r string) string {
 	return k
 }
 
-func (v RunVerdict) String() string {
-	s := strings.ToUpper(string(v.Verdict))
-	if v.Verdict == NotEvaluated {
-		s = "NO VERDICT"
+// causes are the causes of incomplete and no verdict, each by the words
+// that name it, the more particular first (a lost tail before lost
+// steps): a cause reworded keeps its words, and one gotogether does not
+// know yet is compared as worded. Read-only.
+var causes = []struct {
+	kind  string
+	words []string
+}{
+	{"lost tail", []string{"tail"}},
+	{"uncollected", []string{"uncollected"}},
+	{"dropped steps", []string{"dropped"}},
+	{"lost steps", []string{"lost"}},
+	{"pending calls", []string{"pending"}},
+	{"no settle", []string{"settle"}},
+	{"eventual val false", []string{"eventual", "false"}},
+	{"no eventual val", []string{"eventual"}},
+	{"linearize budget", []string{"budget"}},
+	{"snapshot overlap", []string{"overlap"}},
+	{"conformance n/a", []string{"conformance"}},
+	{"ITF trace", []string{"itf"}},
+}
+
+// causeKind is the cause of the rest of an incomplete or no verdict
+// reason, " (no settle)": " (" its kind ")", "" for none.
+func causeKind(rest string) string {
+	c, ok := strings.CutPrefix(strings.TrimSpace(rest), "(")
+	if !ok {
+		return ""
 	}
+	c, _, _ = strings.Cut(c, ")")
+	lc := strings.ToLower(c)
+	for _, k := range causes {
+		all := true
+		for _, w := range k.words {
+			all = all && strings.Contains(lc, w)
+		}
+		if all {
+			return " (" + k.kind + ")"
+		}
+	}
+	return " (" + c + ")"
+}
+
+// verdictWord is a verdict as a result line says it: PASS, FAIL, NO VERDICT.
+func verdictWord(v Verdict) string {
+	if v == NotEvaluated {
+		return "NO VERDICT"
+	}
+	return strings.ToUpper(string(v))
+}
+
+func (v RunVerdict) String() string {
+	s := verdictWord(v.Verdict)
 	if v.Reason != "" {
 		s += " (" + v.Reason + ")"
 	}

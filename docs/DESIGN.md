@@ -3554,7 +3554,10 @@ own instance; the check recorded is the check judged (a complete
 binding's finish check in the CLI, none in qtest, where the test's claim
 is the check); `Manifest.Bundle` copies every file beside it, so a CI
 job's uploaded evidence replays on another machine; a reworded reason
-is the same verdict (`Same` compares kinds), and `evidence` skips a
+is the same verdict (`Same` compares kinds: a mismatch, a rejection,
+the invariant, incomplete's and no verdict's cause, and the action each
+failing actor fails at; G1 found the cause and every actor after the
+first ignored), and `evidence` skips a
 later format's manifest by name. Every validate call typechecked its
 model again, about a second each, and the replays multiplied the calls
 (cmd/gotogether's tests went from about 60 s before E1 to over 300 s on

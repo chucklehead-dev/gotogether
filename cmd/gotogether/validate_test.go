@@ -416,7 +416,7 @@ func TestValidateManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out = vcapture(t, []string{"-replay", edited, "-dir", filepath.Join(dir, "replay")})
-	if code != 1 || !strings.Contains(out, "the verdict is not the manifest's") || !strings.Contains(out, "manifest: PASS") {
+	if code != 1 || !strings.Contains(out, "the verdict is not the manifest's") || !strings.Contains(out, "manifest: PASS") || !strings.Contains(out, "differs:  the verdict is PASS, now FAIL") {
 		t.Errorf("an edited verdict: exit %d:\n%s", code, out)
 	}
 	// the suite's evidence lists it, an external run

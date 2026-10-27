@@ -204,14 +204,15 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 	if err != nil {
 		return code, err
 	}
-	if same, note := m.Verdict.Same(got); same {
+	same, note := m.Verdict.Same(got)
+	if same {
 		if note != "" {
 			fmt.Fprintln(out, "note:", note)
 		}
 		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", got)
 		return code, nil
 	}
-	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n", m.Verdict, got)
+	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s\n", m.Verdict, got, note)
 	return 1, nil
 }
 

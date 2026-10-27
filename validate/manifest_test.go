@@ -155,6 +155,9 @@ func TestVerdictOf(t *testing.T) {
 	if v.Verdict != Fail || v.Reason != "no verdict (lost steps)" || v.Failing == nil || v.Failing.Actor != "b" || v.Failing.Ref != "trace.jsonl:2" || len(v.Actors) != 3 || v.Actors[1].Verdict != NotEvaluated {
 		t.Errorf("%+v", v)
 	}
+	if v.Actors[2].Action != "deposit" || v.Actors[1].Action != "" {
+		t.Errorf("the actors' failing actions: %+v", v.Actors)
+	}
 	if v := VerdictOf([]*Result{pass, none}, nil); v.Verdict != NotEvaluated || v.Failing != nil {
 		t.Errorf("no verdict: %+v", v)
 	}
@@ -188,10 +191,72 @@ func TestVerdictOf(t *testing.T) {
 		t.Error("another failing step is the same verdict")
 	}
 	viol := func(inv string) RunVerdict {
-		return RunVerdict{Verdict: Fail, Reason: "violates " + inv, Actors: []ActorVerdict{{"a", Fail, "violates " + inv}}}
+		return RunVerdict{Verdict: Fail, Reason: "violates " + inv, Actors: []ActorVerdict{{Actor: "a", Verdict: Fail, Reason: "violates " + inv}}}
 	}
 	if same, _ := viol("underLimit").Same(viol("nonNegative")); same {
 		t.Error("two invariants' violations are one verdict")
+	}
+}
+
+// Two verdicts of one kind differ in the cause of incomplete or no
+// verdict, and in the action any failing actor fails at, not only the
+// first's (the G1 review: each replayed as reproduced).
+func TestVerdictSameCauseAndActors(t *testing.T) {
+	t.Parallel()
+	one := func(verdict Verdict, reason string) RunVerdict {
+		return RunVerdict{Verdict: verdict, Reason: reason, Actors: []ActorVerdict{{Actor: "a", Verdict: verdict, Reason: reason}}}
+	}
+	for _, c := range [][2]string{
+		{"incomplete (no settle)", "incomplete (pending calls)"},
+		{"incomplete (no eventual val)", "incomplete (eventual val false)"},
+	} {
+		if same, note := one(Fail, c[0]).Same(one(Fail, c[1])); same || !strings.Contains(note, c[1]) {
+			t.Errorf("%s and %s: %v %q", c[0], c[1], same, note)
+		}
+	}
+	for _, c := range [][2]string{
+		{"no verdict (lost tail)", "no verdict (uncollected)"},
+		{"no verdict (lost steps)", "no verdict (dropped steps)"},
+		{"no verdict (linearize budget)", "no verdict (lost tail)"},
+	} {
+		if same, _ := one(NotEvaluated, c[0]).Same(one(NotEvaluated, c[1])); same {
+			t.Errorf("%s and %s are one verdict", c[0], c[1])
+		}
+	}
+	// every cause gotogether states is its own
+	known := []string{"pending calls", "no settle", "no eventual val", "eventual val false", "lost tail", "uncollected",
+		"dropped steps", "lost steps", "linearize budget", "snapshot overlap", "conformance n/a", "ITF trace"}
+	seen := map[string]string{}
+	for _, c := range known {
+		k := causeKind("(" + c + ")")
+		if o, ok := seen[k]; ok {
+			t.Errorf("%q and %q are one cause, %s", o, c, k)
+		}
+		seen[k] = c
+	}
+	// a second failing actor's failing action
+	two := func(first, second string) RunVerdict {
+		return RunVerdict{Verdict: Fail, Reason: "mismatch after " + first,
+			Failing: &FailingStep{Actor: "a", Recorder: "r", Seq: 1, Action: first},
+			Actors:  []ActorVerdict{{"a", Fail, "mismatch after " + first, first}, {"b", Fail, "mismatch after " + second, second}}}
+	}
+	if same, note := two("deposit", "withdraw").Same(two("deposit", "transfer")); same || !strings.Contains(note, "actor b fails at withdraw") {
+		t.Errorf("a second actor's failing action: %v %q", same, note)
+	}
+	// a manifest written before Action: the reason's action
+	old := two("deposit", "withdraw")
+	old.Actors[1].Action = ""
+	if same, _ := old.Same(two("deposit", "withdraw")); !same {
+		t.Error("an older manifest's actor, failing at the same action, made another verdict")
+	}
+	if same, _ := old.Same(two("deposit", "transfer")); same {
+		t.Error("an older manifest's actor, failing at another action, is the same verdict")
+	}
+	// reworded, the action kept: the same verdict
+	w := two("deposit", "withdraw")
+	w.Actors[1].Reason = "mismatch after the withdraw step"
+	if same, note := two("deposit", "withdraw").Same(w); !same || !strings.Contains(note, "worded otherwise") {
+		t.Errorf("a reworded reason: %v %q", same, note)
 	}
 }
 
