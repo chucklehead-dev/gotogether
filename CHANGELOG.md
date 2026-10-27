@@ -8,6 +8,22 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist, declared calls on the simulated tier (GR3's slice 1,
+  docs/grist.md §0.12; api/grist.txt): `grist.NewDependency`,
+  `grist.NewCall[Req, Resp]` (`Keyed`, `Refuses`), `grist.Uses` on a
+  processor (enforced), `Call.Do` in an effect (the caller's view
+  recorded as an invocation and its completion), `Call.Handler`,
+  `grist.Handlers` and `grist.CallHandler`, `grist.Local`,
+  `grist.Transport`, `grist.CallInfo`, `grist.CallKey`,
+  `grist.Replayed`, `App.Dependencies`, the catalog's `Dependencies` and
+  processors' `Uses`; the site's record placed at its cause (2·H+1);
+  `gristsim.Config.Doubles` and `gristsim.Doubles` (each dependency a
+  `qenv.Service` named after it), `gristsim.DependencyTimeout`; the
+  generator's call types, variables, caller and site actions, rule hole
+  `<p><Call>` and generated `<c>Admits`; grist.qnt's `CallKey`,
+  `callKeyStable`, `keyCalled`; `gristtest.Exercised` taking each call.
+  examples/counters' bank is a declared call (its `BankDep`, `SimBank`,
+  `BankPays` gone).
 - grist, the library trial's left items (docs/grist.md §0.11;
   api/grist.txt): `gristtest.Exercised(app, except...)` and
   `gristtest.Takes(app)` (every block of the catalog taken, each command

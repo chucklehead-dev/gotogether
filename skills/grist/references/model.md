@@ -20,16 +20,20 @@ one beside this page.
   (`totalsEvents(log, counter)`) and the reads a read of it records
   (`totalsReads(counter)`); a record type per command's and query's
   arguments with `principal` (`CreateCounterArgs`), per query's result,
-  per site's record.
+  per site's record, per declared call its request, response and step
+  record (`BankPayRequest`, `BankPayResponse`, `BankPayRecord`: processor,
+  trigger, key, request, result, response).
 - module `<app>Gen`, the store's side: `log`, `checkpoints`, `appended`,
-  `effects`, `answered` and one list per site (`bankPaysRecords`); per
+  `effects`, `answered`, one list per site, and per call the caller's
+  steps and the site's (`bankPayCalls`, `bankPayRecords`); per
   command an action (a reused key; a `conflict` if it is conditioned;
   ok and each declared refusal, with `freshKey`, `covers` of its rule's
   needs and `conditionHolds`), per query one, per processor those of
   its declared shape (`Emits`: one action; `Delivers(AtLeastOnce)`: the
   effect step, the checkpoint over `atLeastOnceDone`, an outcome step
   that never happens; `Delivers(AtMostOnce)`: checkpoint, effect,
-  outcome), per site one; every frame condition; `step`.
+  outcome), per site one, per call two (below); every frame condition;
+  `step`.
 - module `<app>CallsGen`, the clients' side: no positions, no
   processors, a key's first answer final, `denied` answering nothing.
 - `<app>.binding.yaml`, `<app>.calls.binding.yaml` and one
@@ -155,13 +159,48 @@ that changes a delivery (and its declaration with it, which the runtime
 enforces) is rejected at its first trigger (`Rejects(<processor>)`:
 counters' `checkpointFirst`), before what it would cause.
 
-## A dependency's record of its own effects
+## A declared call, at both ends
 
-A double (a simulated bank, a ledger) records each effect where it makes
-it, with a site: `var BankPays = grist.NewSite[Payment](App, "bank-pays")`
-and `BankPays.Record(ctx, tenant, Payment{...})` in its handler (actor
-the tenant, process the App's name, so the step joins the tenant's
-trace). The generator writes its list (`bankPaysRecords`) and action.
+A call (`grist.NewCall`, used by a processor with `grist.Uses`) is two
+steps, both grist's: the caller's `<call>` (`bankPay`: dependency, then
+call, capitalized), recorded by `Call.Do` as an invocation and its
+completion, ordered as the effect step it precedes; and the site's
+`<call>Served`, recorded by the handler's wrapper where the dependency
+applies it, placed at its cause (`order.pos` 2·H+1, H the head the
+poller read: after the commit holding the trigger, even inside a batch
+of several events) on a thread of its key. Each records the processor,
+the trigger, the key, the request's and the response's fields (zeros
+when there is no response), the outcome as `result` (`ok`, a declared
+refusal, and at the caller `unknown`). The generator writes:
+
+- a rule hole per (processor, call), `<p><Call>(prefix, trigger):
+  <Call>Request`: the request the effect makes for the trigger (counters'
+  `payoutBankPay`: the retired counter and its total). The caller's
+  action requires it, so a payout of the wrong amount is
+  `Rejects("bankPay")` (counters' `wrongAmount`).
+- the caller's action: a user's trigger, before its effect step (at
+  least once: its next trigger; at most once: checkpointed, no effect
+  step yet, no earlier call of the key), the key the trigger's
+  (`callKeyStable`).
+- the site's action: a user's trigger in the log, and `<call>Admits(prefix,
+  records, r)`, generated (a `Keyed` call: no earlier served record of
+  the key; else any) unless your rules define it, reading only the log
+  through the trigger. Its request is the caller's to judge: the site's
+  record is recorded inside the call, before the caller's completion, at
+  the same position, so judging the request there would name the site
+  for the caller's error.
+
+A double that deduplicates says so: `grist.Replayed(ctx)` when it answers
+a key from its first answer, so the retry records no second
+application. An invariant or eventual val reads `<call>Records` (counters'
+`everyRetirementPaidOnce`: one ok served record per retirement's
+trigger) and `<call>Calls`.
+
+A double grist does not serve may still record its effects with a site:
+`grist.NewSite[T](App, name)` and `Site.Record(ctx, tenant, v)` in its
+handler (actor the tenant, process the App's name); the generator writes
+its list (`<site>Records`) and action, ordered with no commit (an
+eventual val relates it to the log).
 
 ## Check it alone
 

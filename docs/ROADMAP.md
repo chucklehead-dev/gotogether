@@ -76,7 +76,12 @@ Then, in order, each item reviewed before the next:
   app that adds a dependency gets its steps without writing code;
   OTel spans of the same seams converted, for apps already traced.
   Designed in docs/grist-instrumentation.md (declared calls, both ends
-  recorded, six slices).
+  recorded, six slices). Slice 1 built (docs/grist.md §0.12): declared
+  calls on the simulated tier (`NewDependency`, `NewCall`, `Keyed`,
+  `Uses`, `Call.Do`, `Handlers`, the site placed at its cause), gristsim
+  serving each dependency, the generator writing both actions and a rule
+  per processor and call; counters' bank ported (`wrongAmount` caught).
+  Next: slice 2 (the default double, every example's dependencies).
 - **GR4. Several services simulated together (L).** gristsim composes
   several Apps, each with its own store, process and node(s), over
   qhttp/simgrpc/simlog networks with faults per service; a cross-service

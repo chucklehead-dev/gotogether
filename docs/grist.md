@@ -1189,6 +1189,93 @@ out:
   `everyReceiptForABorrow` stays an eventual val, and `<s>Admits` still
   sees only the records.
 
+## 0.12 What building GR3's slice 1 changed (declared calls, simulated)
+
+docs/grist-instrumentation.md §4's slice 1: a dependency an effect
+calls is a declaration, recorded at both ends and modelled by the
+generator, on the simulated tier. Built, each with a test that fails
+with it taken out:
+
+- **Declared calls** (grist/calls.go): `grist.NewDependency(App, name)`,
+  `grist.NewCall[Req, Resp](dep, name, grist.Keyed(), grist.Refuses(...))`
+  (request and response structs of scalars; a field of one name on both
+  sides, or named `processor`, `trigger`, `key` or `result`, a refusal
+  named `unknown`, a dependency named `api` are `Verify`'s problems), and
+  `grist.Uses(calls...)` on a processor, enforced as `Emits` is: `Do`
+  from an effect of a processor that does not list the call, or outside
+  any effect, is the effect's error naming the fix and records nothing
+  (`TestCallDeclared`); `Uses` on a processor that declares no
+  `Delivers`, or of another App's call, is a problem
+  (`TestCallDeclarations`). The catalog gains `Dependencies` (each call's
+  types, `Keyed`, refusals and users) and each processor's `Uses`.
+- **Both ends recorded by grist** (`TestCallSteps`). `Call.Do` records
+  the caller's view, the step `<dep><Call>` (`bankPay`), as
+  `qobs.Invoke` before the request and `Call.Done` with the answer: the
+  request's fields, the processor, the trigger, the effect's key, the
+  response's fields (zeros without one), the outcome `ok`, a declared
+  refusal's name (returned as `NotApplied` of its `*Rejected`: at most
+  once, `grist.failed`) or `unknown` (any other error: `grist.unknown`);
+  ordered as the effect step it precedes (`order.pos` 2·H+1, the
+  effect's `order.p.<processor>`, the poller's thread). The handler's
+  wrapper (`Call.Handler`, served by `grist.Local`) records the
+  application, `<dep><Call>Served`, at its cause, `grist.CallInfo`
+  (App, tenant, processor, trigger, the head the poller read, the key):
+  `order.pos` 2·H+1, on a thread of the key, so it follows the commit
+  holding the trigger even inside a two-event batch
+  (`TestSiteAfterItsCommit`, which fails with 2·T+1: a batch's commit is
+  at 2·P). A handler answering a key from its first answer says
+  `grist.Replayed(ctx)` and records nothing (`TestReplayedRecordsNothing`);
+  one returning an error that is no declared refusal is recorded with
+  the fix. `grist.CallKey(ctx)` is the key in an effect and in a handler.
+- **gristsim serves each dependency** as a `qenv.Service` named after it
+  (faults `rpc.<dependency>.request`, `.delay`, `.response`), on no
+  process, from `Config.Doubles` (`func() gristsim.Doubles`, per run);
+  a dependency without a double, or a call without a handler, is the
+  run's error (`TestDoublesServed`). The default double is slice 2's.
+- **The generator** writes per call its request, response and record
+  types (`BankPayRequest`, `BankPayResponse`, `BankPayRecord`), the
+  caller's steps and the site's (`bankPayCalls`, `bankPayRecords`), the
+  caller's action (a user's trigger, before its effect step, under the
+  trigger's key, `callKeyStable`; at most once, no earlier call of the
+  key; the request the rule's), the site's (a user's trigger in the log,
+  `<c>Admits` given `log.slice(0, T)`), a rule hole per (processor,
+  call), `<p><Call>` (`payoutBankPay`), and `<c>Admits` itself unless
+  the rules define one (a `Keyed` call: no earlier record of the key;
+  else any), with `step` branches drawing each (in the Go evaluator's
+  fragment: `TestAgreesWithQuint`). grist.qnt gains `CallKey`,
+  `callKeyStable` and `keyCalled`, checked in grist/model's tests. The
+  binding names both actions with no template but the outcome as
+  `result` (and a reserved name's), and the calls' outcomes.
+  `gristtest.Exercised` takes each call, answered ok and applied.
+- **counters' bank** is a declared call (`Bank`, `Pay`: `Keyed`,
+  refusing `declined`), its double a handler attached per run in its
+  tests (deduplicating by key, `Replayed`); deps.go's `Bank` interface, `BankDep`,
+  `noBank`, `payRequest`, `SimBank`, `BankPays` and `Payment` are gone,
+  its rules gain `payoutBankPay` and lose `bankPaysAdmits`, and
+  `everyRetirementPaidOnce` reads the served records by trigger. The new
+  mutant `wrongAmount` (the payout pays one more) is
+  `Some(Rejects("bankPay"))` in 4 of 4 runs, where no record the store
+  makes differs; `TestPayoutAmount` is its contrast (`None(Rejects("bankPay"))`,
+  and conforming through the bank's own lost, duplicated and late
+  requests and lost answers). The other payout mutants and claims are
+  unchanged and caught as before.
+
+Where the design changed (docs/grist-instrumentation.md, corrected in
+place): the site's action does not judge the request, the caller's
+does. The site's record is recorded inside the call, before the caller's
+completion, at the same 2·H+1: the two are concurrent and reconstructed
+in recording order, the site first, so a request judged at the site
+would reject `bankPayServed` for the caller's error and the caller's
+step would never be judged; grist records the caller wherever it
+records the site. The site's records are `<c>Records`, not `<c>Served`
+(the site action's name). A response's fields are step arguments, not
+observations, so the actions take them as same-named parameters.
+`grist.Handler` is a fold's handler, so a call's is `grist.CallHandler`
+(`Handlers` as designed). `Transport` and `Local` came with slice 1
+(gristsim serves through `Local`), and `Replayed` is new: without it a
+deduplicating double's replay is a second application. The call's
+timeout is `gristsim.DependencyTimeout` (1 s), not yet an option.
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
 Both were read in grain's code (research notes, 2026-10-27); slice 1

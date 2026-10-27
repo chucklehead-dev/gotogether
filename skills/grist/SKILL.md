@@ -57,19 +57,37 @@ for it. No binding is written by hand.
    refusals (`grist.Refuses(ErrA, ErrB)`; another rejection is the
    decision's error), each processor's result (`grist.Emits(Type)` or
    `grist.Delivers(grist.AtLeastOnce|grist.AtMostOnce, SuccessType)`;
-   another result fails the trigger), a dependency as a typed
-   `grist.NewDep[T](name, fallback)` (T best an interface, its fallback a
-   stand-in refusing every call with the fix; `Dep.Of(ctx)` in an effect,
-   `Dep.With(ctx, v)` where the node starts: gristsim's `Setup`,
-   `grist.Dependencies`), and a double's own record of its effects as a
-   `grist.NewSite[T](App, name)` (`Site.Record(ctx, tenant, v)`). Then
+   another result fails the trigger), a remote party an effect calls as
+   a declared dependency and its typed calls (`var Bank =
+   grist.NewDependency(App, "bank")`, `var Pay = grist.NewCall[PayRequest,
+   PayReceipt](Bank, "pay", grist.Keyed(), grist.Refuses(ErrDeclined))`,
+   requests and responses structs of scalars, the processor declaring
+   `grist.Uses(Pay)` beside its `Delivers`; in the effect `_, err :=
+   Pay.Do(ctx, req)`, whose error is already a refusal's `NotApplied` or
+   an unknown outcome): grist records the caller's view (`bankPay`, an
+   invocation and its completion) and the bank's application
+   (`bankPayServed`, by the handler's wrapper, ordered after the commit
+   holding the trigger), and gristsim serves each dependency as a
+   `qenv.Service` named after it (`rpc.bank.*`) from the run's
+   `Config.Doubles` (`func() gristsim.Doubles`: `gristsim.Doubles{Bank:
+   grist.Handlers{Pay.Handler(f)}}`, per run; a deduplicating double
+   answering a retry from its first answer calls `grist.Replayed(ctx)`,
+   `grist.CallKey(ctx)` the key). Do outside an effect, or of a call
+   the processor does not list in `Uses`, is the effect's error. What is
+   no call stays a typed `grist.NewDep[T](name, fallback)` (T best an
+   interface, its fallback a stand-in refusing every call with the fix;
+   `Dep.Of(ctx)` in an effect, `Dep.With(ctx, v)` where the node starts:
+   gristsim's `Setup`, `grist.Dependencies`), and a double grist does
+   not serve may record its effects with a `grist.NewSite[T](App, name)`
+   (`Site.Record(ctx, tenant, v)`). Then
    `go run ./cmd/<app> model` (`grist.Main`; `-init` the first time)
    writes `model/<app>_gen.qnt` (events, reads, an action per block with
    its outcome branches and frame conditions, `step`), the vendored
    `grist.qnt` and the bindings; you write `model/<app>.qnt`'s rules
    (per command its outcome, events and needs; per query its answer;
    per processor its events, and a Delivers one which triggers it skips;
-   per site its guard; the read models' folds)
+   per processor and call it uses the request it makes, `<p><Call>`; per
+   site its guard; the read models' folds)
    and its invariants, each marked `// grist: invariant|eventually|violable
    [bindings]` (a binding name other than `default` is a test-only
    variant, `<app>.<name>.binding.yaml`). **Read
