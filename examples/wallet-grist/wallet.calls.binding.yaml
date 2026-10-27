@@ -1,0 +1,27 @@
+# The clients' calls (actor <tenant>/clients: qobs.Invoke before the first
+# request, Call.Done with the answer, every retry inside the one call) as
+# calls of model/wallet.qnt's walletCalls module, linearized by
+# qtest.Linearize: no positions, no processors. A command's outcome is its
+# result; a read's balance is compared with balanceOf where it linearizes.
+actors: ['*/clients']
+spec: model/wallet.qnt
+module: walletCalls
+
+outcomes:
+  ok: '"ok"'
+  invalid: '"invalid"'
+  insufficient-funds: '"insufficient-funds"'
+  conflict: '"conflict"'
+
+actions:
+  transfer:
+    args: { result: '{{.outcome}}' }
+  deposit:
+    args: { result: '{{.outcome}}' }
+  read:
+    expect: 'balanceOf(log, {{.account}}) == {{.obs.balance}}'
+
+invariants: [noOverdraft]
+
+simulate:
+  holds: [noOverdraft]

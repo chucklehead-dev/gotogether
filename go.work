@@ -19,6 +19,7 @@ use (
 	./examples/quorumkv
 	./examples/raftkv
 	./examples/wallet
+	./examples/wallet-grist
 	./examples/webjobs
 	./examples/retrystorm
 	./examples/sktrace

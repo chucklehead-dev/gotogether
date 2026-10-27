@@ -1,0 +1,88 @@
+# wallet-grist: examples/wallet's bank on grist
+
+[examples/wallet](../wallet)'s bank, written as grist's blocks
+([docs/grist.md](../../docs/grist.md), [skills/grist](../../skills/grist/SKILL.md))
+and checked against a Quint model with no annotation of its own: accounts
+whose balances move by transfers and deposits, each request applied at
+most once by its id, a ledger that posts every applied move, and two
+accounts (`a`, `b`) sharing a credit line. A request the bank must refuse
+(a transfer to its own source, an account it does not hold, an amount
+that is not positive) is answered `invalid`; a transfer its funds do not
+cover, `insufficient-funds`.
+
+What examples/wallet writes by hand, grist has by construction:
+
+| examples/wallet | here |
+|---|---|
+| the request's record, read under its lock, answering a retry as the first time | the command id's marker (`Envelope.ID`, the API's `Idempotency-Key`): a key's first answer is final, refusals included |
+| balances in a transactional store, read under locks | the log; `balances`, a read model keyed by account; a transfer's append conditioned on every account it read (the source, or both of the credit line) |
+| an outbox, drained to a queue by a relay | the log is the outbox: the `post` processor handles every `moved` event after its checkpoint |
+| the ledger consuming the queue, deduplicating | `post`'s effect, at least once (the checkpoint after the ledger's answer), under grist's effect key, which the ledger deduplicates |
+
+| file | what it is |
+|---|---|
+| [wallet.go](wallet.go) | the accounts (`a`, `b`, `c`, 5 cents each; `a` and `b` a credit line), the events (`moved`: one account's signed move, two per transfer; `posted`: the ledger's confirmation) and the read model `balances`, keyed by account |
+| [commands.go](commands.go), [queries.go](queries.go), [processors.go](processors.go) | `transfer`, `deposit`, the query `read`, the processor `post` (`Effect`, `AtLeastOnce`, `OnSuccess(posted)`) |
+| [deps.go](deps.go) | the ledger: a `qenv.Service` in a simulation, in process on the real tier; it deduplicates by key and records each post where it makes it (`ledgerPost`) |
+| [model/wallet.qnt](model/wallet.qnt) | one tenant's log: `wallet` (the commit side, with the ledger's record), `walletCalls` (the client side); balances and funds as defs over the log; `noOverdraft`, eventual `allPosted` and `postedApplied`, test-only `everyMovePostedOnce` |
+| [model/grist.qnt](model/grist.qnt) | grist's guarantees, vendored from [grist/model](../../grist/model/grist.qnt) |
+| [wallet.binding.yaml](wallet.binding.yaml) | the commit-side steps (actor the tenant), `eventually: [allPosted, postedApplied]` |
+| [wallet.exactly.binding.yaml](wallet.exactly.binding.yaml) | the same steps judged by `everyMovePostedOnce` (the ledger holds every move once) |
+| [wallet.calls.binding.yaml](wallet.calls.binding.yaml) | the clients' calls (`<tenant>/clients`), linearized |
+| [sim_test.go](sim_test.go), [mutants_test.go](mutants_test.go), [real_test.go](real_test.go) | the claims in simulation (gristsim), the mutants, the real tier over HTTP on SQLite |
+| [cmd/wallet](cmd/wallet/main.go) | the app's binary (`grist.Main`) |
+| [testdata/mutants](testdata/mutants) | each mutant a file replacing the app's of its name (a `go test -overlay`) |
+| [TRIAL.md](TRIAL.md) | how building this went: a newcomer's friction log |
+
+## What each test catches
+
+Rates from one full run (2026-10-27); `-short` runs fewer seeds.
+
+| test | mutant | configuration | verdict |
+|---|---|---|---|
+| `TestFaithful` | none | one tenant, three clients, transfers, deposits and reads; commit faults, node crashes, the API's and the ledger's requests and answers lost, duplicated and late; Serializable and ReadCommitted | `Conforms`, `All(Settles)` (every move posted, every post a move's), commit faults and crashes reached: 20 of 20 at each level |
+| `TestFaithfulAtClients` | none | the same at ReadCommitted, judged where the clients saw it, linearized | `Conforms`: 20 of 20 |
+| `TestDuplicateRequests` | none (wallet's `NoDedupe` and `UnlockedRecord` cannot be written: see below) | the API duplicating and delaying 3 requests in 10 | `Conforms` at the store and at the clients: 20 of 20 on each side |
+| `TestInvalidRequests` | `noValidation`: no request refused as invalid | transfers to and from `z` (not held), to their own source, of -1 and 0; deposits alike | the faithful bank conforms (10 of 10); the mutant commits what the model refuses, `Some(Rejects("transfer"))` (6 of 6: 4 reject `transfer`, 2 `deposit`) |
+| `TestRaces` | `readThenWrite`: `transfer` declared `Unconditioned` | at ReadCommitted, no faults: `race`, two clients spending 3 of `c`'s 5 twice each; `skew`, one transfer of 6 from each account of the credit line (10 between them) | faithful: `None(Rejects("transfer"))`, and both sides conform (20 of 20 at each shape, each side); the mutant: `Some(Rejects("transfer"))`, the funds overdrawn (lost update 19 of 20, credit line 19 of 20); under Serializable the mutant still commits a transfer decided before the other's commit in 2 of 20 runs at the `race` shape (not asserted: see [TRIAL.md](TRIAL.md)) |
+| `TestPostedOnce` | `ledgerNoDedupe`: the ledger posts a retried key again | one client depositing; a `qenv.Script` of `grist.post.effect`'s `crashAfter` (the node crashes after the ledger's post, before the checkpoint) | faithful: conforms, and `everyMovePostedOnce` holds with and without the crash (10 of 10 each); the mutant posts twice, `Some(Rejects("ledgerPost"))` (6 of 6) |
+| `TestMutant` (`noOutbox`) | `noOutbox`: `post` declared `AtMostOnce` (fire and forget after the checkpoint) | one client depositing, no faults | `Some(Rejects("post"))`: its checkpoint commits before any effect step, which the at-least-once model refuses (6 of 6) |
+| `TestReplicaReadShape` | `replicaRead`: `read` answered from the ledger's postings | two clients depositing to and reading `a`, no faults | faithful: `None(Mismatch("read"))` (10 of 10); the mutant: `Some(Mismatch("read"))`, a read missing a deposit not yet posted (10 of 10) |
+| `TestSQLTier` | none | `TestFaithful`'s shape on the SQL tier (sqlstore over qsql) at ReadCommitted, commit faults at 15 in 100 (full mode) | `Conforms`, `All(Settles)` at the store and, linearized, at the clients: 10 of 10 each |
+| `TestOneRequestExhaust` | none | `Exhaust` within one fault: one client, one transfer (full mode) | `Conforms`, `All(Settles)`: 49 of 49 |
+| `TestRealHTTP` | none | the real tier: `grist.NewHandler` on a real HTTP server over a SQLite file, three clients (`grist/client`), every fifth command's answer lost after it was served; the steps to a `PerStep` file | the file conforms to `wallet.binding.yaml` and settles, and linearized to `wallet.calls.binding.yaml`; every client's answer has its store-side step; lost answers retried under their key and replayed from the marker (counted) |
+
+`TestMutants` builds the test binary with each mutant's overlay and runs
+`TestMutant` in it.
+
+### examples/wallet's checks that do not carry over
+
+- **`NoDedupe`, `UnlockedRecord`**: the request record is grist's marker,
+  which no application code touches: neither mutant can be written.
+  `TestDuplicateRequests` is the faithful half; grist's own tests ablate
+  the marker.
+- **`WriteSkew` at snapshot isolation, and `qhistory`**: a conditioned
+  read cannot be left out of the condition, and grist checks every
+  condition under the tenant's lock, so no isolation level lets a
+  conditioned transfer skew. Snapshot's runs are Serializable's (every
+  append writes the head). The only skew an application can write is a
+  whole command `Unconditioned` (`readThenWrite` at the `skew` shape),
+  caught at ReadCommitted in 19 of 20 runs (and, unlike what grist's
+  skill says, still in 2 of 20 of the `race` shape's at Serializable). The store's history is a log of appends,
+  not the list-append workload qhistory reads.
+- **`TestPendingTransfers` (`ResolvePending`)**: gristsim's clients do not
+  crash; a call is pending only after `MaxAttempts` tries.
+- **`TestAllFaults` (`GOTOGETHER_ALL_FAULTS`)**: not tried (outside what
+  grist's docs describe).
+- **`noOutbox` caught by `eventually allPosted`**: here the declaration
+  contradicts the at-least-once model at the first post, so the mutant is
+  `Rejects("post")` without a crash; the loss itself is never reached.
+
+## Run it
+
+```sh
+go test -short ./...                 # needs quint on PATH
+./run-demo.sh                        # the faithful bank
+MUTATION=read-then-write ./run-demo.sh
+SERVE=1 ./run-demo.sh                # cmd/wallet on SQLite, driven with curl, its steps validated
+```

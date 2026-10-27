@@ -1,0 +1,41 @@
+# The steps grist records at the store (actor the tenant) as calls of
+# model/wallet.qnt's wallet module: every parameter is the step's field of
+# its name, but result (the step's outcome) and reads (slice 1's triples
+# as grist.qnt's Reads). Each commit's observations (a refusal's too: it
+# commits its marker) are the head after it and the batch it appended,
+# compared with the model's; a read's balance with balanceOf at its
+# position. The ledger's posts (ledgerPost, recorded by the ledger where
+# it posts) are judged here too. No restart: every step's process is the
+# store.
+actors: ['!*/clients']
+spec: model/wallet.qnt
+module: wallet
+
+outcomes:
+  ok: '"ok"'
+  invalid: '"invalid"'
+  insufficient-funds: '"insufficient-funds"'
+  conflict: '"conflict"'
+  idempotency-key-reused: '"idempotency-key-reused"'
+
+actions:
+  transfer:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+    expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  deposit:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+    expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  read:
+    expect: 'balanceOf(log, {{.account}}) == {{.obs.balance}}'
+  postEffect: {}
+  post:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("post") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  postOutcome: {}
+  ledgerPost: {}
+
+invariants: [noOverdraft]
+eventually: [allPosted, postedApplied]
+
+# The model on its own (gotogether simulate): no overdraft is the design's.
+simulate:
+  holds: [noOverdraft]

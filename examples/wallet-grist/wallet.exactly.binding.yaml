@@ -1,0 +1,30 @@
+# wallet.binding.yaml's model and steps, judged by the test-only eventual
+# val everyMovePostedOnce: the ledger holds every move exactly once, by its
+# own record of its posts. At least once allows a post given up after
+# EFFECT_TRIES failures; runs judged here have no ledger faults, so every
+# move must be posted, and a duplicate the ledger failed to deduplicate
+# (or a post lost) fails it.
+actors: ['!*/clients']
+spec: model/wallet.qnt
+module: wallet
+
+outcomes:
+  ok: '"ok"'
+  invalid: '"invalid"'
+  insufficient-funds: '"insufficient-funds"'
+  conflict: '"conflict"'
+  idempotency-key-reused: '"idempotency-key-reused"'
+
+actions:
+  transfer:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+  deposit:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+  read: {}
+  postEffect: {}
+  post: {}
+  postOutcome: {}
+  ledgerPost: {}
+
+invariants: []
+eventually: [everyMovePostedOnce]
