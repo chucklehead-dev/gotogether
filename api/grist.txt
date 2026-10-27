@@ -1,40 +1,34 @@
 == github.com/chucklehead-dev/gotogether/grist
 const AtLeastOnce Delivery = iota + 1
-const BatchSize = 100
-const ConditionTries = 5
-const EffectTries = 3
-const TransientTries = 10
-func CheckCondition(log []Stored, c Condition) error
+func BatchSize(n int) Option
+func ConditionTries(n int) Option
 func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result
 func EffectFaults(processor string) qenv.FaultKind
 func EffectKey(ctx context.Context) string
+func EffectTries(n int) Option
 func Emit(events ...Event) Result
+func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
 func Keys(names ...string) KeyNames
 func New(name string) *App
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewEvent[E any](app *App, name string) *EventType[E]
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
-func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result) *Processor
-func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error)) *QueryBlock[Q, R]
+func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result, opts ...Option) *Processor
+func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
 func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
-func NewReceipt(tenant string, head Position, n int) Receipt
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
-func ParsePosKey(s string) (Position, error)
-func PosKey(p Position) string
-func Quiet(ctx context.Context) context.Context
 func QuintName(name string) (string, error)
 func Rejection(name string) error
-func Select(log []Stored, q Query, at Position) []Stored
 func Skip() Result
-func StepFields(typ reflect.Type, body []byte, prefix string) []any
 func Tag(key string, value any) TagPair
-func Transient(err error) bool
+func TransientTries(n int) Option
 func Unconditioned(reason string) Option
 type App struct
     field Name string
     method (*App) ArgsType(name string) reflect.Type
+    method (*App) Catalog() Catalog
     method (*App) Commands() []string
     method (*App) Execute(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (Receipt, error)
     method (*App) Processors() []string
@@ -43,51 +37,48 @@ type App struct
     method (*App) ResultType(name string) reflect.Type
     method (*App) Start(ctx context.Context, s Store) error
     method (*App) Verify() error
-type Batch struct
-    field Events []Event
-    field Condition *Condition
-    field Marker *Marker
-    field Checkpoint *CheckpointMove
-    field Time int64
-    field Cause string
-    field OnCommit func(head Position)
-type CheckpointMove struct
-    field Processor string
-    field From Position
-    field To Position
-type CheckpointMoved struct
-    field Processor string
-    field Expected Position
-    field Found Position
-    method (*CheckpointMoved) Error() string
+type Catalog struct
+    field Name string
+    field Events []CatalogEvent
+    field ReadModels []CatalogReadModel
+    field Commands []CatalogBlock
+    field Queries []CatalogBlock
+    field Processors []CatalogProcessor
+type CatalogBlock struct
+    field Name string
+    field Quint string
+    field Args reflect.Type
+    field Result reflect.Type
+    field Unconditioned string
+type CatalogEvent struct
+    field Name string
+    field Version int
+    field Body reflect.Type
+    field Tags []string
+type CatalogProcessor struct
+    field Name string
+    field Quint string
+    field On string
+    field EffectTries int
+type CatalogReadModel struct
+    field Name string
+    field Version int
+    field Types []string
+    field Keys []string
 type Command[C any] struct
     method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
     method (*Command[C]) Name() string
-type Condition struct
-    field After Position
-    field Queries []Query
-type ConditionFailed struct
-    field Query Query
-    field Event Position
-    field Marker string
-    method (*ConditionFailed) Error() string
 type Delivery int
 type EffectOption func(*Result)
 type Envelope struct
     field ID string
     field Tenant string
     field Actor string
-type Event struct
-    field Type string
-    field Version int
-    field Tags []TagPair
-    field Body json.RawMessage
-    method (Event) Tagged(tags []TagPair) bool
+type Event = store.Event
 type EventName interface
     Name() string
-type EventRef struct
-    field Tenant string
-    field Pos Position
+    registered() *eventInfo
+type EventRef = store.EventRef
 type EventType[E any] struct
     method (*EventType[E]) Decode(s Stored) (E, error)
     method (*EventType[E]) Name() string
@@ -100,27 +91,11 @@ type KeyNames []string
 type KeyedReadModel[S any] struct
     embed ReadModel[S]
     method (*KeyedReadModel[S]) For(r *Reads, values ...string) S
-type Marker struct
-    field ID string
-    field Hash string
-    field Receipt Receipt
-type Meta struct
-    field Tenant string
-    field Pos Position
-    field Time int64
-    field Cause string
-type Option func(*options)
-type Position int64
+type Meta = store.Meta
+type Option struct
+type Position = store.Position
 type Processor struct
     method (*Processor) Name() string
-type Query struct
-    field Types []string
-    field Tags []TagPair
-    field After Position
-    field Reverse bool
-    field Limit int
-    method (Query) Matches(e Event) bool
-    method (Query) String() string
 type QueryBlock[Q, R any] struct
     method (*QueryBlock[Q, R]) Name() string
     method (*QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) (R, Position, error)
@@ -128,43 +103,26 @@ type ReadModel[S any] struct
     method (*ReadModel[S]) Fold(events []Stored) (S, error)
     method (*ReadModel[S]) Get(r *Reads) S
     method (*ReadModel[S]) Name() string
-    method (*ReadModel[S]) Query(tags ...TagPair) Query
 type Reads struct
-    method (*Reads) Events(q Query) []Stored
     method (*Reads) Exists(t EventName, tags ...TagPair) bool
     method (*Reads) ID(n int) string
     method (*Reads) Position() Position
+    method (*Reads) Select(q Selector) []Stored
     method (*Reads) Tenant() string
-type Receipt struct
-    field Pos Position
-    field Events []EventRef
+type Receipt = store.Receipt
 type Rejected struct
     field Name string
     method (*Rejected) Error() string
+    method (*Rejected) Is(target error) bool
 type Result struct
-type Store interface
-    Name() string
-    CreateTenant(ctx context.Context, tenant string) error
-    Tenants(ctx context.Context) ([]string, error)
-    Read(ctx context.Context, tenant string, q Query, at Position) ([]Stored, Position, error)
-    Append(ctx context.Context, tenant string, b Batch) (Position, error)
-    Marker(ctx context.Context, tenant, id string) (Marker, bool, error)
-    Checkpoint(ctx context.Context, tenant, processor string) (Position, error)
-    Heads(ctx context.Context) (map[string]Position, error)
-    Wait(ctx context.Context, tenant string, p Position) error
-type Stored struct
-    embed Event
-    field Tenant string
-    field Pos Position
-    field Time int64
-    field Cause string
-    method (Stored) Meta() Meta
-type TagPair struct
-    field Key string
-    field Value string
-var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later")
+type Selector = store.Selector
+type Store = store.Store
+type Stored = store.Stored
+type TagPair = store.TagPair
+var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later under a new id")
 var ErrKeyReused = Rejection("idempotency-key-reused")
-var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
+var ErrOutcomeUnknown = errors.New("grist: the command's outcome is unknown (an append may have committed): retry it with the same id")
+var ErrUnavailable = errors.New("grist: the store kept failing before anything committed: retry later")
 
 == github.com/chucklehead-dev/gotogether/grist/gristsim
 const AtClients Recording = iota (spec 1 of its group)
@@ -189,56 +147,143 @@ type Config struct
     field Horizon time.Duration
     field Log func(string)
 type Recording int
-type Request struct
-    field Query bool
-    field Name string
-    field Env grist.Envelope
-    field Args json.RawMessage
-type Response struct
-    field Receipt grist.Receipt
-    field Result json.RawMessage
-    field Pos grist.Position
-    field Rejected string
-    field Err string
 
 == github.com/chucklehead-dev/gotogether/grist/memstore
 func New(name string) *Store
 type Store struct
-    method (*Store) Append(_ context.Context, t string, b grist.Batch) (grist.Position, error)
-    method (*Store) Checkpoint(_ context.Context, t, processor string) (grist.Position, error)
+    method (*Store) Append(_ context.Context, t string, b store.Batch) (store.Position, error)
+    method (*Store) Checkpoint(_ context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(_ context.Context, t string) error
-    method (*Store) Heads(context.Context) (map[string]grist.Position, error)
-    method (*Store) Marker(_ context.Context, t, id string) (grist.Marker, bool, error)
+    method (*Store) Heads(context.Context) (map[string]store.Position, error)
+    method (*Store) Marker(_ context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
-    method (*Store) Read(_ context.Context, t string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error)
+    method (*Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(context.Context) ([]string, error)
-    method (*Store) Wait(ctx context.Context, t string, p grist.Position) error
+    method (*Store) Wait(ctx context.Context, t string, p store.Position) error
 
 == github.com/chucklehead-dev/gotogether/grist/simstore
 func New(db *qenv.Store) *Store
 type Store struct
-    method (*Store) Append(ctx context.Context, t string, b grist.Batch) (grist.Position, error)
-    method (*Store) Checkpoint(ctx context.Context, t, processor string) (grist.Position, error)
+    method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
+    method (*Store) Checkpoint(ctx context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(ctx context.Context, t string) error
-    method (*Store) Heads(ctx context.Context) (map[string]grist.Position, error)
-    method (*Store) Marker(ctx context.Context, t, id string) (grist.Marker, bool, error)
+    method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
+    method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
-    method (*Store) Read(ctx context.Context, t string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error)
+    method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
-    method (*Store) Wait(ctx context.Context, t string, p grist.Position) error
+    method (*Store) Wait(ctx context.Context, t string, p store.Position) error
+
+== github.com/chucklehead-dev/gotogether/grist/store
+func CheckCondition(log []Stored, c Condition) error
+func NewReceipt(tenant string, head Position, n int) Receipt
+func Select(log []Stored, q Selector, at Position) []Stored
+func Transient(err error) bool
+type Batch struct
+    field Events []Event
+    field Condition *Condition
+    field Marker *Marker
+    field Checkpoint *CheckpointMove
+    field Time int64
+    field Cause string
+    field Step json.RawMessage
+    field OnCommit func(head Position)
+type CheckpointMove struct
+    field Processor string
+    field From Position
+    field To Position
+type CheckpointMoved struct
+    field Processor string
+    field Expected Position
+    field Found Position
+    method (*CheckpointMoved) Error() string
+type Condition struct
+    field After Position
+    field Selectors []Selector
+type ConditionFailed struct
+    field Selector Selector
+    field Event Position
+    field Marker string
+    method (*ConditionFailed) Error() string
+type Event struct
+    field Type string
+    field Version int
+    field Tags []TagPair
+    field Body json.RawMessage
+    method (Event) Clone() Event
+    method (Event) Tagged(tags []TagPair) bool
+type EventRef struct
+    field Tenant string
+    field Pos Position
+type Marker struct
+    field ID string
+    field Hash string
+    field Outcome string
+    field Receipt Receipt
+type Meta struct
+    field Tenant string
+    field Pos Position
+    field Time int64
+    field Cause string
+type Position int64
+type Receipt struct
+    field Pos Position
+    field Events []EventRef
+type Selector struct
+    field Types []string
+    field Tags []TagPair
+    field After Position
+    field Reverse bool
+    field Limit int
+    method (Selector) Matches(e Event) bool
+    method (Selector) String() string
+type StepLog interface
+    Steps(ctx context.Context, tenant string, after int64, limit int) ([]StepRow, error)
+type StepRow struct
+    field Seq int64
+    field Head Position
+    field Step json.RawMessage
+type Store interface
+    Name() string
+    CreateTenant(ctx context.Context, tenant string) error
+    Tenants(ctx context.Context) ([]string, error)
+    Read(ctx context.Context, tenant string, q Selector, at Position) ([]Stored, Position, error)
+    Append(ctx context.Context, tenant string, b Batch) (Position, error)
+    Marker(ctx context.Context, tenant, id string) (Marker, bool, error)
+    Checkpoint(ctx context.Context, tenant, processor string) (Position, error)
+    Heads(ctx context.Context) (map[string]Position, error)
+    Wait(ctx context.Context, tenant string, p Position) error
+type Stored struct
+    embed Event
+    field Tenant string
+    field Pos Position
+    field Time int64
+    field Cause string
+    method (Stored) Clone() Stored
+    method (Stored) Meta() Meta
+type TagPair struct
+    field Key string
+    field Value string
+var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
 
 == github.com/chucklehead-dev/gotogether/grist/storetest
-func Checkpoints(ctx context.Context, s grist.Store) error
-func ConditionsAgainstBruteForce(ctx context.Context, s grist.Store) error
-func DensePositions(ctx context.Context, s grist.Store) error
-func Markers(ctx context.Context, s grist.Store) error
-func ReadsAgainstBruteForce(ctx context.Context, s grist.Store) error
+func Checkpoints(ctx context.Context, s store.Store) error
+func Checks() []Check
+func ConcurrentAgainstBruteForce(ctx context.Context, s store.Store) error
+func ConditionsAgainstBruteForce(ctx context.Context, s store.Store) error
+func DensePositions(ctx context.Context, s store.Store) error
+func Markers(ctx context.Context, s store.Store) error
+func NoSharedSlices(ctx context.Context, s store.Store) error
+func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error
 func Run(t *testing.T, h Harness)
-func TenantIsolation(ctx context.Context, s grist.Store) error
-func UnknownTenant(ctx context.Context, s grist.Store) error
+func StepLog(ctx context.Context, s store.Store) error
+func TenantIsolation(ctx context.Context, s store.Store) error
+func UnknownTenant(ctx context.Context, s store.Store) error
+func WaitWakes(ctx context.Context, s store.Store) error
 type Check struct
     field Name string
-    field Run func(ctx context.Context, s grist.Store) error
-type Harness func(t *testing.T, body func(ctx context.Context, s grist.Store) error)
-var Checks = []Check{…}
+    field Run func(ctx context.Context, s store.Store) error
+type Harness func(t *testing.T, body func(ctx context.Context, s store.Store) error)
 

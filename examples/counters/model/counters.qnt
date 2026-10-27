@@ -9,13 +9,19 @@ module countersLib {
   import grist.* from "./grist"
 
   pure def created(counter: str, name: str, id: str): Event =
-    { typ: "counter-created", strs: [counter, name], ints: [], tags: Set(("counter", counter), ("name", name)), cause: id }
+    { typ: "counter-created", strs: [counter, name], ints: [], tags: Set(("counter", counter), ("name", name)), cause: ("command", id) }
   pure def incremented(counter: str, by: int, id: str): Event =
-    { typ: "counter-incremented", strs: [counter], ints: [by], tags: Set(("counter", counter)), cause: id }
+    { typ: "counter-incremented", strs: [counter], ints: [by], tags: Set(("counter", counter)), cause: ("command", id) }
   pure def averageComputed(sum: int, count: int): Event =
-    { typ: "average-computed", strs: [], ints: [sum, count], tags: Set(), cause: "" }
+    { typ: "average-computed", strs: [], ints: [sum, count], tags: Set(), cause: ("processor", "average") }
   pure def notified(counter: str): Event =
-    { typ: "notified", strs: [counter], ints: [], tags: Set(("counter", counter)), cause: "" }
+    { typ: "notified", strs: [counter], ints: [], tags: Set(("counter", counter)), cause: ("processor", "welcome") }
+
+  // what each command's rule reads: whether a counter has the name, and
+  // whether the counter exists. A committed step's read set must cover
+  // it (grist's covers), whatever else the decision read
+  pure def nameRead(name: str): Read = { typ: "counter-created", tags: Set(("name", name)) }
+  pure def counterRead(counter: str): Read = { typ: "counter-created", tags: Set(("counter", counter)) }
 
   // totals, keyed by counter: the sum of its increments
   pure def total(log: List[Event], counter: str): int =
@@ -28,10 +34,12 @@ module countersLib {
     val names = counterNames(log)
     names.keys().filter(n => names.get(n) == counter).size()
 
-  // the design's: every created name is created once
+  // the design's: every created name is created once (as many distinct
+  // names as creates: linear in the log, where comparing every pair of
+  // creates was quadratic)
   pure def namesUnique(log: List[Event]): bool =
-    log.indices().forall(i => log.indices().forall(j =>
-      (i < j and log[i].typ == "counter-created" and log[j].typ == "counter-created") implies log[i].strs[1] != log[j].strs[1]))
+    val creates = log.select(e => e.typ == "counter-created")
+    creates.foldl(Set(), (s, e) => s.union(Set(e.strs[1]))).size() == creates.length()
 }
 
 // The commit side: every step recorded where it took effect (gristsim's
@@ -48,58 +56,105 @@ module counters {
   var checkpoints: str -> int
   // the batch the last step appended (what its observations are checked against)
   var appended: List[Event]
-  // the effect steps: (processor, trigger, ok)
-  var effects: List[(str, int, bool)]
+  // the effect steps: (processor, trigger, key, ok)
+  var effects: List[Effect]
+  // the command ids answered so far, by a commit or a committed refusal
+  var answered: Set[str]
 
   action init = all {
     log' = [],
     checkpoints' = Map("average" -> 0, "welcome" -> 0),
     appended' = [],
     effects' = [],
+    answered' = Set(),
   }
 
-  action appends(b: List[Event]): bool = all {
+  // a command's commit of b, answering id
+  action appends(b: List[Event], id: str): bool = all {
     log' = log.concat(b),
     appended' = b,
     checkpoints' = checkpoints,
     effects' = effects,
+    answered' = answered.union(Set(id)),
   }
 
-  // a refusal: it read through readPos, which is the log's length where it
-  // is ordered (2·readPos+1), and changes nothing
-  action refused(readPos: int): bool = all {
+  // a committed refusal: its marker answers id, nothing is appended. It
+  // commits at the head, at or after the position it read through
+  action refuses(readPos: int, id: str): bool = all {
+    readPos <= log.length(),
+    appends([], id),
+  }
+
+  // a step that commits nothing (a query, a reused key): it read through
+  // readPos, which is the log's length where it is ordered (2·readPos+1)
+  action readsThrough(readPos: int): bool = all {
     log.length() == readPos,
     log' = log,
     appended' = [],
     checkpoints' = checkpoints,
     effects' = effects,
+    answered' = answered,
   }
 
+  // A command's steps. Every committed outcome needs its id fresh and its
+  // read set covering what its rule reads; an ok or a rejection needs its
+  // condition to have held (nothing it read changed since readPos); a
+  // conflict needs it not to have (the reads kept changing), and commits
+  // unconditioned. A reused key commits nothing and needs the key taken.
   action createCounter(counter: str, name: str, id: str, readPos: int, reads: List[Read], result: str): bool =
-    if (result == "ok") all {
-      not(existsTagged(log, "counter-created", "name", name)),
+    if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
+    else if (result == "conflict") all {
+      freshKey(answered, id),
+      covers(reads, nameRead(name)),
+      not(conditionHolds(log, readPos, reads)),
+      refuses(readPos, id),
+    } else all {
+      freshKey(answered, id),
+      covers(reads, nameRead(name)),
       conditionHolds(log, readPos, reads),
-      freshCause(log, id),
-      appends([created(counter, name, id)]),
-    } else if (result == "name-taken") all {
-      existsTagged(log, "counter-created", "name", name),
-      refused(readPos),
-    } else all { result == "conflict", refused(readPos) }
+      if (result == "ok") all {
+        not(existsTagged(log, "counter-created", "name", name)),
+        appends([created(counter, name, id)], id),
+      } else all {
+        result == "name-taken",
+        existsTagged(log, "counter-created", "name", name),
+        refuses(readPos, id),
+      },
+    }
 
   action incrementCounter(counter: str, by: int, id: str, readPos: int, reads: List[Read], result: str): bool =
-    if (result == "ok") all {
-      existsTagged(log, "counter-created", "counter", counter),
+    if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
+    else if (result == "conflict") all {
+      freshKey(answered, id),
+      covers(reads, counterRead(counter)),
+      not(conditionHolds(log, readPos, reads)),
+      refuses(readPos, id),
+    } else all {
+      freshKey(answered, id),
+      covers(reads, counterRead(counter)),
       conditionHolds(log, readPos, reads),
-      freshCause(log, id),
-      appends([incremented(counter, by, id)]),
-    } else if (result == "unknown-counter") all {
-      not(existsTagged(log, "counter-created", "counter", counter)),
-      refused(readPos),
-    } else all { result == "conflict", refused(readPos) }
+      if (result == "ok") all {
+        existsTagged(log, "counter-created", "counter", counter),
+        appends([incremented(counter, by, id)], id),
+      } else all {
+        result == "unknown-counter",
+        not(existsTagged(log, "counter-created", "counter", counter)),
+        refuses(readPos, id),
+      },
+    }
 
   // a query: it reads through readPos, changes nothing; its answer is
   // checked against total and namesOf (the binding's expect)
-  action showCounter(counter: str, readPos: int): bool = refused(readPos)
+  action showCounter(counter: str, readPos: int): bool = readsThrough(readPos)
+
+  // the processors' steps change neither the commands' keys nor each other's
+  action processes(b: List[Event], p: str, trigger: int): bool = all {
+    log' = log.concat(b),
+    appended' = b,
+    checkpoints' = checkpoints.set(p, trigger),
+    effects' = effects,
+    answered' = answered,
+  }
 
   // average: on each increment, the tenant's sum and count as of the
   // trigger (the handler reads log.slice(0, trigger), whatever came after)
@@ -107,42 +162,31 @@ module counters {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("average"), "counter-incremented"),
     val incs = log.slice(0, trigger).select(e => e.typ == "counter-incremented")
-    val avg = averageComputed(incs.foldl(0, (s, e) => s + e.ints[0]), incs.length())
-    all {
-      log' = log.append(avg),
-      appended' = [avg],
-      checkpoints' = checkpoints.set("average", trigger),
-      effects' = effects,
-    },
+    processes([averageComputed(incs.foldl(0, (s, e) => s + e.ints[0]), incs.length())], "average", trigger),
   }
 
   // welcome's effect (the mailer's send), at least once: any number of
-  // tries for the next created counter before its checkpoint
+  // tries for the next created counter before its checkpoint, every one
+  // under the trigger's key
   action welcomeEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("welcome"), "counter-created"),
+    keyStable(effects, "welcome", trigger, key),
     log' = log,
     appended' = [],
     checkpoints' = checkpoints,
-    effects' = effects.append(("welcome", trigger, ok)),
+    effects' = effects.append(("welcome", trigger, key, ok)),
+    answered' = answered,
   }
 
-  // welcome's checkpoint, only after an effect step: notified once the
-  // effect succeeded, grist.failed after EFFECT_TRIES failures
-  action welcome(trigger: int): bool = all {
+  // welcome's checkpoint, only after effect steps: notified after an ok
+  // one, grist.failed after EFFECT_TRIES failed ones, whichever the run
+  // committed (ok: its record of which)
+  action welcome(trigger: int, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("welcome"), "counter-created"),
-    val outcome =
-      if (effectsOf(effects, "welcome", trigger, true) > 0) [notified(log[trigger - 1].strs[0])]
-      else if (effectsOf(effects, "welcome", trigger, false) >= EFFECT_TRIES) [failed("welcome", trigger)]
-      else []
-    all {
-      outcome.length() > 0,
-      log' = log.concat(outcome),
-      appended' = outcome,
-      checkpoints' = checkpoints.set("welcome", trigger),
-      effects' = effects,
-    },
+    atLeastOnceDone(effects, "welcome", trigger, ok, EFFECT_TRIES),
+    processes(atLeastOnceOutcome("welcome", trigger, ok, [notified(log[trigger - 1].strs[0])]), "welcome", trigger),
   }
 
   // the model on its own (gotogether simulate)
@@ -151,17 +195,17 @@ module counters {
     nondet name = Set("a", "b").oneOf()
     nondet by = 1.to(2).oneOf()
     nondet id = Set("i1", "i2", "i3", "i4").oneOf()
+    nondet key = Set("k1", "k2", "k3").oneOf()
     nondet ok = Bool.oneOf()
     any {
-      createCounter(counter, name, id, log.length(), [("counter-created", "name", name)], "ok"),
-      createCounter(counter, name, id, log.length(), [("counter-created", "name", name)], "name-taken"),
-      incrementCounter(counter, by, id, log.length(),
-        [("counter-created", "counter", counter), ("counter-incremented", "counter", counter)], "ok"),
-      incrementCounter(counter, by, id, log.length(), [("counter-created", "counter", counter)], "unknown-counter"),
+      createCounter(counter, name, id, log.length(), [nameRead(name)], "ok"),
+      createCounter(counter, name, id, log.length(), [nameRead(name)], "name-taken"),
+      incrementCounter(counter, by, id, log.length(), [counterRead(counter), { typ: "counter-incremented", tags: Set(("counter", counter)) }], "ok"),
+      incrementCounter(counter, by, id, log.length(), [counterRead(counter)], "unknown-counter"),
       showCounter(counter, log.length()),
       average(nextOf(log, checkpoints.get("average"), "counter-incremented")),
-      welcomeEffect(nextOf(log, checkpoints.get("welcome"), "counter-created"), "key", ok),
-      welcome(nextOf(log, checkpoints.get("welcome"), "counter-created")),
+      welcomeEffect(nextOf(log, checkpoints.get("welcome"), "counter-created"), key, ok),
+      welcome(nextOf(log, checkpoints.get("welcome"), "counter-created"), ok),
     }
   }
 
@@ -194,7 +238,8 @@ module counters {
 
 // The client side: every command and query recorded where a client saw
 // it (gristsim's AtClients), linearized by qtest.Linearize. No positions,
-// no processors: the log holds the commands' events alone.
+// no processors: the log holds the commands' events alone. A key's first
+// answer is final here too: a refused id never commits later.
 module countersCalls {
   import grist.* from "./grist"
   import countersLib.*
@@ -202,30 +247,35 @@ module countersCalls {
   export countersLib.*
 
   var log: List[Event]
+  var answered: Set[str]
 
-  action init = log' = []
+  action init = all { log' = [], answered' = Set() }
+
+  action answers(b: List[Event], id: str): bool = all {
+    freshKey(answered, id),
+    log' = log.concat(b),
+    answered' = answered.union(Set(id)),
+  }
 
   action createCounter(counter: str, name: str, id: str, result: str): bool =
     if (result == "ok") all {
       not(existsTagged(log, "counter-created", "name", name)),
-      freshCause(log, id),
-      log' = log.append(created(counter, name, id)),
+      answers([created(counter, name, id)], id),
     } else if (result == "name-taken") all {
       existsTagged(log, "counter-created", "name", name),
-      log' = log,
-    } else all { result == "conflict", log' = log }
+      answers([], id),
+    } else all { result == "conflict", answers([], id) }
 
   action incrementCounter(counter: str, by: int, id: str, result: str): bool =
     if (result == "ok") all {
       existsTagged(log, "counter-created", "counter", counter),
-      freshCause(log, id),
-      log' = log.append(incremented(counter, by, id)),
+      answers([incremented(counter, by, id)], id),
     } else if (result == "unknown-counter") all {
       not(existsTagged(log, "counter-created", "counter", counter)),
-      log' = log,
-    } else all { result == "conflict", log' = log }
+      answers([], id),
+    } else all { result == "conflict", answers([], id) }
 
-  action showCounter(counter: str): bool = log' = log
+  action showCounter(counter: str): bool = all { log' = log, answered' = answered }
 
   action step = {
     nondet counter = Set("a", "b").oneOf()

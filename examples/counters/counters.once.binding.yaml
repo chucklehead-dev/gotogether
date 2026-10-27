@@ -11,12 +11,13 @@ outcomes:
   name-taken: '"name-taken"'
   unknown-counter: '"unknown-counter"'
   conflict: '"conflict"'
+  idempotency-key-reused: '"idempotency-key-reused"'
 
 actions:
   createCounter:
-    args: { result: '{{.outcome}}' }
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
   incrementCounter:
-    args: { result: '{{.outcome}}' }
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
   showCounter: {}
   average: {}
   welcomeEffect: {}

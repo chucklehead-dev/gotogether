@@ -1,6 +1,7 @@
-// Package memstore is a grist.Store in memory: maps and a mutex, for unit
+// Package memstore is a grist store in memory: maps and a mutex, for unit
 // tests of a fold or a decision. It is not for simulations (its mutex is
-// a real one, which qenv cannot schedule): use grist/simstore there.
+// a real one, which qenv cannot schedule): use grist/simstore there. It
+// keeps a store.StepLog.
 package memstore
 
 import (
@@ -8,10 +9,10 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 )
 
-// Store is an in-memory grist.Store.
+// Store is an in-memory store.Store.
 type Store struct {
 	name string
 
@@ -21,9 +22,10 @@ type Store struct {
 }
 
 type tenant struct {
-	log         []grist.Stored
-	markers     map[string]grist.Marker
-	checkpoints map[string]grist.Position
+	log         []store.Stored
+	markers     map[string]store.Marker
+	checkpoints map[string]store.Position
+	steps       []store.StepRow
 }
 
 // New returns an empty store named name.
@@ -31,20 +33,20 @@ func New(name string) *Store {
 	return &Store{name: name, tenants: map[string]*tenant{}, changed: make(chan struct{})}
 }
 
-// Name implements grist.Store.
+// Name implements store.Store.
 func (s *Store) Name() string { return s.name }
 
-// CreateTenant implements grist.Store.
+// CreateTenant implements store.Store.
 func (s *Store) CreateTenant(_ context.Context, t string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.tenants[t] == nil {
-		s.tenants[t] = &tenant{markers: map[string]grist.Marker{}, checkpoints: map[string]grist.Position{}}
+		s.tenants[t] = &tenant{markers: map[string]store.Marker{}, checkpoints: map[string]store.Position{}}
 	}
 	return nil
 }
 
-// Tenants implements grist.Store.
+// Tenants implements store.Store.
 func (s *Store) Tenants(context.Context) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,57 +58,60 @@ func (s *Store) Tenants(context.Context) ([]string, error) {
 	return out, nil
 }
 
-// Read implements grist.Store.
-func (s *Store) Read(_ context.Context, t string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error) {
+// Read implements store.Store: the reader's own copies (store.Select's).
+func (s *Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tn := s.tenants[t]
 	if tn == nil {
-		return nil, 0, grist.ErrUnknownTenant
+		return nil, 0, store.ErrUnknownTenant
 	}
-	head := grist.Position(len(tn.log))
+	head := store.Position(len(tn.log))
 	if at == 0 || at > head {
 		at = head
 	}
-	return grist.Select(tn.log, q, at), at, nil
+	return store.Select(tn.log, q, at), at, nil
 }
 
-// Append implements grist.Store.
-func (s *Store) Append(_ context.Context, t string, b grist.Batch) (grist.Position, error) {
+// Append implements store.Store. The marker, the checkpoint and the
+// condition are checked under the store's lock.
+func (s *Store) Append(_ context.Context, t string, b store.Batch) (store.Position, error) {
 	s.mu.Lock()
 	tn := s.tenants[t]
 	if tn == nil {
 		s.mu.Unlock()
-		return 0, grist.ErrUnknownTenant
+		return 0, store.ErrUnknownTenant
 	}
 	if b.Marker != nil {
 		if _, ok := tn.markers[b.Marker.ID]; ok {
 			s.mu.Unlock()
-			return 0, &grist.ConditionFailed{Marker: b.Marker.ID}
+			return 0, &store.ConditionFailed{Marker: b.Marker.ID}
 		}
 	}
 	if c := b.Checkpoint; c != nil && tn.checkpoints[c.Processor] != c.From {
 		s.mu.Unlock()
-		return 0, &grist.CheckpointMoved{Processor: c.Processor, Expected: c.From, Found: tn.checkpoints[c.Processor]}
+		return 0, &store.CheckpointMoved{Processor: c.Processor, Expected: c.From, Found: tn.checkpoints[c.Processor]}
 	}
 	if b.Condition != nil {
-		if err := grist.CheckCondition(tn.log, *b.Condition); err != nil {
+		if err := store.CheckCondition(tn.log, *b.Condition); err != nil {
 			s.mu.Unlock()
 			return 0, err
 		}
 	}
 	for _, e := range b.Events {
-		e.Tags = append([]grist.TagPair(nil), e.Tags...)
-		tn.log = append(tn.log, grist.Stored{Event: e, Tenant: t, Pos: grist.Position(len(tn.log) + 1), Time: b.Time, Cause: b.Cause})
+		tn.log = append(tn.log, store.Stored{Event: e.Clone(), Tenant: t, Pos: store.Position(len(tn.log) + 1), Time: b.Time, Cause: b.Cause})
 	}
-	head := grist.Position(len(tn.log))
+	head := store.Position(len(tn.log))
 	if b.Marker != nil {
 		m := *b.Marker
-		m.Receipt = grist.NewReceipt(t, head, len(b.Events))
+		m.Receipt = store.NewReceipt(t, head, len(b.Events))
 		tn.markers[m.ID] = m
 	}
 	if c := b.Checkpoint; c != nil {
 		tn.checkpoints[c.Processor] = c.To
+	}
+	if b.Step != nil {
+		tn.steps = append(tn.steps, store.StepRow{Seq: int64(len(tn.steps) + 1), Head: head, Step: append([]byte(nil), b.Step...)})
 	}
 	close(s.changed)
 	s.changed = make(chan struct{})
@@ -117,50 +122,69 @@ func (s *Store) Append(_ context.Context, t string, b grist.Batch) (grist.Positi
 	return head, nil
 }
 
-// Marker implements grist.Store.
-func (s *Store) Marker(_ context.Context, t, id string) (grist.Marker, bool, error) {
+// Steps implements store.StepLog.
+func (s *Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tn := s.tenants[t]
 	if tn == nil {
-		return grist.Marker{}, false, grist.ErrUnknownTenant
+		return nil, store.ErrUnknownTenant
 	}
-	m, ok := tn.markers[id]
-	return m, ok, nil
-}
-
-// Checkpoint implements grist.Store.
-func (s *Store) Checkpoint(_ context.Context, t, processor string) (grist.Position, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tn := s.tenants[t]
-	if tn == nil {
-		return 0, grist.ErrUnknownTenant
-	}
-	return tn.checkpoints[processor], nil
-}
-
-// Heads implements grist.Store.
-func (s *Store) Heads(context.Context) (map[string]grist.Position, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := map[string]grist.Position{}
-	for t, tn := range s.tenants {
-		out[t] = grist.Position(len(tn.log))
+	out := []store.StepRow{}
+	for _, r := range tn.steps {
+		if r.Seq > after && (limit == 0 || len(out) < limit) {
+			r.Step = append([]byte(nil), r.Step...)
+			out = append(out, r)
+		}
 	}
 	return out, nil
 }
 
-// Wait implements grist.Store.
-func (s *Store) Wait(ctx context.Context, t string, p grist.Position) error {
+// Marker implements store.Store.
+func (s *Store) Marker(_ context.Context, t, id string) (store.Marker, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return store.Marker{}, false, store.ErrUnknownTenant
+	}
+	m, ok := tn.markers[id]
+	m.Receipt.Events = append([]store.EventRef{}, m.Receipt.Events...)
+	return m, ok, nil
+}
+
+// Checkpoint implements store.Store.
+func (s *Store) Checkpoint(_ context.Context, t, processor string) (store.Position, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return 0, store.ErrUnknownTenant
+	}
+	return tn.checkpoints[processor], nil
+}
+
+// Heads implements store.Store.
+func (s *Store) Heads(context.Context) (map[string]store.Position, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := map[string]store.Position{}
+	for t, tn := range s.tenants {
+		out[t] = store.Position(len(tn.log))
+	}
+	return out, nil
+}
+
+// Wait implements store.Store.
+func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 	for {
 		s.mu.Lock()
 		tn := s.tenants[t]
 		if tn == nil {
 			s.mu.Unlock()
-			return grist.ErrUnknownTenant
+			return store.ErrUnknownTenant
 		}
-		if grist.Position(len(tn.log)) > p {
+		if store.Position(len(tn.log)) > p {
 			s.mu.Unlock()
 			return nil
 		}

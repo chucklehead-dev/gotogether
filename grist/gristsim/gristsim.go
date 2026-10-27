@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -83,22 +84,26 @@ type Config struct {
 	Log func(string)
 }
 
-// Request is a client's request to the node.
-type Request struct {
+// request is a client's request to the node.
+type request struct {
 	Query bool // a query, else a command
 	Name  string
 	Env   grist.Envelope
 	Args  json.RawMessage
 }
 
-// Response is the node's answer: a command's receipt, a query's result
-// and position, a rejection's name, or an error's text.
-type Response struct {
+// response is the node's answer: a command's receipt, a query's result
+// and position, a rejection's name, an error's text, or Retry: the
+// outcome is unknown (grist.ErrOutcomeUnknown) or nothing committed
+// (grist.ErrUnavailable), and the client sends the request again under
+// its id, as for a lost answer.
+type response struct {
 	Receipt  grist.Receipt
 	Result   json.RawMessage
 	Pos      grist.Position
 	Rejected string
 	Err      string
+	Retry    bool
 }
 
 // Timeouts: a client waits CallTimeout for an answer, then retries the
@@ -142,7 +147,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	nodeCtx := func(ctx context.Context) context.Context {
 		ctx = deps(ctx)
 		if cfg.Record == AtClients {
-			ctx = grist.Quiet(ctx)
+			ctx = rec.Quiet(ctx)
 		}
 		return ctx
 	}
@@ -158,7 +163,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			p.Restart()
 		}
 	})
-	api := qenv.NewService(s, "api", node, func(ctx context.Context, req Request) (Response, error) {
+	api := qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
 		return serve(nodeCtx(ctx), app, st, req), nil
 	})
 	w := &workload{app: app, cfg: cfg, s: s, api: api}
@@ -173,7 +178,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 				tenant := cfg.Tenants[s.Choose("gristsim.tenant", len(cfg.Tenants))]
 				name := names[s.Choose("gristsim.op", len(names))]
 				args := w.gen(name)
-				w.call(ctx, Request{Query: isQuery(app, name), Name: name,
+				w.call(ctx, request{Query: isQuery(app, name), Name: name,
 					Env: grist.Envelope{ID: fmt.Sprintf("%s-c%d-%d", tenant, i, op), Tenant: tenant, Actor: fmt.Sprintf("client%d", i)}, Args: args})
 			}
 		})
@@ -192,9 +197,9 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		for _, t := range cfg.Tenants {
 			for _, q := range app.Queries() {
 				for k, args := range w.all(app.ArgsType(q)) {
-					req := Request{Query: true, Name: q, Env: grist.Envelope{ID: fmt.Sprintf("%s-probe-%s-%d", t, q, k), Tenant: t, Actor: "probe"}, Args: args}
+					req := request{Query: true, Name: q, Env: grist.Envelope{ID: fmt.Sprintf("%s-probe-%s-%d", t, q, k), Tenant: t, Actor: "probe"}, Args: args}
 					if cfg.Record == AtClients {
-						w.record(ctx, req, func() Response { return serve(deps(grist.Quiet(ctx)), app, st, req) })
+						w.record(ctx, req, func() response { return serve(deps(rec.Quiet(ctx)), app, st, req) })
 					} else {
 						serve(deps(ctx), app, st, req)
 					}
@@ -237,28 +242,32 @@ func defaults(cfg Config) Config {
 }
 
 // serve is the node's handling of a request.
-func serve(ctx context.Context, app *grist.App, st grist.Store, req Request) Response {
+func serve(ctx context.Context, app *grist.App, st grist.Store, req request) response {
 	var rej *grist.Rejected
 	if req.Query {
 		res, pos, err := app.Query(ctx, st, req.Env, req.Name, req.Args)
 		switch {
+		case errors.Is(err, grist.ErrUnavailable):
+			return response{Retry: true}
 		case errors.As(err, &rej):
-			return Response{Rejected: rej.Name, Pos: pos}
+			return response{Rejected: rej.Name, Pos: pos}
 		case err != nil:
-			return Response{Err: err.Error(), Pos: pos}
+			return response{Err: err.Error(), Pos: pos}
 		}
-		return Response{Result: res, Pos: pos}
+		return response{Result: res, Pos: pos}
 	}
-	rec, err := app.Execute(ctx, st, req.Env, req.Name, req.Args)
+	rc, err := app.Execute(ctx, st, req.Env, req.Name, req.Args)
 	switch {
 	case errors.As(err, &rej):
-		return Response{Rejected: rej.Name}
+		return response{Rejected: rej.Name}
 	case errors.Is(err, grist.ErrConflict):
-		return Response{Rejected: "conflict"}
+		return response{Rejected: "conflict"}
+	case errors.Is(err, grist.ErrOutcomeUnknown), errors.Is(err, grist.ErrUnavailable):
+		return response{Retry: true}
 	case err != nil:
-		return Response{Err: err.Error()}
+		return response{Err: err.Error()}
 	}
-	return Response{Receipt: rec}
+	return response{Receipt: rc}
 }
 
 // A workload is the clients' generator and caller.
@@ -266,7 +275,7 @@ type workload struct {
 	app *grist.App
 	cfg Config
 	s   *qenv.Sim
-	api *qenv.Service[Request, Response]
+	api *qenv.Service[request, response]
 }
 
 // gen draws name's arguments through the run's Chooser.
@@ -342,26 +351,27 @@ func (w *workload) all(typ reflect.Type) []json.RawMessage {
 }
 
 // call sends req until it is answered (at most MaxAttempts tries, the
-// same id each time), recording it under AtClients.
-func (w *workload) call(ctx context.Context, req Request) {
-	send := func() (Response, bool) {
+// same id each time: a lost or late answer, or one saying the outcome is
+// unknown, is sent again), recording it under AtClients.
+func (w *workload) call(ctx context.Context, req request) {
+	send := func() (response, bool) {
 		for try := 1; try <= MaxAttempts; try++ {
 			resp, err := w.api.Call(ctx, req, CallTimeout)
-			if err == nil {
+			if err == nil && !resp.Retry {
 				return resp, true
 			}
 			qenv.Sleep(ctx, RetryDelay)
 		}
-		return Response{}, false
+		return response{}, false
 	}
 	if w.cfg.Record != AtClients {
 		send()
 		return
 	}
-	w.record(ctx, req, func() Response {
+	w.record(ctx, req, func() response {
 		resp, ok := send()
 		if !ok {
-			return Response{Err: "unanswered"}
+			return response{Err: "unanswered"}
 		}
 		return resp
 	})
@@ -369,23 +379,23 @@ func (w *workload) call(ctx context.Context, req Request) {
 
 // record records req as a client's call: invoked before, done with the
 // answer do gives (pending if none came).
-func (w *workload) record(ctx context.Context, req Request, do func() Response) {
+func (w *workload) record(ctx context.Context, req request, do func() response) {
 	q, _ := grist.QuintName(req.Name)
-	kv := append([]any{"actor", req.Env.Tenant, "process", w.app.Name}, grist.StepFields(w.app.ArgsType(req.Name), req.Args, "")...)
+	kv := append([]any{"actor", req.Env.Tenant, "process", w.app.Name}, rec.StepFields(w.app.ArgsType(req.Name), req.Args, "")...)
 	if !req.Query {
 		kv = append(kv, "id", req.Env.ID)
 	}
 	call := qobs.Invoke(ctx, q, kv...)
 	resp := do()
 	switch {
-	case resp.Err == "unanswered":
+	case resp.Err == "unanswered", resp.Retry:
 		return // pending: the caller never learned the outcome
 	case resp.Err != "":
 		call.Done(errors.New(resp.Err))
 	case resp.Rejected != "":
 		call.Done(nil, "outcome", resp.Rejected)
 	case req.Query:
-		call.Done(nil, grist.StepFields(w.app.ResultType(req.Name), resp.Result, "obs.")...)
+		call.Done(nil, rec.StepFields(w.app.ResultType(req.Name), resp.Result, "obs.")...)
 	default:
 		call.Done(nil)
 	}

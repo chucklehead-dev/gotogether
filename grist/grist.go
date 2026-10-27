@@ -16,10 +16,11 @@
 //
 // Slice 1 (docs/grist.md §8.1): one event version, plain and keyed read
 // models folded from the log on every read, pinned Reads, commands with
-// read-set conditions and idempotency, queries, processors with Emit,
-// Skip and Effect(AtLeastOnce), one node. The stores are
-// grist/memstore (unit tests) and grist/simstore (qenv.Store);
-// grist/gristsim runs an application in a simulation.
+// read-set conditions and idempotency (a key's first answer is final,
+// refusals included), queries, processors with Emit, Skip and
+// Effect(AtLeastOnce), one node. The store contract is grist/store; the
+// stores are grist/memstore (unit tests) and grist/simstore
+// (qenv.Store); grist/gristsim runs an application in a simulation.
 package grist
 
 import (
@@ -40,6 +41,7 @@ type App struct {
 	events     map[string]*eventInfo
 	names      map[string]string // block name -> what it is, for uniqueness
 	quintNames map[string]string // Quint identifier -> block name
+	eventOrder []string          // event names in registration order, for the Catalog
 	commands   map[string]*commandInfo
 	queries    map[string]*queryInfo
 	processors []*processorInfo
@@ -175,3 +177,6 @@ func sortedKeys[V any](m map[string]V) []string {
 	sort.Strings(out)
 	return out
 }
+
+// eventNames are the App's event types, sorted, for an error's fix.
+func (a *App) eventNames() []string { return sortedKeys(a.events) }

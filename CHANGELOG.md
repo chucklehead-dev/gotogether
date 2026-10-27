@@ -16,6 +16,31 @@ The first release. What a user meets, by module:
   the stores `memstore` and `simstore` with the contract suite
   `storetest`, and `gristsim.Run` for a `qtest.System`;
   examples/counters is its first application.
+- grist, after slice 1's review (docs/grist.md §0.2; api/grist.txt): a
+  key's first answer is final (a rejection commits its marker,
+  `store.Marker.Outcome`, and a conflict too; a late duplicate gets the
+  same refusal), the marker's hash covers the command's name and
+  version; reads are checked against the App (an unregistered type, a
+  tag key the type lacks, another App's event are the decision's error;
+  `NewKeyedReadModel` refuses a key that is no tag; `Exists` takes an
+  `EventName`, which only an `*EventType` is); `ErrOutcomeUnknown` and
+  `ErrUnavailable` when the transient budget runs out (the marker read
+  once more first); the zero `Result` and `Option` are invalid, an
+  `Effect`'s delivery checked. The store contract moves to package
+  `grist/store` (`Store`, `Batch`, `Condition`, `Marker`, `Selector`, was
+  `grist.Query`, the errors, `CheckCondition`, `Select`, `NewReceipt`),
+  with `store.StepLog` (a commit's step written in its transaction,
+  `Batch.Step`) kept by memstore and simstore; grist keeps aliases of the
+  types an application meets. `Reads.Events` is `Reads.Select`, beside
+  the typed `grist.Events[E]`. The tries and the batch size are options
+  (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`, was
+  constants) of one `grist.Option`; `App.Catalog()` is new; `PosKey`,
+  `ParsePosKey`, `StepFields`, `Quiet` and gristsim's `Request` and
+  `Response` are internal; `storetest.Checks` is a function, and the
+  suite checks concurrent appends, `Wait` and copies. Steps record each
+  event's cause (`obs.causes`) and an effect checkpoint's `ok`; grist.qnt
+  has `covers`, `freshKey` (was `freshCause`), `keyStable`,
+  `atLeastOnceDone` and `readsOf`, its `Read` is `{ typ, tags }`.
 - API trim before the tags (G6). `validate.Command`, `Judged` and
   `Replay` move to package `validate/cli` as `cli.Check`, `cli.Judged`,
   `cli.Replay`: the check reads OTLP/JSON, and in validate it brought

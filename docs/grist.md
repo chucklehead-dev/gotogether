@@ -1,7 +1,8 @@
 # grist: an event-sourced application framework checked by its model
 
 Status: slice 1 built (grist/, examples/counters; §0.1 says what
-building it changed here); slices 2 and 3 are design. Decisions taken 2026-10-27 (a module
+building it changed here, §0.2 what its review changed); slices 2 and 3
+are design. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
 alongside); revised the same day after a review, every point of which
@@ -71,9 +72,10 @@ version of this note:
   (`qtest.Optional` included), nothing more: stubs fail under it only if
   reported through `qtest.Optional` (§3.2).
 
-Decided differently from the review: rejections are not remembered
-under their idempotency key (§2.4); `leakTenant` is dropped, tenant
-isolation being a contract-suite test with a mutant store (§3.3).
+Decided differently from the review: `leakTenant` is dropped, tenant
+isolation being a contract-suite test with a mutant store (§3.3). (The
+first version also decided that rejections are not remembered under
+their idempotency key; slice 1's review showed that wrong, §0.2.)
 
 ## 0.1 What building slice 1 changed
 
@@ -85,14 +87,15 @@ or incomplete in these places; each is fixed where it stands below.
   whose retry starts again at the marker and decides again on fresh
   reads: that closes most of the blind create's window (2 of 40 runs
   race). At ReadCommitted the loser waits for the head's lock and
-  commits blind (25 of 40). The blind create is still caught at every
-  level, at its rate (§8.1).
+  commits blind (25 of 40). After slice 1's review the window is closed
+  under Serializable (0 of 120 runs) and claim 1 is ReadCommitted's
+  alone (30 of 40, §8.1).
 - **The read set's step fields are `readPos` and `reads`**, not
   `read.pos` and `read.queries`: a model parameter is a Quint identifier,
   and a binding gives templates only where a parameter is not the
-  same-named step field. The recorded read set is the *condition* the
-  append committed under: an `Unconditioned` command records `[]`, and
-  the model's precondition judges it.
+  same-named step field. (The recorded read set was the *condition*,
+  `[]` for an `Unconditioned` command; since slice 1's review it is what
+  the decision read, whatever the condition, §0.2.)
 - **The effect step is `<processor>Effect`** (`welcomeEffect`), not
   `<processor>.effect`: a step's action is its model action's name. Its
   arguments are `trigger`, `key` and `ok`. The fault kind keeps the dots
@@ -120,9 +123,9 @@ or incomplete in these places; each is fixed where it stands below.
   carries `Marker`, `Checkpoint` (a compare-and-set), `Condition`, `Time`,
   `Cause` and the commit hook. A failed checkpoint is a
   `*CheckpointMoved`; a marker that exists a `*ConditionFailed` naming it.
-  The types live in package grist; there is no `store/` package yet, and
-  the node (pollers, the effect inline in its poller) is `App.Start`, not
-  a `runtime/` package.
+  The node (pollers, the effect inline in its poller) is `App.Start`, not
+  a `runtime/` package. (The types lived in package grist; slice 1's
+  review moved them to `grist/store`, §0.2.)
 - **A command's result is a `grist.Receipt`** (`Result` is a processor
   handler's).
 - **Keyed read models take one key in slice 1**, and a query one tag: the
@@ -139,6 +142,109 @@ or incomplete in these places; each is fixed where it stands below.
   late; its configuration has `Send` (which commands and queries the
   workload sends) and `Setup` (the application's doubles, attached to the
   node's contexts).
+
+## 0.2 What the review of slice 1 changed
+
+A review of slice 1 probed it (a reviewer's tests against grist and the
+example) and found these; each is fixed, with a test that fails without
+the fix, and stated where it stands below.
+
+- **A key's first answer is final, a refusal's too.** A rejection wrote
+  no marker, so a late or duplicated request decided again and could
+  commit after its client was told 422 (4 of 40 runs at the clients with
+  the API delaying and duplicating 30% of requests). A refusal now
+  commits its marker alone (`Marker.Outcome`, the rejection's name),
+  conditioned on its reads like a commit; a conflict commits a
+  `conflict` marker, unconditioned. The marker is checked under the head
+  lock (the store's), so a refused key cannot commit later; the cost is
+  that every refusal takes the tenant's lock (§2.4). The model's
+  `freshCause(log, id)` (no event of the id) is `freshKey(answered, id)`
+  over a ghost set of answered ids, which a committed refusal joins.
+- **The marker's hash is the command's**: its name, version and
+  canonical arguments. It was the arguments' only, so another command
+  under the same id with JSON-equal arguments got the first's receipt.
+- **Reads are checked against the App.** A tag key no type has (the Go
+  field's name where the JSON name is the key), a keyed read model keyed
+  by a field that is no tag, a misspelled type or another App's event
+  matched nothing and conditioned nothing: grain's race with no
+  `Unconditioned` in sight. Every read is now the decision's error when
+  its type is not the App's or a tag key not the type's;
+  `NewKeyedReadModel` refuses a key that is no tag of every handler's
+  type (Verify); `Exists` takes an `EventName` whose method is
+  unexported, so a read model or a command does not pass for one.
+- **Under at least once, the committed run decides the outcome.** An ok
+  send, a crash before the checkpoint, then three failed sends on the
+  restarted node checkpoint `grist.failed`; the model insisted on
+  `notified` (any ok effect wins) and rejected the faithful app. The
+  effect's checkpoint step records `ok` (which outcome it commits), and
+  grist.qnt's `atLeastOnceDone` admits notified after an ok effect step
+  and `grist.failed` after `EFFECT_TRIES` failed ones, whichever the run
+  committed: a library def every at-least-once application uses.
+- **An unknown outcome at the end of the transient budget** returned an
+  error though the command had committed. The marker is read once more
+  before giving up, and a command that gives up after an append whose
+  outcome is unknown returns `ErrOutcomeUnknown` (retry with the same
+  id), one that never appended `ErrUnavailable`; gristsim's clients
+  retry both under the same id, as for a lost answer.
+- **The model checks the read set, not only the condition.** With
+  `readPos` and `reads` the runtime's own report, `conditionHolds` was
+  circular: a runtime that dropped a read from the read set dropped it
+  from the condition too, and the model agreed. grist.qnt's `covers`
+  states what a decision's rule needs (create-counter: whether a counter
+  has the name), and the model requires it of the recorded read set at
+  every committed step, so losing coverage is caught at every commit.
+  The read set is recorded whatever the condition (an `Unconditioned`
+  command records what it read), so the blind mutant is caught by the
+  race, as claim 1 says, not by its missing condition. `conditionHolds`
+  also requires `0 ≤ readPos ≤ head`; a conflict requires the condition
+  *not* to have held.
+- **The claims test the mechanism.** Claim 1 gains its contrast (the
+  faithful app at claim 1's configuration: `None(Rejects("createCounter"))`,
+  which fails in 13 of 20 runs with the runtime's condition taken out);
+  a claim of duplicated and late requests (the API duplicating and
+  delaying three in ten) catches the marker taken out; claim 2 runs one
+  tenant and two letters, and drops Snapshot, whose runs are
+  Serializable's byte for byte (every append writes the head).
+- **The bindings compare more**: every event's cause (`obs.causes`, a
+  (kind, name) pair, in `batchIs`), the effect's key (`keyStable`: the
+  same key on every effect step of a trigger, no other trigger's), and
+  a refusal's head and empty batch (it commits now).
+- **A commit's step is written in its transaction.** `Batch.OnCommit`
+  running even when the outcome is unknown is qenv's property, not
+  database/sql's: a node that dies between COMMIT and the hook loses the
+  step. `Batch.Step` carries the step (its fields but those the head
+  gives), which a `store.StepLog` writes in the batch's transaction;
+  memstore and simstore keep one, storetest checks it, and slice 2's
+  sqlstore records from its rows (§2.10, §3.8).
+- **Zero values are invalid**: the zero `Result`, an `Effect` without a
+  function or of a delivery slice 1 lacks, the zero `Option`; each is
+  the handler's error (`grist.failed`) or a Verify problem.
+- **grist.qnt is checked in grist's own tests**: typechecked, its defs
+  run on small values (`quint test`), and a small machine over them run
+  (`quint run`), grist/model/model_test.go.
+- **storetest checks concurrency**: tasks appending at once with
+  conditions, checkpoint compare-and-sets and markers, the committed log
+  replayed through `CheckCondition` (a mutant store checking conditions
+  outside its lock fails it); `Wait` woken by an append (a mutant whose
+  `Wait` returns at once fails it); and no slice shared with a reader or
+  a writer (a fold mutating its events in place corrupts nothing).
+- **API, before slice 2**: the store's contract is package `grist/store`
+  (`Store`, `Batch`, `Condition`, `Marker`, `Selector`, the errors,
+  `CheckCondition`, `Select`, `NewReceipt`), with later methods as
+  optional interfaces (`StepLog`); grist keeps aliases of the types an
+  application meets (`grist.Event`, `grist.Stored`, `grist.Position`,
+  ...). The raw filter `grist.Query` is `Selector`, read with
+  `Reads.Select`, beside the typed `grist.Events[E](r, t, tags...)`.
+  `PosKey`, `StepFields` and `Quiet` are internal, as are gristsim's
+  request and response. The tries and the batch size are options
+  (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`) of
+  one `grist.Option` type for every block (queries take `Authorize`
+  later), defaults 5, 10, 3 and 100. `storetest.Checks` is a function.
+  `App.Catalog()` is the registry as data, for slice 2's generator. The
+  slice-2 read-set encoding is chosen: grist.qnt's `Read` is `{ typ,
+  tags: Set[(str, str)] }`, which slice 1's binding builds from the
+  recorded triples (`readsOf`) and slice 2's typed template function
+  will record directly.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -263,8 +369,18 @@ The reads are:
 - `r.Exists(Event, tags...)`: whether an event of that type with those
   tags exists through P, a query that folds nothing (the uniqueness
   check);
-- `r.Events(q)`: a raw query, `grist.Query{Types, Tags, Reverse,
+- `grist.Events(r, Event, tags...)`: the events of one type and those
+  tags, decoded;
+- `r.Select(q)`: a raw selection, `grist.Selector{Types, Tags, Reverse,
   Limit}` (newest first with a limit is the "latest of" read grain has).
+
+**Every read is checked against the App** (§0.2): a type it does not
+register, or a tag key the type has no tag of (the Go field's name where
+the JSON name is the key, a field not marked `grist:"tag"`), would match
+nothing and condition nothing, so it is the decision's error, naming the
+fix, never an empty answer; `Exists` and `Events` refuse another App's
+event type, and `NewKeyedReadModel` a key that is no tag of every
+handler's type.
 
 The **condition** of the decision's append is DCB's form, one position
 and the union of the queries: it commits only if no event matching any
@@ -298,7 +414,8 @@ var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Authori
 
 **The append is conditioned on the read set** (§2.3). When the
 condition fails, the runtime reads again at the new head and decides
-again (5 tries by default, then `grist.ErrConflict`, a 409 at the API).
+again (5 tries by default, `grist.ConditionTries(n)`; then
+`grist.ErrConflict`, a 409 at the API, committed as the key's answer).
 This is the dynamic consistency boundary of the "kill the aggregate"
 pattern, and it is the default because it is derived, not declared: a
 decision that reads names is conditioned on names whether or not its
@@ -325,8 +442,8 @@ tenant's lock (the simstore's ErrConflict under Snapshot or
 Serializable; SQLSTATE 40001 and 40P01 on PostgreSQL; SQLITE_BUSY after
 `busy_timeout`) and a commit of unknown outcome are retried from the
 idempotency check (below), with backoff in virtual time, on a budget of
-their own (10 by default), and never count as one of the 5 condition
-tries. Only `*grist.ConditionFailed` (an event matching the read set
+their own (10 by default, `grist.TransientTries(n)`), and never count as
+one of the condition tries. Only `*grist.ConditionFailed` (an event matching the read set
 after P) means "decide again".
 
 **Rejections and errors.** A decision returns either events or an
@@ -336,27 +453,41 @@ other error is a fault of the code (a 500), recorded with its text.
 
 **Idempotency.** Every command carries an envelope (`grist.Envelope`:
 command id, tenant, actor, time), the id chosen by the caller (the API
-requires it as `Idempotency-Key`). Each committed batch writes a marker
-keyed by the command id, holding the hash of the command's canonical
-JSON and the command's result. Every try, the first and each retry,
-begins by reading the marker (a keyed read, so the marker is in the read
-set and the append's condition covers "no marker with this id"):
+requires it as `Idempotency-Key`). **A key's first answer is final**
+(§0.2): every committed outcome writes a marker keyed by the command
+id, holding the hash of the command (its name, version and canonical
+JSON arguments) and its answer: a commit's receipt, or a refusal's name
+(`Marker.Outcome`: a rejection, committed with the marker alone and
+conditioned on its reads as a commit is; `conflict`, committed
+unconditioned once the condition failed every try). The store checks
+that the marker is new under the tenant's lock, so a key never has two
+outcomes. Every try, the first and each retry, begins by reading the
+marker:
 
-- a marker with the same hash: the first attempt committed (a lost
-  response, the case payd's dedupe is for); its result is returned and
-  nothing is appended or recorded;
+- a marker with the same hash: the first attempt was answered (a lost
+  response, a late duplicate of the request, the case payd's dedupe is
+  for); its answer is returned, the receipt or the refusal, and nothing
+  is appended or recorded;
 - a marker with another hash: a 422 `idempotency-key-reused`, recorded
-  as a rejection;
+  as a refusal that commits nothing (the key's own answer stands);
 - no marker: decide.
+
+When the transient budget runs out the marker is read once more: a
+commit whose answer was lost answers there. Otherwise a command whose
+append may have committed returns `grist.ErrOutcomeUnknown` (retry with
+the same id), one that never appended `grist.ErrUnavailable`. An error
+of the decision itself (the code's fault) is recorded with its text and
+not remembered.
 
 **A command's result** (a `grist.Receipt`) is what its marker holds: the batch's last
 position and an `EventRef{Tenant, Pos}` per event (§10.3), never a value
 the decision computes, so the marker needs nothing of the application
 and a retry's answer is the first attempt's exactly. **Rejections are
-not remembered**: a refusal commits nothing (remembering it would turn
-every refusal into a contended append on the tenant's lock), so a retry
-of a refused command decides again on fresh reads, and may succeed if
-the state changed. A key names at most one committed outcome. Event ids a
+remembered** (the first version of this note decided otherwise, to keep
+refusals off the tenant's lock; slice 1's review found a refused
+command committing after its client was told no, §0.2): a refusal takes
+the tenant's lock as a commit does, the price of a final answer. A key
+names at most one outcome. Event ids a
 decision needs (a new counter's id when the caller gives none) come
 from `r.ID(n)`: a UUIDv5 of the command id and n, so a decision stays a
 function of its inputs and its retries mint the same ids.
@@ -406,9 +537,15 @@ tenant, T), so a crash and a retry dispatch once. `grist.Skip()`
 checkpoints and does nothing.
 
 **Errors.** A handler's or an effect's error is retried with backoff (3
-tries by default, in virtual time in a simulation), then checkpointed
-with a `grist.failed` event naming the trigger, so a poison event stops
-nothing and is visible (grain checkpoints a failed effect silently and
+tries by default, `grist.EffectTries(n)`, in virtual time in a
+simulation), then checkpointed with a `grist.failed` event naming the
+trigger, so a poison event stops nothing and is visible. A result grist
+cannot carry out is such an error too: the zero `Result`, an `Effect`
+without a function or of a delivery slice 1 lacks. Under at least once
+the committed run decides the outcome: a run that had an ok effect, then
+crashed before its checkpoint and failed every try on the restarted
+node, checkpoints `grist.failed`; the checkpoint's step records `ok`
+(which outcome it commits), and the model admits either (§3.3) (grain checkpoints a failed effect silently and
 never retries). `grist.OnError(grist.RetryForever)` is grain's
 `retry-on-error?`: the processor stops at the event and retries it until
 it succeeds, its lag growing (§9's metrics show it). Transient store
@@ -485,26 +622,43 @@ becomes `createCounter`; `to` is reserved).
 
 grist owns its store interface; it does not reuse hallgren/eventsourcing's
 `core.EventStore`, which appends by aggregate and version. grist has no
-aggregates: its condition is a set of queries through a position, its
-order one sequence per tenant, and a batch carries a marker and a
-checkpoint. The interface:
+aggregates: its condition is a set of selectors through a position, its
+order one sequence per tenant, and a batch carries a marker, a
+checkpoint and its step. The contract is package `grist/store` (it
+imports nothing of grist, so a tier depends on it alone); its interface,
+as built (slice 1):
 
 ```go
-// proposed
+// as built: package grist/store (abridged; Name, Marker and Checkpoint too)
 type Store interface {
 	CreateTenant(ctx context.Context, tenant string) error // its head, at 0
 	Tenants(ctx context.Context) ([]string, error)
 	// Read: events matching q through at (0: the head, returned), in position
-	// order or newest first (q.Reverse), at most q.Limit.
-	Read(ctx context.Context, tenant string, q grist.Query, at grist.Position) ([]grist.Stored, grist.Position, error)
-	// Append commits the batch at the next positions if its condition holds and
-	// its checkpoint is as expected, with its marker; *grist.ConditionFailed
-	// names the query and event that broke it, anything else is transient.
-	Append(ctx context.Context, tenant string, b grist.Batch) (grist.Position, error)
-	Heads(ctx context.Context) (map[string]grist.Position, error) // every tenant's: a change feed's poll
-	Wait(ctx context.Context, tenant string, p grist.Position) error
+	// order or newest first (q.Reverse), at most q.Limit; the reader's copies.
+	Read(ctx context.Context, tenant string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+	// Append commits the batch at the next positions if its condition holds,
+	// its marker is new and its checkpoint as expected; *store.ConditionFailed
+	// names the selector and event that broke it (or the marker), anything
+	// else is transient.
+	Append(ctx context.Context, tenant string, b store.Batch) (store.Position, error)
+	Heads(ctx context.Context) (map[string]store.Position, error) // every tenant's: a change feed's poll
+	Wait(ctx context.Context, tenant string, p store.Position) error
 }
 ```
+
+Methods added later are optional interfaces, found by a type assertion,
+so a store written against this one keeps compiling. The first is
+`store.StepLog`: **a commit's step is written in its own transaction**
+(`Batch.Step`, the step's fields but those the head gives) and read back
+with `Steps(ctx, tenant, after, limit)`. Slice 1 records a commit's step
+from `Batch.OnCommit`, which memstore and simstore run at the commit,
+before `Append` returns, even when the caller is then told the outcome is
+unknown (qenv's `Txn.OnCommit` runs its hooks before `ErrUnknownOutcome`
+is returned). That is the simulation's property, not database/sql's: a
+node that dies between COMMIT and the hook loses the step. Slice 2's
+sqlstore writes the row (`grist_steps(tenant, seq, head, step)`) and its
+node records steps from the rows, each once by its seq, so a committed
+step survives the node.
 
 Positions are int64, dense and assigned under the tenant's lock, so
 within a tenant the position order is the commit order. This is the
@@ -518,10 +672,16 @@ One contract suite (`grist/storetest`) runs against every tier, and
 holds what the model takes for granted (§3.3): dense positions,
 conditions honoured (checked against a brute-force filter over every
 event, on small random histories), checkpoints' compare-and-set,
-markers, reverse and limit, and **tenant isolation**: a read of t1 never
-returns t2's events, an append to t1 never moves t2's head. A mutant
-store that ignores the tenant in `Read` fails the suite, so the test is
-shown to see it.
+markers (a commit's receipt, a refusal's outcome, a key that cannot
+commit twice), reverse and limit, concurrent appends (tasks appending at
+once with conditions, compare-and-sets and markers, the committed log
+replayed through `store.CheckCondition`), `Wait` woken by an append,
+no slice shared with a reader or a writer, the step log, and **tenant
+isolation**: a read of t1 never returns t2's events, an append to t1
+never moves t2's head. Mutant stores show each check sees what it is
+for: one that ignores the tenant in `Read` fails tenant isolation, one
+that checks conditions outside its lock fails the concurrent check, one
+whose `Wait` returns at once fails the wake-up check.
 
 - **memstore**: maps and a mutex, for unit tests of a fold or a
   decision. Not for simulations (a real mutex).
@@ -529,10 +689,11 @@ shown to see it.
   `t/<tenant>/e/<position, 20 digits>`, index keys
   `t/<tenant>/i/<type>/<position>` and
   `t/<tenant>/g/<type>/<key>=<value>/<position>`, markers
-  `t/<tenant>/m/<command id>`, checkpoints `t/<tenant>/c/<processor>`.
+  `t/<tenant>/m/<command id>`, checkpoints `t/<tenant>/c/<processor>`,
+  step rows `t/<tenant>/s/<seq>`.
   An append takes the head with `GetForUpdate` (the tenant's lock),
-  checks the condition with `Scan` over each query's index prefix,
-  writes, and commits; the step is recorded in `Txn.OnCommit`, whose
+  checks the marker, the checkpoint and the condition (`Scan` over each
+  selector's index prefix), writes, and commits; the step is recorded in `Txn.OnCommit`, whose
   hooks run before `ErrUnknownOutcome` is returned, so a commit whose
   answer is lost is recorded. The head lock serializes a tenant's
   appends; under Snapshot and Serializable the loser of a race gets
@@ -547,8 +708,9 @@ shown to see it.
   application's (pgx's stdlib, modernc.org/sqlite: no cgo). Tables
   `grist_heads(tenant, head)`, `grist_events(tenant, pos, type, version,
   at, meta, body)`, `grist_index(tenant, k, pos)` (k a type or a
-  type/tag=value), `grist_markers(tenant, id, hash, result)`,
-  `grist_checkpoints(tenant, processor, pos)`. An append's **first
+  type/tag=value), `grist_markers(tenant, id, hash, outcome, result)`,
+  `grist_checkpoints(tenant, processor, pos)`, `grist_steps(tenant, seq,
+  head, step)`. An append's **first
   statement** is `UPDATE grist_heads SET head = head + $1 WHERE tenant =
   $2 RETURNING head`: it takes the row's lock and reads the new head in
   one round trip (no advisory locks, which are invisible to the
@@ -610,9 +772,14 @@ its own instance of the model from init.
 `quint.order.pos` (`"order.pos"` in `qobs.Record`'s pairs):
 
 - a step that commits a batch ending at position P: **2·P**;
-- a step that reads through P and commits nothing (a query, a
-  rejection): **2·P+1**, after the commit of P and before the commit of
-  P+1, concurrent only with other reads through P, which commute;
+- a step that reads through P and commits nothing (a query, a reused
+  key, a decision's error): **2·P+1**, after the commit of P and before
+  the commit of P+1, concurrent only with other reads through P, which
+  commute;
+- a command's refusal (a rejection, a conflict), which commits its
+  marker alone: **2·H+1**, H the head at its commit (at or after the P
+  it read through: its condition held between, or, for a conflict, did
+  not);
 - a processor step that commits only its checkpoint (`Skip`, an
   effect's checkpoint, a `failed` with no event): **2·H+1**, H the head
   its own transaction read, not its trigger T: a poller that emitted at
@@ -634,15 +801,16 @@ one order without trusting a clock.
 
 | step action | recorded | arguments | observations |
 | --- | --- | --- | --- |
-| the command's name | in the append's commit hook (`Txn.OnCommit`, qsql's, the sqlstore's post-commit) | the command's fields, command id, the read set it committed under (`readPos`, `reads`) | the events appended, the head; the result |
-| the command's name, with outcome | on return, when refused | as above | the rejection's name, or `conflict` after the tries |
+| the command's name | in the append's commit hook (`Txn.OnCommit`, qsql's; the sqlstore's from its step row, §2.10) | the command's fields, command id, the read set it read (`readPos`, `reads`: the condition too, unless `Unconditioned`) | the events appended (types, fields, causes), the head; the result |
+| the command's name, with outcome | at the commit of its marker, when refused | as above | the rejection's name, or `conflict` after the tries; the head, no events |
+| the command's name, with outcome | on return, for a reused key or the code's error | as above | `idempotency-key-reused`, or the error's text |
 | the query's name | on return | the query's fields | the result; the position read through |
-| `<processor>` | at its commit | the trigger's position and type | the events appended, the checkpoint |
+| `<processor>` | at its commit | the trigger's position; an effect's checkpoint, `ok` (which outcome it commits) | the events appended (types, fields, causes), the checkpoint |
 | `<processor>Effect` | grist's wrapper, after f returns, before the checkpoint | the trigger, the effect key | f's outcome (`ok`) |
 | `<periodic>` | at its commit (slice 3) | slot | the events appended |
 
-A rejection is recorded on return because nothing committed; a commit
-at the commit, because the caller may never be told (an 08006, a crash
+A refusal and a commit are recorded at their commit, because the caller
+may never be told (an 08006, a crash
 between commit and response), and the model must see it. A retried
 command that finds its marker records nothing: its effect was recorded
 once. **A raw append** (application code calling the store, which
@@ -653,9 +821,19 @@ caught by the next step of its tenant, not where it happened.
 
 **The read set is a step argument**: `readPos` (P) and `reads`
 (a list of (type, tag key, tag value) triples; key "" for a type-only
-query), so grist.qnt's conditional-append property (§3.3) is checked
+read), so grist.qnt's conditional-append property (§3.3) is checked
 against what the decision read, not assumed. Without them the property
-would hold vacuously.
+would hold vacuously; and since they are the runtime's own report, the
+model also states which reads a decision's rule needs (`covers`, §3.3),
+so a runtime that drops a read from the set (and so from the condition)
+is caught at every commit. The read set is recorded whatever the
+condition: an `Unconditioned` command's step records what it read, and
+its model leaves `conditionHolds` out. **The encoding is slice 2's
+already** on the model's side: grist.qnt's `Read` is `{ typ: str, tags:
+Set[(str, str)] }` (a read of several tags is one record); slice 1's
+binding builds it from the triples (`readsOf({{toList .reads}})`), and
+slice 2's typed template function records the records directly, the
+model unchanged.
 
 **Client steps.** gristsim's workload (§3.6) can instead record each
 command and query where the client sees it: `qobs.Invoke` before the
@@ -733,9 +911,19 @@ promises, in the per-tenant state above:
 
 - **Positions**: dense, increasing, commit order (a commit's recorded
   head is `log.length()` after it).
-- **Conditional append**: `conditionHolds(log, readPos, reads)`, no
-  event after `readPos` matching a recorded query; part of every
-  conditioned commit's precondition, with the read set from the step.
+- **Conditional append**: `conditionHolds(log, readPos, reads)`, `0 ≤
+  readPos ≤ head` and no event after `readPos` matching a recorded read;
+  part of every conditioned commit's precondition (a refusal's
+  included), with the read set from the step. A conflict requires it
+  false.
+- **Coverage**: `covers(reads, need)`, some read selecting every event
+  `need` selects; an application's action requires it of what its rule
+  reads (`nameRead(name)` for create-counter), so the read set is
+  checked, not only the condition it implies.
+- **Keys**: `freshKey(answered, id)`, a key names at most one outcome:
+  every committed step of a command (a commit, a rejection, a conflict)
+  requires its id unanswered and adds it to the model's `answered`; a
+  reused key requires it answered.
 - **Processor reads**: a handler's action evaluates its reads on
   `log.slice(0, trigger)`, so the model states the trigger-position
   rule rather than assuming it; `Dispatch` evaluates the command's
@@ -744,8 +932,12 @@ promises, in the per-tenant state above:
   and never passes an event it has not handled: exactly one handling
   step per subscribed event (`Emit`, `Dispatch`, `Skip`, `failed`).
 - **Effects**: `AtLeastOnce` admits one or more effect steps per trigger,
-  its checkpoint step only after one, and **eventually** (after a settle) each trigger has an ok effect step
-  or a `grist.failed`; `AtMostOnce` admits zero or one, and **an outcome
+  every one under the trigger's key (`keyStable`), its checkpoint step
+  only after them, committing what its run reached (`atLeastOnceDone`:
+  the success event after an ok effect step, `grist.failed` after
+  `EFFECT_TRIES` failed ones; a run with both admits either, the
+  checkpoint's `ok` saying which), and **eventually** (after a settle)
+  each trigger has an ok effect step or a `grist.failed`; `AtMostOnce` admits zero or one, and **an outcome
   event, if present, agrees with the one effect step** (it may be absent:
   a crash between checkpoint and effect loses it, by right). An
   application whose effect must not repeat states it with an invariant
@@ -760,9 +952,11 @@ It is held by the store contract suite (§2.10), with a mutant store
 shown to fail it, and by every read and append taking its tenant from
 the envelope, never from a handler's argument.
 
-This module is checked once, in grist's own tests, against grist's own
-runtime, so an application's failure is its own or its model's, not the
-framework's.
+This module is checked in grist's own tests (grist/model/model_test.go:
+it typechecks, its defs hold on small values under `quint test`, and a
+small machine over them keeps its invariants under `quint run`) and
+against grist's own runtime (examples/counters' explorations), so an
+application's failure is its own or its model's, not the framework's.
 
 ### 3.4 Leases, in plain Quint (slice 3)
 
@@ -854,8 +1048,11 @@ qmeta to an effect retrying against a slow dependency.
 
 `grist.Main(app)` serves the application on sqlstore and writes its
 steps with `qobs.FileSink(path, qobs.PerStep)`, validated with the same
-binding. Commits are recorded at the commit and ordered by the domain
-clock across nodes, so a killed node loses no committed step; an effect
+binding. Commits are recorded from the store's step rows (a
+`store.StepLog`, written in each commit's transaction, §2.10), not from
+a post-commit hook, and ordered by the domain clock across nodes, so a
+node killed between its COMMIT and its record loses no committed step;
+an effect
 step lost between f and its record is one the model allows to be unseen.
 `qnemesis.FromScript` replays a simulation's fault script against it.
 
@@ -941,8 +1138,11 @@ file. `gotogether-start`'s table gets a row.
 
 ```text
 grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mod; published like qhegel)
-  grist.go             App, events, read models, commands, queries, processors, periodic, Reads, Result
-                       slice 1: also Store, Query, Batch, Position, EventRef, and the node (App.Start: pollers)
+  grist.go             App, events, read models, commands, queries, processors, periodic, Reads, Result, Option,
+                       Catalog; slice 1: also the node (App.Start: pollers), aliases of store's types
+  store/               the store contract: Store, Batch, Condition, Marker, Selector, StepLog, the errors,
+                       CheckCondition and Select (the reference evaluations); imports nothing of grist
+  internal/            the step fields and the quiet context (rec), position keys (poskey)
   runtime/             (later) the node: pollers, effect worker, scheduler, dispatcher (qenv seams only)
   storetest/           the contract suite
   memstore/ simstore/ sqlstore/
@@ -1020,30 +1220,47 @@ for a miss chance under 5% (payd's discipline):
 1. **The race is found in the unsafe variant.** `blind`, two clients,
    no faults, names colliding: `qtest.Some(qtest.Rejects("createCounter"))`:
    the second create commits where the model's precondition is false.
-   At ReadCommitted (25 of 40 runs); under Serializable too, at 2 of 40,
-   since the race's loser gets a transient conflict whose retry decides
-   again (§0.1).
+   At ReadCommitted, 30 of 40 runs (measured after slice 1's review);
+   under Serializable not at all (0 of 120 runs in three configurations,
+   up to four clients and two letters; 2 of 40 before the review), since
+   the race's loser gets a transient conflict whose retry decides again
+   (§0.1): the claim is ReadCommitted's. **Its contrast**: the
+   faithful app at the same configuration,
+   `qtest.None(qtest.Rejects("createCounter"))` (0 of 40 at both
+   levels), which fails in 13 of 20 runs with the runtime's condition
+   taken out of the append (§0.2): the claim tests grist's mechanism,
+   not only the mutant.
 2. **The safe default passes, through every fault.** The faithful app
-   at each of the simstore's three isolation levels, with store commit
-   faults and node crashes: `qtest.Conforms()`,
-   `qtest.All(qtest.Settles())`, and
+   at Serializable and ReadCommitted (Snapshot's runs are Serializable's,
+   byte for byte, every append writing the head), one tenant and names
+   from two letters, with store commit faults and node crashes:
+   `qtest.Conforms()`, `qtest.All(qtest.Settles())`, and
    `qtest.Reaches("store.counters.commit").Faulted()` so the faults
-   happened. The same under `AtClients` with `qtest.Linearize()`.
+   happened. The same under `AtClients` with `qtest.Linearize()`. And
+   **a key's first answer is final** through the API duplicating and
+   delaying three requests in ten (`rpc.api.request`, `rpc.api.delay`):
+   both sides conform (0 of 40 each), where the runtime without its
+   markers fails in 40 of 40 runs at the commits and 33 of 40 at the clients, and without refusal markers in 17 of 20 (§0.2).
 3. **The duplicated welcome is the declared guarantee's, seen and
    judged.** A `qenv.Script` asking for `grist.welcome.effect`'s
    `crashAfter` (and `Exhaust` with one fault reaching it): the
    restarted node sends the welcome again under the same effect key. The
    model admits it (`qtest.Conforms()`); a test-only model variant with
    the invariant `welcomedOnce` (one ok effect step per trigger) rejects
-   exactly those runs: `qtest.Some(qtest.Violates("welcomedOnce"))`.
+   exactly those runs: `qtest.Some(qtest.Violates("welcomedOnce"))` (13
+   of 105 runs within one fault). The script's `crashAfter` followed by
+   three lost sends on the restarted node checkpoints `grist.failed`
+   after an ok send, which the model admits (`atLeastOnceDone`, §0.2).
 4. **grain's processor duplicate is caught.** `dispatchDirect`, with and
-   without crashes: `qtest.Some(qtest.Mismatch("average"))`: the
+   without crashes (24 and 25 of 30 runs): `qtest.Some(qtest.Mismatch("average"))`: the
    processor's step records no events where the model's action appends
    one, and the raw append shifts every later head (§3.1). The faithful
    `Emit` never does (claim 2).
 5. **The store keeps its contract.** `storetest` over memstore and
    simstore passes; over the mutant store that ignores tenants, it
-   fails, naming the isolation check.
+   fails, naming the isolation check; over one checking conditions
+   outside its lock, the concurrent check; over one whose `Wait` returns
+   at once, the wake-up check.
 
 Done when the five pass in CI, the README's table names which check
 catches which mutant, `run-demo.sh` shows claims 1 and 3, and the
@@ -1148,7 +1365,14 @@ may override** each.
    in slice 1: one tenant's run judged in 7 s at 203 steps and 35 s at
    1003, a 4-core machine, the explorer's determinism rerun included;
    the simulation itself 0.03 s and 0.35 s; examples/counters'
-   `TestValidationCost`): read
+   `TestValidationCost`. Re-measured after slice 1's review on a loaded
+   4-core machine, both trees side by side: before, 5.1 s at 203 steps and
+   30.7 s at 1003; after, 6.0 s at 214 and 25.3 s at 999, `uniqueNames`
+   linear in the log where it compared every pair of creates; 5.3 s and
+   18.2 s without the eventual val, which the validator judges in a
+   replay of its own: judging it at the end of the fused replay is a core
+   item, docs/ROADMAP.md. The generated text was left as it is: its
+   per-step `batchIs` expects are what the model compares): read
    models as defs over the log, validation time measured at 200 and 1000
    steps per tenant (slice 1's explorations and a long SQLite run)
    before any variant keeping folds as variables (a mechanism-level model

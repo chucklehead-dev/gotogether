@@ -50,21 +50,65 @@ func seeds(n, short int) int {
 	return n
 }
 
-// Claim 2: the safe default passes, through every fault. At each of the
-// store's isolation levels, with commit faults and node crashes, and the
+// contended is claim 2's shape: one tenant and names from two letters,
+// so that creates and increments collide.
+var contended = gristsim.Config{Tenants: []string{"t1"}, Alphabet: []string{"a", "b"}, CommitFaults: true, Check: true}
+
+// Claim 2: the safe default passes, through every fault. At Serializable
+// and ReadCommitted, with commit faults and node crashes, and the
 // scheduler's and the Store's own checks on, every run conforms and
-// settles, and the faults happened.
+// settles, and the faults happened. Snapshot is left out: every append
+// writes the head, so its runs are Serializable's, byte for byte (the
+// verdicts are cached across the two).
 func TestFaithful(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
 	qtest.RequireQuint(t)
-	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted} {
+	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.ReadCommitted} {
 		t.Run(iso.String(), func(t *testing.T) {
-			system(commits, gristsim.Config{Isolation: iso, CommitFaults: true, Check: true}).
+			cfg := contended
+			cfg.Isolation = iso
+			system(commits, cfg).
 				Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
 				Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
 					qtest.Reaches("store.counters.commit").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 		})
 	}
+}
+
+// Claim 1's contrast: the faithful app at claim 1's configuration (two
+// clients creating in one tenant, no faults) never commits a create the
+// model refuses, where the blind mutant does in most runs. With grist's
+// condition taken out of the runtime (the append unconditioned), this
+// claim fails as the blind mutant's holds: 13 of 20 runs (6 seeds miss
+// it with chance 0.2%).
+func TestFaithfulAtClaim1(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(commits, gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}).
+		WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 6)}).
+		Expect(t, qtest.None(qtest.Rejects("createCounter")), qtest.Conforms())
+}
+
+// A key's first answer is final, through duplicated and late requests:
+// with the API duplicating and delaying three requests in ten, a refused
+// command's late duplicate does not commit after its client was told
+// no, nor a committed one's commit again. Both sides conform: the
+// commits (every committed outcome needs its key fresh) and the clients,
+// linearized. Without the marker (no key remembered) the duplicates
+// commit twice: 40 of 40 runs fail at the commits, 33 of 40 at the
+// clients; without refusal markers 17 of 20 at the commits (4 seeds miss
+// either with chance under 0.1%).
+func TestDuplicateRequests(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	rates := qenv.NoFaults.Set("rpc.api.delay", 0.3).Set("rpc.api.request", 0.3)
+	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"},
+		Send: []string{"create-counter", "increment-counter", "show-counter"}}
+	system(commits, cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
+	cfg.Record = gristsim.AtClients
+	system(calls, cfg, qtest.Linearize()).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 4)}).
+		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
 }
 
 // Claim 2, at the clients: the same runs recorded where the clients see
@@ -73,7 +117,9 @@ func TestFaithful(t *testing.T) {
 func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(calls, gristsim.Config{Record: gristsim.AtClients, CommitFaults: true, Check: true}, qtest.Linearize()).
+	cfg := contended
+	cfg.Record = gristsim.AtClients
+	system(calls, cfg, qtest.Linearize()).
 		Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted())
 }
@@ -85,6 +131,18 @@ func crashAfterWelcome(seed uint64) qenv.Chooser {
 	base := qenv.NewSeeded(seed)
 	base.Rates = qenv.NoFaults
 	return &qenv.Script{Base: base, Faults: []qenv.Scripted{{Kind: "grist.welcome.effect", Name: "crashAfter"}}}
+}
+
+// okThenFailed is crashAfterWelcome, then three lost sends after it.
+func okThenFailed(seed uint64) qenv.Chooser {
+	base := qenv.NewSeeded(seed)
+	base.Rates = qenv.NoFaults
+	return &qenv.Script{Base: base, Faults: []qenv.Scripted{
+		{Kind: "grist.welcome.effect", Name: "crashAfter"},
+		{Kind: "rpc.mailer.request", Name: "drop", Follows: []int{0}},
+		{Kind: "rpc.mailer.request", Name: "drop", Follows: []int{0}},
+		{Kind: "rpc.mailer.request", Name: "drop", Follows: []int{0}},
+	}}
 }
 
 // Claim 3: the duplicated welcome is the declared guarantee's, seen and
@@ -104,6 +162,11 @@ func TestWelcomeDuplicate(t *testing.T) {
 	// without the crash, no duplicate
 	system(once, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: n}).
 		Expect(t, qtest.None(qtest.Violates("welcomedOnce")))
+	// an ok send, a crash before the checkpoint, then every try of the
+	// restarted node's send lost: the committed run checkpoints
+	// grist.failed, which at least once admits (atLeastOnceDone)
+	system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: n, Chooser: okThenFailed}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.mailer.request").Faulted())
 	if testing.Short() {
 		return
 	}

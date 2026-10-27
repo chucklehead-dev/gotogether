@@ -9,6 +9,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/memstore"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -70,7 +71,7 @@ type racing struct {
 	n      int
 }
 
-func (s *racing) Append(ctx context.Context, t string, b grist.Batch) (grist.Position, error) {
+func (s *racing) Append(ctx context.Context, t string, b store.Batch) (grist.Position, error) {
 	s.n++
 	if s.before != nil {
 		s.before(s.n)
@@ -79,7 +80,7 @@ func (s *racing) Append(ctx context.Context, t string, b grist.Batch) (grist.Pos
 }
 
 func names(t *testing.T, s grist.Store) []string {
-	evs, _, err := s.Read(context.Background(), "t1", grist.Query{Types: []string{"counter-created"}}, 0)
+	evs, _, err := s.Read(context.Background(), "t1", grist.Selector{Types: []string{"counter-created"}}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestConditionedOnReads(t *testing.T) {
 		s := &racing{Store: newStore(t)}
 		s.before = func(n int) {
 			if n == 1 { // the other create, committed after this one's read
-				s.Store.Append(context.Background(), "t1", grist.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "a"})}})
+				s.Store.Append(context.Background(), "t1", store.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "a"})}})
 			}
 		}
 		_, err := cmd.Execute(context.Background(), s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "y", Name: "a"})
@@ -129,11 +130,11 @@ func TestReadsPinned(t *testing.T) {
 	tries := 0
 	cmd := grist.NewCommand(a, "count", func(r *grist.Reads, c Create) ([]grist.Event, error) {
 		tries++
-		first := len(r.Events(grist.Query{Types: []string{"counter-created"}}))
+		first := len(r.Select(grist.Selector{Types: []string{"counter-created"}}))
 		if tries == 1 { // a commit while the decision runs
-			s.Append(context.Background(), "t1", grist.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "z"})}})
+			s.Append(context.Background(), "t1", store.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "z"})}})
 		}
-		seen = append(seen, first, len(r.Events(grist.Query{Types: []string{"counter-created"}})))
+		seen = append(seen, first, len(r.Select(grist.Selector{Types: []string{"counter-created"}})))
 		return []grist.Event{ev.Of(Created{Counter: c.Counter, Name: c.Name})}, nil
 	})
 	if _, err := cmd.Execute(context.Background(), s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "y", Name: "a"}); err != nil {
@@ -211,7 +212,7 @@ type flaky struct {
 	lost      bool
 }
 
-func (s *flaky) Append(ctx context.Context, t string, b grist.Batch) (grist.Position, error) {
+func (s *flaky) Append(ctx context.Context, t string, b store.Batch) (grist.Position, error) {
 	if s.transient > 0 {
 		s.transient--
 		return 0, errors.New("lock lost: retry")
@@ -224,25 +225,32 @@ func (s *flaky) Append(ctx context.Context, t string, b grist.Batch) (grist.Posi
 	return h, err
 }
 
-// A condition failing on every try is a conflict, recorded as one.
+// A condition failing on every try is a conflict: committed as the key's
+// answer (one more append, the marker alone, unconditioned) and recorded
+// as one; a retry under the key gets the conflict again, deciding
+// nothing.
 func TestConflictAfterTries(t *testing.T) {
 	a := grist.New("counters")
 	ev := grist.NewEvent[Created](a, "counter-created")
 	cmd := grist.NewCommand(a, "count", func(r *grist.Reads, c Create) ([]grist.Event, error) {
-		r.Events(grist.Query{Types: []string{"counter-created"}})
+		r.Select(grist.Selector{Types: []string{"counter-created"}})
 		return []grist.Event{ev.Of(Created{Counter: c.Counter, Name: c.Name})}, nil
 	})
 	s := &racing{Store: newStore(t)}
 	s.before = func(int) {
-		s.Store.Append(context.Background(), "t1", grist.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "z"})}})
+		s.Store.Append(context.Background(), "t1", store.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "z"})}})
 	}
 	ctx, steps := recorded()
 	_, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "y", Name: "a"})
-	if !errors.Is(err, grist.ErrConflict) || s.n != grist.ConditionTries {
-		t.Errorf("%v after %d appends; want grist.ErrConflict after %d", err, s.n, grist.ConditionTries)
+	if !errors.Is(err, grist.ErrConflict) || s.n != 5+1 {
+		t.Errorf("%v after %d appends; want grist.ErrConflict after 5 tries and the conflict's marker", err, s.n)
 	}
 	if st := steps(); len(st) != 1 || st[0].Outcome != "conflict" {
 		t.Errorf("steps %v: want one, its outcome conflict", st)
+	}
+	s.before = nil
+	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "y", Name: "a"}); !errors.Is(err, grist.ErrConflict) || s.n != 6 || len(steps()) != 1 {
+		t.Errorf("the retry: %v after %d appends, %d steps; want the conflict again, nothing appended or recorded", err, s.n, len(steps()))
 	}
 }
 

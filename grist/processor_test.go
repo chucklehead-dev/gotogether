@@ -8,10 +8,14 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
+
+// effectTries is grist's default EffectTries.
+const effectTries = 3
 
 type Added struct {
 	By int `json:"by"`
@@ -36,7 +40,7 @@ func procApp(effect func(ctx context.Context) error) (*grist.App, *grist.EventTy
 	noted := grist.NewEvent[Noted](a, "noted")
 	grist.NewProcessor(a, "sum", added, func(ctx context.Context, r *grist.Reads, e Added, m grist.Meta) grist.Result {
 		sum, n := 0, 0
-		for _, s := range r.Events(grist.Query{Types: []string{"added"}}) {
+		for _, s := range r.Select(grist.Selector{Types: []string{"added"}}) {
 			v, _ := added.Decode(s)
 			sum, n = sum+v.By, n+1
 		}
@@ -63,7 +67,7 @@ func simulate(t *testing.T, a *grist.App, added *grist.EventType[Added], c qenv.
 	ctx := s.Context()
 	st.CreateTenant(ctx, "t1")
 	for i := 1; i <= 3; i++ {
-		st.Append(ctx, "t1", grist.Batch{Events: []grist.Event{added.Of(Added{By: i})}})
+		st.Append(ctx, "t1", store.Batch{Events: []grist.Event{added.Of(Added{By: i})}})
 	}
 	node := s.Process("node", true, func(ctx context.Context) {
 		if err := a.Start(ctx, st); err != nil {
@@ -78,7 +82,7 @@ func simulate(t *testing.T, a *grist.App, added *grist.EventType[Added], c qenv.
 	if err := s.Run(time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	log, _, err := st.Read(ctx, "t1", grist.Query{Types: []string{"added", "summed", "noted", "grist.failed"}}, 0)
+	log, _, err := st.Read(ctx, "t1", grist.Selector{Types: []string{"added", "summed", "noted", "grist.failed"}}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,8 +136,8 @@ func TestEffectAtLeastOnce(t *testing.T) {
 		return nil
 	})
 	log, steps := simulate(t, a, added, qenv.NewSeeded(1))
-	if keys["note/t1/1"] != grist.EffectTries || keys["note/t1/2"] != 2 || keys["note/t1/3"] != 1 {
-		t.Errorf("effect runs by key %v: want %d for the failing trigger, 2 and 1", keys, grist.EffectTries)
+	if keys["note/t1/1"] != effectTries || keys["note/t1/2"] != 2 || keys["note/t1/3"] != 1 {
+		t.Errorf("effect runs by key %v: want %d for the failing trigger, 2 and 1", keys, effectTries)
 	}
 	var outcomes []string
 	for _, e := range log {
@@ -151,8 +155,8 @@ func TestEffectAtLeastOnce(t *testing.T) {
 			effects++
 		}
 	}
-	if effects != grist.EffectTries+3 {
-		t.Errorf("%d effect steps, want one per try (%d)", effects, grist.EffectTries+3)
+	if effects != effectTries+3 {
+		t.Errorf("%d effect steps, want one per try (%d)", effects, effectTries+3)
 	}
 }
 
@@ -194,8 +198,8 @@ func TestHandlerFailure(t *testing.T) {
 		return grist.Skip()
 	})
 	log, _ := simulate(t, a, added, qenv.NewSeeded(1))
-	if calls[2] != grist.EffectTries || calls[1] != 1 || calls[3] != 1 {
-		t.Errorf("handler calls by trigger %v: want %d for the poison one, one for the others", calls, grist.EffectTries)
+	if calls[2] != effectTries || calls[1] != 1 || calls[3] != 1 {
+		t.Errorf("handler calls by trigger %v: want %d for the poison one, one for the others", calls, effectTries)
 	}
 	failed := 0
 	for _, e := range log {

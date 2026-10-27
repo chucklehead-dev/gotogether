@@ -4,76 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 )
 
-// Position is a place in a tenant's log: dense, from 1, assigned under the
-// tenant's lock, so within a tenant the position order is the commit
-// order. 0 is "before the first event" (and, as a Read's at, "the head").
-type Position int64
-
-// A TagPair is one tag of an event: a (key, value) pair, the key a tagged
-// field's JSON name.
-type TagPair struct {
-	Key, Value string
-}
-
 // Tag is the tag key=value, as a query names it: Exists(Created,
-// Tag("name", n)).
+// Tag("name", n)). The key is a tagged field's JSON name; a read refuses
+// a key the event type has no tag of.
 func Tag(key string, value any) TagPair { return TagPair{Key: key, Value: fmt.Sprint(value)} }
-
-// An Event is an event to append: its registered type and version, the
-// tags its tagged fields give, and its body as JSON. Build one with
-// EventType.Of.
-type Event struct {
-	Type    string
-	Version int
-	Tags    []TagPair
-	Body    json.RawMessage
-}
-
-// Tagged reports whether the event carries every tag of tags.
-func (e Event) Tagged(tags []TagPair) bool {
-	for _, t := range tags {
-		found := false
-		for _, have := range e.Tags {
-			if have == t {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
-// Stored is an event as the store holds it: the event and its envelope.
-type Stored struct {
-	Event
-	Tenant string
-	Pos    Position
-	// Time is the append's time, Unix milliseconds (qenv.Now: virtual in a
-	// simulation), one value per append.
-	Time int64
-	// Cause is what appended it: the command's id, or the processor's
-	// effect key (processor/tenant/trigger).
-	Cause string
-}
-
-// Meta is a stored event's envelope, as folds and handlers see it.
-type Meta struct {
-	Tenant string
-	Pos    Position
-	Time   int64 // Unix milliseconds
-	Cause  string
-}
-
-// Meta is the stored event's envelope.
-func (s Stored) Meta() Meta { return Meta{Tenant: s.Tenant, Pos: s.Pos, Time: s.Time, Cause: s.Cause} }
 
 // eventInfo is a registered event type.
 type eventInfo struct {
@@ -86,6 +25,25 @@ type eventInfo struct {
 type tagField struct {
 	index int
 	key   string
+}
+
+// hasTag reports whether the event type has a tag keyed key.
+func (i *eventInfo) hasTag(key string) bool {
+	for _, t := range i.tags {
+		if t.key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// tagKeys are the event type's tag keys, for an error's fix.
+func (i *eventInfo) tagKeys() []string {
+	out := []string{}
+	for _, t := range i.tags {
+		out = append(out, t.key)
+	}
+	return out
 }
 
 // EventType is a registered event type whose body is E.
@@ -121,10 +79,13 @@ func NewEvent[E any](app *App, name string) *EventType[E] {
 				app.problems = append(app.problems, fmt.Sprintf("event %q: tag field %s is %v: a tag is a string, an integer or a boolean", name, f.Name, f.Type))
 				continue
 			}
-			info.tags = append(info.tags, tagField{index: i, key: jsonName(f)})
+			info.tags = append(info.tags, tagField{index: i, key: rec.JSONName(f)})
 		}
 	}
-	app.events[name] = info
+	if app.events[name] == nil {
+		app.events[name] = info
+		app.eventOrder = append(app.eventOrder, name)
+	}
 	return &EventType[E]{info: info}
 }
 
@@ -155,9 +116,15 @@ func (t *EventType[E]) Decode(s Stored) (E, error) {
 	return e, err
 }
 
-// An EventName is anything that names a registered event type (an
-// *EventType): what Exists and queries take.
-type EventName interface{ Name() string }
+// An EventName is a registered event type (an *EventType, whatever its
+// body): what Exists takes. Its method is unexported, so a read model, a
+// command or a processor, which have names too, are not event names.
+type EventName interface {
+	Name() string
+	registered() *eventInfo
+}
+
+func (t *EventType[E]) registered() *eventInfo { return t.info }
 
 // modelable lists why typ holds a value the model cannot: a float or a
 // time, at path.
@@ -185,16 +152,6 @@ func modelable(typ reflect.Type, path string) []string {
 		return []string{fmt.Sprintf("%s is a %v, which the model cannot hold", path, typ)}
 	}
 	return nil
-}
-
-// jsonName is a struct field's JSON name.
-func jsonName(f reflect.StructField) string {
-	if tag, ok := f.Tag.Lookup("json"); ok {
-		if n, _, _ := strings.Cut(tag, ","); n != "" && n != "-" {
-			return n
-		}
-	}
-	return f.Name
 }
 
 // scalars are the top-level scalar fields of a JSON-encoded struct of
@@ -234,58 +191,13 @@ func scalars(typ reflect.Type, body []byte) (strs []string, ints []int64) {
 	return
 }
 
-// StepFields are a JSON-encoded value of type typ as a step's keys: a
-// struct's top-level scalar fields by JSON name (numbers as integers),
-// each name after prefix ("obs." for observations); a scalar as
-// prefix+"result". It is how grist records arguments and results, for an
-// adapter that records the same steps at a client.
-func StepFields(typ reflect.Type, body []byte, prefix string) []any {
-	if typ == nil {
-		return nil
-	}
-	if typ.Kind() != reflect.Struct {
-		var v any
-		if json.Unmarshal(body, &v) == nil {
-			return []any{prefix + "result", scalar(v)}
-		}
-		return nil
-	}
-	var m map[string]any
-	if json.Unmarshal(body, &m) != nil {
-		return nil
-	}
-	var kv []any
-	for i := 0; i < typ.NumField(); i++ {
-		f := typ.Field(i)
-		if !f.IsExported() {
-			continue
-		}
-		n := jsonName(f)
-		if v, ok := m[n]; ok {
-			switch v.(type) {
-			case string, bool, float64:
-				kv = append(kv, prefix+n, scalar(v))
-			}
-		}
-	}
-	return kv
-}
-
-// scalar is a decoded JSON scalar as qobs records it: numbers as integers
-// (the model holds no floats).
-func scalar(v any) any {
-	if f, ok := v.(float64); ok {
-		return int64(f)
-	}
-	return v
-}
-
 // failedType is the event a processor appends when a trigger's handling
 // failed every try: it names the processor and the trigger.
 const failedType = "grist.failed"
 
 // Failed is the body of a grist.failed event. The failure's text is not
 // in it (the model could not compute it): it is in the effect's steps.
+// Its cause, like every processor event's, is "processor:<name>".
 type Failed struct {
 	Processor string `json:"processor" grist:"tag"`
 	Trigger   int64  `json:"trigger"`
@@ -301,13 +213,3 @@ func failedEvent(processor string, trigger Position) Event {
 	body, _ := json.Marshal(f)
 	return Event{Type: failedType, Version: 1, Tags: []TagPair{{Key: "processor", Value: processor}}, Body: body}
 }
-
-// ParsePosKey is the position a 20-digit key segment names.
-func ParsePosKey(s string) (Position, error) {
-	n, err := strconv.ParseInt(s, 10, 64)
-	return Position(n), err
-}
-
-// PosKey is p as a 20-digit key segment, sorting in position order (a
-// store's keys: t/<tenant>/e/<position>).
-func PosKey(p Position) string { return fmt.Sprintf("%020d", p) }

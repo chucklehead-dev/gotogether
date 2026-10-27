@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/grist/storetest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
@@ -17,7 +17,7 @@ import (
 func TestContract(t *testing.T) {
 	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted} {
 		t.Run(iso.String(), func(t *testing.T) {
-			storetest.Run(t, func(t *testing.T, body func(ctx context.Context, s grist.Store) error) {
+			storetest.Run(t, func(t *testing.T, body func(ctx context.Context, s store.Store) error) {
 				sim := qenv.New(qenv.NewSeeded(1))
 				defer sim.Close()
 				sim.Check = true

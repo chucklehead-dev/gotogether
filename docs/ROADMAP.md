@@ -22,10 +22,22 @@ The grist track, alongside G: an event-sourced framework checked by its
 model, designed in docs/grist.md (§8 for the slices).
 
 - **Slice 1, the thesis**: done (grist/, examples/counters, skills/grist;
-  docs/grist.md §0.1 says what building it changed). Left of it for
-  slice 2: keys and queries of several tags (with the typed template
-  function), a separate effect worker, tenants created while a node runs,
-  `grist.lock` and `grist.topology`.
+  docs/grist.md §0.1 says what building it changed, §0.2 what its review
+  changed). Left of it for slice 2: keys and queries of several tags
+  (with the typed template function, recording grist.qnt's `Read`
+  records directly), a separate effect worker, tenants created while a
+  node runs, recording commits from a `store.StepLog`'s rows (the
+  sqlstore's, a relay keyed by the row's seq) instead of
+  `Batch.OnCommit`, `grist.lock` and `grist.topology`.
+- **A core item grist's measurements ask for** (validate,
+  internal/replay): an eventual val is judged by a replay of its own
+  (`<val>EvTest`), so a binding with one eventual val replays every run
+  twice in the fast phase; judging it at the end of the fused run
+  (`allTest`'s last step expecting it, for a settled trace only, the
+  detail phase telling which check failed) would save that replay: 7 s
+  of 25 at examples/counters' 999 steps (docs/grist.md §10, question 4). It changes the generated module the validator's caches
+  and snapshot tests key on, so it is the core's change to make, with
+  its own tests, not grist's.
 - **Slice 2, the real tier**: qsql extended (its own core item, with a
   brute-force test), the typed template function, an actor filter;
   sqlstore on qsql and SQLite, the HTTP API, `AtMostOnce`, the

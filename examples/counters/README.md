@@ -3,8 +3,8 @@
 grist's slice 1 application ([docs/grist.md](../../docs/grist.md) §8.1):
 ObneyAI/grain's counter example, without float averages, written as
 grist's blocks and checked against a Quint model with no annotation of
-its own. grist records every block's step (each commit at the store,
-each refusal and query on return, each effect), so what the application
+its own. grist records every block's step (each commit and committed refusal at
+the store, each query on return, each effect), so what the application
 writes is its decisions and folds.
 
 | file | what it is |
@@ -23,14 +23,19 @@ writes is its decisions and folds.
 ## The model
 
 The model's state is one tenant's log (each tenant's trace is its own
-instance), the processors' checkpoints, the batch the last step appended
-and the effect steps. A committed create's precondition is that no
-counter has the name, that its read set's condition held
+instance), the processors' checkpoints, the batch the last step appended,
+the effect steps and the command ids answered. A committed create's
+precondition is that no counter has the name, that its read set covers
+the name's read (`covers(reads, nameRead(name))`: a runtime that loses
+the read is caught at every commit), that its condition held
 (`conditionHolds(log, readPos, reads)`, the read set from the step) and
-that its command id appended nothing before; a refusal's is that the
-state through its position refuses it. `average(trigger)` appends the
-sum and count of the increments in `log.slice(0, trigger)`;
-`welcomeEffect` may repeat before `welcome` checkpoints the trigger.
+that its id was never answered (`freshKey(answered, id)`); a refusal
+commits its marker too, so its id is answered and a late duplicate
+cannot commit after it. `average(trigger)` appends the sum and count of
+the increments in `log.slice(0, trigger)`; `welcomeEffect` may repeat,
+under the trigger's key (`keyStable`), before `welcome(trigger, ok)`
+checkpoints it with what its run reached (`atLeastOnceDone`: notified
+after an ok send, `grist.failed` after three failed ones).
 `uniqueNames` and `averageAsOfTrigger` are the design's (`simulate:
 holds`); `everyCounterWelcomedOrFailed` is judged after the run's last
 settle.
@@ -39,12 +44,14 @@ settle.
 
 | test | configuration | catches | rate (2026-10-27) |
 |---|---|---|---|
-| `TestFaithful` | the app at Serializable, Snapshot and ReadCommitted; commit faults (`store.counters.commit`), node crashes, lost and late requests | nothing: `Conforms`, `All(Settles)`, both faults reached | 60 of 60 conform |
+| `TestFaithful` | the app at Serializable and ReadCommitted (Snapshot's runs are Serializable's: every append writes the head), one tenant, names from two letters; commit faults (`store.counters.commit`), node crashes, lost and late requests | nothing: `Conforms`, `All(Settles)`, both faults reached | 40 of 40 conform |
 | `TestFaithfulAtClients` | the same, recorded at the clients (`Invoke`/`Done`), `qtest.Linearize()` | nothing: a retry's duplicate would be a later read's `Mismatch` | 20 of 20 |
-| `TestWelcomeDuplicate` | a `qenv.Script` of `grist.welcome.effect`'s `crashAfter`; `Exhaust` within one fault | the duplicate welcome: admitted by `counters.binding.yaml`, `All(Violates("welcomedOnce"))` under the script, `None` without faults, `Some` within one fault | 10 of 10 scripted; 10 of 99 exhausted |
-| `TestMutant` (`blind`: create `Unconditioned`, grain's create-counter) | two clients creating in one tenant, no faults | `Some(Rejects("createCounter"))`: a second create of a name commits where the model's precondition is false | 25 of 40 at ReadCommitted; 2 of 40 at Serializable, where the race's loser gets `ErrConflict` and its transient retry decides again |
-| `TestMutant` (`dispatchDirect`: average appends through the store and returns `Skip`, grain's processor) | creates and increments in one tenant, without and with faults | `Some(Mismatch("average"))`: the step records no event where the model appends one, and the raw append shifts every later head | 19 of 30 without faults, 22 of 30 with |
-| `grist/storetest` (grist's own tests) | memstore, simstore at three levels, a mutant store whose `Read` ignores the tenant | the mutant fails `TenantIsolation`, the rest pass | every run |
+| `TestFaithfulAtClaim1` | claim 1's configuration (two clients creating in one tenant, no faults, ReadCommitted), the app as it is | `None(Rejects("createCounter"))`: claim 1's contrast; with grist's condition taken out of the runtime, 13 of 20 runs reject | 40 of 40 conform |
+| `TestDuplicateRequests` | the API duplicating and delaying 3 requests in 10 (`rpc.api.request`, `rpc.api.delay`), creates, increments and shows in one tenant; at the commits and at the clients | nothing: a key's first answer is final; without grist's markers 40 of 40 runs reject at the commits (33 of 40 fail at the clients), without refusal markers 17 of 20 (a refused command's late duplicate committing) | 40 of 40 on each side |
+| `TestWelcomeDuplicate` | a `qenv.Script` of `grist.welcome.effect`'s `crashAfter`; the same then three lost sends; `Exhaust` within one fault | the duplicate welcome: admitted by `counters.binding.yaml`, `All(Violates("welcomedOnce"))` under the script, `None` without faults, `Some` within one fault; an ok send then three failures checkpoints `grist.failed`, admitted (`atLeastOnceDone`) | 10 of 10 scripted; 13 of 105 exhausted |
+| `TestMutant` (`blind`: create `Unconditioned`, grain's create-counter) | two clients creating in one tenant, no faults, ReadCommitted | `Some(Rejects("createCounter"))`: a second create of a name commits where the model's precondition is false | 30 of 40; under Serializable 0 of 120, the race's loser retrying a transient `ErrConflict` and deciding again |
+| `TestMutant` (`dispatchDirect`: average appends through the store and returns `Skip`, grain's processor) | creates and increments in one tenant, without and with faults | `Some(Mismatch("average"))`: the step records no event where the model appends one, and the raw append shifts every later head | 24 of 30 without faults, 25 of 30 with |
+| `grist/storetest` (grist's own tests) | memstore, simstore at three levels; mutant stores whose `Read` ignores the tenant, whose conditions are checked outside the lock, whose `Wait` returns at once | each mutant fails its check (`TenantIsolation`, `ConcurrentAgainstBruteForce`, `WaitWakes`), the rest pass | every run |
 
 `TestMutants` builds the test binary with each mutant's overlay and runs
 `TestMutant` in it. Under `-short` each claim runs at fewer seeds, each
@@ -57,9 +64,10 @@ go test -short ./...                 # every claim, at CI's seeds
 ./run-demo.sh                        # claims 2 and 3
 MUTATION=blind ./run-demo.sh         # claim 1
 MUTATION=dispatch-direct ./run-demo.sh
-COUNTERS_COST=740 go test -run TestValidationCost -v .   # a run of about 1000 steps, judged
+COUNTERS_COST=752 go test -run TestValidationCost -v .   # a run of about 1000 steps, judged
 ```
 
 Judging one tenant's run (one seed, the explorer's determinism rerun
-included, a 4-core machine): 203 steps in 7 s, 1003 steps in 35 s; the
-simulation itself takes 0.03 s and 0.35 s.
+included, a loaded 4-core machine): 214 steps in 6.0 s, 999 steps in
+25.3 s (`COUNTERS_COST=752`), of which the eventual val's own replay is
+0.7 s and 7.1 s; the simulation itself takes well under a second.

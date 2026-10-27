@@ -9,33 +9,40 @@ import (
 // Reads is a decision's only access to state. Its first read pins the
 // position: the head at that read, P. Every later read of the same Reads
 // folds through P, never past it, so a decision sees one state whatever
-// commits while it runs. Every read is recorded as a query (an event
+// commits while it runs. Every read is recorded as a selector (an event
 // type set and a tag set), and the decision's append is conditioned on
 // their union: it commits only if no event matching any of them was
 // appended after P (docs/grist.md §2.3).
 //
+// Every read is checked against the App: a type it does not register, or
+// a tag key the type has no tag of (the Go field's name where the JSON
+// name is the key, a field not marked grist:"tag"), would match nothing
+// and condition nothing, so it is the decision's error, naming the fix,
+// never an empty answer.
+//
 // A processor's Reads are pinned at its trigger's position and condition
 // nothing: the prefix through the trigger never changes.
 type Reads struct {
-	ctx     context.Context
-	store   Store
-	tenant  string
-	pos     Position
-	pinned  bool
-	queries []Query
-	id      string // the command id, for ID
+	ctx    context.Context
+	app    *App
+	store  Store
+	tenant string
+	pos    Position
+	pinned bool
+	sels   []Selector
+	id     string // the command id, for ID
 	// err is the first store error (transient: the try is retried); bad
 	// the first misuse (the code's fault)
 	err, bad error
 }
 
-func newReads(ctx context.Context, s Store, tenant, id string) *Reads {
-	return &Reads{ctx: ctx, store: s, tenant: tenant, id: id}
+func newReads(ctx context.Context, app *App, s Store, tenant, id string) *Reads {
+	return &Reads{ctx: ctx, app: app, store: s, tenant: tenant, id: id}
 }
 
-// at is a Reads pinned at p.
-func readsAt(ctx context.Context, s Store, tenant string, p Position, id string) *Reads {
-	return &Reads{ctx: ctx, store: s, tenant: tenant, id: id, pos: p, pinned: true}
+// readsAt is a Reads pinned at p.
+func readsAt(ctx context.Context, app *App, s Store, tenant string, p Position, id string) *Reads {
+	return &Reads{ctx: ctx, app: app, store: s, tenant: tenant, id: id, pos: p, pinned: true}
 }
 
 // Tenant is the tenant the decision is about.
@@ -45,23 +52,49 @@ func (r *Reads) Tenant() string { return r.tenant }
 // head) if nothing was read yet.
 func (r *Reads) Position() Position {
 	if !r.pinned {
-		r.read(Query{})
+		r.read(Selector{})
 	}
 	return r.pos
 }
 
+// misuse notes the decision's first misuse of its reads.
+func (r *Reads) misuse(format string, args ...any) {
+	if r.bad == nil {
+		r.bad = fmt.Errorf("grist: "+format, args...)
+	}
+}
+
+// check reports whether q names only the App's event types and their tag
+// keys, noting the misuse otherwise.
+func (r *Reads) check(q Selector) bool {
+	if len(q.Tags) > 1 {
+		r.misuse("read %s has %d tags: slice 1 records a read set as (type, tag, value) triples, one tag per read", q, len(q.Tags))
+		return false
+	}
+	for _, t := range q.Types {
+		info := r.app.events[t]
+		if info == nil {
+			r.misuse("read of %q, which %s does not register (it has %v): fix the name, or register the event (NewEvent)", t, r.app.Name, r.app.eventNames())
+			return false
+		}
+		for _, tag := range q.Tags {
+			if !info.hasTag(tag.Key) {
+				r.misuse("read of %s tagged %s=%s: %s has no tag %q (its tags: %v); a tag's key is the field's JSON name, and the field is marked grist:\"tag\"", t, tag.Key, tag.Value, t, tag.Key, info.tagKeys())
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // read runs q through the pinned position (pinning it at the head on the
 // first read) and adds q to the read set.
-func (r *Reads) read(q Query) []Stored {
-	if r.err != nil || r.bad != nil {
-		return nil
-	}
-	if len(q.Tags) > 1 {
-		r.bad = fmt.Errorf("grist: query %s has %d tags: slice 1 records a read set as (type, tag, value) triples, one tag per query", q, len(q.Tags))
+func (r *Reads) read(q Selector) []Stored {
+	if r.err != nil || r.bad != nil || !r.check(q) {
 		return nil
 	}
 	if len(q.Types) > 0 {
-		r.addQuery(Query{Types: q.Types, Tags: q.Tags})
+		r.addSelector(Selector{Types: q.Types, Tags: q.Tags})
 	}
 	if r.pinned && r.pos == 0 {
 		return nil // nothing through position 0 (and 0 would read the head)
@@ -77,27 +110,51 @@ func (r *Reads) read(q Query) []Stored {
 	return evs
 }
 
-func (r *Reads) addQuery(q Query) {
-	for _, have := range r.queries {
+func (r *Reads) addSelector(q Selector) {
+	for _, have := range r.sels {
 		if have.String() == q.String() {
 			return
 		}
 	}
-	r.queries = append(r.queries, q)
+	r.sels = append(r.sels, q)
 }
 
 // Exists reports whether an event of type t with every tag of tags
-// exists through the pinned position: a query that folds nothing (the
+// exists through the pinned position: a read that folds nothing (the
 // uniqueness check, Exists(Created, Tag("name", n))).
 func (r *Reads) Exists(t EventName, tags ...TagPair) bool {
-	return len(r.read(Query{Types: []string{t.Name()}, Tags: tags, Limit: 1})) > 0
+	info := t.registered()
+	if r.app.events[info.name] != info {
+		r.misuse("Exists(%s): an event type of another App: register it on %s", info.name, r.app.Name)
+		return false
+	}
+	return len(r.read(Selector{Types: []string{info.name}, Tags: tags, Limit: 1})) > 0
 }
 
-// Events runs a raw query through the pinned position. A query with
-// Reverse or Limit conditions the append on its whole query, not on the
-// events it returned: a later event matching it would have changed the
-// answer.
-func (r *Reads) Events(q Query) []Stored { return r.read(q) }
+// Select runs a raw selector through the pinned position. A selector with
+// Reverse or Limit conditions the append on its whole selection, not on
+// the events it returned: a later event matching it would have changed
+// the answer.
+func (r *Reads) Select(q Selector) []Stored { return r.read(q) }
+
+// Events are the events of type t carrying every tag of tags through r's
+// position, decoded, in position order: the typed form of Select.
+func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E {
+	if r.app.events[t.info.name] != t.info {
+		r.misuse("Events(%s): an event type of another App: register it on %s", t.info.name, r.app.Name)
+		return nil
+	}
+	out := []E{}
+	for _, s := range r.read(Selector{Types: []string{t.info.name}, Tags: tags}) {
+		e, err := t.Decode(s)
+		if err != nil {
+			r.misuse("event %d (%s): %v", s.Pos, s.Type, err)
+			return nil
+		}
+		out = append(out, e)
+	}
+	return out
+}
 
 // ID is the n-th id the decision mints: a UUIDv5 of the command id and n,
 // so that a decision stays a function of its inputs and its retries mint
@@ -128,12 +185,13 @@ type readModelInfo struct {
 // A Handler is one event type's step of a fold (On).
 type Handler[S any] struct {
 	typ  string
+	info *eventInfo
 	fold func(S, Stored) (S, error)
 }
 
 // On is a fold's handler for events of type t.
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S] {
-	return Handler[S]{typ: t.Name(), fold: func(s S, st Stored) (S, error) {
+	return Handler[S]{typ: t.Name(), info: t.info, fold: func(s S, st Stored) (S, error) {
 		e, err := t.Decode(st)
 		if err != nil {
 			return s, err
@@ -172,9 +230,9 @@ func NewReadModel[S any](app *App, name string, version int, init func() S, hand
 // Name is the read model's name.
 func (m *ReadModel[S]) Name() string { return m.info.name }
 
-// Query is the read model's query: its types, the tags given.
-func (m *ReadModel[S]) Query(tags ...TagPair) Query {
-	return Query{Types: append([]string(nil), m.info.types...), Tags: tags}
+// selector is the read model's read: its types, the tags given.
+func (m *ReadModel[S]) selector(tags ...TagPair) Selector {
+	return Selector{Types: append([]string(nil), m.info.types...), Tags: tags}
 }
 
 // Fold folds events (in position order) from the initial value: the
@@ -197,9 +255,9 @@ func (m *ReadModel[S]) Fold(events []Stored) (S, error) {
 func (m *ReadModel[S]) Get(r *Reads) S { return m.get(r, nil) }
 
 func (m *ReadModel[S]) get(r *Reads, tags []TagPair) S {
-	s, err := m.Fold(r.read(m.Query(tags...)))
-	if err != nil && r.bad == nil {
-		r.bad = err
+	s, err := m.Fold(r.read(m.selector(tags...)))
+	if err != nil {
+		r.misuse("%v", err)
 	}
 	return s
 }
@@ -226,6 +284,15 @@ func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames,
 	if len(keys) != 1 {
 		app.problems = append(app.problems, fmt.Sprintf("read model %q is keyed by %d tags: slice 1 keys a read model by one tag (its read set is (type, tag, value) triples)", name, len(keys)))
 	}
+	// every handler's type must have every key as a tag: a key that is
+	// not one matches nothing, and For would fold nothing, silently
+	for _, h := range handlers {
+		for _, k := range keys {
+			if !h.info.hasTag(k) {
+				app.problems = append(app.problems, fmt.Sprintf("read model %q is keyed by %q, which %s has no tag of (its tags: %v): mark the field grist:\"tag\", key by its JSON name, or make the read model plain", name, k, h.typ, h.info.tagKeys()))
+			}
+		}
+	}
 	return m
 }
 
@@ -233,9 +300,7 @@ func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames,
 // through r's position.
 func (m *KeyedReadModel[S]) For(r *Reads, values ...string) S {
 	if len(values) != len(m.keys) {
-		if r.bad == nil {
-			r.bad = fmt.Errorf("grist: read model %s is keyed by %v: For takes %d values, not %d", m.info.name, m.keys, len(m.keys), len(values))
-		}
+		r.misuse("read model %s is keyed by %v: For takes %d values, not %d", m.info.name, m.keys, len(m.keys), len(values))
 		return m.init()
 	}
 	tags := make([]TagPair, len(values))

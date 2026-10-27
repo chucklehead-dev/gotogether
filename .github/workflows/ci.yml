@@ -411,7 +411,8 @@ jobs:
   grist:
     # its own module (published like qhegel): the framework's stores
     # against the contract suite, its commands and processors on a
-    # simulated store, the scheduler's and the Store's checks on
+    # simulated store, the scheduler's and the Store's checks on, and
+    # grist.qnt checked by quint (model/model_test.go)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -422,10 +423,15 @@ jobs:
         with:
           go-version-file: grist/go.mod
           cache-dependency-path: grist/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../ci/install-quint.sh
       - name: gofmt, vet, lint -sim
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C .. ./cmd/gotogether lint -sim grist
-      - name: test (GOTOGETHER_CHECK)
-        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m ./...
+      - name: test (GOTOGETHER_CHECK, quint required)
+        run: GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 go test -count=1 -timeout 30m ./...
 
   payd:
     # its own job: an unmodified net/http + database/sql service in qenv

@@ -31,7 +31,7 @@ func app() *grist.App {
 		return []grist.Event{noted.Of(Noted{Key: c.Key})}, nil
 	})
 	grist.NewQuery(a, "count", func(r *grist.Reads, q Note) (Count, error) {
-		return Count{N: len(r.Events(grist.Query{Types: []string{"noted"}, Tags: []grist.TagPair{grist.Tag("topic", q.Key)}}))}, nil
+		return Count{N: len(r.Select(grist.Selector{Types: []string{"noted"}, Tags: []grist.TagPair{grist.Tag("topic", q.Key)}}))}, nil
 	})
 	return a
 }

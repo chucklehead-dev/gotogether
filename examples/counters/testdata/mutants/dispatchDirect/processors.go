@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 )
 
 // Average, the mutant dispatchDirect (grain's example processor): it
@@ -13,14 +14,10 @@ import (
 var Average = grist.NewProcessor(App, "average", Incremented,
 	func(ctx context.Context, r *grist.Reads, e CounterIncremented, m grist.Meta) grist.Result {
 		sum, count := 0, 0
-		for _, s := range r.Events(grist.Query{Types: []string{Incremented.Name()}}) {
-			inc, err := Incremented.Decode(s)
-			if err != nil {
-				return grist.Fail(err)
-			}
+		for _, inc := range grist.Events(r, Incremented) {
 			sum, count = sum+inc.By, count+1
 		}
-		if _, err := DepsOf(ctx).Store.Append(ctx, m.Tenant, grist.Batch{Events: []grist.Event{Averaged.Of(AverageComputed{Sum: sum, Count: count})}}); err != nil {
+		if _, err := DepsOf(ctx).Store.Append(ctx, m.Tenant, store.Batch{Events: []grist.Event{Averaged.Of(AverageComputed{Sum: sum, Count: count})}}); err != nil {
 			return grist.Fail(err)
 		}
 		return grist.Skip()

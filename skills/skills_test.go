@@ -169,6 +169,13 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qshrink.Yes", "qshrink.Reproduced"},
 		{"qshrink.Unknown", "qshrink.Undecided"},
 		{"-require-settle", "-require-finish (the old name is a deprecated alias)"},
+		// grist slice 1's review
+		{"grist.Query{", "grist.Selector{ (Reads.Select), or grist.Events(r, t, tags...)"},
+		{"freshCause", "freshKey(answered, id) (grist.qnt: a refusal answers its key too)"},
+		{"grist.StepFields", "nothing: grist records the steps (internal/rec)"},
+		{"grist.Quiet", "gristsim.Config.Record (AtClients)"},
+		{"grist.PosKey", "nothing: a store's own key layout (internal/poskey)"},
+		{"grist.CheckCondition", "store.CheckCondition (package grist/store)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

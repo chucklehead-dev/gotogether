@@ -3,13 +3,14 @@
 # simulation, every run checked against model/counters.qnt. MUTATION=
 # blind or dispatch-direct builds the app with that mutant's overlay
 # (testdata/mutants/) and shows what catches it; without one, the
-# faithful app through commit faults and crashes at three isolation
-# levels, and the welcome's duplicate after a crash (claims 2 and 3 of
-# docs/grist.md §8.1; MUTATION=blind is claim 1).
+# faithful app through commit faults and crashes at two isolation
+# levels, at claim 1's configuration, through duplicated and late
+# requests, and the welcome's duplicate after a crash (claims 2 and 3 of
+# docs/grist.md §8.1, and claim 1's contrast; MUTATION=blind is claim 1).
 set -euo pipefail
 cd "$(dirname "$0")"
 case "${MUTATION:-}" in
-  "") run='TestFaithful$|TestWelcomeDuplicate$' ;;
+  "") run='TestFaithful$|TestFaithfulAtClaim1$|TestDuplicateRequests$|TestWelcomeDuplicate$' ;;
   blind) run='TestMutants$/^blind$' ;;
   dispatch-direct) run='TestMutants$/^dispatchDirect$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;

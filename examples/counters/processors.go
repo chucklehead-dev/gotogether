@@ -13,11 +13,7 @@ import (
 var Average = grist.NewProcessor(App, "average", Incremented,
 	func(ctx context.Context, r *grist.Reads, e CounterIncremented, m grist.Meta) grist.Result {
 		sum, count := 0, 0
-		for _, s := range r.Events(grist.Query{Types: []string{Incremented.Name()}}) {
-			inc, err := Incremented.Decode(s)
-			if err != nil {
-				return grist.Fail(err)
-			}
+		for _, inc := range grist.Events(r, Incremented) {
 			sum, count = sum+inc.By, count+1
 		}
 		return grist.Emit(Averaged.Of(AverageComputed{Sum: sum, Count: count}))
