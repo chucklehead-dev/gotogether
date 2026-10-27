@@ -14,6 +14,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -137,6 +138,12 @@ func TestRealHTTP(t *testing.T) {
 
 	first := tier.Start("node1")
 	clients(1, []string{"a", "b", "c"}, []string{"a", "b"}, func() {
+		// the first relay has recorded some row (on a loaded machine it may
+		// lag every commit so far, and the second relay's copies would then
+		// be no copies): within a second
+		for deadline := time.Now().Add(time.Second); time.Now().Before(deadline) && !relayedSome(t, tier, first); {
+			time.Sleep(5 * time.Millisecond) //qenv:ok polling the real tier
+		}
 		first.Kill()
 		tier.Start("node2") // its relay records the step log from its first row
 	})
@@ -293,4 +300,21 @@ func TestRealLostThenKilled(t *testing.T) {
 	// welcome's answer is one no site gave. Why the real tier is judged
 	// by its own variant (docs/grist-instrumentation.md §5, decision 4)
 	qtest.Validate(t, commits, tier.Steps()).Expect(t, qtest.Violates(validate.EventuallyName("everyMailAnswerServed")))
+}
+
+// relayedSome reports whether n's relay has recorded a row of the step
+// log: fewer rows behind than the log holds.
+func relayedSome(t *testing.T, tier *gristtest.Tier, n *gristtest.Node) bool {
+	ctx := context.Background()
+	total := int64(0)
+	for _, tn := range []string{"t1", "t2"} {
+		c, err := tier.Store.(store.StepLog).StepCount(ctx, tn)
+		if err != nil {
+			t.Error(err)
+			return true
+		}
+		total += c
+	}
+	behind, err := n.Relay.Behind(ctx)
+	return err != nil || behind < total
 }

@@ -87,8 +87,16 @@ Then, in order, each item reviewed before the next:
   hand-written double, site or dedupe rule left in an example), `grist
   new`'s starter declaring a dependency; after its review, the site's
   action judges the request too and the default double stands in only
-  for calls answering no fields. Next: slice 3 (the real tier over HTTP:
-  `OverHTTP`, `ServeCalls`).
+  for calls answering no fields. Slice 3 built (§0.14): the real tier
+  over HTTP (`grist.OverHTTP`, `grist.ServeCalls` recording the site
+  with its own recorder, `grist.ServeDependency` and `serve -dependency`
+  in `grist.Main`, `gristtest.TierConfig.Serve` losing every fifth
+  answer after applying it, `Local` one per tier, a killed node
+  committing nothing), counters' `TestRealHTTP` retiring through a bank
+  behind `ServeCalls` and judged by its real variant (the mailer a third
+  party's), `payTwice` caught from the steps file, the lost answer with
+  the node killed probed over HTTP. Next: slice 4 (lints for an app's
+  own code).
   Candidate example apps for the declared calls (not built):
   - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
     once, refusing `declined`; `capture` at most once, reading the

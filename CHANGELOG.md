@@ -8,6 +8,19 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist, declared calls on the real tier over HTTP (GR3's slice 3,
+  docs/grist.md §0.14; api/grist.txt): `grist.OverHTTP(base, client)`
+  (`POST base/<call>`, `Idempotency-Key`, `grist.CauseHeader`
+  `Grist-Cause`; `grist.CallTimeout`), `grist.ServeCalls(dep, handlers)`
+  for a dependency the team owns (its site recorded into the request
+  context's recorder, in the caller's tenant's trace; nil handlers its
+  default double), `grist.ServeDependency` and `serve -dependency
+  NAME=URL` in `grist.Main`; `gristtest.TierConfig.Serve`, `Local`,
+  `DependencyLoseEvery`, `OnLostAnswer`, `Tier.Current`,
+  `Tier.DependencySteps`, `Tier.LostCalls`; a killed tier node commits
+  nothing after its kill. An at-most-once effect's unknown error is
+  recorded and stored with its double quotes made single (a Quint
+  string holds none: net/http's errors quote the URL).
 - grist, the default double (GR3's slice 2, docs/grist.md §0.13;
   api/grist.txt): `grist.DefaultHandlers(dep)`, a dependency's handlers
   applying a `Keyed` call once per key (a later try replayed from the

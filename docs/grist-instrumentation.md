@@ -1,12 +1,13 @@
 # grist instrumentation (GR3): every seam recorded and simulated by construction
 
-Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slices 1 and
-2 are built** (§4; docs/grist.md §0.12 and §0.13 say what building them
-changed, and the text below is corrected where they did):
+Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slices 1 to
+3 are built** (§4; docs/grist.md §0.12, §0.13 and §0.14 say what
+building them changed, and the text below is corrected where they did):
 `grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
 `Handlers`, `Local`, `Transport`, `gristsim.Config.Doubles`,
-`grist.DefaultHandlers` (the default double). The rest of the Go below is
-**proposed API** (`OverHTTP`, `ServeCalls`, `client.NewPeer`, ...),
+`grist.DefaultHandlers` (the default double), `grist.OverHTTP`,
+`grist.ServeCalls`, `grist.ServeDependency`, `gristtest.TierConfig.Serve`.
+The rest of the Go below is **proposed API** (`client.NewPeer`, ...),
 written so it parses; every name it takes from an existing toolkit
 package exists today.
 Read docs/grist.md first (§2.6 processors, §3.1 recording, §3.5 seams,
@@ -234,7 +235,7 @@ Which implementation answers is attached where the node starts, as
 `Dep.With` is today, so it is per run:
 
 ```go
-// proposed: the binary (grist.Main) and a real-tier test
+// the binary (grist.Main) and a real-tier test (built in slice 3)
 var deps = grist.Dependencies(func(ctx context.Context) context.Context {
 	return Bank.With(ctx, grist.OverHTTP("https://bank.internal/v1", nil))
 })
@@ -444,21 +445,36 @@ heavy and a module of its own can add one:
 
 ```text
 // package grist: Transport and Local built in slice 1 (gristsim serves a
-// dependency's Service requests through Local); the rest proposed
+// dependency's Service requests through Local), the rest in slice 3
 type Transport interface {
 	Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error)
 }
 func OverHTTP(base string, c *http.Client) Transport // POST base/<call>, Idempotency-Key, Grist-Cause
 func Local(h Handlers) Transport                     // in process; records the site
 func ServeCalls(d *Dependency, h Handlers) http.Handler // a dependency the team owns: records the site
+func ServeDependency(d *Dependency, h Handlers) ServeOption // Main: ServeCalls beside the node, over HTTP
 ```
+
+(Built so in slice 3, docs/grist.md §0.14. `ServeCalls` takes no
+recorder: it records into the request context's, so a service wraps it
+in `qobshttp.Handler(h, rec)` with its own (gristtest's tier does, with
+a step file of its own; `ServeDependency` does, into Main's steps file
+under a recorder of its own). Its records join the caller's tenant's
+trace (actor the tenant, process the App's name, placed at the cause's
+2·H+1, one clock per `ServeCalls` whichever node calls), and it refuses,
+400 and unrecorded, a request without its cause or key, of another App,
+or that does not decode; nil handlers are the default double, which
+refuses a call answering fields. A request a grist caller did not send
+for a trigger is then the model's rejection at `<c>Served`.)
 
 `OverHTTP` maps answers as grist/client does (grist §0.7): 2xx the
 response, 422 with `{"rejected": name}` a declared refusal, another 4xx
-a refusal of no name (`NotApplied`), a 5xx, a reset or a timeout an
-unknown outcome. The caller's steps go to the node's recorder (Main's
-`PerStep` file) exactly as in a simulation, so the same binding judges
-them.
+a refusal of no name (`NotApplied`: the effect's outcome is
+grist.failed, the caller's step's `unknown`, the only outcome `Do`
+records for an answer that is no declared refusal), a 5xx, a reset or a
+timeout an unknown outcome (`ErrOutcomeUnknown`). The caller's steps go
+to the node's recorder (Main's `PerStep` file) exactly as in a
+simulation, so the same binding judges them.
 
 The site exists on the real tier only where grist serves the call: an
 in-process `Local` (wallet-grist's ledger), a team-owned service behind
@@ -467,8 +483,15 @@ validate` as two recorders of one run), or a grist peer (§3.7, whose
 commit is the site). A third party (a real bank) has no site record: the
 model's `<c>Served` is never taken, its invariants over `<c>Served` hold
 vacuously, and an eventual val that needs a served record cannot be
-judged there (question 4). Over HTTP the caller's view is still checked
-in full: the request against the trigger, at most one call per key.
+judged there (§5's decision 4: such a tier is judged by
+`<app>.real.binding.yaml`, the vals marked `real`). Over HTTP the
+caller's view is still checked in full: the request against the
+trigger, at most one call per key. (Built in slice 3: counters' real
+tier pays through its bank behind `ServeCalls` and mails through a third
+party's mailer over `OverHTTP`; its site claims are
+`everyPaymentAnswerServed`, marked `real`, and `everyMailAnswerServed`,
+which the default binding judges in simulations and the real variant
+leaves out.)
 
 ### 3.7 Service A calls service B: one seam, both sides
 
@@ -598,7 +621,8 @@ names the mutant it must catch, built as an overlay
    the site is recorded; the review found that tier in a simulation, a
    caller crashed during the call); and the default double stands in
    only for calls answering no fields (§3.5).
-3. **The real tier over HTTP.** `Transport`, `OverHTTP`, `Local`,
+3. **The real tier over HTTP** (built, 2026-10-27: docs/grist.md
+   §0.14, with what it changed here). `Transport`, `OverHTTP`, `Local`,
    `ServeCalls`; `grist.Main` and `gristtest.TierConfig` serving a
    dependency's `Handlers` on a loopback server that loses every fifth
    answer after applying it. **Example: counters'** `TestRealHTTP`, now
@@ -608,7 +632,22 @@ names the mutant it must catch, built as an overlay
    on the real tier (two calls of one at-most-once key, judged from the
    steps file), and the faithful run conforms with
    `grist.unknown` appended for a lost answer and one served record per
-   key.
+   key. Built so, with the slice 2 review's three asks: the lost answer
+   with the node killed probed over HTTP (`TestRealLostThenKilled`: the
+   bank's step file the payment's only record, the payout's call
+   pending), where `wrongAmount` rejects `bankPayServed`, judged against
+   the processor's rule at the site; `ServeCalls`'s default refusing a
+   call answering fields; and one `ServeCalls` (one site clock) and one
+   `Local` per tier for every node. Three corrections: a killed tier node
+   commits nothing after its kill (its at-most-once outcome append,
+   which outlives the node's context by design, committed an outcome
+   whose effect step had died with the node's sink); an unknown
+   outcome's error is recorded with its double quotes made single
+   (net/http's errors quote the URL, which no Quint string holds); and
+   the real tier is judged by `counters.real.binding.yaml` (decision 4),
+   its mailer a third party's. `grist.Main` gained `ServeDependency` and
+   `serve -dependency NAME=URL`; the lost answer is a 502, as a proxy
+   gives.
 4. **Lints for an app's own code.** `lint -sim` over files importing
    grist (clock, rand, `go`, multi-case selects), with fixtures, and a
    `quintvet` check that an effect calls no `net/http` client, gRPC

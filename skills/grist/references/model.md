@@ -128,6 +128,18 @@ only its own vals (`once`, `exactly`) leaves them to the default
 binding's claims, and compares none (each expect is evaluated at every
 step of every replay). Each eventual val costs a replay per run: keep
 the per-push binding's few.
+
+A real tier whose dependency is a third party's (a real bank, a mail
+provider: no `grist.ServeCalls`, so no site records) cannot judge a val
+over that dependency's `<call>Records`: mark every val the real tier can
+judge `real` too and validate its steps with `<app>.real.binding.yaml`,
+leaving the site claims to the simulations, where grist serves every
+site (docs/grist-instrumentation.md §5, decision 4). counters' bank runs
+behind `ServeCalls` on its real tier and its mailer is a third party's,
+so `everyPaymentAnswerServed` (every answer the payout got is the bank's
+served record, or unknown) is marked `default retiring real` and
+`everyMailAnswerServed` `default retiring`; judged by the default
+binding, its real tier violates the second.
 Both modules import `grist`, `<app>Events` and `<app>Rules` themselves
 beside the skeleton (the starter does): quint's flattener loses names
 re-exported twice, and the validator's Go evaluator, which compiles the
@@ -208,7 +220,9 @@ serves a dependency the run gives no handlers) does so; it stands in only
 for calls whose response has no fields. An invariant or
 eventual val reads `<call>Records` (counters'
 `everyRetirementPaidOnce`: one ok served record per retirement's
-trigger) and `<call>Calls`; an invariant that each record's request
+trigger) and `<call>Calls` (`everyPaymentAnswerServed`: every answer
+the caller got, unknown aside, is a served record, field for field: on
+a real tier that checks the transport and the site's step file); an invariant that each record's request
 follows from its trigger restates the site's action, and holds in every
 run that conforms.
 

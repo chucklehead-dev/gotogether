@@ -83,10 +83,27 @@ for it. No binding is written by hand.
    `grist.Replayed(ctx)`, recorded and judged as `bankPayReplayed`, and
    keeps each key's first answer, a refusal included; `grist.CallKey(ctx)`
    the key). Outside a simulation attach a transport where the node
-   starts (`Bank.With(ctx, grist.Local(handlers))` in `grist.Dependencies`
-   or `gristtest.TierConfig.Deps`; `grist.Local(grist.DefaultHandlers(Mailer))`
-   for the default in process), its site records going to the node's
-   recorder. Do outside an effect, or of a call
+   starts: over HTTP `Bank.With(ctx, grist.OverHTTP(baseURL, nil))`
+   (`POST base/<call>`, the key as `Idempotency-Key`, the cause as
+   `Grist-Cause`; 2xx the response, 422 `{"rejected": name}` a refusal,
+   another 4xx `NotApplied`, a 5xx, a reset or a timeout an unknown
+   outcome; one attempt, never retried), in process
+   `Bank.With(ctx, grist.Local(handlers))` (its site records going to the
+   node's recorder), in `grist.Dependencies`. A dependency the team owns
+   serves its handlers with `grist.ServeCalls(dep, handlers)` (nil: the
+   default double, which refuses a call answering fields), wrapped in
+   `qobshttp.Handler(h, rec)` so its site records go to its own recorder
+   (its own step file, validated with the caller's), into the caller's
+   tenant's trace, each judged against the processor's rule: serve one
+   per dependency, whichever node calls. `grist.Main` serves one beside
+   the node with `grist.ServeDependency(dep, handlers)` (a loopback port,
+   its records in the steps file under a recorder of their own), and
+   `serve -dependency NAME=URL` calls another over HTTP. A third party's
+   dependency (a real bank, a mail provider) records no site: judge such
+   a real tier by a test-only variant, `<app>.real.binding.yaml`, whose
+   vals are marked `// grist: ... real` and leave out the site claims
+   (an eventual val over `<c>Records`), stated in simulations instead
+   (docs/grist-instrumentation.md §5, decision 4). Do outside an effect, or of a call
    the processor does not list in `Uses`, is the effect's error. What is
    no call stays a typed `grist.NewDep[T](name, fallback)` (T best an
    interface, its fallback a stand-in refusing every call with the fix;
@@ -235,10 +252,19 @@ for it. No binding is written by hand.
   a transaction at it);
   `App.Start(ctx, st, grist.WithRelay(relay))` with a recorder writing
   `qobs.FileSink(path, qobs.PerStep)`; clients record their calls with
-  `grist/client`'s `Client.Do` over HTTP, or `gristsim.Do` in process (as a run's clients do). `gristtest.NewTier(t, App, gristtest.TierConfig{Tenants, Deps})`
-  is all of it as a library: `Start(id)` a node (its `Kill`, a second
-  `Start` taking the traffic), `Clients()` and `Do` for the clients,
-  every fifth command's answer lost (`LoseEvery`), `Settle(probe)`
+  `grist/client`'s `Client.Do` over HTTP, or `gristsim.Do` in process (as a run's clients do). `gristtest.NewTier(t, App, gristtest.TierConfig{Tenants, Serve, Local, Deps})`
+  is all of it as a library: `Start(id)` a node (its `Kill`: its sink
+  dead and nothing committed after, a second `Start` taking the traffic;
+  `Current()` the node taking it), `Clients()` and `Do` for the clients,
+  every fifth command's answer lost (`LoseEvery`); `Serve` runs a
+  dependency's handlers behind `grist.ServeCalls` on a loopback server
+  of the tier's (its own step file, read with the nodes' by `Steps`,
+  `DependencySteps(dep)` alone), the nodes calling it with
+  `grist.OverHTTP`, every fifth answer lost after the call was applied
+  (`DependencyLoseEvery`, a 502; `OnLostAnswer` runs then: kill a node
+  there for the lost-answer-and-crash shape), `Local` serves handlers in
+  process, one `grist.Local` for the tier, `Deps` attaches the rest;
+  `Settle(probe)`
   waiting for every processor and the relay before it records the
   settle, `Check(commits, calls)` validating both bindings and that every
   client's answer has its store-side step (`gristtest.Answered`; a
@@ -251,7 +277,11 @@ for it. No binding is written by hand.
   `qtest.Linearize()`), and check each client's answer has its store-side
   step (a lost refusal step passes both bindings). examples/counters'
   `TestRealHTTP` is the walk-through (a node killed mid-run, a second
-  one recording what it never did). A second node's relay records the
+  one recording what it never did; retirements paid by a bank behind
+  `ServeCalls` that loses answers; a third party's mailer over
+  `OverHTTP`, so it is judged by `counters.real.binding.yaml`), and
+  `TestRealLostThenKilled` the lost answer with the node killed (the
+  bank's file the payment's only record). A second node's relay records the
   log again from its first row; Reconstruct drops the copies (info
   issues "seen twice"); a durable relay cursor is designed, not built
   (docs/grist.md §0.4), so validate a node's step files together.
@@ -281,7 +311,9 @@ for it. No binding is written by hand.
 - **An app's binary**: `func main() { grist.Main(app, opts...) }` with
   the driver imported: `catalog` (the registry as JSON, types as JSON
   Schemas), `verify`, `serve -db sqlite:PATH|postgres:DSN -tenant t1
-  -steps steps.jsonl [-actor-header X-Actor]`; validate the steps file
+  -steps steps.jsonl [-actor-header X-Actor] [-dependency NAME=URL]`;
+  `grist.ServeDependency(dep, handlers)` serves a dependency the team owns
+  beside the node over HTTP; validate the steps file
   with the app's binding (`gotogether validate -binding ...`).
   examples/counters' `cmd/counters` and `SERVE=1 ./run-demo.sh`.
 - **PostgreSQL**: `sqlstore.Postgres` states read committed and sets

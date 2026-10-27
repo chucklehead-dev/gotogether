@@ -7,7 +7,7 @@ on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
 `grist.Main` built (§0.5), `AtMostOnce` built (§0.6), their review's
 fixes (§0.7), a newcomer's trial's fixes (§0.8), the generator, `grist
 new` and the test harnesses built (§0.9), GR3's declared calls built
-(§0.12, §0.13); gristflow is design, as is
+(§0.12, §0.13, §0.14: on the real tier over HTTP); gristflow is design, as is
 slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -1541,6 +1541,146 @@ price of the crash case and of keeping the caller's check exercised).
 Nothing cheaper was found that would not drop a claim: the slice's
 growth is the recorded steps of every mail and post, which every
 exploration validates.
+
+## 0.14 What building GR3's slice 3 changed (the real tier over HTTP)
+
+docs/grist-instrumentation.md §4's slice 3: a declared call made and
+served over real HTTP, its site recorded by the service that applies it.
+Built, each with a test that fails with it taken out:
+
+- **`grist.OverHTTP(base, client)`** (grist/overhttp.go): `POST
+  base/<call>`, the request's JSON, the key as `Idempotency-Key`, the
+  cause as `Grist-Cause` (`grist.CauseHeader`:
+  `<app>/<tenant>/<processor>/<trigger>/<head>`, each part
+  path-escaped); nil client: one bounded by `grist.CallTimeout` (10 s).
+  2xx the response, 422 `{"rejected": name}` the refusal, another 4xx
+  `NotApplied`, a 5xx, a reset or a timeout `ErrOutcomeUnknown`; one
+  attempt (`TestOverHTTPAnswers`, against a server that is not grist's).
+- **`grist.ServeCalls(dep, handlers)`**, a dependency the team owns: each
+  call by its handler, whose wrapper records `<c>Served` or
+  `<c>Replayed` into the request context's recorder (a service wraps it
+  in `qobshttp.Handler(h, rec)`: its own recorder and step file), in the
+  caller's tenant's trace at the cause's 2·H+1, one site clock per
+  `ServeCalls` whichever node calls (`TestServeCallsOrderPerKey`: two
+  transports, one server, the delayed first try placed at the retry's
+  place). A request without its cause or key, of another App (its
+  records join this App's trace), or that does not decode is a 400,
+  recorded nowhere (`OverHTTP`: `NotApplied`); an undeclared call a 404,
+  another method a 405, a handler's error that is no declared refusal a
+  500 recorded with it (`TestServeCallsRefuses`). nil handlers are the
+  default double, which panics for a call answering fields, as
+  `DefaultHandlers` does; handlers lacking a call panic too
+  (`TestServeCallsDefault`). End to end, a node's effects over HTTP to a
+  bank behind `ServeCalls`, both recorders' steps alike in key, request
+  and place (`TestCallOverHTTP`).
+- **`grist.Main`**: `grist.ServeDependency(dep, handlers)` serves a
+  dependency behind `ServeCalls` on a loopback port beside the node,
+  its records in the `-steps` file under a recorder of their own
+  (`<app>-<pid>-<dep>`), the node calling it with `OverHTTP`; `serve
+  -dependency NAME=URL` calls URL instead (`TestMainServesDependency`).
+  counters' binary serves its bank so (`SERVE=1 ./run-demo.sh` retires a
+  counter).
+- **`gristtest.TierConfig.Serve`**: a dependency's handlers behind
+  `ServeCalls` on a loopback server of the tier's (one per dependency for
+  every node), recording into a step file of its own (`Steps` reads it
+  with the nodes', `DependencySteps(dep)` alone), the nodes calling it
+  with `OverHTTP`; every `DependencyLoseEvery`-th answer (default 5) lost
+  after the call was applied, as a 502, `OnLostAnswer` running then
+  (where a test kills a node), `Check` requiring some lost. `Local`
+  serves handlers in process, one `grist.Local` for the tier, so its
+  clock and its handlers' state (a default double's first answers) span
+  every node (wallet-grist's and library's tiers use it; they built
+  their `Local` outside `Deps` by hand). `Current()` is the node taking
+  the traffic.
+- **counters' real tier** (`TestRealHTTP`): a third phase of five
+  counters created and retired, paid through the bank (`NewBank`, the
+  team's own, now in deps.go and every simulation's double too) behind
+  `ServeCalls`, the fifth answer lost: that payout is `grist.unknown`,
+  each key paid once, the bank's file the only one recording payments.
+  The mailer is a third party's over `OverHTTP` (a handler of its own,
+  recording nothing). **`payTwice`** (the at-most-once payout calling
+  `Do` again after an unknown answer, as a retrying SDK would) is
+  `Rejects("bankPay")` from the steps file on that tier: the bank replays
+  the retry, nothing is paid twice, the store's records are the faithful
+  app's; the third phase is its contrast.
+- **The lost answer with the node killed, over HTTP**
+  (`TestRealLostThenKilled`, the slice 2 review's ask): one payout, the
+  bank's answer lost as `OnLostAnswer` kills the node, a second node
+  taking over: the payout's call pending, the bank's file the payment's
+  only record, and the run conforms. `wrongAmount` in that shape is
+  `Rejects("bankPayServed")`, the site's request judged against
+  `payoutBankPay` from the bank's own file.
+- **The real variant** (decision 4): `counters.real.binding.yaml`, the
+  vals the real tier can judge marked `real`. Two new site claims,
+  eventual vals over a call's steps and its served records:
+  `everyPaymentAnswerServed` (every answer the payout got, unknown
+  aside, is the bank's served record, field for field: on the real tier
+  it checks the transport's decoding and the bank's step file), marked
+  `default retiring real`, and `everyMailAnswerServed`, marked `default
+  retiring` only: judged by the default binding, the real tier violates
+  it (the third party's mailer records no site), which
+  `TestRealLostThenKilled` claims.
+
+Where the design changed (docs/grist-instrumentation.md, corrected in
+place):
+
+- **A killed tier node commits nothing after its kill.** The probe found
+  it: the at-most-once outcome append outlives its node's context by
+  design (a stopped node must not lose a payment's outcome), so after
+  `Node.Kill` killed the sink the outcome still committed, and the next
+  node's relay recorded an outcome whose effect step had died with the
+  sink: `payoutOutcome` rejected, a run no real process makes (a killed
+  process appends nothing). `Kill` now makes the node's store refuse
+  every append it begins after the kill (`ErrUnavailable`); one begun
+  before may commit, its node's earlier steps written first. Without it
+  `TestRealLostThenKilled` rejects `payoutOutcome`.
+- **An unknown outcome's error is recorded with its double quotes made
+  single**, in its step and its `grist.unknown` event alike (no Quint
+  string holds a double quote, and net/http's errors quote the URL:
+  every validation of such a run failed rendering the step;
+  `TestEffectAtMostOnce` now returns an error with quotes).
+- **`ServeCalls` takes no recorder**: it records into the request
+  context's, as every handler grist serves does, `qobshttp.Handler`
+  giving it one. **A 4xx of no name** is `NotApplied` for the effect
+  (grist.failed) while the caller's step records `unknown`, the only
+  outcome `Do` records for an answer that is no declared refusal.
+- **The lost answer is a 502** (what a proxy that lost the upstream's
+  answer gives), counted per served dependency; the design said only
+  "loses every fifth answer".
+- `grist.Main` gained `ServeDependency` and `-dependency`, which the
+  design named only as "serving a dependency's Handlers".
+
+What slice 4 (lints for an app's own code) must know: `OverHTTP` is
+grist's transport, attached where the node starts (`Dependencies`, a
+tier's config), never called from an effect, so a lint against an
+effect's raw `net/http` client must not flag `Call.Do`; a handler given
+to `ServeCalls` or `Call.Handler` is the dependency's code, not an
+effect's, and may use what it likes (counters' `NewBank` holds a
+`sync.Mutex`: a real service is concurrent). The real-tier test files
+(`real_test.go`) sleep and start servers with `//qenv:ok` reasons
+already; they import no qenv.
+
+What slice 5 (peer calls, actors named after the service) must know:
+the site's actor is set in one place, the handler wrapper
+(`callInfo.handler`, calls.go: actor the cause's tenant, process the
+App's name), which `ServeCalls`, `Local` and gristsim share, so
+`<app>/<tenant>` changes there; `Grist-Cause` already carries the App
+first, and `ServeCalls` refuses another App's call (400) because its
+records join one App's trace: a dependency serving several Apps needs
+that revisited with the actors. The key a `ServeCalls` dedupes by is the
+caller's (`Idempotency-Key`), so prefixing it with the App changes no
+transport. A peer's site is its commit, not `ServeCalls`.
+
+Cost (`go test -short ./...` in examples/counters, CPU s, user + sys,
+load 10-13 on 4 cores, this tree and main's one after the other): 749
+against 460. Of it: `TestRealHTTP` grew by its third phase and its real
+variant (about 30 s of wall time to 47), `TestRealLostThenKilled` and
+`payTwice`'s real tier are new, and so is `wrongAmount`'s real probe
+(each a real tier's few seconds of HTTP and SQLite, and its
+validations); the two site claims cost every exploration of the default
+and retiring bindings about 8% (`TestFaithful` and `TestPayoutTwoNodes`
+together, measured alone: 65 against 62). ci/test-times.txt's line (640)
+is unchanged: twice it is 1280.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
