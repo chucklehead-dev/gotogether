@@ -28,9 +28,9 @@ import (
 // same outcome.
 func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
-	ledger := &LocalLedger{}
+	ledger := grist.Local(grist.DefaultHandlers(Ledger))
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{
-		Deps: func(ctx context.Context, _ grist.Store) context.Context { return LedgerDep.With(ctx, ledger) }})
+		Deps: func(ctx context.Context, _ grist.Store) context.Context { return Ledger.With(ctx, ledger) }})
 	tier.Start("node")
 	var wg sync.WaitGroup
 	for c := 1; c <= 3; c++ {

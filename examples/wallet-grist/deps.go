@@ -1,107 +1,28 @@
 package walletgrist
 
-import (
-	"context"
-	"errors"
-	"sync"
-	"time"
+import "github.com/chucklehead-dev/gotogether/grist"
 
-	"github.com/chucklehead-dev/gotogether/grist"
-	"github.com/chucklehead-dev/gotogether/qenv"
-)
+// Ledger is the ledger every move is posted to: a declared dependency,
+// whose calls grist records at both ends (the caller's step ledgerPost,
+// the ledger's own ledgerPostServed) and gristsim serves as a
+// qenv.Service named ledger, its faults rpc.ledger.*. No test gives it a
+// double: gristsim serves its default (grist.DefaultHandlers), which
+// posts each key once; the real tier and the binary attach that default
+// in process (grist.Local), recording its posts with the node's steps.
+var Ledger = grist.NewDependency(App, "ledger")
 
-// A Ledger posts moves, deduplicating by key: a post under a key it
-// already holds is answered ok and posts nothing.
-type Ledger interface {
-	Post(ctx context.Context, tenant, key, account string, amount int) error
-}
-
-// LedgerDep is the application's ledger, reached through a processor's
-// context (grist.Dep): one per run, attached by gristsim's Config.Setup,
-// Main's Dependencies or the real tier's harness; a ledger that refuses
-// every post where none is attached.
-var LedgerDep = grist.NewDep[Ledger]("ledger", noLedger{})
-
-type noLedger struct{}
-
-func (noLedger) Post(context.Context, string, string, string, int) error {
-	return errors.New("wallet: no ledger: attach one (LedgerDep.With)")
-}
-
-// An Entry is a post as the ledger takes it.
+// Entry is a post as the ledger takes it: the move's account and amount.
+// The move it is for is the call's trigger, and the key the ledger
+// deduplicates by the call's (grist.CallKey): grist carries both.
 type Entry struct {
-	Tenant, Key, Account string
-	Amount               int
-}
-
-// A LedgerEntry is a post as the ledger makes it: its record at the
-// ledger's site (LedgerPosts), the tenant its actor.
-type LedgerEntry struct {
-	Key     string `json:"key"`
 	Account string `json:"account"`
 	Amount  int    `json:"amount"`
 }
 
-// LedgerPosts is the ledger's own record of each post it makes, where it
-// makes it (the step ledgerPost, actor the tenant): an effect's site
-// records the effect, so a post made twice is in the trace whatever the
-// processor saw.
-var LedgerPosts = grist.NewSite[LedgerEntry](App, "ledger-post")
+// Booked is the ledger's answer: the entry is on its book.
+type Booked struct{}
 
-// Book is the ledger's state: the keys it posted, in order. It records
-// each post at its site (LedgerPosts).
-type Book struct {
-	mu   sync.Mutex
-	keys map[string]bool
-	// Entries are the posts made, in order.
-	Entries []Entry
-}
-
-// post makes e's post once per key, recording it.
-func (b *Book) post(ctx context.Context, e Entry) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.keys == nil {
-		b.keys = map[string]bool{}
-	}
-	if b.keys[e.Key] {
-		return // a retry under the key: posted already
-	}
-	b.keys[e.Key] = true
-	b.Entries = append(b.Entries, e)
-	LedgerPosts.Record(ctx, e.Tenant, LedgerEntry{Key: e.Key, Account: e.Account, Amount: e.Amount})
-}
-
-// SimLedger is the ledger in a simulation: a qenv.Service of its own
-// process ("ledger"), whose requests and responses may be lost or late.
-type SimLedger struct {
-	svc  *qenv.Service[Entry, struct{}]
-	book Book
-}
-
-// NewSimLedger registers the ledger service in s.
-func NewSimLedger(s *qenv.Sim) *SimLedger {
-	l := &SimLedger{}
-	l.svc = qenv.NewService(s, "ledger", nil, func(ctx context.Context, e Entry) (struct{}, error) {
-		l.book.post(ctx, e)
-		return struct{}{}, nil
-	})
-	return l
-}
-
-// Post implements Ledger: an error if no answer came within a second.
-func (l *SimLedger) Post(ctx context.Context, tenant, key, account string, amount int) error {
-	_, err := l.svc.Call(ctx, Entry{Tenant: tenant, Key: key, Account: account, Amount: amount}, time.Second)
-	return err
-}
-
-// LocalLedger is the ledger in process (the real tier's and the binary's
-// stand-in), recording its posts to the recorder of the context it is
-// given.
-type LocalLedger struct{ book Book }
-
-// Post implements Ledger.
-func (l *LocalLedger) Post(ctx context.Context, tenant, key, account string, amount int) error {
-	l.book.post(ctx, Entry{Tenant: tenant, Key: key, Account: account, Amount: amount})
-	return nil
-}
+// PostEntry posts a move. Keyed: the ledger posts each key once (the post
+// processor's effect key, sent with every try), which the generated
+// model's ledgerPostAdmits says.
+var PostEntry = grist.NewCall[Entry, Booked](Ledger, "post", grist.Keyed())

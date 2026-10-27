@@ -1,21 +1,13 @@
 package walletgrist
 
 import (
-	"context"
 	"testing"
 
-	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
-
-// setup gives every run a ledger of its own.
-func setup(s *qenv.Sim, _ grist.Store) func(context.Context) context.Context {
-	l := NewSimLedger(s)
-	return func(ctx context.Context) context.Context { return LedgerDep.With(ctx, l) }
-}
 
 // The bindings: the commit side's, its test-only exactly-once variant,
 // and the client side's.
@@ -27,7 +19,7 @@ const (
 
 // system is the app under cfg, judged by binding, with faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
-	cfg.Setup = setup
+	cfg.Doubles = doubles
 	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
@@ -175,6 +167,28 @@ func TestRaces(t *testing.T) {
 				Expect(t, qtest.Conforms())
 		})
 	}
+}
+
+// transfers is one client transferring from c to a or b, no faults: each
+// transfer commits its two moves in one batch, each the trigger of a
+// post.
+var transfers = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Send: []string{"transfer"},
+	Gen: map[string]func(pick func(int) int) any{"transfer": func(p func(int) int) any {
+		return Transfer{Src: "c", Dest: of(p, "a", "b"), Amount: 1}
+	}}}
+
+// TestPostAfterTransfer: a post's record at the ledger follows the commit
+// holding its move, even the first move of a transfer's two-event batch:
+// grist places the ledger's record at its cause (the head the poller
+// read), and the generated ledgerPostServed takes a record only once its
+// trigger is in the log. Placed at its trigger's own position (2·T+1) the
+// first move's post comes before the batch's commit (at 2·P, P the
+// batch's end): every run rejects ledgerPostServed at its first post.
+func TestPostAfterTransfer(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(commits, transfers).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("ledgerPostServed"))
 }
 
 // crashAfterPost is a script of one fault: the node crashes after the

@@ -12,6 +12,7 @@ outcomes:
   ok: '"ok"'
   insufficient-funds: '"insufficient-funds"'
   invalid: '"invalid"'
+  unknown: '"unknown"'
   conflict: '"conflict"'
   idempotency-key-reused: '"idempotency-key-reused"'
 
@@ -30,7 +31,12 @@ actions:
   postOutcome: {}
   postSkip:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("post") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
-  ledgerPost: {}
+  ledgerPost:
+    args: { result: '{{.outcome}}' }
+  ledgerPostServed:
+    args: { result: '{{.outcome}}' }
+  ledgerPostReplayed:
+    args: { result: '{{.outcome}}' }
 
 invariants: [noOverdraft]
 eventually: [allPosted, postedApplied]

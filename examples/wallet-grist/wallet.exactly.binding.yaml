@@ -13,6 +13,7 @@ outcomes:
   ok: '"ok"'
   insufficient-funds: '"insufficient-funds"'
   invalid: '"invalid"'
+  unknown: '"unknown"'
   conflict: '"conflict"'
   idempotency-key-reused: '"idempotency-key-reused"'
 
@@ -26,7 +27,12 @@ actions:
   post: {}
   postOutcome: {}
   postSkip: {}
-  ledgerPost: {}
+  ledgerPost:
+    args: { result: '{{.outcome}}' }
+  ledgerPostServed:
+    args: { result: '{{.outcome}}' }
+  ledgerPostReplayed:
+    args: { result: '{{.outcome}}' }
 
 invariants: []
 eventually: [everyMovePostedOnce]

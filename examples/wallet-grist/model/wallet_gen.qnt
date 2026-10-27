@@ -35,8 +35,11 @@ module walletEvents {
   type TransferArgs = { src: str, dest: str, amount: int, principal: str }
   type ReadArgs = { account: str, principal: str }
   type ReadResult = { balance: int }
-  // site ledger-post: a record of the effect, made where it takes place
-  type LedgerPostRecord = { key: str, account: str, amount: int }
+  // call ledger/post: its request and response, and a step of it (the caller's or the site's: the outcome as result,
+  // the response zero unless it is ok)
+  type LedgerPostRequest = { account: str, amount: int }
+  type LedgerPostResponse = { unit: bool }
+  type LedgerPostRecord = { processor: str, trigger: int, key: str, request: LedgerPostRequest, result: str, response: LedgerPostResponse }
 }
 
 // The store's side (wallet.binding.yaml): every step where it took effect, one
@@ -61,7 +64,9 @@ module walletGen {
   var effects: List[Effect]
   // the command ids answered so far, by a commit or a committed refusal
   var answered: Set[str]
-  // what the ledger-post site recorded, in order
+  // the calls of ledger/post as their callers saw them (Call.Do), and as the dependency
+  // applied them (its served records), in order
+  var ledgerPostCalls: List[LedgerPostRecord]
   var ledgerPostRecords: List[LedgerPostRecord]
 
   action init = all {
@@ -70,6 +75,7 @@ module walletGen {
     appended' = [],
     effects' = [],
     answered' = Set(),
+    ledgerPostCalls' = [],
     ledgerPostRecords' = [],
   }
 
@@ -84,6 +90,7 @@ module walletGen {
     appended' = b,
     effects' = effects,
     answered' = answered.union(Set(id)),
+    ledgerPostCalls' = ledgerPostCalls,
     ledgerPostRecords' = ledgerPostRecords,
   }
 
@@ -103,6 +110,7 @@ module walletGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
+    ledgerPostCalls' = ledgerPostCalls,
     ledgerPostRecords' = ledgerPostRecords,
   }
 
@@ -113,6 +121,7 @@ module walletGen {
     appended' = b,
     effects' = effects,
     answered' = answered,
+    ledgerPostCalls' = ledgerPostCalls,
     ledgerPostRecords' = ledgerPostRecords,
   }
 
@@ -125,6 +134,7 @@ module walletGen {
     appended' = [],
     effects' = effects.append((p, trigger, key, ok)),
     answered' = answered,
+    ledgerPostCalls' = ledgerPostCalls,
     ledgerPostRecords' = ledgerPostRecords,
   }
 
@@ -218,21 +228,86 @@ module walletGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
+    ledgerPostCalls' = ledgerPostCalls,
     ledgerPostRecords' = ledgerPostRecords,
   }
 
-  // the ledger-post site's record, made where its effect took place: any number,
-  // in any order with the steps that asked for them, as ledgerPostAdmits allows
-  action ledgerPost(key: str, account: str, amount: int): bool = {
-    val rec_: LedgerPostRecord = { key: key, account: account, amount: amount }
+  // the keys of ledger/post's steps: (processor, trigger, key)
+  pure def ledgerPostKeys(l: List[LedgerPostRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))
+
+  // the ledger dependency applies each key once (Keyed): no earlier record of
+  // the key; the application's rules may define ledgerPostAdmits instead,
+  // reading only prefix (the log through the trigger)
+  pure def ledgerPostAdmits(prefix: List[Event], records: List[LedgerPostRecord], r: LedgerPostRecord): bool = not(keyCalled(ledgerPostKeys(records), r.key))
+
+  // ledger/post as its caller saw it (Call.Do: invoked before the request,
+  // done with the answer, the outcome ok, a declared refusal or unknown):
+  // from an effect of a processor that uses it, for one of its triggers
+  // before the effect step, under the trigger's key (callKeyStable), its
+  // request the processor's rule's
+  action ledgerPost(processor: str, trigger: int, key: str, account: str, amount: int, result: str): bool = {
+    val rec_: LedgerPostRecord = { processor: processor, trigger: trigger, key: key, request: { account: account, amount: amount }, result: result, response: { unit: true } }
     all {
-      ledgerPostAdmits(ledgerPostRecords, rec_),
+      or {
+        processor == "post" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "moved",
+          rec_.request == postLedgerPost(log.slice(0, trigger), trigger),
+          not(postSkips(log.slice(0, trigger), trigger)),
+          trigger == nextOf(log, checkpoints.get("post"), "moved"),
+        } else false),
+      },
+      callKeyStable(effects, ledgerPostKeys(ledgerPostCalls), processor, trigger, key),
       log' = log,
       checkpoints' = checkpoints,
       appended' = [],
       effects' = effects,
       answered' = answered,
+      ledgerPostCalls' = ledgerPostCalls.append(rec_),
+      ledgerPostRecords' = ledgerPostRecords,
+    }
+  }
+
+  // ledger/post as the dependency applied it (its served record, placed at
+  // its cause: after the commit holding its trigger): for one of a user's
+  // triggers, as ledgerPostAdmits allows given the log through the trigger.
+  // Its request is the caller's to judge (its step, recorded where grist
+  // makes the call)
+  action ledgerPostServed(processor: str, trigger: int, key: str, account: str, amount: int, result: str): bool = {
+    val rec_: LedgerPostRecord = { processor: processor, trigger: trigger, key: key, request: { account: account, amount: amount }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "post" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "moved",
+          ledgerPostAdmits(log.slice(0, trigger), ledgerPostRecords, rec_),
+        } else false),
+      },
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      ledgerPostCalls' = ledgerPostCalls,
       ledgerPostRecords' = ledgerPostRecords.append(rec_),
+    }
+  }
+
+  // ledger/post answered again from an application (grist.Replayed: a
+  // dependency answering a retry of a key from its first answer): an earlier
+  // served record, request and answer alike; it applies nothing
+  action ledgerPostReplayed(processor: str, trigger: int, key: str, account: str, amount: int, result: str): bool = {
+    val rec_: LedgerPostRecord = { processor: processor, trigger: trigger, key: key, request: { account: account, amount: amount }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "post" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "moved" else false),
+      },
+      ledgerPostRecords.indices().exists(i => ledgerPostRecords[i] == rec_),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      ledgerPostCalls' = ledgerPostCalls,
+      ledgerPostRecords' = ledgerPostRecords,
     }
   }
 
@@ -280,10 +355,31 @@ module walletGen {
         post(nextOf(log, checkpoints.get("post"), "moved"), ok_)
       },
       {
-        nondet key = STRS.oneOf()
-        nondet account = STRS.oneOf()
-        nondet amount = INTS.oneOf()
-        ledgerPost(key, account, amount)
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "unknown").oneOf()
+        {
+          val req_: LedgerPostRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "moved") postLedgerPost(log.slice(0, trigger_), trigger_) else { account: "", amount: 0 }
+          ledgerPost("post", trigger_, key_, req_.account, req_.amount, result_)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok").oneOf()
+        {
+          val req_: LedgerPostRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "moved") postLedgerPost(log.slice(0, trigger_), trigger_) else { account: "", amount: 0 }
+          ledgerPostServed("post", trigger_, key_, req_.account, req_.amount, result_)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok").oneOf()
+        {
+          val req_: LedgerPostRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "moved") postLedgerPost(log.slice(0, trigger_), trigger_) else { account: "", amount: 0 }
+          ledgerPostReplayed("post", trigger_, key_, req_.account, req_.amount, result_)
+        }
       },
     }
   }

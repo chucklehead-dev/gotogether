@@ -4,12 +4,13 @@
 // conditions, step) calls. examples/wallet/model/wallet.qnt keeps
 // balances, each request's outcome and its moves as variables; here they
 // are defs over the log, each request's outcome is grist's marker, and the
-// ledger's posts are the post processor's effect steps and the ledger's
-// own record of what it posted (its site, ledgerPost).
+// ledger's posts are the post processor's effect steps, its calls of the
+// ledger (ledgerPost) and the ledger's own record of what it posted
+// (ledgerPostServed).
 
 // The rules: the bank's accounts, its read model, each command's outcome,
-// events and needs, the read's answer, the post's event and the ledger's
-// dedupe.
+// events and needs, the read's answer, the post's event and its request of
+// the ledger.
 module walletRules {
   import grist.* from "./grist"
   import walletEvents.* from "./wallet_gen"
@@ -59,10 +60,11 @@ module walletRules {
     [posted(movedAccount(prefix[trigger - 1]), movedAmount(prefix[trigger - 1]), trigger)]
   // post skips no move (its handler never Skips)
   pure def postSkips(prefix: List[Event], trigger: int): bool = false
-  // the ledger posts once per key (it deduplicates; a ledger that does not
-  // posts a retried move twice, which this rule refuses)
-  pure def ledgerPostAdmits(records: List[LedgerPostRecord], r: LedgerPostRecord): bool =
-    records.select(p => p.key == r.key).length() == 0
+  // what the post asks the ledger for the move at the trigger: its account
+  // and amount (the ledger posts each key once: PostEntry is Keyed, and the
+  // generated ledgerPostAdmits says so)
+  pure def postLedgerPost(prefix: List[Event], trigger: int): LedgerPostRequest =
+    { account: movedAccount(prefix[trigger - 1]), amount: movedAmount(prefix[trigger - 1]) }
 
   // no account outside the credit line goes negative, nor the line in sum
   pure def noOverdraftIn(log: List[Event]): bool =
@@ -99,8 +101,8 @@ module wallet {
     ledgerPostRecords.foldl(true, (b, p) => b and effects.indices().exists(j => and {
       effects[j]._1 == "post",
       effects[j]._3 == p.key,
-      movedAccount(log[effects[j]._2 - 1]) == p.account,
-      movedAmount(log[effects[j]._2 - 1]) == p.amount,
+      movedAccount(log[effects[j]._2 - 1]) == p.request.account,
+      movedAmount(log[effects[j]._2 - 1]) == p.request.amount,
     }))
 
   // test-only: the ledger holds every move exactly once, under its effect
