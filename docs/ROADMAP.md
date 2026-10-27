@@ -19,31 +19,95 @@ items left from S, X, Y, T and E alongside; R5 when the maintainer says.
 ## grist (codename)
 
 The grist track, alongside G: an event-sourced framework checked by its
-model, designed in docs/grist.md (§8 for the slices).
+model, designed in docs/grist.md (§8 for the slices). The maintainer's
+aim (2026-10-27): every grist application instrumented automatically,
+grist usable for stream publishers and consumers, gRPC services and
+Kubernetes controllers as well as HTTP services, several services or
+systems simulated together, and all of it onboarded with minimal work
+by the user.
 
-- **Slice 1, the thesis**: done (grist/, examples/counters, skills/grist;
-  docs/grist.md §0.1 says what building it changed, §0.2 what its review
-  changed). Left of it for slice 2: keys and queries of several tags
-  (with the typed template function, recording grist.qnt's `Read`
-  records directly), a separate effect worker, tenants created while a
-  node runs, recording commits from a `store.StepLog`'s rows (the
-  sqlstore's, a relay keyed by the row's seq) instead of
-  `Batch.OnCommit`, `grist.lock` and `grist.topology`.
+- **Slice 1, the thesis: done** (grist/, examples/counters, skills/grist;
+  docs/grist.md §0.1-§0.2).
+- **Slice 2, the real tier: mostly done.** qsql's composite keys, ranges
+  and RETURNING, the typed template function and `actors:` (core);
+  sqlstore on PostgreSQL, SQLite and qsql, commits recorded from the
+  step log (Relay), PostgreSQL in CI; the HTTP API, grist/client,
+  grist.Main; AtMostOnce (docs/grist.md §0.3-§0.6). Left: the generator,
+  gristflow, `blind` measured on the real tier, a durable relay cursor
+  (with a lost-prefix record in qtrace), and the core item below.
 - **A core item grist's measurements ask for** (validate,
-  internal/replay): an eventual val is judged by a replay of its own
-  (`<val>EvTest`), so a binding with one eventual val replays every run
-  twice in the fast phase; judging it at the end of the fused run
-  (`allTest`'s last step expecting it, for a settled trace only, the
-  detail phase telling which check failed) would save that replay: 7 s
-  of 25 at examples/counters' 999 steps (docs/grist.md §10, question 4). It changes the generated module the validator's caches
-  and snapshot tests key on, so it is the core's change to make, with
-  its own tests, not grist's.
-- **Slice 2, the real tier**: qsql extended (its own core item, with a
-  brute-force test), the typed template function, an actor filter;
-  sqlstore on qsql and SQLite, the HTTP API, `AtMostOnce`, the
-  generator, gristflow.
-- **Slice 3, the rest of grain**: periodic tasks, upcasting, snapshots,
-  gristpure, gristhegel, PostgreSQL, leases, screens and Datastar.
+  internal/replay): an eventual val is judged by a replay of its own, so
+  a binding with one replays every run twice; judging it at the end of
+  the fused run would save 7 s of 25 at counters' 999 steps
+  (docs/grist.md §10, question 4).
+
+Then, in order, each item reviewed before the next:
+
+- **GR1. A trial by a naive agent (S).** wallet rebuilt on grist
+  (examples/wallet-grist) by an agent given only skills/grist,
+  docs/grist.md and wallet's README and model, not its code; scored on
+  explorations green, wallet's mutants caught, how much of the model
+  and binding was written by hand, and every place it guessed. Its
+  frictions reorder what follows. Further trials as items land: payd,
+  webjobs (with its Playwright journeys judged against the grist
+  version), hello as a smoke test.
+- **GR2. Onboarding with minimal work (M).** The generator (`grist
+  model`: the Quint skeleton, the bindings of both sides, a diff in CI);
+  `grist new` (an app, its model, bindings, gristsim test and run-demo
+  scaffolded and green on first run); gristflow (an append its reads do
+  not cover, a rejection on an unconditioned read, a raw store call); a
+  "grist for a new app" page and the skill's first-hour path. Done when
+  a trial agent writes no binding by hand.
+- **GR3. Automatic instrumentation everywhere (M).** Today every block's
+  step is recorded by construction; the rest of an application's seams
+  are not: outbound HTTP and gRPC calls, stream publishes and consumes,
+  timers, and the app's own dependencies. Each adapter (GR5-GR7)
+  records its seam with no annotation, the generator binds it, and an
+  app that adds a dependency gets its steps without writing code;
+  OTel spans of the same seams converted, for apps already traced.
+- **GR4. Several services simulated together (L).** gristsim composes
+  several Apps, each with its own store, process and node(s), over
+  qhttp/simgrpc/simlog networks with faults per service; a cross-service
+  causal link recorded on both sides (the cause and the caller's command
+  id carried with a call and an event); per-service bindings with
+  `actors:` and a system model (Choreo for the protocol between
+  services); multi-node runs of one service (Config.Nodes). Then
+  integration between services: a service's event feed with remote
+  consumer checkpoints, a packaged inbox/outbox, service identities
+  (an actor that is a service, Internal blocks callable by named
+  peers).
+- **GR5. Stream publishers and consumers (M).** A processor that
+  publishes to a stream (Kafka via franz-go, Kinesis, the simulated
+  log examples/streams has) with the checkpoint and the publish's
+  idempotence (producer ids, sequence) in one discipline; a consumer
+  block reading a partitioned stream into commands with per-partition
+  checkpoints; kfake/kinesisfake and simlog as the simulated tiers,
+  reusing streams' binding lessons (the consumer the one place every
+  tier can record).
+- **GR6. gRPC services (M).** Commands and queries served over gRPC
+  beside HTTP (a generated service from the catalog, or a handler for
+  a hand-written proto), and called over gRPC by grist/client; simgrpc
+  (examples/grpcledger) as the simulated tier, otelgrpc spans converted.
+- **GR7. Kubernetes controllers (L).** A reconciler as a grist
+  processor over a watched resource (desired state as events, the
+  reconcile's effects at least once with their keys), on
+  multicluster-runtime/controller-runtime; kubesim (fleetrollout) as the
+  simulated tier, kwok and kind as real tiers, crossdb's and
+  fleetrollout's lessons (closed-loop polls, status lag, real-clock
+  libraries translated at the seam).
+- **GR8. Sagas and timers (M).** Per-entity deadlines (a timer as a
+  scheduled event, fired once per entity and slot), periodic tasks
+  (Slice 3's), a saga/process-manager block with compensations; the
+  model's library defs for them.
+- **GR9. checkout as grist services (L).** examples/checkout-grist:
+  order, inventory and payment as three grist services, the saga across
+  them, reservations that expire, the payment gateway a qenv.Service
+  double; checkout's claims (isolation levels, crashes, idempotency,
+  the outbox) carried over, plus the system model's; a real tier with
+  three processes. The proof that GR4 and GR8 compose.
+- **Slice 3's rest**: upcasting, snapshots, gristpure, gristhegel,
+  leases, screens and Datastar (the read models' cost on long histories
+  first: snapshots before a second real app).
 
 ## Release (R5)
 
