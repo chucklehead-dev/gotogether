@@ -1672,8 +1672,9 @@ caller's (`Idempotency-Key`), so prefixing it with the App changes no
 transport. A peer's site is its commit, not `ServeCalls`.
 
 Cost (`go test -short ./...` in examples/counters, CPU s, user + sys,
-load 10-13 on 4 cores, this tree and main's one after the other): 749
-against 460. Of it: `TestRealHTTP` grew by its third phase and its real
+load 6-13 on 4 cores, this tree and main's one after the other): 717
+against 460 (749 with eight retirements in the real tier's phase, cut
+to five, the fewest that reach the bank's lost fifth answer). Of it: `TestRealHTTP` grew by its third phase and its real
 variant (about 30 s of wall time to 47), `TestRealLostThenKilled` and
 `payTwice`'s real tier are new, and so is `wrongAmount`'s real probe
 (each a real tier's few seconds of HTTP and SQLite, and its
