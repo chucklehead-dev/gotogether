@@ -342,7 +342,9 @@ types buys users nothing they would notice.
   the selector is the `*types.Func` whatever the import's name); a
   check of every use, not every call, would close it. A finding more,
   never one fewer: a behaviour change of the lint, to state in the
-  CHANGELOG. qweave's receiver match does not unalias (`types.Unalias`)
+  CHANGELOG. Done ("qlint, quintsim: the wall clock and math/rand as
+  function values"): qlint's rule finds values, by name in the CLI and
+  by type in quintsim (`qlint.SimFileTyped`). qweave's receiver match does not unalias (`types.Unalias`)
   a receiver's type; harmless today, since its join points name sync's
   types, whose methods are declared on no alias.
 - cmd/gotogether: done with the core (A1, A5). Its errors wrap with `%v`

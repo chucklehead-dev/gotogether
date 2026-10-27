@@ -17,3 +17,10 @@ Gotchas for agents (and humans) before changing qanalysis or the binding lint; A
   import qobs. An action through a constant or variable is not seen, and
   a call on another imported package's `Record` (qtest's) is skipped by
   its name; the analyzer confirms each call by type, the CLI cannot.
+- quintsim and `gotogether lint -sim` share qlint's rule (`simFile`): the
+  CLI's is syntactic (`SimFile`: a function by its import's local name,
+  a value only for the functions it knows by name, so `rand.Rand`, a
+  type, is none), the analyzer's typed (`SimFileTyped` with
+  `pass.TypesInfo`: a `*types.Func` of the package, no receiver, so a
+  dot import is seen and a local that shadows `time` is not). A rule
+  change goes in both modes, with a qlint test and a simapp fixture.

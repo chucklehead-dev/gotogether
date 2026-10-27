@@ -967,6 +967,7 @@ type Workload struct
 == github.com/chucklehead-dev/gotogether/qlint
 func Sim(dir string) ([]Finding, error)
 func SimFile(fset *token.FileSet, f *ast.File) []Finding
+func SimFileTyped(fset *token.FileSet, f *ast.File, info *types.Info) []Finding
 func Woven(dir string) ([]Finding, error)
 func WovenFile(fset *token.FileSet, f *ast.File) []Finding
 type Finding struct

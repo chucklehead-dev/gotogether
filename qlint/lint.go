@@ -10,6 +10,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -61,6 +62,13 @@ func (f Finding) String() string { return f.Pos + ": " + f.What + ": " + f.Fix }
 //     generator from rand.New with a seed the run chose is fine);
 //   - a select with two or more communication cases: when several are
 //     ready Go picks one at random, which no chooser makes.
+//
+// The wall clock's and the random packages' functions are found as
+// values too (now := time.Now, a field set to rand.IntN): a call of the
+// value escapes as a call of the function would. Without type
+// information (Sim, SimFile) a function is found by its package's import
+// name (time.Now); with it (SimFileTyped, the analyzers) by what the name
+// denotes, so a dot import is seen and a local variable named time is not.
 //
 // A line with a //qenv:ok comment is exempt, for code that runs outside
 // the simulation on purpose (a real server next to a simulated client).
@@ -114,13 +122,39 @@ func importName(p string) string {
 // Read-only.
 var randConstructors = map[string]bool{"New": true, "NewSource": true, "NewPCG": true, "NewChaCha8": true, "NewZipf": true}
 
+// randFuncs are the random packages' functions that draw, by name: a
+// value of one, without type information, is told from a type's name
+// (rand.Rand) by this list.
+// Read-only.
+var randFuncs = map[string]bool{}
+
+func init() {
+	for p, names := range map[string]string{
+		"math/rand":    "ExpFloat64 Float32 Float64 Int Int31 Int31n Int63 Int63n Intn NormFloat64 Perm Read Seed Shuffle Uint32 Uint64",
+		"math/rand/v2": "ExpFloat64 Float32 Float64 Int Int32 Int32N Int64 Int64N IntN N NormFloat64 Perm Shuffle Uint Uint32 Uint32N Uint64 Uint64N UintN",
+		"crypto/rand":  "Int Prime Read Text",
+	} {
+		for n := range strings.FieldsSeq(names) {
+			randFuncs[p+"."+n] = true
+		}
+	}
+}
+
 // SimFile is Sim's check of one parsed file (with comments): nothing
 // unless the file imports qenv.
-func SimFile(fset *token.FileSet, f *ast.File) []Finding { return simFile(fset, f, false) }
+func SimFile(fset *token.FileSet, f *ast.File) []Finding { return simFile(fset, f, nil, false) }
 
-// simFile is SimFile; with all, of any file: the core's own simulation
-// code (qenv, its doubles, qload) imports no qenv to say so.
-func simFile(fset *token.FileSet, f *ast.File, all bool) []Finding {
+// SimFileTyped is SimFile with the file's type information: a function
+// is known by the object its name denotes, not by its package's import
+// name (a dot import's Now(), a function value through it).
+func SimFileTyped(fset *token.FileSet, f *ast.File, info *types.Info) []Finding {
+	return simFile(fset, f, info, false)
+}
+
+// simFile is SimFile (SimFileTyped with info); with all, of any file: the
+// core's own simulation code (qenv, its doubles, qload) imports no qenv
+// to say so.
+func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Finding {
 	names := map[string]string{} // import path -> local name
 	for _, im := range f.Imports {
 		p, _ := strconv.Unquote(im.Path.Value)
@@ -149,18 +183,85 @@ func simFile(fset *token.FileSet, f *ast.File, all bool) []Finding {
 				At: n.Pos(), file: pos.Filename, line: pos.Line, col: pos.Column})
 		}
 	}
-	sel := func(e ast.Expr, pkgPath string) (string, bool) {
+	// funcOf is the package-level function e names (pkg.F, or F through a dot
+	// import when typed): by type information if there is any, else by
+	// the import's local name
+	funcOf := func(e ast.Expr) (pkgPath, name string, ok bool) {
+		if info != nil {
+			var id *ast.Ident
+			switch x := e.(type) {
+			case *ast.Ident:
+				id = x
+			case *ast.SelectorExpr:
+				id = x.Sel
+			default:
+				return "", "", false
+			}
+			f, ok := info.Uses[id].(*types.Func)
+			if !ok || f.Pkg() == nil || f.Type().(*types.Signature).Recv() != nil {
+				return "", "", false
+			}
+			return f.Pkg().Path(), f.Name(), true
+		}
 		s, ok := e.(*ast.SelectorExpr)
 		if !ok {
-			return "", false
+			return "", "", false
 		}
 		id, ok := s.X.(*ast.Ident)
-		if !ok || names[pkgPath] == "" || id.Name != names[pkgPath] {
-			return "", false
+		if !ok {
+			return "", "", false
 		}
-		return s.Sel.Name, true
+		for p, local := range names {
+			if local == id.Name {
+				return p, s.Sel.Name, true
+			}
+		}
+		return "", "", false
 	}
+	sel := func(e ast.Expr, pkgPath string) (string, bool) {
+		p, name, ok := funcOf(e)
+		return name, ok && p == pkgPath
+	}
+	// escapes is why calling pkgPath.name leaves the simulation, and the fix
+	escapes := func(pkgPath, name string) (what, fix string) {
+		switch pkgPath {
+		case "math/rand", "math/rand/v2", "crypto/rand":
+			if !randConstructors[name] {
+				return pkgPath + "." + name + " draws from a source seeded at random, so a run does not replay",
+					"draw from the run's chooser (Sim.Choose(kind, n)), or from rand.New with a seed the run chose"
+			}
+		case "time":
+			if wallClock[name] != "" {
+				return "time." + name + " reads the wall clock, which does not move in a simulation", "use " + wallClock[name]
+			}
+		}
+		return "", ""
+	}
+	// called are the call expressions' functions, and selectors' names:
+	// what is left of a flagged function's uses are its values
+	called, selName := map[ast.Expr]bool{}, map[*ast.Ident]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CallExpr:
+			called[ast.Unparen(n.Fun)] = true
+		case *ast.SelectorExpr:
+			selName[n.Sel] = true
+		}
+		return true
+	})
+	ast.Inspect(f, func(n ast.Node) bool {
+		if e, ok := n.(ast.Expr); ok && !called[e] {
+			if id, ok := e.(*ast.Ident); !ok || !selName[id] {
+				// without types a selector may name a type (rand.Rand): only
+				// the functions known by name are values
+				if p, name, ok := funcOf(e); ok && (info != nil || p == "time" || randFuncs[p+"."+name]) {
+					if what, fix := escapes(p, name); what != "" {
+						add(n, p+"."+name+" used as a value: a call of it "+strings.TrimPrefix(what, p+"."+name+" "),
+							fix+" (in a func that calls it, where a function value is wanted)")
+					}
+				}
+			}
+		}
 		switch n := n.(type) {
 		case *ast.GoStmt:
 			add(n, "goroutine started with `go`, outside the simulation", "start it with qenv.Go(ctx, name, fn)")
@@ -176,14 +277,10 @@ func simFile(fset *token.FileSet, f *ast.File, all bool) []Finding {
 					"wait for one thing at a time (qenv.Wait, a qenv.Signal), or mark it //qenv:ok if at most one case can be ready at once")
 			}
 		case *ast.CallExpr:
-			for _, rp := range []string{"math/rand", "math/rand/v2", "crypto/rand"} {
-				if fn, ok := sel(n.Fun, rp); ok && !randConstructors[fn] {
-					add(n, rp+"."+fn+" draws from a source seeded at random, so a run does not replay",
-						"draw from the run's chooser (Sim.Choose(kind, n)), or from rand.New with a seed the run chose")
+			if p, name, ok := funcOf(ast.Unparen(n.Fun)); ok {
+				if what, fix := escapes(p, name); what != "" {
+					add(n, what, fix)
 				}
-			}
-			if fn, ok := sel(n.Fun, "time"); ok && wallClock[fn] != "" {
-				add(n, "time."+fn+" reads the wall clock, which does not move in a simulation", "use "+wallClock[fn])
 			}
 			if fn, ok := sel(n.Fun, "github.com/chucklehead-dev/gotogether/qobs"); ok && (fn == "Record" || fn == "Invoke") && len(n.Args) > 0 {
 				if c, ok := n.Args[0].(*ast.CallExpr); ok {

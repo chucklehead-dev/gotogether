@@ -177,3 +177,50 @@ func run(s *qenv.Sim, a, b chan int) {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// The wall clock's and the random packages' functions are found as
+// values too, where a call of the value escapes later; a type of the
+// random package (rand.Rand) and a seeded generator's methods are not.
+func TestLintFunctionValues(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sim.go"), []byte(`package app
+
+import (
+	"math/rand/v2"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/qenv"
+)
+
+type clock struct{ now func() time.Time }
+
+func run(s *qenv.Sim) {
+	now := time.Now
+	c := clock{now: time.Now}
+	draw := rand.IntN
+	var g *rand.Rand = rand.New(rand.NewPCG(1, 2))
+	pick := g.IntN
+	_, _, _, _ = now, c, draw, pick
+	after := time.After //qenv:ok a real timeout beside the simulation
+	_ = after
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fs, err := qlint.Sim(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range fs {
+		got = append(got, f.Pos[strings.LastIndex(f.Pos, "/")+1:]+" "+f.What)
+	}
+	want := []string{
+		"sim.go:13:9 time.Now used as a value: a call of it reads the wall clock, which does not move in a simulation",
+		"sim.go:14:18 time.Now used as a value: a call of it reads the wall clock, which does not move in a simulation",
+		"sim.go:15:10 math/rand/v2.IntN used as a value: a call of it draws from a source seeded at random, so a run does not replay",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

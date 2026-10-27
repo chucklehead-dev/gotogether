@@ -8,6 +8,12 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `gotogether lint -sim` and quintsim find the wall clock's and the
+  random packages' functions as values too (`now := time.Now`, a field
+  set to `rand.IntN`), which escaped them: a finding more, never one
+  fewer. `qlint.SimFileTyped` is the check with type information, which
+  quintsim now runs (a dot import's functions found, a local that
+  shadows an import's name left alone).
 - Errors wrap their cause with `%w` where they printed it with `%v`
   (24 sites: binding, validate, qtrace, qdriver, qdriver/bombadil,
   qcover/gocover, the CLI), so a caller's `errors.Is` sees a missing

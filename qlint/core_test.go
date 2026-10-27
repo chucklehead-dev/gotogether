@@ -38,7 +38,7 @@ func TestCoreStaysInTheSimulation(t *testing.T) {
 					t.Errorf("%s:%d: //qenv:ok without its reason", p, i+1)
 				}
 			}
-			for _, fd := range simFile(fset, f, true) {
+			for _, fd := range simFile(fset, f, nil, true) {
 				t.Errorf("%s (or mark it //qenv:ok with the reason it runs outside the simulation)", fd)
 			}
 		}
