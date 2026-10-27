@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"sync"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -69,15 +70,6 @@ func NewDependency(app *App, name string) *Dependency {
 // Name is the dependency's name.
 func (d *Dependency) Name() string { return d.name }
 
-// Calls are the names of the dependency's calls, in registration order.
-func (d *Dependency) Calls() []string {
-	out := make([]string, len(d.calls))
-	for i, c := range d.calls {
-		out[i] = c.name
-	}
-	return out
-}
-
 // With is ctx with t answering d's calls: what runs the node attaches it
 // (gristsim does, per run; Main's Dependencies, a real tier's harness).
 func (d *Dependency) With(ctx context.Context, t Transport) context.Context {
@@ -94,7 +86,8 @@ func (a *App) Dependencies() []*Dependency { return slices.Clone(a.depOrder) }
 // response Resp are structs of scalar fields (strings, integers,
 // booleans) the model compares, by JSON name. Its caller's view is the
 // step <call's Quint name> (Do), its application at the dependency the
-// step <...>Served (the handler's wrapper: Handler).
+// step <...>Served and an answer given again from an application the step
+// <...>Replayed (the handler's wrapper: Handler).
 type Call[Req, Resp any] struct{ info *callInfo }
 
 // CallName is a declared call, of any types: what Uses takes.
@@ -107,9 +100,6 @@ func (c *Call[Req, Resp]) call() *callInfo { return c.info }
 
 // Name is the call's name.
 func (c *Call[Req, Resp]) Name() string { return c.info.name }
-
-// Dependency is the call's dependency.
-func (c *Call[Req, Resp]) Dependency() *Dependency { return c.info.dep }
 
 // The fields every call step records beside its request's and response's:
 // a request or response field of one of these names would be overwritten.
@@ -131,7 +121,7 @@ func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Re
 		a.problems = append(a.problems, fmt.Sprintf("%s: declared twice: declare each call of a dependency once", what))
 	case d.quint != "":
 		c.quint = d.quint + upper(q)
-		for _, n := range []string{c.quint, c.quint + "Served"} {
+		for _, n := range []string{c.quint, c.quint + "Served", c.quint + "Replayed"} {
 			if prev, ok := a.quintNames[n]; ok {
 				a.problems = append(a.problems, fmt.Sprintf("%s maps to the Quint action %s, as %q does: rename one", what, n, prev))
 			}
@@ -265,7 +255,7 @@ func (c *Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error) {
 	}
 	t, _ := ctx.Value(ci.dep.key).(Transport)
 	if t == nil {
-		return zero, fmt.Errorf("grist: call %s: no transport is attached for dependency %s: gristsim serves it from Config.Doubles; elsewhere attach one (%s's With)", ci.label(), ci.dep.name, ci.dep.name)
+		return zero, fmt.Errorf("grist: call %s: no transport is attached for dependency %s: gristsim serves it from Config.Doubles; elsewhere attach one where the node starts (the dependency's With(ctx, grist.Local(handlers)) serves it in process)", ci.label(), ci.dep.name)
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -334,6 +324,40 @@ type handlerCtx struct {
 	replayed bool
 }
 
+// siteClock places a transport's site records of each key: at the call's
+// cause (2·Head+1), but never before an earlier record of the key. A
+// request from an earlier head may be served after a later one's (a
+// request delayed past its caller's timeout and a restarted poller's
+// retry, or two nodes' pollers): placed at its own cause it would come
+// before the record it follows on the key's thread, a cycle, and a replay
+// before the application it repeats.
+type siteClock struct {
+	mu   sync.Mutex
+	last map[string]int64
+}
+
+// at is the place of a record of key caused at pos: pos, or the key's
+// last record's if later.
+func (c *siteClock) at(key string, pos int64) int64 {
+	if c == nil {
+		return pos
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if prev, ok := c.last[key]; ok && prev > pos {
+		pos = prev
+	}
+	c.last[key] = pos
+	return pos
+}
+
+// served is what a transport hands a handler's wrapper: the call's cause
+// and the transport's site clock.
+type served struct {
+	info  CallInfo
+	clock *siteClock
+}
+
 type handlerKey struct{}
 
 // CallKey is the call's key: in an effect, the effect key (EffectKey),
@@ -348,8 +372,13 @@ func CallKey(ctx context.Context) string {
 
 // Replayed says, from a handler, that its answer is one it gave before
 // for the call's key (a deduplicating dependency answering a retry from
-// its first answer): it applied nothing now, and no served record is
-// recorded. Outside a handler it does nothing.
+// its first answer): it applied nothing now, so the wrapper records the
+// step <call>Replayed instead of a served record, and the model admits it
+// only as an earlier served record of the key, request and answer alike
+// (a replay of no application, or of another answer, is rejected). It is
+// the handler's word: a double that applies a call again and says
+// Replayed hides the second application. Outside a handler it does
+// nothing.
 func Replayed(ctx context.Context) {
 	if h, ok := ctx.Value(handlerKey{}).(*handlerCtx); ok {
 		h.replayed = true
@@ -361,9 +390,10 @@ func Replayed(ctx context.Context) {
 // application at its site, the step <call>Served: the request's and the
 // response's fields, the processor, trigger and key, the outcome f
 // answered (ok, or a declared refusal's name), placed at the call's
-// cause (order.pos 2·Head+1: after the commit holding the trigger) on a
-// thread of its own key. A handler that answers from an earlier
-// application says so (Replayed), and records nothing; one that returns
+// cause (order.pos 2·Head+1: after the commit holding the trigger, and
+// not before an earlier record of the key) on a thread of its own key. A
+// handler that answers from an earlier application says so (Replayed):
+// the step is <call>Replayed, with the same fields. One that returns
 // another error is recorded with it, naming the fix.
 func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, error)) CallHandler {
 	ci := c.info
@@ -373,16 +403,9 @@ func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, er
 			return nil, fmt.Errorf("grist: call %s: its request does not decode: %w", ci.label(), err)
 		}
 		hc := &handlerCtx{}
-		if info, ok := ctx.Value(callInfoKey{}).(CallInfo); ok {
-			hc.info = info
-		}
+		sv, _ := ctx.Value(callInfoKey{}).(served)
+		hc.info = sv.info
 		resp, err := f(context.WithValue(ctx, handlerKey{}, hc), req)
-		if hc.replayed {
-			if err != nil {
-				return nil, err
-			}
-			return json.Marshal(resp)
-		}
 		out, merr := json.Marshal(resp)
 		var rej *Rejected
 		var kv []any
@@ -404,8 +427,12 @@ func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, er
 		reqKV, _ := rec.StepFields(ci.req, body, "")
 		i := hc.info
 		all := append([]any{"actor", i.Tenant, "process", ci.dep.app.Name, "thread", "grist.served/" + i.Key,
-			"processor", i.Processor, "trigger", int64(i.Trigger), "key", i.Key, "order.pos", readOrder(i.Head)}, reqKV...)
-		qobs.Record(ctx, ci.quint+"Served", recErr, append(all, kv...)...)
+			"processor", i.Processor, "trigger", int64(i.Trigger), "key", i.Key, "order.pos", sv.clock.at(i.Key, readOrder(i.Head))}, reqKV...)
+		action := ci.quint + "Served"
+		if hc.replayed {
+			action = ci.quint + "Replayed"
+		}
+		qobs.Record(ctx, action, recErr, append(all, kv...)...)
 		if err != nil {
 			return nil, err
 		}
@@ -417,8 +444,10 @@ type callInfoKey struct{}
 
 // Local is a transport serving h in process: each call by its handler
 // (Handler), recorded at its site. gristsim serves a simulated
-// dependency's requests through it; a test or a binary may attach it
-// directly (Dependency.With).
+// dependency's requests through it, one Local per run; a test or a
+// binary may attach it directly (Dependency.With). A Local orders its
+// site records of each key (never one before an earlier one), so one
+// Local serves one run.
 func Local(h Handlers) Transport {
 	by := map[string]CallHandler{}
 	for _, x := range h {
@@ -430,17 +459,20 @@ func Local(h Handlers) Transport {
 		}
 		by[x.call.name] = x
 	}
-	return local(by)
+	return &local{by: by, clock: &siteClock{last: map[string]int64{}}}
 }
 
-type local map[string]CallHandler
+type local struct {
+	by    map[string]CallHandler
+	clock *siteClock
+}
 
-func (l local) Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
-	h, ok := l[call]
+func (l *local) Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
+	h, ok := l.by[call]
 	if !ok {
 		return nil, fmt.Errorf("grist: no handler of call %s: add the call's Handler to the Handlers", call)
 	}
-	return h.serve(context.WithValue(ctx, callInfoKey{}, c), req)
+	return h.serve(context.WithValue(ctx, callInfoKey{}, served{info: c, clock: l.clock}), req)
 }
 
 // Serves reports whether h has a handler of each call of d, naming the

@@ -93,7 +93,6 @@ type CallName interface
     Name() string
     call() *callInfo
 type Call[Req, Resp any] struct
-    method (*Call[Req, Resp]) Dependency() *Dependency
     method (*Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error)
     method (*Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, error)) CallHandler
     method (*Call[Req, Resp]) Name() string
@@ -168,7 +167,6 @@ type Dep[T any] struct
     method (*Dep[T]) String() string
     method (*Dep[T]) With(ctx context.Context, v T) context.Context
 type Dependency struct
-    method (*Dependency) Calls() []string
     method (*Dependency) Name() string
     method (*Dependency) String() string
     method (*Dependency) With(ctx context.Context, t Transport) context.Context

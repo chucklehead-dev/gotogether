@@ -72,7 +72,8 @@ module countersEvents {
   type RetireCounterArgs = { counter: str, principal: str }
   type ShowCounterArgs = { counter: str, principal: str }
   type ShowCounterResult = { total: int, names: int }
-  // call bank/pay: its request and response, and a step of it (the caller's or the site's: the outcome as result)
+  // call bank/pay: its request and response, and a step of it (the caller's or the site's: the outcome as result,
+  // the response zero unless it is ok)
   type BankPayRequest = { counter: str, amount: int }
   type BankPayResponse = { ref: str }
   type BankPayRecord = { processor: str, trigger: int, key: str, request: BankPayRequest, result: str, response: BankPayResponse }
@@ -415,6 +416,26 @@ module countersGen {
     }
   }
 
+  // bank/pay answered again from an application (grist.Replayed: a dependency
+  // answering a retry of a key from its first answer): an earlier served
+  // record, request and answer alike; it applies nothing
+  action bankPayReplayed(processor: str, trigger: int, key: str, counter: str, amount: int, result: str, ref: str): bool = {
+    val rec_: BankPayRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, amount: amount }, result: result, response: { ref: ref } }
+    all {
+      or {
+        processor == "payout" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "counter-retired" else false),
+      },
+      bankPayRecords.indices().exists(i => bankPayRecords[i] == rec_),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      bankPayCalls' = bankPayCalls,
+      bankPayRecords' = bankPayRecords,
+    }
+  }
+
   // the model on its own (gotogether simulate): every command as its rule
   // decides, reading what it needs, every query, processor and site, each
   // drawing its own arguments (one draw shared by every block would make
@@ -500,6 +521,16 @@ module countersGen {
         {
           val req_: BankPayRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-retired") payoutBankPay(log.slice(0, trigger_), trigger_) else { counter: "", amount: 0 }
           bankPayServed("payout", trigger_, key_, req_.counter, req_.amount, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "declined").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: BankPayRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-retired") payoutBankPay(log.slice(0, trigger_), trigger_) else { counter: "", amount: 0 }
+          bankPayReplayed("payout", trigger_, key_, req_.counter, req_.amount, result_, ref)
         }
       },
     }

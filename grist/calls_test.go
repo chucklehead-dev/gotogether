@@ -281,6 +281,11 @@ func TestSiteAfterItsCommit(t *testing.T) {
 	if trace == nil {
 		t.Fatal("no trace of t1")
 	}
+	for _, i := range trace.Issues { // a cycle is the trace's issue
+		if i.Severity == "error" {
+			t.Errorf("reconstruction of t1: %v", i)
+		}
+	}
 	commit, sites := -1, 0
 	for i, s := range trace.Steps {
 		switch s.Action {
@@ -300,16 +305,80 @@ func TestSiteAfterItsCommit(t *testing.T) {
 
 // A Keyed dependency that answers a retry from its first answer says so
 // (Replayed): a call sent twice (a retransmission) is applied and
-// recorded at its site once, and answered twice alike.
-func TestReplayedRecordsNothing(t *testing.T) {
+// recorded as served once, its second answer recorded as a replay
+// (bankPayReplayed) with the same fields, so the model can judge it: a
+// replay of no application, or of another answer, is no earlier served
+// record. Both are answered alike.
+func TestReplayedRecorded(t *testing.T) {
 	a, bank, pay := callsApp(grist.AtMostOnce, true)
 	steps, _ := runCalls(t, a, bank, bankHandlers(pay), true, addAmounts{A: 5})
-	if served := byAction(steps, "bankPayServed"); len(served) != 1 {
-		t.Errorf("served steps %v: want one (the retransmission replayed)", served)
+	served, replayed := byAction(steps, "bankPayServed"), byAction(steps, "bankPayReplayed")
+	if len(served) != 1 || len(replayed) != 1 {
+		t.Fatalf("served steps %v, replayed %v: want one of each (the retransmission replayed)", served, replayed)
+	}
+	if r, s := replayed[0], served[0]; r.Outcome != s.Outcome || fmt.Sprint(r.Args) != fmt.Sprint(s.Args) || r.Thread != s.Thread || r.Order["pos"] != s.Order["pos"] {
+		t.Errorf("replay %+v: want the served record's fields, outcome, thread and place %+v", r, s)
 	}
 	calls := byAction(steps, "bankPay")
 	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-payer/t1/1" {
 		t.Errorf("caller steps %v: want one, answered with the first application's ref", calls)
+	}
+}
+
+// A site record of a key is never placed before an earlier one of the
+// key: a request caused at an earlier head served after a later one's (a
+// request delayed past a restarted poller's retry, or two nodes'
+// pollers) is placed at the earlier record's 2·H+1, not its own, which
+// on the key's thread would contradict program order (a cycle) and put a
+// replay before the application it repeats. Other keys keep their own
+// cause.
+func TestSiteOrderPerKey(t *testing.T) {
+	a, _, pay := callsApp(grist.AtLeastOnce, true)
+	if err := a.Verify(); err != nil {
+		t.Fatal(err)
+	}
+	sink := &qobs.MemorySink{}
+	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
+	// an unkeyed-like double: it applies every request (no dedupe)
+	tr := grist.Local(grist.Handlers{pay.Handler(func(ctx context.Context, r payReq) (payResp, error) {
+		return payResp{Ref: "r"}, nil
+	})})
+	body, _ := json.Marshal(payReq{Amount: 5})
+	for _, c := range []grist.CallInfo{
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "payer/t1/1"}, // the retry, served first
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "payer/t1/1"}, // the delayed first try
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 2, Head: 4, Key: "payer/t1/2"},
+	} {
+		if _, err := tr.Call(ctx, c, "pay", body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	served := byAction(sink.Steps(), "bankPayServed")
+	if len(served) != 3 {
+		t.Fatalf("served %v: want three", served)
+	}
+	for i, want := range []int64{15, 15, 9} {
+		if got := served[i].Order["pos"]; got != want {
+			t.Errorf("served record %d (key %v): order.pos %d, want %d", i, served[i].Args["key"], got, want)
+		}
+	}
+	traces, issues := qtrace.Reconstruct(sink.Steps())
+	if len(traces) != 1 || len(traces[0].Steps) != 3 {
+		t.Fatalf("%d traces: want one of three steps", len(traces))
+	}
+	for _, i := range append(issues, traces[0].Issues...) {
+		if i.Severity == "error" {
+			t.Errorf("reconstruction: %v", i)
+		}
+	}
+	var order []uint64
+	for _, s := range traces[0].Steps {
+		if s.Args["key"] == "payer/t1/1" {
+			order = append(order, s.Seq)
+		}
+	}
+	if len(order) != 2 || order[0] != served[0].Seq || order[1] != served[1].Seq {
+		t.Errorf("the key's records in the trace, by seq: %v, want %d then %d (serving order)", order, served[0].Seq, served[1].Seq)
 	}
 }
 

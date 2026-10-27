@@ -40,6 +40,8 @@ actions:
     args: { result: '{{.outcome}}' }
   bankPayServed:
     args: { result: '{{.outcome}}' }
+  bankPayReplayed:
+    args: { result: '{{.outcome}}' }
 
 invariants: []
 eventually: [everyRetirementPaidOnce, everyPayoutOutcomeLogged]

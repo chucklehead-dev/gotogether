@@ -10,8 +10,9 @@ import (
 // The generator's part for declared calls (docs/grist-instrumentation.md
 // §3.4): per call c of a dependency, used by processors (Uses), the
 // record types, the caller's ghost (<c>Calls) and the site's records
-// (<c>Records), the caller action <c> and the site action <c>Served, a
-// rule hole per (processor, call) and a generated <c>Admits unless the
+// (<c>Records), the caller action <c>, the site's actions <c>Served (an
+// application) and <c>Replayed (an answer given again from one), a rule
+// hole per (processor, call) and a generated <c>Admits unless the
 // application's rules define one.
 
 // aCall is one declared call as the generator writes it.
@@ -80,7 +81,7 @@ func (g *gen) callHoles() {
 func (g *gen) claimCalls() {
 	for _, c := range g.calls() {
 		what := "call " + c.label()
-		for _, n := range []string{c.Quint, c.Quint + "Served", c.Quint + "Calls", c.Quint + "Records", c.Quint + "Admits", c.Quint + "Keys"} {
+		for _, n := range []string{c.Quint, c.Quint + "Served", c.Quint + "Replayed", c.Quint + "Calls", c.Quint + "Records", c.Quint + "Admits", c.Quint + "Keys"} {
 			g.claim(n, what)
 		}
 	}
@@ -102,7 +103,7 @@ func zeroRecord(fs []field) string {
 func (g *gen) callTypes(b *strings.Builder) {
 	for _, c := range g.calls() {
 		t := c.typeName()
-		fmt.Fprintf(b, "  // call %s: its request and response, and a step of it (the caller's or the site's: the outcome as result)\n", c.label())
+		fmt.Fprintf(b, "  // call %s: its request and response, and a step of it (the caller's or the site's: the outcome as result,\n  // the response zero unless it is ok)\n", c.label())
 		fmt.Fprintf(b, "  type %s = %s\n", g.claim(t+"Request", "call "+c.label()), recordType(c.req))
 		fmt.Fprintf(b, "  type %s = %s\n", g.claim(t+"Response", "call "+c.label()), recordType(c.resp))
 		fmt.Fprintf(b, "  type %s = { processor: str, trigger: int, key: str, request: %sRequest, result: str, response: %sResponse }\n",
@@ -163,7 +164,7 @@ func (g *gen) callActions(b *strings.Builder) {
 		}
 		// the caller: from an effect of a processor that uses it, its
 		// request that processor's rule for the trigger
-		var callers, sites []string
+		var callers, sites, replays []string
 		for _, p := range c.users {
 			cond := []string{
 				fmt.Sprintf("log[trigger - 1].typ == %q", p.On),
@@ -177,6 +178,7 @@ func (g *gen) callActions(b *strings.Builder) {
 			}
 			callers = append(callers, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) and {\n          %s,\n        } else false)", p.Name, strings.Join(cond, ",\n          ")))
 			sites = append(sites, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) and {\n          log[trigger - 1].typ == %q,\n          %sAdmits(log.slice(0, trigger), %sRecords, rec_),\n        } else false)", p.Name, p.On, c.Quint, c.Quint))
+			replays = append(replays, fmt.Sprintf("processor == %q and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == %q else false)", p.Name, p.On))
 		}
 		or := func(xs []string) string {
 			if len(xs) == 0 {
@@ -199,12 +201,16 @@ func (g *gen) callActions(b *strings.Builder) {
 		fmt.Fprintf(b, "  action %sServed(%s): bool = {\n    val rec_: %sRecord = %s\n    all {\n      %s,\n", c.Quint, ps, t, rec, or(sites))
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", c.Quint + "Records": c.Quint + "Records.append(rec_)"}))
 		b.WriteString("    }\n  }\n")
+		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s answered again from an application (grist.Replayed: a dependency answering a retry of a key from its first answer): an earlier served record, request and answer alike; it applies nothing", c.label())))
+		fmt.Fprintf(b, "  action %sReplayed(%s): bool = {\n    val rec_: %sRecord = %s\n    all {\n      %s,\n      %sRecords.indices().exists(i => %sRecords[i] == rec_),\n", c.Quint, ps, t, rec, or(replays), c.Quint, c.Quint)
+		b.WriteString(g.frame("      ", map[string]string{"appended": "[]"}))
+		b.WriteString("    }\n  }\n")
 	}
 }
 
 // callSteps are the store step's branches of the calls: per user, a
-// caller's and a site's, each drawing its trigger, key, outcome and
-// response, its request the rule's.
+// caller's, a site's application and its replay, each drawing its
+// trigger, key, outcome and response, its request the rule's.
 func (g *gen) callSteps() []string {
 	var out []string
 	for _, c := range g.calls() {
@@ -213,7 +219,8 @@ func (g *gen) callSteps() []string {
 			results = append(results, fmt.Sprintf("%q", r))
 		}
 		for _, p := range c.users {
-			for _, site := range []bool{false, true} {
+			for _, action := range []string{c.Quint, c.Quint + "Served", c.Quint + "Replayed"} {
+				site := action != c.Quint
 				d := newDraws()
 				d.pick("trigger_", "1.to(log.length() + 1)")
 				d.pick("key_", "KEYS")
@@ -231,10 +238,6 @@ func (g *gen) callSteps() []string {
 				for _, f := range resp {
 					args = append(args, f.param)
 				}
-				action := c.Quint
-				if site {
-					action += "Served"
-				}
 				call := fmt.Sprintf("{\n        val req_: %sRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == %q) %s(log.slice(0, trigger_), trigger_) else %s\n        %s(%s)\n      }",
 					c.typeName(), p.On, c.ruleName(p), zeroRecord(c.req), action, strings.Join(args, ", "))
 				out = append(out, d.branch(call))
@@ -251,6 +254,7 @@ func (g *gen) callBindings(entry func(action, args, expect string)) {
 		args := argTemplates(append(append([]field(nil), c.req...), c.resp...), "result: '{{.outcome}}'")
 		entry(c.Quint, args, "")
 		entry(c.Quint+"Served", args, "")
+		entry(c.Quint+"Replayed", args, "")
 	}
 }
 

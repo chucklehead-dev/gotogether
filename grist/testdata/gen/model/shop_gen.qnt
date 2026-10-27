@@ -49,7 +49,8 @@ module shopEvents {
   type ShowItemResult = { qty: int, shipped: bool }
   // site warehouse-picks: a record of the effect, made where it takes place
   type WarehousePicksRecord = { key: str, item: str, qty: int }
-  // call warehouse/hold: its request and response, and a step of it (the caller's or the site's: the outcome as result)
+  // call warehouse/hold: its request and response, and a step of it (the caller's or the site's: the outcome as result,
+  // the response zero unless it is ok)
   type WarehouseHoldRequest = { item: str, qty: int }
   type WarehouseHoldResponse = { ref: str }
   type WarehouseHoldRecord = { processor: str, trigger: int, key: str, request: WarehouseHoldRequest, result: str, response: WarehouseHoldResponse }
@@ -405,6 +406,28 @@ module shopGen {
     }
   }
 
+  // warehouse/hold answered again from an application (grist.Replayed: a
+  // dependency answering a retry of a key from its first answer): an earlier
+  // served record, request and answer alike; it applies nothing
+  action warehouseHoldReplayed(processor: str, trigger: int, key: str, item_: str, qty: int, result: str, ref: str): bool = {
+    val rec_: WarehouseHoldRecord = { processor: processor, trigger: trigger, key: key, request: { item: item_, qty: qty }, result: result, response: { ref: ref } }
+    all {
+      or {
+        processor == "notify" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "item-added" else false),
+        processor == "charge" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "item-shipped" else false),
+      },
+      warehouseHoldRecords.indices().exists(i => warehouseHoldRecords[i] == rec_),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      warehousePicksRecords' = warehousePicksRecords,
+      warehouseHoldCalls' = warehouseHoldCalls,
+      warehouseHoldRecords' = warehouseHoldRecords,
+    }
+  }
+
   // the model on its own (gotogether simulate): every command as its rule
   // decides, reading what it needs, every query, processor and site, each
   // drawing its own arguments (one draw shared by every block would make
@@ -492,6 +515,16 @@ module shopGen {
       {
         nondet trigger_ = 1.to(log.length() + 1).oneOf()
         nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-stock").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-added") notifyWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          warehouseHoldReplayed("notify", trigger_, key_, req_.item, req_.qty, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
         nondet result_ = Set("ok", "no-stock", "unknown").oneOf()
         nondet ref = STRS.oneOf()
         {
@@ -507,6 +540,16 @@ module shopGen {
         {
           val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-shipped") chargeWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
           warehouseHoldServed("charge", trigger_, key_, req_.item, req_.qty, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-stock").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-shipped") chargeWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          warehouseHoldReplayed("charge", trigger_, key_, req_.item, req_.qty, result_, ref)
         }
       },
     }

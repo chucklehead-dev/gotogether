@@ -49,6 +49,8 @@ actions:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
   warehouseHoldServed:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
+  warehouseHoldReplayed:
+    args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
 
 invariants: [stockBounded]
 eventually: [allShipped]

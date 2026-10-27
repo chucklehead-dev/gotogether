@@ -89,7 +89,7 @@ func Takes(app *grist.App) []qtest.Take {
 			out = append(out, qtest.Takes(call.Quint).Outcome("ok").Hint(fmt.Sprintf(
 				"no call of %s/%s was answered ok: an effect that uses it must run (its processor's line) and its double answer (gristsim Config.Doubles)", d.Name, call.Name)),
 				qtest.Takes(call.Quint+"Served").Hint(fmt.Sprintf(
-					"%s applied no %s: its double must apply a call (not only replay one: grist.Replayed records nothing)", d.Name, call.Name)))
+					"%s applied no %s: its double must apply a call (not only replay one: a grist.Replayed answer is recorded as %sReplayed)", d.Name, call.Name, call.Quint)))
 		}
 	}
 	for _, s := range c.Sites {
