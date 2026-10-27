@@ -30,11 +30,13 @@ package qnemesis
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -178,7 +180,7 @@ func (s *seen) read(path string) int {
 	}
 	s.off += int64(i + 1)
 	n := 0
-	for _, line := range bytes.Split(b[:i], []byte("\n")) {
+	for line := range bytes.SplitSeq(b[:i], []byte("\n")) {
 		var m map[string]any
 		if len(bytes.TrimSpace(line)) == 0 || json.Unmarshal(line, &m) != nil {
 			continue
@@ -692,7 +694,7 @@ func (n *Nemesis) Stop(ctx context.Context) error {
 	}
 	n.mu.Lock()
 	n.undos = nil
-	cuts, shaped, paused := sortedKeys(n.cuts), sortedKeys(n.shaped), keysOf(n.paused)
+	cuts, shaped, paused := sortedKeys(n.cuts), sortedKeys(n.shaped), slices.Sorted(maps.Keys(n.paused))
 	n.mu.Unlock()
 	var errs []error
 	for _, p := range cuts {
@@ -713,7 +715,7 @@ func (n *Nemesis) Stop(ctx context.Context) error {
 		n.mu.Unlock()
 		errs = append(errs, n.resume(ctx, i, p, "nemesis.resume."+p, "end"))
 	}
-	for _, p := range keysOf(n.Targets) {
+	for _, p := range slices.Sorted(maps.Keys(n.Targets)) {
 		n.mu.Lock()
 		i, ok := n.down[p]
 		n.mu.Unlock()
@@ -725,22 +727,13 @@ func (n *Nemesis) Stop(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func keysOf[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
+func sortedKeys(m map[[2]string]int) [][2]string {
+	return slices.SortedFunc(maps.Keys(m), comparePairs)
 }
 
-func sortedKeys(m map[[2]string]int) [][2]string {
-	out := make([][2]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] || out[i][0] == out[j][0] && out[i][1] < out[j][1] })
-	return out
+// comparePairs orders pairs by their first name, then their second.
+func comparePairs(a, b [2]string) int {
+	return cmp.Or(cmp.Compare(a[0], b[0]), cmp.Compare(a[1], b[1]))
 }
 
 // Remaining are the faults of the last Run's schedule that never
@@ -773,7 +766,7 @@ func (n *Nemesis) Misnamed() []string {
 // a Follows of no other fault or in a cycle, an After without Steps.
 func (n *Nemesis) misnamed(s Schedule) []string {
 	var out []string
-	targets := keysOf(n.Targets)
+	targets := slices.Sorted(maps.Keys(n.Targets))
 	var pairs [][2]string
 	if n.Net != nil {
 		pairs = n.Net.Pairs()
@@ -806,7 +799,7 @@ func (n *Nemesis) misnamed(s Schedule) []string {
 		}
 		shape, known := families[fam]
 		if !known {
-			bad("%q is no nemesis family of a real deployment: the families are %s (\"nemesis.<family>.<target>\" or \".<a>.<b>\")", fam, strings.Join(keysOf(families), ", "))
+			bad("%q is no nemesis family of a real deployment: the families are %s (\"nemesis.<family>.<target>\" or \".<a>.<b>\")", fam, strings.Join(slices.Sorted(maps.Keys(families)), ", "))
 			continue
 		}
 		switch {

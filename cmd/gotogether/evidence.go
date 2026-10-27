@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -112,7 +114,7 @@ func readChecks(path string) ([]string, error) {
 		return nil, err
 	}
 	var out []string
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -183,7 +185,7 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			name = e.Package + " " + e.Test // two packages' tests may share a name
 		}
 		fmt.Fprintf(&b, "%s: %d runs, %d conform", name, e.Runs, e.Conform)
-		for _, r := range sortedKeys(e.FailingBy) {
+		for _, r := range slices.Sorted(maps.Keys(e.FailingBy)) {
 			fmt.Fprintf(&b, ", %d %s", e.FailingBy[r], r)
 		}
 		if e.Exhaust != nil && !e.Exhaust.Complete {
@@ -226,9 +228,9 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			actions[spec][a] = true
 		}
 	}
-	for _, spec := range sortedKeys(actions) {
+	for _, spec := range slices.Sorted(maps.Keys(actions)) {
 		var never []string
-		for _, a := range sortedKeys(actions[spec]) {
+		for _, a := range slices.Sorted(maps.Keys(actions[spec])) {
 			if !taken[spec][a] {
 				never = append(never, a)
 			}
@@ -263,12 +265,12 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 		}
 	}
 	var unreached, unfaulted []string
-	for _, k := range sortedKeys(declared) {
+	for _, k := range slices.Sorted(maps.Keys(declared)) {
 		if !reached[k] {
 			unreached = append(unreached, k)
 		}
 	}
-	for _, k := range sortedKeys(reached) {
+	for _, k := range slices.Sorted(maps.Keys(reached)) {
 		if !faulted[k] {
 			unfaulted = append(unfaulted, k)
 		}

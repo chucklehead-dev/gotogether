@@ -2,6 +2,8 @@ package qtest
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -161,7 +163,7 @@ func (k Take) judge([]*validate.Report) judgment { return judgment{show: -1} }
 // unknown says why k names nothing of the model ("": it names an action).
 func (k Take) unknown(actions map[string]bool) string {
 	if actions != nil && !actions[k.action] {
-		return fmt.Sprintf("%s is not an action of the model (%sits actions: %s); a misspelled name never matches", k.action, didYouMean(k.action, actions), strings.Join(keysOf(actions), ", "))
+		return fmt.Sprintf("%s is not an action of the model (%sits actions: %s); a misspelled name never matches", k.action, didYouMean(k.action, actions), strings.Join(slices.Sorted(maps.Keys(actions)), ", "))
 	}
 	return ""
 }
@@ -279,11 +281,7 @@ func (e Exercise) String() string {
 	if len(e.except) == 0 {
 		return all
 	}
-	var ex []string
-	for x := range e.except {
-		ex = append(ex, x)
-	}
-	sort.Strings(ex)
+	ex := slices.Sorted(maps.Keys(e.except))
 	return all + ", but " + strings.Join(ex, ", ")
 }
 
@@ -441,11 +439,7 @@ func neverList(never []string, bound map[string]bool) string {
 }
 
 func takenList(m *ModelCoverage) string {
-	var as []string
-	for a := range m.Taken {
-		as = append(as, a)
-	}
-	sort.Strings(as)
+	as := slices.Sorted(maps.Keys(m.Taken))
 	if len(as) == 0 {
 		return "none"
 	}

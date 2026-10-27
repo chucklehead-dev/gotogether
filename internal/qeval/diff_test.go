@@ -2,9 +2,11 @@ package qeval
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -76,7 +78,7 @@ func agree(t *testing.T, b *binding.Binding) bool {
 	}
 	rel = strings.TrimSuffix(rel, ".qnt")
 	var cs []string
-	for _, k := range sortedKeys(b.Constants) {
+	for _, k := range slices.Sorted(maps.Keys(b.Constants)) {
 		cs = append(cs, k+" = "+b.Constants[k])
 	}
 	imp := fmt.Sprintf("import %s.* from %q", b.Module, rel)
@@ -185,7 +187,7 @@ func stateOf(m *Model, st itf.State) (State, error) {
 
 func showState(s State) string {
 	var b strings.Builder
-	for _, k := range sortedKeys(s) {
+	for _, k := range slices.Sorted(maps.Keys(s)) {
 		fmt.Fprintf(&b, "%s=%s ", k, String(s[k]))
 	}
 	return b.String()
@@ -196,13 +198,4 @@ func showFirst(ss []State) string {
 		return "(disabled)"
 	}
 	return showState(ss[0])
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

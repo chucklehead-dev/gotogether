@@ -13,6 +13,7 @@
 package depgraph
 
 import (
+	"maps"
 	"slices"
 	"sort"
 )
@@ -60,11 +61,7 @@ func (g *Graph) Add(from, to int64, kind, key string) {
 // Components returns the graph's strongly connected components of more
 // than one transaction (Tarjan), each sorted, in order of their least id.
 func (g *Graph) Components() [][]int64 {
-	nodes := make([]int64, 0, len(g.out))
-	for n := range g.out {
-		nodes = append(nodes, n)
-	}
-	slices.Sort(nodes)
+	nodes := slices.Sorted(maps.Keys(g.out))
 	index, low, on := map[int64]int{}, map[int64]int{}, map[int64]bool{}
 	var stack []int64
 	var sccs [][]int64
@@ -129,12 +126,7 @@ func (g *Graph) Component(n int64) []int64 {
 	if len(both) < 2 {
 		return nil
 	}
-	c := make([]int64, 0, len(both))
-	for v := range both {
-		c = append(c, v)
-	}
-	slices.Sort(c)
-	return c
+	return slices.Sorted(maps.Keys(both))
 }
 
 // Classify finds the component's cycle of the strongest anomaly: ww

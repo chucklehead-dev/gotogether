@@ -53,6 +53,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"slices"
@@ -270,7 +271,7 @@ func (o *Options) click(raw json.RawMessage) (string, error) {
 		return "", nil
 	}
 	if _, ok := o.Clicks[a.Custom.Name]; !ok {
-		return "", fmt.Errorf("custom action %s is none the adapter maps (%s): add it to Options.Clicks, or rename it in the spec", a.Custom.Name, strings.Join(sorted(o.Clicks), ", "))
+		return "", fmt.Errorf("custom action %s is none the adapter maps (%s): add it to Options.Clicks, or rename it in the spec", a.Custom.Name, strings.Join(slices.Sorted(maps.Keys(o.Clicks)), ", "))
 	}
 	return a.Custom.Name, nil
 }
@@ -454,7 +455,7 @@ func (c *converter) state(s *State, started bool) error {
 		clicks, ok := c.sends[r.Action]
 		switch {
 		case !ok:
-			return fmt.Errorf("request %d is a %q, which the mapping does not know (%s): add the click that sends it to Options.Clicks", r.N, r.Action, strings.Join(sorted(c.sends), ", "))
+			return fmt.Errorf("request %d is a %q, which the mapping does not know (%s): add the click that sends it to Options.Clicks", r.N, r.Action, strings.Join(slices.Sorted(maps.Keys(c.sends)), ", "))
 		case !slices.Contains(clicks, s.Click):
 			return fmt.Errorf("request %d (%s) was sent with no %s before it: a request no click sent", r.N, r.Action, strings.Join(clicks, " or "))
 		case !started:
@@ -512,14 +513,5 @@ func (o *Options) shown(s *State) map[string]any {
 			out[f] = v
 		}
 	}
-	return out
-}
-
-func sorted[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }

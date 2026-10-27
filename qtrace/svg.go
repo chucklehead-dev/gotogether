@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -144,11 +146,7 @@ func HistorySVG(recorded, order []Step, failedAt int) []byte {
 
 // obsString is a step's observations, sorted, as label text.
 func obsString(obs map[string]any) string {
-	keys := make([]string, 0, len(obs))
-	for k := range obs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(obs))
 	parts := make([]string, len(keys))
 	for i, k := range keys {
 		parts[i] = fmt.Sprintf("%s=%v", k, obs[k])

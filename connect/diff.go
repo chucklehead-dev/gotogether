@@ -2,9 +2,10 @@ package connect
 
 import (
 	"fmt"
+	"maps"
 	"math/big"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -120,11 +121,7 @@ func diff(a, b reflect.Value, path string, out *[]string) {
 		for _, k := range b.MapKeys() {
 			keys[fmt.Sprint(k.Interface())] = k
 		}
-		names := make([]string, 0, len(keys))
-		for n := range keys {
-			names = append(names, n)
-		}
-		sort.Strings(names)
+		names := slices.Sorted(maps.Keys(keys))
 		for _, n := range names {
 			k := keys[n]
 			diff(a.MapIndex(k), b.MapIndex(k), fmt.Sprintf("%s[%v]", path, n), out)

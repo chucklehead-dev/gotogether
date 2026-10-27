@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -64,7 +66,7 @@ func simulate(args []string) (int, error) {
 		*verify, capped = sim.VerifySteps, ", the binding's verifySteps"
 	}
 	overrides := []string{}
-	for _, k := range sortedKeys(sim.Constants) {
+	for _, k := range slices.Sorted(maps.Keys(sim.Constants)) {
 		overrides = append(overrides, k+"="+sim.Constants[k])
 	}
 	overrides = append(overrides, splitTop(*consts)...)
@@ -207,7 +209,7 @@ func simulationModule(b *binding.Binding, overrides []string, file string) (stri
 		fmt.Fprintf(&s, "  import %s(%s).* from %q\n", b.Module, strings.Join(cs, ", "), rel)
 	}
 	if d := strings.TrimSpace(b.Defs); d != "" {
-		for _, l := range strings.Split(d, "\n") {
+		for l := range strings.SplitSeq(d, "\n") {
 			s.WriteString("  " + l + "\n")
 		}
 	}
@@ -228,7 +230,7 @@ func constantList(b *binding.Binding, overrides []string) []string {
 		}
 	}
 	var out []string
-	for _, k := range sortedKeys(m) {
+	for _, k := range slices.Sorted(maps.Keys(m)) {
 		out = append(out, k+" = "+m[k])
 	}
 	sort.Strings(out)
@@ -237,7 +239,7 @@ func constantList(b *binding.Binding, overrides []string) []string {
 
 func splitList(s string) []string {
 	var out []string
-	for _, x := range strings.Split(s, ",") {
+	for x := range strings.SplitSeq(s, ",") {
 		if x = strings.TrimSpace(x); x != "" {
 			out = append(out, x)
 		}

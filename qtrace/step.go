@@ -9,7 +9,8 @@ package qtrace
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -158,11 +159,7 @@ func (s *Step) Get(name string) (any, bool) {
 func (s *Step) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s", s.Action)
-	keys := make([]string, 0, len(s.Args))
-	for k := range s.Args {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(s.Args))
 	b.WriteString("(")
 	for i, k := range keys {
 		if i > 0 {

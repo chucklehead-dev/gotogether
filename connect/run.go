@@ -267,9 +267,8 @@ func replayAll(t testing.TB, c Config, files []string, newDriver func() Driver, 
 			}
 		}
 		if err := Replay(tr, newDriver(), opt); err != nil {
-			var se *StepError
 			msg := err.Error()
-			if errors.As(err, &se) && se.Kind != "trace" {
+			if se, ok := errors.AsType[*StepError](err); ok && se.Kind != "trace" {
 				msg += "\n\n" + indent(se.Step.String(), "    ")
 			}
 			repro := ""

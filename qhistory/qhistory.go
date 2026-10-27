@@ -37,8 +37,8 @@ package qhistory
 
 import (
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -299,11 +299,7 @@ func Check(level Level, txns []Txn) (*Report, error) {
 
 	// each key's version order: its longest read, of which every other must
 	// be a prefix
-	keys := make([]string, 0, len(reads))
-	for k := range reads {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(reads))
 	g := depgraph.New()
 	var edges []dep
 	link := func(from, to int, kind, key string) {

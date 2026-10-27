@@ -31,9 +31,10 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -208,7 +209,7 @@ func scaffoldTo(w io.Writer, out, spec, module string, system bool, bpath, pkg, 
 		return err
 	}
 	fmt.Fprintf(w, "# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\nconstants:\n", module, relativeTo(out, spec), module)
-	for _, c := range sortedKeys(m.Consts) {
+	for _, c := range slices.Sorted(maps.Keys(m.Consts)) {
 		fmt.Fprintf(w, "  %s: ''   # %s\n", c, m.Consts[c])
 	}
 	fmt.Fprintf(w, "\nintern: {}      # arg: actor|process, for opaque ids the model names by small integers\n")
@@ -234,7 +235,7 @@ func scaffoldTo(w io.Writer, out, spec, module string, system bool, bpath, pkg, 
 	}
 	// every boolean val, checked and classified, so the skeleton checks
 	// what the model says: drop a val that is no invariant
-	vals := strings.Join(sortedKeys(m.Vals), ", ")
+	vals := strings.Join(slices.Sorted(maps.Keys(m.Vals)), ", ")
 	fmt.Fprintf(w, "\ninvariants: [%s]  # the boolean vals of %s: drop those that are not invariants\n", vals, module)
 	fmt.Fprintf(w, "\nsimulate:        # gotogether simulate: what the model alone does with each invariant\n")
 	fmt.Fprintf(w, "  holds: [%s]   # the model guarantees them (no trace violates them)\n", vals)
@@ -287,7 +288,7 @@ func lint(args []string) (int, error) {
 	}
 	var bound []binding.Bound
 	var errs []string
-	for _, path := range strings.Split(*bpath, ",") {
+	for path := range strings.SplitSeq(*bpath, ",") {
 		b, err := binding.Load(path)
 		if err != nil {
 			return 2, err
@@ -465,11 +466,7 @@ func failSummary(results []*validate.Result) string {
 			bad++
 		}
 	}
-	whys := make([]string, 0, len(by))
-	for w := range by {
-		whys = append(whys, w)
-	}
-	sort.Strings(whys)
+	whys := slices.Sorted(maps.Keys(by))
 	for i, w := range whys {
 		whys[i] = fmt.Sprintf("%d %s", by[w], w)
 	}
@@ -696,19 +693,6 @@ func runSkills(args []string) error {
 	return nil
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	var out []string
-	for k := range m {
-		out = append(out, k)
-	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j] < out[j-1]; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
-	return out
-}
-
 // output is the file at path, created (an existing one is not
 // overwritten: a scaffold is filled in by hand), or standard output.
 // checkOut refuses an -out that exists (a scaffold is filled in by hand
@@ -813,7 +797,7 @@ func systemTest(pkg, bpath string, b *binding.Binding, m *binding.Model) string 
 				delete(rest, p.Name)
 			}
 		}
-		fields = append(fields, sortedKeys(rest)...)
+		fields = append(fields, slices.Sorted(maps.Keys(rest))...)
 		kv := ""
 		for _, f := range fields {
 			v := f
@@ -912,7 +896,7 @@ func fields(s string) []string {
 		return nil
 	}
 	var out []string
-	for _, f := range strings.Split(s, ",") {
+	for f := range strings.SplitSeq(s, ",") {
 		if f = strings.TrimSpace(f); f != "" {
 			out = append(out, f)
 		}

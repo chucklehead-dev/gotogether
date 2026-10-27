@@ -41,8 +41,9 @@ package connect
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/itf"
@@ -91,11 +92,7 @@ func (s *Step) Get(path ...string) itf.Value {
 }
 
 func (s *Step) pickNames() string {
-	var ks []string
-	for k := range s.Picks {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
+	ks := slices.Sorted(maps.Keys(s.Picks))
 	if len(ks) == 0 {
 		return "no picks"
 	}
@@ -109,12 +106,12 @@ func (s *Step) String() string {
 	fmt.Fprintf(&b, "Action taken: %s\n", s.Action)
 	if len(s.Picks) > 0 {
 		b.WriteString("Nondet picks:\n")
-		for _, k := range sortedKeys(s.Picks) {
+		for _, k := range slices.Sorted(maps.Keys(s.Picks)) {
 			fmt.Fprintf(&b, "  + %s: %s\n", k, s.Picks[k])
 		}
 	}
 	b.WriteString("Next state:\n")
-	for _, k := range sortedKeys(s.After) {
+	for _, k := range slices.Sorted(maps.Keys(s.After)) {
 		fmt.Fprintf(&b, "  + %s: %s\n", k, s.After[k])
 	}
 	return b.String()
@@ -125,7 +122,7 @@ func (s *Step) summary() string {
 	b.WriteString(s.Action)
 	if len(s.Picks) > 0 {
 		b.WriteString("(")
-		for i, k := range sortedKeys(s.Picks) {
+		for i, k := range slices.Sorted(maps.Keys(s.Picks)) {
 			if i > 0 {
 				b.WriteString(", ")
 			}
@@ -382,7 +379,7 @@ func walk(vars map[string]itf.Value, path []string) (itf.Value, error) {
 			}
 		}
 		if !ok {
-			return v, fmt.Errorf("state path %s: no %q (have %s)", strings.Join(path, "."), p, strings.Join(sortedKeys(v.Fields), ", "))
+			return v, fmt.Errorf("state path %s: no %q (have %s)", strings.Join(path, "."), p, strings.Join(slices.Sorted(maps.Keys(v.Fields)), ", "))
 		}
 		v = next
 	}
@@ -433,13 +430,4 @@ func compare(model itf.Value, impl any) ([]string, error) {
 		return nil, fmt.Errorf("decoding the model's state into %s: %w", t, err)
 	}
 	return diffValues(want.Elem().Interface(), impl), nil
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

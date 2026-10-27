@@ -3,7 +3,9 @@ package qtrace
 import (
 	"container/heap"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"sort"
 	"time"
 )
@@ -180,7 +182,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	sort.Strings(recs)
 	for _, rec := range recs {
 		seqs := byRec[rec]
-		sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+		slices.Sort(seqs)
 		var missing []uint64
 		var holes []Gap
 		var first, next, prev uint64 // the first seq, the one expected next, the last seen
@@ -408,11 +410,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			byActor[a] = []Step{} // an actor whose every record was dropped as a conflicting duplicate: its issue says so
 		}
 	}
-	actors := make([]string, 0, len(byActor))
-	for a := range byActor {
-		actors = append(actors, a)
-	}
-	sort.Strings(actors)
+	actors := slices.Sorted(maps.Keys(byActor))
 	var out []*Trace
 	for _, a := range actors {
 		t := order(a, byActor[a])

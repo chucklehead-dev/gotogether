@@ -3,7 +3,8 @@ package qtest
 import (
 	"context"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,11 +96,7 @@ func (x *Exploration) findVacuous() vacuityResult {
 	if len(ante) == 0 {
 		return vacuityResult{}
 	}
-	invs := make([]string, 0, len(ante))
-	for inv := range ante {
-		invs = append(invs, inv)
-	}
-	sort.Strings(invs)
+	invs := slices.Sorted(maps.Keys(ante))
 	// the runs where each invariant passed
 	passed := map[string][]int{}
 	for i, r := range x.Runs {
@@ -141,11 +138,7 @@ func (x *Exploration) findVacuous() vacuityResult {
 			todo[i] = true
 		}
 	}
-	var order []int
-	for i := range todo {
-		order = append(order, i)
-	}
-	sort.Ints(order)
+	order := slices.Sorted(maps.Keys(todo))
 	for s := 0; s < len(order) && len(witnessed) < len(invs); s += witnessChunk {
 		chunk := order[s:min(s+witnessChunk, len(order))]
 		runs := make([][]qtrace.Step, len(chunk))

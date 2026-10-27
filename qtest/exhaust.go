@@ -63,7 +63,7 @@ func parseSchedule(s string) ([]deviation, error) {
 	if s == "" {
 		return nil, nil
 	}
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		a, v, ok := strings.Cut(p, ":")
 		at, err1 := strconv.Atoi(a)
 		value, err2 := strconv.Atoi(v)

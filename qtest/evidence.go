@@ -3,8 +3,9 @@ package qtest
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/evidence"
@@ -192,11 +193,7 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, "\n  search    truncated: at least %d runs within %d delays and %d faults left (MaxRuns)", sr.Left, sr.Delays, sr.Faults)
 	}
 	fmt.Fprintf(&b, "\n  verdicts  %d conform", e.Conform)
-	reasons := make([]string, 0, len(e.FailingBy))
-	for r := range e.FailingBy {
-		reasons = append(reasons, r)
-	}
-	sort.Strings(reasons)
+	reasons := slices.Sorted(maps.Keys(e.FailingBy))
 	for _, r := range reasons {
 		fmt.Fprintf(&b, " · %d %s", e.FailingBy[r], r)
 	}

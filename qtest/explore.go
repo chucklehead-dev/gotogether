@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -360,7 +362,7 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 		}
 		sources = append(sources, &steerSource{t: t, x: x, n: cfg.Steer, parallel: cfg.Parallel, dir: steerDir(x), seeded: seeded})
 	}
-	e.known = append(e.known, knownCheck{"System.Rates key", keysOf(cfg.rates.Kinds)})
+	e.known = append(e.known, knownCheck{"System.Rates key", slices.Sorted(maps.Keys(cfg.rates.Kinds))})
 	e.run(sources...)
 	return x
 }
@@ -447,7 +449,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		err = cerr
 	}
 	var unsettled string
-	if u := (*qenv.Unsettled)(nil); errors.As(err, &u) { // a run outcome, judged by claims (Conforms, Settles), not a run that failed to run
+	if u, ok := errors.AsType[*qenv.Unsettled](err); ok { // a run outcome, judged by claims (Conforms, Settles), not a run that failed to run
 		unsettled, err = u.Error(), nil
 	}
 	if is := r.Issues(); err == nil && len(is) > 0 {
@@ -532,8 +534,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			continue
 		}
 		if r.Err != nil {
-			var p *RunPanic
-			if errors.As(r.Err, &p) { // a self-check's finding, or a bug: keep the run
+			if p, ok := errors.AsType[*RunPanic](r.Err); ok { // a self-check's finding, or a bug: keep the run
 				where := "the scenario's stack"
 				if p.InTask {
 					where = "the task's stack"
@@ -1039,7 +1040,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 func (x *Exploration) summary() string {
 	e := evidenceOf(x.Runs)
 	line := fmt.Sprintf("%s: %d runs, %d conform", x.ref(), e.Runs, e.Conform)
-	for _, r := range keysOf(e.FailingBy) {
+	for _, r := range slices.Sorted(maps.Keys(e.FailingBy)) {
 		line += fmt.Sprintf(", %d %s", e.FailingBy[r], runsDo(r))
 	}
 	// what liveness claims judge: runs that settled, calls left pending
@@ -1222,7 +1223,7 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 func (x *Exploration) failingWords() string {
 	e := evidenceOf(x.Runs)
 	bad := e.Runs - e.Conform
-	reasons := keysOf(e.FailingBy)
+	reasons := slices.Sorted(maps.Keys(e.FailingBy))
 	if len(reasons) == 1 {
 		return fmt.Sprintf("%d of %d runs %s", bad, e.Runs, runsDo(reasons[0]))
 	}
@@ -1233,7 +1234,7 @@ func (x *Exploration) failingWords() string {
 // violate exactlyOnce".
 func (x *Exploration) failingReasons() string {
 	e := evidenceOf(x.Runs)
-	reasons := keysOf(e.FailingBy)
+	reasons := slices.Sorted(maps.Keys(e.FailingBy))
 	parts := make([]string, len(reasons))
 	for i, r := range reasons {
 		parts[i] = fmt.Sprintf("%d %s", e.FailingBy[r], runsDo(r))
@@ -1342,7 +1343,7 @@ func (x *Exploration) atStart() string {
 		}
 	}
 	var cs []string
-	for _, k := range keysOf(x.constants) {
+	for _, k := range slices.Sorted(maps.Keys(x.constants)) {
 		cs = append(cs, k+"="+x.constants[k])
 	}
 	return fmt.Sprintf(" (all %d runs fail at step 1: the binding's constants (%s) may not match the scenario's; pass qtest.Constants)", len(x.Runs), strings.Join(cs, ", "))

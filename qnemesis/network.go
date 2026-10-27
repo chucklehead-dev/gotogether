@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -248,12 +248,7 @@ func (t *Toxiproxy) Clear(ctx context.Context, a, b string) error {
 func (t *Toxiproxy) Pairs() [][2]string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	out := make([][2]string, 0, len(t.proxies))
-	for k := range t.proxies {
-		out = append(out, k)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] || out[i][0] == out[j][0] && out[i][1] < out[j][1] })
-	return out
+	return slices.SortedFunc(maps.Keys(t.proxies), comparePairs)
 }
 
 // Close deletes the proxies Link made: a t.Cleanup's.

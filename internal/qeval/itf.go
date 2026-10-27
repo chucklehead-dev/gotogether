@@ -2,6 +2,7 @@ package qeval
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -59,11 +60,7 @@ func FromITF(v itf.Value) (Value, error) {
 		}
 		return NewMap(ks, vs), nil
 	case itf.Record:
-		names := make([]string, 0, len(v.Fields))
-		for n := range v.Fields {
-			names = append(names, n)
-		}
-		slices.Sort(names)
+		names := slices.Sorted(maps.Keys(v.Fields))
 		vals := make([]Value, len(names))
 		for i, n := range names {
 			x, err := FromITF(v.Fields[n])

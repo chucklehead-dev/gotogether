@@ -65,7 +65,7 @@ func TestOTLPJSONFile(t *testing.T) {
 func BenchmarkRecordDisabled(b *testing.B) {
 	qobs.SetGlobal(nil)
 	ctx := context.Background()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		qobs.Record(ctx, "writeTable", nil, "payload", "req-1", "batch", uint64(i), "gen", "g20260924T100000")
 	}
 }
@@ -74,7 +74,7 @@ func BenchmarkRecordMemory(b *testing.B) {
 	r := qobs.NewRecorder(&qobs.MemorySink{})
 	ctx := context.Background()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		r.Record(ctx, "writeTable", nil, "payload", "req-1", "batch", uint64(i), "gen", "g20260924T100000")
 	}
 }
@@ -85,7 +85,7 @@ func BenchmarkRecordOTelBatchToFile(b *testing.B) {
 	r := qobs.NewRecorder(qobs.NewOTelSink(tp))
 	ctx := context.Background()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		r.Record(ctx, "writeTable", nil, "payload", "req-1", "batch", uint64(i), "gen", "g20260924T100000")
 	}
 }
@@ -94,7 +94,7 @@ func BenchmarkRecordStepLog(b *testing.B) {
 	r := qobs.NewRecorder(qobs.NewJSONLSink(io.Discard, qobs.PerStep))
 	ctx := context.Background()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		r.Record(ctx, "writeTable", nil, "payload", "req-1", "batch", uint64(i), "gen", "g20260924T100000")
 	}
 }

@@ -12,8 +12,9 @@ package qsweep
 
 import (
 	"fmt"
+	"maps"
 	"math/rand/v2"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -348,10 +349,6 @@ func Missing(factors []Factor, t int, allow func(Row) bool, rows []Row) ([]strin
 			}
 		}
 	}
-	var out []string
-	for d := range miss {
-		out = append(out, d)
-	}
-	sort.Strings(out)
+	out := slices.Sorted(maps.Keys(miss))
 	return out, nil
 }

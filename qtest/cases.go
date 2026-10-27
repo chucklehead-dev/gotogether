@@ -1,7 +1,9 @@
 package qtest
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
@@ -87,7 +89,7 @@ func (s System) Judge(t testing.TB, ch qenv.Chooser) *Run {
 		t.Fatalf("gotogether: %d steps were recorded from outside the run judged (a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
 	}
 	if r.Err == nil { // a run that did not run declared nothing
-		unknownKinds(t, "System.Rates key", keysOf(s.Rates.Kinds), []*Run{r})
+		unknownKinds(t, "System.Rates key", slices.Sorted(maps.Keys(s.Rates.Kinds)), []*Run{r})
 	}
 	if r.Err != nil {
 		return r

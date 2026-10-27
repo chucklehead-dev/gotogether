@@ -6,11 +6,14 @@
 package skills
 
 import (
+	"cmp"
 	"embed"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -47,7 +50,7 @@ func List() ([]Skill, error) {
 		}
 		out = append(out, Skill{Name: e.Name(), Description: frontMatter(string(b), "description")})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Skill) int { return cmp.Compare(a.Name, b.Name) })
 	return out, nil
 }
 
@@ -59,7 +62,7 @@ func frontMatter(doc, key string) string {
 	if end < 0 {
 		return ""
 	}
-	for _, line := range strings.Split(doc[4:4+end], "\n") {
+	for line := range strings.SplitSeq(doc[4:4+end], "\n") {
 		if k, v, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(k) == key {
 			return strings.TrimSpace(v)
 		}
@@ -97,11 +100,7 @@ func TargetDirs(root string, names []string) ([]string, error) {
 	for _, n := range names {
 		d, ok := Targets[n]
 		if !ok {
-			var known []string
-			for k := range Targets {
-				known = append(known, k)
-			}
-			sort.Strings(known)
+			known := slices.Sorted(maps.Keys(Targets))
 			return nil, fmt.Errorf("unknown target %q (have %s, all)", n, strings.Join(known, ", "))
 		}
 		out = append(out, filepath.Join(root, d))

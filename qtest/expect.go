@@ -2,8 +2,9 @@ package qtest
 
 import (
 	"fmt"
+	"maps"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -451,22 +452,22 @@ func unknownNames(es []Expectation, actions, invariants map[string]bool, of stri
 			switch {
 			case actions == nil || actions[a]:
 			case invariants[a]:
-				out = append(out, fmt.Sprintf("%s is an invariant, not an action (Violates(%q) names an invariant; Rejects and Mismatch an action: its actions: %s)", a, a, strings.Join(keysOf(actions), ", ")))
+				out = append(out, fmt.Sprintf("%s is an invariant, not an action (Violates(%q) names an invariant; Rejects and Mismatch an action: its actions: %s)", a, a, strings.Join(slices.Sorted(maps.Keys(actions)), ", ")))
 			default:
-				out = append(out, fmt.Sprintf("%s is not an action of the model (%sits actions: %s)", a, didYouMean(a, actions), strings.Join(keysOf(actions), ", ")))
+				out = append(out, fmt.Sprintf("%s is not an action of the model (%sits actions: %s)", a, didYouMean(a, actions), strings.Join(slices.Sorted(maps.Keys(actions)), ", ")))
 			}
 		}
 		for _, i := range e.invariants {
 			switch {
 			case invariants == nil || invariants[i]:
 			case actions[i]:
-				out = append(out, fmt.Sprintf("%s is an action, not an invariant (Rejects(%q) or Mismatch(%q) name an action; Violates an invariant: checked: %s)", i, i, i, strings.Join(keysOf(invariants), ", ")))
+				out = append(out, fmt.Sprintf("%s is an action, not an invariant (Rejects(%q) or Mismatch(%q) name an action; Violates an invariant: checked: %s)", i, i, i, strings.Join(slices.Sorted(maps.Keys(invariants)), ", ")))
 			case invariants[validate.EventuallyName(i)]:
 				// an eventual val's verdict is named apart from an
 				// invariant's of the same val
-				out = append(out, fmt.Sprintf("%s is an eventual val of %s, judged after a settle: name it Violates(validate.EventuallyName(%q)), %q (checked: %s)", i, of, i, validate.EventuallyName(i), strings.Join(keysOf(invariants), ", ")))
+				out = append(out, fmt.Sprintf("%s is an eventual val of %s, judged after a settle: name it Violates(validate.EventuallyName(%q)), %q (checked: %s)", i, of, i, validate.EventuallyName(i), strings.Join(slices.Sorted(maps.Keys(invariants)), ", ")))
 			default:
-				out = append(out, fmt.Sprintf("%s is not an invariant of %s (%schecked: %s)", i, of, didYouMean(i, invariants), strings.Join(keysOf(invariants), ", ")))
+				out = append(out, fmt.Sprintf("%s is not an invariant of %s (%schecked: %s)", i, of, didYouMean(i, invariants), strings.Join(slices.Sorted(maps.Keys(invariants)), ", ")))
 			}
 		}
 	}
@@ -476,7 +477,7 @@ func unknownNames(es []Expectation, actions, invariants map[string]bool, of stri
 // didYouMean is "did you mean x?; " for the name of names nearest to
 // name, or "" if none is near.
 func didYouMean(name string, names map[string]bool) string {
-	if best := nearest.Name(name, keysOf(names)); best != "" {
+	if best := nearest.Name(name, slices.Sorted(maps.Keys(names))); best != "" {
 		return "did you mean " + best + "?; "
 	}
 	return ""
@@ -819,7 +820,7 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 		for _, e := range es {
 			if v := e.value(r.Report); v != yes {
 				itfs := make([]string, 0, len(r.ITF))
-				for _, k := range keysOf(r.ITF) {
+				for _, k := range slices.Sorted(maps.Keys(r.ITF)) {
 					itfs = append(itfs, r.ITF[k])
 				}
 				why := e.explain(r.Report)
@@ -837,15 +838,6 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 			t.Fatalf("gotogether: want %s, got %d faults: %v", c, len(r.Faults()), r.Faults())
 		}
 	}
-}
-
-func keysOf[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // Runs gathers runs made one by one (Validate's, Record's: a real
