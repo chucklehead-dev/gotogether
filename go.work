@@ -15,6 +15,7 @@ use (
 	./examples/jobqueue
 	./examples/kvstore
 	./examples/lease
+	./examples/library
 	./examples/payd
 	./examples/quorumkv
 	./examples/raftkv
