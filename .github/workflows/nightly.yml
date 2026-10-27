@@ -201,13 +201,51 @@ jobs:
     # batch a search judges and on each actor of every run checked, in
     # every example: a disagreement fails the test, naming the candidate.
     # Quint checks everything too, so it takes what quint alone does, and
-    # more.
+    # more: a search's every candidate batch goes to quint as well.
+    #
+    # seeds: the explorations' count where 500 would not fit 110m, each
+    # measured in shadow on 4 cores (nightly 6, and nights 4 and 5, timed
+    # out at 110m with 500 in all four below). own: the tests' own counts
+    # (the workflow's GOTOGETHER_SEEDS unset), the searches' cost being their
+    # candidates', not their runs'.
+    # - fleetrollout: nine explorations, at 500 seeds 4500 runs at the
+    #   1.0 s a run takes CI's -short tier (49 s for 48), more with both
+    #   evaluators; 150 (about 35 minutes) exceed every test's own count.
+    # - quorumkv: 100 seeds 21 minutes (TestRepick 8), above its own 70.
+    # - streams: 100 seeds 14 minutes (TestMutants' four in parallel, 9),
+    #   above its own 60.
+    # - wallet: own, 28 minutes (TestPendingTransfersLinearized 20; at 100
+    #   seeds its first exploration alone took 43), and the core's searches
+    #   after it, 27.
+    # - raftkv: own, in two shards: TestLostSnapshots 40 minutes; the rest
+    #   about 52 (TestPendingTransfers 23, TestRollingUpgrade 19). Not
+    #   TestLinearizeScale: its five 200-operation histories took more
+    #   than 90 minutes in shadow, the search's tens of thousands of
+    #   candidates each judged by quint too; raftkv's other tests shadow
+    #   the same linearized checks, and fresh-seeds runs it.
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, raftkv, wallet, payd]
+        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet, payd]
+        include:
+          - example: fleetrollout
+            seeds: "150"
+          - example: quorumkv
+            seeds: "100"
+          - example: streams
+            seeds: "100"
+          - example: wallet
+            seeds: own
+          - example: raftkv
+            shard: lost-snapshots
+            seeds: own
+            run: ^TestLostSnapshots$
+          - example: raftkv
+            shard: rest
+            seeds: own
+            skip: ^(TestLostSnapshots|TestLinearizeScale)$
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -221,12 +259,12 @@ jobs:
       - name: the tests, every judgement checked by both
         working-directory: examples/${{ matrix.example }}
         env:
-          # fleetrollout runs nine explorations: at 500 seeds each, 4500
-          # runs at the 1.0 s a run takes CI's -short tier (49 s for 48),
-          # more with both evaluators, would not fit 110m. 150 seeds (1350
-          # runs, about 35 minutes) still exceed every test's own count.
-          GOTOGETHER_SEEDS: ${{ matrix.example == 'fleetrollout' && '150' || '500' }}
-        run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ./...
+          SEEDS: ${{ matrix.seeds || '500' }}
+          RUN: ${{ matrix.run }}
+          SKIP: ${{ matrix.skip }}
+        run: |
+          if [ "$SEEDS" = own ]; then unset GOTOGETHER_SEEDS; else export GOTOGETHER_SEEDS=$SEEDS; fi
+          GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ${RUN:+-run "$RUN"} ${SKIP:+-skip "$SKIP"} ./...
       - name: the core's searches, checked by both
         if: matrix.example == 'wallet'
         run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 60m ./validate ./qtest
