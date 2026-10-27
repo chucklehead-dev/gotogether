@@ -230,8 +230,8 @@ func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	v := findViolation(t, ViolationConfig{Binding: sys.Binding, Opts: sys.Opts}, cases, func(tc hegel.TestCase, rec *Case) {
 		c := Choices(tc)
 		c.Rates = rates
-		var u *qenv.Unsettled
-		if err := sys.Run(rec.Env(c)); errors.As(err, &u) {
+		err := sys.Run(rec.Env(c))
+		if u, ok := errors.AsType[*qenv.Unsettled](err); ok {
 			rec.unsettled = u.Error() // an outcome, judged as an exploration judges it
 		} else if err != nil {
 			tc.Errorf("qhegel: the system did not run: %v", err)

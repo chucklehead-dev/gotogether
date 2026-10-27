@@ -8,7 +8,9 @@ import (
 	"go/format"
 	"go/token"
 	"go/types"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -615,11 +617,7 @@ func (w *fileWeaver) apply() ([]byte, error) {
 	pos := w.p.fset.Position(after)
 	var imp strings.Builder
 	imp.WriteString("\nimport (\n")
-	aliases := make([]string, 0, len(w.need))
-	for a := range w.need {
-		aliases = append(aliases, a)
-	}
-	sort.Strings(aliases)
+	aliases := slices.Sorted(maps.Keys(w.need))
 	for _, a := range aliases {
 		fmt.Fprintf(&imp, "\t%s %q\n", a, w.need[a])
 	}

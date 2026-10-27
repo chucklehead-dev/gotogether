@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"testing"
 
@@ -80,8 +82,7 @@ func VaryTraces(tc hegel.TestCase, traces []*itf.Trace, newDriver func(tc hegel.
 		}
 	}
 	if err := connect.Replay(tr, newDriver(tc), ro); err != nil {
-		var se *connect.StepError
-		if errors.As(err, &se) && se.Kind != "trace" {
+		if se, ok := errors.AsType[*connect.StepError](err); ok && se.Kind != "trace" {
 			tc.Errorf("qhegel: %v\n%s", err, se.Step)
 		}
 		tc.Errorf("qhegel: %v", err)
@@ -93,7 +94,7 @@ func summary(s *connect.Step) string {
 	if len(s.Picks) > 0 {
 		out += "("
 		first := true
-		for _, k := range sortedKeys(s.Picks) {
+		for _, k := range slices.Sorted(maps.Keys(s.Picks)) {
 			if !first {
 				out += ", "
 			}
@@ -101,19 +102,6 @@ func summary(s *connect.Step) string {
 			out += k + "=" + s.Picks[k].String()
 		}
 		out += ")"
-	}
-	return out
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j] < out[j-1]; j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
 	}
 	return out
 }

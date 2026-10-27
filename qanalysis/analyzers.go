@@ -16,8 +16,9 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -158,11 +159,7 @@ func checkScope(pass *analysis.Pass, a binding.Annotation) {
 	if scope == nil || a.Decl.Body == nil {
 		return
 	}
-	keys := make([]string, 0, len(a.Keys))
-	for k := range a.Keys {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(a.Keys))
 	for _, k := range keys {
 		if notExpressions[k] {
 			continue

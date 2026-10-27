@@ -27,8 +27,9 @@ package qweave
 
 import (
 	"fmt"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -240,11 +241,7 @@ func Hash(aspects []*Aspect) string {
 	for _, a := range aspects {
 		fmt.Fprintf(&b, "%s\x00%s\x00%#v\x00", a.File, a.ID, a.Join)
 		for _, adv := range a.Advice {
-			keys := make([]string, 0, len(adv.Imports))
-			for k := range adv.Imports {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
+			keys := slices.Sorted(maps.Keys(adv.Imports))
 			fmt.Fprintf(&b, "%s\x00%s\x00", adv.Kind, adv.text)
 			for _, k := range keys {
 				fmt.Fprintf(&b, "%s=%s\x00", k, adv.Imports[k])

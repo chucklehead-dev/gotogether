@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -287,11 +288,7 @@ func Weave(c Config) (*Result, error) {
 		return nil, visitErr
 	}
 	h := Hash(aspects)
-	names := make([]string, 0, len(r.Files))
-	for n := range r.Files {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(r.Files))
 	for _, n := range names {
 		h = hash(h + n + string(r.Files[n]))
 	}
@@ -303,11 +300,7 @@ func Weave(c Config) (*Result, error) {
 // overlay file (go build -overlay) naming them, and returns its path.
 func (r *Result) WriteOverlay(dir string) (string, error) {
 	replace := map[string]string{}
-	names := make([]string, 0, len(r.Files))
-	for n := range r.Files {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(r.Files))
 	for i, n := range names {
 		p := filepath.Join(dir, fmt.Sprintf("%04d_%s", i, filepath.Base(n)))
 		if err := os.WriteFile(p, r.Files[n], 0o644); err != nil {

@@ -29,6 +29,8 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/types"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -60,7 +62,7 @@ type Map struct {
 }
 
 // Actions are the map's actions, sorted.
-func (m *Map) Actions() []string { return sortedKeys(m.Sites) }
+func (m *Map) Actions() []string { return slices.Sorted(maps.Keys(m.Sites)) }
 
 // Static loads the packages matching patterns (relative to dir; tests
 // excluded) and maps each action to the functions of those packages its
@@ -243,7 +245,7 @@ func dead(all map[*ssa.Function]bool, cg *callgraph.Graph, own map[*types.Packag
 			set[Name(f)] = true
 		}
 	}
-	return sortedKeys(set)
+	return slices.Sorted(maps.Keys(set))
 }
 
 // An ErrorPath is code the exploration never tried: blocks no run ran in
@@ -268,7 +270,7 @@ func UntriedErrorPaths(m *Map, s *qcover.Summary, cov *qenv.Coverage) []ErrorPat
 				if !strings.HasSuffix(fn, "."+site) && !strings.HasSuffix(fn, ")."+site) {
 					continue
 				}
-				for _, caller := range sortedKeys(callers) {
+				for _, caller := range slices.Sorted(maps.Keys(callers)) {
 					var blocks []qcover.Block
 					for _, b := range s.Blocks {
 						if b.Func == caller && s.Hit[b.ID] == 0 {
@@ -369,9 +371,9 @@ func Compare(m *Map, s *qcover.Summary) []Gap {
 		actions[a] = true
 	}
 	var out []Gap
-	for _, a := range sortedKeys(actions) {
+	for _, a := range slices.Sorted(maps.Keys(actions)) {
 		g := Gap{Action: a, Sites: m.Sites[a]}
-		for _, f := range sortedKeys(m.Reach[a]) {
+		for _, f := range slices.Sorted(maps.Keys(m.Reach[a])) {
 			switch {
 			case !instrumented[f] || ran[a][f]:
 			case !hit[f]:
@@ -380,7 +382,7 @@ func Compare(m *Map, s *qcover.Summary) []Gap {
 				g.ByOthers = append(g.ByOthers, f)
 			}
 		}
-		for _, f := range sortedKeys(ran[a]) {
+		for _, f := range slices.Sorted(maps.Keys(ran[a])) {
 			if !m.Reach[a][f] {
 				g.Unreachable = append(g.Unreachable, f)
 			}
@@ -424,13 +426,4 @@ func appendUnique(s []string, v string) []string {
 		}
 	}
 	return append(s, v)
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
