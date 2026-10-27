@@ -107,11 +107,11 @@ func TestWriteSkewHistory(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ser, err := qhistory.Check(qhistory.Serializable, d.History.OnAccounts())
+			ser, err := qhistory.Check(qhistory.Serializable, d.History.WithOps())
 			if err != nil {
 				t.Fatal(err)
 			}
-			si, _ := qhistory.Check(qhistory.SnapshotIsolation, d.History.OnAccounts())
+			si, _ := qhistory.Check(qhistory.SnapshotIsolation, d.History.WithOps())
 			switch {
 			case m == Faithful && !ser.OK():
 				t.Fatalf("seed %d: the faithful bank's history is not serializable:\n%s", seed, ser)
@@ -137,7 +137,7 @@ func TestWriteSkewHistory(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rep, err := qhistory.Check(qhistory.Serializable, d.History.OnAccounts()); err != nil || !rep.OK() {
+		if rep, err := qhistory.Check(qhistory.Serializable, d.History.WithOps()); err != nil || !rep.OK() {
 			t.Fatalf("seed %d: %v\n%s", seed, err, rep)
 		}
 	}

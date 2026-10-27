@@ -274,16 +274,5 @@ func signatureOf(rep *validate.Report) string {
 	if rep.OK() {
 		return "it passes"
 	}
-	return fmt.Sprintf("no failure of a step (%s)", reasonOf(rep))
-}
-
-// reasonOf is a report's reason, as validate's result line says it.
-func reasonOf(r *validate.Report) string {
-	if v := r.Verdict(); v.Reason != "" {
-		return v.Reason
-	}
-	if r.Unsettled != "" {
-		return "unsettled"
-	}
-	return "fails"
+	return fmt.Sprintf("no failure of a step (%s)", rep.Reason())
 }

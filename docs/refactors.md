@@ -158,7 +158,7 @@ work. Risk: none in behaviour; conflicts with work in flight, so do it
 when nobody is in those files. explore.go's verdict paths are claims'
 semantics: move, never edit, there.
 
-### A8. Three copies of a report's reason (proposed)
+### A8. Three copies of a report's reason (done, with B2)
 
 `reasonOf(*validate.Report)` is written three times, identically
 (qshrink/samefailure.go, validate/stepmutants.go, qtest/stepmutate.go):
@@ -188,7 +188,7 @@ validate (B2 below); until then it can stay.
 
 ## B. Additive exported changes
 
-### B1. A recording DB for qhistory (proposed)
+### B1. A recording DB for qhistory (done: "qhistory.Record, validate.Report.Reason")
 
 examples/wallet/history.go is 110 lines that wrap `qenv.DB` and
 `qenv.Txn` (Begin, Get, GetForUpdate, Put, Commit, Rollback) to record a
@@ -208,7 +208,13 @@ Buys: the example's file becomes one call; the outcome rules live where
 qhistory's checker reads them. Risk: qhistory then imports qenv (it
 imports neither now); a subpackage `qhistory/qenvhist` keeps it light.
 
-### B2. `(*validate.Report).Reason()` (proposed)
+Done in qhistory itself, as the maintainer asked (qenv is the core's
+and pure Go: qhistory gains no heavy dependency): `Record(db, h,
+lists)` with `lists` a `qhistory.Lists` naming a key's list and its
+elements, a `History` safe for concurrent clients (its `Txns`,
+`WithOps`). The qtest copy of reasonOf was dead code.
+
+### B2. `(*validate.Report).Reason()` (done, with B1)
 
 The reason a failing report fails, as A8's three copies compute it, for
 qshrink, qtest and users' own summaries. One method, a line in

@@ -48,6 +48,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qhistory"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -492,7 +493,7 @@ type Deployment struct {
 	Ledger        *Ledger
 	BankProc      *qenv.Process
 	Store, Posted *qenv.Store
-	History       *History
+	History       *qhistory.History // the bank store's transactions, as qhistory.Record records them
 	Service       *qenv.Service[Req, Resp]
 }
 
@@ -502,7 +503,7 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	if iso == 0 {
 		iso = qenv.SnapshotIsolation
 	}
-	d := &Deployment{Sim: s, History: &History{}}
+	d := &Deployment{Sim: s, History: &qhistory.History{}}
 	replica := map[string]int{}
 	for _, a := range Accounts {
 		replica[a] = Initial
@@ -513,7 +514,7 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	// request's record answers the retry
 	d.Store.CommitFaults = true
 	d.Posted = qenv.NewStore(s, "ledger", qenv.Serializable)
-	d.Bank = &Bank{Mutation: cfg.Mutation, DB: &recording{d.Store, d.History}, Replica: replica, Store: d.Store}
+	d.Bank = &Bank{Mutation: cfg.Mutation, DB: qhistory.Record(d.Store, d.History, accountLists), Replica: replica, Store: d.Store}
 	d.Ledger = &Ledger{DB: d.Posted, Replica: replica}
 	ledgerProc := s.Process("ledger", true, func(ctx context.Context) { d.Ledger.Consume(ctx) })
 	d.Ledger.Queue = qenv.NewQueue(s, "postings", ledgerProc)

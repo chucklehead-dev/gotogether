@@ -929,14 +929,19 @@ const SnapshotIsolation Level = iota (spec 1 of its group)
 const StrictSerializable Level = iota (spec 3 of its group)
 const Unknown Outcome = iota
 func Check(level Level, txns []Txn) (*Report, error)
+func Record(db qenv.DB, h *History, lists Lists) qenv.DB
 type Anomaly struct
     field Kind string
     field Txns []int
     field Msg string
     field Forbidden bool
     method (Anomaly) String() string
+type History struct
+    method (*History) Txns() []Txn
+    method (*History) WithOps() []Txn
 type Level int
     method (Level) String() string
+type Lists func(key string, val any) (name string, list []int, ok bool)
 type Op struct
     field Kind OpKind
     field Key string
@@ -2111,6 +2116,7 @@ type Report struct
     method (*Report) Finished() Finish
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
+    method (*Report) Reason() string
     method (*Report) Summary() string
     method (*Report) Verdict() RunVerdict
     method (*Report) WithoutRefs() *Report

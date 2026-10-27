@@ -8,6 +8,13 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qhistory.Record(db, h, lists)` (docs/refactors.md B1): a `qenv.DB`
+  whose transactions are recorded in a `qhistory.History` as a
+  list-append workload's (reads, appends, outcomes: an unknown commit
+  stays Unknown); `History.Txns`, `History.WithOps`, `qhistory.Lists`.
+  examples/wallet's hand-written recording DB (history.go) is gone.
+  `(*validate.Report).Reason()` (B2): why a report fails, as validate's
+  result line says it, replacing three private copies.
 - `gotogether lint -sim` and quintsim find the wall clock's and the
   random packages' functions as values too (`now := time.Now`, a field
   set to `rand.IntN`), which escaped them: a finding more, never one

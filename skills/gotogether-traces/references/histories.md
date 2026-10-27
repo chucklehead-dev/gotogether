@@ -38,3 +38,22 @@ if err != nil || !rep.OK() {
 - qenv's `Store` checks its own commits against its level under
   `GOTOGETHER_CHECK=1` (it knows its versions); qhistory is for
   databases that do not tell.
+- An application whose rows are append-only lists (examples/wallet's
+  accounts) records its own history through any `qenv.DB` (a Store, an
+  adapter over a real database) with `qhistory.Record`, instead of a
+  hand-written Txn wrapper:
+
+  ```go
+  h := &qhistory.History{}
+  db := qhistory.Record(store, h, func(key string, val any) (string, []int, bool) {
+  	/* the key's list name and its elements; ok false for other keys */
+  	return "", nil, false
+  })
+  /* run the app on db, then */
+  rep, err := qhistory.Check(qhistory.Serializable, h.WithOps())
+  ```
+
+  Every attempt (each of `qenv.Retry`'s) is a transaction: a read the
+  list it returned, a Put the append of its last element, a commit's
+  `ErrUnknownOutcome` left Unknown (a Rollback after the commit records
+  nothing), any other failure Aborted.

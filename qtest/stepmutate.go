@@ -126,17 +126,6 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 	return rep, nil
 }
 
-// reasonOf is a report's reason, as validate's result line says it.
-func reasonOf(r *validate.Report) string {
-	if v := r.Verdict(); v.Reason != "" {
-		return v.Reason
-	}
-	if r.Unsettled != "" {
-		return "unsettled"
-	}
-	return "fails"
-}
-
 // counts are a report's mutants by op and fate.
 func (r *StepMutationReport) counts() (ops []string, n map[string]map[string]int) {
 	n = map[string]map[string]int{}

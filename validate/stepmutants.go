@@ -101,7 +101,7 @@ func (c *Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt Sear
 	orig := js[0].Report
 	if !orig.OK() {
 		return nil, fmt.Errorf("the original steps do not conform (%s): observation mutants ask what a conforming run's checks constrain, "+
-			"and a failing run's mutants fail too. Fix the run or the model first:\n%s", reasonOf(orig), orig.Summary())
+			"and a failing run's mutants fail too. Fix the run or the model first:\n%s", orig.Reason(), orig.Summary())
 	}
 	rep := &StepMutants{Original: js[0]}
 	var used map[string][]string
@@ -171,9 +171,9 @@ func stepFate(orig, r *Report) (fate, why string) {
 	}
 	switch {
 	case verdictless(r):
-		return FateUndecided, reasonOf(r)
+		return FateUndecided, r.Reason()
 	case !r.OK():
-		return FateKilled, reasonOf(r)
+		return FateKilled, r.Reason()
 	}
 	if orig.Finished().Verdict == Pass {
 		switch f := r.Finished(); f.Verdict {
@@ -222,17 +222,6 @@ func malformed(r *Report) string {
 		}
 	}
 	return ""
-}
-
-// reasonOf is a report's reason, as validate's result line says it.
-func reasonOf(r *Report) string {
-	if v := r.Verdict(); v.Reason != "" {
-		return v.Reason
-	}
-	if r.Unsettled != "" {
-		return "unsettled"
-	}
-	return "fails"
 }
 
 // counts are a report's mutants by op and fate.

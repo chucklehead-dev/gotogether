@@ -78,7 +78,7 @@ store's history, named as Adya names it:
 
 ```go
 d, _ := RunDeployment(chooser, Config{Mutation: WriteSkew, Workload: Skew})
-rep, _ := qhistory.Check(qhistory.Serializable, d.History.OnAccounts())
+rep, _ := qhistory.Check(qhistory.Serializable, d.History.WithOps())
 rep.Has("G2") // true; at qhistory.SnapshotIsolation, rep.OK()
 ```
 

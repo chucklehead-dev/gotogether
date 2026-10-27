@@ -202,6 +202,20 @@ func (r *Report) OK() bool {
 	return len(r.Actors) > 0
 }
 
+// Reason is why a report that is not OK fails, as validate's result line
+// says it: its verdict's reason, else "unsettled" for a run whose system
+// did not settle, else "fails". (Of an OK report it says nothing: ask OK
+// first.)
+func (r *Report) Reason() string {
+	if v := r.Verdict(); v.Reason != "" {
+		return v.Reason
+	}
+	if r.Unsettled != "" {
+		return "unsettled"
+	}
+	return "fails"
+}
+
 func (r *Report) Summary() string {
 	s := ""
 	if r.Unsettled != "" {
