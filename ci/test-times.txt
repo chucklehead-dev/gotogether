@@ -27,7 +27,7 @@ examples/retrystorm 51
 examples/twophase 156
 examples/wallet 119
 examples/webjobs 156 # 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, its compile counted; TestShrink is full mode): 135-155 CPU s
-binding 195 # 165-193 CPU s; wall on CI 266-322 s (runs 334-338) with the core job's CPUs shared, 107 s alone here
+binding 310 # 310 CPU s on CI (run 404); TestEvalModuleCompiles compiles every example's binding with quint, and the grist examples (counters, wallet-grist, library) added theirs: 163 to 207 CPU s here, that test 86 to 109 s (165-193 on CI before, runs 334-338)
 cmd/gotogether 200 # 176-195 CPU s: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
 internal/qeval 210 # 180-206 CPU s (wall 194 s alone, 343-361 s in the full run)
 internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
