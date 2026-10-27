@@ -2,18 +2,33 @@
 const ConditionTries = 5
 const TransientTries = 10
 func CheckCondition(log []Stored, c Condition) error
+func Keys(names ...string) KeyNames
 func New(name string) *App
+func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewEvent[E any](app *App, name string) *EventType[E]
+func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
+func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error)) *QueryBlock[Q, R]
+func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
 func NewReceipt(tenant string, head Position, n int) Receipt
+func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
 func ParsePosKey(s string) (Position, error)
 func PosKey(p Position) string
+func Quiet(ctx context.Context) context.Context
 func QuintName(name string) (string, error)
+func Rejection(name string) error
 func Select(log []Stored, q Query, at Position) []Stored
 func StepFields(typ reflect.Type, body []byte, prefix string) []any
 func Tag(key string, value any) TagPair
 func Transient(err error) bool
+func Unconditioned(reason string) Option
 type App struct
     field Name string
+    method (*App) ArgsType(name string) reflect.Type
+    method (*App) Commands() []string
+    method (*App) Execute(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (Receipt, error)
+    method (*App) Queries() []string
+    method (*App) Query(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (json.RawMessage, Position, error)
+    method (*App) ResultType(name string) reflect.Type
     method (*App) Verify() error
 type Batch struct
     field Events []Event
@@ -32,6 +47,9 @@ type CheckpointMoved struct
     field Expected Position
     field Found Position
     method (*CheckpointMoved) Error() string
+type Command[C any] struct
+    method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
+    method (*Command[C]) Name() string
 type Condition struct
     field After Position
     field Queries []Query
@@ -40,6 +58,10 @@ type ConditionFailed struct
     field Event Position
     field Marker string
     method (*ConditionFailed) Error() string
+type Envelope struct
+    field ID string
+    field Tenant string
+    field Actor string
 type Event struct
     field Type string
     field Version int
@@ -58,6 +80,11 @@ type EventType[E any] struct
 type Failed struct
     field Processor string `json:"processor" grist:"tag"`
     field Trigger int64 `json:"trigger"`
+type Handler[S any] struct
+type KeyNames []string
+type KeyedReadModel[S any] struct
+    embed ReadModel[S]
+    method (*KeyedReadModel[S]) For(r *Reads, values ...string) S
 type Marker struct
     field ID string
     field Hash string
@@ -67,6 +94,7 @@ type Meta struct
     field Pos Position
     field Time int64
     field Cause string
+type Option func(*options)
 type Position int64
 type Query struct
     field Types []string
@@ -76,9 +104,26 @@ type Query struct
     field Limit int
     method (Query) Matches(e Event) bool
     method (Query) String() string
+type QueryBlock[Q, R any] struct
+    method (*QueryBlock[Q, R]) Name() string
+    method (*QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) (R, Position, error)
+type ReadModel[S any] struct
+    method (*ReadModel[S]) Fold(events []Stored) (S, error)
+    method (*ReadModel[S]) Get(r *Reads) S
+    method (*ReadModel[S]) Name() string
+    method (*ReadModel[S]) Query(tags ...TagPair) Query
+type Reads struct
+    method (*Reads) Events(q Query) []Stored
+    method (*Reads) Exists(t EventName, tags ...TagPair) bool
+    method (*Reads) ID(n int) string
+    method (*Reads) Position() Position
+    method (*Reads) Tenant() string
 type Receipt struct
     field Pos Position
     field Events []EventRef
+type Rejected struct
+    field Name string
+    method (*Rejected) Error() string
 type Store interface
     Name() string
     CreateTenant(ctx context.Context, tenant string) error
@@ -99,6 +144,8 @@ type Stored struct
 type TagPair struct
     field Key string
     field Value string
+var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later")
+var ErrKeyReused = Rejection("idempotency-key-reused")
 var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
 
 == github.com/chucklehead-dev/gotogether/grist/memstore

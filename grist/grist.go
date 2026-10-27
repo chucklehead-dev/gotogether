@@ -40,12 +40,16 @@ type App struct {
 	events     map[string]*eventInfo
 	names      map[string]string // block name -> what it is, for uniqueness
 	quintNames map[string]string // Quint identifier -> block name
+	commands   map[string]*commandInfo
+	queries    map[string]*queryInfo
+	readModels []*readModelInfo
 	problems   []string
 }
 
 // New returns an empty App named name.
 func New(name string) *App {
-	a := &App{Name: name, events: map[string]*eventInfo{}, names: map[string]string{}, quintNames: map[string]string{}}
+	a := &App{Name: name, events: map[string]*eventInfo{}, names: map[string]string{}, quintNames: map[string]string{},
+		commands: map[string]*commandInfo{}, queries: map[string]*queryInfo{}}
 	a.events[failedType] = failedInfo()
 	return a
 }
@@ -88,12 +92,25 @@ func (a *App) register(kind, name string) {
 // block and the fix; nil when the App may start.
 func (a *App) Verify() error {
 	ps := append([]string(nil), a.problems...)
+	for _, rm := range a.readModels {
+		for _, t := range rm.types {
+			if a.events[t] == nil {
+				ps = append(ps, fmt.Sprintf("read model %q folds %q, an event of another App: register it on %s", rm.name, t, a.Name))
+			}
+		}
+	}
 	if len(ps) == 0 {
 		return nil
 	}
 	sort.Strings(ps)
 	return fmt.Errorf("grist: app %s does not verify:\n  %s", a.Name, strings.Join(ps, "\n  "))
 }
+
+// Commands are the names of the App's commands, sorted.
+func (a *App) Commands() []string { return sortedKeys(a.commands) }
+
+// Queries are the names of the App's queries, sorted.
+func (a *App) Queries() []string { return sortedKeys(a.queries) }
 
 // quintReserved are names Quint will not take as an action's (its
 // keywords and the built-ins a model most often meets): `to` fails to
@@ -133,4 +150,13 @@ func QuintName(name string) (string, error) {
 		return "", fmt.Errorf("maps to %s, which Quint reserves: rename it", q)
 	}
 	return q, nil
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
