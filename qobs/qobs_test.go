@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 )
 
 // A file sink's steps are in the file as soon as they are recorded
@@ -103,5 +105,25 @@ func TestSinkErrors(t *testing.T) {
 	NewRecorder(sink).Record(context.Background(), "deposit", nil)
 	if err := sink.Err(); err == nil || !strings.Contains(err.Error(), "after the step log was closed") {
 		t.Errorf("a step after Close: %v", err)
+	}
+}
+
+// A step that escapes a strict run outside any simulation is told to
+// record through the run's context, not to start its goroutine with
+// qenv.Go: there is no simulation to start it in (qenv's tests check its
+// advice inside one).
+func TestEscapedStepOutsideASimulation(t *testing.T) {
+	release := hooks.Strict()
+	defer release()
+	mark, _ := hooks.Escaped(0)
+	done := make(chan struct{})
+	go func() { //qenv:ok a goroutine no run follows
+		defer close(done)
+		Record(context.Background(), "lost", nil)
+	}()
+	<-done
+	_, msgs := hooks.Escaped(mark)
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "qobs.WithRecorder(ctx, rec)") || strings.Contains(msgs[0], "qenv") {
+		t.Fatalf("escaped: %q; want one naming qobs.WithRecorder and not qenv", msgs)
 	}
 }

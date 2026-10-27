@@ -1298,6 +1298,9 @@ type StepRef string
 type Tee []Sink
     method (Tee) Record(ctx context.Context, s *qtrace.Step)
 
+== github.com/chucklehead-dev/gotogether/qobs/qobshttp
+func Handler(h http.Handler, rec *qobs.Recorder) http.Handler
+
 == github.com/chucklehead-dev/gotogether/qrole
 const MetricAttempts = "quint.call.attempts"
 const MetricOrbit = "quint.orbit"

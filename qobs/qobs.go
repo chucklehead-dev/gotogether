@@ -17,6 +17,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qrun"
 	"reflect"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -229,9 +231,32 @@ func Record(ctx context.Context, action string, err error, kv ...any) {
 	}
 	if hooks.StrictOn() {
 		hooks.Escape(fmt.Sprintf("qobs: step %q has no recorder: its context carries none, its goroutine belongs to no "+
-			"simulated run, and no global recorder is installed. A goroutine started with `go` is outside the "+
-			"simulation: start it with qenv.Go, or record through a context from the run (qenv.WithContext).", action))
+			"run, and no global recorder is installed. %s", action, escapeAdvice()))
 	}
+}
+
+// escapeAdvice is what to do about a step that escaped a strict run,
+// for the goroutine it came from: an HTTP handler's (net/http serves
+// each connection on a goroutine of its own) is told to wrap the
+// handler, one in a process running a simulation to start it with
+// qenv.Go, any other to be given the run's context. It reads the
+// goroutine's stack, on this path only.
+func escapeAdvice() string {
+	buf := make([]byte, 64<<10)
+	stack := string(buf[:runtime.Stack(buf, false)])
+	switch {
+	case strings.Contains(stack, "net/http.serverHandler.ServeHTTP(") || strings.Contains(stack, "net/http.(*conn).serve("):
+		return "It is an HTTP handler's (net/http serves each connection on a goroutine of its own): wrap the handler " +
+			"so that its requests carry the run's recorder (qobshttp.Handler(h, rec), rec the run's: qtest.Record's " +
+			"scenario's argument), or pass qtest.Global(), which keeps tests from running in parallel. A goroutine the " +
+			"handler starts must record through the request's context (r.Context())."
+	case hooks.Simulating():
+		return "A goroutine started with `go` is outside the simulation: start it with qenv.Go, or record through " +
+			"a context from the run (qenv.WithContext)."
+	}
+	return "A goroutine started with `go` is outside the run (qrun.Start covers only the goroutine that called it): " +
+		"record through a context from the run (qobs.WithRecorder(ctx, rec), rec qtest.Record's scenario's argument), " +
+		"or pass qtest.Global() for goroutines the code starts, which keeps tests from running in parallel."
 }
 
 type threadKey struct{}

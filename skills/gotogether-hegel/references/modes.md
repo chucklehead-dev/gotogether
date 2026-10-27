@@ -20,7 +20,10 @@
   recorder too, for steps from goroutines the body starts (a server's
   handlers, a cluster's nodes). The body's own goroutine always records
   into the case. Tests with it must not run in parallel: a second install
-  fails. Rules
+  fails. An HTTP server needs none of it: wrap its handler with the case's
+  recorder, a server per case (`qobshttp.Handler(h, c.Recorder)`;
+  gotogether-traces' references/emitting.md, "Recording a server in a
+  test"). Rules
   can also call `rec.Step(action, err, kv...)`. Every step becomes a Hegel
   note, so the shrunk run prints as model actions.
 - **Generators.** Draw invalid inputs too: unknown ids, non-positive

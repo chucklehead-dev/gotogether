@@ -52,6 +52,22 @@ func Strict() (release func()) {
 // StrictOn reports whether a strict run is on.
 func StrictOn() bool { return strict.Load() > 0 }
 
+// Process-wide: installed by qenv.
+var simulating atomic.Pointer[func() bool]
+
+// SetSimulating installs how to tell whether a simulation is open in the
+// process: qenv's count of simulations not yet closed. An escaped step's
+// message advises qenv.Go only then: outside any simulation (a test
+// recording a real server) that advice is noise.
+func SetSimulating(f func() bool) { simulating.Store(&f) }
+
+// Simulating reports whether a simulation is open in the process
+// (SetSimulating's check; false without qenv).
+func Simulating() bool {
+	f := simulating.Load()
+	return f != nil && (*f)()
+}
+
 // escaped logs the steps strict runs could not place, process-wide: their
 // goroutine names no run, so no run can be told.
 var escaped struct {
@@ -97,7 +113,8 @@ func Escaped(mark int) (n int, since []string) {
 	}
 	if escaped.n > mark && len(since) == 0 {
 		since = []string{strconv.Itoa(escaped.n-mark) + " steps had no recorder (their messages are past the first " + strconv.Itoa(maxEscaped) +
-			" kept): a goroutine started with `go` is outside the simulation; start it with qenv.Go"}
+			" kept): a goroutine started with `go` is outside the run; start it with qenv.Go in a simulation, " +
+			"wrap an HTTP handler with qobshttp.Handler, or record through a context from the run (qobs.WithRecorder)"}
 	}
 	return escaped.n, since
 }

@@ -447,6 +447,8 @@ func TestBackgroundStepsFindTheirRun(t *testing.T) {
 // do. It once panicked, on a goroutine no run owns, which killed the test
 // binary instead of failing the run.
 func TestStrictStepWithNowhereToGo(t *testing.T) {
+	s := qenv.New(qenv.Nominal{}) // open: the advice is qenv's only in a process simulating
+	defer s.Close()
 	release := hooks.Strict()
 	defer release()
 	mark, _ := hooks.Escaped(0)

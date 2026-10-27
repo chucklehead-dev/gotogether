@@ -31,7 +31,8 @@ connect/      MBT runtime (quint-connect parity); testdata/bank.qnt
 qhegel/       separate module: Hegel integration; testdata/bank.yaml
 internal/hegelprops/  unpublished module (replace => ../..): the core's Hegel-checked properties, on the current core
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
-qobs/ qtrace/ otelio/ convert/ input/  recording, schema/reconstruction, OTLP, span conversion, reading any trace input
+qobs/ qtrace/ otelio/ convert/ input/  recording, schema/reconstruction, OTLP, span conversion, reading any trace input;
+              qobs/qobshttp: an HTTP handler's steps into a given run
 binding/ validate/ qtest/              binding YAML, quint-test-based validator, test helpers (Expect, Explore)
 qenv/         deterministic simulation: scheduler, virtual time, processes; Store, Queue, Service doubles;
               internal/choice (choosers, byte rule, rates) and internal/profile (virtual-time pprof), qenv's API
@@ -293,9 +294,11 @@ working there:
 - `qrun.Start(ctx)` makes ctx the goroutine's run without a simulation
   (`qtest.Record`, `qhegel.Case.Install`), and `qenv.New` inherits
   it. Goroutines the run starts are not in it: their steps fail Record
-  (the run is strict) unless it is given `qtest.Global()` (in
-  qhegel's `Config.Opts` too), which installs the global recorder for
-  them (`qobs.InstallGlobal`). A second install while one is in place fails,
+  (the run is strict) unless they record through a context carrying the
+  run's recorder (`qobs.WithRecorder`; an HTTP server's handlers behind
+  `qobshttp.Handler(h, rec)`, in parallel), or the run is given
+  `qtest.Global()` (in qhegel's `Config.Opts` too), which installs the
+  global recorder for them (`qobs.InstallGlobal`). A second install while one is in place fails,
   so such tests must not run in parallel; a restore puts back the
   previous recorder only if its own is still installed.
 - A model that learns a log from its reads checks Kafka, Kinesis and a

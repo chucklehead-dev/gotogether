@@ -79,8 +79,7 @@ In a simulation, steps carry its virtual time, and an exploration takes
 the same options: a simulated client history is linearized run by run.
 
 Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with
-`qobs.SetGlobal`; a test gets one per run from qtest, and `qtest.Global()`
-installs it globally for goroutines the run starts):
+`qobs.SetGlobal`; a test gets one per run from qtest, below):
 - `MemorySink` for tests;
 - `FileSink("steps.jsonl", qobs.PerStep)` for a native step log: each
   step reaches the OS before Record returns, so a killed process loses
@@ -94,3 +93,59 @@ installs it globally for goroutines the run starts):
   samples them out: a dropped step is a reported gap;
 - `Tee{...}` to send steps to several sinks.
 
+## Recording a server in a test
+
+`qtest.Record` gives the scenario a recorder of its own (`rec`) and makes
+the scenario's goroutine the run's (`qrun.Start`): what it records, with
+any context, is in the run. A goroutine it starts is not (Go has no
+goroutine-local state to inherit): its steps escape, and the run, being
+strict, fails naming them. Hand such a goroutine the run's recorder in its
+context, `qobs.WithRecorder(ctx, rec)`; a step recorded through that
+context (or one derived from it) is in the run.
+
+An HTTP server's handlers run on goroutines net/http starts, one per
+connection. Wrap the handler with `qobshttp.Handler(h, rec)`: each request's
+context carries rec, and the handler's goroutine is in rec's run while it
+serves the request, so steps recorded with `r.Context()` or with
+`context.Background()` (a library's, woven `//quint:action` without a
+context) land in the run:
+
+```go
+qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
+	srv := httptest.NewServer(qobshttp.Handler(api, rec))
+	defer srv.Close() // waits for the handlers: their steps are in the run
+	/* drive srv.URL */
+}).Expect(t, qtest.Conforms())
+```
+
+- **Parallel tests.** Each run has its server and its recorder, so tests
+  with `t.Parallel()` keep their steps apart (examples/kvstore's load
+  test). `qtest.Global()` does the same through the process-wide
+  recorder, which one test at a time may install: keep it for goroutines
+  nothing can hand a context (a cluster's nodes, a server built where
+  you cannot wrap its handler).
+- **Lifetime.** Start the server inside the scenario and close it before
+  the scenario returns (`defer srv.Close()`, not `t.Cleanup`, which runs
+  after the run was judged): a step recorded later is in no run. An
+  `http.Server` you configure yourself takes the wrapper in place
+  (`srv.Config.Handler = qobshttp.Handler(srv.Config.Handler, rec)` before
+  `Start`). The recorder is the request's, not the connection's: a
+  keep-alive connection carries none from one request to the next. A
+  server shared by several runs records into the recorder it was wrapped
+  with, whichever run sent the request: give each run a server.
+- **A handler's own goroutines** record into the run when given the
+  request's context or one derived from it; for work that outlives the
+  response, `context.WithoutCancel(r.Context())`, and wait for it before
+  the scenario returns. One that records with `context.Background()`
+  escapes, as any goroutine started with `go`.
+- **The client's steps** (a client that records its calls on return,
+  `"invoked", start`) are in the run when the client runs on the
+  scenario's goroutine; concurrent clients on goroutines of their own need
+  `qobs.WithRecorder(ctx, rec)` in the context they call with.
+- **Reruns and cases.** A `qtest.ShrinkActions` `Rerun` builds its
+  recorder (`qobs.NewRecorder(&qobs.MemorySink{})`) and a server wrapped
+  with it per rerun, closes the server, and returns the sink's steps. A
+  qhegel case is a recorder: `qobshttp.Handler(h, c.Recorder)`, a server
+  per case.
+- **In a simulation** use `qenv/qhttp`: its handlers run as the
+  simulation's tasks and record into its run with nothing to wrap.

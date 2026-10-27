@@ -8,6 +8,15 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Recording an HTTP service in a test: `qobshttp.Handler(h, rec)` (new
+  package `qobs/qobshttp`) puts rec in every request's context and makes
+  the handler's goroutine rec's run while it serves the request, so a
+  server started inside `qtest.Record` (a ShrinkActions rerun, a qhegel
+  case) records its handlers' steps into that run, in parallel with other
+  tests, where `qtest.Global()` serialised them. A step that escapes a
+  strict run says what fixes it where it came from: an HTTP handler's
+  names `qobshttp.Handler`, one outside any simulation
+  `qobs.WithRecorder`; only a process simulating is told `qenv.Go`.
 - `gotogether validate`'s result line says `RESULT: NO VERDICT (...)`
   when the run's verdict is no verdict (every failing actor's a lost
   tail, dropped steps or an uncollected window; exit 1, being no pass),

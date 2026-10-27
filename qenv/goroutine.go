@@ -54,6 +54,7 @@ func init() {
 		ctx, ok := owners.ended[id]
 		return ctx, ok
 	})
+	hooks.SetSimulating(func() bool { return live.Load() > 0 })
 	hooks.SetDiscard(func() bool {
 		if live.Load() == 0 {
 			return false

@@ -13,6 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/otelio"
 	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs/qobshttp"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -36,15 +37,20 @@ func service(t testing.TB, m kv.Mutation, sr *tracetest.SpanRecorder) *kv.Client
 // Concurrent load against the service. The store's model steps are
 // recorded (qtest) and must form a behaviour of the model: every CAS
 // outcome, revision and read consistent with some serial history, namely
-// the one the store's lock produced.
+// the one the store's lock produced. The server's handlers run on
+// net/http's goroutines: qobshttp.Handler puts the run's recorder in each
+// request's context, so the test runs in parallel with others
+// (qtest.Global() would serialise it).
 func TestServiceUnderLoadConforms(t *testing.T) {
+	t.Parallel()
 	qtest.RequireQuint(t)
-	qtest.Record(t, "kv.binding.yaml", func(*qobs.Recorder) {
-		cl := service(t, kv.Faithful, nil)
-		if err := kv.Load(context.Background(), cl.Base, 8, 40, []string{"a", "b"}, 1); err != nil {
+	qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
+		srv := httptest.NewServer(qobshttp.Handler(kv.NewServer(kv.NewStore(kv.Faithful), sdktrace.NewTracerProvider()).Handler(), rec))
+		defer srv.Close() // waits for the handlers: their steps are in the run
+		if err := kv.Load(context.Background(), srv.URL, 8, 40, []string{"a", "b"}, 1); err != nil {
 			t.Fatal(err)
 		}
-	}, qtest.Global()).Expect(t, qtest.Conforms()) // the server's handlers run on its goroutines
+	}).Expect(t, qtest.Conforms())
 }
 
 // The server's plain OTel spans, from the same kind of load, converted by

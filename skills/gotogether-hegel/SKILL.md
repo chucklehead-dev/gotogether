@@ -46,7 +46,8 @@ func TestBankAgainstModel(t *testing.T) {
   `Each` on a failure so Hegel shrinks it); `Each` checks every case;
   `After` checks once at the end and shrinks nothing. `qtest.Global()` in `Opts`
   also installs each case's recorder globally, for steps from goroutines
-  the body starts (not in parallel tests). Read [references/modes.md](references/modes.md) for the
+  the body starts (not in parallel tests); an HTTP server's handlers
+  record into the case behind `qobshttp.Handler(h, c.Recorder)`. Read [references/modes.md](references/modes.md) for the
   modes' costs and options, generators and budgets.
 - **Expected failures** (a mutant, a known bug): use
   `qhegel.FindViolation`. It checks every case with the verdict

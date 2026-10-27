@@ -93,7 +93,7 @@ checked alone*); the two rotation mutants show only there.
 
 | Test | Direction | Shows |
 |---|---|---|
-| `TestServiceUnderLoadConforms` | 8 concurrent clients; recorded steps checked (`qtest`) | a concurrent run is a serial behaviour of the model |
+| `TestServiceUnderLoadConforms` | 8 concurrent clients; the handlers' steps recorded into the run (`qobshttp.Handler`, in parallel) and checked (`qtest`) | a concurrent run is a serial behaviour of the model |
 | `TestServiceSpansConform` | the same load; plain spans converted and checked | spans plus `kv.op` give the same verdict |
 | `TestStaleCASCaughtUnderLoad` | the race mutant under load | caught as a CAS the model cannot take |
 | `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |

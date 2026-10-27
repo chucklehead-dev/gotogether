@@ -176,11 +176,13 @@ func SkipIfEmpty() Option { return option(optSkipIfEmpty, func(c *settings) { c.
 
 // Global makes Record install its recorder as the global one
 // (qobs.InstallGlobal) while the scenario runs, for the steps of
-// goroutines the scenario starts (a server's handlers, a cluster's
-// nodes), which no run can follow. Such tests must not run in parallel:
-// a second install fails. Without it only the scenario's goroutine, and
-// code recording through its recorder's context, record into the run. It
-// is Record's and qhegel's: an exploration and Validate refuse it.
+// goroutines the scenario starts (a cluster's nodes, a server's handlers
+// when the server cannot be wrapped), which no run can follow. Such tests
+// must not run in parallel: a second install fails. Without it only the
+// scenario's goroutine, and code recording through its recorder's context,
+// record into the run: an HTTP server's handlers do, in parallel with
+// other runs, behind qobshttp.Handler(h, rec). It is Record's and
+// qhegel's: an exploration and Validate refuse it.
 func Global() Option { return option(optGlobal, func(c *settings) { c.Global = true }) }
 
 // Constants checks against another instance of the binding's model: these
@@ -406,8 +408,8 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	if n, msgs := hooks.Escaped(mark); n > mark && !c.Global {
 		// a verdict on a run missing steps would only mislead
 		t.Fatalf("gotogether: %d steps were recorded from goroutines outside the scenario's run (the first: %s); "+
-			"record through the scenario's context (rec's: qobs.WithRecorder), or pass qtest.Global() for goroutines "+
-			"the scenario starts", n-mark, firstOr(msgs))
+			"record through the scenario's context (rec's: qobs.WithRecorder), wrap an HTTP server's handler "+
+			"(qobshttp.Handler(h, rec)), or pass qtest.Global() for goroutines the scenario starts", n-mark, firstOr(msgs))
 	}
 	for _, is := range rec.Issues() {
 		t.Errorf("gotogether: recording: %s", is)

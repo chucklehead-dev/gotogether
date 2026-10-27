@@ -92,9 +92,26 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `Expect`. Start with
   `qtest.RequireQuint(t)`, which skips the test without quint.
   The scenario's goroutine records into the run. Steps from goroutines
-  it starts (an HTTP server's handlers, a cluster's nodes) fail the test
-  unless you pass `qtest.Global()`. That option installs the run's
-  recorder globally, so such tests must not run in parallel.
+  it starts fail the test (strict: none is lost silently) unless they
+  record through a context carrying the run's recorder
+  (`qobs.WithRecorder(ctx, rec)`). An HTTP server's handlers run on
+  net/http's goroutines: wrap the handler, and the run, in parallel with
+  others, gets their steps:
+
+  ```go
+  qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
+      srv := httptest.NewServer(qobshttp.Handler(api, rec))
+      defer srv.Close() // waits for the handlers: their steps are in the run
+      /* drive srv.URL */
+  }).Expect(t, qtest.Conforms())
+  ```
+
+  `qtest.Global()` installs the run's recorder globally instead, for
+  goroutines nothing can hand a context (a cluster's nodes, a server you
+  cannot wrap); such tests must not run in parallel.
+  Read [references/emitting.md](references/emitting.md), "Recording a
+  server in a test", for handlers' goroutines, client steps, reruns and
+  Hegel cases.
 - **Expected verdicts** (mutants): `qtest.Record(...).Expect(t, e...)`,
   where each `e` says how the run must show up:
   - `qtest.Conforms()`;

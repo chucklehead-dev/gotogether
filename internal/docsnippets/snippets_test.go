@@ -29,7 +29,7 @@ const root = "../.."
 var packages = map[string]string{
 	"binding": "binding", "connect": "connect", "convert": "convert", "input": "input", "itf": "itf",
 	"otelio": "otelio", "qcover": "qcover", "qenv": "qenv", "qhegel": "qhegel", "qload": "qload",
-	"qmeta": "qmeta", "qmut": "qmut", "qobs": "qobs", "qrole": "qrole", "qrun": "qrun", "qsweep": "qsweep",
+	"qmeta": "qmeta", "qmut": "qmut", "qobs": "qobs", "qobshttp": "qobs/qobshttp", "qrole": "qrole", "qrun": "qrun", "qsweep": "qsweep",
 	"qtest": "qtest", "qtrace": "qtrace", "sktrace": "examples/sktrace", "validate": "validate",
 	"qgosim": "qgosim", "qweave": "qweave", "qlint": "qlint",
 }
