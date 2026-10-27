@@ -36,6 +36,12 @@ actions:
   payout: {}
   payoutEffect: {}
   payoutOutcome: {}
+  mailerSend:
+    args: { result: '{{.outcome}}' }
+  mailerSendServed:
+    args: { result: '{{.outcome}}' }
+  mailerSendReplayed:
+    args: { result: '{{.outcome}}' }
   bankPay:
     args: { result: '{{.outcome}}' }
   bankPayServed:

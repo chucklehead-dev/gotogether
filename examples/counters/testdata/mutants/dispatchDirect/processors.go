@@ -29,9 +29,10 @@ var Average = grist.NewProcessor(App, "average", Incremented,
 var Welcome = grist.NewProcessor(App, "welcome", Created,
 	func(ctx context.Context, r *grist.Reads, e CounterCreated, m grist.Meta) grist.Result {
 		return grist.Effect(func(ctx context.Context) error {
-			return MailerDep.Of(ctx).Send(ctx, grist.EffectKey(ctx), "created "+e.Name)
+			_, err := Send.Do(ctx, Mail{Counter: e.Counter, Name: e.Name})
+			return err
 		}, grist.AtLeastOnce, grist.OnSuccess(Welcomed.Of(Notified{Counter: e.Counter})))
-	}, grist.Delivers(grist.AtLeastOnce, Welcomed))
+	}, grist.Delivers(grist.AtLeastOnce, Welcomed), grist.Uses(Send))
 
 // Payout pays a retired counter's total out through the bank, at most
 // once: a duplicate payout is money lost, a lost one is reconciled by

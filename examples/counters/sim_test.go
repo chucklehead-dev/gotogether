@@ -14,13 +14,10 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// setup gives every run a mailer of its own, and the store (for the
-// dispatchDirect mutant's raw append).
+// setup gives every run the store (for the dispatchDirect mutant's raw
+// append). The mailer is gristsim's: its default double.
 func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
-	m := NewSimMailer(s)
-	return func(ctx context.Context) context.Context {
-		return StoreDep.With(MailerDep.With(ctx, m), st)
-	}
+	return func(ctx context.Context) context.Context { return StoreDep.With(ctx, st) }
 }
 
 // doubles are a run's bank, which gristsim serves as the qenv.Service
@@ -30,6 +27,8 @@ func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
 // over 100. grist records each payment it makes at its site
 // (bankPayServed), so a payment made twice, or made while its answer was
 // lost, is in the trace whatever the payout saw.
+//
+// The mailer is given none: gristsim serves its default double.
 func doubles() gristsim.Doubles { return bankDouble(false) }
 
 // bankDouble is the bank double; fresh answers a replay with a new receipt

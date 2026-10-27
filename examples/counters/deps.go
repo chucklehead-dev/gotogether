@@ -1,63 +1,33 @@
 package counters
 
-import (
-	"context"
-	"errors"
-	"time"
+import "github.com/chucklehead-dev/gotogether/grist"
 
-	"github.com/chucklehead-dev/gotogether/grist"
-	"github.com/chucklehead-dev/gotogether/qenv"
-)
+// StoreDep is the application's store, for a raw append, which only the
+// dispatchDirect mutant makes (grain's example processor): an undeclared
+// dependency, reached through a processor's context (grist.Dep), attached
+// by gristsim's Config.Setup or the real tier's harness.
+var StoreDep = grist.NewDep[grist.Store]("store", nil)
 
-// A Mailer sends mail, deduplicating by key where it can.
-type Mailer interface {
-	Send(ctx context.Context, key, msg string) error
+// Mailer is the mailer a new counter's welcome is sent through: a
+// declared dependency, whose calls grist records at both ends (the
+// caller's step mailerSend, the mailer's own mailerSendServed) and
+// gristsim serves as a qenv.Service named mailer, its faults
+// rpc.mailer.*. No simulation gives it a double: gristsim serves its
+// default (grist.DefaultHandlers), which sends every mail it is asked to.
+var Mailer = grist.NewDependency(App, "mailer")
+
+// Mail is a welcome: the counter, and its name.
+type Mail struct {
+	Counter string `json:"counter"`
+	Name    string `json:"name"`
 }
 
-// The application's undeclared dependencies, reached through a
-// processor's context (grist.Dep): one set per run, attached by
-// gristsim's Config.Setup, Main's Dependencies or the real tier's
-// harness, never a package-level value that runs in parallel would
-// share. Where none is attached, a mailer that refuses every mail.
-var (
-	MailerDep = grist.NewDep[Mailer]("mailer", noMailer{})
-	// StoreDep is the application's store, for a raw append, which only
-	// the dispatchDirect mutant makes (grain's example processor).
-	StoreDep = grist.NewDep[grist.Store]("store", nil)
-)
+// Mailed is the mailer's answer: the mail was sent.
+type Mailed struct{}
 
-type noMailer struct{}
-
-func (noMailer) Send(context.Context, string, string) error {
-	return errors.New("counters: no mailer: attach one (MailerDep.With)")
-}
-
-// Mail is a mail as the simulated mailer takes it.
-type Mail struct{ Key, Msg string }
-
-// SimMailer is a mailer in a simulation: a qenv.Service of its own
-// process ("mailer"), whose requests and responses may be lost or late.
-type SimMailer struct {
-	svc *qenv.Service[Mail, struct{}]
-	// Sent are the mails it was asked to send, duplicates included.
-	Sent []Mail
-}
-
-// NewSimMailer registers the mailer service in s.
-func NewSimMailer(s *qenv.Sim) *SimMailer {
-	m := &SimMailer{}
-	m.svc = qenv.NewService(s, "mailer", nil, func(ctx context.Context, mail Mail) (struct{}, error) {
-		m.Sent = append(m.Sent, mail)
-		return struct{}{}, nil
-	})
-	return m
-}
-
-// Send implements Mailer: an error if no answer came within a second.
-func (m *SimMailer) Send(ctx context.Context, key, msg string) error {
-	_, err := m.svc.Call(ctx, Mail{Key: key, Msg: msg}, time.Second)
-	return err
-}
+// Send sends a mail. Not Keyed: the mailer sends every mail it gets, a
+// retried welcome again (the welcome is at least once, by right).
+var Send = grist.NewCall[Mail, Mailed](Mailer, "send")
 
 // Bank is the bank a retired counter's total is paid out through: a
 // declared dependency, whose calls grist records at both ends (the

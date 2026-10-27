@@ -45,6 +45,12 @@ actions:
   payoutEffect: {}
   payoutOutcome:
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  mailerSend:
+    args: { result: '{{.outcome}}' }
+  mailerSendServed:
+    args: { result: '{{.outcome}}' }
+  mailerSendReplayed:
+    args: { result: '{{.outcome}}' }
   bankPay:
     args: { result: '{{.outcome}}' }
   bankPayServed:

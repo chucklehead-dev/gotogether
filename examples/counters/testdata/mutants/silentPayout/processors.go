@@ -25,9 +25,10 @@ var Average = grist.NewProcessor(App, "average", Incremented,
 var Welcome = grist.NewProcessor(App, "welcome", Created,
 	func(ctx context.Context, r *grist.Reads, e CounterCreated, m grist.Meta) grist.Result {
 		return grist.Effect(func(ctx context.Context) error {
-			return MailerDep.Of(ctx).Send(ctx, grist.EffectKey(ctx), "created "+e.Name)
+			_, err := Send.Do(ctx, Mail{Counter: e.Counter, Name: e.Name})
+			return err
 		}, grist.AtLeastOnce, grist.OnSuccess(Welcomed.Of(Notified{Counter: e.Counter})))
-	}, grist.Delivers(grist.AtLeastOnce, Welcomed))
+	}, grist.Delivers(grist.AtLeastOnce, Welcomed), grist.Uses(Send))
 
 // Payout, the silentPayout mutant: it pays at most once, as the app's,
 // but declares no success event, so a payment made leaves nothing in the

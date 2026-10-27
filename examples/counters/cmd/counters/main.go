@@ -21,19 +21,21 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist"
 )
 
-// stderrMailer sends a mail by writing it to stderr.
-type stderrMailer struct{ mu sync.Mutex }
-
-func (m *stderrMailer) Send(_ context.Context, key, msg string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	_, err := fmt.Fprintf(os.Stderr, "mail %s: %s\n", key, msg)
-	return err
+// stderrMailer sends a mail by writing it to stderr, recording each send
+// with the node's steps (mailerSendServed).
+func stderrMailer() grist.Transport {
+	var mu sync.Mutex
+	return grist.Local(grist.Handlers{counters.Send.Handler(func(ctx context.Context, m counters.Mail) (counters.Mailed, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		_, err := fmt.Fprintf(os.Stderr, "mail %s: created %s\n", grist.CallKey(ctx), m.Name)
+		return counters.Mailed{}, err
+	})})
 }
 
 func main() {
-	mailer := &stderrMailer{}
+	mailer := stderrMailer()
 	grist.Main(counters.App, grist.Dependencies(func(ctx context.Context) context.Context {
-		return counters.MailerDep.With(ctx, mailer)
+		return counters.Mailer.With(ctx, mailer)
 	}))
 }

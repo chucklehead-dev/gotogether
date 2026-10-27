@@ -17,19 +17,14 @@ import (
 )
 
 // realMailer is a mailer that takes 20 ms to send (the real tier's
-// stand-in: nothing is lost, so every welcome is notified, but not at
-// once, so a settle recorded before the processors caught up is seen).
-type realMailer struct {
-	mu   sync.Mutex
-	sent []Mail
-}
-
-func (m *realMailer) Send(_ context.Context, key, msg string) error {
-	time.Sleep(20 * time.Millisecond) //qenv:ok the real tier's mailer, outside any simulation
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.sent = append(m.sent, Mail{Key: key, Msg: msg})
-	return nil
+// stand-in, in process: nothing is lost, so every welcome is notified,
+// but not at once, so a settle recorded before the processors caught up
+// is seen), recording each send where it makes it (mailerSendServed).
+func realMailer() grist.Transport {
+	return grist.Local(grist.Handlers{Send.Handler(func(context.Context, Mail) (Mailed, error) {
+		time.Sleep(20 * time.Millisecond) //qenv:ok the real tier's mailer, outside any simulation
+		return Mailed{}, nil
+	})})
 }
 
 // The real tier, judged by the same bindings (gristtest.Tier): the app
@@ -60,7 +55,7 @@ func TestRealHTTP(t *testing.T) {
 	tenants := []string{"t1", "t2"}
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{Tenants: tenants,
 		Deps: func(ctx context.Context, st grist.Store) context.Context {
-			return StoreDep.With(MailerDep.With(ctx, &realMailer{}), st)
+			return StoreDep.With(Mailer.With(ctx, realMailer()), st)
 		}})
 	// clients runs four clients of 8 operations each on counters, names
 	// from names; after the first client's half, kill runs (if set)

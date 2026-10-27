@@ -72,6 +72,11 @@ module countersEvents {
   type RetireCounterArgs = { counter: str, principal: str }
   type ShowCounterArgs = { counter: str, principal: str }
   type ShowCounterResult = { total: int, names: int }
+  // call mailer/send: its request and response, and a step of it (the caller's or the site's: the outcome as result,
+  // the response zero unless it is ok)
+  type MailerSendRequest = { counter: str, name: str }
+  type MailerSendResponse = { unit: bool }
+  type MailerSendRecord = { processor: str, trigger: int, key: str, request: MailerSendRequest, result: str, response: MailerSendResponse }
   // call bank/pay: its request and response, and a step of it (the caller's or the site's: the outcome as result,
   // the response zero unless it is ok)
   type BankPayRequest = { counter: str, amount: int }
@@ -101,6 +106,10 @@ module countersGen {
   var effects: List[Effect]
   // the command ids answered so far, by a commit or a committed refusal
   var answered: Set[str]
+  // the calls of mailer/send as their callers saw them (Call.Do), and as the dependency
+  // applied them (its served records), in order
+  var mailerSendCalls: List[MailerSendRecord]
+  var mailerSendRecords: List[MailerSendRecord]
   // the calls of bank/pay as their callers saw them (Call.Do), and as the dependency
   // applied them (its served records), in order
   var bankPayCalls: List[BankPayRecord]
@@ -112,6 +121,8 @@ module countersGen {
     appended' = [],
     effects' = [],
     answered' = Set(),
+    mailerSendCalls' = [],
+    mailerSendRecords' = [],
     bankPayCalls' = [],
     bankPayRecords' = [],
   }
@@ -127,6 +138,8 @@ module countersGen {
     appended' = b,
     effects' = effects,
     answered' = answered.union(Set(id)),
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
     bankPayCalls' = bankPayCalls,
     bankPayRecords' = bankPayRecords,
   }
@@ -147,6 +160,8 @@ module countersGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
     bankPayCalls' = bankPayCalls,
     bankPayRecords' = bankPayRecords,
   }
@@ -158,6 +173,8 @@ module countersGen {
     appended' = b,
     effects' = effects,
     answered' = answered,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
     bankPayCalls' = bankPayCalls,
     bankPayRecords' = bankPayRecords,
   }
@@ -171,6 +188,8 @@ module countersGen {
     appended' = [],
     effects' = effects.append((p, trigger, key, ok)),
     answered' = answered,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
     bankPayCalls' = bankPayCalls,
     bankPayRecords' = bankPayRecords,
   }
@@ -295,6 +314,8 @@ module countersGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
     bankPayCalls' = bankPayCalls,
     bankPayRecords' = bankPayRecords,
   }
@@ -349,9 +370,96 @@ module countersGen {
         appended' = b,
         effects' = effects,
         answered' = answered,
+        mailerSendCalls' = mailerSendCalls,
+        mailerSendRecords' = mailerSendRecords,
         bankPayCalls' = bankPayCalls,
         bankPayRecords' = bankPayRecords,
       },
+    }
+  }
+
+  // the keys of mailer/send's steps: (processor, trigger, key)
+  pure def mailerSendKeys(l: List[MailerSendRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))
+
+  // the mailer dependency applies every call it gets (not Keyed): any record;
+  // the application's rules may define mailerSendAdmits instead, reading only
+  // prefix (the log through the trigger)
+  pure def mailerSendAdmits(prefix: List[Event], records: List[MailerSendRecord], r: MailerSendRecord): bool = true
+
+  // mailer/send as its caller saw it (Call.Do: invoked before the request,
+  // done with the answer, the outcome ok, a declared refusal or unknown):
+  // from an effect of a processor that uses it, for one of its triggers
+  // before the effect step, under the trigger's key (callKeyStable), its
+  // request the processor's rule's
+  action mailerSend(processor: str, trigger: int, key: str, counter: str, name: str, result: str): bool = {
+    val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, name: name }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "welcome" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "counter-created",
+          rec_.request == welcomeMailerSend(log.slice(0, trigger), trigger),
+          not(welcomeSkips(log.slice(0, trigger), trigger)),
+          trigger == nextOf(log, checkpoints.get("welcome"), "counter-created"),
+        } else false),
+      },
+      callKeyStable(effects, mailerSendKeys(mailerSendCalls), processor, trigger, key),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      mailerSendCalls' = mailerSendCalls.append(rec_),
+      mailerSendRecords' = mailerSendRecords,
+      bankPayCalls' = bankPayCalls,
+      bankPayRecords' = bankPayRecords,
+    }
+  }
+
+  // mailer/send as the dependency applied it (its served record, placed at
+  // its cause: after the commit holding its trigger): for one of a user's
+  // triggers, as mailerSendAdmits allows given the log through the trigger.
+  // Its request is the caller's to judge (its step, recorded where grist
+  // makes the call)
+  action mailerSendServed(processor: str, trigger: int, key: str, counter: str, name: str, result: str): bool = {
+    val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, name: name }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "welcome" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "counter-created",
+          mailerSendAdmits(log.slice(0, trigger), mailerSendRecords, rec_),
+        } else false),
+      },
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords.append(rec_),
+      bankPayCalls' = bankPayCalls,
+      bankPayRecords' = bankPayRecords,
+    }
+  }
+
+  // mailer/send answered again from an application (grist.Replayed: a
+  // dependency answering a retry of a key from its first answer): an earlier
+  // served record, request and answer alike; it applies nothing
+  action mailerSendReplayed(processor: str, trigger: int, key: str, counter: str, name: str, result: str): bool = {
+    val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { counter: counter, name: name }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "welcome" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "counter-created" else false),
+      },
+      mailerSendRecords.indices().exists(i => mailerSendRecords[i] == rec_),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords,
+      bankPayCalls' = bankPayCalls,
+      bankPayRecords' = bankPayRecords,
     }
   }
 
@@ -387,6 +495,8 @@ module countersGen {
       appended' = [],
       effects' = effects,
       answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords,
       bankPayCalls' = bankPayCalls.append(rec_),
       bankPayRecords' = bankPayRecords,
     }
@@ -411,6 +521,8 @@ module countersGen {
       appended' = [],
       effects' = effects,
       answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords,
       bankPayCalls' = bankPayCalls,
       bankPayRecords' = bankPayRecords.append(rec_),
     }
@@ -431,6 +543,8 @@ module countersGen {
       appended' = [],
       effects' = effects,
       answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords,
       bankPayCalls' = bankPayCalls,
       bankPayRecords' = bankPayRecords,
     }
@@ -502,6 +616,33 @@ module countersGen {
         nondet ok_ = Bool.oneOf()
         nondet known_ = Bool.oneOf()
         payoutOutcome(trigger_, ok_, known_, "lost")
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "unknown").oneOf()
+        {
+          val req_: MailerSendRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-created") welcomeMailerSend(log.slice(0, trigger_), trigger_) else { counter: "", name: "" }
+          mailerSend("welcome", trigger_, key_, req_.counter, req_.name, result_)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok").oneOf()
+        {
+          val req_: MailerSendRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-created") welcomeMailerSend(log.slice(0, trigger_), trigger_) else { counter: "", name: "" }
+          mailerSendServed("welcome", trigger_, key_, req_.counter, req_.name, result_)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok").oneOf()
+        {
+          val req_: MailerSendRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "counter-created") welcomeMailerSend(log.slice(0, trigger_), trigger_) else { counter: "", name: "" }
+          mailerSendReplayed("welcome", trigger_, key_, req_.counter, req_.name, result_)
+        }
       },
       {
         nondet trigger_ = 1.to(log.length() + 1).oneOf()

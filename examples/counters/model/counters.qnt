@@ -6,8 +6,8 @@
 // itself about what a read model holds.
 
 // The rules: each command's outcome, events and the reads it needs, the
-// query's answer, the processors' events, the payout's request of the
-// bank, and the read models' folds.
+// query's answer, the processors' events, the welcome's request of the
+// mailer and the payout's of the bank, and the read models' folds.
 module countersRules {
   import grist.* from "./grist"
   import countersEvents.* from "./counters_gen"
@@ -58,6 +58,11 @@ module countersRules {
     val incs = prefix.select(e => e.typ == "counter-incremented")
     List(averageComputed(incs.foldl(0, (s, e) => s + counterIncrementedBy(e)), incs.length()))
   pure def welcomeSuccess(prefix: List[Event], trigger: int): List[Event] = [notified(counterCreatedCounter(prefix[trigger - 1]))]
+  // a creation's welcome mails the counter and its name (the mailer sends
+  // every mail: Send is not Keyed, and the generated mailerSendAdmits
+  // admits any)
+  pure def welcomeMailerSend(prefix: List[Event], trigger: int): MailerSendRequest =
+    { counter: counterCreatedCounter(prefix[trigger - 1]), name: counterCreatedName(prefix[trigger - 1]) }
   // welcome and payout skip no trigger (their handlers never Skip)
   pure def welcomeSkips(prefix: List[Event], trigger: int): bool = false
   // a retirement's payout names the retirement, so each one's outcome is its own
