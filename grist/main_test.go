@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -228,5 +229,52 @@ func TestMainShutdownDrains(t *testing.T) {
 	}
 	if !outcome {
 		t.Errorf("no noteOutcome of trigger 1 in the file: the effect's outcome was lost at shutdown")
+	}
+}
+
+// serve records a settle on shutdown, after the node's processors are
+// done with what the requests committed and the relay has recorded it:
+// an at-most-once effect still in flight at the signal (its checkpoint
+// committed, its outcome not yet) is waited for, so the settle is the
+// file's last step and the bindings' eventual vals are judged on it.
+func TestMainServeSettles(t *testing.T) {
+	a, added := amoApp(func(ctx context.Context, m grist.Meta) error {
+		time.Sleep(300 * time.Millisecond) // in flight when the signal comes
+		return nil
+	})
+	grist.NewCommand(a, "add", func(r *grist.Reads, c Added) ([]grist.Event, error) {
+		return []grist.Event{added.Of(c)}, nil
+	}, grist.Authorize(grist.Authenticated))
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	url, steps, done := startServe(t, ctx, a, t.TempDir())
+	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond) // the effect under way
+	stop()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	recorded, err := qtrace.ReadJSONL(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actions []string
+	for _, s := range recorded {
+		if s.Settled {
+			actions = append(actions, "settled")
+		} else {
+			actions = append(actions, s.Action)
+		}
+	}
+	if n := len(actions); n == 0 || actions[n-1] != "settled" || !slices.Contains(actions, "noteOutcome") {
+		t.Errorf("steps %v: want the effect's outcome (noteOutcome) and then a settle, last", actions)
 	}
 }

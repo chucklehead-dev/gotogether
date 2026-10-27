@@ -83,7 +83,10 @@ func NewRelay(s Store) (*Relay, error) {
 type StartOption struct{ apply func(*startConfig) }
 
 // startConfig is App.Start's options.
-type startConfig struct{ relay *Relay }
+type startConfig struct {
+	relay  *Relay
+	onNode func(*node) // serve's: the node, to wait for it to quiet before a settle
+}
 
 // WithRelay makes App.Start relay with r instead of a relay of its own:
 // one that outlives a node's incarnations (gristsim's) resumes where the

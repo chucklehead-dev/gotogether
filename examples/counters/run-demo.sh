@@ -11,7 +11,9 @@
 # SERVE=1 instead builds cmd/counters (grist.Main), serves the app's HTTP
 # API on a SQLite file, drives it with curl (a command, its retry under
 # the same Idempotency-Key, a refusal, a reused key, a query), stops it
-# and validates the steps it recorded with counters.binding.yaml.
+# (the server drains, the node quiets and serve records a settle) and
+# validates the steps it recorded with counters.binding.yaml, its
+# eventual vals judged on the settle.
 set -euo pipefail
 cd "$(dirname "$0")"
 if [ -n "${SERVE:-}" ]; then
@@ -37,7 +39,6 @@ if [ -n "${SERVE:-}" ]; then
   curl -s -w ' %{http_code}\n' "$api/queries/show-counter?counter=a" -H 'X-Actor: demo'
   echo "== without an actor: 403"
   curl -s -w ' %{http_code}\n' -X POST "$api/commands/increment-counter" -H 'Idempotency-Key: k4' -d '{"counter":"a","by":1}'
-  sleep 0.5 # the welcome's mail and checkpoint
   kill -INT "$pid"; wait "$pid" || true; pid=
   echo "== the steps the server recorded, validated with counters.binding.yaml"
   (cd ../.. && go run ./cmd/gotogether validate -binding examples/counters/counters.binding.yaml "$dir/steps.jsonl")

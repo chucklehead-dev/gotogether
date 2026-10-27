@@ -6,6 +6,7 @@ const FlushTimeout = 10 * time.Second
 const MaxIDBytes = 255
 const ReplayedHeader = "Idempotent-Replayed"
 const RetryAfter = 1
+const SettleTimeout = 10 * time.Second
 const ShutdownTimeout = 10 * time.Second
 func ActorFromHeader(name string) ServeOption
 func ActorOf(ctx context.Context) string

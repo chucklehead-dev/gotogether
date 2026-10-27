@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -68,8 +69,11 @@ const mainUsage = `commands:
 //	           (qobs.FileSink, PerStep: a new file each time) for validation with
 //	           the app's bindings; until ctx ends, then a graceful shutdown: the
 //	           server drains its requests (ShutdownTimeout) while the node keeps
-//	           running, then the node stops and the relay records every committed
-//	           step (Relay.Flush, FlushTimeout) before the file closes
+//	           running, then, once its processors are idle and its relay caught
+//	           up (SettleTimeout), a settle is recorded (qobs.Settled: the
+//	           bindings' eventual vals are judged on the file), then the node
+//	           stops and the relay records every committed step (Relay.Flush,
+//	           FlushTimeout) before the file closes
 //
 // serve writes "<app> serving on http://ADDR" to stderr once it listens.
 func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error {
@@ -209,7 +213,8 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if err != nil {
 		return err
 	}
-	if err := app.Start(nodeCtx, st, WithRelay(relay)); err != nil {
+	var n *node
+	if err := app.Start(nodeCtx, st, WithRelay(relay), StartOption{apply: func(c *startConfig) { c.onNode = func(x *node) { n = x } }}); err != nil {
 		return err
 	}
 	ln, err := net.Listen("tcp", *addr)
@@ -230,6 +235,14 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	shut, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownTimeout)
 	err = srv.Shutdown(shut)
 	cancel()
+	// no request is left: once the processors and the relay are done with
+	// what the requests committed, the run has settled, and a settle in
+	// the file is what judges the bindings' eventual vals (qobs.Settled)
+	quiet, cancelQuiet := context.WithTimeout(context.WithoutCancel(ctx), SettleTimeout)
+	if serr := settle(quiet, st, relay, n); serr != nil {
+		fmt.Fprintf(stderr, "%s: no settle recorded (the steps file's eventual vals get no verdict): %v\n", app.Name, serr)
+	}
+	cancelQuiet()
 	stopNode()
 	// every committed step into the file before it closes: a row the
 	// relay had not reached would otherwise be recorded only by the next
@@ -244,11 +257,45 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 }
 
 // Main's server's bounds: how long a graceful shutdown waits for the
-// requests in flight, and then how long the relay's flush may take.
+// requests in flight, then how long for the node to quiet before it
+// records a settle, and then how long the relay's flush may take.
 const (
 	ShutdownTimeout = 10 * time.Second
+	SettleTimeout   = 10 * time.Second
 	FlushTimeout    = 10 * time.Second
 )
+
+// settle waits for n to quiet and records a settle into ctx's recorder:
+// every poller waiting with nothing after its checkpoint (an effect in
+// flight is work in hand), the relay caught up (every committed step
+// recorded, Behind 0) and no tenant's head moved across two looks 20 ms
+// apart. It returns why not if ctx ends first or the relay failed. The
+// settle is the last thing the file holds of the run: the node stops
+// after it, with nothing left to do.
+func settle(ctx context.Context, st Store, relay *Relay, n *node) error {
+	var last map[string]Position
+	for {
+		if err := relay.Err(); err != nil {
+			return err
+		}
+		heads, err := st.Heads(ctx)
+		quiet := err == nil && n != nil && n.idle() && maps.Equal(heads, last)
+		if quiet {
+			behind, berr := relay.Behind(ctx)
+			quiet = berr == nil && behind == 0
+		}
+		if quiet {
+			qobs.Settled(ctx)
+			return nil
+		}
+		last = heads
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the node did not quiet within %v (a processor still at work, or the relay behind)", SettleTimeout)
+		case <-time.After(20 * time.Millisecond): //qenv:ok the real tier's binary, outside any simulation
+		}
+	}
+}
 
 // newMainServer is serve's http.Server for h: requests run with ctx's
 // values (its recorder, so a query's step and a refusal's on-return step

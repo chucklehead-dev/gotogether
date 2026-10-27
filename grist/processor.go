@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -206,6 +207,9 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 		return fmt.Errorf("grist: store %s (%T) is no store.TenantFeed: a node relays and handles every tenant, those created after it started included, waiting on WaitTenants", s.Name(), s)
 	}
 	n := &node{app: a, s: s, relay: r, started: map[string]bool{}}
+	if cfg.onNode != nil {
+		cfg.onNode(n)
+	}
 	var tenants []string
 	for try := 1; ; try++ {
 		ts, err := s.Tenants(ctx)
@@ -236,7 +240,15 @@ type node struct {
 	relay   *Relay
 	started map[string]bool // only the starting task and the watcher touch it, one after the other
 	count   int             // the tenants the store had when last read
+	// pollers is how many pollers the node started, waiting how many of
+	// them wait on the store with nothing after their checkpoint: equal,
+	// no processor has work in hand (an at-most-once effect in flight
+	// after its checkpoint included), which a checkpoint alone cannot say
+	pollers, waiting atomic.Int64
 }
+
+// idle reports whether every poller of the node waits with nothing to do.
+func (n *node) idle() bool { return n.waiting.Load() == n.pollers.Load() }
 
 // start starts tenant t's relay and pollers, once.
 func (n *node) start(ctx context.Context, t string) {
@@ -255,9 +267,10 @@ func (n *node) start(ctx context.Context, t string) {
 	})
 	for _, p := range n.app.processors {
 		p := p
+		n.pollers.Add(1)
 		qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
 			qenv.Daemon(ctx)
-			(&poller{app: n.app, s: n.s, p: p, tenant: t}).run(qobs.Thread(ctx))
+			(&poller{app: n.app, s: n.s, p: p, tenant: t, waiting: &n.waiting}).run(qobs.Thread(ctx))
 		})
 	}
 }
@@ -289,11 +302,12 @@ func (n *node) watch(ctx context.Context, feed store.TenantFeed) {
 
 // A poller runs one processor for one tenant.
 type poller struct {
-	app    *App
-	s      Store
-	p      *processorInfo
-	tenant string
-	tries  int // transient errors in a row
+	app     *App
+	s       Store
+	p       *processorInfo
+	tenant  string
+	tries   int           // transient errors in a row
+	waiting *atomic.Int64 // the node's count of idle pollers (node.idle)
 }
 
 // pause backs off after a transient error.
@@ -316,7 +330,9 @@ func (pl *poller) run(ctx context.Context) {
 		}
 		pl.tries = 0
 		if len(evs) == 0 {
+			pl.waiting.Add(1)
 			pl.s.Wait(ctx, pl.tenant, head)
+			pl.waiting.Add(-1)
 			continue
 		}
 		// the checkpoint and the read are two reads: another poller (a
