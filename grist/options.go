@@ -275,11 +275,13 @@ func Emits(types ...EventName) Option {
 // at-most-once defs). A handler that returns another delivery, no
 // success event where one is declared or another's, or an Emit, fails
 // its trigger (Fail), naming the fix: the guarantee the model judges is
-// the declared one. The runtime allows a Skip or a handler's Fail
-// whatever the shape, but the generated model of a Delivers processor
-// has no step for either yet (its checkpoint follows effect steps): one
-// is a binding error or a rejection of that processor's checkpoint, not
-// a check passed (docs/grist.md §0.10).
+// the declared one. A Skip or a handler's Fail is allowed too: its
+// trigger's checkpoint commits with no effect, recorded as the
+// processor's skip step (<processor>Skip, Fail's with its grist.failed),
+// which the generated model takes where the app's rule <processor>Skips
+// says the handler skips the trigger (docs/grist.md §0.11); a Fail, whose
+// grist.failed the skip's empty batch does not match, is a mismatch, as
+// an Emits processor's is.
 func Delivers(d Delivery, success ...EventName) Option {
 	return Option{name: "Delivers", kinds: kindsOf("Delivers"), apply: func(o *options) string {
 		if d != AtLeastOnce && d != AtMostOnce {

@@ -58,8 +58,11 @@ module countersRules {
     val incs = prefix.select(e => e.typ == "counter-incremented")
     List(averageComputed(incs.foldl(0, (s, e) => s + counterIncrementedBy(e)), incs.length()))
   pure def welcomeSuccess(prefix: List[Event], trigger: int): List[Event] = [notified(counterCreatedCounter(prefix[trigger - 1]))]
+  // welcome and payout skip no trigger (their handlers never Skip)
+  pure def welcomeSkips(prefix: List[Event], trigger: int): bool = false
   // a retirement's payout names the retirement, so each one's outcome is its own
   pure def payoutSuccess(prefix: List[Event], trigger: int): List[Event] = [paidOut(counterRetiredCounter(prefix[trigger - 1]), trigger)]
+  pure def payoutSkips(prefix: List[Event], trigger: int): bool = false
   // the bank records every payment it makes, duplicates included
   pure def bankPaysAdmits(records: List[BankPaysRecord], r: BankPaysRecord): bool = true
 

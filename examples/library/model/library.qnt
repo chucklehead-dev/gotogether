@@ -69,6 +69,9 @@ module libraryRules {
   pure def memberLoansAnswer(log: List[Event], q: MemberLoansArgs): MemberLoansResult =
     { count: loanCount(log, q.member) }
 
+  // receipts skips no borrow (its handler never Skips)
+  pure def receiptsSkips(prefix: List[Event], trigger: int): bool = false
+
   // the mailer sends each key once
   pure def mailerSendsAdmits(records: List[MailerSendsRecord], r: MailerSendsRecord): bool =
     records.foldl(true, (ok, x) => ok and x.key != r.key)

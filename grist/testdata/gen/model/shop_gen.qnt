@@ -199,11 +199,23 @@ module shopGen {
   pure def notifySucceeded(log: List[Event], trigger: int): List[Event] =
     caused(notifySuccess(log.slice(0, trigger), trigger), ("processor", "notify"))
 
+  // notify skips a trigger its rule says it skips (notifySkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action notifySkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("notify"), "item-added"),
+    notifySkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "notify", trigger) == 0,
+    processes([], "notify", trigger),
+  }
+
   // notify's effect, at least once: any number of tries for its next trigger
   // before its checkpoint, every one under the trigger's key
   action notifyEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("notify"), "item-added"),
+    not(notifySkips(log.slice(0, trigger), trigger)),
     effectStep("notify", trigger, key, ok),
   }
 
@@ -229,11 +241,23 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
   }
 
+  // charge skips a trigger its rule says it skips (chargeSkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action chargeSkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("charge"), "item-shipped"),
+    chargeSkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "charge", trigger) == 0,
+    processes([], "charge", trigger),
+  }
+
   // charge, at most once: its checkpoint first (ok false, nothing appended),
   // before any effect step of its trigger
   action charge(trigger: int, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("charge"), "item-shipped"),
+    not(chargeSkips(log.slice(0, trigger), trigger)),
     atMostOnceFirst(effects, "charge", trigger, ok),
     processes([], "charge", trigger),
   }
@@ -242,6 +266,7 @@ module shopGen {
   // the two loses it, by right)
   action chargeEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0 and trigger <= log.length() and log[trigger - 1].typ == "item-shipped",
+    not(chargeSkips(log.slice(0, trigger), trigger)),
     atMostOnceEffect(effects, checkpoints.get("charge"), "charge", trigger),
     effectStep("charge", trigger, key, ok),
   }
@@ -316,6 +341,7 @@ module shopGen {
         showItem(item_, log.length())
       },
       ship(nextOf(log, checkpoints.get("ship"), "item-added")),
+      notifySkip(nextOf(log, checkpoints.get("notify"), "item-added")),
       {
         nondet key_ = KEYS.oneOf()
         nondet ok_ = Bool.oneOf()
@@ -325,6 +351,7 @@ module shopGen {
         nondet ok_ = Bool.oneOf()
         notify(nextOf(log, checkpoints.get("notify"), "item-added"), ok_)
       },
+      chargeSkip(nextOf(log, checkpoints.get("charge"), "item-shipped")),
       charge(nextOf(log, checkpoints.get("charge"), "item-shipped"), false),
       {
         nondet trigger_ = 1.to(log.length() + 1).oneOf()

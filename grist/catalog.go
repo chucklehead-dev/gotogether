@@ -177,7 +177,7 @@ func nullable(s map[string]any) map[string]any {
 // A CatalogProcessor is a registered processor.
 type CatalogProcessor struct {
 	Name        string `json:"name"`
-	Quint       string `json:"quint"` // its model action's name (its effect steps' is Quint+"Effect", an at-most-once outcome's Quint+"Outcome")
+	Quint       string `json:"quint"` // its model action's name (its effect steps' is Quint+"Effect", an at-most-once outcome's Quint+"Outcome", a Delivers processor's skip Quint+"Skip")
 	On          string `json:"on"`    // the event type it handles
 	EffectTries int    `json:"effectTries"`
 	// Shape is its declared result: "emits" (Emits), "effect" (Delivers),

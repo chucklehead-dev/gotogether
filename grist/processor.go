@@ -360,10 +360,14 @@ func (pl *poller) run(ctx context.Context) {
 	}
 }
 
-// pending is one trigger's part of an Emit batch.
+// pending is one trigger's part of an Emit batch. skip marks a Delivers
+// processor's trigger handled without its effect (a Skip, or a Fail's
+// grist.failed): its step is the processor's skip action
+// (<processor>Skip), not its checkpoint, which follows effect steps.
 type pending struct {
 	trigger Position
 	events  []Event
+	skip    bool
 }
 
 // handle handles evs (triggers after checkpoint cp, read with the head
@@ -387,12 +391,13 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 			flush()
 			return // a store error: read again
 		}
+		delivers := pl.p.opts.shape.kind == effectResult
 		switch res.kind {
 		case emitResult:
-			group = append(group, pending{trigger: e.Pos, events: res.events})
+			group = append(group, pending{trigger: e.Pos, events: res.events, skip: delivers})
 			continue
 		case failResult:
-			group = append(group, pending{trigger: e.Pos, events: []Event{failedEvent(pl.p.name, e.Pos)}})
+			group = append(group, pending{trigger: e.Pos, events: []Event{failedEvent(pl.p.name, e.Pos)}, skip: delivers})
 			continue
 		}
 		if !flush() {
@@ -464,7 +469,7 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 	// with its own events: the relay gives each the head after them
 	steps := make([]rowStep, 0, len(group))
 	for _, g := range group {
-		steps = append(steps, pl.step(g.trigger, g.events, slot, kv...))
+		steps = append(steps, pl.step(g.trigger, g.events, slot, g.skip, kv...))
 	}
 	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(steps)}
@@ -506,10 +511,14 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 // at-most-once effect step (2·trigger+1). A checkpoint and an effect may
 // share a head, and are recorded on two threads (the relay's and the
 // poller's).
-func (pl *poller) step(trigger Position, events []Event, slot int64, extra ...any) rowStep {
+func (pl *poller) step(trigger Position, events []Event, slot int64, skip bool, extra ...any) rowStep {
 	kv := append(append([]any{"trigger", int64(trigger)}, extra...), pl.app.batchObs(events, "processor", pl.p.name)...)
 	kv = append(kv, "obs.checkpoint", int64(trigger), "order.p."+pl.p.quint, 2*int64(trigger)+slot)
-	return newRowStep(pl.p.quint, len(events), kv...)
+	action := pl.p.quint
+	if skip {
+		action += "Skip"
+	}
+	return newRowStep(action, len(events), kv...)
 }
 
 // effect runs an Effect for trigger e (checkpoint cp before it, head

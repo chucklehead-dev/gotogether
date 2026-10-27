@@ -33,6 +33,10 @@ actions:
   notify:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("notify") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   notifyOutcome: {}
+  notifySkip:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("notify") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  chargeSkip:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("charge") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   charge:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("charge") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   chargeEffect: {}

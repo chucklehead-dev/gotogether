@@ -57,6 +57,8 @@ module walletRules {
   // the ledger's confirmation of the move at the trigger
   pure def postSuccess(prefix: List[Event], trigger: int): List[Event] =
     [posted(movedAccount(prefix[trigger - 1]), movedAmount(prefix[trigger - 1]), trigger)]
+  // post skips no move (its handler never Skips)
+  pure def postSkips(prefix: List[Event], trigger: int): bool = false
   // the ledger posts once per key (it deduplicates; a ledger that does not
   // posts a retried move twice, which this rule refuses)
   pure def ledgerPostAdmits(records: List[LedgerPostRecord], r: LedgerPostRecord): bool =

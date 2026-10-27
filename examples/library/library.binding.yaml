@@ -38,6 +38,8 @@ actions:
   receipts:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("receipts") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   receiptsOutcome: {}
+  receiptsSkip:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("receipts") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   mailerSends: {}
 
 invariants: [copiesHeld, withinLimit]

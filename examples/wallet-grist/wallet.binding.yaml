@@ -28,6 +28,8 @@ actions:
   post:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("post") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   postOutcome: {}
+  postSkip:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("post") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   ledgerPost: {}
 
 invariants: [noOverdraft]

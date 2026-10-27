@@ -410,6 +410,7 @@ func (g *gen) claimBlocks() {
 		g.claim(p.Quint, "processor "+p.Name)
 		g.claim(p.Quint+"Effect", "processor "+p.Name)
 		g.claim(p.Quint+"Outcome", "processor "+p.Name)
+		g.claim(p.Quint+"Skip", "processor "+p.Name)
 	}
 	for _, s := range g.c.Sites {
 		g.claim(s.Quint, "site "+s.Name)
@@ -456,9 +457,15 @@ func (g *gen) collectHoles() {
 		case p.Shape == "emits":
 			g.hole(p.Quint+"Emits", fmt.Sprintf("the events %s emits for the trigger at position trigger, reading prefix (the log through it)", p.Name),
 				fmt.Sprintf(`pure def %sEmits(prefix: List[Event], trigger: int): List[Event] = []`, p.Quint))
-		case p.Success != "":
+		case p.Shape == "effect" && p.Success != "":
 			g.hole(p.Quint+"Success", fmt.Sprintf("the %s event %s appends after its effect succeeded for the trigger at position trigger (prefix: the log through it)", p.Success, p.Name),
 				fmt.Sprintf(`pure def %sSuccess(prefix: List[Event], trigger: int): List[Event] = []`, p.Quint))
+		}
+	}
+	for _, p := range g.c.Processors {
+		if p.Shape == "effect" {
+			g.hole(p.Quint+"Skips", fmt.Sprintf("whether %s's handler skips the trigger at position trigger (returns Skip: its checkpoint alone, no effect), reading prefix (the log through it)", p.Name),
+				fmt.Sprintf(`pure def %sSkips(prefix: List[Event], trigger: int): bool = false`, p.Quint))
 		}
 	}
 	for _, s := range g.c.Sites {
@@ -823,6 +830,12 @@ func (g *gen) processor(b *strings.Builder, p CatalogProcessor) {
 			p.Name, p.Quint, g.claim(p.Quint+"Succeeded", "processor "+p.Name), p.Quint, cause)
 	}
 	unchanged := g.frame("    ", map[string]string{"appended": "[]"})
+	effects := fmt.Sprintf("not(%sSkips(log.slice(0, trigger), trigger))", p.Quint)
+	if p.Shape == "effect" {
+		fmt.Fprintf(b, "\n  // %s skips a trigger its rule says it skips (%sSkips: the handler's Skip),\n  // its checkpoint alone, no effect step; a handler's Fail is recorded so\n  // too, appending grist.failed, which a skip's empty batch does not match\n", p.Name, p.Quint)
+		fmt.Fprintf(b, "  action %sSkip(trigger: int): bool = all {\n    trigger > 0,\n    trigger == %s,\n    %sSkips(log.slice(0, trigger), trigger),\n    triesOf(effects, %q, trigger) == 0,\n    processes([], %q, trigger),\n  }\n",
+			p.Quint, next, p.Quint, p.Name, p.Name)
+	}
 	switch {
 	case p.Shape == "emits":
 		fmt.Fprintf(b, "\n  // %s (Emits): on each %s, %sEmits of the log through the trigger,\n  // with its checkpoint (whatever came after the trigger)\n", p.Name, p.On, p.Quint)
@@ -830,7 +843,7 @@ func (g *gen) processor(b *strings.Builder, p CatalogProcessor) {
 			p.Quint, next, p.Quint, cause, p.Name)
 	case p.Delivery == AtLeastOnce:
 		fmt.Fprintf(b, "\n  // %s's effect, at least once: any number of tries for its next trigger\n  // before its checkpoint, every one under the trigger's key\n", p.Name)
-		fmt.Fprintf(b, "  action %sEffect(trigger: int, key: str, ok: bool): bool = all {\n    trigger > 0,\n    trigger == %s,\n    effectStep(%q, trigger, key, ok),\n  }\n", p.Quint, next, p.Name)
+		fmt.Fprintf(b, "  action %sEffect(trigger: int, key: str, ok: bool): bool = all {\n    trigger > 0,\n    trigger == %s,\n    %s,\n    effectStep(%q, trigger, key, ok),\n  }\n", p.Quint, next, effects, p.Name)
 		fmt.Fprintf(b, "\n  // %s's checkpoint, only after effect steps: its success after an ok one,\n  // grist.failed after %d failed ones, whichever the run committed (ok: its\n  // record of which)\n", p.Name, p.EffectTries)
 		fmt.Fprintf(b, "  action %s(trigger: int, ok: bool): bool = all {\n    trigger > 0,\n    trigger == %s,\n    atLeastOnceDone(effects, %q, trigger, ok, %d),\n    processes(atLeastOnceOutcome(%q, trigger, ok, %s), %q, trigger),\n  }\n",
 			p.Quint, next, p.Name, p.EffectTries, p.Name, success, p.Name)
@@ -838,11 +851,11 @@ func (g *gen) processor(b *strings.Builder, p CatalogProcessor) {
 		fmt.Fprintf(b, "  action %sOutcome(trigger: int, ok: bool): bool = all {\n    false,\n%s  }\n", p.Quint, unchanged)
 	default: // at most once
 		fmt.Fprintf(b, "\n  // %s, at most once: its checkpoint first (ok false, nothing appended),\n  // before any effect step of its trigger\n", p.Name)
-		fmt.Fprintf(b, "  action %s(trigger: int, ok: bool): bool = all {\n    trigger > 0,\n    trigger == %s,\n    atMostOnceFirst(effects, %q, trigger, ok),\n    processes([], %q, trigger),\n  }\n",
-			p.Quint, next, p.Name, p.Name)
+		fmt.Fprintf(b, "  action %s(trigger: int, ok: bool): bool = all {\n    trigger > 0,\n    trigger == %s,\n    %s,\n    atMostOnceFirst(effects, %q, trigger, ok),\n    processes([], %q, trigger),\n  }\n",
+			p.Quint, next, effects, p.Name, p.Name)
 		fmt.Fprintf(b, "\n  // %s's effect: once, after its checkpoint, or never (a crash between\n  // the two loses it, by right)\n", p.Name)
-		fmt.Fprintf(b, "  action %sEffect(trigger: int, key: str, ok: bool): bool = all {\n    %s,\n    atMostOnceEffect(effects, checkpoints.get(%q), %q, trigger),\n    effectStep(%q, trigger, key, ok),\n  }\n",
-			p.Quint, isTrigger, p.Name, p.Name, p.Name)
+		fmt.Fprintf(b, "  action %sEffect(trigger: int, key: str, ok: bool): bool = all {\n    %s,\n    %s,\n    atMostOnceEffect(effects, checkpoints.get(%q), %q, trigger),\n    effectStep(%q, trigger, key, ok),\n  }\n",
+			p.Quint, isTrigger, effects, p.Name, p.Name, p.Name)
 		fmt.Fprintf(b, "\n  // %s's outcome, if present (a crash after the effect loses it): its\n  // success after the one ok effect step; after a failed one grist.failed\n  // when the failure is known, else grist.unknown with the error\n", p.Name)
 		fmt.Fprintf(b, "  action %sOutcome(trigger: int, ok: bool, known: bool, error: str): bool = {\n    val isTrigger = %s\n    val success = if (isTrigger) %s else []\n",
 			p.Quint, isTrigger, success)
@@ -953,6 +966,7 @@ func (g *gen) storeStep(b *strings.Builder) {
 		case p.Shape == "emits":
 			calls = append(calls, fmt.Sprintf("%s(%s)", p.Quint, next))
 		case p.Delivery == AtLeastOnce:
+			calls = append(calls, fmt.Sprintf("%sSkip(%s)", p.Quint, next))
 			d.pick("key_", "KEYS")
 			d.pick("ok_", "Bool")
 			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(%s, key_, ok_)", p.Quint, next)))
@@ -960,6 +974,7 @@ func (g *gen) storeStep(b *strings.Builder) {
 			d.pick("ok_", "Bool")
 			calls = append(calls, d.branch(fmt.Sprintf("%s(%s, ok_)", p.Quint, next)))
 		default:
+			calls = append(calls, fmt.Sprintf("%sSkip(%s)", p.Quint, next))
 			calls = append(calls, fmt.Sprintf("%s(%s, false)", p.Quint, next))
 			d.pick("trigger_", "1.to(log.length() + 1)")
 			d.pick("key_", "KEYS")
@@ -1163,7 +1178,9 @@ func (g *gen) binding(name string, m marks) []byte {
 				entry(p.Quint+"Effect", "", "")
 				entry(p.Quint, "", cp)
 				entry(p.Quint+"Outcome", "", "")
+				entry(p.Quint+"Skip", "", cp)
 			default:
+				entry(p.Quint+"Skip", "", cp)
 				entry(p.Quint, "", cp)
 				entry(p.Quint+"Effect", "", "")
 				entry(p.Quint+"Outcome", "", commit)

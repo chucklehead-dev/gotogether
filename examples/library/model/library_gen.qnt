@@ -240,11 +240,23 @@ module libraryGen {
   // at its position (the binding's expect)
   action memberLoans(member: str, readPos: int): bool = readsThrough(readPos)
 
+  // receipts skips a trigger its rule says it skips (receiptsSkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action receiptsSkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("receipts"), "book-borrowed"),
+    receiptsSkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "receipts", trigger) == 0,
+    processes([], "receipts", trigger),
+  }
+
   // receipts's effect, at least once: any number of tries for its next trigger
   // before its checkpoint, every one under the trigger's key
   action receiptsEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("receipts"), "book-borrowed"),
+    not(receiptsSkips(log.slice(0, trigger), trigger)),
     effectStep("receipts", trigger, key, ok),
   }
 
@@ -338,6 +350,7 @@ module libraryGen {
         nondet member = STRS.oneOf()
         memberLoans(member, log.length())
       },
+      receiptsSkip(nextOf(log, checkpoints.get("receipts"), "book-borrowed")),
       {
         nondet key_ = KEYS.oneOf()
         nondet ok_ = Bool.oneOf()

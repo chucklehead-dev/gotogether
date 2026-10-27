@@ -35,6 +35,10 @@ actions:
   welcome:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("welcome") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   welcomeOutcome: {}
+  welcomeSkip:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("welcome") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  payoutSkip:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("payout") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   payout:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("payout") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   payoutEffect: {}

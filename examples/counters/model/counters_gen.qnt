@@ -246,11 +246,23 @@ module countersGen {
   pure def welcomeSucceeded(log: List[Event], trigger: int): List[Event] =
     caused(welcomeSuccess(log.slice(0, trigger), trigger), ("processor", "welcome"))
 
+  // welcome skips a trigger its rule says it skips (welcomeSkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action welcomeSkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("welcome"), "counter-created"),
+    welcomeSkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "welcome", trigger) == 0,
+    processes([], "welcome", trigger),
+  }
+
   // welcome's effect, at least once: any number of tries for its next trigger
   // before its checkpoint, every one under the trigger's key
   action welcomeEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("welcome"), "counter-created"),
+    not(welcomeSkips(log.slice(0, trigger), trigger)),
     effectStep("welcome", trigger, key, ok),
   }
 
@@ -280,11 +292,23 @@ module countersGen {
   pure def payoutSucceeded(log: List[Event], trigger: int): List[Event] =
     caused(payoutSuccess(log.slice(0, trigger), trigger), ("processor", "payout"))
 
+  // payout skips a trigger its rule says it skips (payoutSkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action payoutSkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("payout"), "counter-retired"),
+    payoutSkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "payout", trigger) == 0,
+    processes([], "payout", trigger),
+  }
+
   // payout, at most once: its checkpoint first (ok false, nothing appended),
   // before any effect step of its trigger
   action payout(trigger: int, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("payout"), "counter-retired"),
+    not(payoutSkips(log.slice(0, trigger), trigger)),
     atMostOnceFirst(effects, "payout", trigger, ok),
     processes([], "payout", trigger),
   }
@@ -293,6 +317,7 @@ module countersGen {
   // the two loses it, by right)
   action payoutEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0 and trigger <= log.length() and log[trigger - 1].typ == "counter-retired",
+    not(payoutSkips(log.slice(0, trigger), trigger)),
     atMostOnceEffect(effects, checkpoints.get("payout"), "payout", trigger),
     effectStep("payout", trigger, key, ok),
   }
@@ -376,6 +401,7 @@ module countersGen {
         showCounter(counter, log.length())
       },
       average(nextOf(log, checkpoints.get("average"), "counter-incremented")),
+      welcomeSkip(nextOf(log, checkpoints.get("welcome"), "counter-created")),
       {
         nondet key_ = KEYS.oneOf()
         nondet ok_ = Bool.oneOf()
@@ -385,6 +411,7 @@ module countersGen {
         nondet ok_ = Bool.oneOf()
         welcome(nextOf(log, checkpoints.get("welcome"), "counter-created"), ok_)
       },
+      payoutSkip(nextOf(log, checkpoints.get("payout"), "counter-retired")),
       payout(nextOf(log, checkpoints.get("payout"), "counter-retired"), false),
       {
         nondet trigger_ = 1.to(log.length() + 1).oneOf()

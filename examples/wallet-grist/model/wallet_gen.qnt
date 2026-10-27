@@ -179,11 +179,23 @@ module walletGen {
   pure def postSucceeded(log: List[Event], trigger: int): List[Event] =
     caused(postSuccess(log.slice(0, trigger), trigger), ("processor", "post"))
 
+  // post skips a trigger its rule says it skips (postSkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action postSkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("post"), "moved"),
+    postSkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "post", trigger) == 0,
+    processes([], "post", trigger),
+  }
+
   // post's effect, at least once: any number of tries for its next trigger
   // before its checkpoint, every one under the trigger's key
   action postEffect(trigger: int, key: str, ok: bool): bool = all {
     trigger > 0,
     trigger == nextOf(log, checkpoints.get("post"), "moved"),
+    not(postSkips(log.slice(0, trigger), trigger)),
     effectStep("post", trigger, key, ok),
   }
 
@@ -257,6 +269,7 @@ module walletGen {
         nondet account = STRS.oneOf()
         read(account, log.length())
       },
+      postSkip(nextOf(log, checkpoints.get("post"), "moved")),
       {
         nondet key_ = KEYS.oneOf()
         nondet ok_ = Bool.oneOf()

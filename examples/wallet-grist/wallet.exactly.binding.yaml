@@ -25,6 +25,7 @@ actions:
   postEffect: {}
   post: {}
   postOutcome: {}
+  postSkip: {}
   ledgerPost: {}
 
 invariants: []

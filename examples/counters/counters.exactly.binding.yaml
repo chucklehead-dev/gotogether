@@ -29,6 +29,8 @@ actions:
   welcomeEffect: {}
   welcome: {}
   welcomeOutcome: {}
+  welcomeSkip: {}
+  payoutSkip: {}
   payout: {}
   payoutEffect: {}
   payoutOutcome: {}
