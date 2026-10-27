@@ -301,7 +301,7 @@ variable list of independent switches, structs where a call takes one
 shape), the names are not. Recommendation: leave it; a rename of a dozen
 types buys users nothing they would notice.
 
-## Phase 2: grist, the CLI, the examples (in progress)
+## Phase 2: grist, the CLI, qanalysis, the examples
 
 - grist (proposals only while GR3 slice 3 is under way): the same A1
   pattern in eight files (`sortedKeys` in grist.go, `sortedNames` in
@@ -310,6 +310,24 @@ types buys users nothing they would notice.
   (`grist.NewEvent[Deposited](app, "deposited")`, 52 in the examples;
   `NewCall[Req, Resp]`, 16), and handlers infer theirs (`grist.On`, never
   spelled).
+- The examples: the A1 pattern in ten files of ten modules (counters,
+  glomers ×2, sktrace, payd, crossdb, edgepublish, fleetrollout,
+  streams ×2). Not changed: each is its own module with its own suite;
+  worth doing when each is next touched, since users copy their idioms.
+- qanalysis (proposed): quintsim and quintweave delegate to qlint's
+  syntactic checks, shared with `gotogether lint`, and so see only calls:
+  `now := time.Now` or `draw := rand.IntN`, a function value called
+  later, escapes them. The analyzer has types (`pass.TypesInfo.Uses` of
+  the selector is the `*types.Func` whatever the import's name); a
+  check of every use, not every call, would close it. A finding more,
+  never one fewer: a behaviour change of the lint, to state in the
+  CHANGELOG. qweave's receiver match does not unalias (`types.Unalias`)
+  a receiver's type; harmless today, since its join points name sync's
+  types, whose methods are declared on no alias.
+- cmd/gotogether: done with the core (A1, A5). Its errors wrap with `%v`
+  where `%w` would let a caller's `errors.Is` see a missing file (21
+  such in the core): a behaviour change, though only additive; proposed
+  for one sweep.
 - The examples' simulators (`cmd/*-sim`, four) each write
   `qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec))` and
   the same seed loop around a FileSink; to be weighed against
