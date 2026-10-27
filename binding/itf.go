@@ -119,7 +119,7 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 // StepsToITF reconstructs steps (any order, any recorders) and returns one
 // model-level ITF trace per actor, plus the reconstruction issues.
 func (b *Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error) {
-	traces, issues := qtrace.Reconstruct(steps)
+	traces, issues := b.Reconstruct(steps) // the actors it checks
 	out := map[string][]byte{}
 	for _, t := range traces {
 		issues = append(issues, b.StartIssues(t)...)

@@ -13,8 +13,8 @@ import (
 	"io/fs"
 	"math/big"
 	"os"
-	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +22,7 @@ import (
 	"text/template"
 	"text/template/parse"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -58,14 +59,17 @@ type Binding struct {
 	// `xs.exists(x => P(x))`.
 	Antecedents map[string]string `yaml:"antecedents"`
 	// Actors are the actors whose traces the binding checks: glob patterns
-	// (path.Match: * ? [a-z]), a pattern written "!p" excluding the actors
-	// p matches. Empty: every actor. A trace of another actor is another
-	// binding's, left out of every check (and named in the report's
-	// issues): so one run that records two sides (a system's commits under
-	// the tenants' names, its clients' calls under "<tenant>.clients") is
+	// (* any run of characters, / and . included, since an actor's name is
+	// no path: `*.clients` matches `t/x.clients`; ? one character; [a-z]
+	// and [!a-z] a class; \c the character c), a pattern written "!p"
+	// excluding the actors p matches. Empty: every actor. A trace of
+	// another actor is another binding's, left out of every check and of
+	// StepsToITF, and named with its step count in the report's issues: so
+	// one run that records two sides (a system's commits under the
+	// tenants' names, its clients' calls under "<tenant>.clients") is
 	// checked by two bindings of one model, `actors: ["!*.clients"]` and
 	// `actors: ["*.clients"]`. Every step still reconstructs, so a gap or a
-	// settle is found over the whole run.
+	// settle is found over the whole run (Reconstruct).
 	Actors []string `yaml:"actors"`
 	// Actions maps a model action to the templates that build its call.
 	Actions map[string]Action `yaml:"actions"`
@@ -224,34 +228,121 @@ func Load(path string) (*Binding, error) {
 	return &bd, nil
 }
 
-// checkActors fails on a pattern of Actors that path.Match cannot read.
+// checkActors fails on a pattern of Actors that is no glob.
 func (b *Binding) checkActors() error {
 	for _, p := range b.Actors {
 		pat := strings.TrimPrefix(p, "!")
-		if _, err := path.Match(pat, ""); err != nil || pat == "" {
-			return fmt.Errorf("actors: the pattern %q is not a glob (path.Match's: *, ?, [a-z]; \"!p\" excludes p's actors)", p)
+		if _, err := actorGlob(pat); err != nil || pat == "" {
+			why := "empty"
+			if err != nil {
+				why = err.Error()
+			}
+			return fmt.Errorf("actors: the pattern %q is not a glob (%s; * any characters, / included, ? one, [a-z] a class; \"!p\" excludes p's actors)", p, why)
 		}
 	}
 	return nil
 }
 
-// Checks reports whether the binding checks actor's trace (Actors): it
-// matches an including pattern (or there is none) and no excluding one.
-func (b *Binding) Checks(actor string) bool {
+// ChecksActor reports whether the binding checks actor's trace (Actors):
+// it matches an including pattern (or there is none) and no excluding
+// one.
+func (b *Binding) ChecksActor(actor string) bool {
 	in, includes := false, false
 	for _, p := range b.Actors {
 		if pat, ok := strings.CutPrefix(p, "!"); ok {
-			if m, _ := path.Match(pat, actor); m {
+			if re, err := actorGlob(pat); err == nil && re.MatchString(actor) {
 				return false
 			}
 			continue
 		}
 		includes = true
-		if m, _ := path.Match(p, actor); m {
+		if re, err := actorGlob(p); err == nil && re.MatchString(actor) {
 			in = true
 		}
 	}
 	return in || !includes
+}
+
+// Reconstruct is qtrace.Reconstruct of steps, keeping the traces of the
+// actors the binding checks (Actors): every step reconstructs, so a gap
+// or a settle is found over the whole run, and another actor's trace is
+// another binding's. Any left out are named, with their steps, in an
+// info issue "actors"; a run none of whose actors the binding checks has
+// a warning naming them (and, with no actor, no verdict).
+func (b *Binding) Reconstruct(steps []qtrace.Step) ([]*qtrace.Trace, []qtrace.Issue) {
+	traces, issues := qtrace.Reconstruct(steps)
+	if len(b.Actors) == 0 {
+		return traces, issues
+	}
+	kept := traces[:0:0]
+	var others []string
+	for _, t := range traces {
+		if b.ChecksActor(t.Actor) {
+			kept = append(kept, t)
+			continue
+		}
+		name := t.Actor
+		if name == "" {
+			name = "default"
+		}
+		others = append(others, fmt.Sprintf("%s (%d steps, %d pending)", name, len(t.Steps), len(t.Pending)))
+	}
+	switch {
+	case len(kept) == 0 && len(others) > 0:
+		issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "actors", Msg: fmt.Sprintf(
+			"the binding checks the actors %s; the run's are all other bindings' (%s): fix the binding's actors: patterns, or record under the actors it names",
+			strings.Join(b.Actors, ", "), strings.Join(others, ", "))})
+	case len(others) > 0:
+		issues = append(issues, qtrace.Issue{Severity: "info", Kind: "actors", Msg: fmt.Sprintf(
+			"left out, another binding's (actors: %s): %s", strings.Join(b.Actors, ", "), strings.Join(others, ", "))})
+	}
+	return kept, issues
+}
+
+// actorGlob compiles an actors: pattern: * any run of characters, / and
+// . included (an actor's name is no path: `*.clients` matches
+// `t/x.clients`), ? one character, [a-z] and [!a-z] a class, \c the
+// character c.
+func actorGlob(pat string) (*regexp.Regexp, error) {
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(pat); i++ {
+		switch pat[i] {
+		case '*':
+			b.WriteString(".*")
+		case '?':
+			b.WriteString(".")
+		case '\\':
+			if i+1 == len(pat) {
+				return nil, fmt.Errorf("a \\ at the end")
+			}
+			i++
+			b.WriteString(regexp.QuoteMeta(pat[i : i+1]))
+		case '[':
+			j := strings.IndexByte(pat[i+1:], ']')
+			if j < 0 {
+				return nil, fmt.Errorf("a [ without its ]")
+			}
+			class := pat[i+1 : i+1+j]
+			if class == "" || class == "!" || class == "^" {
+				return nil, fmt.Errorf("an empty class []")
+			}
+			b.WriteString("[")
+			if class[0] == '!' || class[0] == '^' {
+				b.WriteString("^")
+				class = class[1:]
+			}
+			b.WriteString(strings.NewReplacer(`\`, `\\`, `[`, `\[`).Replace(class))
+			b.WriteString("]")
+			i += j + 1
+		default:
+			r, n := utf8.DecodeRuneInString(pat[i:])
+			b.WriteString(regexp.QuoteMeta(string(r)))
+			i += n - 1
+		}
+	}
+	b.WriteString("$")
+	return regexp.Compile(b.String())
 }
 
 // SpecPath is the absolute path of the model.

@@ -1347,8 +1347,10 @@ model and binding are generated.
    binding's `actors:` pattern), so one run checks commit steps and
    client steps with their two bindings (§3.1).
    **Done, decided: a binding field, not a qtest option.** `actors:` is
-   a list of globs (path.Match's), `!p` excluding what p matches, none
-   meaning every actor (`Binding.Checks`). Which steps a binding is
+   a list of globs (`*` any characters, `/` included: an actor's name is
+   no path; path.Match's `*`, the first version's, missed `t/x.clients`),
+   `!p` excluding what p matches, none meaning every actor
+   (`Binding.ChecksActor`, `Binding.Reconstruct`). Which steps a binding is
    about is the binding's to say, and so every reader honours it: qtest,
    `gotogether validate` on a real log that has both sides, qhegel; a
    qtest option would have left the CLI checking the other side. The
@@ -1356,8 +1358,10 @@ model and binding are generated.
    every check and search): every step reconstructs, so a gap or a settle
    is judged over the whole run (dropping the other side's steps first
    would have made seq gaps of them), and the other actors' traces are
-   left out; a binding whose patterns match none of a run's actors has no
-   verdict and a warning naming them. One System has one binding still:
+   left out, named with their step counts in an info issue; a binding
+   whose patterns match none of a run's actors has no verdict and a
+   warning naming them. `StepsToITF` (qtest's artifacts, `gotogether
+   itf`) and qhegel's case checker filter the same way. One System has one binding still:
    `System.WithBinding(path, opts...)` is the same System judged by
    another binding (with Linearize for the clients), whose explorations
    run the same seeds and so the same runs, simulated twice (cheap next

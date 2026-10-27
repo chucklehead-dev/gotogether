@@ -46,7 +46,7 @@ type Binding struct
     field Dir string `yaml:"-"`
     field Path string `yaml:"-"`
     method (*Binding) CheckSpec() error
-    method (*Binding) Checks(actor string) bool
+    method (*Binding) ChecksActor(actor string) bool
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
@@ -54,6 +54,7 @@ type Binding struct
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
     method (*Binding) Planner(m *Model, whole *qtrace.Trace) *Planner
+    method (*Binding) Reconstruct(steps []qtrace.Step) ([]*qtrace.Trace, []qtrace.Issue)
     method (*Binding) Skips(s *qtrace.Step) bool
     method (*Binding) SnapshotFirst(tr *qtrace.Trace) bool
     method (*Binding) SpecPath() string

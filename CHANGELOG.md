@@ -79,11 +79,18 @@ The first release. What a user meets, by module:
 - A binding's `actors:` (docs/grist.md §8.2, item 3): globs (`!p`
   excludes) naming the actors whose traces it checks, so one run that
   records two sides (commits and clients' calls, under actors of their
-  own) is checked by two bindings of one model; `Binding.Checks`. Every
+  own) is checked by two bindings of one model; `Binding.ChecksActor`,
+  `Binding.Reconstruct`. Every
   step still reconstructs (gaps, settles), the other actors' traces are
   left out, and a binding matching none of a run's actors has no verdict
   and says so. `System.WithBinding(path, opts...)`: the same runs judged
   by another binding.
+- `actors:` after its review: `*` matches `/` (an actor's name is no
+  path: path.Match's `*` missed `t/x.clients`); the actors left out are
+  named with their step counts in an info issue whenever any are;
+  `StepsToITF` (qtest's artifacts, `gotogether itf`) keeps only the
+  binding's actors; `Binding.Checks` is `ChecksActor`, and
+  `Binding.Reconstruct` is the filter every reader uses.
 - toQuint after its review: a `str` takes any string (a time's text was
   refused; a time is refused only where an int goes); ITF's encodings
   (`#bigint`, `#tup`, `#set`, `#map`) are read; an integer past int64 is

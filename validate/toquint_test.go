@@ -83,7 +83,7 @@ func TestActorsMatchNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.OK() || len(rep.Actors) != 0 || !strings.Contains(fmt.Sprint(rep.Issues), "the binding checks the actors *.clients; the run's are all other bindings' (acct)") {
+	if rep.OK() || len(rep.Actors) != 0 || !strings.Contains(fmt.Sprint(rep.Issues), "the binding checks the actors *.clients; the run's are all other bindings' (acct (1 steps, 0 pending))") {
 		t.Fatalf("got %s %v", rep.Summary(), rep.Issues)
 	}
 }

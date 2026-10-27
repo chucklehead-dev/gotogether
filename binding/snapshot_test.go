@@ -117,3 +117,25 @@ func TestStepsToITFSnapshot(t *testing.T) {
 		t.Errorf("issues %v", issues)
 	}
 }
+
+// A binding's actors: decide StepsToITF's traces as they decide every
+// check's (it once wrote every actor's), and those left out are named
+// with their step counts in an info issue whenever any are (the doc
+// promised it; only a binding matching none said so).
+func TestStepsToITFActors(t *testing.T) {
+	b := &Binding{Actors: []string{"!*.clients"}, Actions: map[string]Action{"setX": {Args: map[string]string{"v": "{{.v}}"}}}}
+	var steps []qtrace.Step
+	for i, a := range []string{"t/1", "t/1.clients", "t/1.clients", "t/2"} {
+		steps = append(steps, qtrace.Step{Action: "setX", Seq: uint64(i + 1), Recorder: "r", Actor: a, Process: "p", Args: map[string]any{"v": int64(i)}})
+	}
+	out, issues, err := b.StepsToITF(steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 || out["t/1"] == nil || out["t/2"] == nil {
+		t.Errorf("traces of %d actors, want t/1 and t/2", len(out))
+	}
+	if len(issues) != 1 || issues[0].Severity != "info" || issues[0].Kind != "actors" || !strings.Contains(issues[0].Msg, "left out, another binding's (actors: !*.clients): t/1.clients (2 steps, 0 pending)") {
+		t.Errorf("issues %v, want the clients named with their steps", issues)
+	}
+}

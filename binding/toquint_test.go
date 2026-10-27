@@ -433,20 +433,26 @@ func TestActors(t *testing.T) {
 		{[]string{"!*.clients"}, []string{"t1", "t2"}, []string{"t1.clients"}},
 		{[]string{"t?", "acct"}, []string{"t1", "acct"}, []string{"t10", "acct.clients"}},
 		{[]string{"t*", "!t9"}, []string{"t1"}, []string{"t9", "u"}},
+		// * crosses / and .: an actor's name is no path (path.Match's *
+		// stopped at /, so *.clients missed t/x.clients)
+		{[]string{"*.clients"}, []string{"t/x.clients", "a/b/c.clients"}, []string{"t/x"}},
+		{[]string{"!tenant/*"}, []string{"other"}, []string{"tenant/a", "tenant/a/b.clients"}},
+		{[]string{"[!a]*", `\*x`}, []string{"b1", "*x"}, []string{"a1", "ax"}},
+		{[]string{"é?"}, []string{"éa"}, []string{"éab"}},
 	} {
 		b := &Binding{Actors: tc.pats}
 		for _, a := range tc.in {
-			if !b.Checks(a) {
+			if !b.ChecksActor(a) {
 				t.Errorf("%q: %s not checked", tc.pats, a)
 			}
 		}
 		for _, a := range tc.out {
-			if b.Checks(a) {
+			if b.ChecksActor(a) {
 				t.Errorf("%q: %s checked", tc.pats, a)
 			}
 		}
 	}
-	for _, bad := range []string{"[a-", "!", ""} {
+	for _, bad := range []string{"[a-", "!", "", "[]", `x\`} {
 		if err := (&Binding{Actors: []string{bad}}).checkActors(); err == nil || !strings.Contains(err.Error(), "is not a glob") {
 			t.Errorf("%q: %v", bad, err)
 		}

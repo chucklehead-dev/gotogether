@@ -185,6 +185,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qdriver.Observed", "qdriver.Step (an Event)"},
 		{"bombadil.ReadFile", "bombadil.LogFile(path, opts) and its Steps()"},
 		{"bombadil.Read(", "bombadil.Log(r, opts) and its Steps()"},
+		{"Binding.Checks(", "Binding.ChecksActor"},
+		{"`Binding.Checks`", "`Binding.ChecksActor`"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},
