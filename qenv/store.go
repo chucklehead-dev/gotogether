@@ -112,6 +112,7 @@ type Store struct {
 	txs   int64
 
 	commit       FaultKind // "store.<name>.commit"
+	changed      Signal    // notified at every commit that wrote, and every Load: Changed
 	noValidation bool      // tests only: a store that keeps no level, for the history check to catch
 }
 
@@ -474,6 +475,9 @@ func (tx *tx) Commit() error {
 	for _, h := range tx.hooks {
 		h()
 	}
+	if commit > 0 {
+		st.changed.Notify() // applied, whatever the caller is told next
+	}
 	if st.CommitFaults && len(tx.order) > 0 && st.sim.FaultOf(st.commit) == "unknownOutcome" {
 		return ErrUnknownOutcome
 	}
@@ -499,6 +503,21 @@ func (tx *tx) end() {
 	}
 	delete(tx.st.open, tx)
 }
+
+// Changed is notified at every commit that writes (and every Load),
+// once it is applied, even if its caller is then told the outcome is
+// unknown: a wait for data any client of the Store writes. Two clients
+// over one Store (two grist stores over one database, a change feed
+// beside the application) each see the other's commits, which a signal
+// of their own, notified at their own commits, would sleep through.
+// Read Version before reading the data and compare after: a commit
+// between the two is one whose Notify the wait would miss.
+func (st *Store) Changed() *Signal { return &st.changed }
+
+// Version is the sequence number of the Store's last commit that wrote
+// (or Load): it grows at each one, so a waiter that reads Version, then
+// the data, then Version again knows whether a commit fell between.
+func (st *Store) Version() int64 { return st.seq }
 
 // Read returns the latest committed value of key, outside any
 // transaction: for tests and for checking final states.
@@ -548,4 +567,5 @@ func (st *Store) Load(key string, val any) {
 	if st.hist != nil {
 		st.hist.Load(key, history.Version(st.seq))
 	}
+	st.changed.Notify()
 }

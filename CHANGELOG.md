@@ -105,6 +105,12 @@ The first release. What a user meets, by module:
   range and not beside it, and the history checker sees the same. Keys
   of one column keep their encoding. Checked against brute force in Go
   and differentially against SQLite (examples/payd).
+- `qenv.Store.Changed` (a signal notified at every commit that writes,
+  applied, an unknown outcome's included, and every `Load`) and
+  `Store.Version` (the last such commit's number), and `qsql.StoreOf`
+  (the Store a qsql database runs on): two clients of one database in a
+  simulation (two grist stores) wait for each other's commits, which a
+  signal of their own slept through.
 - binding's `toQuint` template function (docs/grist.md §8.2, item 2):
   `{{ toQuint "List[Event]" .obs.events }}` decodes a step field's JSON
   by a type of the model (records, sums, tuples, sets, lists, maps, its

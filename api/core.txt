@@ -798,9 +798,11 @@ type Store struct
     field Iso Isolation
     field CommitFaults bool
     method (*Store) Begin(ctx context.Context) Txn
+    method (*Store) Changed() *Signal
     method (*Store) Keys(prefix string) []string
     method (*Store) Load(key string, val any)
     method (*Store) Read(key string) (any, bool)
+    method (*Store) Version() int64
 type TimeProfile = profile.Profile
     method (*Profile) Total() time.Duration
     method (*Profile) Waited(task string, start time.Time, now func() time.Time) func()
@@ -865,6 +867,7 @@ type Transport struct
 
 == github.com/chucklehead-dev/gotogether/qenv/qsql
 func Open(s *qenv.Sim, st *qenv.Store, o ...Options) *sql.DB
+func StoreOf(db *sql.DB) *qenv.Store
 func Table(st *qenv.Store, name string) []map[string]any
 type Change struct
     field Table string

@@ -1018,3 +1018,27 @@ func TestUnwoundWithRowsOpen(t *testing.T) {
 	w.run(t)
 	closes(t, w.s, "rows left open by a killed task")
 }
+
+// StoreOf names the Store a qsql database runs on, and no Store for any
+// other database: a client of the database waits on its Changed.
+func TestStoreOf(t *testing.T) {
+	s := qenv.New(qenv.NewSeeded(1))
+	defer s.Close()
+	st := qenv.NewStore(s, "db", qenv.ReadCommitted)
+	if got := qsql.StoreOf(qsql.Open(s, st)); got != st {
+		t.Errorf("StoreOf(a qsql database) = %v, want its Store", got)
+	}
+	if got := qsql.StoreOf(sql.OpenDB(otherConnector{})); got != nil {
+		t.Errorf("StoreOf(another driver's database) = %v, want nil", got)
+	}
+}
+
+// otherConnector is a database/sql connector of no qsql database.
+type otherConnector struct{}
+
+func (otherConnector) Connect(context.Context) (driver.Conn, error) { return nil, errors.New("none") }
+func (otherConnector) Driver() driver.Driver                        { return otherDriver{} }
+
+type otherDriver struct{}
+
+func (otherDriver) Open(string) (driver.Conn, error) { return nil, errors.New("none") }

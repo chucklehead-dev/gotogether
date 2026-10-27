@@ -189,10 +189,22 @@ func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
 	return &conn{c: c}, nil
 }
 
-func (c *connector) Driver() driver.Driver { return drv{} }
+func (c *connector) Driver() driver.Driver { return drv{st: c.st} }
 
-// drv is the connector's driver.Driver, which database/sql requires.
-type drv struct{}
+// drv is the connector's driver.Driver, which database/sql requires; it
+// names the Store, for StoreOf.
+type drv struct{ st *qenv.Store }
+
+// StoreOf is the qenv.Store a database opened with Open runs on, nil for
+// any other database: what a client that waits for other clients' commits
+// waits on (Store.Changed), since every client of one Store, whatever its
+// database/sql pool, commits through it.
+func StoreOf(db *sql.DB) *qenv.Store {
+	if d, ok := db.Driver().(drv); ok {
+		return d.st
+	}
+	return nil
+}
 
 func (drv) Open(string) (driver.Conn, error) {
 	return nil, errors.New("qsql: a database over a qenv.Store is opened with qsql.Open(sim, store), not sql.Open")
