@@ -104,10 +104,12 @@ var sqlitePermanent = map[int]bool{1: true, 8: true, 11: true, 20: true, 21: tru
 // PostgreSQL's SQLSTATE classes (and codes) that no retry fixes: a
 // statement the server cannot run (42: syntax, an undefined table or
 // column, privileges; 0A: a feature it lacks), bad data (22), a missing
-// database or schema (3D, 3F), authentication (28). 40001 (serialization),
+// database or schema (3D, 3F), authentication (28), a program limit
+// (54: 54000, an index row past the btree's size, which a key too long
+// for grist's indexes would otherwise retry forever). 40001 (serialization),
 // 40P01 (deadlock), 55P03 (lock_timeout), the connection's class 08 and
 // the rest stay transient. Read-only.
-var pgPermanent = map[string]bool{"42": true, "0A": true, "22": true, "3D": true, "3F": true, "28": true}
+var pgPermanent = map[string]bool{"42": true, "0A": true, "22": true, "3D": true, "3F": true, "28": true, "54": true}
 
 // classify is err as the store contract reads it: a *store.PermanentError
 // for what no retry fixes, err itself (transient) for the rest. Every

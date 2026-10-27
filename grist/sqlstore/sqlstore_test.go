@@ -180,7 +180,7 @@ func TestErrorsClassified(t *testing.T) {
 		permanent bool
 	}{
 		{pgError("40001"), false}, {pgError("40P01"), false}, {pgError("55P03"), false}, {pgError("08006"), false},
-		{pgError("42P01"), true}, {pgError("42601"), true}, {pgError("0A000"), true}, {pgError("22P02"), true},
+		{pgError("42P01"), true}, {pgError("42601"), true}, {pgError("0A000"), true}, {pgError("22P02"), true}, {pgError("54000"), true},
 		{liteError(5), false}, {liteError(517), false}, {liteError(6), false}, {liteError(1), true}, {liteError(21), true},
 		{&qsql.Error{Code: "40001"}, false}, {&qsql.Error{Code: "42601"}, true},
 	} {

@@ -183,3 +183,52 @@ func TestStepInTheTransaction(t *testing.T) {
 
 // storeBatch is an unconditioned batch of events (another writer's).
 func storeBatch(events ...grist.Event) store.Batch { return store.Batch{Events: events} }
+
+// V1 and V2 are one command's arguments before and after a deploy that
+// added a field (Note) in front of the old one.
+type V1 struct {
+	Name string `json:"name"`
+}
+
+type V2 struct {
+	Note string `json:"note"`
+	Name string `json:"name"`
+}
+
+// A retry spanning a deploy that added a field (absent, so its zero) or
+// reordered the fields is the same command: its key's marker answers it,
+// where the marker's hash of the re-encoded arguments made it a reused
+// key. A retry that sets the new field is other arguments: reused.
+func TestRetryAcrossDeploy(t *testing.T) {
+	app := func() (*grist.App, *grist.EventType[Named]) {
+		a := grist.New("names")
+		return a, grist.NewEvent[Named](a, "named")
+	}
+	v1, named1 := app()
+	c1 := grist.NewCommand(v1, "name", func(r *grist.Reads, c V1) ([]grist.Event, error) {
+		return []grist.Event{named1.Of(Named{Name: c.Name})}, nil
+	})
+	v2, named2 := app()
+	c2 := grist.NewCommand(v2, "name", func(r *grist.Reads, c V2) ([]grist.Event, error) {
+		return []grist.Event{named2.Of(Named{Name: c.Name})}, nil
+	})
+	st := newStoreNamed(t, "names")
+	ctx := context.Background()
+	env := grist.Envelope{ID: "k1", Tenant: "t1"}
+	first, err := c1.Execute(ctx, st, env, V1{Name: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, err := c2.Execute(ctx, st, env, V2{Name: "a"}); err != nil || again.Pos != first.Pos {
+		t.Errorf("the retry after the deploy: %v, %v; want the first answer %v", again, err, first)
+	}
+	if _, err := v2.Execute(ctx, st, env, "name", []byte(`{"name":"a","note":""}`)); err != nil {
+		t.Errorf("the retry with the new field given its zero: %v", err)
+	}
+	if _, err := c2.Execute(ctx, st, env, V2{Name: "a", Note: "x"}); !errors.Is(err, grist.ErrKeyReused) {
+		t.Errorf("a retry setting the new field: %v, want ErrKeyReused", err)
+	}
+	if n := count(t, st, "named"); n != 1 {
+		t.Errorf("%d named events, want 1", n)
+	}
+}

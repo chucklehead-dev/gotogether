@@ -169,12 +169,21 @@ examples/counters is the walk-through: read its README's table first.
   (the same on every retry of the key), 422 `{"rejected": name}` (a
   rejection, `idempotency-key-reused`), 409 conflict, 503 with
   `Retry-After` (`{"retry": "outcome-unknown"|"unavailable"}`: send it
-  again under the same key), 400, 403 (`denied`), 404, 500. The actor is
+  again under the same key), 400 (`grist.ErrBadArgs`: not UTF-8, a
+  field missing or null, a NUL byte, an integer past int64; every field
+  is required but a pointer's), 403 (`denied`), 404 (an Internal block
+  too), 413 (past `grist.MaxBody`), 500; a replay of a key's answer
+  carries `Idempotent-Replayed: true`. The actor is
   `grist.WithActor`'s, set by `grist.Middleware` (the app's
-  authentication) or `grist.ActorFromHeader` (tests, behind a proxy);
+  authentication, which wins) or `grist.ActorFromHeader` (tests, behind
+  a proxy: only for a request no middleware authenticated);
   `grist.Dependencies` attaches the app's doubles. `grist/client`'s
   `Client.Do` calls it and records the call as a client's (retrying
-  under the key); the handler records nothing of its own.
+  under the key with jittered exponential backoff within a retry
+  `client.Budget`; a 5xx that is not grist's is an unknown outcome,
+  retried); the handler records nothing of its own. A field added to a
+  command's arguments with a zero default keeps a key's answer (the
+  marker hashes the arguments' canonical value).
   examples/counters' `TestRealHTTP` is the walk-through of a real tier
   over HTTP.
 - **An app's binary**: `func main() { grist.Main(app, opts...) }` with

@@ -76,7 +76,11 @@ func (k *killable) kill() {
 // every step written to one file (qobs.FileSink, PerStep) and validated
 // with counters.binding.yaml (the store's side) and
 // counters.calls.binding.yaml (the clients', linearized), as a
-// simulation's are. Halfway through the first phase the first node is
+// simulation's are. Every fifth command's answer is lost after the
+// command was served (the connection closed without a response): its
+// client retries under the same key, the marker answers
+// (Idempotent-Replayed), and the client's call is judged with the
+// answer it finally got. Halfway through the first phase the first node is
 // killed: its sink dies at that instant (whatever its relay had not
 // recorded is lost with it, as with kill -9), its goroutines are
 // stopped, and a second node takes the server's traffic, with a relay of
@@ -119,15 +123,30 @@ func TestRealHTTP(t *testing.T) {
 
 	// the server: one listener, its traffic handed to the current node's
 	// API, which records what it answers on return (queries) to that
-	// node's recorder
+	// node's recorder. Every fifth command's answer is lost on the way
+	// back (served, then the connection closed without a response, as a
+	// proxy or a network drops it): its client sends it again under the
+	// same Idempotency-Key, and the key's marker answers the retry
 	var current atomic.Pointer[http.Handler]
+	var commandsServed, lost, replayed atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := current.Load()
 		if h == nil {
 			http.Error(w, `{"error":"no node"}`, http.StatusServiceUnavailable)
 			return
 		}
+		if r.Method == http.MethodPost && commandsServed.Add(1)%5 == 0 {
+			(*h).ServeHTTP(httptest.NewRecorder(), r)
+			lost.Add(1)
+			if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+				conn.Close()
+			}
+			return
+		}
 		(*h).ServeHTTP(w, r)
+		if w.Header().Get(grist.ReplayedHeader) == "true" {
+			replayed.Add(1)
+		}
 	}))
 	defer srv.Close()
 	// start is a node recording to its own sink: its relay (returned, to
@@ -259,7 +278,11 @@ func TestRealHTTP(t *testing.T) {
 		t.Errorf("%d relayed records, %d kept: want the second node's copies of the first's rows dropped as duplicates", relayed["t1"]+relayed["t2"], kept)
 	}
 	answered(t, traces)
-	t.Logf("%d steps written, %d relayed (%d kept after the second relay's copies); the killed node's relay was %d rows behind", len(steps), relayed["t1"]+relayed["t2"], kept, behind)
+	if lost.Load() == 0 || replayed.Load() == 0 {
+		t.Errorf("%d answers lost, %d retries answered from their key's marker: want both, or the same-key retry was never exercised", lost.Load(), replayed.Load())
+	}
+	t.Logf("%d steps written, %d relayed (%d kept after the second relay's copies); the killed node's relay was %d rows behind; %d answers lost, %d retries replayed",
+		len(steps), relayed["t1"]+relayed["t2"], kept, behind, lost.Load(), replayed.Load())
 	qtest.Validate(t, commits, steps).Expect(t, qtest.Conforms(), qtest.Settles())
 	qtest.Validate(t, calls, steps, qtest.Linearize()).Expect(t, qtest.Conforms())
 }

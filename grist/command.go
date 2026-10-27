@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
@@ -83,7 +84,9 @@ type commandInfo struct {
 	version     int
 	args        reflect.Type
 	opts        options
-	run         func(ctx context.Context, s Store, env Envelope, args json.RawMessage) (Receipt, error)
+	// run decodes JSON arguments (decodeArgs) and executes them; replayed:
+	// the answer is a marker's found before deciding (an earlier try's)
+	run func(ctx context.Context, s Store, env Envelope, args json.RawMessage) (rc Receipt, replayed bool, err error)
 }
 
 // A Command is a struct of arguments C and a decision: reads and a
@@ -107,12 +110,12 @@ func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Even
 	q, _ := QuintName(name)
 	c.info = &commandInfo{name: name, quint: q, version: 1, args: reflect.TypeFor[C](), opts: app.options("command", name, opts)}
 	app.checkArgs("command", name, c.info.args)
-	c.info.run = func(ctx context.Context, s Store, env Envelope, raw json.RawMessage) (Receipt, error) {
-		var args C
-		if err := json.Unmarshal(raw, &args); err != nil {
-			return Receipt{}, fmt.Errorf("grist: command %s: arguments %s: %w", name, raw, err)
+	c.info.run = func(ctx context.Context, s Store, env Envelope, raw json.RawMessage) (Receipt, bool, error) {
+		v, err := decodeArgs("command "+name, raw, c.info.args)
+		if err != nil {
+			return Receipt{}, false, err
 		}
-		return c.Execute(ctx, s, env, args)
+		return c.execute(ctx, s, env, v.Interface().(C))
 	}
 	app.commands[name] = c.info
 	return c
@@ -139,13 +142,16 @@ func (a *App) checkArgs(kind, name string, t reflect.Type) {
 func (c *Command[C]) Name() string { return c.info.name }
 
 // hash is the marker's hash of a command: its name, its version and its
-// canonical arguments (encoding/json's, fields in declaration order), so
-// another command under the same id, whatever its arguments, is a reused
-// key and not this one's retry.
+// arguments' value (canonicalArgs: members sorted, zero-valued ones left
+// out), so another command under the same id, or other arguments, is a
+// reused key and not this one's retry, while a retry across a deploy
+// that added a field (its zero then) or reordered the fields is the same
+// command. A change of the arguments' meaning under the same name and
+// fields is the command's version's to state.
 func (c *Command[C]) hash(body []byte) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s\x00%d\x00", c.info.name, c.info.version)
-	h.Write(body)
+	h.Write(canonicalArgs(body))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -165,20 +171,37 @@ func (c *Command[C]) hash(body []byte) string {
 // during one included), ErrUnavailable (every transient error came
 // before a commit: store.NotCommitted), or the decision's error (the
 // code's fault, recorded with its text and not remembered).
+//
+// Arguments grist cannot store or record alike on every tier are
+// ErrBadArgs before anything runs: text with a NUL byte or invalid UTF-8
+// (encoding/json would turn it into U+FFFD), an integer past int64.
 func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error) {
+	rc, _, err := c.execute(ctx, s, env, args)
+	return rc, err
+}
+
+// execute is Execute, saying whether its answer is a marker found before
+// deciding (an earlier try's: the API's Idempotent-Replayed).
+func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C) (_ Receipt, replayed bool, _ error) {
 	if env.ID == "" {
-		return Receipt{}, fmt.Errorf("grist: command %s without an id: every command carries one (its idempotency key, Envelope.ID)", c.info.name)
+		return Receipt{}, false, fmt.Errorf("grist: command %s without an id: every command carries one (its idempotency key, Envelope.ID)", c.info.name)
 	}
 	if err := checkEnvelope(env); err != nil {
-		return Receipt{}, fmt.Errorf("grist: command %s: %w", c.info.name, err)
+		return Receipt{}, false, fmt.Errorf("grist: command %s: %w", c.info.name, err)
+	}
+	if err := checkStrings(reflect.ValueOf(args), "argument"); err != nil {
+		return Receipt{}, false, badArgs("command "+c.info.name, "%v", strings.TrimPrefix(err.Error(), "grist: "))
 	}
 	body, err := json.Marshal(args)
 	if err != nil {
-		return Receipt{}, fmt.Errorf("grist: command %s: %w", c.info.name, err)
+		return Receipt{}, false, fmt.Errorf("grist: command %s: %w", c.info.name, err)
+	}
+	argKV, err := rec.StepFields(c.info.args, body, "")
+	if err != nil {
+		return Receipt{}, false, badArgs("command "+c.info.name, "%v", err)
 	}
 	hash := c.hash(body)
 	o := c.info.opts
-	argKV := rec.StepFields(c.info.args, body, "")
 	fields := func(r *Reads) []any {
 		return append(append([]any{}, argKV...), "id", env.ID, "readPos", int64(r.pos), "reads", triples(r.sels))
 	}
@@ -221,10 +244,11 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 		}
 		return false, Receipt{}, fmt.Errorf("%w: command %s (id %s), %d transient store errors, the last: %v", ErrUnavailable, c.info.name, env.ID, transient, err)
 	}
-	for {
+	for first := true; ; first = false {
 		m, ok, err := s.Marker(ctx, env.Tenant, env.ID)
 		if err == nil && ok {
-			return answer(m)
+			rc, err := answer(m)
+			return rc, first, err
 		}
 		var r *Reads
 		var events []Event
@@ -254,16 +278,16 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 				case derr != nil:
 					r.Position()
 					onReturn(r, derr) // the code's fault, recorded with its text, not remembered
-					return Receipt{}, derr
+					return Receipt{}, false, derr
 				}
 			}
 		}
 		if err != nil {
 			if !store.Transient(err) {
-				return Receipt{}, err
+				return Receipt{}, false, err
 			}
 			if again, rc, rerr := retry(err); !again {
-				return rc, rerr
+				return rc, false, rerr
 			}
 			continue
 		}
@@ -284,9 +308,9 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 		head, err := s.Append(ctx, env.Tenant, b)
 		if err == nil {
 			if outcome != "" {
-				return Receipt{}, refusal(outcome)
+				return Receipt{}, false, refusal(outcome)
 			}
-			return store.NewReceipt(env.Tenant, head, len(events)), nil
+			return store.NewReceipt(env.Tenant, head, len(events)), false, nil
 		}
 		var cf *store.ConditionFailed
 		switch {
@@ -301,15 +325,15 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 			// for the head lock, a lock wait timed out) committed nothing
 			mayHaveCommitted = mayHaveCommitted || store.MayHaveCommitted(err)
 			if again, rc, rerr := retry(err); !again {
-				return rc, rerr
+				return rc, false, rerr
 			}
 		case ctx.Err() != nil && store.MayHaveCommitted(err):
 			// the context ended while the append committed: its answer is
 			// lost, as a connection's would be, and the caller must retry
 			// under the id to learn it
-			return Receipt{}, fmt.Errorf("%w: command %s (id %s): %w", ErrOutcomeUnknown, c.info.name, env.ID, err)
+			return Receipt{}, false, fmt.Errorf("%w: command %s (id %s): %w", ErrOutcomeUnknown, c.info.name, env.ID, err)
 		default:
-			return Receipt{}, err
+			return Receipt{}, false, err
 		}
 	}
 }
@@ -328,7 +352,8 @@ func (a *App) Execute(ctx context.Context, s Store, env Envelope, name string, a
 	if c == nil {
 		return Receipt{}, fmt.Errorf("grist: %s has no command %q (it has %v)", a.Name, name, a.Commands())
 	}
-	return c.run(ctx, s, env, args)
+	rc, _, err := c.run(ctx, s, env, args)
+	return rc, err
 }
 
 // ArgsType is the argument type of command or query name (nil if none):

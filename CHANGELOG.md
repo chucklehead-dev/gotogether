@@ -149,6 +149,25 @@ The first release. What a user meets, by module:
   `atMostOnceOutcome`. examples/counters gains `retire-counter` and the
   at-most-once `payout` processor, with its claims, and the
   `checkpointFirst` mutant.
+- grist's API after its review (docs/grist.md §0.7; api/grist.txt):
+  `ActorFromHeader` names only an actor the application's middleware
+  left unset; `ErrBadArgs` (400) for arguments grist refuses (not UTF-8,
+  a required field missing or null: `Schema` makes pointer fields
+  optional and pointers, slices and maps nullable; a NUL byte; an
+  integer past int64), steps' fields decoded exactly; `MaxBody(n)` is a
+  `ServeOption` (the constant is `DefaultMaxBody`) and a larger body is
+  413; an Internal block is 404; `MaxIDBytes` bounds ids;
+  `ReplayedHeader` (`Idempotent-Replayed`) marks an answer from the
+  key's marker; the marker's hash covers the arguments' canonical value
+  (a field added with its zero, or fields reordered, keep a key's
+  answer); `QueryArgs` and `client.Params` are inverse, pointers
+  included. `grist.Main` drains requests before stopping the node
+  (`ShutdownTimeout`, `FlushTimeout`) and bounds its server's reads,
+  writes, idle connections and headers. `grist/client` backs off
+  exponentially with jitter within a retry `Budget` (`DefaultBudget`,
+  `Client.MaxRetryDelay`, `Client.Budget`, `DefaultMaxRetryDelay`), and a
+  5xx that is not grist's is an unknown outcome. sqlstore: PostgreSQL's
+  class 54 is permanent.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

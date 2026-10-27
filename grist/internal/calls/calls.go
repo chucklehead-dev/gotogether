@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
@@ -51,7 +52,12 @@ func IsQuery(app *grist.App, name string) bool {
 func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string, args json.RawMessage, do func() Answer) Answer {
 	q, _ := grist.QuintName(name)
 	query := IsQuery(app, name)
-	kv := append([]any{"actor", Actor(env.Tenant), "process", app.Name}, rec.StepFields(app.ArgsType(name), args, "")...)
+	// the arguments as the block decodes them (rec.StepFields decodes into
+	// its type): a field the body names in another case is the field's,
+	// recorded by its JSON name as the store's step records it. Arguments
+	// that do not decode record none: the server refuses them (400)
+	fields, _ := rec.StepFields(app.ArgsType(name), args, "")
+	kv := append([]any{"actor", Actor(env.Tenant), "process", app.Name}, fields...)
 	if !query {
 		kv = append(kv, "id", env.ID)
 	}
@@ -64,7 +70,12 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	case a.Rejected != "":
 		call.Done(nil, "outcome", a.Rejected)
 	case query:
-		call.Done(nil, rec.StepFields(app.ResultType(name), a.Result, "obs.")...)
+		obs, err := rec.StepFields(app.ResultType(name), a.Result, "obs.")
+		if err != nil {
+			call.Done(fmt.Errorf("grist: query %s: its result: %w", name, err))
+			break
+		}
+		call.Done(nil, obs...)
 	default:
 		call.Done(nil)
 	}

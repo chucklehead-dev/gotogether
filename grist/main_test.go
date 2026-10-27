@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,5 +126,107 @@ func TestMainServe(t *testing.T) {
 	}
 	if outcomes["k1"] != "ok" || outcomes["k2"] != "taken" {
 		t.Errorf("steps in the file %v: want k1's commit and k2's refusal, relayed", outcomes)
+	}
+}
+
+// startServe runs MainArgs serve of a on a SQLite file in dir until ctx
+// ends, returning its URL, the steps file and its result.
+func startServe(t *testing.T, ctx context.Context, a *grist.App, dir string) (string, string, <-chan error) {
+	t.Helper()
+	steps := filepath.Join(dir, "steps.jsonl")
+	var errOut syncBuffer
+	done := make(chan error, 1)
+	go func() {
+		done <- grist.MainArgs(ctx, a, []string{"serve", "-db", "sqlite:" + filepath.Join(dir, "app.db"), "-addr", "127.0.0.1:0",
+			"-tenant", "t1", "-steps", steps, "-actor-header", "X-Actor", "-poll", "10ms"}, &errOut, &errOut)
+	}()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("serve did not start: %s", errOut.String())
+		}
+		if _, after, ok := strings.Cut(errOut.String(), "serving on "); ok {
+			return strings.TrimSpace(after), steps, done
+		}
+	}
+}
+
+// A graceful shutdown keeps the node running while the server drains:
+// an at-most-once effect in flight at SIGTERM, while a client trickles a
+// request's body across it, runs to its end with its context live and
+// its outcome is appended and recorded; the trickled request is
+// answered. The node was stopped at the signal: the effect's context
+// ended in flight, its outcome never appended (a payment made, recorded
+// nowhere).
+func TestMainShutdownDrains(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var cancelled error
+	a, added := amoApp(func(ctx context.Context, m grist.Meta) error {
+		if m.Pos != 1 {
+			return nil
+		}
+		close(started)
+		<-release
+		time.Sleep(50 * time.Millisecond) // the node had all the time it needed
+		cancelled = ctx.Err()
+		return nil
+	})
+	grist.NewCommand(a, "add", func(r *grist.Reads, c Added) ([]grist.Event, error) {
+		return []grist.Event{added.Of(c)}, nil
+	}, grist.Authorize(grist.Authenticated))
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	url, steps, done := startServe(t, ctx, a, t.TempDir())
+	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	// a client trickling its body: in flight when the signal comes
+	pr, pw := io.Pipe()
+	req, _ := http.NewRequest("POST", url+"/t/t1/commands/add", pr)
+	req.Header.Set("X-Actor", "x")
+	req.Header.Set("Idempotency-Key", "k2")
+	answered := make(chan int, 1)
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			answered <- 0
+			return
+		}
+		resp.Body.Close()
+		answered <- resp.StatusCode
+	}()
+	pw.Write([]byte(`{"by":`))
+	time.Sleep(50 * time.Millisecond)
+	stop() // SIGTERM
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	time.Sleep(200 * time.Millisecond)
+	pw.Write([]byte(`2}`))
+	pw.Close()
+	if code := <-answered; code != 200 {
+		t.Errorf("the request trickled across the signal: %d, want 200", code)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if cancelled != nil {
+		t.Errorf("the effect in flight at the signal saw its context end (%v): the node stopped before the server drained", cancelled)
+	}
+	f, err := os.Open(steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	recorded, err := qtrace.ReadJSONL(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome := false
+	for _, s := range recorded {
+		outcome = outcome || s.Action == "noteOutcome" && s.Args["trigger"] == int64(1) && s.Outcome == "ok"
+	}
+	if !outcome {
+		t.Errorf("no noteOutcome of trigger 1 in the file: the effect's outcome was lost at shutdown")
 	}
 }

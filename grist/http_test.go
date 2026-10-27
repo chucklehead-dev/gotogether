@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -119,7 +122,7 @@ func TestAPICodes(t *testing.T) {
 		{"POST", srv.URL + "/t/t9/commands/name", "editor", "k5", `{"name":"c"}`, 404, ""},
 		{"POST", cmd, "viewer", "k6", `{"name":"c"}`, 403, "denied"},
 		{"POST", cmd, "", "k7", `{"name":"c"}`, 403, "denied"},
-		{"POST", srv.URL + "/t/t1/commands/secret", "editor", "k8", `{"name":"c"}`, 403, "denied"},
+		{"POST", srv.URL + "/t/t1/commands/secret", "editor", "k8", `{"name":"c"}`, 404, ""},
 		{"GET", srv.URL + "/t/t1/queries/names?name=a", "", "", "", 403, "denied"},
 		{"GET", srv.URL + "/t/t1/queries/names?nmae=a", "viewer", "", "", 400, ""},
 		{"GET", cmd, "editor", "k9", "", 405, ""},
@@ -308,5 +311,297 @@ func TestClientRetriesOverQHTTP(t *testing.T) {
 	}
 	if invoked["k1"] != 1 || done["k1"] != "ok" || done["k2"] != "taken" || done["k3"] != "denied" || commits != 1 {
 		t.Errorf("client calls invoked %v, done %v, %d commits at the store: want each call once (k1 ok after its retry, k2 taken, k3 denied), one commit", invoked, done, commits)
+	}
+}
+
+// Arguments grist refuses are the client's error (400), not the
+// server's (500): a NUL byte in an argument a decision reads as a tag (in
+// a command's body and in a query's parameter), a body that is not
+// UTF-8 (encoding/json would read U+FFFD), a null body, a required field
+// missing or null, an Idempotency-Key past MaxIDBytes; a body past
+// MaxBody is 413; an Internal block is 404, as an unknown one, and no
+// 404 names it. Before, the first two were 500, invalid UTF-8 committed
+// U+FFFD, a null body or a missing field decided on the zero value, and
+// an internal block answered 403.
+func TestAPIRefusesBadArgs(t *testing.T) {
+	st := newStoreNamed(t, "names")
+	h, err := grist.NewHandler(apiApp(), st, grist.ActorFromHeader("X-Actor"), grist.MaxBody(64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	cmd := srv.URL + "/t/t1/commands/name"
+	for _, c := range []struct {
+		method, url, key, body string
+		code                   int
+	}{
+		{"POST", cmd, "k1", `{"name":"a\u0000"}`, 400},
+		{"GET", srv.URL + "/t/t1/queries/names?name=%00", "", "", 400},
+		{"GET", srv.URL + "/t/t1/queries/names?name=%ff", "", "", 400},
+		{"POST", cmd, "k2", "{\"name\":\"\xff\"}", 400},
+		{"POST", cmd, "k3", `null`, 400},
+		{"POST", cmd, "k4", `{}`, 400},
+		{"POST", cmd, "k5", `{"name":null}`, 400},
+		{"GET", srv.URL + "/t/t1/queries/names", "", "", 400},
+		{"POST", cmd, strings.Repeat("k", grist.MaxIDBytes+1), `{"name":"a"}`, 400},
+		{"POST", cmd, "k6", `{"name":"` + strings.Repeat("a", 64) + `"}`, 413},
+		{"POST", srv.URL + "/t/t1/commands/secret", "k7", `{"name":"a"}`, 404},
+	} {
+		code, body, _ := doAny(t, c.method, c.url, "editor", c.key, c.body)
+		if code != c.code {
+			t.Errorf("%s %s (key %.10q, %q): %d %v, want %d", c.method, c.url, c.key, c.body, code, body, c.code)
+		}
+		if msg, _ := body["error"].(string); code == 404 && strings.Contains(msg, "[name secret]") {
+			t.Errorf("a 404 naming the internal block: %s", msg)
+		}
+	}
+	if n := count(t, st, "named"); n != 0 {
+		t.Errorf("%d named events: every request was refused before deciding", n)
+	}
+	// the same refusals in process: App.Execute's JSON and a typed Execute
+	a := apiApp()
+	env := grist.Envelope{ID: "k8", Tenant: "t1", Actor: "editor"}
+	for _, body := range []string{`{"name":"a\u0000"}`, "{\"name\":\"\xff\"}", `null`, `{}`} {
+		if _, err := a.Execute(context.Background(), st, env, "name", []byte(body)); !errors.Is(err, grist.ErrBadArgs) {
+			t.Errorf("App.Execute of %q: %v, want ErrBadArgs", body, err)
+		}
+	}
+}
+
+// A command's answer taken from its key's marker before deciding says so
+// (Idempotent-Replayed: true); its first answer does not.
+func TestAPIReplayedHeader(t *testing.T) {
+	srv := serve(t, apiApp(), newStoreNamed(t, "names"))
+	send := func(key, body string) (int, string) {
+		req, _ := http.NewRequest("POST", srv.URL+"/t/t1/commands/name", strings.NewReader(body))
+		req.Header.Set("X-Actor", "editor")
+		req.Header.Set("Idempotency-Key", key)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode, resp.Header.Get(grist.ReplayedHeader)
+	}
+	for i, c := range []struct {
+		key, body, replayed string
+		code                int
+	}{
+		{"k1", `{"name":"a"}`, "", 200}, {"k1", `{"name":"a"}`, "true", 200},
+		{"k2", `{"name":"a"}`, "", 422}, {"k2", `{"name":"a"}`, "true", 422},
+	} {
+		if code, replayed := send(c.key, c.body); code != c.code || replayed != c.replayed {
+			t.Errorf("request %d (%s): %d, %s %q; want %d, %q", i, c.key, code, grist.ReplayedHeader, replayed, c.code, c.replayed)
+		}
+	}
+}
+
+// The application's authentication wins over ActorFromHeader: a request
+// a middleware authenticated as a viewer that names itself an editor in
+// the header is a viewer's (403), where the header once overrode it
+// (200). A request no middleware authenticated takes the header's actor.
+func TestActorHeaderDoesNotOverride(t *testing.T) {
+	auth := grist.Middleware(func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") == "Bearer viewer-token" {
+				r = r.WithContext(grist.WithActor(r.Context(), "viewer"))
+			}
+			h.ServeHTTP(w, r)
+		})
+	})
+	h, err := grist.NewHandler(apiApp(), newStoreNamed(t, "names"), auth, grist.ActorFromHeader("X-Actor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	for _, c := range []struct {
+		token string
+		code  int
+	}{{"viewer-token", 403}, {"", 200}} {
+		req, _ := http.NewRequest("POST", srv.URL+"/t/t1/commands/name", strings.NewReader(`{"name":"`+c.token+`"}`))
+		req.Header.Set("X-Actor", "editor")
+		req.Header.Set("Idempotency-Key", "k-"+c.token)
+		if c.token != "" {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.code {
+			t.Errorf("authenticated as %q, X-Actor editor: %d, want %d", c.token, resp.StatusCode, c.code)
+		}
+	}
+}
+
+// Opt is a query's arguments with an optional (pointer) field of each
+// kind: QueryArgs takes a pointer to a string as a string, and leaves an
+// absent pointer nil.
+type Opt struct {
+	Name  string   `json:"name"`
+	Alias *string  `json:"alias"`
+	N     int      `json:"n"`
+	Max   *int     `json:"max"`
+	Open  bool     `json:"open"`
+	Tags  []string `json:"tags"`
+}
+
+// QueryArgs and client.Params are each other's inverse, a pointer field
+// included (?alias=a was refused as no JSON value); a required field
+// left out is refused, an optional one is nil.
+func TestQueryArgsParams(t *testing.T) {
+	alias, max := "3", 7
+	typ := reflect.TypeFor[Opt]()
+	for _, v := range []Opt{
+		{Name: "a", Alias: &alias, N: 2, Max: &max, Open: true, Tags: []string{"x", "y"}},
+		{Name: "b", Tags: []string{}},
+	} {
+		in, _ := json.Marshal(v)
+		params, err := client.Params(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := grist.QueryArgs(typ, params)
+		if err != nil {
+			t.Fatalf("QueryArgs(Params(%s)) = %v: %v", in, params, err)
+		}
+		var back Opt
+		json.Unmarshal(out, &back)
+		if !reflect.DeepEqual(back, v) {
+			t.Errorf("%s through %v came back %s", in, params, out)
+		}
+	}
+	if _, err := grist.QueryArgs(typ, map[string][]string{"name": {"a"}, "alias": {"a"}, "n": {"1"}, "open": {"false"}, "tags": {"[]"}}); err != nil {
+		t.Errorf("?alias=a for a *string: %v", err)
+	}
+	if _, err := grist.QueryArgs(typ, map[string][]string{"name": {"a"}}); err == nil || !strings.Contains(err.Error(), `"n" missing`) {
+		t.Errorf("a required field left out: %v, want it named", err)
+	}
+}
+
+// Big is a query's arguments of integers past float64's exact range.
+type Big struct {
+	N int64  `json:"n"`
+	U uint64 `json:"u"`
+}
+
+// A step records an integer argument exactly (the step's fields were
+// decoded through float64: 2^53+1 recorded as 2^53, MaxInt64 as
+// MinInt64), and refuses one past int64 (an unsigned field's), with the
+// fix, in process and over HTTP (400).
+func TestStepFieldsExact(t *testing.T) {
+	a := grist.New("big")
+	grist.NewQuery(a, "echo", func(r *grist.Reads, q Big) (Big, error) { return q, nil }, grist.Authorize(grist.Authenticated))
+	st := memstore.New("big")
+	st.CreateTenant(context.Background(), "t1")
+	sink := &qobs.MemorySink{}
+	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
+	env := grist.Envelope{Tenant: "t1", Actor: "x"}
+	for _, n := range []int64{1<<53 + 1, math.MaxInt64, math.MinInt64} {
+		if _, _, err := a.Query(ctx, st, env, "echo", []byte(fmt.Sprintf(`{"n":%d,"u":1}`, n))); err != nil {
+			t.Fatal(err)
+		}
+		steps := sink.Steps()
+		got := steps[len(steps)-1]
+		if got.Args["n"] != n || got.Obs["n"] != n {
+			t.Errorf("n %d recorded as %v (obs %v)", n, got.Args["n"], got.Obs["n"])
+		}
+	}
+	if _, _, err := a.Query(ctx, st, env, "echo", []byte(`{"n":1,"u":18446744073709551615}`)); !errors.Is(err, grist.ErrBadArgs) || !strings.Contains(err.Error(), "int64") {
+		t.Errorf("u past int64 in process: %v, want ErrBadArgs naming the fix", err)
+	}
+	srv := serve(t, a, st)
+	if code, body, _ := doAny(t, "GET", srv.URL+"/t/t1/queries/echo?n=1&u=18446744073709551615", "x", "", ""); code != 400 {
+		t.Errorf("u past int64 over HTTP: %d %v, want 400", code, body)
+	}
+}
+
+// Main's server bounds every phase of a connection: a client that
+// trickles its headers or body, or idles, holds none for ever.
+func TestMainServerBounds(t *testing.T) {
+	srv := grist.NewMainServer(context.Background(), http.NotFoundHandler())
+	if srv.ReadHeaderTimeout <= 0 || srv.ReadTimeout <= 0 || srv.WriteTimeout <= 0 || srv.IdleTimeout <= 0 || srv.MaxHeaderBytes <= 0 {
+		t.Errorf("Main's server: read header %v, read %v, write %v, idle %v, max header %d: want every one set",
+			srv.ReadHeaderTimeout, srv.ReadTimeout, srv.WriteTimeout, srv.IdleTimeout, srv.MaxHeaderBytes)
+	}
+}
+
+// scripted serves answers in turn (the last for ever) over qhttp in a
+// simulation, noting each request's virtual time; it returns the times
+// and the client's error.
+func scripted(t *testing.T, budget *client.Budget, answers ...func(w http.ResponseWriter)) ([]time.Duration, error) {
+	t.Helper()
+	s := qenv.New(quietChooser())
+	defer s.Close()
+	a := apiApp()
+	var at []time.Duration
+	var srv *qhttp.Server
+	node := s.Process("node", true, func(ctx context.Context) {
+		srv.Handle(ctx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			at = append(at, s.Elapsed())
+			answers[min(len(at), len(answers))-1](w)
+		}))
+	})
+	srv = qhttp.NewServer(s, "api", node)
+	tr := qhttp.NewTransport(srv)
+	tr.Timeout = time.Second
+	c := &client.Client{App: a, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, Budget: budget}
+	var err error
+	s.Spawn("client", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Millisecond) // the server listening
+		err = c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"a"}`))
+	})
+	if rerr := s.Run(10 * time.Minute); rerr != nil {
+		t.Fatal(rerr)
+	}
+	return at, err
+}
+
+func quietChooser() qenv.Chooser {
+	c := qenv.NewSeeded(1)
+	c.Rates = qenv.NoFaults
+	return c
+}
+
+func status(code int, body string, header ...string) func(w http.ResponseWriter) {
+	return func(w http.ResponseWriter) {
+		for i := 0; i+1 < len(header); i += 2 {
+			w.Header().Set(header[i], header[i+1])
+		}
+		w.WriteHeader(code)
+		io.WriteString(w, body)
+	}
+}
+
+// The client's retries back off exponentially with jitter (RetryDelay
+// doubling, half of each wait drawn), wait at least a 503's Retry-After,
+// take a 5xx that is not grist's (a proxy's 502, 504 or bare 503) to a
+// command as an unknown outcome to send again under the key (it was a
+// final StatusError, a lost commit unretried), and stop at the retry
+// budget, leaving the call pending.
+func TestClientBackoffAndBudget(t *testing.T) {
+	ok := status(200, `{"pos":1,"events":[{"tenant":"t1","pos":1}]}`)
+	at, err := scripted(t, nil, status(502, "bad gateway"), status(504, "timeout"), status(503, "busy"), ok)
+	if err != nil || len(at) != 4 {
+		t.Fatalf("502, 504, a bare 503, then ok: %d requests, %v; want 4, the last answered", len(at), err)
+	}
+	for i, lo := range []time.Duration{50 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond} {
+		if gap := at[i+1] - at[i]; gap < lo || gap > 2*lo {
+			t.Errorf("retry %d after %v: want within [%v, %v] (100 ms doubling, half jittered)", i+1, gap, lo, 2*lo)
+		}
+	}
+	at, err = scripted(t, nil, status(503, `{"error":"x","retry":"unavailable"}`, "Retry-After", "1"), ok)
+	if err != nil || len(at) != 2 || at[1]-at[0] < time.Second {
+		t.Errorf("a 503 with Retry-After 1: requests at %v, %v; want the retry a second or more after", at, err)
+	}
+	at, err = scripted(t, &client.Budget{Ratio: 0, Max: 2}, status(502, "bad gateway"))
+	if len(at) != 3 || !errors.Is(err, grist.ErrOutcomeUnknown) || !strings.Contains(err.Error(), "budget") {
+		t.Errorf("502s for ever with a budget of 2: %d requests, %v; want 3, the outcome unknown, the budget named", len(at), err)
+	}
+	if _, err := scripted(t, nil, status(500, `{"error":"the decision failed"}`)); !errors.As(err, new(*client.StatusError)) {
+		t.Errorf("grist's 500: %v, want a final StatusError", err)
 	}
 }

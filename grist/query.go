@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
@@ -38,11 +39,11 @@ func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error),
 		opts: app.options("query", name, opts)}, f: f}
 	app.checkArgs("query", name, b.info.args)
 	b.info.run = func(ctx context.Context, s Store, env Envelope, raw json.RawMessage) (json.RawMessage, Position, error) {
-		var q Q
-		if err := json.Unmarshal(raw, &q); err != nil {
-			return nil, 0, fmt.Errorf("grist: query %s: arguments %s: %w", name, raw, err)
+		v, err := decodeArgs("query "+name, raw, b.info.args)
+		if err != nil {
+			return nil, 0, err
 		}
-		res, p, err := b.Run(ctx, s, env, q)
+		res, p, err := b.Run(ctx, s, env, v.Interface().(Q))
 		if err != nil {
 			return nil, p, err
 		}
@@ -59,13 +60,22 @@ func (b *QueryBlock[Q, R]) Name() string { return b.info.name }
 // Run answers the query for env's tenant at its head, and records its
 // step: its arguments, the position read through, its result. Transient
 // store errors are retried (TransientTries, with backoff), then
-// answered with ErrUnavailable.
+// answered with ErrUnavailable. Arguments grist cannot store or record
+// alike on every tier are ErrBadArgs (Execute's), a result it cannot
+// record (an integer past int64) the query's error.
 func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) (R, Position, error) {
 	var zero R
 	if err := checkEnvelope(env); err != nil {
 		return zero, 0, fmt.Errorf("grist: query %s: %w", b.info.name, err)
 	}
+	if err := checkStrings(reflect.ValueOf(q), "argument"); err != nil {
+		return zero, 0, badArgs("query "+b.info.name, "%v", strings.TrimPrefix(err.Error(), "grist: "))
+	}
 	args, _ := json.Marshal(q)
+	argKV, err := rec.StepFields(b.info.args, args, "")
+	if err != nil {
+		return zero, 0, badArgs("query "+b.info.name, "%v", err)
+	}
 	for try := 1; ; try++ {
 		r := newReads(ctx, b.app, s, env.Tenant, env.ID)
 		res, err := b.f(r, q)
@@ -83,13 +93,19 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 			err = r.bad
 		}
 		r.Position()
-		kv := append(rec.StepFields(b.info.args, args, ""), "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
+		kv := append(append([]any{}, argKV...), "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
+		var obs []any
+		if err == nil {
+			body, _ := json.Marshal(res)
+			if obs, err = rec.StepFields(reflect.TypeFor[R](), body, "obs."); err != nil {
+				err = fmt.Errorf("grist: query %s: its result: %w", b.info.name, err)
+			}
+		}
 		if err != nil {
 			record(ctx, s, env.Tenant, b.info.quint, err, kv...)
 			return zero, r.pos, err
 		}
-		body, _ := json.Marshal(res)
-		record(ctx, s, env.Tenant, b.info.quint, nil, append(kv, rec.StepFields(reflect.TypeFor[R](), body, "obs.")...)...)
+		record(ctx, s, env.Tenant, b.info.quint, nil, append(kv, obs...)...)
 		return res, r.pos, nil
 	}
 }

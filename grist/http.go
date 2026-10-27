@@ -1,7 +1,6 @@
 package grist
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,17 +9,18 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
 
-// ErrDenied is a command or query an adapter refused to serve: the
-// block is Internal, or its policy (Authorize) does not admit the
-// request's actor in its tenant. Nothing ran, so nothing is recorded at
-// the store; a client that records its calls records the refusal
-// ("denied").
-var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor, or the block is Internal")
+// ErrDenied is a command or query an adapter refused to serve: its
+// policy (Authorize) does not admit the request's actor in its tenant
+// (an Internal block is not served at all: the API answers 404, as for
+// an unknown one). Nothing ran, so nothing is recorded at the store; a
+// client that records its calls records the refusal ("denied").
+var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor")
 
 type actorKey struct{}
 
@@ -37,7 +37,8 @@ func WithActor(ctx context.Context, actor string) context.Context {
 func ActorOf(ctx context.Context) string { a, _ := ctx.Value(actorKey{}).(string); return a }
 
 // A ServeOption configures NewHandler and Main (Middleware,
-// ActorFromHeader, DevEndpoints). The zero ServeOption changes nothing.
+// ActorFromHeader, DevEndpoints, Dependencies, MaxBody). The zero
+// ServeOption changes nothing.
 type ServeOption struct{ apply func(*serveConfig) }
 
 type serveConfig struct {
@@ -45,6 +46,13 @@ type serveConfig struct {
 	actorHeader string
 	catalog     bool
 	deps        func(context.Context) context.Context
+	maxBody     int64
+}
+
+// MaxBody bounds a command's body at n bytes (DefaultMaxBody if not
+// given): a larger one is answered 413 before anything runs.
+func MaxBody(n int64) ServeOption {
+	return ServeOption{apply: func(c *serveConfig) { c.maxBody = n }}
 }
 
 // Dependencies attaches the application's dependencies (a mailer, a
@@ -64,8 +72,12 @@ func Middleware(m func(http.Handler) http.Handler) ServeOption {
 
 // ActorFromHeader takes the request's actor from header name, as set by
 // an authenticating proxy in front of the server (or a test's client:
-// client.Client's ActorHeader). Never expose such a server directly: any
-// client could name any actor.
+// client.Client's ActorHeader), for a request the application's
+// authentication left without one: an actor the request's context
+// already carries (WithActor, set by a Middleware) wins, and the header
+// is then ignored, so a client cannot name itself another actor than the
+// one its credentials gave it. Never expose such a server directly: a
+// request no middleware authenticates could name any actor.
 func ActorFromHeader(name string) ServeOption {
 	return ServeOption{apply: func(c *serveConfig) { c.actorHeader = name }}
 }
@@ -82,8 +94,13 @@ const (
 	// unknown (grist.ErrOutcomeUnknown) or nothing committed
 	// (ErrUnavailable); retry under the same Idempotency-Key.
 	RetryAfter = 1
-	// MaxBody is the largest command body the API reads.
-	MaxBody = 1 << 20
+	// DefaultMaxBody is the largest command body the API reads unless
+	// MaxBody says otherwise: a larger one is answered 413.
+	DefaultMaxBody = 1 << 20
+	// ReplayedHeader is the header ("true") of a command's answer taken
+	// from its key's marker before deciding: an earlier request under the
+	// key was answered, and this one only repeats its answer.
+	ReplayedHeader = "Idempotent-Replayed"
 )
 
 // NewHandler is app's HTTP/JSON API on s (net/http only), a plain
@@ -94,17 +111,23 @@ const (
 //	GET  /catalog                      with DevEndpoints
 //
 // A command answers 200 with its receipt ({"pos", "events": [{"tenant",
-// "pos"}]}), the key's first answer on every retry; 422 with a
-// rejection's name ({"rejected": "name-taken"}, or
+// "pos"}]}), the key's first answer on every retry (with
+// Idempotent-Replayed: true when a request under the key was answered
+// before); 422 with a rejection's name ({"rejected": "name-taken"}, or
 // "idempotency-key-reused" for a key that names another command or
 // other arguments: the key's own answer stands); 409 on a conflict after
 // the condition's tries (also the key's final answer); 503 with
 // Retry-After when the outcome is unknown or nothing committed
 // ({"retry": "outcome-unknown" | "unavailable"}: send it again under the
-// same key); 400 without an Idempotency-Key or with arguments that do
-// not decode; 403 when denied; 404 for an unknown block or tenant; 500
-// for the decision's own error. A query answers 200 with {"result",
-// "pos"} (the position it read through), 422, 503 or 500 alike.
+// same key); 400 without an Idempotency-Key, with one grist refuses (too
+// long, text no store holds), or with arguments it refuses (ErrBadArgs:
+// not UTF-8, a field the type lacks, a required one missing or null,
+// text with a NUL byte, an integer past int64); 413 for a body past
+// MaxBody; 403 when the policy refuses the actor; 404 for an unknown
+// block, an Internal one (as unknown: an internal block's name is not
+// told) or an unknown tenant; 500 for the decision's own error. A query
+// answers 200 with {"result", "pos"} (the position it read through),
+// 400, 422, 503 or 500 alike.
 //
 // Every block is denied by default: NewHandler refuses an App with a
 // command or query that declares neither Authorize nor Internal, and
@@ -139,7 +162,10 @@ func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error) {
 		return nil, fmt.Errorf("grist: %s cannot be served: %v declare neither Authorize nor Internal, and every block is denied by default: "+
 			"give each grist.Authorize(policy) (grist.Authenticated, grist.Actors(...)) or grist.Internal()", app.Name, open)
 	}
-	api := &api{app: app, s: s}
+	api := &api{app: app, s: s, maxBody: cfg.maxBody}
+	if api.maxBody <= 0 {
+		api.maxBody = DefaultMaxBody
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /t/{tenant}/commands/{name}", api.command)
 	mux.HandleFunc("GET /t/{tenant}/queries/{name}", api.query)
@@ -156,7 +182,10 @@ func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error) {
 	if name := cfg.actorHeader; name != "" {
 		inner := h
 		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if a := r.Header.Get(name); a != "" {
+			// the application's authentication (a Middleware, outside
+			// this) wins: the header names only an unauthenticated
+			// request's actor
+			if a := r.Header.Get(name); a != "" && ActorOf(r.Context()) == "" {
 				r = r.WithContext(WithActor(r.Context(), a))
 			}
 			inner.ServeHTTP(w, r)
@@ -169,8 +198,9 @@ func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error) {
 }
 
 type api struct {
-	app *App
-	s   Store
+	app     *App
+	s       Store
+	maxBody int64
 }
 
 // apiError is an error's body: its text, a refusal's name, or how to
@@ -215,11 +245,28 @@ func fail(w http.ResponseWriter, code int, format string, args ...any) {
 // allowed reports whether o's block is served to the request's actor in
 // tenant, answering 403 if not.
 func allowed(w http.ResponseWriter, r *http.Request, o options, tenant string) bool {
-	if o.internal || o.authorize == nil || !o.authorize(ActorOf(r.Context()), tenant) {
+	if o.authorize == nil || !o.authorize(ActorOf(r.Context()), tenant) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: ErrDenied.Error(), Rejected: "denied"})
 		return false
 	}
 	return true
+}
+
+// unknown answers 404 for a block the API does not serve: no such block,
+// or an Internal one, alike (an internal block's existence is not told),
+// listing the blocks it serves.
+func (a *api) unknown(w http.ResponseWriter, kind, name string) {
+	served := []string{}
+	names, opts := a.app.Commands(), func(n string) options { return a.app.commands[n].opts }
+	if kind == "query" {
+		names, opts = a.app.Queries(), func(n string) options { return a.app.queries[n].opts }
+	}
+	for _, n := range names {
+		if !opts(n).internal {
+			served = append(served, n)
+		}
+	}
+	fail(w, http.StatusNotFound, "grist: %s serves no %s %q (it serves %v)", a.app.Name, kind, name, served)
 }
 
 // answer writes err's response (nil: none written, the caller writes
@@ -239,6 +286,8 @@ func answer(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error(), Retry: retryUnavailable})
 	case errors.Is(err, store.ErrUnknownTenant):
 		writeJSON(w, http.StatusNotFound, apiError{Error: err.Error()})
+	case errors.Is(err, ErrBadArgs):
+		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 	default:
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 	}
@@ -247,8 +296,8 @@ func answer(w http.ResponseWriter, err error) {
 func (a *api) command(w http.ResponseWriter, r *http.Request) {
 	tenant, name := r.PathValue("tenant"), r.PathValue("name")
 	c := a.app.commands[name]
-	if c == nil {
-		fail(w, http.StatusNotFound, "grist: %s has no command %q (it has %v)", a.app.Name, name, a.app.Commands())
+	if c == nil || c.opts.internal {
+		a.unknown(w, "command", name)
 		return
 	}
 	if err := CheckTenant(tenant); err != nil {
@@ -267,16 +316,20 @@ func (a *api) command(w http.ResponseWriter, r *http.Request) {
 	if !allowed(w, r, c.opts, tenant) {
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
-	if err != nil {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, a.maxBody))
+	var tooLarge *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooLarge):
+		fail(w, http.StatusRequestEntityTooLarge, "grist: command %s: a body past %d bytes: send less (the server's MaxBody)", name, tooLarge.Limit)
+		return
+	case err != nil:
 		fail(w, http.StatusBadRequest, "grist: command %s: the body: %v", name, err)
 		return
 	}
-	if err := decodeStrict(body, c.args); err != nil {
-		fail(w, http.StatusBadRequest, "grist: command %s: arguments %s: %v (want %s)", name, body, err, schemaText(c.args))
-		return
+	rc, replayed, err := c.run(r.Context(), a.s, Envelope{ID: key, Tenant: tenant, Actor: ActorOf(r.Context())}, body)
+	if replayed {
+		w.Header().Set(ReplayedHeader, "true")
 	}
-	rc, err := a.app.Execute(r.Context(), a.s, Envelope{ID: key, Tenant: tenant, Actor: ActorOf(r.Context())}, name, body)
 	if err != nil {
 		answer(w, err)
 		return
@@ -291,8 +344,8 @@ func (a *api) command(w http.ResponseWriter, r *http.Request) {
 func (a *api) query(w http.ResponseWriter, r *http.Request) {
 	tenant, name := r.PathValue("tenant"), r.PathValue("name")
 	q := a.app.queries[name]
-	if q == nil {
-		fail(w, http.StatusNotFound, "grist: %s has no query %q (it has %v)", a.app.Name, name, a.app.Queries())
+	if q == nil || q.opts.internal {
+		a.unknown(w, "query", name)
 		return
 	}
 	if err := CheckTenant(tenant); err != nil {
@@ -318,25 +371,13 @@ func (a *api) query(w http.ResponseWriter, r *http.Request) {
 	}{res, pos})
 }
 
-// decodeStrict decodes body as a value of typ, refusing a field typ does
-// not have (a misspelled argument would otherwise be its zero value).
-func decodeStrict(body []byte, typ reflect.Type) error {
-	d := json.NewDecoder(bytes.NewReader(body))
-	d.DisallowUnknownFields()
-	if err := d.Decode(reflect.New(typ).Interface()); err != nil {
-		return err
-	}
-	if d.More() {
-		return errors.New("more than one JSON value")
-	}
-	return nil
-}
-
 // QueryArgs are a query's URL parameters as its JSON arguments of type
-// typ: each parameter a field by its JSON name, a string field's value as
-// it is, any other's parsed as JSON (by=3, open=true, tags=["a","b"]).
-// A parameter typ has no field of, or one given twice, is an error; a
-// field not given is its zero value.
+// typ: each parameter a field by its JSON name, a string field's value
+// (or a pointer to a string's) as it is, any other's parsed as JSON
+// (by=3, open=true, tags=["a","b"]). A parameter typ has no field of, or
+// one given twice, is an error, and so are arguments decodeArgs refuses:
+// every field is required but a pointer's, which a parameter left out
+// leaves nil. client.Params is its inverse.
 func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error) {
 	obj := map[string]json.RawMessage{}
 	fields := map[string]reflect.Type{}
@@ -355,7 +396,14 @@ func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, e
 		if len(vs) != 1 {
 			return nil, fmt.Errorf("parameter %q given %d times: give it once", k, len(vs))
 		}
-		if ft.Kind() == reflect.String {
+		if !utf8.ValidString(vs[0]) {
+			return nil, badArgs("query", "parameter %q is not valid UTF-8, which JSON would rewrite silently: send UTF-8 (encode binary data, e.g. as hex or base64)", k)
+		}
+		elem := ft
+		for elem.Kind() == reflect.Pointer {
+			elem = elem.Elem()
+		}
+		if elem.Kind() == reflect.String {
 			b, _ := json.Marshal(vs[0])
 			obj[k] = b
 			continue
@@ -367,8 +415,8 @@ func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, e
 	}
 	b, _ := json.Marshal(obj)
 	if typ != nil {
-		if err := decodeStrict(b, typ); err != nil {
-			return nil, fmt.Errorf("arguments %s: %v (want %s)", b, err, schemaText(typ))
+		if _, err := decodeArgs("query", b, typ); err != nil {
+			return nil, err
 		}
 	}
 	return b, nil

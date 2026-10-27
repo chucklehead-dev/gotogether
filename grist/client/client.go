@@ -17,16 +17,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/internal/calls"
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -35,11 +39,75 @@ const (
 	// DefaultMaxAttempts is how many requests Do sends for one call
 	// before leaving it pending.
 	DefaultMaxAttempts = 50
-	// DefaultRetryDelay is how long Do waits after a request that got no
-	// answer (a timeout, a refused or reset connection) before sending it
-	// again; after a 503, it waits the response's Retry-After.
+	// DefaultRetryDelay is the first retry's backoff: Do waits about it
+	// after a request that got no answer (a timeout, a refused or reset
+	// connection), doubling with every retry of the call up to
+	// DefaultMaxRetryDelay, jittered; after a 503 it waits at least the
+	// response's Retry-After.
 	DefaultRetryDelay = 100 * time.Millisecond
+	// DefaultMaxRetryDelay caps the backoff.
+	DefaultMaxRetryDelay = 5 * time.Second
 )
+
+// A Budget bounds a Client's retries, over all its calls: a token bucket
+// that every call fills by Ratio and every retry drains by one, holding
+// at most Max (and Max at the start). When it is empty a call is not
+// retried: it ends with its last error, a command's pending (its outcome
+// unknown). So a server that stops answering gets at most Ratio retries
+// per call beyond Max, not MaxAttempts per call: retries that multiply
+// the load of an overloaded server are what keep it from recovering
+// after the overload is gone (a metastable retry storm; examples/
+// retrystorm shows backoff alone keeping the storm and a budget ending
+// it). Safe for concurrent use.
+type Budget struct {
+	// Ratio is the retries one call earns (0.2: one retry per five calls).
+	Ratio float64
+	// Max is the most retries kept, and the bucket's start.
+	Max float64
+
+	mu      sync.Mutex
+	started bool
+	tokens  float64
+}
+
+// DefaultBudget is a Budget of Ratio 0.2 and Max 10 (Finagle's
+// RetryBudget's defaults, without its time-based reserve). A Client
+// without one makes one of these for itself.
+func DefaultBudget() *Budget { return &Budget{Ratio: 0.2, Max: 10} }
+
+func (b *Budget) fill() {
+	if !b.started {
+		b.started, b.tokens = true, b.Max
+	}
+}
+
+// deposit records a new call.
+func (b *Budget) deposit() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.fill()
+	b.tokens = min(b.Max, b.tokens+b.Ratio)
+}
+
+// withdraw takes a retry's token, false when the budget is spent.
+func (b *Budget) withdraw() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.fill()
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+// Tokens is the retries the budget holds now.
+func (b *Budget) Tokens() float64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.fill()
+	return b.tokens
+}
 
 // A Client calls one App's API at URL.
 type Client struct {
@@ -57,15 +125,27 @@ type Client struct {
 	// proxy that authenticates). Otherwise authenticate in HTTP's
 	// Transport.
 	ActorHeader string
-	// MaxAttempts and RetryDelay bound Do's retries (0: the defaults).
-	MaxAttempts int
-	RetryDelay  time.Duration
+	// MaxAttempts bounds Do's requests for one call; RetryDelay and
+	// MaxRetryDelay are its backoff's first wait and cap (0: the
+	// defaults).
+	MaxAttempts   int
+	RetryDelay    time.Duration
+	MaxRetryDelay time.Duration
+	// Budget bounds the retries of all of Do's calls (nil: a
+	// DefaultBudget of the Client's own, made at its first call).
+	Budget *Budget
+
+	once  sync.Once
+	calls atomic.Uint64 // Do's calls so far: each one's jitter is its own
 }
 
 // A StatusError is an answer the API gives for a request no retry
-// fixes: 400 (no Idempotency-Key, arguments that do not decode), 404 (an
-// unknown block or tenant), 500 (the decision's own error), or a code
-// grist does not send.
+// fixes: 400 (no Idempotency-Key, arguments grist refuses), 404 (an
+// unknown block or tenant), 413 (a body too large), 500 (the decision's
+// own error, in grist's body), or a 4xx grist does not send. A 5xx
+// without grist's body (a proxy's 502 or 504, a load balancer's 503) is
+// no StatusError: no grist answered, so a command's outcome is unknown
+// and Do sends it again under its key.
 type StatusError struct {
 	Code int
 	// Message is the body's error text.
@@ -105,6 +185,38 @@ func (c *Client) delay() time.Duration {
 	return DefaultRetryDelay
 }
 
+// backoff is the wait before retry n (1-based) of a call whose jitter
+// seed is seed, at least floor (a 503's Retry-After): RetryDelay doubling
+// per retry up to MaxRetryDelay, of which a uniform part is jittered
+// ("equal jitter": half kept, half drawn), so the retries of calls that
+// failed together do not come back together. The draw is a hash of the
+// call and the retry, not a random source: a simulation's run stays a
+// function of its choices, and calls still spread.
+func (c *Client) backoff(n int, seed uint64, floor time.Duration) time.Duration {
+	limit := c.MaxRetryDelay
+	if limit <= 0 {
+		limit = DefaultMaxRetryDelay
+	}
+	d := c.delay() << min(n-1, 20)
+	if d > limit || d <= 0 {
+		d = limit
+	}
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%d/%d", seed, n)
+	half := d / 2
+	d = half + time.Duration(h.Sum64()%uint64(half+1))
+	return max(d, floor)
+}
+
+func (c *Client) budget() *Budget {
+	c.once.Do(func() {
+		if c.Budget == nil {
+			c.Budget = DefaultBudget()
+		}
+	})
+	return c.Budget
+}
+
 // send sends one request and reads its answer.
 func (c *Client) send(ctx context.Context, env grist.Envelope, req *http.Request) (*http.Response, []byte, error) {
 	if c.ActorHeader != "" && env.Actor != "" {
@@ -112,22 +224,31 @@ func (c *Client) send(ctx context.Context, env grist.Envelope, req *http.Request
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, nil, &retryable{err: err, after: c.delay()}
+		return nil, nil, &retryable{err: err}
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, nil, &retryable{err: err, after: c.delay()}
+		return nil, nil, &retryable{err: err}
 	}
 	return resp, b, nil
 }
 
-// refusal is the error of a non-200 answer.
-func (c *Client) refusal(resp *http.Response, b []byte) error {
+// refusal is the error of a non-200 answer to a command (or a query).
+func (c *Client) refusal(resp *http.Response, b []byte, query bool) error {
 	var e body
-	json.Unmarshal(b, &e)
-	if e.Error == "" {
+	gristBody := json.Unmarshal(b, &e) == nil && e.Error != ""
+	if !gristBody {
 		e.Error = strings.TrimSpace(string(b))
+	}
+	if resp.StatusCode >= 500 && !gristBody || resp.StatusCode == http.StatusServiceUnavailable && e.Retry == "" {
+		// no grist answered (a proxy's 502 or 504, a load balancer's 503):
+		// the request may have reached one that committed it
+		base := grist.ErrOutcomeUnknown
+		if query {
+			base = grist.ErrUnavailable
+		}
+		return &retryable{err: fmt.Errorf("%w (%d without grist's answer: %.200s)", base, resp.StatusCode, e.Error), after: retryAfter(resp)}
 	}
 	switch resp.StatusCode {
 	case http.StatusUnprocessableEntity:
@@ -139,17 +260,22 @@ func (c *Client) refusal(resp *http.Response, b []byte) error {
 	case http.StatusForbidden:
 		return grist.ErrDenied
 	case http.StatusServiceUnavailable:
-		after := c.delay()
-		if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s >= 0 {
-			after = time.Duration(s) * time.Second
-		}
 		base := grist.ErrUnavailable
 		if e.Retry == "outcome-unknown" {
 			base = grist.ErrOutcomeUnknown
 		}
-		return &retryable{err: fmt.Errorf("%w (the server: %s)", base, e.Error), after: after}
+		return &retryable{err: fmt.Errorf("%w (the server: %s)", base, e.Error), after: retryAfter(resp)}
 	}
 	return &StatusError{Code: resp.StatusCode, Message: e.Error}
+}
+
+// retryAfter is resp's Retry-After in seconds, 0 if none: the least a
+// retry waits.
+func retryAfter(resp *http.Response) time.Duration {
+	if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s >= 0 {
+		return time.Duration(s) * time.Second
+	}
+	return 0
 }
 
 func (c *Client) path(kind, tenant, name string) string {
@@ -160,9 +286,10 @@ func (c *Client) path(kind, tenant, name string) string {
 // env.ID as its Idempotency-Key. It returns the receipt, or the API's
 // refusal: a *grist.Rejected (grist.ErrKeyReused among them),
 // grist.ErrConflict, grist.ErrDenied, an error that is
-// grist.ErrOutcomeUnknown (a 503 saying so, or no answer at all: the
-// request may have committed) or grist.ErrUnavailable (send it again
-// under the same id), or a *StatusError.
+// grist.ErrOutcomeUnknown (a 503 saying so, no answer at all, or a 5xx
+// that is not grist's: the request may have committed) or
+// grist.ErrUnavailable (send it again under the same id), or a
+// *StatusError.
 func (c *Client) Command(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (grist.Receipt, error) {
 	if len(args) == 0 {
 		args = json.RawMessage("{}")
@@ -176,10 +303,10 @@ func (c *Client) Command(ctx context.Context, env grist.Envelope, name string, a
 	resp, b, err := c.send(ctx, env, req)
 	if err != nil {
 		// no answer: the request may have been processed
-		return grist.Receipt{}, &retryable{err: fmt.Errorf("%w: %w", grist.ErrOutcomeUnknown, err), after: c.delay()}
+		return grist.Receipt{}, &retryable{err: fmt.Errorf("%w: %w", grist.ErrOutcomeUnknown, err)}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return grist.Receipt{}, c.refusal(resp, b)
+		return grist.Receipt{}, c.refusal(resp, b, false)
 	}
 	var r struct {
 		Pos    grist.Position `json:"pos"`
@@ -217,10 +344,10 @@ func (c *Client) Query(ctx context.Context, env grist.Envelope, name string, arg
 	}
 	resp, b, err := c.send(ctx, env, req)
 	if err != nil {
-		return nil, 0, &retryable{err: fmt.Errorf("%w: %w", grist.ErrUnavailable, err), after: c.delay()}
+		return nil, 0, &retryable{err: fmt.Errorf("%w: %w", grist.ErrUnavailable, err)}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, 0, c.refusal(resp, b)
+		return nil, 0, c.refusal(resp, b, true)
 	}
 	var r struct {
 		Result json.RawMessage `json:"result"`
@@ -233,7 +360,8 @@ func (c *Client) Query(ctx context.Context, env grist.Envelope, name string, arg
 }
 
 // Params are a query's JSON arguments (an object) as URL parameters: a
-// string field as it is, any other as its JSON text.
+// string field as it is, any other as its JSON text, a null one (a nil
+// pointer) left out. grist.QueryArgs is its inverse.
 func Params(args json.RawMessage) (url.Values, error) {
 	v := url.Values{}
 	if len(bytes.TrimSpace(args)) == 0 {
@@ -250,6 +378,9 @@ func Params(args json.RawMessage) (url.Values, error) {
 	sort.Strings(keys)
 	for _, k := range keys {
 		raw := bytes.TrimSpace(obj[k])
+		if string(raw) == "null" {
+			continue // QueryArgs leaves an absent pointer nil
+		}
 		var s string
 		if len(raw) > 0 && raw[0] == '"' && json.Unmarshal(raw, &s) == nil {
 			v.Set(k, s)
@@ -262,23 +393,35 @@ func Params(args json.RawMessage) (url.Values, error) {
 
 // Do calls command or query name for env and records the call as a
 // client's (actor <tenant>/clients: invoked before the first request,
-// done with the answer). A request that got no answer, or a 503, is sent
-// again under the same id (the same Idempotency-Key: a key's first
-// answer is final, so a retry of a committed command gets its receipt),
-// after RetryDelay or the 503's Retry-After, at most MaxAttempts times;
-// a call never answered stays pending. It returns nil, the refusal (a
-// *grist.Rejected, grist.ErrConflict, grist.ErrDenied), a *StatusError,
-// or, for a call never answered, the last try's error
-// (grist.ErrOutcomeUnknown or grist.ErrUnavailable).
+// done with the answer). A request that got no answer, a 503, or a 5xx
+// that is not grist's is sent again under the same id (the same
+// Idempotency-Key: a key's first answer is final, so a retry of a
+// committed command gets its receipt) after a jittered exponential
+// backoff (RetryDelay doubling to MaxRetryDelay; at least a 503's
+// Retry-After), at most MaxAttempts times and while the Budget holds a
+// retry; a call never answered stays pending. It returns nil, the
+// refusal (a *grist.Rejected, grist.ErrConflict, grist.ErrDenied), a
+// *StatusError, or, for a call never answered, the last try's error
+// (grist.ErrOutcomeUnknown or grist.ErrUnavailable). Arguments that are
+// not the block's (an integer past the model's) are refused before any
+// request, and not recorded.
 func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) error {
 	if c.App == nil {
 		return errors.New("grist/client: a Client without its App: set Client.App (its blocks' types are what the calls record)")
+	}
+	if len(args) > 0 {
+		if _, err := rec.StepFields(c.App.ArgsType(name), args, ""); err != nil {
+			return fmt.Errorf("grist/client: %s: %w: %w", name, grist.ErrBadArgs, err)
+		}
 	}
 	query := calls.IsQuery(c.App, name)
 	attempts := c.MaxAttempts
 	if attempts <= 0 {
 		attempts = DefaultMaxAttempts
 	}
+	budget := c.budget()
+	budget.deposit()
+	seed := c.calls.Add(1)
 	var last error
 	calls.Record(ctx, c.App, env, name, args, func() calls.Answer {
 		for try := 1; try <= attempts; try++ {
@@ -292,9 +435,14 @@ func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args j
 			if !errors.As(last, &rt) {
 				return answer(last, res)
 			}
-			if try < attempts {
-				qenv.Sleep(ctx, rt.after)
+			if try == attempts {
+				break
 			}
+			if !budget.withdraw() {
+				last = fmt.Errorf("%w (grist/client: the retry budget is spent: not retried)", last)
+				break
+			}
+			qenv.Sleep(ctx, c.backoff(try, seed, rt.after))
 		}
 		return calls.Answer{Pending: true}
 	})

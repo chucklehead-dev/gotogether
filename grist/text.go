@@ -55,11 +55,22 @@ func checkEnvelope(env Envelope) error {
 // takes one.
 const reservedID = "grist:"
 
+// MaxIDBytes is the longest command id (an Idempotency-Key) grist takes,
+// in bytes: an id is a marker's key and every event's cause, indexed by
+// every store, and PostgreSQL's btree refuses an index row past about
+// 2.7 kB (54000), which a retry would never fix. 255, as the IETF
+// Idempotency-Key draft's examples and most APIs bound it.
+const MaxIDBytes = 255
+
 // checkID is the error of a command id (an idempotency key) grist
-// refuses: text no store holds alike, or an id of grist's own.
+// refuses: text no store holds alike, longer than MaxIDBytes, or an id of
+// grist's own.
 func checkID(id string) error {
 	if err := checkText("id", id); err != nil {
 		return err
+	}
+	if len(id) > MaxIDBytes {
+		return fmt.Errorf("grist: an id of %d bytes, past grist's %d (MaxIDBytes): give a shorter id (a UUID, or a hash of a longer one)", len(id), MaxIDBytes)
 	}
 	if strings.HasPrefix(id, reservedID) {
 		return fmt.Errorf("grist: id %q starts with %q, which grist keeps for its own markers: choose another id", id, reservedID)

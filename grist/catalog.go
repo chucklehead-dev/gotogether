@@ -3,6 +3,7 @@ package grist
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 )
@@ -87,9 +88,12 @@ func nonNil(s []string) []string {
 }
 
 // Schema is typ's JSON Schema as grist derives it by reflection: an
-// object of its exported fields by JSON name (every one required, no
-// other allowed), strings, integers, booleans, arrays and maps of them;
-// nil for a nil type. A type that contains itself is {} where it recurs.
+// object of its exported fields by JSON name (no other allowed, every
+// one required but a pointer's), strings, integers, booleans, arrays and
+// maps of them; a pointer, a slice and a map also take null (Go's nil,
+// as encoding/json writes it); nil for a nil type. A type that contains
+// itself is {} where it recurs. The API enforces it (ErrBadArgs: a
+// required field missing, or null where its type takes none, is a 400).
 func Schema(typ reflect.Type) map[string]any { return schema(typ, map[reflect.Type]bool{}) }
 
 func schema(typ reflect.Type, seen map[reflect.Type]bool) map[string]any {
@@ -105,11 +109,13 @@ func schema(typ reflect.Type, seen map[reflect.Type]bool) map[string]any {
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return map[string]any{"type": "integer"}
 	case reflect.Pointer:
-		return schema(typ.Elem(), seen)
-	case reflect.Slice, reflect.Array:
+		return nullable(schema(typ.Elem(), seen))
+	case reflect.Slice:
+		return map[string]any{"type": []string{"array", "null"}, "items": schema(typ.Elem(), seen)}
+	case reflect.Array:
 		return map[string]any{"type": "array", "items": schema(typ.Elem(), seen)}
 	case reflect.Map:
-		return map[string]any{"type": "object", "additionalProperties": schema(typ.Elem(), seen)}
+		return map[string]any{"type": []string{"object", "null"}, "additionalProperties": schema(typ.Elem(), seen)}
 	case reflect.Struct:
 		if seen[typ] {
 			return map[string]any{}
@@ -124,11 +130,26 @@ func schema(typ reflect.Type, seen map[reflect.Type]bool) map[string]any {
 			}
 			n := rec.JSONName(f)
 			props[n] = schema(f.Type, seen)
-			required = append(required, n)
+			if f.Type.Kind() != reflect.Pointer {
+				required = append(required, n)
+			}
 		}
 		return map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false}
 	}
 	return map[string]any{}
+}
+
+// nullable is s also taking null.
+func nullable(s map[string]any) map[string]any {
+	switch t := s["type"].(type) {
+	case string:
+		s["type"] = []string{t, "null"}
+	case []string:
+		if !slices.Contains(t, "null") {
+			s["type"] = append(t, "null")
+		}
+	}
+	return s
 }
 
 // A CatalogProcessor is a registered processor.

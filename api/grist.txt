@@ -1,8 +1,12 @@
 == github.com/chucklehead-dev/gotogether/grist
 const AtLeastOnce Delivery = iota + 1
 const AtMostOnce Delivery = iota + 1 (spec 1 of its group)
-const MaxBody = 1 << 20
+const DefaultMaxBody = 1 << 20
+const FlushTimeout = 10 * time.Second
+const MaxIDBytes = 255
+const ReplayedHeader = "Idempotent-Replayed"
 const RetryAfter = 1
+const ShutdownTimeout = 10 * time.Second
 func ActorFromHeader(name string) ServeOption
 func ActorOf(ctx context.Context) string
 func Actors(names ...string) Policy
@@ -24,6 +28,7 @@ func Internal() Option
 func Keys(names ...string) KeyNames
 func Main(app *App, opts ...ServeOption)
 func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error
+func MaxBody(n int64) ServeOption
 func Middleware(m func(http.Handler) http.Handler) ServeOption
 func New(name string) *App
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
@@ -155,16 +160,23 @@ type TagPair = store.TagPair
 type UsageError struct
     field Msg string
     method (*UsageError) Error() string
+var ErrBadArgs = errors.New("grist: arguments refused")
 var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later under a new id")
-var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor, or the block is Internal")
+var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor")
 var ErrKeyReused = Rejection("idempotency-key-reused")
 var ErrOutcomeUnknown = errors.New("grist: the command's outcome is unknown (an append may have committed): retry it with the same id")
 var ErrUnavailable = errors.New("grist: the store kept failing before anything committed: retry later")
 
 == github.com/chucklehead-dev/gotogether/grist/client
 const DefaultMaxAttempts = 50
+const DefaultMaxRetryDelay = 5 * time.Second
 const DefaultRetryDelay = 100 * time.Millisecond
+func DefaultBudget() *Budget
 func Params(args json.RawMessage) (url.Values, error)
+type Budget struct
+    field Ratio float64
+    field Max float64
+    method (*Budget) Tokens() float64
 type Client struct
     field App *grist.App
     field URL string
@@ -172,6 +184,8 @@ type Client struct
     field ActorHeader string
     field MaxAttempts int
     field RetryDelay time.Duration
+    field MaxRetryDelay time.Duration
+    field Budget *Budget
     method (*Client) Command(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (grist.Receipt, error)
     method (*Client) Do(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) error
     method (*Client) Query(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (json.RawMessage, grist.Position, error)

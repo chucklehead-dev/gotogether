@@ -66,8 +66,10 @@ const mainUsage = `commands:
 //	           (sqlite:PATH, postgres:DSN), the node (App.Start: relay, pollers,
 //	           the tenant watcher) beside it, every step recorded to -steps
 //	           (qobs.FileSink, PerStep: a new file each time) for validation with
-//	           the app's bindings; until ctx ends, then a graceful shutdown that
-//	           records every committed step (Relay.Flush) before closing the file
+//	           the app's bindings; until ctx ends, then a graceful shutdown: the
+//	           server drains its requests (ShutdownTimeout) while the node keeps
+//	           running, then the node stops and the relay records every committed
+//	           step (Relay.Flush, FlushTimeout) before the file closes
 //
 // serve writes "<app> serving on http://ADDR" to stderr once it listens.
 func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error {
@@ -186,7 +188,12 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 			o.apply(&cfg)
 		}
 	}
-	nodeCtx, stopNode := context.WithCancel(ctx)
+	// the node outlives the signal: its processors, relay and in-flight
+	// effects keep running while the server drains its requests (whose
+	// commands they handle), and stop after it (stopNode below); a node
+	// stopped at the signal cancelled an at-most-once effect's ctx in
+	// flight, losing its outcome after the payment was made
+	nodeCtx, stopNode := context.WithCancel(context.WithoutCancel(ctx))
 	if cfg.deps != nil {
 		nodeCtx = cfg.deps(nodeCtx)
 	}
@@ -209,10 +216,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if err != nil {
 		return err
 	}
-	// requests run with the node's context (its recorder), so a query's
-	// step and a refusal's on-return step reach the same file
-	srv := &http.Server{Handler: h, BaseContext: func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
-		ReadHeaderTimeout: 10 * time.Second}
+	srv := newMainServer(ctx, h)
 	fmt.Fprintf(stderr, "%s serving on http://%s\n", app.Name, ln.Addr())
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }() //qenv:ok the real tier's server, outside any simulation
@@ -223,15 +227,40 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	}
 	// the shutdown's context keeps ctx's recorder (the flush below records
 	// into it) but not its cancellation
-	shut, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
+	shut, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownTimeout)
 	err = srv.Shutdown(shut)
+	cancel()
 	stopNode()
 	// every committed step into the file before it closes: a row the
 	// relay had not reached would otherwise be recorded only by the next
-	// node's relay, into its own file
-	if ferr := relay.Flush(shut); err == nil {
+	// node's relay, into its own file. Its own time: a shutdown that used
+	// its whole timeout draining slow requests leaves the flush its own
+	flush, cancelFlush := context.WithTimeout(context.WithoutCancel(ctx), FlushTimeout)
+	defer cancelFlush()
+	if ferr := relay.Flush(flush); err == nil {
 		err = ferr
 	}
 	return err
+}
+
+// Main's server's bounds: how long a graceful shutdown waits for the
+// requests in flight, and then how long the relay's flush may take.
+const (
+	ShutdownTimeout = 10 * time.Second
+	FlushTimeout    = 10 * time.Second
+)
+
+// newMainServer is serve's http.Server for h: requests run with ctx's
+// values (its recorder, so a query's step and a refusal's on-return step
+// reach the node's file) but not its cancellation, and every phase of a
+// connection is bounded, so a slow or idle client holds no connection
+// for ever: its headers in 10 s, its whole request in 1 m (a body
+// trickled past it is cut), its answer written within 2 m of the
+// request's start (a command's transient retries take well under it), an
+// idle keep-alive connection kept 2 m, headers at most 64 KiB (the body
+// is the handler's MaxBody).
+func newMainServer(ctx context.Context, h http.Handler) *http.Server {
+	return &http.Server{Handler: h, BaseContext: func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
+		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, WriteTimeout: 2 * time.Minute,
+		IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 64 << 10}
 }

@@ -4,7 +4,8 @@ Status: slice 1 built (grist/, examples/counters; §0.1 says what
 building it changed here, §0.2 what its review changed); slice 2's SQL
 store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
 on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
-`grist.Main` built (§0.5), `AtMostOnce` built (§0.6), its generator and
+`grist.Main` built (§0.5), `AtMostOnce` built (§0.6), their review's
+fixes (§0.7), its generator and
 gristflow design, as is slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -483,12 +484,15 @@ stated where it stands below.
   the marker). A rejection is **422** with its name; a reused key is
   **422** `idempotency-key-reused` too (the IETF Idempotency-Key draft's
   code for a key sent with another payload; the key's own answer
-  stands); a conflict after the tries **409**; `ErrOutcomeUnknown` and
+  stands; §0.7: the hash is of the arguments' canonical value); a
+  conflict after the tries **409**; `ErrOutcomeUnknown` and
   `ErrUnavailable` **503** with `Retry-After: 1` and `{"retry":
   "outcome-unknown" | "unavailable"}`, to be sent again under the same
   key; arguments that do not decode (a misspelled field included: the
-  body is decoded strictly) 400; an unknown block or tenant 404; the
-  decision's own error 500.
+  body is decoded strictly; §0.7: a required field missing, invalid
+  UTF-8, a NUL byte, an integer past int64 too) 400; a body past
+  `MaxBody` 413 (§0.7); an unknown block or tenant 404 (an Internal
+  block too, §0.7); the decision's own error 500.
 - **Deny by default, at the adapter** (§4.3): one `grist.Option`,
   `Authorize(Policy)` (a `func(actor, tenant string) bool`; policies
   `Authenticated`, `Actors(...)`) or `Internal()`, on commands and
@@ -498,7 +502,8 @@ stated where it stands below.
   tests call blocks directly. A refused request is 403 (`ErrDenied`).
   The actor is the request context's (`WithActor`), set by the
   application's authentication (`Middleware`) or, behind an
-  authenticating proxy and in tests, `ActorFromHeader`.
+  authenticating proxy and in tests, `ActorFromHeader` (§0.7: only for
+  a request the middleware left without an actor).
 - **A denial records nothing at the store.** The note had it a refused
   step (`outcome: denied`); but nothing ran, nothing was read and
   nothing committed, and the server records only what its blocks do
@@ -512,7 +517,9 @@ stated where it stands below.
   most `MaxAttempts`, then pending), one recording with gristsim's
   (`grist/internal/calls`). A request that got no answer is
   `ErrOutcomeUnknown` for a command (it may have committed),
-  `ErrUnavailable` for a query.
+  `ErrUnavailable` for a query (§0.7: retries back off, jittered,
+  within a retry budget, and a 5xx that is not grist's is an unknown
+  outcome too).
 - **gristsim's HTTP tier** (`Config.HTTP`): the node serves
   `NewHandler` on a `qhttp.Server` named `api` from its start function
   (every incarnation listens again), the clients are `client.Client`s
@@ -606,6 +613,117 @@ stated where it stands below.
   its model and rejected by a test-only exactly-once val. The mutant
   runs in full mode (its claim repeats `TestPayoutAtMostOnce`'s and
   grist's mechanism; building its binary is most of its cost).
+
+## 0.7 What the review of slice 2's second part changed
+
+A review of the HTTP API, grist/client, gristsim's HTTP tier,
+`grist.Main` and `AtMostOnce` found these; each is fixed with a test
+that fails without the fix (ablated before committing), and stated where
+it stands below (§0.5 and §0.6 point here where it replaces them).
+
+- **The application's authentication wins over `ActorFromHeader`.** The
+  header's actor replaced the context's, so a request a middleware
+  authenticated as a viewer that named itself an editor in the header
+  was an editor's. The header now names the actor only of a request the
+  context carries none for (`ActorOf` empty): a proxy that
+  authenticates sets it, and a middleware's actor is never overridden
+  (`TestActorHeaderDoesNotOverride`). Refusing both options together was
+  the alternative; a middleware is also logging and limits, so the
+  precedence is stated instead.
+- **Main drains before the node stops.** The node's context was the
+  signal's, so at SIGTERM the processors and the relay stopped while
+  the server still answered: an at-most-once effect in flight had its
+  context cancelled and its outcome never appended (a payment taken,
+  recorded nowhere). The node now runs on `context.WithoutCancel` of the
+  signal's context and is cancelled after `Shutdown` returns
+  (`ShutdownTimeout`, 10 s), and the relay's flush has its own
+  `FlushTimeout` (it shared the shutdown's 5 s, which slow requests
+  could use up). `TestMainShutdownDrains`: an effect in flight at the
+  signal while a client trickles a body across it runs to its end with
+  its context live, its outcome is in the steps file, the trickled
+  request is answered. An effect longer than the drain is still
+  cancelled when the node stops.
+- **Main's server bounds every phase** (`ReadHeaderTimeout` 10 s,
+  `ReadTimeout` 1 m, `WriteTimeout` 2 m, `IdleTimeout` 2 m,
+  `MaxHeaderBytes` 64 KiB; it set only the first), and a command's body
+  bound is a `ServeOption`, `MaxBody(n)` (`DefaultMaxBody`, 1 MiB; was
+  the constant `MaxBody`): a larger body is **413**, was 400.
+- **Arguments are decoded exactly, and refused as the client's error.**
+  A step's fields were decoded through `float64`: an integer past 2^53
+  was recorded rounded, `MaxInt64` as `MinInt64`, while the events
+  decoded exactly. `rec.StepFields` now decodes into the block's type
+  (integers exact; a field the body names in another case, which
+  encoding/json takes, is recorded by its JSON name: the client's steps
+  lost it, recording from the raw body) and refuses an unsigned value
+  past int64 with the fix. Every adapter path decodes through
+  `decodeArgs`: valid UTF-8 (encoding/json rewrote invalid UTF-8 into
+  U+FFFD silently), strictly, **every field required but a pointer's**
+  (a missing field and a `null` body decided on the zero value while the
+  catalog's schema said required: the schema is now enforced, and says
+  a pointer's field optional and a pointer, slice or map nullable), and
+  every string text a store holds (a NUL byte in an argument a decision
+  read as a tag was the decision's error, a 500). Its errors are
+  `ErrBadArgs`, a **400**; typed `Execute` and `QueryBlock.Run` refuse
+  the same before anything runs (`TestAPIRefusesBadArgs`,
+  `TestStepFieldsExact`, internal/rec's `TestStepFields`).
+- **A retry across a deploy is the same command.** The marker's hash
+  covered the re-encoded typed arguments, so a field added to the
+  command's struct between a try and its retry (its zero in the retry's
+  encoding) made the retry `idempotency-key-reused`. The hash now covers
+  the arguments' value, canonical: members sorted, every zero-valued
+  member left out at every depth (`canonicalArgs`), so a field added
+  with a zero default or fields reordered keep the key's answer, while a
+  retry that sets the new field, or renames one, is other arguments (a
+  reused key). Hashing the body as received was the alternative; it
+  would make the in-process path (typed arguments, every field encoded)
+  and the API's disagree, and a client that adds `"note": ""` another
+  command. A change of meaning under the same fields is the command's
+  version's to state (`TestRetryAcrossDeploy`). Markers written before
+  this change hash otherwise: a retry in flight across the upgrade is a
+  reused key (pre-release, no store to migrate).
+- **Query parameters**: `QueryArgs` takes a pointer to a string as a
+  string (`?name=a` for a `*string` was "no JSON value", 400), leaves an
+  absent pointer nil, and refuses a parameter that is not UTF-8;
+  `client.Params` leaves a null (nil pointer) out, and the two are each
+  other's inverse (`TestQueryArgsParams`).
+- **An Internal block is 404, as an unknown one**, and a 404 lists only
+  the blocks the API serves: a 403 for an internal block, and the
+  unknown block's list of every command, told a client the internal
+  names.
+- **Ids are bounded**: `MaxIDBytes` (255) in `checkID`, so an
+  `Idempotency-Key` past it is a 400; a longer one reached PostgreSQL's
+  btree limit (54000), which sqlstore classed transient (retried for
+  ever): class 54 is now permanent.
+- **`Idempotent-Replayed: true`** (`ReplayedHeader`) marks a command's
+  answer taken from its key's marker before deciding (an earlier request
+  was answered; `TestAPIReplayedHeader`), receipts and refusals alike.
+- **grist/client backs off, within a budget, and reads a foreign 5xx as
+  an unknown outcome.** Its retries waited a fixed `RetryDelay` (or the
+  503's `Retry-After`) up to 50 times per call, so a server that stopped
+  answering met every client's every call, retried at once, for ever: a
+  retry storm (examples/retrystorm: retries that multiply an overloaded
+  server's load keep it from recovering after the overload is gone, and
+  qmeta's chain and the load simulation agree that backoff alone keeps
+  the storm while a retry budget ends it). A retry now waits an
+  exponential backoff (`RetryDelay` doubling to `MaxRetryDelay`, 5 s;
+  "equal jitter", half of each wait drawn from a hash of the call and
+  the retry, so a simulation stays a function of its choices), at least
+  a 503's `Retry-After`, and only while the Client's `Budget` (a token
+  bucket every call fills by `Ratio`, 0.2, holding at most `Max`, 10:
+  Finagle's defaults without its time-based reserve) holds a retry; a
+  call the budget refuses ends with its last error, a command's pending.
+  A 5xx without grist's body (a proxy's 502 or 504, a load balancer's
+  bare 503) was a final `StatusError`, so a command whose answer a proxy
+  lost was told failed: it is now an unknown outcome, sent again under
+  its key (a query's: unavailable). `TestClientBackoffAndBudget`.
+- **The real tier exercises the same-key retry.** `TestRealHTTP` lost no
+  answer, so its clients never retried a command under its key. Its
+  server now loses every fifth command's answer after serving it (the
+  connection closed without a response); the clients retry under the
+  key, the marker answers (`Idempotent-Replayed`, counted: the test
+  fails if none was replayed), and both bindings and the answers' check
+  judge the run. With the client retrying under another key, the
+  answers' check fails (the store recorded no step of the client's id).
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -1523,6 +1641,7 @@ block that has neither (§0.5: `App.Verify` does not, for in-process
 callers). The check is in the adapters (as grain's), so a `Dispatch` is
 not subject to a user's roles. A denial is a 403 that records nothing
 at the store (nothing ran); its client records the outcome `denied`.
+An Internal block is answered 404, as an unknown one (§0.7).
 
 ## 5. The API layer and Datastar
 
@@ -1533,9 +1652,11 @@ result (`{"pos", "events": [{"tenant", "pos"}]}`, on every retry of the
 key), 422 with a rejection's name (or `idempotency-key-reused`), 409 on
 conflict after the tries, 403 when denied, 503 with `Retry-After` when
 the outcome is unknown or nothing committed (retry under the same key;
-later, when the tenant's lease is elsewhere), 400 for arguments that do
-not decode, 404 for an unknown block or tenant, 500 for the decision's
-error. `GET /t/{tenant}/queries/{name}?field=value` returns `{"result",
+later, when the tenant's lease is elsewhere), 400 for arguments grist
+refuses (`ErrBadArgs`) or a key it refuses, 413 for a body past
+`MaxBody`, 404 for an unknown or Internal block or an unknown tenant,
+500 for the decision's error; a retry answered from the key's marker
+carries `Idempotent-Replayed: true` (§0.7). `GET /t/{tenant}/queries/{name}?field=value` returns `{"result",
 "pos"}`, the position read through; `GET /catalog`, behind
 `grist.DevEndpoints`, the registry. Authentication is the application's
 middleware (`grist.WithActor`; `grist.Middleware`, or
