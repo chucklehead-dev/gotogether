@@ -39,7 +39,7 @@ of building it as a newcomer to grist.
 | `TestReceiptOnce` | a scripted crash just after a receipt's mail, before its checkpoint | nothing: `Conforms` (the mail sent again, the mailer replaying its first answer), `All(Settles)`, the crash reached |
 | `TestMutant` (`noDedupe`) | the same, a mailer double sending every try | `All(Rejects("mailerSendServed"))`: a second served record of one key, which the generated `mailerSendAdmits` refuses (`Send` is `Keyed`; no rule written by hand) |
 | `TestMutant` (`wrongReceipt`) | borrows, no faults | `All(Rejects("mailerSendServed"))`: a receipt naming no borrow (member and book swapped), refused where the mailer sends it (its request not `receiptsMailerSend`'s for its trigger), the first record of it |
-| `TestRealHTTP` | the real tier: SQLite, real HTTP, the mailer's default double in process (`grist.Local`), every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |
+| `TestRealHTTP` | the real tier: SQLite, real HTTP, the mailer's default double in process (`TierConfig.Local`: one `grist.Local` for the tier), every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |
 | `TestGenerated` | the generated files against the catalog | a block changed without regenerating |
 
 ```sh

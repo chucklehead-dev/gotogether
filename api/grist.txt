@@ -1,6 +1,8 @@
 == github.com/chucklehead-dev/gotogether/grist
 const AtLeastOnce Delivery = iota + 1
 const AtMostOnce Delivery = iota + 1 (spec 1 of its group)
+const CallTimeout = 10 * time.Second
+const CauseHeader = "Grist-Cause"
 const DefaultMaxBody = 1 << 20
 const FlushTimeout = 10 * time.Second
 const MaxIDBytes = 255
@@ -54,6 +56,7 @@ func NewSite[T any](app *App, name string) *Site[T]
 func NotApplied(err error) error
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
+func OverHTTP(base string, c *http.Client) Transport
 func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error)
 func QuintName(name string) (string, error)
 func RecorderID(storeName, tenant string) string
@@ -61,6 +64,8 @@ func Refuses(rejections ...error) Option
 func Rejection(name string) error
 func Replayed(ctx context.Context)
 func Schema(typ reflect.Type) map[string]any
+func ServeCalls(d *Dependency, h Handlers) http.Handler
+func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
 func Starter(app *App) ([]byte, error)
 func Tag(key string, value any) TagPair
@@ -343,8 +348,11 @@ type Tier struct
     field Client *client.Client
     method (*Tier) Check(commits, calls string, opts ...qtest.Option) []*qtrace.Trace
     method (*Tier) Clients() context.Context
+    method (*Tier) Current() *Node
+    method (*Tier) DependencySteps(d *grist.Dependency) []qtrace.Step
     method (*Tier) Do(ctx context.Context, env grist.Envelope, name string, args any)
     method (*Tier) Lost() int64
+    method (*Tier) LostCalls() int64
     method (*Tier) Replayed() int64
     method (*Tier) Settle(probe func(ctx context.Context))
     method (*Tier) Start(id string) *Node
@@ -352,6 +360,10 @@ type Tier struct
 type TierConfig struct
     field Tenants []string
     field Deps func(ctx context.Context, st grist.Store) context.Context
+    field Serve map[*grist.Dependency]grist.Handlers
+    field Local map[*grist.Dependency]grist.Handlers
+    field DependencyLoseEvery int
+    field OnLostAnswer func(d *grist.Dependency, call string)
     field LoseEvery int
     field Poll time.Duration
 

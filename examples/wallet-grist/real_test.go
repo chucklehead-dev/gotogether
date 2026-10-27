@@ -28,9 +28,9 @@ import (
 // same outcome.
 func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
-	ledger := grist.Local(grist.DefaultHandlers(Ledger))
-	tier := gristtest.NewTier(t, App, gristtest.TierConfig{
-		Deps: func(ctx context.Context, _ grist.Store) context.Context { return Ledger.With(ctx, ledger) }})
+	// the ledger in process (its default double, grist.Local): one for the
+	// tier, recording its posts with the calling node's steps
+	tier := gristtest.NewTier(t, App, gristtest.TierConfig{Local: map[*grist.Dependency]grist.Handlers{Ledger: nil}})
 	tier.Start("node")
 	var wg sync.WaitGroup
 	for c := 1; c <= 3; c++ {

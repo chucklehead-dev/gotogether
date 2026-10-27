@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,7 +20,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/client"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
+	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs/qobshttp"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -30,7 +33,37 @@ type TierConfig struct {
 	Tenants []string
 	// Deps attaches the application's dependencies to a context: every
 	// node's, and the clients' (nil: none). It is given the tier's store.
+	// What it attaches wins over Serve's and Local's.
 	Deps func(ctx context.Context, st grist.Store) context.Context
+	// Serve serves each dependency's handlers (nil: its default double,
+	// grist.DefaultHandlers) behind grist.ServeCalls on a loopback HTTP
+	// server of its own, and every node calls it over HTTP
+	// (grist.OverHTTP): a dependency the team owns, with the real
+	// transport between. The server is the tier's, one per dependency
+	// whichever node calls, so its records of each key are ordered across
+	// nodes, and it records its site (<call>Served, <call>Replayed) into a
+	// step file of its own, which Steps reads with the nodes': two
+	// recorders of one run, as a service's own file is validated with
+	// the caller's. Every DependencyLoseEvery-th call's answer is lost
+	// after the call was applied (a 502, as a proxy that lost the
+	// dependency's answer gives), so its caller's outcome is unknown.
+	Serve map[*grist.Dependency]grist.Handlers
+	// Local serves each dependency's handlers (nil: its default double)
+	// in process (grist.Local), one Local per dependency for the whole tier, shared by every node:
+	// its records of each key ordered across nodes, its handlers' state
+	// (a default double's first answers) the tier's. Its records go to
+	// the calling node's recorder.
+	Local map[*grist.Dependency]grist.Handlers
+	// DependencyLoseEvery loses every n-th call's answer of each Serve
+	// dependency after the call was applied (default 5; negative: none).
+	// Check then requires some answer lost.
+	DependencyLoseEvery int
+	// OnLostAnswer runs when a served call's answer is about to be lost,
+	// after the dependency applied it (nil: nothing): a test kills a node
+	// there (Current().Kill()), so the caller's completion is lost with
+	// it, its call pending, and the dependency's record is the call's
+	// only one.
+	OnLostAnswer func(d *grist.Dependency, call string)
 	// LoseEvery loses every n-th command's answer after the command was
 	// served (the connection closed without a response, as a proxy drops
 	// it), so its client retries under the same Idempotency-Key and the
@@ -61,6 +94,7 @@ type Tier struct {
 	// Envelope's Actor, sent in the X-Actor header).
 	Store  grist.Store
 	Client *client.Client
+	sql    *sqlstore.Store
 
 	path string
 	sink interface {
@@ -76,6 +110,21 @@ type Tier struct {
 	served, lost, replayed atomic.Int64
 	closeOnce              sync.Once
 	steps                  []qtrace.Step
+
+	transports map[*grist.Dependency]grist.Transport // Serve's and Local's, the tier's
+	depServers []*depServer
+	depLost    atomic.Int64
+}
+
+// depServer is a Serve dependency's server and its step file.
+type depServer struct {
+	d    *grist.Dependency
+	srv  *httptest.Server
+	path string
+	sink interface {
+		qobs.Sink
+		Close() error
+	}
 }
 
 // The header the tier's clients name their actor in.
@@ -94,6 +143,9 @@ func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier {
 	if cfg.Poll == 0 {
 		cfg.Poll = 10 * time.Millisecond
 	}
+	if cfg.DependencyLoseEvery == 0 {
+		cfg.DependencyLoseEvery = 5
+	}
 	dir := t.TempDir()
 	db, err := sql.Open("sqlite", sqlstore.SQLiteDSN(filepath.Join(dir, app.Name+".db"), 5*time.Second))
 	if err != nil {
@@ -110,12 +162,28 @@ func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier {
 			t.Fatal(err)
 		}
 	}
-	r := &Tier{t: t, app: app, cfg: cfg, Store: st, path: filepath.Join(dir, "steps.jsonl")}
+	r := &Tier{t: t, app: app, cfg: cfg, Store: st, sql: st, path: filepath.Join(dir, "steps.jsonl")}
 	sink, err := qobs.FileSink(r.path, qobs.PerStep)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.sink = sink
+	r.transports = map[*grist.Dependency]grist.Transport{}
+	for d, h := range cfg.Local {
+		if h == nil {
+			h = defaults(t, d)
+		}
+		r.transports[d] = grist.Local(h)
+	}
+	for d, h := range cfg.Serve {
+		if _, ok := cfg.Local[d]; ok {
+			t.Fatalf("dependency %s is in both TierConfig.Serve and Local: serve it one way", d.Name())
+		}
+		if h == nil {
+			h = defaults(t, d)
+		}
+		r.transports[d] = grist.OverHTTP(r.serveDep(d, h, dir), nil)
+	}
 	r.clients = qobs.WithRecorder(r.deps(ctx), qobs.NewRecorder(r.sink, qobs.WithID("clients")))
 	srv := httptest.NewServer(http.HandlerFunc(r.serve))
 	t.Cleanup(srv.Close)
@@ -131,10 +199,69 @@ func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier {
 }
 
 func (r *Tier) deps(ctx context.Context) context.Context {
+	for d, tr := range r.transports {
+		ctx = d.With(ctx, tr)
+	}
 	if r.cfg.Deps == nil {
 		return ctx
 	}
 	return r.cfg.Deps(ctx, r.Store)
+}
+
+// defaults are d's default double, a call answering fields failing the
+// test with DefaultHandlers' fix.
+func defaults(t testing.TB, d *grist.Dependency) (h grist.Handlers) {
+	t.Helper()
+	defer func() {
+		if p := recover(); p != nil {
+			t.Fatalf("TierConfig gives dependency %s no handlers: %v", d.Name(), p)
+		}
+	}()
+	return grist.DefaultHandlers(d)
+}
+
+// serveDep serves h behind grist.ServeCalls on a loopback server of its
+// own, recording into a step file of its own, losing every
+// DependencyLoseEvery-th answer after applying the call; it returns the
+// server's URL.
+func (r *Tier) serveDep(d *grist.Dependency, h grist.Handlers, dir string) string {
+	r.t.Helper()
+	ds := &depServer{d: d, path: filepath.Join(dir, d.Name()+".steps.jsonl")}
+	sink, err := qobs.FileSink(ds.path, qobs.PerStep)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	ds.sink = sink
+	var served http.Handler
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				r.t.Fatalf("TierConfig.Serve: %v", p)
+			}
+		}()
+		served = grist.ServeCalls(d, h)
+	}()
+	rec := qobshttp.Handler(served, qobs.NewRecorder(sink, qobs.WithID(d.Name())))
+	var calls atomic.Int64
+	ds.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if every := int64(r.cfg.DependencyLoseEvery); every > 0 && calls.Add(1)%every == 0 {
+			// applied, then the answer lost on its way back
+			out := httptest.NewRecorder()
+			rec.ServeHTTP(out, req)
+			if out.Code == http.StatusOK {
+				r.depLost.Add(1)
+				if r.cfg.OnLostAnswer != nil {
+					r.cfg.OnLostAnswer(d, strings.TrimPrefix(req.URL.Path, "/"))
+				}
+			}
+			http.Error(w, "the dependency's answer was lost", http.StatusBadGateway)
+			return
+		}
+		rec.ServeHTTP(w, req)
+	}))
+	r.t.Cleanup(ds.srv.Close)
+	r.depServers = append(r.depServers, ds)
+	return ds.srv.URL
 }
 
 // serve hands the request to the current node's API, losing every
@@ -175,18 +302,20 @@ type Node struct {
 // when the first dies.
 func (r *Tier) Start(id string) *Node {
 	r.t.Helper()
-	relay, err := grist.NewRelay(r.Store)
+	k := &killable{s: r.sink}
+	st := &nodeStore{Store: r.sql, k: k}
+	relay, err := grist.NewRelay(st)
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	n := &Node{Relay: relay, sink: &killable{s: r.sink}}
+	n := &Node{Relay: relay, sink: k}
 	rec := qobs.NewRecorder(n.sink, qobs.WithID(id))
 	ctx, cancel := context.WithCancel(qobs.WithRecorder(r.deps(context.Background()), rec))
 	n.stop = cancel
-	if err := r.app.Start(ctx, r.Store, grist.WithRelay(relay)); err != nil {
+	if err := r.app.Start(ctx, st, grist.WithRelay(relay)); err != nil {
 		r.t.Fatal(err)
 	}
-	api, err := grist.NewHandler(r.app, r.Store, grist.ActorFromHeader(actorHeader), grist.Middleware(func(h http.Handler) http.Handler {
+	api, err := grist.NewHandler(r.app, st, grist.ActorFromHeader(actorHeader), grist.Middleware(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			h.ServeHTTP(w, req.WithContext(qobs.WithRecorder(req.Context(), rec)))
 		})
@@ -202,9 +331,17 @@ func (r *Tier) Start(id string) *Node {
 	return n
 }
 
+// Current is the node that takes the server's traffic (the last
+// started), nil before any Start.
+func (r *Tier) Current() *Node { return r.node.Load() }
+
 // Kill kills the node: its sink dies at that instant (whatever its relay
-// had not recorded is lost with it, as with kill -9), and its goroutines
-// are stopped. The next node's relay records the step log from its first
+// had not recorded is lost with it, as with kill -9), it commits nothing
+// after it (its store refuses every append begun after it, as a killed
+// process makes none: a goroutine that outlives its context, as an
+// at-most-once effect's outcome append does by design, would otherwise
+// commit what its dead sink never recorded the effect of), and its
+// goroutines are stopped. The next node's relay records the step log from its first
 // row, so nothing committed is lost (Reconstruct drops the copies).
 func (n *Node) Kill() {
 	n.sink.kill()
@@ -230,6 +367,30 @@ func (k *killable) kill() {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.dead = true
+}
+
+func (k *killable) killed() bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.dead
+}
+
+// nodeStore is the tier's store as one node sees it: once the node is
+// killed, every append it begins is refused (nothing committed, so
+// ErrUnavailable: a client retries elsewhere). An append begun before the
+// kill may still commit, as one in flight at a kill -9 may: the steps
+// its node recorded before it (an effect's) were written first, so the
+// file is still a prefix of what the node did.
+type nodeStore struct {
+	*sqlstore.Store
+	k *killable
+}
+
+func (s *nodeStore) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	if s.k.killed() {
+		return 0, fmt.Errorf("%w: the node was killed (gristtest.Node.Kill)", grist.ErrUnavailable)
+	}
+	return s.Store.Append(ctx, t, b)
 }
 
 // Clients is the context the clients record their calls in (actor
@@ -312,7 +473,9 @@ func (r *Tier) quiet(relay *grist.Relay) {
 	}
 }
 
-// Steps stops every node, closes the step file and reads it (once).
+// Steps stops every node and every Serve dependency's server, closes the
+// step files and reads them (once): the nodes' and clients' file, then
+// each served dependency's own.
 func (r *Tier) Steps() []qtrace.Step {
 	r.t.Helper()
 	r.closeOnce.Do(func() {
@@ -329,17 +492,53 @@ func (r *Tier) Steps() []qtrace.Step {
 		if err := r.sink.Close(); err != nil {
 			r.t.Fatal(err)
 		}
-		f, err := os.Open(r.path)
-		if err != nil {
-			r.t.Fatal(err)
+		paths := []string{r.path}
+		for _, ds := range r.depServers {
+			ds.srv.Close() // its requests in flight recorded first
+			if err := ds.sink.Close(); err != nil {
+				r.t.Fatal(err)
+			}
+			paths = append(paths, ds.path)
 		}
-		defer f.Close()
-		if r.steps, err = qtrace.ReadJSONL(f); err != nil {
-			r.t.Fatal(err)
+		for _, p := range paths {
+			r.steps = append(r.steps, readSteps(r.t, p)...)
 		}
 	})
 	return r.steps
 }
+
+// readSteps reads the step file at path.
+func readSteps(t testing.TB, path string) []qtrace.Step {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	steps, err := qtrace.ReadJSONL(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return steps
+}
+
+// DependencySteps are the steps the Serve dependency d recorded (its own
+// file's), after Steps.
+func (r *Tier) DependencySteps(d *grist.Dependency) []qtrace.Step {
+	r.t.Helper()
+	r.Steps()
+	for _, ds := range r.depServers {
+		if ds.d == d {
+			return readSteps(r.t, ds.path)
+		}
+	}
+	r.t.Fatalf("dependency %s is not served (TierConfig.Serve)", d.Name())
+	return nil
+}
+
+// LostCalls counts the Serve dependencies' answers lost after their
+// calls were applied.
+func (r *Tier) LostCalls() int64 { return r.depLost.Load() }
 
 // Lost counts the commands' answers lost after they were served.
 func (r *Tier) Lost() int64 { return r.lost.Load() }
@@ -365,7 +564,10 @@ func (r *Tier) Check(commits, calls string, opts ...qtest.Option) []*qtrace.Trac
 	if r.cfg.LoseEvery > 0 && (r.Lost() == 0 || r.Replayed() == 0) {
 		r.t.Errorf("%d answers lost, %d retries answered from their key's marker: want both, or the same-key retry was never exercised", r.Lost(), r.Replayed())
 	}
-	r.t.Logf("%d steps written; %d answers lost, %d retries replayed", len(steps), r.Lost(), r.Replayed())
+	if len(r.depServers) > 0 && r.cfg.DependencyLoseEvery > 0 && r.LostCalls() == 0 {
+		r.t.Errorf("no served dependency's answer was lost after its call was applied: want some (DependencyLoseEvery), or the caller's unknown outcome was never exercised")
+	}
+	r.t.Logf("%d steps written; %d answers lost, %d retries replayed; %d dependency answers lost", len(steps), r.Lost(), r.Replayed(), r.LostCalls())
 	qtest.Validate(r.t, commits, steps).Expect(r.t, qtest.Conforms(), qtest.Settles())
 	qtest.Validate(r.t, calls, steps, append([]qtest.Option{qtest.Linearize()}, opts...)...).Expect(r.t, qtest.Conforms())
 	return traces
