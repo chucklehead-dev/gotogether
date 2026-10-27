@@ -34,54 +34,17 @@ and a newcomer recording an HTTP handler, validating its log, replaying
 a manifest and shrinking a journey from the docs alone. Bugs first; each
 item reviewed before the next. Sizes as in S.
 
-- **G1. Silent wrong answers (S each).**
-  - A seq gap (a dropped step) reported as a model FAIL ("mismatch after
-    deposit"), accepted by Mismatch, SameFailure and ShrinkActions, and
-    read by Finishes as not finished: a failure at or after a gap is no
-    verdict (dropped steps), as a lost tail's is; a mutation that drops
-    a step without renumbering.
-  - `ShrunkActions.Minimal` true when the budget ran out before the
-    shrunk sequence's own rate and the last empty rerun.
-  - Spec imports found by a regex that misses an instance import with a
-    string constant and one over lines: the model cache, Verify and
-    Bundle all trust it.
-  - `RunVerdict.Same` compares a reason's first word and the first
-    failing actor only; MutateSteps counts a binding's refusal (a tool
-    error on a real log) as killed.
-  - Suspicions: `RealTimeSlack` fixed at 1 ms across hosts (G8).
-    webjobs' 500 ms within, settled: a show's time (and an answer's) is
-    the Bombadil state that first shows it, so it is later than the page
-    showed it by under one state interval (the page changed after the
-    state before). Faithful's state intervals are 30-61 ms (median 44);
-    commit to ready shown is 27-128 ms in faithful (at most 160 ms in the
-    mutants' recordings but statusStale), so the margin is over 300 ms, and the
-    checked-in recordings judge alike on any host. A live run is at risk
-    only if Bombadil's interval passes about 350 ms (a slow Chrome's
-    screenshots); statusStale's 753 ms (677 ms from the state before)
-    fails whichever time is read. Fix, when live runs flake: the page
-    stamps `at` (Date.now()) on #result and each answer in #log, spec.ts
-    extracts it, bombadiltrace reads it in place of the state's time
-    (refusing one outside the two states' interval), recordings without
-    it read as now.
-- **G2. The CLI says what it did (S).** scaffold writes `spec:` and
-  `Binding:` relative to the working directory, not the file; a failed
-  scaffold leaves an empty file its retry refuses; binding errors number
-  steps from 0 in two places, without file:line or the fix (`restart:`);
-  help prints "(default 0)" after a stated default; an unknown command
-  prints usage without saying so (did you mean); validate's usage omits
-  half its flags; validate leaves a temporary directory per run.
-- **G3. Failures that can be followed (S).** qtest's reports name files
-  in a test's TempDir, gone when the test ends: keep them on failure or
-  say `GOTOGETHER_KEEP`; a claim naming no invariant or action says
-  did-you-mean; the strict-mode escape error outside qenv speaks of
-  qenv; `-mutate-steps` survivors that a binding's `outcomes: skip`
-  explains say so, and the outcome error suggests modelling the refusal
-  before `skip`.
-- **G4. A per-run recorder for an HTTP service (S).** Only
-  `qtest.Global()` is documented, which serialises tests;
-  `http.Server.BaseContext` with `qobs.WithRecorder` works in parallel
-  and is mentioned nowhere. Ship it (`qobs` middleware or a qtest
-  server) and teach it in gotogether-traces.
+- **G1. Silent wrong answers (S each). Done** (fdfeb6a, b888c48,
+  25b2cf0, a3e4962, 9c85996, 6dc3cb4, 0939015, cd38956); the
+  `RealTimeSlack` suspicion is G8's, webjobs' within settled.
+- **G2. The CLI says what it did (S). Done** (a6735c4).
+- **G3. Failures that can be followed (S). Done** (3548401 the strict-mode
+  escape; 0d84012 the rest): a failing report's files are copied out of
+  the test's TempDir and the report says so, a claim's unknown name says
+  did-you-mean before any verdict, skipped steps' survivors say so, and
+  the outcome error says to model the refusal before `skip`.
+- **G4. A per-run recorder for an HTTP service (S). Done** (3548401:
+  `qobshttp`, taught in gotogether-traces).
 - **G5. Shrinking and replay outside `go test` (M).** The CLI imports
   qtest (and with it `testing` and qenv) for step mutants and evidence.
   Move ShrinkActions', MutateSteps' and the manifest's cores out of
