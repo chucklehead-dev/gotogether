@@ -5,8 +5,9 @@
 // a lossy qenv.Service, or over its HTTP API on qhttp: Config.HTTP), and a workload of clients sending random
 // commands and queries of the registry to every tenant. Each of the
 // App's declared dependencies (grist.NewDependency) is served as a
-// qenv.Service named after it, from the run's Config.Doubles, its
-// requests and answers lost, duplicated and late. Run's signature
+// qenv.Service named after it, from the run's Config.Doubles (else its
+// default double, grist.DefaultHandlers), its requests and answers lost,
+// duplicated and late. Run's signature
 // is a qtest.System's Run, so an application is explored, exhausted and
 // shrunk with every claim of qtest:
 //
@@ -116,9 +117,12 @@ type Config struct {
 	// qenv.Service named after the dependency, on no process, its faults
 	// the Service's (rpc.<dependency>.request, .delay, .response), its
 	// handlers recording each call's application at its site
-	// (grist.Call.Handler). A dependency without handlers, or a call
-	// without one, is the run's error. Per run, so a double's state (the
-	// keys it applied) is its run's.
+	// (grist.Call.Handler). A dependency it gives no handlers is served by
+	// its default double (grist.DefaultHandlers: a Keyed call applied once
+	// per key, its later tries replayed; an unkeyed one every time, each
+	// answered with the zero response); one it gives handlers lacking a
+	// call is the run's error. Per run, so a double's state (the keys it
+	// applied) is its run's.
 	Doubles func() Doubles
 	// Setup builds the application's other dependencies once per
 	// simulation (a qenv.Service standing for a mailer, grist.NewDep's),
@@ -193,7 +197,8 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (fun
 	for i, d := range deps {
 		h, ok := ds[d]
 		if !ok {
-			return nil, fmt.Errorf("gristsim: dependency %s of %s has no double: give Config.Doubles its grist.Handlers (each call's Handler)", d.Name(), app.Name)
+			// none given: the default double, this run's own
+			h = grist.DefaultHandlers(d)
 		}
 		if err := h.Serves(d); err != nil {
 			return nil, fmt.Errorf("gristsim: Config.Doubles' handlers of %s: %w", d.Name(), err)

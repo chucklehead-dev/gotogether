@@ -17,6 +17,7 @@ func BatchSize(n int) Option
 func CallKey(ctx context.Context) string
 func CheckTenant(t string) error
 func ConditionTries(n int) Option
+func DefaultHandlers(d *Dependency) Handlers
 func Delivers(d Delivery, success ...EventName) Option
 func Dependencies(f func(context.Context) context.Context) ServeOption
 func DevEndpoints() ServeOption

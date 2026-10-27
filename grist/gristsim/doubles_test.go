@@ -40,8 +40,8 @@ func echoApp() (*grist.App, *grist.Dependency, *grist.Call[Shout, Heard]) {
 
 // A dependency is served as a qenv.Service named after it, whose faults
 // are its own (rpc.<dependency>.*), from the run's Config.Doubles; a
-// dependency without a double, or a call without a handler, is the run's
-// error naming the fix.
+// dependency given handlers lacking a call is the run's error naming the
+// fix (one given none gets its default double: TestDefaultDouble).
 func TestDoublesServed(t *testing.T) {
 	a, echo, shout := echoApp()
 	runs := 0
@@ -79,12 +79,55 @@ func TestDoublesServed(t *testing.T) {
 		doubles func() gristsim.Doubles
 		want    string
 	}{
-		{nil, "dependency echo of notes has no double: give Config.Doubles"},
 		{func() gristsim.Doubles { return gristsim.Doubles{echo: nil} }, "no handler of call echo/shout"},
 	} {
 		err := gristsim.Run(qenv.NewSeeded(1), a, gristsim.Config{Tenants: []string{"t1"}, Doubles: cfg.doubles})
 		if err == nil || !strings.Contains(err.Error(), cfg.want) {
 			t.Errorf("Run: %v, want %q", err, cfg.want)
 		}
+	}
+}
+
+// A dependency the run gives no handlers is served by its default double
+// (grist.DefaultHandlers), a Service of its own name as any double: a
+// Keyed call applied once per key, answered with the zero response, and a
+// later try of a key (the Service's duplicates and the effect's retries
+// after a lost answer) answered from that first answer as a replay, never
+// a second served record. Without it the run is an error (no double).
+func TestDefaultDouble(t *testing.T) {
+	a, _, _ := echoApp()
+	sink := &qobs.MemorySink{}
+	base := qenv.NewSeeded(5)
+	base.Rates = qenv.NoFaults.Set("rpc.echo.request", 0.4).Set("rpc.echo.response", 0.4)
+	c := qenv.WithContext(base, qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink)))
+	cfg := gristsim.Config{Tenants: []string{"t1"}, Send: []string{"shout"}, Check: true}
+	if err := gristsim.Run(c, a, cfg); err != nil {
+		t.Fatal(err)
+	}
+	served, replayed := map[string]int{}, 0
+	for _, s := range sink.Steps() {
+		switch {
+		case s.Invocation:
+		case s.Action == "echoShoutServed" || s.Action == "echoShoutReplayed":
+			if s.Outcome != "ok" || s.Args["echo"] != "" {
+				t.Errorf("%s %v: want ok with the zero response", s.Action, s)
+			}
+			if s.Action == "echoShoutReplayed" {
+				replayed++
+				if served[s.Args["key"].(string)] == 0 {
+					t.Errorf("a replay of key %v before its application", s.Args["key"])
+				}
+				continue
+			}
+			served[s.Args["key"].(string)]++
+		}
+	}
+	for k, n := range served {
+		if n != 1 {
+			t.Errorf("key %s applied %d times: the default double of a Keyed call applies each key once", k, n)
+		}
+	}
+	if len(served) == 0 || replayed == 0 {
+		t.Errorf("%d keys applied, %d replays: want calls applied and later tries replayed", len(served), replayed)
 	}
 }

@@ -397,22 +397,50 @@ func Replayed(ctx context.Context) {
 // another error is recorded with it, naming the fix.
 func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, error)) CallHandler {
 	ci := c.info
-	return CallHandler{call: ci, serve: func(ctx context.Context, body []byte) ([]byte, error) {
+	return ci.handler(func(ctx context.Context, body []byte) ([]byte, error) {
 		var req Req
 		if err := json.Unmarshal(body, &req); err != nil {
-			return nil, fmt.Errorf("grist: call %s: its request does not decode: %w", ci.label(), err)
+			return nil, &undecoded{fmt.Errorf("grist: call %s: its request does not decode: %w", ci.label(), err)}
 		}
+		resp, err := f(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		out, merr := json.Marshal(resp)
+		if merr != nil {
+			return nil, &unencoded{fmt.Errorf("grist: call %s: its response does not encode: %w", ci.label(), merr)}
+		}
+		return out, nil
+	})
+}
+
+// undecoded is a request a handler could not decode: answered with it,
+// recorded nowhere (no application happened, and its fields are unknown).
+type undecoded struct{ error }
+
+// unencoded is a response a handler could not encode: recorded with it.
+type unencoded struct{ error }
+
+// handler wraps f, which answers a request's JSON with the response's
+// JSON or an error, as the call's handler: Handler's wrapper, and the
+// default double's (DefaultHandlers), which has no types to decode into.
+func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, error)) CallHandler {
+	return CallHandler{call: ci, serve: func(ctx context.Context, body []byte) ([]byte, error) {
 		hc := &handlerCtx{}
 		sv, _ := ctx.Value(callInfoKey{}).(served)
 		hc.info = sv.info
-		resp, err := f(context.WithValue(ctx, handlerKey{}, hc), req)
-		out, merr := json.Marshal(resp)
+		out, err := f(context.WithValue(ctx, handlerKey{}, hc), body)
+		var und *undecoded
+		if errors.As(err, &und) {
+			return nil, und.error
+		}
 		var rej *Rejected
+		var une *unencoded
 		var kv []any
 		var recErr error
 		switch {
-		case err == nil && merr != nil:
-			err = fmt.Errorf("grist: call %s: its response does not encode: %w", ci.label(), merr)
+		case errors.As(err, &une):
+			err = une.error
 			recErr = err
 			kv = ci.zeroResponse()
 		case err == nil:
@@ -438,6 +466,41 @@ func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, er
 		}
 		return out, nil
 	}}
+}
+
+// DefaultHandlers are the default double of d: what gristsim serves a
+// dependency the run gives no handlers (Config.Doubles), and what a test
+// or a binary may attach in process (d.With(ctx, grist.Local(...))). A
+// Keyed call is applied once per key and answered with its zero
+// response; a later try of the key gets that first answer, as a replay
+// (Replayed: recorded <call>Replayed and judged as one), so a key's first
+// answer is final. An unkeyed call is applied, and answered so, every
+// time. It refuses nothing. Each call of DefaultHandlers has its own
+// state (the keys applied): one per run.
+func DefaultHandlers(d *Dependency) Handlers {
+	hs := make(Handlers, 0, len(d.calls))
+	for _, ci := range d.calls {
+		zero, _ := json.Marshal(reflect.New(ci.resp).Elem().Interface())
+		if !ci.opts.keyed {
+			hs = append(hs, ci.handler(func(context.Context, []byte) ([]byte, error) { return zero, nil }))
+			continue
+		}
+		var mu sync.Mutex
+		applied := map[string]bool{}
+		hs = append(hs, ci.handler(func(ctx context.Context, _ []byte) ([]byte, error) {
+			key := CallKey(ctx)
+			mu.Lock()
+			again := applied[key]
+			applied[key] = true
+			mu.Unlock()
+			if again {
+				// its first answer, the zero response: final for the key
+				Replayed(ctx)
+			}
+			return zero, nil
+		}))
+	}
+	return hs
 }
 
 type callInfoKey struct{}

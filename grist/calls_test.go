@@ -423,3 +423,37 @@ func TestCallDeclarations(t *testing.T) {
 		}
 	}
 }
+
+// The default double (DefaultHandlers, what gristsim serves a dependency
+// given no handlers): a Keyed call is applied once per key, answered with
+// the zero response, and a later try of the key replayed from that first
+// answer (bankPayReplayed, the served record's fields and place); an
+// unkeyed call is applied every time.
+func TestDefaultHandlers(t *testing.T) {
+	a := grist.New("defaults")
+	bank := grist.NewDependency(a, "bank")
+	grist.NewCall[payReq, payResp](bank, "pay", grist.Keyed())
+	grist.NewCall[payReq, payResp](bank, "tip")
+	sink := &qobs.MemorySink{}
+	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
+	tr := grist.Local(grist.DefaultHandlers(bank))
+	body, _ := json.Marshal(payReq{Amount: 5})
+	for _, call := range []string{"pay", "pay", "tip", "tip"} {
+		for _, key := range []string{"payer/t1/1", "payer/t1/2"} {
+			out, err := tr.Call(ctx, grist.CallInfo{App: "defaults", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 2, Key: key}, call, body)
+			if err != nil || string(out) != `{"ref":""}` {
+				t.Errorf("%s %s: %s, %v: want the zero response", call, key, out, err)
+			}
+		}
+	}
+	steps := sink.Steps()
+	served, replayed, tips := byAction(steps, "bankPayServed"), byAction(steps, "bankPayReplayed"), byAction(steps, "bankTipServed")
+	if len(served) != 2 || len(replayed) != 2 || len(tips) != 4 || len(byAction(steps, "bankTipReplayed")) != 0 {
+		t.Fatalf("pay served %d, replayed %d; tip served %d: want each pay key applied once and replayed once, every tip applied", len(served), len(replayed), len(tips))
+	}
+	for i := range served {
+		if r, s := replayed[i], served[i]; r.Outcome != "ok" || fmt.Sprint(r.Args) != fmt.Sprint(s.Args) || r.Order["pos"] != s.Order["pos"] {
+			t.Errorf("replay %+v: want the served record's fields and place %+v", r, s)
+		}
+	}
+}
