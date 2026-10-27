@@ -2,7 +2,8 @@
 // §8.1), without float averages: counters created under unique names,
 // incremented, shown; a processor that emits the tenant's running sum
 // and count on each increment, and one that welcomes each new counter by
-// mail, at least once. Its model is model/counters.qnt; gristsim runs it
+// mail, at least once; a retired counter's total is paid out, at most
+// once. Its model is model/counters.qnt; gristsim runs it
 // against a simulated store, and counters_test.go states which check
 // catches which mutant (testdata/mutants: grain's two bugs).
 package counters
@@ -35,6 +36,17 @@ type (
 	Notified struct {
 		Counter string `json:"counter" grist:"tag"`
 	}
+	// CounterRetired: a counter retired with its total, to be paid out.
+	CounterRetired struct {
+		Counter string `json:"counter" grist:"tag"`
+		Total   int    `json:"total"`
+	}
+	// PaidOut: a retirement's payout was made (Retired: the retirement's
+	// position, so each retirement's outcome is its own).
+	PaidOut struct {
+		Counter string `json:"counter" grist:"tag"`
+		Retired int64  `json:"retired"`
+	}
 )
 
 // App is the application; its blocks are below and in commands.go and
@@ -47,6 +59,8 @@ var (
 	Incremented = grist.NewEvent[CounterIncremented](App, "counter-incremented")
 	Averaged    = grist.NewEvent[AverageComputed](App, "average-computed")
 	Welcomed    = grist.NewEvent[Notified](App, "notified")
+	Retired     = grist.NewEvent[CounterRetired](App, "counter-retired")
+	Paid        = grist.NewEvent[PaidOut](App, "paid-out")
 )
 
 // Names is the counter-names read model: each name's counter.

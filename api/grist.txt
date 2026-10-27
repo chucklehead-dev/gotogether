@@ -1,5 +1,6 @@
 == github.com/chucklehead-dev/gotogether/grist
 const AtLeastOnce Delivery = iota + 1
+const AtMostOnce Delivery = iota + 1 (spec 1 of its group)
 const MaxBody = 1 << 20
 const RetryAfter = 1
 func ActorFromHeader(name string) ServeOption

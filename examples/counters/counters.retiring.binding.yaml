@@ -1,0 +1,44 @@
+# counters.binding.yaml with retirements: the same steps, and
+# retire-counter's and the at-most-once payout's (payout, payoutEffect,
+# payoutOutcome), as calls of model/counters.qnt; its
+# eventual vals add everyRetirementHandled (every retirement's payout
+# checkpointed: at most once, the payment and its outcome may be lost).
+actors: ['!*/clients']
+spec: model/counters.qnt
+module: counters
+
+outcomes:
+  ok: '"ok"'
+  name-taken: '"name-taken"'
+  unknown-counter: '"unknown-counter"'
+  conflict: '"conflict"'
+  idempotency-key-reused: '"idempotency-key-reused"'
+
+actions:
+  createCounter:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+    expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  incrementCounter:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+    expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  retireCounter:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+    expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  showCounter:
+    expect: 'total(log, {{.counter}}) == {{.obs.total}} and namesOf(log, {{.counter}}) == {{.obs.names}}'
+  average:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("average") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  welcomeEffect: {}
+  welcome:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("welcome") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  welcomeOutcome: {}
+  payout:
+    expect: 'log.length() == {{.obs.head}} and checkpoints.get("payout") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  payoutEffect: {}
+  payoutOutcome:
+    expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+
+invariants: [uniqueNames, averageAsOfTrigger]
+eventually: [everyCounterWelcomedOrFailed, everyRetirementHandled]
+simulate:
+  holds: [uniqueNames, averageAsOfTrigger]

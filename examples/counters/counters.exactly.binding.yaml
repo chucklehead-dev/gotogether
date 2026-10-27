@@ -1,0 +1,35 @@
+# counters.binding.yaml's model and steps, judged by the test-only
+# eventual val everyRetirementPaidOnce (every retirement paid out exactly
+# once, after the settle): what the payout's declared guarantee (at most
+# once) does not promise. The payment a crash between its checkpoint and
+# the bank's call loses is admitted by counters.binding.yaml and rejected
+# here.
+actors: ['!*/clients']
+spec: model/counters.qnt
+module: counters
+
+outcomes:
+  ok: '"ok"'
+  name-taken: '"name-taken"'
+  unknown-counter: '"unknown-counter"'
+  conflict: '"conflict"'
+  idempotency-key-reused: '"idempotency-key-reused"'
+
+actions:
+  createCounter:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+  incrementCounter:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+  retireCounter:
+    args: { result: '{{.outcome}}', reads: 'readsOf({{toList .reads}})' }
+  showCounter: {}
+  average: {}
+  welcomeEffect: {}
+  welcome: {}
+  welcomeOutcome: {}
+  payout: {}
+  payoutEffect: {}
+  payoutOutcome: {}
+
+invariants: []
+eventually: [everyRetirementPaidOnce]

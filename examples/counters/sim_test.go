@@ -8,6 +8,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // mutant is the mutant this test binary was built with: set by the file
@@ -17,16 +18,22 @@ var mutant string
 // setup gives every run a mailer of its own, and the store (for the
 // dispatchDirect mutant's raw append).
 func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
-	m := NewSimMailer(s)
-	return func(ctx context.Context) context.Context { return WithDeps(ctx, Deps{Mailer: m, Store: st}) }
+	m, b := NewSimMailer(s), NewSimBank(s)
+	return func(ctx context.Context) context.Context { return WithDeps(ctx, Deps{Mailer: m, Bank: b, Store: st}) }
 }
 
 // The bindings: the commit side's, its test-only variant judging one
-// welcome per counter, and the client side's.
+// welcome per counter, the client side's, and those of runs that retire
+// counters.
 const (
 	commits = "counters.binding.yaml"
 	once    = "counters.once.binding.yaml"
-	calls   = "counters.calls.binding.yaml"
+	// retiring and exactly judge runs that retire counters (the payout's
+	// steps): model/retiring.qnt, the commit side with retirements, and
+	// its test-only exactly-once eventual val
+	retiring = "counters.retiring.binding.yaml"
+	exactly  = "counters.exactly.binding.yaml"
+	calls    = "counters.calls.binding.yaml"
 )
 
 // system is the app under cfg, judged by binding, with faulty rates.
@@ -51,8 +58,11 @@ func seeds(n, short int) int {
 }
 
 // contended is claim 2's shape: one tenant and names from two letters,
-// so that creates and increments collide.
-var contended = gristsim.Config{Tenants: []string{"t1"}, Alphabet: []string{"a", "b"}, CommitFaults: true, Check: true}
+// so that creates and increments collide; no retirements (the payout's
+// claims are TestPayoutAtMostOnce's, and TestFaithfulRetiring's in full
+// mode).
+var contended = gristsim.Config{Tenants: []string{"t1"}, Alphabet: []string{"a", "b"}, CommitFaults: true, Check: true,
+	Send: []string{"create-counter", "increment-counter", "show-counter"}}
 
 // Claim 2: the safe default passes, through every fault. At Serializable
 // and ReadCommitted, with commit faults and node crashes, and the
@@ -73,6 +83,22 @@ func TestFaithful(t *testing.T) {
 					qtest.Reaches("store.counters.commit").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 		})
 	}
+}
+
+// Claim 2 with retirements: every command and query of the app, the
+// at-most-once payout among the processors, through commit faults and
+// node crashes. Full mode: the payout's claims are TestPayoutAtMostOnce's
+// per push.
+func TestFaithfulRetiring(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("full mode: TestPayoutAtMostOnce judges the payout per push")
+	}
+	qtest.RequireQuint(t)
+	cfg := contended
+	cfg.Send = nil // every command and query
+	system(retiring, cfg).Explore(t, qtest.ExploreConfig{Seeds: 20}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 }
 
 // Claim 1's contrast: the faithful app at claim 1's configuration (two
@@ -175,5 +201,50 @@ func TestWelcomeDuplicate(t *testing.T) {
 	system(once, one).Exhaust(t, qtest.Bound{Faults: 1}).
 		Expect(t, qtest.Some(qtest.Violates("welcomedOnce")))
 	system(commits, one).Exhaust(t, qtest.Bound{Faults: 1}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+}
+
+// retirements is the payout claims' shape: two clients creating and
+// retiring counter a, six times each, so a run retires a counter that
+// exists unless every retirement comes before every create.
+var retirements = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 6, Alphabet: []string{"a"},
+	Send: []string{"create-counter", "retire-counter"}}
+
+// scripted is a script of faults over seed's choices, no other fault.
+func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
+	return func(seed uint64) qenv.Chooser {
+		base := qenv.NewSeeded(seed)
+		base.Rates = qenv.NoFaults
+		return &qenv.Script{Base: base, Faults: faults}
+	}
+}
+
+// The payout is at most once, seen and judged. A crash after its
+// checkpoint and before the payment (grist.payout.effect's crashBefore)
+// loses the payment: the model admits it (the checkpoint first, no
+// effect step, no outcome: 10 of 10 runs conform), and the test-only
+// exactly-once eventual val (everyRetirementPaidOnce) rejects those runs
+// (10 of 10). A crash after the payment (crashAfter) loses its paid-out
+// event and pays nothing twice: both admit it. Without faults every
+// retirement is paid exactly once. With grist's AtMostOnce run as at
+// least once, 10 of 10 runs reject payoutEffect (a payment before its
+// checkpoint). Per push the admitted loss alone, at 2 seeds; the rest in
+// full mode.
+func TestPayoutAtMostOnce(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	n := qtest.ExploreConfig{Seeds: seeds(10, 2)}
+	lose := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashBefore"})}
+	system(retiring, retirements).Explore(t, lose).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	if testing.Short() {
+		return // the judgments of exactly once: full mode (grist's TestEffectAtMostOnceCrashes covers both crashes per push)
+	}
+	system(exactly, retirements).Explore(t, lose).
+		Expect(t, qtest.All(qtest.Violates(validate.EventuallyName("everyRetirementPaidOnce"))))
+	after := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashAfter"})}
+	system(exactly, retirements).Explore(t, after).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }

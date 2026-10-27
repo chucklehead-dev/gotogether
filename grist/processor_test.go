@@ -59,6 +59,13 @@ func procApp(effect func(ctx context.Context) error) (*grist.App, *grist.EventTy
 // returns the store's log of t1 and the steps.
 func simulate(t *testing.T, a *grist.App, added *grist.EventType[Added], c qenv.Chooser) ([]grist.Stored, []qtrace.Step) {
 	t.Helper()
+	return simulateOn(t, a, added, c, nil)
+}
+
+// simulateOn is simulate with the node's store wrapped by wrap (nil: as
+// it is).
+func simulateOn(t *testing.T, a *grist.App, added *grist.EventType[Added], c qenv.Chooser, wrap func(grist.Store) grist.Store) ([]grist.Stored, []qtrace.Step) {
+	t.Helper()
 	sink := &qobs.MemorySink{}
 	s := qenv.New(qenv.WithContext(c, qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))))
 	defer s.Close()
@@ -69,8 +76,12 @@ func simulate(t *testing.T, a *grist.App, added *grist.EventType[Added], c qenv.
 	for i := 1; i <= 3; i++ {
 		st.Append(ctx, "t1", store.Batch{Events: []grist.Event{added.Of(Added{By: i})}})
 	}
+	var nodeStore grist.Store = st
+	if wrap != nil {
+		nodeStore = wrap(st)
+	}
 	node := s.Process("node", true, func(ctx context.Context) {
-		if err := a.Start(ctx, st); err != nil {
+		if err := a.Start(ctx, nodeStore); err != nil {
 			t.Error(err)
 		}
 	})

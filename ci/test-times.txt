@@ -11,7 +11,7 @@
 # the reason; packages under ten CPU seconds have none.
 examples/bank 80
 examples/checkout 165
-examples/counters 420 # 201-206 CPU s here (CI about twice: 400-410), down from 297-303 when the SQL tier repeated per push what other claims cover; its full-mode claims (TestSQLDuplicateRequests, TestSQLFaithfulAtClaim1, the mutants' SQL halves, TestSQLTier's Serializable, TestFaithfulAtClients) are skipped under -short; TestRealSQLite (a killed node, both bindings) about 11 s of wall, mostly its mailer's 20 ms sends
+examples/counters 520 # 255-270 CPU s here on a loaded machine (the parent commit measured 199-211 beside it; CI about twice), up from 201-206: the HTTP tier's client side per push (TestHTTPTier, its store side in full mode), the payout's admitted loss per push (TestPayoutAtMostOnce, its exactly-once judgments in full mode), and a payout poller, a bank and a larger model in every run (each claim about 10% dearer); full mode adds TestHTTPDuplicateRequests, TestFaithfulRetiring and the checkpointFirst mutant, beside the SQL tier's repeated claims and TestFaithfulAtClients; TestRealHTTP about 11 s of wall, mostly its mailer's 20 ms sends
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51

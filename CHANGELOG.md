@@ -138,6 +138,17 @@ The first release. What a user meets, by module:
   grist/sqlstore, every step to a `-steps` file). The catalog's types
   carry JSON tags, and its blocks `Authorized` and `Internal`. Command
   ids starting with `grist:` are refused (grist's own markers).
+- grist's `Effect(f, AtMostOnce)` (docs/grist.md §0.6; api/grist.txt):
+  the checkpoint first (its step's `ok` false), f once, then its outcome
+  event in a commit of its own under a marker of the effect key (the
+  step `<processor>Outcome`); a crash between the checkpoint and f loses
+  the effect, one after f its outcome, and no restart runs either again.
+  `EffectFaults`' `crashBefore` and `crashAfter` are just before and
+  after f for both deliveries. grist.qnt gains `triesOf`, `holds`,
+  `atMostOnceFirst`, `atMostOnceEffect`, `atMostOnceDone` and
+  `atMostOnceOutcome`. examples/counters gains `retire-counter` and the
+  at-most-once `payout` processor, with its claims, and the
+  `checkpointFirst` mutant.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

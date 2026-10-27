@@ -1,6 +1,6 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, a hand-written model over one tenant's log and its bindings (store side and client side, actors:). Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, a hand-written model over one tenant's log and its bindings (store side and client side, actors:). Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
@@ -53,7 +53,18 @@ examples/counters is the walk-through: read its README's table first.
    `atLeastOnceDone(effects, p, trigger, ok, EFFECT_TRIES)` and appends
    `atLeastOnceOutcome(p, trigger, ok, [success])` (the run that
    committed decides: notified after an ok send, `grist.failed` after the
-   tries). Read models are defs over the log. Check it alone:
+   tries). An at-most-once effect (`grist.AtMostOnce`: checkpoint first,
+   f once, then its outcome in a commit of its own, step
+   `<processor>Outcome`) has three actions: the checkpoint
+   `p(trigger, ok)` requiring `atMostOnceFirst(effects, p, trigger, ok)`
+   and appending nothing, the effect step requiring
+   `atMostOnceEffect(effects, checkpoints.get(p), p, trigger)`, and the
+   outcome `pOutcome(trigger, ok)` requiring `atMostOnceDone(log,
+   effects, p, trigger, ok, [success])` (the success event must name the
+   trigger) and appending `atMostOnceOutcome(...)`; a lost effect or
+   outcome is admitted, and an application that needs exactly once states
+   it with a test-only eventual val (examples/counters' `payout`,
+   `counters.exactly.binding.yaml`). Read models are defs over the log. Check it alone:
    `gotogether simulate -binding <app>.binding.yaml`.
 3. **Bind**: every parameter the same-named step field, but `reads:
    'readsOf({{toList .reads}})'` (slice 1 records triples); `expect:` for
@@ -93,7 +104,11 @@ examples/counters is the walk-through: read its README's table first.
    race's loser retries a transient conflict and decides again), a raw append
    from a processor is `Mismatch`, an at-least-once effect's duplicate
    is admitted and a test-only invariant over `effects` judges it
-   (`qenv.Script` of `grist.<processor>.effect`'s `crashAfter`).
+   (`qenv.Script` of `grist.<processor>.effect`'s `crashAfter`); an
+   at-most-once effect's loss (`crashBefore`, after its checkpoint) is
+   admitted and a test-only exactly-once eventual val rejects it; an
+   effect declared at most once where the model says at least once is
+   `Rejects(<processor>)` (counters' `checkpointFirst`).
 
 ## Triage
 

@@ -81,7 +81,7 @@ func (a *App) register(kind, name string) {
 	}
 	actions := []string{q}
 	if kind == "processor" {
-		actions = append(actions, q+"Effect") // its effect steps' action
+		actions = append(actions, q+"Effect", q+"Outcome") // its effect steps' action, an at-most-once outcome's
 	}
 	for _, n := range actions {
 		if prev, ok := a.quintNames[n]; ok {

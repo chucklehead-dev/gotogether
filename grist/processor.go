@@ -16,8 +16,15 @@ type Delivery int
 const (
 	// AtLeastOnce runs the effect, then commits the checkpoint (and the
 	// outcome event): a crash between them runs it again, under the same
-	// EffectKey.
+	// EffectKey. An error is tried EffectTries times.
 	AtLeastOnce Delivery = iota + 1
+	// AtMostOnce commits the checkpoint first, then runs the effect once,
+	// then commits its outcome event (OnSuccess's, or grist.failed for an
+	// error; idempotent, under a marker of the effect key): a crash
+	// between the checkpoint and the effect loses the effect, one after it
+	// the outcome, and no restart runs it again. It is tried once
+	// (EffectTries does not apply: a failed try may have taken effect).
+	AtMostOnce
 )
 
 type resultKind int
@@ -60,10 +67,13 @@ type EffectOption func(*Result)
 // OnSuccess appends e with the checkpoint once the effect succeeded.
 func OnSuccess(e Event) EffectOption { return func(r *Result) { r.onSuccess = &e } }
 
-// Effect runs f outside the log, with the delivery guarantee d (slice 1
-// has AtLeastOnce; any other is the handler's error). f's ctx carries the
-// EffectKey. An error is retried (EffectTries tries, with backoff), then
-// checkpointed with a grist.failed event.
+// Effect runs f outside the log, with the delivery guarantee d
+// (AtLeastOnce or AtMostOnce; any other is the handler's error). f's ctx
+// carries the EffectKey. At least once, an error is retried (EffectTries
+// tries, with backoff), then checkpointed with a grist.failed event; at
+// most once, f runs once after the checkpoint, and its outcome (the
+// success event, or grist.failed) is appended after it, if no crash came
+// between.
 func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result {
 	r := Result{kind: effectResult, effect: f, delivery: d}
 	for _, o := range opts {
@@ -74,15 +84,15 @@ func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption)
 
 // check is the handler's error in r, if r is no result grist can carry
 // out: the zero Result, an Effect without a function or of a delivery
-// slice 1 does not have.
+// grist does not have.
 func (r Result) check(processor string) error {
 	switch {
 	case r.kind == 0:
 		return fmt.Errorf("grist: processor %s returned the zero Result: return Emit, Skip, Effect or Fail", processor)
 	case r.kind == effectResult && r.effect == nil:
 		return fmt.Errorf("grist: processor %s returned an Effect without a function", processor)
-	case r.kind == effectResult && r.delivery != AtLeastOnce:
-		return fmt.Errorf("grist: processor %s returned an Effect of delivery %d: slice 1 has AtLeastOnce only", processor, r.delivery)
+	case r.kind == effectResult && r.delivery != AtLeastOnce && r.delivery != AtMostOnce:
+		return fmt.Errorf("grist: processor %s returned an Effect of delivery %d: give AtLeastOnce or AtMostOnce", processor, r.delivery)
 	}
 	return nil
 }
@@ -129,10 +139,13 @@ func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx con
 func (p *Processor) Name() string { return p.info.name }
 
 // EffectFaults is processor's effect crash points as a fault kind:
-// "grist.<processor>.effect", crashBefore (before f runs) and crashAfter
-// (after f returned and its step was recorded, before the checkpoint).
-// The crash that duplicates an at-least-once effect is one named option,
-// which a qenv.Script asks for and Exhaust reaches with one fault.
+// "grist.<processor>.effect", crashBefore (just before f runs) and
+// crashAfter (just after f returned and its step was recorded). At least
+// once, both come before the checkpoint: crashAfter is the crash that
+// duplicates the effect. At most once, both come after it: crashBefore
+// loses the effect, crashAfter its outcome event. Each is one named
+// option, which a qenv.Script asks for and Exhaust reaches with one
+// fault.
 func EffectFaults(processor string) qenv.FaultKind {
 	return qenv.DeclareFaults("grist."+processor+".effect", "crashBefore", "crashAfter")
 }
@@ -373,6 +386,13 @@ func (pl *poller) key(t Position) string { return fmt.Sprintf("%s/%s/%d", pl.p.n
 // is retried here: the handlers are functions of the prefix through
 // their triggers, which never changes.
 func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv ...any) (Position, bool) {
+	return pl.commitAt(ctx, cp, group, 1, kv...)
+}
+
+// commitAt is commit with each step's order among the processor's at
+// 2·trigger+slot: 1 after the trigger's effect steps (at least once,
+// Emit), 0 before them (at most once's checkpoint).
+func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, slot int64, kv ...any) (Position, bool) {
 	var events []Event
 	triggers := []int64{}
 	for _, g := range group {
@@ -383,7 +403,7 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 	// with its own events: the relay gives each the head after them
 	steps := make([]rowStep, 0, len(group))
 	for _, g := range group {
-		steps = append(steps, pl.step(g.trigger, g.events, kv...))
+		steps = append(steps, pl.step(g.trigger, g.events, slot, kv...))
 	}
 	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(steps)}
@@ -412,12 +432,14 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 // step is a processor's handling of trigger, committing events, as its
 // batch's row holds it (the relay adds obs.head and order.pos); extra
 // are the step's other fields (an effect's checkpoint records ok). Its
-// order among the processor's steps is 2·trigger+1, after the trigger's
-// effect steps (2·trigger): a checkpoint and an effect may share a head,
-// and are recorded on two threads (the relay's and the poller's).
-func (pl *poller) step(trigger Position, events []Event, extra ...any) rowStep {
+// order among the processor's steps is 2·trigger+slot: 1, after the
+// trigger's at-least-once effect steps (2·trigger); 0, before its
+// at-most-once effect step (2·trigger+1). A checkpoint and an effect may
+// share a head, and are recorded on two threads (the relay's and the
+// poller's).
+func (pl *poller) step(trigger Position, events []Event, slot int64, extra ...any) rowStep {
 	kv := append(append([]any{"trigger", int64(trigger)}, extra...), pl.app.batchObs(events, "processor", pl.p.name)...)
-	kv = append(kv, "obs.checkpoint", int64(trigger), "order.p."+pl.p.quint, 2*int64(trigger)+1)
+	kv = append(kv, "obs.checkpoint", int64(trigger), "order.p."+pl.p.quint, 2*int64(trigger)+slot)
 	return newRowStep(pl.p.quint, len(events), kv...)
 }
 
@@ -425,6 +447,9 @@ func (pl *poller) step(trigger Position, events []Event, extra ...any) rowStep {
 // read at head), then commits the checkpoint with its outcome event; it
 // returns the head after, false if the checkpoint did not commit.
 func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res Result) (Position, bool) {
+	if res.delivery == AtMostOnce {
+		return pl.atMostOnce(ctx, cp, e, res)
+	}
 	key := pl.key(e.Pos)
 	kind := EffectFaults(pl.p.name)
 	sim, proc := qenv.From(ctx), qenv.ProcessOf(ctx)
@@ -462,4 +487,64 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 	// least once, a run that had an ok effect and then failed every try
 	// (a crash between) commits grist.failed, and the model admits either
 	return pl.commit(ctx, cp, []pending{{trigger: e.Pos, events: outcome}}, "ok", ok)
+}
+
+// atMostOnce runs an at-most-once Effect for trigger e (checkpoint cp
+// before it): the checkpoint first (its step records ok false: no
+// outcome is known when it commits), then f once, its effect step, then
+// the outcome event, if any, in a commit of its own under a marker of
+// the effect key, so a retry of an outcome whose commit's answer was lost
+// appends it once. It returns the head after, false if the checkpoint did
+// not commit (read again: a commit of unknown outcome counts as another
+// poller's, and its effect is not run).
+func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Result) (Position, bool) {
+	head, ok := pl.commitAt(ctx, cp, []pending{{trigger: e.Pos}}, 0, "ok", false)
+	if !ok {
+		return 0, false
+	}
+	key := pl.key(e.Pos)
+	kind := EffectFaults(pl.p.name)
+	sim, proc := qenv.From(ctx), qenv.ProcessOf(ctx)
+	if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
+		proc.Crash() // the checkpoint moved, the effect never runs: lost, by right
+	}
+	err := res.effect(context.WithValue(ctx, effectKey{}, key))
+	record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
+		"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos)+1)
+	if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
+		proc.Crash() // the effect ran once, its outcome is lost
+	}
+	var outcome []Event
+	switch {
+	case err != nil:
+		outcome = []Event{failedEvent(pl.p.name, e.Pos)}
+	case res.onSuccess != nil:
+		outcome = []Event{*res.onSuccess}
+	}
+	if len(outcome) > 0 && (pl.app.events[outcome[0].Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil) {
+		outcome, err = []Event{failedEvent(pl.p.name, e.Pos)}, errors.New("an unregistered or unstorable outcome event") // the code's fault
+	}
+	if len(outcome) == 0 {
+		return head, true
+	}
+	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil},
+		pl.app.batchObs(outcome, "processor", pl.p.name)...)...)
+	b := store.Batch{Events: outcome, Marker: &store.Marker{ID: reservedID + key, Hash: "outcome"},
+		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow([]rowStep{step})}
+	for ctx.Err() == nil {
+		h, err := pl.s.Append(ctx, pl.tenant, b)
+		var cf *store.ConditionFailed
+		switch {
+		case err == nil:
+			pl.tries = 0
+			return h, true
+		case errors.As(err, &cf) && cf.Marker != "":
+			return head, true // committed by an earlier try whose answer was lost
+		case !store.Transient(err):
+			pl.pause(ctx)
+			return head, true // a permanent error: the outcome is lost, as after a crash
+		}
+		pl.pause(ctx)
+	}
+	return head, true
 }

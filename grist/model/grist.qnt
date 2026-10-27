@@ -98,6 +98,42 @@ module grist {
   pure def atLeastOnceOutcome(processor: str, trigger: int, ok: bool, success: List[Event]): List[Event] =
     if (ok) success else [failed(processor, trigger)]
 
+  // the effect steps of processor for trigger, ok or not
+  pure def triesOf(effects: List[Effect], processor: str, trigger: int): int =
+    effectsOf(effects, processor, trigger, true) + effectsOf(effects, processor, trigger, false)
+
+  // log holds e
+  pure def holds(log: List[Event], e: Event): bool = log.indices().exists(i => log[i] == e)
+
+  // At most once, the checkpoint commits first, before any effect step of
+  // its trigger; its step records ok false (no outcome is known when it
+  // commits) and appends nothing.
+  pure def atMostOnceFirst(effects: List[Effect], processor: str, trigger: int, ok: bool): bool =
+    not(ok) and triesOf(effects, processor, trigger) == 0
+
+  // An at-most-once effect step runs once, after its trigger's checkpoint
+  // (checkpoint: the processor's): none of the trigger's before it. A
+  // crash between the checkpoint and the effect loses it, by right: the
+  // model admits a trigger with no effect step.
+  pure def atMostOnceEffect(effects: List[Effect], checkpoint: int, processor: str, trigger: int): bool =
+    checkpoint >= trigger and triesOf(effects, processor, trigger) == 0
+
+  // An at-most-once outcome, if present, agrees with the one effect step
+  // (ok: the step's record of which outcome it appends) and is appended
+  // once: none of its events, nor the trigger's grist.failed, in the log
+  // yet (success's events must name the trigger). A crash after the
+  // effect loses it, by right.
+  pure def atMostOnceDone(log: List[Event], effects: List[Effect], processor: str, trigger: int, ok: bool, success: List[Event]): bool = and {
+    triesOf(effects, processor, trigger) == 1,
+    effectsOf(effects, processor, trigger, ok) == 1,
+    success.concat([failed(processor, trigger)]).foldl(true, (b, e) => b and not(holds(log, e))),
+  }
+
+  // the events an at-most-once outcome appends: success's, or the
+  // trigger's grist.failed
+  pure def atMostOnceOutcome(processor: str, trigger: int, ok: bool, success: List[Event]): List[Event] =
+    atLeastOnceOutcome(processor, trigger, ok, success)
+
   // grist's default EffectTries: a failed effect is checkpointed with
   // grist.failed after this many failures
   pure val EFFECT_TRIES = 3

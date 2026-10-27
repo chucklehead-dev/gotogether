@@ -14,11 +14,17 @@ type Mailer interface {
 	Send(ctx context.Context, key, msg string) error
 }
 
+// A Bank pays amounts out, deduplicating by key where it can.
+type Bank interface {
+	Pay(ctx context.Context, key, counter string, amount int) error
+}
+
 // Deps are the application's dependencies, reached through a processor's
 // context: one set per simulation, never a package-level value that runs
 // in parallel would share.
 type Deps struct {
 	Mailer Mailer
+	Bank   Bank
 	// Store is the application's store, for a raw append, which only the
 	// dispatchDirect mutant makes (grain's example processor).
 	Store grist.Store
@@ -31,14 +37,23 @@ func WithDeps(ctx context.Context, d Deps) context.Context {
 	return context.WithValue(ctx, depsKey{}, d)
 }
 
-// DepsOf are ctx's dependencies; a Mailer that refuses every mail if
-// none were attached.
+// DepsOf are ctx's dependencies; a Mailer that refuses every mail and a
+// Bank that refuses every payment if none were attached.
 func DepsOf(ctx context.Context) Deps {
 	d, ok := ctx.Value(depsKey{}).(Deps)
 	if !ok || d.Mailer == nil {
 		d.Mailer = noMailer{}
 	}
+	if d.Bank == nil {
+		d.Bank = noBank{}
+	}
 	return d
+}
+
+type noBank struct{}
+
+func (noBank) Pay(context.Context, string, string, int) error {
+	return errors.New("counters: no bank: attach one with WithDeps")
 }
 
 type noMailer struct{}
@@ -71,5 +86,35 @@ func NewSimMailer(s *qenv.Sim) *SimMailer {
 // Send implements Mailer: an error if no answer came within a second.
 func (m *SimMailer) Send(ctx context.Context, key, msg string) error {
 	_, err := m.svc.Call(ctx, Mail{Key: key, Msg: msg}, time.Second)
+	return err
+}
+
+// A Payment is a payment as the simulated bank takes it.
+type Payment struct {
+	Key, Counter string
+	Amount       int
+}
+
+// SimBank is a bank in a simulation: a qenv.Service of its own process
+// ("bank"), whose requests and responses may be lost or late.
+type SimBank struct {
+	svc *qenv.Service[Payment, struct{}]
+	// Paid are the payments it was asked to make, duplicates included.
+	Paid []Payment
+}
+
+// NewSimBank registers the bank service in s.
+func NewSimBank(s *qenv.Sim) *SimBank {
+	b := &SimBank{}
+	b.svc = qenv.NewService(s, "bank", nil, func(ctx context.Context, p Payment) (struct{}, error) {
+		b.Paid = append(b.Paid, p)
+		return struct{}{}, nil
+	})
+	return b
+}
+
+// Pay implements Bank: an error if no answer came within a second.
+func (b *SimBank) Pay(ctx context.Context, key, counter string, amount int) error {
+	_, err := b.svc.Call(ctx, Payment{Key: key, Counter: counter, Amount: amount}, time.Second)
 	return err
 }

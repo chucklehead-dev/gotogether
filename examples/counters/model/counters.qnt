@@ -16,7 +16,8 @@ module countersLib {
     { typ: "average-computed", strs: [], ints: [sum, count], tags: Set(), cause: ("processor", "average") }
   pure def notified(counter: str): Event =
     { typ: "notified", strs: [counter], ints: [], tags: Set(("counter", counter)), cause: ("processor", "welcome") }
-
+  pure def retired(counter: str, total: int, id: str): Event =
+    { typ: "counter-retired", strs: [counter], ints: [total], tags: Set(("counter", counter)), cause: ("command", id) }
   // what each command's rule reads: whether a counter has the name, and
   // whether the counter exists. A committed step's read set must cover
   // it (grist's covers), whatever else the decision read
@@ -63,7 +64,7 @@ module counters {
 
   action init = all {
     log' = [],
-    checkpoints' = Map("average" -> 0, "welcome" -> 0),
+    checkpoints' = Map("average" -> 0, "welcome" -> 0, "payout" -> 0),
     appended' = [],
     effects' = [],
     answered' = Set(),
@@ -189,6 +190,89 @@ module counters {
     processes(atLeastOnceOutcome("welcome", trigger, ok, [notified(log[trigger - 1].strs[0])]), "welcome", trigger),
   }
 
+  // welcome is at least once: its outcome commits with its checkpoint,
+  // never alone, so an outcome step of its own is no step of this model
+  // (the checkpointFirst mutant, welcome at most once, makes them)
+  action welcomeOutcome(trigger: int, ok: bool): bool = all {
+    false,
+    log' = log,
+    appended' = [],
+    checkpoints' = checkpoints,
+    effects' = effects,
+    answered' = answered,
+  }
+
+  // a retirement's payout made: retiredAt is the retirement's position,
+  // so each retirement's outcome is its own (atMostOnceDone)
+  pure def paidOut(counter: str, retiredAt: int): Event =
+    { typ: "paid-out", strs: [counter], ints: [retiredAt], tags: Set(("counter", counter)), cause: ("processor", "payout") }
+
+
+  // retire-counter: refused for an unknown counter, else the counter's
+  // total as of the commit (its read of the counter's increments is in
+  // its condition)
+  action retireCounter(counter: str, id: str, readPos: int, reads: List[Read], result: str): bool =
+    if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
+    else if (result == "conflict") all {
+      freshKey(answered, id),
+      covers(reads, counterRead(counter)),
+      not(conditionHolds(log, readPos, reads)),
+      refuses(readPos, id),
+    } else all {
+      freshKey(answered, id),
+      covers(reads, counterRead(counter)),
+      conditionHolds(log, readPos, reads),
+      if (result == "ok") all {
+        existsTagged(log, "counter-created", "counter", counter),
+        appends([retired(counter, total(log, counter), id)], id),
+      } else all {
+        result == "unknown-counter",
+        not(existsTagged(log, "counter-created", "counter", counter)),
+        refuses(readPos, id),
+      },
+    }
+
+  // payout, at most once: the checkpoint first (ok false, nothing
+  // appended), before any payment of the trigger
+  action payout(trigger: int, ok: bool): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("payout"), "counter-retired"),
+    atMostOnceFirst(effects, "payout", trigger, ok),
+    processes([], "payout", trigger),
+  }
+
+  // payout's effect (the bank's payment): once, after its checkpoint, or
+  // never (a crash between the two loses it, by right)
+  action payoutEffect(trigger: int, key: str, ok: bool): bool = all {
+    trigger > 0 and trigger <= log.length() and log[trigger - 1].typ == "counter-retired",
+    atMostOnceEffect(effects, checkpoints.get("payout"), "payout", trigger),
+    keyStable(effects, "payout", trigger, key),
+    log' = log,
+    appended' = [],
+    checkpoints' = checkpoints,
+    effects' = effects.append(("payout", trigger, key, ok)),
+    answered' = answered,
+  }
+
+  // payout's outcome, if present (a crash after the payment loses it):
+  // paid-out after the one ok payment, grist.failed after a failed one
+  action payoutOutcome(trigger: int, ok: bool): bool = {
+    val isRetirement = trigger > 0 and trigger <= log.length() and log[trigger - 1].typ == "counter-retired"
+    val success = [paidOut(if (isRetirement) log[trigger - 1].strs[0] else "", trigger)]
+    all {
+      isRetirement,
+      atMostOnceDone(log, effects, "payout", trigger, ok, success),
+      val b = atMostOnceOutcome("payout", trigger, ok, success)
+      all {
+        log' = log.concat(b),
+        appended' = b,
+        checkpoints' = checkpoints,
+        effects' = effects,
+        answered' = answered,
+      },
+    }
+  }
+
   // the model on its own (gotogether simulate)
   action step = {
     nondet counter = Set("a", "b").oneOf()
@@ -206,6 +290,10 @@ module counters {
       average(nextOf(log, checkpoints.get("average"), "counter-incremented")),
       welcomeEffect(nextOf(log, checkpoints.get("welcome"), "counter-created"), key, ok),
       welcome(nextOf(log, checkpoints.get("welcome"), "counter-created"), ok),
+      retireCounter(counter, id, log.length(), [counterRead(counter), { typ: "counter-incremented", tags: Set(("counter", counter)) }], "ok"),
+      payout(nextOf(log, checkpoints.get("payout"), "counter-retired"), false),
+      nondet trigger = 1.to(log.length() + 1).oneOf()
+      any { payoutEffect(trigger, key, ok), payoutOutcome(trigger, ok) },
     }
   }
 
@@ -228,6 +316,18 @@ module counters {
       checkpoints.get("welcome") >= i + 1,
       effectsOf(effects, "welcome", i + 1, true) > 0 or log.indices().exists(j => log[j] == failed("welcome", i + 1)),
     })
+
+  // eventually: every retirement's payout was checkpointed (at most
+  // once: its payment and its outcome may be lost)
+  val everyRetirementHandled =
+    log.indices().forall(i => log[i].typ == "counter-retired" implies checkpoints.get("payout") >= i + 1)
+
+  // test-only (counters.exactly.binding.yaml), eventually: every retirement
+  // paid out exactly once. At most once allows none, by right (a crash
+  // between the checkpoint and the payment); an application that must
+  // pay states it so, and needs another guarantee.
+  val everyRetirementPaidOnce =
+    log.indices().forall(i => log[i].typ == "counter-retired" implies effectsOf(effects, "payout", i + 1, true) == 1)
 
   // test-only (counters.once.binding.yaml): one ok welcome per counter.
   // At least once allows more, by right; an application whose effect
@@ -275,6 +375,15 @@ module countersCalls {
       answers([], id),
     } else all { result == "conflict", answers([], id) }
 
+  action retireCounter(counter: str, id: str, result: str): bool =
+    if (result == "ok") all {
+      existsTagged(log, "counter-created", "counter", counter),
+      answers([retired(counter, total(log, counter), id)], id),
+    } else if (result == "unknown-counter") all {
+      not(existsTagged(log, "counter-created", "counter", counter)),
+      answers([], id),
+    } else all { result == "conflict", answers([], id) }
+
   action showCounter(counter: str): bool = all { log' = log, answered' = answered }
 
   action step = {
@@ -287,6 +396,7 @@ module countersCalls {
       createCounter(counter, name, id, "name-taken"),
       incrementCounter(counter, by, id, "ok"),
       incrementCounter(counter, by, id, "unknown-counter"),
+      retireCounter(counter, id, "ok"),
       showCounter(counter),
     }
   }

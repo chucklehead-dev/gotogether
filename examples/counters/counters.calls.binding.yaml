@@ -21,6 +21,8 @@ actions:
     args: { result: '{{.outcome}}' }
   incrementCounter:
     args: { result: '{{.outcome}}' }
+  retireCounter:
+    args: { result: '{{.outcome}}' }
   showCounter:
     expect: 'total(log, {{.counter}}) == {{.obs.total}} and namesOf(log, {{.counter}}) == {{.obs.names}}'
 

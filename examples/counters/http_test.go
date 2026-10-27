@@ -14,8 +14,12 @@ import (
 // (a 503 with Retry-After for an unknown outcome, 422 and 409 for
 // refusals) and the network's faults are qhttp's: requests dropped,
 // duplicated and late, answers lost, the node crashing with requests in
-// flight. One run is judged by both bindings: the store's steps and the
-// clients' calls, linearized.
+// flight. One run is judged by both bindings: the clients' calls,
+// linearized (per push: a retry under another key than the call's is
+// caught there alone, 9 of 20 runs failing so, since the store admits
+// each key as a new command), and the store's steps (full mode: what
+// commits does not depend on the transport, and the store's side is
+// judged per push on the other tiers).
 func TestHTTPTier(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -23,11 +27,15 @@ func TestHTTPTier(t *testing.T) {
 	cfg.HTTP = true
 	sys := system(commits, cfg)
 	n := qtest.ExploreConfig{Seeds: seeds(20, 3)}
+	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
+			qtest.Reaches("rpc.api.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
+	if testing.Short() {
+		return
+	}
 	sys.Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
 			qtest.Reaches("rpc.api.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
-	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }
 
 // Duplicated and late requests over HTTP: a key's first answer is final

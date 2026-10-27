@@ -14,11 +14,18 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-// mutants are grain's two bugs, each a directory of testdata/mutants/
+// mutants are grain's two bugs and an effect checkpointed first, each a directory of testdata/mutants/
 // whose files replace the app's of the same name (a go build overlay):
 // the app's own files stay as they are, and each mutant is a whole file
 // to diff against them.
-var mutants = []string{"blind", "dispatchDirect"}
+var mutants = []string{"blind", "dispatchDirect", "checkpointFirst"}
+
+// fullOnly are the mutants built and run in full mode only: their claim
+// repeats a mechanism a per-push test checks (checkpointFirst: the
+// at-least-once model refusing a checkpoint before its effect, which
+// grist's TestEffectAtMostOnce orders and TestPayoutAtMostOnce judges),
+// and building a mutant's binary is most of its cost.
+var fullOnly = map[string]bool{"checkpointFirst": true}
 
 // TestMutant states what catches the mutant this binary was built with;
 // TestMutants builds and runs it once per mutant. Rates measured on
@@ -77,6 +84,14 @@ func TestMutant(t *testing.T) {
 		cfg.CommitFaults, cfg.SQL = false, true
 		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
+	case "checkpointFirst":
+		// The welcome declared at most once while the model says at least
+		// once: its checkpoint step comes before any effect step of its
+		// trigger, which atLeastOnceDone refuses. One client creating in
+		// one tenant, no faults: every run that creates a counter, 10 of 10
+		cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Send: []string{"create-counter"}}
+		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 2)}).
+			Expect(t, qtest.Some(qtest.Rejects("welcome")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}
@@ -125,6 +140,9 @@ func TestMutants(t *testing.T) {
 	for _, m := range mutants {
 		t.Run(m, func(t *testing.T) {
 			t.Parallel()
+			if testing.Short() && fullOnly[m] {
+				t.Skip("full mode: its claim repeats a per-push check (see fullOnly)")
+			}
 			args := []string{"test", "-count=1", "-overlay", Overlay(t, m, t.TempDir()), "-run", "^TestMutant$", "-v"}
 			if testing.Short() {
 				args = append(args, "-short")

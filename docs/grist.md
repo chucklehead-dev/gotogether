@@ -4,8 +4,8 @@ Status: slice 1 built (grist/, examples/counters; §0.1 says what
 building it changed here, §0.2 what its review changed); slice 2's SQL
 store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
 on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
-`grist.Main` built (§0.5), its `AtMostOnce`, generator and gristflow design,
-as is slice 3. Decisions taken 2026-10-27 (a module
+`grist.Main` built (§0.5), `AtMostOnce` built (§0.6), its generator and
+gristflow design, as is slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
 alongside); revised the same day after a review, every point of which
@@ -519,7 +519,10 @@ stated where it stands below.
   over qhttp's Transport (2 s of virtual time per request), so the
   network's faults are qhttp's under the same kinds as the Service
   tier's (`rpc.api.request`, `rpc.api.delay`, `rpc.api.response`, the
-  node's crashes). examples/counters' `TestHTTPTier` is claim 2 there.
+  node's crashes). examples/counters' `TestHTTPTier` is claim 2 there, judged
+  at the clients per push (a retry under a new key is caught there alone:
+  9 of 20 runs; the store admits each key as a new command) and at the
+  store in full mode.
 - **The real tier is HTTP**: examples/counters' `TestRealHTTP` (was
   `TestRealSQLite`, whose clients called `App.Execute` in process) serves
   `NewHandler` on a real `http.Server` (a loopback port) over a SQLite
@@ -539,6 +542,70 @@ stated where it stands below.
   ./run-demo.sh` serves it, drives it with curl and validates its file.
 - **Ids starting with `grist:` are grist's** (an at-most-once outcome's
   marker, §2.6): a command under one is refused (400 at the API).
+
+## 0.6 What building `AtMostOnce` changed
+
+- **The semantics**: the checkpoint commits first, alone (its step
+  records `ok: false`: no outcome is known when it commits); then f runs
+  **once** (`EffectTries` does not apply: a try that failed may have
+  taken effect, and trying again would be at least once); its effect
+  step is recorded; then the outcome event, `OnSuccess`'s after an ok
+  effect or `grist.failed` after a failed one, commits **in a commit of
+  its own**, under a marker keyed by the effect key (`grist:<key>`, so a
+  retry of an outcome whose answer was lost appends it once; ids
+  starting with `grist:` are refused to commands). A crash between the
+  checkpoint and f loses the effect, one after f its outcome: no restart
+  runs either again. A checkpoint commit whose answer was lost counts as
+  another poller's (its effect is not run): at most once, and before
+  leases (§3.4) the safe reading.
+- **Its steps**: the handling step `<processor>` (trigger, `ok: false`,
+  the checkpoint), the effect step `<processor>Effect`, and the outcome
+  step **`<processor>Outcome`** (trigger, key, `ok`; the events), relayed
+  from its row. `App` registration claims `<processor>Outcome` as a
+  Quint name too. Order: `order.p.<processor>` is 2·T for an
+  at-most-once checkpoint and 2·T+1 for its effect step (at least once
+  keeps 2·T for effects and 2·T+1 for its checkpoint); the outcome step
+  has `order.pos` only (2·P, after the effect's 2·H+1 since it appends).
+- **The crash points are the same kind** (`grist.<processor>.effect`,
+  `crashBefore` and `crashAfter`, just before and just after f, whatever
+  the delivery): at least once both precede the checkpoint (crashAfter
+  duplicates), at most once both follow it (crashBefore loses the
+  effect, crashAfter its outcome). One kind, one option list.
+- **grist.qnt** gains `triesOf`, `holds`, `atMostOnceFirst` (the
+  checkpoint before any effect step of its trigger, `ok` false),
+  `atMostOnceEffect` (one effect step, after the checkpoint),
+  `atMostOnceDone` (the outcome agrees with the one effect step and comes
+  once: the success's events, which must name the trigger, and the
+  trigger's `grist.failed` not in the log yet) and `atMostOnceOutcome`;
+  checked in grist/model's tests on small values.
+- **examples/counters' at-most-once processor is `payout`**, on a new
+  command `retire-counter` (`counter-retired{counter, total}`, refused
+  for an unknown counter): it pays the counter's total out through a
+  simulated `bank` (`qenv.Service`), a duplicate payment being worse
+  than a lost one, `OnSuccess(paid-out{counter, retired})`. Its claims
+  (`TestPayoutAtMostOnce`): a scripted `crashBefore` loses the payment
+  and the model admits it (`counters.retiring.binding.yaml`:
+  `Conforms`, `All(Settles)`, the eventual val `everyRetirementHandled`
+  needing only the checkpoint); a test-only binding
+  (`counters.exactly.binding.yaml`, the eventual val
+  `everyRetirementPaidOnce`) rejects those runs, `All(Violates(...))`;
+  `crashAfter` and no faults conform under it (no payment twice, none
+  lost). With grist's `AtMostOnce` run as at least once, every run
+  rejects `payoutEffect`. Runs that retire are judged by their own
+  binding; the other claims send no `retire-counter` and keep their
+  bindings (a binding's eventual vals each cost a replay).
+- **`checkpointFirst`** (the note's mutant): welcome declared
+  `AtMostOnce` while the model says at least once:
+  `Some(Rejects("welcome"))`, 10 of 10 runs (its checkpoint step before
+  any effect step, which `atLeastOnceDone` refuses). The model gained
+  `welcomeOutcome`, never enabled (an at-least-once outcome commits with
+  its checkpoint), so the mutant's outcome steps are a model's action.
+  The note's second claim (with a crash between, `Violates` of
+  `everyCounterWelcomedOrFailed` in a model variant whose welcome is at
+  most once) is `payout`'s: a real at-most-once processor, admitted by
+  its model and rejected by a test-only exactly-once val. The mutant
+  runs in full mode (its claim repeats `TestPayoutAtMostOnce`'s and
+  grist's mechanism; building its binary is most of its cost).
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -821,7 +888,7 @@ own commit is its checkpoint's. The results:
 | `grist.Emit(events...)` | the events and the checkpoint, one transaction, conditioned on the checkpoint alone | exactly once in the log |
 | `grist.Dispatch(cmd, c)` | the command decided on fresh reads at the head, conditioned on them as any command is, with the checkpoint in the same transaction | exactly once in the log |
 | `grist.Effect(f, grist.AtLeastOnce)` | f runs, then the checkpoint (and an outcome event, `grist.OnSuccess(e)`) | at least once outside the log |
-| `grist.Effect(f, grist.AtMostOnce)` | the checkpoint first, then f, then the outcome event | at most once outside the log |
+| `grist.Effect(f, grist.AtMostOnce)` | the checkpoint first, then f (once), then the outcome event in a commit of its own (under a marker of the effect key): a crash between loses the effect or the outcome (§0.6) | at most once outside the log |
 
 `Dispatch` decides at the head, not at T, because a command's rule is
 about the state it commits into (a welcome command must not create a
@@ -1141,7 +1208,8 @@ one order without trusting a clock.
 | the command's name, with outcome | on return, for a reused key or the code's error | as above | `idempotency-key-reused`, or the error's text |
 | the query's name | on return | the query's fields | the result; the position read through |
 | `<processor>` | from its batch's step row (one step per trigger) | the trigger's position; an effect's checkpoint, `ok` (which outcome it commits) | the events appended (types, fields, causes), the checkpoint |
-| `<processor>Effect` | grist's wrapper, after f returns, before the checkpoint | the trigger, the effect key | f's outcome (`ok`) |
+| `<processor>Effect` | grist's wrapper, after f returns (at least once before the checkpoint, at most once after it) | the trigger, the effect key | f's outcome (`ok`) |
+| `<processor>Outcome` | from the step row of an at-most-once outcome's commit (§0.6) | the trigger, the effect key, `ok` | the events appended, the head |
 | `<periodic>` | at its commit (slice 3) | slot | the events appended |
 
 A refusal and a commit are recorded at their commit, because the caller
@@ -1269,7 +1337,7 @@ promises, in the per-tenant state above:
 - **Checkpoint monotonicity**: a processor's checkpoint never moves back
   and never passes an event it has not handled: exactly one handling
   step per subscribed event (`Emit`, `Dispatch`, `Skip`, `failed`).
-- **Effects**: `AtLeastOnce` admits one or more effect steps per trigger,
+- **Effects** (`AtMostOnce`'s defs since §0.6: `atMostOnceFirst`, `atMostOnceEffect`, `atMostOnceDone`): `AtLeastOnce` admits one or more effect steps per trigger,
   every one under the trigger's key (`keyStable`), its checkpoint step
   only after them, committing what its run reached (`atLeastOnceDone`:
   the success event after an ok effect step, `grist.failed` after
@@ -1332,6 +1400,7 @@ through `qhttp.NewTransport`; the API runs on `qhttp.NewServer` (slice
 `Only("crashBefore")`) and after it, the crash made with
 `ProcessOf(ctx).Crash()`; `qenv.FaultPoint` cannot name two crashes (two
 kinds, `...effect.before` and `...effect.after`, are the alternative).
+At most once the same two options follow the checkpoint (§0.6).
 The crash that duplicates an at-least-once effect is then one named
 option, which a `qenv.Script` asks for and `Exhaust` reaches with one
 fault.
@@ -1758,13 +1827,14 @@ with the runtime's condition taken out; `blind` 25 of 40 and
 real tier on a SQLite file judged by `counters.binding.yaml`, its
 clients goroutines calling `App.Execute` through `gristsim.Do` (since
 §0.4, which moved the SQL tier's repeated claims to full mode).
+**Done (`AtMostOnce`, §0.6)**: the runtime, grist.qnt's defs, examples/counters'
+`payout` with its claims and the `checkpointFirst` mutant.
 **Done (the API, §0.5)**: `grist.NewHandler` with deny-by-default
 policies, `grist/client`, gristsim's HTTP tier (`TestHTTPTier`, claim 2
 over qhttp with its network's faults, both sides; `TestHTTPDuplicateRequests`),
 `TestRealHTTP` (the real tier over real HTTP), `grist.Main` and
-examples/counters' `cmd/counters`. **Left**: `AtMostOnce` and
-`checkpointFirst`, the generator, gristflow, and `blind` measured on the
-real tier.
+examples/counters' `cmd/counters`. **Left**: the generator (`grist
+model`), gristflow, and `blind` measured on the real tier.
 
 ### 8.3 Slice 3: the rest of grain
 

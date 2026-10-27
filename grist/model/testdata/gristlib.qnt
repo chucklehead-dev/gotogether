@@ -55,6 +55,26 @@ module gristlib {
     }
   }
 
+  run atMostOnceTest = {
+    val s = [{ typ: "done", strs: [], ints: [1], tags: Set(), cause: ("processor", "p") }]
+    all {
+      // the checkpoint first: before any effect step, ok false
+      assert(atMostOnceFirst([], "p", 1, false)),
+      assert(not(atMostOnceFirst([], "p", 1, true))),
+      assert(not(atMostOnceFirst([("p", 1, "k", true)], "p", 1, false))),
+      // the effect once, after the checkpoint
+      assert(atMostOnceEffect([], 1, "p", 1)),
+      assert(not(atMostOnceEffect([], 0, "p", 1))),
+      assert(not(atMostOnceEffect([("p", 1, "k", false)], 1, "p", 1))),
+      // the outcome agrees with the one effect step, and comes once
+      assert(atMostOnceDone([], [("p", 1, "k", true)], "p", 1, true, s)),
+      assert(not(atMostOnceDone([], [("p", 1, "k", true)], "p", 1, false, s))),
+      assert(not(atMostOnceDone([], [], "p", 1, true, s))),
+      assert(not(atMostOnceDone(s, [("p", 1, "k", true)], "p", 1, true, s))),
+      assert(atMostOnceOutcome("p", 1, false, s) == [failed("p", 1)]),
+    }
+  }
+
   run atLeastOnceTest = {
     val okThenFailed = [("p", 1, "k", true), ("p", 1, "k", false), ("p", 1, "k", false), ("p", 1, "k", false)]
     all {
