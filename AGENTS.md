@@ -65,6 +65,7 @@ examples/grpcledger   separate module: gRPC ledger; simgrpc (any generated gRPC 
                       real tier over bufconn with otelgrpc spans converted to steps (ledger.convert.yaml); cmd/ledger-real
 examples/streams      separate module: outbox publisher + consumers on Kafka (franz-go, kfake), Kinesis (AWS SDK,
                       kinesisfake) and a simulated log (simlog: partitions, idempotent producer, group, fencing); one binding
+examples/counters     app: grain's counter example on grist, gristsim; mutants blind (Rejects) and dispatchDirect (Mismatch)
 examples/hello        app: the smallest simulated system (a counter, a lossy network, a retrying client); start here
 examples/wallet       app: transfers on a Store with request-id dedupe, an outbox, a ledger; Exhaust, isolation levels and qhistory,
                       ResolvePending, Linearize and LinearizeByKey, an eventual val, GOTOGETHER_ALL_FAULTS

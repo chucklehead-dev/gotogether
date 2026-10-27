@@ -21,10 +21,11 @@ items left from S, X, Y, T and E alongside; R5 when the maintainer says.
 The grist track, alongside G: an event-sourced framework checked by its
 model, designed in docs/grist.md (§8 for the slices).
 
-- **Slice 1, the thesis**: the core blocks on memstore and simstore,
-  pinned reads and read-set conditions, idempotency, `Emit` and
-  `Effect(AtLeastOnce)` processors, gristsim, examples/counters with a
-  hand-written model; grain's race and duplicate caught.
+- **Slice 1, the thesis**: done (grist/, examples/counters, skills/grist;
+  docs/grist.md §0.1 says what building it changed). Left of it for
+  slice 2: keys and queries of several tags (with the typed template
+  function), a separate effect worker, tenants created while a node runs,
+  `grist.lock` and `grist.topology`.
 - **Slice 2, the real tier**: qsql extended (its own core item, with a
   brute-force test), the typed template function, an actor filter;
   sqlstore on qsql and SQLite, the HTTP API, `AtMostOnce`, the

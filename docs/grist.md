@@ -1,6 +1,7 @@
 # grist: an event-sourced application framework checked by its model
 
-Status: design, nothing built. Decisions taken 2026-10-27 (a module
+Status: slice 1 built (grist/, examples/counters; §0.1 says what
+building it changed here); slices 2 and 3 are design. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
 alongside); revised the same day after a review, every point of which
@@ -73,6 +74,71 @@ version of this note:
 Decided differently from the review: rejections are not remembered
 under their idempotency key (§2.4); `leakTenant` is dropped, tenant
 isolation being a contract-suite test with a mutant store (§3.3).
+
+## 0.1 What building slice 1 changed
+
+Implementing slice 1 (grist/, examples/counters) showed this note wrong
+or incomplete in these places; each is fixed where it stands below.
+
+- **Claim 1 runs at ReadCommitted.** Under Snapshot and Serializable the
+  loser of a race for the head gets `ErrConflict`, a transient error
+  whose retry starts again at the marker and decides again on fresh
+  reads: that closes most of the blind create's window (2 of 40 runs
+  race). At ReadCommitted the loser waits for the head's lock and
+  commits blind (25 of 40). The blind create is still caught at every
+  level, at its rate (§8.1).
+- **The read set's step fields are `readPos` and `reads`**, not
+  `read.pos` and `read.queries`: a model parameter is a Quint identifier,
+  and a binding gives templates only where a parameter is not the
+  same-named step field. The recorded read set is the *condition* the
+  append committed under: an `Unconditioned` command records `[]`, and
+  the model's precondition judges it.
+- **The effect step is `<processor>Effect`** (`welcomeEffect`), not
+  `<processor>.effect`: a step's action is its model action's name. Its
+  arguments are `trigger`, `key` and `ok`. The fault kind keeps the dots
+  (`grist.welcome.effect`).
+- **A processor's steps are on one thread per poller** (`qobs.Thread`):
+  an effect step and a checkpoint-only commit can both sit at 2·H+1 and
+  on the same `order.p.<processor>` value, and only program order puts
+  the effect first.
+- **A refusal records the head and an empty batch** (`obs.head`,
+  `obs.events: []`), so one `expect:` serves a command's every step.
+  Every commit records its batch as `obs.events` (types), `obs.strs` and
+  `obs.ints` (the events' string and integer fields in struct order):
+  scalars and lists, all slice 1's binding has. Processor steps add
+  `obs.checkpoint`.
+- **The model keeps two ghost variables** beside the log and the
+  checkpoints: `appended` (the last step's batch, what its observations
+  are compared with) and `effects` (the effect steps, what at-least-once
+  and `welcomedOnce` count). The model module `export`s grist.qnt's and
+  the library's defs, or the binding's expects cannot name them.
+- **`grist.failed` carries the processor and the trigger, not the
+  error's text**: the model could not compute it. A handler's error is
+  `grist.Fail(err)`, tried `EffectTries` times like an effect's.
+- **The Store interface has `Name`, `Marker` and `Checkpoint`**, and
+  `Query` an `After` (a poller reads after its checkpoint); `Batch`
+  carries `Marker`, `Checkpoint` (a compare-and-set), `Condition`, `Time`,
+  `Cause` and the commit hook. A failed checkpoint is a
+  `*CheckpointMoved`; a marker that exists a `*ConditionFailed` naming it.
+  The types live in package grist; there is no `store/` package yet, and
+  the node (pollers, the effect inline in its poller) is `App.Start`, not
+  a `runtime/` package.
+- **A command's result is a `grist.Receipt`** (`Result` is a processor
+  handler's).
+- **Keyed read models take one key in slice 1**, and a query one tag: the
+  read set is (type, tag, value) triples. `Keys("account", "currency")`
+  waits for slice 2's typed binding function.
+- **A poller is one task per (processor, tenant)**, waiting on the
+  store's signal (`Store.Wait`) rather than polling every 250 ms in a
+  simulation, so a quiet system is quiet for `Sim.Settle`; tenants are
+  the store's when the node starts.
+- **gristsim restarts the node from an `OnCrash` hook**: an effect's crash
+  point crashes the node from its own task, which a nemesis's
+  crash-and-restart does not cover. The node serves commands and queries
+  over a `qenv.Service` ("api"), so requests and answers are lost and
+  late; its configuration has `Send` (which commands and queries the
+  workload sends) and `Setup` (the application's doubles, attached to the
+  node's contexts).
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -176,7 +242,7 @@ var Totals = grist.NewKeyedReadModel(App, "totals", 1, grist.Keys("counter"), fu
 
 A plain read model folds the tenant's events of its types; a keyed one
 folds only the events carrying the given values of its key tags
-(`grist.Keys("counter")`, or several: `grist.Keys("account", "currency")`
+(`grist.Keys("counter")`, or, from slice 2, several: `grist.Keys("account", "currency")`
 folds the events tagged with both), so a decision about counter c reads,
 and is conditioned on, counter c's events alone. The version is the
 cache's: bump it when the fold changes. Slices 1 and 2 fold from the log
@@ -283,7 +349,7 @@ set and the append's condition covers "no marker with this id"):
   as a rejection;
 - no marker: decide.
 
-**A command's result** is what its marker holds: the batch's last
+**A command's result** (a `grist.Receipt`) is what its marker holds: the batch's last
 position and an `EventRef{Tenant, Pos}` per event (§10.3), never a value
 the decision computes, so the marker needs nothing of the application
 and a retry's answer is the first attempt's exactly. **Rejections are
@@ -552,7 +618,7 @@ its own instance of the model from init.
   its own transaction read, not its trigger T: a poller that emitted at
   7 for trigger 5 then checkpoints trigger 6 records 14 then at least
   15, in its program order (with T, 13: a cycle with its thread);
-- an effect step (`<processor>.effect`): 2·H+1, H the head the worker
+- an effect step (`<processor>Effect`): 2·H+1, H the head the worker
   read before running it;
 - in an `Emit` batch of several triggers, each trigger's step gets 2·
   the last position of its own events, or, if it emitted none, 2·(the
@@ -568,11 +634,11 @@ one order without trusting a clock.
 
 | step action | recorded | arguments | observations |
 | --- | --- | --- | --- |
-| the command's name | in the append's commit hook (`Txn.OnCommit`, qsql's, the sqlstore's post-commit) | the command's fields, command id, the read set (`read.pos`, `read.queries`) | the events appended, the head; the result |
+| the command's name | in the append's commit hook (`Txn.OnCommit`, qsql's, the sqlstore's post-commit) | the command's fields, command id, the read set it committed under (`readPos`, `reads`) | the events appended, the head; the result |
 | the command's name, with outcome | on return, when refused | as above | the rejection's name, or `conflict` after the tries |
 | the query's name | on return | the query's fields | the result; the position read through |
 | `<processor>` | at its commit | the trigger's position and type | the events appended, the checkpoint |
-| `<processor>.effect` | grist's wrapper, after f returns, before the checkpoint | the effect key | f's outcome |
+| `<processor>Effect` | grist's wrapper, after f returns, before the checkpoint | the trigger, the effect key | f's outcome (`ok`) |
 | `<periodic>` | at its commit (slice 3) | slot | the events appended |
 
 A rejection is recorded on return because nothing committed; a commit
@@ -585,7 +651,7 @@ events the store holds, and the first later step whose recorded head or
 events the model computes otherwise is a Mismatch: a raw append is
 caught by the next step of its tenant, not where it happened.
 
-**The read set is a step argument**: `read.pos` (P) and `read.queries`
+**The read set is a step argument**: `readPos` (P) and `reads`
 (a list of (type, tag key, tag value) triples; key "" for a type-only
 query), so grist.qnt's conditional-append property (§3.3) is checked
 against what the decision read, not assumed. Without them the property
@@ -876,8 +942,9 @@ file. `gotogether-start`'s table gets a row.
 ```text
 grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mod; published like qhegel)
   grist.go             App, events, read models, commands, queries, processors, periodic, Reads, Result
-  runtime/             the node: pollers, effect worker, scheduler, dispatcher (qenv seams only)
-  store/               Store, Query, Batch, Position, EventRef; storetest (the contract suite)
+                       slice 1: also Store, Query, Batch, Position, EventRef, and the node (App.Start: pollers)
+  runtime/             (later) the node: pollers, effect worker, scheduler, dispatcher (qenv seams only)
+  storetest/           the contract suite
   memstore/ simstore/ sqlstore/
   api/                 HTTP/JSON adapter
   screen/              Datastar adapter (the only datastar-go import)
@@ -953,6 +1020,9 @@ for a miss chance under 5% (payd's discipline):
 1. **The race is found in the unsafe variant.** `blind`, two clients,
    no faults, names colliding: `qtest.Some(qtest.Rejects("createCounter"))`:
    the second create commits where the model's precondition is false.
+   At ReadCommitted (25 of 40 runs); under Serializable too, at 2 of 40,
+   since the race's loser gets a transient conflict whose retry decides
+   again (§0.1).
 2. **The safe default passes, through every fault.** The faithful app
    at each of the simstore's three isolation levels, with store commit
    faults and node crashes: `qtest.Conforms()`,
@@ -1074,7 +1144,11 @@ may override** each.
 3. **`EventRef{Tenant, Pos}`, never renumbered** (default, the maintainer
    may override); retention deletes, never renumbers. A global id
    (grain's UUIDv7) waits for export or cross-tenant references.
-4. **The log model only** (default, the maintainer may override): read
+4. **The log model only** (default, the maintainer may override; measured
+   in slice 1: one tenant's run judged in 7 s at 203 steps and 35 s at
+   1003, a 4-core machine, the explorer's determinism rerun included;
+   the simulation itself 0.03 s and 0.35 s; examples/counters'
+   `TestValidationCost`): read
    models as defs over the log, validation time measured at 200 and 1000
    steps per tenant (slice 1's explorations and a long SQLite run)
    before any variant keeping folds as variables (a mechanism-level model

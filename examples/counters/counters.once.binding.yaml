@@ -1,0 +1,29 @@
+# counters.binding.yaml's model and steps, judged by the test-only
+# invariant welcomedOnce (one ok welcome per counter): what the declared
+# guarantee (at least once) allows and an application whose mail must not
+# repeat would forbid. The duplicate a crash after the send makes is
+# admitted by counters.binding.yaml and rejected here.
+spec: model/counters.qnt
+module: counters
+
+outcomes:
+  ok: '"ok"'
+  name-taken: '"name-taken"'
+  unknown-counter: '"unknown-counter"'
+  conflict: '"conflict"'
+
+actions:
+  createCounter:
+    args: { result: '{{.outcome}}' }
+  incrementCounter:
+    args: { result: '{{.outcome}}' }
+  showCounter: {}
+  average: {}
+  welcomeEffect: {}
+  welcome: {}
+
+invariants: [welcomedOnce]
+
+# The model on its own: at least once allows a second welcome.
+simulate:
+  allows: [welcomedOnce]

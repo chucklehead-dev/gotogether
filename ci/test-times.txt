@@ -11,6 +11,7 @@
 # the reason; packages under ten CPU seconds have none.
 examples/bank 80
 examples/checkout 165
+examples/counters 130 # 130 CPU s under -short with GOTOGETHER_CHECK=1 (the mutants' overlay builds and their explorations, three isolation levels, Exhaust skipped)
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51

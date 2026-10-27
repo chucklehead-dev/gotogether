@@ -4,6 +4,7 @@ use (
 	.
 	./examples/bank
 	./examples/checkout
+	./examples/counters
 	./examples/crossdb
 	./examples/edgepublish
 	./examples/fleetrollout

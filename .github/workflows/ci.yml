@@ -109,7 +109,7 @@ jobs:
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           go build -o "$RUNNER_TEMP/cputime" ./internal/cputime
           export GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt"
-          for m in bank checkout glomers hello jobqueue kvstore lease retrystorm sktrace twophase webjobs; do
+          for m in bank checkout counters glomers hello jobqueue kvstore lease retrystorm sktrace twophase webjobs; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
               GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1
@@ -138,6 +138,7 @@ jobs:
           MUTATION=no-fencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
           MUTATION=no-dedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
+          examples/counters/run-demo.sh && MUTATION=blind examples/counters/run-demo.sh
 
       - name: every model on its own (gotogether simulate)
         if: matrix.part == 'tools'

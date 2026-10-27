@@ -30,6 +30,7 @@ references when the task needs them.
 | My system is a Kubernetes controller or a Crossplane provider | simulated API servers (fleetrollout's kubesim, crossdb's interceptors), then real kwok or kind clusters, one model | gotogether-faults (examples/fleetrollout, examples/crossdb) |
 | A bug needs one task far ahead of another, and seeds miss it | `qenv.NewPCT` as the exploration's chooser (priorities, change points), or `ExploreConfig.Steer` toward rare states | gotogether-faults |
 | Seeds and Hegel found nothing; I want coverage-guided search | `System.Fuzz` (the run's choices from the fuzzer's bytes, the model the oracle) | gotogether-faults (its fuzzing reference) |
+| I am writing an event-sourced application and want it checked without annotations | grist's blocks (commands conditioned on their reads, processors with checkpoints), `gristsim.Run` as a `qtest.System`, a model over one tenant's log | grist (examples/counters) |
 | My model is written in Choreo | name each transition (`choreo::step_with`), then any workflow | gotogether-model (Choreo section) |
 | I am starting a component or an example, or setting up CI | the end-to-end workflow and triage | gotogether-workflow |
 | A test failed: whose bug is it? | the verdict table and triage | gotogether-workflow (its verdicts reference) |
