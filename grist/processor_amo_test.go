@@ -52,7 +52,9 @@ func outcomes(log []grist.Stored) []string {
 // the success event, a NotApplied error's grist.failed (known: it did
 // not happen), any other error's grist.unknown with its text (it may
 // have: grist.failed once said "not paid" of a payment whose answer was
-// lost). The steps are ordered
+// lost), its double quotes made single (the step records the text, and
+// no Quint string holds a double quote: an error quoting a URL, as
+// net/http's do, failed every validation of the run). The steps are ordered
 // checkpoint (order.p 2·T, ok false), effect (2·T+1), outcome
 // (noteOutcome, after the effect on the domain clock).
 func TestEffectAtMostOnce(t *testing.T) {
@@ -67,7 +69,7 @@ func TestEffectAtMostOnce(t *testing.T) {
 		case 2:
 			return grist.NotApplied(errors.New("declined"))
 		case 3:
-			return errors.New("bank down")
+			return errors.New(`bank "down"`) // a quote: no Quint string holds one
 		}
 		return nil
 	})
@@ -75,7 +77,7 @@ func TestEffectAtMostOnce(t *testing.T) {
 	if runs["note/t1/1"] != 1 || runs["note/t1/2"] != 1 || runs["note/t1/3"] != 1 {
 		t.Errorf("effect runs by key %v: want each once, the failing one too", runs)
 	}
-	want := []string{`noted:{"of":1}`, `grist.failed:{"processor":"note","trigger":2}`, `grist.unknown:{"processor":"note","error":"bank down","trigger":3}`}
+	want := []string{`noted:{"of":1}`, `grist.failed:{"processor":"note","trigger":2}`, `grist.unknown:{"processor":"note","error":"bank 'down'","trigger":3}`}
 	if got := outcomes(log); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("outcome events %v, want %v", got, want)
 	}
@@ -100,7 +102,7 @@ func TestEffectAtMostOnce(t *testing.T) {
 					t.Errorf("effect step %v: want order.p.note 2·T+1", s)
 				}
 			case "noteOutcome":
-				wantErr := map[int64]string{3: "bank down"}[tr]
+				wantErr := map[int64]string{3: "bank 'down'"}[tr] // as the model can hold it
 				if s.Args["ok"] != (tr == 1) || s.Args["known"] != (tr != 3) || s.Args["error"] != wantErr {
 					t.Errorf("outcome step %v: want ok %v, known %v, error %q", s, tr == 1, tr != 3, wantErr)
 				}

@@ -620,7 +620,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	case errors.As(err, &na):
 		outcome = []Event{failedEvent(pl.p.name, e.Pos)} // known: it did not happen
 	case err != nil:
-		outcome = []Event{unknownEvent(pl.p.name, e.Pos, err.Error())} // it may have happened
+		outcome = []Event{unknownEvent(pl.p.name, e.Pos, modelText(err.Error()))} // it may have happened
 	case res.onSuccess != nil:
 		outcome = []Event{*res.onSuccess}
 	}
@@ -634,7 +634,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	}
 	known, text := err == nil || outcome[0].Type == failedType, ""
 	if !known {
-		text = err.Error()
+		text = modelText(err.Error())
 	}
 	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil, "known", known, "error", text},
 		pl.app.batchObs(outcome, "processor", pl.p.name)...)...)

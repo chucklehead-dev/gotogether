@@ -90,3 +90,11 @@ func checkEvents(block string, events []Event) error {
 	}
 	return nil
 }
+
+// modelText is s as a model's string can hold it, its double quotes made
+// single: a Quint string literal has no escapes, so a recorded text with
+// a double quote (an error quoting a URL, as net/http's do) fails every
+// validation of its run. What grist records and stores of an error (an
+// unknown outcome's) goes through it, both alike, so the model computes
+// the event from the step.
+func modelText(s string) string { return strings.ReplaceAll(s, `"`, "'") }
