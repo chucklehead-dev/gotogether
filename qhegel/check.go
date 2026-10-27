@@ -193,7 +193,10 @@ func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
 		sum := sha256.Sum256([]byte(cc.Checker.Key(steps))) // short: prefix keys copy it per step
 		return "within#" + hex.EncodeToString(sum[:]), false
 	}
-	traces, issues := qtrace.Reconstruct(steps)
+	// the binding's actors (Binding.Reconstruct): one it leaves out has
+	// an info issue, and a prefix is reused only for a run of one actor
+	// that it checks
+	traces, issues := cc.Checker.Binding.Reconstruct(steps)
 	if len(traces) != 1 || len(issues) > 0 || len(traces[0].Issues) > 0 {
 		return "", false
 	}

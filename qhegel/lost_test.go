@@ -48,3 +48,24 @@ func TestCaseKeysLost(t *testing.T) {
 		t.Errorf("a lost tail's cases after and before the cut share a key")
 	}
 }
+
+// A case of an actor the binding's actors: leave out reuses no prefix's
+// verdict: the checker judges no trace of it, so its constants are no
+// instance's (the case checker reconstructed every actor, and planned
+// the left-out one's).
+func TestCaseKeysActors(t *testing.T) {
+	c, err := validate.NewChecker("../validate/testdata/snapshot.yaml", validate.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deposit := qtrace.Step{Action: "deposit", Recorder: "r", Actor: "acct.clients", Seq: 1, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
+	if _, ok := newCaseChecker(c).constants([]qtrace.Step{deposit}); !ok {
+		t.Fatal("every actor checked: the case should reuse prefixes")
+	}
+	b := *c.Binding
+	b.Actors = []string{"!*.clients"}
+	c.Binding = &b
+	if _, ok := newCaseChecker(c).constants([]qtrace.Step{deposit}); ok {
+		t.Error("an actor the binding leaves out: its prefixes reused")
+	}
+}
