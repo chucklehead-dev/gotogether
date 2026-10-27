@@ -73,6 +73,8 @@ Then, in order, each item reviewed before the next:
   records its seam with no annotation, the generator binds it, and an
   app that adds a dependency gets its steps without writing code;
   OTel spans of the same seams converted, for apps already traced.
+  Designed in docs/grist-instrumentation.md (declared calls, both ends
+  recorded, six slices).
 - **GR4. Several services simulated together (L).** gristsim composes
   several Apps, each with its own store, process and node(s), over
   qhttp/simgrpc/simlog networks with faults per service; a cross-service
