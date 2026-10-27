@@ -85,8 +85,22 @@ Then, in order, each item reviewed before the next:
   served by gristsim to a dependency given none), counters' and
   library's mailers and wallet-grist's ledger declared calls (no
   hand-written double, site or dedupe rule left in an example), `grist
-  new`'s starter declaring a dependency. Next: slice 3 (the real tier
-  over HTTP: `OverHTTP`, `ServeCalls`).
+  new`'s starter declaring a dependency; after its review, the site's
+  action judges the request too and the default double stands in only
+  for calls answering no fields. Next: slice 3 (the real tier over HTTP:
+  `OverHTTP`, `ServeCalls`).
+  Candidate example apps for the declared calls (not built):
+  - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
+    once, refusing `declined`; `capture` at most once, reading the
+    authorization's ref from the log (which needs an effect's success
+    event built from its call's response: today `OnSuccess` is fixed
+    before the call). Mutants: a capture of the wrong amount, a PSP
+    without dedupe, a PSP replaying a fresh answer, a retrying SDK
+    capturing twice.
+  - *clinic*, an appointment scheduler: `book`, `cancel`, `reschedule`
+    with several declared refusals, keyed read models by doctor and slot
+    and by patient, an `Emits` processor, an at-least-once SMS reminder
+    and an at-most-once no-show fee.
 - **GR4. Several services simulated together (L).** gristsim composes
   several Apps, each with its own store, process and node(s), over
   qhttp/simgrpc/simlog networks with faults per service; a cross-service

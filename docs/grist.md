@@ -1413,7 +1413,8 @@ place):
   claims a conforming run's violation, so library's `wrongReceipt` is
   `Rejects("mailerSend")`. The invariant `everyReceiptForABorrow` is
   kept: it states the site's guarantee for a tier where only the site is
-  recorded (slice 3's `ServeCalls`).
+  recorded (slice 3's `ServeCalls`). (Superseded by the review below:
+  the site judges the request, and the invariant is gone.)
 - **A site record before its commit is the site action's rejection**,
   not an invariant's: the generated `<c>Served` requires its trigger in
   the log. wallet-grist's test claims conformance and served posts; an
@@ -1428,7 +1429,7 @@ What slice 3 (the real tier over HTTP) must know:
   outside `Deps`, so its key clock is shared by every node of the tier,
   counters' two included). `TierConfig` serving `Handlers` behind
   `ServeCalls` replaces that; the site's records then come from another
-  recorder, and the site action should judge its request too (§0.12's
+  recorder (the site action judges its request since this slice's
   review).
 - `DefaultHandlers` is the natural `ServeCalls` default (a test that
   gives no handlers), and its first-answer map is per instance: one per
@@ -1442,6 +1443,104 @@ Cost (`go test -short ./...` per example, CPU s, user + sys, at load
 ci/test-times.txt, 640, unchanged: twice is 1280); wallet-grist 402 to
 436; library 225 to 246. The new steps (every mail and post recorded at
 both ends) are most of it.
+
+**The slice's review** (2026-10-27), each probed by a counterexample:
+
+- **A wrong request recorded at the site alone was admitted** (the
+  slice 1 review's "left as built", found in a simulation, not only in
+  slice 3). The caller's step is recorded for every outcome but a crash
+  during the call, and that crash is an ordinary fault: the bank's
+  answer lost and the node crashed while the payout waits leaves the
+  payout's call pending, and an at-most-once effect never calls again,
+  so the bank's served record is the payment's only record, and the
+  site judged no request. counters' `wrongAmount` (paying one more)
+  conformed in 4 of 4 runs of that script (`lostThenCrash`, at
+  `payOnce`: the prologue's one payment); under crashes alone (nemesis
+  at 0.05, `paying`) 29 of 60 runs did not reject, many of them a
+  wrong payment served with its call pending. The generated
+  `<c>Served` now requires the request the processor's rule makes for
+  the trigger (and a trigger it does not skip), as the caller's action
+  does, so a wrong request is named at the site where the dependency
+  applied it (its record comes first) and at the caller where nothing
+  did. `wrongAmount` claims all three: `All(Rejects("bankPayServed"))`
+  without faults and under `lostThenCrash` (the second conforms with
+  the site's check taken out), `All(Rejects("bankPay"))` with the request
+  dropped (the caller's check, a third party's tier's only one); one
+  seed each per push. `TestPayoutAmount`'s full mode claims the faithful
+  app conforms under `lostThenCrash`, the bank's record alone.
+- **`everyReceiptForABorrow` was dead weight, and now restates the
+  guard.** In library (receipts at least once) a crash during the call
+  is followed by a retry its caller records, so in every settled run the
+  caller's rule caught a wrong receipt first, and the invariant could
+  fail only in a run cut before the retry: a mutation of it to `true`
+  went unnoticed by every test. With the site judging its request it is
+  the generated `mailerSendServed`'s own guard, and is gone (a comment
+  in the model says where the property lives). `wrongReceipt` is
+  `All(Rejects("mailerSendServed"))`, at one seed per push (lending's
+  every run borrows; it was `Some` at three).
+- **The default double answered the zero response for any call.** No
+  rule judges a response (a rule's request reads the log, and
+  `OnSuccess` is fixed before the call), so the zero answer is judged by
+  nothing but replays and the app's invariants; what it hides is the
+  effect's own handling of an answer (a branch on a reference, a field
+  passed to another call) exercised on a value no dependency gives.
+  `DefaultHandlers` now panics, naming the call, its fields and the fix,
+  for a call whose response has fields, and gristsim's run is the error
+  (grist's `TestDefaultHandlers`, gristsim's `TestDefaultDouble`, both
+  failing with the check taken out). Every example's defaulted call
+  answers `struct{}`; counters' bank has its own double. Generating a
+  value was not chosen: a drawn reference would be as unjudged as a zero
+  one, and a dependency's answers (a reference per key, stable on
+  replay) are its own.
+- **counters' mailer, unkeyed, is faithful, not a weakening.** The
+  simulated mailer it replaces appended every mail (the old interface's
+  "deduplicating by key where it can" was never implemented), and claim
+  3 (`TestWelcomeDuplicate`) is that a duplicated welcome is at least
+  once's by right, judged by the test-only `welcomedOnce` over effect
+  steps, unchanged. Before the port the mailer recorded nothing; now
+  every send is a served record the model admits. A `Keyed` mailer would
+  be another mailer (the duplicate a replay), not a stronger check.
+- **The ported mutants test what their names say.** `noDedupe` and
+  `ledgerNoDedupe` reject the generated admits in 6 of 6 runs each (full
+  mode), and with the generated `Keyed` admits taken out (`true`) every
+  run of both conforms. Every run of their scripts crashes after the
+  call, so both are `All(...)` at one seed per push now (`Some` at three
+  and two). `noOutbox` is caught by the at-least-once rule
+  (`Rejects("post")`, 6 of 6), not by the ledger, as before the port.
+- **The site's trigger guard rejects no faithful run** (probed, no
+  change): two nodes, three clients transferring (two-event batches),
+  commit faults, crashes and the ledger's faults, 24 of 24 runs conform
+  with replays taken. A record's place is the head its poller read (at
+  or past its trigger's batch, whatever batches commit later), or a
+  later record's of the key: never before its trigger's commit.
+- **Docs**: the skill's `grist.Local(grist.DefaultHandlers(Bank))`
+  example would now panic (the bank answers a reference): it names the
+  mailer. The skill, docs/grist-instrumentation.md §3.4, §3.5 and §4, and
+  the READMEs say where a wrong request is caught. Left, the core's: a
+  crashed caller's pending call is labelled "absent (a defect)" in a
+  report's Absent section (validate's `PendingCause`), though the call
+  is pending by right; it fails nothing unless `Completes()` is
+  claimed.
+
+What slice 3 must know besides the list above: a `ServeCalls` site
+judges each request it records against the rule, so a request no grist
+caller sent for a trigger (another client of the service) is rejected
+there, by right for a dependency only the App calls; a default for
+`ServeCalls` refuses a call answering fields, as `DefaultHandlers` does;
+and the payout's lost-answer crash is the shape to probe on HTTP too (a
+5xx after the bank applied, the node killed), where the site's step file
+is the payment's only record.
+
+Cost (`go test -short ./...` per example, CPU s, user + sys, the review's
+tree against main's, measured one after the other on 4 cores):
+library 238 to 190 (`wrongReceipt` and `noDedupe` at one seed, `All`,
+where they were `Some` at three); wallet-grist 439 to 424
+(`ledgerNoDedupe` likewise); counters 439 to 458 (`wrongAmount`'s two
+new explorations, one seed each at the prologue's one payment: the
+price of the crash case and of keeping the caller's check exercised).
+Nothing cheaper was found that would not drop a claim: the slice's
+growth is the recorded steps of every mail and post, which every
+exploration validates.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

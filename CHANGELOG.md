@@ -11,12 +11,17 @@ The first release. What a user meets, by module:
 - grist, the default double (GR3's slice 2, docs/grist.md §0.13;
   api/grist.txt): `grist.DefaultHandlers(dep)`, a dependency's handlers
   applying a `Keyed` call once per key (a later try replayed from the
-  first answer) and an unkeyed one every time, each answered with the
-  zero response; gristsim serves it to a dependency `Config.Doubles`
+  first answer) and an unkeyed one every time, each acknowledged; gristsim serves it to a dependency `Config.Doubles`
   gives none (until now the run's error). `grist new`'s starter declares
   a dependency. examples/library's and examples/counters' mailers and
   examples/wallet-grist's ledger are declared calls served by it (their
   hand-written doubles, sites and dedupe rules gone).
+  After its review (docs/grist.md §0.13): the generated `<c>Served`
+  judges its request against the processor's rule, as the caller's
+  action does (a caller crashed during the call left the served record
+  the request's only one, unjudged); `grist.DefaultHandlers` panics, and
+  gristsim's run is an error, for a call whose response has fields,
+  which a default double cannot know (it answered the zero response).
 - grist, declared calls on the simulated tier (GR3's slice 1,
   docs/grist.md §0.12; api/grist.txt): `grist.NewDependency`,
   `grist.NewCall[Req, Resp]` (`Keyed`, `Refuses`), `grist.Uses` on a

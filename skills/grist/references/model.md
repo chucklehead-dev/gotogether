@@ -91,8 +91,9 @@ reconstructed before the commit that asked for it), and `<s>Admits`
 sees the records, not the log: a relation between them and the log is
 an eventual val (`// grist: eventually`), never an invariant. A declared
 call's served records are placed after the commit holding their
-trigger, so "every receipt is for a borrow" over `<call>Records` is an
-invariant (examples/library's `everyReceiptForABorrow`). A read `r.Exists(T, grist.Tag("k", v))` records the read the
+trigger, and the generated `<call>Served` itself takes only a request
+that follows from its trigger (examples/library's mailer: a receipt for
+no borrow rejects `mailerSendServed`), so no invariant need say it. A read `r.Exists(T, grist.Tag("k", v))` records the read the
 generator names `<t>ByK(v)` (`r.Exists(T)`: `<t>Read`), what `<c>Needs`
 returns for it. A field the model leaves out (a list in a query's
 answer) is tagged `grist:"-"`; an untagged one is the generator's error. `STRS` and `INTS`: what `step` (`gotogether
@@ -177,20 +178,22 @@ refusal, and at the caller `unknown`). The generator writes:
 
 - a rule hole per (processor, call), `<p><Call>(prefix, trigger):
   <Call>Request`: the request the effect makes for the trigger (counters'
-  `payoutBankPay`: the retired counter and its total). The caller's
-  action requires it, so a payout of the wrong amount is
-  `Rejects("bankPay")` (counters' `wrongAmount`).
+  `payoutBankPay`: the retired counter and its total). Both ends'
+  actions require it (below).
 - the caller's action: a user's trigger, before its effect step (at
   least once: its next trigger; at most once: checkpointed, no effect
   step yet, no earlier call of the key), the key the trigger's
   (`callKeyStable`).
-- the site's action: a user's trigger in the log, and `<call>Admits(prefix,
-  records, r)`, generated (a `Keyed` call: no earlier served record of
-  the key; else any) unless your rules define it, reading only the log
-  through the trigger. Its request is the caller's to judge: the site's
-  record is recorded inside the call, before the caller's completion, at
-  the same position, so judging the request there would name the site
-  for the caller's error.
+- the site's action: a user's trigger in the log, its request the rule's
+  (as the caller's), and `<call>Admits(prefix, records, r)`, generated (a
+  `Keyed` call: no earlier served record of the key; else any) unless
+  your rules define it, reading only the log through the trigger. The
+  site's record is recorded inside the call, before the caller's
+  completion, at the same position, so a wrong request is named at the
+  site first where the dependency applied it (`Rejects("bankPayServed")`:
+  counters' `wrongAmount`, and the only record of it when the payout's
+  node crashed during the call), at the caller where it did not (a lost
+  request, a third party's dependency: `Rejects("bankPay")`).
 - the replay's action, `<call>Replayed`: an earlier served record of the
   key, request and answer alike; it changes nothing.
 
@@ -201,11 +204,13 @@ as an earlier served record of the key, request and answer alike: a
 double replaying another answer than its first (a refusal included), or
 one it never gave, is rejected there. Keep each key's first answer,
 refusals too. The default double (`grist.DefaultHandlers`, what gristsim
-serves a dependency the run gives no handlers) does so. An invariant or
+serves a dependency the run gives no handlers) does so; it stands in only
+for calls whose response has no fields. An invariant or
 eventual val reads `<call>Records` (counters'
 `everyRetirementPaidOnce`: one ok served record per retirement's
-trigger; library's `everyReceiptForABorrow`, an invariant: each record's
-request the borrow at its trigger) and `<call>Calls`.
+trigger) and `<call>Calls`; an invariant that each record's request
+follows from its trigger restates the site's action, and holds in every
+run that conforms.
 
 A double grist does not serve may still record its effects with a site:
 `grist.NewSite[T](App, name)` and `Site.Record(ctx, tenant, v)` in its

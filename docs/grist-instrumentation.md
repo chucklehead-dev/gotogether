@@ -335,16 +335,22 @@ skeleton):
   (`keyStable`), the request equals the rule's, and, at most once, no
   earlier call carries the key;
 - the site action `<c>Served(processor, trigger, key, ...request, result,
-  ...response)`: the trigger's commit is in the log, and
-  `<c>Admits(log.slice(0, T), <c>Records, r)` holds. Its request is not
-  judged there (built so; the design first said it was): the site's
-  record is recorded inside the call, before the caller's completion,
-  and both stand at 2·H+1, so they are concurrent on the tenant's clock
-  and reconstructed in recording order, the site first. A site that
-  judged the request would reject a wrong request at the site, naming
-  `bankPayServed` for the caller's error, and the caller's step would
-  never be judged. grist records the caller wherever it records the
-  site, so the request is judged once, at the caller.
+  ...response)`: the trigger's commit is in the log, the request equals
+  the rule's (and the trigger is not one `p` skips), and
+  `<c>Admits(log.slice(0, T), <c>Records, r)` holds. (Slice 1 built it
+  without judging the request, so that a wrong request would be named at
+  the caller rather than at the site, whose record comes first: both
+  stand at 2·H+1, concurrent on the tenant's clock, reconstructed in
+  recording order. Slice 2's review found the record the caller's step
+  was meant to back missing: a node that crashes after the dependency
+  applied the call, before the caller's completion, leaves the caller's
+  step pending, and an at-most-once effect never calls again, so the
+  served record is the request's only one; counters' `wrongAmount` then
+  conformed in every run of its script, docs/grist.md §0.13.) A wrong
+  request is therefore named at the site where the dependency applied it
+  (`Rejects("bankPayServed")`) and at the caller where nothing did (a
+  lost request; a third party's dependency on the real tier, which
+  records no site: `Rejects("bankPay")`).
 
 The application writes one hole per (processor, call) in `<app>Rules`,
 `<p><C>` (the processor's Quint name, then the call's capitalized), as it
@@ -371,7 +377,8 @@ unchanged.
 
 What the generated model now catches that no grist model did: a request
 that does not follow from the trigger (a payout of the wrong amount:
-`Rejects("bankPay")`, at the caller; built, counters' `wrongAmount`), a site that
+`Rejects("bankPayServed")` where the bank applied it, `Rejects("bankPay")`
+where it did not; built, counters' `wrongAmount`), a site that
 applies a key twice (`Rejects("bankPayServed")`, library's `noDedupe`
 without a hand-written rule), and an at-most-once effect whose call was
 sent twice (`Rejects("bankPay")`).
@@ -387,9 +394,14 @@ gristsim.Doubles`, called once per run, so a double's state is its
 run's) or, when none is given, the **default double** (built in slice 2
 as `grist.DefaultHandlers(dep)`, in grist so a real tier or a binary can
 attach it in process too, `grist.Local`): a `Keyed` call is applied
-once per key and answered with the zero response (a later try of a key
-gets that first answer as a replay, `grist.Replayed`, recorded and
-judged as `<c>Replayed`), an unkeyed call is applied every time. A run
+once per key and acknowledged (a later try of a key gets that first
+answer as a replay, `grist.Replayed`, recorded and judged as
+`<c>Replayed`), an unkeyed call is applied every time. It stands in only
+for calls whose response has no fields: what a dependency answers in a
+field (a reference) is its own, and the zero answer, which no
+dependency gives, would exercise one branch of the effect's handling of
+it (slice 2's review: `DefaultHandlers` panics naming the fix, and
+gristsim's run is an error). A run
 that gives a dependency handlers lacking one of its calls is still the
 run's error. The
 dependency's faults are then the Service's, by name, as qenv's doubles
@@ -566,7 +578,7 @@ names the mutant it must catch, built as an overlay
    gristsim's default double (§3.5); counters' mailer, wallet-grist's
    ledger and library's mailer ported (their `NewSite`s and hand-written
    `Admits` deleted); the site placed at its cause, so library's
-   `everyReceiptForABorrow` becomes an invariant and `Receipt.At` goes;
+   `Receipt.At` goes;
    `grist new`'s starter declares one dependency (`TestNewIsGreen`).
    **Acceptance**: library's `noDedupe` (now a double that applies every
    try) is `Some(Rejects("mailerSendServed"))` with no hand-written rule;
@@ -574,17 +586,18 @@ names the mutant it must catch, built as an overlay
    library's mailer meets lost
    answers (`qtest.Reaches("rpc.mailer.response").Faulted()`), which it
    never did. Measured: the lines of deps and rules removed per example.
-   Built so, with two corrections: library's `wrongReceipt` (its receipt
-   now carries no position: it swaps member and book) is caught at the
-   caller, `Rejects("mailerSend")`, not as `Violates(...)`, which claims
-   a violation in a conforming run: a served record carries the bytes
-   its caller sent, so wherever grist records both ends the caller's
-   rule refuses a receipt for no borrow, and the invariant states what
-   the site guarantees for a tier where only the site is recorded (slice
-   3's `ServeCalls`); and a site record placed
-   before its commit is rejected by the generated site action itself (its
-   trigger not yet in the log), not left to an invariant
-   (wallet-grist's `TestPostAfterTransfer`).
+   Built so, with two corrections, and a third from its review: a site
+   record placed before its commit is rejected by the generated site
+   action itself (its trigger not yet in the log), not left to an
+   invariant (wallet-grist's `TestPostAfterTransfer`); the site action
+   judges its request too (§3.4), so library's `wrongReceipt` (its
+   receipt now carries no position: it swaps member and book) is
+   `Rejects("mailerSendServed")`, and `everyReceiptForABorrow`, which
+   restated that guard, is gone (slice 2 built it caught at the caller,
+   `Rejects("mailerSend")`, and kept the invariant for a tier where only
+   the site is recorded; the review found that tier in a simulation, a
+   caller crashed during the call); and the default double stands in
+   only for calls answering no fields (§3.5).
 3. **The real tier over HTTP.** `Transport`, `OverHTTP`, `Local`,
    `ServeCalls`; `grist.Main` and `gristtest.TierConfig` serving a
    dependency's `Handlers` on a loopback server that loses every fifth
