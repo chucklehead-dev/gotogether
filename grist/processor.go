@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
@@ -165,6 +166,18 @@ func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx con
 		}
 		return h(ctx, r, e, s.Meta())
 	}}
+	for _, c := range p.opts.uses {
+		switch {
+		case c.dep.app != app:
+			app.problems = append(app.problems, fmt.Sprintf("processor %q uses call %s, of another App's dependency: declare the dependency on %s", name, c.label(), app.Name))
+		case p.opts.shape.kind != effectResult:
+			app.problems = append(app.problems, fmt.Sprintf("processor %q uses call %s, but declares no Delivers: a call is made from an Effect, so declare grist.Delivers", name, c.label()))
+		default:
+			if !slices.Contains(c.users, p) {
+				c.users = append(c.users, p)
+			}
+		}
+	}
 	app.processors = append(app.processors, p)
 	return &Processor{info: p}
 }
@@ -444,6 +457,15 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 	}
 }
 
+// effectContext is ctx as an effect's f gets it: its key (EffectKey) and
+// its calls' cause (Call.Do): trigger, the head the poller read (the
+// effect step's place on the tenant's clock, 2·head+1, and the site's),
+// and slot, the effect step's place among the processor's steps.
+func (pl *poller) effectContext(ctx context.Context, trigger, head Position, key string, slot int64) context.Context {
+	ctx = context.WithValue(ctx, effectKey{}, key)
+	return context.WithValue(ctx, causeKey{}, &effectCause{app: pl.app, s: pl.s, p: pl.p, tenant: pl.tenant, trigger: trigger, head: head, key: key, slot: slot})
+}
+
 func (pl *poller) key(t Position) string { return fmt.Sprintf("%s/%s/%d", pl.p.name, pl.tenant, t) }
 
 // commit appends a group's events with the checkpoint moved from cp to
@@ -537,7 +559,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 		if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 			proc.Crash()
 		}
-		err := res.effect(context.WithValue(ctx, effectKey{}, key))
+		err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 0))
 		record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
 			"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos))
 		if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
@@ -586,7 +608,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 		proc.Crash() // the checkpoint moved, the effect never runs: lost, by right
 	}
-	err := res.effect(context.WithValue(ctx, effectKey{}, key))
+	err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 1))
 	record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
 		"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos)+1)
 	if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {

@@ -21,6 +21,45 @@ type Catalog struct {
 	Queries    []CatalogBlock     `json:"queries"`  // sorted by name
 	Processors []CatalogProcessor `json:"processors"`
 	Sites      []CatalogSite      `json:"sites"` // in registration order
+	// Dependencies are the App's dependencies (NewDependency), in
+	// registration order, each with its calls.
+	Dependencies []CatalogDependency `json:"dependencies"`
+}
+
+// A CatalogDependency is a registered dependency.
+type CatalogDependency struct {
+	Name  string        `json:"name"`
+	Quint string        `json:"quint"`
+	Calls []CatalogCall `json:"calls"` // in registration order
+}
+
+// A CatalogCall is a declared call (NewCall).
+type CatalogCall struct {
+	Name  string
+	Quint string // its caller's step's action; its site's is Quint+"Served"
+	// Request and Response are its types.
+	Request, Response reflect.Type
+	// Keyed says the dependency applies each key once (Keyed); Refuses are
+	// its declared refusals (Refuses), in the order given.
+	Keyed   bool
+	Refuses []string
+	// Users are the processors that declare it (Uses), in registration
+	// order.
+	Users []string
+}
+
+// MarshalJSON writes the call with its request and response as JSON
+// Schemas.
+func (c CatalogCall) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Name     string         `json:"name"`
+		Quint    string         `json:"quint"`
+		Request  map[string]any `json:"request"`
+		Response map[string]any `json:"response"`
+		Keyed    bool           `json:"keyed,omitempty"`
+		Refuses  []string       `json:"refuses,omitempty"`
+		Users    []string       `json:"users"`
+	}{c.Name, c.Quint, Schema(c.Request), Schema(c.Response), c.Keyed, c.Refuses, nonNil(c.Users)})
 }
 
 // A CatalogSite is a registered site (NewSite): a dependency's record of
@@ -188,6 +227,8 @@ type CatalogProcessor struct {
 	Emits    []string `json:"emits,omitempty"`
 	Delivery Delivery `json:"delivery,omitempty"`
 	Success  string   `json:"success,omitempty"`
+	// Uses are the calls its effect makes (Uses), by Quint name.
+	Uses []string `json:"uses,omitempty"`
 }
 
 // MarshalText writes the delivery by name.
@@ -228,10 +269,24 @@ func (a *App) Catalog() Catalog {
 				cp.Success = sh.success.Name()
 			}
 		}
+		for _, u := range p.opts.uses {
+			cp.Uses = append(cp.Uses, u.quint)
+		}
 		c.Processors = append(c.Processors, cp)
 	}
 	for _, s := range a.sites {
 		c.Sites = append(c.Sites, CatalogSite{Name: s.name, Quint: s.quint, Fields: s.typ})
+	}
+	for _, d := range a.depOrder {
+		cd := CatalogDependency{Name: d.name, Quint: d.quint, Calls: []CatalogCall{}}
+		for _, ci := range d.calls {
+			cc := CatalogCall{Name: ci.name, Quint: ci.quint, Request: ci.req, Response: ci.resp, Keyed: ci.opts.keyed, Refuses: slices.Clone(ci.opts.refuses)}
+			for _, u := range ci.users {
+				cc.Users = append(cc.Users, u.name)
+			}
+			cd.Calls = append(cd.Calls, cc)
+		}
+		c.Dependencies = append(c.Dependencies, cd)
 	}
 	return c
 }

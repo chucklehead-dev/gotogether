@@ -3,7 +3,10 @@
 // chosen isolation level, one node or more (Config.Nodes; a crashable process
 // running the App's processors and serving its commands and queries over
 // a lossy qenv.Service, or over its HTTP API on qhttp: Config.HTTP), and a workload of clients sending random
-// commands and queries of the registry to every tenant. Run's signature
+// commands and queries of the registry to every tenant. Each of the
+// App's declared dependencies (grist.NewDependency) is served as a
+// qenv.Service named after it, from the run's Config.Doubles, its
+// requests and answers lost, duplicated and late. Run's signature
 // is a qtest.System's Run, so an application is explored, exhausted and
 // shrunk with every claim of qtest:
 //
@@ -108,16 +111,112 @@ type Config struct {
 	// Gen overrides a command's or query's generated arguments, by name:
 	// pick(n) chooses one of n through the run's Chooser.
 	Gen map[string]func(pick func(n int) int) any
-	// Setup builds the application's dependencies once per simulation (a
-	// qenv.Service standing for a mailer), returning what attaches them to
-	// a context: the node's tasks run with it, so a processor's effect
-	// reaches them through its ctx. nil: none.
+	// Doubles builds, once per run, the handlers that serve each of the
+	// App's dependencies (grist.NewDependency): each is served as a
+	// qenv.Service named after the dependency, on no process, its faults
+	// the Service's (rpc.<dependency>.request, .delay, .response), its
+	// handlers recording each call's application at its site
+	// (grist.Call.Handler). A dependency without handlers, or a call
+	// without one, is the run's error. Per run, so a double's state (the
+	// keys it applied) is its run's.
+	Doubles func() Doubles
+	// Setup builds the application's other dependencies once per
+	// simulation (a qenv.Service standing for a mailer, grist.NewDep's),
+	// returning what attaches them to a context: the node's tasks run with
+	// it, so a processor's effect reaches them through its ctx. nil: none.
 	Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
 	// Horizon bounds the clients' phase in virtual time (default 2m).
 	Horizon time.Duration
 	// Log, if set, receives the simulation's log (crashes, upgrades:
 	// qenv.Sim.Log), for a failing run's story.
 	Log func(string)
+}
+
+// Doubles are a run's handlers of the App's dependencies, by dependency.
+type Doubles map[*grist.Dependency]grist.Handlers
+
+// DependencyTimeout is how long a call of a simulated dependency waits for
+// its answer (virtual time) before its outcome is unknown.
+const DependencyTimeout = time.Second
+
+// callRequest is a call as a simulated dependency's service takes it: its
+// cause and its request as JSON, the bytes every transport sends.
+type callRequest struct {
+	Info grist.CallInfo
+	Call string
+	Body json.RawMessage
+}
+
+// callResponse is its answer: the response as JSON, a refusal's name, or
+// an error's text.
+type callResponse struct {
+	Body     json.RawMessage
+	Rejected string
+	Err      string
+}
+
+// simTransport is a dependency's qenv.Service as a grist.Transport.
+type simTransport struct {
+	svc *qenv.Service[callRequest, callResponse]
+}
+
+func (t simTransport) Call(ctx context.Context, c grist.CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
+	resp, err := t.svc.Call(ctx, callRequest{Info: c, Call: call, Body: req}, DependencyTimeout)
+	switch {
+	case err != nil:
+		return nil, err // a lost request or answer, a late one: unknown
+	case resp.Rejected != "":
+		return nil, &grist.Rejected{Name: resp.Rejected}
+	case resp.Err != "":
+		return nil, errors.New(resp.Err)
+	}
+	return resp.Body, nil
+}
+
+// serveDependencies serves each of app's dependencies with its doubles as
+// a qenv.Service of s, returning what attaches them to a context.
+func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (func(context.Context) context.Context, error) {
+	deps := app.Dependencies()
+	if len(deps) == 0 {
+		return func(ctx context.Context) context.Context { return ctx }, nil
+	}
+	var ds Doubles
+	if doubles != nil {
+		ds = doubles()
+	}
+	for d := range ds {
+		if !slices.Contains(deps, d) {
+			return nil, fmt.Errorf("gristsim: Config.Doubles has handlers of dependency %s, which is not %s's: declare it on the App (grist.NewDependency)", d.Name(), app.Name)
+		}
+	}
+	trs := make([]grist.Transport, len(deps))
+	for i, d := range deps {
+		h, ok := ds[d]
+		if !ok {
+			return nil, fmt.Errorf("gristsim: dependency %s of %s has no double: give Config.Doubles its grist.Handlers (each call's Handler)", d.Name(), app.Name)
+		}
+		if err := h.Serves(d); err != nil {
+			return nil, fmt.Errorf("gristsim: Config.Doubles' handlers of %s: %w", d.Name(), err)
+		}
+		local := grist.Local(h)
+		trs[i] = simTransport{svc: qenv.NewService(s, d.Name(), nil, func(ctx context.Context, r callRequest) (callResponse, error) {
+			out, err := local.Call(ctx, r.Info, r.Call, r.Body)
+			var rej *grist.Rejected
+			switch {
+			case errors.As(err, &rej):
+				return callResponse{Rejected: rej.Name}, nil
+			case err != nil:
+				return callResponse{Err: err.Error()}, nil
+			}
+			return callResponse{Body: out}, nil
+		})}
+	}
+	return func(ctx context.Context) context.Context {
+		for i, d := range deps {
+			ctx = d.With(ctx, trs[i])
+		}
+		return ctx
+	}, nil
 }
 
 // A Call is one call of a Prologue: a command or query by name, with its
@@ -207,10 +306,14 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 	}
 	db.CommitFaults = cfg.CommitFaults
-	deps := func(ctx context.Context) context.Context { return ctx }
+	served, err := serveDependencies(s, app, cfg.Doubles)
+	if err != nil {
+		return err
+	}
+	deps := served
 	if cfg.Setup != nil {
 		if d := cfg.Setup(s, st); d != nil {
-			deps = d
+			deps = func(ctx context.Context) context.Context { return d(served(ctx)) }
 		}
 	}
 	var srv *qhttp.Server

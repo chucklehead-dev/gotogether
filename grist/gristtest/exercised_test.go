@@ -19,7 +19,7 @@ type sent struct {
 }
 
 // lending is an App of every kind of block: a command with a refusal, a
-// query, an at-least-once processor and a site.
+// query, an at-least-once processor using a declared call, and a site.
 func lending() *grist.App {
 	a := grist.New("lending")
 	ev := grist.NewEvent[noted](a, "noted")
@@ -31,9 +31,10 @@ func lending() *grist.App {
 		return []grist.Event{ev.Of(noted{Item: c.Item})}, nil
 	}, grist.Refuses(dup), grist.Authorize(grist.Authenticated))
 	grist.NewQuery(a, "count", func(r *grist.Reads, q note) (int, error) { return 0, nil }, grist.Authorize(grist.Authenticated))
+	send := grist.NewCall[sent, sent](grist.NewDependency(a, "post"), "send")
 	grist.NewProcessor(a, "mail", ev, func(ctx context.Context, r *grist.Reads, e noted, m grist.Meta) grist.Result {
 		return grist.Effect(func(context.Context) error { return nil }, grist.AtLeastOnce)
-	}, grist.Delivers(grist.AtLeastOnce))
+	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(send))
 	grist.NewSite[sent](a, "sent")
 	return a
 }
@@ -47,7 +48,7 @@ func TestExercised(t *testing.T) {
 	for _, k := range gristtest.Takes(a) {
 		names = append(names, k.Name())
 	}
-	if got, want := strings.Join(names, " "), "note.ok note.dup count mailEffect mail sent"; got != want {
+	if got, want := strings.Join(names, " "), "note.ok note.dup count mailEffect mail postSend.ok postSendServed sent"; got != want {
 		t.Errorf("the catalog's takes %q, want %q", got, want)
 	}
 	call := func(action, outcome string) binding.Call {
@@ -55,17 +56,17 @@ func TestExercised(t *testing.T) {
 	}
 	runs := func() *qtest.Exploration {
 		return qtest.Runs(&qtest.Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
-			Calls: []binding.Call{{Action: "init"}, call("note", "ok"), call("count", "ok"), call("mailEffect", "ok"), call("mail", "ok")}}}}})
+			Calls: []binding.Call{{Action: "init"}, call("note", "ok"), call("count", "ok"), call("mailEffect", "ok"), call("mail", "ok"), call("postSend", "ok")}}}}})
 	}
 	msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a)) })
-	if len(msgs) != 1 || !strings.Contains(msgs[0], "2 of 6 not taken") || !strings.Contains(msgs[0], "no note was refused dup") ||
-		!strings.Contains(msgs[0], "the sent site recorded nothing") {
-		t.Errorf("a run without the refusal and the site's record: %q, want both named with their fixes", msgs)
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "3 of 8 not taken") || !strings.Contains(msgs[0], "no note was refused dup") ||
+		!strings.Contains(msgs[0], "the sent site recorded nothing") || !strings.Contains(msgs[0], "post applied no send") {
+		t.Errorf("a run without the refusal, the site's record and the call's application: %q, want each named with its fix", msgs)
 	}
-	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a, "note.dup", "sent")) }); len(msgs) > 0 {
-		t.Errorf("both excepted: %q", msgs)
+	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a, "note.dup", "sent", "postSendServed")) }); len(msgs) > 0 {
+		t.Errorf("all three excepted: %q", msgs)
 	}
-	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a, "note", "sent")) }); len(msgs) > 0 {
+	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a, "note", "sent", "postSendServed")) }); len(msgs) > 0 {
 		t.Errorf("the command excepted whole: %q", msgs)
 	}
 	defer func() {

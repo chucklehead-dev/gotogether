@@ -37,6 +37,10 @@ type options struct {
 	refuses  []string
 	shape    shape
 	declared int // how many of Emits and Delivers were given
+	// keyed says a call's dependency applies each key once (Keyed); uses
+	// are the calls a processor's effect makes (Uses)
+	keyed bool
+	uses  []*callInfo
 }
 
 // shape is a processor's declared result: 0 when it declares none.
@@ -66,7 +70,7 @@ func (a *App) options(kind, name string, opts []Option) options {
 	o := defaultOptions()
 	for _, opt := range opts {
 		if opt.apply == nil {
-			a.problems = append(a.problems, fmt.Sprintf("%s %q: a zero grist.Option: build one with Authorize, Internal, Unconditioned, ConditionTries, TransientTries, EffectTries or BatchSize", kind, name))
+			a.problems = append(a.problems, fmt.Sprintf("%s %q: a zero grist.Option: build one with its constructor (Authorize, Internal, Unconditioned, Refuses, ConditionTries, TransientTries, EffectTries, BatchSize, Emits, Delivers, Uses, Keyed)", kind, name))
 			continue
 		}
 		ok := false
@@ -109,10 +113,12 @@ func kindsOf(option string) []string {
 	switch option {
 	case "Unconditioned", "ConditionTries":
 		return []string{"command"}
-	case "EffectTries", "BatchSize", "Emits", "Delivers":
+	case "EffectTries", "BatchSize", "Emits", "Delivers", "Uses":
 		return []string{"processor"}
 	case "Refuses":
-		return []string{"command"}
+		return []string{"command", "call"}
+	case "Keyed":
+		return []string{"call"}
 	}
 	return []string{"command", "query"} // TransientTries (a poller retries a transient error forever), Authorize, Internal
 }
@@ -214,7 +220,9 @@ func BatchSize(n int) Option {
 
 // Refuses declares the rejections a command's decision may return (each
 // a Rejection's value), so the model generator (Generate) writes an
-// outcome branch for each and the binding an outcome. A decision that
+// outcome branch for each and the binding an outcome. On a call
+// (NewCall), the dependency's answers that say the call did not happen
+// (a declined payment): Do returns each as NotApplied of its *Rejected. A decision that
 // returns a rejection it does not declare is its error (recorded with its
 // text, not remembered), naming the fix: a declaration the code
 // contradicts would make the generated model wrong silently. A command

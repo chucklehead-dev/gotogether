@@ -47,6 +47,8 @@ type App struct {
 	processors []*processorInfo
 	readModels []*readModelInfo
 	sites      []*siteInfo
+	deps       map[string]*Dependency // by name
+	depOrder   []*Dependency          // in registration order, for the Catalog
 	problems   []string
 }
 

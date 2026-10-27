@@ -11,6 +11,8 @@ module: shop
 outcomes:
   ok: '"ok"'
   full: '"full"'
+  no-stock: '"no-stock"'
+  unknown: '"unknown"'
   conflict: '"conflict"'
   idempotency-key-reused: '"idempotency-key-reused"'
 
@@ -43,6 +45,10 @@ actions:
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   warehousePicks:
     args: { item_: '{{.args.item}}' }
+  warehouseHold:
+    args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
+  warehouseHoldServed:
+    args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
 
 invariants: [stockBounded]
 eventually: [allShipped]

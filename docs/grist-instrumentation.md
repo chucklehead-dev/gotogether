@@ -1,9 +1,13 @@
 # grist instrumentation (GR3): every seam recorded and simulated by construction
 
-Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. Nothing here is
-built. The Go below is **proposed API** of package grist and its
-subpackages (`grist.NewDependency`, `grist.NewCall`, ...), written so it
-parses; every name it takes from an existing toolkit package exists today.
+Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slice 1 is
+built** (§4; docs/grist.md §0.12 says what building it changed, and the
+text below is corrected where it did): `grist.NewDependency`,
+`grist.NewCall`, `Keyed`, `Uses`, `Call.Do`, `Handlers`, `Local`,
+`Transport`, `gristsim.Config.Doubles`. The rest of the Go below is
+**proposed API** (`OverHTTP`, `ServeCalls`, `client.NewPeer`, ...),
+written so it parses; every name it takes from an existing toolkit
+package exists today.
 Read docs/grist.md first (§2.6 processors, §3.1 recording, §3.5 seams,
 §0.9-§0.10 the generator); this note builds on it and cites it as "grist
 §x".
@@ -164,7 +168,7 @@ adapters are GR5-GR7's.
 A dependency is a remote party; a call is one of its operations, typed:
 
 ```go
-// proposed: package counters
+// package counters (built: examples/counters/deps.go)
 var Bank = grist.NewDependency(App, "bank")
 
 type PayRequest struct {
@@ -211,7 +215,11 @@ That is all the application declares. Today's `BankDep`, `noBank`,
   at least once.
 - `grist.CallKey(ctx)` is the call's key: in an effect, the effect key
   (grist §2.6), sent with every try; in a handler, the key it was sent
-  with, so a double or a real service can deduplicate by it.
+  with, so a double or a real service can deduplicate by it. A handler
+  that answers a key from its first answer says so, `grist.Replayed(ctx)`,
+  and its wrapper records no served record (a served record is an
+  application, below); without it a deduplicating double's replay would
+  read as a second payment.
 - `NewDep` stays for what is not a call (a configuration, a clock in a
   test); `NewSite` stays as the escape hatch for a site grist does not
   serve, until GR7 shows whether anything still needs it.
@@ -225,7 +233,8 @@ var deps = grist.Dependencies(func(ctx context.Context) context.Context {
 	return Bank.With(ctx, grist.OverHTTP("https://bank.internal/v1", nil))
 })
 
-// proposed: an in-process implementation, recorded at its site as a double is
+// an in-process implementation (built: grist.Handlers of grist.CallHandler,
+// grist.Local), recorded at its site as a double is
 var local = grist.Handlers{
 	Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
 		return PayReceipt{Ref: grist.CallKey(ctx)}, nil
@@ -244,8 +253,16 @@ construction. A call `pay` of dependency `bank` is the Quint name
 
 | step | where | actor, process | arguments | observations | order |
 | --- | --- | --- | --- | --- | --- |
-| `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | the tenant, the App's store | the request's fields, `trigger`, `key` | the response's fields; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
-| `bankPayServed` (the site) | where the call is served: the double's or `Handlers`' wrapper, or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `trigger`, `key` | the response's fields; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), on a thread of its own (the key) |
+| `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | the tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, then the response's fields (zero without a response) | none; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
+| `bankPayServed` (the site) | where the call is served: `Handlers`' wrapper (`Call.Handler`, served by `grist.Local`: gristsim's doubles), or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, the response's fields | none; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), on a thread of its own (the key) |
+
+(Built so in slice 1. The response's fields are step arguments, not
+observations: the actions take them as parameters, each the same-named
+field, and a step without a response records their zeros, so every step
+of the call has every parameter; a request field and a response field of
+one name, or one named `processor`, `trigger`, `key` or `result`, is a
+declaration problem `Verify` reports. `processor` is recorded because a
+call may be used by several processors, each with its own rule.)
 
 The call carries a **cause**, `grist.CallInfo{App, Tenant, Processor,
 Trigger, Head, Key}`, from the effect's context to wherever it is served
@@ -265,7 +282,10 @@ triggered it, grist §0.10, §0.11): "every receipt is for a borrow that
 happened" is an invariant, and library's `Receipt.At` is no longer the
 application's to carry. Slice 1's acceptance includes a trigger inside a
 two-event batch (wallet-grist's transfer), whose site record must follow
-its commit.
+its commit: built as grist's `TestSiteAfterItsCommit` (a command
+appending two events, each a trigger of a processor's call), which
+fails with the site at 2·T+1. wallet-grist's ledger is ported in slice
+2.
 
 Two choices in the table, and why:
 
@@ -294,16 +314,26 @@ response, `Keyed`, refusals and users (`Uses`). Per call `c` used by
 processor `p`, the generator writes into `<app>Gen` (grist §0.9's
 skeleton):
 
-- a variable `<c>Served: List[<C>Record]` (the site's records: request,
-  key, trigger, response) and a ghost `<c>Calls` (the caller's, for
-  invariants), framed by every other action;
+- variables `<c>Records: List[<C>Record]` (the site's records:
+  processor, trigger, key, request, result, response) and `<c>Calls`
+  (the caller's steps, for invariants and for the at-most-once and key
+  rules), framed by every other action (built so: `<c>Served` is the
+  site action's name);
 - the caller action `<c>(trigger, key, ...request, result, ...response)`:
   the trigger is one of `p`'s events, the key is `p`'s for it
   (`keyStable`), the request equals the rule's, and, at most once, no
   earlier call carries the key;
-- the site action `<c>Served(trigger, key, ...request, ...response)`:
-  the trigger's commit is in the log, the request equals the rule's, and
-  `<c>Admits(log, <c>Served, r)` holds.
+- the site action `<c>Served(processor, trigger, key, ...request, result,
+  ...response)`: the trigger's commit is in the log, and
+  `<c>Admits(log.slice(0, T), <c>Records, r)` holds. Its request is not
+  judged there (built so; the design first said it was): the site's
+  record is recorded inside the call, before the caller's completion,
+  and both stand at 2·H+1, so they are concurrent on the tenant's clock
+  and reconstructed in recording order, the site first. A site that
+  judged the request would reject a wrong request at the site, naming
+  `bankPayServed` for the caller's error, and the caller's step would
+  never be judged. grist records the caller wherever it records the
+  site, so the request is judged once, at the caller.
 
 The application writes one hole per (processor, call) in `<app>Rules`,
 `<p><C>` (the processor's Quint name, then the call's capitalized), as it
@@ -330,7 +360,7 @@ unchanged.
 
 What the generated model now catches that no grist model did: a request
 that does not follow from the trigger (a payout of the wrong amount:
-`Rejects("bankPay")`, at the caller and again at the site), a site that
+`Rejects("bankPay")`, at the caller; built, counters' `wrongAmount`), a site that
 applies a key twice (`Rejects("bankPayServed")`, library's `noDedupe`
 without a hand-written rule), and an at-most-once effect whose call was
 sent twice (`Rejects("bankPay")`).
@@ -341,8 +371,10 @@ sent twice (`Rejects("bankPay")`).
 named after the dependency, on no process (as the examples' doubles are
 today: the nemesis crashes nodes, not the bank; a crashable dependency
 is an option), its handler the
-`grist.Handlers` given in `Config.Doubles` (keyed by dependency) or,
-when none is given, the **default double**: a `Keyed` call is applied
+`grist.Handlers` given in `Config.Doubles` (built in slice 1 as `func()
+gristsim.Doubles`, called once per run, so a double's state is its
+run's; a dependency without handlers is the run's error until slice 2)
+or, when none is given, the **default double** (slice 2): a `Keyed` call is applied
 once per key and answered with the zero response (a second try of a key
 gets the first answer), an unkeyed call is applied every time. The
 dependency's faults are then the Service's, by name, as qenv's doubles
@@ -353,8 +385,9 @@ today, so Rates keys and scripts keep working; library's mailer gains
 lost answers by being declared.
 
 ```go
-// proposed: a test giving the bank's answers (a declined payment), served
-// as the bank's qenv.Service; every other dependency gets the default double
+// a test giving the bank's answers (a declined payment), served as the
+// bank's qenv.Service (built: gristsim.Config{Doubles: doubles}); every
+// other dependency gets the default double (slice 2)
 func doubles() gristsim.Doubles {
 	return gristsim.Doubles{Bank: grist.Handlers{
 		Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
@@ -370,9 +403,10 @@ func doubles() gristsim.Doubles {
 The call's request crosses the Service as JSON (the same bytes every
 transport sends), so a request that would not survive the wire does not
 survive the simulation. Everything stays a function of the Chooser: the
-Service's faults are choices, a timeout is virtual (`Call.Do`'s timeout
-a per-dependency option, default 1 s as the examples' doubles use), and
-the handler runs as the Service's task.
+Service's faults are choices, a timeout is virtual (1 s as the
+examples' doubles use: `gristsim.DependencyTimeout` in slice 1; a
+per-dependency option when an app needs another), and the handler runs
+as the Service's task.
 
 `gristsim.Config.Setup` stays for doubles that are not calls.
 
@@ -382,7 +416,8 @@ A transport is a small interface over JSON, so grist imports nothing
 heavy and a module of its own can add one:
 
 ```text
-// proposed: package grist
+// package grist: Transport and Local built in slice 1 (gristsim serves a
+// dependency's Service requests through Local); the rest proposed
 type Transport interface {
 	Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error)
 }
@@ -494,7 +529,8 @@ Each is one agent's work, reviewed before the next; each acceptance test
 names the mutant it must catch, built as an overlay
 (`gristtest.Mutants`), with the faithful app's contrast claim beside it.
 
-1. **Calls on the simulated tier.** `NewDependency`, `NewCall`, `Keyed`,
+1. **Calls on the simulated tier** (built, 2026-10-27: docs/grist.md
+   §0.12, with what it changed here). `NewDependency`, `NewCall`, `Keyed`,
    `Refuses` on calls, `Uses` (enforced), `Call.Do`, `CallKey`,
    `Handlers`, the cause in the effect's context, both steps of §3.3;
    the catalog's dependencies; gristsim serving each dependency as a

@@ -49,6 +49,10 @@ module shopEvents {
   type ShowItemResult = { qty: int, shipped: bool }
   // site warehouse-picks: a record of the effect, made where it takes place
   type WarehousePicksRecord = { key: str, item: str, qty: int }
+  // call warehouse/hold: its request and response, and a step of it (the caller's or the site's: the outcome as result)
+  type WarehouseHoldRequest = { item: str, qty: int }
+  type WarehouseHoldResponse = { ref: str }
+  type WarehouseHoldRecord = { processor: str, trigger: int, key: str, request: WarehouseHoldRequest, result: str, response: WarehouseHoldResponse }
 }
 
 // The store's side (shop.binding.yaml): every step where it took effect, one
@@ -75,6 +79,10 @@ module shopGen {
   var answered: Set[str]
   // what the warehouse-picks site recorded, in order
   var warehousePicksRecords: List[WarehousePicksRecord]
+  // the calls of warehouse/hold as their callers saw them (Call.Do), and as the dependency
+  // applied them (its served records), in order
+  var warehouseHoldCalls: List[WarehouseHoldRecord]
+  var warehouseHoldRecords: List[WarehouseHoldRecord]
 
   action init = all {
     log' = [],
@@ -83,6 +91,8 @@ module shopGen {
     effects' = [],
     answered' = Set(),
     warehousePicksRecords' = [],
+    warehouseHoldCalls' = [],
+    warehouseHoldRecords' = [],
   }
 
   // the identities and effect keys the model on its own draws
@@ -97,6 +107,8 @@ module shopGen {
     effects' = effects,
     answered' = answered.union(Set(id)),
     warehousePicksRecords' = warehousePicksRecords,
+    warehouseHoldCalls' = warehouseHoldCalls,
+    warehouseHoldRecords' = warehouseHoldRecords,
   }
 
   // a committed refusal: its marker answers id, nothing is appended; it
@@ -116,6 +128,8 @@ module shopGen {
     effects' = effects,
     answered' = answered,
     warehousePicksRecords' = warehousePicksRecords,
+    warehouseHoldCalls' = warehouseHoldCalls,
+    warehouseHoldRecords' = warehouseHoldRecords,
   }
 
   // a processor's handling of trigger, appending b with its checkpoint
@@ -126,6 +140,8 @@ module shopGen {
     effects' = effects,
     answered' = answered,
     warehousePicksRecords' = warehousePicksRecords,
+    warehouseHoldCalls' = warehouseHoldCalls,
+    warehouseHoldRecords' = warehouseHoldRecords,
   }
 
   // an effect step of processor p for trigger, under key (the same on every
@@ -138,6 +154,8 @@ module shopGen {
     effects' = effects.append((p, trigger, key, ok)),
     answered' = answered,
     warehousePicksRecords' = warehousePicksRecords,
+    warehouseHoldCalls' = warehouseHoldCalls,
+    warehouseHoldRecords' = warehouseHoldRecords,
   }
 
   // add-item: conditioned on its reads; refusals full. Every committed
@@ -239,6 +257,8 @@ module shopGen {
     effects' = effects,
     answered' = answered,
     warehousePicksRecords' = warehousePicksRecords,
+    warehouseHoldCalls' = warehouseHoldCalls,
+    warehouseHoldRecords' = warehouseHoldRecords,
   }
 
   // charge skips a trigger its rule says it skips (chargeSkips: the handler's Skip),
@@ -288,6 +308,8 @@ module shopGen {
         effects' = effects,
         answered' = answered,
         warehousePicksRecords' = warehousePicksRecords,
+        warehouseHoldCalls' = warehouseHoldCalls,
+        warehouseHoldRecords' = warehouseHoldRecords,
       },
     }
   }
@@ -304,6 +326,82 @@ module shopGen {
       effects' = effects,
       answered' = answered,
       warehousePicksRecords' = warehousePicksRecords.append(rec_),
+      warehouseHoldCalls' = warehouseHoldCalls,
+      warehouseHoldRecords' = warehouseHoldRecords,
+    }
+  }
+
+  // the keys of warehouse/hold's steps: (processor, trigger, key)
+  pure def warehouseHoldKeys(l: List[WarehouseHoldRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))
+
+  // the warehouse dependency applies each key once (Keyed): no earlier record
+  // of the key; the application's rules may define warehouseHoldAdmits
+  // instead, reading only prefix (the log through the trigger)
+  pure def warehouseHoldAdmits(prefix: List[Event], records: List[WarehouseHoldRecord], r: WarehouseHoldRecord): bool = not(keyCalled(warehouseHoldKeys(records), r.key))
+
+  // warehouse/hold as its caller saw it (Call.Do: invoked before the request,
+  // done with the answer, the outcome ok, a declared refusal or unknown):
+  // from an effect of a processor that uses it, for one of its triggers
+  // before the effect step, under the trigger's key (callKeyStable), its
+  // request the processor's rule's, at most once with no earlier call of the
+  // key
+  action warehouseHold(processor: str, trigger: int, key: str, item_: str, qty: int, result: str, ref: str): bool = {
+    val rec_: WarehouseHoldRecord = { processor: processor, trigger: trigger, key: key, request: { item: item_, qty: qty }, result: result, response: { ref: ref } }
+    all {
+      or {
+        processor == "notify" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "item-added",
+          rec_.request == notifyWarehouseHold(log.slice(0, trigger), trigger),
+          not(notifySkips(log.slice(0, trigger), trigger)),
+          trigger == nextOf(log, checkpoints.get("notify"), "item-added"),
+        } else false),
+        processor == "charge" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "item-shipped",
+          rec_.request == chargeWarehouseHold(log.slice(0, trigger), trigger),
+          not(chargeSkips(log.slice(0, trigger), trigger)),
+          checkpoints.get("charge") >= trigger,
+          triesOf(effects, "charge", trigger) == 0,
+          not(keyCalled(warehouseHoldKeys(warehouseHoldCalls), key)),
+        } else false),
+      },
+      callKeyStable(effects, warehouseHoldKeys(warehouseHoldCalls), processor, trigger, key),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      warehousePicksRecords' = warehousePicksRecords,
+      warehouseHoldCalls' = warehouseHoldCalls.append(rec_),
+      warehouseHoldRecords' = warehouseHoldRecords,
+    }
+  }
+
+  // warehouse/hold as the dependency applied it (its served record, placed at
+  // its cause: after the commit holding its trigger): for one of a user's
+  // triggers, as warehouseHoldAdmits allows given the log through the
+  // trigger. Its request is the caller's to judge (its step, recorded where
+  // grist makes the call)
+  action warehouseHoldServed(processor: str, trigger: int, key: str, item_: str, qty: int, result: str, ref: str): bool = {
+    val rec_: WarehouseHoldRecord = { processor: processor, trigger: trigger, key: key, request: { item: item_, qty: qty }, result: result, response: { ref: ref } }
+    all {
+      or {
+        processor == "notify" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "item-added",
+          warehouseHoldAdmits(log.slice(0, trigger), warehouseHoldRecords, rec_),
+        } else false),
+        processor == "charge" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "item-shipped",
+          warehouseHoldAdmits(log.slice(0, trigger), warehouseHoldRecords, rec_),
+        } else false),
+      },
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      warehousePicksRecords' = warehousePicksRecords,
+      warehouseHoldCalls' = warehouseHoldCalls,
+      warehouseHoldRecords' = warehouseHoldRecords.append(rec_),
     }
   }
 
@@ -370,6 +468,46 @@ module shopGen {
         nondet item_ = STRS.oneOf()
         nondet qty = INTS.oneOf()
         warehousePicks(key, item_, qty)
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-stock", "unknown").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-added") notifyWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          warehouseHold("notify", trigger_, key_, req_.item, req_.qty, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-stock").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-added") notifyWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          warehouseHoldServed("notify", trigger_, key_, req_.item, req_.qty, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-stock", "unknown").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-shipped") chargeWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          warehouseHold("charge", trigger_, key_, req_.item, req_.qty, result_, ref)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-stock").oneOf()
+        nondet ref = STRS.oneOf()
+        {
+          val req_: WarehouseHoldRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-shipped") chargeWarehouseHold(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          warehouseHoldServed("charge", trigger_, key_, req_.item, req_.qty, result_, ref)
+        }
       },
     }
   }

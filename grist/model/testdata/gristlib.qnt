@@ -66,6 +66,20 @@ module gristlib {
     }
   }
 
+  run callKeysTest = {
+    val effects = [("p", 1, "p/t1/1", true)]
+    val calls = [("p", 1, "p/t1/1"), ("p", 2, "p/t1/2"), ("q", 2, "q/t1/2")]
+    all {
+      assert(callKeyStable(effects, calls, "p", 1, "p/t1/1")),
+      assert(callKeyStable(effects, calls, "p", 3, "p/t1/3")),
+      assert(not(callKeyStable(effects, calls, "p", 2, "p/t1/1"))), // the effect's and another call's key
+      assert(not(callKeyStable([], calls, "p", 3, "p/t1/2"))), // another trigger's call's key
+      assert(callKeyStable([], calls, "q", 2, "q/t1/2")),
+      assert(keyCalled(calls, "q/t1/2")),
+      assert(not(keyCalled(calls, "p/t1/3"))),
+    }
+  }
+
   run atMostOnceTest = {
     val s = [{ typ: "done", strs: [], ints: [1], tags: Set(), cause: ("processor", "p") }]
     all {

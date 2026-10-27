@@ -107,6 +107,7 @@ func Generate(app *App, dir string) (Generated, error) {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Generated{}, err
 	}
+	g.defined = definedIn(own, g.aq+"Rules")
 	skeleton := g.skeleton()
 	if len(g.clashes) > 0 {
 		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", app.Name, strings.Join(g.clashes, "\n  "))
@@ -235,6 +236,9 @@ type gen struct {
 	holes   []Hole
 	names   map[string]string // a generated top-level name -> what it is, for clashes
 	clashes []string
+	// defined are the defs of the application's rules (module <app>Rules):
+	// a call's Admits is generated only where they do not define it
+	defined map[string]bool
 }
 
 // a field is one scalar field of a struct, as a step records it.
@@ -256,7 +260,7 @@ func newGen(c Catalog) (*gen, error) {
 		// overwrites, and its module the library's
 		return nil, fmt.Errorf("grist model: an app named %q: its model's file and module would be grist's own library's (model/grist.qnt), which regenerating overwrites: rename the app", c.Name)
 	}
-	g := &gen{c: c, aq: aq, events: map[string]CatalogEvent{}, names: map[string]string{}}
+	g := &gen{c: c, aq: aq, events: map[string]CatalogEvent{}, names: map[string]string{}, defined: map[string]bool{}}
 	var ps []string
 	for _, e := range c.Events {
 		g.events[e.Name] = e
@@ -295,6 +299,7 @@ func newGen(c Catalog) (*gen, error) {
 			ps = append(ps, fmt.Sprintf("site %q: %v", s.Name, err))
 		}
 	}
+	ps = append(ps, g.checkCalls()...)
 	if len(ps) > 0 {
 		return nil, fmt.Errorf("grist model: %s cannot be modelled yet:\n  %s", c.Name, strings.Join(ps, "\n  "))
 	}
@@ -416,6 +421,7 @@ func (g *gen) claimBlocks() {
 		g.claim(s.Quint, "site "+s.Name)
 		g.claim(s.Quint+"Records", "site "+s.Name)
 	}
+	g.claimCalls()
 	for _, h := range g.holes {
 		g.claim(h.Name, "the hole "+h.Name)
 	}
@@ -468,6 +474,7 @@ func (g *gen) collectHoles() {
 				fmt.Sprintf(`pure def %sSkips(prefix: List[Event], trigger: int): bool = false`, p.Quint))
 		}
 	}
+	g.callHoles()
 	for _, s := range g.c.Sites {
 		g.hole(s.Quint+"Admits", fmt.Sprintf("whether the %s site may record r after records (its own rule: a dedupe by key, say)", s.Name),
 			fmt.Sprintf(`pure def %sAdmits(records: List[%sRecord], r: %sRecord): bool = true`, s.Quint, upper(s.Quint), upper(s.Quint)))
@@ -698,6 +705,7 @@ func (g *gen) eventsModule(b *strings.Builder) {
 		fs, _ := scalarFields(s.Fields)
 		fmt.Fprintf(b, "  // site %s: a record of the effect, made where it takes place\n  type %s = %s\n", s.Name, g.claim(upper(s.Quint)+"Record", "site "+s.Name), recordType(fs))
 	}
+	g.callTypes(b)
 	b.WriteString("}\n")
 }
 
@@ -712,7 +720,7 @@ func (g *gen) vars() [][2]string {
 	for _, s := range g.c.Sites {
 		vs = append(vs, [2]string{s.Quint + "Records", "[]"})
 	}
-	return vs
+	return append(vs, g.callVars()...)
 }
 
 // frame is every variable's next value: set's where it names one, else
@@ -742,6 +750,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 	for _, s := range g.c.Sites {
 		fmt.Fprintf(b, "  // what the %s site recorded, in order\n  var %sRecords: List[%sRecord]\n", s.Name, s.Quint, upper(s.Quint))
 	}
+	g.callVarDecls(b)
 	b.WriteString("\n  action init = all {\n")
 	for _, v := range g.vars() {
 		fmt.Fprintf(b, "    %s' = %s,\n", v[0], v[1])
@@ -784,6 +793,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", s.Quint + "Records": s.Quint + "Records.append(rec_)"}))
 		b.WriteString("    }\n  }\n")
 	}
+	g.callActions(b)
 	g.storeStep(b)
 	b.WriteString("}\n")
 }
@@ -992,6 +1002,7 @@ func (g *gen) storeStep(b *strings.Builder) {
 		d := newDraws()
 		calls = append(calls, d.branch(applied(s.Quint, paramNames(d.add(fs)))))
 	}
+	calls = append(calls, g.callSteps()...)
 	b.WriteString("    any {\n")
 	for _, c := range calls {
 		fmt.Fprintf(b, "      %s,\n", c)
@@ -1094,6 +1105,13 @@ func (g *gen) binding(name string, m marks) []byte {
 		}
 		conditioned = conditioned || c.Unconditioned == ""
 	}
+	if !calls {
+		for _, r := range g.callOutcomes() {
+			if !slices.Contains(refusals, r) {
+				refusals = append(refusals, r)
+			}
+		}
+	}
 	sort.Strings(refusals)
 	for _, r := range refusals {
 		fmt.Fprintf(&b, "  %s: '\"%s\"'\n", r, r)
@@ -1190,6 +1208,7 @@ func (g *gen) binding(name string, m marks) []byte {
 			fs, _ := scalarFields(s.Fields)
 			entry(s.Quint, argTemplates(fs), "")
 		}
+		g.callBindings(entry)
 	}
 	inv, ev, viol := m.of(name)
 	fmt.Fprintf(&b, "\ninvariants: [%s]\n", strings.Join(append(append([]string(nil), inv...), viol...), ", "))

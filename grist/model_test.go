@@ -19,7 +19,8 @@ import (
 // keyed read model; a conditioned command with refusals, an
 // Unconditioned one without; a query of a struct and one of a scalar;
 // processors that emit, effect at least once with a success event and at
-// most once without; a site.
+// most once without; a site; a dependency's Keyed call with a refusal,
+// used by both effects.
 type (
 	itemAdded struct {
 		Item string   `json:"item" grist:"tag"`
@@ -52,9 +53,19 @@ type (
 		Item string `json:"item"`
 		Qty  int    `json:"qty"`
 	}
+	reserve struct {
+		Item string `json:"item"`
+		Qty  int    `json:"qty"`
+	}
+	reserved struct {
+		Ref string `json:"ref"`
+	}
 )
 
 var errFull = grist.Rejection("full")
+
+// errNoStock is the warehouse's refusal of a reservation.
+var errNoStock = grist.Rejection("no-stock")
 
 func shopApp() *grist.App {
 	a := grist.New("shop")
@@ -80,12 +91,20 @@ func shopApp() *grist.App {
 	grist.NewProcessor(a, "ship", added, func(ctx context.Context, r *grist.Reads, e itemAdded, m grist.Meta) grist.Result {
 		return grist.Emit(shipped.Of(itemShipped{Item: e.Item, Of: int64(m.Pos)}))
 	}, grist.Emits(shipped))
+	warehouse := grist.NewDependency(a, "warehouse")
+	hold := grist.NewCall[reserve, reserved](warehouse, "hold", grist.Keyed(), grist.Refuses(errNoStock))
 	grist.NewProcessor(a, "notify", added, func(ctx context.Context, r *grist.Reads, e itemAdded, m grist.Meta) grist.Result {
-		return grist.Effect(func(context.Context) error { return nil }, grist.AtLeastOnce, grist.OnSuccess(noted.Of(itemNoted{})))
-	}, grist.Delivers(grist.AtLeastOnce, noted), grist.EffectTries(2))
+		return grist.Effect(func(ctx context.Context) error {
+			_, err := hold.Do(ctx, reserve{Item: e.Item, Qty: e.Qty})
+			return err
+		}, grist.AtLeastOnce, grist.OnSuccess(noted.Of(itemNoted{})))
+	}, grist.Delivers(grist.AtLeastOnce, noted), grist.EffectTries(2), grist.Uses(hold))
 	grist.NewProcessor(a, "charge", shipped, func(ctx context.Context, r *grist.Reads, e itemShipped, m grist.Meta) grist.Result {
-		return grist.Effect(func(context.Context) error { return nil }, grist.AtMostOnce)
-	}, grist.Delivers(grist.AtMostOnce))
+		return grist.Effect(func(ctx context.Context) error {
+			_, err := hold.Do(ctx, reserve{Item: e.Item, Qty: 1})
+			return err
+		}, grist.AtMostOnce)
+	}, grist.Delivers(grist.AtMostOnce), grist.Uses(hold))
 	grist.NewSite[picked](a, "warehouse-picks")
 	return a
 }

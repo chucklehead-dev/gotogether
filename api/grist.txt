@@ -14,6 +14,7 @@ func Actors(names ...string) Policy
 func Authenticated(actor, tenant string) bool
 func Authorize(p Policy) Option
 func BatchSize(n int) Option
+func CallKey(ctx context.Context) string
 func CheckTenant(t string) error
 func ConditionTries(n int) Option
 func Delivers(d Delivery, success ...EventName) Option
@@ -29,14 +30,18 @@ func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
 func Generate(app *App, dir string) (Generated, error)
 func Internal() Option
+func Keyed() Option
 func Keys(names ...string) KeyNames
+func Local(h Handlers) Transport
 func Main(app *App, opts ...ServeOption)
 func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error
 func MaxBody(n int64) ServeOption
 func Middleware(m func(http.Handler) http.Handler) ServeOption
 func New(name string) *App
+func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Req, Resp]
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewDep[T any](name string, fallback T) *Dep[T]
+func NewDependency(app *App, name string) *Dependency
 func NewEvent[E any](app *App, name string) *EventType[E]
 func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
@@ -53,12 +58,14 @@ func QuintName(name string) (string, error)
 func RecorderID(storeName, tenant string) string
 func Refuses(rejections ...error) Option
 func Rejection(name string) error
+func Replayed(ctx context.Context)
 func Schema(typ reflect.Type) map[string]any
 func Skip() Result
 func Starter(app *App) ([]byte, error)
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
+func Uses(calls ...CallName) Option
 func WithActor(ctx context.Context, actor string) context.Context
 func WithRelay(r *Relay) StartOption
 type App struct
@@ -66,6 +73,7 @@ type App struct
     method (*App) ArgsType(name string) reflect.Type
     method (*App) Catalog() Catalog
     method (*App) Commands() []string
+    method (*App) Dependencies() []*Dependency
     method (*App) Execute(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (Receipt, error)
     method (*App) Processors() []string
     method (*App) Queries() []string
@@ -73,6 +81,22 @@ type App struct
     method (*App) ResultType(name string) reflect.Type
     method (*App) Start(ctx context.Context, s Store, opts ...StartOption) error
     method (*App) Verify() error
+type CallHandler struct
+type CallInfo struct
+    field App string
+    field Tenant string
+    field Processor string
+    field Trigger Position
+    field Head Position
+    field Key string
+type CallName interface
+    Name() string
+    call() *callInfo
+type Call[Req, Resp any] struct
+    method (*Call[Req, Resp]) Dependency() *Dependency
+    method (*Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error)
+    method (*Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, error)) CallHandler
+    method (*Call[Req, Resp]) Name() string
 type Catalog struct
     field Name string `json:"name"`
     field Events []CatalogEvent `json:"events"`
@@ -81,6 +105,7 @@ type Catalog struct
     field Queries []CatalogBlock `json:"queries"`
     field Processors []CatalogProcessor `json:"processors"`
     field Sites []CatalogSite `json:"sites"`
+    field Dependencies []CatalogDependency `json:"dependencies"`
 type CatalogBlock struct
     field Name string
     field Quint string
@@ -91,6 +116,19 @@ type CatalogBlock struct
     field Internal bool
     field Refuses []string
     method (CatalogBlock) MarshalJSON() ([]byte, error)
+type CatalogCall struct
+    field Name string
+    field Quint string
+    field Request reflect.Type
+    field Response reflect.Type
+    field Keyed bool
+    field Refuses []string
+    field Users []string
+    method (CatalogCall) MarshalJSON() ([]byte, error)
+type CatalogDependency struct
+    field Name string `json:"name"`
+    field Quint string `json:"quint"`
+    field Calls []CatalogCall `json:"calls"`
 type CatalogEvent struct
     field Name string
     field Version int
@@ -106,6 +144,7 @@ type CatalogProcessor struct
     field Emits []string `json:"emits,omitempty"`
     field Delivery Delivery `json:"delivery,omitempty"`
     field Success string `json:"success,omitempty"`
+    field Uses []string `json:"uses,omitempty"`
 type CatalogReadModel struct
     field Name string `json:"name"`
     field Version int `json:"version"`
@@ -128,6 +167,11 @@ type Dep[T any] struct
     method (*Dep[T]) Of(ctx context.Context) T
     method (*Dep[T]) String() string
     method (*Dep[T]) With(ctx context.Context, v T) context.Context
+type Dependency struct
+    method (*Dependency) Calls() []string
+    method (*Dependency) Name() string
+    method (*Dependency) String() string
+    method (*Dependency) With(ctx context.Context, t Transport) context.Context
 type EffectOption func(*Result)
 type Envelope struct
     field ID string
@@ -152,6 +196,8 @@ type Generated struct
     method (Generated) Diff(dir string) []string
     method (Generated) Write(dir string) error
 type Handler[S any] struct
+type Handlers []CallHandler
+    method (Handlers) Serves(d *Dependency) error
 type Hole struct
     field Name string
     field Doc string
@@ -199,6 +245,8 @@ type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
 type TagPair = store.TagPair
+type Transport interface
+    Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error)
 type Unknown struct
     field Processor string `json:"processor" grist:"tag"`
     field Error string `json:"error"`
@@ -243,6 +291,7 @@ type StatusError struct
 == github.com/chucklehead-dev/gotogether/grist/gristsim
 const ActorHeader = "X-Gristsim-Actor"
 const CallTimeout = 2 * time.Second
+const DependencyTimeout = time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
 func ClientsActor(tenant string) string
@@ -267,9 +316,11 @@ type Config struct
     field Check bool
     field Alphabet []string
     field Gen map[string]func(pick func(n int) int) any
+    field Doubles func() Doubles
     field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
     field Horizon time.Duration
     field Log func(string)
+type Doubles map[*grist.Dependency]grist.Handlers
 
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 const MutantEnv = "GRIST_MUTANT"

@@ -179,6 +179,25 @@ module grist {
       if (effects[i]._4) success(effects[i]._2).foldl(true, (b, e) => b and holds(log, e))
       else holds(log, failed(processor, effects[i]._2)) or holdsUnknown(log, processor, effects[i]._2)))
 
+  // A declared call's step as its key (docs/grist-instrumentation.md
+  // §3.3): (processor, trigger, key), the caller's (Call.Do) or the
+  // site's (its served record).
+  type CallKey = (str, int, str)
+
+  // A call's key is its trigger's: every call of processor for trigger
+  // carries key and no other trigger's does, and the effect steps agree
+  // (keyStable). The same key on every try, so a dependency that applies
+  // each key once (Keyed) applies an at-least-once effect's call once.
+  pure def callKeyStable(effects: List[Effect], calls: List[CallKey], processor: str, trigger: int, key: str): bool = and {
+    keyStable(effects, processor, trigger, key),
+    calls.indices().forall(i => calls[i]._1 == processor implies ((calls[i]._2 == trigger) == (calls[i]._3 == key))),
+  }
+
+  // some step of calls carries key: at most once, a second call of a key is
+  // a second try, which an at-most-once effect never makes; a Keyed
+  // dependency's second served record of a key is a second application
+  pure def keyCalled(calls: List[CallKey], key: str): bool = calls.indices().exists(i => calls[i]._3 == key)
+
   // grist's default EffectTries: a failed effect is checkpointed with
   // grist.failed after this many failures
   pure val EFFECT_TRIES = 3

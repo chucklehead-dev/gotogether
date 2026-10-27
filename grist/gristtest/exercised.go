@@ -14,8 +14,9 @@ import (
 // ok and refused by each refusal it declares (grist.Refuses), every query
 // answered, every processor's steps (an Emits processor's handling, a
 // Delivers processor's effect and checkpoint, an at-most-once outcome
-// when it declares a success event) and every site's record, each in
-// some run. A run that exercised none of the app's own blocks passes every
+// when it declares a success event), every site's record and every
+// declared call's (answered ok at its caller, applied at its
+// dependency), each in some run. A run that exercised none of the app's own blocks passes every
 // other claim (examples/library's first faithful test never committed a
 // borrow): this one fails it, naming each block missed with how to reach
 // it. A conflict, a reused key and a skip are not wanted (faults and
@@ -81,6 +82,14 @@ func Takes(app *grist.App) []qtest.Take {
 			if p.Delivery == grist.AtMostOnce && p.Success != "" {
 				out = append(out, qtest.Takes(p.Quint+"Outcome").Hint(fmt.Sprintf("%s appended no outcome: an effect must succeed with no crash after it", p.Name)))
 			}
+		}
+	}
+	for _, d := range c.Dependencies {
+		for _, call := range d.Calls {
+			out = append(out, qtest.Takes(call.Quint).Outcome("ok").Hint(fmt.Sprintf(
+				"no call of %s/%s was answered ok: an effect that uses it must run (its processor's line) and its double answer (gristsim Config.Doubles)", d.Name, call.Name)),
+				qtest.Takes(call.Quint+"Served").Hint(fmt.Sprintf(
+					"%s applied no %s: its double must apply a call (not only replay one: grist.Replayed records nothing)", d.Name, call.Name)))
 		}
 	}
 	for _, s := range c.Sites {

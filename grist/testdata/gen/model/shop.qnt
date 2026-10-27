@@ -25,6 +25,11 @@ module shopRules {
   // notify skips gifts; charge skips nothing
   pure def notifySkips(prefix: List[Event], trigger: int): bool = itemAddedGift(prefix[trigger - 1])
   pure def chargeSkips(prefix: List[Event], trigger: int): bool = false
+  // notify holds the added quantity of its item, charge one of the shipped
+  pure def notifyWarehouseHold(prefix: List[Event], trigger: int): WarehouseHoldRequest =
+    { item: itemAddedItem(prefix[trigger - 1]), qty: itemAddedQty(prefix[trigger - 1]) }
+  pure def chargeWarehouseHold(prefix: List[Event], trigger: int): WarehouseHoldRequest =
+    { item: itemShippedItem(prefix[trigger - 1]), qty: 1 }
   // the warehouse picks a key once
   pure def warehousePicksAdmits(records: List[WarehousePicksRecord], r: WarehousePicksRecord): bool =
     records.select(p => p.key == r.key).length() == 0
