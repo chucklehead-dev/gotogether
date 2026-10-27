@@ -3,6 +3,7 @@ package counters
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
@@ -40,8 +41,8 @@ func realMailer(t *testing.T) string {
 // realTier is counters' real tier under cfg (gristtest.Tier): its bank
 // the team's own (NewBank) behind grist.ServeCalls on a loopback server
 // of its own, recording its payments into its own step file and losing
-// every fifth answer after the payment was made (TierConfig.Serve:
-// gristtest's DependencyLoseEvery), the nodes calling it through
+// every cfg.DependencyLoseEvery-th answer (default every fifth) after the
+// payment was made (TierConfig.Serve), the nodes calling it through
 // grist.OverHTTP; its mailer a third party's over HTTP (realMailer,
 // grist.OverHTTP), which records nothing. The real variant
 // (counters.real.binding.yaml) judges it: every val of the default
@@ -56,12 +57,12 @@ func realTier(t *testing.T, cfg gristtest.TierConfig) *gristtest.Tier {
 	return gristtest.NewTier(t, App, cfg)
 }
 
-// retireAll has five clients each create a counter of its own in tenant
-// t1 and retire it (the creator's own retirement, its total 0): five
-// payouts, so the bank loses the fifth's answer.
-func retireAll(tier *gristtest.Tier, phase int) {
+// retireAll has n clients each create a counter of its own in tenant t1
+// and retire it (the creator's own retirement, its total 0): n payouts,
+// so a bank losing every n-th answer loses the last's.
+func retireAll(tier *gristtest.Tier, phase, n int) {
 	var wg sync.WaitGroup
-	for c := 1; c <= 5; c++ {
+	for c := 1; c <= n; c++ {
 		wg.Go(func() {
 			ctx := qobs.Thread(tier.Clients())
 			actor := fmt.Sprint("client", c)
@@ -92,10 +93,12 @@ func retireAll(tier *gristtest.Tier, phase int) {
 // its own that records the step log from its first row (its copies of
 // the first node's records are Reconstruct's duplicates) and every row
 // the first never recorded. The second phase creates new counters, whose
-// welcomes only the second node sends. The third retires counters: five
-// payouts through the bank, a server of its own behind grist.ServeCalls
-// (its payments recorded into its own step file, validated with the
-// nodes'), which loses the fifth answer after paying it: that payout's
+// welcomes only the second node sends. The third retires two counters:
+// two payouts through the bank, a server of its own behind
+// grist.ServeCalls (its payments recorded into its own step file,
+// validated with the nodes'), which loses every second answer after
+// paying it (the fewest that give the site claim both an answer to
+// compare with the bank's record and a lost one): that payout's
 // outcome is unknown (grist.unknown, at most once: never paid again), and
 // the bank paid each key once. The tier then waits for the
 // processors and the relay, probes every counter over the API and
@@ -106,7 +109,7 @@ func retireAll(tier *gristtest.Tier, phase int) {
 func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
 	tenants := []string{"t1", "t2"}
-	tier := realTier(t, gristtest.TierConfig{Tenants: tenants})
+	tier := realTier(t, gristtest.TierConfig{Tenants: tenants, DependencyLoseEvery: 2})
 	// clients runs four clients of 8 operations each on counters, names
 	// from names; after the first client's half, kill runs (if set)
 	clients := func(phase int, counters, names []string, kill func()) {
@@ -155,7 +158,7 @@ func TestRealHTTP(t *testing.T) {
 		t.Fatal("the killed node's relay recorded every row: the second node's relay has nothing of its own to record, and this run proves nothing of it")
 	}
 	clients(2, []string{"d", "e", "f"}, []string{"c", "d"}, nil)
-	retireAll(tier, 3)
+	retireAll(tier, 3, 2)
 	tier.Settle(func(ctx context.Context) { // the probe: every counter, on the settled system
 		for _, tn := range tenants {
 			for i, c := range []string{"a", "b", "c", "d", "e", "f"} {
@@ -164,7 +167,8 @@ func TestRealHTTP(t *testing.T) {
 		}
 	})
 	traces := tier.Check(onReal, calls)
-	paidOnce(t, tier, 5)
+	paidOnce(t, tier, 2)
+	forgedReceipt(t, tier.Steps())
 	unknown, _, err := tier.Store.Read(context.Background(), "t1", grist.Selector{Types: []string{"grist.unknown"}}, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -195,6 +199,33 @@ func TestRealHTTP(t *testing.T) {
 		t.Errorf("%d relayed records, %d kept: want the second node's copies of the first's rows dropped as duplicates", relayed["t1"]+relayed["t2"], kept)
 	}
 	t.Logf("%d relayed (%d kept after the second relay's copies); the killed node's relay was %d rows behind", relayed["t1"]+relayed["t2"], kept, behind)
+}
+
+// forgedReceipt validates the real tier's steps with the ok payment's
+// receipt as its caller saw it changed, as a
+// transport that decoded the bank's answer wrongly would record it: the
+// site claim everyPaymentAnswerServed fails, the caller's answer no
+// longer the bank's served record (its one violation: it is not
+// vacuous), and nothing else does (the store's side is the faithful
+// app's).
+func forgedReceipt(t *testing.T, steps []qtrace.Step) {
+	t.Helper()
+	// every step (a recorder's seqs span the tenants: a step left out
+	// would be a gap, and no eventual val judged)
+	var doctored []qtrace.Step
+	forged := false
+	for _, s := range steps {
+		if s.Action == "bankPay" && !s.Invocation && s.Outcome == "ok" && !forged {
+			s.Args = maps.Clone(s.Args)
+			s.Args["ref"] = "forged"
+			forged = true
+		}
+		doctored = append(doctored, s)
+	}
+	if !forged {
+		t.Fatal("no payment answered ok: the site claim compares nothing")
+	}
+	qtest.Validate(t, onReal, doctored).Expect(t, qtest.Violates(validate.EventuallyName("everyPaymentAnswerServed")))
 }
 
 // paidOnce checks the bank's own step file: n payments, each key applied
@@ -294,11 +325,19 @@ func TestRealLostThenKilled(t *testing.T) {
 	tier := lostThenKilled(t)
 	pendingPayment(t, tier)
 	paidOnce(t, tier, 1)
-	tier.Check(onReal, calls)
+	// the store's side alone (not Tier.Check, which validates the
+	// clients' side too: here one client's two calls in sequence, made
+	// before the kill, which TestRealHTTP's four clients cover)
+	traces, _ := qtrace.Reconstruct(tier.Steps())
+	gristtest.Answered(t, App, traces)
+	qtest.Validate(t, onReal, tier.Steps()).Expect(t, qtest.Conforms(), qtest.Settles())
 	// the default binding judges the mailer's site claim too, which needs
 	// the mailer's records: a third party's mailer leaves none, so the
-	// welcome's answer is one no site gave. Why the real tier is judged
-	// by its own variant (docs/grist-instrumentation.md §5, decision 4)
+	// welcome's answer is one no site gave. A verdict on the tier, not on
+	// the app (it holds whatever the code does), and why the real tier is
+	// judged by its own variant (docs/grist-instrumentation.md §5,
+	// decision 4); it is also the claim's one violation, the evidence that
+	// it is not vacuous (an answer without its site's record fails it)
 	qtest.Validate(t, commits, tier.Steps()).Expect(t, qtest.Violates(validate.EventuallyName("everyMailAnswerServed")))
 }
 

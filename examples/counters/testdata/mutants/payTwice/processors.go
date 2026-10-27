@@ -37,7 +37,7 @@ var Welcome = grist.NewProcessor(App, "welcome", Created,
 // the retry), so nothing is paid twice and nothing the store records
 // differs; but an at-most-once effect's one call became two, which the
 // payout's own steps show: two calls of one key (bankPay). The real
-// tier, where the bank loses every fifth answer, rejects it from the
+// tier, its bank losing an answer after paying, rejects it from the
 // steps file.
 //
 // Payout pays a retired counter's total out through the bank, at most

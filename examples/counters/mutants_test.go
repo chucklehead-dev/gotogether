@@ -144,26 +144,32 @@ func TestMutant(t *testing.T) {
 		// bank, behind grist.ServeCalls, makes the payment and its answer
 		// is lost as the node is killed, so the bank's own step file holds
 		// the payment's only record, judged against payoutBankPay there;
-		// TestRealLostThenKilled is its contrast
+		// TestRealLostThenKilled is its contrast. Full mode: the site's
+		// request is judged by the action lostThenCrash rejects above, and
+		// that the bank's file joins the caller's trace is TestRealHTTP's
+		// (its site claim compares each answer with the bank's record)
+		if testing.Short() {
+			return
+		}
 		tier := lostThenKilled(t)
 		pendingPayment(t, tier)
 		qtest.Validate(t, onReal, tier.Steps()).Expect(t, qtest.Rejects("bankPayServed"))
 	case "payTwice":
 		// the at-most-once payout calling the bank again after an unknown
-		// answer: on the real tier (retireAll: five payouts, the bank
-		// losing the fifth's answer after paying it) the retry is the
-		// bank's replay, nothing is paid twice, and the store's records are
-		// the faithful app's; the payout's own steps, in the nodes' steps
-		// file, hold two calls of one at-most-once key. TestRealHTTP's third
+		// answer: on the real tier (one counter created and retired, the
+		// bank losing every answer after paying) the retry is the bank's
+		// replay, nothing is paid twice, and the store's records are the
+		// faithful app's; the payout's own steps, in the nodes' steps file,
+		// hold two calls of one at-most-once key. TestRealHTTP's third
 		// phase is its contrast
-		tier := realTier(t, gristtest.TierConfig{})
+		tier := realTier(t, gristtest.TierConfig{DependencyLoseEvery: 1})
 		tier.Start("node1")
-		retireAll(tier, 1)
+		retireAll(tier, 1, 1)
 		tier.Settle(nil)
 		if tier.LostCalls() == 0 {
 			t.Fatal("no bank answer lost: the retry was never made")
 		}
-		paidOnce(t, tier, 5)
+		paidOnce(t, tier, 1)
 		qtest.Validate(t, onReal, tier.Steps()).Expect(t, qtest.Rejects("bankPay"))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
