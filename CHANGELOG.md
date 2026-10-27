@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `gotogether validate`'s result line says `RESULT: NO VERDICT (...)`
+  when the run's verdict is no verdict (every failing actor's a lost
+  tail, dropped steps or an uncollected window; exit 1, being no pass),
+  as its manifest's verdict already did: it said FAIL for any run not
+  OK, though only a defect is a FAIL.
 - External shrinking: `qtest.ShrinkActions(t, actions, ActionShrink[A]{Binding,
   Rerun, Reset, Keep, Calibration, Opts})` shrinks a failing sequence of
   a driver's actions to a 1-minimal one (ddmin) that still fails the

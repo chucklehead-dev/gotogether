@@ -284,14 +284,14 @@ func TestValidateLost(t *testing.T) {
 		binding string
 	}{
 		{"as recorded", []string{two}, 1, "RESULT: FAIL (1 of 1 actor: 1 rejects withdraw)", "account.yaml"},
-		{"a's tail lost", []string{"-lost-suffix", "a", two}, 1, "RESULT: FAIL (1 of 1 actor: 1 no verdict (lost steps))", "account.yaml"},
+		{"a's tail lost", []string{"-lost-suffix", "a", two}, 1, "RESULT: NO VERDICT (1 of 1 actor: 1 no verdict (lost steps))", "account.yaml"},
 		{"no such recorder", []string{"-lost-suffix", "z", two}, 2, `validate: -lost-suffix z: no step of recorder "z" in the input: name one of its recorders (a, b)`, "account.yaml"},
 		{"no such recorder's watermark", []string{"-complete-through", "z=1", two}, 2, `validate -complete-through z=1: no step of recorder "z" in the input: name one of its recorders (a, b), or * for every one`, "account.yaml"},
 		{"no time", []string{"-complete-through", "a=soon", two}, 2, `validate -complete-through a=soon: "soon" is no time: give RFC3339 (2026-10-26T12:00:00Z) or Unix nanoseconds`, "account.yaml"},
 		{"no recorder", []string{"-complete-through", "1", two}, 2, `validate -complete-through "1": want recorder=T`, "account.yaml"},
 		{"a snapshot's head lost", []string{"-lost-prefix", "c", snap}, 0, "judged from the state recorded by restore at seq 0 (recorder c lost its first steps)", "snapshot.yaml"},
 		{"a head lost", []string{"-lost-prefix", "c", snap}, 1, "error lost-prefix: recorder c lost its first steps", "account.yaml"},
-		{"a gap", []string{gap}, 1, "RESULT: FAIL (1 of 1 actor: 1 no verdict (dropped steps))", "funds.binding.yaml"},
+		{"a gap", []string{gap}, 1, "RESULT: NO VERDICT (1 of 1 actor: 1 no verdict (dropped steps))", "funds.binding.yaml"},
 		{"torn", []string{torn}, 0, "its recorders' tails are lost after their last steps: eventual vals not judged", "account.yaml"},
 	} {
 		args := append([]string{"-binding", "../../validate/testdata/" + c.binding, "-dir", filepath.Join(dir, "out")}, c.args...)

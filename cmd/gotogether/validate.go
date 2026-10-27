@@ -455,7 +455,14 @@ func (v *validateRun) run() (code int, _ validate.RunVerdict, _ error) {
 		fmt.Fprintf(v.out, "RESULT: PASS (%s)\n", passSummary(results))
 		return 0, verdict, nil
 	}
-	fmt.Fprintf(v.out, "RESULT: FAIL (%s)\n", failSummary(results, incomplete))
+	// Only a defect is a FAIL (DESIGN §53): a run whose every failure has
+	// no verdict (a lost tail, dropped steps, an uncollected window) says
+	// so, though it exits 1 as a failure does, being no pass.
+	word := "FAIL"
+	if verdict.Verdict == validate.NotEvaluated {
+		word = "NO VERDICT"
+	}
+	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, failSummary(results, incomplete))
 	return 1, verdict, nil
 }
 
