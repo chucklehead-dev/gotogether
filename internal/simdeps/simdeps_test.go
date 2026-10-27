@@ -143,6 +143,59 @@ func TestSimulatedPackagesHaveNoNativeDeps(t *testing.T) {
 	}
 }
 
+// hostOnly are standard packages the core's simulated packages must not
+// reach: gosim translates everything they import, and a simulated run
+// has no processes to start (qcover's Go-coverage reader, which runs `go
+// tool covdata`, lives in qcover/gocover for it).
+var hostOnly = map[string]bool{"os/exec": true}
+
+// The core's simulated packages (simulated's, the examples aside: some
+// run real clusters beside their simulations) start no processes.
+func TestSimulatedCoreRunsNoCommands(t *testing.T) {
+	var roots []string
+	for _, p := range simulated {
+		if !strings.HasPrefix(p, module+"/examples/") {
+			roots = append(roots, p)
+		}
+	}
+	out := golist(t, append([]string{"-deps", "-json"}, roots...)...)
+	pkgs := map[string]pkg{}
+	dec := json.NewDecoder(strings.NewReader(string(out)))
+	for {
+		var p pkg
+		if err := dec.Decode(&p); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		pkgs[p.ImportPath] = p
+	}
+	for _, root := range roots {
+		if chain := findImport(pkgs, root, hostOnly, map[string]bool{}); chain != nil {
+			t.Errorf("%s imports %s, host-only code a simulation cannot run: %s.\n"+
+				"Move the code that needs it into a host-side package (as qcover/gocover is).",
+				root, chain[len(chain)-1], strings.Join(chain, " -> "))
+		}
+	}
+}
+
+// findImport returns an import chain from p to a package in targets, or nil.
+func findImport(pkgs map[string]pkg, p string, targets, seen map[string]bool) []string {
+	if seen[p] {
+		return nil
+	}
+	seen[p] = true
+	if targets[p] {
+		return []string{p}
+	}
+	for _, imp := range pkgs[p].Imports {
+		if chain := findImport(pkgs, imp, targets, seen); chain != nil {
+			return append([]string{p}, chain...)
+		}
+	}
+	return nil
+}
+
 // find returns an import chain from p to a native package, or nil.
 func find(pkgs map[string]pkg, p string, seen map[string]bool) []string {
 	if seen[p] {

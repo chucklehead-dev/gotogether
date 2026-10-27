@@ -1,4 +1,8 @@
-package qcover
+// Package gocover reads Go's own coverage (binaries built with -cover, a
+// real environment's) and compares it with a simulation's (qcover's
+// Summary, by model step). It runs `go tool covdata`, so it is host-side
+// code, apart from qcover, which simulated code imports.
+package gocover
 
 import (
 	"bufio"
@@ -10,26 +14,28 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/qcover"
 )
 
-// A GoBlock is a block of Go's own coverage (go build -cover): a real
+// A Block is a block of Go's own coverage (go build -cover): a real
 // environment's binaries count with it, globally per process.
-type GoBlock struct {
+type Block struct {
 	File                       string // import path and file name
 	Line, Col, EndLine, EndCol int
 	Stmts, Count               int
 }
 
-// A GoProfile is the coverage of one or more runs of binaries built with
+// A Profile is the coverage of one or more runs of binaries built with
 // -cover (GOCOVERDIR), merged.
-type GoProfile struct {
-	Blocks []GoBlock
+type Profile struct {
+	Blocks []Block
 }
 
-// ReadGoCover merges the coverage data in dirs (each a GOCOVERDIR) with
+// Read merges the coverage data in dirs (each a GOCOVERDIR) with
 // `go tool covdata` and reads it.
-func ReadGoCover(dirs ...string) (*GoProfile, error) {
-	tmp, err := os.MkdirTemp("", "qcover")
+func Read(dirs ...string) (*Profile, error) {
+	tmp, err := os.MkdirTemp("", "gocover")
 	if err != nil {
 		return nil, err
 	}
@@ -37,20 +43,20 @@ func ReadGoCover(dirs ...string) (*GoProfile, error) {
 	out := filepath.Join(tmp, "cover.txt")
 	cmd := exec.Command("go", "tool", "covdata", "textfmt", "-i="+strings.Join(dirs, ","), "-o="+out)
 	if b, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("qcover: go tool covdata textfmt -i=%s: %v\n%s", strings.Join(dirs, ","), err, b)
+		return nil, fmt.Errorf("gocover: go tool covdata textfmt -i=%s: %v\n%s", strings.Join(dirs, ","), err, b)
 	}
 	f, err := os.Open(out)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return ParseGoCover(f)
+	return Parse(f)
 }
 
-// ParseGoCover reads Go's text coverage format (go tool covdata textfmt,
+// Parse reads Go's text coverage format (go tool covdata textfmt,
 // go test -coverprofile). Blocks seen several times are merged.
-func ParseGoCover(r io.Reader) (*GoProfile, error) {
-	merged := map[string]*GoBlock{}
+func Parse(r io.Reader) (*Profile, error) {
+	merged := map[string]*Block{}
 	var keys []string
 	sc := bufio.NewScanner(r)
 	for n := 1; sc.Scan(); n++ {
@@ -58,22 +64,22 @@ func ParseGoCover(r io.Reader) (*GoProfile, error) {
 		if line == "" || strings.HasPrefix(line, "mode:") {
 			continue
 		}
-		var b GoBlock
+		var b Block
 		file, rest, ok := strings.Cut(line, ":")
 		f := strings.Fields(rest)
 		if !ok || len(f) != 3 {
-			return nil, fmt.Errorf("qcover: line %d: %q is not file:l.c,l.c stmts count", n, line)
+			return nil, fmt.Errorf("gocover: line %d: %q is not file:l.c,l.c stmts count", n, line)
 		}
 		b.File = file
 		if _, err := fmt.Sscanf(f[0], "%d.%d,%d.%d", &b.Line, &b.Col, &b.EndLine, &b.EndCol); err != nil {
-			return nil, fmt.Errorf("qcover: line %d: %v", n, err)
+			return nil, fmt.Errorf("gocover: line %d: %v", n, err)
 		}
 		var err error
 		if b.Stmts, err = strconv.Atoi(f[1]); err == nil {
 			b.Count, err = strconv.Atoi(f[2])
 		}
 		if err != nil {
-			return nil, fmt.Errorf("qcover: line %d: %v", n, err)
+			return nil, fmt.Errorf("gocover: line %d: %v", n, err)
 		}
 		k := file + ":" + f[0]
 		if m := merged[k]; m != nil {
@@ -87,7 +93,7 @@ func ParseGoCover(r io.Reader) (*GoProfile, error) {
 		return nil, err
 	}
 	sort.Strings(keys)
-	p := &GoProfile{}
+	p := &Profile{}
 	for _, k := range keys {
 		p.Blocks = append(p.Blocks, *merged[k])
 	}
@@ -95,7 +101,7 @@ func ParseGoCover(r io.Reader) (*GoProfile, error) {
 }
 
 // Ratio is the share of statements run.
-func (p *GoProfile) Ratio() float64 {
+func (p *Profile) Ratio() float64 {
 	total, run := 0, 0
 	for _, b := range p.Blocks {
 		total += b.Stmts
@@ -117,7 +123,7 @@ func sameFile(goFile, file string) bool {
 
 // has reports whether the profile covers file at all, and ran whether a
 // block with a count covers line.
-func (p *GoProfile) has(file string, line int) (has, ran bool) {
+func (p *Profile) has(file string, line int) (has, ran bool) {
 	for _, b := range p.Blocks {
 		if !sameFile(b.File, file) {
 			continue
@@ -137,16 +143,16 @@ type Gap struct {
 	// the simulation's environment never leads to (a fault it does not
 	// inject, a path its doubles do not take). The simulation's verdicts
 	// say nothing about it.
-	RealOnly []Block
+	RealOnly []qcover.Block
 	// SimOnly ran in simulations and never in the real environment: what
 	// the real runs did not exercise (faults that did not happen there).
-	SimOnly []Block
+	SimOnly []qcover.Block
 }
 
-// Compare reads a simulation's code coverage (Summarize, of runs woven by
-// qweave -cover) against a real environment's (ReadGoCover), block by
+// Compare reads a simulation's code coverage (qcover.Summarize, of runs woven by
+// qweave -cover) against a real environment's (Read), block by
 // block, over the files the real binaries contain.
-func Compare(sim *Summary, real *GoProfile) *Gap {
+func Compare(sim *qcover.Summary, real *Profile) *Gap {
 	g := &Gap{}
 	for _, b := range sim.Blocks {
 		has, ran := real.has(b.File, b.Line)

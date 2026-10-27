@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qcover/gocover"
 )
 
 // runCover reads a real environment's coverage (GOCOVERDIRs of binaries
@@ -18,7 +19,7 @@ func runCover(args []string) error {
 	if *covdir == "" {
 		return fmt.Errorf("cover needs -covdir")
 	}
-	real, err := qcover.ReadGoCover(strings.Split(*covdir, ",")...)
+	real, err := gocover.Read(strings.Split(*covdir, ",")...)
 	if err != nil {
 		return err
 	}
@@ -30,6 +31,6 @@ func runCover(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Print(qcover.Compare(s, real))
+	fmt.Print(gocover.Compare(s, real))
 	return nil
 }

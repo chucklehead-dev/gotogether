@@ -299,7 +299,7 @@ Breaking: ShrinkActions has one user outside its tests (examples/webjobs)
 and one line in the workflow skill's verdicts reference. Recommendation:
 do it before the first tag.
 
-### C2. qcover's Go-coverage reader out of the simulated package (decided: yes)
+### C2. qcover's Go-coverage reader out of the simulated package (done: "qcover/gocover: Go's coverage reader out of the simulated qcover")
 
 qcover is held to the simulation's rules (woven into simulated code,
 translated by gosim), yet `ReadGoCover` runs `go tool covdata` (os/exec)
@@ -307,7 +307,8 @@ and `ParseGoCover` reads its text: host-only code that gosim translates
 along with the rest (found by chiasmus's Prolog reachability over the
 import graph, below). Proposed: `qcover/gocover` with `Read`, `Parse`,
 `Profile`, `Block`, and `Compare` taking it. Recommendation: yes, cheap
-now, a rename later.
+now, a rename later. Decided: yes, and done; internal/simdeps fails if a simulated
+package of the core reaches os/exec again.
 
 ### C3. Options or Config: one name for one pattern (decided: left as it is)
 

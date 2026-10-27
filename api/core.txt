@@ -395,11 +395,8 @@ type U64 int64
 
 == github.com/chucklehead-dev/gotogether/qcover
 func Blocks() []Block
-func Compare(sim *Summary, real *GoProfile) *Gap
 func Hit(id int)
 func NewCounts() *Counts
-func ParseGoCover(r io.Reader) (*GoProfile, error)
-func ReadGoCover(dirs ...string) (*GoProfile, error)
 func ReadSummary(path string) (*Summary, error)
 func Register(bs []Block) int
 func Summarize(runs []*Counts) *Summary
@@ -418,21 +415,6 @@ type Counts struct
     method (*Counts) Sink(next qobs.Sink) qobs.Sink
     method (*Counts) Steps() []StepCover
     method (*Counts) Unattributed() []int
-type Gap struct
-    field RealOnly []Block
-    field SimOnly []Block
-    method (*Gap) String() string
-type GoBlock struct
-    field File string
-    field Line int
-    field Col int
-    field EndLine int
-    field EndCol int
-    field Stmts int
-    field Count int
-type GoProfile struct
-    field Blocks []GoBlock
-    method (*GoProfile) Ratio() float64
 type StepCover struct
     field Action string
     field Outcome string
@@ -448,6 +430,26 @@ type Summary struct
     method (*Summary) Ratio() float64
     method (*Summary) String() string
     method (*Summary) Uncovered() []Block
+
+== github.com/chucklehead-dev/gotogether/qcover/gocover
+func Compare(sim *qcover.Summary, real *Profile) *Gap
+func Parse(r io.Reader) (*Profile, error)
+func Read(dirs ...string) (*Profile, error)
+type Block struct
+    field File string
+    field Line int
+    field Col int
+    field EndLine int
+    field EndCol int
+    field Stmts int
+    field Count int
+type Gap struct
+    field RealOnly []qcover.Block
+    field SimOnly []qcover.Block
+    method (*Gap) String() string
+type Profile struct
+    field Blocks []Block
+    method (*Profile) Ratio() float64
 
 == github.com/chucklehead-dev/gotogether/qdriver
 const AnswerPrefix = "answer_"

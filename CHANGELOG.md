@@ -8,6 +8,13 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Breaking: qcover's reader of Go's own coverage moved to a package of
+  its own, `qcover/gocover` (docs/refactors.md C2): `qcover.ReadGoCover`,
+  `ParseGoCover`, `GoProfile`, `GoBlock`, `Gap` and `Compare` are
+  `gocover.Read`, `Parse`, `Profile`, `Block`, `Gap` and `Compare`. It
+  runs `go tool covdata`, and qcover, which simulated code imports (and
+  gosim translates), now reaches no os/exec (internal/simdeps'
+  `TestSimulatedCoreRunsNoCommands`).
 - `qenv.Table[T]` (`qenv.NewTable[T](prefix)`, docs/refactors.md B4):
   an app's records under one prefix, typed: `Get`, `GetForUpdate`,
   `Put`, `Delete`, `Scan` and `ScanRange` (`[]qenv.Row[T]`, keys after

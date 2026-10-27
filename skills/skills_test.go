@@ -191,6 +191,11 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"bombadil.Read(", "bombadil.Log(r, opts) and its Steps()"},
 		{"Binding.Checks(", "Binding.ChecksActor"},
 		{"`Binding.Checks`", "`Binding.ChecksActor`"},
+		// C2: Go's coverage reader out of the simulated qcover
+		{"qcover.ReadGoCover", "gocover.Read (package qcover/gocover)"},
+		{"qcover.ParseGoCover", "gocover.Parse (package qcover/gocover)"},
+		{"qcover.Compare", "gocover.Compare (package qcover/gocover)"},
+		{"qcover.GoProfile", "gocover.Profile (package qcover/gocover)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

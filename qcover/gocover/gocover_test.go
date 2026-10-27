@@ -1,4 +1,4 @@
-package qcover_test
+package gocover_test
 
 import (
 	"os"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qcover"
+	"github.com/chucklehead-dev/gotogether/qcover/gocover"
 )
 
 // A real environment's binary, built with -cover, ran retry; the
@@ -29,20 +30,20 @@ func TestCompareRealWithSimulation(t *testing.T) {
 	if out, err := run.CombinedOutput(); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	real, err := qcover.ReadGoCover(covdir)
+	real, err := gocover.Read(covdir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if r := real.Ratio(); r <= 0 || r >= 1 {
 		t.Fatalf("ratio %v; want some statements run", r)
 	}
-	file := "qcover/testdata/realapp/main.go"
+	file := "qcover/gocover/testdata/realapp/main.go"
 	sim := &qcover.Summary{Runs: 1, Hit: map[int]int{1: 1}, Blocks: []qcover.Block{
 		{File: file, Line: 11, EndLine: 11, Func: "main.retry", Stmts: 1, ID: 0},
 		{File: file, Line: 15, EndLine: 15, Func: "main.refund", Stmts: 1, ID: 1},
 		{File: "elsewhere/x.go", Line: 1, Func: "x.F", Stmts: 1, ID: 2},
 	}}
-	g := qcover.Compare(sim, real)
+	g := gocover.Compare(sim, real)
 	if len(g.RealOnly) != 1 || g.RealOnly[0].Func != "main.retry" || len(g.SimOnly) != 1 || g.SimOnly[0].Func != "main.refund" {
 		t.Fatalf("gap:\n%s", g)
 	}

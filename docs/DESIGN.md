@@ -2452,7 +2452,7 @@ never returns from park). The native runtime does not record it.
 `GOCOVERDIR` at exit: a real environment's binaries (Maelstrom nodes, a
 kwok controller, an HTTP server) can report what they ran, but not under
 which step. What a real environment can say is the comparison with the
-simulation: `qcover.ReadGoCover` merges the runs' data with `go tool
+simulation: `gocover.Read` (qcover/gocover, host-side) merges the runs' data with `go tool
 covdata textfmt`, and `Compare` matches a simulation's blocks (by file
 and line; Go's files are import paths, qcover's module-relative) over the
 files the binaries contain. Code that ran for real and in no simulated

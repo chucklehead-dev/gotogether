@@ -546,7 +546,8 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qload` | load on qenv: `Experiment` (open- or closed-loop), `Trigger`, `Recovers`/`Assess`/`Mostly` with `Recovered`/`StaysDegraded`, `Target`, `Simulate` (an abstract server and its clients), `Piecewise` shapes |
 | `qmeta` | the CTMC: `New`, `HittingTimes`, `RecoveryWithin`, `Mean`, `Calibrate`/`CalibrateTimeout`, `Measure`; alerts (`Region`, `Rules`), `Watch` (the flight recorder on alert); imports nothing of the module |
 | `qrole` | load roles (`//quint:serve`, `//quint:operation`, `//quint:call`): u and v as OTel gauges, pprof labels |
-| `qcover` | code coverage by model step (woven by `qweave -cover`): `Summarize`; a real environment's coverage against a simulation's (`ReadGoCover`, `Compare`) |
+| `qcover` | code coverage by model step (woven by `qweave -cover`): `Summarize`, `ReadSummary` |
+| `qcover/gocover` | a real environment's coverage (binaries built with `-cover`) against a simulation's: `Read` (host-side: it runs `go tool covdata`), `Parse`, `Compare` |
 | `qmut` | mutant schemata woven by `qweave -mutate`, one build, a mutant per run |
 | `qhistory` | a database's isolation level from its clients' history: Elle's list-append `Workload`, `Check` (G0, G1a, G1b, G1c, G-single, G2, by level; `StrictSerializable` with the transactions' times: the cycles through real time, G-single-realtime and its kin) |
 | `qnemesis` | a real deployment's nemesis: `Nemesis` (`Run` a `Schedule`, `Stop` settles), `Process` and `Container` targets (kill, restart by incarnation, pause), `Toxiproxy` links (cut, heal, latency, loss), `Random` (Jepsen's) and `FromScript` schedules, faults recorded as model steps (`Recording`), a journal whose `Script` re-makes them in qenv |
