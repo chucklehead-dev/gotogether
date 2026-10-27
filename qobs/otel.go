@@ -2,7 +2,8 @@ package qobs
 
 import (
 	"context"
-	"sort"
+	"maps"
+	"slices"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"go.opentelemetry.io/otel/attribute"
@@ -36,11 +37,7 @@ func (o *OTelSink) Record(ctx context.Context, s *qtrace.Step) {
 func attributes(s *qtrace.Step) []attribute.KeyValue {
 	m := s.Attributes()
 	delete(m, qtrace.KeyTime)
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(m))
 	kv := make([]attribute.KeyValue, 0, len(keys))
 	for _, k := range keys {
 		kv = append(kv, attr(k, m[k]))

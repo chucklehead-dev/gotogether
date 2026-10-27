@@ -20,7 +20,7 @@ import (
 	"context"
 	"math"
 	"math/rand/v2"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -335,7 +335,7 @@ func (m *Metrics) sample(t time.Duration, sv *Server) {
 	s := Sample{T: t, Queue: sv.InSystem(), Waiting: m.waiting, Arrivals: m.arrivals, Retries: m.retries,
 		Successes: m.successes, Timeouts: m.timeouts, Rejected: m.rejected, Failed: m.failed, Completions: m.completions}
 	if n := len(m.latencies); n > 0 {
-		sort.Slice(m.latencies, func(i, j int) bool { return m.latencies[i] < m.latencies[j] })
+		slices.Sort(m.latencies)
 		s.P99 = m.latencies[(n*99)/100]
 	}
 	m.Samples = append(m.Samples, s)

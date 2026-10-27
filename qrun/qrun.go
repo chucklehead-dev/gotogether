@@ -99,24 +99,21 @@ func Start(ctx context.Context) (end func()) {
 	started.m[id] = append(started.m[id], ctx)
 	started.n.Add(1)
 	started.Unlock()
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			started.Lock()
-			defer started.Unlock()
-			st := started.m[id]
-			for i := len(st) - 1; i >= 0; i-- {
-				if st[i] == ctx {
-					st = append(st[:i], st[i+1:]...)
-					break
-				}
+	return sync.OnceFunc(func() {
+		started.Lock()
+		defer started.Unlock()
+		st := started.m[id]
+		for i := len(st) - 1; i >= 0; i-- {
+			if st[i] == ctx {
+				st = append(st[:i], st[i+1:]...)
+				break
 			}
-			if len(st) == 0 {
-				delete(started.m, id)
-			} else {
-				started.m[id] = st
-			}
-			started.n.Add(-1)
-		})
-	}
+		}
+		if len(st) == 0 {
+			delete(started.m, id)
+		} else {
+			started.m[id] = st
+		}
+		started.n.Add(-1)
+	})
 }

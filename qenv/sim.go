@@ -1,6 +1,7 @@
 package qenv
 
 import (
+	"cmp"
 	"container/heap"
 	"context"
 	"errors"
@@ -1241,7 +1242,7 @@ func (s *Sim) runnable() (int, []*task) {
 		s.pred[i] = nil
 	}
 	s.pred = keep
-	sort.Slice(cands, func(i, j int) bool { return cands[i].id < cands[j].id })
+	slices.SortFunc(cands, func(a, b *task) int { return cmp.Compare(a.id, b.id) })
 	return s.runq.total() + len(cands), cands
 }
 
@@ -1579,7 +1580,7 @@ func goroutineStack(id int64) string {
 		buf = make([]byte, 2*len(buf))
 	}
 	head := fmt.Sprintf("goroutine %d [", id)
-	for _, g := range strings.Split(string(buf), "\n\n") {
+	for g := range strings.SplitSeq(string(buf), "\n\n") {
 		if strings.HasPrefix(g, head) {
 			return g
 		}

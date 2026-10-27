@@ -3,7 +3,8 @@ package qenv
 import (
 	"context"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // Queue is an at-least-once message queue: a published message is
@@ -130,7 +131,7 @@ func (q *Queue) check(op string) {
 	for d := range q.held {
 		live[d.ID] = true
 	}
-	for _, id := range sortedIDs(live) {
+	for _, id := range slices.Sorted(maps.Keys(live)) {
 		if q.acked[id] {
 			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d is delivered again after its acknowledgement (GOTOGETHER_CHECK)", q.Name, op, id))
 		}
@@ -143,17 +144,6 @@ func (q *Queue) check(op string) {
 			panic(fmt.Sprintf("qenv: queue %s, after %s: message %d was lost, neither acknowledged nor pending nor held (GOTOGETHER_CHECK)", q.Name, op, id))
 		}
 	}
-}
-
-// sortedIDs are m's keys in order: a check's first failure is the same
-// in every run.
-func sortedIDs(m map[int]bool) []int {
-	ids := make([]int, 0, len(m))
-	for id := range m {
-		ids = append(ids, id)
-	}
-	sort.Ints(ids)
-	return ids
 }
 
 // reaches reports whether the task of ctx can reach the broker: it is up,

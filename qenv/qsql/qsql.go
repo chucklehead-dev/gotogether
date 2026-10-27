@@ -45,12 +45,13 @@
 package qsql
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -264,7 +265,7 @@ func (c *connector) reap() {
 			done = append(done, t)
 		}
 	}
-	sort.Slice(done, func(i, j int) bool { return done[i].id < done[j].id })
+	slices.SortFunc(done, func(a, b *tx) int { return cmp.Compare(a.id, b.id) })
 	for _, t := range done {
 		t.fail(&Error{Code: "57014", Message: "canceling statement due to user request: the transaction's context is done, and it was rolled back", Err: t.ctx.Err()})
 	}

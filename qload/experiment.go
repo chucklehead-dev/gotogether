@@ -3,13 +3,15 @@ package qload
 import (
 	"context"
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"hash/fnv"
+	"maps"
 	"math"
 	"math/rand/v2"
-	"sort"
+	"slices"
 	"sync"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -236,11 +238,7 @@ func (x Experiment) Run(seed uint64, tr Trigger, horizon time.Duration) *Series 
 		})
 	}
 	series := &Series{Tick: x.Tick}
-	names := make([]string, 0, len(env.probes))
-	for n := range env.probes {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(env.probes))
 	s.Spawn("qload.sampler", func(ctx context.Context) {
 		for {
 			qenv.Sleep(ctx, x.Tick)

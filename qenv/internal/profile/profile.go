@@ -6,8 +6,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"maps"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -137,11 +138,7 @@ func (p *Profile) WriteTo(w io.Writer) (int64, error) {
 		locBufs = append(locBufs, lb.b)
 		return id
 	}
-	keys := make([]string, 0, len(p.samples))
-	for k := range p.samples {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(p.samples))
 	for _, k := range keys {
 		s := p.samples[k]
 		var sb pbuf

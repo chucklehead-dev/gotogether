@@ -1,10 +1,10 @@
 package qenv
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
@@ -172,7 +172,7 @@ func CoverageOf(runs [][]Choice) *Coverage {
 		p.Names = choice.Options(p.Kind)
 		cov.Points = append(cov.Points, p)
 	}
-	sort.Slice(cov.Points, func(i, j int) bool { return cov.Points[i].Kind < cov.Points[j].Kind })
+	slices.SortFunc(cov.Points, func(a, b *PointCoverage) int { return cmp.Compare(a.Kind, b.Kind) })
 	return cov
 }
 

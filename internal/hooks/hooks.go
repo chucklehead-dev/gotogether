@@ -45,8 +45,7 @@ func Discarding() bool {
 // run owns, whose panic nothing could recover.
 func Strict() (release func()) {
 	strict.Add(1)
-	var once sync.Once
-	return func() { once.Do(func() { strict.Add(-1) }) }
+	return sync.OnceFunc(func() { strict.Add(-1) })
 }
 
 // StrictOn reports whether a strict run is on.

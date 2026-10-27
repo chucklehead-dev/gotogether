@@ -18,11 +18,13 @@ package qrole
 
 import (
 	"context"
-	"github.com/chucklehead-dev/gotogether/qrun"
+	"maps"
 	"runtime/pprof"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
+
+	"github.com/chucklehead-dev/gotogether/qrun"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -212,10 +214,5 @@ func (r *Roles) Instrument(meter metric.Meter) error {
 func (r *Roles) names(m map[string]*stats) []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]string, 0, len(m))
-	for n := range m {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(m))
 }

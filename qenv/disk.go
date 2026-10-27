@@ -3,7 +3,8 @@ package qenv
 import (
 	"context"
 	"errors"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // ErrNoSpace is a write that failed for a full disk (ENOSPC): nothing of
@@ -86,11 +87,7 @@ func NewDisk(s *Sim, name string, p *Process) *Disk {
 
 func (d *Disk) crash() {
 	fault := d.sim.FaultOf(d.fault)
-	names := make([]string, 0, len(d.files))
-	for n := range d.files {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(d.files))
 	for _, n := range names {
 		f := d.files[n]
 		switch fault {

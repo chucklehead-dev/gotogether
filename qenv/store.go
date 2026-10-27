@@ -1,9 +1,12 @@
 package qenv
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -137,7 +140,7 @@ func NewStore(s *Sim, name string, iso Isolation) *Store {
 				txs = append(txs, tx)
 			}
 		}
-		sort.Slice(txs, func(i, j int) bool { return txs[i].id < txs[j].id })
+		slices.SortFunc(txs, func(a, b *tx) int { return cmp.Compare(a.id, b.id) })
 		for _, tx := range txs {
 			tx.end()
 		}
@@ -342,7 +345,7 @@ func (tx *tx) ScanRange(r KeyRange) []KV {
 		}
 	}
 	var out []KV
-	for _, k := range sortedSet(keys) {
+	for _, k := range slices.Sorted(maps.Keys(keys)) {
 		if w, ok := tx.writes[k]; ok {
 			if !w.deleted {
 				out = append(out, KV{k, w.val})
@@ -353,15 +356,6 @@ func (tx *tx) ScanRange(r KeyRange) []KV {
 			out = append(out, KV{k, v.val})
 		}
 	}
-	return out
-}
-
-func sortedSet(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }
 

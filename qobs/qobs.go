@@ -224,13 +224,10 @@ func InstallGlobal(r *Recorder) (restore func(), err error) {
 			"qhegel's Config.Global) must not run in parallel; drop t.Parallel, or record through the run's context")
 	}
 	prev := global.Swap(r)
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			global.CompareAndSwap(r, prev)
-			installed.CompareAndSwap(r, nil)
-		})
-	}, nil
+	return sync.OnceFunc(func() {
+		global.CompareAndSwap(r, prev)
+		installed.CompareAndSwap(r, nil)
+	}), nil
 }
 
 var recorderKey = qrun.NewKey[*Recorder]("recorder")

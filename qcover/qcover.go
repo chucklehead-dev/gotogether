@@ -15,11 +15,14 @@ package qcover
 import (
 	"context"
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/internal/runkeys"
-	"github.com/chucklehead-dev/gotogether/qrun"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/chucklehead-dev/gotogether/internal/runkeys"
+	"github.com/chucklehead-dev/gotogether/qrun"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -133,11 +136,7 @@ func (s stepSink) Record(ctx context.Context, st *qtrace.Step) {
 	s.c.mu.Lock()
 	p := s.c.pending[task]
 	delete(s.c.pending, task)
-	ids := make([]int, 0, len(p))
-	for id := range p {
-		ids = append(ids, id)
-	}
-	sort.Ints(ids)
+	ids := slices.Sorted(maps.Keys(p))
 	s.c.steps = append(s.c.steps, StepCover{Action: st.Action, Outcome: st.Outcome, Blocks: ids})
 	s.c.mu.Unlock()
 	if s.next != nil {
@@ -175,16 +174,7 @@ func (c *Counts) Unattributed() []int {
 			set[id] = true
 		}
 	}
-	return sortedKeys(set)
-}
-
-func sortedKeys(m map[int]bool) []int {
-	out := make([]int, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Ints(out)
-	return out
+	return slices.Sorted(maps.Keys(set))
 }
 
 // A Summary is the coverage of a set of runs, read against their steps.
@@ -268,11 +258,7 @@ func (s *Summary) Actions(id int) []string {
 // blocks: the model tells them apart, the code (as far as these runs
 // show) does not.
 func (s *Summary) Indistinct() [][2]string {
-	keys := make([]string, 0, len(s.ByStep))
-	for k := range s.ByStep {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(s.ByStep))
 	var out [][2]string
 	for i, a := range keys {
 		for _, b := range keys[i+1:] {
@@ -328,7 +314,7 @@ func (s *Summary) String() string {
 		// code after a task's last step
 		lines := map[string][]string{}
 		var funcs []string
-		for _, id := range sortedKeys(s.OnlyOff) {
+		for _, id := range slices.Sorted(maps.Keys(s.OnlyOff)) {
 			bl := s.Blocks[id]
 			if lines[bl.Func] == nil {
 				funcs = append(funcs, bl.Func)

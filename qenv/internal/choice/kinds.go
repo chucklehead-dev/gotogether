@@ -2,6 +2,7 @@ package choice
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -215,12 +216,7 @@ func Names() []string {
 		set[k.(string)] = true
 		return true
 	})
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
+	return slices.Sorted(maps.Keys(set))
 }
 
 // Nearest is the name of names nearest to name by edit distance, if one
