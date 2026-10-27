@@ -131,15 +131,16 @@ func TestMainServe(t *testing.T) {
 }
 
 // startServe runs MainArgs serve of a on a SQLite file in dir until ctx
-// ends, returning its URL, the steps file and its result.
-func startServe(t *testing.T, ctx context.Context, a *grist.App, dir string) (string, string, <-chan error) {
+// ends, with flags extra and opts, returning its URL, the steps file and
+// its result.
+func startServe(t *testing.T, ctx context.Context, a *grist.App, dir string, extra []string, opts ...grist.ServeOption) (string, string, <-chan error) {
 	t.Helper()
 	steps := filepath.Join(dir, "steps.jsonl")
 	var errOut syncBuffer
 	done := make(chan error, 1)
 	go func() {
-		done <- grist.MainArgs(ctx, a, []string{"serve", "-db", "sqlite:" + filepath.Join(dir, "app.db"), "-addr", "127.0.0.1:0",
-			"-tenant", "t1", "-steps", steps, "-actor-header", "X-Actor", "-poll", "10ms"}, &errOut, &errOut)
+		done <- grist.MainArgs(ctx, a, append([]string{"serve", "-db", "sqlite:" + filepath.Join(dir, "app.db"), "-addr", "127.0.0.1:0",
+			"-tenant", "t1", "-steps", steps, "-actor-header", "X-Actor", "-poll", "10ms"}, extra...), &errOut, &errOut, opts...)
 	}()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
@@ -176,7 +177,7 @@ func TestMainShutdownDrains(t *testing.T) {
 	}, grist.Authorize(grist.Authenticated))
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
-	url, steps, done := startServe(t, ctx, a, t.TempDir())
+	url, steps, done := startServe(t, ctx, a, t.TempDir(), nil)
 	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
 	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 		t.Fatal(err)
@@ -247,7 +248,7 @@ func TestMainServeSettles(t *testing.T) {
 	}, grist.Authorize(grist.Authenticated))
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
-	url, steps, done := startServe(t, ctx, a, t.TempDir())
+	url, steps, done := startServe(t, ctx, a, t.TempDir(), nil)
 	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
 	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 		t.Fatal(err)
@@ -276,5 +277,84 @@ func TestMainServeSettles(t *testing.T) {
 	}
 	if n := len(actions); n == 0 || actions[n-1] != "settled" || !slices.Contains(actions, "noteOutcome") {
 		t.Errorf("steps %v: want the effect's outcome (noteOutcome) and then a settle, last", actions)
+	}
+}
+
+// payApp is an app whose "add" command (served) appends an amount, and
+// whose processor pays it through the bank at most once.
+func payApp() (*grist.App, *grist.Dependency, *grist.Call[payReq, payResp]) {
+	a := grist.New("payapp")
+	amounts := grist.NewEvent[amount](a, "amount")
+	bank := grist.NewDependency(a, "bank")
+	pay := grist.NewCall[payReq, payResp](bank, "pay", grist.Keyed(), grist.Refuses(errDeclined))
+	grist.NewCommand(a, "add", func(r *grist.Reads, c amount) ([]grist.Event, error) {
+		return []grist.Event{amounts.Of(c)}, nil
+	}, grist.Unconditioned("no reads"), grist.Authorize(grist.Authenticated))
+	grist.NewProcessor(a, "payer", amounts, func(ctx context.Context, r *grist.Reads, e amount, m grist.Meta) grist.Result {
+		return grist.Effect(func(ctx context.Context) error {
+			_, err := pay.Do(ctx, payReq{Amount: e.N})
+			return err
+		}, grist.AtMostOnce)
+	}, grist.Delivers(grist.AtMostOnce), grist.Uses(pay))
+	return a, bank, pay
+}
+
+// serve with ServeDependency runs the bank behind ServeCalls on a
+// loopback port and the node calls it over HTTP, the bank's records in
+// the steps file under a recorder of their own; -dependency bank=URL
+// calls URL instead (its records there, none in the file); a
+// -dependency naming no dependency is a usage error.
+func TestMainServesDependency(t *testing.T) {
+	run := func(extra []string) []qtrace.Step {
+		t.Helper()
+		a, bank, pay := payApp()
+		ctx, stop := context.WithCancel(context.Background())
+		defer stop()
+		url, steps, done := startServe(t, ctx, a, t.TempDir(), extra, grist.ServeDependency(bank, bankHandlers(pay)))
+		c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
+		if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"n":5}`)); err != nil {
+			t.Fatal(err)
+		}
+		stop() // serve settles first: the payout's effect runs to its end
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.Open(steps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		recorded, err := qtrace.ReadJSONL(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return recorded
+	}
+	steps := run(nil)
+	calls, served := byAction(steps, "bankPay"), byAction(steps, "bankPayServed")
+	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-payer/t1/1" {
+		t.Errorf("caller steps %v: want the payment answered with the bank's ref, over HTTP", calls)
+	}
+	if len(served) != 1 || !strings.HasSuffix(served[0].Recorder, "-bank") || served[0].Recorder == calls[0].Recorder || served[0].Actor != "t1" {
+		t.Errorf("served steps %v: want the bank's one payment, in the caller's tenant, under the bank's own recorder (<node>-bank)", served)
+	}
+
+	_, bank, pay := payApp()
+	other, otherSink := serveBank(t, bank, bankHandlers(pay))
+	steps = run([]string{"-dependency", "bank=" + other.URL})
+	if calls := byAction(steps, "bankPay"); len(calls) != 1 || calls[0].Outcome != "ok" {
+		t.Errorf("caller steps %v: want the payment made at -dependency's URL", calls)
+	}
+	if len(byAction(steps, "bankPayServed")) != 0 || len(byAction(otherSink.Steps(), "bankPayServed")) != 1 {
+		t.Errorf("served: %v in the file, %v at the other bank: want the other bank's alone", byAction(steps, "bankPayServed"), otherSink.Steps())
+	}
+
+	a, _, _ := payApp()
+	var usage *grist.UsageError
+	for _, flag := range []string{"nope=http://x", "bank"} {
+		err := grist.MainArgs(context.Background(), a, []string{"serve", "-db", "sqlite:" + filepath.Join(t.TempDir(), "x.db"), "-dependency", flag}, io.Discard, io.Discard)
+		if !errors.As(err, &usage) {
+			t.Errorf("-dependency %s: %v, want a usage error", flag, err)
+		}
 	}
 }

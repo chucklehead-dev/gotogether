@@ -46,7 +46,14 @@ type serveConfig struct {
 	actorHeader string
 	catalog     bool
 	deps        func(context.Context) context.Context
+	served      []servedDep // Main's ServeDependency, in order
 	maxBody     int64
+}
+
+// servedDep is a dependency Main serves on a loopback port (ServeDependency).
+type servedDep struct {
+	d *Dependency
+	h Handlers
 }
 
 // MaxBody bounds a command's body at n bytes (DefaultMaxBody if not
@@ -61,6 +68,17 @@ func MaxBody(n int64) ServeOption {
 // gristsim.Config.Setup.
 func Dependencies(f func(context.Context) context.Context) ServeOption {
 	return ServeOption{apply: func(c *serveConfig) { c.deps = f }}
+}
+
+// ServeDependency has Main's serve run dependency d with h (nil: its
+// default double, DefaultHandlers) behind ServeCalls on a loopback port of
+// its own, its site's records into the -steps file under a recorder of
+// their own, and the node call it over HTTP (OverHTTP): a dependency the
+// team owns, run beside the node with the real transport between them. A
+// -dependency NAME=URL flag naming d calls URL instead. NewHandler
+// ignores it.
+func ServeDependency(d *Dependency, h Handlers) ServeOption {
+	return ServeOption{apply: func(c *serveConfig) { c.served = append(c.served, servedDep{d, h}) }}
 }
 
 // Middleware wraps the handler in m: the application's authentication

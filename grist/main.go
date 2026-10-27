@@ -21,6 +21,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs/qobshttp"
 )
 
 // Main is an application binary's entry point: func main() {
@@ -61,7 +62,8 @@ const mainUsage = `commands:
       -tenant NAME                     create the tenant if it does not exist (repeatable)
       -steps PATH                      record every step to PATH (qobs.FileSink, PerStep), for validation
       -actor-header NAME               take the request's actor from header NAME (behind an authenticating proxy only)
-      -poll DURATION                   how often the store reads other processes' appends (default 250ms)`
+      -poll DURATION                   how often the store reads other processes' appends (default 250ms)
+      -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)`
 
 // MainArgs runs one of Main's commands, args the binary's arguments
 // after its name:
@@ -82,7 +84,9 @@ const mainUsage = `commands:
 //	           up (SettleTimeout), a settle is recorded (qobs.Settled: the
 //	           bindings' eventual vals are judged on the file), then the node
 //	           stops and the relay records every committed step (Relay.Flush,
-//	           FlushTimeout) before the file closes
+//	           FlushTimeout) before the file closes. A -dependency NAME=URL
+//	           calls the App's dependency NAME at URL (OverHTTP), in place of
+//	           what Dependencies or ServeDependency attach
 //
 // serve writes "<app> serving on http://ADDR" to stderr once it listens.
 func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error {
@@ -217,8 +221,9 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	steps := fs.String("steps", "", "")
 	actorHeader := fs.String("actor-header", "", "")
 	poll := fs.Duration("poll", 0, "")
-	var tenants names
+	var tenants, depURLs names
 	fs.Var(&tenants, "tenant", "")
+	fs.Var(&depURLs, "dependency", "")
 	if err := fs.Parse(args); err != nil {
 		return &UsageError{Msg: fmt.Sprintf("%s serve: %v\n%s", app.Name, err, mainUsage)}
 	}
@@ -227,6 +232,18 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	}
 	if err := app.Verify(); err != nil {
 		return err
+	}
+	overHTTP := map[*Dependency]Transport{}
+	for _, v := range depURLs {
+		name, u, ok := strings.Cut(v, "=")
+		d := app.deps[name]
+		switch {
+		case !ok || u == "":
+			return &UsageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL", v)}
+		case d == nil:
+			return &UsageError{Msg: fmt.Sprintf("-dependency %q: %s has no dependency %q (it has %v)", v, app.Name, name, depNames(app))}
+		}
+		overHTTP[d] = OverHTTP(u, nil)
 	}
 	db, dialect, err := openDB(*dbSpec)
 	if err != nil {
@@ -246,6 +263,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		}
 	}
 	var sink qobs.Sink
+	recorderID := fmt.Sprintf("%s-%d", app.Name, os.Getpid())
 	if *steps != "" {
 		fsink, err := qobs.FileSink(*steps, qobs.PerStep)
 		if err != nil {
@@ -253,7 +271,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		}
 		defer fsink.Close()
 		sink = fsink
-		ctx = qobs.WithRecorder(ctx, qobs.NewRecorder(sink, qobs.WithID(fmt.Sprintf("%s-%d", app.Name, os.Getpid()))))
+		ctx = qobs.WithRecorder(ctx, qobs.NewRecorder(sink, qobs.WithID(recorderID)))
 	}
 	var cfg serveConfig
 	for _, o := range opts {
@@ -271,6 +289,23 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		nodeCtx = cfg.deps(nodeCtx)
 	}
 	defer stopNode()
+	for _, sd := range cfg.served {
+		if overHTTP[sd.d] != nil {
+			continue // called where -dependency says
+		}
+		url, stopDep, err := serveLoopback(sd, sink, recorderID)
+		if err != nil {
+			return err
+		}
+		// deferred: stopped after serve stops the node, whose effects in
+		// flight call it until then
+		defer stopDep()
+		fmt.Fprintf(stderr, "%s: dependency %s served on %s\n", app.Name, sd.d.name, url)
+		nodeCtx = sd.d.With(nodeCtx, OverHTTP(url, nil))
+	}
+	for d, t := range overHTTP {
+		nodeCtx = d.With(nodeCtx, t)
+	}
 	if *actorHeader != "" {
 		opts = append(opts, ActorFromHeader(*actorHeader))
 	}
@@ -323,6 +358,36 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		err = ferr
 	}
 	return err
+}
+
+// serveLoopback serves sd behind ServeCalls on a loopback port, its site's
+// records into sink under a recorder of their own (none without a sink),
+// and returns its URL and how to stop it.
+func serveLoopback(sd servedDep, sink qobs.Sink, recorderID string) (string, func(), error) {
+	h := ServeCalls(sd.d, sd.h)
+	if sink != nil {
+		h = qobshttp.Handler(h, qobs.NewRecorder(sink, qobs.WithID(recorderID+"-"+sd.d.name)))
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
+	go srv.Serve(ln) //qenv:ok the real tier's dependency, outside any simulation
+	return "http://" + ln.Addr().String(), func() {
+		ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}, nil
+}
+
+// depNames are app's dependencies' names, in registration order.
+func depNames(app *App) []string {
+	var out []string
+	for _, d := range app.depOrder {
+		out = append(out, d.name)
+	}
+	return out
 }
 
 // Main's server's bounds: how long a graceful shutdown waits for the
