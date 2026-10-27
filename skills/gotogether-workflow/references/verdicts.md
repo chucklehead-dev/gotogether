@@ -133,14 +133,19 @@ failure was not seen in it. It is not a pass of the sequence, and the
 shrink treats it so:
 
 - a rerun with no verdict for the failure kept (a lost tail, which may
-  hold it; a search out of its budget) is not reproduced;
+  hold it; an invariant of a conforming actor left unjudged, which may
+  have failed first; a search out of its budget) is undecided
+  (`ShrunkActions.Undecided`): not among a candidate's reruns, and a
+  one-removal decided by such reruns alone leaves the result not
+  minimal;
 - a rerun whose Rerun returned `qtest.ErrDiverged` (the driver could not
   do the actions) is neither reproduced nor not: counted apart, not
   among a candidate's reruns, and a sequence whose one-removal only ever
   diverged leaves the result not minimal (`ShrunkActions.NotMinimal`);
 - a candidate is taken as passing only after the calibrated reruns
   (`Calibration`: n from the original's rate) all missed, wrongly with
-  chance at most α; a rate below 1 at the end (`ShrunkActions.Rate`)
+  chance at most α (so `Minimal` holds with chance at least 1−α for each
+  removal); a rate below 1 at the end (`ShrunkActions.Rate`)
   says the failure needs more than the actions (timing, data), not
   that the minimal sequence is wrong;
 - another failure is not a reproduction: `qtest.SameFailure` (the

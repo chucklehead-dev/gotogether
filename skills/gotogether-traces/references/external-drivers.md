@@ -160,10 +160,9 @@ that still fails the same way (ddmin, 1-minimal: every sequence with one
 action fewer was rerun without reproducing it):
 
 ```go
-shrunk := qtest.ShrinkActions(t, journey, qtest.ActionShrink[string]{
-	Binding: "webjobs.binding.yaml",
-	Rerun:   play,   // func(ctx, actions) ([]qtrace.Step, error): does them from the initial state
-	Reset:   server, // a qtest.Resetter: clears the system before each rerun
+shrunk := qtest.ShrinkActions(t, journey, qtest.ActionShrink[Action]{ // Action: your driver's action type
+	Binding: "app.binding.yaml",
+	Rerun:   play, // func(ctx, []Action) ([]qtrace.Step, error): does them on a fresh system
 })
 shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
 ```
@@ -175,24 +174,45 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   `qtest.ErrDiverged`: the rerun counts for nothing, never a pass. Any
   other error is a failed rerun, and three in a row end the test with
   it.
-- **The reset contract**, checked before anything else: a `Reset`, then
-  a rerun of no actions, twice, records the same steps both times
-  (compared as the model sees them: recorders', actors', processes' and
-  threads' names may differ, as may times). An environment's own steps
-  repeat and pass (a fresh server's `drained` and settle at every
-  shutdown); a leak shows as a difference (a job the first rerun left
-  running, finishing in the second; a poller Reset did not stop). The
-  original's first two reruns must also fail alike (state one rerun
-  leaves would change the next). A Resetter that fails either is
-  refused by its type: clear what the message names. `Reset` is nil
-  only when `Rerun` builds a fresh environment itself (a new server per
-  rerun).
-- **The failure kept** is the original's (`qtest.SameFailure` of its first
-  failing rerun: each failing actor's first failure's kind and name,
-  whatever ids and arguments), so a shrink does not drift to another
-  bug a smaller sequence shows. `Keep` names another (`Violates(...)`,
+- **A fresh environment per rerun** (`Reset` nil, `Rerun` starting a new
+  server, as webjobs' does) is the only setup safe against leaked
+  state. A `qtest.Resetter` that reuses one system is checked, but the
+  checks catch leaked *work*, not every leaked *state*:
+  - before anything else, a `Reset` then a rerun of no actions, twice,
+    must record the same steps (compared as the model sees them:
+    recorders', actors', processes' and threads' names may differ, as
+    may times). An environment's own steps repeat and pass (a fresh
+    server's `drained` and settle at every shutdown); a job the first
+    left running, or a poller Reset did not stop, shows as a
+    difference;
+  - the rerun of no actions is repeated after the original's reruns and
+    at the end, where work the actions left (a job still pending) would
+    show, and must not reproduce the failure: a failure no actions show
+    is refused (it needs none of them, or state survives Reset), as is
+    the empty sequence reproducing it during the shrink;
+  - the original's first two reruns with a decided failure must fail
+    alike: two ways of failing are a leak or a system that really fails
+    both ways, and then `Keep` must name the one to shrink;
+  - a shrunk sequence that then reproduces far less often than the
+    original did (its `Rate` 0, or its upper bound below the original's
+    lower bound) is reported not minimal: what it showed during the
+    shrink came from state earlier reruns left, or from chance.
+  State the actions leave that changes later reruns without a step of
+  its own (a counter Reset forgets, a cache) passes every check: a
+  shrink then ends on a sequence that fails only after the others.
+- **The failure kept** is the original's (`qtest.SameFailure` of its
+  first rerun with a decided failure: each failing actor's first
+  failure in the replay's order, its kind and name, a state mismatch
+  with the observed fields that differ from the model's, whatever ids
+  and arguments), so a shrink does not drift to another bug a smaller
+  sequence shows. `Keep` names another (`Violates(...)`,
   `Rejects(...)`); one a passing run meets (`Conforms`, `Finishes`) is
   refused.
+- **No verdict is no pass**: a rerun with no verdict for the failure
+  kept (a lost tail, an invariant of a conforming actor left unjudged,
+  a search out of its budget) is `Undecided`, counted apart and not
+  among a candidate's reruns; a sequence with one action fewer decided
+  only by such reruns leaves the result not minimal.
 - **Calibration**: the original is rerun `Baseline` (10) times first. A
   failure that never shows there is refused ("does not reproduce:
   calibrate the rerun"): make the rerun deterministic (the same actions,
@@ -200,21 +220,25 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   shown at a rate p is rerun up to n = ⌈ln α / ln(1−p)⌉ times per
   candidate (p the rate's lower bound at 1−α, α 0.05), stopping at its
   first reproduction: a candidate that did not reproduce in n reruns is
-  taken as passing, wrongly with chance at most α. A failure seen in
-  every baseline rerun costs two reruns per passing candidate; set
-  `Calibration.Reruns: 1` for a driver known to be deterministic.
-  `Budget` (reruns) and `Time` bound the shrink; at either, or near the
-  test's deadline, it returns the smallest sequence so far with
-  `Minimal` false and `NotMinimal` saying why.
+  taken as passing, wrongly with chance at most α. So `Minimal` holds
+  with chance at least 1−α for each removal, not certainly. The rerun
+  Keep's default is taken from is counted in the rate, which leans a
+  rare failure's rate up (the lower bound makes up for part of it). A
+  failure seen in every baseline rerun costs two reruns per passing
+  candidate; set `Calibration.Reruns: 1` for a driver known to be
+  deterministic. `Budget` (reruns) and `Time` bound the shrink; at
+  either, or near the test's deadline, it returns the smallest sequence
+  so far with `Minimal` false and `NotMinimal` saying why.
 - **What it reports**: `Actions`, the minimal `Run` (checked as
   `Validate` checks steps: its report and step log), `Reruns`,
-  `Reproduced`, `NotReproduced`, `Diverged`, `Errors`, the original's
-  `Baseline` rate and the minimal sequence's `Rate` ("8 of 10"). Under
-  `GOTOGETHER_EVIDENCE` the minimal run writes its manifest
+  `Reproduced`, `NotReproduced`, `Undecided`, `Diverged`, `Errors`, the
+  original's `Baseline` rate and the minimal sequence's `Rate` ("8 of
+  10"). Under `GOTOGETHER_EVIDENCE` the minimal run writes its manifest
   (`gotogether.run/1`, driver `qtest.ShrinkActions` unless
   `qtest.Driver` is among `Opts`), with `actions.json` (the shrunk
-  actions) and `shrink.json` (the counts) as hashed artifacts:
-  `validate -replay` judges it again.
+  actions) and `shrink.json` (the counts) as hashed artifacts, each
+  shrink's in a directory of its own: `validate -replay` judges it
+  again.
 
 A shrunk sequence that does not reproduce is a sequence the failure was
 not seen in, not a pass of it: a rate below 1 says the failure depends on

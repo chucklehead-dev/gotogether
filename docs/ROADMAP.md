@@ -340,8 +340,18 @@ explorer). Planned by a design review; sizes as in S. Order: E1 → E8.
   failure kept by default, `ErrDiverged` never a pass, `Calibration`
   (n = ⌈ln α / ln(1−p)⌉ from the original's 10 reruns, p at its Wilson
   lower bound: from the rate measured, a half-rate failure reached its
-  1-minimal sequence in 181 of 200 shrinks, under 1−α); the minimal
-  run's manifest with actions.json and shrink.json. Checked against
+  1-minimal sequence in 933 of 1000 shrinks, under 1−α, the bound in
+  987); the minimal run's manifest with actions.json and shrink.json.
+  Review fixes: a rerun with no verdict for the failure is undecided,
+  never a miss (SameFailure unknown with a lost tail, an undecided actor
+  or a conforming actor's invariant unjudged); the empty rerun repeated
+  after the baseline and at the end (leaked work), the empty sequence
+  never a failure, a shrunk sequence's rate far below the original's
+  not minimal; Keep's default from the first decided failure, two ways
+  of failing asking for Keep; SameFailure by the replay's order and a
+  mismatch's fields; each shrink's artifacts apart. Left: state the
+  actions leave without a step of its own (a counter Reset forgets)
+  passes every check: only a fresh environment per rerun is safe. Checked against
   brute force on up to 8 letters, and with quint on letters.qnt. Left:
   webjobs' integration (keyed durations, `Client` Plan/Play, a
   `bombadiltrace` bridge to actions); Bombadil's `--reproduce` as the
