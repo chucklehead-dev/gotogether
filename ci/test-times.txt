@@ -29,6 +29,8 @@ examples/webjobs 156 # 13 checks under -short (the client per mutant, a cmd/webj
 binding 195 # 165-193 CPU s; wall on CI 266-322 s (runs 334-338) with the core job's CPUs shared, 107 s alone here
 cmd/gotogether 200 # 176-195 CPU s: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
 internal/qeval 210 # 180-206 CPU s (wall 194 s alone, 343-361 s in the full run)
+internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
+qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)
 qload 13 # 8-12 CPU s
 qmeta 15
 qtest 440 # 375-435 CPU s (415 with ShrinkActions)
