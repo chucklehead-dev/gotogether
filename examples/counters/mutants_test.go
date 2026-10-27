@@ -12,11 +12,12 @@ import (
 
 // mutants are grain's two bugs, an effect checkpointed first, a payout
 // without its outcome, a retirement by anyone and a payout of the wrong
-// amount, each a directory of testdata/mutants/
+// amount, and a payout that calls the bank again after an unknown
+// answer, each a directory of testdata/mutants/
 // whose files replace the app's of the same name (a go build overlay):
 // the app's own files stay as they are, and each mutant is a whole file
 // to diff against them.
-var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires", "wrongAmount"}
+var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires", "wrongAmount", "payTwice"}
 
 // fullOnly are the mutants built and run in full mode only: their claim
 // repeats a mechanism a per-push test checks (checkpointFirst: the
@@ -139,6 +140,31 @@ func TestMutant(t *testing.T) {
 		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1), Chooser: scripted(
 			qenv.Scripted{Kind: "rpc.bank.request", Name: "drop"})}).
 			Expect(t, qtest.All(qtest.Rejects("bankPay")))
+		// the same shape over HTTP on the real tier (lostThenKilled): the
+		// bank, behind grist.ServeCalls, makes the payment and its answer
+		// is lost as the node is killed, so the bank's own step file holds
+		// the payment's only record, judged against payoutBankPay there;
+		// TestRealLostThenKilled is its contrast
+		tier := lostThenKilled(t)
+		pendingPayment(t, tier)
+		qtest.Validate(t, onReal, tier.Steps()).Expect(t, qtest.Rejects("bankPayServed"))
+	case "payTwice":
+		// the at-most-once payout calling the bank again after an unknown
+		// answer: on the real tier (retireAll: five payouts, the bank
+		// losing the fifth's answer after paying it) the retry is the
+		// bank's replay, nothing is paid twice, and the store's records are
+		// the faithful app's; the payout's own steps, in the nodes' steps
+		// file, hold two calls of one at-most-once key. TestRealHTTP's third
+		// phase is its contrast
+		tier := realTier(t, gristtest.TierConfig{})
+		tier.Start("node1")
+		retireAll(tier, 1)
+		tier.Settle(nil)
+		if tier.LostCalls() == 0 {
+			t.Fatal("no bank answer lost: the retry was never made")
+		}
+		paidOnce(t, tier, 5)
+		qtest.Validate(t, onReal, tier.Steps()).Expect(t, qtest.Rejects("bankPay"))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

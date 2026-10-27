@@ -59,7 +59,7 @@ actions:
     args: { result: '{{.outcome}}' }
 
 invariants: [uniqueNames, averageAsOfTrigger]
-eventually: [everyCounterWelcomedOrFailed]
+eventually: [everyCounterWelcomedOrFailed, everyPaymentAnswerServed, everyMailAnswerServed]
 
 # The model on its own (gotogether simulate)
 simulate:

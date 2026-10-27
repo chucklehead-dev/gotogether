@@ -89,12 +89,12 @@ module counters {
   import countersGen.* from "./counters_gen"
   export countersGen.*
 
-  // grist: invariant default retiring
+  // grist: invariant default retiring real
   val uniqueNames = namesUnique(log)
 
   // each average-computed is the sum and count of the increments through
   // its trigger: the k-th is the k-th increment's prefix
-  // grist: invariant default retiring
+  // grist: invariant default retiring real
   val averageAsOfTrigger =
     val sums = log.foldl([], (acc, e) =>
       if (e.typ == "counter-incremented") acc.append(if (acc.length() == 0) e.ints[0] else acc[acc.length() - 1] + e.ints[0])
@@ -104,7 +104,7 @@ module counters {
 
   // every created counter was welcomed, or its welcome failed every try
   // and says so
-  // grist: eventually default retiring
+  // grist: eventually default retiring real
   val everyCounterWelcomedOrFailed =
     log.indices().forall(i => log[i].typ == "counter-created" implies and {
       checkpoints.get("welcome") >= i + 1,
@@ -113,9 +113,27 @@ module counters {
 
   // every retirement's payout was checkpointed (at most once: its payment
   // and its outcome may be lost)
-  // grist: eventually retiring
+  // grist: eventually retiring real
   val everyRetirementHandled =
     log.indices().forall(i => log[i].typ == "counter-retired" implies checkpoints.get("payout") >= i + 1)
+
+  // Site claims: every answer a caller got is one its dependency gave
+  // (its served record of the call, request, outcome and response alike,
+  // a replay's being an earlier one's), or unknown. They need the
+  // dependency's site recorded: in every simulation (gristsim serves
+  // both), and on the real tier for the bank only, which runs behind
+  // grist.ServeCalls with its own step file; the real tier's mailer is a
+  // third party's, which records nothing, so the real variant
+  // (counters.real.binding.yaml) leaves the mailer's claim out, as
+  // docs/grist-instrumentation.md §5's decision 4 has it.
+  // grist: eventually default retiring real
+  val everyPaymentAnswerServed =
+    bankPayCalls.indices().forall(i => bankPayCalls[i].result != "unknown" implies
+      bankPayRecords.indices().exists(j => bankPayRecords[j] == bankPayCalls[i]))
+  // grist: eventually default retiring
+  val everyMailAnswerServed =
+    mailerSendCalls.indices().forall(i => mailerSendCalls[i].result != "unknown" implies
+      mailerSendRecords.indices().exists(j => mailerSendRecords[j] == mailerSendCalls[i]))
 
   // test-only: every retirement paid out exactly once, by the bank's own
   // record of its payments (its served records, each naming its trigger).

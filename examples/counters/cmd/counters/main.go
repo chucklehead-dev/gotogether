@@ -4,7 +4,11 @@
 // HTTP API and runs its node on a SQLite file, recording every step for
 // validation with the example's bindings (run-demo.sh's SERVE=1 path).
 //
-// Its mailer writes each welcome to stderr. Its actor comes from the
+// Its mailer writes each welcome to stderr, in process; its bank is the
+// team's own (counters.NewBank), served beside the node behind
+// grist.ServeCalls on a loopback port and called over HTTP
+// (grist.ServeDependency), its payments recorded into the steps file
+// under a recorder of their own (-dependency bank=URL calls another). Its actor comes from the
 // X-Actor header (-actor-header X-Actor): a demo's stand-in for the
 // authentication a real deployment puts in front (grist.Middleware).
 package main
@@ -37,5 +41,5 @@ func main() {
 	mailer := stderrMailer()
 	grist.Main(counters.App, grist.Dependencies(func(ctx context.Context) context.Context {
 		return counters.Mailer.With(ctx, mailer)
-	}))
+	}), grist.ServeDependency(counters.Bank, counters.NewBank()))
 }

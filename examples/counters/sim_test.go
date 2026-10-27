@@ -21,40 +21,27 @@ func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
 }
 
 // doubles are a run's bank, which gristsim serves as the qenv.Service
-// bank: it answers each key once (Pay is Keyed), a retry of a key from
-// its first answer, a decline included (grist.Replayed: recorded as
-// bankPayReplayed, not a second served record), and declines a payment
-// over 100. grist records each payment it makes at its site
+// bank: the team's own (NewBank), paying each key once and declining a
+// payment over 100. grist records each payment it makes at its site
 // (bankPayServed), so a payment made twice, or made while its answer was
 // lost, is in the trace whatever the payout saw.
 //
 // The mailer is given none: gristsim serves its default double.
-func doubles() gristsim.Doubles { return bankDouble(false) }
+func doubles() gristsim.Doubles { return gristsim.Doubles{Bank: NewBank()} }
 
-// bankDouble is the bank double; fresh answers a replay with a new receipt
-// (a bank whose retry of a key is no longer its first answer).
-func bankDouble(fresh bool) gristsim.Doubles {
-	type answer struct {
-		rc  PayReceipt
-		err error
-	}
-	first := map[string]answer{}
+// freshBank is a bank that answers a retry of a key with a new receipt
+// (its replay no longer its first answer).
+func freshBank() gristsim.Doubles {
+	paid := map[string]bool{}
 	return gristsim.Doubles{Bank: grist.Handlers{
 		Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
 			key := grist.CallKey(ctx)
-			if a, ok := first[key]; ok {
+			if paid[key] {
 				grist.Replayed(ctx)
-				if fresh {
-					return PayReceipt{Ref: key + "/again"}, nil
-				}
-				return a.rc, a.err
+				return PayReceipt{Ref: key + "/again"}, nil
 			}
-			a := answer{rc: PayReceipt{Ref: key}}
-			if r.Amount > 100 {
-				a = answer{err: ErrDeclined}
-			}
-			first[key] = a
-			return a.rc, a.err
+			paid[key] = true
+			return PayReceipt{Ref: key}, nil
 		}),
 	}}
 }
@@ -71,6 +58,10 @@ const (
 	retiring = "counters.retiring.binding.yaml"
 	exactly  = "counters.exactly.binding.yaml"
 	calls    = "counters.calls.binding.yaml"
+	// onReal judges the real tier (real_test.go): the default binding's
+	// vals and the retiring ones but the mailer's site claim, the real
+	// tier's mailer being a third party's
+	onReal = "counters.real.binding.yaml"
 )
 
 // system is the app under cfg, judged by binding, with faulty rates.
@@ -308,7 +299,7 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 // lost answer an unknown outcome (grist.unknown). With the first request
 // duplicated (paying: every run pays) the bank replays and every run
 // conforms; a bank that answers the duplicate with a new receipt
-// (bankDouble(true)) is caught at its replay in every run. Without
+// (freshBank) is caught at its replay in every run. Without
 // faults at paying's shape every run conforms and pays; with the payout
 // paying one more (the wrongAmount mutant, at that shape) every run
 // rejects bankPayServed, where nothing the store records differs (and
@@ -326,7 +317,7 @@ func TestPayoutAmount(t *testing.T) {
 			qtest.Reaches("rpc.bank.delay").Faulted(), qtest.Takes("bankPay").Outcome("unknown"))
 	dup := qtest.ExploreConfig{Seeds: seeds(6, 1), Chooser: scripted(qenv.Scripted{Kind: "rpc.bank.request", Name: "duplicate"})}
 	fresh := paying
-	fresh.Doubles = func() gristsim.Doubles { return bankDouble(true) }
+	fresh.Doubles = freshBank
 	system(retiring, fresh).Explore(t, dup).Expect(t, qtest.All(qtest.Rejects("bankPayReplayed")))
 	if testing.Short() {
 		return

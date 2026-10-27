@@ -1,6 +1,11 @@
 package counters
 
-import "github.com/chucklehead-dev/gotogether/grist"
+import (
+	"context"
+	"sync"
+
+	"github.com/chucklehead-dev/gotogether/grist"
+)
 
 // StoreDep is the application's store, for a raw append, which only the
 // dispatchDirect mutant makes (grain's example processor): an undeclared
@@ -53,3 +58,38 @@ var ErrDeclined = grist.Rejection("declined")
 // payout's effect key, grist.CallKey, sent with every try); Refuses: a
 // declined payment did not happen.
 var Pay = grist.NewCall[PayRequest, PayReceipt](Bank, "pay", grist.Keyed(), grist.Refuses(ErrDeclined))
+
+// NewBank is the bank's implementation, the team's own: it pays each key
+// once (Pay is Keyed), answers a retry of a key from its first answer, a
+// decline included (grist.Replayed: recorded bankPayReplayed, not a
+// second payment), and declines a payment over 100; its receipt's
+// reference is the key. Every simulation serves it as the bank's double
+// (gristsim.Config.Doubles), the real tier behind grist.ServeCalls on a
+// server of its own (gristtest.TierConfig.Serve), and cmd/counters on a
+// loopback port (grist.ServeDependency). Each NewBank has its own
+// payments: one per run.
+func NewBank() grist.Handlers {
+	type answer struct {
+		rc  PayReceipt
+		err error
+	}
+	var mu sync.Mutex
+	first := map[string]answer{}
+	return grist.Handlers{
+		Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
+			key := grist.CallKey(ctx)
+			mu.Lock()
+			defer mu.Unlock()
+			if a, ok := first[key]; ok {
+				grist.Replayed(ctx)
+				return a.rc, a.err
+			}
+			a := answer{rc: PayReceipt{Ref: key}}
+			if r.Amount > 100 {
+				a = answer{err: ErrDeclined}
+			}
+			first[key] = a
+			return a.rc, a.err
+		}),
+	}
+}
