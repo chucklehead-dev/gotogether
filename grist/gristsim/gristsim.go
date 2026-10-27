@@ -1,5 +1,6 @@
 // Package gristsim runs a grist application in a qenv simulation: a
-// simstore at a chosen isolation level, one node (a crashable process
+// simstore, or the SQL tier's sqlstore over qsql (Config.SQL), at a
+// chosen isolation level, one node (a crashable process
 // running the App's processors and serving its commands and queries over
 // a lossy qenv.Service), and a workload of clients sending random
 // commands and queries of the registry to every tenant. Run's signature
@@ -26,7 +27,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
+	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -53,6 +56,12 @@ type Config struct {
 	// Send are the commands and queries the clients send, by name
 	// (default: every one of the registry).
 	Send []string
+	// SQL runs the app on grist/sqlstore over qsql (qsql.Open on the run's
+	// qenv.Store) instead of simstore: the statements the real tier runs
+	// on PostgreSQL and SQLite, interleaved statement by statement at
+	// Isolation, with qsql's SQLSTATEs (a lost race for the head lock is
+	// a 40001 under Snapshot and Serializable) and the same commit faults.
+	SQL bool
 	// CommitFaults turns on the store's commit faults
 	// (store.<app>.commit: a commit applied whose answer is lost).
 	CommitFaults bool
@@ -123,7 +132,15 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	}
 	s.Log = cfg.Log
 	db := qenv.NewStore(s, app.Name, cfg.Isolation)
-	st := simstore.New(db)
+	setup := s.Context()
+	var st grist.Store = simstore.New(db)
+	if cfg.SQL {
+		sq, err := sqlstore.Open(setup, qsql.Open(s, db), sqlstore.QSQL, sqlstore.Options{Name: app.Name})
+		if err != nil {
+			return err
+		}
+		st = sq
+	}
 	// one relay for every incarnation of the node: a restarted node's
 	// relay resumes where the crashed one stopped, and records what it
 	// committed and did not record
@@ -131,7 +148,6 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	setup := s.Context()
 	for _, t := range cfg.Tenants {
 		if err := st.CreateTenant(setup, t); err != nil {
 			return err

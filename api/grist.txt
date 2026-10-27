@@ -118,6 +118,7 @@ type Rejected struct
     method (*Rejected) Error() string
     method (*Rejected) Is(target error) bool
 type Relay struct
+    method (*Relay) Behind(ctx context.Context) (int64, error)
     method (*Relay) Flush(ctx context.Context) error
 type Result struct
 type Selector = store.Selector
@@ -142,6 +143,7 @@ type Config struct
     field Clients int
     field Ops int
     field Send []string
+    field SQL bool
     field CommitFaults bool
     field Check bool
     field Alphabet []string
@@ -179,6 +181,33 @@ type Store struct
     method (*Store) Tenants(ctx context.Context) ([]string, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
     method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
+
+== github.com/chucklehead-dev/gotogether/grist/sqlstore
+func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
+func SQLiteDSN(path string, busy time.Duration) string
+type Dialect struct
+    method (Dialect) String() string
+type Options struct
+    field Name string
+    field Isolation sql.IsolationLevel
+    field LockTimeout time.Duration
+    field IdleTimeout time.Duration
+    field Poll time.Duration
+type Store struct
+    method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
+    method (*Store) Checkpoint(ctx context.Context, t, processor string) (store.Position, error)
+    method (*Store) CreateTenant(ctx context.Context, t string) error
+    method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
+    method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
+    method (*Store) Name() string
+    method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
+    method (*Store) Tenants(ctx context.Context) ([]string, error)
+    method (*Store) Wait(ctx context.Context, t string, p store.Position) error
+    method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
+var Postgres = Dialect{name: "postgres", …}
+var QSQL = Dialect{name: "qsql", …}
+var SQLite = Dialect{name: "sqlite", …}
 
 == github.com/chucklehead-dev/gotogether/grist/store
 func CheckCondition(log []Stored, c Condition) error

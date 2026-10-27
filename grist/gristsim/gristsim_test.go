@@ -50,10 +50,16 @@ func run(t *testing.T, cfg gristsim.Config) []qtrace.Step {
 // the alphabet on every tenant), so the binding's eventual vals are
 // judged. It records both sides: at the store, every step is the store's,
 // of its tenant, the commits relayed from the step log under the tenant's
-// own recorder; at the clients, every command and query is a call
+// own recorder, on simstore and on sqlstore over qsql alike; at the clients, every command and query is a call
 // (invoked, then done) of actor <tenant>.clients.
 func TestBothSides(t *testing.T) {
-	steps := run(t, gristsim.Config{Check: true})
+	for _, sql := range []bool{false, true} {
+		bothSides(t, run(t, gristsim.Config{Check: true, SQL: sql}))
+	}
+}
+
+func bothSides(t *testing.T, steps []qtrace.Step) {
+	t.Helper()
 	if len(steps) == 0 || !steps[len(steps)-1].Settled {
 		t.Fatalf("the run's last record is no settle: %v", steps[len(steps)-1])
 	}

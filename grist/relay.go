@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
@@ -45,6 +46,7 @@ type Relay struct {
 // recorder that numbers and normalizes its steps.
 type relayed struct {
 	rows    int64
+	done    atomic.Int64 // rows, for Behind: read by other goroutines
 	scratch *qobs.Recorder
 	sink    *qobs.MemorySink
 }
@@ -116,6 +118,26 @@ func (r *Relay) Flush(ctx context.Context) error {
 	return nil
 }
 
+// Behind is how many committed step rows the relay has not recorded,
+// over every tenant: 0 once it caught up, which a real tier's harness
+// waits for before it records a settle.
+func (r *Relay) Behind(ctx context.Context) (int64, error) {
+	ts, err := r.s.Tenants(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var behind int64
+	for _, t := range ts {
+		done := r.tenant(t).done.Load()
+		rows, err := r.log.Steps(ctx, t, done, 0)
+		if err != nil {
+			return 0, err
+		}
+		behind += int64(len(rows))
+	}
+	return behind, nil
+}
+
 // flush records tenant t's rows after its progress.
 func (r *Relay) flush(ctx context.Context, t string) error {
 	p := r.tenant(t)
@@ -144,6 +166,7 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 				rec.Add(out...)
 			}
 			p.rows = row.Seq // no seam since the rows were read: a crash cannot fall between the record and this
+			p.done.Store(p.rows)
 		}
 		if len(rows) < relayBatch {
 			return nil

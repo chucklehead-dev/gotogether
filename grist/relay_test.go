@@ -30,11 +30,17 @@ func TestRelayRecordsCommitsOnce(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if n, err := r.Behind(ctx); err != nil || n != 3 {
+			t.Fatalf("a new relay of three rows is behind by %d (%v), want 3", n, err)
+		}
 		if err := r.Flush(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := r.Flush(ctx); err != nil { // nothing new: records nothing
 			t.Fatal(err)
+		}
+		if n, err := r.Behind(ctx); err != nil || n != 0 {
+			t.Fatalf("a flushed relay is behind by %d (%v), want 0", n, err)
 		}
 	}
 	if n := len(sink.Steps()); n != 6 {

@@ -69,6 +69,21 @@ The first release. What a user meets, by module:
   `gristsim.ClientsActor` (`<tenant>.clients`): `Config.Record`,
   `AtCommits` and `AtClients` are gone, a binding's `actors:` picks its
   side. The storetest suite requires a step log and checks `WaitSteps`.
+- grist/sqlstore, a new package (docs/grist.md §2.10; api/grist.txt): a
+  `store.Store` and `store.StepLog` over database/sql in three dialects,
+  `Postgres`, `SQLite` and `QSQL`, running one SQL (`Open` creates the
+  tables; `Options`: `Name`, `Isolation`, `LockTimeout`, `IdleTimeout`,
+  `Poll`). An append's first statement is the head lock and the new head
+  (`UPDATE grist_heads ... RETURNING head, steps`); positions are dense
+  under it; PostgreSQL states read committed and sets `lock_timeout` and
+  `idle_in_transaction_session_timeout` in each transaction; SQLite runs
+  single-writer (`SQLiteDSN`: `_txlock=immediate`, WAL, `busy_timeout`,
+  checked by `Open`). Errors no retry fixes are `store.Permanent`; 40001,
+  40P01, 55P03 and SQLITE_BUSY are transient. It imports no driver.
+  storetest passes on it over qsql at every isolation level, on SQLite
+  and on PostgreSQL 16 (`GRIST_POSTGRES`). `gristsim.Config.SQL` runs an
+  application on it over qsql. `grist.Relay.Behind` says how far a relay
+  is behind, for a real tier's settle.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose
