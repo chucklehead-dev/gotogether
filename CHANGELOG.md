@@ -8,6 +8,11 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A binding's module may re-export another whole (`export lib.*`): its
+  actions, variables and vals are the exported module's too
+  (`binding.LoadModel` follows the exports transitively, its own names
+  winning), so a generated model skeleton (grist model) is bound through
+  the application's module that exports it.
 - A run an external driver made, read as a request log: the protocol
   `gotogether.requests/1` (JSONL a driver writes: a header, then
   `request`, `response` and `step` records) and package `qdriver`

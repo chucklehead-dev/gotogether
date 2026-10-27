@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -290,18 +291,43 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 			}
 		}
 	}
+	// a module's names are its own and those it re-exports whole (`export
+	// lib.*`, transitively: a generated skeleton's module the model's
+	// exports), its own last so that they win
+	decls := map[string][]tcDecl{}
+	for _, mod := range tc.Modules {
+		decls[mod.Name] = mod.Declarations
+	}
+	var visible []tcDecl
+	seenMod := map[string]bool{}
+	var gather func(name string)
+	gather = func(name string) {
+		if seenMod[name] {
+			return
+		}
+		seenMod[name] = true
+		for _, d := range decls[name] {
+			if d.Kind == "export" && d.DefName == "*" && d.QualifiedName == "" {
+				gather(d.ProtoName)
+			}
+		}
+		visible = append(visible, decls[name]...)
+	}
 	for _, mod := range tc.Modules {
 		if mod.Name != module {
 			continue
 		}
+		gather(module)
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
 			assigns: assigns, calls: calls, reads: reads, typedefs: typedefs, types: &sync.Map{}}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
-		for _, d := range mod.Declarations {
+		for _, d := range visible {
 			switch {
 			case d.Kind == "var":
-				m.Vars = append(m.Vars, d.Name)
+				if !slices.Contains(m.Vars, d.Name) {
+					m.Vars = append(m.Vars, d.Name)
+				}
 			case d.Kind == "const":
 				m.Consts[d.Name] = renderType(d.Type)
 			case d.Kind == "def" && d.Qualifier == "action":
