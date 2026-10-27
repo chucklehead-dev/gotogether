@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,115 +9,14 @@ import (
 	"sort"
 	"strings"
 
+	ev "github.com/chucklehead-dev/gotogether/internal/evidence"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // suiteEvidence is what the evidence command reads of an exploration's
-// evidence: the fields of qtest.Evidence's JSON (format evidenceFormat)
-// it reports on. The CLI does not import qtest, which brings testing and
-// the simulation with it; TestEvidenceView pins this view to
-// qtest.Evidence's JSON, and evidenceFormat to qtest.EvidenceFormat.
-type suiteEvidence struct {
-	Format    string         `json:"format"`
-	Role      string         `json:"role"`
-	Package   string         `json:"package,omitempty"`
-	Import    string         `json:"import,omitempty"`
-	Test      string         `json:"test,omitempty"`
-	Spec      string         `json:"spec,omitempty"`
-	Runs      int            `json:"runs"`
-	Conform   int            `json:"conform"`
-	FailingBy map[string]int `json:"failing"`
-	Faults    *struct {
-		Points []struct {
-			Kind     string   `json:"kind"`
-			Sites    []string `json:"sites,omitempty"`
-			Runs     int      `json:"runs"`
-			Injected []int    `json:"injected"`
-		} `json:"points"`
-	} `json:"faults,omitempty"`
-	Model *struct {
-		Taken map[string]int `json:"taken"`
-		Never []string       `json:"never,omitempty"`
-	} `json:"model,omitempty"`
-	Exhaust *struct {
-		Complete bool `json:"complete"`
-	} `json:"search,omitempty"`
-}
-
-// faults counts the faults of a point's options taken, nominal (0)
-// aside (qenv.PointCoverage.Faulted).
-func faults(injected []int) int {
-	n := 0
-	for i, c := range injected {
-		if i > 0 {
-			n += c
-		}
-	}
-	return n
-}
-
-// evidenceFormat is qtest.EvidenceFormat, the format the view reads.
-const evidenceFormat = "gotogether.evidence/2"
-
-// Evidence roles (qtest's).
-const (
-	roleFaithful = "faithful"
-	roleExternal = "external"
-)
-
-// readEvidence reads an exploration's evidence (readEvidence): a
-// file of another format, or none, is refused with the fix.
-func readEvidence(path string) (*suiteEvidence, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var e suiteEvidence
-	if err := json.Unmarshal(b, &e); err != nil {
-		return nil, fmt.Errorf("%s: %w (want the JSON of a qtest.Evidence)", path, err)
-	}
-	if e.Format != evidenceFormat {
-		return nil, fmt.Errorf("%s: evidence of format %q, not %q: run the tests again to write it anew", path, e.Format, evidenceFormat)
-	}
-	return &e, nil
-}
-
-// isEvidence reports whether the JSON file at path is evidence of any
-// format version (isEvidence): its first key the format.
-func isEvidence(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	d := json.NewDecoder(f)
-	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
-		return false
-	}
-	key, err := d.Token()
-	if err != nil || key != "format" {
-		return false
-	}
-	var format string
-	return d.Decode(&format) == nil && strings.HasPrefix(format, "gotogether.evidence/")
-}
-
-// manifestEvidence is a run's manifest as evidence (manifestEvidence).
-func manifestEvidence(m *validate.Manifest) *suiteEvidence {
-	e := &suiteEvidence{Format: evidenceFormat, Role: roleExternal, Package: m.Package, Import: m.Import, Test: m.Name, Runs: 1, FailingBy: map[string]int{}}
-	if m.Model.Spec != nil {
-		e.Spec = m.Model.Spec.Path + ":" + m.Model.Module
-	}
-	switch r := m.Verdict.Reason; {
-	case m.Verdict.Verdict == validate.Pass:
-		e.Conform = 1
-	case m.Verdict.Verdict == validate.NotEvaluated && !strings.HasPrefix(r, "no verdict"):
-		e.FailingBy["no verdict ("+r+")"]++ // no verdict, as an exploration's run of none counts
-	default:
-		e.FailingBy[r]++
-	}
-	return e
-}
+// evidence (internal/evidence's view of qtest.Evidence's JSON): the CLI
+// does not import qtest, which brings testing and the simulation with it.
+type suiteEvidence = ev.View
 
 // evidence reads the evidence every exploration writes under
 // GOTOGETHER_EVIDENCE (or GOTOGETHER_KEEP), and the manifests of the runs
@@ -159,7 +57,7 @@ func evidence(args []string) (int, error) {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || path != root && (!strings.HasSuffix(d.Name(), ".json") || !isEvidence(path) && !validate.IsManifest(path)) {
+			if d.IsDir() || path != root && (!strings.HasSuffix(d.Name(), ".json") || !ev.Is(path) && !validate.IsManifest(path)) {
 				return nil // not evidence: an ITF trace, a corpus entry, a summary
 			}
 			var e *suiteEvidence
@@ -172,8 +70,8 @@ func evidence(args []string) (int, error) {
 				if err != nil {
 					return err
 				}
-				e = manifestEvidence(m)
-			} else if e, err = readEvidence(path); err != nil {
+				e = ev.OfManifest(m)
+			} else if e, err = ev.Read(path); err != nil {
 				return err
 			}
 			if e.Test == "" {
@@ -291,7 +189,7 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 		if e.Exhaust != nil && !e.Exhaust.Complete {
 			b.WriteString(" (search truncated)")
 		}
-		if e.Role != roleFaithful {
+		if e.Role != ev.RoleFaithful {
 			fmt.Fprintf(&b, " (%s: not counted below)", e.Role)
 		}
 		b.WriteString("\n")
@@ -304,7 +202,7 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 	all := es
 	es = nil
 	for _, e := range all {
-		if e.Role == roleFaithful {
+		if e.Role == ev.RoleFaithful {
 			es = append(es, e)
 		}
 	}
@@ -359,7 +257,7 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			if p.Runs > 0 {
 				reached[p.Kind] = true
 			}
-			if faults(p.Injected) > 0 {
+			if ev.Faulted(p.Injected) > 0 {
 				faulted[p.Kind] = true
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -131,4 +132,29 @@ func mapValues(m map[string]string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// An expect's comparisons of a variable with an observation, at the top
+// level of its and-chain: what a state mismatch's differing fields are
+// read from (qshrink.SameFailure), one analysis of the binding's.
+func TestObsComparisons(t *testing.T) {
+	for _, c := range []struct {
+		expect string
+		want   []ObsComparison
+	}{
+		{"balance == {{.obs.balance}}", []ObsComparison{{"balance", "balance"}}},
+		{"balance == {{.obs.balance}} and count == {{.obs.count}}", []ObsComparison{{"balance", "balance"}, {"count", "count"}}},
+		{"x > 0 and total == {{.obs.sum}}", []ObsComparison{{"total", "sum"}}},
+		{"(balance == {{.obs.balance}} or true)", nil},                                     // not a conjunct of the top level
+		{"balance == {{.obs.balance}} + 1", nil},                                           // not the observation alone
+		{"f(balance) == {{.obs.balance}}", nil},                                            // not a variable
+		{`name == "{{.obs.name}}"`, nil},                                                   // inside a string
+		{"stock.get({{.item}}) == {{.obs.left}}", nil},                                     // an expression, not a variable
+		{"{{if .obs.x}}a{{end}}", nil},                                                     // the Go evaluator's split refuses it
+		{"held == {{.obs.held}} and {{.obs.ok}} == ok", []ObsComparison{{"held", "held"}}}, // the other order is not read
+	} {
+		if got := ObsComparisons(c.expect); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%q: %v, want %v", c.expect, got, c.want)
+		}
+	}
 }

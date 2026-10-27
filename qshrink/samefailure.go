@@ -2,10 +2,10 @@ package qshrink
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -14,23 +14,25 @@ import (
 type Shown int
 
 const (
-	// Unknown: the rerun has no verdict for the failure (a lost tail, an
+	// Undecided: the rerun has no verdict for the failure (a lost tail, an
 	// undecided actor, an invariant not judged): neither reproduced nor
-	// not, never a pass.
-	Unknown Shown = iota
-	// Yes: the rerun shows the failure.
-	Yes
-	// No: the rerun was judged and does not show it (a pass, or another
-	// failure).
-	No
+	// not, never a pass. Result.Undecided counts them.
+	Undecided Shown = iota
+	// Reproduced: the rerun shows the failure (Result.Reproduced).
+	Reproduced
+	// NotReproduced: the rerun was judged and does not show it (a pass,
+	// or another failure; Result.NotReproduced).
+	NotReproduced
 )
 
 // A Keep is the failure each smaller sequence must still show: Shows
-// judges a rerun's report. SameFailure is the default; qtest's
-// expectations (Violates, Rejects, Mismatch) are Keeps through
-// ShrinkActions.
+// judges a rerun's report, Why says how one that does not show it fails
+// instead ("" if there is nothing to add), for a message. SameFailure is
+// the default; qtest's expectations (Violates, Rejects, Mismatch) are
+// Keeps through ShrinkActions.
 type Keep interface {
 	Shows(rep *validate.Report) Shown
+	Why(rep *validate.Report) string
 	String() string
 }
 
@@ -47,7 +49,7 @@ type Keep interface {
 // smaller sequences show. A run with no verdict for a part the first
 // failure is judged by (an undecided actor, a lost tail, a gap, an
 // invariant of a conforming actor left unjudged, which may have failed
-// first) has no verdict for it: Unknown, never a pass.
+// first) has no verdict for it: Undecided, never a pass.
 func SameFailure(rep *validate.Report) Keep {
 	var want []string
 	if rep != nil {
@@ -69,19 +71,19 @@ func (s sameFailure) String() string {
 func (s sameFailure) Shows(rep *validate.Report) Shown {
 	switch {
 	case len(s.want) == 0:
-		return No
+		return NotReproduced
 	case rep == nil || unjudgedFailure(rep):
-		return Unknown
+		return Undecided
 	}
 	got := firstFailures(rep)
 	for _, w := range s.want {
 		i := slices.Index(got, w)
 		if i < 0 {
-			return No
+			return NotReproduced
 		}
 		got = slices.Delete(got, i, i+1) // two actors failing alike want two
 	}
-	return Yes
+	return Reproduced
 }
 
 // Why says how rep fails, when it does not show the failure: for a
@@ -235,61 +237,29 @@ func index(f *validate.Failure) int {
 	return f.Index
 }
 
-// obsConjunct is one conjunct of an expect that compares a state
-// variable with an observation: `balance == {{.obs.balance}}`.
-var obsConjunct = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*==\s*\{\{\s*\.obs\.([A-Za-z0-9_]+)\s*\}\}\s*$`)
-
 // mismatched names a state failure's observed fields that differ from
 // the model's state after the step ("obs.balance"), for the expect's
-// conjuncts that compare a variable with an observation; "" when the
-// expect says no more (another shape, no state), so the failure is
-// known by its action alone. A mismatch on another field of the same
-// action is another failure.
+// conjuncts that compare a variable with an observation
+// (binding.ObsComparisons); "" when the expect says no more (another
+// shape, no state), so the failure is known by its action alone. A
+// mismatch on another field of the same action is another failure.
 func mismatched(f *validate.Failure) string {
 	if f.Step == nil || f.State == nil || f.ExpectTemplate == "" {
 		return ""
 	}
 	var fields []string
-	for _, c := range conjuncts(f.ExpectTemplate) {
-		m := obsConjunct.FindStringSubmatch(c)
-		if m == nil {
-			continue
-		}
-		model, ok := f.State[m[1]]
-		obs, seen := f.Step.Obs[m[2]]
+	for _, c := range binding.ObsComparisons(f.ExpectTemplate) {
+		model, ok := f.State[c.Var]
+		obs, seen := f.Step.Obs[c.Field]
 		if !ok || !seen {
 			continue
 		}
 		if v, err := itf.Encode(obs); err != nil || !v.Equal(model) {
-			fields = append(fields, "obs."+m[2])
+			fields = append(fields, "obs."+c.Field)
 		}
 	}
 	slices.Sort(fields)
-	return strings.Join(fields, ", ")
-}
-
-// conjuncts splits a Quint boolean at its top-level `and`s (outside
-// brackets and quotes).
-func conjuncts(expr string) []string {
-	var out []string
-	depth, start := 0, 0
-	inStr := false
-	for i := 0; i < len(expr); i++ {
-		switch c := expr[i]; {
-		case c == '"':
-			inStr = !inStr
-		case inStr:
-		case c == '(' || c == '{' || c == '[':
-			depth++
-		case c == ')' || c == '}' || c == ']':
-			depth--
-		case depth == 0 && strings.HasPrefix(expr[i:], " and "):
-			out = append(out, expr[start:i])
-			start = i + len(" and ")
-			i = start - 1
-		}
-	}
-	return append(out, expr[start:])
+	return strings.Join(slices.Compact(fields), ", ")
 }
 
 // signatureOf is how rep fails, its first failures together, for a
@@ -309,7 +279,7 @@ func signatureOf(rep *validate.Report) string {
 
 // reasonOf is a report's reason, as validate's result line says it.
 func reasonOf(r *validate.Report) string {
-	if v := validate.VerdictOf(r.Actors, nil); v.Reason != "" {
+	if v := r.Verdict(); v.Reason != "" {
 		return v.Reason
 	}
 	if r.Unsettled != "" {

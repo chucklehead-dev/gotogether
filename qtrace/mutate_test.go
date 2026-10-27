@@ -755,3 +755,28 @@ func TestMutationsSwapNoAlike(t *testing.T) {
 		t.Errorf("%d swaps around a cancel, want 2: %v", len(ms), ms)
 	}
 }
+
+// A composite value is corrupted too: a list shortened and grown, a map
+// with its first key dropped; a field of no kind the corruptions change
+// is only removed, and UncorruptedFields names it.
+func TestCorruptComposites(t *testing.T) {
+	s := Step{Recorder: "r", Seq: 1, Action: "put", Args: map[string]any{"items": []any{"a", "b"}, "none": nil},
+		Obs: map[string]any{"stock": map[string]any{"a": int64(1), "b": int64(2)}, "empty": []any{}}}
+	got := map[string]any{}
+	for _, m := range Mutations([]Step{s}, MutateOps("corrupt")) {
+		v := m.Steps[0].Args
+		field := m.Field
+		if f, ok := strings.CutPrefix(field, "obs."); ok {
+			v, field = m.Steps[0].Obs, f
+		}
+		got[m.Field+" "+m.Change] = v[field]
+	}
+	want := map[string]any{"items shorten": []any{"a"}, "items grow": []any{"a", "b", "b"}, "items remove": nil, "none remove": nil,
+		"obs.stock drop": map[string]any{"b": int64(2)}, "obs.stock remove": nil, "obs.empty remove": nil}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("corruptions:\n got %v\nwant %v", got, want)
+	}
+	if u := UncorruptedFields([]Step{s}); !slices.Equal(u, []string{"put none", "put obs.empty"}) {
+		t.Errorf("uncorrupted: %v", u)
+	}
+}

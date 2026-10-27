@@ -35,13 +35,16 @@ const (
 // mutant, and what its verdict made of it (validate.StepMutation).
 type StepMutation = validate.StepMutation
 
-// A StepMutationReport is what judging a log's observation mutants found
-// (MutateSteps, JudgeStepMutants).
+// A StepMutationReport is what MutateSteps found: validate's report of
+// the mutants (Mutants, Killed, Survived, Undecided, Malformed, Score,
+// String: validate.StepMutants'; outside a test,
+// validate.Checker.MutateSteps makes one) with the original as a run of
+// the test's, and the claims a test states of them (Expect).
 type StepMutationReport struct {
-	// Original is the log as given, judged: it conforms.
+	*validate.StepMutants
+	// Original is the log as given, judged as Validate judges it: it
+	// conforms. (StepMutants.Original is the same judgment, validate's.)
 	Original *Run
-	// Mutants are the mutants judged, in qtrace.Mutations' order.
-	Mutants []StepMutation
 	// actions and fields are the original's, for a claim naming neither
 	actions, fields map[string]bool
 }
@@ -98,16 +101,6 @@ func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...
 	return rep
 }
 
-// JudgeStepMutants is MutateSteps outside a test: steps' observation
-// mutants judged by c with the searches opt (Checker.MutateSteps, the
-// verdicts shared by its mutants through the test binary's cache). An
-// error is a tool's, or an original that does not conform.
-func JudgeStepMutants(c *validate.Checker, steps []qtrace.Step, opt validate.SearchOptions, mopts ...qtrace.MutationOption) (*StepMutationReport, error) {
-	// a key of this checker's alone: verdicts shared by its mutants, not
-	// with another instance's
-	return judgeStepMutants(c, fmt.Sprintf("judge %p|", c), steps, opt, mopts)
-}
-
 func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, opt validate.SearchOptions, mopts []qtrace.MutationOption) (*StepMutationReport, error) {
 	var cached int
 	sm, err := cc.MutateSteps(context.Background(), steps, opt, cachedCheck(cc, inst, &cached), mopts...)
@@ -116,7 +109,7 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 	}
 	o := sm.Original
 	original := &Run{Steps: o.Steps, Recorded: steps, Report: o.Report, checker: cc, search: opt, searched: opt.Linearize || opt.ResolvePending}
-	rep := &StepMutationReport{Original: original, Mutants: sm.Mutants, actions: map[string]bool{}, fields: map[string]bool{}}
+	rep := &StepMutationReport{StepMutants: sm, Original: original, actions: map[string]bool{}, fields: map[string]bool{}}
 	for i := range steps {
 		s := &steps[i]
 		if !s.Model() {
@@ -135,18 +128,13 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 
 // reasonOf is a report's reason, as validate's result line says it.
 func reasonOf(r *validate.Report) string {
-	if v := validate.VerdictOf(r.Actors, nil); v.Reason != "" {
+	if v := r.Verdict(); v.Reason != "" {
 		return v.Reason
 	}
 	if r.Unsettled != "" {
 		return "unsettled"
 	}
 	return "fails"
-}
-
-// mutants is r's mutants as validate's report, whose methods r's are.
-func (r *StepMutationReport) mutants() *validate.StepMutants {
-	return &validate.StepMutants{Mutants: r.Mutants}
 }
 
 // counts are a report's mutants by op and fate.
@@ -161,26 +149,6 @@ func (r *StepMutationReport) counts() (ops []string, n map[string]map[string]int
 	}
 	return ops, n
 }
-
-// Killed are the mutants killed.
-func (r *StepMutationReport) Killed() []StepMutation { return r.mutants().Killed() }
-
-// Survived are the mutants that survived: what no check reads.
-func (r *StepMutationReport) Survived() []StepMutation { return r.mutants().Survived() }
-
-// Undecided are the mutants with no verdict.
-func (r *StepMutationReport) Undecided() []StepMutation { return r.mutants().Undecided() }
-
-// Malformed are the mutants refused before a verdict, by Reconstruct or
-// the binding (FateMalformed).
-func (r *StepMutationReport) Malformed() []StepMutation { return r.mutants().Malformed() }
-
-// Score is the share of decided mutants killed.
-func (r *StepMutationReport) Score() float64 { return r.mutants().Score() }
-
-// String is the report's table, by op, and its survivors and undecided
-// mutants, as Mutate's report lists its survivors.
-func (r *StepMutationReport) String() string { return r.mutants().String() }
 
 // A StepSelector names observation mutants: by op (StepOp), and
 // narrowed by the step's action, the field corrupted and how, and the
@@ -209,7 +177,7 @@ func (s StepSelector) Action(action string) StepSelector { s.action = action; re
 func (s StepSelector) Field(field string) StepSelector { s.field = field; return s }
 
 // Change narrows s to corruptions made so: "+1", "-1", "flip", "empty",
-// "change" or "remove".
+// "change", a list's "shorten" or "grow", a map's "drop", or "remove".
 func (s StepSelector) Change(change string) StepSelector { s.change = change; return s }
 
 // Index narrows s to mutants of the log's step i (0-based, as

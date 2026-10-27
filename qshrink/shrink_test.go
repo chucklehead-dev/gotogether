@@ -114,10 +114,12 @@ func fakeJudge(_ context.Context, steps []qtrace.Step) (*validate.Report, error)
 }
 
 // violates is a Keep of the invariant's violation (qtest's Violates, as
-// fakeJudge reports it): Unknown where the invariant has no verdict.
+// fakeJudge reports it): Undecided where the invariant has no verdict.
 type violates string
 
 func (v violates) String() string { return "a violation of " + string(v) }
+
+func (v violates) Why(*validate.Report) string { return "" }
 
 func (v violates) Shows(rep *validate.Report) Shown {
 	for _, a := range rep.Actors {
@@ -125,14 +127,14 @@ func (v violates) Shows(rep *validate.Report) Shown {
 			if inv.Name == string(v) {
 				switch inv.Verdict {
 				case validate.Fail:
-					return Yes
+					return Reproduced
 				case validate.NotEvaluated:
-					return Unknown
+					return Undecided
 				}
 			}
 		}
 	}
-	return No
+	return NotReproduced
 }
 
 // shrinkFake shrinks n letters on app with the fake judge: its result,
@@ -408,7 +410,7 @@ func judgeWith(n int, edit func(*validate.Result)) func(context.Context, []qtrac
 // invariant left unjudged, an undecided actor) is no pass: a one-removal
 // decided by such reruns alone leaves the result not minimal, though the
 // failure needs one action and every rerun of it hides it.
-func TestShrinkActionsUnknownIsNoPass(t *testing.T) {
+func TestShrinkActionsUndecidedIsNoPass(t *testing.T) {
 	t.Parallel()
 	for mode, edit := range map[string]func(*validate.Result){
 		"lost tail": func(r *validate.Result) {
@@ -541,7 +543,7 @@ func TestSameFailureFieldsAndOrder(t *testing.T) {
 	if want := "the same failure (state deposit (obs.balance))"; balance.String() != want {
 		t.Fatalf("got %q, want %q", balance, want)
 	}
-	if balance.Shows(mismatch(12, 2)) != Yes || balance.Shows(mismatch(10, 3)) != No || balance.Shows(mismatch(11, 3)) != No {
+	if balance.Shows(mismatch(12, 2)) != Reproduced || balance.Shows(mismatch(10, 3)) != NotReproduced || balance.Shows(mismatch(11, 3)) != NotReproduced {
 		t.Error("a mismatch of another field matched, or the same field's did not")
 	}
 	// a conformance failure at call 5, an invariant failing at call 2
@@ -554,8 +556,8 @@ func TestSameFailureFieldsAndOrder(t *testing.T) {
 	// a conforming actor with an invariant unjudged may have failed first
 	unjudged := violatesOne("a", "noBugA")
 	unjudged.Invariants = append(unjudged.Invariants, validate.InvariantResult{Name: "within 1s", Verdict: validate.NotEvaluated, Within: true})
-	if v := SameFailure(&validate.Report{Actors: []*validate.Result{violatesOne("a", "noBugA")}}).Shows(&validate.Report{Actors: []*validate.Result{unjudged}}); v != Unknown {
-		t.Errorf("an unjudged within beside the failure: %v, want unknown", v)
+	if v := SameFailure(&validate.Report{Actors: []*validate.Result{violatesOne("a", "noBugA")}}).Shows(&validate.Report{Actors: []*validate.Result{unjudged}}); v != Undecided {
+		t.Errorf("an unjudged within beside the failure: %v, want undecided", v)
 	}
 }
 

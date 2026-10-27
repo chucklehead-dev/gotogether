@@ -155,6 +155,20 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{`"queue.ack"`, `"queue.<name>.ack" ("queue" covers them)`},
 		{`"store.commit"`, `"store.<name>.commit"`},
 		{`"disk.crash"`, `"disk.<name>.crash"`},
+		// G6's trim before the tags
+		{"validate.Command", "cli.Check (package validate/cli)"},
+		{"validate.Replay", "cli.Replay (package validate/cli)"},
+		{"validate.Judged", "cli.Judged (package validate/cli)"},
+		{"validate.VerdictOf", "Report.Verdict"},
+		{"JudgeStepMutants", "validate.Checker.MutateSteps"},
+		{"Manifest.AddInput", "validate.NewManifest(validate.RunRecord{...})"},
+		{"Checker.Manifest", "validate.NewManifest(validate.RunRecord{...})"},
+		{"validate.ModuleVersion", "validate.CurrentTools"},
+		{"validate.QuintVersion", "validate.CurrentTools"},
+		{"WriteArtifacts", "qshrink.Result's JSON (shrink.json)"},
+		{"qshrink.Yes", "qshrink.Reproduced"},
+		{"qshrink.Unknown", "qshrink.Undecided"},
+		{"-require-settle", "-require-finish (the old name is a deprecated alias)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

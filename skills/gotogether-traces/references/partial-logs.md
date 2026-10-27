@@ -194,7 +194,7 @@ With one:
 - a settle it does not reach (by more than the slack) settles nothing (`issue: warn settle:
   recorder r's steps are complete only through T`): a step after the
   settle may not be collected yet, so eventual vals are not judged, and
-  `Finished` (`qtest.Finishes()`, `-require-settle`) is `no verdict
+  `Finished` (`qtest.Finishes()`, `-require-finish`) is `no verdict
   (uncollected)`;
 - a pending call with no settle is uncollected: neither `Completes()`
   nor `Pending(...)` holds.

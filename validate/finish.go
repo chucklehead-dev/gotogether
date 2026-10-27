@@ -11,7 +11,7 @@ import (
 
 // A Finish is whether a run is a finished one, not a prefix of one
 // (Report.Finished): what qtest.Finishes claims and `gotogether validate
-// -require-settle` requires, judged here once so the two agree.
+// -require-finish` requires, judged here once so the two agree.
 type Finish struct {
 	// Verdict is Pass (finished), Fail (certainly not) or NotEvaluated (not
 	// known: a lost tail may hold the settle, the journey's end or a

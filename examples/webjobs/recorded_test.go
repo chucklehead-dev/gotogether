@@ -24,8 +24,8 @@ func TestRecorded(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	recorded(t, "faithful").Expect(t, qtest.Finishes())
-	// its manifest and replay, as the CLI makes them (validate.Command,
-	// validate.Replay): two more checks, no CLI to build
+	// its manifest and replay, as the CLI makes them (cli.Check,
+	// cli.Replay): two more checks, no CLI to build
 	t.Run("replays", func(t *testing.T) { replays(t, filepath.Join("testdata", "runs", "faithful")) })
 }
 

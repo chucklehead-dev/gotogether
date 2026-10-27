@@ -137,7 +137,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   OTLP/JSON, a step log or ITF, detected by content. Add
   `-convert rules.yaml` for plain app spans. Exit status: 0 OK,
   1 violation, 2 tool error. A run cut short passes (its eventual vals
-  unjudged, an info issue says so): `-require-settle` (or the binding's
+  unjudged, an info issue says so): `-require-finish` (or the binding's
   `complete: true`) fails it as `incomplete (no settle)` or `incomplete
   (pending calls)`, as `qtest.Finishes()` judges it; a lost tail or an ITF
   input is `no verdict (...)`, also exit 1. It needs a binding with an
@@ -148,7 +148,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `-history out.svg`, `-mutate-steps` (observation mutants after a
   pass; `-mutate-ops`, `-mutate-limit`).
 - A portable failure: `-manifest run.json` writes the run's manifest
-  (`gotogether.run/1`: gotogether's and quint's versions, the binding,
+  (`gotogether.run/2`: gotogether's and quint's versions, the binding,
   spec, rules and inputs with their sha256, losses, constants,
   invariants, how it was judged, the verdict and failing step with its
   ref), and `-run-info driver.json` adds what gotogether did not see:
@@ -160,7 +160,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   exiting 1 if the verdict is not the manifest's (reasons worded
   otherwise by a newer gotogether only noted). Keep the manifest beside
   its files: paths under its directory are relative; `Manifest.Bundle`
-  copies them there. In code: `Checker.Manifest`, `Manifest.AddInput`,
+  copies them there. In code: `validate.NewManifest(validate.RunRecord{...})`,
   `Bundle`, `Write`, `ReadManifest`, `Verify`; in a test, `qtest.Driver`,
   `qtest.Artifacts` and `Run.Manifest()` (written under
   `GOTOGETHER_EVIDENCE` as `run<N>.json`, its files bundled in
@@ -188,7 +188,7 @@ replayed session) is checked from the driver's own trace: read
 writing its adapter (a click is an invocation, only its request's own answer
 completes it; the journey's own times, call ids and order kept; refs to
 its screenshots; what a settle covers; its manifest, replayed by
-`validate -replay` or `validate.Replay`, and strict gating; shrinking its
+`validate -replay` or `cli.Replay` (package validate/cli), and strict gating; shrinking its
 failing journey with `qtest.ShrinkActions`, or `gotogether shrink`
 outside go test).
 

@@ -16,6 +16,43 @@ The first release. What a user meets, by module:
   the stores `memstore` and `simstore` with the contract suite
   `storetest`, and `gristsim.Run` for a `qtest.System`;
   examples/counters is its first application.
+- API trim before the tags (G6). `validate.Command`, `Judged` and
+  `Replay` move to package `validate/cli` as `cli.Check`, `cli.Judged`,
+  `cli.Replay`: the check reads OTLP/JSON, and in validate it brought
+  otelio and OpenTelemetry's SDK into qtest and every test binary (qtest
+  now links neither, `TestQtestDependencies`). `Check.Format` is an
+  `input.Format`; `RequireSettle` is `RequireFinish`; `Check.Name`,
+  `Driver` and `Artifacts` give the manifest what `RunInfo`'s file
+  gives. `Judged.Temp` is `Temporary()`, and `Close` removes a temporary
+  `Dir` (a Judge or Replay without one left a directory per call);
+  `FinishWhy` (flag text) is `FinishByBinding`; `Incomplete` (a map
+  keyed by result) is gone: an unfinished result is a copy whose new
+  `validate.Result.Unfinished` says why, which `Reason` and the verdict
+  read. `cli.Replayed` has `Got` (the replay's `*Judged`) and `Want`,
+  `Same`, `Differs` (was `Note`) and `Notes`. `validate.VerdictOf` is
+  `Report.Verdict()`; the manifest builders (`NewManifest(o)`,
+  `SetBinding`, `SetSpec`, `AddConvert`, `AddInput`, `AddArtifact`) and
+  `Checker.Manifest` are one `validate.NewManifest(RunRecord{...})`;
+  `ModuleVersion` and `QuintVersion` are `validate.CurrentTools(o)`;
+  `Options.NoEnvBackend` is exported (a replay's). The manifest format
+  is `gotogether.run/2` (`requireFinish`, was `requireSettle`): a
+  `run/1` manifest is refused with the fix. `gotogether validate
+  -require-finish` names the check (qtest.Finishes'); `-require-settle`
+  still works, warning that it is deprecated. qshrink: `Shown`'s values
+  are `Reproduced`, `NotReproduced`, `Undecided` (were `Yes`, `No`,
+  `Unknown`), as Result counts them; `Keep` has `Why`; `Result` marshals
+  as shrink.json (`Set` and its length, where `WriteArtifacts` recorded
+  the length of whatever it was given) and the files' layout is the
+  callers' (internal/shrinkfiles). SameFailure reads a mismatch's fields
+  from `binding.ObsComparisons`, the binding's own analysis of an
+  expect, not a second parser. A corruption changes lists (`shorten`,
+  `grow`) and maps (`drop`), and the step mutants' table names the
+  fields only removed (`qtrace.UncorruptedFields`). The evidence format,
+  roles, the file check and the CLI's view are internal/evidence's, for
+  qtest and the CLI alike. `qtest.JudgeStepMutants` is gone
+  (`validate.Checker.MutateSteps` outside a test); `StepMutationReport`
+  embeds `*validate.StepMutants`, its table's methods, beside its own
+  `Original` run and `Expect`.
 - After the review of G3–G5: `validate -replay -itf` keeps the ITF it
   names; `gotogether shrink` sets each command's `WaitDelay` (a child
   left running with the driver's output open once hung it), takes

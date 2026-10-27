@@ -3522,7 +3522,7 @@ and holds, and every invoked call completed. It is three-valued: a lost
 tail may hold the settle, the end or a completion, so it is no verdict,
 while a part certainly missing decides. A binding with no eventual val
 finishes no run, because nothing in it says where the journey ends; a
-settle alone would pass any quiet prefix. `validate -require-settle` is
+settle alone would pass any quiet prefix. `validate -require-finish` is
 the same judgment for the CLI, and a binding's `complete: true` makes it
 the CLI's default for that binding (it changes no test's claim: a test
 states `Finishes`; lint wants an eventual val beside it). The first

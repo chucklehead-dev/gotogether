@@ -68,7 +68,7 @@ type Binding struct {
 	// Complete says every run checked against the binding is a finished
 	// one (a whole journey, settled, every call answered), not a prefix:
 	// `gotogether validate` then fails one that is not, as with
-	// -require-settle. It needs an eventual val, the journey's end: without
+	// -require-finish. It needs an eventual val, the journey's end: without
 	// one a settled prefix would pass. Tests state it as a claim instead
 	// (qtest.Finishes), which this does not change.
 	Complete bool `yaml:"complete"`

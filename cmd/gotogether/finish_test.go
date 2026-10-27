@@ -31,12 +31,12 @@ func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, erro
 	return code, verr, string(out)
 }
 
-// -require-settle is qtest.Finishes' judgment: the CLI and the claim agree
+// -require-finish is qtest.Finishes' judgment: the CLI and the claim agree
 // on a call -resolve-pending placed (unanswered: unfinished), name an
 // actor whose only call is pending by its calls (not a settle it lacks),
 // call a lost tail no verdict, refuse a binding with no eventual val with
 // Finishes' fix, and never pass an ITF trace, which records no settle.
-func TestValidateRequireSettle(t *testing.T) {
+func TestValidateRequireFinish(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
@@ -67,7 +67,7 @@ func TestValidateRequireSettle(t *testing.T) {
 	} {
 		t.Run(x.name, func(t *testing.T) {
 			t.Parallel()
-			code, err, out := validateSteps(t, x.steps, append([]string{"-binding", funds, "-require-settle"}, x.args...)...)
+			code, err, out := validateSteps(t, x.steps, append([]string{"-binding", funds, "-require-finish"}, x.args...)...)
 			if err != nil || code != x.code {
 				t.Errorf("exit %d, %v, want %d:\n%s", code, err, x.code, out)
 			}
@@ -84,9 +84,16 @@ func TestValidateRequireSettle(t *testing.T) {
 		t.Errorf("Finishes holds of a run whose resolved call was never answered:\n%s", run.Report.Summary())
 	}
 	// no eventual val: refused with Finishes' fix
-	_, err, out := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5), settle(2)}, "-binding", "../../validate/testdata/account.yaml", "-require-settle")
+	_, err, out := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5), settle(2)}, "-binding", "../../validate/testdata/account.yaml", "-require-finish")
 	if err == nil || !strings.Contains(err.Error(), "add the journey's end as an eventual val on a ghost flag") {
 		t.Errorf("a binding with no eventual val: %v:\n%s", err, out)
+	}
+	// -require-settle, the old name, still checks the finish, and says
+	// it is deprecated for -require-finish
+	code, err, out := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5)}, "-binding", funds, "-require-settle")
+	if err != nil || code != 1 || !strings.Contains(out, "warning: -require-settle is deprecated") || !strings.Contains(out, "say -require-finish") ||
+		!strings.Contains(out, "incomplete (no settle) (-require-finish)") {
+		t.Errorf("-require-settle: exit %d, %v:\n%s", code, err, out)
 	}
 	// an ITF trace: no verdict, never a pass
 	dir := t.TempDir()
@@ -101,7 +108,7 @@ func TestValidateRequireSettle(t *testing.T) {
 	if len(itfs) != 1 {
 		t.Fatalf("itf wrote %v", itfs)
 	}
-	for _, args := range [][]string{{"-binding", funds, "-require-settle"}, {"-binding", "../../validate/testdata/funds_complete.yaml"}} {
+	for _, args := range [][]string{{"-binding", funds, "-require-finish"}, {"-binding", "../../validate/testdata/funds_complete.yaml"}} {
 		code, out, err := validated(append(append([]string{"-dir", filepath.Join(t.TempDir(), "out")}, args...), itfs[0]))
 		if err != nil || code != 1 || !strings.Contains(string(out), "a finished run can't be judged from an ITF trace") {
 			t.Errorf("%v on an ITF trace: exit %d, %v:\n%s", args, code, err, fmt.Sprint(string(out)))

@@ -13,6 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/cli"
 )
 
 // bombadil is the bombadil command a live test runs (BOMBADIL, else
@@ -145,7 +146,7 @@ func (j *drive) keep(t *testing.T) {
 		}
 		last = screenshot(s.Ref)
 	}
-	if f := validate.VerdictOf(j.run.Report.Actors, nil).Failing; f != nil && f.Ref != "" {
+	if f := j.run.Report.Verdict().Failing; f != nil && f.Ref != "" {
 		last = screenshot(f.Ref)
 	}
 	shots = append(shots, last)
@@ -213,7 +214,7 @@ func replays(t *testing.T, dir string) {
 	}
 	binding, _ := filepath.Abs("webjobs.binding.yaml")
 	manifest := filepath.Join(t.TempDir(), "run.json")
-	j, err := validate.Command{Binding: binding, Files: []string{filepath.Join(abs, ServerFile), page}, RunInfo: filepath.Join(abs, "run-info.json"),
+	j, err := cli.Check{Binding: binding, Files: []string{filepath.Join(abs, ServerFile), page}, RunInfo: filepath.Join(abs, "run-info.json"),
 		Options: validate.Options{Dir: t.TempDir()}}.Judge(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -232,12 +233,12 @@ func replays(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := validate.Replay(t.Context(), read, validate.Options{Dir: t.TempDir()})
+	r, err := cli.Replay(t.Context(), read, validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !r.Same || !r.OK || read.Driver == nil {
-		t.Fatalf("the manifest's replay: %s, the manifest's %s (%s; driver %+v)", r.Verdict, r.Want, r.Note, read.Driver)
+	if !r.Same || !r.Got.OK || read.Driver == nil {
+		t.Fatalf("the manifest's replay: %s, the manifest's %s (%s; driver %+v)", r.Got.Verdict, r.Want, r.Differs, read.Driver)
 	}
 }
 

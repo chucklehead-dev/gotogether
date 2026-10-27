@@ -157,16 +157,16 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		{"hidden", "gossip.yaml", nil, []qtrace.Step{gossip(1, "a", 1, ""), gossip(2, "b", 0, "[1]")},
 			[]qtrace.Step{gossip(1, "a", 1, ""), gossip(2, "b", 0, "[9]")}, "conformance: FAIL"},
 		{"pending", "account.yaml", []string{"-resolve-pending"}, pending(12), pending(99), "conformance: FAIL"},
-		// -require-settle: a conforming run that is no finished one fails,
+		// -require-finish: a conforming run that is no finished one fails,
 		// saying what it lacks, as qtest.Finishes does (without the flag,
 		// the "eventual" row's unsettled run passes)
-		{"require-settle: no settle", "funds.binding.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+		{"require-settle: no settle", "funds.binding.yaml", []string{"-require-finish"}, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "1 of 1 actor: 1 incomplete (no settle)"},
-		{"require-settle: pending", "funds.binding.yaml", []string{"-require-settle"}, seq(acct("deposit", 5, 5), settled),
+		{"require-settle: pending", "funds.binding.yaml", []string{"-require-finish"}, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5), qtrace.Step{Action: "withdraw", Invocation: true, Args: map[string]any{"amount": int64(3)}}, settled),
 			"1 of 1 actor: 1 incomplete (pending calls)"},
 		// a call -resolve-pending places was still never answered
-		{"require-settle: resolved pending", "funds.binding.yaml", []string{"-require-settle", "-resolve-pending"},
+		{"require-settle: resolved pending", "funds.binding.yaml", []string{"-require-finish", "-resolve-pending"},
 			seq(acct("deposit", 5, 5), settled), append(pending(12), qtrace.Step{Action: "settled", Settled: true, Recorder: "c", Seq: 4, Time: ms(4)}),
 			"1 of 1 actor: 1 incomplete (pending calls)"},
 		// the checked invariants and declared losses are the manifest's too:

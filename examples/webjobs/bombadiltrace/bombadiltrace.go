@@ -28,7 +28,7 @@
 //     id, status), whatever caused it.
 //   - a request whose answer the trace never shows stays an invocation:
 //     qtrace.Reconstruct keeps it as pending, so qtest.Finishes (and
-//     validate -require-settle) fails the run. A click is never taken
+//     validate -require-finish) fails the run. A click is never taken
 //     for its success.
 //   - every record carries quint.ref: "trace.jsonl:N screenshot=
 //     screenshots/F", the line it came from and the screenshot of the

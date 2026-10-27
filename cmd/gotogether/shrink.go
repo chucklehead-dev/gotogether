@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/input"
+	"github.com/chucklehead-dev/gotogether/internal/shrinkfiles"
 	"github.com/chucklehead-dev/gotogether/qshrink"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/cli"
 )
 
 // shrinkTo is the shrink command, its report written to out: a failing
@@ -158,7 +160,7 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 	for i, a := range shrunk {
 		acts[i] = a
 	}
-	arts, err := res.WriteArtifacts(*outDir, acts)
+	arts, err := shrinkfiles.Write(*outDir, res, acts)
 	if err != nil {
 		return 2, err
 	}
@@ -166,21 +168,15 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 	if err := writeSteps(stepsPath, res.Steps); err != nil {
 		return 2, err
 	}
-	cmd := validate.Command{Binding: *bpath, Files: []string{stepsPath}, Invariants: invariants, Search: search, Options: opts}
-	j, err := cmd.Judge(ctx)
+	chk := cli.Check{Binding: *bpath, Files: []string{stepsPath}, Invariants: invariants, Search: search, Options: opts, Name: "shrink", Artifacts: arts,
+		Driver: &validate.Driver{Name: "gotogether shrink", Args: append([]string{fmt.Sprintf("actions=%d of %d", len(shrunk), len(original)), "--"}, argv...)}}
+	j, err := chk.Judge(ctx)
 	if err != nil {
 		return 2, fmt.Errorf("shrink: judging the shrunk sequence's rerun: %w", err)
 	}
 	m, err := j.Manifest()
 	if err != nil {
 		return 2, err
-	}
-	m.Name = "shrink"
-	m.Driver = &validate.Driver{Name: "gotogether shrink", Args: append([]string{fmt.Sprintf("actions=%d of %d", len(shrunk), len(original)), "--"}, argv...)}
-	for _, a := range arts {
-		if err := m.AddArtifact(a.Name, a.Path); err != nil {
-			return 2, err
-		}
 	}
 	manifest := filepath.Join(*outDir, "manifest.json")
 	if err := m.Write(manifest); err != nil {

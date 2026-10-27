@@ -226,7 +226,7 @@ func malformed(r *Report) string {
 
 // reasonOf is a report's reason, as validate's result line says it.
 func reasonOf(r *Report) string {
-	if v := VerdictOf(r.Actors, nil); v.Reason != "" {
+	if v := r.Verdict(); v.Reason != "" {
 		return v.Reason
 	}
 	if r.Unsettled != "" {
@@ -302,6 +302,11 @@ func (r *StepMutants) String() string {
 			fmt.Fprintf(&b, " (%d malformed)", c[FateMalformed])
 		}
 		b.WriteString("\n")
+	}
+	if _, ok := n["corrupt"]; ok && r.Original != nil {
+		if u := qtrace.UncorruptedFields(r.Original.Steps); len(u) > 0 {
+			fmt.Fprintf(&b, "  %d fields only removed, never corrupted (null, a struct, an empty list or map): %s\n", len(u), strings.Join(u, ", "))
+		}
 	}
 	for _, m := range r.Mutants {
 		if m.Fate != FateKilled {

@@ -219,3 +219,77 @@ func atomic(v, after string) bool {
 	a := strings.TrimLeft(after, " \t")
 	return a == "" || !strings.ContainsRune("^.[(", rune(a[0]))
 }
+
+// An ObsComparison is a conjunct of an expect that compares a state
+// variable with one observation: `balance == {{.obs.balance}}` is Var
+// "balance", Field "balance".
+type ObsComparison struct{ Var, Field string }
+
+// ObsComparisons are the conjuncts of the expect template that compare a
+// state variable with an observation, `v == {{.obs.f}}` at the top level
+// of an `and` chain (outside brackets and string literals), in order: a
+// state mismatch's observed fields that differ from the model's are
+// those whose variable's value after the step is not the observation
+// (qshrink.SameFailure). A template the Go evaluator cannot split (a
+// range, a variable) has none.
+func ObsComparisons(expect string) []ObsComparison {
+	parts, holes, err := splitCached(expect)
+	if err != nil {
+		return nil
+	}
+	var out []ObsComparison
+	depth, inStr := 0, false
+	for i, h := range holes {
+		// the text before the hole moves the depth: the hole is at the top
+		// level only at depth 0
+		for _, c := range parts[i] {
+			switch {
+			case c == '"':
+				inStr = !inStr
+			case inStr:
+			case c == '(' || c == '{' || c == '[':
+				depth++
+			case c == ')' || c == '}' || c == ']':
+				depth--
+			}
+		}
+		field, ok := strings.CutPrefix(h, "{{.obs.")
+		if !ok || depth != 0 || inStr {
+			continue
+		}
+		field, ok = strings.CutSuffix(field, "}}")
+		if !ok || !validIdent(field) {
+			continue
+		}
+		before := strings.TrimRight(parts[i], " \t\n")
+		lhs, ok := strings.CutSuffix(before, "==")
+		if !ok {
+			continue
+		}
+		lhs = strings.TrimRight(lhs, " \t\n")
+		v := lhs[strings.LastIndexFunc(lhs, func(r rune) bool { return !identRune(r) })+1:]
+		rest := strings.TrimRight(lhs[:len(lhs)-len(v)], " \t\n")
+		after := strings.TrimLeft(parts[i+1], " \t\n")
+		if !validIdent(v) || rest != "" && !strings.HasSuffix(rest, " and") && rest != "and" || after != "" && !strings.HasPrefix(after, "and ") && after != "and" {
+			continue
+		}
+		out = append(out, ObsComparison{Var: v, Field: field})
+	}
+	return out
+}
+
+func identRune(r rune) bool {
+	return r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
+}
+
+func validIdent(s string) bool {
+	if s == "" || s[0] >= '0' && s[0] <= '9' {
+		return false
+	}
+	for _, r := range s {
+		if !identRune(r) {
+			return false
+		}
+	}
+	return true
+}

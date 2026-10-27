@@ -5,6 +5,7 @@ func LintRecords(m *Model, recs []RecordCall) []string
 func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns []string)
 func Load(path string) (*Binding, error)
 func LoadModel(quint, spec, module string) (*Model, error)
+func ObsComparisons(expect string) []ObsComparison
 func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
 func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
 func ScanAnnotations(dir string) ([]Annotation, error)
@@ -101,6 +102,9 @@ type Model struct
     method (*Model) Assigns(action string) (map[string]bool, bool)
     method (*Model) Reads(action string) (map[string]bool, bool)
     method (*Model) Signature(action string) string
+type ObsComparison struct
+    field Var string
+    field Field string
 type Param struct
     field Name string
     field Type string
@@ -1342,9 +1346,9 @@ type Key[T any] struct
     method (*Key[T]) String() string
 
 == github.com/chucklehead-dev/gotogether/qshrink
-const No Shown = iota (spec 2 of its group)
-const Unknown Shown = iota
-const Yes Shown = iota (spec 1 of its group)
+const NotReproduced Shown = iota (spec 2 of its group)
+const Reproduced Shown = iota (spec 1 of its group)
+const Undecided Shown = iota
 func SameFailure(rep *validate.Report) Keep
 type Calibration struct
     field Baseline int
@@ -1355,6 +1359,7 @@ type Calibration struct
     field Time time.Duration
 type Keep interface
     Shows(rep *validate.Report) Shown
+    Why(rep *validate.Report) string
     String() string
 type Rate struct
     field Reproduced int
@@ -1378,8 +1383,8 @@ type Result struct
     field Minimal bool
     field NotMinimal string
     field Keep Keep
+    method (*Result) MarshalJSON() ([]byte, error)
     method (*Result) String() string
-    method (*Result) WriteArtifacts(dir string, actions []any) ([]validate.Artifact, error)
 type Shown int
 type Shrink struct
     field Actions int
@@ -1414,15 +1419,15 @@ type Row struct
     method (Row) String() string
 
 == github.com/chucklehead-dev/gotogether/qtest
-const EvidenceFormat = "gotogether.evidence/2"
+const EvidenceFormat = evidence.Format
 const FateKilled = validate.FateKilled
 const FateMalformed = validate.FateMalformed
 const FateSurvived = validate.FateSurvived
 const FateUndecided = validate.FateUndecided
-const RoleExternal = "external"
-const RoleFaithful = "faithful"
-const RoleMutant = "mutant"
-const RoleReplay = "replay"
+const RoleExternal = evidence.RoleExternal
+const RoleFaithful = evidence.RoleFaithful
+const RoleMutant = evidence.RoleMutant
+const RoleReplay = evidence.RoleReplay
 func Absent(name string, cause validate.Cause) Expectation
 func All(es ...Expectation) Claim
 func AnyOf(es ...Expectation) Expectation
@@ -1439,7 +1444,6 @@ func Finishes() Expectation
 func Global() Option
 func Invariants(names ...string) Option
 func IsEvidence(path string) bool
-func JudgeStepMutants(c *validate.Checker, steps []qtrace.Step, opt validate.SearchOptions, mopts ...qtrace.MutationOption) (*StepMutationReport, error)
 func Killed(sel StepSelector) StepClaim
 func Linearize() Option
 func LinearizeBudget(n int) Option
@@ -1619,15 +1623,9 @@ type StepClaim struct
     method (StepClaim) String() string
 type StepMutation = validate.StepMutation
 type StepMutationReport struct
+    embed *validate.StepMutants
     field Original *Run
-    field Mutants []StepMutation
     method (*StepMutationReport) Expect(t testing.TB, claims ...StepClaim)
-    method (*StepMutationReport) Killed() []StepMutation
-    method (*StepMutationReport) Malformed() []StepMutation
-    method (*StepMutationReport) Score() float64
-    method (*StepMutationReport) String() string
-    method (*StepMutationReport) Survived() []StepMutation
-    method (*StepMutationReport) Undecided() []StepMutation
 type StepSelector struct
     method (StepSelector) Action(action string) StepSelector
     method (StepSelector) Change(change string) StepSelector
@@ -1716,6 +1714,7 @@ func MutateOps(ops ...string) MutationOption
 func Mutations(steps []Step, opts ...MutationOption) []StepMutant
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
+func UncorruptedFields(steps []Step) []string
 func WriteJSONL(w io.Writer, steps []Step) error
 type Filter struct
     field Actors []string
@@ -1850,23 +1849,20 @@ const FateKilled = "killed"
 const FateMalformed = "malformed"
 const FateSurvived = "survived"
 const FateUndecided = "undecided"
-const ManifestFormat = "gotogether.run/1"
+const ManifestFormat = "gotogether.run/2"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const Uncollected Cause = "uncollected"
 func Cached(bindingPath string, o Options) (*Checker, error)
+func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
 func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error)
 func IsManifest(path string) bool
-func ModuleVersion() string
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
-func NewManifest(o Options) *Manifest
-func QuintVersion(bin string) string
+func NewManifest(r RunRecord) (*Manifest, error)
 func ReadManifest(path string) (*Manifest, error)
-func Replay(ctx context.Context, m *Manifest, o Options) (*Replayed, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
-func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict
 type Absence struct
     field Actor string
     field Kind string
@@ -1897,29 +1893,9 @@ type Checker struct
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
-    method (*Checker) Manifest(results []*Result, opt SearchOptions) (*Manifest, error)
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
-type Command struct
-    field Binding string
-    field Files []string
-    field Format string
-    field Convert string
-    field Spec string
-    field Module string
-    field Instance string
-    field NoVars bool
-    field Invariants []string
-    field Constants map[string]string
-    field Search SearchOptions
-    field LostPrefix []string
-    field LostSuffix []string
-    field CompleteThrough []string
-    field RequireSettle bool
-    field RunInfo string
-    field Options Options
-    method (Command) Judge(ctx context.Context) (*Judged, error)
 type Driver struct
     field Name string `json:"name"`
     field Version string `json:"version,omitempty"`
@@ -1971,28 +1947,6 @@ type InvariantResult struct
     field Failure *Failure
     field Eventually bool
     field Within bool
-type Judged struct
-    field Inputs []JudgedInput
-    field Dir string
-    field Temp bool
-    field Steps []qtrace.Step
-    field Checker *Checker
-    field Judgment *Judgment
-    field ITF []*Result
-    field Finish bool
-    field FinishWhy string
-    field Unfinished *Finish
-    field Results []*Result
-    field Incomplete map[*Result]string
-    field OK bool
-    field Verdict RunVerdict
-    method (*Judged) Manifest() (*Manifest, error)
-type JudgedInput struct
-    field Path string
-    field Format input.Format
-    field Converted bool
-    field Steps []qtrace.Step
-    field Torn *qtrace.TornTail
 type Judgment struct
     field Report *Report
     field Steps []qtrace.Step
@@ -2014,12 +1968,7 @@ type Manifest struct
     field Verdict RunVerdict `json:"verdict"`
     field Driver *Driver `json:"driver,omitempty"`
     field Artifacts []Artifact `json:"artifacts,omitempty"`
-    method (*Manifest) AddArtifact(name, path string) error
-    method (*Manifest) AddConvert(path string) (err error)
-    method (*Manifest) AddInput(path, format string, steps []qtrace.Step) error
     method (*Manifest) Bundle(dir string) error
-    method (*Manifest) SetBinding(b *binding.Binding) error
-    method (*Manifest) SetSpec(path string) (err error)
     method (*Manifest) Verify() (warnings []string, err error)
     method (*Manifest) Write(path string) error
 type Options struct
@@ -2029,13 +1978,7 @@ type Options struct
     field NoITF bool
     field VerdictsOnly bool
     field Eval string
-type Replayed struct
-    embed *Judged
-    field Want RunVerdict
-    field Same bool
-    field Note string
-    field Warnings []string
-    field Notes []string
+    field NoEnvBackend bool
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
@@ -2045,6 +1988,7 @@ type Report struct
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
     method (*Report) Summary() string
+    method (*Report) Verdict() RunVerdict
     method (*Report) WithoutRefs() *Report
 type Result struct
     field Actor string
@@ -2064,6 +2008,7 @@ type Result struct
     field ITF string
     field Calls []binding.Call
     field Output string
+    field Unfinished string
     method (*Result) OK() bool
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
@@ -2073,13 +2018,18 @@ type RunCheck struct
     field Key string `json:"linearizeKey,omitempty"`
     field Budget int `json:"linearizeBudget,omitempty"`
     field ResolvePending bool `json:"resolvePending,omitempty"`
-    field RequireSettle bool `json:"requireSettle,omitempty"`
+    field RequireFinish bool `json:"requireFinish,omitempty"`
     field LostPrefix []string `json:"lostPrefix,omitempty"`
     field LostSuffix []string `json:"lostSuffix,omitempty"`
     field CompleteThrough []string `json:"completeThrough,omitempty"`
     field Format string `json:"format,omitempty"`
     field NoVars bool `json:"noVars,omitempty"`
     method (RunCheck) SearchOptions() SearchOptions
+type RunInput struct
+    field Path string
+    field Format string
+    field Steps []qtrace.Step
+    field Model *RunModel
 type RunModel struct
     field Binding *File `json:"binding,omitempty"`
     field Spec *File `json:"spec,omitempty"`
@@ -2089,6 +2039,15 @@ type RunModel struct
     field Convert *File `json:"convert,omitempty"`
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
+type RunRecord struct
+    field Options Options
+    field Binding *binding.Binding
+    field Check RunCheck
+    field Search SearchOptions
+    field Results []*Result
+    field Inputs []RunInput
+    field Convert string
+    field Artifacts []Artifact
 type RunVerdict struct
     field Verdict Verdict `json:"verdict"`
     field Reason string `json:"reason,omitempty"`
@@ -2131,4 +2090,58 @@ type Tools struct
     field Backend string `json:"backend,omitempty"`
 type Verdict string
 var ErrManifestFormat = errors.New("another manifest format")
+
+== github.com/chucklehead-dev/gotogether/validate/cli
+func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Replayed, error)
+type Check struct
+    field Binding string
+    field Files []string
+    field Format input.Format
+    field Convert string
+    field Spec string
+    field Module string
+    field Instance string
+    field NoVars bool
+    field Invariants []string
+    field Constants map[string]string
+    field Search validate.SearchOptions
+    field LostPrefix []string
+    field LostSuffix []string
+    field CompleteThrough []string
+    field RequireFinish bool
+    field Name string
+    field Driver *validate.Driver
+    field Artifacts []validate.Artifact
+    field RunInfo string
+    field Options validate.Options
+    method (Check) Judge(ctx context.Context) (*Judged, error)
+type Input struct
+    field Path string
+    field Format input.Format
+    field Converted bool
+    field Steps []qtrace.Step
+    field Torn *qtrace.TornTail
+type Judged struct
+    field Inputs []Input
+    field Dir string
+    field Steps []qtrace.Step
+    field Checker *validate.Checker
+    field Judgment *validate.Judgment
+    field ITF []*validate.Result
+    field Finish bool
+    field FinishByBinding bool
+    field Unfinished *validate.Finish
+    field Results []*validate.Result
+    field OK bool
+    field Verdict validate.RunVerdict
+    method (*Judged) Close() error
+    method (*Judged) Manifest() (*validate.Manifest, error)
+    method (*Judged) Temporary() bool
+type Replayed struct
+    field Got *Judged
+    field Want validate.RunVerdict
+    field Same bool
+    field Differs string
+    field Warnings []string
+    field Notes []string
 

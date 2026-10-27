@@ -210,6 +210,6 @@ deliberately and say why in the commit and the README.
   that skips clears what an earlier run of it left; use a fresh
   directory per run all the same (a renamed test's stays).
 - **A finished run.** Validate a real environment's logs with
-  `gotogether validate -require-settle` (or `complete: true` in the
+  `gotogether validate -require-finish` (or `complete: true` in the
   binding), and claim `qtest.Finishes()` of a driver's runs: a run cut
   short conforms (verdicts reference, "A prefix vs a finished run").

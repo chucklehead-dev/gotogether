@@ -33,3 +33,14 @@ func TestStepFateMalformed(t *testing.T) {
 		t.Errorf("score %v, %d malformed", rep.Score(), len(rep.Malformed()))
 	}
 }
+
+// The table says which fields the corrupt op could only remove: their
+// checks the mutants test less.
+func TestStepMutantsUncorrupted(t *testing.T) {
+	t.Parallel()
+	steps := []qtrace.Step{{Recorder: "r", Seq: 1, Action: "put", Args: map[string]any{"n": int64(1), "meta": nil}}}
+	rep := &StepMutants{Original: &Judgment{Steps: steps}, Mutants: []StepMutation{{StepMutant: qtrace.StepMutant{Op: "corrupt", Field: "n", Change: "+1"}, Fate: FateKilled}}}
+	if s := rep.String(); !strings.Contains(s, "1 fields only removed, never corrupted (null, a struct, an empty list or map): put meta") {
+		t.Errorf("the table:\n%s", s)
+	}
+}

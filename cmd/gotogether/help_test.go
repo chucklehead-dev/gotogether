@@ -116,7 +116,8 @@ func TestUnknownCommandExits(t *testing.T) {
 }
 
 // The top-level usage lists every flag of validate (but removed ones,
-// whose usage starts "gone:"): it once omitted half of them.
+// whose usage starts "gone:", and old names, "deprecated:"): it once
+// omitted half of them.
 func TestUsageListsValidateFlags(t *testing.T) {
 	var b bytes.Buffer
 	usageTo(&b)
@@ -126,7 +127,7 @@ func TestUsageListsValidateFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	flags := regexp.MustCompile(`fset\.[A-Za-z]+\((?:&[^,]+, )?"([a-z-]+)", [^,]+, "(gone:)?`).FindAllStringSubmatch(string(src), -1)
+	flags := regexp.MustCompile(`fset\.[A-Za-z]+\((?:&[^,]+, )?"([a-z-]+)", [^,]+, "(gone:|deprecated:)?`).FindAllStringSubmatch(string(src), -1)
 	if len(flags) < 20 {
 		t.Fatalf("found %d of validate's flags: the pattern no longer matches their definitions", len(flags))
 	}

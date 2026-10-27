@@ -157,7 +157,7 @@ func Finishes() Expectation {
 }
 
 // finishes is Finishes' value of r, and why it is not met: validate's
-// Report.Finished, the judgment `gotogether validate -require-settle`
+// Report.Finished, the judgment `gotogether validate -require-finish`
 // makes too.
 func finishes(r *validate.Report) (tri, string) {
 	f := r.Finished()

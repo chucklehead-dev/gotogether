@@ -3,6 +3,7 @@ package qtrace
 import (
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -26,7 +27,8 @@ type StepMutant struct {
 	Action string
 	// Field and Change are a corruption's: the field changed, as a binding
 	// names it ("amount", "obs.balance"), and how ("+1", "-1", "flip",
-	// "empty", "change", "remove"). Empty for the other ops.
+	// "empty", "change"; a list's "shorten" and "grow", a map's "drop";
+	// "remove"). Empty for the other ops.
 	Field, Change string
 	// Detail says what changed, for a report: the step by recorder and
 	// seq, and the values.
@@ -104,7 +106,13 @@ func MutateLimit(n int) MutationOption { return func(c *mutationConfig) { c.limi
 //     overlap, which Reconstruct reports.
 //   - corrupt: one argument or observation changed: an integer or float
 //     +1 and -1, a bool flipped, a string emptied (if not empty) and
-//     changed, and every field removed (absent), each its own mutant.
+//     changed, a list (a JSON array, a slice) shortened by its last
+//     element and grown by a copy of it, a map (an object) with its
+//     first key (in sorted order) dropped, and every field removed
+//     (absent), each its own mutant. A value of no such kind (null, a
+//     struct, an empty list or map) is only removed: the report counts
+//     such fields (UncorruptedFields), whose checks the mutants test
+//     less.
 //   - retime: one step's time (and its invocation time, kept as long
 //     before it) moved later, never past its actor's next step (a
 //     within's clock would go back), nor past a settle or a watermark
@@ -390,7 +398,56 @@ func corrupted(v any) [][2]any {
 		}
 		return [][2]any{{"empty", ""}, {"change", x + "~"}}
 	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice:
+		if rv.Len() == 0 {
+			return nil
+		}
+		shorter := reflect.MakeSlice(rv.Type(), rv.Len()-1, rv.Len()-1)
+		reflect.Copy(shorter, rv)
+		longer := reflect.Append(reflect.AppendSlice(reflect.MakeSlice(rv.Type(), 0, rv.Len()+1), rv), rv.Index(rv.Len()-1))
+		return [][2]any{{"shorten", shorter.Interface()}, {"grow", longer.Interface()}}
+	case reflect.Map:
+		if rv.Len() == 0 {
+			return nil
+		}
+		keys := rv.MapKeys()
+		sort.Slice(keys, func(i, j int) bool { return fmt.Sprint(keys[i].Interface()) < fmt.Sprint(keys[j].Interface()) })
+		m := reflect.MakeMapWithSize(rv.Type(), rv.Len()-1)
+		for _, k := range keys[1:] {
+			m.SetMapIndex(k, rv.MapIndex(k))
+		}
+		return [][2]any{{"drop", m.Interface()}}
+	}
 	return nil
+}
+
+// UncorruptedFields are the fields of steps' model steps that the
+// corrupt op changes only by removing them (corrupted has no change of
+// their values: null, a struct, an empty list or map), each as
+// "action field" once, sorted: a report says how much of the log the
+// mutants test less.
+func UncorruptedFields(steps []Step) []string {
+	seen := map[string]bool{}
+	for i := range steps {
+		s := &steps[i]
+		if !s.Model() {
+			continue
+		}
+		for _, obs := range []bool{false, true} {
+			vals, prefix := s.Args, ""
+			if obs {
+				vals, prefix = s.Obs, "obs."
+			}
+			for k, v := range vals {
+				if corrupted(v) == nil {
+					seen[s.Action+" "+prefix+k] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
 }
 
 func corruptions(steps []Step) []StepMutant {

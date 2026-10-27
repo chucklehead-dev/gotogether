@@ -118,7 +118,7 @@ usage:
                    [-keep-refs] [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
-                   [-convert rules.yaml] [-invariants a,b] [-itf] [-require-settle]
+                   [-convert rules.yaml] [-invariants a,b] [-itf] [-require-finish]
                    [-linearize] [-linearize-key arg] [-linearize-budget n] [-resolve-pending] [-history h.svg]
                    [-lost-prefix r,s] [-lost-suffix r,s] [-complete-through recorder=T]
                    [-mutate-steps [-mutate-ops o,p] [-mutate-limit n]] [-quint q] [-v]
@@ -452,17 +452,13 @@ func steps(args []string) error {
 }
 
 // failSummary says how many of results fail and why, in the claims' words
-// (validate.Result.Reason, else its reason in incomplete): "2 of 5
+// (validate.Result.Reason, an unfinished result's included): "2 of 5
 // actors: 1 rejects replay, 1 mismatch after apply".
-func failSummary(results []*validate.Result, incomplete map[*validate.Result]string) string {
+func failSummary(results []*validate.Result) string {
 	by := map[string]int{}
 	bad := 0
 	for _, r := range results {
-		why := r.Reason()
-		if why == "" {
-			why = incomplete[r]
-		}
-		if why != "" {
+		if why := r.Reason(); why != "" { // an unfinished one's too
 			by[why]++
 			bad++
 		}

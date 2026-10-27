@@ -24,7 +24,7 @@ import (
 // ManifestFormat is the format Manifest.Write writes and ReadManifest
 // reads. Bump it when a field's name or meaning changes, so an old
 // manifest is refused, not misread.
-const ManifestFormat = "gotogether.run/1"
+const ManifestFormat = "gotogether.run/2" // 2: requireFinish, was requireSettle
 
 // A Manifest says what a validated run was judged on and what came of
 // it, so a failure of a run gotogether did not drive (a browser
@@ -114,11 +114,11 @@ type RunCheck struct {
 	Key            string `json:"linearizeKey,omitempty"`
 	Budget         int    `json:"linearizeBudget,omitempty"`
 	ResolvePending bool   `json:"resolvePending,omitempty"`
-	// RequireSettle: the finish check was judged (validate -require-settle,
+	// RequireFinish: the finish check was judged (validate -require-finish,
 	// or a complete binding's default in the CLI; qtest's Validate and
 	// Record judge none, a test claims Finishes). A replay judges it as
 	// recorded, whatever the binding's complete says now.
-	RequireSettle bool `json:"requireSettle,omitempty"`
+	RequireFinish bool `json:"requireFinish,omitempty"`
 	// LostPrefix and LostSuffix are the recorders whose losses were
 	// declared (validate -lost-prefix, -lost-suffix), not in the logs.
 	LostPrefix []string `json:"lostPrefix,omitempty"`
@@ -159,7 +159,7 @@ type Loss struct {
 	Before   time.Time `json:"before,omitzero"`
 }
 
-// RunVerdict is a run's verdict: its actors' (VerdictOf).
+// RunVerdict is a run's verdict: its actors' (Report.Verdict).
 type RunVerdict struct {
 	// Verdict is Fail if an actor fails, else NotEvaluated if one has no
 	// verdict, else Pass.
@@ -203,18 +203,20 @@ type Driver struct {
 }
 
 // An Artifact is a record the driver kept of the run (its trace, a
-// screenshot, a video). Its hash is filled when it is added (AddArtifact).
+// screenshot, a video). Its hash is filled when the manifest is made (NewManifest).
 type Artifact struct {
 	Name   string `json:"name"`
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256,omitempty"`
 }
 
-// VerdictOf is the verdict of results, an actor's or ITF trace's each.
-// incomplete, if set, gives the reason of an actor that passed but is no
-// finished run (validate -require-settle, Report.Finished): it fails with
-// that reason, or has no verdict ("no verdict (lost tail)").
-func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict {
+// Verdict is the report's verdict, its actors' together: the first
+// failing actor's reason and failing step, else the first with no
+// verdict's (Result.Reason, Unfinished included), else a pass.
+func (r *Report) Verdict() RunVerdict { return runVerdictOf(r.Actors) }
+
+// runVerdictOf is the verdict of results, an actor's or ITF trace's each.
+func runVerdictOf(results []*Result) RunVerdict {
 	v := RunVerdict{Verdict: Pass, Actors: []ActorVerdict{}}
 	for _, r := range results {
 		a := ActorVerdict{Actor: r.Actor, Verdict: Pass, Reason: r.Reason()}
@@ -222,10 +224,6 @@ func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict {
 			a.Actor = "default" // as a step log reads a step of no actor: the replay's
 		}
 		switch {
-		case a.Reason == "" && strings.HasPrefix(incomplete[r], "no verdict"):
-			a.Verdict, a.Reason = NotEvaluated, incomplete[r]
-		case a.Reason == "" && incomplete[r] != "":
-			a.Verdict, a.Reason = Fail, incomplete[r]
 		case strings.HasPrefix(a.Reason, "no verdict"):
 			a.Verdict = NotEvaluated
 		case a.Reason != "":
@@ -418,33 +416,94 @@ func (v RunVerdict) String() string {
 	return s
 }
 
-// Manifest is the manifest of results, judged by c with the searches
-// opt: its tools, model and verdict. The caller adds the inputs
-// (AddInput), and the driver and artifacts if it knows them. c's
-// binding must have been loaded from a file (binding.Load).
-func (c *Checker) Manifest(results []*Result, opt SearchOptions) (*Manifest, error) {
-	m := NewManifest(c.Options)
-	if err := m.SetBinding(c.Binding); err != nil {
-		return nil, err
+// A RunRecord is what a manifest is made of (NewManifest): how the run
+// was judged, its results, and the files its verdict depends on, each
+// hashed as the manifest is made.
+type RunRecord struct {
+	// Options are the tools the run was judged with: quint's version and
+	// the backend go in the manifest.
+	Options Options
+	// Binding is the instance judged: the binding and its spec, hashed,
+	// its module, constants and invariants (a Checker's, with any
+	// override). It must have been loaded from a file (binding.Load). nil:
+	// ITF inputs alone, each naming its own (RunInput.Model).
+	Binding *binding.Binding
+	// Check is how the run was judged beyond the model, and Search its
+	// searches (filling Check's).
+	Check  RunCheck
+	Search SearchOptions
+	// Results are every actor's and ITF trace's: the verdict's
+	// (Report.Verdict).
+	Results []*Result
+	// Inputs are the files judged, and Convert the rule file OTLP/JSON
+	// ones were converted with ("": none).
+	Inputs  []RunInput
+	Convert string
+	// Artifacts are the driver's records of the run, by Name and Path.
+	Artifacts []Artifact
+}
+
+// A RunInput is one input of a RunRecord: its file, its format
+// ("steps", "otlp", "itf"), the steps read from it (none for ITF), and
+// an ITF trace's instance (ITFModel).
+type RunInput struct {
+	Path, Format string
+	Steps        []qtrace.Step
+	Model        *RunModel
+}
+
+// NewManifest is the manifest of the run r records (gotogether.run/2):
+// the tools, the instance, how it was judged, each input and artifact
+// hashed with the inputs' losses, and the verdict. The caller names the
+// run (Name, Package, Import) and its Driver. A file that cannot be read
+// is an error.
+func NewManifest(r RunRecord) (*Manifest, error) {
+	m := emptyManifest(r.Options)
+	m.Model.Invariants = []string{}
+	if r.Binding != nil {
+		if err := m.setBinding(r.Binding); err != nil {
+			return nil, err
+		}
 	}
-	m.Check = RunCheck{Linearize: opt.Linearize || opt.Key != "", Key: opt.Key, Budget: opt.Budget, ResolvePending: opt.ResolvePending}
-	m.Verdict = VerdictOf(results, nil)
+	m.Check = r.Check
+	o := r.Search
+	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending
+	m.Verdict = runVerdictOf(r.Results)
+	if r.Convert != "" {
+		var err error
+		if m.Model.Convert, err = hashed(r.Convert); err != nil {
+			return nil, err
+		}
+	}
+	for _, in := range r.Inputs {
+		if err := m.addInput(in.Path, in.Format, in.Steps); err != nil {
+			return nil, err
+		}
+		m.Inputs[len(m.Inputs)-1].Model = in.Model
+	}
+	for _, a := range r.Artifacts {
+		if err := m.addArtifact(a.Name, a.Path); err != nil {
+			return nil, fmt.Errorf("artifact %s: %w", a.Name, err)
+		}
+	}
 	return m, nil
 }
 
-// NewManifest is an empty manifest of this format, with the tools o runs
-// (gotogether's version, quint's): what Checker.Manifest starts from, and
-// a caller with no checker (an ITF input's) fills.
-func NewManifest(o Options) *Manifest {
+// emptyManifest is a manifest of this format, with the tools o runs
+// (gotogether's version, quint's).
+func emptyManifest(o Options) *Manifest {
 	backend := o.envBackend()
 	return &Manifest{Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second),
-		Tools: Tools{Gotogether: ModuleVersion(), Quint: QuintVersion(o.Quint), Backend: backend}}
+		Tools: Tools{Gotogether: toolkitVersion(), Quint: quintVersion(o.Quint), Backend: backend}}
 }
 
-// SetBinding sets the manifest's model to b's instance: the binding and
-// its spec, hashed, its module, constants and invariants. b must have
-// been loaded from a file (binding.Load).
-func (m *Manifest) SetBinding(b *binding.Binding) error {
+// CurrentTools are the tools a run judged with o would be judged with
+// now: what a replay compares with its manifest's.
+func CurrentTools(o Options) Tools { return emptyManifest(o).Tools }
+
+// setBinding sets the manifest's model to b's instance: the binding and
+// its spec, hashed, its module, constants and invariants.
+func (m *Manifest) setBinding(b *binding.Binding) error {
 	if b.Path == "" {
 		return errors.New("manifest: the binding was not loaded from a file (binding.Load, NewChecker): a manifest hashes it")
 	}
@@ -452,7 +511,7 @@ func (m *Manifest) SetBinding(b *binding.Binding) error {
 	if m.Model.Binding, err = hashed(b.Path); err != nil {
 		return err
 	}
-	if err := m.SetSpec(b.SpecPath()); err != nil {
+	if m.Model.Spec, m.Model.Imports, err = specFiles(b.SpecPath()); err != nil {
 		return err
 	}
 	m.Model.Module = b.Module
@@ -461,22 +520,9 @@ func (m *Manifest) SetBinding(b *binding.Binding) error {
 	return nil
 }
 
-// SetSpec sets the model's spec file and the files it imports, hashed.
-func (m *Manifest) SetSpec(path string) (err error) {
-	m.Model.Spec, m.Model.Imports, err = specFiles(path)
-	return err
-}
-
-// AddConvert sets the rule file OTLP/JSON inputs were converted with,
-// hashed.
-func (m *Manifest) AddConvert(path string) (err error) {
-	m.Model.Convert, err = hashed(path)
-	return err
-}
-
-// AddInput adds the input at path, the steps read from it (recorded
+// addInput adds the input at path, the steps read from it (recorded
 // steps; none for an ITF trace), hashing the file.
-func (m *Manifest) AddInput(path, format string, steps []qtrace.Step) error {
+func (m *Manifest) addInput(path, format string, steps []qtrace.Step) error {
 	f, err := hashed(path)
 	if err != nil {
 		return err
@@ -494,8 +540,8 @@ func (m *Manifest) AddInput(path, format string, steps []qtrace.Step) error {
 	return nil
 }
 
-// AddArtifact adds an artifact of the driver's, hashing its file.
-func (m *Manifest) AddArtifact(name, path string) error {
+// addArtifact adds an artifact of the driver's, hashing its file.
+func (m *Manifest) addArtifact(name, path string) error {
 	f, err := hashed(path)
 	if err != nil {
 		return err
@@ -727,9 +773,9 @@ func (m *Manifest) paths(f func(string) string) {
 	}
 }
 
-// ModuleVersion is the toolkit's version in this binary, from its build
+// toolkitVersion is the toolkit's version in this binary, from its build
 // info (moduleVersion).
-func ModuleVersion() string {
+func toolkitVersion() string {
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "unknown"
@@ -774,9 +820,9 @@ func moduleVersion(bi *debug.BuildInfo) string {
 // Process-wide.
 var quintVersions sync.Map
 
-// QuintVersion is `quint --version` of the binary (default "quint"),
+// quintVersion is `quint --version` of the binary (default "quint"),
 // or "" if it does not run.
-func QuintVersion(bin string) string {
+func quintVersion(bin string) string {
 	if bin == "" {
 		bin = "quint"
 	}

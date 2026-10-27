@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/ddmin"
@@ -144,9 +142,10 @@ func (r *Result) String() string {
 		r.Original, len(r.Set), m, r.Rate, r.Set, r.Reruns, r.Reproduced, r.NotReproduced, r.Undecided, r.Diverged, r.Errors, r.Baseline, r.PerCandidate)
 }
 
-// record is shrink.json, a manifest's artifact: what the shrink did.
+// record is a Result's JSON: what the shrink did.
 type record struct {
 	Original      int    `json:"original"`
+	Set           []int  `json:"set"`
 	Actions       int    `json:"actions"`
 	Keep          string `json:"keep"`
 	Reruns        int    `json:"reruns"`
@@ -162,45 +161,23 @@ type record struct {
 	NotMinimal    string `json:"notMinimal,omitempty"`
 }
 
-// WriteArtifacts writes actions.json (actions, the shrunk sequence, as
-// JSON, or each as Go prints it when they do not marshal) and
-// shrink.json (what the shrink did) into dir, for the minimal run's
-// manifest (validate.Manifest.Artifacts), and returns them named
-// "actions" and "shrink".
-func (r *Result) WriteArtifacts(dir string, actions []any) ([]validate.Artifact, error) {
-	acts, err := json.MarshalIndent(actions, "", "  ")
-	if err != nil {
-		printed := make([]string, len(actions))
-		for i, a := range actions {
-			printed[i] = fmt.Sprintf("%+v", a)
-		}
-		acts, _ = json.MarshalIndent(printed, "", "  ")
-	}
+// MarshalJSON writes what the shrink did, as a manifest's shrink.json
+// artifact holds it (qtest.ShrinkActions, gotogether shrink): the
+// original's length, Set and its length (actions), the Keep's
+// description, the counts, the rates, Minimal and NotMinimal. Steps are
+// not in it: they are the run's step log.
+func (r *Result) MarshalJSON() ([]byte, error) {
 	keep := ""
 	if r.Keep != nil {
 		keep = r.Keep.String()
 	}
-	rec, err := json.MarshalIndent(record{Original: r.Original, Actions: len(actions), Keep: keep, Reruns: r.Reruns, Reproduced: r.Reproduced,
-		NotReproduced: r.NotReproduced, Undecided: r.Undecided, Diverged: r.Diverged, Errors: r.Errors, Baseline: r.Baseline, PerCandidate: r.PerCandidate, Rate: r.Rate,
-		Minimal: r.Minimal, NotMinimal: r.NotMinimal}, "", "  ")
-	if err != nil {
-		return nil, err
+	set := r.Set
+	if set == nil {
+		set = []int{}
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
-	}
-	var arts []validate.Artifact
-	for _, f := range []struct {
-		name string
-		data []byte
-	}{{"actions", acts}, {"shrink", rec}} {
-		p := filepath.Join(dir, f.name+".json")
-		if err := os.WriteFile(p, append(f.data, '\n'), 0o644); err != nil {
-			return nil, err
-		}
-		arts = append(arts, validate.Artifact{Name: f.name, Path: p})
-	}
-	return arts, nil
+	return json.Marshal(record{Original: r.Original, Set: set, Actions: len(r.Set), Keep: keep, Reruns: r.Reruns, Reproduced: r.Reproduced,
+		NotReproduced: r.NotReproduced, Undecided: r.Undecided, Diverged: r.Diverged, Errors: r.Errors, Baseline: r.Baseline, PerCandidate: r.PerCandidate,
+		Rate: r.Rate, Minimal: r.Minimal, NotMinimal: r.NotMinimal})
 }
 
 // shrinker is a Shrink running.
@@ -227,7 +204,7 @@ type shrinker struct {
 // attempt is one rerun's outcome.
 type attempt struct {
 	ran   bool  // it ran and was judged: not diverged, not an error
-	v     Shown // Keep's value of it (Unknown before Keep is known)
+	v     Shown // Keep's value of it (Undecided before Keep is known)
 	steps []qtrace.Step
 	rep   *validate.Report
 }
@@ -282,7 +259,7 @@ func (s *shrinker) once(ctx context.Context, idx []int) attempt {
 		return attempt{}
 	}
 	s.inARow = 0
-	a := attempt{ran: true, v: Unknown, steps: steps, rep: rep}
+	a := attempt{ran: true, v: Undecided, steps: steps, rep: rep}
 	if s.keep != nil {
 		a.v = s.keep.Shows(rep)
 		s.count(a.v)
@@ -295,9 +272,9 @@ func (s *shrinker) once(ctx context.Context, idx []int) attempt {
 // neither reproduced nor not.
 func (s *shrinker) count(v Shown) {
 	switch v {
-	case Yes:
+	case Reproduced:
 		s.reproduced++
-	case No:
+	case NotReproduced:
 		s.notReproduced++
 	default:
 		s.undecided++
@@ -337,11 +314,11 @@ func (s *shrinker) candidate(ctx context.Context, idx []int, n int, found map[st
 			return ddmin.Unknown
 		}
 		a := s.once(ctx, idx)
-		if !a.ran || a.v == Unknown {
+		if !a.ran || a.v == Undecided {
 			continue
 		}
 		ran++
-		if a.v == Yes {
+		if a.v == Reproduced {
 			if len(idx) == 0 {
 				s.fatalf("a rerun of no actions reproduced %s, after reruns of the original did not show it there: "+
 					"state or work the actions leave survives Reset (%s). Make Reset clear it, or build a fresh environment per rerun (Reset nil)", s.keep, s.resetter())
@@ -404,7 +381,7 @@ func (s *shrinker) emptyRerun(ctx context.Context, when string) {
 	if err != nil {
 		s.fatalf("checking a Rerun of no actions (%s): %v", when, err)
 	}
-	if s.keep.Shows(rep) == Yes {
+	if s.keep.Shows(rep) == Reproduced {
 		s.fatalf("a Rerun of no actions (%s) reproduced %s: "+
 			"the failure needs none of the actions (the environment fails alone: shrink nothing), or state the original's reruns left survives "+
 			"Reset (%s): make Reset clear it, or build a fresh environment per rerun (Reset nil)", when, s.keep, s.resetter())
@@ -479,11 +456,11 @@ func (s *shrinker) shrink() *Result {
 		if !keepGiven {
 			s.count(v) // counted now Keep is known
 		}
-		if v == Unknown {
+		if v == Undecided {
 			continue
 		}
 		res.Baseline.Of++
-		if v == Yes {
+		if v == Reproduced {
 			res.Baseline.Reproduced++
 			if res.Steps == nil {
 				res.Steps = a.steps
@@ -531,11 +508,11 @@ func (s *shrinker) shrink() *Result {
 			break
 		}
 		a := s.once(ctx, d.Set)
-		if !a.ran || a.v == Unknown {
+		if !a.ran || a.v == Undecided {
 			continue
 		}
 		res.Rate.Of++
-		if a.v == Yes {
+		if a.v == Reproduced {
 			res.Rate.Reproduced++
 		}
 	}

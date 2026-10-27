@@ -50,15 +50,16 @@ type Options struct {
 	// phase): a chunk's TypeScript backend writes no ITF for a failing
 	// test, so the model's state at the failure is Rust's to report
 	detailBackend string
-	// noEnvBackend: Backend "" is validate's default, not
-	// QUINT_BACKEND's (a replay of a run judged on the default)
-	noEnvBackend bool
+	// NoEnvBackend makes Backend "" validate's default, not
+	// QUINT_BACKEND's: a replay of a run judged on the default
+	// (cli.Replay).
+	NoEnvBackend bool
 }
 
 // envBackend is the backend chosen: Backend, else QUINT_BACKEND's
 // (unless a replay ignores it); "" is validate's default.
 func (opt Options) envBackend() string {
-	if opt.Backend == "" && !opt.noEnvBackend {
+	if opt.Backend == "" && !opt.NoEnvBackend {
 		return os.Getenv("QUINT_BACKEND")
 	}
 	return opt.Backend
@@ -144,6 +145,13 @@ type Result struct {
 	// withins are the bounded responses judgeWithin found not met or not
 	// judged, for Absent
 	withins []obligation
+	// Unfinished, set by a check that judges the finish (a recorded
+	// run's -require-finish, validate/cli), is why a result that
+	// passes is no finished run ("incomplete (no settle)", "no verdict
+	// (ITF trace)"): Reason gives it when nothing failed, and a run's
+	// verdict reads it (a "no verdict" reason has none, any other fails).
+	// OK is the checks' alone and does not read it.
+	Unfinished string
 }
 
 type Failure struct {
@@ -709,7 +717,7 @@ func sanitize(s string) string {
 func (r *Result) Reason() string {
 	switch {
 	case r.OK():
-		return ""
+		return r.Unfinished
 	case r.Conforms == Fail:
 		action := "a step"
 		if f := r.Failure; f != nil && f.Step != nil {

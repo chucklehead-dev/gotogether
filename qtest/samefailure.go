@@ -33,18 +33,14 @@ func SameFailure(r *Run) Expectation {
 func keepExpectation(k qshrink.Keep) Expectation {
 	value := func(rep *validate.Report) tri {
 		switch k.Shows(rep) {
-		case qshrink.Yes:
+		case qshrink.Reproduced:
 			return yes
-		case qshrink.No:
+		case qshrink.NotReproduced:
 			return no
 		}
 		return unknown
 	}
-	e := Expectation{desc: k.String(), check: func(rep *validate.Report) bool { return value(rep) == yes }, tri: value}
-	if w, ok := k.(interface{ Why(*validate.Report) string }); ok {
-		e.why = w.Why
-	}
-	return e
+	return Expectation{desc: k.String(), check: func(rep *validate.Report) bool { return value(rep) == yes }, tri: value, why: k.Why}
 }
 
 // shrinkKeep is an expectation as a shrink's Keep: what a rerun must
@@ -56,9 +52,16 @@ func (k shrinkKeep) String() string { return k.e.String() }
 func (k shrinkKeep) Shows(rep *validate.Report) qshrink.Shown {
 	switch k.e.value(rep) {
 	case yes:
-		return qshrink.Yes
+		return qshrink.Reproduced
 	case no:
-		return qshrink.No
+		return qshrink.NotReproduced
 	}
-	return qshrink.Unknown
+	return qshrink.Undecided
+}
+
+func (k shrinkKeep) Why(rep *validate.Report) string {
+	if k.e.why == nil {
+		return ""
+	}
+	return k.e.why(rep)
 }

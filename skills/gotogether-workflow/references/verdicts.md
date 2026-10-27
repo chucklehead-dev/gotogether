@@ -24,7 +24,7 @@ mutants) ends in one of these verdicts.
 | absent: uncollected | `NAME: uncollected (no verdict)`; a within the trace went past but its watermark does not reach: Reason `no verdict (uncollected steps)`; `issue: warn settle: recorder r's steps are complete only through T` | `qtest.Absent(name, validate.Uncollected)`, `qtest.Undecided(qtest.Violates(w), "uncollected")` | the window ends past the recorders' watermark (`-complete-through`, `qobs.Recorder.CompleteThrough`), or the run recorded no settle and ended first: wait for collection and raise the watermark, or record a settle |
 | absent (a defect) | `NAME: absent (a defect)`, with the within's or eventual val's `FAIL`, or a call never completed | `qtest.Absent(name, validate.Defect)` with `Violates`, `Pending` | the recorders are complete past where the step was due (a settle, a watermark past the window, the trace going on past it) and lost nothing: the system did not take the step |
 | eventual vals not judged | `issue: info eventually: eventual vals not judged (V)` | `qtest.Settles()` states whether runs settled | the trace's last record is no settle (no `Sim.Settle`, a step after it, its error dropped) or another recorder recorded after it (`issue: warn settle`): an exploration claiming `Conforms()` of such runs fails, unless it also claims whether they settle |
-| incomplete (a prefix) | `validate -require-settle` (or `complete: true`): `the run: incomplete (no settle)`, `actor A: incomplete (pending calls)`, exit 1; `no verdict (lost tail)` and `no verdict (ITF trace)`, exit 1 too | `qtest.Finishes()` | the run passes and is no finished one: it never settled, so its eventual vals were not judged, or a call was left pending (one `-resolve-pending` placed included). A lost tail may hold what is missing (no verdict: check a log that kept its steps); an ITF trace records no settle (see "A prefix vs a finished run") |
+| incomplete (a prefix) | `validate -require-finish` (or `complete: true`): `the run: incomplete (no settle)`, `actor A: incomplete (pending calls)`, exit 1; `no verdict (lost tail)` and `no verdict (ITF trace)`, exit 1 too | `qtest.Finishes()` | the run passes and is no finished one: it never settled, so its eventual vals were not judged, or a call was left pending (one `-resolve-pending` placed included). A lost tail may hold what is missing (no verdict: check a log that kept its steps); an ITF trace records no settle (see "A prefix vs a finished run") |
 | real time bounds nothing | `issue: warn linearize: ... real time bounds none of its N steps` | none: record calls with `qobs.Invoke` and `Call.Done` | no step has an invocation time, so every order of its threads is allowed: sequential consistency, not linearizability |
 | a tool failure | an error, exit 2, no verdict | none: fix the binding or model | a template, a type, a missing field, or quint itself |
 
@@ -54,7 +54,7 @@ session, an end-to-end test). Say which:
   `the run recorded no settle last`, `eventually V is false where actor A
   settled: the run stopped short of the journey's end`, `call c (process p)
   was invoked and never completed`, `the binding states no eventual val`;
-- the CLI says it with `gotogether validate -require-settle`, or the
+- the CLI says it with `gotogether validate -require-finish`, or the
   binding's `complete: true`: one judgment with `Finishes()`
   (`validate.Report.Finished`), so the two agree. A passing run that
   never settled, or left a call pending, exits 1 as `incomplete (...)`,
@@ -64,6 +64,15 @@ session, an end-to-end test). Say which:
   input as `no verdict (ITF trace)`, never a pass. A binding with no
   eventual val is refused (exit 2). `complete` changes only the CLI's
   exit; a test states `Finishes()` itself.
+
+The three claims of a run's end, side by side: each is a part of the
+next.
+
+| Claim | States | The CLI |
+|---|---|---|
+| `qtest.Settles()` | the system settled: a settle recorded last (`Sim.Settle`, `qobs.Settled`) | (none alone) |
+| `qtest.Completes()` | every call recorded with `qobs.Invoke` completed | (none alone) |
+| `qtest.Finishes()` | it conforms, `Settles()`, every eventual val holds at the settle, `Completes()` | `validate -require-finish`, or `complete: true` |
 
 ## Over many runs: claims
 
@@ -75,8 +84,8 @@ together (`Exploration.Expect`):
 | an expectation alone, e.g. `qtest.Rejects("ship")` | some run shows it (the run is logged) |
 | `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle |
 | `qtest.Pending("action")` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
-| `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
 | `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
+| `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
 | `qtest.Finishes()` | every run is a finished one: it conforms, settled, every eventual val was judged and holds (a binding with none finishes no run), and every invoked call completed; a run that may have finished in a lost tail has no verdict. A miss names the part missing and the fix |
 | `qtest.Some(a, b)` | one run shows both |
 | `qtest.All(a)` | every run shows it |

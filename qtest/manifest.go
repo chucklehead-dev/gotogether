@@ -26,7 +26,7 @@ func Artifacts(a ...validate.Artifact) Option {
 	return option(optArtifacts, func(c *settings) { c.artifacts = append(c.artifacts, a...) })
 }
 
-// Manifest is the run's manifest (validate.Manifest, gotogether.run/1):
+// Manifest is the run's manifest (validate.Manifest, gotogether.run/2):
 // the tools, the instance it was checked against (the binding and spec
 // hashed, the constants and invariants), its step log hashed with its
 // losses, the verdict and failing step, and the driver and artifacts its
@@ -54,19 +54,12 @@ func (r *Run) manifest(log string) (*validate.Manifest, error) {
 	if r.Report != nil {
 		results = r.Report.Actors
 	}
-	m, err := r.checker.Manifest(results, r.search)
+	m, err := validate.NewManifest(validate.RunRecord{Options: r.checker.Options, Binding: r.checker.Binding, Search: r.search, Results: results,
+		Inputs: []validate.RunInput{{Path: log, Format: "steps", Steps: r.Recorded}}, Artifacts: r.artifacts})
 	if err != nil {
 		return nil, err
 	}
 	m.Name, m.Package, m.Import, m.Driver = r.name, pkgDir(), importPath(), r.driver
-	if err := m.AddInput(log, "steps", r.Recorded); err != nil {
-		return nil, err
-	}
-	for _, a := range r.artifacts {
-		if err := m.AddArtifact(a.Name, a.Path); err != nil {
-			return nil, err
-		}
-	}
 	return m, nil
 }
 

@@ -417,7 +417,7 @@ func TestGapFailureWins(t *testing.T) {
 			t.Errorf("%s: %q, want violates underLimit:\n%s", x.name, got, rep.Summary())
 		}
 		// the failing step is underLimit's (seq 2), not fewOps's after it
-		if v := VerdictOf(rep.Actors, nil); v.Verdict != Fail || v.Failing == nil || v.Failing.Recorder != "r" || v.Failing.Seq != 2 {
+		if v := rep.Verdict(); v.Verdict != Fail || v.Failing == nil || v.Failing.Recorder != "r" || v.Failing.Seq != 2 {
 			t.Errorf("%s: run verdict %v (%s) at %+v, want fail at seq 2 of r", x.name, v.Verdict, v.Reason, v.Failing)
 		}
 		if f := rep.Finished(); f.Verdict != Fail || f.Reason != "violates underLimit" {
@@ -543,7 +543,7 @@ func TestGapFailures(t *testing.T) {
 			if f := rep.Finished(); f.Verdict != x.finish {
 				t.Errorf("%s (%s): finished %v (%s), want %v:\n%s", x.name, how, f.Verdict, f.Reason, x.finish, rep.Summary())
 			}
-			if v := VerdictOf(rep.Actors, nil); x.reason == dropped && v.Verdict != NotEvaluated {
+			if v := rep.Verdict(); x.reason == dropped && v.Verdict != NotEvaluated {
 				t.Errorf("%s (%s): run verdict %v, want no verdict", x.name, how, v.Verdict)
 			}
 		}

@@ -13,16 +13,17 @@ import (
 	"github.com/chucklehead-dev/gotogether/input"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/cli"
 )
 
 // validateRun is one validate command: what its flags ask for (a
-// validate.Command), and how its report is printed (a replay's too).
+// cli.Check), and how its report is printed (a replay's too).
 type validateRun struct {
 	binding, dir, backend, quint, format string
 	spec, module, instance               string // an ITF input's
 	conv, history                        string
 	novars, verbose, withITF             bool
-	requireSettle                        bool
+	requireFinish                        bool
 	// invariants, if set, override the binding's (-invariants)
 	invariants []string
 	search     validate.SearchOptions
@@ -72,7 +73,8 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.BoolVar(&v.search.ResolvePending, "resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
 	fset.StringVar(&v.history, "history", "", "write the history drawn as SVG to this file (lanes of calls, the order checked numbered, the failing step red, each call's ref on hover)")
 	fset.StringVar(&v.lostPrefix, "lost-prefix", "", "comma-separated recorders whose logs lost their first steps, which the log cannot show (no seqs): judged as a lost prefix (qtrace.MarkLost)")
-	fset.BoolVar(&v.requireSettle, "require-settle", false, "exit 1 unless the run is finished, as qtest.Finishes judges it: it settled (its trace's last record a settle), every eventual val held there, and no call was left pending (one -resolve-pending places included: its caller never got the answer); a lost tail is no verdict (exit 1). The binding needs an eventual val, the journey's end; the default for a binding with complete: true. An ITF trace records no settle, so it cannot be judged finished (exit 1)")
+	settle := fset.Bool("require-settle", false, "deprecated: -require-finish (the run settled is one part of what it checks)")
+	fset.BoolVar(&v.requireFinish, "require-finish", false, "exit 1 unless the run is finished, as qtest.Finishes judges it: it settled (its trace's last record a settle), every eventual val held there, and no call was left pending (one -resolve-pending places included: its caller never got the answer); a lost tail is no verdict (exit 1). The binding needs an eventual val, the journey's end; the default for a binding with complete: true. An ITF trace records no settle, so it cannot be judged finished (exit 1)")
 	fset.StringVar(&v.lostSuffix, "lost-suffix", "", "comma-separated recorders whose logs lost their last steps, which the log cannot show (a killed process's buffer): their tails judged lost after their last steps (qtrace.MarkLost)")
 	fset.Var(&v.completeThrough, "complete-through", "recorder=T: the recorder's steps recorded at or before T (RFC3339, or Unix nanoseconds) are all in the input, as an external collector knows what it has ingested (a ClickHouse poll, a log shipper's acknowledgement); *=T states it of every recorder. Repeatable. "+
 		"A bounded response due by T is then judged though the run never settled (absent: a FAIL), one due after it is uncollected (no verdict), and a settle it does not reach settles nothing. A log with no watermark is taken whole (qtrace.MarkComplete)")
@@ -83,6 +85,10 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.IntVar(&v.mutateLimit, "mutate-limit", 0, "with -mutate-steps: at most this many mutants of each op, spread over the log (default: every one)")
 	replay := fset.String("replay", "", "judge a run again from its manifest (validate -manifest's, or a test's under GOTOGETHER_EVIDENCE), refusing an input whose hash changed; exit as validate does, and 1 if the verdict is not the manifest's")
 	fset.Parse(args)
+	if *settle {
+		fmt.Fprintln(out, "warning: -require-settle is deprecated: it checks the run finished (qtest.Finishes), of which settling is one part; say -require-finish")
+		v.requireFinish = true
+	}
 	if *noITF {
 		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
 	}
@@ -119,7 +125,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 var replayFlags = map[string]bool{"replay": true, "dir": true, "quint": true, "v": true, "backend": true, "manifest": true, "history": true, "itf": true}
 
 // replayManifest judges the run of the manifest at path again
-// (validate.Replay): its files unchanged (refused otherwise, naming
+// (cli.Replay): its files unchanged (refused otherwise, naming
 // each), as it was judged, and reports whether the verdict is the
 // manifest's.
 func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error) {
@@ -139,7 +145,7 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 	}
 	get := func(name string) string { return fset.Lookup(name).Value.String() }
 	v := validateRun{out: out, verbose: get("v") == "true", history: get("history"), manifest: get("manifest"), withITF: get("itf") == "true"}
-	r, err := validate.Replay(context.Background(), m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
+	r, err := cli.Replay(context.Background(), m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
 	if r == nil && err != nil {
 		return 2, fmt.Errorf("validate -replay %s: %w", path, err)
 	}
@@ -149,30 +155,34 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 	for _, n := range r.Notes {
 		fmt.Fprintln(out, "note:", n)
 	}
-	code, err := v.report(r.Judged, err)
+	code, err := v.report(r.Got, err)
 	if err != nil {
 		return code, err
 	}
 	if r.Same {
-		if r.Note != "" {
-			fmt.Fprintln(out, "note:", r.Note)
+		if r.Differs != "" {
+			fmt.Fprintln(out, "note:", r.Differs)
 		}
-		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", r.Verdict)
+		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", r.Got.Verdict)
 		return code, nil
 	}
-	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s\n", r.Want, r.Verdict, r.Note)
+	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s\n", r.Want, r.Got.Verdict, r.Differs)
 	return 1, nil
 }
 
-// run judges the inputs (validate.Command), prints the report and the
+// run judges the inputs (cli.Check), prints the report and the
 // result line, and writes the manifest if asked: exit status 0 if every
 // actor passes, 1 if not.
 func (v *validateRun) run() (int, error) {
-	cmd := validate.Command{Binding: v.binding, Files: v.files, Format: v.format, Convert: v.conv, Spec: v.spec, Module: v.module, Instance: v.instance,
+	format := input.Format(v.format)
+	if v.format == "auto" {
+		format = input.Unknown
+	}
+	chk := cli.Check{Binding: v.binding, Files: v.files, Format: format, Convert: v.conv, Spec: v.spec, Module: v.module, Instance: v.instance,
 		NoVars: v.novars, Invariants: v.invariants, Search: v.search, LostPrefix: fields(v.lostPrefix), LostSuffix: fields(v.lostSuffix),
-		CompleteThrough: v.completeThrough, RequireSettle: v.requireSettle, RunInfo: v.runInfo,
+		CompleteThrough: v.completeThrough, RequireFinish: v.requireFinish, RunInfo: v.runInfo,
 		Options: validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}}
-	j, err := cmd.Judge(context.Background())
+	j, err := chk.Judge(context.Background())
 	return v.report(j, err)
 }
 
@@ -187,13 +197,13 @@ func (v *validateRun) run() (int, error) {
 // removed when the run passes (unless -itf asked for its ITF): one was
 // left behind by every run, tool errors included. A failing run's, or a
 // tool error's after it was made, is kept: the report names it.
-func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error) {
+func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 	if j == nil {
 		return 2, jerr
 	}
 	defer func() {
-		if j.Temp && code == 0 && !v.withITF {
-			os.RemoveAll(j.Dir)
+		if code == 0 && !v.withITF {
+			j.Close() // a temporary directory; -dir's is kept
 		}
 	}()
 	for _, in := range j.Inputs {
@@ -211,9 +221,9 @@ func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error)
 		return 2, jerr
 	}
 	switch {
-	case j.Temp && v.withITF:
+	case j.Temporary() && v.withITF:
 		fmt.Fprintf(v.out, "artifacts (generated modules, every run's ITF): %s (kept: -itf)\n", j.Dir)
-	case j.Temp:
+	case j.Temporary():
 		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s (removed if the run passes; -dir keeps them)\n", j.Dir)
 	default:
 		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", j.Dir)
@@ -236,7 +246,7 @@ func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error)
 			if f.Actor != "" {
 				who = "actor " + f.Actor
 			}
-			fmt.Fprintf(v.out, "%s: %s (%s): %s\n", who, f.Reason, j.FinishWhy, f.Why)
+			fmt.Fprintf(v.out, "%s: %s (%s): %s\n", who, f.Reason, finishWhy(j), f.Why)
 		}
 		if v.mutateSteps && jerr == nil {
 			if err := v.mutate(j.Checker, j.Steps, rep.OK() && j.Unfinished == nil); err != nil {
@@ -259,7 +269,7 @@ func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error)
 			fmt.Fprintln(v.out, r.Output)
 		}
 		if j.Finish && r.OK() {
-			fmt.Fprintf(v.out, "%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, j.FinishWhy)
+			fmt.Fprintf(v.out, "%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, finishWhy(j))
 		}
 	}
 	if jerr != nil {
@@ -289,8 +299,16 @@ func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error)
 	if j.Verdict.Verdict == validate.NotEvaluated {
 		word = "NO VERDICT"
 	}
-	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, failSummary(j.Results, j.Incomplete))
+	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, failSummary(j.Results))
 	return 1, nil
+}
+
+// finishWhy is why the finish check was judged, as the report says it.
+func finishWhy(j *cli.Judged) string {
+	if j.FinishByBinding {
+		return "the binding is complete"
+	}
+	return "-require-finish"
 }
 
 // mutate judges and prints the observation mutants of steps, after the

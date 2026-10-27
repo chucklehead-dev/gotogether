@@ -42,7 +42,7 @@ snapshots. A request no driver action sent is refused too.
 
 A click whose outcome the trace never shows stays an invocation:
 `qtrace.Reconstruct` keeps it in `Trace.Pending`, and `qtest.Finishes()`
-(or `gotogether validate -require-settle`, or the binding's
+(or `gotogether validate -require-finish`, or the binding's
 `complete: true`) fails the run as `incomplete (pending calls)`. A
 recorded click never stands in for an observed success: an adapter that
 writes the click as the step, or completes it with the next change of
@@ -152,20 +152,23 @@ run.json` warns if one changed. In a test, `qtest.Driver` and
 `GOTOGETHER_EVIDENCE`.
 
 A Go program (a test that checks a recorded journey, a CI job's own
-tool) does the same without the CLI: `validate.Command` is the check
-`gotogether validate` makes (its fields are the flags), its `Judged`
-the report and `Manifest()` the manifest, and `validate.Replay` is
-`validate -replay` (webjobs' `replays`):
+tool) does the same without the CLI: package `validate/cli` is it.
+`cli.Check` is the check `gotogether validate` makes (its fields are the
+flags), its `Judged` the report (`Close` removes a temporary `Dir`) and
+`Manifest()` the manifest, and `cli.Replay` is `validate -replay`
+(webjobs' `replays`). A package of its own: it reads OTLP/JSON, and
+`validate`, which every test links, does not bring OpenTelemetry's SDK:
 
 ```go
-j, err := validate.Command{Binding: "webjobs.binding.yaml", Files: []string{"server.jsonl", "page.jsonl"},
+j, err := cli.Check{Binding: "webjobs.binding.yaml", Files: []string{"server.jsonl", "page.jsonl"},
 	RunInfo: "run-info.json"}.Judge(ctx)
 if err != nil { /* a tool error: an unreadable input, quint failing */ }
+defer j.Close()
 m, _ := j.Manifest() // j.OK, j.Verdict: the run's verdict, as the CLI's result line
 _ = m.Write("run.json")
 read, _ := validate.ReadManifest("run.json")
-r, err := validate.Replay(ctx, read, validate.Options{}) // refuses a changed input (err)
-_ = r.Same                                               // the manifest's verdict reproduced; r.Note says where not
+r, err := cli.Replay(ctx, read, validate.Options{}) // refuses a changed input (err)
+_ = r.Same                                          // r.Got.Verdict is r.Want; r.Differs says where not
 ```
 
 ## Shrinking a run you did not drive
@@ -255,7 +258,7 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   `Reproduced`, `NotReproduced`, `Undecided`, `Diverged`, `Errors`, the
   original's `Baseline` rate and the minimal sequence's `Rate` ("8 of
   10"). Under `GOTOGETHER_EVIDENCE` the minimal run writes its manifest
-  (`gotogether.run/1`, driver `qtest.ShrinkActions` unless
+  (`gotogether.run/2`, driver `qtest.ShrinkActions` unless
   `qtest.Driver` is among `Opts`), with `actions.json` (the shrunk
   actions) and `shrink.json` (the counts) as hashed artifacts, each
   shrink's in a directory of its own: `validate -replay` judges it

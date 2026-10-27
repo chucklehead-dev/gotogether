@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/shrinkfiles"
 	"github.com/chucklehead-dev/gotogether/qshrink"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -156,7 +157,7 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	if c.driver == nil {
 		opts = append(opts, Driver(validate.Driver{Name: "qtest.ShrinkActions", Args: []string{fmt.Sprintf("actions=%d of %d", len(out.Actions), out.Original)}}))
 	}
-	if arts, err := out.writeArtifacts(t, c.Dir); err != nil {
+	if arts, err := out.writeArtifacts(t, c.Dir, res); err != nil {
 		t.Logf("gotogether: ShrinkActions: artifacts: %v", err)
 	} else {
 		opts = append(opts, Artifacts(arts...))
@@ -203,22 +204,19 @@ func (s *ShrunkActions[A]) String() string {
 		s.Original, len(s.Actions), m, s.Rate, s.Actions, s.Reruns, s.Reproduced, s.NotReproduced, s.Undecided, s.Diverged, s.Errors, s.Baseline, s.PerCandidate)
 }
 
-// writeArtifacts writes actions.json (the shrunk actions, as JSON, or
-// each as Go prints it when they do not marshal) and shrink.json into
-// dir/shrink<N>, N counting t's shrinks, for the minimal run's manifest
-// (qshrink.Result.WriteArtifacts): two shrinks in one directory
-// (GOTOGETHER_KEEP's is the test's) would overwrite the files an earlier
-// run's manifest hashed.
-func (s *ShrunkActions[A]) writeArtifacts(t testing.TB, dir string) ([]validate.Artifact, error) {
+// writeArtifacts writes actions.json and shrink.json (shrinkfiles.Write)
+// into dir/shrink<N>, N counting t's shrinks, for the minimal run's
+// manifest: two shrinks in one directory (GOTOGETHER_KEEP's is the
+// test's) would overwrite the files an earlier run's manifest hashed.
+func (s *ShrunkActions[A]) writeArtifacts(t testing.TB, dir string, res *qshrink.Result) ([]validate.Artifact, error) {
 	dir = filepath.Join(dir, fmt.Sprintf("shrink%d", nextShrink(t)))
-	res := &qshrink.Result{Original: s.Original, Reruns: s.Reruns, Reproduced: s.Reproduced, NotReproduced: s.NotReproduced, Undecided: s.Undecided,
-		Diverged: s.Diverged, Errors: s.Errors, Baseline: s.Baseline, PerCandidate: s.PerCandidate, Rate: s.Rate, Minimal: s.Minimal, NotMinimal: s.NotMinimal,
-		Keep: shrinkKeep{s.keep}}
+	r := *res
+	r.Keep = shrinkKeep{s.keep}
 	acts := make([]any, len(s.Actions))
 	for i, a := range s.Actions {
 		acts[i] = a
 	}
-	return res.WriteArtifacts(dir, acts)
+	return shrinkfiles.Write(dir, &r, acts)
 }
 
 // shrinks counts each test's shrinks, for their artifacts' directories.

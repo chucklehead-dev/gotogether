@@ -45,14 +45,9 @@ func bundle(t *testing.T) (dir string, m *Manifest) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m = NewManifest(Options{Quint: "no-such-quint"})
-	if err := m.SetBinding(b); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.AddInput(filepath.Join(dir, "run.jsonl"), "steps", steps); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.AddArtifact("screenshot", filepath.Join(dir, "shot.webp")); err != nil {
+	m, err = NewManifest(RunRecord{Options: Options{Quint: "no-such-quint"}, Binding: b, Inputs: []RunInput{{Path: filepath.Join(dir, "run.jsonl"), Format: "steps", Steps: steps}},
+		Artifacts: []Artifact{{Name: "screenshot", Path: filepath.Join(dir, "shot.webp")}}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	m.Driver = &Driver{Name: "bombadil", Seed: "42", Args: []string{"--headless"}}
@@ -99,7 +94,7 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 	other := filepath.Join(moved, "evidence.json")
 	os.WriteFile(other, []byte(`{"format": "gotogether.evidence/2", "runs": 1}`), 0o644)
-	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/1"`) || IsManifest(other) {
+	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/2"`) || IsManifest(other) {
 		t.Errorf("another format: %v", err)
 	}
 }
@@ -145,13 +140,13 @@ func TestManifestVerifyRefusesChanges(t *testing.T) {
 // A run's verdict is its actors': a failure decides, then no verdict; an
 // actor that passes but is incomplete fails with why; two verdicts are
 // the same at the same failing step, whatever its ref.
-func TestVerdictOf(t *testing.T) {
+func TestRunVerdict(t *testing.T) {
 	t.Parallel()
 	step := &qtrace.Step{Action: "deposit", Recorder: "r", Seq: 2, Ref: "trace.jsonl:2"}
 	pass := &Result{Actor: "a", Conforms: Pass}
 	fail := &Result{Actor: "b", Conforms: Fail, Failure: &Failure{Kind: "state", Step: step}}
 	none := &Result{Actor: "c", Conforms: NotEvaluated, noVerdict: "lost steps"}
-	v := VerdictOf([]*Result{pass, none, fail}, nil)
+	v := runVerdictOf([]*Result{pass, none, fail})
 	if v.Verdict != Fail || v.Reason != "mismatch after deposit" || v.Failing == nil || v.Failing.Actor != "b" || v.Failing.Ref != "trace.jsonl:2" || len(v.Actors) != 3 || v.Actors[1].Verdict != NotEvaluated {
 		t.Errorf("%+v", v)
 	}
@@ -163,22 +158,25 @@ func TestVerdictOf(t *testing.T) {
 	// verdict (dropped steps))"), however the no verdict failed
 	gapped := &Result{Actor: "c", Conforms: NotEvaluated, noVerdict: "dropped steps",
 		Failure: &Failure{Kind: "state", Step: &qtrace.Step{Action: "withdraw", Recorder: "r", Seq: 1}}}
-	if v := VerdictOf([]*Result{gapped, fail}, nil); v.Verdict != Fail || v.Reason != "mismatch after deposit" || v.Failing == nil || v.Failing.Actor != "b" {
+	if v := runVerdictOf([]*Result{gapped, fail}); v.Verdict != Fail || v.Reason != "mismatch after deposit" || v.Failing == nil || v.Failing.Actor != "b" {
 		t.Errorf("a defect after a no verdict: %v", v)
 	}
-	if v := VerdictOf([]*Result{gapped, pass}, nil); v.Verdict != NotEvaluated || v.Reason != "no verdict (dropped steps)" || v.Failing == nil || v.Failing.Actor != "c" {
+	if v := runVerdictOf([]*Result{gapped, pass}); v.Verdict != NotEvaluated || v.Reason != "no verdict (dropped steps)" || v.Failing == nil || v.Failing.Actor != "c" {
 		t.Errorf("no verdict alone: %v", v)
 	}
-	if v := VerdictOf([]*Result{pass, none}, nil); v.Verdict != NotEvaluated || v.Failing != nil {
+	if v := runVerdictOf([]*Result{pass, none}); v.Verdict != NotEvaluated || v.Failing != nil {
 		t.Errorf("no verdict: %+v", v)
 	}
-	if v := VerdictOf([]*Result{pass}, map[*Result]string{pass: "incomplete (no settle)"}); v.Verdict != Fail || v.Reason != "incomplete (no settle)" {
+	if v := runVerdictOf([]*Result{{Actor: "a", Conforms: Pass, Unfinished: "incomplete (no settle)"}}); v.Verdict != Fail || v.Reason != "incomplete (no settle)" {
 		t.Errorf("incomplete: %+v", v)
 	}
-	if v := VerdictOf(nil, nil); v.Verdict != NotEvaluated {
+	if v := runVerdictOf([]*Result{{Actor: "a", Conforms: Pass, Unfinished: "no verdict (ITF trace)"}}); v.Verdict != NotEvaluated || v.Reason != "no verdict (ITF trace)" {
+		t.Errorf("unfinished, no verdict: %+v", v)
+	}
+	if v := runVerdictOf(nil); v.Verdict != NotEvaluated {
 		t.Errorf("nothing: %+v", v)
 	}
-	w := VerdictOf([]*Result{pass, none, fail}, nil)
+	w := runVerdictOf([]*Result{pass, none, fail})
 	w.Failing.Ref = "another run's line"
 	if same, note := v.Same(w); !same || note != "" {
 		t.Errorf("a ref made another verdict: %v %q", same, note)
@@ -196,7 +194,7 @@ func TestVerdictOf(t *testing.T) {
 	if same, _ := v.Same(w); same {
 		t.Error("a rejection is the same verdict as a mismatch")
 	}
-	w = VerdictOf([]*Result{pass, none, fail}, nil)
+	w = runVerdictOf([]*Result{pass, none, fail})
 	w.Failing.Seq = 3
 	if same, _ := v.Same(w); same {
 		t.Error("another failing step is the same verdict")
@@ -309,11 +307,8 @@ func layoutManifest(t *testing.T, dir string) *Manifest {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := NewManifest(Options{Quint: "no-such-quint"})
-	if err := m.SetBinding(b); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.AddInput(filepath.Join(dir, "run", "steps.jsonl"), "steps", nil); err != nil {
+	m, err := NewManifest(RunRecord{Options: Options{Quint: "no-such-quint"}, Binding: b, Inputs: []RunInput{{Path: filepath.Join(dir, "run", "steps.jsonl"), Format: "steps"}}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	return m
@@ -381,7 +376,7 @@ func TestManifestBundle(t *testing.T) {
 	a := t.TempDir()
 	m := layoutManifest(t, a)
 	write(t, a, map[string]string{"shot.webp": "pixels"})
-	if err := m.AddArtifact("screenshot", filepath.Join(a, "shot.webp")); err != nil {
+	if err := m.addArtifact("screenshot", filepath.Join(a, "shot.webp")); err != nil {
 		t.Fatal(err)
 	}
 	out := filepath.Join(t.TempDir(), "ev")

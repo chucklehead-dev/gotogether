@@ -115,7 +115,7 @@ Then claim `qtest.Finishes()` (conforms, settled, every eventual val
 judged and true, every invoked call completed), not `Conforms()` alone,
 and record `qobs.Settled` only once the driver's calls are answered and
 the collector drained. For the CLI, `gotogether validate
--require-settle`, or `complete: true` in the binding, makes the same
+-require-finish`, or `complete: true` in the binding, makes the same
 judgment (a run that never settled, or left a call pending, fails); both
 need such a val, and refuse a binding without one.
 

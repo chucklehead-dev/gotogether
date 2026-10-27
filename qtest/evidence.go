@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/evidence"
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -69,36 +70,29 @@ func (e *Evidence) WriteJSON(path string) error {
 }
 
 // EvidenceFormat is the format WriteJSON writes and ReadEvidence reads.
-// Bump it when a field's name or meaning changes (qenv.Coverage's and
+// Bumped when a field's name or meaning changes (qenv.Coverage's and
 // qcover.Summary's, which it embeds, too), so old files are refused, not
 // misread.
-const EvidenceFormat = "gotogether.evidence/2" // 2: qenv.Coverage's keys in lower case, Package
+const EvidenceFormat = evidence.Format
 
 // Evidence roles (Evidence.Role).
 const (
-	RoleFaithful = "faithful"
-	RoleMutant   = "mutant"
-	RoleReplay   = "replay"
+	RoleFaithful = evidence.RoleFaithful
+	RoleMutant   = evidence.RoleMutant
+	RoleReplay   = evidence.RoleReplay
 	// RoleExternal is a run gotogether did not drive, as gotogether
 	// evidence lists its manifest (validate.Manifest): Validate's,
 	// Record's, validate -manifest's. Not counted in what the suite tried.
-	RoleExternal = "external"
+	RoleExternal = evidence.RoleExternal
 )
 
 // ReadEvidence reads an Evidence written by WriteJSON (an exploration's,
 // under GOTOGETHER_EVIDENCE or GOTOGETHER_KEEP). A file of another format,
 // or none (written before the format was), is refused with the fix.
 func ReadEvidence(path string) (*Evidence, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
 	var e Evidence
-	if err := json.Unmarshal(b, &e); err != nil {
-		return nil, fmt.Errorf("%s: %w (want the JSON of a qtest.Evidence)", path, err)
-	}
-	if e.Format != EvidenceFormat {
-		return nil, fmt.Errorf("%s: evidence of format %q, not %q: run the tests again to write it anew", path, e.Format, EvidenceFormat)
+	if err := evidence.Decode(path, &e); err != nil {
+		return nil, err
 	}
 	return &e, nil
 }
@@ -106,44 +100,15 @@ func ReadEvidence(path string) (*Evidence, error) {
 // IsEvidence reports whether the JSON file at path is evidence of any
 // format version: what a tool walking a directory reads, and skips the
 // rest (ITF traces, corpus entries, summaries).
-func IsEvidence(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	// the format is WriteJSON's first key: read it alone, not a whole ITF
-	// trace beside it
-	d := json.NewDecoder(f)
-	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
-		return false
-	}
-	key, err := d.Token()
-	if err != nil || key != "format" {
-		return false
-	}
-	var format string
-	return d.Decode(&format) == nil && strings.HasPrefix(format, "gotogether.evidence/")
-}
+func IsEvidence(path string) bool { return evidence.Is(path) }
 
 // ManifestEvidence is a run's manifest as evidence (RoleExternal): one
 // run, its verdict, its test (or the manifest's name) and package, so
 // gotogether evidence lists it, and -expect finds the check that wrote
 // it.
 func ManifestEvidence(m *validate.Manifest) *Evidence {
-	e := &Evidence{Format: EvidenceFormat, Role: RoleExternal, Package: m.Package, Import: m.Import, Test: m.Name, Runs: 1, FailingBy: map[string]int{}}
-	if m.Model.Spec != nil {
-		e.Spec = m.Model.Spec.Path + ":" + m.Model.Module
-	}
-	switch r := m.Verdict.Reason; {
-	case m.Verdict.Verdict == validate.Pass:
-		e.Conform = 1
-	case m.Verdict.Verdict == validate.NotEvaluated && !strings.HasPrefix(r, "no verdict"):
-		e.FailingBy["no verdict ("+r+")"]++ // no verdict, as an exploration's run of none counts
-	default:
-		e.FailingBy[r]++
-	}
-	return e
+	v := evidence.OfManifest(m)
+	return &Evidence{Format: v.Format, Role: v.Role, Package: v.Package, Import: v.Import, Test: v.Test, Spec: v.Spec, Runs: v.Runs, Conform: v.Conform, FailingBy: v.FailingBy}
 }
 
 // Evidence is the exploration's report.

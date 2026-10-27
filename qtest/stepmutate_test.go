@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // bankLog is a small bank's log on one recorder: two deposits and a
@@ -191,7 +192,7 @@ func TestMutateStepsRetimeWithin(t *testing.T) {
 // (validate's TestStepFateMalformed judges the fates).
 func TestStepMutationScore(t *testing.T) {
 	t.Parallel()
-	rep := &StepMutationReport{Mutants: []StepMutation{{Fate: FateKilled}, {Fate: FateMalformed}, {Fate: FateSurvived}}}
+	rep := &StepMutationReport{StepMutants: &validate.StepMutants{Mutants: []StepMutation{{Fate: FateKilled}, {Fate: FateMalformed}, {Fate: FateSurvived}}}}
 	if rep.Score() != 0.5 || len(rep.Malformed()) != 1 {
 		t.Errorf("score %v, %d malformed", rep.Score(), len(rep.Malformed()))
 	}

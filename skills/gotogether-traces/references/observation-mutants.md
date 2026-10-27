@@ -23,8 +23,11 @@ t.Log(rep) // the table by op, and every survivor
 
 From a file: `gotogether validate -binding b.yaml -mutate-steps
 [-mutate-ops drop,corrupt] [-mutate-limit 20] run.jsonl` prints the same
-table after a pass. In code, `qtest.JudgeStepMutants(checker, steps,
-search)`; the mutants alone, `qtrace.Mutations(steps)`.
+table after a pass. Outside a test, `checker.MutateSteps(ctx, steps,
+search, nil)` (a `*validate.StepMutants`, the same table); the mutants
+alone, `qtrace.Mutations(steps)`. A corruption changes a number, a bool,
+a string, a list (shortened, grown) and a map (a key dropped); a field
+of no such kind is only removed, and the table names those.
 
 ## The ops
 

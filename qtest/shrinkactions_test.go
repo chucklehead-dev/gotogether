@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -187,13 +188,25 @@ func TestShrinkArtifactsPerShrink(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	var first string
-	for _, acts := range [][]string{{"b", "d"}, {"a", "c", "e"}} {
-		arts, err := (&ShrunkActions[string]{Actions: acts, Original: 5}).writeArtifacts(t, dir)
+	for _, c := range []struct {
+		acts []string
+		set  []int
+	}{{[]string{"b", "d"}, []int{1, 3}}, {[]string{"a", "c", "e"}, []int{0, 2, 4}}} {
+		arts, err := (&ShrunkActions[string]{Actions: c.acts, Original: 5}).writeArtifacts(t, dir, &qshrink.Result{Set: c.set, Original: 5})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if first == "" {
 			first = arts[0].Path
+		}
+		// shrink.json says the set and its length, as actions.json has it
+		var rec struct {
+			Set     []int
+			Actions int
+		}
+		data, _ := os.ReadFile(arts[1].Path)
+		if err := json.Unmarshal(data, &rec); err != nil || !slices.Equal(rec.Set, c.set) || rec.Actions != len(c.acts) {
+			t.Errorf("shrink.json: %s (%v)", data, err)
 		}
 	}
 	if data, err := os.ReadFile(first); err != nil || strings.Join(strings.Fields(string(data)), "") != `["b","d"]` {
