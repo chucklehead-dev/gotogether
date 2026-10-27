@@ -509,6 +509,14 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 			return 0, false // the checkpoint moved: another poller's
 		}
 		pl.pause(ctx)
+		if ctx.Err() != nil {
+			// the node stops: its backoff returns at once now, and a store
+			// failing alike (one answering an ended context with a transient
+			// error, a killed tier node's) would be retried in a spin. Not
+			// committed, as far as this poller knows: the next node reads
+			// the checkpoint again
+			return 0, false
+		}
 		err0 := err
 		// a commit of unknown outcome may have moved the checkpoint: the
 		// next Append's compare-and-set tells
