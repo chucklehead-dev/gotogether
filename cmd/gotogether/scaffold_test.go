@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,7 +112,7 @@ func TestScaffoldOut(t *testing.T) {
 	if err := checkOut(path); err == nil || !strings.Contains(err.Error(), "never overwrites") {
 		t.Errorf("a second scaffold to %s: %v, want it refused", path, err)
 	}
-	if err := writeOut(path, []byte("package other\n")); err == nil || !strings.Contains(err.Error(), "never overwrites") {
+	if err := writeOut(path, []byte("package other\n")); err == nil || !strings.Contains(err.Error(), "never overwrites") || !errors.Is(err, fs.ErrExist) {
 		t.Errorf("a second write to %s: %v, want it refused", path, err)
 	}
 	if b, _ := os.ReadFile(path); string(b) != "package app\n" {

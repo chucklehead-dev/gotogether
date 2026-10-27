@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -131,8 +133,9 @@ func TestManifestVerifyRefusesChanges(t *testing.T) {
 			t.Errorf("%s: %v", c.file, err)
 		}
 		os.Remove(filepath.Join(dir, c.file))
-		if _, err := m.Verify(); !c.warn && (err == nil || !strings.Contains(err.Error(), "put it back")) {
-			t.Errorf("%s missing: %v", c.file, err)
+		// the cause wrapped: a caller tells a missing file by errors.Is
+		if _, err := m.Verify(); !c.warn && (err == nil || !strings.Contains(err.Error(), "put it back") || !errors.Is(err, fs.ErrNotExist)) {
+			t.Errorf("%s missing: %v (errors.Is fs.ErrNotExist: %v)", c.file, err, errors.Is(err, fs.ErrNotExist))
 		}
 	}
 }

@@ -51,7 +51,7 @@ func (c *Checker) checkHidden(ctx context.Context, tr *qtrace.Trace) (*Result, e
 		if len(c.Binding.Hidden) == 0 {
 			what, fix = fmt.Sprintf("the states resume %s admits are", c.Binding.Resume), ": record a snapshot step at each log's head instead (snapshot: restore)"
 		}
-		return nil, fmt.Errorf("%s searched by the Go evaluator, which has none for this binding: %v%s", what, e.err, fix)
+		return nil, fmt.Errorf("%s searched by the Go evaluator, which has none for this binding: %w%s", what, e.err, fix)
 	}
 	consts := map[string]qeval.Value{}
 	for k, name := range e.em.Consts {

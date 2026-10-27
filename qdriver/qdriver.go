@@ -226,7 +226,7 @@ func Read(r io.Reader) (*Log, error) {
 			if !header {
 				what = "the header"
 			}
-			return nil, fmt.Errorf("line %d: not %s of a request log (%s): %v", n, what, Protocol, err)
+			return nil, fmt.Errorf("line %d: not %s of a request log (%s): %w", n, what, Protocol, err)
 		}
 		header = true
 	}

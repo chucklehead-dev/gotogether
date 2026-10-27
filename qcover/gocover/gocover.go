@@ -43,7 +43,7 @@ func Read(dirs ...string) (*Profile, error) {
 	out := filepath.Join(tmp, "cover.txt")
 	cmd := exec.Command("go", "tool", "covdata", "textfmt", "-i="+strings.Join(dirs, ","), "-o="+out)
 	if b, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("gocover: go tool covdata textfmt -i=%s: %v\n%s", strings.Join(dirs, ","), err, b)
+		return nil, fmt.Errorf("gocover: go tool covdata textfmt -i=%s: %w\n%s", strings.Join(dirs, ","), err, b)
 	}
 	f, err := os.Open(out)
 	if err != nil {
@@ -72,14 +72,14 @@ func Parse(r io.Reader) (*Profile, error) {
 		}
 		b.File = file
 		if _, err := fmt.Sscanf(f[0], "%d.%d,%d.%d", &b.Line, &b.Col, &b.EndLine, &b.EndCol); err != nil {
-			return nil, fmt.Errorf("gocover: line %d: %v", n, err)
+			return nil, fmt.Errorf("gocover: line %d: %w", n, err)
 		}
 		var err error
 		if b.Stmts, err = strconv.Atoi(f[1]); err == nil {
 			b.Count, err = strconv.Atoi(f[2])
 		}
 		if err != nil {
-			return nil, fmt.Errorf("gocover: line %d: %v", n, err)
+			return nil, fmt.Errorf("gocover: line %d: %w", n, err)
 		}
 		k := file + ":" + f[0]
 		if m := merged[k]; m != nil {

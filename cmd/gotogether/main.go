@@ -725,16 +725,16 @@ func writeOut(path string, data []byte) error {
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
-		return fmt.Errorf("scaffold: %v (a scaffold never overwrites: remove it or pick another -out)", err)
+		return fmt.Errorf("scaffold: %w (a scaffold never overwrites: remove it or pick another -out)", err)
 	}
 	if _, err := f.Write(data); err != nil {
 		f.Close()
 		os.Remove(path)
-		return fmt.Errorf("scaffold: %v", err)
+		return fmt.Errorf("scaffold: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(path)
-		return fmt.Errorf("scaffold: %v", err)
+		return fmt.Errorf("scaffold: %w", err)
 	}
 	fmt.Fprintln(os.Stderr, "wrote", path)
 	return nil

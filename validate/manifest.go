@@ -618,7 +618,7 @@ func (m *Manifest) Verify() (warnings []string, err error) {
 		h, herr := hashFile(in.f.Path)
 		switch {
 		case herr != nil:
-			errs = append(errs, fmt.Errorf("%s %s: %v: replay judges the files the manifest hashed; put it back at that path (a manifest's directory moves whole)", in.what, in.f.Path, herr))
+			errs = append(errs, fmt.Errorf("%s %s: %w: replay judges the files the manifest hashed; put it back at that path (a manifest's directory moves whole)", in.what, in.f.Path, herr))
 		case h != in.f.SHA256:
 			errs = append(errs, fmt.Errorf("%s %s changed since the run was judged (sha256 %s, now %s): replay judges the files the manifest hashed; restore it, or validate the new files anew (gotogether validate, -manifest for a new manifest)",
 				in.what, in.f.Path, short(in.f.SHA256), short(h)))

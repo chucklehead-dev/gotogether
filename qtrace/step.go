@@ -230,7 +230,7 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 			if v, ok := layers[0][KeyLostBefore]; ok {
 				n, err := toInt(v)
 				if err != nil {
-					return s, fmt.Errorf("%s: %s: %v", EventName, KeyLostBefore, err)
+					return s, fmt.Errorf("%s: %s: %w", EventName, KeyLostBefore, err)
 				}
 				s.LostBefore = time.Unix(0, n)
 			}
@@ -255,7 +255,7 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 		if v, ok := layers[0][KeyInvoked]; ok {
 			n, err := toInt(v)
 			if err != nil {
-				return s, fmt.Errorf("%s: %s: %v", EventName, KeyInvoked, err)
+				return s, fmt.Errorf("%s: %s: %w", EventName, KeyInvoked, err)
 			}
 			s.Invoked = time.Unix(0, n)
 		}
@@ -268,7 +268,7 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 			case strings.HasPrefix(k, PrefixOrder):
 				n, err := toInt(v)
 				if err != nil {
-					return s, fmt.Errorf("%s: %s: %v", EventName, k, err)
+					return s, fmt.Errorf("%s: %s: %w", EventName, k, err)
 				}
 				s.Order[strings.TrimPrefix(k, PrefixOrder)] = n
 			}

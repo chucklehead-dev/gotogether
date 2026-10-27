@@ -173,7 +173,7 @@ func (md *RunModel) verify() []error {
 	}
 	f, imports, err := specFiles(spec)
 	if err != nil {
-		return []error{fmt.Errorf("the spec %s%s: %v: replay judges the model the manifest hashed; put it back where the binding finds it (a manifest's directory moves whole, with the model beside the binding as it was)", spec, how, err)}
+		return []error{fmt.Errorf("the spec %s%s: %w: replay judges the model the manifest hashed; put it back where the binding finds it (a manifest's directory moves whole, with the model beside the binding as it was)", spec, how, err)}
 	}
 	var errs []error
 	if f.SHA256 != md.Spec.SHA256 {

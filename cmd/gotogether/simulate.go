@@ -136,7 +136,7 @@ func simulate(args []string) (int, error) {
 				return 2, fmt.Errorf("simulate: %s has no step action to run on its own: add one that picks among its actions, "+
 					"or say why not (simulate.skip: a replay-only model)", b.Module)
 			}
-			return 2, fmt.Errorf("simulate: quint %s --invariant %s: %v\n%s", argv[0], inv, err, out)
+			return 2, fmt.Errorf("simulate: quint %s --invariant %s: %w\n%s", argv[0], inv, err, out)
 		}
 		switch {
 		case holds[inv] && !violated && *verify > 0:

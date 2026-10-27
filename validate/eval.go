@@ -206,7 +206,7 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 	err = cmd.Run()
 	f.Close()
 	if err != nil {
-		return &evaluator{err: fmt.Errorf("quint compile of the evaluation module: %v: %s", err, strings.TrimSpace(stderr.String()))}
+		return &evaluator{err: fmt.Errorf("quint compile of the evaluation module: %w: %s", err, strings.TrimSpace(stderr.String()))}
 	}
 	data, err := os.ReadFile(out)
 	if err != nil {

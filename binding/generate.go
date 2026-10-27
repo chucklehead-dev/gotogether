@@ -458,7 +458,7 @@ func jsonQuint(v any, kind string) (string, error) {
 	if kind == "Map" {
 		var m map[string]any
 		if err := json.Unmarshal([]byte(text), &m); err != nil {
-			return "", fmt.Errorf("toMap: %q is not a JSON object: %v", text, err)
+			return "", fmt.Errorf("toMap: %q is not a JSON object: %w", text, err)
 		}
 		keys := slices.Sorted(maps.Keys(m))
 		parts := make([]string, len(keys))
@@ -476,7 +476,7 @@ func jsonQuint(v any, kind string) (string, error) {
 	}
 	var xs []any
 	if err := json.Unmarshal([]byte(text), &xs); err != nil {
-		return "", fmt.Errorf("to%s: %q is not a JSON array: %v", kind, text, err)
+		return "", fmt.Errorf("to%s: %q is not a JSON array: %w", kind, text, err)
 	}
 	parts := make([]string, len(xs))
 	for i, x := range xs {

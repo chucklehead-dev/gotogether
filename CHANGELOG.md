@@ -8,6 +8,13 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Errors wrap their cause with `%w` where they printed it with `%v`
+  (24 sites: binding, validate, qtrace, qdriver, qdriver/bombadil,
+  qcover/gocover, the CLI), so a caller's `errors.Is` sees a missing
+  file (`fs.ErrNotExist`, a manifest's input), an existing one
+  (`fs.ErrExist`, scaffold `-out`), a quint not installed
+  (`exec.ErrNotFound`), a malformed number (`strconv.ErrSyntax`) or a
+  JSON error. The messages are unchanged.
 - Breaking: qcover's reader of Go's own coverage moved to a package of
   its own, `qcover/gocover` (docs/refactors.md C2): `qcover.ReadGoCover`,
   `ParseGoCover`, `GoProfile`, `GoBlock`, `Gap` and `Compare` are

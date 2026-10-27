@@ -348,7 +348,11 @@ types buys users nothing they would notice.
 - cmd/gotogether: done with the core (A1, A5). Its errors wrap with `%v`
   where `%w` would let a caller's `errors.Is` see a missing file (21
   such in the core): a behaviour change, though only additive; proposed
-  for one sweep.
+  for one sweep. Done ("core: errors wrap their cause with %w"): 24
+  sites, found by type (an `error` argument of a `%v` verb in
+  `fmt.Errorf`); three left as they are, whose cause no caller can test
+  (a duration's parse error, validate's unexported errNoEnd) or may be
+  nil (shrink's argv, where `%w` would print `%!w(<nil>)`).
 - The examples' simulators (`cmd/*-sim`, four) each write
   `qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec))` and
   the same seed loop around a FileSink; to be weighed against

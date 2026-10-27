@@ -217,7 +217,7 @@ func States(r io.Reader, opt Options) ([]State, error) {
 			if i == len(lines)-1 { // no newline after it: the writer stopped here
 				return out, &qtrace.TornTail{Line: n, Text: string(raw)}
 			}
-			return nil, fmt.Errorf("%s:%d: not a Bombadil trace entry: %v", opt.Name, n, err)
+			return nil, fmt.Errorf("%s:%d: not a Bombadil trace entry: %w", opt.Name, n, err)
 		}
 		s, err := opt.state(n, &e)
 		if err != nil {
@@ -280,13 +280,13 @@ func (o *Options) click(raw json.RawMessage) (string, error) {
 func (o *Options) snapshot(s *State, raw json.RawMessage) error {
 	var v map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return fmt.Errorf("snapshot %s is not an object with a %s: %v", o.Snapshot, o.Log, err)
+		return fmt.Errorf("snapshot %s is not an object with a %s: %w", o.Snapshot, o.Log, err)
 	}
 	var log []map[string]json.RawMessage
 	if l, ok := v[o.Log]; !ok {
 		return fmt.Errorf("snapshot %s has no %s: the page's log of its requests, which the extract reads", o.Snapshot, o.Log)
 	} else if err := json.Unmarshal(l, &log); err != nil {
-		return fmt.Errorf("snapshot %s's %s is not a list of requests: %v", o.Snapshot, o.Log, err)
+		return fmt.Errorf("snapshot %s's %s is not a list of requests: %w", o.Snapshot, o.Log, err)
 	}
 	f := o.Fields
 	for _, e := range log {
@@ -297,13 +297,13 @@ func (o *Options) snapshot(s *State, raw json.RawMessage) error {
 		if c, ok := e[f.Code]; ok && string(c) != "null" {
 			var code int64
 			if err := json.Unmarshal(c, &code); err != nil {
-				return fmt.Errorf("request %d's %s is not a status: %v", r.N, f.Code, err)
+				return fmt.Errorf("request %d's %s is not a status: %w", r.N, f.Code, err)
 			}
 			r.Code = &code
 		}
 		if a, ok := e[f.Answer]; ok && string(a) != "null" {
 			if err := unmarshal(a, &r.Answer); err != nil {
-				return fmt.Errorf("request %d's %s is not an object: %v", r.N, f.Answer, err)
+				return fmt.Errorf("request %d's %s is not an object: %w", r.N, f.Answer, err)
 			}
 		}
 		r.Args = map[string]any{}

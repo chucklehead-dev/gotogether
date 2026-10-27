@@ -183,7 +183,7 @@ func LoadModel(quint, spec, module string) (*Model, error) {
 	cmd := exec.Command(quint, "typecheck", filepath.Base(spec), "--out", tmp.Name())
 	cmd.Dir = filepath.Dir(spec)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("quint typecheck %s: %v\n%s", spec, err, out)
+		return nil, fmt.Errorf("quint typecheck %s: %w\n%s", spec, err, out)
 	}
 	b, err := os.ReadFile(tmp.Name())
 	if err != nil {

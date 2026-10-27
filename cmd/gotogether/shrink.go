@@ -313,7 +313,7 @@ func (d *driver) rerun(ctx context.Context, actions []json.RawMessage) ([]qtrace
 			fmt.Fprintf(d.out, "rerun %d: its step log is torn: %v\n", d.n, in.Torn)
 		}
 		if len(in.Steps) == 0 {
-			return nil, fmt.Errorf("the rerun's step log is torn before its first step (%v): nothing it recorded can be judged; the driver must finish writing the log before it exits", in.Torn)
+			return nil, fmt.Errorf("the rerun's step log is torn before its first step (%w): nothing it recorded can be judged; the driver must finish writing the log before it exits", in.Torn)
 		}
 	}
 	return in.Steps, nil
