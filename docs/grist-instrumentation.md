@@ -565,38 +565,41 @@ names the mutant it must catch, built as an overlay
    at-most-once key). Lowest priority: it
    adds a recorder, not a seam.
 
-## 5. Open questions for the maintainer
+## 5. Decisions (the maintainer, 2026-10-27)
 
-1. **Actors that name the service.** Today a store-side step's actor is
+The maintainer took the recommendation on all five; each below is now
+the design, and the slices build on it.
+
+1. **Actors that name the service** (decided: yes, in slice 5). Today a store-side step's actor is
    the tenant (grist §3.1); two Apps' tenant `t1` in one run would be one
    instance with two processes, which the binding refuses (no
-   `restart`). Recommendation: always `<app>/<tenant>` and
+   `restart`). Decision (as recommended): always `<app>/<tenant>` and
    `<app>/<tenant>/clients` (the App's name refused if it holds a slash),
    the generator writing `actors: ['<app>/*', '!*/clients']`, and the
    API server and the call keys named after the App; done in slice 5, a
    regenerate for every app, before any tag. Only in compositions
    would make a binding depend on where its app runs.
-2. **Declared calls instead of instrumented interfaces.** The
+2. **Declared calls instead of instrumented interfaces** (decided: yes). The
    application writes request and response structs and `Uses`, where
-   today it writes an interface. Recommendation: yes; the types are what
+   today it writes an interface. Decision (as recommended): yes; the types are what
    the generator models and what a transport sends, and grist enforces
    them at run time as it does `Emits`. Keep `NewDep` for non-calls and
    `NewSite` as an escape hatch, revisited after GR7.
-3. **Weaving third-party clients.** Recommendation: not in GR3. Transports
+3. **Weaving third-party clients** (decided: not in GR3). Decision (as recommended): not in GR3. Transports
    cover SDKs that take an `http.Client`; GR5-GR7 own the clients that
    do not; slice 4's lint names the raw calls left. Revisit if an SDK
    resists all three, with qweave aspects in grist's module (YAML and a
    small package, as qenv/fault) rather than a dependency on qweave.
-4. **A third party's site on the real tier.** It is never recorded, so
+4. **A third party's site on the real tier** (decided: a real variant binding, no new mechanism). It is never recorded, so
    an eventual val over `<c>Served` ("every retirement paid") cannot be
-   judged there. Recommendation: no new mechanism: a test-only variant
+   judged there. Decision (as recommended): no new mechanism: a test-only variant
    `<app>.real.binding.yaml` through GR2's marks (the vals a real tier
    can judge marked `// grist: eventually default real`), the real tier
    judging the caller's view only, and the site claims stated in
    simulations, where grist serves the site; not
    hidden actions (DESIGN §49), whose nondets over requests would admit
    any payment.
-5. **Cross-service claims.** Recommendation: `gristtest.Linked`'s Go
+5. **Cross-service claims** (decided: `gristtest.Linked` in slice 5, the system model in GR4). Decision (as recommended): `gristtest.Linked`'s Go
    cross-check in slice 5, and a system model in GR4, designed then:
    reading both services' records as one Quint instance needs a
    cross-actor order (each seam's records carrying a Lamport stamp, as
