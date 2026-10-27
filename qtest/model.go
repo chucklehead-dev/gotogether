@@ -19,14 +19,14 @@ type ModelCoverage struct {
 	Never []string `json:"never,omitempty"`
 }
 
-// taken returns the model actions a run's replay took: every actor's
-// calls up to its failure (a step the model could not take was not taken;
-// a step whose state did not match was).
-func taken(r *Run) map[string]bool {
-	out := map[string]bool{}
+// takenCalls are the calls a run's replay took: every actor's calls up
+// to its failure (a step the model could not take was not taken; a step
+// whose state did not match was).
+func takenCalls(r *Run) []binding.Call {
 	if r == nil || r.Report == nil {
-		return out
+		return nil
 	}
+	var out []binding.Call
 	for _, a := range r.Report.Actors {
 		calls := a.Calls
 		if f := a.Failure; f != nil && a.Conforms != validate.Pass && f.Index >= 0 && f.Index <= len(calls) {
@@ -36,13 +36,43 @@ func taken(r *Run) map[string]bool {
 			}
 			calls = calls[:end]
 		}
-		for _, c := range calls {
-			if c.Action != "" {
-				out[c.Action] = true
-			}
+		out = append(out, calls...)
+	}
+	return out
+}
+
+// taken returns the model actions a run's replay took (takenCalls).
+func taken(r *Run) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range takenCalls(r) {
+		if c.Action != "" {
+			out[c.Action] = true
 		}
 	}
 	return out
+}
+
+// outcomeOf is a call's step's recorded outcome ("ok" for none); "" for
+// an inferred call, which recorded nothing.
+func outcomeOf(c binding.Call) string {
+	if c.Step == nil {
+		return ""
+	}
+	if c.Step.Outcome == "" {
+		return "ok"
+	}
+	return c.Step.Outcome
+}
+
+// takenWith reports whether a run's replay took action with a step of
+// outcome o.
+func takenWith(r *Run, action, o string) bool {
+	for _, c := range takenCalls(r) {
+		if c.Action == action && outcomeOf(c) == o {
+			return true
+		}
+	}
+	return false
 }
 
 // stepActions are the actions of m a run's step can be: all but init,
@@ -78,8 +108,10 @@ func modelCoverage(runs []*Run, actions map[string]bool) *ModelCoverage {
 // them (Takes): the twin of Reaches for the model's side. A pass in which
 // no run cancelled says nothing of cancelling.
 type Take struct {
-	action string
-	share  float64
+	action  string
+	share   float64
+	outcome string // a step's recorded outcome the action was taken with ("": any)
+	hint    string // how to reach it, said when no run did
 }
 
 // Takes claims that some run took the model action.
@@ -88,27 +120,132 @@ func Takes(action string) Take { return Take{action: action} }
 // InAtLeast wants the action taken in at least share (0 to 1) of the runs.
 func (k Take) InAtLeast(share float64) Take { k.share = share; return k }
 
+// Outcome wants the action taken by a step recorded with outcome o (the
+// step's quint.outcome, as the binding's outcomes map it: "ok", a
+// refusal's name), not by any: a contrast test claims it reached the
+// refusal its mutant removes (Takes("borrow").Outcome("limit")), which a
+// borrow that committed does not show.
+func (k Take) Outcome(o string) Take { k.outcome = o; return k }
+
+// Hint is how to reach the action, said when no run did (what the
+// workload must send, a fault to turn on): a claim built for a whole
+// catalog (TakesEach) names the fix of each block it misses.
+func (k Take) Hint(how string) Take { k.hint = how; return k }
+
+// Name is the action, then the outcome after a dot if Outcome gave one
+// ("borrow.limit"): how TakesEach's lists and its builders' exceptions
+// name a Take.
+func (k Take) Name() string {
+	if k.outcome == "" {
+		return k.action
+	}
+	return k.action + "." + k.outcome
+}
+
+func (k Take) what() string {
+	if k.outcome == "" {
+		return k.action
+	}
+	return k.action + " with outcome " + k.outcome
+}
+
 func (k Take) String() string {
 	if k.share > 0 {
-		return fmt.Sprintf("taking %s in at least %.0f%% of the runs", k.action, 100*k.share)
+		return fmt.Sprintf("taking %s in at least %.0f%% of the runs", k.what(), 100*k.share)
 	}
-	return "some run taking " + k.action
+	return "some run taking " + k.what()
 }
 
 func (k Take) judge([]*validate.Report) judgment { return judgment{show: -1} }
 
-func (k Take) judgeRuns(runs []*Run, actions map[string]bool) string {
+// unknown says why k names nothing of the model ("": it names an action).
+func (k Take) unknown(actions map[string]bool) string {
 	if actions != nil && !actions[k.action] {
-		return fmt.Sprintf("%s: %s is not an action of the model (%sits actions: %s); a misspelled name never matches", k, k.action, didYouMean(k.action, actions), strings.Join(keysOf(actions), ", "))
+		return fmt.Sprintf("%s is not an action of the model (%sits actions: %s); a misspelled name never matches", k.action, didYouMean(k.action, actions), strings.Join(keysOf(actions), ", "))
 	}
-	m := modelCoverage(runs, actions)
-	need := 1
+	return ""
+}
+
+// count is how many runs took k, and how many must.
+func (k Take) count(runs []*Run, m *ModelCoverage) (n, need int) {
+	need = 1
 	if k.share > 0 {
 		need = int(k.share*float64(len(runs)) + 0.999999)
 	}
-	if n := m.Taken[k.action]; n < need {
-		return fmt.Sprintf("want %s; %d of %d runs did (the actions the runs took: %s). Drive the system to it (more seeds, "+
-			"a longer run, a workload that asks for it) or say why it is not expected", k, n, len(runs), takenList(m))
+	if k.outcome == "" {
+		return m.Taken[k.action], need
+	}
+	for _, r := range runs {
+		if takenWith(r, k.action, k.outcome) {
+			n++
+		}
+	}
+	return n, need
+}
+
+func (k Take) judgeRuns(runs []*Run, actions map[string]bool) string {
+	if u := k.unknown(actions); u != "" {
+		return k.String() + ": " + u
+	}
+	m := modelCoverage(runs, actions)
+	if n, need := k.count(runs, m); n < need {
+		how := "Drive the system to it (more seeds, a longer run, a workload that asks for it) or say why it is not expected"
+		if k.hint != "" {
+			how = k.hint
+		}
+		return fmt.Sprintf("want %s; %d of %d runs did (the actions the runs took: %s). %s", k, n, len(runs), takenList(m), how)
+	}
+	return ""
+}
+
+// A TakeEach is the claim TakesEach: every one of its Takes holds.
+type TakeEach struct{ takes []Take }
+
+// TakesEach claims that every one of takes holds (each Take's own share
+// and outcome), naming every one that does not, each with its Hint: one
+// claim for a list of what an exploration must have reached, such as
+// every block of an application's catalog by each of its outcomes
+// (gristtest.Exercised), where a list of separate claims stops at the
+// first missed. Exercised is the model-wide twin, over every action and
+// fault; this one asks for the takes it is given, so a model's helpers
+// and the outcomes a test does not care for are not wanted.
+func TakesEach(takes ...Take) TakeEach { return TakeEach{takes: append([]Take(nil), takes...)} }
+
+func (e TakeEach) String() string {
+	names := make([]string, len(e.takes))
+	for i, k := range e.takes {
+		names[i] = k.Name()
+	}
+	return "each of " + strings.Join(names, ", ") + " taken"
+}
+
+func (e TakeEach) judge([]*validate.Report) judgment { return judgment{show: -1} }
+
+func (e TakeEach) judgeRuns(runs []*Run, actions map[string]bool) string {
+	var bad, missed []string
+	m := modelCoverage(runs, actions)
+	for _, k := range e.takes {
+		if u := k.unknown(actions); u != "" {
+			bad = append(bad, u)
+			continue
+		}
+		if n, need := k.count(runs, m); n < need {
+			line := fmt.Sprintf("%s (%d of %d runs", k.what(), n, len(runs))
+			if need > 1 {
+				line += fmt.Sprintf(", want %d", need)
+			}
+			line += ")"
+			if k.hint != "" {
+				line += ": " + k.hint
+			}
+			missed = append(missed, line)
+		}
+	}
+	switch {
+	case len(bad) > 0:
+		return fmt.Sprintf("want %s; %s", e, strings.Join(bad, "; "))
+	case len(missed) > 0:
+		return fmt.Sprintf("want %s; %d of %d not taken:\n  %s\n(the actions the runs took: %s)", e, len(missed), len(e.takes), strings.Join(missed, "\n  "), takenList(m))
 	}
 	return ""
 }
@@ -267,6 +404,40 @@ func exercisedFaults(runs []*Run) (known []string, never []unexercised) {
 		}
 	}
 	return known, never
+}
+
+// neverList is the summary's list of the actions no run took: first
+// those the binding names (bound: a grist binding names every block of
+// the app's catalog), every one of them, then the model's others (the
+// helpers other actions call: appends, readsThrough), at most 8. One list
+// once buried an app's processor among the helpers no run of it ever
+// lacks, and cut it off ("and 1 more").
+func neverList(never []string, bound map[string]bool) string {
+	var own, other []string
+	for _, a := range never {
+		if bound[a] {
+			own = append(own, a)
+		} else {
+			other = append(other, a)
+		}
+	}
+	short := func(as []string) string {
+		if len(as) <= 8 {
+			return strings.Join(as, ", ")
+		}
+		return fmt.Sprintf("%s and %d more", strings.Join(as[:8], ", "), len(as)-8)
+	}
+	switch {
+	case len(never) == 0:
+		return ""
+	case len(own) == 0 && len(bound) == 0:
+		return " (never: " + short(other) + ")"
+	case len(own) == 0:
+		return " (never, of the binding's actions: none; of the model's others: " + short(other) + ")"
+	case len(other) == 0:
+		return " (never, of the binding's actions: " + strings.Join(own, ", ") + ")"
+	}
+	return " (never, of the binding's actions: " + strings.Join(own, ", ") + "; of the model's others: " + short(other) + ")"
 }
 
 func takenList(m *ModelCoverage) string {

@@ -176,6 +176,48 @@ func TestTakesAndExercised(t *testing.T) {
 	}
 }
 
+// Takes(...).Outcome(o) counts a run only if it took the action by a step
+// recorded with outcome o (a contrast test's refusal); TakesEach names
+// every Take no run met, each with its hint, and a name the model lacks.
+func TestTakesOutcomeAndEach(t *testing.T) {
+	t.Parallel()
+	step := func(a, o string) binding.Call {
+		return binding.Call{Action: a, Step: &qtrace.Step{Action: a, Outcome: o}}
+	}
+	okRun := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
+		Calls: []binding.Call{{Action: "init"}, step("borrow", ""), step("borrow", "unavailable")}}}}}
+	// refused at its limit, but the model rejected that step: not taken
+	rejected := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Fail,
+		Failure: &validate.Failure{Kind: "disabled", Index: 1}, Calls: []binding.Call{{Action: "init"}, step("borrow", "limit")}}}}}
+	model := map[string]bool{"init": true, "step": true, "borrow": true, "receipts": true}
+	runs := []*Run{okRun, rejected}
+	for _, c := range []struct {
+		claim runsClaim
+		want  string // in the message; "" for a pass
+	}{
+		{Takes("borrow").Outcome("ok"), ""},
+		{Takes("borrow").Outcome("unavailable"), ""},
+		{Takes("borrow").Outcome("limit"), "some run taking borrow with outcome limit; 0 of 2 runs did"},
+		{Takes("borrow").Outcome("limit").Hint("send borrows past the limit"), "send borrows past the limit"},
+		{Takes("borrow").Outcome("ok").InAtLeast(1), "1 of 2 runs did"},
+		{TakesEach(Takes("borrow").Outcome("ok"), Takes("borrow").Outcome("unavailable")), ""},
+		{TakesEach(Takes("borrow").Outcome("ok"), Takes("borrow").Outcome("limit").Hint("past the limit"), Takes("receipts").Hint("commit a borrow")),
+			"2 of 3 not taken:\n  borrow with outcome limit (0 of 2 runs): past the limit\n  receipts (0 of 2 runs): commit a borrow"},
+		{TakesEach(Takes("borow")), "borow is not an action of the model (did you mean borrow?"},
+	} {
+		msg := c.claim.judgeRuns(runs, model)
+		switch {
+		case c.want == "" && msg != "":
+			t.Errorf("%s: %q, want a pass", c.claim, msg)
+		case c.want != "" && !strings.Contains(msg, c.want):
+			t.Errorf("%s: %q, want %q in it", c.claim, msg, c.want)
+		}
+	}
+	if n := (Takes("borrow").Outcome("limit")).Name(); n != "borrow.limit" {
+		t.Errorf("Name %q, want borrow.limit", n)
+	}
+}
+
 // Exercised counts each option of a declared kind by name, among those a
 // choice offered, and each nemesis a run enabled by name; an exception
 // covers the names below it.

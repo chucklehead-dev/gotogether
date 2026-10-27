@@ -53,6 +53,27 @@ func TestSummaryNamesUntakenActions(t *testing.T) {
 	}
 }
 
+// The summary names the untaken actions the binding names apart from the
+// model's others, and never cuts the binding's short: a grist app's
+// processor once hid among the helpers, after "and 1 more".
+func TestSummarySeparatesTheBindingsActions(t *testing.T) {
+	t.Parallel()
+	never := []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9"}
+	bound := map[string]bool{}
+	for _, a := range never[:9] {
+		bound[a] = true
+	}
+	if s, want := neverList(never, bound), " (never, of the binding's actions: a1, a2, a3, a4, a5, a6, a7, a8, a9; of the model's others: h1, h2, h3, h4, h5, h6, h7, h8 and 1 more)"; s != want {
+		t.Errorf("neverList:\n%s\nwant\n%s", s, want)
+	}
+	if s, want := neverList([]string{"get"}, nil), " (never: get)"; s != want {
+		t.Errorf("no binding's actions: %q, want %q", s, want)
+	}
+	if s, want := neverList([]string{"appends"}, map[string]bool{"put": true}), " (never, of the binding's actions: none; of the model's others: appends)"; s != want {
+		t.Errorf("%q, want %q", s, want)
+	}
+}
+
 // Exercised asks for the model's steps: a frame condition (same) no run
 // can take is not missing, an untaken step is.
 func TestExercisedSkipsFrameConditions(t *testing.T) {

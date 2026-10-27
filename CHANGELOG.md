@@ -8,6 +8,13 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- qtest: `Take.Outcome(o)` (a run counts only if it took the action by a
+  step recorded with outcome o: a contrast test claims the refusal it
+  reached), `Take.Hint` (said when no run took it), `Take.Name`, and
+  `TakesEach(takes...)` (`TakeEach`: every one holds, each one missed
+  named with its hint). An exploration's summary lists the untaken
+  actions the binding names apart from the model's others, the first
+  never cut short.
 - grist's generator and onboarding (docs/grist.md §0.9; api/grist.txt):
   `grist.Generate` and `grist.Starter`, an app's binary's `model` command
   (`grist.Main`: `-check`, `-init`), writing the model's skeleton

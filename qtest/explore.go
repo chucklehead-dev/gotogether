@@ -1073,11 +1073,14 @@ func (x *Exploration) summary() string {
 		m := modelCoverage(x.Runs, x.steps)
 		all := len(x.steps)
 		line += fmt.Sprintf("; model actions taken %d of %d", all-len(m.Never), all)
-		if n := len(m.Never); n > 0 && n <= 8 {
-			line += " (never: " + strings.Join(m.Never, ", ") + ")"
-		} else if n > 8 {
-			line += fmt.Sprintf(" (never: %s and %d more)", strings.Join(m.Never[:8], ", "), n-8)
+		var bound map[string]bool
+		if x.checker != nil && x.checker.Binding != nil {
+			bound = map[string]bool{}
+			for a := range x.checker.Binding.Actions {
+				bound[a] = true
+			}
 		}
+		line += neverList(m.Never, bound)
 	}
 	cov := x.faultCoverage()
 	faulted, reached := 0, 0

@@ -1576,6 +1576,7 @@ func StepMutations(opts ...qtrace.MutationOption) Option
 func StepOp(op string) StepSelector
 func Survived(sel StepSelector) StepClaim
 func Takes(action string) Take
+func TakesEach(takes ...Take) TakeEach
 func Undecided(e Expectation, because ...string) Expectation
 func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
 func Violates(invariant string) Expectation
@@ -1761,8 +1762,13 @@ type System struct
     method (System) WithBinding(bind string, opts ...Option) System
     method (System) WithRates(r qenv.Rates) System
 type Take struct
+    method (Take) Hint(how string) Take
     method (Take) InAtLeast(share float64) Take
+    method (Take) Name() string
+    method (Take) Outcome(o string) Take
     method (Take) String() string
+type TakeEach struct
+    method (TakeEach) String() string
 type Vacuity struct
     field Invariant string `json:"invariant"`
     field Antecedent string `json:"antecedent"`
