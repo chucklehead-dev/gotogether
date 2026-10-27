@@ -234,3 +234,29 @@ func TestMutateStepsGap(t *testing.T) {
 		}
 	}
 }
+
+// A survivor of a step the binding skips (outcomes: error: skip) says
+// so: no check reads a skipped step, whatever a mutant does to it, and
+// the report once listed it as a field no check reads, unexplained.
+func TestMutateStepsSurvivorsOfSkippedSteps(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	steps := bankLog()
+	refused := steps[2]
+	refused.Seq, refused.Time = 5, refused.Time.Add(10*time.Millisecond)
+	refused.Args = map[string]any{"account": "bob", "amount": int64(100)}
+	refused.Obs, refused.Outcome, refused.Error = nil, "error", "insufficient funds"
+	steps = append(steps, refused)
+	rep := MutateSteps(t, "testdata/bank-skip.yaml", steps, StepMutations(qtrace.MutateOps("drop", "dup")))
+	rep.Original.Expect(t, Conforms())
+	rep.Expect(t, Survived(StepOp("drop").Index(4)), Survived(StepOp("dup").Index(4)))
+	for _, m := range rep.Mutants {
+		explained := strings.Contains(m.String(), "skipped by the binding's outcomes: error: skip")
+		if want := m.Index == 4; m.Skipped != map[bool]string{true: "error"}[want] || explained != want {
+			t.Errorf("%s: Skipped %q, explained %v; want them for the skipped step alone", m, m.Skipped, explained)
+		}
+	}
+	if s := rep.String(); !strings.Contains(s, "drop") || !strings.Contains(s, "outcomes: error: skip") {
+		t.Errorf("the report does not explain its survivors:\n%s", s)
+	}
+}

@@ -377,7 +377,9 @@ func (b *Binding) outcome(a Action, s *qtrace.Step) (string, error) {
 	if o != "ok" && !a.usesOutcome() {
 		// A failed step of an action whose call ignores the outcome would be
 		// replayed as a success. Make the binding say what it means.
-		return "", fmt.Errorf("%s failed (outcome %q: %s) but its templates do not use .outcome; map it in the action's outcomes (e.g. %s: skip)", s.Action, o, s.Error, o)
+		return "", fmt.Errorf("%s failed (outcome %q: %s) but its templates do not use .outcome, so it would replay as a success. "+
+			"Model the refusal first: an action of the model for it, or a parameter whose template reads {{.outcome}}, so the check judges it; "+
+			"map it in the action's outcomes as %s: skip only for an outcome the model does not judge (a skipped step is checked by nothing)", s.Action, o, s.Error, o)
 	}
 	if v, ok := b.Outcomes[o]; ok {
 		return v, nil

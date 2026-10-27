@@ -159,7 +159,10 @@ The failure names the run: its seed, its faults, the report, the step
 log, and `reproduce: GOTOGETHER_RUN='TestX#2:seed=n' go test -run '^TestX$'`:
 the run in its exploration (`#2`, the test's second), or an exhaustive
 search's schedule (`:schedule=17:1`, the choices it made otherwise). The
-paths a failing claim prints outlive the test. A passing claim satisfied
+paths a failing claim prints outlive the test: the files were in the
+test's `t.TempDir()`, so a failure copies them out (to
+`$TMPDIR/gotogether-*`, and says so), as `Run.Expect` does for Record's
+and Validate's runs. A passing claim satisfied
 by failing runs (`Some(Rejects(...))`) logs its first example headed `as
 expected, <claim>:`, without paths: its files are not kept
 (`GOTOGETHER_KEEP=dir` keeps them). When the rate it measured would let

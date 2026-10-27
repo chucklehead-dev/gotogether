@@ -317,6 +317,10 @@ type Run struct {
 	Report    *validate.Report
 	StepLog   string            // Record's native step log (JSONL)
 	ITF       map[string]string // Record's: actor -> model-level ITF written in-process
+	// keep copies the run's files (Record's, Validate's) out of the
+	// test's temporary directory when a report names them; nil when they
+	// are kept already (GOTOGETHER_KEEP, a Dir option)
+	keep *keeper
 }
 
 // Faults are the run's fault choices that were not nominal.
@@ -473,6 +477,9 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	run.Report = j.Report
 	run.checks, run.checker = checkedNames(ch), ch
 	run.search, run.driver, run.artifacts, run.name = c.searchOptions(), c.driver, c.artifacts, t.Name()
+	if c.tempDir {
+		run.keep = &keeper{dir: c.Dir, name: t.Name()}
+	}
 	writeManifest(t, run)
 	return run
 }

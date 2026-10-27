@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/internal/nearest"
 )
 
 // A command's help: what it is for and a first example, above its flags.
@@ -87,38 +89,11 @@ var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps",
 // it is a likely misspelling, and where the list is: the whole usage
 // printed alone did not say what was wrong.
 func unknownCommand(name string) string {
-	best, bestD := "", -1
-	for _, c := range commandNames {
-		if d := editDistance(strings.ToLower(name), c); bestD < 0 || d < bestD {
-			best, bestD = c, d
-		}
-	}
 	msg := fmt.Sprintf("unknown command %q", name)
-	if bestD >= 0 && bestD <= max(2, len(name)/3) {
+	if best := nearest.Name(name, commandNames); best != "" {
 		msg += fmt.Sprintf(" (did you mean %s?)", best)
 	}
 	return msg + "; gotogether help lists the commands"
-}
-
-// editDistance is the Levenshtein distance between a and b.
-func editDistance(a, b string) int {
-	prev := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		cur := make([]int, len(b)+1)
-		cur[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
-		}
-		prev = cur
-	}
-	return prev[len(b)]
 }
 
 // version is the module's version as built (go install …@v), else its

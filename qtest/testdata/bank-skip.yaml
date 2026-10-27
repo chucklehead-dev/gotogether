@@ -1,0 +1,13 @@
+# bank.yaml with a refused withdrawal skipped (outcomes: error: skip):
+# the model does not judge it, so no mutant of it can be killed, and
+# MutateSteps' survivors say so.
+spec: ../../connect/testdata/bank.qnt
+module: bank
+actions:
+  deposit:
+    expect: 'balances.get({{.account}}) == {{.obs.balance}}'
+  withdraw:
+    expect: 'balances.get({{.account}}) == {{.obs.balance}}'
+    outcomes: { error: skip }
+  transfer: {}
+invariants: [nonNegative]

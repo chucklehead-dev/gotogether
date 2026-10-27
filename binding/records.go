@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/internal/nearest"
 )
 
 // qobsPath is the import path of the recording package.
@@ -243,18 +245,14 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 // action if one is near, and the list.
 func (m *Model) notAnAction(name string) string {
 	var names []string
-	best, bestD := "", -1
 	for _, a := range m.ActionNames() {
 		if a == "init" || a == "step" || m.Helpers[a] {
 			continue // the state machine, not steps; a helper is part of one
 		}
 		names = append(names, a)
-		if d := editDistance(strings.ToLower(name), strings.ToLower(a)); bestD < 0 || d < bestD {
-			best, bestD = a, d
-		}
 	}
 	msg := fmt.Sprintf("%s is not an action of %s", name, m.Module)
-	if bestD >= 0 && bestD <= max(2, len(name)/3) {
+	if best := nearest.Name(name, names); best != "" {
 		msg += fmt.Sprintf(" (did you mean %s?)", best)
 	}
 	return msg + "; its actions: " + strings.Join(names, ", ")
@@ -267,25 +265,4 @@ func sortedNames[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// editDistance is the Levenshtein distance between a and b, in bytes.
-func editDistance(a, b string) int {
-	prev := make([]int, len(b)+1)
-	cur := make([]int, len(b)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		cur[0] = i
-		for j := 1; j <= len(b); j++ {
-			sub := prev[j-1]
-			if a[i-1] != b[j-1] {
-				sub++
-			}
-			cur[j] = min(sub, prev[j]+1, cur[j-1]+1)
-		}
-		prev, cur = cur, prev
-	}
-	return prev[len(b)]
 }

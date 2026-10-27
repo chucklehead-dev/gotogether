@@ -52,7 +52,8 @@ func TestProcessChangeMessage(t *testing.T) {
 }
 
 // A step whose outcome the binding cannot map is numbered from 1, with
-// its seq and where it was recorded.
+// its seq and where it was recorded, and the fix says to model the
+// refusal before skipping it: a skip once read as the fix.
 func TestOutcomeErrorNumbersSteps(t *testing.T) {
 	tr := &qtrace.Trace{Actor: "a", Processes: []string{"p"}, Steps: []qtrace.Step{
 		{Action: "Deposit", Process: "p", Outcome: "ok", Seq: 1, Source: "run.jsonl:1", Args: map[string]any{"amount": 1}},
@@ -60,7 +61,10 @@ func TestOutcomeErrorNumbersSteps(t *testing.T) {
 	}}
 	b := &Binding{Module: "m", Actions: map[string]Action{"Deposit": {Args: map[string]string{"amount": "{{.amount}}"}}}}
 	_, err := b.Plan(nil, tr)
-	if want := "step 2 (seq 2, run.jsonl:2): Deposit failed"; err == nil || !strings.Contains(err.Error(), want) {
-		t.Errorf("want %q in %v", want, err)
+	for _, want := range []string{"step 2 (seq 2, run.jsonl:2): Deposit failed", "Model the refusal first",
+		"as error: skip only for an outcome the model does not judge"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("want %q in %v", want, err)
+		}
 	}
 }

@@ -85,7 +85,7 @@ func (k Take) judge([]*validate.Report) judgment { return judgment{show: -1} }
 
 func (k Take) judgeRuns(runs []*Run, actions map[string]bool) string {
 	if actions != nil && !actions[k.action] {
-		return fmt.Sprintf("%s names %s, which the model has no action of: a misspelled name never matches", k, k.action)
+		return fmt.Sprintf("%s: %s is not an action of the model (%sits actions: %s); a misspelled name never matches", k, k.action, didYouMean(k.action, actions), strings.Join(keysOf(actions), ", "))
 	}
 	m := modelCoverage(runs, actions)
 	need := 1

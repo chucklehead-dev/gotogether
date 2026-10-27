@@ -53,7 +53,7 @@ restart: crash                  # inserted where the process identity changes
 actions:
   deposit:
     # account, amount: the step fields of those names (the default)
-    outcomes: { error: skip }   # a refused call is no model step
+    outcomes: { error: skip }   # a refused call is no model step (one the model judges: model the refusal)
     expect: 'balances.get({{.account}}) == {{.obs.balance}}'
 invariants: [noOverdraft]
 eventually: [noPending]          # must hold in the last state (a run that settled)

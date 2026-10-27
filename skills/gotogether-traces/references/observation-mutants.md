@@ -83,6 +83,10 @@ right:
   (`put` of the same value);
 - an observation the binding does not compare corrupted (`Unread`): a
   field kept for people, not for the check;
+- any mutant of a step the binding skips (`outcomes: { error: skip }`,
+  marked `Skipped` with the outcome, and said in the report): a skipped
+  step is no model call, so nothing reads it. If the refusal matters,
+  model it (an action enabled only when the call must fail) instead;
 - a swap of steps that commute (deposits to two accounts);
 - a retime, when nothing in the binding reads time.
 

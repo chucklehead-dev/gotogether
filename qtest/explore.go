@@ -971,8 +971,8 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			t.Fatalf("gotogether: %s names %s, which no run judged: an eventual val is judged in a trace whose last record is a settle, and no run's was "+
 				"(call Sim.Settle at the end of Run and return its error, or qobs.Settled after a probe; Settles() states that a run settled)", describeClaim(c), strings.Join(u, ", "))
 		}
-		if u := unknownNames(es, x.actions, invariants); len(u) > 0 {
-			t.Fatalf("gotogether: %s names %s: a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
+		if u := unknownNames(es, x.actions, invariants, "the runs"); len(u) > 0 {
+			t.Fatalf("gotogether: %s: %s; a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
 		}
 	}
 	if x.checker != nil && len(x.checker.Binding.Eventually) > 0 && !anySettled(x.Runs) && claimsConformance(claims) && !claimsSettling(claims) {
@@ -1451,7 +1451,10 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	}
 	dir := x.dir // kept with the exploration's other artifacts (keepFiles)
 	if dir == "" {
-		dir = t.TempDir()
+		// runs gathered (Runs) have no directory of their own: the report's
+		// files go where they outlive the test (a t.TempDir() would not)
+		x.keptOnce.Do(func() { x.kept, _ = os.MkdirTemp("", "gotogether-runs-") })
+		dir = x.kept
 	}
 	base := filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
 	// the step log is what the run recorded, which the CLI's validate (with
@@ -1460,20 +1463,21 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	if recorded == nil {
 		recorded = r.Steps
 	}
-	if writeSteps(base+".steps.jsonl", recorded) {
+	if dir != "" && writeSteps(base+".steps.jsonl", recorded) {
 		fmt.Fprintf(&b, "  step log: %s\n", base+".steps.jsonl")
 	}
-	if r.searched && writeSteps(base+".judged.steps.jsonl", r.Steps) {
+	if dir != "" && r.searched && writeSteps(base+".judged.steps.jsonl", r.Steps) {
 		fmt.Fprintf(&b, "  the order judged (the search's): %s\n", base+".judged.steps.jsonl")
 		if r.Report != nil && os.WriteFile(base+".history.svg", r.Report.HistorySVG(recorded, r.Steps), 0o644) == nil {
 			fmt.Fprintf(&b, "  the history drawn (the order judged numbered, the failing step red): %s\n", base+".history.svg")
 		}
 	}
 	b.WriteString(x.keep(r, save))
+	out := r.keep.out(b.String()) // a gathered run's module, in its own test's temporary directory
 	if !save && x.alone == nil {
-		return b.String() // a passing claim's example, kept under GOTOGETHER_KEEP
+		return out // a passing claim's example, kept under GOTOGETHER_KEEP
 	}
-	return x.keepFiles(b.String())
+	return x.keepFiles(out)
 }
 
 // writeSteps writes a step log, reporting whether it did.

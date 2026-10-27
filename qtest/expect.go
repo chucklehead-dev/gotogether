@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/nearest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -438,22 +439,33 @@ func named(action string) []string {
 }
 
 // unknownNames says which actions and invariants es name that the model
-// (actions) or the checked invariants do not have; nil sets skip a check.
-func unknownNames(es []Expectation, actions, invariants map[string]bool) []string {
+// (actions) or the checked invariants do not have, each as why it never
+// matches, with the name it most likely meant; nil sets skip a check. of
+// names whose invariants they are ("the run", "the runs").
+func unknownNames(es []Expectation, actions, invariants map[string]bool, of string) []string {
 	var out []string
 	for _, e := range es {
 		for _, a := range e.actions {
 			if actions != nil && !actions[a] {
-				out = append(out, fmt.Sprintf("action %q (the model's: %s)", a, strings.Join(keysOf(actions), ", ")))
+				out = append(out, fmt.Sprintf("%s is not an action of the model (%sits actions: %s)", a, didYouMean(a, actions), strings.Join(keysOf(actions), ", ")))
 			}
 		}
 		for _, i := range e.invariants {
 			if invariants != nil && !invariants[i] {
-				out = append(out, fmt.Sprintf("invariant %q (checked: %s)", i, strings.Join(keysOf(invariants), ", ")))
+				out = append(out, fmt.Sprintf("%s is not an invariant of %s (%schecked: %s)", i, of, didYouMean(i, invariants), strings.Join(keysOf(invariants), ", ")))
 			}
 		}
 	}
 	return out
+}
+
+// didYouMean is "did you mean x?; " for the name of names nearest to
+// name, or "" if none is near.
+func didYouMean(name string, names map[string]bool) string {
+	if best := nearest.Name(name, keysOf(names)); best != "" {
+		return "did you mean " + best + "?; "
+	}
+	return ""
 }
 
 // reportInvariants are the invariants a report checked (nil: none known).
@@ -712,8 +724,9 @@ func verdictless(r *validate.Report) bool {
 }
 
 // expectReport fails t unless the report meets every expectation,
-// printing the report.
-func expectReport(t testing.TB, r *validate.Report, checks map[string]bool, es ...Expectation) {
+// printing the report. Names the model (actions, nil: unknown) or the
+// checks lack fail first, as names, not as the report's verdicts.
+func expectReport(t testing.TB, r *validate.Report, actions, checks map[string]bool, es ...Expectation) {
 	t.Helper()
 	if r == nil {
 		t.Fatalf("gotogether: no report")
@@ -722,8 +735,8 @@ func expectReport(t testing.TB, r *validate.Report, checks map[string]bool, es .
 	if known == nil {
 		known = reportInvariants(r)
 	}
-	if u := unknownNames(es, nil, known); len(u) > 0 {
-		t.Fatalf("gotogether: the expectation names %s: a misspelled name never matches", strings.Join(u, "; "))
+	if u := unknownNames(es, actions, known, "the run"); len(u) > 0 {
+		t.Fatalf("gotogether: want %s: %s; a misspelled name never matches", describeAll(es), strings.Join(u, "; "))
 	}
 	for _, e := range es {
 		switch e.value(r) {
@@ -759,8 +772,9 @@ func (n shrunkTo) String() string    { return fmt.Sprintf("a run shrunk to at mo
 
 // Expect fails t unless the run meets every claim: its report each
 // Expectation, its faults ShrunkTo. A failure prints the report and names
-// the run's step log and model-level ITF (Record's and Validate's). It is
-// how a test states what a mutant must look like:
+// the run's step log and model-level ITF (Record's and Validate's),
+// copied out of the test's temporary directory, which is removed when the
+// test ends. It is how a test states what a mutant must look like:
 //
 //	qtest.Record(t, "bank.binding.yaml", payday).Expect(t, qtest.Conforms())
 func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
@@ -771,7 +785,23 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 			es = append(es, e)
 		}
 	}
+	var actions map[string]bool
+	if r.checker != nil && r.checker.Model != nil {
+		actions = map[string]bool{}
+		for a := range r.checker.Model.Actions {
+			actions[a] = true
+		}
+	}
 	if r.Report != nil && r.StepLog != "" {
+		// a name the run cannot have is said as one, before any verdict:
+		// "want a violation of nonNegativ" read as the code's failure
+		known := r.checks
+		if known == nil {
+			known = reportInvariants(r.Report)
+		}
+		if u := unknownNames(es, actions, known, "the run"); len(u) > 0 {
+			t.Fatalf("gotogether: want %s: %s; a misspelled name never matches", describeAll(es), strings.Join(u, "; "))
+		}
 		for _, e := range es {
 			if v := e.value(r.Report); v != yes {
 				itfs := make([]string, 0, len(r.ITF))
@@ -782,12 +812,12 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 				if v == unknown {
 					why = ": the run has no verdict for it (a lost tail, a search out of its budget)" + why
 				}
-				t.Fatalf("gotogether: want %s%s, got:\n%s  step log: %s\n  model-level ITF: %s",
-					e, why, r.Report.Summary(), r.StepLog, strings.Join(itfs, ", "))
+				t.Fatalf("gotogether: want %s%s, got:\n%s", e, why, r.keep.out(fmt.Sprintf("%s  step log: %s\n  model-level ITF: %s\n",
+					r.Report.Summary(), r.StepLog, strings.Join(itfs, ", "))))
 			}
 		}
 	}
-	expectReport(t, r.Report, r.checks, es...)
+	expectReport(t, r.Report, actions, r.checks, es...)
 	for _, c := range cs {
 		if _, ok := c.(Expectation); !ok && !c.Holds(r) {
 			t.Fatalf("gotogether: want %s, got %d faults: %v", c, len(r.Faults()), r.Faults())

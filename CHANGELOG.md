@@ -8,6 +8,20 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- qtest's failure reports name files that outlive the test: Record's and
+  Validate's `Run.Expect` (and a `Runs` claim's) copies the run's step
+  log, ITF and modules out of the test's `t.TempDir()` into
+  `$TMPDIR/gotogether-*` and says so, as explorations' claims did; a
+  report that cannot copy them says they will be gone
+  (`GOTOGETHER_KEEP=dir` keeps them). A claim naming an invariant or
+  action the run cannot have says so before any verdict, with the name
+  it most likely meant (`nonNegativ is not an invariant of the run (did
+  you mean nonNegative?; ...)`), where `Run.Expect` said "want a
+  violation of nonNegativ, got: ...". `StepMutation.Skipped` names the
+  outcome of a mutated step the binding skips (`outcomes: { error: skip
+  }`), and `-mutate-steps`' report says such a survivor is skipped; the
+  binding's error for an unmapped failed outcome says to model the
+  refusal first, and to skip only an outcome the model does not judge.
 - A failure that stands beside a gap or a lost tail is a FAIL, whatever
   another check's failure after it (no verdict) says: `Result.Reason`
   returned at the first invariant with no verdict, so the CLI printed

@@ -398,7 +398,7 @@ func TestShrinkActions(t *testing.T) {
 		}()
 		<-done
 	}()
-	if len(f.errs) != 1 || !strings.Contains(f.errs[0], `Keep names action "presss" (the model's: init, press, step): a misspelled name never matches`) || app.resets != 0 {
+	if len(f.errs) != 1 || !strings.Contains(f.errs[0], `presss is not an action of the model (did you mean press?; its actions: init, press, step); a misspelled name never matches`) || app.resets != 0 {
 		t.Fatalf("errors %q", f.errs)
 	}
 	shrunk := ShrinkActions(t, journey, ActionShrink[string]{Binding: "testdata/letters.yaml", Rerun: app.Play, Reset: app, Calibration: Calibration{Reruns: 1}})

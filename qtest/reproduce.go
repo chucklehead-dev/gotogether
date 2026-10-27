@@ -276,13 +276,47 @@ func (x *Exploration) keepFiles(out string) string {
 	if !x.tempDir || x.dir == "" {
 		return out
 	}
-	x.keptOnce.Do(func() {
-		x.kept, _ = os.MkdirTemp("", "gotogether-"+strings.NewReplacer("/", "_", " ", "_", "#", "_").Replace(x.ref())+"-")
-	})
-	if x.kept == "" || copyTree(x.dir, x.kept) != nil {
+	return keepCopy(x.dir, x.ref(), &x.kept, &x.keptOnce, out)
+}
+
+// A keeper copies a run's files out of the test's t.TempDir() the first
+// time a report names them (Record's and Validate's runs; an
+// exploration's are its keepFiles).
+type keeper struct {
+	dir, name string // the run's directory, a t.TempDir(); its test
+	once      sync.Once
+	kept      string
+}
+
+// out points out's paths in k's directory at their copy; a nil keeper's
+// files are kept already.
+func (k *keeper) out(out string) string {
+	if k == nil {
 		return out
 	}
-	return strings.ReplaceAll(out, x.dir, x.kept)
+	return keepCopy(k.dir, k.name, &k.kept, &k.once, out)
+}
+
+// keepCopy copies dir (a test's t.TempDir()) into a directory of its own,
+// made once and named after name, and rewrites out's paths in dir to the
+// copy's, saying so. It copies on every call: an exploration writes a
+// failing run's step log beside the others' as its report is made. A
+// report naming files that will not exist would be no help: if the copy
+// fails, it says so instead.
+func keepCopy(dir, name string, kept *string, once *sync.Once, out string) string {
+	if !strings.Contains(out, dir) {
+		return out
+	}
+	once.Do(func() {
+		*kept, _ = os.MkdirTemp("", "gotogether-"+strings.NewReplacer("/", "_", " ", "_", "#", "_").Replace(name)+"-")
+	})
+	if !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+	if *kept == "" || copyTree(dir, *kept) != nil {
+		return out + "  (these files are in the test's temporary directory, removed when the test ends, and could not be copied out: GOTOGETHER_KEEP=dir keeps them)\n"
+	}
+	return strings.ReplaceAll(out, dir, *kept) + "  (these files were copied out of the test's temporary directory, removed when the test ends; GOTOGETHER_KEEP=dir keeps every run's)\n"
 }
 
 // copyTree copies the files under src to dst.

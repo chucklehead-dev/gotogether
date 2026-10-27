@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -54,6 +55,11 @@ type StepMutation struct {
 	// the step's parameters or expects (binding.Binding.UsedFields): its
 	// survival says so already.
 	Unread bool
+	// Skipped is the mutated step's outcome when the binding skips it
+	// (its outcomes map it to skip: "error"), "" otherwise: a skipped step
+	// is no model call, so no check reads what a mutant does to it, and
+	// its survival says so already.
+	Skipped string
 	// Report is its verdict; nil when the binding refused it.
 	Report *validate.Report
 }
@@ -65,6 +71,9 @@ func (m StepMutation) String() string {
 	}
 	if m.Unread {
 		s += " (a field the binding does not read)"
+	}
+	if m.Skipped != "" && m.Fate == FateSurvived {
+		s += fmt.Sprintf(" (this step is skipped by the binding's outcomes: %s: skip, so no check reads it; model the refusal if it should be judged)", m.Skipped)
 	}
 	return s
 }
@@ -184,6 +193,9 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 		sm := StepMutation{StepMutant: m}
 		if m.Op == "corrupt" && used != nil {
 			sm.Unread = !slices.Contains(used[m.Action], m.Field)
+		}
+		if s := &steps[m.Index]; s.Model() && cc.Binding.Skips(s) {
+			sm.Skipped = cmp.Or(s.Outcome, "ok")
 		}
 		if err := refused(cc, m.Steps); err != nil {
 			// its first line: the fix that follows is the binding's

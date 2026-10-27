@@ -652,7 +652,7 @@ More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
 | `GOTOGETHER_CORPUS=dir` | every exploration replays and saves corpus entries under dir/<test> (ExploreConfig.Corpus) |
 | `GOTOGETHER_HEGEL_SEED=n` or `random` | qhegel's searches (FindViolation, Shrink) use this seed instead of the test's own, logged (the nightly run's) |
 | `GOTOGETHER_SEEDS=n`, `GOTOGETHER_SEED_OFFSET=k` | runs n seeds from k+1 instead of the test's own: a wider, fresh sample (the nightly workflow) |
-| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test |
+| `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test (without it they are in the test's temporary directory, and a failure's report names copies it made under `$TMPDIR/gotogether-*`) |
 | `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`), and each Validate and Record run's manifest, `run<N>.json`, its files (step log, binding, spec and imports, artifacts) bundled in `run<N>/` so the directory replays elsewhere (`validate -replay`; listed as external). The step logs are whole and unsanitized: mind where the directory is uploaded |
 | `GOTOGETHER_STRICT=1` (or `true`) | every toolkit skip fails instead, with its message (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`), as does `qtest.Optional(t, reason)`, a test's own skip: for CI jobs that install what their tests need. `gotogether evidence -expect checks.txt` fails on a listed check that wrote no evidence |
 | `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |

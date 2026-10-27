@@ -552,8 +552,8 @@ func (s *shrinker) shrink() *shrinkResult {
 			t.Fatalf("gotogether: ShrinkActions: Keep %s describes a passing run; Keep names the failure each smaller sequence must show "+
 				"(Rejects, Mismatch, Violates, SameFailure: the default)", s.keep)
 		}
-		if u := unknownNames([]Expectation{s.keep}, s.actions, s.names); len(u) > 0 {
-			t.Fatalf("gotogether: ShrinkActions: Keep names %s: a misspelled name never matches", strings.Join(u, "; "))
+		if u := unknownNames([]Expectation{s.keep}, s.actions, s.names, "the run"); len(u) > 0 {
+			t.Fatalf("gotogether: ShrinkActions: Keep %s: %s; a misspelled name never matches", s.keep, strings.Join(u, "; "))
 		}
 	}
 	// the Resetter's contract: no actions, the same steps each time. An

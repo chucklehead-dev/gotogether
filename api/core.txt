@@ -1577,6 +1577,7 @@ type StepMutation struct
     field Fate string
     field Why string
     field Unread bool
+    field Skipped string
     field Report *validate.Report
     method (StepMutation) String() string
 type StepMutationReport struct
