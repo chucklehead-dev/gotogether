@@ -95,7 +95,7 @@ func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
 	var items []item
 	var batch [][]qtrace.Step
 	for r, steps := range runs {
-		traces, _ := qtrace.Reconstruct(steps)
+		traces, _ := reconstruct(c.Binding, steps)
 		for _, tr := range traces {
 			if len(tr.Steps) == 0 {
 				continue
@@ -279,7 +279,7 @@ func (e *evaluator) unknownTag(v itf.Value) (string, bool) {
 // invariants, violatedAt read a report), or -1 and its last state. An
 // error is the evaluator's refusal (the caller asks quint).
 func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step, n int, invariants bool) (int, string, error) {
-	traces, _ := qtrace.Reconstruct(order)
+	traces, _ := reconstruct(c.Binding, order)
 	if len(traces) != 1 {
 		return 0, "", &qeval.Unsupported{Op: "order", Why: fmt.Sprintf("%d actors in one candidate", len(traces))}
 	}

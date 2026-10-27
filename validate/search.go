@@ -198,7 +198,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 			strings.Join(c.Binding.Hidden, ", "))
 	}
 	if opt.Linearize || opt.ResolvePending {
-		traces, _ := qtrace.Reconstruct(steps)
+		traces, _ := reconstruct(c.Binding, steps)
 		for _, tr := range traces {
 			if c.resumes(tr) {
 				return nil, fmt.Errorf("a search (Linearize, ResolvePending) of actor %s, which lost its head and resumes from the states %s admits: not combined, each candidate would be a search over those states; "+
@@ -263,7 +263,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 // search's order gives it: with a key, every partition of the actor has
 // them all (whose the lost steps were is unknown).
 func lostOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]qtrace.Lost {
-	traces, _ := qtrace.Reconstruct(steps)
+	traces, _ := reconstruct(b, steps)
 	out := map[string][]qtrace.Lost{}
 	for _, tr := range traces {
 		if len(tr.Lost) == 0 {
@@ -280,7 +280,7 @@ func lostOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]qt
 // (qtrace.Trace.Gaps, Collected, Pending, Steps), by the name a search's
 // order gives it, as lostOf its losses; and true, for search.searched.
 func recordedOf(b *binding.Binding, steps []qtrace.Step, key string) (map[string][]qtrace.Gap, map[string][]qtrace.Watermark, map[string][]qtrace.Step, map[string][]qtrace.Step, bool) {
-	traces, _ := qtrace.Reconstruct(steps)
+	traces, _ := reconstruct(b, steps)
 	gaps, marks, pending, recorded := map[string][]qtrace.Gap{}, map[string][]qtrace.Watermark{}, map[string][]qtrace.Step{}, map[string][]qtrace.Step{}
 	for _, tr := range traces {
 		for _, p := range partitions(tr, key, snapshotFirst(b, tr)) {
@@ -331,7 +331,7 @@ func carried(tr *qtrace.Trace, rec string) (qtrace.Step, bool) {
 // its recorder, else by time, give or take the slack). A step whose
 // invocation is unknown is taken to follow it, as recorded.
 func overlapsOf(b *binding.Binding, steps []qtrace.Step, key string) map[string][]string {
-	traces, _ := qtrace.Reconstruct(steps)
+	traces, _ := reconstruct(b, steps)
 	out := map[string][]string{}
 	for _, tr := range traces {
 		if !snapshotFirst(b, tr) {
@@ -447,7 +447,7 @@ func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}
 // other), for its result: the order checked is re-sequenced onto one
 // thread, where neither shows.
 func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, resolving bool) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
-	traces, issues := qtrace.Reconstruct(steps) // deduplicated, gaps found across actors
+	traces, issues := reconstruct(ch.Binding, steps) // deduplicated, gaps found across actors
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
 	type job struct {
 		tr, part *qtrace.Trace
@@ -1178,7 +1178,7 @@ func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
 // was cut short, and the issues each actor's steps had as recorded that no
 // resolution removes (gaps, cycles).
 func resolve(ch *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
-	traces, issues := qtrace.Reconstruct(steps)
+	traces, issues := reconstruct(ch.Binding, steps)
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
 	for _, tr := range traces {
 		for _, i := range startIssues(ch.Binding, tr) {

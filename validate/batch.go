@@ -76,7 +76,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	groups := map[string][]*item{}
 	var keys []string
 	for i, steps := range runs {
-		traces, issues := qtrace.Reconstruct(steps)
+		traces, issues := reconstruct(c.Binding, steps)
 		reports[i] = &Report{Issues: issues}
 		for _, t := range traces {
 			if c.resumes(t) && c.mode.history == nil {

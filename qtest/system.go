@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/connect"
@@ -53,6 +54,23 @@ type System struct {
 // other rates than its own.
 func (s System) WithRates(r qenv.Rates) System {
 	s.Rates = r
+	return s
+}
+
+// WithBinding is the system checked by another binding: the same runs
+// (a seed makes the same run), judged by bind, with opts after the
+// system's (Linearize for a client side). A run that records two
+// sides (a service's commits and its clients' calls, under actors of
+// their own) is checked by one binding per side, each naming its actors
+// (the binding's actors: patterns):
+//
+//	commits := System{Binding: "commits.binding.yaml", Run: run}
+//	calls := commits.WithBinding("calls.binding.yaml", qtest.Linearize())
+//	commits.Explore(t, cfg).Expect(t, qtest.All(qtest.Conforms()))
+//	calls.Explore(t, cfg).Expect(t, qtest.All(qtest.Conforms()))
+func (s System) WithBinding(bind string, opts ...Option) System {
+	s.Binding = bind
+	s.Opts = append(slices.Clone(s.Opts), opts...)
 	return s
 }
 

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -53,6 +54,16 @@ type Binding struct {
 	// `xs.forall(x => P(x) implies Q(x))`, whose antecedent is
 	// `xs.exists(x => P(x))`.
 	Antecedents map[string]string `yaml:"antecedents"`
+	// Actors are the actors whose traces the binding checks: glob patterns
+	// (path.Match: * ? [a-z]), a pattern written "!p" excluding the actors
+	// p matches. Empty: every actor. A trace of another actor is another
+	// binding's, left out of every check (and named in the report's
+	// issues): so one run that records two sides (a system's commits under
+	// the tenants' names, its clients' calls under "<tenant>.clients") is
+	// checked by two bindings of one model, `actors: ["!*.clients"]` and
+	// `actors: ["*.clients"]`. Every step still reconstructs, so a gap or a
+	// settle is found over the whole run.
+	Actors []string `yaml:"actors"`
 	// Actions maps a model action to the templates that build its call.
 	Actions map[string]Action `yaml:"actions"`
 	// Invariants are vals of the model checked in every observed state.
@@ -196,6 +207,9 @@ func Load(path string) (*Binding, error) {
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
+	if err := bd.checkActors(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	for i := range bd.Within {
 		w := &bd.Within[i]
 		d, err := time.ParseDuration(w.BoundText)
@@ -205,6 +219,36 @@ func Load(path string) (*Binding, error) {
 		w.Bound = d
 	}
 	return &bd, nil
+}
+
+// checkActors fails on a pattern of Actors that path.Match cannot read.
+func (b *Binding) checkActors() error {
+	for _, p := range b.Actors {
+		pat := strings.TrimPrefix(p, "!")
+		if _, err := path.Match(pat, ""); err != nil || pat == "" {
+			return fmt.Errorf("actors: the pattern %q is not a glob (path.Match's: *, ?, [a-z]; \"!p\" excludes p's actors)", p)
+		}
+	}
+	return nil
+}
+
+// Checks reports whether the binding checks actor's trace (Actors): it
+// matches an including pattern (or there is none) and no excluding one.
+func (b *Binding) Checks(actor string) bool {
+	in, includes := false, false
+	for _, p := range b.Actors {
+		if pat, ok := strings.CutPrefix(p, "!"); ok {
+			if m, _ := path.Match(pat, actor); m {
+				return false
+			}
+			continue
+		}
+		includes = true
+		if m, _ := path.Match(p, actor); m {
+			in = true
+		}
+	}
+	return in || !includes
 }
 
 // SpecPath is the absolute path of the model.

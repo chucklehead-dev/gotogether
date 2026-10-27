@@ -61,8 +61,9 @@ version of this note:
   `jsonElem` renders objects as quoted strings and floats truncated:
   grist encodes events itself, and binding needs a typed function (§3.2;
   `toQuint`, added for slice 2, §8.2).
-- **One System has one binding, and qtest has no actor filter**: a
-  run records commit steps or client steps, not both (§3.1).
+- **One System has one binding, and qtest had no actor filter**: a
+  run records commit steps or client steps, not both (§3.1). Slice 2's
+  third core item adds the filter (a binding's `actors:`, §8.2).
 - **`Scan` walks every row of the store** (a Serializable commit again
   per scanned prefix), with no range: simstore's cost grows with the
   store, not the tenant (§2.10).
@@ -848,7 +849,10 @@ Every binding sees every actor of a run, so a run records one side
 commands and queries only), the client side checked by a second binding
 of the same model (`counters.calls.binding.yaml`: no positions, no
 processors' eventual vals). Both sides in one run need an actor filter
-in qtest (§8.2).
+(§8.2, item 3: a binding's `actors:`), and the client side its own
+actors: today both sides record actor t and the store's process, so
+slice 2 records a client's calls under `<t>.clients`, and the two
+bindings say `actors: ['!*.clients']` and `actors: ['*.clients']`.
 
 ### 3.2 The model and its binding
 
@@ -1339,6 +1343,30 @@ model and binding are generated.
 3. **An actor filter** for a System's binding (`qtest.Actors(...)`, or a
    binding's `actors:` pattern), so one run checks commit steps and
    client steps with their two bindings (§3.1).
+   **Done, decided: a binding field, not a qtest option.** `actors:` is
+   a list of globs (path.Match's), `!p` excluding what p matches, none
+   meaning every actor (`Binding.Checks`). Which steps a binding is
+   about is the binding's to say, and so every reader honours it: qtest,
+   `gotogether validate` on a real log that has both sides, qhegel; a
+   qtest option would have left the CLI checking the other side. The
+   filter applies after reconstruction (validate's `reconstruct`, at
+   every check and search): every step reconstructs, so a gap or a settle
+   is judged over the whole run (dropping the other side's steps first
+   would have made seq gaps of them), and the other actors' traces are
+   left out; a binding whose patterns match none of a run's actors has no
+   verdict and a warning naming them. One System has one binding still:
+   `System.WithBinding(path, opts...)` is the same System judged by
+   another binding (with Linearize for the clients), whose explorations
+   run the same seeds and so the same runs, simulated twice (cheap next
+   to the checks) instead of one run carrying two reports and claims that
+   would need to name their binding. qtest's `TestTwoBindingsOneRun`:
+   an account service recording its commits (actor `acct`) and its
+   clients' calls (`acct.clients`); both conform for the faithful
+   service, a service that lies to its clients is a Mismatch for the
+   clients' binding and conforms for the commits', and without the
+   filter the commits' binding meets steps without its fields. grist's
+   part (slice 2): gristsim records both sides at once, the clients
+   under `<tenant>.clients`.
 
 **grist**: sqlstore on qsql (explored like the simstore, claims 1–4
 again on it) and on SQLite (`real_test.go`: `grist.Main` on a SQLite file

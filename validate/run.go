@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -227,10 +228,37 @@ func (r *Report) Summary() string {
 	return s
 }
 
+// reconstruct is qtrace.Reconstruct of steps, keeping the traces of the
+// actors b checks (binding.Binding.Actors): every step reconstructs, so a
+// gap or a settle is found over the whole run, and another actor's trace
+// is another binding's. A run none of whose actors b checks has an issue
+// naming them (and, with no actor, no verdict).
+func reconstruct(b *binding.Binding, steps []qtrace.Step) ([]*qtrace.Trace, []qtrace.Issue) {
+	traces, issues := qtrace.Reconstruct(steps)
+	if len(b.Actors) == 0 {
+		return traces, issues
+	}
+	kept := traces[:0:0]
+	var others []string
+	for _, t := range traces {
+		if b.Checks(t.Actor) {
+			kept = append(kept, t)
+		} else {
+			others = append(others, nameOf(t.Actor))
+		}
+	}
+	if len(kept) == 0 && len(others) > 0 {
+		issues = append(issues, qtrace.Issue{Severity: "warn", Kind: "actors", Msg: fmt.Sprintf(
+			"the binding checks the actors %s; the run's are all other bindings' (%s): fix the binding's actors: patterns, or record under the actors it names",
+			strings.Join(b.Actors, ", "), strings.Join(others, ", "))})
+	}
+	return kept, issues
+}
+
 // Check reconstructs per-actor traces from steps (in any order, from any
 // number of recorders) and validates each.
 func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
-	traces, issues := qtrace.Reconstruct(steps)
+	traces, issues := reconstruct(c.Binding, steps)
 	rep := &Report{Issues: issues}
 	for _, t := range traces {
 		if (len(c.Binding.Hidden) > 0 || c.resumes(t)) && c.mode.history == nil {

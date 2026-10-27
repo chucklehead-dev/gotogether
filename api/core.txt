@@ -32,6 +32,7 @@ type Binding struct
     field Restart string `yaml:"restart"`
     field Defs string `yaml:"defs"`
     field Antecedents map[string]string `yaml:"antecedents"`
+    field Actors []string `yaml:"actors"`
     field Actions map[string]Action `yaml:"actions"`
     field Invariants []string `yaml:"invariants"`
     field Eventually []string `yaml:"eventually"`
@@ -45,6 +46,7 @@ type Binding struct
     field Dir string `yaml:"-"`
     field Path string `yaml:"-"`
     method (*Binding) CheckSpec() error
+    method (*Binding) Checks(actor string) bool
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
@@ -1743,6 +1745,7 @@ type System struct
     method (System) Judge(t testing.TB, ch qenv.Chooser) *Run
     method (System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport
     method (System) Sweep(t *testing.T, sw SweepConfig) *SweepResult
+    method (System) WithBinding(bind string, opts ...Option) System
     method (System) WithRates(r qenv.Rates) System
 type Take struct
     method (Take) InAtLeast(share float64) Take

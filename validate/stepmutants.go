@@ -150,7 +150,7 @@ func (c *Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt Sear
 // refused is the binding's error planning steps, if any: what Check
 // would fail with before a verdict.
 func refused(c *Checker, steps []qtrace.Step) error {
-	traces, _ := qtrace.Reconstruct(steps)
+	traces, _ := reconstruct(c.Binding, steps)
 	for _, tr := range traces {
 		if _, err := c.Binding.Plan(c.Model, tr); err != nil {
 			return fmt.Errorf("actor %s: %w", tr.Actor, err)

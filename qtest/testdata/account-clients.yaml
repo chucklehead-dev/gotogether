@@ -1,0 +1,13 @@
+# The account's clients' calls (actor "acct.clients"), checked with
+# Linearize, beside account-commits.yaml's commits of the same run.
+spec: ../../validate/testdata/account.qnt
+module: account
+constants:
+  LIMIT: '100'
+actors: ['*.clients']
+actions:
+  deposit:
+    expect: 'balance == {{.obs.balance}}'
+  withdraw:
+    expect: 'balance == {{.obs.balance}}'
+invariants: [nonNegative]

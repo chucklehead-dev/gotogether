@@ -382,3 +382,36 @@ func randJSON(r *rand.Rand, v itf.Value, t *qtype) any {
 	}
 	return map[string]any{"tag": v.Tag, "value": p}
 }
+
+// Actors: including patterns (any one), excluding ones (none), every
+// actor when there are none; a pattern path.Match cannot read fails Load.
+func TestActors(t *testing.T) {
+	for _, tc := range []struct {
+		pats []string
+		in   []string
+		out  []string
+	}{
+		{nil, []string{"t1", "t1.clients"}, nil},
+		{[]string{"*.clients"}, []string{"t1.clients"}, []string{"t1", "clients"}},
+		{[]string{"!*.clients"}, []string{"t1", "t2"}, []string{"t1.clients"}},
+		{[]string{"t?", "acct"}, []string{"t1", "acct"}, []string{"t10", "acct.clients"}},
+		{[]string{"t*", "!t9"}, []string{"t1"}, []string{"t9", "u"}},
+	} {
+		b := &Binding{Actors: tc.pats}
+		for _, a := range tc.in {
+			if !b.Checks(a) {
+				t.Errorf("%q: %s not checked", tc.pats, a)
+			}
+		}
+		for _, a := range tc.out {
+			if b.Checks(a) {
+				t.Errorf("%q: %s checked", tc.pats, a)
+			}
+		}
+	}
+	for _, bad := range []string{"[a-", "!", ""} {
+		if err := (&Binding{Actors: []string{bad}}).checkActors(); err == nil || !strings.Contains(err.Error(), "is not a glob") {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+}

@@ -1,0 +1,14 @@
+# The account's commits (actor "acct"), one of two bindings of one run
+# (actors_test.go): the clients' calls (actor "acct.clients") are
+# account-clients.yaml's.
+spec: ../../validate/testdata/account.qnt
+module: account
+constants:
+  LIMIT: '100'
+actors: ['!*.clients']
+actions:
+  deposit:
+    expect: 'balance == {{.obs.committed}}'
+  withdraw:
+    expect: 'balance == {{.obs.committed}}'
+invariants: [nonNegative]

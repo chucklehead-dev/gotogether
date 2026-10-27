@@ -18,6 +18,12 @@ Rules:
   Give a template only to map a field differently, e.g.
   `args: { o: '{{.outcome}}' }`. An action that needs nothing else can
   be `name: {}`.
+- A run that records two sides (a service's commits and its clients'
+  calls) gives each side actors of its own (`acct`, `acct.clients`) and
+  each a binding naming them: `actors: ['!*.clients']`, `actors:
+  ['*.clients']` (globs, `!` excludes; none: every actor). In qtest,
+  `sys.WithBinding("calls.binding.yaml", qtest.Linearize())` explores
+  the same runs with the other binding.
 - A failed step whose templates ignore `{{.outcome}}` must be mapped in
   the action's `outcomes` (`skip`, or `call` to replay it as a success).
   The tool refuses to guess.

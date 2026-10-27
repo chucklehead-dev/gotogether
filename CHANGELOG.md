@@ -75,6 +75,14 @@ The first release. What a user meets, by module:
   record or a sum defaults to it; `Param.Type` prints the whole type
   (`{ typ: str, tags: Set[(str, str)] }`, was `{...}`); a float field
   reaches templates whole (printed truncated, as before).
+- A binding's `actors:` (docs/grist.md §8.2, item 3): globs (`!p`
+  excludes) naming the actors whose traces it checks, so one run that
+  records two sides (commits and clients' calls, under actors of their
+  own) is checked by two bindings of one model; `Binding.Checks`. Every
+  step still reconstructs (gaps, settles), the other actors' traces are
+  left out, and a binding matching none of a run's actors has no verdict
+  and says so. `System.WithBinding(path, opts...)`: the same runs judged
+  by another binding.
 - API trim before the tags (G6). `validate.Command`, `Judged` and
   `Replay` move to package `validate/cli` as `cli.Check`, `cli.Judged`,
   `cli.Replay`: the check reads OTLP/JSON, and in validate it brought
