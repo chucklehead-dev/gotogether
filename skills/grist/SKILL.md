@@ -1,6 +1,6 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, the model's skeleton and both bindings generated from the App's catalog (grist model: the app writes only its rules and invariants), grist new for a new app, and grist/gristtest's harnesses (Generated, Mutants, Tier). Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, the model's skeleton and both bindings generated from the App's catalog (grist model: the app writes only its rules and invariants), grist new for a new app, and grist/gristtest's harnesses (Generated, Exercised, Mutants, Tier). Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
@@ -68,7 +68,8 @@ for it. No binding is written by hand.
    its outcome branches and frame conditions, `step`), the vendored
    `grist.qnt` and the bindings; you write `model/<app>.qnt`'s rules
    (per command its outcome, events and needs; per query its answer;
-   per processor its events; per site its guard; the read models' folds)
+   per processor its events, and a Delivers one which triggers it skips;
+   per site its guard; the read models' folds)
    and its invariants, each marked `// grist: invariant|eventually|violable
    [bindings]` (a binding name other than `default` is a test-only
    variant, `<app>.<name>.binding.yaml`). **Read
@@ -95,9 +96,10 @@ for it. No binding is written by hand.
    `store.<app>.commit`'s rate to reach commit faults in few seeds), `Tenants` and `Alphabet` (one tenant and two
    letters for contention), `CommitFaults`, `Check`, `Send` (each op drawn
    uniformly from the list: a name listed twice is sent about twice as
-   often; there is no ordered prologue, so a block that needs others
-   first may be weighted, and a claim that it was reached, `Takes`,
-   keeps a run that never reached it from passing), `Setup` (the
+   often), `Prologue` (`[]gristsim.Call{{Name: "join", Args: Join{...}}}`:
+   calls made in order, each answered, before any client's first: the
+   state a block that needs others first depends on, a member joined
+   before borrows), `Setup` (the
    app's doubles, reached through a processor's ctx; a double records
    its own effect with `actor` the tenant and `process` the App's name:
    [`references/model.md`](references/model.md)). Every run records
@@ -113,6 +115,18 @@ for it. No binding is written by hand.
    clients call it with `grist/client` (the API's codes and the
    network's faults, `rpc.api.response` among them, under the same
    kinds).
+   **Claim the runs reached the app**: a faithful test adds
+   `gristtest.Exercised(App, except...)`, every block of the catalog
+   taken in some run (each command by `ok` and each declared refusal,
+   every query, a processor's handling, effect and checkpoint, every
+   site's record), naming each missed with how to reach it; except
+   names a block (`"receipts"`), a command's outcome (`"borrow.limit"`)
+   or a command whole, each with its reason. A run that took none of the
+   app's blocks passes every other claim. It is not applied by default:
+   a contrast test's workload is narrow by design, and claims the one
+   outcome it needs, `qtest.Takes("borrow").Outcome("limit")`. The
+   summary's "never" list names the binding's actions (the app's
+   blocks) apart from grist's helpers (`appends`, `readsThrough`).
 5. **Prove each check can fail** with a mutant per claim (files in
    `testdata/mutants/<name>/` replacing the app's of the same names, run
    by `gristtest.Mutants{Names: ..., FullOnly: ...}.Run(t)` from a

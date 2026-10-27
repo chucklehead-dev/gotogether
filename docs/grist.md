@@ -1108,6 +1108,87 @@ without it:
   suspected to be: the generated skeleton is larger than the
   hand-written model, and quint typechecks all of it per process.
 
+## 0.11 What GR2b changed (the library trial's left items)
+
+The left items of §0.10 and the library trial's ranked list (its
+TRIAL.md, items 2-4 and 8), each with a test that fails with it taken
+out:
+
+- **A run that reached none of the app's blocks fails.** library's first
+  `TestFaithful` never committed a borrow and passed every claim.
+  `gristtest.Exercised(App, except...)` claims every block of the
+  catalog taken in some run: each command by `ok` and by each declared
+  refusal, each query, a processor's handling (Emits) or its effect and
+  checkpoint (Delivers; an at-most-once outcome when it declares a
+  success event), each site's record. It names every one missed with
+  how to reach it (`Config.Prologue`, `Gen`, `Send`, `Setup`).
+  A conflict, a reused key and a skip are not wanted (faults and
+  workloads decide them). It is qtest's `TakesEach` of the catalog's
+  `Takes` (core: `Take.Outcome`, `Take.Hint`, `TakesEach`), so its
+  verdict is any Takes' (`TestExercised`, qtest's
+  `TestTakesOutcomeAndEach`). **Not applied by default**: gristsim's
+  `Run` is a `qtest.System`'s run, which knows no claims, and a default
+  in qtest would fail every contrast and mutant test, whose workloads
+  are narrow by design (library's `TestScarce` never returns a book),
+  so each would carry an exception list. That noise is what makes
+  exceptions a habit. The faithful test claims it: the starter's
+  `TestFaithful` does (`TestNewIsGreen`), as do library's.
+  Applied there it found two real gaps. `TestGreedy`, the contrast of the
+  `staleLimit` mutant, had never reached the limit refusal it stands for
+  (its join and additions were random sends). `TestFaithful`'s runs had
+  never refused an invalid addition. Both are now reached through the
+  prologue below.
+- **The summary's "never" list** names the actions the binding names
+  (a grist binding names every block) apart from the model's others
+  (grist's `appends`, `readsThrough`, ...), and never cuts the first
+  short (`TestSummarySeparatesTheBindingsActions`).
+- **`Takes(action).Outcome(o)`**: a run counts only if it took the
+  action by a step recorded with outcome o. A contrast test claims the
+  refusal its mutant removes (library's `TestGreedy` claims `limit`,
+  `TestScarce` `unavailable`).
+- **An ordered workload**: `gristsim.Config.Prologue []gristsim.Call`,
+  calls made in order, each answered (or pending after MaxAttempts),
+  before any client sends its first. They go to each tenant or the one
+  named, recorded as clients' calls (actor `prologue`) through the same
+  faults (`TestPrologue`, which fails with the clients not waiting).
+  library's faithful, greedy and lending shapes open with it, where they
+  weighted `Send`.
+- **A Delivers processor's Skip has a step**: a Skip or a handler's Fail
+  of a Delivers processor commits its checkpoint as the processor's skip
+  step (`<p>Skip`, Fail's with its `grist.failed`). The generator writes a
+  hole `<p>Skips(prefix, trigger): bool` and an action `<p>Skip(trigger)`
+  that requires it, no effect step of the trigger, and nothing appended.
+  Its effect actions (and an at-most-once checkpoint) require it false.
+  A Fail is then a Mismatch of the skip (its `grist.failed` against the
+  skip's empty batch), as an Emits processor's Fail is a Mismatch of its
+  emit. `TestDeliversSkip`: the faithful rule conforms and takes both
+  the skip and the effect; a rule that skips nothing is
+  `Rejects("mailSkip")`, one that skips everything
+  `Rejects("mailEffect")`. Before, the skip's step bound to the
+  checkpoint action and failed on its missing `ok`. counters',
+  wallet-grist's and library's rules say `false` (no handler skips).
+- **A command that declares no refusals and refuses** is still refused
+  (its key answered: changing that would make every hand-written
+  command's refusal an error), but its step carries an error naming the
+  command and saying to declare `grist.Refuses`. The binding's "outcome
+  has no mapping" prints the step's error, so it now names the fix
+  (`TestUndeclaredRefusalNamesRefuses`; the step row gains an optional
+  `error`, which an older grist ignores).
+- **Left to GR3: a site's record ordered after its trigger's commit**
+  (docs/grist-instrumentation.md §3.3, its slices 1-2). The order GR3
+  specifies (`order.pos` at the cause, a thread per key, the cause
+  carried with the call) needs the call declared and its cause carried
+  to wherever it is served, which is GR3's `NewCall`. A `Site.Record`
+  that read the cause from its context would order an in-process double
+  only, and GR3's served record replaces it. One finding went into that
+  design (its 1b7309e): an order of 2·T+1 would place a record of a
+  trigger inside a batch of several events (wallet-grist's transfer
+  appends two moves) before the commit holding the trigger, whose step
+  is at 2·P, P the batch's end. The record is placed at the poller's
+  head, with the rule given the prefix through T. So library's
+  `everyReceiptForABorrow` stays an eventual val, and `<s>Admits` still
+  sees only the records.
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
 Both were read in grain's code (research notes, 2026-10-27); slice 1

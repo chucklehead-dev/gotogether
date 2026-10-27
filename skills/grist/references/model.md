@@ -43,11 +43,16 @@ SuccessType)` on a processor (a result contradicting it fails the
 trigger). A processor with neither is the generator's error. A refusal
 may not be named `ok`, `conflict`, `denied` or `error` (each already an
 outcome of grist's: Verify says so), nor the app `grist` (its model
-would be the vendored library's file). A `Delivers` processor's handler
-that returns Skip or Fail (no effect) has no step in the generated
-model yet: its checkpoint fails to bind or is rejected; filter inside
-the effect instead, or declare `Emits` for a processor that only
-appends.
+would be the vendored library's file). A command that declares no
+refusals and refuses at run time is refused, but its binding has no
+outcome for it: the binding's "outcome has no mapping" carries the
+step's error, which names the command and says to declare
+`grist.Refuses`. A `Delivers` processor's handler that returns Skip
+records the processor's skip step (`<p>Skip`: its checkpoint alone),
+which the model takes where your `<p>Skips(prefix, trigger)` says the
+handler skips; a handler's Fail is recorded so too, with its
+`grist.failed`, which a skip's empty batch does not match (a Mismatch,
+as an Emits processor's Fail is).
 
 ## The holes (module `<app>Rules`)
 
@@ -70,14 +75,18 @@ Per processor `p`: `<p>Emits(prefix, trigger)` (Emits) or
 `<p>Success(prefix, trigger)` (Delivers with a success event): `prefix`
 is the log through the trigger, `prefix[trigger - 1]` the trigger; a
 success event names the trigger (`paidOut(counter, trigger)`) so each
-trigger's outcome is its own. Per site `s`: `<s>Admits(records, r)`, the
+trigger's outcome is its own; and for a Delivers processor
+`<p>Skips(prefix, trigger): bool`, whether its handler skips the
+trigger (returns Skip: no effect step; `false` for a handler that never
+does): its effect actions require it false, its skip action true. Per site `s`: `<s>Admits(records, r)`, the
 dependency's own rule (a ledger's dedupe by key; `true` for a bank that
 records every payment). A site's records are ordered with no commit of
 the tenant's log (a record may be reconstructed before the commit that
 asked for it), and `<s>Admits` sees the records, not the log: a relation
 between them and the log ("every receipt is for a borrow") is an
 eventual val (`// grist: eventually`), judged after a settle, never an
-invariant. A read `r.Exists(T, grist.Tag("k", v))` records the read the
+invariant (GR3, docs/grist-instrumentation.md, places a served call's
+record after its trigger's commit). A read `r.Exists(T, grist.Tag("k", v))` records the read the
 generator names `<t>ByK(v)` (`r.Exists(T)`: `<t>Read`), what `<c>Needs`
 returns for it. A field the model leaves out (a list in a query's
 answer) is tagged `grist:"-"`; an untagged one is the generator's error. `STRS` and `INTS`: what `step` (`gotogether

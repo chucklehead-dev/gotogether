@@ -8,6 +8,15 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist, the library trial's left items (docs/grist.md §0.11;
+  api/grist.txt): `gristtest.Exercised(app, except...)` and
+  `gristtest.Takes(app)` (every block of the catalog taken, each command
+  by `ok` and each declared refusal, each missed named with how to reach
+  it; the starter's `TestFaithful` claims it); `gristsim.Config.Prologue`
+  and `gristsim.Call` (calls in order before the clients start); a
+  Delivers processor's Skip or Fail recorded as its skip step
+  (`<p>Skip`), with a generated hole `<p>Skips` and action; a refusal of
+  a command that declares none carries an error naming `grist.Refuses`.
 - qtest: `Take.Outcome(o)` (a run counts only if it took the action by a
   step recorded with outcome o: a contrast test claims the refusal it
   reached), `Take.Hint` (said when no run took it), `Take.Name`, and
