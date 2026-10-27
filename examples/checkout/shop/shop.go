@@ -143,12 +143,20 @@ var (
 	errTransient = errors.New("transient failure; retry later")
 )
 
-func (s *Shop) read(tx qenv.Txn, key string) (any, bool, error) {
+// orders and inventory are the shop's rows: an order by its id, a SKU's
+// units in stock by the SKU.
+var (
+	orders    = qenv.NewTable[Order]("order/")
+	inventory = qenv.NewTable[int]("stock/")
+)
+
+// read reads k of table t in tx, locking its row (but under NoLocks).
+func read[T any](s *Shop, tx qenv.Txn, t qenv.Table[T], k string) (T, bool, error) {
 	if s.Mutation == NoLocks {
-		v, ok := tx.Get(key)
+		v, ok := t.Get(tx, k)
 		return v, ok, nil
 	}
-	return tx.GetForUpdate(key)
+	return t.GetForUpdate(tx, k)
 }
 
 func (s *Shop) emit(tx qenv.Txn, ev Event) {
@@ -166,14 +174,13 @@ func (s *Shop) PlaceOrder(ctx context.Context, id, sku string, qty int) error {
 		created, soldOut = false, false
 		// lock the stock row first, then check for the order: under read
 		// committed a concurrent retry of this call is then seen
-		v, _, err := s.read(tx, "stock/"+sku)
+		stock, _, err := read(s, tx, inventory, sku)
 		if err != nil {
 			return err
 		}
-		if _, ok := tx.Get("order/" + id); ok {
+		if _, ok := orders.Get(tx, id); ok {
 			return nil
 		}
-		stock, _ := v.(int)
 		if stock < qty {
 			// A refusal is a step (the model's refuse), recorded when the
 			// read-only transaction commits: an error here would roll back
@@ -182,8 +189,8 @@ func (s *Shop) PlaceOrder(ctx context.Context, id, sku string, qty int) error {
 			soldOut = true
 			return nil
 		}
-		tx.Put("stock/"+sku, stock-qty)
-		tx.Put("order/"+id, Order{ID: id, SKU: sku, Qty: qty})
+		inventory.Put(tx, sku, stock-qty)
+		orders.Put(tx, id, Order{ID: id, SKU: sku, Qty: qty})
 		s.emit(tx, Event{Type: "placed", Order: id})
 		tx.OnCommit(func() { qobs.Record(ctx, "place", nil, "order", id, "qty", qty, "obs.stock", stock-qty) })
 		created = true
@@ -201,14 +208,13 @@ func (s *Shop) PlaceOrder(ctx context.Context, id, sku string, qty int) error {
 // Cancel cancels an order that has not shipped, releasing its stock.
 func (s *Shop) Cancel(ctx context.Context, id string) error {
 	return qenv.Retry(ctx, s.DB, 10, func(tx qenv.Txn) error {
-		v, ok, err := s.read(tx, "order/"+id)
+		o, ok, err := read(s, tx, orders, id)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return ErrNoOrder
 		}
-		o := v.(Order)
 		shipped, cancelled := o.Shipped, o.Cancelled
 		if s.Mutation == LockWithoutWrite {
 			_, shipped = tx.Get("ship/" + id)
@@ -220,17 +226,17 @@ func (s *Shop) Cancel(ctx context.Context, id string) error {
 		if cancelled {
 			return nil
 		}
-		sv, _, err := s.read(tx, "stock/"+o.SKU)
+		units, _, err := read(s, tx, inventory, o.SKU)
 		if err != nil {
 			return err
 		}
-		restocked := sv.(int) + o.Qty
-		tx.Put("stock/"+o.SKU, restocked)
+		restocked := units + o.Qty
+		inventory.Put(tx, o.SKU, restocked)
 		if s.Mutation == LockWithoutWrite {
 			tx.Put("cancel/"+id, true)
 		} else {
 			o.Cancelled = true
-			tx.Put("order/"+id, o)
+			orders.Put(tx, id, o)
 		}
 		s.emit(tx, Event{Type: "cancelled", Order: id})
 		tx.OnCommit(func() { qobs.Record(ctx, "cancel", nil, "order", id, "obs.stock", restocked) })
@@ -312,13 +318,12 @@ func (s *Shop) consumePayments(ctx context.Context, in Inbox) {
 
 func (s *Shop) pay(ctx context.Context, id string) error {
 	tx := s.DB.Begin(ctx)
-	v, ok := tx.Get("order/" + id)
+	o, ok := orders.Get(tx, id)
 	_, cancelledRow := tx.Get("cancel/" + id)
 	tx.Rollback()
 	if !ok {
 		return nil
 	}
-	o := v.(Order)
 	if o.Paid || o.Cancelled || cancelledRow {
 		return nil
 	}
@@ -338,16 +343,15 @@ func (s *Shop) pay(ctx context.Context, id string) error {
 		return err
 	}
 	return qenv.Retry(ctx, s.DB, 10, func(tx qenv.Txn) error {
-		v, _, err := s.read(tx, "order/"+id)
+		o, _, err := read(s, tx, orders, id)
 		if err != nil {
 			return err
 		}
-		o := v.(Order)
 		if o.Paid {
 			return nil
 		}
 		o.Paid = true
-		tx.Put("order/"+id, o)
+		orders.Put(tx, id, o)
 		s.emit(tx, Event{Type: "paid", Order: id})
 		tx.OnCommit(func() { qobs.Record(ctx, "markPaid", nil, "order", id) })
 		return nil
@@ -359,11 +363,10 @@ func (s *Shop) RunShipping(ctx context.Context, in Inbox) {
 	for {
 		ev, ack, nack := in.Receive(ctx)
 		err := qenv.Retry(ctx, s.DB, 10, func(tx qenv.Txn) error {
-			v, ok, err := s.read(tx, "order/"+ev.Order)
-			if err != nil || !ok || !v.(Order).Paid {
+			o, ok, err := read(s, tx, orders, ev.Order)
+			if err != nil || !ok || !o.Paid {
 				return err
 			}
-			o := v.(Order)
 			shipped, cancelled := o.Shipped, o.Cancelled
 			if s.Mutation == LockWithoutWrite {
 				_, shipped = tx.Get("ship/" + ev.Order)
@@ -376,7 +379,7 @@ func (s *Shop) RunShipping(ctx context.Context, in Inbox) {
 				tx.Put("ship/"+ev.Order, true)
 			} else {
 				o.Shipped = true
-				tx.Put("order/"+ev.Order, o)
+				orders.Put(tx, ev.Order, o)
 			}
 			tx.OnCommit(func() { qobs.Record(ctx, "ship", nil, "order", ev.Order) })
 			return nil

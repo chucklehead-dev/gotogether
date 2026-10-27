@@ -15,7 +15,11 @@ Findings are ranked by value to users and maintainers within each part:
 
 Each says where, the shape now, the shape proposed, what it buys, the
 risk, and its state: *done* (with the commit's subject), *proposed*, or
-*rejected* (looked at, not worth it). Phase 1 covered the core module,
+*rejected* (looked at, not worth it).
+
+The maintainer's decisions (2026-10-27), after two design reviews of B4
+and C1: B4 yes, with the reviewers' changes (below); C1 dropped; C2 yes;
+C3 left as it is. Phase 1 covered the core module,
 qhegel, qweave and qanalysis; later phases extend it to the rest
 (§ Phase 2).
 
@@ -216,7 +220,7 @@ Checked: `Recorder.Steps`, `Counts.Steps`, `qtrace.Reconstruct`. Each copies und
 caller keeps; an `iter.Seq` could not hold the lock across the caller's
 loop body, and the copies are small. No API gains by an iterator.
 
-### B4. Typed store keys (needs design review)
+### B4. Typed store keys (done: "qenv: Table[T], an app's typed records over a Txn")
 
 Users keep a `qenv.Store` value as `any` and assert it back at each read
 (examples/wallet's `entries(v)`, grpcledger's, quorumkv's); a wrong
@@ -244,9 +248,25 @@ change: the store still holds `any`.
 (`qenv.Keys[[]Entry]`), after which calls look like plain methods; that
 `Txn.Get` still works for untyped keys. Nothing else changes.
 
+Decided: yes, with the reviewers' changes, as built. The name is
+`qenv.Table[T]`, made by `qenv.NewTable[T](prefix)` (`Keys` would read
+as `Store.Keys`). It is a value over Txn: `Get`, `GetForUpdate`, `Put`,
+`Delete`, `Scan` and `ScanRange` (`[]Row[T]`, as Txn's scans return
+`[]KV`), `Key`, `Prefix`, `Range`; each makes the one Txn call its raw
+form makes, so levels, commit faults, the history check and Txn
+wrappers see the same transaction (`TestTableIsItsRawCalls`). Its
+methods take the key after the prefix, and a key that starts with the
+prefix is not refused: it may be a legitimate suffix (prefix "a",
+account "ab"). A typed read of a value of another type panics naming
+the key, the type found and T. The doc says what the proposal's
+example missed: values are shared, so clip before appending
+(`append(slices.Clip(es), e)`). The faults skill says when to use a
+Table, raw Txn or qsql; examples/wallet's accounts and
+examples/checkout's orders and stock are ported.
+
 ## C. Breaking exported changes (not implemented)
 
-### C1. `ShrinkActions` infers its action type (needs design review)
+### C1. `ShrinkActions` infers its action type (dropped by the maintainer)
 
 (a) Today, and with the proposal:
 
@@ -279,7 +299,7 @@ Breaking: ShrinkActions has one user outside its tests (examples/webjobs)
 and one line in the workflow skill's verdicts reference. Recommendation:
 do it before the first tag.
 
-### C2. qcover's Go-coverage reader out of the simulated package
+### C2. qcover's Go-coverage reader out of the simulated package (decided: yes)
 
 qcover is held to the simulation's rules (woven into simulated code,
 translated by gosim), yet `ReadGoCover` runs `go tool covdata` (os/exec)
@@ -289,7 +309,7 @@ import graph, below). Proposed: `qcover/gocover` with `Read`, `Parse`,
 `Profile`, `Block`, and `Compare` taking it. Recommendation: yes, cheap
 now, a rename later.
 
-### C3. Options or Config: one name for one pattern
+### C3. Options or Config: one name for one pattern (decided: left as it is)
 
 Config structs are named both ways: `LinearizeOptions`, `ReplayOptions`,
 `VaryOptions`, `SearchOptions`, `ITFOptions`, `validate.Options`, beside

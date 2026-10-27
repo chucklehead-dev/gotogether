@@ -555,6 +555,7 @@ func NewQueue(s *Sim, name string, p *Process) *Queue
 func NewSeeded(seed uint64) *Seeded
 func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx context.Context, req Req) (Resp, error)) *Service[Req, Resp]
 func NewStore(s *Sim, name string, iso Isolation) *Store
+func NewTable[T any](prefix string) Table[T]
 func NewTimeProfile() *TimeProfile
 func Now(ctx context.Context) time.Time
 func ProcessOf(ctx context.Context) *Process
@@ -726,6 +727,9 @@ type Replayer = choice.Replayer
     method (*Replayer) Choose(kind string, n int) int
     method (*Replayer) Err() error
     method (*Replayer) Left() int
+type Row[T any] struct
+    field Key string
+    field Val T
 type Script struct
     field Faults []Scripted
     field Base Chooser
@@ -803,6 +807,16 @@ type Store struct
     method (*Store) Load(key string, val any)
     method (*Store) Read(key string) (any, bool)
     method (*Store) Version() int64
+type Table[T any] struct
+    method (Table[T]) Delete(tx Txn, k string)
+    method (Table[T]) Get(tx Txn, k string) (T, bool)
+    method (Table[T]) GetForUpdate(tx Txn, k string) (T, bool, error)
+    method (Table[T]) Key(k string) string
+    method (Table[T]) Prefix() string
+    method (Table[T]) Put(tx Txn, k string, v T)
+    method (Table[T]) Range() KeyRange
+    method (Table[T]) Scan(tx Txn) []Row[T]
+    method (Table[T]) ScanRange(tx Txn, r KeyRange) []Row[T]
 type TimeProfile = profile.Profile
     method (*Profile) Total() time.Duration
     method (*Profile) Waited(task string, start time.Time, now func() time.Time) func()

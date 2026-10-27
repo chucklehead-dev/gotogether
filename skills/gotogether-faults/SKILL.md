@@ -22,6 +22,28 @@ shrinking removes faults.
   `database/sql` implements them. `qenv.Retry(ctx, db, n, fn)` begins,
   runs fn and commits, again on a conflict: fn returns nil to commit and
   never calls Commit itself.
+- **Typed records:** declare an app's own records once as a
+  `qenv.Table[T]` and read them without assertions:
+
+  ```go
+  var accounts = qenv.NewTable[[]Entry]("acct/") // keys "acct/<account>", values []Entry
+
+  es, _, err := accounts.GetForUpdate(tx, a) // a is the key after the prefix
+  accounts.Put(tx, a, append(slices.Clip(es), e))
+  for _, r := range accounts.Scan(tx) { /* r.Key is "<account>", r.Val a []Entry */ }
+  ```
+
+  Each method is the one Txn call on `prefix+k`, so isolation, commit
+  faults, the history check and any Txn wrapper see what they would of
+  the raw call. Values are shared and immutable: clip a slice before
+  appending (`slices.Clip`), copy a map before changing it. A key
+  holding another type (written raw) panics naming the key and both
+  types. Use a Table for an app's own records (examples/wallet's
+  accounts, examples/checkout's orders and stock); raw `Txn.Get`/`Put`
+  for an untyped flag or marker row, in code that implements or wraps
+  `Txn` (a recording DB, an adapter), and in tests through
+  `Store.Read`/`Store.Load` (whole store keys: `Table.Key(k)`); `qenv/qsql`
+  for relational data ([`references/sql.md`](references/sql.md)).
 - **Other services:** small interfaces of your own (a broker, a payment
   client), implemented in the deployment over `qenv.Queue` and
   `qenv.Service`.

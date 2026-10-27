@@ -8,6 +8,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qenv.Table[T]` (`qenv.NewTable[T](prefix)`, docs/refactors.md B4):
+  an app's records under one prefix, typed: `Get`, `GetForUpdate`,
+  `Put`, `Delete`, `Scan` and `ScanRange` (`[]qenv.Row[T]`, keys after
+  the prefix), `Key`, `Prefix`, `Range`. Each is the one Txn call on the
+  prefixed key, so levels, commit faults, the history check and Txn
+  wrappers see the raw call; a value of another type under its key
+  panics naming the key and both types. examples/wallet's accounts and
+  examples/checkout's orders and stock use it.
 - grist, declared calls on the real tier over HTTP (GR3's slice 3,
   docs/grist.md §0.14; api/grist.txt): `grist.OverHTTP(base, client)`
   (`POST base/<call>`, `Idempotency-Key`, `grist.CauseHeader`

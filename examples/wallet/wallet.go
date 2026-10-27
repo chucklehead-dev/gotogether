@@ -145,18 +145,17 @@ type Bank struct {
 	tags     int            // the last entry's tag
 }
 
-func accountKey(a string) string { return "acct/" + a }
-
-func entries(v any) []Entry { es, _ := v.([]Entry); return es }
+// accounts are the accounts' lists of entries, by account.
+var accounts = qenv.NewTable[[]Entry]("acct/")
 
 // read reads account in tx, locking it unless lock is false.
 func read(tx qenv.Txn, account string, lock bool) ([]Entry, error) {
 	if !lock {
-		v, _ := tx.Get(accountKey(account))
-		return entries(v), nil
+		es, _ := accounts.Get(tx, account)
+		return es, nil
 	}
-	v, _, err := tx.GetForUpdate(accountKey(account))
-	return entries(v), err
+	es, _, err := accounts.GetForUpdate(tx, account)
+	return es, err
 }
 
 // apply moves amounts in tx: each account's entry appended to its list,
@@ -176,7 +175,7 @@ func (b *Bank) apply(tx qenv.Txn, id int, moves map[string]int, have map[string]
 			}
 		}
 		b.tags++
-		tx.Put(accountKey(a), append(slices.Clip(es), Entry{id, amt, b.tags}))
+		accounts.Put(tx, a, append(slices.Clip(es), Entry{id, amt, b.tags}))
 	}
 	return nil
 }
@@ -589,4 +588,4 @@ func tags(es []Entry) []int {
 }
 
 // isAccount reports whether a store key is an account's, and which.
-func isAccount(k string) (string, bool) { return strings.CutPrefix(k, "acct/") }
+func isAccount(k string) (string, bool) { return strings.CutPrefix(k, accounts.Prefix()) }

@@ -39,6 +39,8 @@ type recorded struct {
 	ended bool // committed, or tried to: a Rollback after it changes nothing
 }
 
+func entries(v any) []Entry { es, _ := v.([]Entry); return es }
+
 func (t *recorded) txn() *qhistory.Txn { return &t.h.Txns[t.i] }
 
 func (t *recorded) readOp(k string, v any) {
