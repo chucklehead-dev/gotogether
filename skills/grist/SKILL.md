@@ -1,14 +1,16 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist (gotogether's framework, slice 1) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least once), options, the store contract (grist/store) with memstore and simstore, gristsim.Run as a qtest.System, a hand-written model over one tenant's log and its binding. Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least once), options, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore or the SQL tier, a real-tier run on SQLite judged by the same binding, a hand-written model over one tenant's log and its bindings (store side and client side, actors:). Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
 
 grist (module `github.com/chucklehead-dev/gotogether/grist`, design in
-docs/grist.md, slice 1 built; §0.2 says what its review changed)
-records every block's step itself: each commit and committed refusal at
-the store, each query on return, each effect. The application writes
+docs/grist.md, slice 1 built, slice 2's SQL store built; §0.2 and §0.3
+say what changed) records every block's step itself: each commit and
+committed refusal from the row it wrote in its own transaction (the
+store's step log, read back by `grist.Relay`), each query on return,
+each effect. The application writes
 its decisions and folds; its model is one tenant's log.
 examples/counters is the walk-through: read its README's table first.
 
@@ -62,7 +64,10 @@ examples/counters is the walk-through: read its README's table first.
    qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}`;
    `gristsim.Config` sets the isolation level (Serializable and
    ReadCommitted: Snapshot's runs are Serializable's, every append
-   writing the head), `Tenants` and `Alphabet` (one tenant and two
+   writing the head), `SQL` (the app on grist/sqlstore over qsql: the
+   real tier's statements, qsql's SQLSTATEs and commit faults; the
+   nemesis acts per scheduling step and qsql has more of them, so raise
+   `store.<app>.commit`'s rate to reach commit faults in few seeds), `Tenants` and `Alphabet` (one tenant and two
    letters for contention), `CommitFaults`, `Check`, `Send`, `Setup` (the
    app's doubles, reached through a processor's ctx). Every run records
    both sides: the store's steps (actor the tenant: commits relayed from
@@ -99,8 +104,27 @@ examples/counters is the walk-through: read its README's table first.
 - A run that does not settle names its tasks: a poller is a daemon; a
   client waiting means the node is down (gristsim restarts it from an
   `OnCrash` hook).
-- A store of your own implements `store.Store` (package grist/store;
-  `store.StepLog` if it keeps each commit's step in its transaction, as
-  a database/sql store must): run `storetest.Run(t, harness)`; its checks
-  compare conditions, reads and concurrent appends with brute force over
-  every event, wake a `Wait`, and mutate readers' copies.
+- A store of your own implements `store.Store` and `store.StepLog`
+  (package grist/store: each commit's step written in its transaction,
+  `Steps` and `WaitSteps`; a node records commits from it alone):
+  run `storetest.Run(t, harness)`; its checks compare conditions, reads
+  and concurrent appends with brute force over every event, wake a
+  `Wait` and a `WaitSteps`, and mutate readers' copies. Errors no retry
+  fixes are `store.Permanent`.
+- **The real tier**: `sqlstore.Open(ctx, db, sqlstore.Postgres |
+  sqlstore.SQLite, sqlstore.Options{Name: app.Name})` on the
+  application's own driver (SQLite: `sql.Open("sqlite",
+  sqlstore.SQLiteDSN(path, 5*time.Second))`, single-writer, checked);
+  `App.Start(ctx, st)` with a recorder writing `qobs.FileSink(path,
+  qobs.PerStep)`; before recording a settle, wait for the processors'
+  checkpoints and `Relay.Behind(ctx) == 0` (`grist.WithRelay` to hold
+  the node's relay); validate the file with the same binding
+  (`qtest.Validate(t, binding, steps)`). examples/counters'
+  `TestRealSQLite` is the walk-through. A second node's relay records the
+  log again from its first row; Reconstruct drops the copies (info
+  issues "seen twice").
+- **PostgreSQL**: `sqlstore.Postgres` states read committed and sets
+  `lock_timeout` and `idle_in_transaction_session_timeout` per
+  transaction; grist/sqlstore's contract test runs against one with
+  `GRIST_POSTGRES=<pgx dsn>` (a scratch server: `initdb -D dir`, then
+  `postgres -D dir -k sockdir`).

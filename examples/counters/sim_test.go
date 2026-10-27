@@ -95,9 +95,8 @@ func TestFaithfulAtClaim1(t *testing.T) {
 // no, nor a committed one's commit again. Both sides conform: the
 // commits (every committed outcome needs its key fresh) and the clients,
 // linearized. Without the marker (no key remembered) the duplicates
-// commit twice: 40 of 40 runs fail at the commits, 33 of 40 at the
-// clients; without refusal markers 17 of 20 at the commits (4 seeds miss
-// either with chance under 0.1%).
+// commit twice: 19 of 20 runs fail at the commits; without refusal
+// markers 18 of 20 (4 seeds miss either with chance under 0.1%).
 func TestDuplicateRequests(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)

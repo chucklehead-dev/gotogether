@@ -36,25 +36,38 @@ func TestMutant(t *testing.T) {
 		// letters: a second create of a name commits where the model's
 		// precondition is false. At ReadCommitted (PostgreSQL's default) the
 		// loser of the race for the head waits for its lock and commits
-		// blind: 30 of 40 runs (4 seeds miss with chance 0.4%). Under
+		// blind: 25 of 40 runs (4 seeds miss with chance 2%). Under
 		// Snapshot and Serializable the loser gets ErrConflict, a transient
 		// error whose retry decides again on fresh reads: the window is
 		// closed (0 of 120 runs in three configurations), so the claim is
 		// ReadCommitted's. TestFaithfulAtClaim1 is its contrast
-		system(commits, gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}).
+		claim1 := gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}
+		system(commits, claim1).
+			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
+			Expect(t, qtest.Some(qtest.Rejects("createCounter")))
+		// the same on the SQL tier (sqlstore over qsql at read committed:
+		// the loser of the race for the head lock waits for it, then
+		// commits blind): 25 of 40 runs, 4 seeds miss with chance 2%
+		claim1.SQL = true
+		system(commits, claim1).
 			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
 			Expect(t, qtest.Some(qtest.Rejects("createCounter")))
 	case "dispatchDirect":
 		// Claim 4: grain's processor duplicate is caught. One tenant, creates
 		// and increments: the average's step records no event where the
 		// model's action appends one, and the raw append shifts every later
-		// head. Without faults in 24 of 30 runs, with commit faults and
-		// crashes in 25 of 30 (4 seeds miss with chance under 0.2% each)
+		// head. Without faults in 15 of 30 runs (5 seeds miss with chance
+		// 3%), with commit faults and crashes in 22 of 30 (4 seeds: 0.5%)
 		cfg := gristsim.Config{Tenants: []string{"t1"}, Send: []string{"create-counter", "increment-counter"}}
-		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
+		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 5)}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
 		cfg.CommitFaults = true
 		system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
+			Expect(t, qtest.Some(qtest.Mismatch("average")))
+		// the same on the SQL tier, without faults: 18 of 30 runs (4 seeds
+		// miss with chance 3%)
+		cfg.CommitFaults, cfg.SQL = false, true
+		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)

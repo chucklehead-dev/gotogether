@@ -84,6 +84,11 @@ The first release. What a user meets, by module:
   and on PostgreSQL 16 (`GRIST_POSTGRES`). `gristsim.Config.SQL` runs an
   application on it over qsql. `grist.Relay.Behind` says how far a relay
   is behind, for a real tier's settle.
+- examples/counters on the SQL tier and the real one: `TestSQLTier`,
+  `TestSQLDuplicateRequests`, `TestSQLFaithfulAtClaim1` and both mutants
+  on sqlstore over qsql, and `TestRealSQLite` (a SQLite file, steps to a
+  `PerStep` file sink, validated by `counters.binding.yaml`); its
+  bindings name their side (`actors: ['!*.clients']`, `['*.clients']`).
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose
