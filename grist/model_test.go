@@ -3,6 +3,7 @@ package grist_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -246,5 +247,96 @@ func quint(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("quint %v: %v\n%s", args, err, out)
+	}
+}
+
+// An app named grist would have its model at model/grist.qnt, the
+// vendored library's file, which every regeneration overwrites: the
+// generator refuses it, writing nothing over the app's rules.
+func TestGenerateRefusesGristsName(t *testing.T) {
+	a := grist.New("grist")
+	grist.NewEvent[itemNoted](a, "noted")
+	dir := t.TempDir()
+	own := filepath.Join(dir, "model", "grist.qnt")
+	os.MkdirAll(filepath.Dir(own), 0o755)
+	os.WriteFile(own, []byte("// the app's rules\n"), 0o644)
+	if _, err := grist.Generate(a, dir); err == nil || !strings.Contains(err.Error(), "rename the app") {
+		t.Errorf("Generate of an app named grist: %v, want refused", err)
+	}
+	if _, err := grist.Starter(a); err == nil {
+		t.Error("Starter of an app named grist: no error")
+	}
+	if err := grist.MainArgs(context.Background(), a, []string{"model", "-dir", dir}, io.Discard, io.Discard); err == nil {
+		t.Error("the model command of an app named grist: no error")
+	}
+	if _, err := grist.Generate(grist.New("Grist"), dir); err == nil {
+		t.Error("Generate of an app named Grist (model/Grist.qnt, grist.qnt on a case-insensitive file system): no error")
+	}
+	if b, _ := os.ReadFile(own); string(b) != "// the app's rules\n" {
+		t.Errorf("the app's model was overwritten (%d bytes of grist.qnt)", len(b))
+	}
+}
+
+// A query whose result has no scalar field (the model compares none) is
+// the record { unit: ... }: its Starter stub is one, so an app's first
+// `model -init` typechecks.
+func TestStarterEmptyResult(t *testing.T) {
+	type tags struct {
+		Tags []string `json:"tags"`
+	}
+	a := grist.New("tagger")
+	grist.NewEvent[itemNoted](a, "noted")
+	grist.NewQuery(a, "tags", func(r *grist.Reads, q struct{}) (tags, error) { return tags{}, nil }, grist.Authorize(grist.Authenticated))
+	b, err := grist.Starter(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "TagsResult = { unit: true }") {
+		t.Errorf("the empty result's stub:\n%s", b)
+	}
+	requireQuint(t)
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "model"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, "model", "tagger.qnt"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g, err := grist.Generate(a, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Write(dir); err != nil {
+		t.Fatal(err)
+	}
+	quint(t, filepath.Join(dir, "model"), "typecheck", "tagger.qnt")
+}
+
+// The model command: without the app's model it says how to start one
+// (-init), -init writes the starter beside the generated files, naming
+// each, and -check fails on a generated file edited by hand, naming it.
+func TestMainModel(t *testing.T) {
+	dir := t.TempDir()
+	model := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := grist.MainArgs(context.Background(), shopApp(), append([]string{"model", "-dir", dir}, args...), &out, io.Discard)
+		return out.String(), err
+	}
+	if _, err := model(); err == nil || !strings.Contains(err.Error(), "shop model -init") {
+		t.Errorf("model with no model/shop.qnt: %v, want the fix (-init)", err)
+	}
+	out, err := model("-init")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"wrote " + filepath.Join(dir, "model", "shop.qnt"), "model/shop_gen.qnt", "shop.binding.yaml", "shop.calls.binding.yaml"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("model -init's output %q lacks %q", out, want)
+		}
+	}
+	if _, err := model("-check"); err != nil {
+		t.Errorf("model -check right after -init: %v", err)
+	}
+	os.WriteFile(filepath.Join(dir, "shop.binding.yaml"), []byte("# by hand\n"), 0o644)
+	if _, err := model("-check"); err == nil || !strings.Contains(err.Error(), "shop.binding.yaml") {
+		t.Errorf("model -check of an edited binding: %v, want it named", err)
 	}
 }

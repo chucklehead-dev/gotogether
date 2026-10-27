@@ -250,6 +250,12 @@ func newGen(c Catalog) (*gen, error) {
 	if err != nil {
 		return nil, fmt.Errorf("grist model: the app's name %q: %w", c.Name, err)
 	}
+	if strings.EqualFold(aq, "grist") {
+		// its model would be model/grist.qnt, the vendored library's file
+		// (on a case-insensitive file system too), which every regeneration
+		// overwrites, and its module the library's
+		return nil, fmt.Errorf("grist model: an app named %q: its model's file and module would be grist's own library's (model/grist.qnt), which regenerating overwrites: rename the app", c.Name)
+	}
 	g := &gen{c: c, aq: aq, events: map[string]CatalogEvent{}, names: map[string]string{}}
 	var ps []string
 	for _, e := range c.Events {
@@ -478,6 +484,9 @@ func (g *gen) zeroResult(q CatalogBlock) string {
 		return zeroOf(quintScalar(q.Result))
 	}
 	fs, _ := scalarFields(q.Result)
+	if len(fs) == 0 {
+		return "{ unit: true }" // recordType's, and the binding's answer
+	}
 	parts := make([]string, len(fs))
 	for i, f := range fs {
 		parts[i] = f.json + ": " + zeroOf(f.typ)

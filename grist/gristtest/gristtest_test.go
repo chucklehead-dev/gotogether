@@ -130,10 +130,31 @@ func TestAnswered(t *testing.T) {
 	}); len(msgs) > 0 {
 		t.Errorf("every answer has its step: %v", msgs)
 	}
+	// a call the API denied ran nothing at the store; two tenants' clients
+	// may use one id, each answered by its own tenant's step
+	if msgs := run(t, func(tb testing.TB) {
+		gristtest.Answered(tb, a, traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t1/clients", "c2", "denied"),
+			step("t2/clients", "c1", "ok"), step("t2", "c1", "ok")))
+	}); len(msgs) > 0 {
+		t.Errorf("a denied call, an id in two tenants: %v", msgs)
+	}
+	// a key's calls answered alike (the second from its marker), and the
+	// key reused with other arguments, refused at the store on each try
+	if msgs := run(t, func(tb testing.TB) {
+		gristtest.Answered(tb, a, traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t1/clients", "c1", "ok"),
+			step("t1/clients", "c1", "idempotency-key-reused"), step("t1", "c1", "idempotency-key-reused"), step("t1", "c1", "idempotency-key-reused")))
+	}); len(msgs) > 0 {
+		t.Errorf("a key answered twice, then reused: %v", msgs)
+	}
 	for name, ts := range map[string][]*qtrace.Trace{
 		"missing": traces(step("t1/clients", "c1", "ok")),
-		"differs": traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "full")),
-		"twice":   traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t1", "c1", "ok")),
+		// t1's step of the id does not answer t2's client
+		"another tenant's": traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t2/clients", "c1", "ok")),
+		"differs":          traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "full")),
+		"twice":            traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t1", "c1", "ok")),
+		// a key's two outcomes: the client told the one the store lacks
+		"two outcomes":      traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t1/clients", "c1", "conflict")),
+		"reused unrecorded": traces(step("t1/clients", "c1", "ok"), step("t1", "c1", "ok"), step("t1/clients", "c1", "idempotency-key-reused")),
 	} {
 		if msgs := run(t, func(tb testing.TB) { gristtest.Answered(tb, a, ts) }); len(msgs) == 0 {
 			t.Errorf("%s: Answered passed", name)

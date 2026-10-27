@@ -905,7 +905,8 @@ with a test that fails without it:
   undeclared rejection is its error, not remembered), `grist.Emits(types...)`
   or `grist.Delivers(d, success...)` on a processor (a result that
   contradicts it fails the trigger: tried, then `grist.failed`; Skip and
-  Fail allowed under any). A declaration the code could contradict
+  Fail allowed under any, though a Delivers processor's have no step in
+  its generated model: §0.10). A declaration the code could contradict
   silently would make the generated model wrong silently
   (`TestRefusesDeclared`, `TestShapeDeclared`; each fails with its
   enforcement taken out). A processor declaring neither is the
@@ -998,6 +999,74 @@ with a test that fails without it:
   and real-tier harnesses 563 → 265 lines; wallet-grist's model 314
   (211) → 124 (64), its three bindings → none, its harnesses 388 → 145.
   Their claims are unchanged and pass in full mode.
+
+## 0.10 What the review of GR2 changed
+
+Two reviewers' reading of GR2 (an architect's and a newcomer's, who ran
+`grist new` and grew the app it wrote), each fix with a test that fails
+without it:
+
+- **The generated models judge what the hand-written ones did.**
+  counters' and wallet-grist's skeletons plus their holes were diffed
+  against the hand-written models they replaced: on the store's side
+  the actions are equivalent (the generated at-least-once checkpoint
+  takes the processor's own EffectTries, where the hand-written one
+  wrote EFFECT_TRIES), and every mutant is caught by its claim as
+  before. The clients' side is weaker in one place: a conflict answers
+  any call of a conditioned command there, where wallet's hand-written
+  model required a valid transfer (an invalid one is refused before it
+  reads, so it cannot conflict). The store's side still refuses it (a
+  conflict needs a recorded read the condition failed on, and the
+  invalid decision recorded none), and both sides judge every run, so
+  no mutant escapes; a generic rule would need the clients to know the
+  reads.
+- **Regeneration never writes the app's file**, but an app named
+  `grist` had its model at `model/grist.qnt`, the vendored library's,
+  which every `model` overwrote (with its module named as the
+  library's): Generate, Starter and `grist new` refuse the name
+  (`TestGenerateRefusesGristsName`, `TestNewRefuses`).
+- **A refusal named as one of grist's own outcomes** (`ok`, `conflict`,
+  `denied`, `error`) would be judged as that outcome: a "conflict"
+  refusal by the failed-condition branch (and committed without its
+  condition), a "denied" one at the clients as a 403 that answers
+  nothing. `Refuses` refuses them (`TestRefusesDeclared`).
+- **Answered** keyed commands by id alone: two tenants' clients using
+  one id failed it ("two steps on one side"), and so did a call the API
+  denied (no store step, by right), a key answered twice from its
+  marker, and a key reused with other arguments (its refusal a step per
+  try). It now keys by tenant and id, skips denied calls, and requires
+  of the store one outcome per key (key-reuse refusals aside) and each
+  outcome a client was told (`TestAnswered`).
+- **The starter's stub of a query whose result has no scalar field** was
+  `{  }`, which does not parse; it is `{ unit: true }`, the record type
+  and the binding's answer (`TestStarterEmptyResult`).
+- **Onboarding**: `<app> model` with no `model/<app>.qnt` listed every
+  hole as undefined; it now says the file is missing and that `model
+  -init` writes one, and names the files it writes
+  (`TestMainModel`, the model command's first test). `gristtest.Overlay`
+  is unexported: it is `Mutants`' mechanics.
+- **Left**: a `Delivers` processor's Skip or handler Fail (the runtime
+  allows both) commits a checkpoint with no effect step and no `ok`,
+  which its generated actions cannot take: the binding fails on the
+  missing parameter, or the at-least-once checkpoint is rejected. A
+  sound model needs the rule for which triggers skip (a hole
+  `<p>Skips(prefix, trigger)`) and an action for the skip; the docs say
+  so meanwhile (Delivers, skills/grist's model reference). And a
+  command that declares no `Refuses` but refuses at run time fails in
+  the binding ("outcome has no mapping"), an error that names the
+  binding, not `grist.Refuses`.
+- **Cost**: counters' `-short` measured 359.5 CPU s here (load 10-25 on
+  4 cores; ci/test-times.txt says 354): 90 `quint test` processes, 4
+  typechecks and one compile. Each `quint test` of a counters replay
+  costs about 3.3 CPU s, of which a typecheck of the replay is 3.1 and of
+  `grist.qnt` alone 1.5 (a trivial module's whole test is 0.45): the
+  library's typecheck is most of every replay's fixed cost, spread over
+  its defs (no one def is slow). Moving the clients' modules out of the
+  store binding's files saved 3% per process, under the noise; sharing
+  one typecheck between a spec's two bound modules would save one
+  quint process per test binary. Neither is the cheap waste the 5% was
+  suspected to be: the generated skeleton is larger than the
+  hand-written model, and quint typechecks all of it per process.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

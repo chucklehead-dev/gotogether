@@ -272,7 +272,6 @@ func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
 func Generated(t testing.TB, app *grist.App)
 func Mutant() string
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
-func Overlay(t testing.TB, dir, name string) string
 type Mutants struct
     field Names []string
     field FullOnly []string

@@ -65,6 +65,10 @@ func TestNewRefuses(t *testing.T) {
 	if err := run([]string{"new", "-dir", dir, "-no-generate", "app"}, &out, &out); err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Errorf("a directory in use: %v", err)
 	}
+	// an app named grist would have the vendored library's model file
+	if err := run([]string{"new", "-dir", filepath.Join(t.TempDir(), "g"), "-no-generate", "grist"}, &out, &out); err == nil || !strings.Contains(err.Error(), "library") {
+		t.Errorf("an app named grist: %v, want refused", err)
+	}
 	fresh := filepath.Join(t.TempDir(), "app")
 	if err := run([]string{"new", "-dir", fresh, "-no-generate", "app"}, &out, &out); err != nil {
 		t.Fatal(err)

@@ -231,11 +231,23 @@ func Refuses(rejections ...error) Option {
 			if rej.Name == ErrKeyReused.(*Rejected).Name {
 				return "idempotency-key-reused is grist's own refusal, never a decision's: remove it"
 			}
+			if reservedOutcomes[rej.Name] {
+				// the generated model and bindings give these names their
+				// own meaning: a refusal of one would be judged as a commit,
+				// a failed condition, a 403 or the code's error
+				return fmt.Sprintf("a rejection named %q: grist's steps already mean something by it (ok, conflict, denied, error): give the rejection another name", rej.Name)
+			}
 			o.refuses = append(o.refuses, rej.Name)
 		}
 		return ""
 	}}
 }
+
+// reservedOutcomes are the outcomes a step of grist's has without its
+// decision's refusal: a commit (ok), a failed condition (conflict), the
+// API's 403 at the clients (denied) and the code's error (error).
+// Read-only.
+var reservedOutcomes = map[string]bool{"ok": true, conflictOutcome: true, "denied": true, "error": true}
 
 // Emits declares a processor whose handler returns Emit (of events of
 // the given types only) or Skip: exactly once in the log, its appends
@@ -263,7 +275,11 @@ func Emits(types ...EventName) Option {
 // at-most-once defs). A handler that returns another delivery, no
 // success event where one is declared or another's, or an Emit, fails
 // its trigger (Fail), naming the fix: the guarantee the model judges is
-// the declared one. Skip and Fail are allowed whatever the shape.
+// the declared one. The runtime allows a Skip or a handler's Fail
+// whatever the shape, but the generated model of a Delivers processor
+// has no step for either yet (its checkpoint follows effect steps): one
+// is a binding error or a rejection of that processor's checkpoint, not
+// a check passed (docs/grist.md §0.10).
 func Delivers(d Delivery, success ...EventName) Option {
 	return Option{name: "Delivers", kinds: kindsOf("Delivers"), apply: func(o *options) string {
 		if d != AtLeastOnce && d != AtMostOnce {

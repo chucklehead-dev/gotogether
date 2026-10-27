@@ -41,8 +41,8 @@ type Mutants struct {
 // Run builds the package's tests once per mutant with its overlay and
 // runs Test in each (in parallel, -short and the deadline passed on),
 // failing with the binary's output when it fails and logging its
-// summaries. In a mutant's own binary it skips, as it does for a mutant
-// file that replaces none of the package's.
+// summaries. In a mutant's own binary it skips; a mutant with no files,
+// or a file that replaces none of the package's, fails it (overlay).
 func (m Mutants) Run(t *testing.T) {
 	if Mutant() != "" {
 		t.Skip("already a mutant's binary")
@@ -60,7 +60,7 @@ func (m Mutants) Run(t *testing.T) {
 				t.Skip("full mode: its claim repeats a per-push test's mechanism")
 			}
 			t.Parallel()
-			args := []string{"test", "-count=1", "-overlay", Overlay(t, dir, name), "-run", "^" + test + "$", "-v"}
+			args := []string{"test", "-count=1", "-overlay", overlay(t, dir, name), "-run", "^" + test + "$", "-v"}
 			if testing.Short() {
 				args = append(args, "-short")
 			}
@@ -94,11 +94,11 @@ func (m Mutants) Run(t *testing.T) {
 	}
 }
 
-// Overlay writes the go build overlay of mutant name (dir/name's .go
+// overlay writes the go build overlay of mutant name (dir/name's .go
 // files in place of the package's of the same names) into a temporary
 // directory and returns its path; a mutant with no files, or a file that
 // replaces none of the package's, fails t.
-func Overlay(t testing.TB, dir, name string) string {
+func overlay(t testing.TB, dir, name string) string {
 	t.Helper()
 	here, err := os.Getwd()
 	if err != nil {

@@ -61,6 +61,16 @@ func TestRefusesDeclared(t *testing.T) {
 	if err := b.Verify(); err == nil || !strings.Contains(err.Error(), "is no rejection") {
 		t.Errorf("Refuses of a plain error: %v, want a Verify problem", err)
 	}
+	// a rejection named as one of grist's own outcomes would be judged as
+	// that outcome (a "conflict" by the condition's branch, an "ok" as a
+	// commit): a Verify problem
+	for _, name := range []string{"ok", "conflict", "denied", "error"} {
+		c := grist.New("other")
+		grist.NewCommand(c, "x", func(r *grist.Reads, c Create) ([]grist.Event, error) { return nil, nil }, grist.Refuses(grist.Rejection(name)))
+		if err := c.Verify(); err == nil || !strings.Contains(err.Error(), "already mean something by it") {
+			t.Errorf("Refuses(Rejection(%q)): %v, want a Verify problem", name, err)
+		}
+	}
 }
 
 // A processor's declared shape (Emits, Delivers) is the result its

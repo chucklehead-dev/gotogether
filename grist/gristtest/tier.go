@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -371,39 +372,73 @@ func (r *Tier) Check(commits, calls string, opts ...qtest.Option) []*qtrace.Trac
 }
 
 // Answered checks every command of app a client was answered against
-// the store's side: the store recorded its step, once, with the outcome
-// the client was told. Neither binding sees a store-side step missing (a
-// refusal commits no event, so the model's log is the same without it),
-// but the client's answer names it.
+// the store's side: the store recorded the outcome the client was told,
+// and a key one outcome at most. Neither binding sees a store-side step
+// missing (a refusal commits no event, so the model's log is the same
+// without it), but the client's answer names it. Commands are matched by
+// tenant and id (two tenants' clients may use one id). A key's first
+// answer is final, so its calls may be answered alike more than once
+// (from its marker); a refusal of the key reused with other arguments
+// (idempotency-key-reused) is a step of its own, once per try. A call
+// the API denied (403) ran nothing at the store, by right, and a pending
+// one was answered nothing.
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace) {
 	t.Helper()
 	commands := map[string]bool{}
 	for _, c := range app.Catalog().Commands {
 		commands[c.Quint] = true
 	}
-	atStore, atClients := map[string]string{}, map[string]string{}
+	type key struct{ tenant, id string }
+	reused := grist.ErrKeyReused.(*grist.Rejected).Name
+	atStore := map[key]map[string]int{}
+	var told []key
+	outcomes := map[key][]string{}
 	for _, tr := range traces {
 		for _, s := range tr.Steps {
 			id, _ := s.Args["id"].(string)
 			if id == "" || !commands[s.Action] {
 				continue
 			}
-			side := atStore
-			if strings.HasSuffix(s.Actor, "/clients") {
-				side = atClients
+			tenant, clients := strings.CutSuffix(s.Actor, "/clients")
+			k := key{tenant, id}
+			switch {
+			case clients && s.Outcome == "denied":
+				// refused before any store ran it
+			case clients:
+				if len(outcomes[k]) == 0 {
+					told = append(told, k)
+				}
+				outcomes[k] = append(outcomes[k], s.Outcome)
+			default:
+				if atStore[k] == nil {
+					atStore[k] = map[string]int{}
+				}
+				atStore[k][s.Outcome]++
 			}
-			if prev, dup := side[id]; dup {
-				t.Errorf("command %s has two steps on one side (%s, %s)", id, prev, s.Outcome)
-			}
-			side[id] = s.Outcome
 		}
 	}
-	if len(atClients) == 0 {
+	for k, byOutcome := range atStore {
+		n := 0
+		var got []string
+		for o, c := range byOutcome {
+			if o != reused {
+				n += c
+				got = append(got, o)
+			}
+		}
+		if n > 1 {
+			sort.Strings(got)
+			t.Errorf("command %s of tenant %s has %d store-side steps (%s): a key names one outcome", k.id, k.tenant, n, strings.Join(got, ", "))
+		}
+	}
+	if len(told) == 0 {
 		t.Fatal("no client was answered")
 	}
-	for id, outcome := range atClients {
-		if got, ok := atStore[id]; !ok || got != outcome {
-			t.Errorf("command %s: the client was told %s, the store recorded %q (found %v): a committed answer's step is missing or differs", id, outcome, got, ok)
+	for _, k := range told {
+		for _, o := range outcomes[k] {
+			if atStore[k][o] == 0 {
+				t.Errorf("command %s of tenant %s: the client was told %s, the store recorded %v: a committed answer's step is missing or differs", k.id, k.tenant, o, atStore[k])
+			}
 		}
 	}
 }

@@ -40,7 +40,14 @@ The generator needs the shapes declared: `grist.Refuses(ErrA, ...)` on a
 command (a decision returning another rejection is its error),
 `grist.Emits(Type...)` or `grist.Delivers(grist.AtLeastOnce|AtMostOnce,
 SuccessType)` on a processor (a result contradicting it fails the
-trigger). A processor with neither is the generator's error.
+trigger). A processor with neither is the generator's error. A refusal
+may not be named `ok`, `conflict`, `denied` or `error` (each already an
+outcome of grist's: Verify says so), nor the app `grist` (its model
+would be the vendored library's file). A `Delivers` processor's handler
+that returns Skip or Fail (no effect) has no step in the generated
+model yet: its checkpoint fails to bind or is rejected; filter inside
+the effect instead, or declare `Emits` for a processor that only
+appends.
 
 ## The holes (module `<app>Rules`)
 

@@ -151,6 +151,9 @@ func modelMain(app *App, args []string, stdout io.Writer) error {
 	} else if err := g.Write(*dir); err != nil {
 		return err
 	}
+	if _, err := os.Stat(own); errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%s model: there is no %s, the app's rules (every hole of the skeleton) and invariants: `%s model -init` writes one with every hole stubbed", app.Name, own, app.Name)
+	}
 	if len(g.Missing) > 0 {
 		var b strings.Builder
 		for _, h := range g.Holes {
@@ -162,7 +165,7 @@ func modelMain(app *App, args []string, stdout io.Writer) error {
 			app.Name, own, strings.Join(g.Missing, ", "), mustQuint(app.Name), b.String())
 	}
 	if !*check {
-		fmt.Fprintf(stdout, "wrote %d files under %s\n", len(g.Files), *dir)
+		fmt.Fprintf(stdout, "wrote %s under %s\n", strings.Join(g.paths(), ", "), *dir)
 	}
 	return nil
 }

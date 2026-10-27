@@ -57,7 +57,8 @@ Then, in order, each item reviewed before the next:
   invariants; the diff in CI, `gristtest.Generated`), `grist new` (an app
   green on first run, `TestNewIsGreen`), grist/gristtest's harnesses
   (`Mutants`, `Tier`), `NewDep` and `NewSite`; counters and wallet-grist
-  generated (their bindings no longer hand-written). Left: gristflow
+  generated (their bindings no longer hand-written); reviewed (§0.10).
+  Left: a Delivers processor's Skip in its generated model, gristflow
   (an append its reads do not cover, a rejection on an unconditioned
   read, a raw store call), and a trial agent building a new app from
   `grist new` to confirm it writes no binding by hand.

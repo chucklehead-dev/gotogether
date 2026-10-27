@@ -78,6 +78,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return usage(fmt.Sprintf("grist new: %q: %v", name, err))
 	}
+	if q == "grist" {
+		// its model would be model/grist.qnt, the vendored library's file
+		return usage(fmt.Sprintf("grist new: %q is grist's own library's name (model/grist.qnt): name the app otherwise", name))
+	}
 	if *dir == "" {
 		*dir = name
 	}

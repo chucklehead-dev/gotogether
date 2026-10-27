@@ -21,10 +21,16 @@ The first release. What a user meets, by module:
   the catalog's `Sites`) and `grist.NewDep` (typed dependencies);
   grist.qnt's `UNCAUSED`, `caused`, `triplesOf`. Package `grist/gristtest`:
   `Generated` (the generated files' CI diff), `Mutants`, `Mutant`,
-  `Overlay`, `NewTier` (the real tier: `Start`, `Kill`, `Do`, `Settle`,
+  `NewTier` (the real tier: `Start`, `Kill`, `Do`, `Settle`,
   `Check`), `Answered`. `grist/cmd/grist`: `grist new <name>`, an app
   module green on its first run. examples/counters and
-  examples/wallet-grist are generated and use the harnesses.
+  examples/wallet-grist are generated and use the harnesses. Its review
+  (docs/grist.md §0.10): an app named `grist` is refused (its model was
+  the vendored library's file, overwritten by every `model`); `Refuses`
+  refuses a rejection named `ok`, `conflict`, `denied` or `error`;
+  `gristtest.Answered` matches commands by tenant and id, skips denied
+  calls and allows a key answered twice or reused; `model` without the
+  app's model says `-init`.
 - A binding's module may re-export another whole (`export lib.*`): its
   actions, variables and vals are the exported module's too
   (`binding.LoadModel` follows the exports transitively, its own names
