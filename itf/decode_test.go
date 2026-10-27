@@ -108,3 +108,55 @@ func TestEncodeNames(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+type benchAccount struct {
+	Owner   string
+	Balance int
+	Frozen  bool
+}
+
+type benchState struct {
+	Accounts map[string]benchAccount
+	Seen     map[string]bool
+	Log      []int
+}
+
+// benchValue is a state of 64 accounts, a set of 64 names and a log: the
+// size of a small model's state, decoded at every step of a replay.
+func benchValue(b *testing.B) Value {
+	s := benchState{Accounts: map[string]benchAccount{}, Seen: map[string]bool{}}
+	for i := range 64 {
+		name := "acct" + strings.Repeat("x", i%7) + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		s.Accounts[name] = benchAccount{Owner: name, Balance: i * 10}
+		s.Seen[name] = true
+		s.Log = append(s.Log, i)
+	}
+	v, err := Encode(s)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return v
+}
+
+func BenchmarkDecodeState(b *testing.B) {
+	v := benchValue(b)
+	for b.Loop() {
+		var s benchState
+		if err := Decode(v, &s); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeState(b *testing.B) {
+	v := benchValue(b)
+	var s benchState
+	if err := Decode(v, &s); err != nil {
+		b.Fatal(err)
+	}
+	for b.Loop() {
+		if _, err := Encode(s); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

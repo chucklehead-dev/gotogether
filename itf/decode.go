@@ -3,10 +3,12 @@ package itf
 import (
 	"encoding"
 	"fmt"
+	"maps"
 	"math/big"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
+	"sync"
 	"unicode"
 )
 
@@ -293,7 +295,7 @@ func seqElems(v Value, path string) ([]Value, error) {
 func (d decoder) decodePairs(v Value, rv reflect.Value, path string) error {
 	t := rv.Type()
 	pairs := append([][2]Value(nil), v.Pairs...)
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i][0].String() < pairs[j][0].String() })
+	sortByString(pairs, func(p [2]Value) string { return p[0].String() })
 	s := reflect.MakeSlice(t, len(pairs), len(pairs))
 	for i, p := range pairs {
 		tup := Value{Kind: Tuple, Elems: []Value{p[0], p[1]}}
@@ -312,7 +314,21 @@ type fieldInfo struct {
 	tuple, skip bool
 }
 
+// fieldCache holds each struct type's fields, process-wide: reading
+// them parsed every field's tags again for every value decoded.
+var fieldCache sync.Map // reflect.Type -> []fieldInfo
+
+// structFields are t's exported fields as tags name them, read once per
+// type. Callers share the slice: they must not modify it.
 func structFields(t reflect.Type) []fieldInfo {
+	if fs, ok := fieldCache.Load(t); ok {
+		return fs.([]fieldInfo)
+	}
+	fs, _ := fieldCache.LoadOrStore(t, readFields(t))
+	return fs.([]fieldInfo)
+}
+
+func readFields(t reflect.Type) []fieldInfo {
 	var out []fieldInfo
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -323,7 +339,7 @@ func structFields(t reflect.Type) []fieldInfo {
 		tag, ok := f.Tag.Lookup("itf")
 		if !ok {
 			if jt, ok := f.Tag.Lookup("json"); ok {
-				tag = strings.Split(jt, ",")[0]
+				tag, _, _ = strings.Cut(jt, ",")
 			}
 		}
 		name, opts, _ := strings.Cut(tag, ",")
@@ -332,7 +348,7 @@ func structFields(t reflect.Type) []fieldInfo {
 		} else if name != "" {
 			fi.name = name
 		}
-		for _, o := range strings.Split(opts, ",") {
+		for o := range strings.SplitSeq(opts, ",") {
 			switch o {
 			case "tag":
 				fi.tag = true
@@ -344,15 +360,6 @@ func structFields(t reflect.Type) []fieldInfo {
 		}
 		out = append(out, fi)
 	}
-	return out
-}
-
-func sortedNames(m map[string]Value) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }
 
@@ -416,7 +423,7 @@ func (d decoder) decodeStruct(v Value, rv reflect.Value, path string) error {
 				}
 			}
 			if !ok && d.strict {
-				return derr(path, "field %s of %s is not the record's (it has %s): name it after one, or tag it `itf:\"-\"`", f.name, t, strings.Join(sortedNames(v.Fields), ", "))
+				return derr(path, "field %s of %s is not the record's (it has %s): name it after one, or tag it `itf:\"-\"`", f.name, t, strings.Join(slices.Sorted(maps.Keys(v.Fields)), ", "))
 			}
 			if !ok {
 				continue // absent: leave the zero value, as serde does with defaults
@@ -488,9 +495,28 @@ func (v Value) nullary() bool {
 	return v.Inner == nil || (v.Inner.Kind == Tuple && len(v.Inner.Elems) == 0)
 }
 
+// sortByString sorts xs by key, each element's key computed once:
+// Value.String renders the whole value, and a comparator calling it
+// rendered each element at every comparison. The order is sort.Slice's
+// on the same keys, ties included.
+func sortByString[T any](xs []T, key func(T) string) {
+	type keyed struct {
+		k string
+		x T
+	}
+	ks := make([]keyed, len(xs))
+	for i, x := range xs {
+		ks[i] = keyed{key(x), x}
+	}
+	slices.SortFunc(ks, func(a, b keyed) int { return strings.Compare(a.k, b.k) })
+	for i, k := range ks {
+		xs[i] = k.x
+	}
+}
+
 func (v Value) sortedElems() []Value {
 	es := append([]Value(nil), v.Elems...)
-	sort.Slice(es, func(i, j int) bool { return es[i].String() < es[j].String() })
+	sortByString(es, Value.String)
 	return es
 }
 
@@ -614,7 +640,7 @@ func encode(rv reflect.Value, opts, path string) (Value, error) {
 		return Value{Kind: Int, I: new(big.Int).Set(&b)}, nil
 	}
 	has := func(o string) bool {
-		for _, x := range strings.Split(opts, ",") {
+		for x := range strings.SplitSeq(opts, ",") {
 			if x == o {
 				return true
 			}
@@ -709,7 +735,7 @@ func encode(rv reflect.Value, opts, path string) (Value, error) {
 			}
 			out.Pairs = append(out.Pairs, [2]Value{kv, vv})
 		}
-		sort.Slice(out.Pairs, func(i, j int) bool { return out.Pairs[i][0].String() < out.Pairs[j][0].String() })
+		sortByString(out.Pairs, func(p [2]Value) string { return p[0].String() })
 		return out, nil
 	case reflect.Struct:
 		fields := structFields(t)

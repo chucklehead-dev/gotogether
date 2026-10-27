@@ -9,8 +9,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/big"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -265,11 +267,7 @@ func (v Value) quotable(at string) error {
 			}
 		}
 	case Record:
-		keys := make([]string, 0, len(v.Fields))
-		for k := range v.Fields {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := slices.Sorted(maps.Keys(v.Fields))
 		for _, k := range keys {
 			if err := v.Fields[k].quotable(at + "." + k); err != nil {
 				return err
@@ -341,11 +339,7 @@ func (v Value) String() string {
 		sort.Strings(parts)
 		return "Map(" + strings.Join(parts, ", ") + ")"
 	case Record:
-		keys := make([]string, 0, len(v.Fields))
-		for k := range v.Fields {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := slices.Sorted(maps.Keys(v.Fields))
 		parts := make([]string, len(keys))
 		for i, k := range keys {
 			parts[i] = k + ": " + v.Fields[k].String()
