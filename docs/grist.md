@@ -1276,6 +1276,67 @@ observations, so the actions take them as same-named parameters.
 deduplicating double's replay is a second application. The call's
 timeout is `gristsim.DependencyTimeout` (1 s), not yet an option.
 
+**The slice's review** (2026-10-27), each probed by a counterexample:
+
+- **A replay was unjudged.** `grist.Replayed` recorded nothing, so the
+  model could not tell a replay of the first answer from one of another
+  answer, or of no application at all (the faithful default double of
+  slice 2 could get it wrong unseen). The wrapper now records the step
+  `<c>Replayed` with the handler's answer, and the generated action
+  admits it only as an earlier served record of the key, request,
+  outcome and response alike (`<c>Records.indices().exists(i =>
+  <c>Records[i] == rec_)`): counters' bank answering a duplicate with a
+  new receipt rejects `bankPayReplayed` in every run (TestPayoutAmount,
+  `paying` with its first request duplicated; the faithful bank there
+  conforms and replays), where it conformed before; grist's
+  `TestReplayedRecorded`. `Replayed` stays the handler's word: a double
+  that applies a call again and says `Replayed` with the first answer
+  hides it, which no record can show. counters' double now keeps each
+  key's first answer, a decline included (a declined key retried was a
+  second served record; no counters workload declines).
+- **Two records of one key could form a cycle.** The site's record was
+  placed at its own cause, 2·H+1, on the key's thread; a request from
+  an earlier head served after a later one's (a request delayed past a
+  restarted poller's retry, two nodes' pollers) put a higher `order.pos`
+  before a lower one on one thread, a cycle (qtrace's `cycle` issue,
+  the trace's, not Reconstruct's own list), and would put a replay before
+  the application it repeats. `grist.Local` keeps each key's last place
+  and records at the later of the two (`TestSiteOrderPerKey`, which
+  fails with the cycle without it); still after the trigger's commit.
+  `TestSiteAfterItsCommit` checked only Reconstruct's returned issues,
+  where a cycle never is: it now checks the trace's too.
+- **The site does not judge the request** (left as built): in slice 1
+  both ends record the same bytes in grist's own code, and the caller's
+  step is recorded for every outcome but a crash during the call, so a
+  request that does not follow from its trigger is judged at the caller
+  (`wrongAmount`). It becomes a gap where the site is recorded by another
+  process or for a request no grist caller sent (slice 3's
+  `ServeCalls`): there the site's action should judge its request
+  against the rule too, accepting that a caller's wrong request is then
+  named at the site first. Keyed admits is enforced at the site as
+  built.
+- **A response's zeros** without a response (a refusal, an unknown
+  outcome) are told apart by `result`, which every record carries; an
+  invariant reading a response field conditions on `result == "ok"` (the
+  record type's comment says so).
+- **API**: `Dependency.Calls` and `Call.Dependency`, used nowhere, are
+  removed (the catalog lists a dependency's calls); `Do`'s error for a
+  dependency with no transport names the fix (`With(ctx,
+  grist.Local(handlers))`).
+- **Cost**: `wrongAmount` runs at `paying`'s shape (a prologue creating
+  and retiring counter a, so every run pays), `All(Rejects("bankPay"))`
+  at one seed per push instead of `Some` at two (the mutant's test 21.6
+  to 13.1 CPU s here). TestPayoutAmount's contrasts (without faults, and
+  the faithful bank under a duplicate) are full mode: per push
+  TestPayoutTwoNodes' runs, which already ran, claim the call answered ok
+  and applied without faults, and under faults the bank's lost requests
+  and answers, an unknown call and a replay, all conforming. The new
+  per-push claim (a new-receipt replay rejected) is one seed. The two
+  tests together 41.1 to 37.7 CPU s; counters -short 392 and 402 CPU s
+  before and after, in the noise of a shared machine. TestPayoutAmount
+  never reached a lost answer (0 of 10 runs at 0.3 among
+  the other faults): its comment no longer claims one.
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
 Both were read in grain's code (research notes, 2026-10-27); slice 1

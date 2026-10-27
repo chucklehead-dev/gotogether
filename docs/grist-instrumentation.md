@@ -217,9 +217,14 @@ That is all the application declares. Today's `BankDep`, `noBank`,
   (grist §2.6), sent with every try; in a handler, the key it was sent
   with, so a double or a real service can deduplicate by it. A handler
   that answers a key from its first answer says so, `grist.Replayed(ctx)`,
-  and its wrapper records no served record (a served record is an
-  application, below); without it a deduplicating double's replay would
-  read as a second payment.
+  and its wrapper records a replay, `<c>Replayed`, instead of a served
+  record (a served record is an application, below); without it a
+  deduplicating double's replay would read as a second payment. The
+  model admits a replay only as an earlier served record of the key,
+  request and answer alike (built in slice 1's review, docs/grist.md
+  §0.12), so a double replaying another answer than its first, or one it
+  never gave, is rejected; a double that applies a call again and says
+  `Replayed` hides it (the flag is the handler's word).
 - `NewDep` stays for what is not a call (a configuration, a clock in a
   test); `NewSite` stays as the escape hatch for a site grist does not
   serve, until GR7 shows whether anything still needs it.
@@ -254,7 +259,8 @@ construction. A call `pay` of dependency `bank` is the Quint name
 | step | where | actor, process | arguments | observations | order |
 | --- | --- | --- | --- | --- | --- |
 | `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | the tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, then the response's fields (zero without a response) | none; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
-| `bankPayServed` (the site) | where the call is served: `Handlers`' wrapper (`Call.Handler`, served by `grist.Local`: gristsim's doubles), or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, the response's fields | none; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), on a thread of its own (the key) |
+| `bankPayServed` (the site) | where the call is served: `Handlers`' wrapper (`Call.Handler`, served by `grist.Local`: gristsim's doubles), or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, the response's fields | none; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), or an earlier record of the key's if later, on a thread of its own (the key) |
+| `bankPayReplayed` (the site's answer given again, `grist.Replayed`) | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` |
 
 (Built so in slice 1. The response's fields are step arguments, not
 observations: the actions take them as parameters, each the same-named
@@ -298,11 +304,15 @@ Two choices in the table, and why:
   serving trigger 9's call before trigger 5's would otherwise put
   `order.pos` 19 before 11 on one thread, a cycle (grist §0's ordering
   rule). Per key, the domain clock alone orders it; two tries of one key
-  keep their program order.
+  keep their program order. Two tries of one key may still be served out
+  of their causes' order (a request delayed past a restarted poller's
+  retry, two nodes' pollers): the later-served is placed at the earlier
+  record's 2·H+1 when that is later (the transport keeps each key's last,
+  `grist.Local`), which is still after its own trigger's commit.
 
 A served record is an application of the call, not a request: a
 deduplicating dependency that answers a retry from its first answer
-records nothing for the retry. The site is the effect's record of what
+records the retry as a replay, not a served record. The site is the effect's record of what
 happened; the caller's step is what the effect saw. A payment made while its answer was lost is a
 served record and a caller step with outcome `unknown`; both are in the
 trace, and the model relates them.

@@ -189,10 +189,16 @@ refusal, and at the caller `unknown`). The generator writes:
   record is recorded inside the call, before the caller's completion, at
   the same position, so judging the request there would name the site
   for the caller's error.
+- the replay's action, `<call>Replayed`: an earlier served record of the
+  key, request and answer alike; it changes nothing.
 
 A double that deduplicates says so: `grist.Replayed(ctx)` when it answers
-a key from its first answer, so the retry records no second
-application. An invariant or eventual val reads `<call>Records` (counters'
+a key from its first answer, so the retry records no second application
+but a replay, `<call>Replayed`, which the generated action admits only
+as an earlier served record of the key, request and answer alike: a
+double replaying another answer than its first (a refusal included), or
+one it never gave, is rejected there. Keep each key's first answer,
+refusals too. An invariant or eventual val reads `<call>Records` (counters'
 `everyRetirementPaidOnce`: one ok served record per retirement's
 trigger) and `<call>Calls`.
 

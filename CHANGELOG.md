@@ -24,6 +24,11 @@ The first release. What a user meets, by module:
   `callKeyStable`, `keyCalled`; `gristtest.Exercised` taking each call.
   examples/counters' bank is a declared call (its `BankDep`, `SimBank`,
   `BankPays` gone).
+  After its review (docs/grist.md §0.12): an answer a handler gives with
+  `grist.Replayed` is recorded as `<c>Replayed` and judged by the
+  generated action of that name (an earlier served record, answer alike);
+  `grist.Local` never places a key's site record before an earlier one
+  of the key; `Dependency.Calls` and `Call.Dependency` removed.
 - grist, the library trial's left items (docs/grist.md §0.11;
   api/grist.txt): `gristtest.Exercised(app, except...)` and
   `gristtest.Takes(app)` (every block of the catalog taken, each command

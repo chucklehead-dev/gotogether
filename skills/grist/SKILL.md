@@ -72,7 +72,8 @@ for it. No binding is written by hand.
    `Config.Doubles` (`func() gristsim.Doubles`: `gristsim.Doubles{Bank:
    grist.Handlers{Pay.Handler(f)}}`, per run; a deduplicating double
    answering a retry from its first answer calls `grist.Replayed(ctx)`,
-   `grist.CallKey(ctx)` the key). Do outside an effect, or of a call
+   recorded and judged as `bankPayReplayed`; `grist.CallKey(ctx)` the
+   key). Do outside an effect, or of a call
    the processor does not list in `Uses`, is the effect's error. What is
    no call stays a typed `grist.NewDep[T](name, fallback)` (T best an
    interface, its fallback a stand-in refusing every call with the fix;
