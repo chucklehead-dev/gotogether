@@ -156,7 +156,11 @@ func TestHegelShrinksWriteSkew(t *testing.T) {
 	}
 	sys := system(checkout.Config{Isolation: qenv.SnapshotIsolation, Mutation: shop.LockWithoutWrite})
 	skew := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
-	v := qhegel.Shrink(t, sys.WithRates(crashy), hegel.WithTestCases(50), hegel.WithSeed(1))
+	// up to 200 cases: a case finds a skew about one time in 27 (at 50
+	// cases, 2 of 13 fresh seeds found none, nightly 6's 1506461457257314357
+	// among them; both find one within 100), and the search stops at the
+	// first
+	v := qhegel.Shrink(t, sys.WithRates(crashy), hegel.WithTestCases(200), hegel.WithSeed(1))
 	v.Expect(t, skew)
 
 	replay := sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.Replay(v.Choices) }})
