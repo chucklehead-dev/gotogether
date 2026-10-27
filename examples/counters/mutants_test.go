@@ -120,11 +120,12 @@ func TestMutant(t *testing.T) {
 	case "wrongAmount":
 		// the payout paying one more than the retired total: the bank's call,
 		// recorded where the payout makes it, asks for an amount the model's
-		// rule (payoutBankPay) does not, Some(Rejects("bankPay")), without
-		// faults 4 of 4 runs (every run that retires); TestPayoutAmount is
-		// its contrast
-		system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 2)}).
-			Expect(t, qtest.Some(qtest.Rejects("bankPay")))
+		// rule (payoutBankPay) does not, without faults in every run that
+		// retires: paying's prologue retires a counter, so every run
+		// rejects bankPay, at one seed per push; TestPayoutAmount is its
+		// contrast
+		system(retiring, paying).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1)}).
+			Expect(t, qtest.All(qtest.Rejects("bankPay")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

@@ -24,25 +24,38 @@ func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
 }
 
 // doubles are a run's bank, which gristsim serves as the qenv.Service
-// bank: it pays each key once (Pay is Keyed), answering a retry of a key
-// from its first answer (grist.Replayed: no second served record), and
-// declines a payment over 100. grist records each payment it makes at its
-// site (bankPayServed), so a payment made twice, or made while its answer
-// was lost, is in the trace whatever the payout saw.
-func doubles() gristsim.Doubles {
-	paid := map[string]PayReceipt{}
+// bank: it answers each key once (Pay is Keyed), a retry of a key from
+// its first answer, a decline included (grist.Replayed: recorded as
+// bankPayReplayed, not a second served record), and declines a payment
+// over 100. grist records each payment it makes at its site
+// (bankPayServed), so a payment made twice, or made while its answer was
+// lost, is in the trace whatever the payout saw.
+func doubles() gristsim.Doubles { return bankDouble(false) }
+
+// bankDouble is the bank double; fresh answers a replay with a new receipt
+// (a bank whose retry of a key is no longer its first answer).
+func bankDouble(fresh bool) gristsim.Doubles {
+	type answer struct {
+		rc  PayReceipt
+		err error
+	}
+	first := map[string]answer{}
 	return gristsim.Doubles{Bank: grist.Handlers{
 		Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
 			key := grist.CallKey(ctx)
-			if rc, ok := paid[key]; ok {
+			if a, ok := first[key]; ok {
 				grist.Replayed(ctx)
-				return rc, nil
+				if fresh {
+					return PayReceipt{Ref: key + "/again"}, nil
+				}
+				return a.rc, a.err
 			}
+			a := answer{rc: PayReceipt{Ref: key}}
 			if r.Amount > 100 {
-				return PayReceipt{}, ErrDeclined
+				a = answer{err: ErrDeclined}
 			}
-			paid[key] = PayReceipt{Ref: key}
-			return paid[key], nil
+			first[key] = a
+			return a.rc, a.err
 		}),
 	}}
 }
@@ -63,7 +76,10 @@ const (
 
 // system is the app under cfg, judged by binding, with faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
-	cfg.Setup, cfg.Doubles = setup, doubles
+	if cfg.Doubles == nil {
+		cfg.Doubles = doubles
+	}
+	cfg.Setup = setup
 	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
@@ -173,7 +189,9 @@ func TestFaithfulAtClients(t *testing.T) {
 	cfg := contended
 	system(calls, cfg, qtest.Linearize()).
 		Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted())
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted(),
+			qtest.Reaches("rpc.bank.request").Faulted(), qtest.Reaches("rpc.bank.response").Faulted(),
+			qtest.Takes("bankPay").Outcome("unknown"), qtest.Takes("bankPayReplayed"))
 }
 
 // crashAfterWelcome is a script of one fault: the node crashes after the
@@ -237,6 +255,15 @@ func TestWelcomeDuplicate(t *testing.T) {
 var retirements = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 8, Alphabet: []string{"a"},
 	Send: []string{"create-counter", "retire-counter"}}
 
+// paying is retirements after a prologue creating and retiring counter
+// a: every run pays at least once, so a claim about the payment holds in
+// every run, at one seed.
+var paying = func() gristsim.Config {
+	cfg := retirements
+	cfg.Prologue = []gristsim.Call{{Name: "create-counter", Args: CreateCounter{Counter: "a", Name: "a"}}, {Name: "retire-counter", Args: RetireCounter{Counter: "a"}}}
+	return cfg
+}()
+
 // contested is two clients creating and retiring counter a, six times
 // each: one's retirement of a counter only the other created is refused
 // (not-creator).
@@ -256,23 +283,39 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 // call where the payout makes it (bankPay: its request, the trigger, the
 // key) and the payment where the bank makes it (bankPayServed), and the
 // model's rule (payoutBankPay: the retired counter and its total) judges
-// the request. One client creating and retiring counter a, without
-// faults: every run conforms and some run pays. With the payout paying one
-// more (the wrongAmount mutant) 4 of 4 runs reject bankPay, where
-// nothing the store records differs. Then through the bank's own faults
-// (its requests lost, duplicated and late, its answers lost, at three in
-// ten): a duplicate the bank answers from its first answer is not a second
-// payment (bankPayAdmits: no second served record of a key), a lost answer
-// an unknown outcome (grist.unknown).
+// the request. Through the bank's own faults (its requests lost,
+// duplicated and late at three in ten; its answers lost at that rate too,
+// though no run here reaches one, 0 of 10: TestPayoutTwoNodes' faulty
+// runs claim them per push, TestPayoutAtMostOnce scripts one): a duplicate
+// the bank answers from its first answer is no second payment but a
+// replay (bankPayReplayed: an earlier served record, answer alike), a
+// lost answer an unknown outcome (grist.unknown). With the first request
+// duplicated (paying: every run pays) the bank replays and every run
+// conforms; a bank that answers the duplicate with a new receipt
+// (bankDouble(true)) is caught at its replay in every run. Without
+// faults at paying's shape every run conforms and pays; with the payout
+// paying one more (the wrongAmount mutant, at that shape) every run
+// rejects bankPay, where nothing the store records differs. The two
+// contrasts are full mode: per push TestPayoutTwoNodes' runs take
+// bankPay ok without faults and a replay under faults, and conform.
 func TestPayoutAmount(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
-		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("bankPay")), qtest.All(qtest.Settles()),
-			qtest.Takes("bankPay").Outcome("ok"), qtest.Takes("bankPayServed"))
 	bank := qenv.NoFaults.Set("rpc.bank.request", 0.3).Set("rpc.bank.delay", 0.3).Set("rpc.bank.response", 0.3)
 	system(retiring, retirements).WithRates(bank).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.request").Faulted(), qtest.Takes("bankPay").Outcome("unknown"))
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.request").Faulted(),
+			qtest.Reaches("rpc.bank.delay").Faulted(), qtest.Takes("bankPay").Outcome("unknown"))
+	dup := qtest.ExploreConfig{Seeds: seeds(6, 1), Chooser: scripted(qenv.Scripted{Kind: "rpc.bank.request", Name: "duplicate"})}
+	fresh := paying
+	fresh.Doubles = func() gristsim.Doubles { return bankDouble(true) }
+	system(retiring, fresh).Explore(t, dup).Expect(t, qtest.All(qtest.Rejects("bankPayReplayed")))
+	if testing.Short() {
+		return
+	}
+	system(retiring, paying).Explore(t, dup).Expect(t, qtest.Conforms(), qtest.Takes("bankPayReplayed"))
+	system(retiring, paying).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6}).
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("bankPay")), qtest.All(qtest.Settles()),
+			qtest.Takes("bankPay").Outcome("ok"), qtest.Takes("bankPayServed"))
 }
 
 // The payout is at most once, seen and judged. A crash after its
@@ -337,7 +380,9 @@ var twoNodes = func() gristsim.Config {
 // (the mutant in commitAt), the loser pays too: 10 of 10 runs reject
 // payoutEffect (atMostOnceEffect refuses a second payment step). Then
 // two nodes through commit faults and crashes: the per-push exploration
-// of the payout under faults other than a scripted crash.
+// of the payout under faults other than a scripted crash, the bank's
+// requests and answers lost among them (a call's unknown outcome, a
+// duplicate replayed).
 func TestPayoutTwoNodes(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -351,7 +396,7 @@ func TestPayoutTwoNodes(t *testing.T) {
 		}
 	}
 	system(retiring, race).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("bankPay").Outcome("ok"), qtest.Takes("bankPayServed"))
 	if left.Load() == 0 {
 		t.Error("no payout checkpoint was left to another poller after a failed append: the race the claim is about never happened")
 	}
@@ -362,7 +407,9 @@ func TestPayoutTwoNodes(t *testing.T) {
 	faults := twoNodes
 	faults.CommitFaults = true
 	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted())
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted(),
+			qtest.Reaches("rpc.bank.request").Faulted(), qtest.Reaches("rpc.bank.response").Faulted(),
+			qtest.Takes("bankPay").Outcome("unknown"), qtest.Takes("bankPayReplayed"))
 }
 
 // Only a counter's creator retires it: the decision reads the creator
