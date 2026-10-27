@@ -296,12 +296,15 @@ func TestVerify(t *testing.T) {
 	grist.NewEvent[Created](a, "bad-happened")
 	grist.NewCommand(a, "to", func(*grist.Reads, Create) ([]grist.Event, error) { return nil, nil })
 	grist.NewCommand(a, "do--it", func(*grist.Reads, Args) ([]grist.Event, error) { return nil, nil })
+	grist.NewProcessor(a, "note", grist.NewEvent[Created](a, "noted"), func(context.Context, *grist.Reads, Created, grist.Meta) grist.Result { return grist.Skip() })
+	grist.NewCommand(a, "note-effect", func(*grist.Reads, Create) ([]grist.Event, error) { return nil, nil })
 	err := a.Verify()
 	if err == nil {
 		t.Fatal("an app of floats, times, a reused name and a reserved one verifies")
 	}
 	for _, want := range []string{"Bad.Amount is a float64", "Bad.At is a time.Time", `"bad-happened": the name is taken`,
-		"maps to to, which Quint reserves", `"do--it"`, `field ID is named "id"`} {
+		"maps to to, which Quint reserves", `"do--it"`, `field ID is named "id"`,
+		`command "note-effect" maps to the Quint action noteEffect, as "note" does`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Verify's error lacks %q:\n%v", want, err)
 		}

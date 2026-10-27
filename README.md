@@ -555,7 +555,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |
 | `qgosim` (module) | qenv and whole programs in gosim (the fork, `github.com/chucklehead-dev/gosim`) |
-| `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`; `Unconditioned`; idempotent by `Envelope.ID`), `NewQuery`, `Store`; every step recorded by the framework |
+| `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`; `Unconditioned`; idempotent by `Envelope.ID`), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce`, `EffectKey`), `Store`; every step recorded by the framework |
 | `grist/memstore`, `grist/simstore` | grist's stores: in memory for unit tests; over a `qenv.Store` for simulations |
 | `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions and reads against brute force, checkpoints, markers, tenant isolation |
 

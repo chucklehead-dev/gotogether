@@ -42,6 +42,7 @@ type App struct {
 	quintNames map[string]string // Quint identifier -> block name
 	commands   map[string]*commandInfo
 	queries    map[string]*queryInfo
+	processors []*processorInfo
 	readModels []*readModelInfo
 	problems   []string
 }
@@ -99,6 +100,11 @@ func (a *App) Verify() error {
 			}
 		}
 	}
+	for _, p := range a.processors {
+		if a.events[p.on] == nil {
+			ps = append(ps, fmt.Sprintf("processor %q subscribes to %q, an event of another App: register it on %s", p.name, p.on, a.Name))
+		}
+	}
 	if len(ps) == 0 {
 		return nil
 	}
@@ -111,6 +117,15 @@ func (a *App) Commands() []string { return sortedKeys(a.commands) }
 
 // Queries are the names of the App's queries, sorted.
 func (a *App) Queries() []string { return sortedKeys(a.queries) }
+
+// Processors are the names of the App's processors, in registration order.
+func (a *App) Processors() []string {
+	out := make([]string, len(a.processors))
+	for i, p := range a.processors {
+		out[i] = p.name
+	}
+	return out
+}
 
 // quintReserved are names Quint will not take as an action's (its
 // keywords and the built-ins a model most often meets): `to` fails to
