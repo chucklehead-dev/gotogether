@@ -13,8 +13,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -502,11 +504,7 @@ func markComplete(steps []qtrace.Step, specs []string) ([]qtrace.Step, error) {
 			return nil, fmt.Errorf("validate -complete-through %q: want recorder=T (T in RFC3339 or Unix nanoseconds; *=T for every recorder), e.g. -complete-through 'srv=2026-10-26T12:00:00Z'", spec)
 		}
 		if rec != qtrace.AllRecorders && !recs[rec] {
-			names := make([]string, 0, len(recs))
-			for r := range recs {
-				names = append(names, r)
-			}
-			sort.Strings(names)
+			names := slices.Sorted(maps.Keys(recs))
 			return nil, fmt.Errorf("validate -complete-through %s: no step of recorder %q in the input: name one of its recorders (%s), or * for every one", spec, rec, strings.Join(names, ", "))
 		}
 		t, err := time.Parse(time.RFC3339Nano, at)

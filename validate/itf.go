@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -145,7 +146,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		ms.Constants = consts
 		ms.Header = append(ms.Header, "constants of instance "+opt.Instance)
 	} else {
-		for _, k := range sortedKeys(meta.Constants) {
+		for _, k := range slices.Sorted(maps.Keys(meta.Constants)) {
 			ms.Constants = append(ms.Constants, fmt.Sprintf("%s = %s", k, meta.Constants[k]))
 		}
 	}
@@ -159,15 +160,6 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 	base := "replay_" + sanitize(actor)
 	res := &Result{Actor: actor}
 	return res, evaluate(ctx, ms, [][]binding.Call{calls}, []*binding.Call{start}, base, o, []*Result{res})[0]
-}
-
-func sortedKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // itfInstance is the instance an ITF trace is replayed against: the

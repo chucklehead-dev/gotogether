@@ -3,7 +3,8 @@ package binding
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/itf"
@@ -96,11 +97,7 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 		}
 		states = append(states, st)
 	}
-	vars := make([]string, 0, len(varSet))
-	for v := range varSet {
-		vars = append(vars, v)
-	}
-	sort.Strings(vars)
+	vars := slices.Sorted(maps.Keys(varSet))
 	doc := map[string]any{
 		"#meta": map[string]any{
 			"format":             "ITF",

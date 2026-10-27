@@ -54,7 +54,7 @@ type Plan struct {
 // ConstantList renders the constants as "NAME = expr", sorted.
 func (p *Plan) ConstantList() []string {
 	var out []string
-	for _, c := range sortedKeys(p.Constants) {
+	for _, c := range slices.Sorted(maps.Keys(p.Constants)) {
 		out = append(out, fmt.Sprintf("%s = %s", c, p.Constants[c]))
 	}
 	return out
@@ -141,7 +141,7 @@ func (b *Binding) Planner(m *Model, whole *qtrace.Trace) *Planner {
 		},
 	}
 	p.rd = newRenderer(funcs)
-	for _, c := range sortedKeys(b.Constants) {
+	for _, c := range slices.Sorted(maps.Keys(b.Constants)) {
 		v, err := p.rd.render(b.Constants[c], nil)
 		if err != nil {
 			p.err = fmt.Errorf("constant %s: %w", c, err)
@@ -267,7 +267,7 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 			}
 			params = ps
 		} else {
-			for _, p := range sortedKeys(ab.Args) {
+			for _, p := range slices.Sorted(maps.Keys(ab.Args)) {
 				params = append(params, Param{Name: p})
 			}
 		}
@@ -460,11 +460,7 @@ func jsonQuint(v any, kind string) (string, error) {
 		if err := json.Unmarshal([]byte(text), &m); err != nil {
 			return "", fmt.Errorf("toMap: %q is not a JSON object: %v", text, err)
 		}
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+		keys := slices.Sorted(maps.Keys(m))
 		parts := make([]string, len(keys))
 		for i, k := range keys {
 			e, err := jsonElem(m[k], fmt.Sprintf("[%q]", k))

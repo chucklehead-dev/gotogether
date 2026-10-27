@@ -8,11 +8,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -936,11 +938,7 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 }
 
 func obsString(m map[string]any) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(m))
 	parts := make([]string, len(keys))
 	for i, k := range keys {
 		parts[i] = fmt.Sprintf("%s=%v", k, m[k])

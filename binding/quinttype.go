@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/big"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -226,11 +228,7 @@ func aliasType(name string, args []*qtype, defs map[string]typedef, depth int) (
 	}
 	d, ok := defs[name]
 	if !ok {
-		names := make([]string, 0, len(defs))
-		for n := range defs {
-			names = append(names, n)
-		}
-		sort.Strings(names)
+		names := slices.Sorted(maps.Keys(defs))
 		known := "none"
 		if len(names) > 0 {
 			known = strings.Join(names, ", ")
@@ -497,27 +495,24 @@ func (m *Model) typeOf(src string) (*qtype, error) {
 	if m == nil {
 		return typeOf(src, map[string]typedef{})
 	}
-	if m.types != nil {
-		if v, ok := m.types.Load(src); ok {
-			if err, bad := v.(error); bad {
-				return nil, err
-			}
-			return v.(*qtype), nil
-		}
-	}
 	defs := m.typedefs
 	if defs == nil { // a Model made by hand: no aliases
 		defs = map[string]typedef{}
 	}
-	t, err := typeOf(src, defs)
-	if m.types != nil {
-		if err != nil {
-			m.types.Store(src, err)
-		} else {
-			m.types.Store(src, t)
-		}
+	if m.types == nil {
+		return typeOf(src, defs)
 	}
-	return t, err
+	r := m.types.Once(src, func() typeResult {
+		t, err := typeOf(src, defs)
+		return typeResult{t, err}
+	})
+	return r.t, r.err
+}
+
+// typeResult is a type's source parsed, or why it does not parse.
+type typeResult struct {
+	t   *qtype
+	err error
 }
 
 // ---- toQuint ----------------------------------------------------------------
@@ -738,7 +733,7 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 		}
 		switch x := j.(type) {
 		case map[string]any:
-			for _, k := range sortedKeys(x) {
+			for _, k := range slices.Sorted(maps.Keys(x)) {
 				var key any = k
 				if r.elem.resolved().kind == "int" {
 					key = json.Number(k)
@@ -782,7 +777,7 @@ func decodeRecord(obj map[string]any, r *qtype, at string, t *qtype) (itf.Value,
 	for _, f := range r.fields {
 		key, ok := f.name, false
 		if _, ok = obj[key]; !ok {
-			for _, k := range sortedKeys(obj) {
+			for _, k := range slices.Sorted(maps.Keys(obj)) {
 				if normField(k) == normField(f.name) {
 					key, ok = k, true
 					break
@@ -790,7 +785,7 @@ func decodeRecord(obj map[string]any, r *qtype, at string, t *qtype) (itf.Value,
 			}
 		}
 		if !ok {
-			return itf.Value{}, fmt.Errorf("at %s: the record has no field %s (it has: %s; %s needs every field)", pathOr(at), f.name, strings.Join(sortedKeys(obj), ", "), t)
+			return itf.Value{}, fmt.Errorf("at %s: the record has no field %s (it has: %s; %s needs every field)", pathOr(at), f.name, strings.Join(slices.Sorted(maps.Keys(obj)), ", "), t)
 		}
 		if other, twice := used[key]; twice {
 			return itf.Value{}, fmt.Errorf("at %s: the key %s is both %s's fields %s and %s (Go's names match ignoring case and underscores): record the fields under their own names", pathOr(at), key, t, other, f.name)
@@ -802,7 +797,7 @@ func decodeRecord(obj map[string]any, r *qtype, at string, t *qtype) (itf.Value,
 		}
 		out.Fields[f.name] = v
 	}
-	for _, k := range sortedKeys(obj) {
+	for _, k := range slices.Sorted(maps.Keys(obj)) {
 		if _, ok := used[k]; !ok {
 			return itf.Value{}, fmt.Errorf("at %s: the field %s is none of %s's (record what the model has, or add the field to the model)", pathOr(at), k, t)
 		}

@@ -6,7 +6,9 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -130,7 +132,7 @@ func directiveArgs(s string) [][2]string {
 // which LintSource checks too).
 func (b *Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string) {
 	errs, emitted := b.lintAnnotations(m, anns)
-	for _, name := range sortedNames(b.Actions) {
+	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		if !emitted[name] {
 			warns = append(warns, fmt.Sprintf("action %s is bound but no //quint:action emits it (explicit qobs.Record calls are not scanned)", name))
 		}

@@ -11,19 +11,21 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"math/big"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"text/template"
 	"text/template/parse"
 	"time"
 	"unicode/utf8"
 
+	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"gopkg.in/yaml.v3"
@@ -397,7 +399,7 @@ func (b *Binding) relPath() string {
 // all problems found.
 func (b *Binding) Lint(m *Model) []string {
 	var errs []string
-	for _, name := range sortedKeys(b.Actions) {
+	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		a := b.Actions[name]
 		ps, ok := m.Actions[name]
 		if !ok {
@@ -539,7 +541,7 @@ func (b *Binding) Lint(m *Model) []string {
 			errs = append(errs, fmt.Sprintf("%s: no bound: give a positive duration (bound: 3s)", w.Name()))
 		}
 	}
-	for _, c := range sortedNames(m.Consts) {
+	for _, c := range slices.Sorted(maps.Keys(m.Consts)) {
 		if v, ok := b.Constants[c]; !ok || strings.TrimSpace(v) == "" {
 			// an empty one (scaffold's '') once linted and failed in quint's parser
 			errs = append(errs, fmt.Sprintf("constant %s: no value (type %s): give it a Quint expression (%s: '3')", c, m.Consts[c], c))
@@ -565,7 +567,7 @@ func readVars(m *Model, action string) string {
 	if !known || len(vars) == 0 {
 		return ""
 	}
-	return strings.Join(sortedKeys(vars), ", ")
+	return strings.Join(slices.Sorted(maps.Keys(vars)), ", ")
 }
 
 // Fields returns the step fields (.name) a template refers to: what the
@@ -593,7 +595,7 @@ func (a Action) Fields(ps ...Param) []string {
 			set[a] = true
 		}
 	}
-	return sortedKeys(set)
+	return slices.Sorted(maps.Keys(set))
 }
 
 // Template is the template of an action's parameter: the binding's, else
@@ -663,15 +665,6 @@ func collectFields(s string, set map[string]bool) {
 		}
 	}
 	walk(t.Tree.Root)
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // quintLit renders an observed value as a Quint literal.
@@ -787,26 +780,26 @@ var funcNames = []string{"set", "toSet", "toList", "toMap", "toQuint", "max", "c
 // parsed caches each template text's parse tree, process-wide (a
 // template parses the same in every plan): parsing it for every
 // candidate a search planned was a third of a long linearization's time.
-var parsed sync.Map // process-wide: template text -> *parse.Tree (or error)
+var parsed memo.Map[string, parsedTree] // process-wide: template text -> its tree (or error)
+
+type parsedTree struct {
+	tree *parse.Tree
+	err  error
+}
 
 func treeOf(tpl string) (*parse.Tree, error) {
-	if v, ok := parsed.Load(tpl); ok {
-		if err, bad := v.(error); bad {
-			return nil, err
+	p := parsed.Once(tpl, func() parsedTree {
+		stubs := template.FuncMap{}
+		for _, f := range funcNames {
+			stubs[f] = func(...any) any { return nil }
 		}
-		return v.(*parse.Tree), nil
-	}
-	stubs := template.FuncMap{}
-	for _, f := range funcNames {
-		stubs[f] = func(...any) any { return nil }
-	}
-	t, err := template.New("").Funcs(stubs).Parse(tpl)
-	if err != nil {
-		parsed.Store(tpl, err)
-		return nil, err
-	}
-	parsed.Store(tpl, t.Tree)
-	return t.Tree, nil
+		t, err := template.New("").Funcs(stubs).Parse(tpl)
+		if err != nil {
+			return parsedTree{err: err}
+		}
+		return parsedTree{tree: t.Tree}
+	})
+	return p.tree, p.err
 }
 
 // A renderer renders templates with one plan's functions, bound once: a

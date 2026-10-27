@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
+
+	"github.com/chucklehead-dev/gotogether/internal/memo"
 )
 
 // Model is what gotogether needs to know about a Quint module: its actions with
@@ -44,7 +45,7 @@ type Model struct {
 	// typedefs are the type aliases of the file's modules, for toQuint;
 	// types caches the types its templates name (src -> *qtype or error)
 	typedefs map[string]typedef
-	types    *sync.Map
+	types    *memo.Map[string, typeResult]
 }
 
 // Reads reports which of the model's variables action reads, itself or
@@ -161,12 +162,7 @@ func (m *Model) Signature(action string) string {
 
 // ActionNames in sorted order.
 func (m *Model) ActionNames() []string {
-	var out []string
-	for a := range m.Actions {
-		out = append(out, a)
-	}
-	sort.Strings(out)
-	return out
+	return slices.Sorted(maps.Keys(m.Actions))
 }
 
 // LoadModel typechecks spec with the quint CLI and extracts module.
@@ -319,7 +315,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 		}
 		gather(module)
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
-			assigns: assigns, calls: calls, reads: reads, typedefs: typedefs, types: &sync.Map{}}
+			assigns: assigns, calls: calls, reads: reads, typedefs: typedefs, types: &memo.Map[string, typeResult]{}}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range visible {

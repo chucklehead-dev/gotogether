@@ -3,15 +3,17 @@ package validate
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
-	"sort"
 
-	"github.com/chucklehead-dev/gotogether/binding"
-	"github.com/chucklehead-dev/gotogether/qtrace"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/memo"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // Checker validates steps against one binding. Create it once (it typechecks
@@ -133,7 +135,7 @@ func (c *Checker) Close() error {
 }
 
 // Process-wide: the checkers For built.
-var cached sync.Map // absolute binding path, quint, backend -> *Checker
+var cached memo.Map[string, *Checker] // process-wide: absolute binding path, quint, backend -> *Checker
 
 // Cached is NewChecker once per binding, quint binary and backend in a
 // process (the model is typechecked and the binding linted once), with
@@ -145,15 +147,11 @@ func Cached(bindingPath string, o Options) (*Checker, error) {
 		return nil, err
 	}
 	key := abs + "|" + o.Quint + "|" + o.Backend
-	c, ok := cached.Load(key)
-	if !ok {
-		nc, err := NewChecker(abs, o)
-		if err != nil {
-			return nil, err
-		}
-		c, _ = cached.LoadOrStore(key, nc)
+	c, err := cached.Do(key, func() (*Checker, error) { return NewChecker(abs, o) })
+	if err != nil {
+		return nil, err
 	}
-	cc := *c.(*Checker)
+	cc := *c
 	cc.Options = o
 	return &cc, nil
 }
@@ -170,22 +168,13 @@ func (c *Checker) WithConstants(constants map[string]string) (*Checker, error) {
 	}
 	for k, v := range constants {
 		if _, ok := c.Model.Consts[k]; !ok {
-			return nil, fmt.Errorf("constant %s: not a const of %s (it has %v)", k, c.Model.Module, sortedConsts(c.Model.Consts))
+			return nil, fmt.Errorf("constant %s: not a const of %s (it has %v)", k, c.Model.Module, slices.Sorted(maps.Keys(c.Model.Consts)))
 		}
 		b.Constants[k] = v
 	}
 	cc := *c
 	cc.Binding = &b
 	return &cc, nil
-}
-
-func sortedConsts(m map[string]string) []string {
-	var ks []string
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
 }
 
 // Report is the result of Check: global reconstruction issues and one

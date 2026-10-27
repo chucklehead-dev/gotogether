@@ -6,8 +6,9 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -164,7 +165,7 @@ func (b *Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (er
 	for _, r := range recs {
 		emitted[r.Action] = true
 	}
-	for _, name := range sortedNames(b.Actions) {
+	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		if !emitted[name] {
 			warns = append(warns, fmt.Sprintf("action %s is bound but neither a //quint:action nor a literal qobs.Record emits it (an action recorded through a constant or a variable is not seen)", name))
 		}
@@ -232,7 +233,7 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 		}
 	}
 	for _, b := range bs {
-		for _, name := range sortedNames(b.Binding.Actions) {
+		for _, name := range slices.Sorted(maps.Keys(b.Binding.Actions)) {
 			if !emitted[name] {
 				warns = append(warns, fmt.Sprintf("%s: action %s is bound but neither a //quint:action nor a literal qobs.Record emits it (an action recorded through a constant or a variable is not seen)", b.Model.Module, name))
 			}
@@ -256,13 +257,4 @@ func (m *Model) notAnAction(name string) string {
 		msg += fmt.Sprintf(" (did you mean %s?)", best)
 	}
 	return msg + "; its actions: " + strings.Join(names, ", ")
-}
-
-func sortedNames[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }

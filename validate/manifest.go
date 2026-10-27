@@ -14,10 +14,10 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -818,7 +818,7 @@ func moduleVersion(bi *debug.BuildInfo) string {
 
 // quintVersions caches `quint --version` by binary: one run per process.
 // Process-wide.
-var quintVersions sync.Map
+var quintVersions memo.Map[string, string]
 
 // quintVersion is `quint --version` of the binary (default "quint"),
 // or "" if it does not run.
@@ -826,14 +826,11 @@ func quintVersion(bin string) string {
 	if bin == "" {
 		bin = "quint"
 	}
-	if v, ok := quintVersions.Load(bin); ok {
-		return v.(string)
-	}
-	out, err := exec.Command(bin, "--version").Output()
-	v := ""
-	if err == nil {
-		v = strings.TrimSpace(string(out))
-	}
-	quintVersions.Store(bin, v)
-	return v
+	return quintVersions.Once(bin, func() string {
+		out, err := exec.Command(bin, "--version").Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	})
 }

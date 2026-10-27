@@ -15,6 +15,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -32,12 +33,7 @@ type evaluator struct {
 
 // Process-wide: each evaluation module compiled once, by its text and
 // its model's source.
-var evaluators sync.Map // key -> *evalOnce
-
-type evalOnce struct {
-	once sync.Once
-	ev   *evaluator
-}
+var evaluators memo.Map[string, *evaluator]
 
 // evalMode is how searches check candidates: "go" (the evaluator, quint
 // for what it refuses; the default), "quint" (quint alone), "shadow" (the
@@ -174,10 +170,7 @@ func evaluatorFor(c *Checker) *evaluator {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s\x00%s\x00%s", c.Options.Quint, em.Text, src)
 	key := hex.EncodeToString(h.Sum(nil))[:16]
-	v, _ := evaluators.LoadOrStore(key, &evalOnce{})
-	o := v.(*evalOnce)
-	o.once.Do(func() { o.ev = compileEval(c, em, filepath.Join(dir, key)) })
-	return o.ev
+	return evaluators.Once(key, func() *evaluator { return compileEval(c, em, filepath.Join(dir, key)) })
 }
 
 // compileEval writes em in dir and compiles it with quint: its stdout to a
