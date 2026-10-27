@@ -47,7 +47,7 @@ func (t *qtype) render(nested bool) string {
 	switch t.kind {
 	case "int", "str", "bool":
 		return t.kind
-	case "alias":
+	case "alias", "var":
 		return t.name
 	case "set":
 		return "Set[" + t.elem.render(false) + "]"
@@ -113,7 +113,7 @@ func (t *qtype) structured() bool {
 		return true
 	}
 	switch r := t.resolved(); r.kind {
-	case "int", "str", "bool":
+	case "int", "str", "bool", "var": // a type variable: the field as it is
 		return false
 	case "set", "list":
 		return !flat(r.elem)
@@ -127,6 +127,9 @@ func (t *qtype) structured() bool {
 type typedef struct {
 	params []string
 	def    json.RawMessage
+	// scope is the names of its module, which def's are resolved in
+	// (nil: the scope it is looked up in)
+	scope map[string]typedef
 }
 
 // irType converts a type's JSON IR (quint typecheck's), aliases looked up
@@ -189,6 +192,9 @@ func irType(raw json.RawMessage, defs map[string]typedef, vars map[string]*qtype
 		if v, ok := vars[t.Name]; ok {
 			return v, nil
 		}
+		if defs == nil { // printing: the variable by its name
+			return &qtype{kind: "var", name: t.Name}, nil
+		}
 		return nil, fmt.Errorf("the type variable %s, unbound (a polymorphic parameter: annotate it)", t.Name)
 	case "const":
 		var args []*qtype
@@ -238,7 +244,11 @@ func aliasType(name string, args []*qtype, defs map[string]typedef, depth int) (
 	for i, p := range d.params {
 		vars[p] = args[i]
 	}
-	target, err := irType(d.def, defs, vars, depth+1)
+	scope := defs
+	if d.scope != nil {
+		scope = d.scope
+	}
+	target, err := irType(d.def, scope, vars, depth+1)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
@@ -309,7 +319,11 @@ func (p *typeParser) eat(tok string) bool {
 func (p *typeParser) ident() string {
 	p.ws()
 	j := p.i
-	for j < len(p.src) && (p.src[j] == '_' || unicode.IsLetter(rune(p.src[j])) || unicode.IsDigit(rune(p.src[j]))) {
+	for j < len(p.src) && (p.src[j] == '_' || unicode.IsLetter(rune(p.src[j])) || unicode.IsDigit(rune(p.src[j])) ||
+		strings.HasPrefix(p.src[j:], "::") && j > p.i) { // a qualified name: O::Shared
+		if p.src[j] == ':' {
+			j++
+		}
 		j++
 	}
 	s := p.src[p.i:j]
@@ -516,9 +530,16 @@ func (m *Model) typeOf(src string) (*qtype, error) {
 // and no other; a sum's value is "Tag", {"tag": "Tag", "value": v} (ITF's),
 // {"Tag": v}, or {"tag": "Tag", ...the payload record's fields}, and null is
 // None where the sum has one; a map is an object (its keys parsed by the
-// key's type) or a list of [key, value] pairs; a tuple is an array. A
-// number with a fraction or an exponent, and a time, are refused, naming
-// where: Quint has neither, so record an integer unit.
+// key's type) or a list of [key, value] pairs; a tuple is an array.
+// ITF's own encodings are read too ({"#bigint": "n"}, {"#tup": [...]},
+// {"#set": [...]}, {"#map": [[k, v], ...]}), and an integer is whole at
+// any size. A number with a fraction or an exponent, and a time where an
+// int goes, are refused, naming where: Quint has neither, so record an
+// integer unit; a str takes any string. Refused too: two keys of a map
+// that decode to one ("1" and "01" for an int key), and a key that two
+// of a record's fields match (Go's names: ab and a_b). Aliases are the
+// model's module's own and those it imports, by the name the import
+// gives (lib::T).
 func toQuint(m *Model, src string, v any) (string, error) {
 	t, err := m.typeOf(src)
 	if err != nil {
@@ -541,19 +562,22 @@ func toQuint(m *Model, src string, v any) (string, error) {
 func jsonOf(v any, t *qtype) (any, error) {
 	switch x := v.(type) {
 	case qfloat:
-		return json.Number(strconv.FormatFloat(float64(x), 'g', -1, 64)), nil
+		return json.Number(string(x)), nil
 	case qstr:
 		v = string(x)
 	case qlit:
 		s := string(x)
 		if len(s) >= 2 && strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
 			v = s[1 : len(s)-1] // a Quint string literal: its text as it is
+		} else if s == "true" || s == "false" {
+			v = s == "true"
+		} else if _, ok := new(big.Int).SetString(s, 10); ok {
+			v = json.Number(s) // an integer: .process, a step field
 		} else {
-			v = json.Number(s) // an integer or a boolean literal
-			if s == "true" || s == "false" {
-				v = s == "true"
-			}
+			v = s // a name: .outcome's mapped value (a sum's tag: Ok, Rejected)
 		}
+	case uint64: // .step.seq
+		v = json.Number(strconv.FormatUint(x, 10))
 	case int64:
 		v = json.Number(strconv.FormatInt(x, 10))
 	case int:
@@ -593,6 +617,27 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 		return itf.Value{}, fmt.Errorf("at %s: %s", where(), fmt.Sprintf(f, a...))
 	}
 	r := t.resolved()
+	// ITF's own encodings, which the doc names: {"#bigint": "n"},
+	// {"#tup": [...]}, {"#set": [...]}, {"#map": [[k, v], ...]}
+	if obj, ok := j.(map[string]any); ok && len(obj) == 1 {
+		for k, x := range obj {
+			switch {
+			case k == "#bigint" && r.kind == "int":
+				s, ok := x.(string)
+				if !ok {
+					return fail("#bigint holds %s, not a string of digits", jsonText(x))
+				}
+				j = json.Number(s)
+			case k == "#tup" && r.kind == "tup", k == "#set" && (r.kind == "set" || r.kind == "list"), k == "#map" && r.kind == "map":
+				if _, ok := x.([]any); !ok {
+					return fail("%s holds %s, not a JSON array", k, jsonText(x))
+				}
+				j = x
+			case (k == "#bigint" || k == "#tup" || k == "#set") && r.kind != "map" && r.kind != "rec":
+				return fail("ITF's %s where %s goes", k, t)
+			}
+		}
+	}
 	if j == nil && (r.kind == "set" || r.kind == "list" || r.kind == "map") {
 		j = []any{} // Go's nil slice or map: empty
 	}
@@ -622,9 +667,8 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 		if !ok {
 			return fail("%s where a str goes", jsonText(j))
 		}
-		if isTime(s) {
-			return fail("%q is a time: Quint has none; record an integer unit (time.UnixMilli) and type the field int", s)
-		}
+		// a str takes any string, an RFC 3339 time's text included: a
+		// time is refused where the model wants a number of it (int)
 		if strings.Contains(s, `"`) {
 			return itf.Value{}, &itf.UnquotableError{At: where(), S: s}
 		}
@@ -675,6 +719,7 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 		return out, nil
 	case "map":
 		out := itf.Value{Kind: itf.Map}
+		keys := map[string]string{} // each key decoded, by its path
 		add := func(k, v any, path string) error {
 			kv, err := decodeAs(k, r.elem, path+"(key)")
 			if err != nil {
@@ -684,6 +729,10 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 			if err != nil {
 				return err
 			}
+			if prev, dup := keys[kv.String()]; dup {
+				return fmt.Errorf("at %s: the key %s twice (%s and %s): a map has one value per key, and these decode to one", pathOr(path+"(key)"), kv, prev, path)
+			}
+			keys[kv.String()] = path
 			out.Pairs = append(out.Pairs, [2]itf.Value{kv, vv})
 			return nil
 		}
@@ -729,7 +778,7 @@ func decodeAs(j any, t *qtype, at string) (itf.Value, error) {
 // decodeRecord decodes obj as the record type r (written t).
 func decodeRecord(obj map[string]any, r *qtype, at string, t *qtype) (itf.Value, error) {
 	out := itf.Value{Kind: itf.Record, Fields: map[string]itf.Value{}}
-	used := map[string]bool{}
+	used := map[string]string{} // each key, by the field it decoded
 	for _, f := range r.fields {
 		key, ok := f.name, false
 		if _, ok = obj[key]; !ok {
@@ -743,7 +792,10 @@ func decodeRecord(obj map[string]any, r *qtype, at string, t *qtype) (itf.Value,
 		if !ok {
 			return itf.Value{}, fmt.Errorf("at %s: the record has no field %s (it has: %s; %s needs every field)", pathOr(at), f.name, strings.Join(sortedKeys(obj), ", "), t)
 		}
-		used[key] = true
+		if other, twice := used[key]; twice {
+			return itf.Value{}, fmt.Errorf("at %s: the key %s is both %s's fields %s and %s (Go's names match ignoring case and underscores): record the fields under their own names", pathOr(at), key, t, other, f.name)
+		}
+		used[key] = f.name
 		v, err := decodeAs(obj[key], f.typ, at+"."+f.name)
 		if err != nil {
 			return itf.Value{}, err
@@ -751,7 +803,7 @@ func decodeRecord(obj map[string]any, r *qtype, at string, t *qtype) (itf.Value,
 		out.Fields[f.name] = v
 	}
 	for _, k := range sortedKeys(obj) {
-		if !used[k] {
+		if _, ok := used[k]; !ok {
 			return itf.Value{}, fmt.Errorf("at %s: the field %s is none of %s's (record what the model has, or add the field to the model)", pathOr(at), k, t)
 		}
 	}
@@ -867,9 +919,16 @@ func jsonText(j any) string {
 	return strings.TrimSpace(b.String())
 }
 
-// qfloat is a recorded float: printed as quintLit prints it (truncated:
-// a template that reads it as a scalar is as it was), and refused by
-// toQuint, which sees it whole.
-type qfloat float64
+// qfloat is a recorded float, its text whole (strconv's shortest): printed
+// as quintLit prints it (truncated: a template that reads it as a scalar
+// is as it was), refused by toQuint, which sees it whole, and a string
+// to text/template's eq, as every other field is (`eq .obs.x "3"` held
+// for 3.0 before floats reached templates whole, and holds again).
+type qfloat string
 
-func (f qfloat) String() string { return quintLit(float64(f)) }
+func newQfloat(f float64) qfloat { return qfloat(strconv.FormatFloat(f, 'g', -1, 64)) }
+
+func (f qfloat) String() string {
+	x, _ := strconv.ParseFloat(string(f), 64)
+	return quintLit(x)
+}

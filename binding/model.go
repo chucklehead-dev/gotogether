@@ -215,6 +215,11 @@ type tcDecl struct {
 	Type      json.RawMessage `json:"typeAnnotation"`
 	Def       json.RawMessage `json:"type"`   // of a typedef
 	TypeVars  []string        `json:"params"` // of a typedef
+	// an import's: the module, the one name it imports ("*": every
+	// one; "": none, the module's names qualified), and the qualifier
+	ProtoName     string `json:"protoName"`
+	DefName       string `json:"defName"`
+	QualifiedName string `json:"qualifiedName"`
 }
 
 type tcOut struct {
@@ -249,16 +254,31 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 			}
 		}
 	}
-	// type aliases, from every module: a parameter's Shape looks through them
+	// type aliases, from every module: a parameter's Shape looks through
+	// them. toQuint's are scoped as Quint scopes them: a module's own, and
+	// those it imports (lib.T, lib.* or lib::T), each resolved in its own
+	// module's scope. Two modules of one file may each have their Event,
+	// and keyed by name alone the last one read was every module's.
 	aliases := map[string]json.RawMessage{}
-	typedefs := map[string]typedef{}
 	for _, mod := range tc.Modules {
 		for _, d := range mod.Declarations {
 			if d.Kind == "typedef" && len(d.Def) > 0 {
 				aliases[d.Name] = d.Def
-				typedefs[d.Name] = typedef{params: d.TypeVars, def: d.Def}
 			}
 		}
+	}
+	for _, mod := range tc.Modules { // the model's own win the Shape's lookup
+		if mod.Name == module {
+			for _, d := range mod.Declarations {
+				if d.Kind == "typedef" && len(d.Def) > 0 {
+					aliases[d.Name] = d.Def
+				}
+			}
+		}
+	}
+	typedefs := typeScopes(&tc)[module]
+	if typedefs == nil {
+		typedefs = map[string]typedef{}
 	}
 	// every module's actions' assignments and calls, by name: an action
 	// may assign through one it imports
@@ -486,6 +506,58 @@ func namesIn(raw json.RawMessage) map[string]bool {
 		walk(v)
 	}
 	return out
+}
+
+// typeScopes is each module's type aliases by the names it can use them
+// by: its own, then what it imports. Each typedef carries its module's
+// scope, which its definition's names are resolved in.
+func typeScopes(tc *tcOut) map[string]map[string]typedef {
+	scopes := map[string]map[string]typedef{}
+	for _, mod := range tc.Modules {
+		scopes[mod.Name] = map[string]typedef{}
+	}
+	for _, mod := range tc.Modules {
+		for _, d := range mod.Declarations {
+			if d.Kind == "typedef" && len(d.Def) > 0 {
+				scopes[mod.Name][d.Name] = typedef{params: d.TypeVars, def: d.Def, scope: scopes[mod.Name]}
+			}
+		}
+	}
+	// imports, in module order (a module's imports precede it in the IR);
+	// a module's own names are never shadowed by an import's
+	for _, mod := range tc.Modules {
+		own := map[string]bool{}
+		for n := range scopes[mod.Name] {
+			own[n] = true
+		}
+		for _, d := range mod.Declarations {
+			if d.Kind != "import" {
+				continue
+			}
+			from, ok := scopes[d.ProtoName]
+			if !ok {
+				continue
+			}
+			add := func(name, as string) {
+				if td, ok := from[name]; ok && !own[as] {
+					scopes[mod.Name][as] = td
+				}
+			}
+			for name := range from {
+				switch {
+				case d.DefName == "*":
+					add(name, name)
+				case d.DefName == name:
+					add(name, name)
+				case d.DefName == "" && d.QualifiedName != "":
+					add(name, d.QualifiedName+"::"+name)
+				case d.DefName == "":
+					add(name, d.ProtoName+"::"+name)
+				}
+			}
+		}
+	}
+	return scopes
 }
 
 // renderType prints a Quint type from its JSON IR, aliases by name: as

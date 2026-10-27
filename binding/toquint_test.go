@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
@@ -136,9 +137,13 @@ func TestToQuintRefuses(t *testing.T) {
 	}{
 		{"Batch", `{"events": [], "at": 1.5, "cause": "None"}`, "at .at: 1.5 is not an integer: Quint has no fractions; record an integer unit (cents, milliseconds) and type the field int"},
 		{"List[int]", `[1, 2e3]`, "at [1]: 2e3 is not an integer"},
-		{"int", qfloat(2.5), "at the value: 2.5 is not an integer"},
+		{"int", newQfloat(2.5), "at the value: 2.5 is not an integer"},
 		{"Batch", `{"events": [], "at": "2026-10-27T10:00:00Z", "cause": "None"}`, `at .at: "2026-10-27T10:00:00Z" is a time: Quint has none; record an integer unit (time.UnixMilli)`},
-		{"str", qlit(quintLit(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).String())), "is a time"},
+		{"int", qstr(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).String()), "is a time"},
+		{"int -> str", `{"1": "a", "01": "b"}`, `the key 1 twice (["01"] and ["1"])`},
+		{"Set[int] -> int", `[[[1], 1], [[1, 1], 2]]`, "the key Set(1) twice"},
+		{"{ ab: int, a_b: int }", `{"AB": 1}`, "the key AB is both { a_b: int, ab: int }'s fields a_b and ab"},
+		{"int", `{"#bigint": 12}`, "#bigint holds 12, not a string of digits"},
 		{"Read", `{"typ": "x"}`, "the record has no field tags (it has: typ; Read needs every field)"},
 		{"Read", `{"typ": "x", "tags": [], "extra": 1}`, "the field extra is none of Read's"},
 		{"Event", `{"tag": "Deleted", "value": {}}`, `the tag "Deleted" is none of Event's (Created, Renamed, Reset)`},
@@ -153,6 +158,38 @@ func TestToQuintRefuses(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.says) {
 			t.Errorf("toQuint %s %v: %v, want it to say %q", tc.typ, tc.v, err, tc.says)
 		}
+	}
+	// accepted: a str takes any string, a time's text included; ITF's own
+	// encodings; an integer past int64 whole; .step.seq and .outcome
+	for _, tc := range []struct {
+		typ  string
+		v    any
+		want string
+	}{
+		{"str", "2026-10-27T10:00:00Z", `"2026-10-27T10:00:00Z"`},
+		{"{ at: str }", `{"at": "2026-10-27T10:00:00Z"}`, `{ at: "2026-10-27T10:00:00Z" }`},
+		{"int", `{"#bigint": "123456789012345678901234567890"}`, "123456789012345678901234567890"},
+		{"(int, str)", `{"#tup": [{"#bigint": "1"}, "a"]}`, `(1, "a")`},
+		{"Set[int]", `{"#set": [2, 1, 2]}`, "Set(1, 2)"},
+		{"str -> int", `{"#map": [["k", 1]]}`, `Map("k" -> 1)`},
+		{"int", json.Number("123456789012345678901234567890"), "123456789012345678901234567890"},
+		{"int", uint64(7), "7"},
+		{"Ok | Rejected", qlit("Rejected"), "Rejected"},
+	} {
+		if got, err := toQuint(m, tc.typ, value(tc.v)); err != nil || got != tc.want {
+			t.Errorf("toQuint %s %v: %s, %v; want %s", tc.typ, tc.v, got, err, tc.want)
+		}
+	}
+	// a template passes the step's seq and its outcome
+	s := &qtrace.Step{Action: "a", Seq: 9, Args: map[string]any{"x": 3.0}}
+	d := stepData(s, s.Args, 1, "Rejected")
+	if got, err := render(`{{ toQuint "int" .step.seq }} {{ toQuint "Ok | Rejected" .outcome }}`, d, template.FuncMap{"toQuint": func(t string, v any) (string, error) { return toQuint(m, t, v) }}); err != nil || got != "9 Rejected" {
+		t.Errorf("seq and outcome: %q, %v", got, err)
+	}
+	// a float field compares as text, as every field does (eq "3" held
+	// for 3.0 before floats reached templates whole)
+	if got, err := render(`{{ if eq .x "3" }}three{{ end }}`, d, nil); err != nil || got != "three" {
+		t.Errorf("eq of a float field: %q, %v", got, err)
 	}
 	// without a model, a type of built-ins still works and an alias does not
 	if got, err := toQuint(nil, "Set[(str, int)]", value(`[["a", 1]]`)); err != nil || got != `Set(("a", 1))` {
@@ -412,6 +449,43 @@ func TestActors(t *testing.T) {
 	for _, bad := range []string{"[a-", "!", ""} {
 		if err := (&Binding{Actors: []string{bad}}).checkActors(); err == nil || !strings.Contains(err.Error(), "is not a glob") {
 			t.Errorf("%q: %v", bad, err)
+		}
+	}
+}
+
+// toQuint's aliases are scoped as Quint scopes them: the model's own
+// Event, not another module's of the same name (keyed by name across
+// every module, the last read won); an imported one by the name the
+// import gives (lib.Shared as Shared, other's as O::Shared), each
+// resolved in its module. A type variable prints by its name, and its
+// parameter defaults to the field as it is.
+func TestToQuintScopes(t *testing.T) {
+	skip.Quint(t)
+	m, err := LoadModel("quint", "testdata/twomods.qnt", "twomods")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ typ, v, want string }{
+		{"Event", `{"name": "n"}`, `{ name: "n" }`},
+		{"Shared", `{"a": 1}`, `{ a: 1 }`},
+		{"O::Shared", `{"b": "x"}`, `{ b: "x" }`},
+	} {
+		if got, err := toQuint(m, tc.typ, value(tc.v)); err != nil || got != tc.want {
+			t.Errorf("toQuint %s %s: %s, %v; want %s", tc.typ, tc.v, got, err, tc.want)
+		}
+	}
+	if _, err := toQuint(m, "Event", value(`{"id": 1}`)); err == nil || !strings.Contains(err.Error(), "the record has no field name") {
+		t.Errorf("lib's Event read as the model's: %v", err)
+	}
+	want := map[string][2]string{
+		"e": {"Event", `{{ toQuint "Event" .e }}`},
+		"s": {"Shared", `{{ toQuint "Shared" .s }}`},
+		"o": {"O::Shared", `{{ toQuint "O::Shared" .o }}`},
+		"x": {"a", `{{.x}}`},
+	}
+	for _, p := range m.Actions["seen"] {
+		if w := want[p.Name]; p.Type != w[0] || p.DefaultTemplate() != w[1] {
+			t.Errorf("%s: type %q, default %s; want %q, %s", p.Name, p.Type, p.DefaultTemplate(), w[0], w[1])
 		}
 	}
 }

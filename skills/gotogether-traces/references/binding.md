@@ -11,9 +11,12 @@ Rules:
   every field and no other; a sum's value is `"Tag"`, `{"Tag": v}`,
   `{"tag": "Tag", "value": v}` or the payload record's fields beside
   `"tag"`, and `null` is `None`; a map is an object or a list of `[key,
-  value]` pairs; a nil slice is empty. It refuses a number with a
-  fraction and a time, naming where: record an integer unit (cents,
-  `time.UnixMilli`). qobs records a slice or a map as JSON but a struct
+  value]` pairs; a nil slice is empty; ITF's own encodings (`#bigint`,
+  `#tup`, `#set`, `#map`) are read too. It refuses a number with a
+  fraction and a time where an int goes, naming where: record an
+  integer unit (cents, `time.UnixMilli`); a `str` takes any string. Two
+  map keys that decode to one (`"1"`, `"01"`) and a key two record
+  fields match are refused. `.step.seq` and `.outcome` can be passed. qobs records a slice or a map as JSON but a struct
   by `fmt.Sprint`: record a struct's `json.Marshal` text, or a slice.
   A string is written as Quint writes one, its characters as they are
   between quotes (Quint has no escapes: a tab, a newline, a backslash

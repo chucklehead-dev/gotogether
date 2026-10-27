@@ -1330,8 +1330,9 @@ model and binding are generated.
    event as grist writes it), `null` its `None`; a map an object or a
    list of pairs; a nil slice empty. A number with a fraction or an
    exponent (a float recorded whole included: templates now see floats
-   as floats, printed truncated as before) and a time string are refused
-   with the path and the fix (an integer unit). `Param.Type` prints the
+   as floats, printed truncated as before) and a time string where an int
+   goes are refused with the path and the fix (an integer unit); a `str`
+   takes any string, a time's text included. `Param.Type` prints the
    full type (it printed `{...}` for a record), and `DefaultTemplate` is
    `toQuint` for a parameter whose type holds a record or a sum, or a
    collection the older functions misrender (a map's non-scalar values),

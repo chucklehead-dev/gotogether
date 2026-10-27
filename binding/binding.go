@@ -677,7 +677,7 @@ func stepData(s *qtrace.Step, args map[string]any, process int, outcome string) 
 func fieldValue(v any) any {
 	switch x := v.(type) {
 	case float64:
-		return qfloat(x)
+		return newQfloat(x)
 	case string:
 		return qstr(x)
 	}

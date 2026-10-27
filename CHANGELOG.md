@@ -84,6 +84,16 @@ The first release. What a user meets, by module:
   left out, and a binding matching none of a run's actors has no verdict
   and says so. `System.WithBinding(path, opts...)`: the same runs judged
   by another binding.
+- toQuint after its review: a `str` takes any string (a time's text was
+  refused; a time is refused only where an int goes); ITF's encodings
+  (`#bigint`, `#tup`, `#set`, `#map`) are read; an integer past int64 is
+  whole at the top level too (qtrace reads it as a `json.Number`); two
+  map keys that decode to one (`"1"`, `"01"`) and a key matched by two
+  record fields are refused; `.step.seq` and `.outcome` can be passed; a
+  float field compares as text in a template's `eq`, as every field does;
+  aliases are the model's module's own and its imports' (`lib::T`), not
+  the last module's of a name; a type variable prints by its name
+  (`Param.Type`, was `?`) and its parameter defaults to the field.
 - Strings are written as Quint writes them: their characters between
   quotes, as they are (`itf.Value.String`, a template's string field,
   `toQuint`, `toSet`, `toList`, `toMap`, `itf.ParseQuint`). They were
