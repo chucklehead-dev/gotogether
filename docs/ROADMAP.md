@@ -69,12 +69,19 @@ item reviewed before the next. Sizes as in S.
   and `go list -deps ./cmd/gotogether` has neither `testing` nor qenv.
   `gotogether shrink` reruns a driver command per candidate (SameFailure
   only: no `-keep`).
-- **G6. API trim before R5 (S).** `validate.VerdictOf`, the Manifest
-  builder methods, `ModuleVersion`/`QuintVersion` internal; claims'
-  names side by side (Settles, Completes, Finishes; `-require-settle`
-  checks Finishes: `-require-finish`); SameFailure's fields from
-  binding's conjuncts, not a second parser; Mutations of composite
-  values, or a count of the fields not mutated.
+- **G6. API trim before R5 (S). Done** (f108cd1; 41b894a the review
+  of G3–G5 before it): validate's CLI check is package validate/cli
+  (`cli.Check`, `Judged` with `Close`, `Replay`, `Replayed{Got, Want,
+  Same, Differs}`), which keeps OTLP and the OTel SDK out of qtest;
+  `Report.Verdict` for `VerdictOf`, `NewManifest(RunRecord)` for the
+  builders, `CurrentTools` for `ModuleVersion`/`QuintVersion`;
+  `-require-finish` (`-require-settle` a deprecated alias; manifests
+  `gotogether.run/2`); the claims of a run's end side by side in
+  verdicts.md; SameFailure's fields from `binding.ObsComparisons`; lists
+  and maps corrupted, the fields only removed named; qshrink's `Shown`
+  in Result's words, `Keep.Why`, `Result`'s JSON; the evidence view in
+  internal/evidence; `JudgeStepMutants` gone, `StepMutationReport`
+  embedding validate's.
 - **G7. Driver adapters, published (M).** bombadiltrace lives in an
   unpublished example with its defaults: a published package for a
   page's request log (invocation and completion from a request's own
