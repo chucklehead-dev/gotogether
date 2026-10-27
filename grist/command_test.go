@@ -10,7 +10,9 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/memstore"
+	"github.com/chucklehead-dev/gotogether/grist/simstore"
 	"github.com/chucklehead-dev/gotogether/grist/store"
+	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -136,6 +138,79 @@ func TestConditionedOnReads(t *testing.T) {
 			t.Errorf("unconditioned: %v and names %v; want two creates of a (the race, on purpose)", err, got)
 		}
 	}
+}
+
+// An Unconditioned decision is unprotected at every isolation level, by
+// design: its reads are pinned before its append, each in a transaction
+// of its own, and the append's transaction begins after them, so the
+// store's level orders the appends but never the decision's reads with
+// another's append. A create of a name that another create took after
+// the read, before the append's transaction began, commits blind on a
+// simulated store at Serializable as at ReadCommitted; conditioned, it is
+// refused at every level. (Serializable makes a loser decide again only
+// when the two appends' transactions overlap: a lost race for the head
+// is transient and its retry reads afresh. That narrows the window, it
+// does not close it: examples/wallet-grist's readThenWrite mutant
+// commits an overdraft at Serializable.)
+func TestUnconditionedAtEveryLevel(t *testing.T) {
+	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted} {
+		for _, blind := range []bool{false, true} {
+			sim := qenv.New(qenv.NewSeeded(1))
+			sim.Check = true
+			_, ev, cmd := app(blind)
+			inner := simstore.New(qenv.NewStore(sim, "counters", iso))
+			s := &racingStore{Store: inner}
+			s.before = func(ctx context.Context, n int) {
+				if n == 1 { // the other create, committed after this one's read and before its append began
+					if _, err := inner.Append(ctx, "t1", store.Batch{Events: []grist.Event{ev.Of(Created{Counter: "x", Name: "a"})}}); err != nil {
+						t.Errorf("%v: the other create: %v", iso, err)
+					}
+				}
+			}
+			var err error
+			var got []string
+			sim.Spawn("client", func(ctx context.Context) {
+				if cerr := inner.CreateTenant(ctx, "t1"); cerr != nil {
+					t.Error(cerr)
+					return
+				}
+				_, err = cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1"}, Create{Counter: "y", Name: "a"})
+				evs, _, rerr := inner.Read(ctx, "t1", grist.Selector{Types: []string{"counter-created"}}, 0)
+				if rerr != nil {
+					t.Error(rerr)
+				}
+				for _, e := range evs {
+					got = append(got, e.Tags[1].Value)
+				}
+			})
+			if rerr := sim.Run(time.Minute); rerr != nil {
+				t.Fatal(rerr)
+			}
+			sim.Close()
+			switch {
+			case !blind && (!errors.Is(err, errTaken) || len(got) != 1):
+				t.Errorf("%v, conditioned: %v and names %v; want name-taken, one create of a", iso, err, got)
+			case blind && (err != nil || len(got) != 2):
+				t.Errorf("%v, unconditioned: %v and names %v; want two creates of a: the decision's reads are not in the append's transaction, so no level protects it", iso, err, got)
+			}
+		}
+	}
+}
+
+// racingStore is racing over any store: before runs before each Append,
+// in the appending task's context.
+type racingStore struct {
+	grist.Store
+	before func(ctx context.Context, n int)
+	n      int
+}
+
+func (s *racingStore) Append(ctx context.Context, t string, b store.Batch) (grist.Position, error) {
+	s.n++
+	if s.before != nil {
+		s.before(ctx, s.n)
+	}
+	return s.Store.Append(ctx, t, b)
 }
 
 // Reads are pinned at their first read: a later read of the same Reads

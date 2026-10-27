@@ -99,6 +99,12 @@ build a binary each), so the example is
    the append are separate transactions, so a loser whose append began
    after the winner's commit sees no conflict. Either the docs overstate
    it or grist has a bug; I dropped the assertion and wrote it down.
+   *Resolved (docs/grist.md §0.8): the guess is right, by design. The
+   reads are store reads pinned before the append, whose transaction
+   begins after them, so no level protects an `Unconditioned` decision;
+   the docs were wrong (counters' 0 of 120 was its shape's luck: 2 of 60
+   at four clients). The assertion is back as `Some(Rejects("transfer"))`
+   at Serializable, 80 seeds in full mode.*
 2. **The skill links no reference files.** AGENTS.md's convention is
    mechanics in `skills/<name>/references/*.md`; grist's skill is one
    dense SKILL.md whose step 2 is a 30-line sentence of model rules. It
@@ -210,3 +216,20 @@ build a binary each), so the example is
    `Dependencies`) instead of each app's context key, and a documented
    way for a double to record its effect at its site (the `actor` and
    `process` keys).
+
+## Follow-up
+
+What the trial's findings changed (docs/grist.md §0.8): `Unconditioned`
+is documented as unprotected at every isolation level, and
+`readThenWrite` is claimed at Serializable (`Some(Rejects("transfer"))`,
+80 seeds, full mode); `grist.Main serve` records a settle on shutdown,
+so `SERVE=1` judges the eventual vals; the skill's model rules and the
+multi-entity pattern (guesses 1 to 4 above) are reference pages
+(skills/grist/references/), with a double's `actor`/`process` record and
+the declaration-shadows-consequence rule (finding 6); exploration
+summaries name the untaken actions (the "other four" of 11 are the
+model's helper actions `appends`, `refuses`, `readsThrough`,
+`processes`); the "no model-level ITF" log says the verdict is
+unaffected; Quint's reserved names are listed in AGENTS.md and the
+skill. The generator, the harness helpers and typed dependencies are
+ROADMAP's grist track.

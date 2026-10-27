@@ -140,6 +140,14 @@ func Internal() Option {
 // grain's unique-name race back on purpose; the model's precondition
 // then judges each commit (docs/grist.md §2.4). The step still records
 // the reads (readPos, reads), so the model can tell what was read.
+//
+// No isolation level of the store protects it: the decision's reads are
+// pinned before the append, each a read of its own, and the append's
+// transaction begins after them. Under Serializable or Snapshot a race
+// whose two appends overlap makes the loser decide again (a transient
+// conflict), but a decision that read before the other's commit and
+// appends after it commits on what it read, as at ReadCommitted. Only
+// the condition (the default) closes the window, at every level.
 func Unconditioned(reason string) Option {
 	return Option{name: "Unconditioned", kinds: kindsOf("Unconditioned"), apply: func(o *options) string {
 		if reason == "" {

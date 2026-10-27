@@ -45,10 +45,15 @@ func TestMutant(t *testing.T) {
 		// precondition is false. At ReadCommitted (PostgreSQL's default) the
 		// loser of the race for the head waits for its lock and commits
 		// blind: 25 of 40 runs (4 seeds miss with chance 2%). Under
-		// Snapshot and Serializable the loser gets ErrConflict, a transient
-		// error whose retry decides again on fresh reads: the window is
-		// closed (0 of 120 runs in three configurations), so the claim is
-		// ReadCommitted's. TestFaithfulAtClaim1 is its contrast
+		// Snapshot and Serializable a loser whose append overlaps the
+		// winner's gets ErrConflict, a transient error whose retry decides
+		// again on fresh reads, but one that read before the winner's
+		// commit and began its append after it commits blind: no level
+		// protects an Unconditioned decision (grist's
+		// TestUnconditionedAtEveryLevel). The window is narrow at this
+		// shape (0 of 120 runs in three configurations; 2 of 60 with four
+		// clients creating three each), so the claim is ReadCommitted's.
+		// TestFaithfulAtClaim1 is its contrast
 		claim1 := gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}
 		system(commits, claim1).
 			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).

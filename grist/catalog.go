@@ -8,9 +8,11 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 )
 
-// A Catalog is an App's registry as data: what slice 2's generator
-// (grist model) writes a model skeleton and its binding from, and what
-// an API's catalog endpoint serves. It is a copy: changing it changes
+// A Catalog is an App's registry as data: what Main's catalog command and
+// an API's catalog endpoint serve, and what a model generator would
+// write a model skeleton and its binding from (designed, docs/grist.md
+// §3.2, not built: an application's model and bindings are written by
+// hand). It is a copy: changing it changes
 // nothing registered. Its JSON (json.Marshal, the catalog endpoint's and
 // Main's catalog command's) writes each type as a JSON Schema (Schema).
 type Catalog struct {

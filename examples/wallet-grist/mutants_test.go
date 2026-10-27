@@ -46,13 +46,22 @@ func TestMutant(t *testing.T) {
 			Expect(t, qtest.Some(qtest.Rejects("transfer")))
 		system(commits, skew).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 8)}).
 			Expect(t, qtest.Some(qtest.Rejects("transfer")))
-		// Under Serializable the race is narrower but open: the skill and
-		// examples/counters say the race's loser retries a transient
-		// conflict and decides again, yet 2 of 20 runs at the race shape
-		// commit a transfer decided before the other's commit (readPos 0,
-		// committed at head 4; GOTOGETHER_RUN='TestMutant#3:seed=5' showed
-		// it). At that rate no claim at few seeds holds either way, so it is
-		// stated in TRIAL.md, not asserted.
+		// Under Serializable the race is narrower but open: a decision's
+		// reads come before its append's transaction, so no isolation
+		// level protects an Unconditioned one (grist's
+		// TestUnconditionedAtEveryLevel). A loser whose append overlaps the
+		// winner's gets a transient conflict and decides again; one that
+		// read before the winner's commit and began its append after it
+		// commits the overdraft (readPos 0, committed at head 4): 7 of 180
+		// runs at the race shape, so 80 seeds miss with chance 4%. Full
+		// mode: the cost is the seeds
+		if testing.Short() {
+			return
+		}
+		ser := race
+		ser.Isolation = qenv.Serializable
+		system(commits, ser).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 80}).
+			Expect(t, qtest.Some(qtest.Rejects("transfer")))
 	case "noOutbox":
 		// the post at most once: its checkpoint commits before any effect
 		// step, which the at-least-once model refuses (atLeastOnceDone)

@@ -44,7 +44,7 @@ Rates from one full run (2026-10-27); `-short` runs fewer seeds.
 | `TestFaithfulAtClients` | none | the same at ReadCommitted, judged where the clients saw it, linearized | `Conforms`: 20 of 20 |
 | `TestDuplicateRequests` | none (wallet's `NoDedupe` and `UnlockedRecord` cannot be written: see below) | the API duplicating and delaying 3 requests in 10 | `Conforms` at the store and at the clients: 20 of 20 on each side |
 | `TestInvalidRequests` | `noValidation`: no request refused as invalid | transfers to and from `z` (not held), to their own source, of -1 and 0; deposits alike | the faithful bank conforms (10 of 10); the mutant commits what the model refuses, `Some(Rejects("transfer"))` (6 of 6: 4 reject `transfer`, 2 `deposit`) |
-| `TestRaces` | `readThenWrite`: `transfer` declared `Unconditioned` | at ReadCommitted, no faults: `race`, two clients spending 3 of `c`'s 5 twice each; `skew`, one transfer of 6 from each account of the credit line (10 between them) | faithful: `None(Rejects("transfer"))`, and both sides conform (20 of 20 at each shape, each side); the mutant: `Some(Rejects("transfer"))`, the funds overdrawn (lost update 19 of 20, credit line 19 of 20); under Serializable the mutant still commits a transfer decided before the other's commit in 2 of 20 runs at the `race` shape (not asserted: see [TRIAL.md](TRIAL.md)) |
+| `TestRaces` | `readThenWrite`: `transfer` declared `Unconditioned` | at ReadCommitted, no faults: `race`, two clients spending 3 of `c`'s 5 twice each; `skew`, one transfer of 6 from each account of the credit line (10 between them) | faithful: `None(Rejects("transfer"))`, and both sides conform (20 of 20 at each shape, each side); the mutant: `Some(Rejects("transfer"))`, the funds overdrawn (lost update 19 of 20, credit line 19 of 20); under Serializable too, `Some(Rejects("transfer"))` at the `race` shape (7 of 180 runs; 80 seeds, full mode): a decision's reads come before its append's transaction, so no isolation level protects an `Unconditioned` command (docs/grist.md §0.8) |
 | `TestPostedOnce` | `ledgerNoDedupe`: the ledger posts a retried key again | one client depositing; a `qenv.Script` of `grist.post.effect`'s `crashAfter` (the node crashes after the ledger's post, before the checkpoint) | faithful: conforms, and `everyMovePostedOnce` holds with and without the crash (10 of 10 each); the mutant posts twice, `Some(Rejects("ledgerPost"))` (6 of 6) |
 | `TestMutant` (`noOutbox`) | `noOutbox`: `post` declared `AtMostOnce` (fire and forget after the checkpoint) | one client depositing, no faults | `Some(Rejects("post"))`: its checkpoint commits before any effect step, which the at-least-once model refuses (6 of 6) |
 | `TestReplicaReadShape` | `replicaRead`: `read` answered from the ledger's postings | two clients depositing to and reading `a`, no faults | faithful: `None(Mismatch("read"))` (10 of 10); the mutant: `Some(Mismatch("read"))`, a read missing a deposit not yet posted (10 of 10) |
@@ -67,8 +67,9 @@ Rates from one full run (2026-10-27); `-short` runs fewer seeds.
   conditioned transfer skew. Snapshot's runs are Serializable's (every
   append writes the head). The only skew an application can write is a
   whole command `Unconditioned` (`readThenWrite` at the `skew` shape),
-  caught at ReadCommitted in 19 of 20 runs (and, unlike what grist's
-  skill says, still in 2 of 20 of the `race` shape's at Serializable). The store's history is a log of appends,
+  caught at ReadCommitted in 19 of 20 runs (and at Serializable in 7 of
+  180 of the `race` shape's: no level protects an `Unconditioned`
+  decision, whose reads precede its append's transaction). The store's history is a log of appends,
   not the list-append workload qhistory reads.
 - **`TestPendingTransfers` (`ResolvePending`)**: gristsim's clients do not
   crash; a call is pending only after `MaxAttempts` tries.
