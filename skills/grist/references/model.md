@@ -82,15 +82,17 @@ success event names the trigger (`paidOut(counter, trigger)`) so each
 trigger's outcome is its own; and for a Delivers processor
 `<p>Skips(prefix, trigger): bool`, whether its handler skips the
 trigger (returns Skip: no effect step; `false` for a handler that never
-does): its effect actions require it false, its skip action true. Per site `s`: `<s>Admits(records, r)`, the
-dependency's own rule (a ledger's dedupe by key; `true` for a bank that
-records every payment). A site's records are ordered with no commit of
-the tenant's log (a record may be reconstructed before the commit that
-asked for it), and `<s>Admits` sees the records, not the log: a relation
-between them and the log ("every receipt is for a borrow") is an
-eventual val (`// grist: eventually`), judged after a settle, never an
-invariant (GR3, docs/grist-instrumentation.md, places a served call's
-record after its trigger's commit). A read `r.Exists(T, grist.Tag("k", v))` records the read the
+does): its effect actions require it false, its skip action true. Per
+processor and declared call it uses, the request it makes (below). Per
+site `s` (`grist.NewSite`, the escape hatch for a double grist does not
+serve): `<s>Admits(records, r)`, the dependency's own rule. A site's
+records are ordered with no commit of the tenant's log (a record may be
+reconstructed before the commit that asked for it), and `<s>Admits`
+sees the records, not the log: a relation between them and the log is
+an eventual val (`// grist: eventually`), never an invariant. A declared
+call's served records are placed after the commit holding their
+trigger, so "every receipt is for a borrow" over `<call>Records` is an
+invariant (examples/library's `everyReceiptForABorrow`). A read `r.Exists(T, grist.Tag("k", v))` records the read the
 generator names `<t>ByK(v)` (`r.Exists(T)`: `<t>Read`), what `<c>Needs`
 returns for it. A field the model leaves out (a list in a query's
 answer) is tagged `grist:"-"`; an untagged one is the generator's error. `STRS` and `INTS`: what `step` (`gotogether
@@ -198,15 +200,19 @@ but a replay, `<call>Replayed`, which the generated action admits only
 as an earlier served record of the key, request and answer alike: a
 double replaying another answer than its first (a refusal included), or
 one it never gave, is rejected there. Keep each key's first answer,
-refusals too. An invariant or eventual val reads `<call>Records` (counters'
+refusals too. The default double (`grist.DefaultHandlers`, what gristsim
+serves a dependency the run gives no handlers) does so. An invariant or
+eventual val reads `<call>Records` (counters'
 `everyRetirementPaidOnce`: one ok served record per retirement's
-trigger) and `<call>Calls`.
+trigger; library's `everyReceiptForABorrow`, an invariant: each record's
+request the borrow at its trigger) and `<call>Calls`.
 
 A double grist does not serve may still record its effects with a site:
 `grist.NewSite[T](App, name)` and `Site.Record(ctx, tenant, v)` in its
 handler (actor the tenant, process the App's name); the generator writes
 its list (`<site>Records`) and action, ordered with no commit (an
-eventual val relates it to the log).
+eventual val relates it to the log). It is an escape hatch, kept until
+GR7: declare a call instead, which grist records, orders and models.
 
 ## Check it alone
 

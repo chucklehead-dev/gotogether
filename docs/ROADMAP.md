@@ -63,7 +63,7 @@ Then, in order, each item reviewed before the next:
   grist's helpers), `Takes` by outcome, `gristsim.Config.Prologue`, a
   Delivers processor's Skip in its generated model, a refusal undeclared
   naming `grist.Refuses`. A site record ordered after the commit that
-  triggered it is GR3's (docs/grist-instrumentation.md §3.3, slices 1-2).
+  triggered it: built in GR3 (docs/grist-instrumentation.md §3.3, slices 1-2).
   Left: gristflow
   (an append its reads do not cover, a rejection on an unconditioned
   read, a raw store call), and a trial agent building a new app from
@@ -81,7 +81,12 @@ Then, in order, each item reviewed before the next:
   `Uses`, `Call.Do`, `Handlers`, the site placed at its cause), gristsim
   serving each dependency, the generator writing both actions and a rule
   per processor and call; counters' bank ported (`wrongAmount` caught).
-  Next: slice 2 (the default double, every example's dependencies).
+  Slice 2 built (§0.13): the default double (`grist.DefaultHandlers`,
+  served by gristsim to a dependency given none), counters' and
+  library's mailers and wallet-grist's ledger declared calls (no
+  hand-written double, site or dedupe rule left in an example), `grist
+  new`'s starter declaring a dependency. Next: slice 3 (the real tier
+  over HTTP: `OverHTTP`, `ServeCalls`).
 - **GR4. Several services simulated together (L).** gristsim composes
   several Apps, each with its own store, process and node(s), over
   qhttp/simgrpc/simlog networks with faults per service; a cross-service

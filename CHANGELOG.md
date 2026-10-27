@@ -8,6 +8,15 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist, the default double (GR3's slice 2, docs/grist.md §0.13;
+  api/grist.txt): `grist.DefaultHandlers(dep)`, a dependency's handlers
+  applying a `Keyed` call once per key (a later try replayed from the
+  first answer) and an unkeyed one every time, each answered with the
+  zero response; gristsim serves it to a dependency `Config.Doubles`
+  gives none (until now the run's error). `grist new`'s starter declares
+  a dependency. examples/library's and examples/counters' mailers and
+  examples/wallet-grist's ledger are declared calls served by it (their
+  hand-written doubles, sites and dedupe rules gone).
 - grist, declared calls on the simulated tier (GR3's slice 1,
   docs/grist.md §0.12; api/grist.txt): `grist.NewDependency`,
   `grist.NewCall[Req, Resp]` (`Keyed`, `Refuses`), `grist.Uses` on a

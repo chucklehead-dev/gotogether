@@ -1,10 +1,11 @@
 # grist instrumentation (GR3): every seam recorded and simulated by construction
 
-Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slice 1 is
-built** (§4; docs/grist.md §0.12 says what building it changed, and the
-text below is corrected where it did): `grist.NewDependency`,
-`grist.NewCall`, `Keyed`, `Uses`, `Call.Do`, `Handlers`, `Local`,
-`Transport`, `gristsim.Config.Doubles`. The rest of the Go below is
+Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slices 1 and
+2 are built** (§4; docs/grist.md §0.12 and §0.13 say what building them
+changed, and the text below is corrected where they did):
+`grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
+`Handlers`, `Local`, `Transport`, `gristsim.Config.Doubles`,
+`grist.DefaultHandlers` (the default double). The rest of the Go below is
 **proposed API** (`OverHTTP`, `ServeCalls`, `client.NewPeer`, ...),
 written so it parses; every name it takes from an existing toolkit
 package exists today.
@@ -383,10 +384,14 @@ today: the nemesis crashes nodes, not the bank; a crashable dependency
 is an option), its handler the
 `grist.Handlers` given in `Config.Doubles` (built in slice 1 as `func()
 gristsim.Doubles`, called once per run, so a double's state is its
-run's; a dependency without handlers is the run's error until slice 2)
-or, when none is given, the **default double** (slice 2): a `Keyed` call is applied
-once per key and answered with the zero response (a second try of a key
-gets the first answer), an unkeyed call is applied every time. The
+run's) or, when none is given, the **default double** (built in slice 2
+as `grist.DefaultHandlers(dep)`, in grist so a real tier or a binary can
+attach it in process too, `grist.Local`): a `Keyed` call is applied
+once per key and answered with the zero response (a later try of a key
+gets that first answer as a replay, `grist.Replayed`, recorded and
+judged as `<c>Replayed`), an unkeyed call is applied every time. A run
+that gives a dependency handlers lacking one of its calls is still the
+run's error. The
 dependency's faults are then the Service's, by name, as qenv's doubles
 declare them (`qenv.NewService`: `rpc.<name>.request` drop and
 duplicate, `rpc.<name>.delay` late and slow, `rpc.<name>.response`
@@ -397,7 +402,7 @@ lost answers by being declared.
 ```go
 // a test giving the bank's answers (a declined payment), served as the
 // bank's qenv.Service (built: gristsim.Config{Doubles: doubles}); every
-// other dependency gets the default double (slice 2)
+// other dependency gets the default double (built in slice 2)
 func doubles() gristsim.Doubles {
 	return gristsim.Doubles{Bank: grist.Handlers{
 		Pay.Handler(func(ctx context.Context, r PayRequest) (PayReceipt, error) {
@@ -556,7 +561,8 @@ names the mutant it must catch, built as an overlay
    `rpc.bank.*`, keep their names). grist's own tests:
    `Do` outside an effect or without `Uses` is an error naming the fix
    (each fails with its check removed).
-2. **The default double, and every example's dependencies declared.**
+2. **The default double, and every example's dependencies declared**
+   (built, 2026-10-27: docs/grist.md §0.13, with what it changed here).
    gristsim's default double (§3.5); counters' mailer, wallet-grist's
    ledger and library's mailer ported (their `NewSite`s and hand-written
    `Admits` deleted); the site placed at its cause, so library's
@@ -564,9 +570,21 @@ names the mutant it must catch, built as an overlay
    `grist new`'s starter declares one dependency (`TestNewIsGreen`).
    **Acceptance**: library's `noDedupe` (now a double that applies every
    try) is `Some(Rejects("mailerSendServed"))` with no hand-written rule;
-   wallet-grist's `ledgerNoDedupe` likewise; library's mailer meets lost
+   wallet-grist's `ledgerNoDedupe` likewise (`Rejects("ledgerPostServed")`);
+   library's mailer meets lost
    answers (`qtest.Reaches("rpc.mailer.response").Faulted()`), which it
    never did. Measured: the lines of deps and rules removed per example.
+   Built so, with two corrections: library's `wrongReceipt` (its receipt
+   now carries no position: it swaps member and book) is caught at the
+   caller, `Rejects("mailerSend")`, not as `Violates(...)`, which claims
+   a violation in a conforming run: a served record carries the bytes
+   its caller sent, so wherever grist records both ends the caller's
+   rule refuses a receipt for no borrow, and the invariant states what
+   the site guarantees for a tier where only the site is recorded (slice
+   3's `ServeCalls`); and a site record placed
+   before its commit is rejected by the generated site action itself (its
+   trigger not yet in the log), not left to an invariant
+   (wallet-grist's `TestPostAfterTransfer`).
 3. **The real tier over HTTP.** `Transport`, `OverHTTP`, `Local`,
    `ServeCalls`; `grist.Main` and `gristtest.TierConfig` serving a
    dependency's `Handlers` on a loopback server that loses every fifth

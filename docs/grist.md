@@ -6,7 +6,8 @@ store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
 on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
 `grist.Main` built (§0.5), `AtMostOnce` built (§0.6), their review's
 fixes (§0.7), a newcomer's trial's fixes (§0.8), the generator, `grist
-new` and the test harnesses built (§0.9); gristflow is design, as is
+new` and the test harnesses built (§0.9), GR3's declared calls built
+(§0.12, §0.13); gristflow is design, as is
 slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -1336,6 +1337,111 @@ timeout is `gristsim.DependencyTimeout` (1 s), not yet an option.
   before and after, in the noise of a shared machine. TestPayoutAmount
   never reached a lost answer (0 of 10 runs at 0.3 among
   the other faults): its comment no longer claims one.
+
+## 0.13 What building GR3's slice 2 changed (the default double, every example's dependencies declared)
+
+docs/grist-instrumentation.md §4's slice 2: no grist example writes a
+double, a site or a dedupe rule by hand. Built, each with a test that
+fails with it taken out:
+
+- **The default double** (grist/calls.go): `grist.DefaultHandlers(dep)`
+  are a dependency's handlers that apply a `Keyed` call once per key and
+  answer it with the zero response, answer a later try of the key from
+  that first answer as a replay (`grist.Replayed`: recorded
+  `<c>Replayed`, judged as one, so a key's first answer is final), and
+  apply an unkeyed call every time. gristsim serves them to a dependency
+  the run's `Config.Doubles` gives no handlers (a dependency given
+  handlers lacking a call is still the run's error); a real tier or a
+  binary attaches them in process (`dep.With(ctx,
+  grist.Local(grist.DefaultHandlers(dep)))`), their records going to the
+  node's recorder. `Call.Handler`'s wrapper is shared, so the default
+  records through the same code (`TestDefaultHandlers`; gristsim's
+  `TestDefaultDouble`, through the Service's duplicates and lost answers,
+  fails with the default's dedupe removed: a key applied twice, no
+  replay). The default lives in grist, not gristsim, so slice 3's real
+  tier serves it too.
+- **library's mailer** (`Mailer`, `Send`: `Keyed`, request `{member,
+  book}`) served by the default double: mailer.go 62 to 27 lines (the
+  `Mailer` double, `Sends`, `Sender`, `MailerDep` gone), the model's
+  `mailerSendsAdmits` (3 lines) gone for the rule `receiptsMailerSend`
+  (4). `Receipt.At` goes: the trigger is grist's. `everyReceiptForABorrow`
+  is an invariant over the served records' triggers. The mailer is a
+  `qenv.Service` now, so TestFaithful claims what it never met:
+  `Reaches("rpc.mailer.response").Faulted()`, a send of outcome
+  `unknown`, a replay. `noDedupe` is a double sending every try (the
+  overlay replaces doubles_test.go, whose faithful `doubles` is nil),
+  `Some(Rejects("mailerSendServed"))` by the generated admits.
+  `wrongReceipt` cannot name a wrong position any more; it swaps the
+  receipt's member and book and is `Some(Rejects("mailerSend"))`, the
+  caller's generated rule (below).
+- **wallet-grist's ledger** (`Ledger`, `PostEntry`: `Keyed`, request
+  `{account, amount}`) served by the default double, in process on the
+  real tier and in the binary: deps.go 107 to 28 lines (`Book`,
+  `SimLedger`, `LocalLedger`, `LedgerPosts`, `LedgerDep` gone),
+  `ledgerPostAdmits` (3 lines) for `postLedgerPost` (4). `ledgerNoDedupe`
+  is a double posting every try, `Some(Rejects("ledgerPostServed"))`
+  (6 of 6, as `Rejects("ledgerPost")` was). `TestPostAfterTransfer`: a
+  transfer commits two moves in one batch, each a post's trigger, and the
+  ledger's record of the first follows the batch's commit; with the site
+  placed at 2·T+1 every run rejects `ledgerPostServed` (its trigger not
+  yet in the log).
+- **counters' mailer** (`Mailer`, `Send`: not `Keyed`, as the simulated
+  mailer it replaces sent every mail; request `{counter, name}`) served
+  by the default double under the same Service name, so `rpc.mailer.*`
+  and the scripts' faults keep their kinds: deps.go's mailer half (53
+  lines: `Mailer`, `MailerDep`, `noMailer`, `Mail`, `SimMailer`) became
+  its declaration (23), the rule `welcomeMailerSend` (5) is new; the real
+  tier's and the binary's mailers are handlers served by `grist.Local`.
+  `StoreDep` stays a `NewDep`: it is no call. Every claim and mutant
+  unchanged.
+- **`grist new`'s starter** declares a dependency (`Warehouse`, `Keyed`
+  `Receive`, the processor `shelve` at least once, the rule
+  `shelveWarehouseReceive`, an eventual val that every addition was
+  received or failed every try); `TestNewIsGreen` passes, `Exercised`
+  taking the call.
+
+`grist.NewSite` stays, tested in grist (declare_test, model_test,
+gristtest's exercised_test), as the escape hatch until GR7; no example
+uses it.
+
+Where the design changed (docs/grist-instrumentation.md, corrected in
+place):
+
+- **A wrong request is caught at the caller, not by an invariant over
+  the site.** A served record carries the bytes its caller sent, and a
+  run grist records both ends of rejects at the caller's step; `Violates`
+  claims a conforming run's violation, so library's `wrongReceipt` is
+  `Rejects("mailerSend")`. The invariant `everyReceiptForABorrow` is
+  kept: it states the site's guarantee for a tier where only the site is
+  recorded (slice 3's `ServeCalls`).
+- **A site record before its commit is the site action's rejection**,
+  not an invariant's: the generated `<c>Served` requires its trigger in
+  the log. wallet-grist's test claims conformance and served posts; an
+  invariant restating the guard was tried and dropped.
+- **The default double is in grist** (`DefaultHandlers`), where the
+  design had it in gristsim alone.
+
+What slice 3 (the real tier over HTTP) must know:
+
+- The real tiers attach in-process transports today (`TierConfig.Deps`:
+  `dep.With(ctx, grist.Local(...))`, one `Local` per tier, created
+  outside `Deps`, so its key clock is shared by every node of the tier,
+  counters' two included). `TierConfig` serving `Handlers` behind
+  `ServeCalls` replaces that; the site's records then come from another
+  recorder, and the site action should judge its request too (§0.12's
+  review).
+- `DefaultHandlers` is the natural `ServeCalls` default (a test that
+  gives no handlers), and its first-answer map is per instance: one per
+  served dependency per run.
+- library's binary (`cmd/library`) attaches no mailer: its receipts fail
+  every try there (`grist.failed`), as before; counters' and
+  wallet-grist's binaries serve theirs in process.
+
+Cost (`go test -short ./...` per example, CPU s, user + sys, at load
+4-13 on 4 cores): counters 415 before, 438 after (its line in
+ci/test-times.txt, 640, unchanged: twice is 1280); wallet-grist 402 to
+436; library 225 to 246. The new steps (every mail and post recorded at
+both ends) are most of it.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

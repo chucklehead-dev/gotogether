@@ -68,19 +68,30 @@ for it. No binding is written by hand.
    invocation and its completion) and the bank's application
    (`bankPayServed`, by the handler's wrapper, ordered after the commit
    holding the trigger), and gristsim serves each dependency as a
-   `qenv.Service` named after it (`rpc.bank.*`) from the run's
-   `Config.Doubles` (`func() gristsim.Doubles`: `gristsim.Doubles{Bank:
-   grist.Handlers{Pay.Handler(f)}}`, per run; a deduplicating double
-   answering a retry from its first answer calls `grist.Replayed(ctx)`,
-   recorded and judged as `bankPayReplayed`; `grist.CallKey(ctx)` the
-   key). Do outside an effect, or of a call
+   `qenv.Service` named after it (`rpc.bank.*`), by default with its
+   **default double** (`grist.DefaultHandlers(dep)`: a `Keyed` call
+   applied once per key and answered with the zero response, a later try
+   of the key replayed from that first answer; an unkeyed call applied
+   every time): most apps write no double. Give one only to answer
+   otherwise (a decline, a receipt) or as a mutant (a double that applies
+   every try), in the run's `Config.Doubles` (`func() gristsim.Doubles`:
+   `gristsim.Doubles{Bank: grist.Handlers{Pay.Handler(f)}}`, per run; a
+   deduplicating double answering a retry from its first answer calls
+   `grist.Replayed(ctx)`, recorded and judged as `bankPayReplayed`, and
+   keeps each key's first answer, a refusal included; `grist.CallKey(ctx)`
+   the key). Outside a simulation attach a transport where the node
+   starts (`Bank.With(ctx, grist.Local(handlers))` in `grist.Dependencies`
+   or `gristtest.TierConfig.Deps`; `grist.Local(grist.DefaultHandlers(Bank))`
+   for the default in process), its site records going to the node's
+   recorder. Do outside an effect, or of a call
    the processor does not list in `Uses`, is the effect's error. What is
    no call stays a typed `grist.NewDep[T](name, fallback)` (T best an
    interface, its fallback a stand-in refusing every call with the fix;
    `Dep.Of(ctx)` in an effect, `Dep.With(ctx, v)` where the node starts:
-   gristsim's `Setup`, `grist.Dependencies`), and a double grist does
-   not serve may record its effects with a `grist.NewSite[T](App, name)`
-   (`Site.Record(ctx, tenant, v)`). Then
+   gristsim's `Setup`, `grist.Dependencies`). A double grist does not
+   serve may record its effects with a `grist.NewSite[T](App, name)`
+   (`Site.Record(ctx, tenant, v)`): an escape hatch no example needs
+   (its records are ordered with no commit; a call's are). Then
    `go run ./cmd/<app> model` (`grist.Main`; `-init` the first time)
    writes `model/<app>_gen.qnt` (events, reads, an action per block with
    its outcome branches and frame conditions, `step`), the vendored
@@ -118,9 +129,10 @@ for it. No binding is written by hand.
    often), `Prologue` (`[]gristsim.Call{{Name: "join", Args: Join{...}}}`:
    calls made in order, each answered, before any client's first: the
    state a block that needs others first depends on, a member joined
-   before borrows), `Setup` (the
-   app's doubles, reached through a processor's ctx; a double records
-   its own effect with `actor` the tenant and `process` the App's name:
+   before borrows), `Doubles` (a declared dependency's handlers, else its
+   default double), `Setup` (what is no call: a `grist.NewDep`'s value,
+   reached through a processor's ctx; a `NewSite` double records its own
+   effect with `actor` the tenant and `process` the App's name:
    [`references/model.md`](references/model.md)). Every run records
    both sides: the store's steps (actor the tenant: commits relayed from
    the step log) and the clients' calls (`gristsim.ClientsActor`,

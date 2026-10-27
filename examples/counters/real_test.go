@@ -53,9 +53,12 @@ func realMailer() grist.Transport {
 func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
 	tenants := []string{"t1", "t2"}
+	// one mailer for both nodes: a Local orders each key's site records,
+	// the second node's retry of a key after the first's send included
+	mailer := realMailer()
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{Tenants: tenants,
 		Deps: func(ctx context.Context, st grist.Store) context.Context {
-			return StoreDep.With(Mailer.With(ctx, realMailer()), st)
+			return StoreDep.With(Mailer.With(ctx, mailer), st)
 		}})
 	// clients runs four clients of 8 operations each on counters, names
 	// from names; after the first client's half, kill runs (if set)
