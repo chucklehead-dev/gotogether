@@ -245,19 +245,27 @@ construction. A call `pay` of dependency `bank` is the Quint name
 | step | where | actor, process | arguments | observations | order |
 | --- | --- | --- | --- | --- | --- |
 | `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | the tenant, the App's store | the request's fields, `trigger`, `key` | the response's fields; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
-| `bankPayServed` (the site) | where the call is served: the double's or `Handlers`' wrapper, or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `trigger`, `key` | the response's fields; outcome as the handler answered | `order.pos` 2·T+1, on a thread of its own (the key) |
+| `bankPayServed` (the site) | where the call is served: the double's or `Handlers`' wrapper, or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `trigger`, `key` | the response's fields; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), on a thread of its own (the key) |
 
 The call carries a **cause**, `grist.CallInfo{App, Tenant, Processor,
-Trigger, Key}`, from the effect's context to wherever it is served (a
-field of the simulated request; headers on HTTP: `Idempotency-Key` and
-`Grist-Cause: <app>/<tenant>/<processor>/<trigger>`). That is what lets
-the site record join the right tenant's trace and be **placed at its
-cause**: at 2·T+1, after the trigger's commit and with the reads through
-T, which is when the effect was decided (grist §2.6: a handler reads as
-of T). It closes GR2's left item (a site record ordered after the commit
-that triggered it, grist §0.10): the site's rule sees the log through T,
-so "every receipt is for a borrow that happened" is an invariant, and
-library's `Receipt.At` is no longer the application's to carry.
+Trigger, Head, Key}`, from the effect's context to wherever it is served
+(a field of the simulated request; headers on HTTP: `Idempotency-Key` and
+`Grist-Cause: <app>/<tenant>/<processor>/<trigger>/<head>`). That is what
+lets the site record join the right tenant's trace and be **placed at its
+cause**: at 2·H+1, where H is the head the poller read when it took the
+trigger (H ≥ the end of the trigger's batch, as the effect step's own
+2·H+1). Not 2·T+1: a commit step is ordered at 2·P, P the end of its
+batch (record.go's commitOrder), so a trigger T inside a multi-event
+batch [T..P] (wallet-grist's transfer appends two `moved` events, each a
+post trigger) would put its site record before the commit holding T.
+The site's rule is given `log.slice(0, T)`, the prefix the effect decided
+on (grist §2.6: a handler reads as of T), not the whole log at 2·H+1. It
+closes GR2's left item (a site record ordered after the commit that
+triggered it, grist §0.10, §0.11): "every receipt is for a borrow that
+happened" is an invariant, and library's `Receipt.At` is no longer the
+application's to carry. Slice 1's acceptance includes a trigger inside a
+two-event batch (wallet-grist's transfer), whose site record must follow
+its commit.
 
 Two choices in the table, and why:
 
