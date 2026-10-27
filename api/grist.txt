@@ -1,6 +1,7 @@
 == github.com/chucklehead-dev/gotogether/grist
 const AtLeastOnce Delivery = iota + 1
 func BatchSize(n int) Option
+func CheckTenant(t string) error
 func ConditionTries(n int) Option
 func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result
 func EffectFaults(processor string) qenv.FaultKind
@@ -27,7 +28,7 @@ func Skip() Result
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
-func WithRelay(ctx context.Context, r *Relay) context.Context
+func WithRelay(r *Relay) StartOption
 type App struct
     field Name string
     method (*App) ArgsType(name string) reflect.Type
@@ -38,7 +39,7 @@ type App struct
     method (*App) Queries() []string
     method (*App) Query(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (json.RawMessage, Position, error)
     method (*App) ResultType(name string) reflect.Type
-    method (*App) Start(ctx context.Context, s Store) error
+    method (*App) Start(ctx context.Context, s Store, opts ...StartOption) error
     method (*App) Verify() error
 type Catalog struct
     field Name string
@@ -119,9 +120,11 @@ type Rejected struct
     method (*Rejected) Is(target error) bool
 type Relay struct
     method (*Relay) Behind(ctx context.Context) (int64, error)
+    method (*Relay) Err() error
     method (*Relay) Flush(ctx context.Context) error
 type Result struct
 type Selector = store.Selector
+type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
 type TagPair = store.TagPair
@@ -135,6 +138,7 @@ const CallTimeout = 2 * time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
 func ClientsActor(tenant string) string
+func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope, name string, args json.RawMessage) error
 func Gen(typ reflect.Type, alphabet []string, pick func(n int) int) any
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error
 type Config struct
@@ -155,17 +159,19 @@ type Config struct
 == github.com/chucklehead-dev/gotogether/grist/memstore
 func New(name string) *Store
 type Store struct
-    method (*Store) Append(_ context.Context, t string, b store.Batch) (store.Position, error)
+    method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
     method (*Store) Checkpoint(_ context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(_ context.Context, t string) error
     method (*Store) Heads(context.Context) (map[string]store.Position, error)
     method (*Store) Marker(_ context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
     method (*Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) StepCount(_ context.Context, t string) (int64, error)
     method (*Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(context.Context) ([]string, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
     method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
+    method (*Store) WaitTenants(ctx context.Context, n int) error
 
 == github.com/chucklehead-dev/gotogether/grist/simstore
 func New(db *qenv.Store) *Store
@@ -177,10 +183,12 @@ type Store struct
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
     method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
+    method (*Store) WaitTenants(ctx context.Context, n int) error
 
 == github.com/chucklehead-dev/gotogether/grist/sqlstore
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
@@ -201,19 +209,24 @@ type Store struct
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
     method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
+    method (*Store) WaitTenants(ctx context.Context, n int) error
 var Postgres = Dialect{name: "postgres", …}
 var QSQL = Dialect{name: "qsql", …}
 var SQLite = Dialect{name: "sqlite", …}
 
 == github.com/chucklehead-dev/gotogether/grist/store
 func CheckCondition(log []Stored, c Condition) error
+func MayHaveCommitted(err error) bool
 func NewReceipt(tenant string, head Position, n int) Receipt
+func NotCommitted(err error) error
 func Permanent(err error) error
 func Select(log []Stored, q Selector, at Position) []Stored
+func StepTime(ctx context.Context) int64
 func Transient(err error) bool
 type Batch struct
     field Events []Event
@@ -260,6 +273,10 @@ type Meta struct
     field Pos Position
     field Time int64
     field Cause string
+type NotCommittedError struct
+    field Err error
+    method (*NotCommittedError) Error() string
+    method (*NotCommittedError) Unwrap() error
 type PermanentError struct
     field Err error
     method (*PermanentError) Error() string
@@ -279,9 +296,11 @@ type Selector struct
 type StepLog interface
     Steps(ctx context.Context, tenant string, after int64, limit int) ([]StepRow, error)
     WaitSteps(ctx context.Context, tenant string, after int64) error
+    StepCount(ctx context.Context, tenant string) (int64, error)
 type StepRow struct
     field Seq int64
     field Head Position
+    field Time int64
     field Step json.RawMessage
 type Store interface
     Name() string
@@ -304,6 +323,8 @@ type Stored struct
 type TagPair struct
     field Key string
     field Value string
+type TenantFeed interface
+    WaitTenants(ctx context.Context, n int) error
 var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
 
 == github.com/chucklehead-dev/gotogether/grist/storetest
@@ -317,7 +338,9 @@ func NoSharedSlices(ctx context.Context, s store.Store) error
 func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error
 func Run(t *testing.T, h Harness)
 func StepLog(ctx context.Context, s store.Store) error
+func TenantFeed(ctx context.Context, s store.Store) error
 func TenantIsolation(ctx context.Context, s store.Store) error
+func TwoStores(ctx context.Context, a, b store.Store) error
 func UnknownTenant(ctx context.Context, s store.Store) error
 func WaitWakes(ctx context.Context, s store.Store) error
 type Check struct

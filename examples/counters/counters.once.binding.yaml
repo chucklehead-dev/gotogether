@@ -4,7 +4,7 @@
 # repeat would forbid. The duplicate a crash after the send makes is
 # admitted by counters.binding.yaml and rejected here.
 # the store's steps, as counters.binding.yaml's
-actors: ['!*.clients']
+actors: ['!*/clients']
 spec: model/counters.qnt
 module: counters
 

@@ -65,6 +65,9 @@ func (a *App) register(kind, name string) {
 		return
 	}
 	a.names[name] = kind
+	if err := checkText(kind+" name", name); err != nil {
+		a.problems = append(a.problems, fmt.Sprintf("%s %q: %v", kind, name, strings.TrimPrefix(err.Error(), "grist: ")))
+	}
 	if strings.HasPrefix(name, "grist") {
 		a.problems = append(a.problems, fmt.Sprintf("%s %q: names starting with grist are the framework's (grist.failed): rename it", kind, name))
 	}

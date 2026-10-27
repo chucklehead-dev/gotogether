@@ -36,12 +36,14 @@ import (
 // ClientsActor is the actor of tenant's client-side steps: a run records
 // every command and query twice, at the store (actor tenant: commits from
 // the step log, refusals at their commit, queries on return) and where
-// the clients see them (actor tenant + ".clients": qobs.Invoke before the
+// the clients see them (actor tenant + "/clients": qobs.Invoke before the
 // first request and Call.Done with the answer, every retry of a lost or
 // late response inside the one call), so a commits binding (actors:
-// ['!*.clients']) and a clients binding (actors: ['*.clients'], with
+// ['!*/clients']) and a clients binding (actors: ['*/clients'], with
 // qtest.Linearize) judge one run (System.WithBinding; docs/grist.md §3.1).
-func ClientsActor(tenant string) string { return tenant + ".clients" }
+// No tenant's name holds a slash (grist.CheckTenant), so no tenant is
+// another's clients.
+func ClientsActor(tenant string) string { return tenant + "/clients" }
 
 // Config is a run's shape.
 type Config struct {
@@ -125,6 +127,11 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		return err
 	}
 	cfg = defaults(cfg)
+	for _, t := range cfg.Tenants {
+		if err := grist.CheckTenant(t); err != nil {
+			return fmt.Errorf("gristsim: Config.Tenants: %w", err)
+		}
+	}
 	s := qenv.New(c)
 	defer s.Close()
 	if cfg.Check {
@@ -160,9 +167,8 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			deps = d
 		}
 	}
-	nodeCtx := func(ctx context.Context) context.Context { return grist.WithRelay(deps(ctx), relay) }
 	node := s.Process("node", true, func(ctx context.Context) {
-		if err := app.Start(nodeCtx(ctx), st); err != nil {
+		if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
 			panic(fmt.Sprintf("gristsim: the node could not start: %v", err))
 		}
 	})
@@ -174,7 +180,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 	})
 	api := qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
-		return serve(nodeCtx(ctx), app, st, req), nil
+		return serve(deps(ctx), app, st, req), nil
 	})
 	w := &workload{app: app, cfg: cfg, s: s, api: api}
 	names := cfg.Send
@@ -216,7 +222,12 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	if err := s.Run(time.Minute); err != nil {
 		return err
 	}
-	return s.Settle(time.Minute)
+	if err := s.Settle(time.Minute); err != nil {
+		return err
+	}
+	// a relay that cannot read a row records none after it: the run's
+	// commits are not all in its trace, and no verdict on it would hold
+	return relay.Err()
 }
 
 func isQuery(app *grist.App, name string) bool {
@@ -377,6 +388,41 @@ func (w *workload) call(ctx context.Context, req request) {
 		}
 		return resp
 	})
+}
+
+// Do runs the command or query name of app on st for env, in the
+// caller's goroutine (no API between: a real tier's client in process,
+// as examples/counters' TestRealSQLite has), and records the call as a
+// run's clients do: under ClientsActor(env.Tenant), qobs.Invoke before
+// the first try and Call.Done with the answer, an unknown outcome or an
+// unavailable store retried under the same id inside the one call (at
+// most MaxAttempts tries, then pending). It returns the answer: nil, a
+// *grist.Rejected, grist.ErrConflict, the error's text, or for a call
+// never answered grist.ErrOutcomeUnknown.
+func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope, name string, args json.RawMessage) error {
+	w := &workload{app: app}
+	req := request{Query: isQuery(app, name), Name: name, Env: env, Args: args}
+	var resp response
+	w.record(ctx, req, func() response {
+		for try := 1; try <= MaxAttempts; try++ {
+			if resp = serve(ctx, app, st, req); !resp.Retry {
+				return resp
+			}
+			qenv.Sleep(ctx, RetryDelay)
+		}
+		return resp // pending: never answered
+	})
+	switch {
+	case resp.Retry:
+		return grist.ErrOutcomeUnknown
+	case resp.Rejected == "conflict":
+		return grist.ErrConflict
+	case resp.Rejected != "":
+		return &grist.Rejected{Name: resp.Rejected}
+	case resp.Err != "":
+		return errors.New(resp.Err)
+	}
+	return nil
 }
 
 // record records req as a client's call: invoked before, done with the

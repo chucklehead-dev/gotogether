@@ -7,6 +7,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/grist/memstore"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -51,7 +52,7 @@ func run(t *testing.T, cfg gristsim.Config) []qtrace.Step {
 // judged. It records both sides: at the store, every step is the store's,
 // of its tenant, the commits relayed from the step log under the tenant's
 // own recorder, on simstore and on sqlstore over qsql alike; at the clients, every command and query is a call
-// (invoked, then done) of actor <tenant>.clients.
+// (invoked, then done) of actor <tenant>/clients.
 func TestBothSides(t *testing.T) {
 	for _, sql := range []bool{false, true} {
 		bothSides(t, run(t, gristsim.Config{Check: true, SQL: sql}))
@@ -111,3 +112,29 @@ func TestGen(t *testing.T) {
 }
 
 func qreflect[T any]() reflect.Type { return reflect.TypeFor[T]() }
+
+// Do runs a command or query in the caller's goroutine and records the
+// call as a run's clients do: invoked, then done with its answer, under
+// <tenant>/clients, beside the store's own step.
+func TestDo(t *testing.T) {
+	a := app()
+	st := memstore.New("notes")
+	st.CreateTenant(context.Background(), "t1")
+	sink := &qobs.MemorySink{}
+	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
+	if err := gristsim.Do(ctx, a, st, grist.Envelope{ID: "n1", Tenant: "t1"}, "note", []byte(`{"topic":"x"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := gristsim.Do(ctx, a, st, grist.Envelope{ID: "q1", Tenant: "t1"}, "count", []byte(`{"topic":"x"}`)); err != nil {
+		t.Fatal(err)
+	}
+	var calls []qtrace.Step
+	for _, s := range sink.Steps() {
+		if s.Actor == gristsim.ClientsActor("t1") {
+			calls = append(calls, s)
+		}
+	}
+	if len(calls) != 4 || !calls[0].Invocation || calls[1].Call == 0 || calls[0].Args["id"] != "n1" || calls[3].Obs["n"] != int64(1) {
+		t.Errorf("client-side steps %v: want the note and the count each invoked and done, the count answering 1", calls)
+	}
+}

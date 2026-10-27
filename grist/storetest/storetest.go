@@ -6,7 +6,8 @@
 // markers (a commit's receipt, a refusal's outcome), concurrent appends
 // replayed against the reference evaluation, Wait woken by an append,
 // readers and writers sharing no slice with the store, the step log of
-// a store.StepLog, and tenant isolation: a read of one tenant never
+// a store.StepLog (its rows timed in commit order), a store.TenantFeed's
+// wait for a new tenant, and tenant isolation: a read of one tenant never
 // returns another's events, an append to one never moves another's head.
 //
 // Each check is a function of a context and a fresh store returning an
@@ -50,6 +51,7 @@ func Checks() []Check {
 		{"WaitWakes", WaitWakes},
 		{"NoSharedSlices", NoSharedSlices},
 		{"StepLog", StepLog},
+		{"TenantFeed", TenantFeed},
 		{"TenantIsolation", TenantIsolation},
 		{"UnknownTenant", UnknownTenant},
 	}
@@ -88,11 +90,13 @@ func randQuery(r *rand.Rand, head store.Position) store.Selector {
 	if r.IntN(3) == 0 {
 		q.Types = types
 	}
-	switch r.IntN(3) {
+	switch r.IntN(4) {
 	case 0:
 		q.Tags = []store.TagPair{{Key: "k", Value: values[r.IntN(len(values))]}}
 	case 1:
 		q.Tags = []store.TagPair{{Key: "j", Value: values[r.IntN(len(values))]}}
+	case 2: // both: a store indexing one tag must check the other on the events
+		q.Tags = []store.TagPair{{Key: "k", Value: values[r.IntN(len(values))]}, {Key: "j", Value: values[r.IntN(len(values))]}}
 	}
 	if r.IntN(3) == 0 && head > 0 {
 		q.After = store.Position(r.Int64N(int64(head)))
@@ -188,16 +192,16 @@ func DensePositions(ctx context.Context, s store.Store) error {
 }
 
 // ConditionsAgainstBruteForce: on random histories, an append with a
-// random condition commits exactly when store.CheckCondition over the
-// whole log says it holds, and a failed one names the event that broke
-// it.
+// random condition (selectors of one or two types and none, one or two
+// tags) commits exactly when store.CheckCondition over the whole log
+// says it holds, and a failed one names the event that broke it.
 func ConditionsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
 	r := rand.New(rand.NewPCG(3, 4))
 	var log []store.Stored
-	committed, refused := 0, 0
+	committed, refused, twoCommitted, twoRefused := 0, 0, 0, 0
 	for i := 0; i < 120; i++ {
 		head := store.Position(len(log))
 		var c store.Condition
@@ -205,15 +209,19 @@ func ConditionsAgainstBruteForce(ctx context.Context, s store.Store) error {
 			c.After = store.Position(r.Int64N(int64(head) + 1))
 		}
 		for n := r.IntN(3) + 1; n > 0; n-- {
-			q := randQuery(r, head)
+			q := randQuery(r, head) // one or two types, no tag, one or two
 			q.After, q.Reverse, q.Limit = 0, false, 0
-			if len(q.Tags) > 1 {
-				q.Tags = q.Tags[:1]
-			}
 			c.Selectors = append(c.Selectors, q)
 		}
 		batch := []store.Event{randEvent(r)}
 		want := store.CheckCondition(log, c)
+		if twoTags(c.Selectors) {
+			if want == nil {
+				twoCommitted++
+			} else {
+				twoRefused++
+			}
+		}
 		_, err := s.Append(ctx, "t1", store.Batch{Events: batch, Condition: &c})
 		var cf, wcf *store.ConditionFailed
 		switch {
@@ -238,12 +246,25 @@ func ConditionsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if committed < 10 || refused < 10 {
 		return fmt.Errorf("conditions: %d committed and %d refused of 120: the random histories test too little of either", committed, refused)
 	}
+	if twoCommitted < 3 || twoRefused < 3 {
+		return fmt.Errorf("conditions: %d committed and %d refused with a selector of two tags: too few to test them", twoCommitted, twoRefused)
+	}
 	return nil
 }
 
-// ReadsAgainstBruteForce: on a random history, every random query (types,
-// a tag, after, reverse, limit) through a random position returns what
-// store.Select over the whole log returns.
+// twoTags reports whether one of sels has two tags.
+func twoTags(sels []store.Selector) bool {
+	for _, q := range sels {
+		if len(q.Tags) > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// ReadsAgainstBruteForce: on a random history, every random query (one or
+// two types; none, one or two tags; after, reverse, limit) through a
+// random position returns what store.Select over the whole log returns.
 func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
@@ -257,6 +278,7 @@ func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error {
 		}
 		log = append(log, stored("t1", store.Position(len(log)), []store.Event{e}, 0, "")...)
 	}
+	twoFound := 0
 	for i := 0; i < 200; i++ {
 		q := randQuery(r, store.Position(len(log)))
 		at := store.Position(r.IntN(len(log) + 1)) // 0: the head
@@ -270,7 +292,12 @@ func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error {
 		}
 		if want := store.Select(log, q, wantAt); through != wantAt || !same(got, want) {
 			return fmt.Errorf("reads: %s after %d (reverse %v, limit %d) through %d: got %v through %d, want %v", q, q.After, q.Reverse, q.Limit, at, positions(got), through, positions(want))
+		} else if len(q.Tags) > 1 && len(want) > 0 {
+			twoFound++
 		}
+	}
+	if twoFound < 5 {
+		return fmt.Errorf("reads: %d queries of two tags found events: too few to test them", twoFound)
 	}
 	return nil
 }
@@ -588,6 +615,15 @@ func StepLog(ctx context.Context, s store.Store) error {
 		if got[i].Seq != want[i].Seq || got[i].Head != want[i].Head || string(got[i].Step) != string(want[i].Step) {
 			return fmt.Errorf("step log: row %d is %d at %d %s, want %d at %d %s", i+1, got[i].Seq, got[i].Head, got[i].Step, want[i].Seq, want[i].Head, want[i].Step)
 		}
+		if got[i].Time == 0 || i > 0 && got[i].Time < got[i-1].Time {
+			return fmt.Errorf("step log: row %d's time is %d after row %d's %d: a row is timed under the tenant's lock (store.StepTime), so its times are in commit order", i+1, got[i].Time, i, got[max(i-1, 0)].Time)
+		}
+	}
+	if n, err := sl.StepCount(ctx, "t1"); err != nil || n != int64(len(want)) {
+		return fmt.Errorf("step log: StepCount is %d (%v), the log has %d rows", n, err, len(want))
+	}
+	if _, err := sl.StepCount(ctx, "nobody"); !errors.Is(err, store.ErrUnknownTenant) {
+		return fmt.Errorf("step log: StepCount of a tenant never created: %v, want store.ErrUnknownTenant", err)
 	}
 	if after, _ := sl.Steps(ctx, "t1", 1, 1); len(after) != 1 || after[0].Seq != 2 {
 		return fmt.Errorf("step log: the rows after 1, at most 1: %v, want row 2", after)
@@ -617,6 +653,51 @@ func StepLog(ctx context.Context, s store.Store) error {
 	}
 	if !qenv.WaitFor(ctx, woke.Load, 10*time.Second) {
 		return fmt.Errorf("step log: WaitSteps(t1, %d) did not return after a refusal committed its step (the head did not move: a wait on the head sleeps through it)", last)
+	}
+	return nil
+}
+
+// TenantFeed: the store is a store.TenantFeed (a node relays and handles
+// a tenant created after it started), whose WaitTenants returns at once
+// when the store has more tenants than it was told, and otherwise once a
+// tenant is created, not before.
+func TenantFeed(ctx context.Context, s store.Store) error {
+	tf, ok := s.(store.TenantFeed)
+	if !ok {
+		return fmt.Errorf("tenant feed: %T is no store.TenantFeed: a node waits on WaitTenants for tenants created after it started", s)
+	}
+	if err := s.CreateTenant(ctx, "t1"); err != nil {
+		return err
+	}
+	if err := tf.WaitTenants(ctx, 0); err != nil { // one tenant already: at once
+		return fmt.Errorf("tenant feed: WaitTenants(0) with one tenant: %v", err)
+	}
+	var woke, waiting atomic.Bool
+	qenv.Go(ctx, "storetest.tenantwaiter", func(ctx context.Context) {
+		waiting.Store(true)
+		if tf.WaitTenants(ctx, 1) == nil {
+			woke.Store(true)
+		}
+	})
+	if !qenv.WaitFor(ctx, waiting.Load, 10*time.Second) {
+		return fmt.Errorf("tenant feed: the waiter never started")
+	}
+	qenv.Sleep(ctx, 50*time.Millisecond)
+	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{{Type: "a-happened", Version: 1, Body: []byte(`{}`)}}}); err != nil {
+		return err
+	}
+	if err := s.CreateTenant(ctx, "t1"); err != nil { // exists: no new tenant
+		return err
+	}
+	qenv.Sleep(ctx, 50*time.Millisecond)
+	if woke.Load() {
+		return fmt.Errorf("tenant feed: WaitTenants(1) returned with one tenant (after an append and a second create of t1)")
+	}
+	if err := s.CreateTenant(ctx, "t2"); err != nil {
+		return err
+	}
+	if !qenv.WaitFor(ctx, woke.Load, 10*time.Second) {
+		return fmt.Errorf("tenant feed: WaitTenants(1) did not return once t2 was created")
 	}
 	return nil
 }
@@ -683,6 +764,77 @@ func UnknownTenant(ctx context.Context, s store.Store) error {
 	}
 	if _, err := s.Append(ctx, "nobody", store.Batch{}); !errors.Is(err, store.ErrUnknownTenant) {
 		return fmt.Errorf("unknown tenant: an append: %v, want store.ErrUnknownTenant", err)
+	}
+	return nil
+}
+
+// TwoStores: a and b are two stores over one database (two nodes, or two
+// Stores a process opened), and each one's waiters wake for the other's
+// commits: Wait for an append, WaitSteps for a refusal's step, and
+// WaitTenants for a tenant, each made through the other store. A store
+// that wakes its waiters only at its own commits (and polls nothing in a
+// simulation) sleeps through them. It is no Check: it needs two stores,
+// which a harness opens.
+func TwoStores(ctx context.Context, a, b store.Store) error {
+	if err := a.CreateTenant(ctx, "t1"); err != nil {
+		return err
+	}
+	al, ok := a.(store.StepLog)
+	if !ok {
+		return fmt.Errorf("two stores: %T is no store.StepLog", a)
+	}
+	af, ok := a.(store.TenantFeed)
+	if !ok {
+		return fmt.Errorf("two stores: %T is no store.TenantFeed", a)
+	}
+	steps, err := al.StepCount(ctx, "t1")
+	if err != nil {
+		return err
+	}
+	ts, err := a.Tenants(ctx)
+	if err != nil {
+		return err
+	}
+	var head, step, tenant, waiting atomic.Int32
+	qenv.Go(ctx, "storetest.headwaiter", func(ctx context.Context) {
+		waiting.Add(1)
+		if a.Wait(ctx, "t1", 0) == nil {
+			head.Store(1)
+		}
+	})
+	qenv.Go(ctx, "storetest.stepwaiter", func(ctx context.Context) {
+		waiting.Add(1)
+		if al.WaitSteps(ctx, "t1", steps+1) == nil { // the append's row, then the refusal's
+			step.Store(1)
+		}
+	})
+	qenv.Go(ctx, "storetest.tenantwaiter", func(ctx context.Context) {
+		waiting.Add(1)
+		if af.WaitTenants(ctx, len(ts)) == nil {
+			tenant.Store(1)
+		}
+	})
+	if !qenv.WaitFor(ctx, func() bool { return waiting.Load() == 3 }, 10*time.Second) {
+		return fmt.Errorf("two stores: the waiters never started")
+	}
+	qenv.Sleep(ctx, 10*time.Millisecond)
+	if _, err := b.Append(ctx, "t1", store.Batch{Events: []store.Event{{Type: "a-happened", Version: 1, Body: []byte(`{}`)}}, Step: []byte(`{"n":1}`)}); err != nil {
+		return err
+	}
+	if !qenv.WaitFor(ctx, func() bool { return head.Load() == 1 }, 10*time.Second) {
+		return fmt.Errorf("two stores: a's Wait(t1, 0) did not return after b's append moved the head")
+	}
+	if _, err := b.Append(ctx, "t1", store.Batch{Marker: &store.Marker{ID: "m", Outcome: "no"}, Step: []byte(`{"n":2}`)}); err != nil {
+		return err
+	}
+	if !qenv.WaitFor(ctx, func() bool { return step.Load() == 1 }, 10*time.Second) {
+		return fmt.Errorf("two stores: a's WaitSteps did not return after b committed a refusal's step")
+	}
+	if err := b.CreateTenant(ctx, "t2"); err != nil {
+		return err
+	}
+	if !qenv.WaitFor(ctx, func() bool { return tenant.Load() == 1 }, 10*time.Second) {
+		return fmt.Errorf("two stores: a's WaitTenants did not return after b created t2")
 	}
 	return nil
 }

@@ -89,6 +89,31 @@ The first release. What a user meets, by module:
   on sqlstore over qsql, and `TestRealSQLite` (a SQLite file, steps to a
   `PerStep` file sink, validated by `counters.binding.yaml`); its
   bindings name their side (`actors: ['!*.clients']`, `['*.clients']`).
+- grist, after the review of slice 2's first part (docs/grist.md §0.4;
+  api/grist.txt): a node starts the relay and pollers of tenants created
+  after it (`store.TenantFeed`, `WaitTenants`, required by `App.Start`);
+  `App.Start(ctx, s, grist.WithRelay(r))` takes a `StartOption` (was
+  `WithRelay(ctx, r)`, a context; a relay of another store is Start's
+  error); `Relay.Err` reports a row it cannot read (step rows carry
+  `"v": 1`; another version stops the tenant's relay) and transient
+  errors; `Relay.Flush` may run beside a node of the same Relay;
+  `Relay.Behind` counts rows (`store.StepLog.StepCount`, new); a relay
+  with no recorder escapes in a strict run. `store.StepRow.Time` (the
+  commit's, stamped under the lock: `store.StepTime`) times relayed
+  steps (was the decision's); sqlstore's `grist_steps` gains `at_ns`.
+  `store.NotCommitted` (`*NotCommittedError`) and `store.MayHaveCommitted`:
+  an error before the COMMIT committed nothing, so `Execute` answers
+  `ErrUnavailable`, and a context cancelled during a commit is
+  `ErrOutcomeUnknown`. `grist.CheckTenant`: tenants, ids, tags and names
+  must be valid UTF-8 without NUL, tenants without a slash; the clients'
+  actor is `<tenant>/clients` (was `<tenant>.clients`). `RecorderID`
+  escapes its names. simstore and sqlstore on qsql wait on the
+  database's own signal (two Stores over one database wake each other:
+  `storetest.TwoStores`); sqlstore's waits return once satisfied, `Open`
+  validates its options and the isolation level, and `SQLiteDSN` drops
+  `_txlock=immediate`. storetest draws selectors of two tags and checks
+  `TenantFeed`. `gristsim.Do` runs and records a client's call in
+  process, and `gristsim.Run` returns a relay's error.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

@@ -45,10 +45,10 @@ var (
 	// never a failed condition.
 	Postgres = Dialect{name: "postgres", iso: sql.LevelReadCommitted, timeouts: true} // read-only
 	// SQLite is SQLite through any database/sql driver (modernc.org/sqlite:
-	// no cgo), in its single-writer mode: open it with SQLiteDSN (or the
-	// driver's own spelling of _txlock=immediate, journal_mode WAL and a
-	// busy_timeout), which Open checks. Tenants do not append in
-	// parallel: SQLite has one writer for the whole file.
+	// no cgo), in WAL with a busy_timeout: open it with SQLiteDSN (or the
+	// driver's own spelling of journal_mode WAL and a busy_timeout), which
+	// Open checks. Tenants do not append in parallel: SQLite has one
+	// writer for the whole file.
 	SQLite = Dialect{name: "sqlite", iso: sql.LevelDefault, pragmas: true} // read-only
 	// QSQL is qsql (gotogether/qenv/qsql) over a qenv.Store, for
 	// simulations: the real tier's statements, interleaved at the Store's
@@ -60,14 +60,22 @@ var (
 // String is the dialect's name.
 func (d Dialect) String() string { return d.name }
 
-// SQLiteDSN is the DSN of the SQLite file at path in the single-writer
-// mode, as modernc.org/sqlite spells it: _txlock=immediate (BEGIN
-// IMMEDIATE takes the write lock before the first read, so the deferred
-// upgrade that fails with SQLITE_BUSY cannot happen), WAL (readers do not
-// block the writer) and a busy_timeout (a writer waits busy for the lock
-// instead of failing at once). Another driver spells these its own way.
+// SQLiteDSN is the DSN of the SQLite file at path in the mode grist
+// needs, as modernc.org/sqlite spells it: WAL (readers do not block the
+// writer, nor it them) and a busy_timeout (a writer waits busy for the
+// write lock instead of failing at once). Transactions begin deferred,
+// SQLite's default: an append's first statement is a write (the head
+// lock's UPDATE), so it takes the write lock before it reads anything and
+// never upgrades a read snapshot that another writer made stale (the
+// SQLITE_BUSY no busy_timeout waits through). _txlock=immediate (BEGIN
+// IMMEDIATE), which this DSN once set for that reason, buys an append
+// nothing, and a driver that applied it to read-only transactions too
+// would make every read wait for the writer (modernc applies it to
+// read-write ones only). The concurrent contract check runs appends
+// from goroutines at once on it (TestContractOnSQLite). Another driver
+// spells these its own way.
 func SQLiteDSN(path string, busy time.Duration) string {
-	return "file:" + path + "?_txlock=immediate&_pragma=journal_mode(WAL)&_pragma=busy_timeout(" + fmt.Sprint(busy.Milliseconds()) + ")"
+	return "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(" + fmt.Sprint(busy.Milliseconds()) + ")"
 }
 
 // checkSQLite is Open's check of SQLite's mode on one connection: WAL
@@ -82,7 +90,7 @@ func checkSQLite(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if !strings.EqualFold(mode, "wal") || busy <= 0 {
-		return fmt.Errorf("sqlstore: SQLite runs journal_mode %s with busy_timeout %d ms; grist needs WAL (readers beside the writer) and a busy_timeout (a writer waits for the lock): open it with sqlstore.SQLiteDSN(path, 5*time.Second), or your driver's spelling of _txlock=immediate, journal_mode=WAL and busy_timeout", mode, busy)
+		return fmt.Errorf("sqlstore: SQLite runs journal_mode %s with busy_timeout %d ms; grist needs WAL (readers beside the writer) and a busy_timeout (a writer waits for the lock): open it with sqlstore.SQLiteDSN(path, 5*time.Second), or your driver's spelling of journal_mode=WAL and busy_timeout", mode, busy)
 	}
 	return nil
 }

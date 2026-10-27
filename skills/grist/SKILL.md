@@ -6,7 +6,7 @@ description: Build an event-sourced Go application on grist (gotogether's framew
 # grist: an application checked by its model
 
 grist (module `github.com/chucklehead-dev/gotogether/grist`, design in
-docs/grist.md, slice 1 built, slice 2's SQL store built; §0.2 and §0.3
+docs/grist.md, slice 1 built, slice 2's SQL store built; §0.2, §0.3 and §0.4
 say what changed) records every block's step itself: each commit and
 committed refusal from the row it wrote in its own transaction (the
 store's step log, read back by `grist.Relay`), each query on return,
@@ -72,8 +72,9 @@ examples/counters is the walk-through: read its README's table first.
    app's doubles, reached through a processor's ctx). Every run records
    both sides: the store's steps (actor the tenant: commits relayed from
    the step log) and the clients' calls (`gristsim.ClientsActor`,
-   `<tenant>.clients`); the commits binding says `actors: ['!*.clients']`,
-   a client-side one `actors: ['*.clients']`, judged with
+   `<tenant>/clients`: no tenant name holds a slash, `grist.CheckTenant`);
+   the commits binding says `actors: ['!*/clients']`,
+   a client-side one `actors: ['*/clients']`, judged with
    `sys.WithBinding(calls, qtest.Linearize())` over a client-side model
    module.
    Duplicated and late requests: `rpc.api.request` and `rpc.api.delay`
@@ -99,30 +100,48 @@ examples/counters is the walk-through: read its README's table first.
   shows at its tenant's next step), or a fold that disagrees with the
   def.
 - `grist.ErrOutcomeUnknown`: the transient budget ran out after an
-  append whose outcome is unknown; retry with the same id (gristsim's
-  clients do). `grist.ErrUnavailable`: nothing committed.
+  append whose outcome is unknown, or the context ended while one
+  committed; retry with the same id (gristsim's clients do).
+  `grist.ErrUnavailable`: nothing committed.
+- `Relay.Err()` (gristsim.Run returns it): a step row the relay cannot
+  read (`"v"` another grist's: upgrade the node) stopped its tenant, or
+  a read keeps failing.
 - A run that does not settle names its tasks: a poller is a daemon; a
   client waiting means the node is down (gristsim restarts it from an
   `OnCrash` hook).
-- A store of your own implements `store.Store` and `store.StepLog`
-  (package grist/store: each commit's step written in its transaction,
-  `Steps` and `WaitSteps`; a node records commits from it alone):
-  run `storetest.Run(t, harness)`; its checks compare conditions, reads
-  and concurrent appends with brute force over every event, wake a
-  `Wait` and a `WaitSteps`, and mutate readers' copies. Errors no retry
-  fixes are `store.Permanent`.
+- A store of your own implements `store.Store`, `store.StepLog` (package
+  grist/store: each commit's step written in its transaction and timed
+  under the tenant's lock, `StepRow.Time` from `store.StepTime`; `Steps`,
+  `WaitSteps`, `StepCount`; a node records commits from it alone) and
+  `store.TenantFeed` (`WaitTenants`: a node starts tenants created after
+  it): run `storetest.Run(t, harness)`; its checks compare conditions and
+  reads (selectors of one or two tags) and concurrent appends with brute
+  force over every event, wake a `Wait`, a `WaitSteps` and a
+  `WaitTenants`, and mutate readers' copies; two Stores over one
+  database, `storetest.TwoStores(ctx, a, b)`. Errors no retry fixes are
+  `store.Permanent`; transient errors before the COMMIT are
+  `store.NotCommitted` (else grist answers `ErrOutcomeUnknown`).
+- Tenants, ids and tag values are valid UTF-8 without NUL (PostgreSQL's
+  TEXT), a tenant without a slash: grist refuses others with the fix.
 - **The real tier**: `sqlstore.Open(ctx, db, sqlstore.Postgres |
   sqlstore.SQLite, sqlstore.Options{Name: app.Name})` on the
   application's own driver (SQLite: `sql.Open("sqlite",
-  sqlstore.SQLiteDSN(path, 5*time.Second))`, single-writer, checked);
-  `App.Start(ctx, st)` with a recorder writing `qobs.FileSink(path,
-  qobs.PerStep)`; before recording a settle, wait for the processors'
-  checkpoints and `Relay.Behind(ctx) == 0` (`grist.WithRelay` to hold
-  the node's relay); validate the file with the same binding
-  (`qtest.Validate(t, binding, steps)`). examples/counters'
-  `TestRealSQLite` is the walk-through. A second node's relay records the
+  sqlstore.SQLiteDSN(path, 5*time.Second))`: WAL and busy_timeout,
+  checked; `Open` checks the options, the isolation level by beginning
+  a transaction at it);
+  `App.Start(ctx, st, grist.WithRelay(relay))` with a recorder writing
+  `qobs.FileSink(path, qobs.PerStep)`; clients record their calls with
+  `gristsim.Do` (as a run's clients do); before recording a settle, wait
+  for the processors' checkpoints and `Relay.Behind(ctx) == 0`, failing
+  on `Relay.Err()`; validate the file with both bindings
+  (`qtest.Validate(t, binding, steps)`, the clients' with
+  `qtest.Linearize()`), and check each client's answer has its store-side
+  step (a lost refusal step passes both bindings). examples/counters'
+  `TestRealSQLite` is the walk-through (a node killed mid-run, a second
+  one recording what it never did). A second node's relay records the
   log again from its first row; Reconstruct drops the copies (info
-  issues "seen twice").
+  issues "seen twice"); a durable relay cursor is designed, not built
+  (docs/grist.md §0.4), so validate a node's step files together.
 - **PostgreSQL**: `sqlstore.Postgres` states read committed and sets
   `lock_timeout` and `idle_in_transaction_session_timeout` per
   transaction; grist/sqlstore's contract test runs against one with

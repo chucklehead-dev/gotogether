@@ -14,6 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Position is a place in a tenant's log: dense, from 1, assigned under the
@@ -186,6 +189,20 @@ type StepLog interface {
 	// is done. A refusal commits its marker and its step without moving
 	// the head, so Store.Wait would sleep through it.
 	WaitSteps(ctx context.Context, tenant string, after int64) error
+	// StepCount is how many step rows tenant's log has (the last row's
+	// Seq): a relay's distance behind, without reading the rows.
+	StepCount(ctx context.Context, tenant string) (int64, error)
+}
+
+// A TenantFeed is a store that says when a tenant is created: a node
+// (grist.App.Start) relays and handles a tenant created after it
+// started, waking on WaitTenants rather than polling (which in a
+// simulation would keep a settled system busy). Every tier implements
+// it, and a node needs it.
+type TenantFeed interface {
+	// WaitTenants blocks until the store has more than n tenants, or ctx
+	// is done. Tenants are never deleted, so a count is a version.
+	WaitTenants(ctx context.Context, n int) error
 }
 
 // A StepRow is one committed batch's step as a StepLog keeps it.
@@ -195,8 +212,24 @@ type StepRow struct {
 	// Head is the head after the batch: what its step's head observation
 	// and its order on the tenant's clock are computed from.
 	Head Position
+	// Time is the commit's time, Unix nanoseconds, taken by the store
+	// under the tenant's lock (the simulation's true time in one, else
+	// the wall clock's): rows in Seq order are in time order, so a relay
+	// recording them in commit order records them in time order too.
+	Time int64
 	// Step is the batch's Step, as given.
 	Step json.RawMessage
+}
+
+// StepTime is the time a store stamps a step row with (StepRow.Time),
+// under the tenant's lock: the simulation's true time inside one (as qobs
+// stamps a step recorded there, never a process's skewed clock), else the
+// wall clock's, Unix nanoseconds.
+func StepTime(ctx context.Context) int64 {
+	if sim := qenv.From(ctx); sim != nil {
+		return sim.Now().UnixNano()
+	}
+	return time.Now().UnixNano() //qenv:ok outside a simulation: a step's time is the wall clock's, as qobs stamps it
 }
 
 // A Condition is DCB's: no event matching any of Selectors appended after
@@ -326,6 +359,46 @@ func Permanent(err error) error {
 		return nil
 	}
 	return &PermanentError{Err: err}
+}
+
+// NotCommittedError is a transient error an Append returned before it
+// tried to commit (a lost race for the tenant's lock, a lock wait that
+// timed out, a connection lost before COMMIT): nothing of the batch
+// committed, so the caller knows the outcome, unlike a transient error at
+// or after the commit, which may have committed. A tier marks what it
+// knows to be such (NotCommitted); an unmarked transient error is
+// outcome unknown.
+type NotCommittedError struct{ Err error }
+
+func (e *NotCommittedError) Error() string {
+	return e.Err.Error() + " (before the commit: nothing committed)"
+}
+
+// Unwrap is Err.
+func (e *NotCommittedError) Unwrap() error { return e.Err }
+
+// NotCommitted wraps err as a *NotCommittedError (nil stays nil, and an
+// error no retry fixes stays as it is, since its caller does not retry).
+func NotCommitted(err error) error {
+	var pe *PermanentError
+	if err == nil || errors.As(err, &pe) {
+		return err
+	}
+	return &NotCommittedError{Err: err}
+}
+
+// MayHaveCommitted reports whether a failed Append may have committed:
+// false for an error before the commit (a *NotCommittedError), a failed
+// condition, a moved checkpoint, an unknown tenant or a permanent error;
+// true for any other, a commit whose answer was lost or a context
+// cancelled while it committed included.
+func MayHaveCommitted(err error) bool {
+	var cf *ConditionFailed
+	var cm *CheckpointMoved
+	var pe *PermanentError
+	var nc *NotCommittedError
+	return err != nil && !errors.As(err, &cf) && !errors.As(err, &cm) && !errors.As(err, &pe) && !errors.As(err, &nc) &&
+		!errors.Is(err, ErrUnknownTenant)
 }
 
 // ErrUnknownTenant is a read or append of a tenant never created.

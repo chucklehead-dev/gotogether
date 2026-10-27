@@ -27,6 +27,7 @@ package simstore
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"sort"
 	"strings"
@@ -36,10 +37,12 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
-// Store is a store.Store over a qenv.Store.
+// Store is a store.Store over a qenv.Store. Its waits are on the
+// qenv.Store's own signal (qenv.Store.Changed), notified at every commit
+// whoever made it: two Stores over one qenv.Store wake each other's
+// waiters.
 type Store struct {
-	db      *qenv.Store
-	changed qenv.Signal // notified at every append's commit
+	db *qenv.Store
 }
 
 // New returns a grist store over db, named after it.
@@ -170,7 +173,7 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 	defer tx.Rollback()
 	v, ok, err := tx.GetForUpdate(headKey(t)) // the tenant's lock
 	if err != nil {
-		return 0, err
+		return 0, store.NotCommitted(err) // a lost race for the lock: nothing committed
 	}
 	if !ok {
 		return 0, store.ErrUnknownTenant
@@ -184,7 +187,7 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 	if c := b.Checkpoint; c != nil {
 		v, _, err := tx.GetForUpdate(checkpointKey(t, c.Processor))
 		if err != nil {
-			return 0, err
+			return 0, store.NotCommitted(err)
 		}
 		cur, _ := v.(store.Position)
 		if cur != c.From {
@@ -224,11 +227,13 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 		seq, _ := v.(int64)
 		seq++
 		tx.Put(stepSeqKey(t), seq)
-		tx.Put(stepKey(t, seq), store.StepRow{Seq: seq, Head: h, Step: append([]byte(nil), b.Step...)})
+		tx.Put(stepKey(t, seq), store.StepRow{Seq: seq, Head: h, Time: store.StepTime(ctx), Step: append([]byte(nil), b.Step...)})
 	}
-	tx.OnCommit(s.changed.Notify)
 	if err := tx.Commit(); err != nil {
-		return 0, err
+		if errors.Is(err, qenv.ErrConflict) {
+			return 0, store.NotCommitted(err) // validation refused it (a deadlock too): nothing applied
+		}
+		return 0, err // ErrUnknownOutcome: applied, its answer lost
 	}
 	return h, nil
 }
@@ -305,6 +310,30 @@ func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 	return s.wait(ctx, headKey(t), true, func(v any) bool { return v.(store.Position) > p })
 }
 
+// StepCount implements store.StepLog.
+func (s *Store) StepCount(ctx context.Context, t string) (int64, error) {
+	tx := s.db.Begin(ctx)
+	defer tx.Rollback()
+	if _, ok := head(tx, t); !ok {
+		return 0, store.ErrUnknownTenant
+	}
+	v, _ := tx.Get(stepSeqKey(t))
+	n, _ := v.(int64)
+	return n, nil
+}
+
+// WaitTenants implements store.TenantFeed, as Wait does on the tenants'
+// keys.
+func (s *Store) WaitTenants(ctx context.Context, n int) error {
+	for len(s.db.Keys("tenants/")) <= n {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		s.db.Changed().Wait(ctx, 0)
+	}
+	return nil
+}
+
 // WaitSteps implements store.StepLog, as Wait does on the step log's
 // sequence.
 func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
@@ -329,6 +358,6 @@ func (s *Store) wait(ctx context.Context, key string, must bool, done func(any) 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		s.changed.Wait(ctx, 0)
+		s.db.Changed().Wait(ctx, 0) // every commit's, this Store's or another's over the same qenv.Store
 	}
 }

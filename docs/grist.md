@@ -3,7 +3,7 @@
 Status: slice 1 built (grist/, examples/counters; §0.1 says what
 building it changed here, §0.2 what its review changed); slice 2's SQL
 store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
-on SQLite: §0.3), its API, `AtMostOnce`, generator and gristflow design,
+on SQLite: §0.3; its review: §0.4), its API, `AtMostOnce`, generator and gristflow design,
 as is slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -272,12 +272,14 @@ where it stands below.
 - **A relayed step is the same record however often it is relayed.** It
   is recorded under a recorder of its own, `grist/<store>/<tenant>`
   (`grist.RecorderID`), numbered by its place in the tenant's step log
-  and timed by its batch (the simulation's true time, or the wall
-  clock's), on one thread (commit order). A relay that starts afresh (a
+  and timed by its commit (the row's time, taken under the tenant's
+  lock since §0.4: the simulation's true time, or the wall clock's), on
+  one thread (commit order). A relay that starts afresh (a
   restarted process, a second node) records the log from its first row,
   and `qtrace.Reconstruct` keeps one copy of each (an info issue, "seen
   twice"), so no relay progress has to be durable. gristsim holds one
-  relay across the node's incarnations (`grist.WithRelay`), which resumes
+  relay across the node's incarnations (`grist.WithRelay`, a
+  `StartOption` since §0.4), which resumes
   where the crashed one stopped. `Relay.Behind` says how many rows are
   unrecorded: a real tier's harness waits for 0 before its settle.
   Recorded through `qobs.Record` instead, a second relay's copies are new
@@ -287,7 +289,8 @@ where it stands below.
   handling step (slice 1: T on both, the poller's thread putting the
   effect first; the handling step is now the relay's, on another thread).
 - **Every gristsim run records both sides**: the clients' calls under
-  `<tenant>.clients` (`gristsim.ClientsActor`), the store's steps under
+  `<tenant>/clients` (`gristsim.ClientsActor`; `<tenant>.clients` until
+  §0.4), the store's steps under
   the tenant; a binding's `actors:` picks its side, and
   `System.WithBinding(calls, qtest.Linearize())` judges the same runs at
   the clients. `Config.Record` (`AtCommits`, `AtClients`) and the quiet
@@ -321,7 +324,8 @@ where it stands below.
   through it would sleep through its step), re-read if a COMMIT happened
   while they read, and poll every 250 ms outside a simulation for other
   processes' appends; inside one they poll never, so a settled run is
-  quiet.
+  quiet (§0.4: on qsql they wait on the database's own signal, so a
+  second Store's commits wake them too, and return once satisfied).
 - **The contract on every tier**: storetest passes over sqlstore on qsql
   at Serializable, Snapshot and ReadCommitted with the Store's history
   checker on, on SQLite (a temp file, goroutines appending at once), and
@@ -338,6 +342,114 @@ where it stands below.
   point, so the nemesis (per scheduling step) crashes the node about
   three times as often; examples/counters' SQL claims raise the commit
   fault's rate to reach it in few seeds.
+
+## 0.4 What the review of slice 2's first part changed
+
+A review of the relay, grist/sqlstore and examples/counters' SQL and
+real tiers found these; each is fixed with a test that fails without the
+fix (ablated before committing), and stated where it stands below.
+
+- **A node handles tenants created after it started.** The relay and the
+  pollers covered the tenants listed at `App.Start`: a later tenant's
+  commits were never recorded (`Relay.Behind` stayed at their count) and
+  its triggers never handled. The node now runs a watcher task that
+  waits on the store's new optional interface `store.TenantFeed`
+  (`WaitTenants(ctx, n)`: until the store has more than n tenants) and
+  starts the relay and pollers of each new tenant; every tier implements
+  it, `App.Start` requires it, and storetest checks it (`TenantFeed`,
+  against a mutant whose wait returns at once). A wait, not a poll: a
+  timer would keep a settled simulation busy.
+- **Two stores over one database wake each other.** A simstore or a
+  sqlstore on qsql woke its waiters only at its own appends and, in a
+  simulation, polled never: a second Store's commits were slept through
+  and, with a relay waiting on the first, their steps silently lost.
+  The core's `qenv.Store` now notifies a signal at every commit that
+  writes (`Store.Changed`, with `Store.Version` to tell a commit that
+  fell between a read and its wait), `qsql.StoreOf` names the Store a
+  qsql database runs on, and both tiers wait on it; on SQLite and
+  PostgreSQL another Store's commits are found by `Options.Poll`.
+  `storetest.TwoStores(ctx, a, b)` checks a pair (on simstore, qsql and
+  SQLite), failing for a Store's own signal. Refusing a second Store
+  was the alternative; two nodes over one database are the real tier's
+  normal shape, so they are made to work.
+- **A step row has a version, `"v": 1`.** A row of another version (a
+  newer grist's, or one no grist wrote) is a `rowError`: its tenant's
+  relay stops, and `Relay.Err()` names the row and the fix (upgrade the
+  node) instead of retrying forever; transient read errors are retried
+  with backoff and reported by `Err` until a read succeeds (`gristsim.Run`
+  returns it, examples/counters' harness fails on it).
+- **A relayed step's time is its commit's.** The row was encoded with
+  the decision's time, before the append, so a command that decided first
+  and committed second carried the earlier time at the later seq. A row
+  is now timed by the store under the tenant's lock (`store.StepRow.Time`,
+  `store.StepTime`: the simulation's true time, else the wall clock's;
+  sqlstore's `grist_steps.at_ns`), so seq order is time order; storetest's
+  `StepLog` checks it.
+- **An error before COMMIT says nothing committed.** Every transient
+  error set "may have committed", so a lost race for the head lock
+  (40001, 55P03 on its UPDATE) ran out as `ErrOutcomeUnknown`. A tier
+  now marks an error before its COMMIT `store.NotCommitted`
+  (`*NotCommittedError`; sqlstore every statement's before COMMIT,
+  simstore a lost lock and a refused validation), `store.MayHaveCommitted`
+  tells the two, and `Execute` answers `ErrUnavailable` when every
+  transient error came before a commit. A context cancelled while an
+  append committed is `ErrOutcomeUnknown` (wrapping `context.Canceled`),
+  not a bare cancel that reads as "nothing happened".
+- **Text no store holds alike is grist's error.** PostgreSQL refuses a
+  NUL byte and invalid UTF-8 (22021) where SQLite and memstore take them,
+  and JSON rewrites invalid UTF-8: tenants, ids, emitted events' tags,
+  read tags and block names are checked in grist, on every tier, with
+  the fix (encode binary data). A tenant name holds no slash
+  (`grist.CheckTenant`), so a run's client-side actor is
+  `<tenant>/clients` (was `<tenant>.clients`, which a tenant could be
+  named); the bindings say `actors: ['!*/clients']` and `['*/clients']`.
+  `RecorderID` path-escapes the store's and the tenant's names.
+- **sqlstore's waits return once satisfied** (a commit during a read
+  that already found what it waited for once made it read again), and
+  `Open` validates its options: a negative duration, a name with NUL, a
+  stated isolation level on SQLite (whose driver takes any and runs its
+  one), and one transaction at the level, so pgx's "unsupported
+  isolation" (no SQLSTATE: transient) is `Open`'s error with the fix.
+- **SQLite's DSN drops `_txlock=immediate`**: its stated reason (a
+  deferred transaction's upgrade from read to write fails with
+  SQLITE_BUSY) does not apply, since an append's first statement is the
+  head lock's write; deferred transactions take the write lock at it.
+- **A relay with no recorder records as `qobs.Record` does**: dropped,
+  or in a strict run an escape that fails it (it advanced in silence).
+- **The relay's API**: `App.Start(ctx, s, grist.WithRelay(r))` (a
+  `StartOption`; was a context value, and a relay of another store was
+  ignored: now Start's error); `Relay.Flush` may run beside a node of the
+  same Relay (a per-tenant lock held only between a row's progress and
+  its record, where no seam is reached, so a crashed node's frozen task
+  never holds it; each row recorded once, in order); `Relay.Behind` is
+  the store's count of rows less the relay's progress
+  (`store.StepLog.StepCount`), not a scan of the rows.
+- **storetest draws selectors of two tags** (one or two types) in
+  `ReadsAgainstBruteForce` and `ConditionsAgainstBruteForce`, on every
+  tier, PostgreSQL included; a store honouring a selector's first tag
+  alone fails both.
+- **TestRealSQLite proves what it waits for.** The clients record their
+  calls (`gristsim.Do`: `<tenant>/clients`), judged by
+  `counters.calls.binding.yaml` too; every answer a client got is checked
+  against the store's side (a lost refusal step passes both bindings:
+  it commits no event); the first node is killed mid-phase (its sink dies
+  at once, its relay behind, the clients still committing), the second
+  phase creates new counters, and a mailer taking 20 ms makes a settle
+  recorded without waiting (`quiet`) fail the eventual val. Each of the
+  two ablations (a refusal's step dropped, the wait removed) fails it.
+- **Restarts still re-record from row 1: deferred.** A relay that starts
+  afresh records the tenant's log from its first row (Reconstruct drops
+  the copies), which costs a restart O(log) and rewrites, in a new file,
+  history an older file holds. The design, not built: a durable cursor
+  per (tenant, sink) in the store (`grist_relay(tenant, sink, seq)`,
+  written after the sink wrote the rows: at least once, a crash between
+  the two re-recording one batch), and a relay declared to start after
+  row N that records a lost-prefix record first, so a file whose steps
+  begin at seq N+1 is judged as a suffix rather than reported as a gap
+  (a qtrace change: an instance's state at the prefix is unknown, so the
+  binding needs a way to start the model there, or the prefix's file is
+  validated with it). Until then, keep a node's step files together and
+  validate them as one run.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 
@@ -742,9 +854,15 @@ type Store interface {
 Methods added later are optional interfaces, found by a type assertion,
 so a store written against this one keeps compiling. The first is
 `store.StepLog`: **a commit's step is written in its own transaction**
-(`Batch.Step`, the step's fields but those the head gives) and read back
-with `Steps(ctx, tenant, after, limit)`, `WaitSteps` waiting for a row
-(a refusal's step moves no head). Slice 1 recorded a commit's step from
+(`Batch.Step`, the step's fields but those the head gives, `"v": 1`) and
+read back with `Steps(ctx, tenant, after, limit)` (each row timed by the
+store under the tenant's lock, `StepRow.Time`), `WaitSteps` waiting for
+a row (a refusal's step moves no head) and `StepCount` (a relay's
+distance behind, without reading the rows). The second is
+`store.TenantFeed`, `WaitTenants(ctx, n)`: a node starts the relay and
+pollers of a tenant created after it started (§0.4). A transient error
+before a store's COMMIT is `store.NotCommitted`: nothing committed, so
+grist need not answer "outcome unknown" (§0.4). Slice 1 recorded a commit's step from
 `Batch.OnCommit`, which memstore and simstore ran at the commit even when
 the caller was then told the outcome is unknown: the simulation's
 property, not database/sql's, where a node that dies between COMMIT and
@@ -807,7 +925,9 @@ whose `Wait` returns at once fails the wake-up check.
   `grist_markers(tenant, id, hash, outcome, pos, events)` (the receipt is
   its last position and event count), `grist_checkpoints(tenant,
   processor, pos)`, `grist_steps(tenant, seq, head, step)`, every key a
-  composite `PRIMARY KEY`. An append's **first statement** is `UPDATE
+  composite `PRIMARY KEY` (`grist_steps(tenant, seq, head, at_ns, step)`
+  since §0.4, `at_ns` the row's time under the lock). An append's
+  **first statement** is `UPDATE
   grist_heads SET head = head + $1, steps = steps + $2 WHERE tenant = $3
   RETURNING head, steps`: it takes the row's lock and reads the new head
   and the step row's number in one round trip (no advisory locks, which
@@ -837,18 +957,24 @@ whose `Wait` returns at once fails the wake-up check.
     slice 3's second fence.
   - **SQLite**: one writer for the whole database, whatever the tenant,
     so tenants do not append in parallel. `sqlstore.SQLiteDSN(path,
-    busy)` is modernc's spelling of `_txlock=immediate` (`BEGIN
-    IMMEDIATE`: the write lock before the first read), WAL (readers do
-    not block the writer) and `busy_timeout` (a writer waits for the
-    lock instead of failing at once); `Open` checks WAL and the timeout
-    and names the fix. Every isolation level is serializable there: the
-    dialect states none.
-  - **Change feeds**: `Wait` and `WaitSteps` wake on this Store's own
-    COMMITs (every one, its answer lost or not: one of unknown outcome
-    may have committed) and read the database every `Options.Poll`
-    (250 ms) for other processes' appends; inside a simulation every
-    writer is a task of the Store and no timer runs, so a settled system
-    is quiet. `LISTEN/NOTIFY` is an optimisation for later.
+    busy)` is modernc's spelling of WAL (readers do not block the
+    writer) and `busy_timeout` (a writer waits for the lock instead of
+    failing at once); `Open` checks both and names the fix. Transactions
+    begin deferred: an append's first statement is a write, so it takes
+    the write lock before reading and never upgrades a stale read
+    snapshot (the SQLITE_BUSY no timeout waits through); the
+    `_txlock=immediate` the DSN once set for that reason bought nothing
+    (§0.4). Every isolation level is serializable there: the dialect
+    states none, and `Open` refuses one stated other than serializable.
+  - **Change feeds**: `Wait`, `WaitSteps` and `WaitTenants` wake on
+    this Store's own COMMITs (every one, its answer lost or not: one of
+    unknown outcome may have committed) and read the database every
+    `Options.Poll` (250 ms) for other processes' appends; on qsql they
+    wait on the database's own signal (`qsql.StoreOf`,
+    `qenv.Store.Changed`), notified at every commit whoever made it, and
+    no timer runs, so a second Store over the database wakes them and a
+    settled system is quiet. A wait returns as soon as its read holds.
+    `LISTEN/NOTIFY` is an optimisation for later.
 - **sqlstore on qsql** (slice 2, built): the same code on `qsql.Open`
   over a `qenv.Store` (`sqlstore.QSQL`, `gristsim.Config.SQL`), so the
   SQL tier is explored with qsql's anomalies, SQLSTATEs and commit faults.
@@ -962,9 +1088,10 @@ retry of a lost or late response inside the one call; checked with
 `qtest.Linearize()`, a duplicate a retry created shows as a later read's
 Mismatch, a call never answered as `Pending` (`qtest.Completes()`).
 Since slice 2 every run records both sides (§0.3): the clients' calls
-under their own actor, `<t>.clients` (`gristsim.ClientsActor`), the
-store's steps under t, and the two bindings say `actors: ['!*.clients']`
-and `actors: ['*.clients']` (§8.2, item 3), the client side checked by a
+under their own actor, `<t>/clients` (`gristsim.ClientsActor`: no tenant
+name holds a slash, `grist.CheckTenant`), the store's steps under t, and
+the two bindings say `actors: ['!*/clients']` and `actors: ['*/clients']`
+(§8.2, item 3), the client side checked by a
 second binding of the same model (`counters.calls.binding.yaml`: no
 positions, no processors' eventual vals) over the same runs
 (`System.WithBinding`). Slice 1's `gristsim.Config.Record` (`AtCommits`
@@ -1176,13 +1303,17 @@ node killed between its COMMIT and its record loses no committed step;
 an effect
 step lost between f and its record is one the model allows to be unseen.
 `qnemesis.FromScript` replays a simulation's fault script against it.
-Built so far (§0.3): the store and the recording; examples/counters'
+Built so far (§0.3, §0.4): the store and the recording; examples/counters'
 `TestRealSQLite` runs the node and four clients as goroutines on a
-SQLite file, records to a `PerStep` file sink, restarts the node halfway
-with a relay of its own (whose copies of the first node's records
-Reconstruct drops), waits for the processors and the relay
-(`Relay.Behind`), probes, records the settle and validates the file with
-`counters.binding.yaml`. `grist.Main` and the HTTP API are not built.
+SQLite file, the clients recording their calls (`gristsim.Do`), records
+to a `PerStep` file sink, kills the first node mid-phase (its sink dies
+at once, its relay behind) and starts a second with a relay of its own
+(which records what the first never did, and whose copies of the first
+node's records Reconstruct drops), creates new counters in the second
+phase, waits for the processors and the relay (`Relay.Behind`,
+`Relay.Err`), probes, records the settle, checks every client's answer
+against the store's steps, and validates the file with
+`counters.binding.yaml` and, linearized, `counters.calls.binding.yaml`. `grist.Main` and the HTTP API are not built.
 
 ## 4. Constraints enforced
 
@@ -1267,10 +1398,11 @@ file. `gotogether-start`'s table gets a row.
 ```text
 grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mod; published like qhegel)
   grist.go             App, events, read models, commands, queries, processors, periodic, Reads, Result, Option,
-                       Catalog; slice 1: also the node (App.Start: pollers), aliases of store's types
+                       Catalog; the node (App.Start: per tenant its relay and pollers, a watcher for new
+                       tenants), the relay (Relay), aliases of store's types
   store/               the store contract: Store, Batch, Condition, Marker, Selector, StepLog, the errors,
                        CheckCondition and Select (the reference evaluations); imports nothing of grist
-  internal/            the step fields and the quiet context (rec), position keys (poskey)
+  internal/            the step fields (rec), position keys (poskey)
   runtime/             (later) the node: pollers, effect worker, scheduler, dispatcher (qenv seams only)
   storetest/           the contract suite
   memstore/ simstore/ sqlstore/
@@ -1520,7 +1652,8 @@ clients from one run; `TestSQLDuplicateRequests`;
 with the runtime's condition taken out; `blind` 25 of 40 and
 `dispatchDirect` 18 of 30 on the SQL tier) and `TestRealSQLite`, the
 real tier on a SQLite file judged by `counters.binding.yaml`, its
-clients goroutines calling `App.Execute`. **Left**: `grist.Main` and the
+clients goroutines calling `App.Execute` through `gristsim.Do` (since
+§0.4). **Left**: `grist.Main` and the
 HTTP API on `qhttp` (so the real test drives no HTTP, and `blind` on the
 real tier is not measured), `AtMostOnce` and `checkpointFirst`, the
 generator, gristflow.

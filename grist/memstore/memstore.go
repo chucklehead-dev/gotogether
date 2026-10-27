@@ -1,7 +1,7 @@
 // Package memstore is a grist store in memory: maps and a mutex, for unit
 // tests of a fold or a decision. It is not for simulations (its mutex is
 // a real one, which qenv cannot schedule): use grist/simstore there. It
-// keeps a store.StepLog.
+// keeps a store.StepLog and is a store.TenantFeed.
 package memstore
 
 import (
@@ -42,8 +42,15 @@ func (s *Store) CreateTenant(_ context.Context, t string) error {
 	defer s.mu.Unlock()
 	if s.tenants[t] == nil {
 		s.tenants[t] = &tenant{markers: map[string]store.Marker{}, checkpoints: map[string]store.Position{}}
+		s.wake()
 	}
 	return nil
+}
+
+// wake wakes every waiter (with s.mu held).
+func (s *Store) wake() {
+	close(s.changed)
+	s.changed = make(chan struct{})
 }
 
 // Tenants implements store.Store.
@@ -75,7 +82,7 @@ func (s *Store) Read(_ context.Context, t string, q store.Selector, at store.Pos
 
 // Append implements store.Store. The marker, the checkpoint and the
 // condition are checked under the store's lock.
-func (s *Store) Append(_ context.Context, t string, b store.Batch) (store.Position, error) {
+func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
 	s.mu.Lock()
 	tn := s.tenants[t]
 	if tn == nil {
@@ -111,10 +118,9 @@ func (s *Store) Append(_ context.Context, t string, b store.Batch) (store.Positi
 		tn.checkpoints[c.Processor] = c.To
 	}
 	if b.Step != nil {
-		tn.steps = append(tn.steps, store.StepRow{Seq: int64(len(tn.steps) + 1), Head: head, Step: append([]byte(nil), b.Step...)})
+		tn.steps = append(tn.steps, store.StepRow{Seq: int64(len(tn.steps) + 1), Head: head, Time: store.StepTime(ctx), Step: append([]byte(nil), b.Step...)})
 	}
-	close(s.changed)
-	s.changed = make(chan struct{})
+	s.wake()
 	s.mu.Unlock()
 	return head, nil
 }
@@ -182,12 +188,29 @@ func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
 	return s.wait(ctx, t, func(tn *tenant) bool { return int64(len(tn.steps)) > after })
 }
 
-// wait waits until done holds of t, woken by every append.
+// StepCount implements store.StepLog.
+func (s *Store) StepCount(_ context.Context, t string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return 0, store.ErrUnknownTenant
+	}
+	return int64(len(tn.steps)), nil
+}
+
+// WaitTenants implements store.TenantFeed.
+func (s *Store) WaitTenants(ctx context.Context, n int) error {
+	return s.wait(ctx, "", func(*tenant) bool { return len(s.tenants) > n })
+}
+
+// wait waits until done holds of t (of the store, t ""), woken by every
+// append and every tenant created.
 func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) error {
 	for {
 		s.mu.Lock()
 		tn := s.tenants[t]
-		if tn == nil {
+		if tn == nil && t != "" {
 			s.mu.Unlock()
 			return store.ErrUnknownTenant
 		}

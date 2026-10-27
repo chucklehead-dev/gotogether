@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,37 +17,74 @@ import (
 	_ "modernc.org/sqlite" // the real tier's driver
 
 	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
-// realMailer is a mailer that sends at once (the real tier's stand-in:
-// nothing is lost, so every welcome is notified).
+// realMailer is a mailer that takes 20 ms to send (the real tier's
+// stand-in: nothing is lost, so every welcome is notified, but not at
+// once, so a settle recorded before the processors caught up is seen).
 type realMailer struct {
 	mu   sync.Mutex
 	sent []Mail
 }
 
 func (m *realMailer) Send(_ context.Context, key, msg string) error {
+	time.Sleep(20 * time.Millisecond) //qenv:ok the real tier's mailer, outside any simulation
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sent = append(m.sent, Mail{Key: key, Msg: msg})
 	return nil
 }
 
-// The real tier, judged by the same binding: the app on SQLite (a temp
-// file, sqlstore in its single-writer mode), a node (App.Start: the relay
-// and the pollers, goroutines), four clients appending to two tenants at
-// once, every step written to a file (qobs.FileSink, PerStep) and
-// validated with counters.binding.yaml as a simulation's are. The node is
-// stopped halfway and a second one started, with a relay of its own: it
-// records the step log again from its first row, records the first node's
-// copies make the same records, and Reconstruct keeps one of each. After
-// the second phase the harness waits for the processors and the relay to
-// catch up, probes every counter, and records the settle, so the eventual
-// val (every counter welcomed) is judged.
+// killable is a sink that dies with its process: after kill, nothing it
+// is given is written, as a killed node's records after the instant of
+// its death are not (its goroutines are stopped soon after; whatever
+// they record meanwhile is lost with it).
+type killable struct {
+	mu   sync.Mutex
+	dead bool
+	s    qobs.Sink
+}
+
+func (k *killable) Record(ctx context.Context, s *qtrace.Step) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if !k.dead {
+		k.s.Record(ctx, s)
+	}
+}
+
+func (k *killable) kill() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.dead = true
+}
+
+// The real tier, judged by the same bindings: the app on SQLite (a temp
+// file, sqlstore), a node (App.Start: the relay, the tenant watcher and
+// the pollers, goroutines), four clients appending to two tenants at
+// once and recording their calls as a run's clients do
+// (gristsim.Do: <tenant>/clients), every step written to one file
+// (qobs.FileSink, PerStep) and validated with counters.binding.yaml
+// (the store's side) and counters.calls.binding.yaml (the clients',
+// linearized), as a simulation's are. Halfway through the first phase
+// the first node is killed: its sink dies at that instant (whatever its
+// relay had not recorded is lost with it, as with kill -9) and its
+// goroutines are stopped, while the clients go on committing. A second
+// node, with a relay of its own, records the step log from its first
+// row (its copies of the first node's records are Reconstruct's
+// duplicates) and every row the first never recorded (its relay is
+// behind when it dies), and the second phase creates new counters, whose
+// welcomes only the second node sends. The harness then waits for the
+// processors and the relay (quiet), probes every counter and records the
+// settle, so the eventual val (every counter welcomed) is judged; and
+// every answer a client got is checked against the store's side: each
+// command answered has its step there, with the same outcome (a refusal's
+// included: one the store did not record would pass both bindings).
 func TestRealSQLite(t *testing.T) {
 	qtest.RequireQuint(t)
 	dir := t.TempDir()
@@ -56,7 +94,7 @@ func TestRealSQLite(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	st, err := sqlstore.Open(ctx, db, sqlstore.SQLite, sqlstore.Options{Name: App.Name})
+	st, err := sqlstore.Open(ctx, db, sqlstore.SQLite, sqlstore.Options{Name: App.Name, Poll: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,30 +109,37 @@ func TestRealSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := qobs.NewRecorder(sink, qobs.WithID("node"))
-	run := qobs.WithRecorder(WithDeps(ctx, Deps{Mailer: &realMailer{}, Store: st}), rec)
+	deps := WithDeps(ctx, Deps{Mailer: &realMailer{}, Store: st})
+	clientsCtx := qobs.WithRecorder(deps, qobs.NewRecorder(sink, qobs.WithID("clients")))
 
-	// start is a node: its relay (returned, to wait for) and pollers, until stop
-	start := func() (relay *grist.Relay, stop func()) {
+	// start is a node recording to its own sink: its relay (returned, to
+	// wait for) and pollers, until stop
+	start := func(id string, to qobs.Sink) (relay *grist.Relay, stop func()) {
 		relay, err := grist.NewRelay(st)
 		if err != nil {
 			t.Fatal(err)
 		}
-		nctx, cancel := context.WithCancel(grist.WithRelay(run, relay))
-		if err := App.Start(nctx, st); err != nil {
+		nctx, cancel := context.WithCancel(qobs.WithRecorder(deps, qobs.NewRecorder(to, qobs.WithID(id))))
+		if err := App.Start(nctx, st, grist.WithRelay(relay)); err != nil {
 			t.Fatal(err)
 		}
 		return relay, cancel
 	}
-	clients := func(phase int) {
+	// clients runs four clients of 8 operations each on counters, names
+	// from names; after the first client's half, kill runs (if set)
+	clients := func(phase int, counters, names []string, kill func()) {
 		var wg sync.WaitGroup
 		for c := 1; c <= 4; c++ {
 			wg.Go(func() {
+				ctx := qobs.Thread(clientsCtx) // one thread per goroutine
 				r := rand.New(rand.NewPCG(uint64(phase), uint64(c)))
 				for op := 1; op <= 8; op++ {
+					if op == 5 && c == 1 && kill != nil {
+						kill()
+					}
 					env := grist.Envelope{ID: fmt.Sprintf("p%d-c%d-%d", phase, c, op), Actor: fmt.Sprint("client", c)}
 					env.Tenant = tenants[r.IntN(len(tenants))]
-					counter, name := []string{"a", "b", "c"}[r.IntN(3)], []string{"a", "b"}[r.IntN(2)]
+					counter, name := counters[r.IntN(len(counters))], names[r.IntN(len(names))]
 					var cmd string
 					var args any
 					switch r.IntN(3) {
@@ -103,23 +148,13 @@ func TestRealSQLite(t *testing.T) {
 					case 1:
 						cmd, args = "increment-counter", IncrementCounter{Counter: counter, By: 1 + r.IntN(3)}
 					default:
-						b, _ := json.Marshal(ShowCounter{Counter: counter})
-						if _, _, err := App.Query(run, st, env, "show-counter", b); err != nil {
-							t.Errorf("show %s: %v", counter, err)
-						}
-						continue
+						cmd, args = "show-counter", ShowCounter{Counter: counter}
 					}
 					b, _ := json.Marshal(args)
-					for try := 0; ; try++ { // an unknown outcome is retried under its id, as a client must
-						_, err := App.Execute(run, st, env, cmd, b)
-						var rej *grist.Rejected
-						if err == nil || errors.As(err, &rej) || errors.Is(err, grist.ErrConflict) {
-							break
-						}
-						if !errors.Is(err, grist.ErrOutcomeUnknown) && !errors.Is(err, grist.ErrUnavailable) || try == 5 {
-							t.Errorf("%s %s: %v", cmd, env.ID, err)
-							break
-						}
+					err := gristsim.Do(ctx, App, st, env, cmd, b)
+					var rej *grist.Rejected
+					if err != nil && !errors.As(err, &rej) && !errors.Is(err, grist.ErrConflict) {
+						t.Errorf("%s %s: %v", cmd, env.ID, err)
 					}
 				}
 			})
@@ -127,23 +162,33 @@ func TestRealSQLite(t *testing.T) {
 		wg.Wait()
 	}
 
-	_, stop := start()
-	clients(1)
-	stop()
-	relay, stop := start() // a second node: its relay records the step log from its first row
-	clients(2)
+	first := &killable{s: sink}
+	relay1, stop1 := start("node1", first)
+	clients(1, []string{"a", "b", "c"}, []string{"a", "b"}, func() { first.kill(); stop1() })
+	behind, err := relay1.Behind(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if behind == 0 {
+		t.Fatal("the killed node's relay recorded every row: the second node's relay has nothing of its own to record, and this run proves nothing of it")
+	}
+	relay, stop := start("node2", sink) // its relay records the step log from its first row
+	clients(2, []string{"d", "e", "f"}, []string{"c", "d"}, nil)
 	quiet(t, st, relay, tenants)
 	for _, tn := range tenants { // the probe: every counter, on the settled system
-		for i, c := range []string{"a", "b", "c"} {
+		for i, c := range []string{"a", "b", "c", "d", "e", "f"} {
 			b, _ := json.Marshal(ShowCounter{Counter: c})
-			if _, _, err := App.Query(run, st, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: tn, Actor: "probe"}, "show-counter", b); err != nil {
+			if err := gristsim.Do(clientsCtx, App, st, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: tn, Actor: "probe"}, "show-counter", b); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 	time.Sleep(10 * time.Millisecond) // past RealTimeSlack after the last step
-	qobs.Settled(run)
+	qobs.Settled(clientsCtx)
 	stop()
+	if err := relay.Err(); err != nil {
+		t.Fatal(err)
+	}
 	if err := sink.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -178,13 +223,49 @@ func TestRealSQLite(t *testing.T) {
 	if kept >= relayed["t1"]+relayed["t2"] {
 		t.Errorf("%d relayed records, %d kept: want the second node's copies of the first's rows dropped as duplicates", relayed["t1"]+relayed["t2"], kept)
 	}
-	t.Logf("%d steps written, %d relayed (%d kept after the second relay's copies)", len(steps), relayed["t1"]+relayed["t2"], kept)
+	answered(t, traces)
+	t.Logf("%d steps written, %d relayed (%d kept after the second relay's copies); the killed node's relay was %d rows behind", len(steps), relayed["t1"]+relayed["t2"], kept, behind)
 	qtest.Validate(t, commits, steps).Expect(t, qtest.Conforms(), qtest.Settles())
+	qtest.Validate(t, calls, steps, qtest.Linearize()).Expect(t, qtest.Conforms())
+}
+
+// answered checks every command a client was answered against the
+// store's side: the store recorded its step, once, with the outcome the
+// client was told. Neither binding sees a store-side step missing (a
+// refusal commits no event, so the model's log is the same without it),
+// but the client's answer names it.
+func answered(t *testing.T, traces []*qtrace.Trace) {
+	t.Helper()
+	atStore, atClients := map[string]string{}, map[string]string{}
+	for _, tr := range traces {
+		for _, s := range tr.Steps {
+			id, _ := s.Args["id"].(string)
+			if id == "" || s.Action != "createCounter" && s.Action != "incrementCounter" {
+				continue
+			}
+			side := atStore
+			if strings.HasSuffix(s.Actor, "/clients") {
+				side = atClients
+			}
+			if prev, dup := side[id]; dup {
+				t.Errorf("command %s has two steps on one side (%s, %s)", id, prev, s.Outcome)
+			}
+			side[id] = s.Outcome
+		}
+	}
+	if len(atClients) == 0 {
+		t.Fatal("no client was answered")
+	}
+	for id, outcome := range atClients {
+		if got, ok := atStore[id]; !ok || got != outcome {
+			t.Errorf("command %s: the client was told %s, the store recorded %q (found %v): a committed answer's step is missing or differs", id, outcome, got, ok)
+		}
+	}
 }
 
 // quiet waits until the processors have handled every trigger and the
 // relay has recorded every committed step, twice in a row: a real tier's
-// settle.
+// settle. A relay that cannot record fails the test at once.
 func quiet(t *testing.T, st grist.Store, relay *grist.Relay, tenants []string) {
 	t.Helper()
 	ctx := context.Background()
@@ -209,6 +290,9 @@ func quiet(t *testing.T, st grist.Store, relay *grist.Relay, tenants []string) {
 					done = false
 				}
 			}
+		}
+		if err := relay.Err(); err != nil {
+			t.Fatal(err)
 		}
 		if n, err := relay.Behind(ctx); err != nil || n > 0 {
 			done = false

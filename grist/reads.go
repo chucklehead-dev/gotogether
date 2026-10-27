@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+	"strings"
 )
 
 // Reads is a decision's only access to state. Its first read pins the
@@ -78,6 +79,10 @@ func (r *Reads) check(q Selector) bool {
 			return false
 		}
 		for _, tag := range q.Tags {
+			if err := checkText(fmt.Sprintf("read of %s tagged %s", t, tag.Key), tag.Value); err != nil {
+				r.misuse("%v", strings.TrimPrefix(err.Error(), "grist: "))
+				return false
+			}
 			if !info.hasTag(tag.Key) {
 				r.misuse("read of %s tagged %s=%s: %s has no tag %q (its tags: %v); a tag's key is the field's JSON name, and the field is marked grist:\"tag\"", t, tag.Key, tag.Value, t, tag.Key, info.tagKeys())
 				return false

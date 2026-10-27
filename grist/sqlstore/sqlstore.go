@@ -11,7 +11,7 @@
 //	grist_index(tenant, k, pos)                  k: i/<type>, or g/<type>/<key>=<value>
 //	grist_markers(tenant, id, hash, outcome, pos, events)
 //	grist_checkpoints(tenant, processor, pos)
-//	grist_steps(tenant, seq, head, step)         the step log (store.StepLog)
+//	grist_steps(tenant, seq, head, at_ns, step)  the step log (store.StepLog), at_ns its commit's time
 //
 // An append's first statement takes the tenant's lock and reads the new
 // head in one round trip, `UPDATE grist_heads SET head = head + $1, steps
@@ -34,8 +34,8 @@
 // a syntax error, SQLSTATE classes 42, 0A, 22, 3D, 3F, 28, SQLite's
 // SQLITE_ERROR) is a *store.PermanentError; everything else (40001,
 // 40P01, lock_timeout's 55P03, a lost connection, SQLITE_BUSY after the
-// busy_timeout) is transient, a commit's whose outcome is unknown
-// included.
+// busy_timeout) is transient: a *store.NotCommittedError before COMMIT
+// (nothing committed), unmarked at or after it (the outcome unknown).
 package sqlstore
 
 import (
@@ -49,9 +49,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 )
 
 // Options configure a Store.
@@ -67,11 +69,12 @@ type Options struct {
 	// idle_in_transaction_session_timeout, set in each transaction
 	// (defaults 5 s, grain's, and 60 s).
 	LockTimeout, IdleTimeout time.Duration
-	// Poll is how often Wait and WaitSteps read the database when no
-	// append of this Store wakes them: another process's appends (default
-	// 250 ms). Inside a simulation the default is never: every writer is
-	// a task of this Store, whose appends wake its waiters, and a timer
-	// would keep a settled system busy.
+	// Poll is how often Wait, WaitSteps and WaitTenants read the
+	// database when no append of this Store wakes them: another process's
+	// appends (default 250 ms). On qsql the default is never: every
+	// writer commits through the database's qenv.Store, whose own signal
+	// (qenv.Store.Changed) wakes every Store's waiters, and a timer would
+	// keep a settled simulation busy.
 	Poll time.Duration
 }
 
@@ -82,6 +85,11 @@ type Store struct {
 	o       Options
 	changed qenv.Signal   // notified after every append's COMMIT, whatever its answer
 	commits atomic.Uint64 // the COMMITs tried: a waiter that read before one does not sleep through it
+	// sim is the qenv.Store a qsql database runs on (qsql.StoreOf), nil on
+	// a real one: its signal and version stand for changed and commits,
+	// so a waiter wakes at any client's commit, another Store's over the
+	// same database included
+	sim *qenv.Store
 }
 
 // schema is the tables, in the SQL every dialect runs. Read-only.
@@ -91,17 +99,32 @@ var schema = []string{
 	`CREATE TABLE IF NOT EXISTS grist_index (tenant TEXT NOT NULL, k TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, k, pos))`,
 	`CREATE TABLE IF NOT EXISTS grist_markers (tenant TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, outcome TEXT NOT NULL, pos BIGINT NOT NULL, events BIGINT NOT NULL, PRIMARY KEY (tenant, id))`,
 	`CREATE TABLE IF NOT EXISTS grist_checkpoints (tenant TEXT NOT NULL, processor TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, processor))`,
-	`CREATE TABLE IF NOT EXISTS grist_steps (tenant TEXT NOT NULL, seq BIGINT NOT NULL, head BIGINT NOT NULL, step TEXT NOT NULL, PRIMARY KEY (tenant, seq))`,
+	`CREATE TABLE IF NOT EXISTS grist_steps (tenant TEXT NOT NULL, seq BIGINT NOT NULL, head BIGINT NOT NULL, at_ns BIGINT NOT NULL, step TEXT NOT NULL, PRIMARY KEY (tenant, seq))`,
 }
 
 // Open returns a store over db in dialect d, creating its tables if they
 // do not exist; on SQLite it checks the single-writer mode (SQLiteDSN).
+// It checks the options (a negative duration, a name a recorder cannot
+// carry) and begins one transaction at the isolation level, so a level
+// the database or its driver does not offer is Open's error, naming the
+// fix, rather than every append's transient one.
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error) {
 	if d.name == "" {
 		return nil, errors.New("sqlstore: the zero Dialect: use sqlstore.Postgres, sqlstore.SQLite or sqlstore.QSQL")
 	}
 	if o.Name == "" {
 		o.Name = "grist"
+	}
+	if !utf8.ValidString(o.Name) || strings.ContainsRune(o.Name, 0) {
+		return nil, fmt.Errorf("sqlstore: Options.Name %q is not valid UTF-8 without NUL: it names the process of every step recorded at the store; give a plain name (the App's)", o.Name)
+	}
+	for _, d := range []struct {
+		name string
+		d    time.Duration
+	}{{"LockTimeout", o.LockTimeout}, {"IdleTimeout", o.IdleTimeout}, {"Poll", o.Poll}} {
+		if d.d < 0 {
+			return nil, fmt.Errorf("sqlstore: Options.%s is %v: give a positive duration, or 0 for the default", d.name, d.d)
+		}
 	}
 	if o.Isolation == sql.LevelDefault {
 		o.Isolation = d.iso
@@ -122,7 +145,25 @@ func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 			return nil, fmt.Errorf("sqlstore: creating grist's tables (%s): %w", q, err)
 		}
 	}
-	return &Store{db: db, d: d, o: o}, nil
+	s := &Store{db: db, d: d, o: o, sim: qsql.StoreOf(db)}
+	// one transaction at the level, as every append begins one: a level
+	// the driver refuses (pgx's "unsupported isolation", no SQLSTATE) would
+	// otherwise read as transient, and every append would retry it forever
+	if d.pragmas && o.Isolation != sql.LevelDefault && o.Isolation != sql.LevelSerializable {
+		// the driver takes any level and runs SQLite's one: a stated level
+		// would be a promise nothing keeps
+		return nil, fmt.Errorf("sqlstore: Options.Isolation %s on SQLite, whose one writer makes every transaction serializable: leave it unset (or sql.LevelSerializable)", o.Isolation)
+	}
+	tx, err := s.begin(ctx, false)
+	var nc *store.NotCommittedError
+	if errors.As(err, &nc) {
+		err = nc.Err
+	}
+	if err != nil {
+		return nil, fmt.Errorf("sqlstore: a transaction at isolation level %s (Options.Isolation) on %s: %w; name a level the database offers (PostgreSQL: read committed, repeatable read, serializable; SQLite: the default; qsql: its Store's or a weaker one), or leave it unset for the dialect's", o.Isolation, d, err)
+	}
+	tx.Rollback()
+	return s, nil
 }
 
 // Name implements store.Store.
@@ -133,7 +174,7 @@ func (s *Store) Name() string { return s.o.Name }
 func (s *Store) begin(ctx context.Context, readOnly bool) (*sql.Tx, error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: s.o.Isolation, ReadOnly: readOnly})
 	if err != nil {
-		return nil, classify(err)
+		return nil, store.NotCommitted(classify(err))
 	}
 	if s.d.timeouts {
 		// set_config(..., true) is SET LOCAL as a function: both settings
@@ -142,7 +183,7 @@ func (s *Store) begin(ctx context.Context, readOnly bool) (*sql.Tx, error) {
 			fmt.Sprint(s.o.LockTimeout.Milliseconds()), fmt.Sprint(s.o.IdleTimeout.Milliseconds()))
 		if err != nil {
 			tx.Rollback()
-			return nil, classify(err)
+			return nil, store.NotCommitted(classify(err))
 		}
 	}
 	return tx, nil
@@ -162,6 +203,8 @@ func indexKey(typ string, tags []store.TagPair) string {
 // CreateTenant implements store.Store.
 func (s *Store) CreateTenant(ctx context.Context, t string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO grist_heads (tenant, head, steps) VALUES ($1, 0, 0) ON CONFLICT (tenant) DO NOTHING`, t)
+	s.commits.Add(1) // a tenant's watchers (WaitTenants) wake
+	s.changed.Notify()
 	return classify(err)
 }
 
@@ -306,6 +349,42 @@ func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.P
 
 // Append implements store.Store.
 func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	h, err := s.append(ctx, t, b)
+	if err != nil {
+		return 0, err
+	}
+	return h, nil
+}
+
+// errCommitted is an error at or after an append's COMMIT, its outcome
+// unknown: append returns it as it is, every error before COMMIT marked
+// store.NotCommitted.
+type errCommitted struct{ err error }
+
+func (e errCommitted) Error() string { return e.err.Error() }
+
+// append is Append, its errors before COMMIT store.NotCommitted (the
+// contract's own errors stay as they are) and those of COMMIT unmarked.
+func (s *Store) append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	h, err := s.tryAppend(ctx, t, b)
+	var ec errCommitted
+	switch {
+	case err == nil:
+		return h, nil
+	case errors.As(err, &ec):
+		return 0, ec.err
+	}
+	var cf *store.ConditionFailed
+	var cm *store.CheckpointMoved
+	if errors.As(err, &cf) || errors.As(err, &cm) || errors.Is(err, store.ErrUnknownTenant) {
+		return 0, err
+	}
+	return 0, store.NotCommitted(err)
+}
+
+// tryAppend runs an append's transaction: every error before COMMIT is
+// returned as the statement gave it, COMMIT's as an errCommitted.
+func (s *Store) tryAppend(ctx context.Context, t string, b store.Batch) (store.Position, error) {
 	tx, err := s.begin(ctx, false)
 	if err != nil {
 		return 0, err
@@ -381,8 +460,10 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 		}
 	}
 	if b.Step != nil {
-		// numbered under the lock: the step log's order is the commit order
-		if _, err := tx.ExecContext(ctx, `INSERT INTO grist_steps (tenant, seq, head, step) VALUES ($1, $2, $3, $4)`, t, seq, newHead, string(b.Step)); err != nil {
+		// numbered and timed under the lock: the step log's order is the
+		// commit order, and its times are in that order too
+		if _, err := tx.ExecContext(ctx, `INSERT INTO grist_steps (tenant, seq, head, at_ns, step) VALUES ($1, $2, $3, $4, $5)`,
+			t, seq, newHead, store.StepTime(ctx), string(b.Step)); err != nil {
 			return 0, classify(err)
 		}
 	}
@@ -393,7 +474,7 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 	s.commits.Add(1)
 	s.changed.Notify()
 	if err != nil {
-		return 0, classify(err)
+		return 0, errCommitted{classify(err)}
 	}
 	return store.Position(newHead), nil
 }
@@ -531,7 +612,7 @@ func (s *Store) Steps(ctx context.Context, t string, after int64, limit int) ([]
 	if _, err := head(ctx, tx, t); err != nil {
 		return nil, err
 	}
-	stmt, args := `SELECT seq, head, step FROM grist_steps WHERE tenant = $1 AND seq > $2 ORDER BY seq`, []any{t, after}
+	stmt, args := `SELECT seq, head, at_ns, step FROM grist_steps WHERE tenant = $1 AND seq > $2 ORDER BY seq`, []any{t, after}
 	if limit > 0 {
 		stmt, args = stmt+` LIMIT $3`, append(args, limit)
 	}
@@ -545,7 +626,7 @@ func (s *Store) Steps(ctx context.Context, t string, after int64, limit int) ([]
 		var r store.StepRow
 		var h int64
 		var step string
-		if err := rows.Scan(&r.Seq, &h, &step); err != nil {
+		if err := rows.Scan(&r.Seq, &h, &r.Time, &step); err != nil {
 			return nil, classify(err)
 		}
 		r.Head, r.Step = store.Position(h), json.RawMessage(step)
@@ -565,35 +646,63 @@ func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 // WaitSteps implements store.StepLog.
 func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
 	return s.wait(ctx, func() (bool, error) {
-		var n int64
-		switch err := s.db.QueryRowContext(ctx, `SELECT steps FROM grist_heads WHERE tenant = $1`, t).Scan(&n); {
-		case errors.Is(err, sql.ErrNoRows):
-			return false, store.ErrUnknownTenant
-		case err != nil:
-			return false, classify(err)
-		}
-		return n > after, nil
+		n, err := s.StepCount(ctx, t)
+		return n > after, err
 	})
 }
 
-// wait waits until done, woken by this Store's appends and, every Poll,
-// by the clock (another process's appends).
+// StepCount implements store.StepLog: the head row's count, one read.
+func (s *Store) StepCount(ctx context.Context, t string) (int64, error) {
+	var n int64
+	switch err := s.db.QueryRowContext(ctx, `SELECT steps FROM grist_heads WHERE tenant = $1`, t).Scan(&n); {
+	case errors.Is(err, sql.ErrNoRows):
+		return 0, store.ErrUnknownTenant
+	case err != nil:
+		return 0, classify(err)
+	}
+	return n, nil
+}
+
+// WaitTenants implements store.TenantFeed.
+func (s *Store) WaitTenants(ctx context.Context, n int) error {
+	return s.wait(ctx, func() (bool, error) {
+		ts, err := s.Tenants(ctx) // the tenants' names, not COUNT(*): one SQL on every dialect, qsql's included
+		return len(ts) > n, err
+	})
+}
+
+// version is the count of commits a waiter compares before and after its
+// read: the database's on qsql (every client's), else this Store's.
+func (s *Store) version() uint64 {
+	if s.sim != nil {
+		return uint64(s.sim.Version())
+	}
+	return s.commits.Load()
+}
+
+// wait waits until done, woken by this Store's appends (on qsql, by any
+// commit to the database) and, every Poll, by the clock (another
+// process's appends).
 func (s *Store) wait(ctx context.Context, done func() (bool, error)) error {
 	poll := s.o.Poll
-	if poll == 0 && qenv.From(ctx) == nil {
+	if poll == 0 && s.sim == nil {
 		poll = 250 * time.Millisecond
 	}
+	signal := &s.changed
+	if s.sim != nil {
+		signal = s.sim.Changed()
+	}
 	for {
-		seen := s.commits.Load()
+		seen := s.version()
 		ok, err := done() // a read: other tasks commit meanwhile
-		if s.commits.Load() != seen {
-			continue // a commit while it read: read again, its Notify is past
-		}
 		if err != nil && !store.Transient(err) {
 			return err
 		}
 		if ok {
-			return nil
+			return nil // a commit while it read changes nothing: it held already
+		}
+		if s.version() != seen {
+			continue // a commit while it read: read again, its Notify is past
 		}
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -602,6 +711,6 @@ func (s *Store) wait(ctx context.Context, done func() (bool, error)) error {
 			qenv.Sleep(ctx, 10*time.Millisecond) // a transient error: read again soon, not at once
 			continue
 		}
-		s.changed.Wait(ctx, poll)
+		signal.Wait(ctx, poll)
 	}
 }

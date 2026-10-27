@@ -160,12 +160,17 @@ func (c *Command[C]) hash(body []byte) string {
 // then commits the conflict as the key's answer; transient store errors
 // are retried apart (TransientTries, with backoff), the marker read once
 // more before giving up. It returns the receipt, a *Rejected,
-// ErrConflict, ErrKeyReused, ErrOutcomeUnknown (retry with the same id),
-// ErrUnavailable, or the decision's error (the code's fault, recorded
-// with its text and not remembered).
+// ErrConflict, ErrKeyReused, ErrOutcomeUnknown (retry with the same id:
+// an append whose answer was lost may have committed, a context ended
+// during one included), ErrUnavailable (every transient error came
+// before a commit: store.NotCommitted), or the decision's error (the
+// code's fault, recorded with its text and not remembered).
 func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error) {
 	if env.ID == "" {
 		return Receipt{}, fmt.Errorf("grist: command %s without an id: every command carries one (its idempotency key, Envelope.ID)", c.info.name)
+	}
+	if err := checkEnvelope(env); err != nil {
+		return Receipt{}, fmt.Errorf("grist: command %s: %w", c.info.name, err)
 	}
 	body, err := json.Marshal(args)
 	if err != nil {
@@ -239,6 +244,9 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 						derr = fmt.Errorf("grist: command %s emits %q, which is not registered on %s: register it (NewEvent)", c.info.name, e.Type, c.app.Name)
 					}
 				}
+				if derr == nil {
+					derr = checkEvents("command "+c.info.name, events)
+				}
 				var rej *Rejected
 				switch {
 				case derr != nil && errors.As(derr, &rej):
@@ -269,7 +277,7 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 		// commit and its record loses no step
 		step := newRowStep(c.info.quint, len(events), append(kv, c.app.batchObs(events, "command", env.ID)...)...)
 		b := store.Batch{Events: events, Marker: &store.Marker{ID: env.ID, Hash: hash, Outcome: outcome},
-			Time: qenv.Now(ctx).UnixMilli(), Cause: env.ID, Step: encodeRow(ctx, []rowStep{step})}
+			Time: qenv.Now(ctx).UnixMilli(), Cause: env.ID, Step: encodeRow([]rowStep{step})}
 		if o.unconditioned == "" && outcome != conflictOutcome {
 			b.Condition = &store.Condition{After: r.pos, Selectors: r.sels}
 		}
@@ -289,10 +297,17 @@ func (c *Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C)
 				conflicted = r
 			}
 		case store.Transient(err):
-			mayHaveCommitted = true
+			// an error before the commit (store.NotCommitted: a lost race
+			// for the head lock, a lock wait timed out) committed nothing
+			mayHaveCommitted = mayHaveCommitted || store.MayHaveCommitted(err)
 			if again, rc, rerr := retry(err); !again {
 				return rc, rerr
 			}
+		case ctx.Err() != nil && store.MayHaveCommitted(err):
+			// the context ended while the append committed: its answer is
+			// lost, as a connection's would be, and the caller must retry
+			// under the id to learn it
+			return Receipt{}, fmt.Errorf("%w: command %s (id %s): %w", ErrOutcomeUnknown, c.info.name, env.ID, err)
 		default:
 			return Receipt{}, err
 		}

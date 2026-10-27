@@ -34,3 +34,22 @@ func TestContract(t *testing.T) {
 		})
 	}
 }
+
+// Two simstores over one qenv.Store wake each other's waiters: their
+// waits are on the qenv.Store's signal, notified at every commit, not on
+// a signal of their own (which slept through the other's appends, and
+// lost their steps: a relay waiting on one never saw the other's).
+func TestTwoStores(t *testing.T) {
+	sim := qenv.New(qenv.NewSeeded(1))
+	defer sim.Close()
+	db := qenv.NewStore(sim, "grist", qenv.Serializable)
+	a, b := simstore.New(db), simstore.New(db)
+	var err error
+	sim.Spawn("two", func(ctx context.Context) { err = storetest.TwoStores(ctx, a, b) })
+	if rerr := sim.Run(time.Minute); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if err != nil {
+		t.Error(err)
+	}
+}

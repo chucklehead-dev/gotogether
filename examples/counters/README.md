@@ -20,7 +20,7 @@ judged by the same bindings.
 | [model/grist.qnt](model/grist.qnt) | grist's guarantees (conditions, triggers, checkpoints, effects), vendored from [grist/model](../../grist/model/grist.qnt) |
 | [counters.binding.yaml](counters.binding.yaml) | the commit-side steps: every parameter the step's field, the outcome as `result`, each commit's head and batch compared with the model's |
 | [counters.once.binding.yaml](counters.once.binding.yaml) | the same steps judged by the test-only `welcomedOnce` |
-| [counters.calls.binding.yaml](counters.calls.binding.yaml) | the clients' calls (actor `<tenant>.clients`, recorded in every run beside the store's steps), linearized |
+| [counters.calls.binding.yaml](counters.calls.binding.yaml) | the clients' calls (actor `<tenant>/clients`, recorded in every run beside the store's steps), linearized |
 | [sql_test.go](sql_test.go), [real_test.go](real_test.go) | the claims on the SQL tier (`gristsim.Config.SQL`), and the real tier on SQLite |
 | [testdata/mutants](testdata/mutants) | grain's two bugs, each a file replacing the app's of its name (a `go test -overlay`) |
 
@@ -49,7 +49,7 @@ settle.
 | test | configuration | catches | rate (2026-10-27) |
 |---|---|---|---|
 | `TestFaithful` | the app at Serializable and ReadCommitted (Snapshot's runs are Serializable's: every append writes the head), one tenant, names from two letters; commit faults (`store.counters.commit`), node crashes, lost and late requests | nothing: `Conforms`, `All(Settles)`, both faults reached | 40 of 40 conform at each level |
-| `TestFaithfulAtClients` | the same runs, judged at the clients (`<tenant>.clients`: `Invoke`/`Done`) by `counters.calls.binding.yaml`, `qtest.Linearize()` | nothing: a retry's duplicate would be a later read's `Mismatch` | 40 of 40 |
+| `TestFaithfulAtClients` | the same runs, judged at the clients (`<tenant>/clients`: `Invoke`/`Done`) by `counters.calls.binding.yaml`, `qtest.Linearize()` | nothing: a retry's duplicate would be a later read's `Mismatch` | 40 of 40 |
 | `TestFaithfulAtClaim1` | claim 1's configuration (two clients creating in one tenant, no faults, ReadCommitted), the app as it is | `None(Rejects("createCounter"))`: claim 1's contrast; with grist's condition taken out of the runtime, 13 of 20 runs reject | 40 of 40 conform |
 | `TestDuplicateRequests` | the API duplicating and delaying 3 requests in 10 (`rpc.api.request`, `rpc.api.delay`), creates, increments and shows in one tenant; at the commits and at the clients | nothing: a key's first answer is final; without grist's markers 19 of 20 runs reject at the commits, without refusal markers 18 of 20 (a refused command's late duplicate committing) | 40 of 40 on each side |
 | `TestWelcomeDuplicate` | a `qenv.Script` of `grist.welcome.effect`'s `crashAfter`; the same then three lost sends; `Exhaust` within one fault | the duplicate welcome: admitted by `counters.binding.yaml`, `All(Violates("welcomedOnce"))` under the script, `None` without faults, `Some` within one fault; an ok send then three failures checkpoints `grist.failed`, admitted (`atLeastOnceDone`) | 10 of 10 scripted; 13 of 117 exhausted |
@@ -58,12 +58,12 @@ settle.
 | `TestSQLTier` | claim 2 on the SQL tier (sqlstore over qsql) at Serializable and ReadCommitted, commit faults at 15 in 100, node crashes; both bindings over the same runs | nothing: `Conforms`, `All(Settles)` at the store and at the clients, both faults reached | 40 of 40 on each side, at each level |
 | `TestSQLDuplicateRequests` | `TestDuplicateRequests` on the SQL tier | nothing; without grist's markers 20 of 20 runs reject, without refusal markers 16 of 20 | 40 of 40 on each side |
 | `TestSQLFaithfulAtClaim1` | claim 1's contrast on the SQL tier | `None(Rejects("createCounter"))`; with grist's condition taken out, 11 of 20 runs reject | 40 of 40 |
-| `TestRealSQLite` | the real tier: the node and four clients as goroutines on a SQLite file, steps to a `PerStep` file sink, the node restarted halfway with a relay of its own, a settle once the processors and the relay caught up | nothing: the file conforms to `counters.binding.yaml` and settles; the second relay's copies of the first's records are dropped as duplicates | every run |
-| `grist/storetest` (grist's own tests) | memstore, simstore and sqlstore (on qsql at three levels, SQLite, PostgreSQL with `GRIST_POSTGRES`); mutant stores whose `Read` ignores the tenant, whose conditions are checked outside the lock, whose `Wait` returns at once, whose `WaitSteps` waits on the head | each mutant fails its check (`TenantIsolation`, `ConcurrentAgainstBruteForce`, `WaitWakes`, `StepLog`), the rest pass | every run |
+| `TestRealSQLite` | the real tier: the node and four clients as goroutines on a SQLite file, the clients recording their calls (`gristsim.Do`), steps to a `PerStep` file sink; the first node killed mid-phase (its sink dead at once, its relay behind), a second with a relay of its own, new counters in the second phase, a mailer taking 20 ms, a settle once the processors and the relay caught up | nothing: the file conforms to `counters.binding.yaml` (and settles) and, linearized, to `counters.calls.binding.yaml`; every client's answer has its store-side step; the second relay records what the first never did, its copies of the first's records dropped as duplicates. A refusal's step dropped fails the answers' check; the settle recorded without waiting fails `everyCounterWelcomedOrFailed` | every run |
+| `grist/storetest` (grist's own tests) | memstore, simstore and sqlstore (on qsql at three levels, SQLite, PostgreSQL with `GRIST_POSTGRES`); mutant stores whose `Read` ignores the tenant, whose conditions are checked outside the lock, whose `Wait` returns at once, whose `WaitSteps` waits on the head, whose rows' times are not in commit order, whose `WaitTenants` returns at once, that honour one tag of two | each mutant fails its check (`TenantIsolation`, `ConcurrentAgainstBruteForce`, `WaitWakes`, `StepLog`, `TenantFeed`, `ReadsAgainstBruteForce` and `ConditionsAgainstBruteForce`), the rest pass | every run |
 
 `TestMutants` builds the test binary with each mutant's overlay and runs
-`TestMutant` in it. Under `-short` each claim runs at fewer seeds, each
-with a miss chance under 5%.
+`TestMutant` in it. Under `-short` (every push) each claim runs at fewer
+seeds, each with a miss chance under 5%.
 
 ## Run it
 

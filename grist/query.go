@@ -62,6 +62,9 @@ func (b *QueryBlock[Q, R]) Name() string { return b.info.name }
 // answered with ErrUnavailable.
 func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) (R, Position, error) {
 	var zero R
+	if err := checkEnvelope(env); err != nil {
+		return zero, 0, fmt.Errorf("grist: query %s: %w", b.info.name, err)
+	}
 	args, _ := json.Marshal(q)
 	for try := 1; ; try++ {
 		r := newReads(ctx, b.app, s, env.Tenant, env.ID)

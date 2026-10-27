@@ -230,7 +230,173 @@ func TestPostgresLockTimeout(t *testing.T) {
 	start := time.Now() //qenv:ok the wait's wall time, against a real server
 	_, err = s.Append(ctx, "t1", store.Batch{Events: []store.Event{{Type: "a", Version: 1, Body: []byte(`{}`)}}})
 	var state interface{ SQLState() string }
-	if !errors.As(err, &state) || state.SQLState() != "55P03" || !store.Transient(err) || time.Since(start) > 3*time.Second { //qenv:ok the wait's wall time
-		t.Errorf("an append behind a stuck holder: %v after %v, want lock_timeout's 55P03 (transient) after about 200 ms", err, time.Since(start)) //qenv:ok
+	if !errors.As(err, &state) || state.SQLState() != "55P03" || !store.Transient(err) || store.MayHaveCommitted(err) || time.Since(start) > 3*time.Second { //qenv:ok the wait's wall time
+		t.Errorf("an append behind a stuck holder: %v after %v, want lock_timeout's 55P03 (transient, before the commit: nothing committed) after about 200 ms", err, time.Since(start)) //qenv:ok
+	}
+}
+
+// Two sqlstores over one qsql database wake each other's waiters: on qsql
+// a Store waits on the database's qenv.Store (qsql.StoreOf), notified at
+// every commit whoever made it, where its own signal slept through the
+// other's appends (no timer runs in a simulation). On SQLite and
+// PostgreSQL the other's appends are found by polling (Options.Poll).
+func TestTwoStores(t *testing.T) {
+	t.Run("qsql", func(t *testing.T) {
+		sim := qenv.New(qenv.NewSeeded(1))
+		defer sim.Close()
+		db := qsql.Open(sim, qenv.NewStore(sim, "grist", qenv.ReadCommitted))
+		var err error
+		sim.Spawn("two", func(ctx context.Context) {
+			var a, b *sqlstore.Store
+			if a, err = sqlstore.Open(ctx, db, sqlstore.QSQL, sqlstore.Options{}); err != nil {
+				return
+			}
+			if b, err = sqlstore.Open(ctx, db, sqlstore.QSQL, sqlstore.Options{}); err != nil {
+				return
+			}
+			err = storetest.TwoStores(ctx, a, b)
+		})
+		if rerr := sim.Run(time.Minute); rerr != nil {
+			t.Fatal(rerr)
+		}
+		if err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("SQLite", func(t *testing.T) {
+		db := openSQLite(t)
+		ctx := context.Background()
+		a, err := sqlstore.Open(ctx, db, sqlstore.SQLite, sqlstore.Options{Poll: 10 * time.Millisecond})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := sqlstore.Open(ctx, db, sqlstore.SQLite, sqlstore.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := storetest.TwoStores(ctx, a, b); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+// A waiter whose read finds what it waits for returns, even when a
+// commit landed while it read: it once read again for that commit, so a
+// busy tenant (a commit in every read) kept its waiters reading.
+func TestWaitReturnsOnceSatisfied(t *testing.T) {
+	s, err := sqlstore.Open(context.Background(), openSQLite(t), sqlstore.SQLite, sqlstore.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	err = sqlstore.WaitFor(s, context.Background(), func() (bool, error) {
+		if reads++; reads == 1 {
+			sqlstore.Committed(s) // another append's COMMIT, while this read ran
+		}
+		return true, nil
+	})
+	if err != nil || reads != 1 {
+		t.Errorf("a wait whose first read held: %d reads (%v), want 1", reads, err)
+	}
+}
+
+// An isolation level the database or its driver does not offer is
+// Open's error, naming the option and the fix: pgx's "unsupported
+// isolation" carries no SQLSTATE, so every append once read it as
+// transient and retried it forever. Negative durations are refused too.
+func TestOptionsChecked(t *testing.T) {
+	ctx := context.Background()
+	for _, o := range []sqlstore.Options{{Isolation: sql.LevelLinearizable}, {LockTimeout: -time.Second}, {Poll: -1}, {Name: "a\x00b"}} {
+		if _, err := sqlstore.Open(ctx, openSQLite(t), sqlstore.SQLite, o); err == nil || !strings.Contains(err.Error(), "Options.") {
+			t.Errorf("SQLite with %+v: %v, want Open's error naming the option", o, err)
+		}
+	}
+	sim := qenv.New(qenv.NewSeeded(1))
+	defer sim.Close()
+	db := qsql.Open(sim, qenv.NewStore(sim, "grist", qenv.ReadCommitted))
+	var err error
+	sim.Spawn("open", func(ctx context.Context) {
+		_, err = sqlstore.Open(ctx, db, sqlstore.QSQL, sqlstore.Options{Isolation: sql.LevelSerializable})
+	})
+	if rerr := sim.Run(time.Minute); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "Options.Isolation") {
+		t.Errorf("qsql at read committed with serializable transactions: %v, want Open's error naming Options.Isolation", err)
+	}
+	if dsn := os.Getenv("GRIST_POSTGRES"); dsn != "" {
+		pg, err := sql.Open("pgx", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer pg.Close()
+		if _, err := sqlstore.Open(ctx, pg, sqlstore.Postgres, sqlstore.Options{Isolation: sql.LevelLinearizable}); err == nil || !strings.Contains(err.Error(), "Options.Isolation") {
+			t.Errorf("PostgreSQL at linearizable: %v, want Open's error naming Options.Isolation", err)
+		} else {
+			t.Log(err)
+		}
+	}
+}
+
+// An error before COMMIT says nothing committed (store.NotCommitted): a
+// lost race for the head lock (qsql's 40001 under serializable), where
+// grist's retry decides again without "outcome unknown"; COMMIT's own
+// error (08006, the answer lost) is unmarked, the outcome unknown; a
+// permanent error stays permanent.
+func TestNotCommittedBeforeCommit(t *testing.T) {
+	base := qenv.NewSeeded(1)
+	base.Rates = qenv.NoFaults
+	sim := qenv.New(&qenv.Script{Base: base, Faults: []qenv.Scripted{{Kind: "store.grist.commit", Name: "unknownOutcome"}}})
+	defer sim.Close()
+	st := qenv.NewStore(sim, "grist", qenv.Serializable)
+	db := qsql.Open(sim, st)
+	e := store.Event{Type: "a", Version: 1, Body: []byte(`{}`)}
+	var lost, raced []error
+	var err error
+	sim.Spawn("test", func(ctx context.Context) {
+		var s *sqlstore.Store
+		if s, err = sqlstore.Open(ctx, db, sqlstore.QSQL, sqlstore.Options{}); err != nil {
+			return
+		}
+		if err = s.CreateTenant(ctx, "t1"); err != nil {
+			return
+		}
+		st.CommitFaults = true
+		_, e1 := s.Append(ctx, "t1", store.Batch{Events: []store.Event{e}})
+		lost = append(lost, e1)
+		st.CommitFaults = false
+		done := make([]bool, 4)
+		for i := range 4 {
+			qenv.Go(ctx, fmt.Sprint("racer", i), func(ctx context.Context) {
+				for range 3 {
+					if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{e}}); err != nil {
+						raced = append(raced, err)
+					}
+				}
+				done[i] = true
+			})
+		}
+		qenv.WaitFor(ctx, func() bool { return done[0] && done[1] && done[2] && done[3] }, time.Minute)
+	})
+	if rerr := sim.Run(time.Minute); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var nc *store.NotCommittedError
+	if len(lost) != 1 || lost[0] == nil || errors.As(lost[0], &nc) || !store.MayHaveCommitted(lost[0]) {
+		t.Errorf("a commit whose answer was lost: %v, want an unmarked transient error (may have committed)", lost)
+	}
+	if len(raced) == 0 {
+		t.Fatal("four racers for the head lock under serializable: no lost race")
+	}
+	for _, err := range raced {
+		if !errors.As(err, &nc) || store.MayHaveCommitted(err) || !store.Transient(err) {
+			t.Errorf("a lost race for the head lock: %v, want a transient *store.NotCommittedError", err)
+		}
+	}
+	if store.MayHaveCommitted(store.NotCommitted(store.Permanent(errors.New("x")))) || errors.As(store.NotCommitted(store.Permanent(errors.New("x"))), &nc) {
+		t.Error("NotCommitted of a permanent error: want it permanent, unmarked")
 	}
 }

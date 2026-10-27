@@ -137,18 +137,40 @@ func EffectFaults(processor string) qenv.FaultKind {
 	return qenv.DeclareFaults("grist."+processor+".effect", "crashBefore", "crashAfter")
 }
 
-// Start starts the App's node on s: the relay that records every
-// commit's step from s's step log (one task per tenant: Relay; s must be
-// a store.StepLog), and the processors, one poller task per processor
-// and tenant (qenv.Go: a task of the caller's process in a simulation, a
-// goroutine outside one), each a daemon waiting on the store's appends.
-// Tenants are the store's at the start (slice 1: one node, tenants
-// created before it starts). It returns once they are started; they stop
-// with ctx or their process.
-func (a *App) Start(ctx context.Context, s Store) error {
+// Start starts the App's node on s: for every tenant, the relay that
+// records every commit's step from s's step log (Relay; s must be a
+// store.StepLog) and one poller per processor (each a daemon waiting on
+// the tenant's appends), and a watcher that starts both for every tenant
+// created later (s must be a store.TenantFeed: the watcher waits on
+// WaitTenants). Every one is a task (qenv.Go: of the caller's process in
+// a simulation, a goroutine outside one). It returns once the start's
+// tenants are started; the node stops with ctx or its process. A tenant
+// whose name grist refuses (CheckTenant) is not relayed: Relay.Err names
+// it. Options: WithRelay.
+func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 	if err := a.Verify(); err != nil {
 		return err
 	}
+	var cfg startConfig
+	for _, o := range opts {
+		if o.apply != nil {
+			o.apply(&cfg)
+		}
+	}
+	r := cfg.relay
+	if r == nil {
+		var err error
+		if r, err = NewRelay(s); err != nil {
+			return err
+		}
+	} else if r.s != s {
+		return fmt.Errorf("grist: WithRelay's relay is of store %s (%T), Start's store is %s (%T): a relay records one store's step log; give Start that store, or a relay of this one (NewRelay)", r.s.Name(), r.s, s.Name(), s)
+	}
+	feed, ok := s.(store.TenantFeed)
+	if !ok {
+		return fmt.Errorf("grist: store %s (%T) is no store.TenantFeed: a node relays and handles every tenant, those created after it started included, waiting on WaitTenants", s.Name(), s)
+	}
+	n := &node{app: a, s: s, relay: r, started: map[string]bool{}}
 	var tenants []string
 	for try := 1; ; try++ {
 		ts, err := s.Tenants(ctx)
@@ -161,19 +183,73 @@ func (a *App) Start(ctx context.Context, s Store) error {
 		}
 		backoff(ctx, try)
 	}
-	if err := a.relay(ctx, s, tenants); err != nil {
-		return err
+	n.count = len(tenants)
+	for _, t := range tenants {
+		n.start(ctx, t)
 	}
-	for _, p := range a.processors {
-		for _, t := range tenants {
-			p, t := p, t
-			qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
-				qenv.Daemon(ctx)
-				(&poller{app: a, s: s, p: p, tenant: t}).run(qobs.Thread(ctx))
-			})
+	qenv.Go(ctx, "grist.tenants", func(ctx context.Context) {
+		qenv.Daemon(ctx)
+		n.watch(ctx, feed)
+	})
+	return nil
+}
+
+// A node is one App.Start: the tenants it relays and handles.
+type node struct {
+	app     *App
+	s       Store
+	relay   *Relay
+	started map[string]bool // only the starting task and the watcher touch it, one after the other
+	count   int             // the tenants the store had when last read
+}
+
+// start starts tenant t's relay and pollers, once.
+func (n *node) start(ctx context.Context, t string) {
+	if n.started[t] {
+		return
+	}
+	n.started[t] = true
+	if err := CheckTenant(t); err != nil {
+		n.relay.setErr(t, err, true) // never relayed: Err names it
+		return
+	}
+	r := n.relay
+	qenv.Go(ctx, "grist.relay."+t, func(ctx context.Context) {
+		qenv.Daemon(ctx)
+		r.run(ctx, t)
+	})
+	for _, p := range n.app.processors {
+		p := p
+		qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
+			qenv.Daemon(ctx)
+			(&poller{app: n.app, s: n.s, p: p, tenant: t}).run(qobs.Thread(ctx))
+		})
+	}
+}
+
+// watch starts every tenant created after the node started, waiting on
+// the store's feed.
+func (n *node) watch(ctx context.Context, feed store.TenantFeed) {
+	tries := 0
+	for ctx.Err() == nil {
+		if err := feed.WaitTenants(ctx, n.count); err != nil {
+			if ctx.Err() == nil {
+				tries++
+				backoff(ctx, min(tries, 6))
+			}
+			continue
+		}
+		ts, err := n.s.Tenants(ctx)
+		if err != nil {
+			tries++
+			backoff(ctx, min(tries, 6))
+			continue
+		}
+		tries, n.count = 0, len(ts)
+		for _, t := range ts {
+			n.start(ctx, t)
 		}
 	}
-	return nil
 }
 
 // A poller runs one processor for one tenant.
@@ -279,6 +355,9 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 				res = Fail(fmt.Errorf("grist: processor %s emits %q, which is not registered on %s: register it (NewEvent)", pl.p.name, ev.Type, pl.app.Name))
 			}
 		}
+		if err := checkEvents("processor "+pl.p.name, res.events); err != nil {
+			res = Fail(err)
+		}
 		if res.kind != failResult || try >= pl.p.opts.effectTries {
 			return res, true
 		}
@@ -307,7 +386,7 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 		steps = append(steps, pl.step(g.trigger, g.events, kv...))
 	}
 	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
-		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(ctx, steps)}
+		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(steps)}
 	for {
 		head, err := pl.s.Append(ctx, pl.tenant, b)
 		if err == nil {
@@ -375,8 +454,8 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 		backoff(ctx, try)
 	}
 	for _, ev := range outcome {
-		if pl.app.events[ev.Type] == nil {
-			outcome, ok = []Event{failedEvent(pl.p.name, e.Pos)}, false // an unregistered outcome event: the code's fault
+		if pl.app.events[ev.Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil {
+			outcome, ok = []Event{failedEvent(pl.p.name, e.Pos)}, false // an unregistered or unstorable outcome event: the code's fault
 		}
 	}
 	// the checkpoint's step records which outcome it commits: under at
