@@ -383,8 +383,8 @@ type StepSelector struct {
 }
 
 // StepOp selects the mutants of op ("drop", "dup", "swap", "corrupt",
-// "retime", "reactor"; qtrace.MutationOps). An unknown op panics, naming
-// the ops.
+// "retime", "reactor", and "gap", made only when asked for:
+// qtrace.MutationOps). An unknown op panics, naming the ops.
 func StepOp(op string) StepSelector {
 	if !slices.Contains(qtrace.MutationOps, op) {
 		panic(fmt.Sprintf("qtest: StepOp(%q): no such mutation; the ops are %s", op, strings.Join(qtrace.MutationOps, ", ")))
