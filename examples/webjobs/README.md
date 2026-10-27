@@ -94,7 +94,7 @@ model judges both together.
 | test | mutant | check | verdict |
 |---|---|---|---|
 | `TestClient` | none | the real server driven through the page's API by a Go client (`journey.Client`'s plan of eight journeys, each a double-clicked submission, polls every 20ms, a cancel in half of them, every fourth submission sent once more after its job ended), no browser | `Finishes()` |
-| `TestRecorded` | none | the recorded faithful journey (a 6s Bombadil run: 9 jobs, 6 ready, 3 cancelled), then the CLI: `gotogether validate -manifest -run-info` and `validate -replay` | `Finishes()`; the manifest replays |
+| `TestRecorded` | none | the recorded faithful journey (a 6s Bombadil run: 9 jobs, 6 ready, 3 cancelled), then its manifest and replay with validate's Go API (`validate.Command`, `validate.Replay`: what `gotogether validate -manifest -run-info` and `validate -replay` run) | `Finishes()`; the manifest replays |
 | `TestProbes` | none: constructed journeys, each a way a review found the first mapping and model passed | seven runs | a cancel never answered, then a poll's ready: `Pending("cancel")`, `None(Finishes())`; the page stuck at accepted: `Violates(EventuallyName("pageShowsEnds"))`; ready shown 900ms after the commit: the 500ms `within`; finished twice: `finishedOnce`; committed after its cancel: `noCommitAfterCancel`; a double click's second request answered 500: `noFailedRequest`; a key renewed between the snapshot and the click: `Finishes()` (the key is the one sent) |
 | `TestClickWithNoOutcome` | none: the recorded journey cut at its first click, its requests unanswered | one run | `Pending("submit")`, `None(Finishes())` |
 | `TestTornTrace` | none: the trace's last line cut in half | one run | `Conforms()`, `Undecided(Finishes(), "lost its tail")` |
@@ -275,8 +275,8 @@ regress with a push: `TestClient` (the faithful server, in process),
 and the client drives that program from the test process), `TestRecorded`
 (the real trace format, faithful), three of `TestProbes` (a cancel never
 answered, the page stuck at accepted, the key sent), `TestTimesKept`'s
-readyEarly half, and the adapter's tests. The full run adds the CLI's
-manifest replay, the mutants' recorded runs (`TestRecordedMutants`),
+readyEarly half, the recorded journey's manifest replay (`validate.Replay`),
+and the adapter's tests. The full run adds the mutants' recorded runs (`TestRecordedMutants`),
 the probes whose claim a mutant's client run states per push too, the
 re-recorded faithful journey, `TestClickWithNoOutcome`, `TestTornTrace`,
 `TestObservationMutants`, `TestShrink`, `TestShrinkRecorded`,

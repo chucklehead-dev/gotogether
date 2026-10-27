@@ -2,43 +2,29 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/input"
-	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// validateRun is one validate command: what its flags (or a manifest's
-// replay) ask for.
+// validateRun is one validate command: what its flags ask for (a
+// validate.Command), and how its report is printed (a replay's too).
 type validateRun struct {
 	binding, dir, backend, quint, format string
 	spec, module, instance               string // an ITF input's
 	conv, history                        string
 	novars, verbose, withITF             bool
 	requireSettle                        bool
-	// finishFixed: requireSettle says whether the finish check is judged,
-	// whatever the binding's complete says (a replay: as recorded)
-	finishFixed bool
-	// itfModels are a replay's ITF inputs' instances, by path: each
-	// judged against the spec the manifest hashed for it
-	itfModels map[string]*validate.RunModel
-	// invariants and constants, if set, override the binding's (-invariants;
-	// a replay's, the manifest's instance)
+	// invariants, if set, override the binding's (-invariants)
 	invariants []string
-	constants  map[string]string
 	search     validate.SearchOptions
 	lostPrefix string // comma-separated recorders
 	lostSuffix string
@@ -50,7 +36,7 @@ type validateRun struct {
 	// driver, artifacts and name runInfo's fragment gives
 	manifest, runInfo string
 	// mutateSteps judges the steps' observation mutants after a pass
-	// (qtest.JudgeStepMutants), narrowed to mutateOps (comma-separated)
+	// (validate.Checker.MutateSteps), narrowed to mutateOps (comma-separated)
 	// and mutateLimit per op
 	mutateSteps bool
 	mutateOps   string
@@ -122,8 +108,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	if len(v.files) == 0 {
 		usage()
 	}
-	code, _, err := v.run()
-	return code, err
+	return v.run()
 }
 
 // replayFlags are the flags -replay takes besides itself: where its
@@ -133,9 +118,10 @@ func validateTo(out io.Writer, args []string) (int, error) {
 // Read-only.
 var replayFlags = map[string]bool{"replay": true, "dir": true, "quint": true, "v": true, "backend": true, "manifest": true, "history": true, "itf": true}
 
-// replayManifest judges the run of the manifest at path again: its files
-// unchanged (refused otherwise, naming each), as it was judged, and
-// reports whether the verdict is the manifest's.
+// replayManifest judges the run of the manifest at path again
+// (validate.Replay): its files unchanged (refused otherwise, naming
+// each), as it was judged, and reports whether the verdict is the
+// manifest's.
 func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error) {
 	var extra []string
 	fset.Visit(func(f *flag.Flag) {
@@ -151,204 +137,89 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 	if err != nil {
 		return 2, err
 	}
-	warns, err := m.Verify()
-	if err != nil {
+	get := func(name string) string { return fset.Lookup(name).Value.String() }
+	v := validateRun{out: out, verbose: get("v") == "true", history: get("history"), manifest: get("manifest")}
+	r, err := validate.Replay(context.Background(), m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
+	if r == nil && err != nil {
 		return 2, fmt.Errorf("validate -replay %s: %w", path, err)
 	}
-	for _, w := range warns {
+	for _, w := range r.Warnings {
 		fmt.Fprintln(out, "warning:", w)
 	}
-	get := func(name string) string { return fset.Lookup(name).Value.String() }
-	if b := get("backend"); b != "" && b != m.Tools.Backend {
-		return 2, fmt.Errorf("validate -replay %s -backend %s: the run was judged on backend %q (\"\": the default), and verdicts depend on it: drop -backend", path, b, m.Tools.Backend)
+	for _, n := range r.Notes {
+		fmt.Fprintln(out, "note:", n)
 	}
-	if env := os.Getenv("QUINT_BACKEND"); m.Tools.Backend == "" && env != "" {
-		fmt.Fprintf(out, "note: QUINT_BACKEND=%s ignored: the run was judged on the default backend\n", env)
-		os.Unsetenv("QUINT_BACKEND")
-	}
-	v := validateRun{out: out, dir: get("dir"), quint: get("quint"), backend: m.Tools.Backend, verbose: get("v") == "true", withITF: get("itf") == "true",
-		history: get("history"), manifest: get("manifest"), format: m.Check.Format, novars: m.Check.NoVars,
-		requireSettle: m.Check.RequireSettle, finishFixed: true, search: m.Check.SearchOptions(), lostPrefix: strings.Join(m.Check.LostPrefix, ","),
-		lostSuffix: strings.Join(m.Check.LostSuffix, ","), completeThrough: m.Check.CompleteThrough, module: m.Model.Module, invariants: m.Model.Invariants, constants: m.Model.Constants}
-	if v.format == "" {
-		v.format = "auto"
-	}
-	if m.Model.Binding != nil {
-		v.binding = m.Model.Binding.Path
-	}
-	v.itfModels = map[string]*validate.RunModel{}
-	for _, in := range m.Inputs {
-		if in.Model != nil {
-			v.itfModels[in.Path] = in.Model
-			if in.Model.Binding != nil && v.binding == "" {
-				v.binding = in.Model.Binding.Path
-			}
-		}
-	}
-	if m.Model.Convert != nil {
-		v.conv = m.Model.Convert.Path
-	}
-	for _, in := range m.Inputs {
-		v.files = append(v.files, in.Path)
-	}
-	if len(v.files) == 0 {
-		return 2, fmt.Errorf("validate -replay %s: the manifest names no input: it was written for a run with none, and there is nothing to judge", path)
-	}
-	if q := validate.QuintVersion(v.quint); q != m.Tools.Quint {
-		fmt.Fprintf(out, "note: the run was judged with quint %q, this replay with %q\n", m.Tools.Quint, q)
-	}
-	if g := validate.ModuleVersion(); g != m.Tools.Gotogether {
-		fmt.Fprintf(out, "note: the run was judged with gotogether %s, this replay with %s\n", m.Tools.Gotogether, g)
-	}
-	code, got, err := v.run()
+	code, err := v.report(r.Judged, err)
 	if err != nil {
 		return code, err
 	}
-	same, note := m.Verdict.Same(got)
-	if same {
-		if note != "" {
-			fmt.Fprintln(out, "note:", note)
+	if r.Same {
+		if r.Note != "" {
+			fmt.Fprintln(out, "note:", r.Note)
 		}
-		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", got)
+		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", r.Verdict)
 		return code, nil
 	}
-	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s\n", m.Verdict, got, note)
+	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s\n", r.Want, r.Verdict, r.Note)
 	return 1, nil
 }
 
-// run judges the inputs, prints the report and the result line, and
-// writes the manifest if asked: exit status 0 if every actor passes, 1
-// if not.
+// run judges the inputs (validate.Command), prints the report and the
+// result line, and writes the manifest if asked: exit status 0 if every
+// actor passes, 1 if not.
+func (v *validateRun) run() (int, error) {
+	cmd := validate.Command{Binding: v.binding, Files: v.files, Format: v.format, Convert: v.conv, Spec: v.spec, Module: v.module, Instance: v.instance,
+		NoVars: v.novars, Invariants: v.invariants, Search: v.search, LostPrefix: fields(v.lostPrefix), LostSuffix: fields(v.lostSuffix),
+		CompleteThrough: v.completeThrough, RequireSettle: v.requireSettle, RunInfo: v.runInfo,
+		Options: validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}}
+	j, err := cmd.Judge(context.Background())
+	return v.report(j, err)
+}
+
+// report prints a judgment (j, and the error that ended it, if any):
+// its inputs, where its artifacts are, each actor's and ITF trace's
+// report, the finish check, the steps' observation mutants if asked, the
+// manifest if asked, and the result line; exit status 0 if the run
+// passes, 1 if not, 2 on a tool error.
 //
 // Without -dir the artifacts go to a temporary directory made once the
 // inputs are read and the binding is known to be needed and given, and
 // removed when the run passes (unless -itf asked for its ITF): one was
 // left behind by every run, tool errors included. A failing run's, or a
 // tool error's after it was made, is kept: the report names it.
-func (v *validateRun) run() (code int, _ validate.RunVerdict, _ error) {
-	var none validate.RunVerdict
-	temp := ""
+func (v *validateRun) report(j *validate.Judged, jerr error) (code int, _ error) {
+	if j == nil {
+		return 2, jerr
+	}
 	defer func() {
-		if temp != "" && code == 0 && !v.withITF {
-			os.RemoveAll(temp)
+		if j.Temp && code == 0 && !v.withITF {
+			os.RemoveAll(j.Dir)
 		}
 	}()
-	rules, err := loadRules(v.conv)
-	if err != nil {
-		return 2, none, err
-	}
-	var b *binding.Binding
-	if v.binding != "" {
-		if b, err = binding.Load(v.binding); err != nil {
-			return 2, none, err
+	for _, in := range j.Inputs {
+		if in.Converted {
+			fmt.Fprintf(v.out, "input %s: OTLP/JSON spans, converted with %s: %d steps\n", in.Path, v.conv, len(in.Steps))
+			continue
 		}
-		if err := b.CheckSpec(); err != nil {
-			return 2, none, err
-		}
-	}
-	type read struct {
-		path, format string
-		steps        []qtrace.Step // its steps, a manifest's count of them
-	}
-	var reads []read
-	var steps []qtrace.Step
-	var itfs []*input.File
-	for _, f := range v.files {
-		if rules != nil {
-			cs, ok, err := convertFile(f, rules)
-			if err != nil {
-				return 2, none, err
-			}
-			if ok {
-				fmt.Fprintf(v.out, "input %s: OTLP/JSON spans, converted with %s: %d steps\n", f, v.conv, len(cs))
-				steps = append(steps, cs...)
-				reads = append(reads, read{f, "otlp", cs})
-				continue
-			}
-		}
-		in, err := input.Read(f, input.Format(v.format))
-		if err != nil {
-			return 2, none, err
-		}
-		fmt.Fprintf(v.out, "input %s: %s\n", f, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
+		fmt.Fprintf(v.out, "input %s: %s\n", in.Path, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
 			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
 		if in.Torn != nil {
 			fmt.Fprintf(v.out, "  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
 		}
-		if in.Format == input.ITF {
-			itfs = append(itfs, in)
-			reads = append(reads, read{f, "itf", nil})
-		} else {
-			steps = append(steps, in.Steps...)
-			reads = append(reads, read{f, string(in.Format), in.Steps})
-		}
 	}
-	if steps, err = markLost(steps, v.lostPrefix, true); err != nil {
-		return 2, none, err
+	if j.Dir == "" {
+		return 2, jerr
 	}
-	if steps, err = markLost(steps, v.lostSuffix, false); err != nil {
-		return 2, none, err
-	}
-	if steps, err = markComplete(steps, v.completeThrough); err != nil {
-		return 2, none, err
-	}
-	needChecker := len(steps) > 0 || len(itfs) == 0
-	if needChecker && v.binding == "" {
-		return 2, none, fmt.Errorf("recorded steps need -binding")
-	}
-	if v.dir == "" { // one root for every actor's and input's modules, named in the output
-		d, err := os.MkdirTemp("", "gotogether-validate-")
-		if err != nil {
-			return 2, none, err
-		}
-		v.dir, temp = d, d
-		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s (removed if the run passes; -dir keeps them)\n", v.dir)
+	if j.Temp {
+		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s (removed if the run passes; -dir keeps them)\n", j.Dir)
 	} else {
-		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", v.dir)
+		fmt.Fprintf(v.out, "artifacts (generated modules, failing runs' ITF): %s\n", j.Dir)
 	}
-	opts := validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}
-	ok := true
-	var results []*validate.Result // every actor's and ITF's, for the result line
-	// incomplete are the reasons of actors that pass and are not finished,
-	// under -require-settle (or a complete binding): a prefix of a run
-	// conforms, and would pass
-	incomplete := map[*validate.Result]string{}
-	// a finished run required (-require-settle, a complete binding)
-	finish, finishWhy := v.requireSettle, "-require-settle"
-	if !finish && !v.finishFixed && b != nil && b.Complete {
-		finish, finishWhy = true, "the binding is complete"
-	}
-	if finish && v.finishFixed && b != nil && b.Complete { // a replay of a complete binding's finish check, said as it was
-		finishWhy = "the binding is complete"
-	}
-	var c *validate.Checker
-	if needChecker {
-		if c, err = validate.NewChecker(v.binding, opts); err != nil {
-			return 2, none, err
-		}
-		if err := validate.Finishable(c.Binding); finish && err != nil {
-			return 2, none, fmt.Errorf("validate %s: %s: %v", finishWhy, v.binding, err) // (a complete binding's lint says so already)
-		}
-		if v.constants != nil {
-			if c, err = c.WithConstants(v.constants); err != nil {
-				return 2, none, err
-			}
-		}
-		if v.invariants != nil {
-			if c, err = c.WithInvariants(v.invariants...); err != nil {
-				return 2, none, err
-			}
-		}
-		// ordered by the search, checked, the Go evaluator's orders confirmed
-		// by quint where the check fails, and marked
-		j, err := c.Judge(context.Background(), steps, v.search)
-		if err != nil {
-			return 2, none, err
-		}
-		rep := j.Report
+	if jd := j.Judgment; jd != nil {
+		rep := jd.Report
 		if v.history != "" {
-			if err := os.WriteFile(v.history, rep.HistorySVG(steps, j.Steps), 0o644); err != nil {
-				return 2, none, err
+			if err := os.WriteFile(v.history, rep.HistorySVG(j.Steps, jd.Steps), 0o644); err != nil {
+				return 2, err
 			}
 		}
 		fmt.Fprint(v.out, rep.Summary())
@@ -357,114 +228,66 @@ func (v *validateRun) run() (code int, _ validate.RunVerdict, _ error) {
 				fmt.Fprintln(v.out, a.Output)
 			}
 		}
-		ok = ok && rep.OK()
-		// one judgment with qtest.Finishes; only a run that passes is
-		// judged so, since one that fails says why already
-		if f := rep.Finished(); finish && rep.OK() && f.Verdict != validate.Pass {
+		if f := j.Unfinished; f != nil {
 			who := "the run"
-			for _, a := range rep.Actors {
-				if f.Actor == "" || a.Actor == f.Actor {
-					incomplete[a] = f.Reason
-				}
-			}
 			if f.Actor != "" {
 				who = "actor " + f.Actor
 			}
-			fmt.Fprintf(v.out, "%s: %s (%s): %s\n", who, f.Reason, finishWhy, f.Why)
-			ok = false
+			fmt.Fprintf(v.out, "%s: %s (%s): %s\n", who, f.Reason, j.FinishWhy, f.Why)
 		}
-		results = append(results, rep.Actors...)
-		if v.mutateSteps {
-			if err := v.mutate(c, steps, ok); err != nil {
-				return 2, none, err
+		if v.mutateSteps && jerr == nil {
+			if err := v.mutate(j.Checker, j.Steps, rep.OK() && j.Unfinished == nil); err != nil {
+				return 2, err
 			}
 		}
 	}
-	itfModels := map[string]*validate.RunModel{} // each ITF input's instance, for the manifest
-	for i, in := range itfs {
-		o := opts
-		if len(itfs) > 1 {
-			o.Dir = fmt.Sprintf("%s/itf%d", o.Dir, i)
+	itfs := 0
+	for _, in := range j.Inputs {
+		if in.Format != input.ITF {
+			continue
 		}
-		io := validate.ITFOptions{Options: o, Binding: b, Spec: v.spec, Module: v.module, Instance: v.instance, NoVarCheck: v.novars}
-		if md := v.itfModels[in.Path]; md != nil { // a replay: the spec the manifest hashed, not the trace's old path
-			io.Module, io.Instance = md.Module, md.Instance
-			if md.Binding == nil && md.Spec != nil {
-				io.Spec = md.Spec.Path
-			}
+		if itfs >= len(j.ITF) {
+			break
 		}
-		r, err := validate.ValidateITF(context.Background(), in.ITF, io)
-		if err != nil {
-			return 2, none, fmt.Errorf("%s: %w", in.Path, err)
-		}
-		if v.manifest != "" {
-			if itfModels[in.Path], err = validate.ITFModel(in.ITF, io); err != nil {
-				return 2, none, err
-			}
-		}
+		r := j.ITF[itfs]
+		itfs++
 		fmt.Fprint(v.out, r.Summary())
 		if v.verbose {
 			fmt.Fprintln(v.out, r.Output)
 		}
-		ok = ok && r.OK()
-		if finish && r.OK() {
-			// an ITF trace is the model's states alone: no settle, no calls
-			incomplete[r] = "no verdict (ITF trace)"
-			fmt.Fprintf(v.out, "%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, finishWhy)
-			ok = false
+		if j.Finish && r.OK() {
+			fmt.Fprintf(v.out, "%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, j.FinishWhy)
 		}
-		results = append(results, r)
 	}
-	verdict := validate.VerdictOf(results, incomplete)
+	if jerr != nil {
+		return 2, jerr
+	}
 	if v.manifest != "" {
-		var m *validate.Manifest
-		if c != nil {
-			if m, err = c.Manifest(results, v.search); err != nil {
-				return 2, none, err
-			}
-		} else if m, err = itfManifest(opts, b); err != nil {
-			return 2, none, err
-		}
-		m.Verdict = verdict
-		// the check as judged: a complete binding's finish check too
-		m.Check.RequireSettle, m.Check.Format, m.Check.NoVars = finish, v.format, v.novars
-		m.Check.LostPrefix, m.Check.LostSuffix = fields(v.lostPrefix), fields(v.lostSuffix)
-		m.Check.CompleteThrough = v.completeThrough
-		if v.conv != "" {
-			if err := m.AddConvert(v.conv); err != nil {
-				return 2, none, err
-			}
-		}
-		for _, r := range reads {
-			if err := m.AddInput(r.path, r.format, r.steps); err != nil {
-				return 2, none, err
-			}
-			m.Inputs[len(m.Inputs)-1].Model = itfModels[r.path]
-		}
-		if err := addRunInfo(m, v.runInfo); err != nil {
-			return 2, none, err
+		m, err := j.Manifest()
+		if err != nil {
+			return 2, err
 		}
 		if m.Name == "" {
 			m.Name = strings.TrimSuffix(filepath.Base(v.manifest), filepath.Ext(v.manifest))
 		}
 		if err := m.Write(v.manifest); err != nil {
-			return 2, none, err
+			return 2, err
 		}
 		fmt.Fprintf(v.out, "manifest: %s (gotogether validate -replay %s judges it again)\n", v.manifest, v.manifest)
 	}
-	if ok {
-		fmt.Fprintf(v.out, "RESULT: PASS (%s)\n", passSummary(results))
-		return 0, verdict, nil
+	if j.OK {
+		fmt.Fprintf(v.out, "RESULT: PASS (%s)\n", passSummary(j.Results))
+		return 0, nil
 	}
 	// Only a defect is a FAIL (DESIGN §53): a run whose every failure has
 	// no verdict (a lost tail, dropped steps, an uncollected window) says
 	// so, though it exits 1 as a failure does, being no pass.
 	word := "FAIL"
-	if verdict.Verdict == validate.NotEvaluated {
+	if j.Verdict.Verdict == validate.NotEvaluated {
 		word = "NO VERDICT"
 	}
-	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, failSummary(results, incomplete))
-	return 1, verdict, nil
+	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, failSummary(j.Results, j.Incomplete))
+	return 1, nil
 }
 
 // mutate judges and prints the observation mutants of steps, after the
@@ -481,61 +304,11 @@ func (v *validateRun) mutate(c *validate.Checker, steps []qtrace.Step, ok bool) 
 	if v.mutateLimit > 0 {
 		opts = append(opts, qtrace.MutateLimit(v.mutateLimit))
 	}
-	rep, err := qtest.JudgeStepMutants(c, steps, v.search, opts...)
+	rep, err := c.MutateSteps(context.Background(), steps, v.search, nil, opts...)
 	if err != nil {
 		return fmt.Errorf("validate -mutate-steps: %w", err)
 	}
 	fmt.Fprint(v.out, rep)
-	return nil
-}
-
-// itfManifest is the manifest of ITF inputs checked with no checker:
-// the binding, if given; each input's own instance is its Input.Model.
-func itfManifest(o validate.Options, b *binding.Binding) (*validate.Manifest, error) {
-	m := validate.NewManifest(o)
-	m.Model.Invariants = []string{}
-	if b != nil {
-		if err := m.SetBinding(b); err != nil {
-			return nil, err
-		}
-	}
-	return m, nil
-}
-
-// runInfo is what -run-info's file gives a manifest: what gotogether did
-// not see.
-type runInfo struct {
-	Name      string              `json:"name"`
-	Driver    *validate.Driver    `json:"driver"`
-	Artifacts []validate.Artifact `json:"artifacts"`
-}
-
-// addRunInfo adds the name, driver and artifacts of the -run-info file
-// at path (none: "") to m, hashing each artifact.
-func addRunInfo(m *validate.Manifest, path string) error {
-	if path == "" {
-		return nil
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var ri runInfo
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&ri); err != nil {
-		return fmt.Errorf("validate -run-info %s: %w: want {\"name\": ..., \"driver\": {\"name\", \"version\", \"seed\", \"origin\", \"args\"}, \"artifacts\": [{\"name\", \"path\"}]}", path, err)
-	}
-	m.Name, m.Driver = ri.Name, ri.Driver
-	for _, a := range ri.Artifacts {
-		p := a.Path
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(filepath.Dir(path), p)
-		}
-		if err := m.AddArtifact(a.Name, p); err != nil {
-			return fmt.Errorf("validate -run-info %s: artifact %s: %w", path, a.Name, err)
-		}
-	}
 	return nil
 }
 
@@ -546,43 +319,3 @@ func (r *repeated) String() string { return strings.Join(*r, " ") }
 
 // Set adds a value.
 func (r *repeated) Set(v string) error { *r = append(*r, v); return nil }
-
-// markComplete states -complete-through's watermarks the steps do not
-// carry (qtrace.MarkComplete): each "recorder=T", T in RFC3339 or Unix
-// nanoseconds, recorder "*" for every one.
-func markComplete(steps []qtrace.Step, specs []string) ([]qtrace.Step, error) {
-	if len(specs) == 0 {
-		return steps, nil
-	}
-	recs := map[string]bool{}
-	for _, s := range steps {
-		if s.Model() || s.Invocation || s.Settled {
-			recs[s.Recorder] = true
-		}
-	}
-	for _, spec := range specs {
-		rec, at, ok := strings.Cut(spec, "=")
-		rec, at = strings.TrimSpace(rec), strings.TrimSpace(at)
-		if !ok || rec == "" || at == "" {
-			return nil, fmt.Errorf("validate -complete-through %q: want recorder=T (T in RFC3339 or Unix nanoseconds; *=T for every recorder), e.g. -complete-through 'srv=2026-10-26T12:00:00Z'", spec)
-		}
-		if rec != qtrace.AllRecorders && !recs[rec] {
-			names := make([]string, 0, len(recs))
-			for r := range recs {
-				names = append(names, r)
-			}
-			sort.Strings(names)
-			return nil, fmt.Errorf("validate -complete-through %s: no step of recorder %q in the input: name one of its recorders (%s), or * for every one", spec, rec, strings.Join(names, ", "))
-		}
-		t, err := time.Parse(time.RFC3339Nano, at)
-		if err != nil {
-			n, nerr := strconv.ParseInt(at, 10, 64)
-			if nerr != nil || n <= 0 {
-				return nil, fmt.Errorf("validate -complete-through %s: %q is no time: give RFC3339 (2026-10-26T12:00:00Z) or Unix nanoseconds", spec, at)
-			}
-			t = time.Unix(0, n)
-		}
-		steps = qtrace.MarkComplete(steps, rec, t)
-	}
-	return steps, nil
-}

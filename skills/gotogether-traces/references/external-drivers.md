@@ -151,6 +151,23 @@ run.json` warns if one changed. In a test, `qtest.Driver` and
 `qtest.Artifacts` put the same in the manifest written under
 `GOTOGETHER_EVIDENCE`.
 
+A Go program (a test that checks a recorded journey, a CI job's own
+tool) does the same without the CLI: `validate.Command` is the check
+`gotogether validate` makes (its fields are the flags), its `Judged`
+the report and `Manifest()` the manifest, and `validate.Replay` is
+`validate -replay` (webjobs' `replays`):
+
+```go
+j, err := validate.Command{Binding: "webjobs.binding.yaml", Files: []string{"server.jsonl", "page.jsonl"},
+	RunInfo: "run-info.json"}.Judge(ctx)
+if err != nil { /* a tool error: an unreadable input, quint failing */ }
+m, _ := j.Manifest() // j.OK, j.Verdict: the run's verdict, as the CLI's result line
+_ = m.Write("run.json")
+read, _ := validate.ReadManifest("run.json")
+r, err := validate.Replay(ctx, read, validate.Options{}) // refuses a changed input (err)
+_ = r.Same                                               // the manifest's verdict reproduced; r.Note says where not
+```
+
 ## Shrinking a run you did not drive
 
 A driver's failing journey is long (a Bombadil exploration clicks for
@@ -248,6 +265,48 @@ A shrunk sequence that does not reproduce is a sequence the failure was
 not seen in, not a pass of it: a rate below 1 says the failure depends on
 more than the actions (timing, data), and a rerun that diverged says
 the driver could not do them.
+
+### Outside go test: `gotogether shrink`
+
+A driver that is not Go (a Playwright script, Bombadil's replay, a
+shell-free load tool) shrinks with the CLI, which runs the same search
+(package `qshrink`, which `ShrinkActions` wraps) with the same verdict
+rules: the failure kept (`SameFailure` of the original's first decided
+failure; the CLI takes no other Keep), no verdict is no pass, the reset
+contract checked, `Minimal` only with the shrunk sequence's rate
+measured.
+
+```sh
+gotogether shrink -binding app.binding.yaml -actions journey.json -out shrunk \
+  -diverged-exit 3 -reset ./reset-db -reruns 1 \
+  -- ./play -actions {actions} -steps {steps}
+```
+
+- `-actions` is a JSON array of the driver's actions, any JSON each
+  (the `actions.json` ShrinkActions writes reads back as one).
+- The rerun is the command after `--`, run per candidate as argv (never
+  a shell), `{actions}` replaced with a file of the candidate's actions
+  (a JSON array, a subsequence of the original's) and `{steps}` with
+  where it must write the steps it recorded (a step log, or OTLP/JSON;
+  an empty file for none); both are also in its environment
+  (`GOTOGETHER_ACTIONS`, `GOTOGETHER_STEPS`). Exit 0 is a rerun that
+  ran; the `-diverged-exit` status is one that could not do its actions
+  (`ErrDiverged`: counted, never a pass); any other is a failed rerun
+  (three in a row end the shrink, exit 2).
+- `-reset` (a program, or a JSON array of its argv) runs before every
+  rerun; without it each rerun must start its own fresh system, the only
+  setup safe against leaked state.
+- The calibration's knobs are flags (`-baseline`, `-reruns`, `-need`,
+  `-alpha`, `-budget`, `-time`), and the check's (`-linearize`,
+  `-linearize-key`, `-resolve-pending`, `-invariants`).
+- It writes `actions.json` (the shrunk actions), `shrink.json` (what the
+  shrink did), `steps.jsonl` (a rerun of them that showed the failure)
+  and `manifest.json` (driver `gotogether shrink`, the two JSON files as
+  its artifacts): `gotogether validate -replay shrunk/manifest.json`
+  judges it again. It exits 0 for a 1-minimal sequence, 1 for one not
+  minimal (the files written, the report saying why), 2 for a refusal
+  (the reset contract broken, an original that does not reproduce) or a
+  tool error.
 
 ## Gating and strict mode
 

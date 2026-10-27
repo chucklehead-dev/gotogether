@@ -10,6 +10,8 @@
 //	gotogether validate [-binding b.yaml] [-dir OUT] FILE...
 //	                                                    reconstruct (or read), replay in Quint, report
 //	gotogether validate -replay run.json               judge a run again from its manifest (validate -manifest's)
+//	gotogether shrink   -binding b.yaml -actions a.json -- DRIVER {actions} {steps}
+//	                                                    shrink a driver's failing actions by rerunning it
 //	gotogether itf      -binding b.yaml -out DIR FILE...   recorded steps -> model-level ITF, per actor
 //	gotogether convert  -rules r.yaml [-out steps.jsonl] FILE...
 //	                                                    an app's own OTLP/JSON spans -> a native step log
@@ -72,6 +74,8 @@ func main() {
 		code, err = simulate(os.Args[2:])
 	case "evidence":
 		code, err = evidence(os.Args[2:])
+	case "shrink":
+		code, err = shrinkTo(os.Stdout, os.Args[2:])
 	case "help", "-h", "-help", "--help":
 		help()
 	case "version":
@@ -120,6 +124,9 @@ usage:
                    [-mutate-steps [-mutate-ops o,p] [-mutate-limit n]] [-quint q] [-v]
                    [-manifest run.json [-run-info info.json]] FILE...   (validate -h says what each does)
   gotogether validate -replay run.json [-dir OUT]   judge a manifest's run again (its hashed inputs unchanged): the same verdict
+  gotogether shrink   -binding b.yaml -actions journey.json [-out DIR] [-reset PROG] [-diverged-exit n] [-baseline n] [-reruns n]
+                   [-budget n] [-time d] -- DRIVER ARGS... ({actions}, {steps})
+                   shrink an external driver's failing actions, rerunning it per candidate: the shrunk actions, shrink.json, a manifest
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
   gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
                    against a simulation's (an exploration's evidence, or qcover.Summary JSON): what ran only for real, only simulated
@@ -442,42 +449,6 @@ func steps(args []string) error {
 		}
 	}
 	return nil
-}
-
-// markLost declares the losses of the comma-separated recorders the
-// steps cannot show (qtrace.MarkLost): a prefix up to each recorder's
-// first seq, a suffix after its last.
-func markLost(steps []qtrace.Step, recorders string, prefix bool) ([]qtrace.Step, error) {
-	if recorders == "" {
-		return steps, nil
-	}
-	flag := map[bool]string{true: "-lost-prefix", false: "-lost-suffix"}[prefix]
-	first, last := map[string]uint64{}, map[string]uint64{}
-	var names []string
-	for _, s := range steps {
-		if s.Lost != "" {
-			continue
-		}
-		if _, ok := last[s.Recorder]; !ok {
-			names = append(names, s.Recorder)
-			first[s.Recorder] = s.Seq
-		}
-		first[s.Recorder] = min(first[s.Recorder], s.Seq)
-		last[s.Recorder] = max(last[s.Recorder], s.Seq)
-	}
-	for _, r := range strings.Split(recorders, ",") {
-		r = strings.TrimSpace(r)
-		if _, ok := last[r]; !ok {
-			sort.Strings(names)
-			return nil, fmt.Errorf("validate: %s %s: no step of recorder %q in the input: name one of its recorders (%s)", flag, recorders, r, strings.Join(names, ", "))
-		}
-		l := qtrace.Lost{Recorder: r, Prefix: prefix, After: last[r]}
-		if prefix {
-			l.After = max(first[r], 1) - 1
-		}
-		steps = qtrace.MarkLost(steps, l)
-	}
-	return steps, nil
 }
 
 // failSummary says how many of results fail and why, in the claims' words

@@ -3,9 +3,8 @@ package qtest
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 
-	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/internal/stepdiff"
 )
 
 // A simulated run is deterministic only if every choice goes through the
@@ -32,52 +31,7 @@ func sameRun(a, b *Run) string {
 	if a.Unsettled != b.Unsettled {
 		return fmt.Sprintf("settling: %q, then %q", a.Unsettled, b.Unsettled)
 	}
-	ids := map[string]*renaming{"actor": {}, "process": {}, "thread": {}}
-	for i := 0; i < len(a.Steps) || i < len(b.Steps); i++ {
-		switch {
-		case i >= len(a.Steps):
-			return fmt.Sprintf("step %d: the second run recorded one more (%s)", i, b.Steps[i].String())
-		case i >= len(b.Steps):
-			return fmt.Sprintf("step %d: the second run recorded no more (the first: %s)", i, a.Steps[i].String())
-		}
-		x, y := a.Steps[i], b.Steps[i]
-		if !sameStep(x, y) {
-			return fmt.Sprintf("step %d: %s, then %s", i, x.String(), y.String())
-		}
-		for _, f := range [][3]string{{"actor", x.Actor, y.Actor}, {"process", x.Process, y.Process}, {"thread", x.Thread, y.Thread}} {
-			if !ids[f[0]].same(f[1], f[2]) {
-				return fmt.Sprintf("step %d (%s): %s %q, then %q", i, x.String(), f[0], f[1], f[2])
-			}
-		}
-	}
-	return ""
-}
-
-// renaming is a one-to-one correspondence between two runs' names of
-// one identity (a process's default name is its recorder's random id).
-type renaming struct{ ab, ba map[string]string }
-
-// same reports whether a and b name the same identity in their runs: the
-// first time either is seen pairs them.
-func (r *renaming) same(a, b string) bool {
-	if r.ab == nil {
-		r.ab, r.ba = map[string]string{}, map[string]string{}
-	}
-	x, okA := r.ab[a]
-	y, okB := r.ba[b]
-	if !okA && !okB {
-		r.ab[a], r.ba[b] = b, a
-		return true
-	}
-	return okA && okB && x == b && y == a
-}
-
-// sameStep compares what the model sees of a step, its identities aside
-// (sameRun pairs them).
-func sameStep(a, b qtrace.Step) bool {
-	return a.Action == b.Action && a.Outcome == b.Outcome && a.Error == b.Error && reflect.DeepEqual(a.Args, b.Args) &&
-		reflect.DeepEqual(a.Obs, b.Obs) && reflect.DeepEqual(a.Order, b.Order) &&
-		a.Invocation == b.Invocation && a.Call == b.Call && a.Settled == b.Settled && a.Lost == b.Lost && a.LostAfter == b.LostAfter && a.LostBefore.Equal(b.LostBefore)
+	return stepdiff.Diff(a.Steps, b.Steps)
 }
 
 // checkDeterminism runs seed again and fails t, naming the first

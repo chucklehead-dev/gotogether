@@ -1336,6 +1336,56 @@ func With[T any](ctx context.Context, k *Key[T], v T) context.Context
 type Key[T any] struct
     method (*Key[T]) String() string
 
+== github.com/chucklehead-dev/gotogether/qshrink
+const No Shown = iota (spec 2 of its group)
+const Unknown Shown = iota
+const Yes Shown = iota (spec 1 of its group)
+func SameFailure(rep *validate.Report) Keep
+type Calibration struct
+    field Baseline int
+    field Reruns int
+    field Need int
+    field Alpha float64
+    field Budget int
+    field Time time.Duration
+type Keep interface
+    Shows(rep *validate.Report) Shown
+    String() string
+type Rate struct
+    field Reproduced int
+    field Of int
+    method (Rate) String() string
+type Resetter interface
+    Reset(ctx context.Context) error
+type Result struct
+    field Set []int
+    field Steps []qtrace.Step
+    field Original int
+    field Reruns int
+    field Reproduced int
+    field NotReproduced int
+    field Undecided int
+    field Diverged int
+    field Errors int
+    field Baseline Rate
+    field PerCandidate int
+    field Rate Rate
+    field Minimal bool
+    field NotMinimal string
+    field Keep Keep
+    method (*Result) String() string
+    method (*Result) WriteArtifacts(dir string, actions []any) ([]validate.Artifact, error)
+type Shown int
+type Shrink struct
+    field Actions int
+    field Rerun func(ctx context.Context, keep []int) ([]qtrace.Step, error)
+    field Reset Resetter
+    field Judge func(ctx context.Context, steps []qtrace.Step) (*validate.Report, error)
+    field Keep Keep
+    field Calibration Calibration
+    method (Shrink) Run(ctx context.Context) (res *Result, err error)
+var ErrDiverged = errors.New("gotogether: the rerun did not do its actions")
+
 == github.com/chucklehead-dev/gotogether/qsweep
 const MaxSpace = 1 << 21
 func Bool(name string) Factor
@@ -1360,10 +1410,10 @@ type Row struct
 
 == github.com/chucklehead-dev/gotogether/qtest
 const EvidenceFormat = "gotogether.evidence/2"
-const FateKilled = "killed"
-const FateMalformed = "malformed"
-const FateSurvived = "survived"
-const FateUndecided = "undecided"
+const FateKilled = validate.FateKilled
+const FateMalformed = validate.FateMalformed
+const FateSurvived = validate.FateSurvived
+const FateUndecided = validate.FateUndecided
 const RoleExternal = "external"
 const RoleFaithful = "faithful"
 const RoleMutant = "mutant"
@@ -1434,13 +1484,7 @@ type Bound struct
     field MaxRuns int
     field Partial bool
     field Parallel int
-type Calibration struct
-    field Baseline int
-    field Reruns int
-    field Need int
-    field Alpha float64
-    field Budget int
-    field Time time.Duration
+type Calibration = qshrink.Calibration
 type CaseCheck struct
     field Checker *validate.Checker
     field Recorder []qobs.Option
@@ -1514,16 +1558,12 @@ type MutationReport struct
     method (*MutationReport) Score() float64
     method (*MutationReport) String() string
 type Option func(*settings)
-type Rate struct
-    field Reproduced int
-    field Of int
-    method (Rate) String() string
+type Rate = qshrink.Rate
 type Reach struct
     method (Reach) Faulted() Reach
     method (Reach) InAtLeast(share float64) Reach
     method (Reach) String() string
-type Resetter interface
-    Reset(ctx context.Context) error
+type Resetter = qshrink.Resetter
 type Run struct
     field Steps []qtrace.Step
     field Recorded []qtrace.Step
@@ -1572,14 +1612,7 @@ type ShrunkActions[A any] struct
     method (*ShrunkActions[A]) String() string
 type StepClaim struct
     method (StepClaim) String() string
-type StepMutation struct
-    embed qtrace.StepMutant
-    field Fate string
-    field Why string
-    field Unread bool
-    field Skipped string
-    field Report *validate.Report
-    method (StepMutation) String() string
+type StepMutation = validate.StepMutation
 type StepMutationReport struct
     field Original *Run
     field Mutants []StepMutation
@@ -1631,7 +1664,7 @@ type Vacuity struct
     field Antecedent string `json:"antecedent"`
     field Runs int `json:"runs"`
     method (Vacuity) String() string
-var ErrDiverged = errors.New("gotogether: the rerun did not do its actions")
+var ErrDiverged = qshrink.ErrDiverged
 
 == github.com/chucklehead-dev/gotogether/qtrace
 const AllRecorders = "*"
@@ -1808,6 +1841,10 @@ const DefaultResolveBudget = 200
 const Defect Cause = "defect"
 const Dropped Cause = "dropped"
 const Fail Verdict = "fail"
+const FateKilled = "killed"
+const FateMalformed = "malformed"
+const FateSurvived = "survived"
+const FateUndecided = "undecided"
 const ManifestFormat = "gotogether.run/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
@@ -1822,6 +1859,7 @@ func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func NewManifest(o Options) *Manifest
 func QuintVersion(bin string) string
 func ReadManifest(path string) (*Manifest, error)
+func Replay(ctx context.Context, m *Manifest, o Options) (*Replayed, error)
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 func VerdictOf(results []*Result, incomplete map[*Result]string) RunVerdict
 type Absence struct
@@ -1855,8 +1893,28 @@ type Checker struct
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) Manifest(results []*Result, opt SearchOptions) (*Manifest, error)
+    method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type Command struct
+    field Binding string
+    field Files []string
+    field Format string
+    field Convert string
+    field Spec string
+    field Module string
+    field Instance string
+    field NoVars bool
+    field Invariants []string
+    field Constants map[string]string
+    field Search SearchOptions
+    field LostPrefix []string
+    field LostSuffix []string
+    field CompleteThrough []string
+    field RequireSettle bool
+    field RunInfo string
+    field Options Options
+    method (Command) Judge(ctx context.Context) (*Judged, error)
 type Driver struct
     field Name string `json:"name"`
     field Version string `json:"version,omitempty"`
@@ -1908,6 +1966,28 @@ type InvariantResult struct
     field Failure *Failure
     field Eventually bool
     field Within bool
+type Judged struct
+    field Inputs []JudgedInput
+    field Dir string
+    field Temp bool
+    field Steps []qtrace.Step
+    field Checker *Checker
+    field Judgment *Judgment
+    field ITF []*Result
+    field Finish bool
+    field FinishWhy string
+    field Unfinished *Finish
+    field Results []*Result
+    field Incomplete map[*Result]string
+    field OK bool
+    field Verdict RunVerdict
+    method (*Judged) Manifest() (*Manifest, error)
+type JudgedInput struct
+    field Path string
+    field Format input.Format
+    field Converted bool
+    field Steps []qtrace.Step
+    field Torn *qtrace.TornTail
 type Judgment struct
     field Report *Report
     field Steps []qtrace.Step
@@ -1944,6 +2024,13 @@ type Options struct
     field NoITF bool
     field VerdictsOnly bool
     field Eval string
+type Replayed struct
+    embed *Judged
+    field Want RunVerdict
+    field Same bool
+    field Note string
+    field Warnings []string
+    field Notes []string
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
@@ -2010,6 +2097,23 @@ type SearchOptions struct
     field Budget int
     field ResolvePending bool
     field ResolveBudget int
+type StepMutants struct
+    field Original *Judgment
+    field Mutants []StepMutation
+    method (*StepMutants) Killed() []StepMutation
+    method (*StepMutants) Malformed() []StepMutation
+    method (*StepMutants) Score() float64
+    method (*StepMutants) String() string
+    method (*StepMutants) Survived() []StepMutation
+    method (*StepMutants) Undecided() []StepMutation
+type StepMutation struct
+    embed qtrace.StepMutant
+    field Fate string
+    field Why string
+    field Unread bool
+    field Skipped string
+    field Report *Report
+    method (StepMutation) String() string
 type ToolError struct
     field Module string
     field Test string

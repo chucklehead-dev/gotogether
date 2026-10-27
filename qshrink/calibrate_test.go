@@ -1,4 +1,4 @@
-package qtest
+package qshrink
 
 import (
 	"strings"

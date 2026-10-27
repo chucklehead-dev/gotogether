@@ -436,10 +436,7 @@ func (c *Checker) Manifest(results []*Result, opt SearchOptions) (*Manifest, err
 // (gotogether's version, quint's): what Checker.Manifest starts from, and
 // a caller with no checker (an ITF input's) fills.
 func NewManifest(o Options) *Manifest {
-	backend := o.Backend
-	if backend == "" {
-		backend = os.Getenv("QUINT_BACKEND")
-	}
+	backend := o.envBackend()
 	return &Manifest{Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second),
 		Tools: Tools{Gotogether: ModuleVersion(), Quint: QuintVersion(o.Quint), Backend: backend}}
 }

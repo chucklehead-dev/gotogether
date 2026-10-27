@@ -50,6 +50,18 @@ type Options struct {
 	// phase): a chunk's TypeScript backend writes no ITF for a failing
 	// test, so the model's state at the failure is Rust's to report
 	detailBackend string
+	// noEnvBackend: Backend "" is validate's default, not
+	// QUINT_BACKEND's (a replay of a run judged on the default)
+	noEnvBackend bool
+}
+
+// envBackend is the backend chosen: Backend, else QUINT_BACKEND's
+// (unless a replay ignores it); "" is validate's default.
+func (opt Options) envBackend() string {
+	if opt.Backend == "" && !opt.noEnvBackend {
+		return os.Getenv("QUINT_BACKEND")
+	}
+	return opt.Backend
 }
 
 // Verdict of one check.
@@ -263,9 +275,7 @@ func (opt Options) resolve() (Options, error) {
 	if opt.Quint == "" {
 		opt.Quint = "quint"
 	}
-	if opt.Backend == "" {
-		opt.Backend = os.Getenv("QUINT_BACKEND")
-	}
+	opt.Backend = opt.envBackend()
 	if opt.Backend == "" {
 		opt.Backend = "rust"
 	}

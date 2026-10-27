@@ -180,10 +180,11 @@ func copyFile(t *testing.T, from, to string) {
 	}
 }
 
-// replays checks the journey in dir with the CLI as its driver's job
-// would: gotogether validate with the binding's complete: true (a finish
-// check), a manifest from the run-info, and then validate -replay of the
-// manifest, which refuses an input that changed and exits 1 on another
+// replays checks the journey in dir as its driver's job would, with
+// validate's Go API (what gotogether validate -manifest -run-info and
+// -replay run): the logs judged with the binding's complete: true (a
+// finish check), a manifest from the run-info, and then the manifest's
+// replay, which refuses an input that changed and reports another
 // verdict.
 func replays(t *testing.T, dir string) {
 	t.Helper()
@@ -212,28 +213,32 @@ func replays(t *testing.T, dir string) {
 	}
 	binding, _ := filepath.Abs("webjobs.binding.yaml")
 	manifest := filepath.Join(t.TempDir(), "run.json")
-	gotogether(t, 0, "validate", "-binding", binding, "-dir", t.TempDir(), "-manifest", manifest,
-		"-run-info", filepath.Join(abs, "run-info.json"), filepath.Join(abs, ServerFile), page)
-	gotogether(t, 0, "validate", "-replay", manifest, "-dir", t.TempDir())
-}
-
-// gotogether runs the CLI from the repository's root module, wanting
-// exit code want.
-func gotogether(t *testing.T, want int, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("go", append([]string{"run", "-C", "../..", "./cmd/gotogether"}, args...)...)
-	out, err := cmd.CombinedOutput()
-	code := 0
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		code = exit.ExitCode()
-	} else if err != nil {
+	j, err := validate.Command{Binding: binding, Files: []string{filepath.Join(abs, ServerFile), page}, RunInfo: filepath.Join(abs, "run-info.json"),
+		Options: validate.Options{Dir: t.TempDir()}}.Judge(t.Context())
+	if err != nil {
 		t.Fatal(err)
 	}
-	if code != want {
-		t.Fatalf("gotogether %s: exit %d, want %d:\n%s", strings.Join(args, " "), code, want, out)
+	if !j.OK || !j.Finish {
+		t.Fatalf("the journey's logs do not pass with the finish check (%s):\n%s", j.Verdict, j.Judgment.Report.Summary())
 	}
-	return string(out)
+	m, err := j.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Write(manifest); err != nil {
+		t.Fatal(err)
+	}
+	read, err := validate.ReadManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := validate.Replay(t.Context(), read, validate.Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Same || !r.OK || read.Driver == nil {
+		t.Fatalf("the manifest's replay: %s, the manifest's %s (%s; driver %+v)", r.Verdict, r.Want, r.Note, read.Driver)
+	}
 }
 
 // webjobs as it is, explored by Bombadil for 45s: a finished journey

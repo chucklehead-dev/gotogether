@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +9,56 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
+
+// views are es as the evidence command reads them: their JSON, as
+// WriteJSON writes it, decoded into the command's view.
+func views(t *testing.T, es ...*qtest.Evidence) []*suiteEvidence {
+	t.Helper()
+	var out []*suiteEvidence
+	for _, e := range es {
+		b, err := json.Marshal(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var v suiteEvidence
+		if err := json.Unmarshal(b, &v); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, &v)
+	}
+	return out
+}
+
+// The command's view of evidence is qtest's: its format, its roles, a
+// manifest's evidence, and every field it reads, decoded from
+// qtest.Evidence's JSON (a renamed tag would read as zero).
+func TestEvidenceView(t *testing.T) {
+	if evidenceFormat != qtest.EvidenceFormat || roleFaithful != qtest.RoleFaithful || roleExternal != qtest.RoleExternal {
+		t.Fatalf("the view's format and roles are not qtest's: %s %s %s", evidenceFormat, roleFaithful, roleExternal)
+	}
+	e := &qtest.Evidence{Format: qtest.EvidenceFormat, Role: qtest.RoleFaithful, Package: "p", Import: "x/p", Test: "TestA#1", Spec: "m.qnt:m", Runs: 3, Conform: 2,
+		FailingBy: map[string]int{"violates inv": 1}, Model: &qtest.ModelCoverage{Taken: map[string]int{"put": 2}, Never: []string{"get"}},
+		Faults:  &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "rpc.db", Sites: []string{"a.go:1"}, Runs: 2, Injected: []int{3, 1, 2}}}},
+		Exhaust: &qtest.Extent{Complete: true}}
+	v := views(t, e)[0]
+	p := v.Faults.Points[0]
+	if v.Format != e.Format || v.Role != e.Role || v.Package != "p" || v.Import != "x/p" || v.Test != e.Test || v.Spec != e.Spec || v.Runs != 3 || v.Conform != 2 ||
+		v.FailingBy["violates inv"] != 1 || v.Model.Taken["put"] != 2 || v.Model.Never[0] != "get" || !v.Exhaust.Complete ||
+		p.Kind != "rpc.db" || p.Sites[0] != "a.go:1" || p.Runs != 2 || faults(p.Injected) != e.Faults.Points[0].Faulted() {
+		t.Errorf("the view of %+v is %+v", e, v)
+	}
+	for _, verdict := range []validate.RunVerdict{{Verdict: validate.Pass}, {Verdict: validate.Fail, Reason: "violates inv"},
+		{Verdict: validate.NotEvaluated, Reason: "no verdict (lost tail)"}, {Verdict: validate.NotEvaluated, Reason: "incomplete (no settle)"}} {
+		m := &validate.Manifest{Name: "run", Package: "p", Import: "x/p", Verdict: verdict, Model: validate.RunModel{Spec: &validate.File{Path: "m.qnt"}, Module: "m"}}
+		want, _ := json.Marshal(views(t, qtest.ManifestEvidence(m))[0])
+		got, _ := json.Marshal(manifestEvidence(m))
+		if string(got) != string(want) {
+			t.Errorf("%s: the manifest's evidence is %s, qtest's %s", verdict, got, want)
+		}
+	}
+}
 
 // The suite's gaps are what no exploration tried: an action each test
 // leaves out but another takes is no gap; one no test takes is. A
@@ -27,7 +77,7 @@ func TestSuiteReport(t *testing.T) {
 		{Test: "TestB#2", Role: qtest.RoleMutant, Spec: m, Runs: 1,
 			Model: &qtest.ModelCoverage{Taken: map[string]int{"del": 1}}},
 	}
-	report, gaps := suiteReport(es)
+	report, gaps := suiteReport(views(t, es...))
 	for _, want := range []string{
 		"TestB: 3 runs, 1 conform, 2 violates inv",
 		"suite: 3 explorations, 6 runs",
@@ -58,6 +108,9 @@ func TestEvidenceFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "TestA", "trace.itf.json"), []byte(`{"states": []}`), 0o644)
+	if !isEvidence(filepath.Join(dir, "TestA", "x1.json")) || isEvidence(filepath.Join(dir, "TestA", "trace.itf.json")) {
+		t.Error("isEvidence: the evidence not seen, or an ITF trace taken for it")
+	}
 	if code, err := evidence([]string{dir}); code != 0 || err != nil {
 		t.Errorf("evidence: %d %v", code, err)
 	}

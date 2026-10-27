@@ -61,11 +61,13 @@ item reviewed before the next. Sizes as in S.
   the outcome error says to model the refusal before `skip`.
 - **G4. A per-run recorder for an HTTP service (S). Done** (3548401:
   `qobshttp`, taught in gotogether-traces).
-- **G5. Shrinking and replay outside `go test` (M).** The CLI imports
-  qtest (and with it `testing` and qenv) for step mutants and evidence.
-  Move ShrinkActions', MutateSteps' and the manifest's cores out of
-  qtest, with qtest's `testing.TB` wrappers; then `validate.Replay` and
-  `gotogether shrink`.
+- **G5. Shrinking and replay outside `go test` (M). Done**: ShrinkActions'
+  core is `qshrink`, MutateSteps' `validate.Checker.MutateSteps`, the
+  validate command's `validate.Command` and `validate.Replay`; qtest
+  keeps its wrappers, the CLI's evidence reads a view of qtest's format,
+  and `go list -deps ./cmd/gotogether` has neither `testing` nor qenv.
+  `gotogether shrink` reruns a driver command per candidate (SameFailure
+  only: no `-keep`).
 - **G6. API trim before R5 (S).** `validate.VerdictOf`, the Manifest
   builder methods, `ModuleVersion`/`QuintVersion` internal; claims'
   names side by side (Settles, Completes, Finishes; `-require-settle`
@@ -275,8 +277,6 @@ left:
   a client and its server cannot be one actor's distinct locations, and
   a crash's semantics attach to the shared name (webjobs, raftkv share
   one by necessity). Separate location from incarnation.
-- **A Go API for a manifest's replay** (`validate.Replay`); webjobs'
-  tests shell out to the CLI.
 - **Strict mode and evidence (E2).** The nightly is not strict (its
   fresh-seed runs include the unwoven mutation tests); evidence a
   renamed test left in a reused directory still counts; Hegel checks

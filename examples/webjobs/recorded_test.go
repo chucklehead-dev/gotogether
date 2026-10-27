@@ -24,14 +24,9 @@ func TestRecorded(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	recorded(t, "faithful").Expect(t, qtest.Finishes())
-	t.Run("replays", func(t *testing.T) {
-		if testing.Short() {
-			// the CLI's build and two more checks: TestLive replays a
-			// manifest too, and the full run this one
-			t.Skip("the CLI's manifest and replay: full mode")
-		}
-		replays(t, filepath.Join("testdata", "runs", "faithful"))
-	})
+	// its manifest and replay, as the CLI makes them (validate.Command,
+	// validate.Replay): two more checks, no CLI to build
+	t.Run("replays", func(t *testing.T) { replays(t, filepath.Join("testdata", "runs", "faithful")) })
 }
 
 // edited copies the recorded faithful journey into a directory of the

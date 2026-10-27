@@ -8,6 +8,35 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Shrinking and replay outside `go test` (G5): the CLI no longer imports
+  qtest, and with it `testing` and qenv. Package `qshrink` is
+  ShrinkActions' core: `Shrink{Actions, Rerun, Reset, Judge, Keep,
+  Calibration}.Run(ctx)` over indices, `Result` (`Set`, `Steps`, the
+  counts, `Baseline`, `Rate`, `Minimal`, `NotMinimal`, `Keep`,
+  `WriteArtifacts`: actions.json and shrink.json), `Keep` and `Shown`
+  (`Yes`, `No`, `Unknown`), `SameFailure(report)`, `Calibration`, `Rate`,
+  `Resetter`, `ErrDiverged`; qtest's `Calibration`, `Rate`, `Resetter`
+  and `ErrDiverged` are aliases of them, and `ShrinkActions` (same name,
+  same behaviour, messages) wraps it, stopping before the test's
+  deadline through its context. `gotogether shrink -binding b.yaml
+  -actions journey.json [-out DIR] [-reset PROG] [-diverged-exit n]
+  [calibration flags] -- DRIVER ... {actions} ... {steps}` shrinks an
+  external driver's journey by rerunning the command per candidate (argv,
+  never a shell), writing the shrunk actions, shrink.json, the
+  reproducing rerun's steps.jsonl and a manifest `validate -replay`
+  judges again; exit 0 1-minimal, 1 not minimal, 2 a refusal.
+  `validate.Checker.MutateSteps(ctx, steps, opt, check, mopts...)` is
+  MutateSteps' core (`StepMutants`, `StepMutation` and the `Fate*`
+  constants, which qtest's alias); `qtest.MutateSteps` and
+  `JudgeStepMutants` keep their names. `validate.Command{...}.Judge(ctx)`
+  is the check `gotogether validate` makes (the flags as fields, a
+  `Judged` with the inputs read, the judgment, ITF results, the finish
+  check, `OK`, `Verdict`, and `Manifest()`, `-run-info` included), and
+  `validate.Replay(ctx, manifest, opts)` is `validate -replay` in Go
+  (`Replayed`: the judgment, `Want`, `Same`, `Note`, `Warnings`,
+  `Notes`); a run judged on the default backend replays on it whatever
+  QUINT_BACKEND says, without touching the environment. webjobs' tests
+  replay their manifest through it, per push.
 - qtest's failure reports name files that outlive the test: Record's and
   Validate's `Run.Expect` (and a `Runs` claim's) copies the run's step
   log, ITF and modules out of the test's `t.TempDir()` into

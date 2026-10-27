@@ -58,7 +58,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	// module, while TypeScript evaluates them all in one process. Checkout's,
 	// glomers' and streams' suites ran 20-55% faster. A single long replay
 	// (Validate, a retry here) stays on Rust, which was faster for those.
-	chosen := opt.Backend != "" || os.Getenv("QUINT_BACKEND") != ""
+	chosen := opt.envBackend() != ""
 	opt, err = opt.resolve()
 	if err != nil {
 		for i := range errs {

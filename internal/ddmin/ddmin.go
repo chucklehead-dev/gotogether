@@ -1,8 +1,9 @@
 // Package ddmin is Zeller and Hildebrandt's delta debugging (ddmin) over
 // index sets, with a three-valued test: a set fails (it shows the
 // failure), passes, or is unknown (a rerun that could not run it, a
-// budget spent). It is qtest.ShrinkActions' search: the sets are the
-// positions of a driver's actions kept, in their order.
+// budget spent). It is qshrink's search (qtest.ShrinkActions' and
+// gotogether shrink's): the sets are the positions of a driver's actions
+// kept, in their order.
 //
 // The result is 1-minimal for the test as it answered: it fails, and
 // every set with one index fewer passes. For a monotone failure (every

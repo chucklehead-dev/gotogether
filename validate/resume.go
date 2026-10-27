@@ -192,7 +192,7 @@ func (c *Checker) replayStarts(ctx context.Context, tr *qtrace.Trace, plan *bind
 	if err != nil {
 		return nil, err
 	}
-	chosen := o.Backend != "" || os.Getenv("QUINT_BACKEND") != ""
+	chosen := o.envBackend() != ""
 	if o, err = o.resolve(); err != nil {
 		return nil, err
 	}

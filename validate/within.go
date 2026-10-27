@@ -2,7 +2,6 @@ package validate
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -317,10 +316,7 @@ func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 // same steps judged from init are another verdict). Two runs of one key
 // get one verdict.
 func (c *Checker) Key(steps []qtrace.Step) string {
-	backend := c.Options.Backend
-	if backend == "" {
-		backend = os.Getenv("QUINT_BACKEND")
-	}
+	backend := c.Options.envBackend()
 	var b strings.Builder
 	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|resume=%s|", c.Options.evalMode(), backend, c.Binding.Snapshot, c.Binding.Resume)
 	b.WriteString(qtrace.Key(steps))
