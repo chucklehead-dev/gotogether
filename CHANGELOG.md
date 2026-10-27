@@ -8,6 +8,17 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- A run an external driver made, read as a request log: the protocol
+  `gotogether.requests/1` (JSONL a driver writes: a header, then
+  `request`, `response` and `step` records) and package `qdriver`
+  (`Read`, `ReadFile`, `New`, `Log.Steps`, `Log.Write`, `Sniff`): each
+  request an invocation record, completed only by its own response.
+  `gotogether validate` and package input read it by its header
+  (`input.Requests`, `-format requests`). Package `qdriver/bombadil`
+  reads Bombadil's trace with a page that logs its requests (`Read`,
+  `ReadFile`, `Log`, `States`, `Options`); it was examples/webjobs'
+  bombadiltrace. adapters/playwright writes the log from a Playwright
+  page's routed requests (DESIGN §55).
 - grist, a new module (api/grist.txt): an event-sourced framework whose
   applications are checked against their Quint model with nothing
   annotated (docs/grist.md, slice 1): events, read models, commands

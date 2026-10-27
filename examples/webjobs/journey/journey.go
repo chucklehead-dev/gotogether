@@ -2,7 +2,7 @@
 // browser, from a list of actions: what the per-push tier runs against
 // the real server (and each mutant's), what a shrinker removes actions
 // from and reruns, and what a Bombadil trace becomes
-// (bombadiltrace.Actions). It records what bombadiltrace records of a
+// (FromTrace). It records what qdriver/bombadil makes of a
 // Bombadil trace, on recorder "ui": each request an invocation
 // (qobs.Invoke) and its own answer its completion (Call.Done: code, id,
 // status), each change of the job shown a show step. Recorded live, with

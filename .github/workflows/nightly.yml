@@ -230,7 +230,8 @@ jobs:
     # webjobs explored live by Bombadil (headless, ubuntu's Chrome): the
     # faithful app for 45s (a finished journey, its manifest replayed,
     # then --reproduce), and each mutant's server for 45s (its invariant
-    # violated). Strict: a bombadil missing from PATH fails the job
+    # violated); a Playwright journey through adapters/playwright. Strict:
+    # a bombadil (or playwright) missing from PATH fails the job
     # instead of skipping. The per-push tier checks the recorded runs
     # (testdata/runs) in the examples loop.
     runs-on: ubuntu-latest
@@ -262,6 +263,12 @@ jobs:
         run: go test -count=1 -timeout 30m -run 'TestShrink$|TestShrinkRecorded$' -v .
       - name: "the recorded journey's observation mutants (full mode only, a check per mutant)"
         run: go test -count=1 -timeout 15m -run 'TestObservationMutants$' -v .
+      - name: Install Playwright (pinned) and its Chromium
+        run: |
+          npm i -g playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: "a Playwright journey, through adapters/playwright's request log (TestPlaywright)"
+        run: go test -count=1 -timeout 10m -run 'TestPlaywright$' -v .
       - name: keep the journeys (Bombadil's traces and screenshots, the server's logs, run-info.json)
         if: failure()
         uses: actions/upload-artifact@v4

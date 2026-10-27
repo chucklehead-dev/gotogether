@@ -33,6 +33,8 @@ internal/hegelprops/  unpublished module (replace => ../..): the core's Hegel-ch
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
 qobs/ qtrace/ otelio/ convert/ input/  recording, schema/reconstruction, OTLP, span conversion, reading any trace input;
               qobs/qobshttp: an HTTP handler's steps into a given run
+qdriver/      an external driver's request log (gotogether.requests/1): requests as invocations, each completed by its own
+              response; qdriver/bombadil reads Bombadil's trace; adapters/playwright (JS, no dependency) writes one
 binding/ validate/ qtest/              binding YAML, quint-test-based validator (validate/cli: the CLI's check of files, Replay), test helpers (Expect, Explore)
 qshrink/      a driver's failing actions shrunk by reruns (ddmin, calibration, SameFailure): ShrinkActions' and gotogether shrink's core
 qenv/         deterministic simulation: scheduler, virtual time, processes; Store, Queue, Service doubles;

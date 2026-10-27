@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/webjobs/bombadiltrace"
 	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
@@ -74,7 +73,7 @@ func clientJourneys() int {
 	return 8
 }
 
-// The recorded faithful journey's actions (bombadiltrace.Actions), played
+// The recorded faithful journey's actions (journey.FromTrace), played
 // by the client against a fresh server: a finished run, as Bombadil's
 // was. The bridge a Bombadil failure is shrunk through. Full mode.
 func TestRecordedActions(t *testing.T) {
@@ -91,7 +90,7 @@ func TestRecordedActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	as, err := bombadiltrace.Actions(f, bombadiltrace.Options{})
+	as, err := journey.FromTrace(f)
 	if err != nil {
 		t.Fatal(err)
 	}

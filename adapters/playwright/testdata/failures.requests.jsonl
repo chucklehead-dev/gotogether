@@ -1,0 +1,7 @@
+{"protocol":"gotogether.requests/1","driver":"playwright 1.56.1","recorder":"ui","actor":"webjobs","process":"webjobs","thread":"page"}
+{"event":"request","req":"1","action":"submit","time":"2026-10-27T06:41:00.000500Z","args":{"key":"k1"},"corr":"pw-1","ref":"POST /jobs"}
+{"event":"response","req":"1","time":"2026-10-27T06:41:00.010250Z","code":0,"error":"net::ERR_CONNECTION_REFUSED","args":{"id":"","status":""}}
+{"event":"request","req":"2","action":"submit","time":"2026-10-27T06:41:00.020000Z","args":{"key":"k2"},"corr":"app-7","ref":"POST /jobs"}
+{"event":"request","req":"3","action":"cancel","time":"2026-10-27T06:41:00.021000Z","args":{"id":"j9"},"corr":"pw-3","ref":"POST /jobs/j9/cancel"}
+{"event":"response","req":"2","time":"2026-10-27T06:41:00.030000Z","code":500,"args":{"id":"","status":""}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:00.031000Z","args":{"id":"j9","status":"accepted"}}

@@ -247,6 +247,7 @@ type Rules struct
 == github.com/chucklehead-dev/gotogether/input
 const ITF Format = "itf"
 const OTLP Format = "otlp"
+const Requests Format = "requests"
 const StepLog Format = "steps"
 const Unknown Format = ""
 func Read(path string, format Format) (*File, error)
@@ -436,6 +437,82 @@ type Summary struct
     method (*Summary) Ratio() float64
     method (*Summary) String() string
     method (*Summary) Uncovered() []Block
+
+== github.com/chucklehead-dev/gotogether/qdriver
+const CodeArg = "code"
+const Observed = "step"
+const Protocol = "gotogether.requests/1"
+const Request = "request"
+const Response = "response"
+func New(h Header, records []Record) (*Log, error)
+func Read(r io.Reader) (*Log, error)
+func ReadFile(path string) (*Log, error)
+func Sniff(data []byte) bool
+type Header struct
+    field Protocol string `json:"protocol"`
+    field Recorder string `json:"recorder"`
+    field Actor string `json:"actor,omitempty"`
+    field Process string `json:"process,omitempty"`
+    field Thread string `json:"thread,omitempty"`
+    field Driver string `json:"driver,omitempty"`
+type Log struct
+    field Header Header
+    field Records []Record
+    field Torn *qtrace.TornTail
+    method (*Log) Steps() []qtrace.Step
+    method (*Log) Write(w io.Writer) error
+type Record struct
+    field Event string `json:"event"`
+    field Req string `json:"req,omitempty"`
+    field Action string `json:"action,omitempty"`
+    field Time time.Time `json:"time"`
+    field Code *int64 `json:"code,omitempty"`
+    field Error string `json:"error,omitempty"`
+    field Outcome string `json:"outcome,omitempty"`
+    field Args map[string]any `json:"args,omitempty"`
+    field Obs map[string]any `json:"obs,omitempty"`
+    field Corr string `json:"corr,omitempty"`
+    field Thread string `json:"thread,omitempty"`
+    field Order map[string]int64 `json:"order,omitempty"`
+    field Ref string `json:"ref,omitempty"`
+
+== github.com/chucklehead-dev/gotogether/qdriver/bombadil
+func Log(r io.Reader, opt Options) (*qdriver.Log, error)
+func Read(r io.Reader, opt Options) ([]qtrace.Step, error)
+func ReadFile(path string, opt Options) ([]qtrace.Step, error)
+func States(r io.Reader, opt Options) ([]State, error)
+type Fields struct
+    field Number string
+    field Action string
+    field Code string
+    field Answer string
+    field AnswerFields []string
+type Options struct
+    field Header qdriver.Header
+    field Snapshot string
+    field Log string
+    field Fields Fields
+    field Clicks map[string][]string
+    field Show *Show
+    field Name string
+type Request struct
+    field N int
+    field Action string
+    field Args map[string]any
+    field Code *int64
+    field Answer map[string]any
+type Show struct
+    field Action string
+    field Key string
+    field Fields []string
+type State struct
+    field Line int
+    field Time time.Time
+    field Ref string
+    field Click string
+    field Snapshot bool
+    field Log []Request
+    field Shown map[string]any
 
 == github.com/chucklehead-dev/gotogether/qenv
 const BytesVersion = choice.BytesVersion

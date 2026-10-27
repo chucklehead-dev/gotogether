@@ -1,0 +1,17 @@
+{"protocol":"gotogether.requests/1","driver":"playwright 1.56.1","recorder":"ui","actor":"webjobs","process":"webjobs","thread":"page"}
+{"event":"request","req":"1","action":"submit","time":"2026-10-27T06:41:00.356060Z","args":{"key":"kmvqbh6da4ey9t5"},"corr":"pw-1","ref":"POST /jobs"}
+{"event":"request","req":"2","action":"submit","time":"2026-10-27T06:41:00.357160Z","args":{"key":"kmvqbh6da4ey9t5"},"corr":"pw-2","ref":"POST /jobs"}
+{"event":"response","req":"2","time":"2026-10-27T06:41:00.369632Z","code":202,"args":{"id":"jfe5d3711","status":"accepted"}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:00.374479Z","args":{"id":"jfe5d3711","status":"accepted"}}
+{"event":"response","req":"1","time":"2026-10-27T06:41:00.375131Z","code":200,"args":{"id":"jfe5d3711","status":"accepted"}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:00.916697Z","args":{"id":"jfe5d3711","status":"ready"}}
+{"event":"request","req":"3","action":"submit","time":"2026-10-27T06:41:00.949565Z","args":{"key":"kmvqbh6uq5a3cjl"},"corr":"pw-3","ref":"POST /jobs"}
+{"event":"response","req":"3","time":"2026-10-27T06:41:00.961146Z","code":202,"args":{"id":"j6c932530","status":"accepted"}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:00.963601Z","args":{"id":"j6c932530","status":"accepted"}}
+{"event":"request","req":"4","action":"cancel","time":"2026-10-27T06:41:01.015506Z","args":{"id":"j6c932530"},"corr":"pw-4","ref":"POST /jobs/j6c932530/cancel"}
+{"event":"response","req":"4","time":"2026-10-27T06:41:01.027535Z","code":200,"args":{"id":"j6c932530","status":"cancelled"}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:01.029604Z","args":{"id":"j6c932530","status":"cancelled"}}
+{"event":"request","req":"5","action":"submit","time":"2026-10-27T06:41:01.081910Z","args":{"key":"kmvqbh6xwf5gayt"},"corr":"pw-5","ref":"POST /jobs"}
+{"event":"response","req":"5","time":"2026-10-27T06:41:01.093912Z","code":202,"args":{"id":"j08078c51","status":"accepted"}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:01.095706Z","args":{"id":"j08078c51","status":"accepted"}}
+{"event":"step","action":"show","time":"2026-10-27T06:41:01.452773Z","args":{"id":"j08078c51","status":"ready"}}

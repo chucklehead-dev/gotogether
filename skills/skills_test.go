@@ -176,6 +176,9 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"grist.Quiet", "gristsim.Config.Record (AtClients)"},
 		{"grist.PosKey", "nothing: a store's own key layout (internal/poskey)"},
 		{"grist.CheckCondition", "store.CheckCondition (package grist/store)"},
+		// G7: the driver adapters published
+		{"bombadiltrace.", "package qdriver/bombadil (journey.Bombadil, journey.FromTrace in webjobs)"},
+		{"[bombadiltrace]", "package qdriver/bombadil"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

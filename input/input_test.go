@@ -16,7 +16,7 @@ func TestUnknownShapeSaysWhatIsWanted(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := Read(p, "")
-	for _, want := range []string{`has the keys "action", "obs"`, `"quint.action"`, `"quint.obs."<name>`, "qobs.JSONLSink", StepLogExample} {
+	for _, want := range []string{`has the keys "action", "obs"`, `{"protocol": "gotogether.requests/1", "recorder": ...}`, `"quint.action"`, `"quint.obs."<name>`, "qobs.JSONLSink", StepLogExample} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("error lacks %q: %v", want, err)
 		}
@@ -66,7 +66,42 @@ func TestTornFirstLine(t *testing.T) {
 	if err := os.WriteFile(p, []byte(`{"action":"reserve"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Read(p, ""); err == nil || !strings.Contains(err.Error(), "not OTLP/JSON, a step log or ITF") {
+	if _, err := Read(p, ""); err == nil || !strings.Contains(err.Error(), "not OTLP/JSON, a step log, a request log or ITF") {
 		t.Errorf("a whole object: %v", err)
+	}
+}
+
+// A driver's request log is read by its header: its requests
+// invocations, each completed by its own response, its steps naming the
+// file's lines; a torn one keeps what came before the cut.
+func TestRequestLog(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "requests.jsonl")
+	log := `{"protocol":"gotogether.requests/1","recorder":"ui"}
+{"event":"request","req":"1","action":"deposit","time":"2026-10-27T09:00:00Z","args":{"amount":5}}
+{"event":"response","req":"1","time":"2026-10-27T09:00:01Z","code":200,"args":{"balance":5}}
+`
+	if err := os.WriteFile(p, []byte(log), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := Read(p, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Format != Requests || len(f.Steps) != 2 || !f.Steps[0].Invocation || f.Steps[1].Call != 1 || f.Steps[1].Source != p+":3" ||
+		f.Steps[1].Args["balance"] != int64(5) || f.Steps[1].Args["code"] != int64(200) {
+		t.Fatalf("%+v", f)
+	}
+	if err := os.WriteFile(p, []byte(log[:len(log)-20]), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if f, err = Read(p, ""); err != nil || f.Torn == nil || f.Torn.Line != 3 || len(f.Steps) != 2 || f.Steps[1].Lost != "suffix" {
+		t.Fatalf("torn: %v %+v", err, f)
+	}
+	// a later version is refused with the fix, not read as another format
+	if err := os.WriteFile(p, []byte(`{"protocol":"gotogether.requests/2","recorder":"ui"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read(p, ""); err == nil || !strings.Contains(err.Error(), "upgrade gotogether") {
+		t.Errorf("a later version: %v", err)
 	}
 }

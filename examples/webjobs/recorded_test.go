@@ -64,7 +64,7 @@ func TestClickWithNoOutcome(t *testing.T) {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {
-		t.Skip("a pending click's claim, per push in bombadiltrace's TestOnlyItsOwnAnswerCompletesACall and TestProbes' cancel never answered: full mode")
+		t.Skip("a pending click's claim, per push in qdriver/bombadil's TestOnlyItsOwnAnswerCompletesACall and TestProbes' cancel never answered: full mode")
 	}
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -109,7 +109,7 @@ func TestTornTrace(t *testing.T) {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {
-		t.Skip("a torn trace's claim, per push in bombadiltrace's TestTornTail: full mode")
+		t.Skip("a torn trace's claim, per push in qdriver/bombadil's TestTornTail: full mode")
 	}
 	t.Parallel()
 	qtest.RequireQuint(t)

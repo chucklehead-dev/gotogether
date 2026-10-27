@@ -1,0 +1,7 @@
+{"type":"start","header":{"driver":"playwright 1.56.1","recorder":"ui","actor":"webjobs","process":"webjobs","thread":"page"},"correlation":{"header":"x-request-id","prefix":"pw"}}
+{"type":"request","id":1,"time":1793083260000.5,"request":{"url":"http://127.0.0.1:1/jobs","method":"POST","headers":{"content-type":"application/json"},"body":{"key":"k1"}}}
+{"type":"failed","id":1,"time":1793083260010.25,"error":"net::ERR_CONNECTION_REFUSED"}
+{"type":"request","id":2,"time":1793083260020,"request":{"url":"http://127.0.0.1:1/jobs","method":"POST","headers":{"content-type":"application/json","x-request-id":"app-7"},"body":{"key":"k2"}}}
+{"type":"request","id":3,"time":1793083260021,"request":{"url":"http://127.0.0.1:1/jobs/j9/cancel","method":"POST","headers":{},"body":null}}
+{"type":"response","id":2,"time":1793083260030,"response":{"status":500,"headers":{},"body":"internal error"}}
+{"type":"step","time":1793083260031,"action":"show","args":{"id":"j9","status":"accepted"}}

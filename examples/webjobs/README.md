@@ -11,9 +11,14 @@ events, and the page shows both.
 property-based browser explorer, drives the page: it clicks, waits and
 checks its own properties, and writes a trace (`trace.jsonl`) and
 screenshots. gotogether did not drive the run, so the run's record is
-Bombadil's. An adapter ([bombadiltrace](bombadiltrace)) turns it into
-steps, the server records its own effects where it makes them, and the
-model judges both together.
+Bombadil's. The toolkit's Bombadil reader (package
+[qdriver/bombadil](../../qdriver/bombadil/bombadil.go), with webjobs'
+names in [journey.Bombadil](journey/bombadil.go)) turns it into a
+request log and steps, the server records its own effects where it
+makes them, and the model judges both together. Playwright drives the
+same page too (`TestPlaywright`), through the toolkit's adapter
+([adapters/playwright](../../adapters/playwright)), whose request log
+`gotogether validate` reads as it is.
 
 | file | what it is |
 |---|---|
@@ -21,8 +26,9 @@ model judges both together.
 | [model/webjobs.qnt](model/webjobs.qnt) | the server's jobs, what the page showed for each, a ghost `done` (the server drained); the properties below |
 | [webjobs.binding.yaml](webjobs.binding.yaml) | every parameter the step's field of its name; `complete: true` (a journey is judged finished); a `within` |
 | [bombadil/spec.ts](bombadil/spec.ts) | Bombadil's spec: custom actions `ui.submit` (a double click) and `ui.cancel`, the `result` extract (`{id, status, key}`), its own properties |
-| [bombadiltrace](bombadiltrace/bombadiltrace.go) | the adapter: trace.jsonl to invocation records and steps |
-| [journey](journey/journey.go) | the page's actions (`Submit{Key, Twice}`, `Cancel`, `Poll`, `AwaitEnd`, `Resubmit`, `Sleep`), `Client.Plan(seed)` and `Client.Play`, recording as bombadiltrace does; [rerun.go](journey/rerun.go): `Rerun` against a fresh server (`InProcess`, or a mutant's `Program`), drained, its steps returned, for a shrinker's reruns |
+| [journey/bombadil.go](journey/bombadil.go) | `journey.Bombadil`, webjobs' names for package qdriver/bombadil (the spec's custom actions, its `result` extract, the page's log entries `{n, op, key or id, code, job}`, the job shown); `journey.FromTrace`, a trace's actions for the client |
+| [playwright](playwright) | `journey.cjs`, a Playwright journey through adapters/playwright (a double click, a cancel, one more), and `webjobs.cjs`, which requests are calls and what each answer says |
+| [journey](journey/journey.go) | the page's actions (`Submit{Key, Twice}`, `Cancel`, `Poll`, `AwaitEnd`, `Resubmit`, `Sleep`), `Client.Plan(seed)` and `Client.Play`, recording as the Bombadil reader does; [rerun.go](journey/rerun.go): `Rerun` against a fresh server (`InProcess`, or a mutant's `Program`), drained, its steps returned, for a shrinker's reruns |
 | [harness.go](harness.go) | `RunLive` (the server on 127.0.0.1:0, Bombadil headless, the drain), `Steps` (a journey's server log and page steps), run-info.json |
 | [testdata/runs](testdata/runs) | recorded journeys, one faithful and one per mutant: Bombadil's trace, two of its screenshots, the server's log, run-info.json |
 | [testdata/mutants](testdata/mutants) | each mutant's files, replacing webjobs' of the same name |
@@ -67,6 +73,19 @@ model judges both together.
     that fell out of the log between two snapshots, a log out of order,
     an unmapped custom action. A torn last line is a lost tail: the
     steps before it, and no verdict for the finish.
+- **Playwright's page** (`TestPlaywright`, recorder `ui` too) is a
+  request log the adapter writes as the test runs: each call when
+  Playwright routes it, before the browser sends it on (Playwright's own
+  `request` event came 1ms after the server's record of the request:
+  an invocation after its effect), with an `x-request-id` the server
+  sees; its own response when Playwright reports it; each change of
+  `#result` a show step. Measured on 2026-10-27 with Playwright 1.56.1
+  and its Chromium 141: the double click's second request was answered
+  first (202, the first 200), and the log pairs each with its own. A
+  first version of the journey closed the log while the page still
+  showed the job before, its last submission unanswered: the run did not
+  finish (`invoked, never completed: submit`), and the journey now waits
+  for a new job.
 - The two recorders are ordered by wall clock: one host, the same clock.
 - A live run's page takes `?until=<ms since the epoch>`: it stops new
   submissions 2s before Bombadil's time limit is up (counted from
@@ -108,7 +127,8 @@ model judges both together.
 | `TestMutants/rerunFinished` | a key asked again once its job ended runs the job again in place: the same id, back to running | the client's run in both tiers (every fourth journey sends its submission once more, late); no page sends a key again once its job ended, so no Bombadil run or recording reaches it | `Violates("createdOnce")` |
 | `TestLive` | none | Bombadil explores the faithful app for 45s; the manifest replays; then `--reproduce` of the run against a new server (the same seed) | `Finishes()`, and Bombadil's own properties hold (its exit 2 fails the run); the reproduction finishes too, or diverges (Bombadil's reproduction is best effort, and the page's timing is not replayed) and what it replayed conforms |
 | `TestObservationMutants` | none: the recorded faithful journey with one mistake in its log (`qtest.MutateSteps`, four mutants of each op spread over its 59 steps); full mode only, and nightly | 20 checks of the journey | every dropped step killed, a job's creation recorded twice killed (`createdOnce`), a submit's code 199 killed (`noFailedRequest`); a submit or a cancel recorded twice, and every retime (within its actor's next step), survive (below) |
-| `bombadiltrace` tests | none | constructed traces | the mapping (times, calls, refs), calls completed only by their own answers, each refusal, a torn tail |
+| `TestPlaywright` | none | a real Chromium driven by Playwright through three journeys against the real server, its calls a request log (adapters/playwright), read beside the server's steps; full mode, nightly | `Finishes()`; the adapter's events replayed without a browser give the same log |
+| qdriver/bombadil's tests | none | constructed traces, with webjobs' mapping | the mapping (times, calls, refs), calls completed only by their own answers, each refusal, a torn tail; `journey`'s tests: a trace's actions |
 
 Rates were measured on 2026-10-26 in a sandbox with Bombadil 0.7.9 and
 Chromium 141 (Playwright's build; `--chrome-grant-permissions
@@ -178,7 +198,7 @@ passes. `TestObservationMutants` judges four of each op (the journey has
 662), spread over the log, in about 70s. For a step log the CLI prints
 the same table (`gotogether validate -binding webjobs.binding.yaml
 -mutate-steps -mutate-limit 4 steps.jsonl`); the page's half of a
-journey is Bombadil's trace, which only bombadiltrace reads, so the test
+journey is Bombadil's trace, which only qdriver/bombadil reads, so the test
 judges the joined steps with `qtest.MutateSteps`.
 
 | op | mutants | killed | survived | what the survivors say |
@@ -209,7 +229,7 @@ rest: the client plays a list (`journey.Client.Play`), its plan is one
 (`Plan(seed)`, which `Run` plays), and `journey.Rerun` plays one
 against a fresh server each time, drained before its steps are returned
 (no reset endpoint). A Bombadil trace becomes such a list
-(`bombadiltrace.Actions`: each click's requests from the page's log, a
+(`journey.FromTrace`: each click's requests from the page's log, a
 cancel by the key of the job it names, the page's own polling an
 `AwaitEnd` before the next submission, the time before a cancel a
 `Sleep`): `TestRecordedActions` plays the recorded faithful journey's 26
@@ -256,7 +276,7 @@ meaningful: a removed submission renames and retimes no other job.
 `TestShrink` is full mode and nightly only: the shrinker itself is
 tested per push in qtest, against brute force.
 `TestShrinkRecorded` (full mode) shrinks Bombadil's recorded failures
-the same way, through `bombadiltrace.Actions` (each request of a click
+the same way, through `journey.FromTrace` (each request of a click
 its own action, the page's polling at its 100ms): doubleJob's recorded
 journey (20 actions) to its one double-clicked submission in 28 reruns,
 cancelIgnored's (14) to a submission and its cancel in 40, both
@@ -280,7 +300,7 @@ and the adapter's tests. The full run adds the mutants' recorded runs (`TestReco
 the probes whose claim a mutant's client run states per push too, the
 re-recorded faithful journey, `TestClickWithNoOutcome`, `TestTornTrace`,
 `TestObservationMutants`, `TestShrink`, `TestShrinkRecorded`,
-`TestRecordedActions` and the live runs.
+`TestRecordedActions`, `TestPlaywright` and the live runs.
 
 Under -short the client runs 12 journeys at seed 1, alternating between
 running to ready and cancelling (every fourth sent again late). Four
@@ -302,7 +322,7 @@ budgets 40).
 
 ```sh
 go test -short ./...                       # the client's runs (faithful, each mutant's overlay), the faithful recording, three probes, the adapter; about 40 s quiet
-go test ./...                              # adds the live runs: bombadil and a Chrome on PATH
+go test ./...                              # adds the live runs: bombadil and a Chrome on PATH; TestPlaywright: node and playwright (npm i -g playwright@1.56.1)
 WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .   # records 6s runs into testdata/runs
 ./run-demo.sh                              # the recorded journeys, then cmd/webjobs answering one key twice
 MUTATION=ready-early ./run-demo.sh         # or double-job, cancel-ignored, cancel-broken, status-stale, commit-after-cancel, rerun-finished; LIVE=1 live

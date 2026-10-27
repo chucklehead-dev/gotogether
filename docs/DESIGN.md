@@ -3742,3 +3742,80 @@ reproducing 10 of 10, each shrunk list finishing on the faithful server
 (the webjobs review: a rerun ending before the page saw its job end
 "failed" the within on the faithful server, so a rerun ends as an open
 page does, polling to the end).
+
+## 55. Driver adapters, published (G7)
+
+E5's adapter lived in examples/webjobs with webjobs' names, so every
+adopter would have copied its 330 lines: a trace's parsing, its refs,
+the pairing of a request with its own answer. G7 publishes it as a
+protocol and a package: a driver writes a **request log**
+(`gotogether.requests/1`, JSONL), package `qdriver` turns it into
+steps, `gotogether validate` reads it by its header (package input), and
+two drivers write it: Bombadil, through `qdriver/bombadil`, and
+Playwright, through adapters/playwright, one JavaScript file with no
+dependency.
+
+The protocol is §54's rule made a format. A `request` record is an
+invocation with what the request sent; a `response` names its request
+(`req`) and is the only thing that completes it; a `step` is anything
+seen that answers no request, and names none. A response's arguments
+are the answer's fields, under the request's: the call's arguments are
+what was sent, whatever the answer says (an answer naming another key
+does not change the call). Decisions:
+
+- **A header, required, versioned exactly.** It names the recorder the
+  records are numbered in, so two logs joined cannot share one by
+  default; a later version is refused with the fix (upgrade), never
+  read as this one, and sniffing knows the family by its prefix.
+- **`code` is required on a response, 0 for none came.** A missing code
+  read as 0 would make a driver's omission a network error the model
+  judges. The outcome stays `ok` unless the driver says otherwise: the
+  call completed with the code it got, and the model says which codes
+  are failures (webjobs' `noFailedRequest`).
+- **Unknown fields refused.** A misspelt `arg` would otherwise drop a
+  request's arguments silently; a new field is a new version.
+- **Times in the log's order, never back.** Seqs are assigned in file
+  order, so a record timed before the one before it would contradict
+  the thread's program order.
+- **`corr` goes into refs, not arguments.** It names the server's
+  records to look for in a failure; no check reads a ref, so a
+  correlation id never changes a verdict. A model that needs it takes
+  it as an argument the driver writes.
+- **A torn last line is a lost tail**, as a step log's is.
+
+Bombadil's reader goes through the protocol (trace → `qdriver.Log` →
+steps), so there is one pairing of requests with answers, and its
+options say what was webjobs' (the extract, the custom actions that
+send requests, the log entry's field names, the display's fields);
+`AnswerFields` fills an answer the page left null, so a 500's
+completion has its action's arguments. webjobs keeps its names
+(`journey.Bombadil`) and its rerun list (`journey.FromTrace`, over
+`bombadil.States`). Every recorded run, its observation mutants and
+its shrinks judge as before.
+
+The Playwright adapter's one finding: Playwright's `request` event
+reaches the test after the browser sent the request, and in a measured
+run 1 ms after the server's own record of it, so an invocation written
+then follows its effect, which a real-time check (Linearize) would
+read as a call that took effect before it was made. The adapter writes
+a call when `page.route` holds it, before the browser sends it on, and
+injects its correlation id there. Its answer's body is read later than
+its response event, so records are chained in the order the events
+happened, a body waited for at most 10 s (a stream that never ends is
+answered with no body). The adapter is tested without a browser:
+recorded events (a real Chromium journey through webjobs, and a
+hand-written one with a failed request, a 500 and a call never
+answered) replayed through it give a golden log, which qdriver reads;
+webjobs' `TestPlaywright` runs a real page end to end (full mode,
+nightly). Its first version of the journey closed the log while the
+page still showed the job before: the last submission's call stayed
+pending and the run did not finish, the check catching the driver.
+
+Rejected: a reporter in Playwright's sense (a `Reporter` sees tests'
+results, not a page's requests); taking requests from Playwright's
+trace file after the run (its format is Playwright's own, unversioned
+for this, and it is written at the end, so a killed test leaves
+nothing); completing a call from `expect(...).toHaveText` (§54: a poll
+may have made it true); reading Bombadil's traces in the CLI (its
+mapping needs the spec's names, which a flag list would only
+restate: `bombadil.Log` writes the protocol for the CLI instead).

@@ -1,7 +1,7 @@
 // Package harness runs webjobs under Bombadil and checks what it left
 // against model/webjobs.qnt: the server's steps (recorded where it makes
-// its effects) and the page's (bombadiltrace, from Bombadil's
-// trace.jsonl), joined by their wall clocks on one host.
+// its effects) and the page's (package qdriver/bombadil with
+// journey.Bombadil's mapping, from Bombadil's trace.jsonl), joined by their wall clocks on one host.
 package harness
 
 import (
@@ -18,8 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/webjobs/bombadiltrace"
+	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
 	"github.com/chucklehead-dev/gotogether/examples/webjobs/webjobs"
+	bombadiltrace "github.com/chucklehead-dev/gotogether/qdriver/bombadil"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -51,7 +52,7 @@ func Steps(dir string) ([]qtrace.Step, error) {
 	if serr != nil && !errors.As(serr, &torn) {
 		return nil, fmt.Errorf("%s: %w", ServerFile, serr)
 	}
-	page, perr := bombadiltrace.ReadFile(filepath.Join(dir, TraceFile), bombadiltrace.Options{})
+	page, perr := bombadiltrace.ReadFile(filepath.Join(dir, TraceFile), journey.Bombadil)
 	if perr != nil && !errors.As(perr, &torn) {
 		return nil, perr
 	}

@@ -94,10 +94,13 @@ item reviewed before the next. Sizes as in S.
   in Result's words, `Keep.Why`, `Result`'s JSON; the evidence view in
   internal/evidence; `JudgeStepMutants` gone, `StepMutationReport`
   embedding validate's.
-- **G7. Driver adapters, published (M).** bombadiltrace lives in an
-  unpublished example with its defaults: a published package for a
-  page's request log (invocation and completion from a request's own
-  answer, refs), Bombadil's reader and a Playwright reporter.
+- **G7. Driver adapters, published (M). Done** (DESIGN §55): the
+  request log's protocol (`gotogether.requests/1`) and package
+  `qdriver`, read by `gotogether validate` (package input sniffs it);
+  Bombadil's reader as `qdriver/bombadil` (webjobs' names in
+  `journey.Bombadil`); adapters/playwright, a page's routed requests as
+  a request log, tested on recorded events and end to end in webjobs'
+  `TestPlaywright`.
 - **G8. Across hosts (M).** A step's location separate from its
   incarnation (Left from E); a declared clock skew per pair of
   recorders in place of the fixed 1 ms; a collector-side watermark (an

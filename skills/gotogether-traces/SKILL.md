@@ -134,7 +134,8 @@ templates (collections, outcomes, ITF), or setting up the analyzers
 - In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use
   `CheckBatch` for many runs in one quint process per chunk.
 - From files: `gotogether validate -binding b.yaml FILE...`. FILE may be
-  OTLP/JSON, a step log or ITF, detected by content. Add
+  OTLP/JSON, a step log, a driver's request log (package qdriver) or
+  ITF, detected by content. Add
   `-convert rules.yaml` for plain app spans. Exit status: 0 OK,
   1 violation, 2 tool error. A run cut short passes (its eventual vals
   unjudged, an info issue says so): `-require-finish` (or the binding's
@@ -183,11 +184,14 @@ another actor) and lists the survivors, fields no check constrains. Read
 for the ops, `Killed`/`Survived` claims, and how to read a survivor.
 
 A run another tool drove (a Bombadil exploration, a Playwright suite, a
-replayed session) is checked from the driver's own trace: read
-[references/external-drivers.md](references/external-drivers.md) before
-writing its adapter (a click is an invocation, only its request's own answer
-completes it; the journey's own times, call ids and order kept; refs to
-its screenshots; what a settle covers; its manifest, replayed by
+replayed session) is checked from its request log (`gotogether.requests/1`,
+package qdriver: each request an invocation, only its own answer
+completes it), which `gotogether validate` reads beside the server's
+steps: read [references/external-drivers.md](references/external-drivers.md)
+before producing one (adapters/playwright writes it from a page's routed
+requests, `qdriver/bombadil` reads Bombadil's trace, any driver can
+write it; the journey's own times, call ids and order kept; refs to its
+screenshots and correlation ids; what a settle covers; its manifest, replayed by
 `validate -replay` or `cli.Replay` (package validate/cli), and strict gating; shrinking its
 failing journey with `qtest.ShrinkActions`, or `gotogether shrink`
 outside go test).

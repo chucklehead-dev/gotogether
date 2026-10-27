@@ -57,7 +57,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.dir, "dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
 	fset.StringVar(&v.backend, "backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
 	fset.StringVar(&v.quint, "quint", "quint", "quint binary")
-	fset.StringVar(&v.format, "format", "auto", "input format: auto, otlp, steps (native step log) or itf")
+	fset.StringVar(&v.format, "format", "auto", "input format: auto, otlp, steps (native step log), requests (a driver's request log, package qdriver) or itf")
 	fset.StringVar(&v.spec, "spec", "", "ITF input: the model, if neither the trace nor a binding names it")
 	fset.StringVar(&v.module, "module", "", "ITF input: the parameterised module")
 	fset.StringVar(&v.instance, "instance", "", "ITF input: replay against this instance module (e.g. currentDesign), e.g. for quint run --mbt traces")
@@ -211,7 +211,7 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 			fmt.Fprintf(v.out, "input %s: OTLP/JSON spans, converted with %s: %d steps\n", in.Path, v.conv, len(in.Steps))
 			continue
 		}
-		fmt.Fprintf(v.out, "input %s: %s\n", in.Path, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log",
+		fmt.Fprintf(v.out, "input %s: %s\n", in.Path, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log", input.Requests: "a driver's request log",
 			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
 		if in.Torn != nil {
 			fmt.Fprintf(v.out, "  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)

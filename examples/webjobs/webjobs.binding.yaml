@@ -1,5 +1,5 @@
 # The server's effects (recorded where it makes them: created, finished,
-# cancelled, drained) and the page as Bombadil saw it (bombadiltrace:
+# cancelled, drained) and the page as Bombadil saw it (qdriver/bombadil:
 # each request a click sent an invocation, completed only by that
 # request's own answer; each change of the job the page shows) as calls
 # of model/webjobs.qnt's actions: every parameter is the step's field of

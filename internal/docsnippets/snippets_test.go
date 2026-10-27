@@ -31,7 +31,7 @@ var packages = map[string]string{
 	"otelio": "otelio", "qcover": "qcover", "qenv": "qenv", "qhegel": "qhegel", "qload": "qload",
 	"qmeta": "qmeta", "qmut": "qmut", "qobs": "qobs", "qobshttp": "qobs/qobshttp", "qrole": "qrole", "qrun": "qrun", "qsweep": "qsweep",
 	"qtest": "qtest", "qtrace": "qtrace", "sktrace": "examples/sktrace", "validate": "validate",
-	"qgosim": "qgosim", "qweave": "qweave", "qlint": "qlint",
+	"qgosim": "qgosim", "qweave": "qweave", "qlint": "qlint", "qdriver": "qdriver", "bombadil": "qdriver/bombadil",
 }
 
 // docs are the files whose snippets are checked: HISTORY's and ROADMAP's

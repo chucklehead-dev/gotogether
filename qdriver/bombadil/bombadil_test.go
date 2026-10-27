@@ -1,4 +1,4 @@
-package bombadiltrace
+package bombadil
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
+	"github.com/chucklehead-dev/gotogether/qdriver"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -29,9 +29,19 @@ func custom(name string) any {
 	return map[string]any{"Custom": map[string]any{"name": name, "arguments": []any{}}}
 }
 
+// webjobs is examples/webjobs' mapping: its spec's custom actions and
+// extract, its page's log entries ({n, op, key or id, code, job}).
+var webjobs = Options{
+	Header:   qdriver.Header{Recorder: "ui", Actor: "webjobs", Process: "webjobs", Thread: "page"},
+	Snapshot: "result",
+	Fields:   Fields{Action: "op", Answer: "job", AnswerFields: []string{"id", "status"}},
+	Clicks:   map[string][]string{"ui.submit": {"submit"}, "ui.cancel": {"cancel"}},
+	Show:     &Show{Key: "id", Fields: []string{"id", "status"}},
+}
+
 func read(t *testing.T, lines ...string) ([]qtrace.Step, error) {
 	t.Helper()
-	return Read(strings.NewReader(strings.Join(lines, "")), Options{})
+	return Read(strings.NewReader(strings.Join(lines, "")), webjobs)
 }
 
 // A request a click sent is an invocation at the state before the click;
@@ -73,7 +83,7 @@ func TestMapping(t *testing.T) {
 	for i, w := range wants {
 		s := steps[i]
 		got := want{s.Action, s.Invocation, s.Call, s.Time.UnixMicro(), fmt.Sprint(s.Args), s.Ref}
-		if got != w || s.Seq != uint64(i+1) || s.Recorder != "ui" || s.Actor != "webjobs" || s.Process != "webjobs" {
+		if got != w || s.Seq != uint64(i+1) || s.Recorder != "ui" || s.Actor != "webjobs" || s.Process != "webjobs" || s.Thread != "page" {
 			t.Errorf("record %d: %+v (seq %d, %s/%s/%s), want %+v", i+1, got, s.Seq, s.Recorder, s.Actor, s.Process, w)
 		}
 	}
@@ -156,7 +166,7 @@ func TestRefused(t *testing.T) {
 		{"a custom action not mapped", []string{
 			line(1000, nil, page("", "")),
 			line(2000, custom("ui.retry"), page("", "")),
-		}, "custom action ui.retry is none the adapter maps"},
+		}, "custom action ui.retry is none the adapter maps (ui.cancel, ui.submit)"},
 		{"a malformed line", []string{
 			"{not json\n",
 			line(2000, nil, page("", "")),
@@ -196,63 +206,108 @@ func can(n int, id string) request  { return request{N: n, Op: "cancel", ID: id}
 func (r request) answered(code int, id, status string) request {
 	r.Code = &code
 	if id != "" {
-		r.Job = &struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-		}{id, status}
+		r.Job = &job{id, status}
 	}
 	return r
+}
+
+// request is an entry of webjobs' page log, as its page writes it.
+type request struct {
+	N    int    `json:"n"`
+	Op   string `json:"op"`
+	Key  string `json:"key,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Code *int   `json:"code"`
+	Job  *job   `json:"job"`
+}
+
+type job struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+// shown is webjobs' result snapshot: the job shown, and the log.
+type shown struct {
+	ID     string    `json:"id"`
+	Status string    `json:"status"`
+	Log    []request `json:"log"`
 }
 
 // page is a result snapshot: the job shown, and the log.
 func page(id, status string, log ...request) *shown { return &shown{ID: id, Status: status, Log: log} }
 
-// A trace's clicks are the page's actions: a double click's two requests
-// a Submit twice, a cancel the key of the job it names, the page's own
-// polling an await before the next submission (and at the end), and the
-// time between a submission and its cancel a sleep.
-func TestActions(t *testing.T) {
-	s1 := sub(1, "k1").answered(202, "j1", "accepted")
-	s2 := sub(2, "k1").answered(200, "j1", "accepted")
+// With the defaults a page's log entry is {n, action, code, answer, and
+// what the request sent}: the answer's fields are carried as they are,
+// one click may send requests of several actions, the recorder is
+// "bombadil", and with no Show nothing shown is a step.
+func TestDefaults(t *testing.T) {
+	entry := func(n int, action string, sent map[string]any, code any, answer any) map[string]any {
+		e := map[string]any{"n": n, "action": action, "code": code, "answer": answer}
+		for k, v := range sent {
+			e[k] = v
+		}
+		return e
+	}
+	snap := func(log ...map[string]any) map[string]any { return map[string]any{"log": log, "id": "x"} }
 	trace := strings.Join([]string{
-		line(1000, nil, page("", "")),
-		line(2000, custom("ui.submit"), page("j1", "accepted", s1, s2)),
-		line(3000, "Wait", page("j1", "ready", s1, s2)),
-		line(4000, custom("ui.submit"), page("j2", "accepted", s1, s2, sub(3, "k2").answered(202, "j2", "accepted"))),
-		line(53000, "Wait", page("j2", "accepted", s1, s2, sub(3, "k2").answered(202, "j2", "accepted"))),
-		line(54000, custom("ui.cancel"), page("j2", "cancelled", s2, sub(3, "k2").answered(202, "j2", "accepted"), can(4, "j2").answered(200, "j2", "cancelled"))),
+		line(1000, nil, nil),
+		strings.Replace(line(2000, custom("ui.save"), nil), `"snapshots":[]`, `"snapshots":[{"name":"page","value":`+mustJSON(snap(
+			entry(1, "put", map[string]any{"k": "a", "v": 2}, nil, nil),
+			entry(2, "audit", nil, nil, nil)))+`}]`, 1),
+		strings.Replace(line(3000, "Wait", nil), `"snapshots":[]`, `"snapshots":[{"name":"page","value":`+mustJSON(snap(
+			entry(1, "put", map[string]any{"k": "a", "v": 2}, 201, map[string]any{"version": 7, "etag": "e1"}),
+			entry(2, "audit", nil, 0, nil)))+`}]`, 1),
 	}, "")
-	as, err := Actions(strings.NewReader(trace), Options{})
+	opt := Options{Snapshot: "page", Clicks: map[string][]string{"ui.save": {"put", "audit"}}}
+	steps, err := Read(strings.NewReader(trace), opt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := fmt.Sprint(as), "[submit k1 twice await k1 submit k2 sleep 50ms cancel k2 await k2]"; got != want {
-		t.Fatalf("actions %s, want %s", got, want)
+	var got []string
+	for _, s := range steps {
+		got = append(got, fmt.Sprintf("%s %v %d %v %s", s.Action, s.Invocation, s.Call, s.Args, s.Recorder))
+	}
+	want := []string{
+		"put true 0 map[k:a v:2] bombadil",
+		"audit true 0 map[] bombadil",
+		"put false 1 map[code:201 etag:e1 k:a v:2 version:7] bombadil",
+		"audit false 2 map[code:0] bombadil",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("steps\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// the request log it makes is the protocol's: written and read back,
+	// the same steps
+	l, err := Log(strings.NewReader(trace), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf strings.Builder
+	if err := l.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+	back, err := qdriver.Read(strings.NewReader(buf.String()))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, buf.String())
+	}
+	for i, s := range back.Steps() {
+		if fmt.Sprint(s.Args) != fmt.Sprint(steps[i].Args) || !s.Time.Equal(steps[i].Time) || s.Ref != steps[i].Ref || s.Call != steps[i].Call {
+			t.Errorf("step %d read back as %+v, want %+v", i, s, steps[i])
+		}
+	}
+	// the spec's own names are required
+	if _, err := Read(strings.NewReader(trace), Options{}); err == nil || !strings.Contains(err.Error(), "names no Snapshot") {
+		t.Errorf("no snapshot named: %v", err)
+	}
+	if _, err := Read(strings.NewReader(trace), Options{Snapshot: "page"}); err == nil || !strings.Contains(err.Error(), "custom action ui.save is none the adapter maps") {
+		t.Errorf("no clicks named: %v", err)
 	}
 }
 
-// Every request of an entry is an action, in the order sent: two
-// submissions of other keys two Submits, a cancel beside a submission
-// and two cancels each a Cancel; an await polls at the page's 100ms.
-func TestActionsEveryRequest(t *testing.T) {
-	a1 := sub(1, "k1").answered(202, "j1", "accepted")
-	b2 := sub(2, "k2").answered(202, "j2", "accepted")
-	trace := strings.Join([]string{
-		line(1000, nil, page("", "")),
-		line(2000, custom("ui.submit"), page("j1", "accepted", a1, b2)),
-		line(3000, custom("ui.cancel"), page("j1", "cancelled", a1, b2, can(3, "j1").answered(200, "j1", "cancelled"))),
-		line(4000, custom("ui.cancel"), page("j2", "cancelled", can(3, "j1").answered(200, "j1", "cancelled"), can(4, "j2").answered(200, "j2", "cancelled"), can(5, "j1").answered(409, "j1", "cancelled"))),
-	}, "")
-	as, err := Actions(strings.NewReader(trace), Options{})
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	if got, want := fmt.Sprint(as), "[submit k1 await k1 submit k2 sleep 1ms cancel k1 sleep 1ms cancel k2 cancel k1 await k2]"; got != want {
-		t.Fatalf("actions %s, want %s", got, want)
-	}
-	for _, a := range as {
-		if w, ok := a.(journey.AwaitEnd); ok && w.Every != 100*time.Millisecond {
-			t.Errorf("%v polls every %v, want the page's 100ms", w, w.Every)
-		}
-	}
+	return string(b)
 }

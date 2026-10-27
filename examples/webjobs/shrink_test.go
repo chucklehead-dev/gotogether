@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/webjobs/bombadiltrace"
 	"github.com/chucklehead-dev/gotogether/examples/webjobs/journey"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -97,7 +96,7 @@ func faithful(t *testing.T, actions []journey.Action) {
 }
 
 // A failure Bombadil found shrinks in Go: a mutant's recorded journey
-// becomes the page's actions (bombadiltrace.Actions), played against a
+// becomes the page's actions (journey.FromTrace), played against a
 // fresh mutant server each rerun and shrunk as the client's plans are.
 // Full mode.
 func TestShrinkRecorded(t *testing.T) {
@@ -116,7 +115,7 @@ func TestShrinkRecorded(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			original, err := bombadiltrace.Actions(f, bombadiltrace.Options{})
+			original, err := journey.FromTrace(f)
 			f.Close()
 			if err != nil {
 				t.Fatal(err)

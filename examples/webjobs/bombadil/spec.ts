@@ -1,7 +1,7 @@
 // Bombadil's specification of the webjobs page: what it may do (submit a
 // report, with a double click as people do; cancel the job shown; wait)
 // and what it checks of the page by itself. The model checks the rest,
-// from this run's trace.jsonl (package bombadiltrace) and the server's
+// from this run's trace.jsonl (package qdriver/bombadil, with journey.Bombadil's mapping) and the server's
 // steps. The adapter reads the custom actions by name (ui.submit,
 // ui.cancel) and the `result` snapshot: keep the three as they are. Its
 // `log` is the page's last requests, each with what it sent and its own

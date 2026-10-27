@@ -1,112 +1,210 @@
-# Runs a driver made: Bombadil, Playwright
+# Runs a driver made: Bombadil, Playwright, your own
 
 Read this when the run to check was driven by a tool gotogether did not
 run: a browser explorer (Bombadil), an end-to-end suite (Playwright,
-Cypress), a load generator, a replayed production session. The driver's
-own record of the run (its trace, its screenshots) is then an input, and
-an adapter you write turns it into steps. [examples/webjobs](../../../examples/webjobs)
-is the whole case: a web app explored by Bombadil, its adapter
-(`bombadiltrace`), recorded runs checked offline and a live run nightly.
+Cypress), a load generator, a replayed production session. What the
+driver sent and what came back is then an input, a **request log** in a
+small protocol the driver writes (package `qdriver`), and `gotogether
+validate` reads it beside the server's steps:
 
-## A click is an invocation, its own answer is the completion
-
-A driver records what it did (a click) and, separately, what it then
-saw (a DOM snapshot). Only an observation the click caused says its
-operation happened, and the page's display rarely says which click
-caused what: a poll's answer, a second click's answer and a cancel's
-answer can all change the same status. So make the page (or the
-driver's custom action) expose each request's own answer, and map:
-
-- each request a driver action sent is an **invocation record**
-  (`qtrace.Step{Invocation: true, Seq: n, ...}`), never a step, with
-  the arguments **the request sent** (from the page's log of it: the
-  key in its body, the id in its URL), not the state shown before the
-  click, which a late answer may have changed between the driver's
-  snapshot and its click;
-- its completion is **the first observation of that request's own
-  answer** (its status code and body, from the page's log): a step
-  whose `Call` is the invocation's `Seq`, at that observation's time;
-- several clicks are several calls, each completed only by its own
-  answer: a double click is two requests, and the second is answered
-  when its own response is seen, not when the first's job is shown;
-- any other change the page shows (a poll's status, a stale answer) is
-  a step of its own, which completes nothing;
-- a request the page never answered (an error it swallowed, a hang)
-  stays pending though the page then shows the job ended for another
-  reason.
-
-webjobs' page keeps `#log`, its last three requests, each `{n, op, key
-or id, code, job}`, numbered as sent; the spec's extract reads it, and
-the adapter refuses a trace whose log skips requests between two
-snapshots. A request no driver action sent is refused too.
-
-A click whose outcome the trace never shows stays an invocation:
-`qtrace.Reconstruct` keeps it in `Trace.Pending`, and `qtest.Finishes()`
-(or `gotogether validate -require-finish`, or the binding's
-`complete: true`) fails the run as `incomplete (pending calls)`. A
-recorded click never stands in for an observed success: an adapter that
-writes the click as the step, or completes it with the next change of
-the page, passes a page that never answered (webjobs' cancelBroken
-mutant: a cancel answered 500 and ignored, the job shown ready by a
-poll).
-
-```go
-// the request the click sent, at the state before the click
-steps = append(steps, qtrace.Step{Action: "submit", Invocation: true, Seq: 7, Recorder: "ui",
-	Time: before, Ref: "trace.jsonl:12 screenshot=screenshots/a.jpeg", Args: map[string]any{"key": sentKey}})
-// its own answer, at the snapshot whose log first shows it
-steps = append(steps, qtrace.Step{Action: "submit", Call: 7, Seq: 8, Recorder: "ui", Outcome: "ok",
-	Time: answered, Ref: "trace.jsonl:13 screenshot=screenshots/b.jpeg",
-	Args: map[string]any{"key": sentKey, "code": int64(202), "id": id, "status": status}})
+```sh
+gotogether validate -binding app.binding.yaml server.jsonl requests.jsonl
 ```
 
-State the page's end too: a model whose page may stay "accepted" for
-good after the server finished passes a page that never polls again.
-webjobs says it twice: an eventual val (`pageShowsEnds`: every job the
-page was answered with shown ended) and a `within` (a job committed is
-shown ended within 500ms). A journey a driver cuts at a time limit can
-be mid-job: let the page stop new journeys before the limit (webjobs'
-`?until=<ms since the epoch>`, 2s before the limit), so its last job
-ends on screen.
+- Playwright: [adapters/playwright](../../../adapters/playwright) writes
+  the log from a page's routed requests and responses (copy one file).
+- Bombadil: package `qdriver/bombadil` reads its `trace.jsonl` (with a
+  page that logs its requests) and makes the log, or the steps.
+- Anything else: write the protocol yourself (below); it is JSONL.
 
-## Keep the journey's own times, calls and order
+[examples/webjobs](../../../examples/webjobs) is the whole case: a web
+app explored by Bombadil (recorded runs checked offline, live runs
+nightly) and driven by Playwright (`TestPlaywright`), both through the
+request log.
 
-Write the steps as the driver's trace has them (`qtrace.Step` values
-passed to `qtest.Validate`, or written with `qtrace.WriteJSONL` for
-`gotogether validate`), never by calling `qobs.Record` or `qobs.Invoke`
-while the adapter reads an archived trace. A recorder stamps each step
-with the time it is called, validation's time, and numbers it in its own
-sequence. An archived journey then follows every server step in time:
-the order between the page and the server, which a model of "the page
-shows ready only after the commit" is about, is lost, and the bug it
-would catch passes (webjobs' `TestTimesKept`: re-recorded, the readyEarly
-mutant's run conforms, and the faithful journey's page acts after the
-server's settle, which then settles nothing). So:
+## A request is an invocation, its own answer the completion
 
-- **times**: each record's `Time` is the driver's (Bombadil's
-  `timestamp`, microseconds since the epoch); an invocation's is the
-  state before the action, a completion's the state that shows it;
-- **call identities**: `Seq` dense from 1 per recorder (a gap is lost
-  steps), and each completion's `Call` its own invocation's `Seq`, from
-  the request's own identity (the page's request number), never matched
-  up by what the page shows next; `qtrace.Reconstruct` reports a
-  completion timed before its invocation record, or numbered before it,
-  as an error;
-- **causal order**: one `Thread` for one tab (its actions are in program
-  order); across the driver and the servers, wall time, which orders
-  them only on one host or with clocks in sync to within
-  `qtrace.RealTimeSlack` (1ms). Across hosts, give the steps an order
-  key both sides carry (`order.<domain>`: a request id's sequence)
-  instead.
+A driver knows what it did (a click) and, separately, what it then saw.
+Only an observation the request caused says its operation happened, and
+the page's display rarely says which request caused what: a poll's
+answer, a second click's and a cancel's can all change one status. So
+the log records requests and their own answers, and maps:
+
+- each request sent is an **invocation record**, never a step, with the
+  arguments **the request sent** (the key in its body, the id in its
+  URL), not the state shown before the click, which a late answer may
+  have changed between the driver's snapshot and its click;
+- its completion is **that request's own answer**: its status and the
+  answer's fields, at the time the driver saw it;
+- several clicks are several calls, each completed only by its own
+  answer: a double click is two requests, and the second is answered
+  when its own response is seen (Playwright's webjobs journey: the
+  second request answered first, 202, the first 200);
+- any other change the driver sees (a poll's status, the page's text) is
+  a step of its own, which completes nothing;
+- a request never answered stays pending though the page then shows the
+  job ended for another reason, and `qtest.Finishes()` (or `gotogether
+  validate -require-finish`, or the binding's `complete: true`) fails
+  the run as `incomplete (pending calls)`. A request sent never stands
+  in for an observed success: an adapter that writes the click as the
+  step, or completes it with the next change of the page, passes a page
+  that never answered (webjobs' cancelBroken mutant: a cancel answered
+  500 and ignored, the job shown ready by a poll). It caught a driver
+  bug too: webjobs' Playwright journey once closed its log when the page
+  still showed the job before, its last submission unanswered.
+
+## The protocol: `gotogether.requests/1`
+
+One JSON object per line; the first is the header, every other a
+record. `qdriver.Read` (and the validator) refuses a field the protocol
+does not name, a later version (with the fix: upgrade), a response to
+no request or a second one, a response with no `code`, a time going
+back, naming the line; a torn last line is a lost tail.
+
+```json
+{"protocol": "gotogether.requests/1", "recorder": "ui", "actor": "webjobs", "process": "webjobs", "thread": "page", "driver": "playwright 1.56.1"}
+{"event": "request", "req": "1", "action": "submit", "time": "2026-10-27T06:41:00.356060Z", "args": {"key": "k1"}, "corr": "pw-1", "ref": "POST /jobs"}
+{"event": "request", "req": "2", "action": "submit", "time": "2026-10-27T06:41:00.357160Z", "args": {"key": "k1"}, "corr": "pw-2", "ref": "POST /jobs"}
+{"event": "response", "req": "2", "time": "2026-10-27T06:41:00.369632Z", "code": 202, "args": {"id": "j1", "status": "accepted"}}
+{"event": "step", "action": "show", "time": "2026-10-27T06:41:00.374479Z", "args": {"id": "j1", "status": "accepted"}}
+{"event": "response", "req": "1", "time": "2026-10-27T06:41:00.375131Z", "code": 200, "args": {"id": "j1", "status": "accepted"}}
+```
+
+| field | on | what it is |
+|---|---|---|
+| `protocol` | header | `gotogether.requests/1`, exactly (required) |
+| `recorder` | header | the steps' recorder (required): numbered in it, so two logs joined must not share one |
+| `actor`, `process`, `thread` | header | default `default`, the recorder, the recorder (one tab's program order) |
+| `driver` | header | free text |
+| `event` | record | `request`, `response` or `step` |
+| `time` | record | RFC 3339, the driver's clock, never going back (required) |
+| `req` | request, response | the request's identity in the log (a string); a response names its request's |
+| `action` | request, step | the model's action |
+| `args` | any | a request's: what it sent; a response's: the answer's fields; a step's: its arguments |
+| `code` | response | the answer's status, 0 if none came (required) |
+| `error` | response | why none came |
+| `outcome` | response | the step's (default `ok`: the call completed with its code, and the model judges the code) |
+| `obs` | response, step | observations of the state after it |
+| `corr` | request | the id the request carried to the server (a request-id header): written into its steps' refs (`corr=pw-1`) |
+| `thread` | request, step | another tab's program order (a response is in its request's) |
+| `order` | any | domain clocks (`qtrace.Step.Order`) |
+| `ref` | any | the artifact it came from (a screenshot, a trace line); a response without one takes its request's |
+
+A completion's arguments are what the request sent, then the answer's
+fields it did not send, then `code`: the call's arguments are the
+request's, whatever its answer says. Its steps keep the driver's times
+and order: `Seq` is the record's line among records, a completion's
+`Call` its request's, its `Invoked` the request's time.
+
+In Go: `qdriver.ReadFile(path)` (a `*qtrace.TornTail` error with the log
+for a torn one), `Log.Steps()` for `qtest.Validate`, `qdriver.New(header,
+records)` to build one (checked as Read checks it), `Log.Write(w)`.
+
+```go
+log, err := qdriver.ReadFile("test-results/requests.jsonl")
+if err != nil { /* refused: the error names the line and the fix */ }
+qtest.Validate(t, "app.binding.yaml", append(serverSteps, log.Steps()...)).Expect(t, qtest.Finishes())
+```
+
+## Bombadil: `qdriver/bombadil`
+
+Bombadil's trace has states, not requests: each line the state after an
+action (`Custom` for a spec's own), with the spec's extracts. Make the
+page keep a log of its requests, numbered as sent, each with what it
+sent and, once it came, its own answer, and read it in an extract:
+
+```js
+// in the page: {n, action, ...what it sent, code: null, answer: null}, then the answer's
+function sent(action, args) { const r = { n: requests.length + 1, action, ...args, code: null, answer: null }; requests.push(r); show(); return r; }
+// in the spec: extract(({document}) => ({log: JSON.parse(document.querySelector('#log').textContent), ...}))
+```
+
+```go
+steps, err := bombadil.ReadFile("journey/trace.jsonl", bombadil.Options{
+	Header:   qdriver.Header{Recorder: "ui", Actor: "webjobs", Process: "webjobs"},
+	Snapshot: "result",                                   // the spec's extract with the log
+	Clicks:   map[string][]string{"ui.submit": {"submit"}, "ui.cancel": {"cancel"}}, // custom action -> what it sends
+	Show:     &bombadil.Show{Key: "id", Fields: []string{"id", "status"}}, // the display: a show step per change
+})
+```
+
+- A request is an invocation at the state before the click that sent
+  it, which must be one of `Clicks`' custom actions: a request no click
+  sent is refused, as is a custom action not in `Clicks`.
+- Its answer completes it at the state that first shows it.
+- An entry's fields are `n`, `action`, `code`, `answer`, and what it sent
+  (every other field); `Fields` renames them (webjobs' page writes `op`
+  and `job`), and `AnswerFields` fills an answer the page left null (a
+  500's) with `""`, so every completion has its action's arguments.
+- Refs are `trace.jsonl:N screenshot=screenshots/F`: the line and the
+  screenshot of the state.
+- Refused, naming the line: a click with no snapshot, requests that fell
+  out of the page's log between two snapshots (it lists only the last
+  few), a log out of order. A torn last line is a lost tail.
+- `bombadil.Log` gives the request log (`Log.Write` it, and `gotogether
+  validate` reads it); `bombadil.States` the trace's states as read,
+  for your own mapping (webjobs' `journey.FromTrace` makes a rerunnable
+  list of actions from them).
+
+Running it: `bombadil browser test --headless --no-sandbox
+--time-limit 45s --output-path DIR ORIGIN spec.ts` exits 0 (no
+violation of the spec's properties), 2 (a violation) or 1 (an error);
+`--exit-on-violation` stops at the first. It writes `DIR/trace.jsonl`
+(per line: `timestamp` in microseconds, the `action` that led to the
+state, null for the first, a `Custom` action as `{"Custom": {"name":
+...}}`, the `state`'s `url` and `screenshot`, the extracts' `snapshots`
+as `{name, value}`, and `violations`) and `DIR/screenshots/`. It refuses
+a `DIR` that has a trace unless `--output-path-overwrite`. Install with
+`npm i @antithesishq/bombadil@0.7.9` (the package carries the binaries),
+and a Chrome or Chromium on PATH; an older Chrome needs
+`--chrome-grant-permissions` without the `local-network` permission it
+does not know.
+
+## Playwright: adapters/playwright
+
+`requestLog(page, {path, header, classify, answer})` routes the page's
+requests: each one `classify` names a call (`{action, args}` from the
+request's URL and body; null for a poll or an asset) is written when
+routed, before the browser sends it on, so before the server can act on
+it (Playwright's `request` event comes after the browser sent it, often
+after the server took it), with a correlation id in its `x-request-id`
+header; its response when Playwright reports it, with `answer`'s fields
+(code 0 and the error for a failed request). `log.watch('#result',
+map)` writes a step each time the element's text changes; `log.close()`
+waits for the answers being read. The adapter's
+[README](../../../adapters/playwright/README.md) has a test; its golden
+test feeds recorded events through it without a browser.
+
+## Your own driver
+
+Write the protocol: the header, then a `request` line when it sends a
+request (before the system can act on it: an invocation after its
+effect breaks a real-time check), a `response` line with the request's
+own status when its answer comes (code 0 when none came), a `step` line
+for what it sees that answers no request. Write each line as it happens
+(a killed driver keeps its log, a torn last line at worst), never all
+at the end. Never re-record an archived run through `qobs.Record` or
+`qobs.Invoke`: a recorder stamps each step with the time it is called,
+validation's time, and an archived journey then follows every server
+step in time, so the order between the driver and the server, which a
+model of "the page shows ready only after the commit" is about, is lost
+(webjobs' `TestTimesKept`: re-recorded, the readyEarly mutant's run
+conforms).
+
+Across hosts, the driver's and the server's clocks order their steps
+only if in sync to within `qtrace.RealTimeSlack` (1 ms): give the
+records an order key both sides carry (`order`, a request id's
+sequence) instead.
 
 ## Refs: the way back to the artifact
 
-Give every record `Ref` (`quint.ref`): the trace's line and the
+Give every record a `ref` (`quint.ref`): the trace's line and the
 screenshot of the state it describes (`trace.jsonl:42
-screenshot=screenshots/1793042049689466.jpeg`). A failing step's ref is
-printed with the failure and kept in the manifest, so a reader opens
-the screenshot of the state the model rejected. A ref is no model data:
-no verdict depends on it.
+screenshot=screenshots/1793042049689466.jpeg`), or the request (`POST
+/jobs`). A failing step's ref is printed with the failure and kept in
+the manifest, so a reader opens the screenshot of the state the model
+rejected; a request's `corr` is in it too. A ref is no model data: no
+verdict depends on it.
 
 ## What a settle covers
 
@@ -340,25 +438,3 @@ A live driver run needs the driver (and, for Bombadil, a Chrome):
   client making the page's requests and recording them as the adapter
   would (webjobs' `Client`), so a regression of the server fails on
   push, not only in a recorded trace.
-
-Bombadil specifics: `bombadil browser test --headless --no-sandbox
---time-limit 45s --output-path DIR ORIGIN spec.ts` exits 0 (no
-violation of the spec's properties), 2 (a violation) or 1 (an error);
-`--exit-on-violation` stops at the first. It writes `DIR/trace.jsonl`
-(per line: `timestamp`, the `action` that led to the state, null for the
-first, a `Custom` action as `{"Custom": {"name": ...}}`, the `state`'s
-`url` and `screenshot`, the extracts' `snapshots` as `{name, value}`,
-named after the spec's `extract` consts, and `violations`) and
-`DIR/screenshots/`. It refuses a `DIR` that has a trace unless
-`--output-path-overwrite`. Install with `npm i
-@antithesishq/bombadil@0.7.9` (the package carries the binaries), and a
-Chrome or Chromium on PATH; an older Chrome needs
-`--chrome-grant-permissions` without the `local-network` permission it
-does not know.
-
-Playwright is the same shape: record the invocation when the click
-sends its request (`page.waitForRequest`), and complete it from that
-request's own response (`await request.response()`: its status and
-body), not from the first `expect(...).toHaveText` that passes, which
-a poll or another request may have made true. Its trace's screenshots
-and the HTML report are the refs and artifacts.
