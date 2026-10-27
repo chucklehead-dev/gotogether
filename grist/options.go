@@ -2,6 +2,7 @@ package grist
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -29,6 +30,21 @@ type options struct {
 	// refuses to serve the App (deny by default, docs/grist.md §4.3)
 	authorize Policy
 	internal  bool
+	// refuses are a command's declared rejections (Refuses), nil when it
+	// declares none; shape is a processor's declared result (Emits,
+	// Delivers): its delivery, the event types it emits, its success
+	// event's type
+	refuses  []string
+	shape    shape
+	declared int // how many of Emits and Delivers were given
+}
+
+// shape is a processor's declared result: 0 when it declares none.
+type shape struct {
+	kind     resultKind // emitResult or effectResult
+	delivery Delivery
+	emits    []EventName
+	success  EventName // nil: no OnSuccess
 }
 
 // The defaults of the tries and the batch size.
@@ -65,6 +81,14 @@ func (a *App) options(kind, name string, opts []Option) options {
 			a.problems = append(a.problems, fmt.Sprintf("%s %q: option %s: %s", kind, name, opt.name, p))
 		}
 	}
+	if o.declared > 1 {
+		a.problems = append(a.problems, fmt.Sprintf("%s %q: more than one of Emits and Delivers: a processor declares one result shape", kind, name))
+	}
+	for _, e := range append(append([]EventName(nil), o.shape.emits...), o.shape.success) {
+		if e != nil && a.events[e.Name()] != e.registered() {
+			a.problems = append(a.problems, fmt.Sprintf("%s %q: it declares %q, an event of another App: register it on %s", kind, name, e.Name(), a.Name))
+		}
+	}
 	if o.authorize != nil && o.internal {
 		a.problems = append(a.problems, fmt.Sprintf("%s %q: both Authorize and Internal: an internal block is served to no one; drop one", kind, name))
 	}
@@ -85,8 +109,10 @@ func kindsOf(option string) []string {
 	switch option {
 	case "Unconditioned", "ConditionTries":
 		return []string{"command"}
-	case "EffectTries", "BatchSize":
+	case "EffectTries", "BatchSize", "Emits", "Delivers":
 		return []string{"processor"}
+	case "Refuses":
+		return []string{"command"}
 	}
 	return []string{"command", "query"} // TransientTries (a poller retries a transient error forever), Authorize, Internal
 }
@@ -184,4 +210,104 @@ func EffectTries(n int) Option {
 // (default 100).
 func BatchSize(n int) Option {
 	return tries("BatchSize", n, func(o *options, n int) { o.batchSize = n })
+}
+
+// Refuses declares the rejections a command's decision may return (each
+// a Rejection's value), so the model generator (Generate) writes an
+// outcome branch for each and the binding an outcome. A decision that
+// returns a rejection it does not declare is its error (recorded with its
+// text, not remembered), naming the fix: a declaration the code
+// contradicts would make the generated model wrong silently. A command
+// that declares none may refuse with any rejection, and its generated
+// model has none.
+func Refuses(rejections ...error) Option {
+	return Option{name: "Refuses", kinds: kindsOf("Refuses"), apply: func(o *options) string {
+		o.refuses = []string{}
+		for _, r := range rejections {
+			rej, ok := r.(*Rejected)
+			if !ok || rej == nil || rej.Name == "" {
+				return fmt.Sprintf("%v is no rejection: give values of grist.Rejection", r)
+			}
+			if rej.Name == ErrKeyReused.(*Rejected).Name {
+				return "idempotency-key-reused is grist's own refusal, never a decision's: remove it"
+			}
+			o.refuses = append(o.refuses, rej.Name)
+		}
+		return ""
+	}}
+}
+
+// Emits declares a processor whose handler returns Emit (of events of
+// the given types only) or Skip: exactly once in the log, its appends
+// committed with its checkpoint. The model generator writes its action
+// from it. A handler that returns anything else (an Effect, an event of
+// another type) fails its trigger (Fail: tried EffectTries times, then
+// grist.failed), naming the fix.
+func Emits(types ...EventName) Option {
+	return Option{name: "Emits", kinds: kindsOf("Emits"), apply: func(o *options) string {
+		for _, t := range types {
+			if t == nil {
+				return "a nil event type: give registered event types (NewEvent's)"
+			}
+		}
+		o.declared++
+		o.shape = shape{kind: emitResult, emits: types}
+		return ""
+	}}
+}
+
+// Delivers declares a processor whose handler returns an Effect of
+// delivery d, with OnSuccess of an event of type success (at most one;
+// none: no success event). The model generator writes its effect,
+// checkpoint and outcome actions from it (grist.qnt's at-least-once or
+// at-most-once defs). A handler that returns another delivery, no
+// success event where one is declared or another's, or an Emit, fails
+// its trigger (Fail), naming the fix: the guarantee the model judges is
+// the declared one. Skip and Fail are allowed whatever the shape.
+func Delivers(d Delivery, success ...EventName) Option {
+	return Option{name: "Delivers", kinds: kindsOf("Delivers"), apply: func(o *options) string {
+		if d != AtLeastOnce && d != AtMostOnce {
+			return fmt.Sprintf("delivery %d: give AtLeastOnce or AtMostOnce", d)
+		}
+		if len(success) > 1 {
+			return "more than one success event: an effect's OnSuccess appends one"
+		}
+		o.declared++
+		o.shape = shape{kind: effectResult, delivery: d}
+		if len(success) == 1 {
+			if success[0] == nil {
+				return "a nil success event type: give a registered event type, or none"
+			}
+			o.shape.success = success[0]
+		}
+		return ""
+	}}
+}
+
+// conforms is res's contradiction of the processor's declared shape, if
+// any: nil when it declares none, and for Skip and Fail whatever it
+// declares.
+func (s shape) conforms(processor string, res Result) error {
+	if s.kind == 0 || res.kind == failResult || res.kind == emitResult && len(res.events) == 0 {
+		return nil
+	}
+	switch {
+	case s.kind == emitResult && res.kind != emitResult:
+		return fmt.Errorf("grist: processor %s returned an Effect, but it declares Emits: return Emit or Skip, or declare Delivers", processor)
+	case s.kind == emitResult:
+		for _, e := range res.events {
+			if !slices.ContainsFunc(s.emits, func(t EventName) bool { return t.Name() == e.Type }) {
+				return fmt.Errorf("grist: processor %s emits %q, which its Emits does not declare: add it", processor, e.Type)
+			}
+		}
+	case res.kind != effectResult:
+		return fmt.Errorf("grist: processor %s returned Emit, but it declares Delivers: return an Effect, or declare Emits", processor)
+	case res.delivery != s.delivery:
+		return fmt.Errorf("grist: processor %s returned an Effect %s, but it declares Delivers(%s): make them agree", processor, res.delivery, s.delivery)
+	case s.success == nil && res.onSuccess != nil:
+		return fmt.Errorf("grist: processor %s's Effect has OnSuccess(%s), which its Delivers does not declare: add it", processor, res.onSuccess.Type)
+	case s.success != nil && (res.onSuccess == nil || res.onSuccess.Type != s.success.Name()):
+		return fmt.Errorf("grist: processor %s's Effect lacks OnSuccess of %s, which its Delivers declares: append it, or drop it from Delivers", processor, s.success.Name())
+	}
+	return nil
 }

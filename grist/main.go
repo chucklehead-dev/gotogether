@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -50,6 +52,9 @@ func (e *UsageError) Error() string { return e.Msg }
 const mainUsage = `commands:
   catalog                     print the App's registry as JSON (App.Catalog)
   verify                      check the registry (App.Verify), as the node does at boot
+  model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings (Generate) under DIR (default .)
+      -check                           write nothing: fail if a generated file differs (CI's diff)
+      -init                            also write a first model/<app>.qnt (Starter) if there is none
   serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
       -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
       -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port)
@@ -63,6 +68,10 @@ const mainUsage = `commands:
 //
 //	catalog    App.Catalog as JSON on stdout
 //	verify     App.Verify
+//	model      Generate's files written under -dir (default .), or with -check
+//	           compared with those there (an error naming each that differs);
+//	           -init writes a Starter model/<app>.qnt where there is none.
+//	           It lists the holes the app's model has not filled
 //	serve      the HTTP API (NewHandler, opts applied) on grist/sqlstore over -db
 //	           (sqlite:PATH, postgres:DSN), the node (App.Start: relay, pollers,
 //	           the tenant watcher) beside it, every step recorded to -steps
@@ -94,6 +103,8 @@ func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 		}
 		fmt.Fprintf(stdout, "%s verifies\n", app.Name)
 		return nil
+	case "model":
+		return modelMain(app, args[1:], stdout)
 	case "serve":
 		return serveMain(ctx, app, args[1:], stderr, opts)
 	case "help", "-h", "-help", "--help":
@@ -102,6 +113,61 @@ func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 	}
 	return &UsageError{Msg: fmt.Sprintf("%s: unknown command %q\n%s", app.Name, args[0], mainUsage)}
 }
+
+// modelMain is the model command.
+func modelMain(app *App, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet(app.Name+" model", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	dir := fs.String("dir", ".", "")
+	check := fs.Bool("check", false, "")
+	starter := fs.Bool("init", false, "")
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 {
+		return &UsageError{Msg: fmt.Sprintf("usage: %s model [-dir DIR] [-check] [-init]", app.Name)}
+	}
+	own := filepath.Join(*dir, modelFile(app.Name))
+	if *starter && !*check {
+		if _, err := os.Stat(own); errors.Is(err, os.ErrNotExist) {
+			b, err := Starter(app)
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(own), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(own, b, 0o644); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "wrote %s (every hole stubbed: write the rules)\n", own)
+		}
+	}
+	g, err := Generate(app, *dir)
+	if err != nil {
+		return err
+	}
+	if *check {
+		if d := g.Diff(*dir); len(d) > 0 {
+			return fmt.Errorf("%s model: %s differ from what the catalog generates: regenerate with `%s model` and commit them", app.Name, strings.Join(d, ", "), app.Name)
+		}
+	} else if err := g.Write(*dir); err != nil {
+		return err
+	}
+	if len(g.Missing) > 0 {
+		var b strings.Builder
+		for _, h := range g.Holes {
+			if slices.Contains(g.Missing, h.Name) {
+				fmt.Fprintf(&b, "\n%s  %s", comment("  ", h.Doc), h.Stub)
+			}
+		}
+		return fmt.Errorf("%s model: %s does not define %s, which the skeleton calls; in module %sRules, for instance:%s",
+			app.Name, own, strings.Join(g.Missing, ", "), mustQuint(app.Name), b.String())
+	}
+	if !*check {
+		fmt.Fprintf(stdout, "wrote %d files under %s\n", len(g.Files), *dir)
+	}
+	return nil
+}
+
+func mustQuint(name string) string { q, _ := QuintName(name); return q }
 
 // names is a repeatable flag.
 type names []string

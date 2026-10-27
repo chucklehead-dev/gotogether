@@ -18,6 +18,6 @@ import (
 var Post = grist.NewProcessor(App, "post", Moved,
 	func(ctx context.Context, r *grist.Reads, e Move, m grist.Meta) grist.Result {
 		return grist.Effect(func(ctx context.Context) error {
-			return DepsOf(ctx).Ledger.Post(ctx, r.Tenant(), grist.EffectKey(ctx), e.Account, e.Amount)
+			return LedgerDep.Of(ctx).Post(ctx, r.Tenant(), grist.EffectKey(ctx), e.Account, e.Amount)
 		}, grist.AtMostOnce, grist.OnSuccess(Posted.Of(Posting{Account: e.Account, Amount: e.Amount, Of: int64(m.Pos)})))
-	})
+	}, grist.Delivers(grist.AtMostOnce, Posted))

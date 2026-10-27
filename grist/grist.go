@@ -46,6 +46,7 @@ type App struct {
 	queries    map[string]*queryInfo
 	processors []*processorInfo
 	readModels []*readModelInfo
+	sites      []*siteInfo
 	problems   []string
 }
 

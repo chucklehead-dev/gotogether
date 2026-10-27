@@ -1,0 +1,53 @@
+package {{.Pkg}}
+
+import (
+	"context"
+	"fmt"
+	"math/rand/v2"
+	"sync"
+	"testing"
+
+	_ "modernc.org/sqlite" // the real tier's driver
+
+	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/gristtest"
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
+)
+
+// TestRealHTTP: the real tier (gristtest.Tier), judged by the same
+// bindings: the app on a SQLite file served over real HTTP, one node, two
+// clients calling the API at once, every fifth command's answer lost
+// after it was served (its client retries under the same key, the marker
+// answers). The tier waits for the processor and the relay, probes both
+// items and records the settle; the steps conform at the store (and
+// settle) and, linearized, at the clients, and every answer a client got
+// has its store-side step.
+func TestRealHTTP(t *testing.T) {
+	qtest.RequireQuint(t)
+	tier := gristtest.NewTier(t, App, gristtest.TierConfig{})
+	tier.Start("node")
+	var wg sync.WaitGroup
+	for c := 1; c <= 2; c++ {
+		wg.Go(func() {
+			ctx := qobs.Thread(tier.Clients()) // one thread per goroutine
+			r := rand.New(rand.NewPCG(1, uint64(c)))
+			for op := 1; op <= 8; op++ {
+				env := grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Actor: fmt.Sprint("client", c)}
+				item := []string{"a", "b"}[r.IntN(2)]
+				if r.IntN(3) == 0 {
+					tier.Do(ctx, env, "show-item", ShowItem{Item: item})
+				} else {
+					tier.Do(ctx, env, "add-item", AddItem{Item: item, Qty: r.IntN(4)})
+				}
+			}
+		})
+	}
+	wg.Wait()
+	tier.Settle(func(ctx context.Context) {
+		for i, item := range []string{"a", "b"} {
+			tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: "t1", Actor: "probe"}, "show-item", ShowItem{Item: item})
+		}
+	})
+	tier.Check(commits, calls)
+}

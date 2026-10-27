@@ -1,0 +1,40 @@
+# {{.Name}}
+
+A grist application, scaffolded by `grist new {{.Name}}`: items added to
+a store that holds at most five of each (`add-item`, refused `invalid` or
+`full`), shown (`show-item`), and tallied after each addition (the
+`tally` processor). It is checked against its Quint model with nothing
+annotated: grist records every block's step, and the model's skeleton
+and both bindings are generated from the App's catalog.
+
+| file | what it is |
+|---|---|
+| [app.go](app.go), [commands.go](commands.go), [queries.go](queries.go), [processors.go](processors.go) | the events, the read model (`stock`, keyed by item), the command, the query, the processor |
+| [model/{{.Name}}.qnt](model/{{.Name}}.qnt) | written by hand: the rules the skeleton calls (each command's outcome, events and the reads it needs, the query's answer, the processor's events) and the invariants, each marked for its binding (`// grist: invariant`) |
+| [model/{{.Name}}_gen.qnt](model/{{.Name}}_gen.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/{{.Name}} model` (never edit them; `TestGenerated` fails when they are stale) |
+| [cmd/{{.Name}}](cmd/{{.Name}}/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
+| [testdata/mutants](testdata/mutants) | `noCapacity`: the capacity check left out |
+
+## Which check catches which mutant
+
+| test | configuration | catches |
+|---|---|---|
+| `TestFaithful` | one tenant, three clients, commit faults, node crashes, a lossy API | nothing: `Conforms`, `All(Settles)`, commit faults reached |
+| `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
+| `TestFull` | two clients filling one item, no faults | nothing: `None(Rejects("addItem"))` (the mutant's contrast) |
+| `TestMutant` (`noCapacity`) | the same | `Some(Rejects("addItem"))`: an addition past the capacity commits where the model refuses it |
+| `TestRealHTTP` | the real tier: SQLite, real HTTP, every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |
+| `TestGenerated` | the generated files against the catalog | a block changed without regenerating |
+
+## Next
+
+Add a block (an event, a command, a processor) in Go, regenerate (`go
+run ./cmd/{{.Name}} model`: it names each new hole and a stub for it),
+fill the holes in `model/{{.Name}}.qnt`, mark the invariants, and write a
+mutant per claim. skills/grist says how.
+
+```sh
+go test -short ./...           # every claim (needs quint on PATH)
+./run-demo.sh
+MUTATION=no-capacity ./run-demo.sh
+```

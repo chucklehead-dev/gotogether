@@ -5,8 +5,9 @@ building it changed here, §0.2 what its review changed); slice 2's SQL
 store built (grist/sqlstore, the relay, gristsim's SQL tier, a real tier
 on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
 `grist.Main` built (§0.5), `AtMostOnce` built (§0.6), their review's
-fixes (§0.7), a newcomer's trial's fixes (§0.8), its generator and
-gristflow design, as is slice 3. Decisions taken 2026-10-27 (a module
+fixes (§0.7), a newcomer's trial's fixes (§0.8), the generator, `grist
+new` and the test harnesses built (§0.9); gristflow is design, as is
+slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
 alongside); revised the same day after a review, every point of which
@@ -885,6 +886,119 @@ What it found, each fixed where it stands:
   name must avoid. `Catalog`'s doc comment no longer reads as if the
   generator (§3.2) were built.
 
+## 0.9 What building the generator changed (GR2)
+
+GR2 (docs/ROADMAP.md): onboarding with minimal work, done when a trial
+agent writes no binding by hand. The trial (§0.8, wallet-grist's
+TRIAL.md) wrote 200 of 314 model lines, three bindings, an 80-line
+mutant harness and a 120-line real-tier harness by hand. Built, each
+with a test that fails without it:
+
+- **The generator is the app's binary's** (`<app> model`, `grist.Main`;
+  `grist.Generate`, `grist.Starter`), not a `cmd/grist` that would have
+  to load an application's catalog it cannot import: only the app's own
+  process has its `App`. It needs no binding or validate (text from the
+  `Catalog`), so a production binary links nothing more.
+- **Shapes the generator needs are declared, and enforced.** The
+  catalog lacked each command's refusals and each processor's result:
+  `grist.Refuses(rejections...)` on a command (a decision returning an
+  undeclared rejection is its error, not remembered), `grist.Emits(types...)`
+  or `grist.Delivers(d, success...)` on a processor (a result that
+  contradicts it fails the trigger: tried, then `grist.failed`; Skip and
+  Fail allowed under any). A declaration the code could contradict
+  silently would make the generated model wrong silently
+  (`TestRefusesDeclared`, `TestShapeDeclared`; each fails with its
+  enforcement taken out). A processor declaring neither is the
+  generator's error.
+- **What it writes, and what the app writes.** `model/<app>_gen.qnt`
+  holds three modules: `<app>Events` (an `Event` constructor per type,
+  accessors, reads, each read model's selection of the log and the reads
+  a read of it records, a record type per block's arguments with
+  `principal`, per query's result, per site's record), `<app>Gen` (the
+  store's side: every variable, an action per command with its reused
+  key, conflict, ok and declared refusals over `freshKey`, `covers` and
+  `conditionHolds`, per query, per processor by its declared shape over
+  grist.qnt's at-least-once and at-most-once defs, per site; every frame
+  condition; `step`) and `<app>CallsGen` (the clients'). Beside it the
+  vendored `grist.qnt`, `<app>.binding.yaml`, `<app>.calls.binding.yaml`
+  and a binding per test-only variant. The app writes
+  `model/<app>.qnt`: module `<app>Rules` with the holes (per command
+  `<c>Outcome`, `<c>Events`, `<c>Needs`; per query `<q>Answer`; per
+  processor `<p>Emits` or `<p>Success`; per site `<s>Admits`; `STRS`
+  and `INTS` for `step`) and the read models' folds; module `<app>` and
+  `<app>Calls`, importing the skeleton, with the invariants. **Folds
+  are holes**, not generated: a fold is a Go closure the generator
+  cannot read, and an analyzer that translated one (gristpure's facts,
+  §4.1) is slice 3's; the generated selection (`totalsEvents(log, c)`)
+  leaves a fold one line. **A rule is a function** (the outcome its
+  decision reaches on the log), not a predicate per outcome: the Go
+  decision is one, it makes `step` able to drive every command, and a
+  generated action checks `result == <c>Outcome(log, c)`.
+- **Regeneration preserves the holes by construction**: the skeleton is
+  a module of its own file, which the app's model imports and the
+  generator overwrites whole; the app's file is never written but by
+  `model -init` when it does not exist. Markers inside one file were the
+  alternative; they make a stale region a merge, where a module makes it
+  a quint error naming the hole. A hole takes its block's arguments as a
+  record (`c.counter`), so a field added to a command changes no hole's
+  signature; a new block's holes are reported missing, each with a stub.
+- **Invariants are marked, not listed**: `// grist: invariant|eventually|violable
+  [bindings]` on the line before a val (`default` the store's binding,
+  another name a test-only variant `<app>.<name>.binding.yaml`; in
+  `<app>Calls`, the clients' binding). counters' `once`, `exactly` and
+  `retiring` are three such variants. A variant keeps its own eventual
+  vals so a per-push binding pays for few replays; one that judges only
+  its own vals compares no observation (the default binding's claims
+  do), one that judges every default invariant is a default binding with
+  more vals and compares them, as counters' hand-written variants did.
+- **The binding module exports the skeleton**, so binding's `LoadModel`
+  follows whole-module exports transitively (a core change:
+  `TestLoadModelFollowsExports`). And the app's modules import grist,
+  the events and the rules themselves beside the skeleton: quint's
+  flattener (`quint compile`, which the validator's Go evaluator runs
+  on a module importing the binding's from another directory) loses
+  names re-exported twice, and without the evaluator every
+  linearization's candidates were checked by quint processes:
+  wallet-grist's linearized claims cost twice the CPU, with nothing
+  failing. `gristtest.Generated` fails a module without those imports
+  (ablated: it does), without running quint (every validation
+  typechecks the model).
+- **The read set is a parameter of triples** (`reads: List[(str, str,
+  str)]`, `readsOf` in the action), which the binding's default template
+  renders as literals (`toList`): a generated binding needs no template
+  for it, and the "no model-level ITF" log (§0.8) is gone.
+- **Names**: a parameter Quint reserves (`of`, `item`, `size`: quint's
+  built-ins, read from its own list) is renamed (`of_`, with the binding's
+  template); an integer tag, a pointer argument and a JSON name that is
+  no identifier are the generator's errors with the fix.
+- **`grist new <name>`** (`grist/cmd/grist`) writes a module (an App of
+  two events, a keyed read model, a command with two refusals, a query, a
+  processor that emits; its binary, its rules, a gristsim test with
+  `Expect` claims, a mutant, a real-tier test, `run-demo.sh`, a README),
+  runs `go mod tidy` and the app's `model` command; `TestNewIsGreen` runs
+  `go test -short ./...` in it (full mode, about a CPU minute).
+- **Harnesses** (grist/gristtest): `Generated(t, App)` (the CI diff: the
+  checked-in skeleton, grist.qnt and bindings are the catalog's, every
+  hole defined, both modules importing the events and rules;
+  `GRIST_UPDATE=1` writes them);
+  `Mutants{Names, FullOnly}.Run(t)` and `Mutant()` (each mutant's binary
+  built with a go `-overlay` of `testdata/mutants/<m>/*.go`, told its
+  name by `GRIST_MUTANT`: no marker file); `NewTier(t, App, TierConfig)`
+  (the real tier: SQLite, real HTTP, nodes started and killed, lost
+  answers, `Settle` waiting for every processor of the catalog and the
+  relay, `Check` validating both bindings and `Answered`, the
+  every-client-answer-has-its-store-step cross-check). In grist:
+  `grist.NewDep[T]` (a typed dependency: `With`, `Of`, a fallback) for
+  each app's context key, and `grist.NewSite[T]` (`Record(ctx, tenant,
+  v)`: a double's record of its effect at its site, actor the tenant,
+  process the App's) for the hand-written `qobs.Record` of `actor` and
+  `process`.
+- **What remains hand-written**: examples/counters' model 472 lines (329
+  of code) → 143 (75), its five bindings (203 lines) → none, its mutant
+  and real-tier harnesses 563 → 265 lines; wallet-grist's model 314
+  (211) → 124 (64), its three bindings → none, its harnesses 388 → 145.
+  Their claims are unchanged and pass in full mode.
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
 Both were read in grain's code (research notes, 2026-10-27); slice 1
@@ -1597,7 +1711,10 @@ number with a fraction and a time string, naming the field and the fix
 (an integer unit). A generated stub of an action the application has
 not written appends what the step recorded and checks nothing; `grist
 verify` lists stubs, and `gristtest` reports them through
-`qtest.Optional`, so `GOTOGETHER_STRICT=1` fails on them.
+`qtest.Optional`, so `GOTOGETHER_STRICT=1` fails on them. (Built, §0.9: the generator is the app's
+binary's `model` command, it writes no stubs of actions but leaves the
+rules as holes of the app's own module, and the event encoding stays
+slice 1's record, `batchIs` comparing it.)
 
 ### 3.3 grist's guarantees as a Quint module
 
@@ -1853,10 +1970,11 @@ decisions (`grist.Todo`) until `grist verify` is clean; **model first**
 (preconditions, invariants, `quint run`); **implement red first** (the
 stub's exploration fails by `Rejects`); **prove each check can fail**
 (a mutant per claim); **tend** (verify, analyzers, exploration on every
-change). The CLI (`grist`, `cmd/grist`, which alone links the generator,
-binding and validate): `catalog`, `verify`, `model`, `topology -w`,
-`invoke`, `query`, `events`, `fold`, against a memstore or a SQLite
-file. `gotogether-start`'s table gets a row.
+change). An app's binary (`grist.Main`) has `catalog`, `verify`, `model`
+(the generator, §0.9) and `serve`; `grist new` (`cmd/grist`) starts an
+app. Later, in the app's binary: `topology -w`, `invoke`, `query`,
+`events`, `fold`, against a memstore or a SQLite file.
+`gotogether-start`'s table gets a row.
 
 ## 7. Module layout
 
@@ -1875,9 +1993,10 @@ grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mo
   client/              the API's client, recording each call as a client's
   screen/              Datastar adapter (the only datastar-go import)
   gristsim/            Run(chooser, app, cfg): nodes, store, workload, settles, probes
-  gristtest/           ShrinkCommands, stub reports, storetest helpers (imports qtest)
-  model/               grist.qnt, leases.qnt, the generator's templates
-  cmd/grist/           the CLI and the generator (imports binding, validate)
+  gristtest/           Generated (the generated files' CI diff), Mutants (overlay builds), Tier (the real
+                       tier), Answered; later ShrinkCommands (imports qtest)
+  model/               grist.qnt (vendored by the generator, which is package grist's: Generate, Main's model)
+  cmd/grist/           grist new (the scaffold); later the CLI below
 grist/gristhegel/      module of its own: registry-driven Hegel machines (requires grist, qhegel)
 qanalysis/             + gristflow, gristpure (recognize grist by import path; no dependency on grist)
 skills/grist/          the skill
@@ -2129,8 +2248,10 @@ clients goroutines calling `App.Execute` through `gristsim.Do` (since
 policies, `grist/client`, gristsim's HTTP tier (`TestHTTPTier`, claim 2
 over qhttp with its network's faults, both sides; `TestHTTPDuplicateRequests`),
 `TestRealHTTP` (the real tier over real HTTP), `grist.Main` and
-examples/counters' `cmd/counters`. **Left**: the generator (`grist
-model`), gristflow, and `blind` measured on the real tier.
+examples/counters' `cmd/counters`. **Done (the generator, §0.9)**:
+`grist model` (the app's binary's), `grist new`, grist/gristtest, its
+diff in CI (`gristtest.Generated`). **Left**: gristflow, and `blind`
+measured on the real tier.
 
 ### 8.3 Slice 3: the rest of grain
 

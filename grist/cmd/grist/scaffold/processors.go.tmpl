@@ -1,0 +1,16 @@
+package {{.Pkg}}
+
+import (
+	"context"
+
+	"github.com/chucklehead-dev/gotogether/grist"
+)
+
+// Tally records, on each addition, the item's stock as of it: the handler
+// reads through the trigger, so a late handling (a poller behind, a
+// restart) computes what an on-time one would have, and its event commits
+// with the checkpoint (Emit: exactly once in the log).
+var Tally = grist.NewProcessor(App, "tally", Added,
+	func(ctx context.Context, r *grist.Reads, e ItemAdded, m grist.Meta) grist.Result {
+		return grist.Emit(Tallied.Of(ItemTallied{Item: e.Item, Stock: Stock.For(r, e.Item), At: int64(m.Pos)}))
+	}, grist.Emits(Tallied))

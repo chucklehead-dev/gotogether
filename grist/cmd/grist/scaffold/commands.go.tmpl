@@ -1,0 +1,34 @@
+package {{.Pkg}}
+
+import "github.com/chucklehead-dev/gotogether/grist"
+
+// AddItem adds Qty of Item.
+type AddItem struct {
+	Item string `json:"item"`
+	Qty  int    `json:"qty"`
+}
+
+// The refusals: a quantity that is not positive, and one the item's
+// capacity does not hold.
+var (
+	ErrInvalid = grist.Rejection("invalid")
+	ErrFull    = grist.Rejection("full")
+)
+
+// decideAdd refuses an invalid quantity before reading anything, and one
+// past the item's capacity: its read of the item's stock is in the read
+// set, so its append commits only if no addition of the item came since
+// (two concurrent adds of the last units: one commits, the other decides
+// again and is refused).
+func decideAdd(r *grist.Reads, c AddItem) ([]grist.Event, error) {
+	if c.Qty <= 0 {
+		return nil, ErrInvalid
+	}
+	if Stock.For(r, c.Item)+c.Qty > Capacity {
+		return nil, ErrFull
+	}
+	return []grist.Event{Added.Of(ItemAdded{Item: c.Item, Qty: c.Qty})}, nil
+}
+
+// Add is the add-item command.
+var Add = grist.NewCommand(App, "add-item", decideAdd, grist.Refuses(ErrInvalid, ErrFull), grist.Authorize(grist.Authenticated))

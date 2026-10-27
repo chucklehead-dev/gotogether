@@ -52,7 +52,8 @@ qhistory/     a real database's isolation level from a list-append workload's hi
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
 grist/        separate module (published): an event-sourced framework checked by its model (docs/grist.md, slice 1);
               store/ (the store contract) memstore/ simstore/ storetest/ (its suite) gristsim/ (an app as a
-              qtest.System's run), model/grist.qnt (checked by model/model_test.go)
+              qtest.System's run), model/grist.qnt (checked by model/model_test.go), the generator (model.go:
+              an app's binary's `model`), gristtest/ (Generated, Mutants, Tier), cmd/grist (grist new)
 qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspects in orchestrion.yml): u and v as gauges
 cmd/gotogether/  CLI
 skills/       agent skills, the source of truth (embedded by package skills;
@@ -265,7 +266,8 @@ working there:
   `assume`, `true`, `false`), checked with quint 0.33 on a parameter of
   each name. A step field becomes a parameter by its name (a grist
   command's or event's Go field by its JSON name): grpcledger's model
-  says `src`/`dest`, wallet-grist's `posting` constructor `at` for the event's `of`.
+  says `src`/`dest`; grist's generator renames such a parameter (`of_`,
+  the binding's template naming the field).
 - A crashable process whose restart redoes its whole job (a publisher that
   republishes everything) livelocks a run under per-step crash rates:
   every restart adds work at the same virtual instant. Give it durable

@@ -23,6 +23,24 @@ module grist {
   pure def readsOf(triples: List[(str, str, str)]): List[Read] =
     triples.foldl([], (acc, t) => acc.append({ typ: t._1, tags: if (t._2 == "") Set() else Set((t._2, t._3)) }))
 
+  // no cause yet: what the generated event constructors (grist model)
+  // give an event, stamped by the action that appends it (caused)
+  pure val UNCAUSED: Cause = ("", "")
+
+  // b with every event's cause set to cause: a command's batch is caused
+  // by ("command", its id), a processor's by ("processor", its name)
+  pure def caused(b: List[Event], cause: Cause): List[Event] =
+    b.foldl([], (acc, e) => acc.append(e.with("cause", cause)))
+
+  // reads as a step records them (slice 1's triples, readsOf's input): a
+  // (type, tag key, tag value) triple per tag of each read, (type, "", "")
+  // for a type-only read. A generated step action (grist model) records
+  // the reads its rule needs so.
+  pure def triplesOf(reads: Set[Read]): List[(str, str, str)] =
+    reads.fold([], (acc, r) =>
+      if (r.tags.size() == 0) acc.append((r.typ, "", ""))
+      else r.tags.fold(acc, (a, t) => a.append((r.typ, t._1, t._2))))
+
   // e matches the read q
   pure def matches(e: Event, q: Read): bool =
     e.typ == q.typ and q.tags.subseteq(e.tags)

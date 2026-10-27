@@ -32,7 +32,7 @@ func decideTransfer(r *grist.Reads, c Transfer) ([]grist.Event, error) {
 }
 
 // TransferCmd is the transfer command.
-var TransferCmd = grist.NewCommand(App, "transfer", decideTransfer, grist.Authorize(grist.Authenticated))
+var TransferCmd = grist.NewCommand(App, "transfer", decideTransfer, grist.Refuses(ErrInvalid, ErrInsufficientFunds), grist.Authorize(grist.Authenticated))
 
 // Deposit adds Amount to Account.
 type Deposit struct {
@@ -48,4 +48,4 @@ func decideDeposit(r *grist.Reads, c Deposit) ([]grist.Event, error) {
 }
 
 // DepositCmd is the deposit command.
-var DepositCmd = grist.NewCommand(App, "deposit", decideDeposit, grist.Authorize(grist.Authenticated))
+var DepositCmd = grist.NewCommand(App, "deposit", decideDeposit, grist.Refuses(ErrInvalid), grist.Authorize(grist.Authenticated))

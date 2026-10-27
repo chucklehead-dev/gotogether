@@ -16,6 +16,7 @@ func Authorize(p Policy) Option
 func BatchSize(n int) Option
 func CheckTenant(t string) error
 func ConditionTries(n int) Option
+func Delivers(d Delivery, success ...EventName) Option
 func Dependencies(f func(context.Context) context.Context) ServeOption
 func DevEndpoints() ServeOption
 func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result
@@ -23,8 +24,10 @@ func EffectFaults(processor string) qenv.FaultKind
 func EffectKey(ctx context.Context) string
 func EffectTries(n int) Option
 func Emit(events ...Event) Result
+func Emits(types ...EventName) Option
 func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
+func Generate(app *App, dir string) (Generated, error)
 func Internal() Option
 func Keys(names ...string) KeyNames
 func Main(app *App, opts ...ServeOption)
@@ -33,6 +36,7 @@ func MaxBody(n int64) ServeOption
 func Middleware(m func(http.Handler) http.Handler) ServeOption
 func New(name string) *App
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
+func NewDep[T any](name string, fallback T) *Dep[T]
 func NewEvent[E any](app *App, name string) *EventType[E]
 func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
@@ -40,15 +44,18 @@ func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx con
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
 func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
 func NewRelay(s Store) (*Relay, error)
+func NewSite[T any](app *App, name string) *Site[T]
 func NotApplied(err error) error
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
 func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error)
 func QuintName(name string) (string, error)
 func RecorderID(storeName, tenant string) string
+func Refuses(rejections ...error) Option
 func Rejection(name string) error
 func Schema(typ reflect.Type) map[string]any
 func Skip() Result
+func Starter(app *App) ([]byte, error)
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
@@ -73,6 +80,7 @@ type Catalog struct
     field Commands []CatalogBlock `json:"commands"`
     field Queries []CatalogBlock `json:"queries"`
     field Processors []CatalogProcessor `json:"processors"`
+    field Sites []CatalogSite `json:"sites"`
 type CatalogBlock struct
     field Name string
     field Quint string
@@ -81,6 +89,7 @@ type CatalogBlock struct
     field Unconditioned string
     field Authorized bool
     field Internal bool
+    field Refuses []string
     method (CatalogBlock) MarshalJSON() ([]byte, error)
 type CatalogEvent struct
     field Name string
@@ -93,15 +102,32 @@ type CatalogProcessor struct
     field Quint string `json:"quint"`
     field On string `json:"on"`
     field EffectTries int `json:"effectTries"`
+    field Shape string `json:"shape,omitempty"`
+    field Emits []string `json:"emits,omitempty"`
+    field Delivery Delivery `json:"delivery,omitempty"`
+    field Success string `json:"success,omitempty"`
 type CatalogReadModel struct
     field Name string `json:"name"`
     field Version int `json:"version"`
     field Types []string `json:"types"`
     field Keys []string `json:"keys"`
+type CatalogSite struct
+    field Name string
+    field Quint string
+    field Fields reflect.Type
+    method (CatalogSite) MarshalJSON() ([]byte, error)
 type Command[C any] struct
     method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
     method (*Command[C]) Name() string
 type Delivery int
+    method (Delivery) MarshalText() ([]byte, error)
+    method (Delivery) String() string
+type Dep[T any] struct
+    method (*Dep[T]) Attached(ctx context.Context) bool
+    method (*Dep[T]) Name() string
+    method (*Dep[T]) Of(ctx context.Context) T
+    method (*Dep[T]) String() string
+    method (*Dep[T]) With(ctx context.Context, v T) context.Context
 type EffectOption func(*Result)
 type Envelope struct
     field ID string
@@ -119,7 +145,17 @@ type EventType[E any] struct
 type Failed struct
     field Processor string `json:"processor" grist:"tag"`
     field Trigger int64 `json:"trigger"`
+type Generated struct
+    field Files map[string][]byte
+    field Holes []Hole
+    field Missing []string
+    method (Generated) Diff(dir string) []string
+    method (Generated) Write(dir string) error
 type Handler[S any] struct
+type Hole struct
+    field Name string
+    field Doc string
+    field Stub string
 type KeyNames []string
 type KeyedReadModel[S any] struct
     embed ReadModel[S]
@@ -156,6 +192,9 @@ type Relay struct
 type Result struct
 type Selector = store.Selector
 type ServeOption struct
+type Site[T any] struct
+    method (*Site[T]) Name() string
+    method (*Site[T]) Record(ctx context.Context, tenant string, v T)
 type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
@@ -226,6 +265,39 @@ type Config struct
     field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
     field Horizon time.Duration
     field Log func(string)
+
+== github.com/chucklehead-dev/gotogether/grist/gristtest
+const MutantEnv = "GRIST_MUTANT"
+func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
+func Generated(t testing.TB, app *grist.App)
+func Mutant() string
+func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
+func Overlay(t testing.TB, dir, name string) string
+type Mutants struct
+    field Names []string
+    field FullOnly []string
+    field Dir string
+    field Test string
+    method (Mutants) Run(t *testing.T)
+type Node struct
+    field Relay *grist.Relay
+    method (*Node) Kill()
+type Tier struct
+    field Store grist.Store
+    field Client *client.Client
+    method (*Tier) Check(commits, calls string, opts ...qtest.Option) []*qtrace.Trace
+    method (*Tier) Clients() context.Context
+    method (*Tier) Do(ctx context.Context, env grist.Envelope, name string, args any)
+    method (*Tier) Lost() int64
+    method (*Tier) Replayed() int64
+    method (*Tier) Settle(probe func(ctx context.Context))
+    method (*Tier) Start(id string) *Node
+    method (*Tier) Steps() []qtrace.Step
+type TierConfig struct
+    field Tenants []string
+    field Deps func(ctx context.Context, st grist.Store) context.Context
+    field LoseEvery int
+    field Poll time.Duration
 
 == github.com/chucklehead-dev/gotogether/grist/memstore
 func New(name string) *Store

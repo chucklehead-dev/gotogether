@@ -8,20 +8,19 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// mutant is the mutant this test binary was built with: set by the file
-// a mutant's overlay adds (TestMutants), "" for the app as it is.
-var mutant string
-
 // setup gives every run a mailer of its own, and the store (for the
 // dispatchDirect mutant's raw append).
 func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
 	m, b := NewSimMailer(s), NewSimBank(s)
-	return func(ctx context.Context) context.Context { return WithDeps(ctx, Deps{Mailer: m, Bank: b, Store: st}) }
+	return func(ctx context.Context) context.Context {
+		return StoreDep.With(BankDep.With(MailerDep.With(ctx, m), b), st)
+	}
 }
 
 // The bindings: the commit side's, its test-only variant judging one
@@ -41,7 +40,7 @@ const (
 // system is the app under cfg, judged by binding, with faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
 	cfg.Setup = setup
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: mutant,
+	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
 

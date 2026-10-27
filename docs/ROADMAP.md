@@ -32,8 +32,8 @@ by the user.
   and RETURNING, the typed template function and `actors:` (core);
   sqlstore on PostgreSQL, SQLite and qsql, commits recorded from the
   step log (Relay), PostgreSQL in CI; the HTTP API, grist/client,
-  grist.Main; AtMostOnce (docs/grist.md §0.3-§0.6). Left: the generator,
-  gristflow, `blind` measured on the real tier, a durable relay cursor
+  grist.Main; AtMostOnce (docs/grist.md §0.3-§0.6); the generator (§0.9,
+  GR2). Left: gristflow, `blind` measured on the real tier, a durable relay cursor
   (with a lost-prefix record in qtrace), and the core item below.
 - **A core item grist's measurements ask for** (validate,
   internal/replay): an eventual val is judged by a replay of its own, so
@@ -51,13 +51,16 @@ Then, in order, each item reviewed before the next:
   frictions reorder what follows. Further trials as items land: payd,
   webjobs (with its Playwright journeys judged against the grist
   version), hello as a smoke test.
-- **GR2. Onboarding with minimal work (M).** The generator (`grist
-  model`: the Quint skeleton, the bindings of both sides, a diff in CI);
-  `grist new` (an app, its model, bindings, gristsim test and run-demo
-  scaffolded and green on first run); gristflow (an append its reads do
-  not cover, a rejection on an unconditioned read, a raw store call); a
-  "grist for a new app" page and the skill's first-hour path. Done when
-  a trial agent writes no binding by hand.
+- **GR2. Onboarding with minimal work (M).** Built (docs/grist.md
+  §0.9): the generator (`<app> model`, grist.Main: the Quint skeleton and
+  both bindings from the catalog, the app writing its rules and marked
+  invariants; the diff in CI, `gristtest.Generated`), `grist new` (an app
+  green on first run, `TestNewIsGreen`), grist/gristtest's harnesses
+  (`Mutants`, `Tier`), `NewDep` and `NewSite`; counters and wallet-grist
+  generated (their bindings no longer hand-written). Left: gristflow
+  (an append its reads do not cover, a rejection on an unconditioned
+  read, a raw store call), and a trial agent building a new app from
+  `grist new` to confirm it writes no binding by hand.
 - **GR3. Automatic instrumentation everywhere (M).** Today every block's
   step is recorded by construction; the rest of an application's seams
   are not: outbound HTTP and gRPC calls, stream publishes and consumes,

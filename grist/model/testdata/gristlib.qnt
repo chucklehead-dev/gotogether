@@ -10,6 +10,15 @@ module gristlib {
 
   run readsOfTest = assert(readsOf([("a", "k", "x"), ("b", "", "")]) == [{ typ: "a", tags: Set(("k", "x")) }, { typ: "b", tags: Set() }])
 
+  run causedTest = assert(caused([ev("a", "x", "c1"), failed("p", 2)], ("command", "c9")).foldl([], (acc, e) => acc.append(e.cause)) ==
+    [("command", "c9"), ("command", "c9")])
+
+  run triplesOfTest = all {
+    assert(readsOf(triplesOf(Set({ typ: "a", tags: Set(("k", "x")) }))) == [{ typ: "a", tags: Set(("k", "x")) }]),
+    assert(triplesOf(Set({ typ: "b", tags: Set() })) == [("b", "", "")]),
+    assert(triplesOf(Set()) == []),
+  }
+
   run matchesTest = all {
     assert(matches(ev("a", "x", "c1"), { typ: "a", tags: Set() })),
     assert(matches(ev("a", "x", "c1"), { typ: "a", tags: Set(("k", "x")) })),

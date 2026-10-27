@@ -1,6 +1,6 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, a hand-written model over one tenant's log and its bindings (store side and client side, actors:). Use when writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, the model's skeleton and both bindings generated from the App's catalog (grist model: the app writes only its rules and invariants), grist new for a new app, and grist/gristtest's harnesses (Generated, Mutants, Tier). Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
@@ -13,6 +13,19 @@ store's step log, read back by `grist.Relay`), each query on return,
 each effect. The application writes
 its decisions and folds; its model is one tenant's log.
 examples/counters is the walk-through: read its README's table first.
+
+## The first hour
+
+`go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new
+<name>` (`-module`, `-dir`; `-replace <checkout>` inside this repository)
+writes a module green on its first run: an App (two events, a keyed
+read model, a command with declared refusals, a query, a processor), its
+binary, `model/<name>.qnt` with its rules filled, the generated skeleton
+and bindings, a gristsim test with `Expect` claims, a mutant, a
+real-tier test, `run-demo.sh` and a README. Then change it one block at
+a time: the block in Go, `go run ./cmd/<name> model` (it names each new
+hole with a stub), the hole in `model/<name>.qnt`, a claim and a mutant
+for it. No binding is written by hand.
 
 ## The loop
 
@@ -40,30 +53,37 @@ examples/counters is the walk-through: read its README's table first.
    string) bool`) or `Internal()`: blocks are denied by default, and the
    HTTP adapter refuses an App with a block that has neither. `App.Verify()` names every problem and its fix;
    `App.Catalog()` is the registry as data.
-2. **Model first**: `model/<app>.qnt`, one tenant's log, imports and
-   `export`s a vendored `grist.qnt` (copy `grist/model/grist.qnt`);
-   state `log`, `checkpoints`, `appended`, `effects`, `answered`; read
-   models are defs over the log. Each command's action takes its
-   fields, `id`, `readPos`, `reads`, `principal` and `result`, and
-   requires `freshKey`, `covers` and `conditionHolds` per outcome; each
-   processor's actions follow its declared delivery (at least once: an
-   effect step and a checkpoint; at most once: checkpoint, effect,
-   outcome). **Read [`references/model.md`](references/model.md) before
-   writing or changing a model**: every rule, the Quint names a Go
-   field must avoid (`to`, `of`, `type`, `size`, ...), exactly-once
-   claims, and how a double records its own effect. Check it alone:
-   `gotogether simulate -binding <app>.binding.yaml`.
-3. **Bind**: every parameter the same-named step field, but `reads:
-   'readsOf({{toList .reads}})'` (slice 1 records triples); `expect:` for
-   commits and refusals is `log.length() == {{.obs.head}} and
-   batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}},
-   {{toList .obs.ints}}, {{toList .obs.causes}})`, for a query the read
-   models' defs against `.obs.*`. Outcomes include `conflict` and
-   `idempotency-key-reused`. No `restart`: every step's process is the
-   store. `qtest.Validate` logs "no model-level ITF ... readsOf is not a
-   literal" for such a binding: harmless, the verdict is quint's, which
-   evaluates `readsOf`; only the ITF file written beside the step log
-   for inspection (`Run.ITF`) is skipped.
+2. **Declare the shapes, generate, fill the holes**: each command's
+   refusals (`grist.Refuses(ErrA, ErrB)`; another rejection is the
+   decision's error), each processor's result (`grist.Emits(Type)` or
+   `grist.Delivers(grist.AtLeastOnce|grist.AtMostOnce, SuccessType)`;
+   another result fails the trigger), a dependency as a typed
+   `grist.NewDep[T](name, fallback)` (`Dep.Of(ctx)` in an effect,
+   `Dep.With(ctx, v)` where the node starts: gristsim's `Setup`,
+   `grist.Dependencies`), and a double's own record of its effects as a
+   `grist.NewSite[T](App, name)` (`Site.Record(ctx, tenant, v)`). Then
+   `go run ./cmd/<app> model` (`grist.Main`; `-init` the first time)
+   writes `model/<app>_gen.qnt` (events, reads, an action per block with
+   its outcome branches and frame conditions, `step`), the vendored
+   `grist.qnt` and the bindings; you write `model/<app>.qnt`'s rules
+   (per command its outcome, events and needs; per query its answer;
+   per processor its events; per site its guard; the read models' folds)
+   and its invariants, each marked `// grist: invariant|eventually|violable
+   [bindings]` (a binding name other than `default` is a test-only
+   variant, `<app>.<name>.binding.yaml`). **Read
+   [`references/model.md`](references/model.md) before writing or
+   changing a model**: the holes, the marks, the names Quint refuses,
+   exactly-once claims. Check it alone: `gotogether simulate -binding
+   <app>.binding.yaml`.
+3. **Witness**: `func TestGenerated(t *testing.T) { gristtest.Generated(t,
+   App) }` fails when the checked-in skeleton or bindings are not what
+   the catalog generates now (regenerate; `GRIST_UPDATE=1` writes them)
+   or a hole is missing, or a binding's module does not import the
+   events and the rules itself (the validator's evaluator needs it). The bindings are never written by hand:
+   every parameter the step's field (the read set's triples by the
+   default template), the outcome as `result`, each commit's head and batch and
+   each query's answer compared with the model's, `actors:` per side,
+   no `restart` (every step's process is the store).
 4. **Explore**: `qtest.System{Binding: ..., Rates: ..., Run: func(c
    qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}`;
    `gristsim.Config` sets the isolation level (Serializable and
@@ -88,8 +108,13 @@ examples/counters is the walk-through: read its README's table first.
    clients call it with `grist/client` (the API's codes and the
    network's faults, `rpc.api.response` among them, under the same
    kinds).
-5. **Prove each check can fail** with a mutant per claim (overlay files,
-   as examples/counters' `blind` and `dispatchDirect`), and the faithful
+5. **Prove each check can fail** with a mutant per claim (files in
+   `testdata/mutants/<name>/` replacing the app's of the same names, run
+   by `gristtest.Mutants{Names: ..., FullOnly: ...}.Run(t)` from a
+   `TestMutants`, each binary's `TestMutant` switching on
+   `gristtest.Mutant()`, as examples/counters' `blind` and
+   `dispatchDirect`; a mutant carries the declarations its code needs),
+   and the faithful
    app at the mutant's configuration with the opposite claim
    (`None(Rejects("createCounter"))`): an `Unconditioned` create is
    `Rejects` when the race hits, at every isolation level (its reads
@@ -157,7 +182,15 @@ examples/counters is the walk-through: read its README's table first.
   a transaction at it);
   `App.Start(ctx, st, grist.WithRelay(relay))` with a recorder writing
   `qobs.FileSink(path, qobs.PerStep)`; clients record their calls with
-  `grist/client`'s `Client.Do` over HTTP, or `gristsim.Do` in process (as a run's clients do); before recording a settle, wait
+  `grist/client`'s `Client.Do` over HTTP, or `gristsim.Do` in process (as a run's clients do). `gristtest.NewTier(t, App, gristtest.TierConfig{Tenants, Deps})`
+  is all of it as a library: `Start(id)` a node (its `Kill`, a second
+  `Start` taking the traffic), `Clients()` and `Do` for the clients,
+  every fifth command's answer lost (`LoseEvery`), `Settle(probe)`
+  waiting for every processor and the relay before it records the
+  settle, `Check(commits, calls)` validating both bindings and that every
+  client's answer has its store-side step (`gristtest.Answered`; a
+  real run's concurrent calls may need `qtest.LinearizeBudget(n)`, passed
+  to `Check`). By hand: before recording a settle, wait
   for the processors' checkpoints and `Relay.Behind(ctx) == 0`, failing
   on `Relay.Err()` (`grist.Main serve` does so itself on shutdown and
   records the settle); validate the file with both bindings

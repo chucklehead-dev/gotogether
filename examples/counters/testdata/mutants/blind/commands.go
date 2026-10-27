@@ -24,7 +24,7 @@ func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
 
 // Create is the create-counter command: unconditioned (the mutant
 // blind, grain's create-counter), so two creates of one name both commit.
-var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Unconditioned("names are advisory here"),
+var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Refuses(ErrNameTaken), grist.Unconditioned("names are advisory here"),
 	grist.Authorize(grist.Authenticated))
 
 // IncrementCounter adds By to a counter's total.
@@ -45,7 +45,7 @@ func decideIncrement(r *grist.Reads, c IncrementCounter) ([]grist.Event, error) 
 }
 
 // Increment is the increment-counter command.
-var Increment = grist.NewCommand(App, "increment-counter", decideIncrement, grist.Authorize(grist.Authenticated))
+var Increment = grist.NewCommand(App, "increment-counter", decideIncrement, grist.Refuses(ErrUnknownCounter), grist.Authorize(grist.Authenticated))
 
 // RetireCounter retires a counter: its total is paid out (Payout).
 type RetireCounter struct {
@@ -82,7 +82,7 @@ func decideRetire(r *grist.Reads, c RetireCounter) ([]grist.Event, error) {
 // Retire is the retire-counter command, its creator's only (ErrNotCreator):
 // its total read through the keyed fold, so it commits only if no
 // increment of the counter came since.
-var Retire = grist.NewCommand(App, "retire-counter", decideRetire, grist.Authorize(grist.Authenticated))
+var Retire = grist.NewCommand(App, "retire-counter", decideRetire, grist.Refuses(ErrUnknownCounter, ErrNotCreator), grist.Authorize(grist.Authenticated))
 
 // ShowCounter asks for a counter.
 type ShowCounter struct {

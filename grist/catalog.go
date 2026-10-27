@@ -9,11 +9,9 @@ import (
 )
 
 // A Catalog is an App's registry as data: what Main's catalog command and
-// an API's catalog endpoint serve, and what a model generator would
-// write a model skeleton and its binding from (designed, docs/grist.md
-// §3.2, not built: an application's model and bindings are written by
-// hand). It is a copy: changing it changes
-// nothing registered. Its JSON (json.Marshal, the catalog endpoint's and
+// an API's catalog endpoint serve, and what Generate writes the model's
+// skeleton and its bindings from (Main's model command). It is a copy:
+// changing it changes nothing registered. Its JSON (json.Marshal, the catalog endpoint's and
 // Main's catalog command's) writes each type as a JSON Schema (Schema).
 type Catalog struct {
 	Name       string             `json:"name"`
@@ -22,6 +20,24 @@ type Catalog struct {
 	Commands   []CatalogBlock     `json:"commands"` // sorted by name
 	Queries    []CatalogBlock     `json:"queries"`  // sorted by name
 	Processors []CatalogProcessor `json:"processors"`
+	Sites      []CatalogSite      `json:"sites"` // in registration order
+}
+
+// A CatalogSite is a registered site (NewSite): a dependency's record of
+// its effects.
+type CatalogSite struct {
+	Name   string
+	Quint  string       // its step's action
+	Fields reflect.Type // the record's type
+}
+
+// MarshalJSON writes the site with its record as a JSON Schema.
+func (s CatalogSite) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Name   string         `json:"name"`
+		Quint  string         `json:"quint"`
+		Fields map[string]any `json:"fields"`
+	}{s.Name, s.Quint, Schema(s.Fields)})
 }
 
 // A CatalogEvent is a registered event type.
@@ -52,6 +68,9 @@ type CatalogBlock struct {
 	// Authorized says the block declares a Policy (Authorize); Internal
 	// that no adapter serves it (Internal).
 	Authorized, Internal bool
+	// Refuses are a command's declared rejections (Refuses), in the order
+	// given; nil when it declares none.
+	Refuses []string
 }
 
 // MarshalJSON writes the event with its body as a JSON Schema.
@@ -79,7 +98,8 @@ func (b CatalogBlock) MarshalJSON() ([]byte, error) {
 		Unconditioned string         `json:"unconditioned,omitempty"`
 		Authorized    bool           `json:"authorized"`
 		Internal      bool           `json:"internal,omitempty"`
-	}{b.Name, b.Quint, Schema(b.Args), res, b.Unconditioned, b.Authorized, b.Internal})
+		Refuses       []string       `json:"refuses,omitempty"`
+	}{b.Name, b.Quint, Schema(b.Args), res, b.Unconditioned, b.Authorized, b.Internal, b.Refuses})
 }
 
 func nonNil(s []string) []string {
@@ -160,7 +180,18 @@ type CatalogProcessor struct {
 	Quint       string `json:"quint"` // its model action's name (its effect steps' is Quint+"Effect", an at-most-once outcome's Quint+"Outcome")
 	On          string `json:"on"`    // the event type it handles
 	EffectTries int    `json:"effectTries"`
+	// Shape is its declared result: "emits" (Emits), "effect" (Delivers),
+	// or "" when it declares none. Emits are an Emits' event types;
+	// Delivery and Success an effect's delivery and success event type
+	// ("" for none).
+	Shape    string   `json:"shape,omitempty"`
+	Emits    []string `json:"emits,omitempty"`
+	Delivery Delivery `json:"delivery,omitempty"`
+	Success  string   `json:"success,omitempty"`
 }
+
+// MarshalText writes the delivery by name.
+func (d Delivery) MarshalText() ([]byte, error) { return []byte(d.String()), nil }
 
 // Catalog is the App's registry.
 func (a *App) Catalog() Catalog {
@@ -176,7 +207,7 @@ func (a *App) Catalog() Catalog {
 	for _, n := range a.Commands() {
 		ci := a.commands[n]
 		c.Commands = append(c.Commands, CatalogBlock{Name: ci.name, Quint: ci.quint, Args: ci.args, Unconditioned: ci.opts.unconditioned,
-			Authorized: ci.opts.authorize != nil, Internal: ci.opts.internal})
+			Authorized: ci.opts.authorize != nil, Internal: ci.opts.internal, Refuses: slices.Clone(ci.opts.refuses)})
 	}
 	for _, n := range a.Queries() {
 		qi := a.queries[n]
@@ -184,7 +215,23 @@ func (a *App) Catalog() Catalog {
 			Authorized: qi.opts.authorize != nil, Internal: qi.opts.internal})
 	}
 	for _, p := range a.processors {
-		c.Processors = append(c.Processors, CatalogProcessor{Name: p.name, Quint: p.quint, On: p.on, EffectTries: p.opts.effectTries})
+		cp := CatalogProcessor{Name: p.name, Quint: p.quint, On: p.on, EffectTries: p.opts.effectTries}
+		switch sh := p.opts.shape; sh.kind {
+		case emitResult:
+			cp.Shape = "emits"
+			for _, e := range sh.emits {
+				cp.Emits = append(cp.Emits, e.Name())
+			}
+		case effectResult:
+			cp.Shape, cp.Delivery = "effect", sh.delivery
+			if sh.success != nil {
+				cp.Success = sh.success.Name()
+			}
+		}
+		c.Processors = append(c.Processors, cp)
+	}
+	for _, s := range a.sites {
+		c.Sites = append(c.Sites, CatalogSite{Name: s.name, Quint: s.quint, Fields: s.typ})
 	}
 	return c
 }

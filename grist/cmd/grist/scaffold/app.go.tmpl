@@ -1,0 +1,47 @@
+// Package {{.Pkg}} is a grist application, scaffolded by grist new: a
+// store of items, each holding at most Capacity, added to by a command
+// (add-item) and read by a query (show-item), with a processor (tally)
+// that records each item's stock as of every addition. Its model is
+// model/{{.Name}}.qnt (the rules) beside the skeleton grist writes from
+// the App's catalog (model/{{.Name}}_gen.qnt: `go run ./cmd/{{.Name}} model`);
+// its tests explore it in a simulation (sim_test.go), catch a mutant
+// (mutants_test.go) and judge its real tier on SQLite (real_test.go), all
+// with the same generated bindings.
+package {{.Pkg}}
+
+import "github.com/chucklehead-dev/gotogether/grist"
+
+// The events.
+type (
+	// ItemAdded: Qty more of an item.
+	ItemAdded struct {
+		Item string `json:"item" grist:"tag"`
+		Qty  int    `json:"qty"`
+	}
+	// ItemTallied: an item's stock as of an addition (At: the addition's
+	// position, so each addition's tally is its own).
+	ItemTallied struct {
+		Item  string `json:"item" grist:"tag"`
+		Stock int    `json:"stock"`
+		At    int64  `json:"at"`
+	}
+)
+
+// App is the application; its blocks are below and in commands.go,
+// queries.go and processors.go.
+var App = grist.New("{{.Name}}")
+
+// The event types.
+var (
+	Added   = grist.NewEvent[ItemAdded](App, "item-added")
+	Tallied = grist.NewEvent[ItemTallied](App, "item-tallied")
+)
+
+// Stock is each item's quantity, keyed by item: a decision about item x
+// reads, and is conditioned on, x's additions alone.
+var Stock = grist.NewKeyedReadModel(App, "stock", 1, grist.Keys("item"), func() int { return 0 },
+	grist.On(Added, func(s int, e ItemAdded, m grist.Meta) int { return s + e.Qty }))
+
+// Capacity is how many of an item the store holds. The model states the
+// same (CAPACITY).
+const Capacity = 5

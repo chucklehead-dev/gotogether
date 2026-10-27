@@ -1,15 +1,10 @@
 package counters
 
 import (
-	"encoding/json"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -26,13 +21,14 @@ var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayo
 // at-least-once model refusing a checkpoint before its effect, which
 // grist's TestEffectAtMostOnce orders and TestPayoutAtMostOnce judges),
 // and building a mutant's binary is most of its cost.
-var fullOnly = map[string]bool{"checkpointFirst": true, "silentPayout": true, "anyoneRetires": true}
+var fullOnly = []string{"checkpointFirst", "silentPayout", "anyoneRetires"}
 
 // TestMutant states what catches the mutant this binary was built with;
 // TestMutants builds and runs it once per mutant. Rates measured on
 // 2026-10-27 (README); seeds give a miss chance under 5%. The faithful
 // app passes every one of these configurations (TestFaithful's claims).
 func TestMutant(t *testing.T) {
+	mutant := gristtest.Mutant()
 	if mutant == "" {
 		t.Skip("the app as it is: TestMutants runs this test built with each mutant's overlay")
 	}
@@ -124,76 +120,8 @@ func TestMutant(t *testing.T) {
 	}
 }
 
-// Overlay writes the go build overlay for mutant m into dir and returns
-// its path: the mutant's files in place of the app's, and a test file
-// that names the mutant to this package's tests.
-func Overlay(t testing.TB, m, dir string) string {
-	t.Helper()
-	here, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	replace := map[string]string{}
-	files, err := filepath.Glob(filepath.Join(here, "testdata", "mutants", m, "*.go"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("mutant %s has no files in testdata/mutants/%s", m, m)
-	}
-	for _, f := range files {
-		target := filepath.Join(here, filepath.Base(f))
-		if _, err := os.Stat(target); err != nil {
-			t.Fatalf("testdata/mutants/%s/%s replaces no file of the app: %v", m, filepath.Base(f), err)
-		}
-		replace[target] = f
-	}
-	marker := filepath.Join(dir, "mutant_test.go")
-	if err := os.WriteFile(marker, []byte("package counters\n\nfunc init() { mutant = \""+m+"\" }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	replace[filepath.Join(here, "zz_mutant_test.go")] = marker
-	b, _ := json.Marshal(map[string]any{"Replace": replace})
-	path := filepath.Join(dir, "overlay.json")
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 // Each mutant, built with its overlay, is caught as TestMutant says.
 func TestMutants(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	if mutant != "" {
-		t.Skip("already a mutant's binary")
-	}
-	for _, m := range mutants {
-		t.Run(m, func(t *testing.T) {
-			t.Parallel()
-			if testing.Short() && fullOnly[m] {
-				t.Skip("full mode: its claim repeats a per-push check (see fullOnly)")
-			}
-			args := []string{"test", "-count=1", "-overlay", Overlay(t, m, t.TempDir()), "-run", "^TestMutant$", "-v"}
-			if testing.Short() {
-				args = append(args, "-short")
-			}
-			if d, ok := t.Deadline(); ok {
-				args = append(args, "-timeout", time.Until(d).Round(time.Second).String()) //qenv:ok the test binary's own deadline, handed to the mutant's
-			}
-			cmd := exec.Command("go", append(args, ".")...)
-			// a mutant's claims have their stated miss chance at their own
-			// seeds: a nightly's GOTOGETHER_SEEDS would only make it slow
-			for _, e := range os.Environ() {
-				if !strings.HasPrefix(e, "GOTOGETHER_SEEDS=") {
-					cmd.Env = append(cmd.Env, e)
-				}
-			}
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("mutant %s: %v\n%s", m, err, out)
-			}
-			for _, l := range strings.Split(string(out), "\n") {
-				if strings.Contains(l, "runs, ") || strings.HasPrefix(strings.TrimSpace(l), "---") {
-					t.Log(strings.TrimSpace(l))
-				}
-			}
-		})
-	}
+	gristtest.Mutants{Names: mutants, FullOnly: fullOnly}.Run(t)
 }

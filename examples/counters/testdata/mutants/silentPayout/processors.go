@@ -17,7 +17,7 @@ var Average = grist.NewProcessor(App, "average", Incremented,
 			sum, count = sum+inc.By, count+1
 		}
 		return grist.Emit(Averaged.Of(AverageComputed{Sum: sum, Count: count}))
-	})
+	}, grist.Emits(Averaged))
 
 // Welcome mails each new counter's name, at least once (a crash after
 // the send and before the checkpoint sends it again, under the same
@@ -25,9 +25,9 @@ var Average = grist.NewProcessor(App, "average", Incremented,
 var Welcome = grist.NewProcessor(App, "welcome", Created,
 	func(ctx context.Context, r *grist.Reads, e CounterCreated, m grist.Meta) grist.Result {
 		return grist.Effect(func(ctx context.Context) error {
-			return DepsOf(ctx).Mailer.Send(ctx, grist.EffectKey(ctx), "created "+e.Name)
+			return MailerDep.Of(ctx).Send(ctx, grist.EffectKey(ctx), "created "+e.Name)
 		}, grist.AtLeastOnce, grist.OnSuccess(Welcomed.Of(Notified{Counter: e.Counter})))
-	})
+	}, grist.Delivers(grist.AtLeastOnce, Welcomed))
 
 // Payout, the silentPayout mutant: it pays at most once, as the app's,
 // but declares no success event, so a payment made leaves nothing in the
@@ -37,6 +37,6 @@ var Welcome = grist.NewProcessor(App, "welcome", Created,
 var Payout = grist.NewProcessor(App, "payout", Retired,
 	func(ctx context.Context, r *grist.Reads, e CounterRetired, m grist.Meta) grist.Result {
 		return grist.Effect(func(ctx context.Context) error {
-			return DepsOf(ctx).Bank.Pay(ctx, r.Tenant(), grist.EffectKey(ctx), e.Counter, e.Total)
+			return BankDep.Of(ctx).Pay(ctx, r.Tenant(), grist.EffectKey(ctx), e.Counter, e.Total)
 		}, grist.AtMostOnce)
-	})
+	}, grist.Delivers(grist.AtMostOnce))

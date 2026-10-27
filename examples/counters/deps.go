@@ -7,7 +7,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Mailer sends mail, deduplicating by key where it can.
@@ -22,47 +21,29 @@ type Bank interface {
 	Pay(ctx context.Context, tenant, key, counter string, amount int) error
 }
 
-// Deps are the application's dependencies, reached through a processor's
-// context: one set per simulation, never a package-level value that runs
-// in parallel would share.
-type Deps struct {
-	Mailer Mailer
-	Bank   Bank
-	// Store is the application's store, for a raw append, which only the
-	// dispatchDirect mutant makes (grain's example processor).
-	Store grist.Store
-}
-
-type depsKey struct{}
-
-// WithDeps attaches d to ctx.
-func WithDeps(ctx context.Context, d Deps) context.Context {
-	return context.WithValue(ctx, depsKey{}, d)
-}
-
-// DepsOf are ctx's dependencies; a Mailer that refuses every mail and a
-// Bank that refuses every payment if none were attached.
-func DepsOf(ctx context.Context) Deps {
-	d, ok := ctx.Value(depsKey{}).(Deps)
-	if !ok || d.Mailer == nil {
-		d.Mailer = noMailer{}
-	}
-	if d.Bank == nil {
-		d.Bank = noBank{}
-	}
-	return d
-}
+// The application's dependencies, reached through a processor's context
+// (grist.Dep): one set per run, attached by gristsim's Config.Setup, Main's
+// Dependencies or the real tier's harness, never a package-level value
+// that runs in parallel would share. Where none is attached, a mailer
+// that refuses every mail and a bank that refuses every payment.
+var (
+	MailerDep = grist.NewDep[Mailer]("mailer", noMailer{})
+	BankDep   = grist.NewDep[Bank]("bank", noBank{})
+	// StoreDep is the application's store, for a raw append, which only
+	// the dispatchDirect mutant makes (grain's example processor).
+	StoreDep = grist.NewDep[grist.Store]("store", nil)
+)
 
 type noBank struct{}
 
 func (noBank) Pay(context.Context, string, string, string, int) error {
-	return grist.NotApplied(errors.New("counters: no bank: attach one with WithDeps"))
+	return grist.NotApplied(errors.New("counters: no bank: attach one (BankDep.With)"))
 }
 
 type noMailer struct{}
 
 func (noMailer) Send(context.Context, string, string) error {
-	return errors.New("counters: no mailer: attach one with WithDeps")
+	return errors.New("counters: no mailer: attach one (MailerDep.With)")
 }
 
 // Mail is a mail as the simulated mailer takes it.
@@ -92,20 +73,32 @@ func (m *SimMailer) Send(ctx context.Context, key, msg string) error {
 	return err
 }
 
-// A Payment is a payment as the simulated bank takes it.
+// A Payment is a payment as the bank makes it: its record at the bank's
+// site (BankPays), the tenant its actor.
 type Payment struct {
-	Tenant, Key, Counter string
-	Amount               int
+	Key     string `json:"key"`
+	Counter string `json:"counter"`
+	Amount  int    `json:"amount"`
+}
+
+// BankPays is the bank's own record of each payment it makes, where it
+// makes it (the step bankPays: actor the tenant, the key, the counter and
+// the amount): an effect's site records the effect, so a payment made
+// twice, or made while its answer was lost, is in the trace whatever the
+// caller saw.
+var BankPays = grist.NewSite[Payment](App, "bank-pays")
+
+// payRequest is a payment request as the simulated bank's service takes it.
+type payRequest struct {
+	Tenant string
+	Payment
 }
 
 // SimBank is a bank in a simulation: a qenv.Service of its own process
-// ("bank"), whose requests and responses may be lost or late. It
-// records each payment it makes (the step bankPays, actor the tenant,
-// with the key, the counter and the amount) where it makes it: an
-// effect's site records the effect, so a payment made twice, or made
-// while its answer was lost, is in the trace whatever the caller saw.
+// ("bank"), whose requests and responses may be lost or late. It records
+// each payment it makes at its site (BankPays).
 type SimBank struct {
-	svc *qenv.Service[Payment, struct{}]
+	svc *qenv.Service[payRequest, struct{}]
 	// Paid are the payments it was asked to make, duplicates included.
 	Paid []Payment
 }
@@ -113,9 +106,9 @@ type SimBank struct {
 // NewSimBank registers the bank service in s.
 func NewSimBank(s *qenv.Sim) *SimBank {
 	b := &SimBank{}
-	b.svc = qenv.NewService(s, "bank", nil, func(ctx context.Context, p Payment) (struct{}, error) {
-		b.Paid = append(b.Paid, p)
-		qobs.Record(ctx, "bankPays", nil, "actor", p.Tenant, "process", App.Name, "key", p.Key, "counter", p.Counter, "amount", p.Amount)
+	b.svc = qenv.NewService(s, "bank", nil, func(ctx context.Context, p payRequest) (struct{}, error) {
+		b.Paid = append(b.Paid, p.Payment)
+		BankPays.Record(ctx, p.Tenant, p.Payment)
 		return struct{}{}, nil
 	})
 	return b
@@ -124,6 +117,6 @@ func NewSimBank(s *qenv.Sim) *SimBank {
 // Pay implements Bank: an error if no answer came within a second (the
 // payment's outcome unknown: the request or its answer was lost).
 func (b *SimBank) Pay(ctx context.Context, tenant, key, counter string, amount int) error {
-	_, err := b.svc.Call(ctx, Payment{Tenant: tenant, Key: key, Counter: counter, Amount: amount}, time.Second)
+	_, err := b.svc.Call(ctx, payRequest{Tenant: tenant, Payment: Payment{Key: key, Counter: counter, Amount: amount}}, time.Second)
 	return err
 }

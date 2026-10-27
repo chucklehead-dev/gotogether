@@ -1,117 +1,146 @@
-# A grist application's model: the rules
+# A grist application's model: the skeleton and the rules
 
-The model is one tenant's log, hand-written (a generator is designed,
-docs/grist.md §3.2, not built). `model/<app>.qnt` imports a vendored
-`grist.qnt` (copy `grist/model/grist.qnt`) and `export`s it.
-examples/counters' `model/counters.qnt` and examples/wallet-grist's
-`model/wallet.qnt` are complete ones: read one beside this page.
+The model is one tenant's log. Its skeleton and both bindings are
+generated from the App's catalog by the app's binary (`go run ./cmd/<app>
+model`, `grist.Main`; `-init` also writes a first `model/<app>.qnt` with
+every hole stubbed); the application writes the rules and invariants in
+`model/<app>.qnt`, which regenerating never touches. examples/counters'
+and examples/wallet-grist's `model/<app>.qnt` are complete ones: read
+one beside this page.
 
-## State
+## What is generated
 
-- `log`: the tenant's events, each `{ typ, tags, strs, ints, cause }`.
-- `checkpoints`: each processor's position.
-- `appended`: the batch the last step appended (`[]` for a step that
-  appends nothing).
-- `effects`: the effect steps, `(processor, trigger, key, ok)`.
-- `answered`: the command ids with an outcome.
-- Any dependency's own record of its effects (counters' `payments`,
-  wallet's `ledger`), when a double records at its site (below).
+`model/<app>_gen.qnt` (never edit it):
 
-Every action assigns every variable (frame conditions: `log' = log`
-where nothing is appended). Read models are defs over the log.
+- module `<app>Events`: an `Event` constructor per event type, its
+  scalar fields in Go order (`counterCreated(counter, name, creator)`;
+  its cause is stamped by the action that appends it); accessors
+  (`counterCreatedName(e)`); reads (`counterCreatedRead`,
+  `counterCreatedByName(v)`); per read model its selection of the log
+  (`totalsEvents(log, counter)`) and the reads a read of it records
+  (`totalsReads(counter)`); a record type per command's and query's
+  arguments with `principal` (`CreateCounterArgs`), per query's result,
+  per site's record.
+- module `<app>Gen`, the store's side: `log`, `checkpoints`, `appended`,
+  `effects`, `answered` and one list per site (`bankPaysRecords`); per
+  command an action (a reused key; a `conflict` if it is conditioned;
+  ok and each declared refusal, with `freshKey`, `covers` of its rule's
+  needs and `conditionHolds`), per query one, per processor those of
+  its declared shape (`Emits`: one action; `Delivers(AtLeastOnce)`: the
+  effect step, the checkpoint over `atLeastOnceDone`, an outcome step
+  that never happens; `Delivers(AtMostOnce)`: checkpoint, effect,
+  outcome), per site one; every frame condition; `step`.
+- module `<app>CallsGen`, the clients' side: no positions, no
+  processors, a key's first answer final, `denied` answering nothing.
+- `<app>.binding.yaml`, `<app>.calls.binding.yaml` and one
+  `<app>.<variant>.binding.yaml` per test-only variant (below), and
+  `model/grist.qnt` vendored.
+
+The generator needs the shapes declared: `grist.Refuses(ErrA, ...)` on a
+command (a decision returning another rejection is its error),
+`grist.Emits(Type...)` or `grist.Delivers(grist.AtLeastOnce|AtMostOnce,
+SuccessType)` on a processor (a result contradicting it fails the
+trigger). A processor with neither is the generator's error.
+
+## The holes (module `<app>Rules`)
+
+Per command `c` (its arguments a record: `c.counter`, `c.principal`):
+
+- `<c>Outcome(log, c): str`: the rule, `"ok"` or a declared refusal,
+  decided on the log at the commit (for a conditioned command, equal to
+  the log at its read position for everything it read). It must not
+  depend on processors' events if the clients' side is to agree (its
+  log holds the commands' events alone).
+- `<c>Events(log, c): List[Event]`: what an ok appends.
+- `<c>Needs(c, result): Set[Read]`: the reads the rule needs for that
+  outcome; the committed step's read set must cover each, so a lost
+  read is caught at every commit. A refusal decided before any read
+  (an invalid request) needs `Set()`.
+
+Per query `q`: `<q>Answer(log, q)`, the result's scalar fields as a
+record (or the scalar), compared with the step's at its position.
+Per processor `p`: `<p>Emits(prefix, trigger)` (Emits) or
+`<p>Success(prefix, trigger)` (Delivers with a success event): `prefix`
+is the log through the trigger, `prefix[trigger - 1]` the trigger; a
+success event names the trigger (`paidOut(counter, trigger)`) so each
+trigger's outcome is its own. Per site `s`: `<s>Admits(records, r)`, the
+dependency's own rule (a ledger's dedupe by key; `true` for a bank that
+records every payment). `STRS` and `INTS`: what `step` (`gotogether
+simulate`) draws arguments from. Read models' folds are yours (Go
+closures cannot be translated): write a def over the generated
+selection (`totalsEvents(log, c).foldl(0, (s, e) => s + counterIncrementedBy(e))`).
+
+`go run ./cmd/<app> model` names every missing hole with a stub to
+start from. A new block's holes are missing until written; a changed
+argument list changes nothing in a hole (it takes the record).
+
+## Invariants and variants
+
+Write vals in module `<app>` (the store's side) or `<app>Calls` (the
+clients'), each marked on the line before it:
+
+- `// grist: invariant [bindings]`: judged at every step, and held by
+  the model on its own (`simulate: holds`);
+- `// grist: eventually [bindings]`: judged after the run's last settle;
+- `// grist: violable [bindings]`: a test-only invariant the design
+  allows to fail (`simulate: allows`), such as one ok welcome per counter
+  under at least once.
+
+Bindings default to `default` (`<app>.binding.yaml`); any other name is
+a test-only variant, `<app>.<name>.binding.yaml`: the same actions,
+judged by its own vals (counters' `once`, `exactly`, `retiring`). A
+variant that judges every invariant of the default binding (`retiring`)
+compares the steps' observations as the default does; one that judges
+only its own vals (`once`, `exactly`) leaves them to the default
+binding's claims, and compares none (each expect is evaluated at every
+step of every replay). Each eventual val costs a replay per run: keep
+the per-push binding's few.
+Both modules import `grist`, `<app>Events` and `<app>Rules` themselves
+beside the skeleton (the starter does): quint's flattener loses names
+re-exported twice, and the validator's Go evaluator, which compiles the
+module from another directory, falls back to quint processes, several
+times slower.
 
 ## Names
 
-A command's or event's Go field becomes a Quint parameter by its JSON
-name, and Quint refuses its keywords and redefinitions of its built-ins
-(QNT008, QNT101, or a parse error): `to`, `of`, `in`, `not`, `then`,
-`with`, `type`, `and`, `or`, `if`, `else`, `all`, `any`, `val`, `def`,
-`var`, `const`, `action`, `run`, `pure`, `nondet`, `match`, `import`,
-`export`, `module`, `assume`, `true`, `false`, and the operators `map`,
-`filter`, `fold`, `keys`, `get`, `put`, `set`, `size`, `length`, `head`,
-`tail`, `nth`, `range`, `select`, `union`, `contains`, `exists`,
-`forall`, `next`, `fail`, `assert`, `reps`, `enabled`, `always`,
-`eventually`, among others. Name the field otherwise (`Src`/`Dest`, not
-`From`/`To`; `Kind`, not `Type`); `quint typecheck` names the one it
-refuses. grist's own step fields (`id`, `principal`, `readPos`,
-`reads`, `result`, `trigger`, `key`, `ok`) are refused by `App.Verify`.
+A Go field's JSON name is a Quint parameter or a record field. The
+generator renames a parameter Quint reserves (`of`, `item`, `size`, ...:
+`of_`, with the binding's template) and refuses a JSON name that is no
+identifier, an integer tag (a tag is text the model cannot write from
+an int: make it a string), and a pointer argument (recorded only when
+set). In your own defs, avoid Quint's built-ins as parameter names
+(`item`, `set`, `range`, `exists`...); `quint typecheck` names the one it
+refuses. grist's own step fields (`id`, `principal`, `readPos`, `reads`,
+`result`, `trigger`, `key`, `ok`) are refused by `App.Verify`.
 
-## Commands
+## Delivery, and what a mismatch shows
 
-A command's action takes its fields, `id`, `readPos`, `reads` (Reads,
-`{ typ, tags }`), `principal` (the actor, when its rule needs it) and
-`result` (`{{.outcome}}` in the binding). A client-side model takes
-`denied` (a 403: nothing appended, the key unanswered).
-
-- Every committed outcome requires `freshKey(answered, id)` and adds the
-  id: a rejection and a conflict commit their marker, so a key's first
-  answer is final.
-- `covers(reads, need)` for what its rule reads, so a lost read is
-  caught at every commit. An outcome whose rule reads nothing (a request
-  refused as invalid before any read) leaves `covers` out of its branch.
-- `conditionHolds(log, readPos, reads)` for a commit and a refusal; a
-  `conflict` requires its negation. An `Unconditioned` command's model
-  leaves `conditionHolds` out, and its precondition then catches the
-  race (no isolation level closes it: docs/grist.md §2.4).
-- A commit appends its events; a refusal requires `readPos <=
-  log.length()` and its reason, and appends nothing.
-- `idempotency-key-reused` requires the id answered and commits nothing.
-- A command that cannot conflict (it reads nothing, so its condition is
-  empty) needs no `conflict` branch.
-- Event causes are pairs: `("command", id)` or `("processor", name)`.
-
-## Processors
-
-A processor's action takes `trigger == nextOf(log, checkpoints.get(p),
-type)` and reads `log.slice(0, trigger)`.
-
-**At least once** (the default): the effect step `<p>Effect(trigger,
-key, ok)` requires `keyStable`; the checkpoint `p(trigger, ok)`
-requires `atLeastOnceDone(effects, p, trigger, ok, EFFECT_TRIES)` and
-appends `atLeastOnceOutcome(p, trigger, ok, [success])`: the run that
-committed decides, the success event after an ok effect, `grist.failed`
-after the tries.
-
-**At most once** (`grist.AtMostOnce`: checkpoint first, the effect
-once, then its outcome in a commit of its own) has three actions:
-
-- the checkpoint `p(trigger, ok)`, requiring `atMostOnceFirst(effects,
-  p, trigger, ok)`, appending nothing;
-- the effect step, requiring `atMostOnceEffect(effects,
-  checkpoints.get(p), p, trigger)`;
-- the outcome `pOutcome(trigger, ok, known, error)`, requiring
-  `atMostOnceDone(log, effects, p, trigger, ok, [success])` (the success
-  event names the trigger) and appending `atMostOnceOutcome(p, trigger,
-  ok, known, error, [success])`: after a failed effect `grist.failed` if
-  f returned `grist.NotApplied(err)` (it did not happen), else
-  `grist.unknown` with the error's text (it may have: a lost answer).
-
-A lost effect or outcome is admitted. An application that needs exactly
-once states it with test-only eventual vals over the dependency's own
-record of each effect, counted per key (examples/counters' `payout`,
-`counters.exactly.binding.yaml`), and grist's `atMostOnceOutcomesLogged`
-for outcomes owed. Check it with two pollers: `gristsim.Config.Nodes: 2`.
-
-**The model encodes the declared delivery.** An effect declared at most
-once where the model says at least once is rejected at its first
-trigger (`Rejects(<processor>)`: its checkpoint step comes before any
-effect step), so what the mismatch would cause (a lost effect) is never
-reached; the same for any declared guarantee the model contradicts.
+At least once, the checkpoint commits what the run reached (the success
+after an ok effect step, `grist.failed` after the tries); at most once,
+the checkpoint comes first, the effect once, then its outcome
+(`grist.failed` after `grist.NotApplied`, else `grist.unknown`). A lost
+effect or outcome is admitted; an application that needs exactly once
+states it with test-only eventual vals over the site's records
+(counters' `everyRetirementPaidOnce`, `everyPayoutOutcomeLogged` with
+`atMostOnceOutcomesLogged`), checked with two pollers
+(`gristsim.Config.Nodes: 2`). The checked-in model is generated from the
+faithful app's declarations, and judges every mutant's runs: a mutant
+that changes a delivery (and its declaration with it, which the runtime
+enforces) is rejected at its first trigger (`Rejects(<processor>)`:
+counters' `checkpointFirst`), before what it would cause.
 
 ## A dependency's record of its own effects
 
-A double (a simulated mailer, bank, ledger) records each effect where it
-makes it, so the model sees it whether or not grist's effect step
-survives: `qobs.Record(ctx, "bankPays", nil, "actor", tenant,
-"process", App.Name, "key", key, ...)`. `actor` puts the step in the
-tenant's trace (every grist step of a tenant has the tenant as its
-actor), and `process` must be the store's name, which is the App's
-(gristsim names the store after it; `sqlstore.Options.Name`): another
-process would be a second incarnation of the actor, a restart the
-binding has no action for. The action is a model action that adds to
-the dependency's record (counters' `bankPays`, wallet's `ledgerPost`).
+A double (a simulated bank, a ledger) records each effect where it makes
+it, with a site: `var BankPays = grist.NewSite[Payment](App, "bank-pays")`
+and `BankPays.Record(ctx, tenant, Payment{...})` in its handler (actor
+the tenant, process the App's name, so the step joins the tenant's
+trace). The generator writes its list (`bankPaysRecords`) and action.
 
 ## Check it alone
 
 `gotogether simulate -binding <app>.binding.yaml` runs the model's own
-`step` against the binding's `simulate:` invariants before any Go runs.
+`step` against the binding's `simulate:` invariants before any Go runs;
+`gristtest.Generated(t, App)` (a `TestGenerated`) fails when the
+checked-in files are stale, a hole is missing, or a module lacks those
+imports.

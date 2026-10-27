@@ -37,7 +37,7 @@ func decideTransfer(r *grist.Reads, c Transfer) ([]grist.Event, error) {
 // The mutant readThenWrite: Unconditioned, so the funds it read are
 // advisory and two transfers from one account (or one from each account
 // of the credit line) both spend what one saw.
-var TransferCmd = grist.NewCommand(App, "transfer", decideTransfer, grist.Unconditioned("the funds are advisory here"),
+var TransferCmd = grist.NewCommand(App, "transfer", decideTransfer, grist.Refuses(ErrInvalid, ErrInsufficientFunds), grist.Unconditioned("the funds are advisory here"),
 	grist.Authorize(grist.Authenticated))
 
 // Deposit adds Amount to Account.
@@ -56,4 +56,4 @@ func decideDeposit(r *grist.Reads, c Deposit) ([]grist.Event, error) {
 }
 
 // DepositCmd is the deposit command.
-var DepositCmd = grist.NewCommand(App, "deposit", decideDeposit, grist.Authorize(grist.Authenticated))
+var DepositCmd = grist.NewCommand(App, "deposit", decideDeposit, grist.Refuses(ErrInvalid), grist.Authorize(grist.Authenticated))

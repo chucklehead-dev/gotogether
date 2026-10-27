@@ -1,0 +1,92 @@
+package {{.Pkg}}
+
+import (
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/grist/gristtest"
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qtest"
+)
+
+// The bindings, generated from the App's catalog (`go run ./cmd/{{.Name}}
+// model`): the store's side and the clients'.
+const (
+	commits = "{{.Name}}.binding.yaml"
+	calls   = "{{.Name}}.calls.binding.yaml"
+)
+
+// faulty crashes the node at 2 in 100 scheduling steps and loses the
+// answer of 15 in 100 commits (with CommitFaults), every other fault at
+// the default rate (requests and answers lost, duplicated and late).
+var faulty = qenv.DefaultRates.Set("nemesis", 0.02).Set("store.{{.Name}}.commit", 0.15)
+
+// system is the app under cfg, judged by binding, at faulty rates.
+func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
+	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
+		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
+}
+
+// seeds is n, or short under -short.
+func seeds(n, short int) int {
+	if testing.Short() {
+		return short
+	}
+	return n
+}
+
+// of picks one of xs.
+func of[T any](pick func(int) int, xs ...T) T { return xs[pick(len(xs))] }
+
+// gen are the workload's arguments: additions of -1 to 3 of two items (a
+// quantity that is not positive among them, refused), shows of both.
+var gen = map[string]func(pick func(int) int) any{
+	"add-item":  func(p func(int) int) any { return AddItem{Item: of(p, "a", "b"), Qty: p(5) - 1} },
+	"show-item": func(p func(int) int) any { return ShowItem{Item: of(p, "a", "b")} },
+}
+
+// contended is one tenant, three clients of four operations each.
+var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, CommitFaults: true, Gen: gen}
+
+// TestFaithful: through commit faults, node crashes and a lossy API, every
+// run conforms at the store and settles (every addition tallied), and the
+// commit faults happened.
+func TestFaithful(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.{{.Name}}.commit").Faulted())
+}
+
+// TestFaithfulAtClients: the same runs judged where the clients saw them,
+// linearized: an addition applied twice would show as a stock no order
+// explains.
+func TestFaithfulAtClients(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(calls, contended, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+		Expect(t, qtest.Conforms())
+}
+
+// fill is two clients adding to one item, no faults: the capacity is
+// reached. The noCapacity mutant's shape.
+var fill = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Send: []string{"add-item"},
+	Gen: map[string]func(pick func(int) int) any{"add-item": func(p func(int) int) any { return AddItem{Item: "a", Qty: 1 + p(3)} }}}
+
+// TestFull: the faithful app at the mutant's shape refuses past the
+// capacity, and some addition is refused full.
+func TestFull(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("addItem")))
+}
+
+// TestGenerated: the model's skeleton and the bindings are what the
+// catalog generates (regenerate with `go run ./cmd/{{.Name}} model`).
+func TestGenerated(t *testing.T) {
+	if gristtest.Mutant() != "" {
+		t.Skip("a mutant's binary: its catalog is not the app's")
+	}
+	gristtest.Generated(t, App)
+}

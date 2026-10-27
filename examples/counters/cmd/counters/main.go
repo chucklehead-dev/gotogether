@@ -34,6 +34,6 @@ func (m *stderrMailer) Send(_ context.Context, key, msg string) error {
 func main() {
 	mailer := &stderrMailer{}
 	grist.Main(counters.App, grist.Dependencies(func(ctx context.Context) context.Context {
-		return counters.WithDeps(ctx, counters.Deps{Mailer: mailer})
+		return counters.MailerDep.With(ctx, mailer)
 	}))
 }

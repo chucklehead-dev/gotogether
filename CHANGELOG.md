@@ -8,6 +8,23 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist's generator and onboarding (docs/grist.md §0.9; api/grist.txt):
+  `grist.Generate` and `grist.Starter`, an app's binary's `model` command
+  (`grist.Main`: `-check`, `-init`), writing the model's skeleton
+  (`model/<app>_gen.qnt`), the vendored grist.qnt and the bindings of
+  both sides and of test-only variants from the App's catalog, the app
+  writing only its rules and its marked invariants (`// grist: invariant`);
+  the declarations it reads, enforced at run time: `grist.Refuses` on a
+  command, `grist.Emits` and `grist.Delivers` on a processor (the
+  catalog's `Refuses`, `Shape`, `Emits`, `Delivery`, `Success`);
+  `grist.NewSite` (a dependency's record of its effect at its site, in
+  the catalog's `Sites`) and `grist.NewDep` (typed dependencies);
+  grist.qnt's `UNCAUSED`, `caused`, `triplesOf`. Package `grist/gristtest`:
+  `Generated` (the generated files' CI diff), `Mutants`, `Mutant`,
+  `Overlay`, `NewTier` (the real tier: `Start`, `Kill`, `Do`, `Settle`,
+  `Check`), `Answered`. `grist/cmd/grist`: `grist new <name>`, an app
+  module green on its first run. examples/counters and
+  examples/wallet-grist are generated and use the harnesses.
 - A binding's module may re-export another whole (`export lib.*`): its
   actions, variables and vals are the exported module's too
   (`binding.LoadModel` follows the exports transitively, its own names

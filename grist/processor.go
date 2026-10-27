@@ -31,6 +31,17 @@ const (
 	AtMostOnce
 )
 
+// String is the delivery's name (AtLeastOnce, AtMostOnce).
+func (d Delivery) String() string {
+	switch d {
+	case AtLeastOnce:
+		return "AtLeastOnce"
+	case AtMostOnce:
+		return "AtMostOnce"
+	}
+	return fmt.Sprintf("Delivery(%d)", int(d))
+}
+
 // notApplied is an effect's error that says it did not happen.
 type notApplied struct{ err error }
 
@@ -409,6 +420,8 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 		if r.bad != nil {
 			res = Fail(r.bad)
 		} else if err := res.check(pl.p.name); err != nil {
+			res = Fail(err)
+		} else if err := pl.p.opts.shape.conforms(pl.p.name, res); err != nil {
 			res = Fail(err)
 		}
 		for _, ev := range res.events {

@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Ledger posts moves, deduplicating by key: a post under a key it
@@ -16,34 +16,16 @@ type Ledger interface {
 	Post(ctx context.Context, tenant, key, account string, amount int) error
 }
 
-// Deps are the application's dependencies, reached through a processor's
-// context: one set per simulation, never a package-level value that runs
-// in parallel would share.
-type Deps struct {
-	Ledger Ledger
-}
-
-type depsKey struct{}
-
-// WithDeps attaches d to ctx.
-func WithDeps(ctx context.Context, d Deps) context.Context {
-	return context.WithValue(ctx, depsKey{}, d)
-}
-
-// DepsOf are ctx's dependencies; a Ledger that refuses every post if none
-// was attached.
-func DepsOf(ctx context.Context) Deps {
-	d, ok := ctx.Value(depsKey{}).(Deps)
-	if !ok || d.Ledger == nil {
-		d.Ledger = noLedger{}
-	}
-	return d
-}
+// LedgerDep is the application's ledger, reached through a processor's
+// context (grist.Dep): one per run, attached by gristsim's Config.Setup,
+// Main's Dependencies or the real tier's harness; a ledger that refuses
+// every post where none is attached.
+var LedgerDep = grist.NewDep[Ledger]("ledger", noLedger{})
 
 type noLedger struct{}
 
 func (noLedger) Post(context.Context, string, string, string, int) error {
-	return errors.New("wallet: no ledger: attach one with WithDeps")
+	return errors.New("wallet: no ledger: attach one (LedgerDep.With)")
 }
 
 // An Entry is a post as the ledger takes it.
@@ -52,10 +34,22 @@ type Entry struct {
 	Amount               int
 }
 
+// A LedgerEntry is a post as the ledger makes it: its record at the
+// ledger's site (LedgerPosts), the tenant its actor.
+type LedgerEntry struct {
+	Key     string `json:"key"`
+	Account string `json:"account"`
+	Amount  int    `json:"amount"`
+}
+
+// LedgerPosts is the ledger's own record of each post it makes, where it
+// makes it (the step ledgerPost, actor the tenant): an effect's site
+// records the effect, so a post made twice is in the trace whatever the
+// processor saw.
+var LedgerPosts = grist.NewSite[LedgerEntry](App, "ledger-post")
+
 // Book is the ledger's state: the keys it posted, in order. It records
-// each post where it makes it (the step ledgerPost, actor the tenant):
-// an effect's site records the effect, so a post made twice is in the
-// trace whatever the processor saw.
+// each post at its site (LedgerPosts).
 type Book struct {
 	mu   sync.Mutex
 	keys map[string]bool
@@ -75,7 +69,7 @@ func (b *Book) post(ctx context.Context, e Entry) {
 	}
 	b.keys[e.Key] = true
 	b.Entries = append(b.Entries, e)
-	qobs.Record(ctx, "ledgerPost", nil, "actor", e.Tenant, "process", App.Name, "key", e.Key, "account", e.Account, "amount", e.Amount)
+	LedgerPosts.Record(ctx, e.Tenant, LedgerEntry{Key: e.Key, Account: e.Account, Amount: e.Amount})
 }
 
 // SimLedger is the ledger in a simulation: a qenv.Service of its own

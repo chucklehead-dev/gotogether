@@ -1,0 +1,19 @@
+package {{.Pkg}}
+
+import "github.com/chucklehead-dev/gotogether/grist"
+
+// ShowItem asks for an item.
+type ShowItem struct {
+	Item string `json:"item"`
+}
+
+// ItemView is an item as shown: its stock.
+type ItemView struct {
+	Stock int `json:"stock"`
+}
+
+// Show is the show-item query: the item's stock through the position it
+// read.
+var Show = grist.NewQuery(App, "show-item", func(r *grist.Reads, q ShowItem) (ItemView, error) {
+	return ItemView{Stock: Stock.For(r, q.Item)}, nil
+}, grist.Authorize(grist.Authenticated))

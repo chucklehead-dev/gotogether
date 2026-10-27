@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -272,6 +273,9 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 					derr = checkEvents("command "+c.info.name, events)
 				}
 				var rej *Rejected
+				if derr != nil && errors.As(derr, &rej) && o.refuses != nil && !slices.Contains(o.refuses, rej.Name) {
+					derr = fmt.Errorf("grist: command %s refused %s, which its Refuses does not declare (%v): add it, so its model has the outcome", c.info.name, rej.Name, o.refuses)
+				}
 				switch {
 				case derr != nil && errors.As(derr, &rej):
 					outcome, events = rej.Name, nil

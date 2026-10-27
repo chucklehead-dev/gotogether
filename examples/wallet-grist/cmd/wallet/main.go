@@ -19,6 +19,6 @@ import (
 func main() {
 	ledger := &walletgrist.LocalLedger{}
 	grist.Main(walletgrist.App, grist.Dependencies(func(ctx context.Context) context.Context {
-		return walletgrist.WithDeps(ctx, walletgrist.Deps{Ledger: ledger})
+		return walletgrist.LedgerDep.With(ctx, ledger)
 	}))
 }

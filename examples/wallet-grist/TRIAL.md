@@ -233,3 +233,15 @@ model's helper actions `appends`, `refuses`, `readsThrough`,
 unaffected; Quint's reserved names are listed in AGENTS.md and the
 skill. The generator, the harness helpers and typed dependencies are
 ROADMAP's grist track.
+
+## After GR2 (docs/grist.md §0.9)
+
+What this log asked for first is built, and this example moved onto it:
+the model's skeleton and all three bindings are generated from the
+App's catalog (`go run ./cmd/wallet model`), so of the model 64 lines of
+Quint are written by hand (the rules above, the vals) and no binding;
+the mutant runner is `gristtest.Mutants`, the real tier
+`gristtest.NewTier` (60 lines here, from 234), the ledger a typed
+`grist.NewDep` and its record a `grist.NewSite`. The commands declare
+their refusals (`grist.Refuses`) and the post its delivery
+(`grist.Delivers`), which the generator reads and the runtime enforces.

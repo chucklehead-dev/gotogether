@@ -27,6 +27,13 @@ AGENTS.md has the general requirements.
   `WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .` records 6s
   runs into testdata/runs; `WEBJOBS_TIME_LIMIT=10s` shortens a live run;
   `WEBJOBS_JOURNEYS=dir` keeps the journeys.
+- grist (its own module): `cd grist && GOTOGETHER_CHECK=1
+  GOTOGETHER_STRICT=1 go test ./...` (as CI; `TestNewIsGreen`, full mode,
+  scaffolds a module with `grist new` and tests it). A grist app's
+  generated model and bindings: `go run ./cmd/<app> model` in its
+  module (`-init` writes a first model/<app>.qnt), or `GRIST_UPDATE=1 go
+  test -run TestGenerated`; grist's own golden files:
+  `GRIST_UPDATE=1 go test -run TestGenerateGolden .` in grist/.
 - grpcledger and streams (their own modules): `cd examples/<name> && go test ./...`.
   grpcledger's generated protobuf code is checked in; regenerate with buf
   (no protoc: see its README).
