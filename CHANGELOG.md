@@ -33,6 +33,10 @@ The first release. What a user meets, by module:
   (never a pass nor a failure); `qtest.Calibration` (reruns from the
   original's rate at its lower bound, the fewest that miss a failure
   with chance at most α; a budget and a time) and `qtest.Rate`.
+  `ShrunkActions.Minimal` holds only with the shrunk sequence's own
+  rate measured and the last rerun of no actions made (a budget that
+  ran out right after the search once left it true at a rate of 0 of
+  0): a `Budget` keeps `Baseline`+1 reruns back for them.
 - Absence diagnostics: each step a run was expected to show and does
   not (a within not met or not judged, an eventual val not judged or
   false at the settle, a call never completed) is in the report's
@@ -147,6 +151,11 @@ The first release. What a user meets, by module:
   refused (`validate.Finishable`). A binding's `complete: true` makes
   that its default. A conforming three-step prefix passed with Conforms
   alone. Reported by a pilot outside the repository.
+- A spec's imports (the model cache's key, `Manifest.Verify`, `Bundle`)
+  are read by token, not by a regular expression that missed an
+  instance's with a string constant (`import a(N = Set("u")) as A from
+  "./a"`) and an import split over lines: a change to such a file once
+  left the cached model stale, passed Verify, and stayed out of a bundle.
 - `qtrace.ReadJSONL` rejects a line whose object is followed by more (a
   second object, garbage), naming the line: it read the first object and
   dropped the rest, losing a record or hiding a corruption. A cut-off

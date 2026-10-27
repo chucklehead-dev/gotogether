@@ -42,7 +42,9 @@ type Calibration struct {
 	// Budget is the most reruns the whole shrink makes (0: no limit), and
 	// Time the longest it runs (0: no limit). Either reached, the shrink
 	// ends with the smallest sequence so far, not minimal. It ends so too
-	// before the test's deadline.
+	// before the test's deadline. The search keeps Baseline+1 reruns of
+	// the Budget back, for the shrunk sequence's own rate and a last
+	// rerun of no actions, without which a shrink is not minimal.
 	Budget int
 	Time   time.Duration
 }

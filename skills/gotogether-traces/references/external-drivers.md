@@ -228,7 +228,11 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   candidate; set `Calibration.Reruns: 1` for a driver known to be
   deterministic. `Budget` (reruns) and `Time` bound the shrink; at
   either, or near the test's deadline, it returns the smallest sequence
-  so far with `Minimal` false and `NotMinimal` saying why.
+  so far with `Minimal` false and `NotMinimal` saying why. `Minimal`
+  also needs the shrunk sequence's own `Rate` measured and a last rerun
+  of no actions made after the search: a `Budget` keeps `Baseline`+1
+  reruns back for them, so a budget the search runs out of still
+  measures the rate; a time out before them leaves `Minimal` false.
 - **What it reports**: `Actions`, the minimal `Run` (checked as
   `Validate` checks steps: its report and step log), `Reruns`,
   `Reproduced`, `NotReproduced`, `Undecided`, `Diverged`, `Errors`, the

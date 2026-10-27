@@ -35,6 +35,9 @@ type fakeApp struct {
 	// its own, at the time it ends (no leak: the environment's own steps)
 	poller, leakState, shutdown bool
 	runs, pollers, boots        int
+	// slowAt: the rerun that boots the slowAt-th time sleeps slow
+	slowAt int
+	slow   time.Duration
 }
 
 type fakeReset struct{ app *fakeApp }
@@ -58,6 +61,9 @@ func (f *fakeApp) rerun(_ context.Context, idx []int) (steps []qtrace.Step, err 
 		f.pollers++
 	}
 	f.boots++
+	if f.boots == f.slowAt {
+		time.Sleep(f.slow)
+	}
 	if f.shutdown {
 		server := fmt.Sprintf("server-%d", f.boots)
 		defer func() {
@@ -323,6 +329,31 @@ func TestShrinkActionsBudget(t *testing.T) {
 	res := shrinkFake(t, &fakeApp{a: func(m uint) bool { return m&0b10000001 == 0b10000001 }}, 8, Expectation{}, Calibration{Budget: 14})
 	if res.minimal || !strings.Contains(res.notMinimal, "budget of 14 reruns ran out") || res.reruns != 14 || !oneOf(res.set) {
 		t.Fatalf("got %v minimal %v after %d reruns (%q)", res.set, res.minimal, res.reruns, res.notMinimal)
+	}
+}
+
+// Minimal holds only with the shrunk sequence's own rate measured and
+// the last rerun of no actions made: a budget just big enough for the
+// search (5 reruns before it, 16 in it) keeps back Baseline+1 reruns
+// for them, ending the search early, not minimal, but with the rate
+// measured; three more give the search its 16 and a minimal shrink. A
+// time that runs out in the search's last rerun leaves Minimal false,
+// naming it.
+func TestShrinkActionsMinimalNeedsItsRate(t *testing.T) {
+	t.Parallel()
+	needs := func(m uint) bool { return m&0b10000001 == 0b10000001 }
+	res := shrinkFake(t, &fakeApp{a: needs}, 8, Expectation{}, Calibration{Budget: 21, Baseline: 2, Reruns: 1})
+	if res.minimal || !strings.Contains(res.notMinimal, "budget of 21 reruns ran out") || res.rate != (Rate{2, 2}) || res.reruns != 21 || !oneOf(res.set) {
+		t.Errorf("a budget the search alone needs: %v minimal %v, rate %s, %d reruns (%q)", res.set, res.minimal, res.rate, res.reruns, res.notMinimal)
+	}
+	res = shrinkFake(t, &fakeApp{a: needs}, 8, Expectation{}, Calibration{Budget: 24, Baseline: 2, Reruns: 1})
+	if !res.minimal || maskOf(res.set) != 0b10000001 || res.rate != (Rate{2, 2}) || res.reruns != 24 {
+		t.Errorf("a budget for the search, the rate and the last rerun: %v minimal %v, rate %s, %d reruns (%q)", res.set, res.minimal, res.rate, res.reruns, res.notMinimal)
+	}
+	res = shrinkFake(t, &fakeApp{a: needs, slowAt: 21, slow: 600 * time.Millisecond}, 8, Expectation{}, Calibration{Time: 300 * time.Millisecond, Baseline: 2, Reruns: 1})
+	if res.minimal || !strings.Contains(res.notMinimal, "time of 300ms ran out") || !strings.Contains(res.notMinimal, "before the shrunk sequence's own rate was measured") ||
+		res.rate.Of != 0 || maskOf(res.set) != 0b10000001 {
+		t.Errorf("a time out after the search: %v minimal %v, rate %s, %d reruns (%q)", res.set, res.minimal, res.rate, res.reruns, res.notMinimal)
 	}
 }
 

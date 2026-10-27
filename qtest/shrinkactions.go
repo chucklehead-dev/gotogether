@@ -88,11 +88,16 @@ type ShrunkActions[A any] struct {
 	Rate Rate
 	// Minimal: every sequence of Actions with one action fewer was rerun
 	// PerCandidate times without reproducing the failure (1-minimal, each
-	// removal with chance at least 1−α), and Actions reproduced after the
-	// shrink at a rate the original's allows.
+	// removal with chance at least 1−α), Actions' own rate was measured
+	// after the shrink (Rate, Calibration.Baseline reruns) and is one the
+	// original's allows, and a last rerun of no actions showed nothing
+	// left behind.
 	// False when the budget or time ran out (Actions is the smallest so
-	// far) or a one-removal never ran (each rerun diverged); NotMinimal
-	// says which.
+	// far, or its rate and the last rerun were not made), a one-removal
+	// never ran (each rerun diverged) or Actions' reruns after the shrink
+	// had no verdict; NotMinimal says which. A Budget keeps
+	// Calibration.Baseline+1 reruns for the rate and the last rerun, so a
+	// budget that runs out in the search still measures them.
 	Minimal    bool
 	NotMinimal string
 	keep       Expectation
@@ -309,6 +314,9 @@ type shrinker struct {
 	judge func(ctx context.Context, steps []qtrace.Step) (*validate.Report, []qtrace.Step, error)
 	keep  Expectation
 	cal   Calibration
+	// reserve is how many reruns of the budget out keeps back: the shrunk
+	// sequence's rate and the last empty rerun's, while ddmin searches
+	reserve int
 	// names are the binding's checked invariant names and actions the
 	// model's (nil: not known), for Keep's: a misspelled one never holds
 	names, actions map[string]bool
@@ -346,7 +354,7 @@ type attempt struct {
 // time, or the test's deadline near (two of the longest reruns away).
 func (s *shrinker) out() string {
 	switch {
-	case s.cal.Budget > 0 && s.reruns >= s.cal.Budget:
+	case s.cal.Budget > 0 && s.reruns >= s.cal.Budget-s.reserve:
 		return fmt.Sprintf("its budget of %d reruns ran out (raise Calibration.Budget)", s.cal.Budget)
 	case s.cal.Time > 0 && time.Since(s.start) >= s.cal.Time:
 		return fmt.Sprintf("its time of %v ran out (raise Calibration.Time)", s.cal.Time)
@@ -629,6 +637,8 @@ func (s *shrinker) shrink() *shrinkResult {
 	}
 	res.perCandidate = n
 	found := map[string][]qtrace.Step{fmt.Sprint(all): res.steps}
+	// the search leaves the budget enough for what Minimal also needs
+	s.reserve = cal.Baseline + 1
 	d := ddmin.Minimize(s.n, func(idx []int) ddmin.Outcome { return s.candidate(ctx, idx, n, found) },
 		func() bool { return s.out() != "" })
 	res.set = d.Set
@@ -640,9 +650,12 @@ func (s *shrinker) shrink() *shrinkResult {
 	case !d.Minimal:
 		res.notMinimal = "a sequence with one action fewer was never decided (each rerun diverged, failed or had no verdict for the failure), so it is not known to pass"
 	}
+	s.reserve = 0 // after s.out() said why the search stopped
 	// the shrunk sequence's own rate, as far as the budget allows
+	measured := true
 	for range cal.Baseline {
 		if s.out() != "" {
+			measured = false
 			break
 		}
 		a := s.once(ctx, d.Set)
@@ -654,8 +667,21 @@ func (s *shrinker) shrink() *shrinkResult {
 			res.rate.Reproduced++
 		}
 	}
-	if s.out() == "" {
+	why := s.out()
+	if why == "" {
 		s.emptyRerun(ctx, "at the end")
+	}
+	// Minimal says the shrunk sequence's own rate was measured and the
+	// last empty rerun ran: a budget or time out before them (a time, or
+	// the test's deadline: the budget keeps them back) leaves it unknown
+	switch {
+	case !res.minimal:
+	case !measured || why != "":
+		res.minimal = false
+		res.notMinimal = why + ", before the shrunk sequence's own rate was measured and a last rerun of no actions checked for leftovers"
+	case res.rate.Of == 0:
+		res.minimal = false
+		res.notMinimal = fmt.Sprintf("the shrunk sequence's %d reruns after the shrink each diverged, failed or had no verdict for the failure: its rate is not known", cal.Baseline)
 	}
 	// a shrunk sequence that reproduces far less than the original showed
 	// its failure in the shrink by state an earlier rerun left, or by

@@ -5,19 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 )
-
-// importRE finds a Quint file's imports and re-exports of other files
-// (`import M.* from "./m"`, `import M(N = 3) as I from "m.qnt"`,
-// `export M.* from "./m"`): the path quint resolves relative to the
-// importing file.
-// Read-only.
-var importRE = regexp.MustCompile(`(?m)^\s*(?:import|export)\b[^"\n]*\bfrom\s+"([^"]+)"`)
 
 // specFiles is the spec at path, hashed, and the files it imports,
 // transitively, each hashed once, in the order found: what a verdict on
@@ -38,8 +30,8 @@ func specFiles(path string) (*File, []File, error) {
 		if err != nil {
 			continue
 		}
-		for _, m := range importRE.FindAllStringSubmatch(stripComments(string(src)), -1) {
-			q := filepath.Join(filepath.Dir(p), filepath.FromSlash(m[1]))
+		for _, imp := range importPaths(string(src)) {
+			q := filepath.Join(filepath.Dir(p), filepath.FromSlash(imp))
 			if filepath.Ext(q) != ".qnt" {
 				q += ".qnt" // quint adds the extension a path leaves out
 			}
@@ -58,12 +50,110 @@ func specFiles(path string) (*File, []File, error) {
 	return spec, imports, nil
 }
 
-// Comments of Quint source, whose example imports import nothing.
-// Read-only.
-var commentRE = regexp.MustCompile(`(?s)/\*.*?\*/|//[^\n]*`)
+// importPaths are the files a Quint source imports or re-exports
+// (`import M.* from "./m"`, `import M(N = Set("u")) as I from "m.qnt"`,
+// either split over lines), in order: the paths quint resolves relative
+// to the importing file. It reads tokens, as quint's lexer does, so a
+// comment's or a string's `from "x"` imports nothing, and an import
+// without `from` (a module of the same file) none. quint's own parse
+// would know too, but costs a process (about 0.3 s, as much as the
+// typecheck the model cache saves), and Verify and Bundle run where
+// quint may be missing.
+func importPaths(src string) []string {
+	toks := quintTokens(src)
+	var paths []string
+	for i := 0; i < len(toks); i++ {
+		if t := toks[i]; t != "import" && t != "export" {
+			continue
+		}
+		depth := 0 // inside an instance's overrides, anything goes
+	scan:
+		for j := i + 1; j < len(toks); j++ {
+			t := toks[j]
+			switch {
+			case t == "(":
+				depth++
+			case t == ")":
+				depth--
+			case depth > 0:
+			case t == "from":
+				if j+1 < len(toks) && strings.HasPrefix(toks[j+1], `"`) {
+					paths = append(paths, strings.Trim(toks[j+1], `"`))
+				}
+				i = j
+				break scan
+			case t == "." || t == "*" || t == "::" || t == "as" || isIdent(t) && !declKeywords[t]:
+				// the import's module name, its qualifier, its alias
+			default: // the next declaration, or the module's end: no file
+				i = j - 1
+				break scan
+			}
+		}
+	}
+	return paths
+}
 
-// stripComments is Quint source without its comments.
-func stripComments(s string) string { return commentRE.ReplaceAllString(s, "") }
+// declKeywords start a module's declarations (quint's grammar): one
+// ends an import that named no file.
+// Read-only.
+var declKeywords = map[string]bool{
+	"const": true, "var": true, "assume": true, "val": true, "pure": true, "type": true, "def": true,
+	"action": true, "run": true, "temporal": true, "nondet": true, "import": true, "export": true, "module": true,
+}
+
+// isIdent reports whether t is a word (an identifier or a keyword).
+func isIdent(t string) bool {
+	return t != "" && (t[0] == '_' || 'a' <= t[0] && t[0] <= 'z' || 'A' <= t[0] && t[0] <= 'Z')
+}
+
+// quintTokens splits Quint source into the tokens importPaths reads:
+// words, strings (quoted, as written: a Quint string has no escapes and
+// ends at the next quote), `::`, and every other character on its own.
+// Comments (`//` to the line's end, `/* */`) and white space are left
+// out.
+func quintTokens(src string) []string {
+	var toks []string
+	for i := 0; i < len(src); {
+		c := src[i]
+		switch {
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			i++
+		case strings.HasPrefix(src[i:], "//"):
+			if k := strings.IndexByte(src[i:], '\n'); k >= 0 {
+				i += k
+			} else {
+				i = len(src)
+			}
+		case strings.HasPrefix(src[i:], "/*"):
+			if k := strings.Index(src[i+2:], "*/"); k >= 0 {
+				i += 2 + k + 2
+			} else {
+				i = len(src)
+			}
+		case c == '"':
+			k := strings.IndexByte(src[i+1:], '"')
+			if k < 0 {
+				return append(toks, src[i:]) // unterminated: quint's to report
+			}
+			toks = append(toks, src[i:i+1+k+1])
+			i += k + 2
+		case isIdent(src[i : i+1]):
+			j := i + 1
+			for j < len(src) && (isIdent(src[j:j+1]) || '0' <= src[j] && src[j] <= '9') {
+				j++
+			}
+			toks = append(toks, src[i:j])
+			i = j
+		case strings.HasPrefix(src[i:], "::"):
+			toks = append(toks, "::")
+			i += 2
+		default:
+			toks = append(toks, src[i:i+1])
+			i++
+		}
+	}
+	return toks
+}
 
 // verify checks md's model as a replay judges it: the spec the binding
 // resolves now (its spec: may be relative to it, and a moved binding's

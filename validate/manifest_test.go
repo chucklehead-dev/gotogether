@@ -210,12 +210,17 @@ func write(t *testing.T, dir string, files map[string]string) {
 }
 
 // A model of a binding whose spec is beside it in another directory,
-// importing a file that imports another (and a commented-out import,
-// which imports nothing).
+// importing an instance with a string constant, a file by an import
+// split over lines, and a file that imports another (and commented-out
+// imports, and a string that reads like one, which import nothing).
 var layout = map[string]string{
-	"run/b.yaml":         "spec: ../model/m.qnt\nmodule: m\nconstants: { N: '3' }\n",
-	"model/m.qnt":        "module m {\n  /*\n  import extra.* from \"./extra\"\n  */\n  import lib.* from \"./lib\"\n}\n",
+	"run/b.yaml": "spec: ../model/m.qnt\nmodule: m\nconstants: { N: '3' }\n",
+	"model/m.qnt": "module m {\n  /*\n  import extra.* from \"./extra\"\n  */\n  // import extra.* from \"./extra\"\n" +
+		"  import inst(N = Set(\"u\")) as I from \"./inst\"\n  import split.*\n    from\n    \"./split\"\n" +
+		"  pure val s = \"import extra.* from \"\n  import lib.* from \"./lib\"\n}\n",
 	"model/extra.qnt":    "module extra {}\n",
+	"model/inst.qnt":     "module inst {\n  const N: Set[str]\n}\n",
+	"model/split.qnt":    "module split {}\n",
 	"model/lib.qnt":      "module lib {\n  import base.* from \"sub/base.qnt\"\n}\n",
 	"model/sub/base.qnt": "module base {}\n",
 	"run/steps.jsonl":    `{"quint.action":"a","quint.seq":1,"quint.recorder":"r"}` + "\n",
@@ -250,7 +255,7 @@ func TestManifestVerifiesTheModelReplayed(t *testing.T) {
 	for _, i := range m.Model.Imports {
 		imps = append(imps, filepath.ToSlash(strings.TrimPrefix(i.Path, a+string(filepath.Separator))))
 	}
-	if strings.Join(imps, " ") != "model/lib.qnt model/sub/base.qnt" {
+	if strings.Join(imps, " ") != "model/inst.qnt model/split.qnt model/lib.qnt model/sub/base.qnt" {
 		t.Fatalf("imports: %v", imps)
 	}
 	if err := m.Write(filepath.Join(a, "run", "run.json")); err != nil {
@@ -264,6 +269,8 @@ func TestManifestVerifiesTheModelReplayed(t *testing.T) {
 		{"the same model elsewhere", nil, ""},
 		{"another spec", map[string]string{"model/m.qnt": "module m {}\n"}, "is not the one the run was judged on"},
 		{"an import changed", map[string]string{"model/sub/base.qnt": "module base { val x = 1 }\n"}, "import sub/base.qnt (beside"},
+		{"an instance's import changed", map[string]string{"model/inst.qnt": "module inst {\n  const N: Set[str]\n  val x = 1\n}\n"}, "import inst.qnt (beside"},
+		{"a split import changed", map[string]string{"model/split.qnt": "module split { val x = 1 }\n"}, "import split.qnt (beside"},
 		{"an import more", map[string]string{"model/lib.qnt": "module lib {\n  import base.* from \"sub/base.qnt\"\n  import more.* from \"more\"\n}\n", "model/more.qnt": "module more {}\n"}, "which the run's model did not"},
 	} {
 		b := t.TempDir()
@@ -322,6 +329,11 @@ func TestManifestBundle(t *testing.T) {
 	if w, err := got.Verify(); err != nil || len(w) > 0 {
 		t.Errorf("a bundle moved: %v %v", w, err)
 	}
+	for _, f := range []string{"m.qnt", "inst.qnt", "split.qnt", "lib.qnt", "sub/base.qnt"} {
+		if _, err := os.Stat(filepath.Join(moved, "run1", "model", "0", "model", filepath.FromSlash(f))); err != nil {
+			t.Errorf("the bundle left out %s: %v", f, err)
+		}
+	}
 	if !strings.HasPrefix(got.Model.Spec.Path, moved) || !strings.HasPrefix(got.Artifacts[0].Path, moved) || !strings.HasPrefix(got.Inputs[0].Path, moved) {
 		t.Errorf("paths: %+v", got)
 	}
@@ -346,5 +358,26 @@ func TestModuleVersion(t *testing.T) {
 		if got := moduleVersion(&c.bi); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.bi, got, c.want)
 		}
+	}
+}
+
+// A Quint source's imports are read by token: an instance's overrides
+// (strings, parentheses), an import over several lines, a qualified
+// alias; not a comment's, nor a string's, nor an import of a module of
+// the same file, which runs into the next declaration.
+func TestImportPaths(t *testing.T) {
+	t.Parallel()
+	src := "module m {\n" +
+		"  // import c.* from \"./comment\"\n" +
+		"  /* import c.* from \"./block\" */\n" +
+		"  import a(N = Set(\"u\"), M = \"from\") as A from \"./a\"\n" +
+		"  import b\n    .*\n    from \"b.qnt\"\n" +
+		"  import local.*\n  val s = \"import x.* from ./str\"\n" +
+		"  import local as L\n  import d.* from \"sub/d\"\n" +
+		"  export e.*\n" +
+		"  val url = \"http://x\" // import f.* from \"./f\"\n" +
+		"}\n"
+	if got := importPaths(src); strings.Join(got, " ") != "./a b.qnt sub/d" {
+		t.Errorf("imports %q", got)
 	}
 }

@@ -37,3 +37,36 @@ func TestModelCacheByContent(t *testing.T) {
 		t.Errorf("a changed import gave the cached model: %v", err)
 	}
 }
+
+// The cache follows every shape of import quint reads: an instance's
+// with a string constant, one split over lines, transitively. A change
+// to a file only such an import reaches loads the model anew.
+func TestModelCacheFollowsEveryImport(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "m.qnt")
+	write(t, dir, map[string]string{
+		"base.qnt":  "module base {\n  pure def one = 1\n}\n",
+		"inst.qnt":  "module inst {\n  const N: Set[str]\n  import base.* from \"./base\"\n  pure def two = one + 1\n}\n",
+		"split.qnt": "module split {\n  pure def three = 3\n}\n",
+		"m.qnt": "module m {\n  import inst(N = Set(\"u\")) as I from \"./inst\"\n  import split.*\n    from\n    \"./split\"\n" +
+			"  var x: int\n  action init = x' = I::two + three\n  action step = x' = x + 1\n}\n",
+	})
+	a, err := loadModel("quint", spec, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ file, src string }{
+		{"split.qnt", "module split {\n  pure def three = 4\n}\n"},
+		{"inst.qnt", "module inst {\n  const N: Set[str]\n  import base.* from \"./base\"\n  pure def two = one + 2\n}\n"},
+		{"base.qnt", "module base {\n  pure def one = 2\n}\n"},
+	} {
+		write(t, dir, map[string]string{c.file: c.src})
+		b, err := loadModel("quint", spec, "m")
+		if err != nil || b == a {
+			t.Errorf("%s changed, the cached model: %v", c.file, err)
+		}
+		a = b
+	}
+}
