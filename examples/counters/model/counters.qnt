@@ -61,6 +61,10 @@ module counters {
   var effects: List[Effect]
   // the command ids answered so far, by a commit or a committed refusal
   var answered: Set[str]
+  // the payments the bank made, as it recorded them (key, counter,
+  // amount): an effect's site records it, so a payment made twice, or
+  // made with its answer lost, is seen whatever the effect step says
+  var payments: List[(str, str, int)]
 
   action init = all {
     log' = [],
@@ -68,6 +72,7 @@ module counters {
     appended' = [],
     effects' = [],
     answered' = Set(),
+    payments' = [],
   }
 
   // a command's commit of b, answering id
@@ -77,6 +82,7 @@ module counters {
     checkpoints' = checkpoints,
     effects' = effects,
     answered' = answered.union(Set(id)),
+    payments' = payments,
   }
 
   // a committed refusal: its marker answers id, nothing is appended. It
@@ -95,6 +101,7 @@ module counters {
     checkpoints' = checkpoints,
     effects' = effects,
     answered' = answered,
+    payments' = payments,
   }
 
   // A command's steps. Every committed outcome needs its id fresh and its
@@ -155,6 +162,7 @@ module counters {
     checkpoints' = checkpoints.set(p, trigger),
     effects' = effects,
     answered' = answered,
+    payments' = payments,
   }
 
   // average: on each increment, the tenant's sum and count as of the
@@ -178,6 +186,7 @@ module counters {
     checkpoints' = checkpoints,
     effects' = effects.append(("welcome", trigger, key, ok)),
     answered' = answered,
+    payments' = payments,
   }
 
   // welcome's checkpoint, only after effect steps: notified after an ok
@@ -200,6 +209,7 @@ module counters {
     checkpoints' = checkpoints,
     effects' = effects,
     answered' = answered,
+    payments' = payments,
   }
 
   // a retirement's payout made: retiredAt is the retirement's position,
@@ -252,25 +262,41 @@ module counters {
     checkpoints' = checkpoints,
     effects' = effects.append(("payout", trigger, key, ok)),
     answered' = answered,
+    payments' = payments,
   }
 
   // payout's outcome, if present (a crash after the payment loses it):
-  // paid-out after the one ok payment, grist.failed after a failed one
-  action payoutOutcome(trigger: int, ok: bool): bool = {
+  // paid-out after the one ok payment; after a failed one grist.failed
+  // when the bank said it did not pay (known), else grist.unknown with
+  // the error (the payment may have been made)
+  action payoutOutcome(trigger: int, ok: bool, known: bool, error: str): bool = {
     val isRetirement = trigger > 0 and trigger <= log.length() and log[trigger - 1].typ == "counter-retired"
     val success = [paidOut(if (isRetirement) log[trigger - 1].strs[0] else "", trigger)]
     all {
       isRetirement,
       atMostOnceDone(log, effects, "payout", trigger, ok, success),
-      val b = atMostOnceOutcome("payout", trigger, ok, success)
+      val b = atMostOnceOutcome("payout", trigger, ok, known, error, success)
       all {
         log' = log.concat(b),
         appended' = b,
         checkpoints' = checkpoints,
         effects' = effects,
         answered' = answered,
+        payments' = payments,
       },
     }
+  }
+
+  // the bank's payment, recorded where it is made (the simulated bank's
+  // service): any number, in any order with the steps that asked for
+  // them; the exactly-once val counts them
+  action bankPays(key: str, counter: str, amount: int): bool = all {
+    log' = log,
+    appended' = [],
+    checkpoints' = checkpoints,
+    effects' = effects,
+    answered' = answered,
+    payments' = payments.append((key, counter, amount)),
   }
 
   // the model on its own (gotogether simulate)
@@ -293,7 +319,8 @@ module counters {
       retireCounter(counter, id, log.length(), [counterRead(counter), { typ: "counter-incremented", tags: Set(("counter", counter)) }], "ok"),
       payout(nextOf(log, checkpoints.get("payout"), "counter-retired"), false),
       nondet trigger = 1.to(log.length() + 1).oneOf()
-      any { payoutEffect(trigger, key, ok), payoutOutcome(trigger, ok) },
+      nondet known = Bool.oneOf()
+      any { payoutEffect(trigger, key, ok), payoutOutcome(trigger, ok, known, "lost"), bankPays(key, counter, by) },
     }
   }
 
@@ -323,11 +350,26 @@ module counters {
     log.indices().forall(i => log[i].typ == "counter-retired" implies checkpoints.get("payout") >= i + 1)
 
   // test-only (counters.exactly.binding.yaml), eventually: every retirement
-  // paid out exactly once. At most once allows none, by right (a crash
-  // between the checkpoint and the payment); an application that must
-  // pay states it so, and needs another guarantee.
+  // paid out exactly once, by the bank's own record of its payments under
+  // the retirement's effect key (a payment made twice inside the effect,
+  // or made with its answer lost, counts as the bank made it). At most
+  // once allows none, by right (a crash between the checkpoint and the
+  // payment); an application that must pay states it so, and needs
+  // another guarantee.
   val everyRetirementPaidOnce =
-    log.indices().forall(i => log[i].typ == "counter-retired" implies effectsOf(effects, "payout", i + 1, true) == 1)
+    log.indices().forall(i => log[i].typ == "counter-retired" implies
+      effects.indices().exists(j => effects[j]._1 == "payout" and effects[j]._2 == i + 1 and
+        payments.select(p => p._1 == effects[j]._3).length() == 1))
+
+  // test-only (counters.exactly.binding.yaml), eventually: every payment
+  // step's outcome is in the log (grist's atMostOnceOutcomesLogged):
+  // paid-out after an ok one, grist.failed or grist.unknown after a failed
+  // one. At most once loses it after a crash after the payment, by right;
+  // a runtime or an app that never appends it conforms to the actions
+  // (the outcome is optional) and is caught here.
+  val everyPayoutOutcomeLogged =
+    atMostOnceOutcomesLogged(log, effects, "payout", t =>
+      if (t > 0 and t <= log.length()) [paidOut(log[t - 1].strs[0], t)] else [])
 
   // test-only (counters.once.binding.yaml): one ok welcome per counter.
   // At least once allows more, by right; an application whose effect

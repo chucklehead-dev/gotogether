@@ -1,9 +1,11 @@
-# counters.binding.yaml's model and steps, judged by the test-only
-# eventual val everyRetirementPaidOnce (every retirement paid out exactly
-# once, after the settle): what the payout's declared guarantee (at most
-# once) does not promise. The payment a crash between its checkpoint and
-# the bank's call loses is admitted by counters.binding.yaml and rejected
-# here.
+# counters.retiring.binding.yaml's model and steps, judged by two
+# test-only eventual vals, what the payout's declared guarantee (at most
+# once) does not promise: everyRetirementPaidOnce (every retirement paid
+# exactly once, by the bank's own record of its payments, after the
+# settle), which the payment a crash between its checkpoint and the
+# bank's call loses fails, and everyPayoutOutcomeLogged (every payment
+# step's outcome in the log), which the outcome a crash after the payment
+# loses fails. The retiring binding admits both losses.
 actors: ['!*/clients']
 spec: model/counters.qnt
 module: counters
@@ -30,6 +32,7 @@ actions:
   payout: {}
   payoutEffect: {}
   payoutOutcome: {}
+  bankPays: {}
 
 invariants: []
-eventually: [everyRetirementPaidOnce]
+eventually: [everyRetirementPaidOnce, everyPayoutOutcomeLogged]

@@ -93,7 +93,7 @@ func simulateOn(t *testing.T, a *grist.App, added *grist.EventType[Added], c qen
 	if err := s.Run(time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	log, _, err := st.Read(ctx, "t1", grist.Selector{Types: []string{"added", "summed", "noted", "grist.failed"}}, 0)
+	log, _, err := st.Read(ctx, "t1", grist.Selector{Types: []string{"added", "summed", "noted", "grist.failed", "grist.unknown"}}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,5 +227,42 @@ func TestHandlerFailure(t *testing.T) {
 	}
 	if failed != 1 {
 		t.Errorf("%d grist.failed events for flop's trigger 2, want 1", failed)
+	}
+}
+
+// movedAfterCheckpoint moves processor note's checkpoint past the first
+// trigger, as another poller's commit would, between this poller's first
+// Checkpoint and Read of note's triggers.
+type movedAfterCheckpoint struct {
+	*simstore.Store
+	moved bool
+}
+
+func (s *movedAfterCheckpoint) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error) {
+	if !s.moved && len(q.Types) == 1 && q.Types[0] == "added" && q.After == 0 && q.Limit > 0 {
+		s.moved = true
+		if _, err := s.Store.Append(ctx, t, store.Batch{Checkpoint: &store.CheckpointMove{Processor: "note", From: 0, To: 1}, Cause: "processor:note"}); err != nil {
+			return nil, 0, err
+		}
+	}
+	return s.Store.Read(ctx, t, q, at)
+}
+
+// A poller re-reads its checkpoint after reading its triggers: one moved
+// between the two (another poller's commit) is read again, not handled
+// on the stale checkpoint with the newer head, which recorded an effect
+// step after the other's checkpoint on the tenant's clock and before it
+// among the processor's, a cycle (examples/counters' TestPayoutTwoNodes,
+// two nodes through crashes).
+func TestPollerCheckpointRaced(t *testing.T) {
+	runs := map[string]int{}
+	a, added, _ := procApp(func(ctx context.Context) error { runs[grist.EffectKey(ctx)]++; return nil })
+	var w *movedAfterCheckpoint
+	simulateOn(t, a, added, quiet(1), func(s grist.Store) grist.Store { w = &movedAfterCheckpoint{Store: s.(*simstore.Store)}; return w })
+	if !w.moved {
+		t.Fatal("the checkpoint was never moved between the poller's reads")
+	}
+	if runs["note/t1/1"] != 0 {
+		t.Errorf("effect runs %v: the first trigger, checkpointed by the other poller before this one read it, ran here", runs)
 	}
 }

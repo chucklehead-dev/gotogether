@@ -37,6 +37,6 @@ var Welcome = grist.NewProcessor(App, "welcome", Created,
 var Payout = grist.NewProcessor(App, "payout", Retired,
 	func(ctx context.Context, r *grist.Reads, e CounterRetired, m grist.Meta) grist.Result {
 		return grist.Effect(func(ctx context.Context) error {
-			return DepsOf(ctx).Bank.Pay(ctx, grist.EffectKey(ctx), e.Counter, e.Total)
+			return DepsOf(ctx).Bank.Pay(ctx, r.Tenant(), grist.EffectKey(ctx), e.Counter, e.Total)
 		}, grist.AtMostOnce, grist.OnSuccess(Paid.Of(PaidOut{Counter: e.Counter, Retired: int64(m.Pos)})))
 	})

@@ -39,6 +39,7 @@ func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx con
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
 func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
 func NewRelay(s Store) (*Relay, error)
+func NotApplied(err error) error
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
 func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error)
@@ -157,6 +158,10 @@ type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
 type TagPair = store.TagPair
+type Unknown struct
+    field Processor string `json:"processor" grist:"tag"`
+    field Error string `json:"error"`
+    field Trigger int64 `json:"trigger"`
 type UsageError struct
     field Msg string
     method (*UsageError) Error() string
@@ -211,6 +216,7 @@ type Config struct
     field Send []string
     field SQL bool
     field HTTP bool
+    field Nodes int
     field CommitFaults bool
     field Check bool
     field Alphabet []string

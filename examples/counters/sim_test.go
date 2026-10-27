@@ -2,6 +2,8 @@ package counters
 
 import (
 	"context"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist"
@@ -223,13 +225,19 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 // checkpoint and before the payment (grist.payout.effect's crashBefore)
 // loses the payment: the model admits it (the checkpoint first, no
 // effect step, no outcome: 10 of 10 runs conform), and the test-only
-// exactly-once eventual val (everyRetirementPaidOnce) rejects those runs
-// (10 of 10). A crash after the payment (crashAfter) loses its paid-out
-// event and pays nothing twice: both admit it. Without faults every
-// retirement is paid exactly once. With grist's AtMostOnce run as at
-// least once, 10 of 10 runs reject payoutEffect (a payment before its
-// checkpoint). Per push the admitted loss alone, at 2 seeds; the rest in
-// full mode.
+// exactly-once eventual val (everyRetirementPaidOnce, by the bank's own
+// record of its payments) rejects those runs (10 of 10), while every
+// payment that was made has its outcome (everyPayoutOutcomeLogged
+// holds). A crash after the payment (crashAfter) loses its paid-out
+// event and pays nothing twice: everyRetirementPaidOnce holds and
+// everyPayoutOutcomeLogged rejects every run (10 of 10). Without faults
+// both hold. With grist's AtMostOnce run as at least once, 10 of 10 runs
+// reject payoutEffect (a payment before its checkpoint); with grist
+// returning before it appends an ok effect's outcome, every run violates
+// everyPayoutOutcomeLogged (10 of 10 under crashBefore: the other
+// retirements' payments), which the model's actions admit (the outcome
+// is optional). Per push the admitted loss
+// alone, at 2 seeds; the rest in full mode.
 func TestPayoutAtMostOnce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
@@ -240,11 +248,65 @@ func TestPayoutAtMostOnce(t *testing.T) {
 	if testing.Short() {
 		return // the judgments of exactly once: full mode (grist's TestEffectAtMostOnceCrashes covers both crashes per push)
 	}
+	paidOnce, logged := validate.EventuallyName("everyRetirementPaidOnce"), validate.EventuallyName("everyPayoutOutcomeLogged")
 	system(exactly, retirements).Explore(t, lose).
-		Expect(t, qtest.All(qtest.Violates(validate.EventuallyName("everyRetirementPaidOnce"))))
+		Expect(t, qtest.All(qtest.Violates(paidOnce)), qtest.None(qtest.Violates(logged)))
 	after := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashAfter"})}
 	system(exactly, retirements).Explore(t, after).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+		Expect(t, qtest.All(qtest.Violates(logged)), qtest.None(qtest.Violates(paidOnce)))
 	system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	// the bank's answer lost after it paid: the payment's outcome is
+	// unknown (grist.unknown, with the error), not "failed"; the bank's own
+	// record shows it paid once, so both vals hold
+	lostAnswer := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "rpc.bank.response", Name: "lost"})}
+	system(exactly, retirements).Explore(t, lostAnswer).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted())
+}
+
+// twoNodes is the payout's shape with two node processes on the one
+// store (gristsim.Config.Nodes): two pollers of payout race for each
+// checkpoint, as two replicas of a real tier do.
+var twoNodes = func() gristsim.Config {
+	cfg := retirements
+	cfg.Nodes = 2
+	return cfg
+}()
+
+// At most once with two pollers. Without faults, two nodes race for
+// each payout checkpoint; the loser of a race whose append failed after
+// the winner committed finds the checkpoint moved and leaves the payment
+// to the winner (grist's TestEffectAtMostOnceLostCheckpoint): every run
+// conforms to the retiring binding, every retirement is paid exactly
+// once (counters.exactly.binding.yaml) and some run took that branch.
+// With grist taking a moved checkpoint for its own after a failed append
+// (the mutant in commitAt), the loser pays too: 10 of 10 runs reject
+// payoutEffect (atMostOnceEffect refuses a second payment step). Then
+// two nodes through commit faults and crashes: the per-push exploration
+// of the payout under faults other than a scripted crash.
+func TestPayoutTwoNodes(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	// the branch is no fault kind (qtest.Reaches names those): grist logs
+	// it to the run's log, counted here
+	var left atomic.Int64
+	race := twoNodes
+	race.Log = func(l string) {
+		if strings.Contains(l, "grist: payout/") && strings.Contains(l, "another poller's") {
+			left.Add(1)
+		}
+	}
+	system(retiring, race).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	if left.Load() == 0 {
+		t.Error("no payout checkpoint was left to another poller after a failed append: the race the claim is about never happened")
+	}
+	if !testing.Short() {
+		system(exactly, twoNodes).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10}).
+			Expect(t, qtest.Conforms())
+	}
+	faults := twoNodes
+	faults.CommitFaults = true
+	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted())
 }

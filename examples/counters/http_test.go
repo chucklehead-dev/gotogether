@@ -16,8 +16,9 @@ import (
 // duplicated and late, answers lost, the node crashing with requests in
 // flight. One run is judged by both bindings: the clients' calls,
 // linearized (per push: a retry under another key than the call's is
-// caught there alone, 9 of 20 runs failing so, since the store admits
-// each key as a new command), and the store's steps (full mode: what
+// caught there alone, 12 of 20 runs failing so with answers lost at
+// 0.15, since the store admits each key as a new command), and the
+// store's steps (full mode: what
 // commits does not depend on the transport, and the store's side is
 // judged per push on the other tiers).
 func TestHTTPTier(t *testing.T) {
@@ -25,7 +26,10 @@ func TestHTTPTier(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := contended
 	cfg.HTTP = true
-	sys := system(commits, cfg)
+	// answers lost at three times the default rate: a lost answer and its
+	// same-key retry is the HTTP tier's point, and at the default a run's
+	// few dozen responses lost none in 3 of 3 runs once its choices moved
+	sys := system(commits, cfg).WithRates(faulty.Set("rpc.api.response", 0.15))
 	n := qtest.ExploreConfig{Seeds: seeds(20, 3)}
 	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),

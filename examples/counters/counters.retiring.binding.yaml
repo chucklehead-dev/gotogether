@@ -1,6 +1,9 @@
 # counters.binding.yaml with retirements: the same steps, and
 # retire-counter's and the at-most-once payout's (payout, payoutEffect,
-# payoutOutcome), as calls of model/counters.qnt; its
+# payoutOutcome; its outcome's known and error, grist.failed or
+# grist.unknown after a failed payment) and the bank's own record of each
+# payment (bankPays, recorded where it is made), as calls of
+# model/counters.qnt; its
 # eventual vals add everyRetirementHandled (every retirement's payout
 # checkpointed: at most once, the payment and its outcome may be lost).
 actors: ['!*/clients']
@@ -37,6 +40,7 @@ actions:
   payoutEffect: {}
   payoutOutcome:
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  bankPays: {}
 
 invariants: [uniqueNames, averageAsOfTrigger]
 eventually: [everyCounterWelcomedOrFailed, everyRetirementHandled]

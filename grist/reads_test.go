@@ -148,11 +148,11 @@ func TestCatalog(t *testing.T) {
 	for _, e := range c.Events {
 		events = append(events, e.Name)
 	}
-	if strings.Join(events, " ") != "grist.failed added summed noted" || len(c.Processors) != 2 || c.Processors[1].Quint != "note" || c.Processors[0].EffectTries != 3 {
+	if strings.Join(events, " ") != "grist.failed grist.unknown added summed noted" || len(c.Processors) != 2 || c.Processors[1].Quint != "note" || c.Processors[0].EffectTries != 3 {
 		t.Errorf("catalog %+v: want grist.failed and the three events, the processors sum and note", c)
 	}
 	b, _, _ := app(true)
-	if cc := b.Catalog(); len(cc.Commands) != 1 || cc.Commands[0].Quint != "createCounter" || cc.Commands[0].Unconditioned == "" || cc.Events[1].Tags[1] != "name" {
+	if cc := b.Catalog(); len(cc.Commands) != 1 || cc.Commands[0].Quint != "createCounter" || cc.Commands[0].Unconditioned == "" || cc.Events[2].Tags[1] != "name" {
 		t.Errorf("catalog %+v: want create-counter, unconditioned, of an event tagged counter and name", cc)
 	}
 }

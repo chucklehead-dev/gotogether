@@ -54,6 +54,7 @@ func New(name string) *App {
 	a := &App{Name: name, events: map[string]*eventInfo{}, names: map[string]string{}, quintNames: map[string]string{},
 		commands: map[string]*commandInfo{}, queries: map[string]*queryInfo{}}
 	a.events[failedType] = failedInfo()
+	a.events[unknownType] = unknownInfo()
 	return a
 }
 

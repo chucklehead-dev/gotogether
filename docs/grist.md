@@ -528,7 +528,7 @@ stated where it stands below.
   tier's (`rpc.api.request`, `rpc.api.delay`, `rpc.api.response`, the
   node's crashes). examples/counters' `TestHTTPTier` is claim 2 there, judged
   at the clients per push (a retry under a new key is caught there alone:
-  9 of 20 runs; the store admits each key as a new command) and at the
+  9 of 20 runs, 12 of 20 with answers lost at 0.15 since §0.7; the store admits each key as a new command) and at the
   store in full mode.
 - **The real tier is HTTP**: examples/counters' `TestRealHTTP` (was
   `TestRealSQLite`, whose clients called `App.Execute` in process) serves
@@ -552,7 +552,8 @@ stated where it stands below.
 
 ## 0.6 What building `AtMostOnce` changed
 
-- **The semantics**: the checkpoint commits first, alone (its step
+- **The semantics** (§0.7: an error's outcome is `grist.unknown` unless
+  f says `NotApplied`): the checkpoint commits first, alone (its step
   records `ok: false`: no outcome is known when it commits); then f runs
   **once** (`EffectTries` does not apply: a try that failed may have
   taken effect, and trying again would be at least once); its effect
@@ -584,7 +585,8 @@ stated where it stands below.
   `atMostOnceDone` (the outcome agrees with the one effect step and comes
   once: the success's events, which must name the trigger, and the
   trigger's `grist.failed` not in the log yet) and `atMostOnceOutcome`;
-  checked in grist/model's tests on small values.
+  checked in grist/model's tests on small values (§0.7 adds `unknown`,
+  `holdsUnknown` and `atMostOnceOutcomesLogged`).
 - **examples/counters' at-most-once processor is `payout`**, on a new
   command `retire-counter` (`counter-retired{counter, total}`, refused
   for an unknown counter): it pays the counter's total out through a
@@ -724,6 +726,83 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   fails if none was replayed), and both bindings and the answers' check
   judge the run. With the client retrying under another key, the
   answers' check fails (the store recorded no step of the client's id).
+
+- **An at-most-once outcome that never comes is caught.** The model's
+  outcome action is optional (a crash after the effect loses it, by
+  right), so a runtime that returned before appending any outcome, or an
+  app whose payout declared no success event, conformed to every action
+  and to `everyRetirementPaidOnce` (which counted effect steps).
+  grist.qnt gains `atMostOnceOutcomesLogged(log, effects, processor,
+  success)`, a library def for an eventual val: every effect step of the
+  processor has its outcome in the log. examples/counters states it as
+  `everyPayoutOutcomeLogged` in the test-only `counters.exactly.binding.yaml`:
+  it holds without faults, under `crashBefore` (no payment, no outcome
+  owed) and with the bank's answer lost, and every run violates it under
+  `crashAfter`; with grist returning before an ok effect's outcome every
+  run violates it (an ablation), and so does the app mutant
+  `silentPayout` (no `OnSuccess`: 6 of 6 runs, full mode), whose runs
+  the retiring binding admits.
+- **At most once with two pollers is checked.** `gristsim.Config.Nodes`
+  runs n node processes on the one store (node, node2, ...: each starts
+  the App, its pollers racing the others' for every checkpoint; the
+  first serves the API; one Relay, so each row is recorded once; each
+  restarted when it crashes). examples/counters' `TestPayoutTwoNodes`:
+  two nodes without faults conform to the retiring binding (per push, 4
+  seeds) and pay every retirement exactly once (full mode); grist's
+  branch for a checkpoint append that failed after which the checkpoint
+  had moved (counted as another poller's, its effect left alone) is
+  reached, counted from the run's log (`Sim.Log`, which grist now
+  writes at that branch: `qtest.Reaches` names fault kinds, and the
+  branch is none). With that branch taking the moved checkpoint for its
+  own (the review's mutant in `commitAt`), 10 of 10 runs reject
+  `payoutEffect` (`atMostOnceEffect` refuses a second payment step);
+  every claim with one node passed it. grist's
+  `TestEffectAtMostOnceLostCheckpoint` is the unit test: an append
+  answered with an error after another poller moved the checkpoint runs
+  no effect.
+- **A poller re-reads its checkpoint after reading its triggers.** Two
+  nodes through crashes found it (2 of 10 runs of `TestPayoutTwoNodes`'
+  faulty half, a reconstruction cycle at `welcomeEffect`): the
+  checkpoint and the triggers are two reads, and another poller's commit
+  between them left this poller handling a trigger already checkpointed,
+  with the newer head, so its at-least-once effect step came after the
+  other's checkpoint on the tenant's clock (`order.pos`) and before it
+  among the processor's (`order.p`). A checkpoint unmoved at a second read
+  was the same when the head was read; a moved one is read again
+  (`TestPollerCheckpointRaced`; without the re-read it fails).
+- **The payout under faults, per push**: `TestPayoutTwoNodes` then runs
+  two nodes through commit faults and crashes (3 seeds per push, 10 in
+  full mode; `Conforms`, `All(Settles)`, commit faults reached): before,
+  nothing model-judged ran the payout per push under any fault but the
+  scripted `crashBefore`.
+- **An unknown outcome is not a failure.** At most once, f's error
+  committed `grist.failed`, read as "not paid", for a payment whose
+  answer was lost (paid, and recorded failed). An error is now unknown
+  unless f wraps it in `grist.NotApplied` (the dependency said it did
+  not happen): an unknown outcome appends **`grist.unknown`**
+  (`{processor, error, trigger}`, the error's text carried, for
+  reconciliation; registered in every App beside `grist.failed`), a
+  known one `grist.failed`. The outcome step records `known` and
+  `error`; grist.qnt's `atMostOnceOutcome(processor, trigger, ok, known,
+  error, success)` and `unknown(...)`, and `atMostOnceDone` refuses a
+  second outcome of either kind. A node stopping after f ran still tries
+  to append its outcome (its context's cancellation does not stop the
+  append: `defaultTransientTries` tries). At least once is unchanged
+  (every error retried).
+- **The simulated bank records its payments** (`bankPays`: actor the
+  tenant, the key, the counter and the amount), where it makes them:
+  an effect's site records the effect. `everyRetirementPaidOnce` now
+  counts the bank's payments under each retirement's effect key, so a
+  payment made twice inside f, or made while its answer was lost, is
+  seen whatever the effect step says (with the answer lost: paid once,
+  both vals hold). `Bank.Pay` takes the tenant.
+- **`checkpointFirst`'s claim says what it shows.** `Some(Rejects("welcome"))`
+  is the at-least-once model refusing a checkpoint step before any
+  effect step of its trigger (`atLeastOnceDone`): the mutant's every
+  welcome comes so, which no other bug of the counters' runs makes
+  without a crash (the faithful app's runs at that configuration reject
+  nothing). It shows a declaration contradicting the model, not a lost
+  mail; the lost effect at most once is `payout`'s claim.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

@@ -207,6 +207,32 @@ func failedInfo() *eventInfo {
 	return &eventInfo{name: failedType, version: 1, typ: reflect.TypeFor[Failed](), tags: []tagField{{index: 0, key: "processor"}}}
 }
 
+// unknownType is the event an at-most-once effect's outcome is when it
+// is unknown: f returned an error that does not say the effect did not
+// happen (NotApplied), so it may have (a payment whose answer was lost).
+// It names the processor, the trigger and f's error, for the
+// reconciliation an unknown outcome needs.
+const unknownType = "grist.unknown"
+
+// Unknown is the body of a grist.unknown event: its effect's error text
+// is in it (the outcome step records it, so the model computes it).
+type Unknown struct {
+	Processor string `json:"processor" grist:"tag"`
+	Error     string `json:"error"`
+	Trigger   int64  `json:"trigger"`
+}
+
+func unknownInfo() *eventInfo {
+	return &eventInfo{name: unknownType, version: 1, typ: reflect.TypeFor[Unknown](), tags: []tagField{{index: 0, key: "processor"}}}
+}
+
+// unknownEvent is the grist.unknown event for processor's trigger, whose
+// effect returned err.
+func unknownEvent(processor string, trigger Position, err string) Event {
+	body, _ := json.Marshal(Unknown{Processor: processor, Error: err, Trigger: int64(trigger)})
+	return Event{Type: unknownType, Version: 1, Tags: []TagPair{{Key: "processor", Value: processor}}, Body: body}
+}
+
 // failedEvent is the grist.failed event for processor's trigger.
 func failedEvent(processor string, trigger Position) Event {
 	f := Failed{Processor: processor, Trigger: int64(trigger)}

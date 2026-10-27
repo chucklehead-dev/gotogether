@@ -15,7 +15,7 @@ import (
 // Main's catalog command's) writes each type as a JSON Schema (Schema).
 type Catalog struct {
 	Name       string             `json:"name"`
-	Events     []CatalogEvent     `json:"events"` // in registration order, grist.failed first
+	Events     []CatalogEvent     `json:"events"` // in registration order, grist.failed and grist.unknown first
 	ReadModels []CatalogReadModel `json:"readModels"`
 	Commands   []CatalogBlock     `json:"commands"` // sorted by name
 	Queries    []CatalogBlock     `json:"queries"`  // sorted by name
@@ -163,7 +163,7 @@ type CatalogProcessor struct {
 // Catalog is the App's registry.
 func (a *App) Catalog() Catalog {
 	c := Catalog{Name: a.Name}
-	c.Events = append(c.Events, catalogEvent(a.events[failedType]))
+	c.Events = append(c.Events, catalogEvent(a.events[failedType]), catalogEvent(a.events[unknownType]))
 	for _, n := range a.eventOrder {
 		c.Events = append(c.Events, catalogEvent(a.events[n]))
 	}

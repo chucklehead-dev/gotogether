@@ -168,6 +168,18 @@ The first release. What a user meets, by module:
   `Client.MaxRetryDelay`, `Client.Budget`, `DefaultMaxRetryDelay`), and a
   5xx that is not grist's is an unknown outcome. sqlstore: PostgreSQL's
   class 54 is permanent.
+- grist's at-most-once outcomes after the review (docs/grist.md §0.7;
+  api/grist.txt): `grist.NotApplied(err)` marks an effect's error as
+  known (`grist.failed`); any other error's outcome is `grist.unknown`
+  (`Unknown`: processor, error, trigger), and the outcome step records
+  `known` and `error`. grist.qnt: `unknown`, `holdsUnknown`,
+  `atMostOnceOutcomesLogged`, and `atMostOnceOutcome` takes `known` and
+  `error`. An outcome is appended after the node's context ended.
+  `gristsim.Config.Nodes` runs several nodes on one store. grist logs a
+  checkpoint left to another poller to the simulation's log.
+  examples/counters: the bank records its payments (`bankPays`;
+  `Bank.Pay` takes the tenant), `everyPayoutOutcomeLogged`,
+  `TestPayoutTwoNodes`, the `silentPayout` mutant.
 - qsql for grist's sqlstore (docs/grist.md §8.2, item 1): keys of
   several columns (`PRIMARY KEY (a, b, c)`, a table constraint; was
   42P16), ranges (`<`, `<=`, `>`, `>=`, `BETWEEN`) on a key column whose

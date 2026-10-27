@@ -71,7 +71,16 @@ module gristlib {
       assert(not(atMostOnceDone([], [("p", 1, "k", true)], "p", 1, false, s))),
       assert(not(atMostOnceDone([], [], "p", 1, true, s))),
       assert(not(atMostOnceDone(s, [("p", 1, "k", true)], "p", 1, true, s))),
-      assert(atMostOnceOutcome("p", 1, false, s) == [failed("p", 1)]),
+      assert(atMostOnceOutcome("p", 1, false, true, "", s) == [failed("p", 1)]),
+      assert(atMostOnceOutcome("p", 1, false, false, "lost", s) == [unknown("p", 1, "lost")]),
+      assert(atMostOnceOutcome("p", 1, true, false, "", s) == s),
+      assert(not(atMostOnceDone([unknown("p", 1, "x")], [("p", 1, "k", false)], "p", 1, false, s))),
+      assert(atMostOnceOutcomesLogged(s, [("p", 1, "k", true)], "p", t => s)),
+      assert(not(atMostOnceOutcomesLogged([], [("p", 1, "k", true)], "p", t => s))),
+      assert(atMostOnceOutcomesLogged([unknown("p", 1, "x")], [("p", 1, "k", false)], "p", t => s)),
+      assert(atMostOnceOutcomesLogged([failed("p", 1)], [("p", 1, "k", false)], "p", t => s)),
+      assert(not(atMostOnceOutcomesLogged(s, [("p", 1, "k", false)], "p", t => s))),
+      assert(atMostOnceOutcomesLogged([], [("q", 1, "k", true)], "p", t => s)),
     }
   }
 

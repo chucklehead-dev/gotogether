@@ -118,21 +118,48 @@ module grist {
   pure def atMostOnceEffect(effects: List[Effect], checkpoint: int, processor: str, trigger: int): bool =
     checkpoint >= trigger and triesOf(effects, processor, trigger) == 0
 
+  // the event an at-most-once outcome appends when its effect's outcome
+  // is unknown (f's error does not say the effect did not happen: it may
+  // have), with the error's text
+  pure def unknown(processor: str, trigger: int, error: str): Event =
+    { typ: "grist.unknown", strs: [processor, error], ints: [trigger], tags: Set(("processor", processor)), cause: ("processor", processor) }
+
+  // log holds an unknown outcome of processor's trigger, whatever its text
+  pure def holdsUnknown(log: List[Event], processor: str, trigger: int): bool =
+    log.indices().exists(i => log[i].typ == "grist.unknown" and log[i].strs[0] == processor and log[i].ints == [trigger])
+
   // An at-most-once outcome, if present, agrees with the one effect step
   // (ok: the step's record of which outcome it appends) and is appended
-  // once: none of its events, nor the trigger's grist.failed, in the log
-  // yet (success's events must name the trigger). A crash after the
-  // effect loses it, by right.
+  // once: none of its events, nor the trigger's grist.failed or
+  // grist.unknown, in the log yet (success's events must name the
+  // trigger). A crash after the effect loses it, by right.
   pure def atMostOnceDone(log: List[Event], effects: List[Effect], processor: str, trigger: int, ok: bool, success: List[Event]): bool = and {
     triesOf(effects, processor, trigger) == 1,
     effectsOf(effects, processor, trigger, ok) == 1,
     success.concat([failed(processor, trigger)]).foldl(true, (b, e) => b and not(holds(log, e))),
+    not(holdsUnknown(log, processor, trigger)),
   }
 
-  // the events an at-most-once outcome appends: success's, or the
-  // trigger's grist.failed
-  pure def atMostOnceOutcome(processor: str, trigger: int, ok: bool, success: List[Event]): List[Event] =
-    atLeastOnceOutcome(processor, trigger, ok, success)
+  // the events an at-most-once outcome appends: success's after an ok
+  // effect; after a failed one, the trigger's grist.failed when the
+  // failure is known (known: f said it did not happen, NotApplied), else
+  // its grist.unknown with the error's text (the outcome step records
+  // known and error)
+  pure def atMostOnceOutcome(processor: str, trigger: int, ok: bool, known: bool, error: str, success: List[Event]): List[Event] =
+    if (ok) success else if (known) [failed(processor, trigger)] else [unknown(processor, trigger, error)]
+
+  // At most once, eventually (after a settle) unless a crash came after
+  // the effect: every effect step of processor has its outcome in the
+  // log, success(trigger)'s events after an ok one, the trigger's
+  // grist.failed or grist.unknown after a failed one. An application
+  // states it in a test-only binding (a crash after the effect loses the
+  // outcome, by right): an at-most-once runtime that skipped appending an
+  // outcome conforms to the model's actions, the outcome being optional,
+  // and is caught here.
+  pure def atMostOnceOutcomesLogged(log: List[Event], effects: List[Effect], processor: str, success: int => List[Event]): bool =
+    effects.indices().forall(i => effects[i]._1 == processor implies (
+      if (effects[i]._4) success(effects[i]._2).foldl(true, (b, e) => b and holds(log, e))
+      else holds(log, failed(processor, effects[i]._2)) or holdsUnknown(log, processor, effects[i]._2)))
 
   // grist's default EffectTries: a failed effect is checkpointed with
   // grist.failed after this many failures

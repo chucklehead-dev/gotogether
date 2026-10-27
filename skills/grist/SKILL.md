@@ -59,12 +59,18 @@ examples/counters is the walk-through: read its README's table first.
    `p(trigger, ok)` requiring `atMostOnceFirst(effects, p, trigger, ok)`
    and appending nothing, the effect step requiring
    `atMostOnceEffect(effects, checkpoints.get(p), p, trigger)`, and the
-   outcome `pOutcome(trigger, ok)` requiring `atMostOnceDone(log,
-   effects, p, trigger, ok, [success])` (the success event must name the
-   trigger) and appending `atMostOnceOutcome(...)`; a lost effect or
-   outcome is admitted, and an application that needs exactly once states
-   it with a test-only eventual val (examples/counters' `payout`,
-   `counters.exactly.binding.yaml`). Read models are defs over the log. Check it alone:
+   outcome `pOutcome(trigger, ok, known, error)` requiring
+   `atMostOnceDone(log, effects, p, trigger, ok, [success])` (the success
+   event must name the trigger) and appending `atMostOnceOutcome(p,
+   trigger, ok, known, error, [success])`: after a failed effect
+   `grist.failed` if f returned `grist.NotApplied(err)` (it did not
+   happen), else `grist.unknown` with the error's text (it may have: a
+   lost answer). A lost effect or outcome is admitted; an application
+   that needs exactly once states it with test-only eventual vals
+   (examples/counters' `payout`, `counters.exactly.binding.yaml`: the
+   dependency's own record of each effect, made at its site, counted
+   per key, and grist's `atMostOnceOutcomesLogged` for outcomes owed).
+   Check it with two pollers: `gristsim.Config.Nodes: 2`. Read models are defs over the log. Check it alone:
    `gotogether simulate -binding <app>.binding.yaml`.
 3. **Bind**: every parameter the same-named step field, but `reads:
    'readsOf({{toList .reads}})'` (slice 1 records triples); `expect:` for

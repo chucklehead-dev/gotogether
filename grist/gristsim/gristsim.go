@@ -1,6 +1,6 @@
 // Package gristsim runs a grist application in a qenv simulation: a
 // simstore, or the SQL tier's sqlstore over qsql (Config.SQL), at a
-// chosen isolation level, one node (a crashable process
+// chosen isolation level, one node or more (Config.Nodes; a crashable process
 // running the App's processors and serving its commands and queries over
 // a lossy qenv.Service, or over its HTTP API on qhttp: Config.HTTP), and a workload of clients sending random
 // commands and queries of the registry to every tenant. Run's signature
@@ -77,6 +77,14 @@ type Config struct {
 	// clients send must declare Authorize (grist denies by default); a
 	// client is its Envelope's actor (ActorHeader).
 	HTTP bool
+	// Nodes is how many node processes run the App on the one store
+	// (default 1): node, node2, ...; each a crashable process starting the
+	// App (its relay, pollers and tenant watcher: two pollers of every
+	// processor and tenant then race for each checkpoint, as two
+	// replicas of a real tier do), restarted when it crashes. Only the
+	// first serves the commands and queries (the API); every node's relay
+	// is one Relay, so each step row is recorded once.
+	Nodes int
 	// CommitFaults turns on the store's commit faults
 	// (store.<app>.commit: a commit applied whose answer is lost).
 	CommitFaults bool
@@ -201,10 +209,18 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			srv.Handle(ctx, handler) // every incarnation listens again
 		}
 	})
+	nodes := map[*qenv.Process]bool{node: true}
+	for i := 2; i <= cfg.Nodes; i++ {
+		nodes[s.Process(fmt.Sprintf("node%d", i), true, func(ctx context.Context) {
+			if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
+				panic(fmt.Sprintf("gristsim: node %d could not start: %v", i, err))
+			}
+		})] = true
+	}
 	// a supervisor: a node that crashed itself (an effect's crash point)
 	// restarts as one the nemesis crashed does
 	s.OnCrash(func(p *qenv.Process) {
-		if p == node {
+		if nodes[p] {
 			p.Restart()
 		}
 	})
@@ -284,6 +300,9 @@ func defaults(cfg Config) Config {
 	}
 	if cfg.Horizon == 0 {
 		cfg.Horizon = 2 * time.Minute
+	}
+	if cfg.Nodes == 0 {
+		cfg.Nodes = 1
 	}
 	return cfg
 }

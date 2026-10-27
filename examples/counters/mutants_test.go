@@ -12,20 +12,21 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // mutants are grain's two bugs and an effect checkpointed first, each a directory of testdata/mutants/
 // whose files replace the app's of the same name (a go build overlay):
 // the app's own files stay as they are, and each mutant is a whole file
 // to diff against them.
-var mutants = []string{"blind", "dispatchDirect", "checkpointFirst"}
+var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout"}
 
 // fullOnly are the mutants built and run in full mode only: their claim
 // repeats a mechanism a per-push test checks (checkpointFirst: the
 // at-least-once model refusing a checkpoint before its effect, which
 // grist's TestEffectAtMostOnce orders and TestPayoutAtMostOnce judges),
 // and building a mutant's binary is most of its cost.
-var fullOnly = map[string]bool{"checkpointFirst": true}
+var fullOnly = map[string]bool{"checkpointFirst": true, "silentPayout": true}
 
 // TestMutant states what catches the mutant this binary was built with;
 // TestMutants builds and runs it once per mutant. Rates measured on
@@ -88,10 +89,24 @@ func TestMutant(t *testing.T) {
 		// The welcome declared at most once while the model says at least
 		// once: its checkpoint step comes before any effect step of its
 		// trigger, which atLeastOnceDone refuses. One client creating in
-		// one tenant, no faults: every run that creates a counter, 10 of 10
+		// one tenant, no faults: every run that creates a counter, 10 of 10.
+		// What it shows is that declaration's contradiction of the model
+		// (the faithful app's runs here reject nothing, TestWelcomeDuplicate's
+		// without faults), not a lost mail: the at-most-once loss is the
+		// payout's claim (TestPayoutAtMostOnce)
 		cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Send: []string{"create-counter"}}
 		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 2)}).
 			Expect(t, qtest.Some(qtest.Rejects("welcome")))
+	case "silentPayout":
+		// The payout without its success event: a payment made leaves no
+		// paid-out. The model's outcome is optional (a crash after the
+		// payment loses it, by right), so the retiring binding admits every
+		// run; the test-only everyPayoutOutcomeLogged rejects every run that
+		// paid, without faults 6 of 6
+		system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+			Expect(t, qtest.Conforms())
+		system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+			Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("everyPayoutOutcomeLogged"))))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

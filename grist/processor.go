@@ -19,13 +19,35 @@ const (
 	// EffectKey. An error is tried EffectTries times.
 	AtLeastOnce Delivery = iota + 1
 	// AtMostOnce commits the checkpoint first, then runs the effect once,
-	// then commits its outcome event (OnSuccess's, or grist.failed for an
-	// error; idempotent, under a marker of the effect key): a crash
-	// between the checkpoint and the effect loses the effect, one after it
-	// the outcome, and no restart runs it again. It is tried once
-	// (EffectTries does not apply: a failed try may have taken effect).
+	// then commits its outcome event (idempotent, under a marker of the
+	// effect key): OnSuccess's after a success, grist.failed after an
+	// error that says the effect did not happen (NotApplied), and
+	// grist.unknown, carrying the error, after any other (it may have: a
+	// payment whose answer was lost). A crash between the checkpoint and
+	// the effect loses the effect, one after it the outcome, and no restart
+	// runs it again. It is tried once (EffectTries does not apply: a failed
+	// try may have taken effect).
 	AtMostOnce
 )
+
+// notApplied is an effect's error that says it did not happen.
+type notApplied struct{ err error }
+
+func (e *notApplied) Error() string { return e.err.Error() }
+func (e *notApplied) Unwrap() error { return e.err }
+
+// NotApplied is err from an at-most-once effect's f saying the effect
+// did not happen (the dependency refused it before acting: an invalid
+// account, a declined card): its outcome is known, grist.failed. Any
+// other error leaves it unknown (a timeout, a lost answer: it may have
+// happened), and the outcome is grist.unknown with the error's text, for
+// reconciliation. At least once, every error is retried alike.
+func NotApplied(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &notApplied{err: err}
+}
 
 type resultKind int
 
@@ -297,6 +319,16 @@ func (pl *poller) run(ctx context.Context) {
 			pl.s.Wait(ctx, pl.tenant, head)
 			continue
 		}
+		// the checkpoint and the read are two reads: another poller (a
+		// second node's) may have moved the checkpoint between them, and a
+		// trigger handled on that stale checkpoint with the newer head
+		// records an effect step after the other's checkpoint on the
+		// tenant's clock (order.pos) but before it among the processor's
+		// (order.p): a cycle, and an effect the model's next trigger is not.
+		// Unmoved at this read, it was cp when head was read
+		if now, err := pl.s.Checkpoint(ctx, pl.tenant, pl.p.name); err != nil || now != cp {
+			continue
+		}
 		pl.handle(ctx, cp, head, evs)
 	}
 }
@@ -421,9 +453,17 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 			return 0, false // the checkpoint moved: another poller's
 		}
 		pl.pause(ctx)
+		err0 := err
 		// a commit of unknown outcome may have moved the checkpoint: the
 		// next Append's compare-and-set tells
 		if now, err := pl.s.Checkpoint(ctx, pl.tenant, pl.p.name); err == nil && now != cp {
+			// not this poller's to know whether it was its own commit: it
+			// counts as another poller's, whose trigger it leaves alone (at
+			// most once, an effect then left to the other poller, or lost if
+			// the commit was this one's)
+			if sim := qenv.From(ctx); sim != nil && sim.Log != nil {
+				sim.Log(fmt.Sprintf("%v grist: %s/%s: the checkpoint moved to %d after an append that failed (%v): another poller's", sim.Elapsed(), pl.p.name, pl.tenant, now, err0))
+			}
 			return 0, false
 		}
 	}
@@ -515,24 +555,38 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 		proc.Crash() // the effect ran once, its outcome is lost
 	}
 	var outcome []Event
+	var na *notApplied
 	switch {
+	case errors.As(err, &na):
+		outcome = []Event{failedEvent(pl.p.name, e.Pos)} // known: it did not happen
 	case err != nil:
-		outcome = []Event{failedEvent(pl.p.name, e.Pos)}
+		outcome = []Event{unknownEvent(pl.p.name, e.Pos, err.Error())} // it may have happened
 	case res.onSuccess != nil:
 		outcome = []Event{*res.onSuccess}
 	}
 	if len(outcome) > 0 && (pl.app.events[outcome[0].Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil) {
-		outcome, err = []Event{failedEvent(pl.p.name, e.Pos)}, errors.New("an unregistered or unstorable outcome event") // the code's fault
+		// the code's fault: the effect succeeded (or failed known), but its
+		// outcome event cannot be stored
+		outcome, err = []Event{failedEvent(pl.p.name, e.Pos)}, NotApplied(errors.New("an unregistered or unstorable outcome event"))
 	}
 	if len(outcome) == 0 {
 		return head, true
 	}
-	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil},
+	known, text := err == nil || outcome[0].Type == failedType, ""
+	if !known {
+		text = err.Error()
+	}
+	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil, "known", known, "error", text},
 		pl.app.batchObs(outcome, "processor", pl.p.name)...)...)
 	b := store.Batch{Events: outcome, Marker: &store.Marker{ID: reservedID + key, Hash: "outcome"},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow([]rowStep{step})}
-	for ctx.Err() == nil {
-		h, err := pl.s.Append(ctx, pl.tenant, b)
+	// the outcome outlives the node's stop: f ran, and an outcome not
+	// appended is a payment recorded nowhere, so a context ended (a node
+	// stopping) still gets defaultTransientTries tries; a crash (a
+	// simulation's) stops the task where it is
+	octx := context.WithoutCancel(ctx)
+	for try := 1; ctx.Err() == nil || try <= defaultTransientTries; try++ {
+		h, err := pl.s.Append(octx, pl.tenant, b)
 		var cf *store.ConditionFailed
 		switch {
 		case err == nil:
@@ -541,10 +595,10 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 		case errors.As(err, &cf) && cf.Marker != "":
 			return head, true // committed by an earlier try whose answer was lost
 		case !store.Transient(err):
-			pl.pause(ctx)
+			pl.pause(octx)
 			return head, true // a permanent error: the outcome is lost, as after a crash
 		}
-		pl.pause(ctx)
+		pl.pause(octx)
 	}
 	return head, true
 }
