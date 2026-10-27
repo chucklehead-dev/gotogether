@@ -32,6 +32,13 @@ module {{.Q}}Rules {
     val i = itemAddedItem(prefix[trigger - 1])
     List(itemTallied(i, stock(prefix, i), trigger))
 
+  // shelve: the warehouse is told of the addition at the trigger (it
+  // applies each key once: Receive is Keyed, and the generated
+  // warehouseReceiveAdmits says so); shelve skips no addition
+  pure def shelveWarehouseReceive(prefix: List[Event], trigger: int): WarehouseReceiveRequest =
+    { item: itemAddedItem(prefix[trigger - 1]), qty: itemAddedQty(prefix[trigger - 1]) }
+  pure def shelveSkips(prefix: List[Event], trigger: int): bool = false
+
   // no item holds more than its capacity
   pure def withinCapacityIn(log: List[Event]): bool =
     log.foldl(true, (b, e) => b and (e.typ != "item-added" or stock(log, itemAddedItem(e)) <= CAPACITY))
@@ -52,6 +59,14 @@ module {{.Q}} {
   // after a settle: every addition tallied
   // grist: eventually
   val everyAdditionTallied = log.indices().forall(i => log[i].typ == "item-added" implies checkpoints.get("tally") >= i + 1)
+
+  // after a settle: the warehouse received every addition, or its every
+  // try failed and the log says so
+  // grist: eventually
+  val everyAdditionShelved = log.indices().forall(i => log[i].typ == "item-added" implies and {
+    checkpoints.get("shelve") >= i + 1,
+    warehouseReceiveRecords.select(r => r.trigger == i + 1 and r.result == "ok").length() > 0 or holds(log, failed("shelve", i + 1)),
+  })
 }
 
 // The clients' side ({{.Name}}.calls.binding.yaml), linearized.

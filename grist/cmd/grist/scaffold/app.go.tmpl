@@ -1,7 +1,8 @@
 // Package {{.Pkg}} is a grist application, scaffolded by grist new: a
 // store of items, each holding at most Capacity, added to by a command
 // (add-item) and read by a query (show-item), with a processor (tally)
-// that records each item's stock as of every addition. Its model is
+// that records each item's stock as of every addition and one (shelve)
+// that tells a warehouse, a declared dependency, of each. Its model is
 // model/{{.Name}}.qnt (the rules) beside the skeleton grist writes from
 // the App's catalog (model/{{.Name}}_gen.qnt: `go run ./cmd/{{.Name}} model`);
 // its tests explore it in a simulation (sim_test.go), catch a mutant

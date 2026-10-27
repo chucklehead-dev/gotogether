@@ -2,14 +2,23 @@
 // `{{.Name}} model` writes its model's skeleton and its bindings from its
 // catalog, `{{.Name}} serve -db sqlite:{{.Name}}.db -tenant t1 -steps
 // steps.jsonl` serves its HTTP API and runs its node on a SQLite file,
-// recording every step for validation with its bindings.
+// recording every step for validation with its bindings. Its warehouse
+// is a stand-in in process (the dependency's default double): attach the
+// real one here.
 package main
 
 import (
+	"context"
+
 	_ "modernc.org/sqlite" // serve's driver: -db sqlite:PATH
 
 	{{.Pkg}} "{{.Module}}"
 	"github.com/chucklehead-dev/gotogether/grist"
 )
 
-func main() { grist.Main({{.Pkg}}.App) }
+func main() {
+	warehouse := grist.Local(grist.DefaultHandlers({{.Pkg}}.Warehouse))
+	grist.Main({{.Pkg}}.App, grist.Dependencies(func(ctx context.Context) context.Context {
+		return {{.Pkg}}.Warehouse.With(ctx, warehouse)
+	}))
+}

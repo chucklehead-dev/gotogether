@@ -16,16 +16,20 @@ import (
 )
 
 // TestRealHTTP: the real tier (gristtest.Tier), judged by the same
-// bindings: the app on a SQLite file served over real HTTP, one node, two
-// clients calling the API at once, every fifth command's answer lost
+// bindings: the app on a SQLite file served over real HTTP, one node and
+// its warehouse, two clients calling the API at once, every fifth command's answer lost
 // after it was served (its client retries under the same key, the marker
-// answers). The tier waits for the processor and the relay, probes both
+// answers). The tier waits for the processors and the relay, probes both
 // items and records the settle; the steps conform at the store (and
 // settle) and, linearized, at the clients, and every answer a client got
 // has its store-side step.
 func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
-	tier := gristtest.NewTier(t, App, gristtest.TierConfig{})
+	// the warehouse in process: its default double, recording what it
+	// applies with the node's steps
+	warehouse := grist.Local(grist.DefaultHandlers(Warehouse))
+	tier := gristtest.NewTier(t, App, gristtest.TierConfig{
+		Deps: func(ctx context.Context, _ grist.Store) context.Context { return Warehouse.With(ctx, warehouse) }})
 	tier.Start("node")
 	var wg sync.WaitGroup
 	for c := 1; c <= 2; c++ {

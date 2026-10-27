@@ -34,7 +34,7 @@ func TestNewIsGreen(t *testing.T) {
 	if err := run([]string{"new", "-dir", dir, "-replace", repo, "-module", "example.com/itemstore", "item-store"}, &out, &out); err != nil {
 		t.Fatalf("grist new: %v\n%s", err, out.String())
 	}
-	for _, f := range []string{"go.mod", "app.go", "cmd/item-store/main.go", "model/item-store.qnt", "model/item-store_gen.qnt", "model/grist.qnt",
+	for _, f := range []string{"go.mod", "app.go", "deps.go", "cmd/item-store/main.go", "model/item-store.qnt", "model/item-store_gen.qnt", "model/grist.qnt",
 		"item-store.binding.yaml", "item-store.calls.binding.yaml", "sim_test.go", "real_test.go", "mutants_test.go", "testdata/mutants/noCapacity/commands.go", "run-demo.sh", "README.md"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("no %s: %v", f, err)

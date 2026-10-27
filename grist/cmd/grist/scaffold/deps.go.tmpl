@@ -1,0 +1,28 @@
+package {{.Pkg}}
+
+import "github.com/chucklehead-dev/gotogether/grist"
+
+// Warehouse is the warehouse each addition is sent to: a declared
+// dependency, whose calls grist records at both ends (the caller's step
+// warehouseReceive, the warehouse's own warehouseReceiveServed), models
+// from the declaration, and in a simulation serves as a qenv.Service
+// named warehouse (its faults rpc.warehouse.*) with its default double
+// (grist.DefaultHandlers: each key applied once) unless a test gives
+// another (gristsim.Config.Doubles).
+var Warehouse = grist.NewDependency(App, "warehouse")
+
+// Delivery is what the warehouse is told of an addition: the item and its
+// quantity. The addition it is for is the call's trigger, and the key the
+// warehouse deduplicates by the call's (grist.CallKey): grist carries both.
+type Delivery struct {
+	Item string `json:"item"`
+	Qty  int    `json:"qty"`
+}
+
+// Received is the warehouse's answer.
+type Received struct{}
+
+// Receive tells the warehouse of a delivery. Keyed: the warehouse applies
+// each key once (the shelve processor's effect key, sent with every try),
+// which the generated model's warehouseReceiveAdmits says.
+var Receive = grist.NewCall[Delivery, Received](Warehouse, "receive", grist.Keyed())

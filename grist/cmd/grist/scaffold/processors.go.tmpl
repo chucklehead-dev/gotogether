@@ -14,3 +14,14 @@ var Tally = grist.NewProcessor(App, "tally", Added,
 	func(ctx context.Context, r *grist.Reads, e ItemAdded, m grist.Meta) grist.Result {
 		return grist.Emit(Tallied.Of(ItemTallied{Item: e.Item, Stock: Stock.For(r, e.Item), At: int64(m.Pos)}))
 	}, grist.Emits(Tallied))
+
+// Shelve tells the warehouse of each addition, at least once: a crash
+// between the call and the checkpoint, or a lost answer, calls again
+// under the same key, which the warehouse deduplicates.
+var Shelve = grist.NewProcessor(App, "shelve", Added,
+	func(ctx context.Context, r *grist.Reads, e ItemAdded, m grist.Meta) grist.Result {
+		return grist.Effect(func(ctx context.Context) error {
+			_, err := Receive.Do(ctx, Delivery{Item: e.Item, Qty: e.Qty})
+			return err
+		}, grist.AtLeastOnce)
+	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(Receive))
