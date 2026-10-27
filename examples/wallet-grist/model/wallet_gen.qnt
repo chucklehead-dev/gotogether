@@ -132,7 +132,7 @@ module walletGen {
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
   // a conflict needs it not to. A reused key commits nothing.
-  action deposit(account: str, amount: int, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action deposit(account: str, amount: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: DepositArgs = { account: account, amount: amount, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -154,7 +154,7 @@ module walletGen {
   // its rule needs; ok and a refusal need the rule's outcome and the
   // condition to have held, a conflict needs it not to. A reused key commits
   // nothing.
-  action transfer(src: str, dest: str, amount: int, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action transfer(src: str, dest: str, amount: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -225,32 +225,53 @@ module walletGen {
   }
 
   // the model on its own (gotogether simulate): every command as its rule
-  // decides, reading what it needs, every query, processor and site
+  // decides, reading what it needs, every query, processor and site, each
+  // drawing its own arguments (one draw shared by every block would make
+  // the step's successors the product of all their domains)
   action step = {
-    nondet account = STRS.oneOf()
-    nondet amount = INTS.oneOf()
-    nondet principal = STRS.oneOf()
-    nondet id = IDS.oneOf()
-    nondet src = STRS.oneOf()
-    nondet dest = STRS.oneOf()
-    nondet key_ = KEYS.oneOf()
-    nondet ok_ = Bool.oneOf()
-    nondet key = STRS.oneOf()
     any {
       {
-        val args_: DepositArgs = { account: account, amount: amount, principal: principal }
-        val result_ = depositOutcome(log, args_)
-        deposit(account, amount, id, principal, log.length(), triplesOf(depositNeeds(args_, result_)), result_)
+        nondet account = STRS.oneOf()
+        nondet amount = INTS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: DepositArgs = { account: account, amount: amount, principal: principal }
+          val result_ = depositOutcome(log, args_)
+          deposit(account, amount, id, principal, log.length(), triplesOf(depositNeeds(args_, result_)), result_)
+        }
       },
       {
-        val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
-        val result_ = transferOutcome(log, args_)
-        transfer(src, dest, amount, id, principal, log.length(), triplesOf(transferNeeds(args_, result_)), result_)
+        nondet src = STRS.oneOf()
+        nondet dest = STRS.oneOf()
+        nondet amount = INTS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
+          val result_ = transferOutcome(log, args_)
+          transfer(src, dest, amount, id, principal, log.length(), triplesOf(transferNeeds(args_, result_)), result_)
+        }
       },
-      read(account, log.length()),
-      postEffect(nextOf(log, checkpoints.get("post"), "moved"), key_, ok_),
-      post(nextOf(log, checkpoints.get("post"), "moved"), ok_),
-      ledgerPost(key, account, amount),
+      {
+        nondet account = STRS.oneOf()
+        read(account, log.length())
+      },
+      {
+        nondet key_ = KEYS.oneOf()
+        nondet ok_ = Bool.oneOf()
+        postEffect(nextOf(log, checkpoints.get("post"), "moved"), key_, ok_)
+      },
+      {
+        nondet ok_ = Bool.oneOf()
+        post(nextOf(log, checkpoints.get("post"), "moved"), ok_)
+      },
+      {
+        nondet key = STRS.oneOf()
+        nondet account = STRS.oneOf()
+        nondet amount = INTS.oneOf()
+        ledgerPost(key, account, amount)
+      },
     }
   }
 }
@@ -308,16 +329,26 @@ module walletCallsGen {
   action read(account: str): bool = all { log' = log, answered' = answered }
 
   action step = {
-    nondet account = STRS.oneOf()
-    nondet amount = INTS.oneOf()
-    nondet principal = STRS.oneOf()
-    nondet id = IDS.oneOf()
-    nondet src = STRS.oneOf()
-    nondet dest = STRS.oneOf()
     any {
-      deposit(account, amount, id, principal, depositOutcome(log, { account: account, amount: amount, principal: principal })),
-      transfer(src, dest, amount, id, principal, transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal })),
-      read(account),
+      {
+        nondet account = STRS.oneOf()
+        nondet amount = INTS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        deposit(account, amount, id, principal, depositOutcome(log, { account: account, amount: amount, principal: principal }))
+      },
+      {
+        nondet src = STRS.oneOf()
+        nondet dest = STRS.oneOf()
+        nondet amount = INTS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        transfer(src, dest, amount, id, principal, transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }))
+      },
+      {
+        nondet account = STRS.oneOf()
+        read(account)
+      },
       all { log' = log, answered' = answered },
     }
   }

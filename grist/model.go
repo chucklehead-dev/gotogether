@@ -791,7 +791,7 @@ func (g *gen) command(b *strings.Builder, c CatalogBlock) {
 		doc += " and the condition to have held, a conflict needs it not to"
 	}
 	b.WriteString("\n" + comment("  ", doc+". A reused key commits nothing."))
-	fmt.Fprintf(b, "  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "principal: str", "readPos: int", "reads: List[(str, str, str)]", "result: str"))
+	fmt.Fprintf(b, "  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "principal: str", "readPos: int", "reads: Set[(str, str, str)]", "result: str"))
 	fmt.Fprintf(b, "    val args_: %s = %s\n    val reads_ = readsOf(reads)\n", args, recordValue(fs, "principal: principal"))
 	b.WriteString("    if (result == \"idempotency-key-reused\") all { answered.contains(id), readsThrough(readPos) }\n    else all {\n")
 	b.WriteString("      freshKey(answered, id),\n")
@@ -851,9 +851,9 @@ func domainOf(typ string) string {
 	return map[string]string{"str": "STRS", "int": "INTS", "bool": "Bool"}[typ]
 }
 
-// draws are the nondet picks a step shares across its branches: one per
-// field name and type (a name of two types is suffixed by the type), in
-// first-use order; named gives each field's pick.
+// draws are the nondet picks of one branch of a step: one per field name
+// and type (a name of two types is suffixed by the type), in first-use
+// order.
 type draws struct {
 	order []string
 	dom   map[string]string
@@ -892,10 +892,19 @@ func (d *draws) pick(name, domain string) {
 	}
 }
 
-func (d *draws) write(b *strings.Builder, indent string) {
-	for _, n := range d.order {
-		fmt.Fprintf(b, "%snondet %s = %s.oneOf()\n", indent, n, d.dom[n])
+// branch is call under its own picks: a block drawing them, or call
+// alone when it draws none.
+func (d *draws) branch(call string) string {
+	if len(d.order) == 0 {
+		return call
 	}
+	var b strings.Builder
+	b.WriteString("{\n")
+	for _, n := range d.order {
+		fmt.Fprintf(&b, "        nondet %s = %s.oneOf()\n", n, d.dom[n])
+	}
+	fmt.Fprintf(&b, "        %s\n      }", strings.ReplaceAll(call, "\n", "\n  "))
+	return b.String()
 }
 
 // commandCall is the step's call of command c with its picks fs: its
@@ -916,43 +925,52 @@ func recordFrom(c CatalogBlock, fs []field) string {
 }
 
 func (g *gen) storeStep(b *strings.Builder) {
-	b.WriteString("\n  // the model on its own (gotogether simulate): every command as its rule\n  // decides, reading what it needs, every query, processor and site\n  action step = {\n")
-	d := newDraws()
+	b.WriteString("\n  // the model on its own (gotogether simulate): every command as its rule\n  // decides, reading what it needs, every query, processor and site, each\n  // drawing its own arguments (one draw shared by every block would make\n  // the step's successors the product of all their domains)\n  action step = {\n")
 	var calls []string
 	for _, c := range g.c.Commands {
 		fs, _ := scalarFields(c.Args)
+		d := newDraws()
 		ps := d.add(fs)
 		d.pick("principal", "STRS")
 		d.pick("id", "IDS")
-		calls = append(calls, commandCall(c, ps, "id", "principal", "log.length()", fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint), "result_"))
+		calls = append(calls, d.branch(commandCall(c, ps, "id", "principal", "log.length()", fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint), "result_")))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
-		calls = append(calls, q.Quint+"("+paramNames(d.add(fs), "log.length()")+")")
+		d := newDraws()
+		calls = append(calls, d.branch(q.Quint+"("+paramNames(d.add(fs), "log.length()")+")"))
 	}
 	for _, p := range g.c.Processors {
 		next := fmt.Sprintf("nextOf(log, checkpoints.get(%q), %q)", p.Name, p.On)
+		d := newDraws()
 		switch {
 		case p.Shape == "emits":
 			calls = append(calls, fmt.Sprintf("%s(%s)", p.Quint, next))
 		case p.Delivery == AtLeastOnce:
 			d.pick("key_", "KEYS")
 			d.pick("ok_", "Bool")
-			calls = append(calls, fmt.Sprintf("%sEffect(%s, key_, ok_)", p.Quint, next), fmt.Sprintf("%s(%s, ok_)", p.Quint, next))
+			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(%s, key_, ok_)", p.Quint, next)))
+			d = newDraws()
+			d.pick("ok_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%s(%s, ok_)", p.Quint, next)))
 		default:
+			calls = append(calls, fmt.Sprintf("%s(%s, false)", p.Quint, next))
+			d.pick("trigger_", "1.to(log.length() + 1)")
 			d.pick("key_", "KEYS")
 			d.pick("ok_", "Bool")
-			d.pick("known_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(trigger_, key_, ok_)", p.Quint)))
+			d = newDraws()
 			d.pick("trigger_", "1.to(log.length() + 1)")
-			calls = append(calls, fmt.Sprintf("%s(%s, false)", p.Quint, next), fmt.Sprintf("%sEffect(trigger_, key_, ok_)", p.Quint),
-				fmt.Sprintf("%sOutcome(trigger_, ok_, known_, \"lost\")", p.Quint))
+			d.pick("ok_", "Bool")
+			d.pick("known_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%sOutcome(trigger_, ok_, known_, \"lost\")", p.Quint)))
 		}
 	}
 	for _, s := range g.c.Sites {
 		fs, _ := scalarFields(s.Fields)
-		calls = append(calls, applied(s.Quint, paramNames(d.add(fs))))
+		d := newDraws()
+		calls = append(calls, d.branch(applied(s.Quint, paramNames(d.add(fs)))))
 	}
-	d.write(b, "    ")
 	b.WriteString("    any {\n")
 	for _, c := range calls {
 		fmt.Fprintf(b, "      %s,\n", c)
@@ -985,20 +1003,20 @@ func (g *gen) callsModule(b *strings.Builder) {
 		fmt.Fprintf(b, "\n  // %s changes nothing; its answer is %sAnswer's where it linearizes\n  action %s: bool = all { log' = log, answered' = answered }\n", q.Name, q.Quint, applied(q.Quint, params(fs)))
 	}
 	b.WriteString("\n  action step = {\n")
-	d := newDraws()
 	var calls []string
 	for _, c := range g.c.Commands {
 		fs, _ := scalarFields(c.Args)
+		d := newDraws()
 		ps := d.add(fs)
 		d.pick("principal", "STRS")
 		d.pick("id", "IDS")
-		calls = append(calls, fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "principal", fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps)))))
+		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "principal", fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))))))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
-		calls = append(calls, applied(q.Quint, paramNames(d.add(fs))))
+		d := newDraws()
+		calls = append(calls, d.branch(applied(q.Quint, paramNames(d.add(fs)))))
 	}
-	d.write(b, "    ")
 	b.WriteString("    any {\n")
 	for _, c := range calls {
 		fmt.Fprintf(b, "      %s,\n", c)

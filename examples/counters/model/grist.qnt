@@ -19,9 +19,11 @@ module grist {
   // an effect step: (processor, trigger, key, ok)
   type Effect = (str, int, str, bool)
 
-  // a recorded read set (slice 1's triples) as Reads
-  pure def readsOf(triples: List[(str, str, str)]): List[Read] =
-    triples.foldl([], (acc, t) => acc.append({ typ: t._1, tags: if (t._2 == "") Set() else Set((t._2, t._3)) }))
+  // a recorded read set (slice 1's triples) as Reads. A set, not a list:
+  // a read set has no order, and a set folded into a list would depend
+  // on the set's order (outside the Go evaluator's fragment)
+  pure def readsOf(triples: Set[(str, str, str)]): Set[Read] =
+    triples.map(t => { typ: t._1, tags: if (t._2 == "") Set() else Set((t._2, t._3)) })
 
   // no cause yet: what the generated event constructors (grist model)
   // give an event, stamped by the action that appends it (caused)
@@ -36,10 +38,8 @@ module grist {
   // (type, tag key, tag value) triple per tag of each read, (type, "", "")
   // for a type-only read. A generated step action (grist model) records
   // the reads its rule needs so.
-  pure def triplesOf(reads: Set[Read]): List[(str, str, str)] =
-    reads.fold([], (acc, r) =>
-      if (r.tags.size() == 0) acc.append((r.typ, "", ""))
-      else r.tags.fold(acc, (a, t) => a.append((r.typ, t._1, t._2))))
+  pure def triplesOf(reads: Set[Read]): Set[(str, str, str)] =
+    reads.map(r => if (r.tags.size() == 0) Set((r.typ, "", "")) else r.tags.map(t => (r.typ, t._1, t._2))).flatten()
 
   // e matches the read q
   pure def matches(e: Event, q: Read): bool =
@@ -50,17 +50,17 @@ module grist {
   // application's action requires it of the reads its rule depends on, so
   // a runtime that loses a read from the read set (and so from the
   // condition) is caught at every commit, not only when a race hits it.
-  pure def covers(reads: List[Read], need: Read): bool =
-    reads.indices().exists(j => reads[j].typ == need.typ and reads[j].tags.subseteq(need.tags))
+  pure def covers(reads: Set[Read], need: Read): bool =
+    reads.exists(r => r.typ == need.typ and r.tags.subseteq(need.tags))
 
   // Conditional append: the decision read through readPos, at most the
   // head, and no event after readPos matches a read of the set. Part of
   // every conditioned commit's precondition, a refusal's included, with
   // the read set the step recorded.
-  pure def conditionHolds(log: List[Event], readPos: int, reads: List[Read]): bool = and {
+  pure def conditionHolds(log: List[Event], readPos: int, reads: Set[Read]): bool = and {
     0 <= readPos,
     readPos <= log.length(),
-    log.indices().forall(i => i < readPos or reads.indices().forall(j => not(matches(log[i], reads[j])))),
+    log.indices().forall(i => i < readPos or reads.forall(r => not(matches(log[i], r)))),
   }
 
   // an event of typ tagged key=value exists in log

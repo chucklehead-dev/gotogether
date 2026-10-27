@@ -30,7 +30,11 @@ The first release. What a user meets, by module:
   refuses a rejection named `ok`, `conflict`, `denied` or `error`;
   `gristtest.Answered` matches commands by tenant and id, skips denied
   calls and allows a key answered twice or reused; `model` without the
-  app's model says `-init`.
+  app's model says `-init`. grist.qnt's read sets are sets
+  (`readsOf`, `triplesOf`, `covers`, `conditionHolds` over
+  `Set[Read]`; a command action's `reads: Set[(str, str, str)]`), and
+  each branch of a generated `step` draws its own arguments, so the
+  model is in the Go evaluator's fragment.
 - A binding's module may re-export another whole (`export lib.*`): its
   actions, variables and vals are the exported module's too
   (`binding.LoadModel` follows the exports transitively, its own names

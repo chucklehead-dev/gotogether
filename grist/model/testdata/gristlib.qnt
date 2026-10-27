@@ -8,15 +8,17 @@ module gristlib {
   pure def ev(typ: str, tag: str, id: str): Event =
     { typ: typ, strs: [tag], ints: [], tags: Set(("k", tag)), cause: ("command", id) }
 
-  run readsOfTest = assert(readsOf([("a", "k", "x"), ("b", "", "")]) == [{ typ: "a", tags: Set(("k", "x")) }, { typ: "b", tags: Set() }])
+  run readsOfTest = assert(readsOf(Set(("a", "k", "x"), ("b", "", ""))) == Set({ typ: "a", tags: Set(("k", "x")) }, { typ: "b", tags: Set() }))
 
   run causedTest = assert(caused([ev("a", "x", "c1"), failed("p", 2)], ("command", "c9")).foldl([], (acc, e) => acc.append(e.cause)) ==
     [("command", "c9"), ("command", "c9")])
 
   run triplesOfTest = all {
-    assert(readsOf(triplesOf(Set({ typ: "a", tags: Set(("k", "x")) }))) == [{ typ: "a", tags: Set(("k", "x")) }]),
-    assert(triplesOf(Set({ typ: "b", tags: Set() })) == [("b", "", "")]),
-    assert(triplesOf(Set()) == []),
+    assert(readsOf(triplesOf(Set({ typ: "a", tags: Set(("k", "x")) }))) == Set({ typ: "a", tags: Set(("k", "x")) })),
+    assert(triplesOf(Set({ typ: "b", tags: Set() })) == Set(("b", "", ""))),
+    // two reads: every triple of each, whatever the set's order
+    assert(triplesOf(Set({ typ: "a", tags: Set(("k", "x")) }, { typ: "b", tags: Set() })) == Set(("a", "k", "x"), ("b", "", ""))),
+    assert(triplesOf(Set()) == Set()),
   }
 
   run matchesTest = all {
@@ -28,21 +30,21 @@ module gristlib {
 
   run coversTest = all {
     // a type-only read covers a tagged need; a read of another tag does not
-    assert(covers([{ typ: "a", tags: Set() }], { typ: "a", tags: Set(("k", "x")) })),
-    assert(covers([{ typ: "a", tags: Set(("k", "x")) }], { typ: "a", tags: Set(("k", "x")) })),
-    assert(not(covers([{ typ: "a", tags: Set(("k", "y")) }], { typ: "a", tags: Set(("k", "x")) }))),
-    assert(not(covers([], { typ: "a", tags: Set() }))),
+    assert(covers(Set({ typ: "a", tags: Set() }), { typ: "a", tags: Set(("k", "x")) })),
+    assert(covers(Set({ typ: "a", tags: Set(("k", "x")) }), { typ: "a", tags: Set(("k", "x")) })),
+    assert(not(covers(Set({ typ: "a", tags: Set(("k", "y")) }), { typ: "a", tags: Set(("k", "x")) }))),
+    assert(not(covers(Set(), { typ: "a", tags: Set() }))),
   }
 
   run conditionHoldsTest = {
     val log = [ev("a", "x", "c1"), ev("a", "y", "c2")]
     all {
-      assert(conditionHolds(log, 1, [{ typ: "a", tags: Set(("k", "x")) }])),
-      assert(not(conditionHolds(log, 1, [{ typ: "a", tags: Set(("k", "y")) }]))),
-      assert(conditionHolds(log, 2, [{ typ: "a", tags: Set() }])),
+      assert(conditionHolds(log, 1, Set({ typ: "a", tags: Set(("k", "x")) }))),
+      assert(not(conditionHolds(log, 1, Set({ typ: "a", tags: Set(("k", "y")) })))),
+      assert(conditionHolds(log, 2, Set({ typ: "a", tags: Set() }))),
       // a read position past the head, or before the log, is no read
-      assert(not(conditionHolds(log, 3, []))),
-      assert(not(conditionHolds(log, -1, []))),
+      assert(not(conditionHolds(log, 3, Set()))),
+      assert(not(conditionHolds(log, -1, Set()))),
     }
   }
 
@@ -120,7 +122,7 @@ module gristrun {
   action init = all { log' = [], answered' = Set(), effects' = [], checkpoint' = 0 }
 
   action create(tag: str, id: str, readPos: int): bool = {
-    val reads = [{ typ: "a", tags: Set(("k", tag)) }]
+    val reads = Set({ typ: "a", tags: Set(("k", tag)) })
     all {
       freshKey(answered, id),
       conditionHolds(log, readPos, reads),

@@ -169,7 +169,7 @@ module countersGen {
   // committed outcome needs its id fresh and its read set covering what its
   // rule needs; ok and a refusal need the rule's outcome and the condition to
   // have held, a conflict needs it not to. A reused key commits nothing.
-  action createCounter(counter: str, name: str, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action createCounter(counter: str, name: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: CreateCounterArgs = { counter: counter, name: name, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -191,7 +191,7 @@ module countersGen {
   // its rule needs; ok and a refusal need the rule's outcome and the
   // condition to have held, a conflict needs it not to. A reused key commits
   // nothing.
-  action incrementCounter(counter: str, by: int, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action incrementCounter(counter: str, by: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: IncrementCounterArgs = { counter: counter, by: by, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -213,7 +213,7 @@ module countersGen {
   // covering what its rule needs; ok and a refusal need the rule's outcome
   // and the condition to have held, a conflict needs it not to. A reused key
   // commits nothing.
-  action retireCounter(counter: str, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action retireCounter(counter: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: RetireCounterArgs = { counter: counter, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -334,43 +334,76 @@ module countersGen {
   }
 
   // the model on its own (gotogether simulate): every command as its rule
-  // decides, reading what it needs, every query, processor and site
+  // decides, reading what it needs, every query, processor and site, each
+  // drawing its own arguments (one draw shared by every block would make
+  // the step's successors the product of all their domains)
   action step = {
-    nondet counter = STRS.oneOf()
-    nondet name = STRS.oneOf()
-    nondet principal = STRS.oneOf()
-    nondet id = IDS.oneOf()
-    nondet by = INTS.oneOf()
-    nondet key_ = KEYS.oneOf()
-    nondet ok_ = Bool.oneOf()
-    nondet known_ = Bool.oneOf()
-    nondet trigger_ = 1.to(log.length() + 1).oneOf()
-    nondet key = STRS.oneOf()
-    nondet amount = INTS.oneOf()
     any {
       {
-        val args_: CreateCounterArgs = { counter: counter, name: name, principal: principal }
-        val result_ = createCounterOutcome(log, args_)
-        createCounter(counter, name, id, principal, log.length(), triplesOf(createCounterNeeds(args_, result_)), result_)
+        nondet counter = STRS.oneOf()
+        nondet name = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: CreateCounterArgs = { counter: counter, name: name, principal: principal }
+          val result_ = createCounterOutcome(log, args_)
+          createCounter(counter, name, id, principal, log.length(), triplesOf(createCounterNeeds(args_, result_)), result_)
+        }
       },
       {
-        val args_: IncrementCounterArgs = { counter: counter, by: by, principal: principal }
-        val result_ = incrementCounterOutcome(log, args_)
-        incrementCounter(counter, by, id, principal, log.length(), triplesOf(incrementCounterNeeds(args_, result_)), result_)
+        nondet counter = STRS.oneOf()
+        nondet by = INTS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: IncrementCounterArgs = { counter: counter, by: by, principal: principal }
+          val result_ = incrementCounterOutcome(log, args_)
+          incrementCounter(counter, by, id, principal, log.length(), triplesOf(incrementCounterNeeds(args_, result_)), result_)
+        }
       },
       {
-        val args_: RetireCounterArgs = { counter: counter, principal: principal }
-        val result_ = retireCounterOutcome(log, args_)
-        retireCounter(counter, id, principal, log.length(), triplesOf(retireCounterNeeds(args_, result_)), result_)
+        nondet counter = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: RetireCounterArgs = { counter: counter, principal: principal }
+          val result_ = retireCounterOutcome(log, args_)
+          retireCounter(counter, id, principal, log.length(), triplesOf(retireCounterNeeds(args_, result_)), result_)
+        }
       },
-      showCounter(counter, log.length()),
+      {
+        nondet counter = STRS.oneOf()
+        showCounter(counter, log.length())
+      },
       average(nextOf(log, checkpoints.get("average"), "counter-incremented")),
-      welcomeEffect(nextOf(log, checkpoints.get("welcome"), "counter-created"), key_, ok_),
-      welcome(nextOf(log, checkpoints.get("welcome"), "counter-created"), ok_),
+      {
+        nondet key_ = KEYS.oneOf()
+        nondet ok_ = Bool.oneOf()
+        welcomeEffect(nextOf(log, checkpoints.get("welcome"), "counter-created"), key_, ok_)
+      },
+      {
+        nondet ok_ = Bool.oneOf()
+        welcome(nextOf(log, checkpoints.get("welcome"), "counter-created"), ok_)
+      },
       payout(nextOf(log, checkpoints.get("payout"), "counter-retired"), false),
-      payoutEffect(trigger_, key_, ok_),
-      payoutOutcome(trigger_, ok_, known_, "lost"),
-      bankPays(key, counter, amount),
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet ok_ = Bool.oneOf()
+        payoutEffect(trigger_, key_, ok_)
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet ok_ = Bool.oneOf()
+        nondet known_ = Bool.oneOf()
+        payoutOutcome(trigger_, ok_, known_, "lost")
+      },
+      {
+        nondet key = STRS.oneOf()
+        nondet counter = STRS.oneOf()
+        nondet amount = INTS.oneOf()
+        bankPays(key, counter, amount)
+      },
     }
   }
 }
@@ -438,16 +471,31 @@ module countersCallsGen {
   action showCounter(counter: str): bool = all { log' = log, answered' = answered }
 
   action step = {
-    nondet counter = STRS.oneOf()
-    nondet name = STRS.oneOf()
-    nondet principal = STRS.oneOf()
-    nondet id = IDS.oneOf()
-    nondet by = INTS.oneOf()
     any {
-      createCounter(counter, name, id, principal, createCounterOutcome(log, { counter: counter, name: name, principal: principal })),
-      incrementCounter(counter, by, id, principal, incrementCounterOutcome(log, { counter: counter, by: by, principal: principal })),
-      retireCounter(counter, id, principal, retireCounterOutcome(log, { counter: counter, principal: principal })),
-      showCounter(counter),
+      {
+        nondet counter = STRS.oneOf()
+        nondet name = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        createCounter(counter, name, id, principal, createCounterOutcome(log, { counter: counter, name: name, principal: principal }))
+      },
+      {
+        nondet counter = STRS.oneOf()
+        nondet by = INTS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        incrementCounter(counter, by, id, principal, incrementCounterOutcome(log, { counter: counter, by: by, principal: principal }))
+      },
+      {
+        nondet counter = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        retireCounter(counter, id, principal, retireCounterOutcome(log, { counter: counter, principal: principal }))
+      },
+      {
+        nondet counter = STRS.oneOf()
+        showCounter(counter)
+      },
       all { log' = log, answered' = answered },
     }
   }

@@ -144,7 +144,7 @@ module shopGen {
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
   // a conflict needs it not to. A reused key commits nothing.
-  action addItem(item_: str, qty: int, of_: str, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action addItem(item_: str, qty: int, of_: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: AddItemArgs = { item: item_, qty: qty, of: of_, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -165,7 +165,7 @@ module shopGen {
   // its precondition is the rule's alone; no refusal. Every committed outcome
   // needs its id fresh and its read set covering what its rule needs; ok and
   // a refusal need the rule's outcome. A reused key commits nothing.
-  action noteItem(item_: str, id: str, principal: str, readPos: int, reads: List[(str, str, str)], result: str): bool = {
+  action noteItem(item_: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: NoteItemArgs = { item: item_, principal: principal }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -283,38 +283,67 @@ module shopGen {
   }
 
   // the model on its own (gotogether simulate): every command as its rule
-  // decides, reading what it needs, every query, processor and site
+  // decides, reading what it needs, every query, processor and site, each
+  // drawing its own arguments (one draw shared by every block would make
+  // the step's successors the product of all their domains)
   action step = {
-    nondet item_ = STRS.oneOf()
-    nondet qty = INTS.oneOf()
-    nondet of_ = STRS.oneOf()
-    nondet principal = STRS.oneOf()
-    nondet id = IDS.oneOf()
-    nondet key_ = KEYS.oneOf()
-    nondet ok_ = Bool.oneOf()
-    nondet known_ = Bool.oneOf()
-    nondet trigger_ = 1.to(log.length() + 1).oneOf()
-    nondet key = STRS.oneOf()
     any {
       {
-        val args_: AddItemArgs = { item: item_, qty: qty, of: of_, principal: principal }
-        val result_ = addItemOutcome(log, args_)
-        addItem(item_, qty, of_, id, principal, log.length(), triplesOf(addItemNeeds(args_, result_)), result_)
+        nondet item_ = STRS.oneOf()
+        nondet qty = INTS.oneOf()
+        nondet of_ = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: AddItemArgs = { item: item_, qty: qty, of: of_, principal: principal }
+          val result_ = addItemOutcome(log, args_)
+          addItem(item_, qty, of_, id, principal, log.length(), triplesOf(addItemNeeds(args_, result_)), result_)
+        }
       },
       {
-        val args_: NoteItemArgs = { item: item_, principal: principal }
-        val result_ = noteItemOutcome(log, args_)
-        noteItem(item_, id, principal, log.length(), triplesOf(noteItemNeeds(args_, result_)), result_)
+        nondet item_ = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        {
+          val args_: NoteItemArgs = { item: item_, principal: principal }
+          val result_ = noteItemOutcome(log, args_)
+          noteItem(item_, id, principal, log.length(), triplesOf(noteItemNeeds(args_, result_)), result_)
+        }
       },
       count(log.length()),
-      showItem(item_, log.length()),
+      {
+        nondet item_ = STRS.oneOf()
+        showItem(item_, log.length())
+      },
       ship(nextOf(log, checkpoints.get("ship"), "item-added")),
-      notifyEffect(nextOf(log, checkpoints.get("notify"), "item-added"), key_, ok_),
-      notify(nextOf(log, checkpoints.get("notify"), "item-added"), ok_),
+      {
+        nondet key_ = KEYS.oneOf()
+        nondet ok_ = Bool.oneOf()
+        notifyEffect(nextOf(log, checkpoints.get("notify"), "item-added"), key_, ok_)
+      },
+      {
+        nondet ok_ = Bool.oneOf()
+        notify(nextOf(log, checkpoints.get("notify"), "item-added"), ok_)
+      },
       charge(nextOf(log, checkpoints.get("charge"), "item-shipped"), false),
-      chargeEffect(trigger_, key_, ok_),
-      chargeOutcome(trigger_, ok_, known_, "lost"),
-      warehousePicks(key, item_, qty),
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet ok_ = Bool.oneOf()
+        chargeEffect(trigger_, key_, ok_)
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet ok_ = Bool.oneOf()
+        nondet known_ = Bool.oneOf()
+        chargeOutcome(trigger_, ok_, known_, "lost")
+      },
+      {
+        nondet key = STRS.oneOf()
+        nondet item_ = STRS.oneOf()
+        nondet qty = INTS.oneOf()
+        warehousePicks(key, item_, qty)
+      },
     }
   }
 }
@@ -374,16 +403,26 @@ module shopCallsGen {
   action showItem(item_: str): bool = all { log' = log, answered' = answered }
 
   action step = {
-    nondet item_ = STRS.oneOf()
-    nondet qty = INTS.oneOf()
-    nondet of_ = STRS.oneOf()
-    nondet principal = STRS.oneOf()
-    nondet id = IDS.oneOf()
     any {
-      addItem(item_, qty, of_, id, principal, addItemOutcome(log, { item: item_, qty: qty, of: of_, principal: principal })),
-      noteItem(item_, id, principal, noteItemOutcome(log, { item: item_, principal: principal })),
+      {
+        nondet item_ = STRS.oneOf()
+        nondet qty = INTS.oneOf()
+        nondet of_ = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        addItem(item_, qty, of_, id, principal, addItemOutcome(log, { item: item_, qty: qty, of: of_, principal: principal }))
+      },
+      {
+        nondet item_ = STRS.oneOf()
+        nondet principal = STRS.oneOf()
+        nondet id = IDS.oneOf()
+        noteItem(item_, id, principal, noteItemOutcome(log, { item: item_, principal: principal }))
+      },
       count,
-      showItem(item_),
+      {
+        nondet item_ = STRS.oneOf()
+        showItem(item_)
+      },
       all { log' = log, answered' = answered },
     }
   }

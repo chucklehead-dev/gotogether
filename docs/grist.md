@@ -964,10 +964,13 @@ with a test that fails without it:
   failing. `gristtest.Generated` fails a module without those imports
   (ablated: it does), without running quint (every validation
   typechecks the model).
-- **The read set is a parameter of triples** (`reads: List[(str, str,
+- **The read set is a parameter of triples** (`reads: Set[(str, str,
   str)]`, `readsOf` in the action), which the binding's default template
-  renders as literals (`toList`): a generated binding needs no template
-  for it, and the "no model-level ITF" log (§0.8) is gone.
+  renders as literals: a generated binding needs no template for it,
+  and the "no model-level ITF" log (§0.8) is gone. A set, not a list
+  (§0.10): a read set has no order, and the generated `step`'s
+  `triplesOf` folding a set into a list was outside the Go evaluator's
+  fragment.
 - **Names**: a parameter Quint reserves (`of`, `item`, `size`: quint's
   built-ins, read from its own list) is renamed (`of_`, with the binding's
   template); an integer tag, a pointer argument and a JSON name that is
@@ -1037,6 +1040,18 @@ without it:
   try). It now keys by tenant and id, skips denied calls, and requires
   of the store one outcome per key (key-reuse refusals aside) and each
   outcome a client was told (`TestAnswered`).
+- **The generated `step` was outside the Go evaluator's fragment**
+  (internal/qeval's `TestAgreesWithQuint`, red since wallet-grist
+  landed): grist.qnt's `triplesOf` folded a command's needed reads, a
+  set, into a list, an order-dependent fold, and the step drew every
+  block's arguments in one product of nondets (wallet's 98304
+  successors, past the evaluator's 65536). Read sets are sets end to
+  end (`readsOf`, `triplesOf`, `covers`, `conditionHolds`; the action's
+  `reads: Set[(str, str, str)]`, rendered by the default template), and
+  each branch of `step` draws its own arguments. Nothing is weaker: a
+  read set's order never meant anything (`covers` asks for some read,
+  `conditionHolds` for every one), and the step's successors are the
+  same.
 - **The starter's stub of a query whose result has no scalar field** was
   `{  }`, which does not parse; it is `{ unit: true }`, the record type
   and the binding's answer (`TestStarterEmptyResult`).
@@ -1696,7 +1711,7 @@ events the model computes otherwise is a Mismatch: a raw append is
 caught by the next step of its tenant, not where it happened.
 
 **The read set is a step argument**: `readPos` (P) and `reads`
-(a list of (type, tag key, tag value) triples; key "" for a type-only
+(a set of (type, tag key, tag value) triples; key "" for a type-only
 read), so grist.qnt's conditional-append property (§3.3) is checked
 against what the decision read, not assumed. Without them the property
 would hold vacuously; and since they are the runtime's own report, the
