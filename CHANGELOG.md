@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtest.MutateSteps` and `gotogether validate -mutate-steps`: a mutant
+  the binding refuses (a field it reads removed) is `FateMalformed`, in
+  no score, not killed: a real log like it is a tool error (exit 2), no
+  verdict, as a mutant Reconstruct refuses already was.
 - `gotogether validate -replay` says "not reproduced" (exit 1) for a
   verdict of another cause or at another action: `RunVerdict.Same`
   compares incomplete's and no verdict's cause (no settle is not

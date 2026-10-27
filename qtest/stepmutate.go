@@ -17,8 +17,7 @@ import (
 const (
 	// FateKilled: the mutant's verdict is not the original's: it fails
 	// where the original conformed (a rejection, a mismatch, a
-	// violation), the binding refuses it (a field it reads removed), or
-	// it is no finished run where the original finished.
+	// violation), or it is no finished run where the original finished.
 	FateKilled = "killed"
 	// FateSurvived: the mutant's verdict is the original's: the check
 	// does not read what it changed.
@@ -27,12 +26,17 @@ const (
 	// budget, a lost tail's eventual val, a failure a dropped step may
 	// explain: the gap op's): neither killed nor survived.
 	FateUndecided = "undecided"
-	// FateMalformed: Reconstruct refused the mutant's log with an error
-	// issue (an overlap, a cycle, a completion before its invocation; a
-	// gap is the verdict's, dropped steps): the recorder's checks stopped
-	// it, not the model's or the binding's. qtrace.Mutations leaves out
-	// the mutants it can see would be; one that is anyway is reported
-	// with its issue, and counts in no score.
+	// FateMalformed: the mutant was refused before a verdict, as a real
+	// log like it is (a tool error, validate's exit 2, never a FAIL):
+	// Reconstruct refused it with an error issue (an overlap, a cycle, a
+	// completion before its invocation; a gap is the verdict's, dropped
+	// steps), or the binding could not plan it (a field it reads
+	// removed, a process change it has no restart for: "refused by the
+	// binding"). No check of the model's judged it, so it counts in no
+	// score and meets no claim: a refusal says the binding needs the
+	// field, not that a run without it fails. qtrace.Mutations leaves out
+	// the mutants it can see Reconstruct would refuse; one that is anyway
+	// is reported with its issue.
 	FateMalformed = "malformed"
 )
 
@@ -40,7 +44,7 @@ const (
 // mutant, and what its verdict made of it.
 type StepMutation struct {
 	qtrace.StepMutant
-	// Fate is FateKilled, FateSurvived or FateUndecided.
+	// Fate is FateKilled, FateSurvived, FateUndecided or FateMalformed.
 	Fate string
 	// Why is a killed or undecided mutant's verdict, as a report's result
 	// line says it ("mismatch after deposit", "violates noOverdraft"), or
@@ -171,8 +175,9 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 		used = cc.Binding.UsedFields(cc.Model)
 	}
 	// a mutant the binding cannot plan (a field it reads removed, a
-	// process change it has no restart for) is refused before quint: its
-	// plan's error is the kill, not a tool's failure
+	// process change it has no restart for) is refused before quint, as
+	// a real log like it is a tool error: malformed, not killed (it once
+	// counted as a kill, a score for a check no model made)
 	var todo [][]qtrace.Step
 	var at []int
 	for _, m := range qtrace.Mutations(steps, mopts...) {
@@ -184,7 +189,7 @@ func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, op
 			// its first line: the fix that follows is the binding's
 			// for a field missing by accident, not by a mutant's design
 			why, _, _ := strings.Cut(err.Error(), "\n")
-			sm.Fate, sm.Why = FateKilled, "refused by the binding: "+why
+			sm.Fate, sm.Why = FateMalformed, "refused by the binding: "+why
 		} else {
 			todo = append(todo, m.Steps)
 			at = append(at, len(rep.Mutants))
@@ -315,7 +320,8 @@ func (r *StepMutationReport) Survived() []StepMutation { return r.ofFate(FateSur
 // Undecided are the mutants with no verdict.
 func (r *StepMutationReport) Undecided() []StepMutation { return r.ofFate(FateUndecided) }
 
-// Malformed are the mutants Reconstruct refused (FateMalformed).
+// Malformed are the mutants refused before a verdict, by Reconstruct or
+// the binding (FateMalformed).
 func (r *StepMutationReport) Malformed() []StepMutation { return r.ofFate(FateMalformed) }
 
 func (r *StepMutationReport) ofFate(f string) []StepMutation {
@@ -347,7 +353,7 @@ func (r *StepMutationReport) String() string {
 		fmt.Fprintf(&b, ", %d undecided (no verdict)", u)
 	}
 	if x > 0 {
-		fmt.Fprintf(&b, ", %d malformed (refused by Reconstruct, in no score)", x)
+		fmt.Fprintf(&b, ", %d malformed (refused before a verdict, by Reconstruct or the binding: in no score)", x)
 	}
 	b.WriteString("\n")
 	ops, n := r.counts()
@@ -448,7 +454,8 @@ func (c StepClaim) String() string { return c.sel.String() + " " + c.fate }
 // mutant (a selector that names none, a misspelled action or field,
 // would hold for nothing), and every one it names has its fate. An
 // undecided mutant meets no claim (raise the search's budget), nor does
-// a malformed one (Reconstruct refused it: no question of the model's).
+// a malformed one (Reconstruct or the binding refused it: no question
+// of the model's).
 func (r *StepMutationReport) Expect(t testing.TB, claims ...StepClaim) {
 	t.Helper()
 	for _, c := range claims {

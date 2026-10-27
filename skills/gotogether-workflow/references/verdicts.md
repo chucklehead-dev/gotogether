@@ -113,10 +113,10 @@ seeds, not by hand.
   (`.Index(i)` for one step). A claim whose selector names no mutant
   fails (a misspelled action or field), as does one any named mutant
   contradicts; an undecided mutant (no verdict) meets neither. A mutant
-  is killed when it fails where the original conformed, when the
-  binding refuses it (a field it reads removed), or when it does not
-  finish where the original finished; it survived with the original's
-  verdict; one Reconstruct refused (an overlap, a cycle) is
+  is killed when it fails where the original conformed, or when it
+  does not finish where the original finished; it survived with the
+  original's verdict; one refused before a verdict, by Reconstruct (an
+  overlap, a cycle) or by the binding (a field it reads removed), is
   malformed, never killed, and in no score;
 - a shrink of a driver's actions: `qtest.ShrinkActions(t, actions,
   qtest.ActionShrink[A]{...}).Expect(t, qtest.Violates("inv"),

@@ -14,7 +14,9 @@ import (
 // validate -mutate-steps prints a passing log's observation mutants by
 // op, and its survivors: a deposit's balance off by one is killed (the
 // expect compares it); the last withdrawal dropped survives (no later
-// step observes the balance). A failing log judges none; the narrowing
+// step observes the balance); a field the binding reads removed is
+// malformed (refused, as a log without it is: a tool error), in no
+// score. A failing log judges none; the narrowing
 // flags need -mutate-steps, and an unknown op names the ops.
 func TestValidateMutateSteps(t *testing.T) {
 	t.Parallel()
@@ -43,9 +45,10 @@ func TestValidateMutateSteps(t *testing.T) {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}
 	for _, want := range []string{
-		"observation mutants: 14, 13 killed (93%), 1 survived",
+		"observation mutants: 14, 9 killed (90%), 1 survived, 4 malformed (refused before a verdict, by Reconstruct or the binding: in no score)",
 		"  drop           2       1         1          0",
-		"  corrupt       12      12         0          0",
+		"  corrupt       12       8         0          0 (4 malformed)",
+		"malformed: corrupt obs.balance of deposit (recorder acct seq 1): 5 removed (refused by the binding: ",
 		"survived: drop of withdraw (recorder acct seq 2)",
 		"RESULT: PASS",
 	} {

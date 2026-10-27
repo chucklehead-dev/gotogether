@@ -49,16 +49,18 @@ mutated; they are renumbered with their recorder's steps.
 ## Fates
 
 - **killed**: the mutant fails where the original conformed (a
-  rejection, a mismatch, a violation), the binding refuses it (a field
-  it reads removed: `refused by the binding`), or, if the original
+  rejection, a mismatch, a violation), or, if the original
   finished (`Finishes`), the mutant does not (a completion dropped
   leaves its call pending).
 - **survived**: the same verdict as the original's.
 - **undecided**: no verdict (a search out of its budget, a lost tail),
   or a survivor whose bounds went unjudged where the original's were
   judged: neither. Raise the budget.
-- **malformed**: Reconstruct refused the mutant's log (a gap, an
-  overlap, a cycle): the recorder's checks stopped it, not the model's.
+- **malformed**: refused before a verdict, as a real log like it is (a
+  tool error, exit 2): Reconstruct refused the mutant's log (an overlap,
+  a cycle), or the binding could not plan it (a field it reads removed:
+  `refused by the binding`, which says the binding needs the field, not
+  that a run without it fails). No check of the model's stopped it.
   Mutations leaves out what it can see would be; one that is anyway is
   reported with its issue, in no score, and meets no claim.
 

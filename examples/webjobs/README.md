@@ -186,13 +186,13 @@ judges the joined steps with `qtest.MutateSteps`.
 | drop | 4 | 4 | 0 | a job's creation dropped leaves its finish rejected; a click's answer dropped leaves its call pending (`Finishes`) |
 | dup | 4 | 2 | 2 | the page's answers and acks are sets, so a submit or a cancel recorded twice changes nothing; a creation recorded twice violates `createdOnce` (it survived before the ghost count of creations: a server that recreated a finished job reset it to running unseen; the rerunFinished mutant is that server) |
 | swap | 4 | 2 | 2 | two submits, and a submit and a show, commute; a creation swapped with its job's finish is rejected, and a cancellation swapped with the next job's creation (taking its later time) violates `cancelHonoured` |
-| corrupt | 4 | 4 | 0 | a submit answered 199 violates `noFailedRequest` (a submit's answer is 202 or 200, anything else a failure; it survived when only 0 and 5xx counted); a key emptied violates `answerIsItsJob`; a show's status removed is refused by the binding |
+| corrupt | 4 | 3 | 0 | a submit answered 199 violates `noFailedRequest` (a submit's answer is 202 or 200, anything else a failure; it survived when only 0 and 5xx counted); a key emptied violates `answerIsItsJob`; a show's status removed is malformed, neither: the binding refuses it, as it refuses a page trace without it (a tool error, exit 2), so it counts in no score |
 | retime | 4 | 0 | 4 | a step moves at most to its actor's next step, so every retime keeps the order the model reads (a creation stays before the submit it answers); only a job's run and a committed job shown are bounded in time, and the four sampled moves (18ms to 111ms, a drain by 28µs) stay within both bounds |
 
 The 199 and the second creation were the two a reader acts on: each
 was a recording the check passed that the server never produced, so
-each was a claim to add to the model, and both are now (12 of 20
-killed; with retime bounded by its actor's next step, the two retimes
+each was a claim to add to the model, and both are now (11 of 19
+killed, the status removed malformed; with retime bounded by its actor's next step, the two retimes
 it killed before, by moving a creation past its submit, are no longer
 made). The survivors left are equivalent by the model's design: answers
 are sets, two submits or a submit and a show commute, and no bound reads

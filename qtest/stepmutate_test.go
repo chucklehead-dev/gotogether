@@ -42,25 +42,36 @@ func TestMutateStepsBank(t *testing.T) {
 	rep.Original.Expect(t, Conforms())
 	rep.Expect(t,
 		Killed(offByOne),
-		Killed(StepOp("corrupt").Action("deposit").Field("obs.balance")), // -1, and removed: refused, the expect reads it
-		Killed(StepOp("drop").Index(0)),                                  // alice cannot withdraw what was not deposited
-		Killed(StepOp("dup").Index(1)),                                   // the copy's balance is 2, the model's 4
-		Killed(StepOp("swap").Action("withdraw")),                        // alice's balance observed is another order's
+		Killed(StepOp("corrupt").Action("deposit").Field("obs.balance").Change("-1")),
+		Killed(StepOp("drop").Index(0)),           // alice cannot withdraw what was not deposited
+		Killed(StepOp("dup").Index(1)),            // the copy's balance is 2, the model's 4
+		Killed(StepOp("swap").Action("withdraw")), // alice's balance observed is another order's
 		Killed(StepOp("corrupt").Action("transfer").Field("amount").Change("-1")),
 		Survived(StepOp("drop").Action("transfer")),
 		Survived(StepOp("dup").Action("transfer")),
 		Survived(StepOp("swap").Action("deposit")),
 		Survived(StepOp("corrupt").Action("transfer").Field("amount").Change("+1")),
 	)
+	// a field the expect reads removed: the binding refuses it, as it
+	// refuses a real log without it (a tool error, exit 2): malformed, in
+	// no score, never killed
+	removed := StepOp("corrupt").Action("deposit").Field("obs.balance").Change("remove")
+	var refusals int
 	for _, m := range rep.Mutants {
-		if m.Fate == FateKilled && m.Field == "obs.balance" && m.Change == "remove" && !strings.Contains(m.Why, "refused by the binding") {
-			t.Errorf("%s: a field the expect reads removed is the binding's refusal", m)
+		if removed.matches(m) && (m.Fate != FateMalformed || !strings.Contains(m.Why, "refused by the binding")) {
+			t.Errorf("%s: a field the expect reads removed is the binding's refusal, malformed", m)
+		}
+		if strings.Contains(m.Why, "refused by the binding") {
+			refusals++
 		}
 		if m.Op == "corrupt" && m.Unread {
 			t.Errorf("%s: marked unread, but the binding reads every field of the log", m)
 		}
 	}
-	if s := rep.String(); !strings.Contains(s, "  corrupt ") || !strings.Contains(s, "survived: drop of transfer") {
+	if refusals == 0 || len(rep.Malformed()) < refusals {
+		t.Errorf("%d refusals, %d malformed: a refusal is malformed, outside the score", refusals, len(rep.Malformed()))
+	}
+	if s := rep.String(); !strings.Contains(s, "  corrupt ") || !strings.Contains(s, "survived: drop of transfer") || !strings.Contains(s, "malformed (refused before a verdict, by Reconstruct or the binding: in no score)") {
 		t.Errorf("the table:\n%s", s)
 	}
 

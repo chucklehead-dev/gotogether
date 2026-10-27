@@ -3603,16 +3603,18 @@ corrupt an argument or observation, retime, move to another actor),
 each keeping the recorder's contract (dense seqs, calls and losses
 renumbered), so the model judges it and not Reconstruct's gap and
 duplicate checks. `qtest.MutateSteps` judges each through the verdict
-cache: killed (fails where the original conformed, refused by the
-binding, or unfinished where the original finished), survived, or
-undecided; a corruption of a field the binding does not read is marked
+cache: killed (fails where the original conformed, or unfinished where
+the original finished), survived, or undecided; a corruption of a field the binding does not read is marked
 `Unread`. The review found kills that were not the model's: a reactor
 into an actor whose Lamport keys contradicted its thread was refused by
 Reconstruct's cycle check (such candidates are left out, and one refused
 anyway is `FateMalformed`, in no score, never killed), and a retime past
 its actor's next step sent a within's clock back (a retime now stays
 before it, a settle and a watermark, and a survivor whose bounds went
-unjudged is undecided). The brute force it is checked against was rewritten as a
+unjudged is undecided). G1 found a third: a mutant the binding could
+not plan (a field it reads removed) counted as killed, though a real
+log like it is a tool error (exit 2), no verdict; it is malformed too,
+refused before a verdict. The brute force it is checked against was rewritten as a
 naive enumeration sharing no code with Mutations, over six shapes. On
 webjobs' journey it found two gaps in the model, a job created twice
 and a submit answered 199, both now claims.
