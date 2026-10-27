@@ -28,22 +28,11 @@ var shrinks = map[string]int{
 
 // rerunOf reruns actions against a fresh mutant server (the program
 // bin) each time, drained before its steps come back: Reset is nil. A
-// rerun of no actions plays nothing and returns no steps of the server's
-// (its drain and settle, which it records at every shutdown, are no work
-// a rerun left behind: each rerun's server is new).
+// rerun of no actions records the server's drain and settle alone, the
+// same each time, as the shrinker's reset check wants.
 func rerunOf(t *testing.T, bin string) func(ctx context.Context, actions []journey.Action) ([]qtrace.Step, error) {
 	return func(ctx context.Context, actions []journey.Action) ([]qtrace.Step, error) {
-		steps, err := journey.Rerun(ctx, journey.Program{Bin: bin, Dir: t.TempDir(), Seed: 1, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, client(), actions)
-		if err != nil || len(actions) > 0 {
-			return steps, err
-		}
-		var none []qtrace.Step
-		for _, s := range steps {
-			if s.Action != "drained" && !s.Settled {
-				none = append(none, s)
-			}
-		}
-		return none, nil
+		return journey.Rerun(ctx, journey.Program{Bin: bin, Dir: t.TempDir(), Seed: 1, MinWork: 100 * time.Millisecond, MaxWork: 300 * time.Millisecond}, client(), actions)
 	}
 }
 

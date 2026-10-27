@@ -253,11 +253,10 @@ submission in 27 reruns, cancelIgnored's (14) to a submission and its
 cancel in 39, both 1-minimal and reproducing 10 of 10 (about 4 minutes
 each, at load 15).
 
-A rerun of no actions (the shrinker's check that nothing is left
-behind) starts and stops a fresh server, which records its drain and a
-settle at every shutdown; `rerunOf` returns none of those two for an
-empty rerun, since each rerun's server is new and leaves nothing
-behind.
+A rerun of no actions (the shrinker's check that a reset leaves
+nothing behind) starts and stops a fresh server, which records its
+drain and a settle at every shutdown: the same steps each time, which
+the check accepts.
 
 ## What -short runs, and its miss chance
 
