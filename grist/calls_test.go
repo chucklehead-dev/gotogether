@@ -426,14 +426,17 @@ func TestCallDeclarations(t *testing.T) {
 
 // The default double (DefaultHandlers, what gristsim serves a dependency
 // given no handlers): a Keyed call is applied once per key, answered with
-// the zero response, and a later try of the key replayed from that first
-// answer (bankPayReplayed, the served record's fields and place); an
-// unkeyed call is applied every time.
+// its response (one with no fields), and a later try of the key replayed
+// from that first answer (bankPayReplayed, the served record's fields and
+// place); an unkeyed call is applied every time. A dependency with a call
+// answering fields has none: DefaultHandlers panics, naming the call, its
+// fields and the fix.
 func TestDefaultHandlers(t *testing.T) {
+	type ack struct{}
 	a := grist.New("defaults")
 	bank := grist.NewDependency(a, "bank")
-	grist.NewCall[payReq, payResp](bank, "pay", grist.Keyed())
-	grist.NewCall[payReq, payResp](bank, "tip")
+	grist.NewCall[payReq, ack](bank, "pay", grist.Keyed())
+	grist.NewCall[payReq, ack](bank, "tip")
 	sink := &qobs.MemorySink{}
 	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
 	tr := grist.Local(grist.DefaultHandlers(bank))
@@ -441,11 +444,22 @@ func TestDefaultHandlers(t *testing.T) {
 	for _, call := range []string{"pay", "pay", "tip", "tip"} {
 		for _, key := range []string{"payer/t1/1", "payer/t1/2"} {
 			out, err := tr.Call(ctx, grist.CallInfo{App: "defaults", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 2, Key: key}, call, body)
-			if err != nil || string(out) != `{"ref":""}` {
-				t.Errorf("%s %s: %s, %v: want the zero response", call, key, out, err)
+			if err != nil || string(out) != `{}` {
+				t.Errorf("%s %s: %s, %v: want the acknowledgement", call, key, out, err)
 			}
 		}
 	}
+	refs := grist.NewDependency(a, "refs")
+	grist.NewCall[payReq, ack](refs, "ack")
+	grist.NewCall[payReq, payResp](refs, "pay", grist.Keyed())
+	func() {
+		defer func() {
+			if r := fmt.Sprint(recover()); !strings.Contains(r, "call refs/pay answers a response with fields (ref), which a default double cannot know: give dependency refs handlers that answer as it would (Call.Handler") {
+				t.Errorf("DefaultHandlers of a call answering a ref: panic %q, want it to name the call, its fields and the fix", r)
+			}
+		}()
+		grist.DefaultHandlers(refs)
+	}()
 	steps := sink.Steps()
 	served, replayed, tips := byAction(steps, "bankPayServed"), byAction(steps, "bankPayReplayed"), byAction(steps, "bankTipServed")
 	if len(served) != 2 || len(replayed) != 2 || len(tips) != 4 || len(byAction(steps, "bankTipReplayed")) != 0 {

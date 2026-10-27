@@ -19,12 +19,16 @@ type Heard struct {
 	Echo string `json:"echo"`
 }
 
+// Ack is an answer with no fields: an acknowledgement, which a default
+// double may give.
+type Ack struct{}
+
 // echoApp is notes with a processor that shouts each note's topic to an
-// echo dependency, at least once.
-func echoApp() (*grist.App, *grist.Dependency, *grist.Call[Shout, Heard]) {
+// echo dependency, at least once, answered with R.
+func echoApp[R any]() (*grist.App, *grist.Dependency, *grist.Call[Shout, R]) {
 	a := app()
 	echo := grist.NewDependency(a, "echo")
-	shout := grist.NewCall[Shout, Heard](echo, "shout", grist.Keyed())
+	shout := grist.NewCall[Shout, R](echo, "shout", grist.Keyed())
 	shouted := grist.NewEvent[Noted](a, "shouted-at")
 	grist.NewCommand(a, "shout", func(r *grist.Reads, c Note) ([]grist.Event, error) {
 		return []grist.Event{shouted.Of(Noted{Key: c.Key})}, nil
@@ -43,7 +47,7 @@ func echoApp() (*grist.App, *grist.Dependency, *grist.Call[Shout, Heard]) {
 // dependency given handlers lacking a call is the run's error naming the
 // fix (one given none gets its default double: TestDefaultDouble).
 func TestDoublesServed(t *testing.T) {
-	a, echo, shout := echoApp()
+	a, echo, shout := echoApp[Heard]()
 	runs := 0
 	doubles := func() gristsim.Doubles {
 		runs++
@@ -90,12 +94,18 @@ func TestDoublesServed(t *testing.T) {
 
 // A dependency the run gives no handlers is served by its default double
 // (grist.DefaultHandlers), a Service of its own name as any double: a
-// Keyed call applied once per key, answered with the zero response, and a
-// later try of a key (the Service's duplicates and the effect's retries
-// after a lost answer) answered from that first answer as a replay, never
-// a second served record. Without it the run is an error (no double).
+// Keyed call applied once per key, answered with its response (one with
+// no fields), and a later try of a key (the Service's duplicates and the
+// effect's retries after a lost answer) answered from that first answer
+// as a replay, never a second served record. A dependency whose call
+// answers fields has no default double: the run is an error naming the
+// call, its fields and the fix.
 func TestDefaultDouble(t *testing.T) {
-	a, _, _ := echoApp()
+	if err := gristsim.Run(qenv.NewSeeded(1), func() *grist.App { a, _, _ := echoApp[Heard](); return a }(), gristsim.Config{Tenants: []string{"t1"}}); err == nil ||
+		!strings.Contains(err.Error(), "call echo/shout answers a response with fields (echo), which a default double cannot know: give dependency echo handlers") {
+		t.Errorf("Run of a call answering fields, no double: %v; want the run's error naming the call, its fields and the fix", err)
+	}
+	a, _, _ := echoApp[Ack]()
 	sink := &qobs.MemorySink{}
 	base := qenv.NewSeeded(5)
 	base.Rates = qenv.NoFaults.Set("rpc.echo.request", 0.4).Set("rpc.echo.response", 0.4)
@@ -109,8 +119,8 @@ func TestDefaultDouble(t *testing.T) {
 		switch {
 		case s.Invocation:
 		case s.Action == "echoShoutServed" || s.Action == "echoShoutReplayed":
-			if s.Outcome != "ok" || s.Args["echo"] != "" {
-				t.Errorf("%s %v: want ok with the zero response", s.Action, s)
+			if s.Outcome != "ok" {
+				t.Errorf("%s %v: want ok", s.Action, s)
 			}
 			if s.Action == "echoShoutReplayed" {
 				replayed++

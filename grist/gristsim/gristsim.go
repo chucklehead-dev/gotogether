@@ -120,8 +120,10 @@ type Config struct {
 	// (grist.Call.Handler). A dependency it gives no handlers is served by
 	// its default double (grist.DefaultHandlers: a Keyed call applied once
 	// per key, its later tries replayed; an unkeyed one every time, each
-	// answered with the zero response); one it gives handlers lacking a
-	// call is the run's error. Per run, so a double's state (the keys it
+	// answered with its response, which has no fields); one with a call
+	// whose response has fields has no default (what a dependency answers
+	// there is its own), and is the run's error, as is one given handlers
+	// lacking a call. Per run, so a double's state (the keys it
 	// applied) is its run's.
 	Doubles func() Doubles
 	// Setup builds the application's other dependencies once per
@@ -157,6 +159,17 @@ type callResponse struct {
 	Body     json.RawMessage
 	Rejected string
 	Err      string
+}
+
+// defaultDouble is d's default double, or why it has none: a call
+// answering a response with fields (grist.DefaultHandlers' panic).
+func defaultDouble(d *grist.Dependency) (h grist.Handlers, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	return grist.DefaultHandlers(d), nil
 }
 
 // simTransport is a dependency's qenv.Service as a grist.Transport.
@@ -198,7 +211,10 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (fun
 		h, ok := ds[d]
 		if !ok {
 			// none given: the default double, this run's own
-			h = grist.DefaultHandlers(d)
+			var err error
+			if h, err = defaultDouble(d); err != nil {
+				return nil, fmt.Errorf("gristsim: dependency %s of %s has no double in Config.Doubles: %w", d.Name(), app.Name, err)
+			}
 		}
 		if err := h.Serves(d); err != nil {
 			return nil, fmt.Errorf("gristsim: Config.Doubles' handlers of %s: %w", d.Name(), err)

@@ -70,18 +70,21 @@ for it. No binding is written by hand.
    holding the trigger), and gristsim serves each dependency as a
    `qenv.Service` named after it (`rpc.bank.*`), by default with its
    **default double** (`grist.DefaultHandlers(dep)`: a `Keyed` call
-   applied once per key and answered with the zero response, a later try
-   of the key replayed from that first answer; an unkeyed call applied
-   every time): most apps write no double. Give one only to answer
-   otherwise (a decline, a receipt) or as a mutant (a double that applies
-   every try), in the run's `Config.Doubles` (`func() gristsim.Doubles`:
+   applied once per key and acknowledged, a later try of the key replayed
+   from that first answer; an unkeyed call applied every time), for a
+   dependency whose calls answer no fields (an acknowledgement, `struct{}`):
+   most apps write no double for those. A call whose response has fields
+   (a receipt's reference) has no default: what the dependency answers is
+   its own, so the run is an error naming the fix until you give one.
+   Give a double to answer (a receipt, a decline) or as a mutant (a double
+   that applies every try), in the run's `Config.Doubles` (`func() gristsim.Doubles`:
    `gristsim.Doubles{Bank: grist.Handlers{Pay.Handler(f)}}`, per run; a
    deduplicating double answering a retry from its first answer calls
    `grist.Replayed(ctx)`, recorded and judged as `bankPayReplayed`, and
    keeps each key's first answer, a refusal included; `grist.CallKey(ctx)`
    the key). Outside a simulation attach a transport where the node
    starts (`Bank.With(ctx, grist.Local(handlers))` in `grist.Dependencies`
-   or `gristtest.TierConfig.Deps`; `grist.Local(grist.DefaultHandlers(Bank))`
+   or `gristtest.TierConfig.Deps`; `grist.Local(grist.DefaultHandlers(Mailer))`
    for the default in process), its site records going to the node's
    recorder. Do outside an effect, or of a call
    the processor does not list in `Uses`, is the effect's error. What is

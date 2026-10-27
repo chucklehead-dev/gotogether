@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
@@ -471,13 +472,30 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 // DefaultHandlers are the default double of d: what gristsim serves a
 // dependency the run gives no handlers (Config.Doubles), and what a test
 // or a binary may attach in process (d.With(ctx, grist.Local(...))). A
-// Keyed call is applied once per key and answered with its zero
-// response; a later try of the key gets that first answer, as a replay
-// (Replayed: recorded <call>Replayed and judged as one), so a key's first
-// answer is final. An unkeyed call is applied, and answered so, every
-// time. It refuses nothing. Each call of DefaultHandlers has its own
-// state (the keys applied): one per run.
+// Keyed call is applied once per key and answered with its response,
+// which has no fields (an acknowledgement); a later try of the key gets
+// that first answer, as a replay (Replayed: recorded <call>Replayed and
+// judged as one), so a key's first answer is final. An unkeyed call is
+// applied, and answered so, every time. It refuses nothing. Each call of
+// DefaultHandlers has its own state (the keys applied): one per run.
+//
+// It panics, naming the fix, if a call of d answers a response with
+// fields (a payment's reference): what a dependency answers there is its
+// own, and a made-up answer (the zero response, which no dependency
+// gives) would exercise one branch of the effect's handling of it, a
+// reference left empty unseen. Give such a dependency handlers that
+// answer as it would (Call.Handler).
 func DefaultHandlers(d *Dependency) Handlers {
+	for _, ci := range d.calls {
+		if fs, _ := scalarFields(ci.resp); len(fs) > 0 {
+			names := make([]string, len(fs))
+			for i, f := range fs {
+				names[i] = f.json
+			}
+			panic(fmt.Sprintf("grist.DefaultHandlers: call %s answers a response with fields (%s), which a default double cannot know: give dependency %s handlers that answer as it would (Call.Handler; in a simulation gristsim.Config.Doubles)",
+				ci.label(), strings.Join(names, ", "), d.name))
+		}
+	}
 	hs := make(Handlers, 0, len(d.calls))
 	for _, ci := range d.calls {
 		zero, _ := json.Marshal(reflect.New(ci.resp).Elem().Interface())
@@ -494,7 +512,7 @@ func DefaultHandlers(d *Dependency) Handlers {
 			applied[key] = true
 			mu.Unlock()
 			if again {
-				// its first answer, the zero response: final for the key
+				// its first answer, the acknowledgement: final for the key
 				Replayed(ctx)
 			}
 			return zero, nil
