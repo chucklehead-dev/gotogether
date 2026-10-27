@@ -384,7 +384,8 @@ func Markers(ctx context.Context, s store.Store) error {
 // (store.CheckCondition) and its checkpoint moved from the previous
 // commit's, each refusal names an event that breaks its condition or a
 // checkpoint that moved, and an append whose answer was transient is
-// committed exactly when its marker exists.
+// committed exactly when its marker exists. An append not committed
+// before its commit is retried, up to eight times.
 func ConcurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
@@ -427,8 +428,20 @@ func ConcurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 					a.move = &store.CheckpointMove{Processor: "p", From: cp, To: cp + 1}
 				}
 				qenv.Sleep(ctx, time.Duration(r.IntN(3))*time.Millisecond) // a decision's think time: others commit meanwhile
-				a.head, a.err = s.Append(ctx, "t1", store.Batch{Events: []store.Event{a.event}, Condition: &a.cond, Checkpoint: a.move,
-					Marker: &store.Marker{ID: a.id, Hash: a.id}})
+				// An append that lost the race before its commit (a
+				// *store.NotCommittedError: at repeatable read and
+				// serializable, most lost races) is retried as grist
+				// retries it, so the race reaches the condition: without
+				// it, a run at repeatable read once refused none.
+				for try := 0; ; try++ {
+					a.head, a.err = s.Append(ctx, "t1", store.Batch{Events: []store.Event{a.event}, Condition: &a.cond, Checkpoint: a.move,
+						Marker: &store.Marker{ID: a.id, Hash: a.id}})
+					var nc *store.NotCommittedError
+					if try == 8 || !errors.As(a.err, &nc) {
+						break
+					}
+					qenv.Sleep(ctx, time.Duration(1+r.IntN(3))*time.Millisecond)
+				}
 				results[i] = append(results[i], a)
 			}
 		})

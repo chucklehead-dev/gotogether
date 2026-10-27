@@ -60,7 +60,15 @@ metadata:
 spec:
   package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.9.0
 EOF
-kubectl wait function/function-patch-and-transform --for=condition=Healthy --timeout=300s >/dev/null
+# The package is pulled from xpkg.crossplane.io; a wait that times out
+# says why (the pull, the revision, the function's pod), not only that.
+if ! kubectl wait function/function-patch-and-transform --for=condition=Healthy --timeout=300s >/dev/null; then
+  kubectl describe function/function-patch-and-transform >&2 || true
+  kubectl get functionrevisions -o wide >&2 || true
+  kubectl -n crossplane-system get pods -o wide >&2 || true
+  kubectl -n crossplane-system get events --sort-by=.lastTimestamp 2>&1 | tail -40 >&2 || true
+  exit 1
+fi
 kubectl apply -f package/crds/ >/dev/null
 kubectl apply -f kind/platform.yaml >/dev/null
 kubectl wait xrd/appdatabases.platform.example.org --for=condition=Established --timeout=120s >/dev/null
