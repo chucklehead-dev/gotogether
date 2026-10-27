@@ -1614,6 +1614,32 @@ Five reviews after T, their findings ROADMAP's S track:
   adapters), a real-deployment nemesis and a per-PR tier are what a team
   shipping a Go service misses most.
 
+### Ninth review (after E)
+
+Two reviews after E, their findings ROADMAP's G track:
+- a probe of the newest code reproduced three wrong answers: a seq gap
+  (a dropped step) reported as a model FAIL and accepted by Mismatch,
+  SameFailure and ShrinkActions; `Minimal` true when the budget ran out
+  before the shrunk sequence's own rate and the last leak check; spec
+  imports missed by a regex (an instance import with a string constant,
+  one over lines), so the model cache, Verify and Bundle trusted an
+  incomplete file list. Suspected: webjobs' within read from snapshot
+  times, a fixed 1 ms of clock slack across hosts, MutateSteps counting
+  a binding's refusal as a kill;
+- architecture: the CLI links `testing` and qenv through qtest, so
+  shrinking and replay exist only inside `go test`; validate exports CLI
+  plumbing and the manifest's builder; qsql lacks the queries of an
+  outbox claim and a conditional debit;
+- a newcomer recorded an HTTP handler, validated its log, replayed a
+  manifest and shrank a journey from the docs alone. Every documented
+  name exists; the frictions were scaffold's paths relative to the
+  working directory, reports naming deleted files, a per-run recorder
+  for an HTTP server documented nowhere (only the serialising global
+  one), installed skills linking into the repository, and the Bombadil
+  adapter unpublished;
+- both suggested an example on two hosts with a collector, which
+  webjobs does not cover (G10).
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

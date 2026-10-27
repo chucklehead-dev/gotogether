@@ -13,8 +13,8 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: S1 → S2 → S5 → S3 → S4 → S6 → S7 → S9 → S8 → S10 → S11 → S12, S13;
-the items left from X, Y, T and E alongside; R5 when the maintainer says.
+Order: G1 → G2 → G3 → G4 → G5 → G6 → G7 → G8 → G9 → G10 → G11 → G12; the
+items left from S, X, Y, T and E alongside; R5 when the maintainer says.
 
 ## Release (R5)
 
@@ -25,6 +25,93 @@ R1–R4 are done (HISTORY, "Release readiness (R)").
 - **Left from R1.** Not checked here: golangci-lint's custom build of the
   plugin (no golangci-lint in this environment). The plugin's doc names the
   version to use.
+
+## Ninth review: from a demo to a deployment (G)
+
+From two reviews after E (HISTORY, "Ninth review (after E)"): a probe of
+the newest code for wrong answers and its seams with the older layers,
+and a newcomer recording an HTTP handler, validating its log, replaying
+a manifest and shrinking a journey from the docs alone. Bugs first; each
+item reviewed before the next. Sizes as in S.
+
+- **G1. Silent wrong answers (S each).**
+  - A seq gap (a dropped step) reported as a model FAIL ("mismatch after
+    deposit"), accepted by Mismatch, SameFailure and ShrinkActions, and
+    read by Finishes as not finished: a failure at or after a gap is no
+    verdict (dropped steps), as a lost tail's is; a mutation that drops
+    a step without renumbering.
+  - `ShrunkActions.Minimal` true when the budget ran out before the
+    shrunk sequence's own rate and the last empty rerun.
+  - Spec imports found by a regex that misses an instance import with a
+    string constant and one over lines: the model cache, Verify and
+    Bundle all trust it.
+  - `RunVerdict.Same` compares a reason's first word and the first
+    failing actor only; MutateSteps counts a binding's refusal (a tool
+    error on a real log) as killed.
+  - Suspicions: webjobs' within read from Bombadil's snapshot times, not
+    the page's; `RealTimeSlack` fixed at 1 ms across hosts (G8).
+- **G2. The CLI says what it did (S).** scaffold writes `spec:` and
+  `Binding:` relative to the working directory, not the file; a failed
+  scaffold leaves an empty file its retry refuses; binding errors number
+  steps from 0 in two places, without file:line or the fix (`restart:`);
+  help prints "(default 0)" after a stated default; an unknown command
+  prints usage without saying so (did you mean); validate's usage omits
+  half its flags; validate leaves a temporary directory per run.
+- **G3. Failures that can be followed (S).** qtest's reports name files
+  in a test's TempDir, gone when the test ends: keep them on failure or
+  say `GOTOGETHER_KEEP`; a claim naming no invariant or action says
+  did-you-mean; the strict-mode escape error outside qenv speaks of
+  qenv; `-mutate-steps` survivors that a binding's `outcomes: skip`
+  explains say so, and the outcome error suggests modelling the refusal
+  before `skip`.
+- **G4. A per-run recorder for an HTTP service (S).** Only
+  `qtest.Global()` is documented, which serialises tests;
+  `http.Server.BaseContext` with `qobs.WithRecorder` works in parallel
+  and is mentioned nowhere. Ship it (`qobs` middleware or a qtest
+  server) and teach it in gotogether-traces.
+- **G5. Shrinking and replay outside `go test` (M).** The CLI imports
+  qtest (and with it `testing` and qenv) for step mutants and evidence.
+  Move ShrinkActions', MutateSteps' and the manifest's cores out of
+  qtest, with qtest's `testing.TB` wrappers; then `validate.Replay` and
+  `gotogether shrink`.
+- **G6. API trim before R5 (S).** `validate.VerdictOf`, the Manifest
+  builder methods, `ModuleVersion`/`QuintVersion` internal; claims'
+  names side by side (Settles, Completes, Finishes; `-require-settle`
+  checks Finishes: `-require-finish`); SameFailure's fields from
+  binding's conjuncts, not a second parser; Mutations of composite
+  values, or a count of the fields not mutated.
+- **G7. Driver adapters, published (M).** bombadiltrace lives in an
+  unpublished example with its defaults: a published package for a
+  page's request log (invocation and completion from a request's own
+  answer, refs), Bombadil's reader and a Playwright reporter.
+- **G8. Across hosts (M).** A step's location separate from its
+  incarnation (Left from E); a declared clock skew per pair of
+  recorders in place of the fixed 1 ms; a collector-side watermark (an
+  OTel processor emitting `quint.complete_through_unix_nano` after a
+  flush).
+- **G9. qsql for a real service's queries (M).** Inequalities, ORDER BY
+  a non-key column with LIMIT, SKIP LOCKED, RETURNING, COUNT, a
+  transaction's own isolation; each checked against SQLite
+  differentially. The outbox claim and the conditional debit need them.
+- **G10. The reviewers' example: examples/shopfront (M-L).** A Go
+  storefront on a real database, its steps through an OTel collector
+  that drops some, driven by Playwright from another host and by a Go
+  client, Toxiproxy between it and the database. Teaches: G7's adapter,
+  ordering across hosts by a propagated request id, `-complete-through`
+  from the collector (dropped, uncollected, defect), a pseudonymized
+  manifest replayed in CI, ShrinkActions with a real Resetter (and a
+  mutant that keeps a cache across Reset: what the reset checks catch
+  and what they cannot), qnemesis faults remade in qenv, a strict
+  nightly. Proves G1's gaps, a killed process's tail as a loss, and a
+  manifest's replay on another machine.
+- **G11. Skills as installed (S).** Links into the repository rewritten
+  on install; `skills install -update`; a test that installs into a
+  temporary directory and resolves every link; gotogether-faults split
+  (about 4k words); AGENTS.md's layout and README's example rows
+  complete (payd, webjobs, qnemesis, sktrace) and shorter.
+- **G12. The cost of a -short verdict (S-M).** validate 1370 CPU s and
+  qtest 440, mostly quint: conformance under -short on internal/qeval,
+  quint confirming failures and a sample of passes, all of it nightly.
 
 ## Left from X
 
