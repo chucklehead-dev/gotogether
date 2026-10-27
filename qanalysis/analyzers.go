@@ -34,14 +34,19 @@ var All = []*analysis.Analyzer{Sim, Weave, Action}
 
 // Sim reports code in files that import qenv that escapes the simulation:
 // go statements, the wall clock, steps recorded with a background context
-// (qlint.SimFile). Test files are checked, as by `gotogether lint -sim`: a
-// System's Run closure lives in one.
+// (qlint.SimFileTyped). Test files are checked, as by `gotogether lint -sim`: a
+// System's Run closure lives in one. With the package's types it knows a
+// function by what its name denotes, so it finds what the CLI's syntactic
+// check cannot: a function value or call through a dot import, and no
+// false finding for a local variable that shadows an import's name.
 var Sim = &analysis.Analyzer{
 	Name: "quintsim",
 	Doc:  "report code that escapes a qenv simulation (go statements, the wall clock, steps recorded with context.Background)",
 	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run: func(pass *analysis.Pass) (any, error) {
-		return nil, report(pass, qlint.SimFile, true)
+		return nil, report(pass, func(fset *token.FileSet, f *ast.File) []qlint.Finding {
+			return qlint.SimFileTyped(fset, f, pass.TypesInfo)
+		}, true)
 	},
 }
 

@@ -6,7 +6,7 @@ yaml.v3 and Hegel.
 
 | Analyzer | Reports | Same as |
 |---|---|---|
-| `quintsim` | in files importing qenv: `go` statements, the wall clock, steps recorded with `context.Background()` | `gotogether lint -sim` |
+| `quintsim` | in files importing qenv: `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()` | `gotogether lint -sim` |
 | `quintweave` | unmarked `go` statements, sync method values, embedded sync types (for packages woven by qenv/weave) | `gotogether lint -weave` |
 | `quintaction` | `//quint:action` without `action:`; expressions using locals (only parameters, the receiver and named results are in scope on return); with `-binding`: actions not in the model, fields the binding uses but the annotation does not record | `gotogether lint -binding -src` |
 
