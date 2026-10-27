@@ -154,7 +154,10 @@ func IsFault(kind string) bool { return choice.IsFault(kind) }
 // package (WithContext, Recorder, Replay), or nil if it has none.
 func EntropyOf(c Chooser) func(n int) []byte { return choice.EntropyOf(c) }
 
-// NewSeeded returns a Seeded chooser with DefaultRates.
+// NewSeeded returns a Seeded chooser with DefaultRates. The seed is a
+// uint64, as math/rand/v2's PCG takes one: an int or int64 seed (a loop
+// index, a flag) converts with uint64(seed), every value a seed of its
+// own, a negative one included.
 func NewSeeded(seed uint64) *Seeded { return choice.NewSeeded(seed) }
 
 // NewPCT returns a PCT scheduler of depth d over base (its other

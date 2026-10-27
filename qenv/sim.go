@@ -1014,6 +1014,11 @@ var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
 // Run schedules tasks until none can run and no deadline is within d of
 // virtual time (the system is quiet), or the virtual time has advanced by
 // d. Tasks still waiting then (workers waiting for messages) stay parked.
+// Run(0) is no unbounded run: it runs what can run at the current
+// instant (deadlines that fall on it included) and returns without
+// advancing virtual time, a way to let tasks just spawned reach their
+// first wait; give a horizon to let time pass, or Settle to run until
+// quiet. On the native runtime Run(d) sleeps d of real time.
 // A panic in a task is re-raised here, with its own value (PanicStack has
 // the task's stack).
 func (s *Sim) Run(d time.Duration) error {

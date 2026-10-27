@@ -22,6 +22,18 @@ shrinking removes faults.
   `database/sql` implements them. `qenv.Retry(ctx, db, n, fn)` begins,
   runs fn and commits, again on a conflict: fn returns nil to commit and
   never calls Commit itself.
+- **GetForUpdate or Get:** a row a transaction reads and then writes
+  from what it read (a balance debited, a stock decremented, a "done"
+  record checked before acting) is read with `GetForUpdate`, as SELECT
+  ... FOR UPDATE: under `SnapshotIsolation` two such transactions that
+  each `Get` the row both read the old value and the second's commit
+  aborts only if they write the same key (two rows checked together, a
+  joint balance, still skew), and under `ReadCommitted` the last writer
+  wins, a lost update. `Get` is for rows only read (a probe, a lookup
+  that decides no write). `Serializable` aborts what `Get` lets through,
+  but the code should not rely on the level it is tested at:
+  examples/wallet's `ReadThenWrite` and `WriteSkew` mutants are the two
+  mistakes, each caught.
 - **Typed records:** declare an app's own records once as a
   `qenv.Table[T]` and read them without assertions:
 
@@ -97,7 +109,7 @@ provider := qenv.NewService(s, "provider", nil, p.Handle)          // its own pr
 api := s.Process("api", true, func(context.Context) {})              // crashable; handlers run in it
 s.Process("payments", true, func(ctx context.Context) { app.RunPayments(ctx, inbox{q}) })
 s.Spawn("client", func(ctx context.Context) { /* calls that retry on qenv.ErrTimeout */ })
-s.Run(20 * time.Second)       // with faults
+s.Run(20 * time.Second)       // with faults for 20s of virtual time; Run(0) lets no time pass
 return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; records the settle
 ```
 
@@ -354,6 +366,8 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
     uniform random schedules. Schedule by priorities instead:
     `ExploreConfig{Chooser: func(seed uint64) qenv.Chooser { return
     qenv.NewPCT(base, seed, 3, 500) }}` with `base` a `qenv.NewSeeded(seed)`
+    (seeds are `uint64`: `qenv.NewSeeded(uint64(i))` for an `int` or
+    `int64` one)
     at `sys.FaultRates()` (PCT: depth 3 finds bugs needing three
     orderings; 500, about a run's scheduling steps: set it to your run's
     length, since change points past the run's end are lost and too large
