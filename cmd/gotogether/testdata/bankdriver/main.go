@@ -6,8 +6,9 @@
 // last deposit; with no deposit to undo it cannot be done, and the
 // driver exits 3 (gotogether shrink -diverged-exit 3). With -reset FILE
 // it only appends a line to FILE: a reset that counts itself. The other
-// flags misbehave as drivers do: -background leaves a child running that
-// holds its output open, -hang sleeps before playing, -cd plays from
+// flags misbehave as drivers do: -background FILE leaves a child running
+// that holds its output open until it is killed, its pid appended to FILE
+// (so the test can see it outlived the rerun, and kill it), -hang sleeps before playing, -cd plays from
 // another directory, -tear-single ends the log of a run of one action in
 // a line cut off.
 package main
@@ -34,15 +35,23 @@ func main() {
 	actionsPath := flag.String("actions", "", "the actions to play, a JSON array")
 	stepsPath := flag.String("steps", "", "where to write the steps")
 	reset := flag.String("reset", "", "append a line to this file and exit")
-	background := flag.Bool("background", false, "leave a child running that holds stdout open")
+	background := flag.String("background", "", "leave a child running that holds stdout open, appending its pid to this file")
 	hang := flag.Duration("hang", 0, "sleep this long first")
 	cd := flag.String("cd", "", "change to this directory first")
 	tear := flag.Bool("tear-single", false, "cut off the last line of a run of one action's log")
 	flag.Parse()
-	if *background {
-		child := exec.Command("sleep", "30")
+	if *background != "" {
+		// it never exits by itself: a shrink that waited for its output
+		// would wait until the test kills it
+		child := exec.Command("sleep", "86400")
 		child.Stdout = os.Stdout
 		exit(child.Start())
+		f, err := os.OpenFile(*background, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err == nil {
+			_, err = fmt.Fprintf(f, "%d\n", child.Process.Pid)
+			err = errors.Join(err, f.Close())
+		}
+		exit(err)
 	}
 	time.Sleep(*hang)
 	if *cd != "" {

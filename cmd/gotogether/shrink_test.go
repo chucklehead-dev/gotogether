@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -144,17 +145,72 @@ func TestShrinkCommandMisbehavingDriver(t *testing.T) {
 		code, err := shrinkTo(&b, args)
 		return code, b.String(), err
 	}
-	done := make(chan struct{})
-	go func() { //qenv:ok a watchdog: the shrink once never returned
-		defer close(done)
-		if code, out, err := shrink([]string{"-out", "bg"}, "-background"); code != 0 || err != nil || !strings.Contains(out, "(1-minimal)") {
-			t.Errorf("a driver leaving a child: exit %d, %v:\n%s", code, err, out)
+	// The children the driver leaves never exit by themselves, so a rerun
+	// that waited for the output they hold would never return: the shrink
+	// is waited for as long as the test may run and no less, since its
+	// reruns and judgments take what the machine's load makes them take.
+	// Its goroutine reports through done, never through t: the test
+	// waits for it whatever happens.
+	pids := filepath.Join(dir, "children")
+	children := func() []int {
+		data, _ := os.ReadFile(pids)
+		var ps []int
+		for _, f := range strings.Fields(string(data)) {
+			if p, err := strconv.Atoi(f); err == nil {
+				ps = append(ps, p)
+			}
 		}
+		return ps
+	}
+	kill := func() {
+		for _, p := range children() {
+			_ = syscall.Kill(p, syscall.SIGKILL)
+		}
+	}
+	t.Cleanup(kill)
+	type outcome struct {
+		code int
+		out  string
+		err  error
+	}
+	done := make(chan outcome, 1)
+	go func() { //qenv:ok the shrink, watched: it once never returned
+		code, out, err := shrink([]string{"-out", "bg"}, "-background", pids)
+		done <- outcome{code, out, err}
 	}()
+	var deadline <-chan time.Time
+	if d, ok := t.Deadline(); ok {
+		// a minute before go test's -timeout, to name the hang: the
+		// shrink then finishes with its children killed as they appear
+		deadline = time.After(time.Until(d) - time.Minute)
+	}
+	var bg outcome
 	select {
-	case <-done:
-	case <-time.After(20 * time.Second):
-		t.Fatal("a driver leaving a child holding its output hung the shrink")
+	case bg = <-done:
+	case <-deadline:
+		for waiting := true; waiting; {
+			kill()
+			select {
+			case bg = <-done:
+				waiting = false
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+		t.Fatalf("a driver leaving a child holding its output hung the shrink until the test's deadline (its children killed then): exit %d, %v:\n%s", bg.code, bg.err, bg.out)
+	}
+	if bg.code != 0 || bg.err != nil || !strings.Contains(bg.out, "(1-minimal)") {
+		t.Errorf("a driver leaving a child: exit %d, %v:\n%s", bg.code, bg.err, bg.out)
+	}
+	// the shrink returned with every child still running: it waited for
+	// none of their output (the children are killed at the test's end)
+	running := children()
+	if len(running) == 0 {
+		t.Error("the driver left no child running: nothing was held open")
+	}
+	for _, p := range running {
+		if err := syscall.Kill(p, 0); err != nil {
+			t.Errorf("the child %d had exited before the shrink returned (%v): its output was not held open", p, err)
+		}
 	}
 	if code, out, err := shrink([]string{"-out", "slow", "-rerun-timeout", "300ms"}, "-hang", "10s"); code != 2 || err == nil ||
 		!strings.Contains(err.Error(), "timed out after 300ms (-rerun-timeout): it was killed") {
@@ -178,14 +234,24 @@ func TestShrinkCommandMisbehavingDriver(t *testing.T) {
 		code int
 		err  error
 	}
-	interrupted := make(chan result)
+	interrupted := make(chan result, 1)
 	go func() { //qenv:ok the shrink, interrupted from the test
 		code, _, err := shrink([]string{"-out", "int"}, "-hang", "1s")
 		interrupted <- result{code, err}
 	}()
-	time.Sleep(1500 * time.Millisecond) // into the first rerun
+	// into a rerun (the signal handler is installed before the first):
+	// once its actions are written, the shrink is in it
+	for started := false; !started; {
+		select {
+		case r := <-interrupted:
+			t.Fatalf("the shrink to interrupt ended before its first rerun: exit %d, %v", r.code, r.err)
+		case <-time.After(10 * time.Millisecond):
+			reruns, _ := filepath.Glob(filepath.Join(dir, "int", "reruns-*", "actions*.json"))
+			started = len(reruns) > 0
+		}
+	}
 	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
-		t.Fatal(err)
+		t.Fatal(err) // the shrink, uninterrupted, ends by its own reruns' end (it reports to no t)
 	}
 	r := <-interrupted
 	left, _ := filepath.Glob(filepath.Join(dir, "int", "reruns-*"))
