@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,10 +68,13 @@ func callsApp(d grist.Delivery, declare bool) (*grist.App, *grist.Dependency, *g
 
 // bankHandlers pay, declining 13 and failing 7 (an error that is no
 // declared refusal), answering a key applied before from its first
-// answer (Replayed).
+// answer (Replayed). Safe for concurrent use (ServeCalls' requests).
 func bankHandlers(pay *grist.Call[payReq, payResp]) grist.Handlers {
+	var mu sync.Mutex
 	paid := map[string]payResp{}
 	return grist.Handlers{pay.Handler(func(ctx context.Context, r payReq) (payResp, error) {
+		mu.Lock()
+		defer mu.Unlock()
 		if p, ok := paid[grist.CallKey(ctx)]; ok {
 			grist.Replayed(ctx)
 			return p, nil

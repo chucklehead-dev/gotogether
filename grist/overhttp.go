@@ -1,0 +1,207 @@
+package grist
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// CauseHeader is the header a call over HTTP carries its cause in (OverHTTP
+// sends it, ServeCalls reads it): <app>/<tenant>/<processor>/<trigger>/<head>,
+// each part path-escaped. With the Idempotency-Key (the call's key) it is
+// what places the dependency's record of the call in the caller's tenant's
+// trace, after the commit holding its trigger.
+const CauseHeader = "Grist-Cause"
+
+// CallTimeout bounds a call over HTTP when OverHTTP is given no client: an
+// answer that does not come within it is an unknown outcome, as a lost one
+// is (a call may have happened).
+const CallTimeout = 10 * time.Second
+
+// OverHTTP is a transport calling a dependency over HTTP: POST
+// base/<call>, the request's JSON as the body, the call's key as its
+// Idempotency-Key and its cause as Grist-Cause (CauseHeader), so a
+// dependency the team owns serves it with ServeCalls and a third party
+// deduplicates by the key. c is the client (nil: one bounded by
+// CallTimeout). Its answers map as grist/client's do: a 2xx is the
+// response (its body); a 422 with {"rejected": name} the dependency's
+// refusal (a *Rejected: Do's declared refusal, if the call declares it);
+// another 4xx a refusal of no name, NotApplied (the request was refused
+// before anything ran: an undecodable request, an unknown call); a 5xx,
+// a reset or a timeout an unknown outcome (ErrOutcomeUnknown: the call
+// may have happened). It makes one attempt: a transport never retries an
+// unknown outcome (an at-most-once effect's one call would become
+// several).
+func OverHTTP(base string, c *http.Client) Transport {
+	if c == nil {
+		c = &http.Client{Timeout: CallTimeout}
+	}
+	return &overHTTP{base: strings.TrimSuffix(base, "/"), c: c}
+}
+
+type overHTTP struct {
+	base string
+	c    *http.Client
+}
+
+func (o *overHTTP) Call(ctx context.Context, ci CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, o.base+"/"+url.PathEscape(call), bytes.NewReader(req))
+	if err != nil {
+		return nil, NotApplied(fmt.Errorf("grist: call %s over HTTP: %w", call, err))
+	}
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Idempotency-Key", ci.Key)
+	r.Header.Set(CauseHeader, encodeCause(ci))
+	resp, err := o.c.Do(r)
+	if err != nil {
+		// no answer: the request may have reached the dependency
+		return nil, fmt.Errorf("%w: call %s to %s: %v", ErrOutcomeUnknown, call, o.base, err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxBody+1))
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf("%w: call %s to %s: its answer was cut: %v", ErrOutcomeUnknown, call, o.base, err)
+	case len(b) > DefaultMaxBody:
+		return nil, fmt.Errorf("%w: call %s to %s: an answer past %d bytes", ErrOutcomeUnknown, call, o.base, DefaultMaxBody)
+	}
+	var e apiError
+	_ = json.Unmarshal(b, &e)
+	switch c := resp.StatusCode; {
+	case c >= 200 && c < 300:
+		return b, nil
+	case c == http.StatusUnprocessableEntity && e.Rejected != "":
+		return nil, &Rejected{Name: e.Rejected}
+	case c >= 400 && c < 500:
+		return nil, NotApplied(fmt.Errorf("grist: call %s to %s refused (%d): %.200s", call, o.base, c, strings.TrimSpace(string(b))))
+	}
+	return nil, fmt.Errorf("%w: call %s to %s answered %d: %.200s", ErrOutcomeUnknown, call, o.base, resp.StatusCode, strings.TrimSpace(string(b)))
+}
+
+// encodeCause is c as CauseHeader's value.
+func encodeCause(c CallInfo) string {
+	return strings.Join([]string{url.PathEscape(c.App), url.PathEscape(c.Tenant), url.PathEscape(c.Processor),
+		strconv.FormatInt(int64(c.Trigger), 10), strconv.FormatInt(int64(c.Head), 10)}, "/")
+}
+
+// decodeCause is CauseHeader's value v and the key as a CallInfo.
+func decodeCause(v, key string) (CallInfo, error) {
+	parts := strings.Split(v, "/")
+	if len(parts) != 5 {
+		return CallInfo{}, fmt.Errorf("%s %q: want <app>/<tenant>/<processor>/<trigger>/<head>, as grist.OverHTTP sends it", CauseHeader, v)
+	}
+	var s [3]string
+	for i := range s {
+		var err error
+		if s[i], err = url.PathUnescape(parts[i]); err != nil {
+			return CallInfo{}, fmt.Errorf("%s %q: %v", CauseHeader, v, err)
+		}
+	}
+	trigger, terr := strconv.ParseInt(parts[3], 10, 64)
+	head, herr := strconv.ParseInt(parts[4], 10, 64)
+	if terr != nil || herr != nil || trigger < 1 || head < trigger {
+		return CallInfo{}, fmt.Errorf("%s %q: its trigger and head are positions, the head at or past the trigger", CauseHeader, v)
+	}
+	if err := CheckTenant(s[1]); err != nil {
+		return CallInfo{}, fmt.Errorf("%s %q: %v", CauseHeader, v, err)
+	}
+	if key == "" {
+		return CallInfo{}, errors.New("no Idempotency-Key: a call carries its key (the effect's), as grist.OverHTTP sends it")
+	}
+	return CallInfo{App: s[0], Tenant: s[1], Processor: s[2], Trigger: Position(trigger), Head: Position(head), Key: key}, nil
+}
+
+// ServeCalls is an HTTP handler serving dependency d's calls with h, for
+// a dependency the team owns: POST /<call> as OverHTTP sends it, each
+// call by its handler (Call.Handler), whose wrapper records the call's
+// application at its site, <call>Served (or <call>Replayed), into the
+// recorder of the request's context: wrap the handler in
+// qobshttp.Handler(h, rec) with the service's own recorder (its own step
+// file, validated with the caller's as two recorders of one run, as
+// gristtest.TierConfig.Serve does). Each record joins the caller's
+// tenant's trace at its cause (the Grist-Cause and Idempotency-Key
+// headers): its actor the tenant, placed after the commit holding its
+// trigger, and never before an earlier record of the key (one
+// ServeCalls orders its records of each key, whichever node sent them:
+// serve a dependency from one). The generated model judges each record's
+// request against the processor's rule, so a request no grist caller
+// sent for a trigger is rejected there: ServeCalls serves a dependency
+// only the App calls.
+//
+// It answers 200 with the response, 422 with {"rejected": name} for a
+// declared refusal, 400 for a request without its cause or key, of
+// another App, or that does not decode (nothing recorded: nothing was
+// applied), 404 for a call d does not declare, 405 for another method
+// than POST, and 500 for a handler's error that is no declared refusal
+// (recorded with it).
+//
+// nil h serves d's default double (DefaultHandlers), which panics for a
+// call answering a response with fields, naming the fix. It panics too
+// for handlers that do not serve each of d's calls (Handlers.Serves).
+func ServeCalls(d *Dependency, h Handlers) http.Handler {
+	if h == nil {
+		h = DefaultHandlers(d)
+	}
+	if err := h.Serves(d); err != nil {
+		panic(fmt.Sprintf("grist.ServeCalls(%s): %v", d.name, err))
+	}
+	return &callServer{d: d, local: Local(h).(*local)}
+}
+
+type callServer struct {
+	d     *Dependency
+	local *local
+}
+
+func (s *callServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	call := strings.TrimPrefix(r.URL.Path, "/")
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		fail(w, http.StatusMethodNotAllowed, "grist: dependency %s's calls are POST /<call>", s.d.name)
+		return
+	}
+	if _, ok := s.local.by[call]; !ok {
+		names := make([]string, 0, len(s.d.calls))
+		for _, c := range s.d.calls {
+			names = append(names, c.name)
+		}
+		fail(w, http.StatusNotFound, "grist: dependency %s has no call %q (it has %v)", s.d.name, call, names)
+		return
+	}
+	info, err := decodeCause(r.Header.Get(CauseHeader), r.Header.Get("Idempotency-Key"))
+	if err == nil && info.App != s.d.app.Name {
+		err = fmt.Errorf("a call of App %q: dependency %s serves App %s's calls, whose trace its records join", info.App, s.d.name, s.d.app.Name)
+	}
+	if err != nil {
+		fail(w, http.StatusBadRequest, "grist: dependency %s: %v", s.d.name, err)
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, DefaultMaxBody))
+	if err != nil {
+		fail(w, http.StatusBadRequest, "grist: dependency %s: the request's body: %v", s.d.name, err)
+		return
+	}
+	out, err := s.local.Call(r.Context(), info, call, body)
+	var rej *Rejected
+	var und *undecoded
+	switch {
+	case err == nil:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(out)
+	case errors.As(err, &rej):
+		writeJSON(w, http.StatusUnprocessableEntity, apiError{Error: err.Error(), Rejected: rej.Name})
+	case errors.As(err, &und):
+		fail(w, http.StatusBadRequest, "%v", err)
+	default:
+		fail(w, http.StatusInternalServerError, "%v", err)
+	}
+}

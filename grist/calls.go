@@ -416,7 +416,8 @@ func (c *Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, er
 }
 
 // undecoded is a request a handler could not decode: answered with it,
-// recorded nowhere (no application happened, and its fields are unknown).
+// recorded nowhere (no application happened, and its fields are unknown);
+// ServeCalls answers it 400, which OverHTTP takes for NotApplied.
 type undecoded struct{ error }
 
 // unencoded is a response a handler could not encode: recorded with it.
@@ -433,7 +434,8 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 		out, err := f(context.WithValue(ctx, handlerKey{}, hc), body)
 		var und *undecoded
 		if errors.As(err, &und) {
-			return nil, und.error
+			// its own type, so ServeCalls answers 400 (nothing applied)
+			return nil, und
 		}
 		var rej *Rejected
 		var une *unencoded
