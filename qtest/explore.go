@@ -1154,7 +1154,14 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 		return x.vacuityVerdict()
 	}
 	if rc, ok := c.(runsClaim); ok {
-		msg := rc.judgeRuns(x.Runs, x.actions)
+		actions := x.actions
+		if _, ok := rc.(Exercise); ok && x.steps != nil {
+			// a frame condition (binding.Model.Helpers) is never a step, so
+			// no run takes it: Exercised asks for the steps, as the
+			// summary counts them
+			actions = x.steps
+		}
+		msg := rc.judgeRuns(x.Runs, actions)
 		return claimVerdict{ok: msg == "", say: func(testing.TB) string { return msg }}
 	}
 	bad := len(x.Failing())

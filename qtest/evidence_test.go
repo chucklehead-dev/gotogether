@@ -52,3 +52,30 @@ func TestSummaryNamesUntakenActions(t *testing.T) {
 		t.Errorf("evidence:\n%s\nwant 1 of 3 actions taken, appends and get never", s)
 	}
 }
+
+// Exercised asks for the model's steps: a frame condition (same) no run
+// can take is not missing, an untaken step is.
+func TestExercisedSkipsFrameConditions(t *testing.T) {
+	t.Parallel()
+	m := &binding.Model{Actions: map[string][]binding.Param{"init": nil, "step": nil, "put": nil, "get": nil, "same": nil},
+		Helpers: map[string]bool{"same": true}}
+	run := func(actions ...string) *Run {
+		var calls []binding.Call
+		for _, a := range actions {
+			calls = append(calls, binding.Call{Action: a})
+		}
+		return &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: calls}}}}
+	}
+	all := map[string]bool{}
+	for a := range m.Actions {
+		all[a] = true
+	}
+	x := &Exploration{Runs: []*Run{run("put"), run("get")}, actions: all, steps: stepActions(m), given: true}
+	if v := x.verdict(Exercised(), nil); !v.ok {
+		t.Errorf("Exercised over runs taking put and get: %s; want it to hold (same is a frame condition)", v.say(t))
+	}
+	x.Runs = x.Runs[:1]
+	if v := x.verdict(Exercised(), nil); v.ok || !strings.Contains(v.say(t), "action get (never taken)") {
+		t.Errorf("Exercised over a run taking put alone held or named the wrong action: %q", v.say(t))
+	}
+}
