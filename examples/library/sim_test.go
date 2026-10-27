@@ -1,10 +1,8 @@
 package library
 
 import (
-	"context"
 	"testing"
 
-	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -23,16 +21,9 @@ const (
 // the default rate (requests and answers lost, duplicated and late).
 var faulty = qenv.DefaultRates.Set("nemesis", 0.02).Set("store.library.commit", 0.15)
 
-// withMailer gives each simulation a mailer of its own, reached by the
-// receipts processor's effect through its ctx.
-func withMailer(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
-	m := NewMailer()
-	return func(ctx context.Context) context.Context { return MailerDep.With(ctx, m) }
-}
-
 // system is the app under cfg, judged by binding, at faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
-	cfg.Setup = withMailer
+	cfg.Doubles = doubles
 	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
@@ -75,9 +66,12 @@ var opened = []gristsim.Call{
 var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, CommitFaults: true, Gen: gen, Prologue: opened,
 	Send: []string{"join", "add-book", "borrow", "borrow", "return-book", "member-loans"}}
 
-// TestFaithful: through commit faults, node crashes and a lossy API, every
-// run conforms at the store and settles (every borrow's receipt sent), the
-// commit faults happened, and the runs took every block of the catalog by
+// TestFaithful: through commit faults, node crashes, a lossy API and a
+// lossy mailer (its default double, served as the qenv.Service mailer:
+// rpc.mailer.*), every run conforms at the store and settles (every
+// borrow's receipt sent), the commit faults happened, the mailer's answers
+// were lost (a send of unknown outcome, retried under its key and
+// replayed by the mailer), and the runs took every block of the catalog by
 // each of its outcomes but the limit refusal, which three borrows of one
 // member in fifteen random operations seldom reach (TestGreedy claims it).
 func TestFaithful(t *testing.T) {
@@ -85,6 +79,7 @@ func TestFaithful(t *testing.T) {
 	qtest.RequireQuint(t)
 	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(),
+			qtest.Reaches("rpc.mailer.response").Faulted(), qtest.Takes("mailerSend").Outcome("unknown"), qtest.Takes("mailerSendReplayed"),
 			gristtest.Exercised(App, "borrow.limit"))
 }
 
@@ -159,9 +154,10 @@ var lending = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Send:
 	}}
 
 // TestReceiptOnce: after a crash between a receipt's mail and its
-// checkpoint, the mail is sent again and the mailer drops the duplicate:
-// every run conforms (one site record per key) and settles (every borrow's
-// receipt sent).
+// checkpoint, the mail is sent again and the mailer (its default double)
+// answers it from its first answer: every run conforms (one served record
+// per key, the duplicate a replay) and settles (every borrow's receipt
+// sent).
 func TestReceiptOnce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)

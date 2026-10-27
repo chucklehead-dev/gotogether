@@ -58,8 +58,11 @@ module libraryEvents {
   type ReturnBookArgs = { member: str, book: str, principal: str }
   type MemberLoansArgs = { member: str, principal: str }
   type MemberLoansResult = { count: int }
-  // site mailer-sends: a record of the effect, made where it takes place
-  type MailerSendsRecord = { member: str, book: str, at: int, key: str }
+  // call mailer/send: its request and response, and a step of it (the caller's or the site's: the outcome as result,
+  // the response zero unless it is ok)
+  type MailerSendRequest = { member: str, book: str }
+  type MailerSendResponse = { unit: bool }
+  type MailerSendRecord = { processor: str, trigger: int, key: str, request: MailerSendRequest, result: str, response: MailerSendResponse }
 }
 
 // The store's side (library.binding.yaml): every step where it took effect, one
@@ -84,8 +87,10 @@ module libraryGen {
   var effects: List[Effect]
   // the command ids answered so far, by a commit or a committed refusal
   var answered: Set[str]
-  // what the mailer-sends site recorded, in order
-  var mailerSendsRecords: List[MailerSendsRecord]
+  // the calls of mailer/send as their callers saw them (Call.Do), and as the dependency
+  // applied them (its served records), in order
+  var mailerSendCalls: List[MailerSendRecord]
+  var mailerSendRecords: List[MailerSendRecord]
 
   action init = all {
     log' = [],
@@ -93,7 +98,8 @@ module libraryGen {
     appended' = [],
     effects' = [],
     answered' = Set(),
-    mailerSendsRecords' = [],
+    mailerSendCalls' = [],
+    mailerSendRecords' = [],
   }
 
   // the identities and effect keys the model on its own draws
@@ -107,7 +113,8 @@ module libraryGen {
     appended' = b,
     effects' = effects,
     answered' = answered.union(Set(id)),
-    mailerSendsRecords' = mailerSendsRecords,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
   }
 
   // a committed refusal: its marker answers id, nothing is appended; it
@@ -126,7 +133,8 @@ module libraryGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
-    mailerSendsRecords' = mailerSendsRecords,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
   }
 
   // a processor's handling of trigger, appending b with its checkpoint
@@ -136,7 +144,8 @@ module libraryGen {
     appended' = b,
     effects' = effects,
     answered' = answered,
-    mailerSendsRecords' = mailerSendsRecords,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
   }
 
   // an effect step of processor p for trigger, under key (the same on every
@@ -148,7 +157,8 @@ module libraryGen {
     appended' = [],
     effects' = effects.append((p, trigger, key, ok)),
     answered' = answered,
-    mailerSendsRecords' = mailerSendsRecords,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
   }
 
   // add-book: conditioned on its reads; refusals invalid. Every committed
@@ -279,21 +289,86 @@ module libraryGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
-    mailerSendsRecords' = mailerSendsRecords,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
   }
 
-  // the mailer-sends site's record, made where its effect took place: any number,
-  // in any order with the steps that asked for them, as mailerSendsAdmits allows
-  action mailerSends(member: str, book: str, at: int, key: str): bool = {
-    val rec_: MailerSendsRecord = { member: member, book: book, at: at, key: key }
+  // the keys of mailer/send's steps: (processor, trigger, key)
+  pure def mailerSendKeys(l: List[MailerSendRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))
+
+  // the mailer dependency applies each key once (Keyed): no earlier record of
+  // the key; the application's rules may define mailerSendAdmits instead,
+  // reading only prefix (the log through the trigger)
+  pure def mailerSendAdmits(prefix: List[Event], records: List[MailerSendRecord], r: MailerSendRecord): bool = not(keyCalled(mailerSendKeys(records), r.key))
+
+  // mailer/send as its caller saw it (Call.Do: invoked before the request,
+  // done with the answer, the outcome ok, a declared refusal or unknown):
+  // from an effect of a processor that uses it, for one of its triggers
+  // before the effect step, under the trigger's key (callKeyStable), its
+  // request the processor's rule's
+  action mailerSend(processor: str, trigger: int, key: str, member: str, book: str, result: str): bool = {
+    val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { member: member, book: book }, result: result, response: { unit: true } }
     all {
-      mailerSendsAdmits(mailerSendsRecords, rec_),
+      or {
+        processor == "receipts" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "book-borrowed",
+          rec_.request == receiptsMailerSend(log.slice(0, trigger), trigger),
+          not(receiptsSkips(log.slice(0, trigger), trigger)),
+          trigger == nextOf(log, checkpoints.get("receipts"), "book-borrowed"),
+        } else false),
+      },
+      callKeyStable(effects, mailerSendKeys(mailerSendCalls), processor, trigger, key),
       log' = log,
       checkpoints' = checkpoints,
       appended' = [],
       effects' = effects,
       answered' = answered,
-      mailerSendsRecords' = mailerSendsRecords.append(rec_),
+      mailerSendCalls' = mailerSendCalls.append(rec_),
+      mailerSendRecords' = mailerSendRecords,
+    }
+  }
+
+  // mailer/send as the dependency applied it (its served record, placed at
+  // its cause: after the commit holding its trigger): for one of a user's
+  // triggers, as mailerSendAdmits allows given the log through the trigger.
+  // Its request is the caller's to judge (its step, recorded where grist
+  // makes the call)
+  action mailerSendServed(processor: str, trigger: int, key: str, member: str, book: str, result: str): bool = {
+    val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { member: member, book: book }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "receipts" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "book-borrowed",
+          mailerSendAdmits(log.slice(0, trigger), mailerSendRecords, rec_),
+        } else false),
+      },
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords.append(rec_),
+    }
+  }
+
+  // mailer/send answered again from an application (grist.Replayed: a
+  // dependency answering a retry of a key from its first answer): an earlier
+  // served record, request and answer alike; it applies nothing
+  action mailerSendReplayed(processor: str, trigger: int, key: str, member: str, book: str, result: str): bool = {
+    val rec_: MailerSendRecord = { processor: processor, trigger: trigger, key: key, request: { member: member, book: book }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "receipts" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "book-borrowed" else false),
+      },
+      mailerSendRecords.indices().exists(i => mailerSendRecords[i] == rec_),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      mailerSendCalls' = mailerSendCalls,
+      mailerSendRecords' = mailerSendRecords,
     }
   }
 
@@ -361,11 +436,31 @@ module libraryGen {
         receipts(nextOf(log, checkpoints.get("receipts"), "book-borrowed"), ok_)
       },
       {
-        nondet member = STRS.oneOf()
-        nondet book = STRS.oneOf()
-        nondet at = INTS.oneOf()
-        nondet key = STRS.oneOf()
-        mailerSends(member, book, at, key)
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "unknown").oneOf()
+        {
+          val req_: MailerSendRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "book-borrowed") receiptsMailerSend(log.slice(0, trigger_), trigger_) else { member: "", book: "" }
+          mailerSend("receipts", trigger_, key_, req_.member, req_.book, result_)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok").oneOf()
+        {
+          val req_: MailerSendRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "book-borrowed") receiptsMailerSend(log.slice(0, trigger_), trigger_) else { member: "", book: "" }
+          mailerSendServed("receipts", trigger_, key_, req_.member, req_.book, result_)
+        }
+      },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok").oneOf()
+        {
+          val req_: MailerSendRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "book-borrowed") receiptsMailerSend(log.slice(0, trigger_), trigger_) else { member: "", book: "" }
+          mailerSendReplayed("receipts", trigger_, key_, req_.member, req_.book, result_)
+        }
       },
     }
   }

@@ -16,6 +16,7 @@ outcomes:
   not-held: '"not-held"'
   not-member: '"not-member"'
   unavailable: '"unavailable"'
+  unknown: '"unknown"'
   conflict: '"conflict"'
   idempotency-key-reused: '"idempotency-key-reused"'
 
@@ -40,11 +41,16 @@ actions:
   receiptsOutcome: {}
   receiptsSkip:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("receipts") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
-  mailerSends: {}
+  mailerSend:
+    args: { result: '{{.outcome}}' }
+  mailerSendServed:
+    args: { result: '{{.outcome}}' }
+  mailerSendReplayed:
+    args: { result: '{{.outcome}}' }
 
-invariants: [copiesHeld, withinLimit]
-eventually: [everyReceiptForABorrow, everyBorrowReceipted]
+invariants: [copiesHeld, withinLimit, everyReceiptForABorrow]
+eventually: [everyBorrowReceipted]
 
 # The model on its own (gotogether simulate)
 simulate:
-  holds: [copiesHeld, withinLimit]
+  holds: [copiesHeld, withinLimit, everyReceiptForABorrow]

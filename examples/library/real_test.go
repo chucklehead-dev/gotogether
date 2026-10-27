@@ -26,9 +26,11 @@ import (
 // answer a client got has its store-side step.
 func TestRealHTTP(t *testing.T) {
 	qtest.RequireQuint(t)
-	mailer := NewMailer()
+	// the mailer in process: its default double, recording its sends
+	// with the node's steps
+	mailer := grist.Local(grist.DefaultHandlers(Mailer))
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{
-		Deps: func(ctx context.Context, st grist.Store) context.Context { return MailerDep.With(ctx, mailer) }})
+		Deps: func(ctx context.Context, st grist.Store) context.Context { return Mailer.With(ctx, mailer) }})
 	tier.Start("node")
 	members := []string{"a", "b"}
 	var wg sync.WaitGroup

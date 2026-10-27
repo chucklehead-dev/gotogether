@@ -30,16 +30,21 @@ func TestMutant(t *testing.T) {
 		system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 6)}).
 			Expect(t, qtest.Some(qtest.Rejects("borrow")))
 	case "noDedupe":
-		// the mailer without its dedupe: the receipt mailed again after the
-		// scripted crash is a second record of its key, which the mailer's
-		// rule refuses (TestReceiptOnce is the contrast)
+		// the mailer without its dedupe (a double sending every try): the
+		// receipt mailed again after the scripted crash is a second served
+		// record of its key, which the generated mailerSendAdmits refuses
+		// (Send is Keyed; no rule of the app's says so; TestReceiptOnce is
+		// the contrast)
 		system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3), Chooser: crashAfterMail}).
-			Expect(t, qtest.Some(qtest.Rejects("mailerSends")))
+			Expect(t, qtest.Some(qtest.Rejects("mailerSendServed")))
 	case "wrongReceipt":
-		// the receipt names the position before its borrow: a receipt for no
-		// borrow (TestFaithful is the contrast)
+		// the receipt's member and book swapped: a receipt for no borrow,
+		// refused where the effect asks for it (mailerSend: the request is
+		// not receiptsMailerSend's for the trigger), before the mailer's
+		// record of it could violate everyReceiptForABorrow (TestFaithful is
+		// the contrast)
 		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).
-			Expect(t, qtest.Some(qtest.Violates("eventually everyReceiptForABorrow")))
+			Expect(t, qtest.Some(qtest.Rejects("mailerSend")))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

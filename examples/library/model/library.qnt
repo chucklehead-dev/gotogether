@@ -72,9 +72,11 @@ module libraryRules {
   // receipts skips no borrow (its handler never Skips)
   pure def receiptsSkips(prefix: List[Event], trigger: int): bool = false
 
-  // the mailer sends each key once
-  pure def mailerSendsAdmits(records: List[MailerSendsRecord], r: MailerSendsRecord): bool =
-    records.foldl(true, (ok, x) => ok and x.key != r.key)
+  // the receipt the mailer is asked to send for the borrow at the trigger:
+  // its member and book (the mailer sends each key once: Send is Keyed, and
+  // the generated mailerSendAdmits says so)
+  pure def receiptsMailerSend(prefix: List[Event], trigger: int): MailerSendRequest =
+    { member: bookBorrowedMember(prefix[trigger - 1]), book: bookBorrowedBook(prefix[trigger - 1]) }
 
   // the books and members the log names
   pure def booksIn(log: List[Event]): Set[str] =
@@ -108,20 +110,18 @@ module library {
   val withinLimit = withinLimitIn(log)
 
   // every receipt the mailer sent is for a borrow that happened: the
-  // borrow at its position, of its member and book. Judged after the run's
-  // settle, not at every step: a site's record is ordered with nothing in
-  // the tenant's log (the reconstruction may place the mailer's record
-  // before the borrow's commit), and the skeleton's site action is guarded
-  // by mailerSendsAdmits(records, r) alone, which cannot see the log.
-  // grist: eventually
-  val everyReceiptForABorrow = mailerSendsRecords.foldl(true, (ok, r) => ok and
-    1 <= r.at and r.at <= log.length() and log[r.at - 1].typ == "book-borrowed"
-      and bookBorrowedMember(log[r.at - 1]) == r.member and bookBorrowedBook(log[r.at - 1]) == r.book)
+  // borrow at its trigger, of its member and book. An invariant: grist
+  // places the mailer's record at its cause, after the commit holding its
+  // trigger
+  // grist: invariant
+  val everyReceiptForABorrow = mailerSendRecords.foldl(true, (ok, r) => ok and
+    1 <= r.trigger and r.trigger <= log.length() and log[r.trigger - 1].typ == "book-borrowed"
+      and bookBorrowedMember(log[r.trigger - 1]) == r.request.member and bookBorrowedBook(log[r.trigger - 1]) == r.request.book)
 
   // after a settle: every borrow's receipt sent
   // grist: eventually
   val everyBorrowReceipted = log.indices().forall(i => log[i].typ == "book-borrowed" implies
-    mailerSendsRecords.foldl(false, (b, r) => b or r.at == i + 1))
+    mailerSendRecords.foldl(false, (b, r) => b or (r.trigger == i + 1 and r.result == "ok")))
 }
 
 // The clients' side (library.calls.binding.yaml), linearized.

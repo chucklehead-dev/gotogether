@@ -7,14 +7,13 @@ import (
 )
 
 // Receipts mails, on each borrow, its receipt to the member, at least once:
-// a crash between the mail and the checkpoint mails it again, under the same
-// key (grist.EffectKey: processor, tenant, trigger), which the mailer
-// deduplicates.
+// a crash between the mail and the checkpoint, or a lost answer, mails it
+// again under the same key (grist.CallKey: processor, tenant, trigger),
+// which the mailer deduplicates.
 var Receipts = grist.NewProcessor(App, "receipts", Borrowed,
 	func(ctx context.Context, r *grist.Reads, e BookBorrowed, m grist.Meta) grist.Result {
-		rc := Receipt{Member: e.Member, Book: e.Book, At: int64(m.Pos), Key: ""}
 		return grist.Effect(func(ctx context.Context) error {
-			rc.Key = grist.EffectKey(ctx)
-			return MailerDep.Of(ctx).Send(ctx, r.Tenant(), rc)
+			_, err := Send.Do(ctx, Receipt{Member: e.Member, Book: e.Book})
+			return err
 		}, grist.AtLeastOnce)
-	}, grist.Delivers(grist.AtLeastOnce))
+	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(Send))
