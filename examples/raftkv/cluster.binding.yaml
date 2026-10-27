@@ -21,10 +21,14 @@ eventually: [hasLeader]
 
 # after the network heals, a leader within 300ms: a follower cut off
 # pre-campaigns every election timeout (100 to 200ms, randomized), and a
-# pre-vote and a vote take a round trip each
+# pre-vote and a vote take a round trip each. Unless the vote splits:
+# nodes whose timeouts fire at once each vote for themselves and draw
+# again, as often as they tie (seed 20753310 of TestElectionAfterHeal
+# tied all three twice, a leader 380ms after the heal), which raft does
+# not bound.
 within:
   - after: healed
-    holds: hasLeader
+    holds: leaderOrSplit
     bound: 300ms
   # a node that boots behind catches up within a second: the leader
   # probes it within a heartbeat, and a snapshot it lost is sent again

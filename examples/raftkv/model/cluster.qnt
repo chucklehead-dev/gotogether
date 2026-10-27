@@ -6,7 +6,11 @@
 //   - electionSafety: at most one node leads a term, ever (raft's
 //     Election Safety), kept by a ghost that remembers every term led.
 //   - after the network heals, some node leads the newest term and is not
-//     cut off (hasLeader), within a bound the binding gives.
+//     cut off (hasLeader), within a bound the binding gives, unless the
+//     vote split (leaderOrSplit): raft bounds an election round, not the
+//     rounds a split vote adds (nodes whose randomized timeouts fire at
+//     once campaign for one term, each votes for itself, and each draws
+//     again).
 //   - a node that restarts behind the others (its applied index below the
 //     highest any other applied when it booted) catches up to it
 //     (caughtUp), within a bound the binding gives: by the leader's log,
@@ -24,17 +28,19 @@ module cluster {
   // ghost: every (node, term) led, and whether two nodes led one term
   var led: Set[(str, int)]
   var twoLeaders: bool
+  // ghost: the (node, term) campaigns since the last heal
+  var campaigned: Set[(str, int)]
   // each node's applied index, and the index a node that booted behind
   // must reach (none: not behind)
   var applied: str -> int
   var target: str -> int
 
   action init = all {
-    cut' = Set(), everCut' = false, maxTerm' = 1, leader' = Map(), led' = Set(), twoLeaders' = false,
+    cut' = Set(), everCut' = false, maxTerm' = 1, leader' = Map(), led' = Set(), twoLeaders' = false, campaigned' = Set(),
     applied' = NODES.mapBy(_ => 1), target' = Map(),
   }
 
-  action unchangedLeadership = all { maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders, applied' = applied, target' = target }
+  action unchangedLeadership = all { campaigned' = campaigned, maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders, applied' = applied, target' = target }
 
   action unchangedLogs = all { applied' = applied, target' = target }
 
@@ -47,11 +53,15 @@ module cluster {
     unchangedLeadership,
   }
 
-  action heal: bool = all { cut' = Set(), everCut' = everCut, unchangedLeadership }
+  action heal: bool = all {
+    cut' = Set(), everCut' = everCut, campaigned' = Set(),
+    maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders, unchangedLogs,
+  }
 
   action campaign(node: str, term: int): bool = all {
     NODES.contains(node),
     maxTerm' = if (term > maxTerm) term else maxTerm,
+    campaigned' = campaigned.union(Set((node, term))),
     cut' = cut, everCut' = everCut, leader' = leader, led' = led, twoLeaders' = twoLeaders, unchangedLogs,
   }
 
@@ -60,20 +70,20 @@ module cluster {
     leader' = leader.put(node, term),
     led' = led.union(Set((node, term))),
     twoLeaders' = (twoLeaders or led.exists(p => p._2 == term and p._1 != node)),
-    cut' = cut, everCut' = everCut, maxTerm' = maxTerm, unchangedLogs,
+    cut' = cut, everCut' = everCut, campaigned' = campaigned, maxTerm' = maxTerm, unchangedLogs,
   }
 
   action stepDown(node: str, term: int): bool = all {
     leader.keys().contains(node), leader.get(node) == term,
     leader' = leader.keys().exclude(Set(node)).mapBy(n => leader.get(n)),
-    cut' = cut, everCut' = everCut, maxTerm' = maxTerm, led' = led, twoLeaders' = twoLeaders, unchangedLogs,
+    cut' = cut, everCut' = everCut, campaigned' = campaigned, maxTerm' = maxTerm, led' = led, twoLeaders' = twoLeaders, unchangedLogs,
   }
 
   // a node down owes no catch-up until it boots again
   action stop(node: str): bool = all {
     NODES.contains(node),
     leader' = leader.keys().exclude(Set(node)).mapBy(n => leader.get(n)),
-    cut' = cut, everCut' = everCut, maxTerm' = maxTerm, led' = led, twoLeaders' = twoLeaders,
+    cut' = cut, everCut' = everCut, campaigned' = campaigned, maxTerm' = maxTerm, led' = led, twoLeaders' = twoLeaders,
     applied' = applied, target' = target.keys().exclude(Set(node)).mapBy(n => target.get(n)),
   }
 
@@ -83,7 +93,7 @@ module cluster {
     NODES.contains(node),
     applied' = applied.set(node, index),
     target' = if (othersApplied(node) > index) target.put(node, othersApplied(node)) else target.keys().exclude(Set(node)).mapBy(n => target.get(n)),
-    cut' = cut, everCut' = everCut, maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders,
+    cut' = cut, everCut' = everCut, campaigned' = campaigned, maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders,
   }
 
   // a node's state machine reaches index
@@ -91,7 +101,7 @@ module cluster {
     NODES.contains(node),
     applied' = applied.set(node, index),
     target' = if (target.keys().contains(node) and index >= target.get(node)) target.keys().exclude(Set(node)).mapBy(n => target.get(n)) else target,
-    cut' = cut, everCut' = everCut, maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders,
+    cut' = cut, everCut' = everCut, campaigned' = campaigned, maxTerm' = maxTerm, leader' = leader, led' = led, twoLeaders' = twoLeaders,
   }
 
   action step = nondet n = NODES.oneOf() nondet t = 1.to(4).oneOf()
@@ -104,6 +114,13 @@ module cluster {
 
   // a node leads the newest term, and reaches the others
   val hasLeader: bool = leader.keys().exists(n => leader.get(n) == maxTerm and not(cut.contains(n)))
+
+  // two nodes campaigned for one term since the heal: the vote may have
+  // split, and the election takes another round
+  val split: bool = campaigned.exists(p => campaigned.exists(q => q._2 == p._2 and q._1 != p._1))
+
+  // a leader, or a split vote that delays it by rounds raft does not bound
+  val leaderOrSplit: bool = hasLeader or split
 
   // no node that can reach the others is behind (a node cut off cannot
   // catch up until the network heals)

@@ -23,9 +23,9 @@ away, and the cluster also goes through a rolling upgrade.
 | file | what it is |
 |---|---|
 | [model/raftkv.qnt](model/raftkv.qnt) | the store as clients must see it: `write`, `read`, `cas`, `transfer` (whether it took effect is `lastOk`), the probe's `observe`; `converged` an eventual val |
-| [model/cluster.qnt](model/cluster.qnt) | leadership as the nodes record it: `campaign`, `lead`, `stepDown`, `stop` (a crash), the test's `isolate` and `heal`, and each node's state machine (`boot`, `apply`); `electionSafety` an invariant, `hasLeader`, `healed`, `behind` and `caughtUp` vals |
+| [model/cluster.qnt](model/cluster.qnt) | leadership as the nodes record it: `campaign`, `lead`, `stepDown`, `stop` (a crash), the test's `isolate` and `heal`, and each node's state machine (`boot`, `apply`); `electionSafety` an invariant, `hasLeader`, `healed`, `split`, `leaderOrSplit`, `behind` and `caughtUp` vals |
 | [raftkv.binding.yaml](raftkv.binding.yaml) | a read's value and a cas's or transfer's answer against the model's; `eventually: [converged]` |
-| [cluster.binding.yaml](cluster.binding.yaml) | `invariants: [electionSafety]`, `eventually: [hasLeader]`, `within:` a leader 300ms after a heal, and a restarted node caught up 1s after it booted behind |
+| [cluster.binding.yaml](cluster.binding.yaml) | `invariants: [electionSafety]`, `eventually: [hasLeader]`, `within:` a leader 300ms after a heal (or a split vote), and a restarted node caught up 1s after it booted behind |
 | [cluster.real.binding.yaml](cluster.real.binding.yaml) | the same for real runs, a leader within 500ms of a heal (real timing's tail) |
 | [node.go](node.go) | a node: its raft loop (the RawNode's only user), its senders, the services' handlers, the leadership steps it records |
 | [storage.go](storage.go) | the write-ahead log: hard state, snapshot and entries, persisted before any message is sent |
@@ -47,7 +47,7 @@ its own, recorded at each node after its hard state is persisted.
 |---|---|---|---|
 | `TestFaithful` | none | 10 seeds, one message fault in twenty, a node crash about every second; linearized | every run conforms, settles and completes every call, and every node converges |
 | `TestClusterFaithful` | none | the same faults, the cluster's history | no term has two leaders; the settled cluster has one |
-| `TestElectionAfterHeal` | `SlowElection`: an election timeout ten times as long | every node cut off from the others for 2.5 s, then healed; no other fault | the faithful cluster elects within 300 ms of the heal in every run. The mutant still elects (its `eventually hasLeader` holds), but too late: every run violates `within 300ms after healed: hasLeader` |
+| `TestElectionAfterHeal` | `SlowElection`: an election timeout ten times as long | every node cut off from the others for 2.5 s, then healed; no other fault | the faithful cluster elects within 300 ms of the heal in every run, or its vote splits (`leaderOrSplit`: nodes whose timeouts tie each vote for themselves and draw again, rounds raft does not bound; the nightly's seed 20753310 tied twice, a leader 380 ms after the heal, kept in `testdata/corpus`). The mutant still elects (its `eventually hasLeader` holds), but too late: every run violates `within 300ms after healed: leaderOrSplit` |
 | `TestPendingTransfers` | none, then `NoRequestID`: a retry is a new request | clients give up after five attempts at one message fault in ten | with `Linearize` and `ResolvePending` every run conforms (8 of the 12 leave calls pending). `Linearize` alone takes a pending call as having no effect: 3 of 12 runs fail (on a read or `converged`). `NoRequestID` applies a retried transfer twice, which no placement explains: 6 of 12 fail |
 | `TestLeaseRead` | `LeaseRead`: reads answered on the leader's lease (`ReadOnlyLeaseBased`) | the leadership moved to n1, then n1 cut off for 400 ms; `Exhaust` over every combination of the three clocks' drifts (none, fast, slow at 0.8), 27 runs | the faithful leader (`ReadOnlySafe`) conforms in all 27; the mutant reads stale in 3 |
 | `TestRollingUpgrade` | `EagerV2`: v2 code writes the v2 log format at once | nodes upgraded one every 500 ms while clients write; a full rollout, and one paused after two nodes | the faithful cluster conforms in both and ends on the v2 log after the full one. The mutant, paused, leaves the v1 node skipping entries it cannot read: 8 of 20 runs violate `converged` |
@@ -164,7 +164,7 @@ heal, not 300ms. The faithful cluster's first leader after a heal came
 |---|---|---|---|
 | `TestRealNemesis` | none | both histories conform and settle in every run; a second leader of a term added after the crashes violates `electionSafety` | 24 of 24 runs (18 with `-race`) |
 | `TestRealNoRequestID` | `NoRequestID` (the client's) | some run fails as the simulation's does (a read, cas or transfer mismatched, or `converged` violated); the cluster's history conforms | per seed 5: 3 of 3, 9: 2 of 3, 10: 3 of 3; together they miss at most 3.7% (each at its worst measured rate) |
-| `TestRealSlowElection` | `SlowElection` (the node's) | some run violates `within 500ms after healed: hasLeader`, none `electionSafety`; the clients' history conforms | 11 of 12 runs over six seeds; per seed 5: 5 of 5, 9: 4 of 5, 10: 5 of 5; together at most 0.8% |
+| `TestRealSlowElection` | `SlowElection` (the node's) | some run violates `within 500ms after healed: leaderOrSplit`, none `electionSafety`; the clients' history conforms | 11 of 12 runs over six seeds; per seed 5: 5 of 5, 9: 4 of 5, 10: 5 of 5; together at most 0.8% |
 | `TestRealFaultsInSimulation` | none | the per-PR runs' journals (`Journal.Script`) re-made in the simulation: every fault happens (`qnemesis.Unmade`), the runs conform, real and simulated | 15 of 15 journals re-made whole |
 
 The per-PR seeds are 5, 9 and 10, each a schedule with a crash; the

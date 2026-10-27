@@ -607,7 +607,7 @@ func TestRealNoRequestID(t *testing.T) {
 // of the time.
 func TestRealSlowElection(t *testing.T) {
 	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, SlowElection) })
-	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Some(qtest.Violates("within 500ms after healed: hasLeader")),
+	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Some(qtest.Violates("within 500ms after healed: leaderOrSplit")),
 		qtest.None(qtest.Violates("electionSafety")))
 	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms())
 }

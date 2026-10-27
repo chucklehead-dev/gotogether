@@ -80,9 +80,16 @@ func TestPendingTransfers(t *testing.T) {
 	cfg := Config{MaxAttempts: 5}
 	lossy := faulty.Set("rpc", 0.1)
 	broken := qtest.Some(qtest.AnyOf(qtest.Mismatch("read"), qtest.Mismatch("cas"), qtest.Mismatch("transfer"), qtest.Violates(validate.EventuallyName("converged"))))
+	x := qtest.ExploreConfig{Seeds: 12, Corpus: "testdata/corpus"}
 	both := []qtest.Option{qtest.Linearize(), qtest.ResolvePending()}
-	x := qtest.ExploreConfig{Seeds: 12}
-	system(cfg, both...).WithRates(lossy).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Some(qtest.Pending("transfer")))
+	// each placement of the pending calls (or none) multiplies the orders:
+	// seed 20753119's four needed more than 5000 (its run conforms within
+	// 20000, in about a minute). Only where every run must conform: a
+	// mutant's failing run searches its whole budget, and one of them
+	// failing is enough
+	faithful := system(cfg, both...)
+	faithful.Opts = append(faithful.Opts, qtest.LinearizeBudget(20000))
+	faithful.WithRates(lossy).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Some(qtest.Pending("transfer")))
 	// 3 runs in 12
 	system(cfg).WithRates(lossy).Explore(t, x).Expect(t, broken)
 	cfg.Mutation = NoRequestID
@@ -105,7 +112,9 @@ func partitioned(ctx context.Context, d *Deployment) {
 
 // After the network heals, a node leads within the bound (300ms): a
 // follower cut off goes on pre-campaigning every election timeout (100
-// to 200ms), and wins once the network is whole. An election timeout ten
+// to 200ms), and wins once the network is whole, unless the vote splits
+// (leaderOrSplit: nodes whose timeouts tie each vote for themselves, a
+// round raft does not bound; seed 20753310's corpus entry ties twice). An election timeout ten
 // times as long (SlowElection) still elects, so the cluster has a leader
 // when it settles, but too late for the bound: only the bounded
 // obligation tells them apart.
@@ -113,11 +122,11 @@ func TestElectionAfterHeal(t *testing.T) {
 	qtest.RequireQuint(t)
 	// the run outlasts the scenario: a settle heals the network unrecorded
 	cfg := Config{Record: Cluster, Scenario: partitioned, Duration: 6 * time.Second}
-	x := qtest.ExploreConfig{Seeds: 10}
+	x := qtest.ExploreConfig{Seeds: 10, Corpus: "testdata/corpus"}
 	system(cfg).WithRates(qenv.NoFaults).Explore(t, x).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	cfg.Mutation = SlowElection
 	system(cfg).WithRates(qenv.NoFaults).Explore(t, x).
-		Expect(t, qtest.None(qtest.Violates(validate.EventuallyName("hasLeader"))), qtest.Some(qtest.Violates("within 300ms after healed: hasLeader")))
+		Expect(t, qtest.None(qtest.Violates(validate.EventuallyName("hasLeader"))), qtest.Some(qtest.Violates("within 300ms after healed: leaderOrSplit")))
 }
 
 // isolateFirst moves the leadership to n1 once some writes are done, as an
