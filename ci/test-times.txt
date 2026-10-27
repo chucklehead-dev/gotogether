@@ -11,7 +11,7 @@
 # the reason; packages under ten CPU seconds have none.
 examples/bank 80
 examples/checkout 165
-examples/counters 190 # 190 CPU s under -short (the mutants' overlay builds and their explorations, two isolation levels, claim 1's contrast, duplicated and late requests; Exhaust skipped)
+examples/counters 390 # 385 CPU s on CI (run 378; 190 measured on a faster machine): under -short the mutants' overlay builds and their explorations, two isolation levels, claim 1's contrast, duplicated and late requests; Exhaust skipped
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51
