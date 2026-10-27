@@ -203,6 +203,13 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 			steps = append(steps, in.Steps...)
 		}
 	}
+	var files []*input.File
+	for _, in := range j.Inputs {
+		files = append(files, in.file)
+	}
+	if err := input.Distinct(files...); err != nil {
+		return nil, err
+	}
 	var err error
 	if steps, err = markLost(steps, chk.LostPrefix, true); err != nil {
 		return nil, err

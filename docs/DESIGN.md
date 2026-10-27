@@ -3819,3 +3819,19 @@ nothing); completing a call from `expect(...).toHaveText` (§54: a poll
 may have made it true); reading Bombadil's traces in the CLI (its
 mapping needs the spec's names, which a flag list would only
 restate: `bombadil.Log` writes the protocol for the CLI instead).
+
+**The review of G7.** Two logs naming one recorder (the README's and
+webjobs' `ui`, Bombadil's default `bombadil`) were numbered alike, and
+Reconstruct's dedupe on (recorder, seq), there for exporters' retries,
+kept the first log's records and dropped the second's as copies, saying
+so as info: a second run that failed passed on the first's. A record
+twice is a copy only if it is the same record (all but `Source`, where
+it was read); two that differ are an error issue `duplicate` of each
+actor of either, as a cycle is: a defect of the input, which no verdict
+of the system reads past (an actor's result is not OK, its reason
+`issue`, and an observation mutant that makes one is malformed). It is
+not no verdict: more of the log would not resolve it, and a FAIL it
+gave would be the input's, which the issue names. The CLI refuses two
+request logs naming one recorder before reading further (a tool error,
+exit 2, `input.Distinct`), and the Playwright adapter makes each log's
+recorder its own (`ui-<pid>-<n>`).

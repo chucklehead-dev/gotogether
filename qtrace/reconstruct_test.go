@@ -64,6 +64,44 @@ func TestGapsAndDuplicates(t *testing.T) {
 	}
 }
 
+// Two records of one (recorder, seq) that differ are no copy: two logs
+// naming one recorder. The second's steps were dropped unseen (a second
+// driver run that failed passed on the first's); now each actor of
+// either record has an error issue, while a copy (read from another
+// place) stays info.
+func TestConflictingDuplicates(t *testing.T) {
+	a := st("deposit", 1, "", 0)
+	a.Args["amount"], a.Source = int64(5), "one.jsonl:2"
+	copyA := a
+	copyA.Args = map[string]any{"amount": int64(5)}
+	copyA.Source = "copy.jsonl:2"
+	traces, issues := Reconstruct([]Step{a, copyA})
+	if len(issues) != 1 || issues[0].Severity != "info" || len(traces[0].Issues) != 0 {
+		t.Fatalf("a copy: issues %v, trace issues %v", issues, traces[0].Issues)
+	}
+	b := a
+	b.Args = map[string]any{"amount": int64(7)}
+	b.Source = "two.jsonl:2"
+	traces, issues = Reconstruct([]Step{a, b})
+	if len(issues) != 0 || len(traces) != 1 || len(traces[0].Issues) != 1 {
+		t.Fatalf("issues %v, traces %d", issues, len(traces))
+	}
+	is := traces[0].Issues[0]
+	for _, want := range []string{"recorder r seq 1 is two different records", "one.jsonl:2", "two.jsonl:2", "give each log its own recorder"} {
+		if is.Severity != "error" || is.Kind != "duplicate" || !strings.Contains(is.Msg, want) {
+			t.Errorf("issue %v lacks %q", is, want)
+		}
+	}
+	// another actor's record under the same seq: both actors are told,
+	// the second with a trace of no steps
+	c := b
+	c.Actor = "other"
+	traces, _ = Reconstruct([]Step{a, c})
+	if len(traces) != 2 || traces[1].Actor != "other" || len(traces[1].Steps) != 0 || len(traces[0].Issues) != 1 || len(traces[1].Issues) != 1 {
+		t.Fatalf("another actor: traces %d", len(traces))
+	}
+}
+
 // An incarnation that acts after its successor started (a zombie) is an
 // error: replayed as restarts, the split brain once validated.
 func TestProcessesAndOverlap(t *testing.T) {

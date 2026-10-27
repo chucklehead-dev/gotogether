@@ -62,6 +62,27 @@ type File struct {
 	// Steps are those before it, and a loss record (qtrace.ReadJSONL,
 	// qdriver.Read).
 	Torn *qtrace.TornTail
+	// Recorder is a request log's header's recorder ("" for any other
+	// format): its records are numbered in it (Distinct).
+	Recorder string
+}
+
+// Distinct refuses two request logs naming one recorder: their records
+// would be numbered alike, and Reconstruct would find every one of the
+// second's a conflicting duplicate of the first's. The fix names both.
+func Distinct(files ...*File) error {
+	by := map[string]string{}
+	for _, f := range files {
+		if f == nil || f.Recorder == "" {
+			continue
+		}
+		if first, ok := by[f.Recorder]; ok {
+			return fmt.Errorf("%s and %s are request logs of one recorder %q: each log's records are numbered from 1 in its header's recorder, so the second's would collide with the first's. "+
+				"Have each driver run write its own recorder (Playwright's adapter: a recorder per page, the default; Bombadil: bombadil.Options.Header.Recorder), or edit one header", first, f.Path, f.Recorder)
+		}
+		by[f.Recorder] = f.Path
+	}
+	return nil
 }
 
 // Read reads path. format may be "" or "auto" to detect it.
@@ -90,7 +111,7 @@ func Read(path string, format Format) (*File, error) {
 			err = nil
 		}
 		if err == nil {
-			in.Steps = l.Steps()
+			in.Steps, in.Recorder = l.Steps(), l.Header.Recorder
 		}
 	case ITF:
 		in.ITF, err = itf.Parse(data)

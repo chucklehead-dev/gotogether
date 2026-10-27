@@ -3,6 +3,7 @@ package qtrace
 import (
 	"container/heap"
 	"fmt"
+	"reflect"
 	"sort"
 	"time"
 )
@@ -77,21 +78,38 @@ func (i Issue) String() string { return fmt.Sprintf("%s %s: %s", i.Severity, i.K
 func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	var issues []Issue
 
-	// 1. Dedupe on (recorder, seq): OTLP exporters retry, collectors fan out.
+	// 1. Dedupe on (recorder, seq): OTLP exporters retry, collectors fan
+	// out, and a copy is the same record twice. Two records of one
+	// (recorder, seq) that differ are no copy: two logs naming one
+	// recorder (two drivers' request logs both "ui"), whose second's steps
+	// a dedupe would drop unseen, a failing run passing on the first's.
+	// That is a defect of the input, an error issue of each actor of
+	// either record, as a cycle is.
 	type rk struct {
 		rec string
 		seq uint64
 	}
-	seen := map[rk]bool{}
+	seen := map[rk]int{} // the index in uniq of the record kept
+	dupIssues := map[string][]Issue{}
 	uniq := steps[:0:0]
 	for _, s := range steps {
 		if s.Seq != 0 {
 			k := rk{s.Recorder, s.Seq}
-			if seen[k] {
-				issues = append(issues, Issue{"info", "duplicate", fmt.Sprintf("recorder %s seq %d seen twice; kept the first", s.Recorder, s.Seq)})
+			if i, ok := seen[k]; ok {
+				first := &uniq[i]
+				if sameRecord(first, &s) {
+					issues = append(issues, Issue{"info", "duplicate", fmt.Sprintf("recorder %s seq %d seen twice; kept the first", s.Recorder, s.Seq)})
+					continue
+				}
+				is := Issue{"error", "duplicate", fmt.Sprintf("recorder %s seq %d is two different records (%s, then %s): two logs or exporters number their steps in one recorder; "+
+					"give each log its own recorder (a request log's header names it), or drop the log that is not this run's", s.Recorder, s.Seq, describe(first), describe(&s))}
+				dupIssues[first.Actor] = append(dupIssues[first.Actor], is)
+				if s.Actor != first.Actor {
+					dupIssues[s.Actor] = append(dupIssues[s.Actor], is)
+				}
 				continue
 			}
-			seen[k] = true
+			seen[k] = len(uniq)
 		}
 		uniq = append(uniq, s)
 	}
@@ -385,6 +403,11 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			byActor[a] = []Step{} // an actor whose every operation is pending
 		}
 	}
+	for a := range dupIssues {
+		if byActor[a] == nil {
+			byActor[a] = []Step{} // an actor whose every record was dropped as a conflicting duplicate: its issue says so
+		}
+	}
 	actors := make([]string, 0, len(byActor))
 	for a := range byActor {
 		actors = append(actors, a)
@@ -409,9 +432,50 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			t.Issues = append(t.Issues, Issue{"error", "gap", m})
 		}
 		t.Issues = append(t.Issues, callIssues[a]...)
+		t.Issues = append(t.Issues, dupIssues[a]...)
 		out = append(out, t)
 	}
 	return out, issues
+}
+
+// sameRecord reports whether a and b are one record twice: equal in
+// everything written with it (Source, where it was read, aside: one span
+// exported twice, one line in two overlapping logs).
+func sameRecord(a, b *Step) bool {
+	x, y := *a, *b
+	x.Source, y.Source = "", ""
+	if !x.Time.Equal(y.Time) || !x.Invoked.Equal(y.Invoked) || !x.LostBefore.Equal(y.LostBefore) || !x.CompleteThrough.Equal(y.CompleteThrough) {
+		return false
+	}
+	x.Time, y.Time, x.Invoked, y.Invoked = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	x.LostBefore, y.LostBefore, x.CompleteThrough, y.CompleteThrough = time.Time{}, time.Time{}, time.Time{}, time.Time{}
+	if len(x.Args) == 0 && len(y.Args) == 0 {
+		x.Args, y.Args = nil, nil
+	}
+	if len(x.Obs) == 0 && len(y.Obs) == 0 {
+		x.Obs, y.Obs = nil, nil
+	}
+	if len(x.Order) == 0 && len(y.Order) == 0 {
+		x.Order, y.Order = nil, nil
+	}
+	return reflect.DeepEqual(x, y)
+}
+
+// describe names a record for a duplicate's issue: its action, actor and
+// where it was read.
+func describe(s *Step) string {
+	d := s.Action
+	if d == "" {
+		d = "a record"
+	}
+	if s.Invocation {
+		d += " invoked"
+	}
+	d += " of actor " + s.Actor
+	if s.Source != "" {
+		d += " at " + s.Source
+	}
+	return d
 }
 
 type node struct {

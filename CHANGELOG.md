@@ -58,7 +58,7 @@ The first release. What a user meets, by module:
   earlier key columns are fixed by equality, planned as a range of the
   Store's keys, `ORDER BY` the key's columns (after those fixed) in one
   direction, with `LIMIT`; `ON CONFLICT (cols) DO UPDATE SET c = ? |
-  c = excluded.c | c = c ± ? [WHERE ...]` (21000 for a row hit twice);
+  c = excluded.c | c = t.c ± ? [WHERE ...]` (21000 for a row hit twice);
   `RETURNING` on INSERT, UPDATE and DELETE. Anything else still fails
   with 42601 naming the subset. The Store scans a range as a predicate
   read of the range alone: `qenv.KeyRange`, `qenv.RangeScanner` (a
@@ -83,6 +83,13 @@ The first release. What a user meets, by module:
   left out, and a binding matching none of a run's actors has no verdict
   and says so. `System.WithBinding(path, opts...)`: the same runs judged
   by another binding.
+- Two records of one (recorder, seq) that differ are no copy: an error
+  issue (`duplicate`) of each actor of either, naming both and the fix,
+  where `qtrace.Reconstruct` kept the first and said so as info (two
+  driver logs both recorder `ui` had the second's steps dropped, a
+  failing second run passing). A copy stays info. `gotogether validate`
+  (and `steps`, `itf`) refuses two request logs naming one recorder
+  (`input.Distinct`, `input.File.Recorder`).
 - API trim before the tags (G6). `validate.Command`, `Judged` and
   `Replay` move to package `validate/cli` as `cli.Check`, `cli.Judged`,
   `cli.Replay`: the check reads OTLP/JSON, and in validate it brought

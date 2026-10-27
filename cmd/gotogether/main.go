@@ -342,6 +342,7 @@ func lint(args []string) (int, error) {
 
 func readSteps(files []string, rules *convert.Rules) ([]qtrace.Step, error) {
 	var all []qtrace.Step
+	var read []*input.File
 	for _, f := range files {
 		if rules != nil {
 			steps, ok, err := convertFile(f, rules)
@@ -360,9 +361,10 @@ func readSteps(files []string, rules *convert.Rules) ([]qtrace.Step, error) {
 		if in.Format == input.ITF {
 			return nil, fmt.Errorf("%s is an ITF trace, not recorded steps", f)
 		}
+		read = append(read, in)
 		all = append(all, in.Steps...)
 	}
-	return all, nil
+	return all, input.Distinct(read...)
 }
 
 func steps(args []string) error {
