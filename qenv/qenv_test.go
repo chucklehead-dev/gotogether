@@ -478,7 +478,7 @@ func TestEscapeAdviceFollowsTheGoroutine(t *testing.T) {
 	recorded := make(chan struct{})
 	go func() { //qenv:ok a goroutine of no simulation
 		defer close(recorded)
-		qobs.Record(context.Background(), "lost", nil)
+		qobs.Record(context.Background(), "lost", nil) //qenv:ok the escape this test is about: a step from a goroutine outside any simulation
 	}()
 	<-recorded
 	if _, msgs := hooks.Escaped(mark); len(msgs) != 1 || strings.Contains(msgs[0], "qenv.Go") || !strings.Contains(msgs[0], "qobs.WithRecorder(ctx, rec)") {
