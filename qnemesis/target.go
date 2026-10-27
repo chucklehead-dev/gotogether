@@ -80,6 +80,7 @@ type Process struct {
 	started time.Time     // the current incarnation's start
 	done    chan struct{} // closed once the current incarnation is reaped
 	exit    error         // its exit, once done
+	killed  bool          // the current incarnation was killed (Kill), not gone by itself
 	closed  bool
 }
 
@@ -126,7 +127,7 @@ func (p *Process) Start(context.Context) error {
 		return fmt.Errorf("qnemesis: start process %s (incarnation %d): %w", p.Name, p.inc+1, err)
 	}
 	p.inc++
-	p.cmd, p.started = cmd, started
+	p.cmd, p.started, p.killed = cmd, started, false
 	if p.PIDFile != "" {
 		pid := cmd.Process.Pid
 		if err := os.WriteFile(p.PIDFile, []byte(fmt.Sprintf("%d %d\n", pid, startTime(pid))), 0o644); err != nil {
@@ -191,6 +192,9 @@ func (p *Process) Exit() error { p.mu.Lock(); defer p.mu.Unlock(); return p.exit
 func (p *Process) Kill(ctx context.Context) error {
 	p.mu.Lock()
 	cmd, done := p.cmd, p.done
+	if cmd != nil && p.running() {
+		p.killed = true
+	}
 	p.mu.Unlock()
 	if cmd == nil || cmd.Process == nil {
 		return nil
@@ -212,34 +216,57 @@ func (p *Process) Kill(ctx context.Context) error {
 // Pause implements Target: SIGSTOP to the incarnation's group. It
 // returns once every process of the group has stopped (on Linux;
 // elsewhere once the signal is sent).
+//
+// A process that is not running is not paused: the error says whether
+// it never started, was killed, or exited by itself (a server that could
+// not bind its address, a panic), and no fault is made of it, so a
+// Nemesis journals and records none.
 func (p *Process) Pause(ctx context.Context) error {
-	if err := p.signal(true); err != nil {
+	pid, err := p.signal(true)
+	if err != nil {
 		return err
 	}
-	p.mu.Lock()
-	pid := p.cmd.Process.Pid
-	p.mu.Unlock()
 	return waitStopped(ctx, pid)
 }
 
-// Resume implements Target: SIGCONT to the incarnation's group.
-func (p *Process) Resume(context.Context) error { return p.signal(false) }
+// Resume implements Target: SIGCONT to the incarnation's group; an
+// error, as Pause's, if it is not running.
+func (p *Process) Resume(context.Context) error { _, err := p.signal(false); return err }
 
-// signal pauses (SIGSTOP) or resumes (SIGCONT) the incarnation's group.
-func (p *Process) signal(pause bool) error {
+// signal pauses (SIGSTOP) or resumes (SIGCONT) the incarnation's group,
+// returning the group's id.
+func (p *Process) signal(pause bool) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if !p.running() {
-		return fmt.Errorf("qnemesis: process %s is not running: start it before pausing or resuming it", p.Name)
-	}
 	s, what := sigCont, "resume"
 	if pause {
 		s, what = sigStop, "pause"
 	}
-	if err := signalGroup(p.cmd.Process.Pid, s); err != nil {
-		return fmt.Errorf("qnemesis: %s process %s: %w", what, p.Name, err)
+	if !p.running() {
+		return 0, p.notRunning(what)
 	}
-	return nil
+	pid := p.cmd.Process.Pid
+	if err := signalGroup(pid, s); err != nil {
+		return 0, fmt.Errorf("qnemesis: %s process %s: %w", what, p.Name, err)
+	}
+	return pid, nil
+}
+
+// notRunning says why a process that is not running cannot be paused or
+// resumed; p.mu held.
+func (p *Process) notRunning(what string) error {
+	switch {
+	case p.cmd == nil:
+		return fmt.Errorf("qnemesis: process %s is not running: start it before pausing or resuming it", p.Name)
+	case p.killed:
+		return fmt.Errorf("qnemesis: process %s is not running (incarnation %d was killed): start it before pausing or resuming it", p.Name, p.inc)
+	}
+	exit := "exit status 0"
+	if p.exit != nil {
+		exit = p.exit.Error()
+	}
+	return fmt.Errorf("qnemesis: process %s is not running: incarnation %d exited by itself (%s), so there is nothing to %s; "+
+		"its output says why (an address in use, a panic): fix that, or Start it again first", p.Name, p.inc, exit, what)
 }
 
 // Close kills the current incarnation, if any, and starts no other: a

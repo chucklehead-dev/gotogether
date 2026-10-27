@@ -258,6 +258,15 @@ The first release. What a user meets, by module:
   after `CutLength`), leaves out heals of links never cut, and
   `Journal.LongestCut` and `Unreproducible` say what to set and what it
   cannot make.
+  `Process.Pause` and `Resume` of a process not running say whether it
+  never started, was killed, or exited by itself (its incarnation and
+  exit status): a schedule's pause of one fails naming the fault, and
+  nothing is journaled or recorded of a fault not made. (raftkv's real
+  tier once ran with n3 never up: its port, picked by listening on
+  ":0", was a toxiproxy proxy's by the time it started, and the proxy
+  answered for it; nodes now take ports below the ephemeral range, an
+  agreement needs each node at its own address, and a node down by
+  itself fails the run.)
 - `qtest.Runs`: claims over runs made one by one (a real deployment's,
   each validated), judged and checked as an exploration's (`Some`, `All`,
   `None`; misspelled names, eventual vals judged in no run, no runs, and

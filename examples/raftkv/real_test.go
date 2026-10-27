@@ -5,10 +5,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -99,33 +102,106 @@ func (c *realCluster) agreed(ctx context.Context, d time.Duration) Status {
 			}
 			last = append(last, st)
 		}
-		if len(last) == len(Nodes) && last[0].Up && last[0].Leader != "" {
-			same := true
-			for _, st := range last[1:] {
-				same = same && st.Up && st.Leader == last[0].Leader && st.Term == last[0].Term && st.Applied == last[0].Applied
-			}
-			if same {
-				return last[0]
-			}
+		if st, ok := agreement(last); ok {
+			return st
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	c.t.Fatalf("the nodes did not agree within %s: %+v (node logs in %s)", d, last, c.dir)
+	c.t.Fatalf("the nodes did not agree within %s: %+v%s (node logs in %s)", d, last, impostors(last), c.dir)
 	return Status{}
 }
 
-// freeAddrs are n localhost addresses free a moment ago.
+// agreement is the status every node agrees on, if they do: each of
+// Nodes answering at its own address as itself, up, with one leader, term
+// and applied index. A node's address answering as another node is no
+// agreement: something else holds its port (impostors).
+func agreement(last []Status) (Status, bool) {
+	if len(last) != len(Nodes) || last[0].Leader == "" {
+		return Status{}, false
+	}
+	for i, st := range last {
+		if st.Node != Nodes[i] || !st.Up || st.Leader != last[0].Leader || st.Term != last[0].Term || st.Applied != last[0].Applied {
+			return Status{}, false
+		}
+	}
+	return last[0], true
+}
+
+// impostors names the nodes whose address another node answered at, for
+// agreed's failure.
+func impostors(last []Status) string {
+	var out string
+	for i, st := range last {
+		if st.Node != Nodes[i] {
+			out += fmt.Sprintf("; %s's address answered as %q: its port is another process's (a proxy's?), see %s's log", Nodes[i], st.Node, Nodes[i])
+		}
+	}
+	return out
+}
+
+// freeAddrs are n localhost addresses free a moment ago, their ports
+// below the kernel's ephemeral range (ephemeralLow) and never handed out
+// twice by this test binary. A port picked by listening on ":0" and
+// released is one the kernel may hand out again, to a toxiproxy proxy
+// made with ":0" or an outgoing connection, before the node binds it:
+// CI's n3 once found its address in use, held by a proxy to another
+// node, which answered for it, so the cluster seemed to agree with n3
+// never up.
 func freeAddrs(t *testing.T, n int) []string {
+	t.Helper()
+	lo, hi := nodePorts()
+	portsMu.Lock()
+	defer portsMu.Unlock()
 	var out []string
-	for range n {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
+	start := rand.IntN(hi - lo)
+	for k := 0; k < hi-lo && len(out) < n; k++ {
+		port := lo + (start+k)%(hi-lo)
+		if portsGiven[port] {
+			continue
+		}
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
-			t.Fatal(err)
+			continue // in use
 		}
 		out = append(out, ln.Addr().String())
 		ln.Close()
+		portsGiven[port] = true
+	}
+	if len(out) < n {
+		t.Fatalf("no %d free ports in [%d, %d), below the ephemeral range", n, lo, hi)
 	}
 	return out
+}
+
+// portsGiven are the ports freeAddrs has handed out (portsMu held):
+// process-wide, so two runs of the binary's tests never share one.
+var (
+	portsMu    sync.Mutex
+	portsGiven = map[int]bool{}
+)
+
+// nodePorts are the ports freeAddrs picks from: from 10000 to the
+// ephemeral range's start, at most 32768 (Linux's default start; BSD's
+// and macOS's is 49152).
+func nodePorts() (lo, hi int) {
+	lo, hi = 10000, min(ephemeralLow(), 32768)
+	if hi-lo < 1000 {
+		lo = 1024 // an ephemeral range starting low: what is below it
+	}
+	return lo, hi
+}
+
+// ephemeralLow is where the kernel's ephemeral ports begin: Linux's
+// ip_local_port_range, else IANA's 49152.
+func ephemeralLow() int {
+	b, err := os.ReadFile("/proc/sys/net/ipv4/ip_local_port_range")
+	var low int
+	if err == nil {
+		if _, err := fmt.Sscan(string(b), &low); err == nil && low > 1024 {
+			return low
+		}
+	}
+	return 49152
 }
 
 // buildNode builds cmd/raftkv-node into dir, with the race detector when
@@ -352,5 +428,51 @@ func TestRealNodeExitsWithParent(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the node outlived its parent by 5s")
+	}
+}
+
+// The real tier's node addresses are below the kernel's ephemeral range,
+// where no ":0" listener (a toxiproxy proxy's) or outgoing connection
+// takes them before the node binds: picked by listening on ":0", one was
+// once a proxy's by the time n3 started.
+func TestFreeAddrsBelowTheEphemeralRange(t *testing.T) {
+	low := ephemeralLow()
+	seen := map[string]bool{}
+	for range 3 {
+		for _, a := range freeAddrs(t, len(Nodes)) {
+			_, port, err := net.SplitHostPort(a)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p, _ := strconv.Atoi(port); p >= low || p < 1024 {
+				t.Errorf("%s: port %d is not below the ephemeral range (from %d)", a, p, low)
+			}
+			if seen[a] {
+				t.Errorf("%s handed out twice", a)
+			}
+			seen[a] = true
+		}
+	}
+}
+
+// The nodes agree only if each answers at its own address as itself: CI's
+// n3 never started (its port a proxy's), and its address, answering as
+// n1 through the proxy, made the cluster look agreed.
+func TestAgreementNeedsEachNodeAtItsAddress(t *testing.T) {
+	st := func(node string) Status { return Status{Node: node, Up: true, Leader: "n1", Term: 2, Applied: 7} }
+	if _, ok := agreement([]Status{st("n1"), st("n2"), st("n3")}); !ok {
+		t.Fatal("three nodes agreeing: no agreement")
+	}
+	impostor := []Status{st("n1"), st("n2"), st("n1")}
+	if _, ok := agreement(impostor); ok {
+		t.Fatal("n3's address answering as n1: an agreement")
+	}
+	if got := impostors(impostor); !strings.Contains(got, `n3's address answered as "n1"`) {
+		t.Fatalf("impostors: %q; want n3's address answering as n1", got)
+	}
+	behind := []Status{st("n1"), st("n2"), st("n3")}
+	behind[2].Applied = 6
+	if _, ok := agreement(behind); ok {
+		t.Fatal("n3 behind: an agreement")
 	}
 }

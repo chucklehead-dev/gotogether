@@ -3336,6 +3336,15 @@ simulation's 300 ms: a faithful election once took 320 ms under the race
 detector, said openly). NoPersistVote and NoSnapshotReport need
 interleavings the real schedules did not reach; the simulation catches
 both.
+A node's port is picked below the kernel's ephemeral range: one picked
+by listening on ":0" and released was once a toxiproxy proxy's (made
+with ":0") by the time n3 bound it, and the proxy, forwarding to another
+node, answered for n3, so a run passed with a node never up until the
+harness's last pause found it gone. An agreement now needs each node
+answering at its own address as itself, a node down by itself fails the
+run (the journal's Stop restart of no fault), and a pause or resume of a
+process not running says whether it was killed or exited by itself, and
+how: the fault is not made, and nothing of it journaled.
 
 Three reviews: of the plan, of qnemesis and the real tier (a kill
 between effect and record giving a false FAIL, the nemesis's steps

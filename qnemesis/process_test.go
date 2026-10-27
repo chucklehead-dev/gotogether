@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -307,5 +309,77 @@ func TestPauseIsRecordedOnceStopped(t *testing.T) {
 				t.Fatalf("a %s (seq %d) at %v, while paused from %v to %v: the pause was recorded before the process stopped", s.Action, s.Seq, s.Time, paused, resumed)
 			}
 		}
+	}
+}
+
+// A process that exited by itself (here, as raftkv's n3 once did, a
+// server whose address another process held) is not paused: Pause says
+// it exited and how, a schedule's pause of it fails naming the fault, and
+// the nemesis journals and records nothing of a fault it did not make.
+// One killed says so; a resume after either is the same refusal.
+func TestPauseOfAProcessNotRunning(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Process{Name: "n3", Cmd: func(inc int) *exec.Cmd {
+		cmd := exec.Command(exe, "-test.run=^$")
+		cmd.Env = append(os.Environ(), "QNEMESIS_CHILD=server", "QNEMESIS_DIR="+dir, "QNEMESIS_NAME=n3",
+			"QNEMESIS_INC="+strconv.Itoa(inc), "QNEMESIS_ADDR="+held.Addr().String())
+		return cmd // its panic's output discarded: the test reads its exit
+	}}
+	t.Cleanup(func() { _ = p.Close() })
+	ctx := context.Background()
+	if err := p.Pause(ctx); err == nil || !strings.Contains(err.Error(), "start it before") {
+		t.Fatalf("Pause before Start: %v; want the process not started", err)
+	}
+	if err := p.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(20 * time.Second); p.Alive(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the server bound an address another process holds")
+		}
+	}
+	for _, op := range []func(context.Context) error{p.Pause, p.Resume} {
+		err := op(ctx)
+		if err == nil || !strings.Contains(err.Error(), "incarnation 1 exited by itself (exit status 2)") {
+			t.Fatalf("%v; want incarnation 1 exited by itself, with its exit status", err)
+		}
+	}
+
+	rec, recPath := nemesisRec(t, dir)
+	var journal bytes.Buffer
+	n := &Nemesis{Targets: map[string]Target{"n3": p}, Rec: rec, Journal: &journal,
+		Record: Recording{"pause": func(Event) (string, []any) { return "pause", nil }}}
+	err = n.Run(ctx, Schedule{{Kind: "nemesis.pause.n3", For: time.Second}})
+	if err == nil || !strings.Contains(err.Error(), "fault 0 (nemesis.pause.n3 for 1s)") || !strings.Contains(err.Error(), "exited by itself") {
+		t.Fatalf("Run: %v; want fault 0 failing, n3 exited by itself", err)
+	}
+	if journal.Len() != 0 {
+		t.Fatalf("journal %q; want nothing: the pause was not made", journal.String())
+	}
+	if steps, _ := readLog(t, recPath); len(steps) != 0 {
+		t.Fatalf("the nemesis recorded %+v; want nothing", steps)
+	}
+
+	// killed, not gone by itself: an incarnation that runs, then the kill
+	held.Close()
+	if err := p.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	addrOf(t, dir, "n3", 2)
+	if err := p.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Resume(ctx); err == nil || !strings.Contains(err.Error(), "incarnation 2 was killed") {
+		t.Fatalf("Resume after Kill: %v; want incarnation 2 killed", err)
 	}
 }

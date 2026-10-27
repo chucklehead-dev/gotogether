@@ -276,6 +276,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	if runErr != nil {
 		t.Fatalf("the nemesis: %v", runErr)
 	}
+	downByItself(t, dir)
 	for range cfg.Cuts {
 		agreed(t, direct, dir, 15*time.Second)
 		for i, a := range Nodes {
@@ -343,6 +344,31 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "harness.jsonl"))...)
 	v.Cluster = qtest.Validate(t, "cluster.real.binding.yaml", cluster)
 	return v
+}
+
+// downByItself fails the run if a node went down by itself during it,
+// as its journal says (Stop's start of a target no fault had stopped):
+// only the nemesis stops a node here, and a run with one missing (n3 once
+// could not bind its address, its port another process's) is not the
+// run its schedule describes.
+func downByItself(t *testing.T, dir string) {
+	t.Helper()
+	f, err := os.Open(filepath.Join(dir, "journal.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	j, err := qnemesis.ReadJournal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range j.Entries {
+		if e.Index < 0 {
+			name := strings.TrimPrefix(e.Kind, "nemesis.restart.")
+			t.Fatalf("%s went down by itself during the run (Stop started its incarnation %d): its logs %s say why",
+				name, e.Incarnation, filepath.Join(dir, name+".*.log"))
+		}
+	}
 }
 
 // noRequestIDCaught is how a run shows NoRequestID, as the simulation's
