@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -39,6 +40,19 @@ func taken(r *Run) map[string]bool {
 			if c.Action != "" {
 				out[c.Action] = true
 			}
+		}
+	}
+	return out
+}
+
+// stepActions are the actions of m a run's step can be: all but init,
+// step (the state machine's own) and the frame helpers other actions
+// call (binding.Model.Helpers, never a step).
+func stepActions(m *binding.Model) map[string]bool {
+	out := map[string]bool{}
+	for a := range m.Actions {
+		if a != "init" && a != "step" && !m.Helpers[a] {
+			out[a] = true
 		}
 	}
 	return out

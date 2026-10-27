@@ -117,8 +117,8 @@ func (x *Exploration) Evidence() *Evidence {
 	e.Test, e.Spec = x.ref(), x.model
 	e.Format, e.Role, e.Mutant, e.Package, e.Import = EvidenceFormat, x.role(), x.mutation, pkgDir(), importPath()
 	e.Faults = x.faultCoverage()
-	if x.actions != nil {
-		e.Model = modelCoverage(x.Runs, x.actions)
+	if x.steps != nil {
+		e.Model = modelCoverage(x.Runs, x.steps)
 	}
 	if x.hasCode() {
 		e.Code = x.codeCoverage()
@@ -137,7 +137,7 @@ func (s *SweepResult) Evidence() *Evidence {
 		if x != nil {
 			all.Runs = append(all.Runs, x.Runs...)
 			if all.actions == nil {
-				all.actions, all.test, all.model, all.mutation = x.actions, x.test, x.model, x.mutation
+				all.actions, all.steps, all.test, all.model, all.mutation = x.actions, x.steps, x.test, x.model, x.mutation
 			}
 		}
 	}

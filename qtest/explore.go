@@ -46,6 +46,7 @@ type Exploration struct {
 	model     string            // the binding's spec and module ("model/m.qnt:m"), for Evidence
 	test      string            // the test's name, for reproducing a seed
 	actions   map[string]bool   // the model's, for checking claims' names
+	steps     map[string]bool   // those a step can be, for model coverage (stepActions)
 	search    *search           // an exhaustive search's bound and extent (System.Exhaust), else nil
 	checker   *validate.Checker // the runs' instance, for witnesses (vacuity)
 	corpus    string            // the corpus directory (ExploreConfig.Corpus), or ""
@@ -584,7 +585,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	x.constants, x.checker = constants, cc
 	x.model = cc.Binding.SpecPath() + ":" + cc.Binding.Module
 	if cc.Model != nil {
-		x.actions = map[string]bool{}
+		x.actions, x.steps = map[string]bool{}, stepActions(cc.Model)
 		for a := range cc.Model.Actions {
 			x.actions[a] = true
 		}
@@ -1065,19 +1066,18 @@ func (x *Exploration) summary() string {
 	if pending > 0 {
 		line += fmt.Sprintf("; %d left calls pending", pending)
 	}
-	if x.actions != nil {
-		m := modelCoverage(x.Runs, x.actions)
-		taken, all := 0, 0
-		for a := range x.actions {
-			if a == "init" || a == "step" {
-				continue // the model's own, not a step a run records
-			}
-			all++
-			if m.Taken[a] > 0 {
-				taken++
-			}
+	if x.steps != nil {
+		// of the model's actions but init, step and frame helpers: an action
+		// only other actions call (a grist model's appends) is one too, so
+		// the untaken are named
+		m := modelCoverage(x.Runs, x.steps)
+		all := len(x.steps)
+		line += fmt.Sprintf("; model actions taken %d of %d", all-len(m.Never), all)
+		if n := len(m.Never); n > 0 && n <= 8 {
+			line += " (never: " + strings.Join(m.Never, ", ") + ")"
+		} else if n > 8 {
+			line += fmt.Sprintf(" (never: %s and %d more)", strings.Join(m.Never[:8], ", "), n-8)
 		}
-		line += fmt.Sprintf("; actions taken %d of %d", taken, all)
 	}
 	cov := x.faultCoverage()
 	faulted, reached := 0, 0

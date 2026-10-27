@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -32,4 +33,22 @@ func TestEvidence(t *testing.T) {
 		}
 	}
 	t.Log(s)
+}
+
+// An exploration's summary counts the model's actions a step can be
+// (init, step and frame helpers aside) and names those no run took: a
+// count alone left a reader guessing which actions were missing, and
+// counted helpers no run can ever take.
+func TestSummaryNamesUntakenActions(t *testing.T) {
+	t.Parallel()
+	m := &binding.Model{Actions: map[string][]binding.Param{"init": nil, "step": nil, "put": nil, "get": nil, "appends": nil, "same": nil},
+		Helpers: map[string]bool{"same": true}}
+	ok := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "put"}}}}}
+	x := &Exploration{Runs: []*Run{{Report: ok}}, steps: stepActions(m), given: true}
+	if s, want := x.summary(), "model actions taken 1 of 3 (never: appends, get)"; !strings.Contains(s, want) {
+		t.Errorf("summary %q: want %q", s, want)
+	}
+	if s := x.Evidence().String(); !strings.Contains(s, "1 of 3 actions taken; never: appends, get") {
+		t.Errorf("evidence:\n%s\nwant 1 of 3 actions taken, appends and get never", s)
+	}
 }

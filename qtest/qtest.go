@@ -483,7 +483,11 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 			}
 		}
 	} else {
-		t.Logf("gotogether: no model-level ITF: %v", err)
+		// the ITF is an artifact (Run.ITF: the observed trace as a file, for
+		// a reader or a replay), made in-process from literal arguments only;
+		// the verdict is quint's, which evaluates every argument, and is not
+		// affected
+		t.Logf("gotogether: no model-level ITF file (Run.ITF) for this run, the verdict unaffected (quint evaluated every argument; only the file, written for inspection, needs literals): %v", err)
 	}
 	run.Report = j.Report
 	run.checks, run.checker = checkedNames(ch), ch

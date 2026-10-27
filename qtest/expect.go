@@ -868,7 +868,7 @@ func Runs(runs ...*Run) *Exploration {
 		}
 	}
 	if x.checker != nil && x.checker.Model != nil {
-		x.actions = map[string]bool{}
+		x.actions, x.steps = map[string]bool{}, stepActions(x.checker.Model)
 		for a := range x.checker.Model.Actions {
 			x.actions[a] = true
 		}
