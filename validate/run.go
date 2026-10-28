@@ -35,6 +35,9 @@ type Checker struct {
 	planner *binding.Planner
 	// scratch is its temporary directory, with no Options.Dir (Close)
 	scratch *scratch
+	// compiled, if set, is the compiled model it judges by, with no
+	// quint (NewCompiledChecker)
+	compiled *compiledState
 }
 
 // mode is how a checker's checks are made, set on the copies a search
@@ -268,6 +271,9 @@ func reconstruct(b *binding.Binding, steps []qtrace.Step) ([]*qtrace.Trace, []qt
 // Check reconstructs per-actor traces from steps (in any order, from any
 // number of recorders) and validates each.
 func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
+	if c.compiled != nil {
+		return c.checkCompiled(ctx, steps)
+	}
 	traces, issues := reconstruct(c.Binding, steps)
 	rep := &Report{Issues: issues}
 	re := c.runEvaluator()

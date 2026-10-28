@@ -161,6 +161,9 @@ type Result struct {
 	// (decide.go); sampled: the evaluator passed it and quint judged it
 	// too, a sample of its passes (GOTOGETHER_EVAL_SAMPLE)
 	byEvaluator, sampled bool
+	// compiled: judged by a compiled model (validate -compiled), the
+	// evaluator alone
+	compiled bool
 	// Unfinished, set by a check that judges the finish (a recorded
 	// run's -require-finish, validate/cli), is why a result that
 	// passes is no finished run ("incomplete (no settle)", "no verdict
@@ -869,7 +872,9 @@ func (r *Result) Summary() string {
 	if r.Module != "" && !r.OK() { // (a search's verdict, with no replay of its own)
 		fmt.Fprintf(&b, "  module: %s\n", r.Module)
 	}
-	if r.byEvaluator {
+	if r.byEvaluator && r.compiled {
+		fmt.Fprintf(&b, "  judged by the Go evaluator alone, by a compiled model (validate -compiled): no quint replay, none to sample it against\n")
+	} else if r.byEvaluator {
 		fmt.Fprintf(&b, "  judged by the Go evaluator, with no quint replay (GOTOGETHER_EVAL=quint replays it with quint)\n")
 	}
 	if r.sampled {

@@ -2103,6 +2103,7 @@ var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-
 var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
+const CompiledFormat = "gotogether.model/1"
 const DefaultGraphStates = 100000
 const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
@@ -2119,15 +2120,20 @@ const NavProtocol = "gotogether.nav/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const Uncollected Cause = "uncollected"
+func CacheDir() string
 func Cached(bindingPath string, o Options) (*Checker, error)
 func CheckNavProtocol(p string) error
+func Compile(bindingPath string, opt Options) (*CompiledModel, error)
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
 func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error)
 func IsManifest(path string) bool
+func LoadCompiled(path string) (*CompiledModel, error)
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
+func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker, error)
 func NewManifest(r RunRecord) (*Manifest, error)
+func QuintSupported(v string) bool
 func ReadManifest(path string) (*Manifest, error)
 func SplitPath(s string) []string
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
@@ -2169,6 +2175,7 @@ type Checker struct
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
     method (*Checker) Close() error
+    method (*Checker) Compiled() *CompiledModel
     method (*Checker) Graph(cfg GraphSearch) (*GraphResult, error)
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
@@ -2179,6 +2186,17 @@ type Checker struct
     method (*Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type CompiledModel struct
+    field Format string `json:"format"`
+    field Quint string `json:"quint"`
+    field Gotogether string `json:"gotogether,omitempty"`
+    field Binding File `json:"binding"`
+    field Sources []File `json:"sources"`
+    field Module string `json:"module"`
+    field Typecheck json.RawMessage `json:"typecheck"`
+    field Eval *binding.EvalModule `json:"eval"`
+    field IR json.RawMessage `json:"ir"`
+    method (*CompiledModel) Write(path string) error
 type Condition struct
     field In string `json:"in"`
     field Expr string `json:"expr"`
@@ -2559,6 +2577,7 @@ type Tools struct
     field Backend string `json:"backend,omitempty"`
 type Verdict string
 var ErrManifestFormat = errors.New("another manifest format")
+var ErrNeedsQuint = errors.New("needs quint: a compiled model (validate -compiled) is judged by the Go evaluator alone")
 
 == github.com/chucklehead-dev/gotogether/validate/cli
 func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Replayed, error)
@@ -2582,6 +2601,7 @@ type Check struct
     field Driver *validate.Driver
     field Artifacts []validate.Artifact
     field RunInfo string
+    field Compiled string
     field Options validate.Options
     method (Check) Judge(ctx context.Context) (*Judged, error)
 type Input struct

@@ -4881,6 +4881,7 @@ per format):
 | `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
 | `gotogether.run/2` | validate's run manifest | the current only |
 | `gotogether.evidence/2` | qtest's evidence | the current only |
+| `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
 | `gotogether.nav/1` | RunSession and RunNode's `protocol` | 1 on; none: 1 |
 
 **Unversioned is major 1.** Every log, binding, rule file and session
@@ -4956,3 +4957,78 @@ and whether it is installed, Node, the formats this version reads, and
 the `GOTOGETHER_*` and `QUINT_*` variables in effect. Each skew is a line
 with its fix; `-strict` exits 1 on one. The rest of I21's doctor (the D3
 cache, bindings' formats in the module) is not built.
+
+## 64. Packaging, and a model compiled for the evaluator alone (I21)
+
+An adopter's CI copied `ci/install-quint.sh`, pinned quint by hand and
+had no word on what to run when (review 11's adopter, AD3). I21 packages
+what this repository's CI does:
+- **The Action** (`.github/actions/gotogether`, composite): Go, Node,
+  quint and its Rust evaluator at pinned versions (install-quint.sh, the
+  evaluator from its release asset, not GitHub's rate-limited API), the
+  CLI at a version (a tag or commit, or `local`: built from the checkout
+  at hand, as this repository's own job does), quint's install and the
+  cache of typechecks and compiles (`GOTOGETHER_CACHE`, §57) kept by
+  actions/cache, `gotogether doctor`, then the command given, its output
+  and result line in the job summary. Composite, not a reusable
+  workflow: it runs in the adopter's job, after their checkout and their
+  build of the binary under test. With `compiled:` it installs neither
+  Node nor quint.
+- **The image** (`ci/image/Dockerfile`): Go, Node, quint and the
+  evaluator pinned by build arguments, the CLI built from the context;
+  CI builds it and runs `gotogether doctor -strict` inside. No registry:
+  where it is published is the maintainer's call.
+- **The tiering** (docs/ci.md): per push, per night, per release, with
+  this repository's costs (ci/test-times.txt) and what each tier catches.
+
+**The compiled model.** The Go evaluator decides the runs that pass
+(§56); quint judged the rest, so every validating pipeline needed Node
+and quint, though most runs pass. A validate-only pipeline (a canary, a
+CronJob, an incident laptop) needs neither if what quint contributes is
+done once, ahead: `gotogether compile -binding b.yaml -o model.json`
+writes quint's typecheck of the model (what the binding's plan and lint
+read) and quint's JSON IR of the binding's evaluation module (what the
+evaluator reads), and `validate -compiled model.json` judges with the
+evaluator alone. What that may claim:
+- **The evaluator judges, and says so.** A pass is its pass and a
+  failure its failure, written in quint's terms (the call rejected, a
+  step disabled or its expect false, each invariant's first failing
+  state, an eventual val false at the settle, a bounded response judged
+  on its states), the model's state the evaluator's. Each result is
+  `JudgedBy` "evaluator" and says "judged by the Go evaluator alone";
+  the report has an info issue naming the artifact and its quint. No
+  pass is sampled by quint (`GOTOGETHER_EVAL_SAMPLE` has nothing to ask),
+  which is the trust the §56 sample buys elsewhere: the evaluator's
+  agreement with quint is `TestAgreesWithQuint`'s and the nightly
+  shadow's, on every model of the repository, not this run's.
+- **What it cannot decide is no verdict, "needs quint"**, never a
+  guess: every `qeval.Unsupported` (a fold whose result depends on
+  quint's order of a set, review 11's F1; a fold over more than ten
+  elements of an operator not known to commute; a choice inside a bound
+  action, F2; an argument that is no literal), a binding with hidden
+  actions or a resume (searched with quint confirming).
+  Searches (`-linearize`, `-resolve-pending`), ITF inputs and
+  `-manifest` (which `-replay` judges again with quint) are refused up
+  front. The checker's quint is a binary that does not exist, so a path
+  that would still ask quint is a tool error, not a verdict; so is an
+  evaluator that fails a run while every check holds on its states.
+- **A stale artifact is refused**, naming what changed and
+  `gotogether compile` as the fix: another binding than the one it was
+  compiled from (its sha256), a source of the model present here whose
+  sha256 is not the artifact's (the main file and its transitive
+  imports, relative to the binding), an evaluation module this
+  gotogether writes otherwise for the binding (an older toolkit's vals
+  or expects: the module is written again and compared, text for text),
+  a later format (`gotogether.model/1`, the current only: a breaking
+  change makes it another check), a quint older than 0.32. A source
+  that is absent is not checked: a canary's image carries the binding
+  and the artifact, not the model; the report warns that it took the
+  artifact's hash for it.
+
+Why not ship the IR alone: the plan reads the model's types (the
+typecheck), and an artifact without the binding's hash and the
+evaluation module's text could be judged against a binding it was not
+compiled for, which is a wrong answer that looks like one. Why not
+gzip: an artifact is 100-200 KB of JSON for the repository's models,
+and readable JSON is diffable in review.
+

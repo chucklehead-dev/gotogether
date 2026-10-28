@@ -17,7 +17,7 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"scaffold", "lint", "simulate", "validate", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "skills", "doctor"}
+var helpOrder = []string{"scaffold", "lint", "simulate", "validate", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
 
 var commands = map[string]command{
 	"scaffold": {"write a binding skeleton for a model (or, with -system, a qtest.System test for a binding): the first step",
@@ -36,7 +36,7 @@ var commands = map[string]command{
 		"gotogether steps -actors node1 -out node1.jsonl runs/*.jsonl",
 		"which steps were recorded? list them, or select and sanitize them into a step log"},
 	"validate": {"check recorded runs (step logs, OTLP/JSON, ITF) against the model",
-		"gotogether validate -binding stock.binding.yaml runs/*.jsonl",
+		"gotogether validate -binding stock.binding.yaml runs/*.jsonl\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl   (no quint: gotogether compile's)",
 		"do recorded runs (step logs, OTLP/JSON, ITF) conform to the model? -replay judges a manifest's run again"},
 	"shrink": {"shrink a failing sequence of an external driver's actions to a 1-minimal one that fails the same way, rerunning the driver per candidate and judging its steps",
 		"gotogether shrink -binding webjobs.binding.yaml -actions journey.json -out shrunk -- ./play -actions {actions} -steps {steps}",
@@ -51,13 +51,16 @@ var commands = map[string]command{
 	"cover": {"compare a real environment's code coverage with a simulation's: what ran only for real, only simulated",
 		"gotogether cover -covdir covdata -sim ev/app/TestX/x1.json",
 		"what code ran only for real, only simulated?"},
+	"compile": {"compile a binding's model for the Go evaluator (quint's typecheck and IR, the binding's and the sources' hashes): validate -compiled then judges its runs with no quint or Node, a run the evaluator cannot decide no verdict",
+		"gotogether compile -binding stock.binding.yaml -o stock.model.json\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl",
+		"validate without quint or Node? the model compiled once, for the Go evaluator alone"},
 	"skills": {"list the agent skills (skills list, the default), or install them into a project (skills install; its -h)",
 		"gotogether skills install -target all",
 		"the agent skills: list them, or install them into a project"},
 	"skills install": {"install the agent skills into a project (.agents/skills and .claude/skills by default)", "gotogether skills install",
 		"install the agent skills into a project"},
-	"doctor": {"report the installed pieces' versions (the CLI and its core, the module's core and published modules, qweave's woven ABI, gotogether-nav, binaries named, quint, its evaluator, Node) and the formats this version reads, naming each skew with its fix",
-		"gotogether doctor\n  gotogether doctor -C ./service -strict ./bin/service",
+	"doctor": {"report the installed pieces' versions (the CLI and its core, the module's core and published modules, qweave's woven ABI, gotogether-nav, binaries named, quint, its evaluator, Node), the quint cache, bindings' formats, compiled models' staleness and the formats this version reads, naming each skew with its fix",
+		"gotogether doctor\n  gotogether doctor -C ./service -strict -binding stock.binding.yaml -compiled stock.model.json ./bin/service",
 		"do the installed pieces fit together? every version, and each skew with its fix"},
 }
 
@@ -108,7 +111,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "skills", "doctor", "help", "version"}
+var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

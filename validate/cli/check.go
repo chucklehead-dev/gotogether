@@ -73,6 +73,11 @@ type Check struct {
 	Driver    *validate.Driver
 	Artifacts []validate.Artifact
 	RunInfo   string
+	// Compiled, if set, is a compiled model (gotogether compile) the
+	// steps are judged by, with no quint: the Go evaluator alone, a run it
+	// cannot decide no verdict (validate.NewCompiledChecker). ITF inputs
+	// and searches need quint, and are refused.
+	Compiled string
 	// Options are quint's: Quint, Backend, Dir (default: a new temporary
 	// directory, which Judged.Close removes), NoITF.
 	Options validate.Options
@@ -181,7 +186,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		if b, err = binding.Load(chk.Binding); err != nil {
 			return nil, err
 		}
-		if err := b.CheckSpec(); err != nil {
+		if err := b.CheckSpec(); err != nil && chk.Compiled == "" { // a compiled model carries its model
 			return nil, err
 		}
 	}
@@ -232,6 +237,9 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		}
 	}
 	needChecker := len(steps) > 0 || itfs == 0
+	if chk.Compiled != "" && itfs > 0 {
+		return nil, fmt.Errorf("-compiled %s: an ITF input is replayed by quint (%w): validate it without -compiled", chk.Compiled, validate.ErrNeedsQuint)
+	}
 	if needChecker && chk.Binding == "" {
 		return nil, fmt.Errorf("recorded steps need -binding")
 	}
@@ -252,7 +260,12 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 	j.FinishByBinding = j.Finish && complete && (!chk.RequireFinish || chk.finishFixed)
 	j.OK = true
 	if needChecker {
-		c, err := validate.NewChecker(chk.Binding, opts)
+		var c *validate.Checker
+		if chk.Compiled != "" {
+			c, err = validate.NewCompiledChecker(chk.Binding, chk.Compiled, opts)
+		} else {
+			c, err = validate.NewChecker(chk.Binding, opts)
+		}
 		if err != nil {
 			return j, err
 		}

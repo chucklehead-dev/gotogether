@@ -77,12 +77,18 @@ func stepsString(o []qtrace.Step) string {
 
 // evaluatorFor is c's binding's evaluator, compiled the first time.
 func evaluatorFor(c *Checker) *evaluator {
+	if c.compiled != nil {
+		return c.compiled.ev // the artifact's: no quint to compile one
+	}
 	return evaluatorOf(c, func(path string) (*binding.EvalModule, error) { return c.Binding.EvalModule(c.Model, path) })
 }
 
 // evaluatorOf is the evaluator of the module make writes for a path
 // (binding.EvalModule, or PossibleModule), compiled the first time.
 func evaluatorOf(c *Checker, make func(path string) (*binding.EvalModule, error)) *evaluator {
+	if c.compiled != nil {
+		return &evaluator{err: ErrNeedsQuint} // another module than the artifact's: quint would compile it
+	}
 	dir := filepath.Join(os.TempDir(), "gotogether-eval")
 	em, err := make(filepath.Join(dir, "x", "eval.qnt"))
 	if err != nil {

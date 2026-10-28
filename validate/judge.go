@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -60,6 +61,13 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 	js, errs := make([]*Judgment, len(runs)), make([]error, len(runs))
 	searches := make([]*search, len(runs))
 	searching := opt.Linearize || opt.ResolvePending
+	if searching && c.compiled != nil {
+		// a search's orders are confirmed by quint
+		for i := range errs {
+			errs[i] = fmt.Errorf("-linearize and -resolve-pending: %w; judge the runs as recorded, or validate without -compiled", ErrNeedsQuint)
+		}
+		return js, errs
+	}
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
 	each := func(idx []int, f func(i int)) {
 		var wg sync.WaitGroup

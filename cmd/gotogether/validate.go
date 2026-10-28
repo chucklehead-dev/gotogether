@@ -22,6 +22,7 @@ type validateRun struct {
 	binding, dir, backend, quint, format string
 	spec, module, instance               string // an ITF input's
 	conv, history                        string
+	compiled                             string // -compiled: a compiled model, judged with no quint
 	novars, verbose, withITF             bool
 	requireFinish                        bool
 	// invariants, if set, override the binding's (-invariants)
@@ -57,6 +58,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.dir, "dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
 	fset.StringVar(&v.backend, "backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
 	fset.StringVar(&v.quint, "quint", "quint", "quint binary")
+	fset.StringVar(&v.compiled, "compiled", "", "judge the steps by this compiled model (gotogether compile's) with the Go evaluator alone: no quint or Node; a run it cannot decide is no verdict (needs quint), and no pass is sampled by quint. Refused when stale (another binding, a changed source, another gotogether's evaluation module)")
 	fset.StringVar(&v.format, "format", "auto", "input format: auto, otlp, steps (native step log), requests (a driver's request log, package qdriver) or itf")
 	fset.StringVar(&v.spec, "spec", "", "ITF input: the model, if neither the trace nor a binding names it")
 	fset.StringVar(&v.module, "module", "", "ITF input: the parameterised module")
@@ -108,6 +110,9 @@ func validateTo(out io.Writer, args []string) (int, error) {
 		}
 	}
 	v.search.Linearize = *lin || v.search.Key != "" || v.search.Skew > 0
+	if v.compiled != "" && v.manifest != "" {
+		return 2, fmt.Errorf("validate -compiled: -manifest records a judgment validate -replay makes again with quint: drop one of them")
+	}
 	if *invs != "" {
 		v.invariants = strings.Split(*invs, ",")
 	}
@@ -181,7 +186,7 @@ func (v *validateRun) run() (int, error) {
 	}
 	chk := cli.Check{Binding: v.binding, Files: v.files, Format: format, Convert: v.conv, Spec: v.spec, Module: v.module, Instance: v.instance,
 		NoVars: v.novars, Invariants: v.invariants, Search: v.search, LostPrefix: fields(v.lostPrefix), LostSuffix: fields(v.lostSuffix),
-		CompleteThrough: v.completeThrough, RequireFinish: v.requireFinish, RunInfo: v.runInfo,
+		CompleteThrough: v.completeThrough, RequireFinish: v.requireFinish, RunInfo: v.runInfo, Compiled: v.compiled,
 		Options: validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}}
 	j, err := chk.Judge(context.Background())
 	return v.report(j, err)

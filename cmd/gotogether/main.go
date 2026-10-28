@@ -80,6 +80,8 @@ func main() {
 		code, err = shrinkTo(os.Stdout, os.Args[2:])
 	case "nav":
 		code, err = nav(os.Stdout, os.Args[2:])
+	case "compile":
+		err = compileTo(os.Stdout, os.Args[2:])
 	case "doctor":
 		code, err = doctor(os.Stdout, os.Args[2:])
 	case "help", "-h", "-help", "--help":

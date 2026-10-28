@@ -1,0 +1,5 @@
+spec: rr.qnt
+module: rr
+actions:
+  place:
+    expect: 'shard.get(2) == {{.obs.s2}}'

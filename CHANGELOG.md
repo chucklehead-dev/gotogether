@@ -10,6 +10,21 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Packaging (ROADMAP I21): `gotogether compile -binding b.yaml -o
+  model.json` writes a compiled model (`gotogether.model/1`: quint's
+  typecheck and the evaluation module's IR, with the binding's and the
+  sources' hashes and quint's version), and `validate -compiled
+  model.json` judges runs with the Go evaluator alone, no quint or Node:
+  a run it cannot decide is no verdict ("needs quint"), searches, ITF
+  inputs and `-manifest` are refused, a stale artifact is refused with
+  the fix (`validate.Compile`, `LoadCompiled`, `NewCompiledChecker`,
+  `Checker.Compiled`, `CompiledModel`, `CompiledFormat`, DESIGN §64).
+  `gotogether doctor` reports the quint cache (`validate.CacheDir`), a
+  quint older than 0.32 (`validate.QuintSupported`), bindings' formats
+  (`-binding`) and compiled models' staleness (`-compiled`). A GitHub
+  Action (`.github/actions/gotogether`), a pinned image
+  (`ci/image/Dockerfile`, built by CI, published nowhere) and a CI
+  tiering guide (docs/ci.md).
 - qsql joins by a key (ROADMAP I23): `SELECT t.c, u.d FROM t JOIN u ON
   u.k = t.c ... WHERE t.... ORDER BY t.... LIMIT n` looks u's rows up by
   its whole primary key, an inner join, every column qualified. grist's

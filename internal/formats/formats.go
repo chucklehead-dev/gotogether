@@ -70,6 +70,12 @@ var (
 	// anew by every run: only the current major is read.
 	Evidence = Format{Thing: "evidence", Major: 2, Oldest: 2, What: "exploration evidence (GOTOGETHER_EVIDENCE)",
 		Older: "run the tests again to write it anew"}
+	// Model is a compiled model (gotogether compile; validate
+	// -compiled): the Go evaluator's IR of a binding's model, compiled by
+	// quint. A breaking change makes an artifact another check, so only
+	// the current major is read.
+	Model = Format{Thing: "model", Major: 1, Oldest: 1, What: "compiled model (gotogether compile; validate -compiled)",
+		Older: "compile it again (gotogether compile -binding B -o model.json)"}
 	// Nav is the run navigation protocol between a test binary
 	// (GOTOGETHER_NAV=serve) and gotogether-nav: a session's first line
 	// names it. A session that names none is nav/1.
@@ -79,7 +85,7 @@ var (
 
 // All is every format, for doctor and the docs.
 func All() []Format {
-	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Nav}
+	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Nav}
 }
 
 // Name is the format's name at the major this build writes.

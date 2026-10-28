@@ -14,7 +14,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/formats"
+	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/woven"
 )
 
@@ -37,6 +39,9 @@ func doctor(out io.Writer, args []string) (int, error) {
 	fset := commandFlags("doctor")
 	dir := fset.String("C", ".", "the module whose versions to compare (its go.mod)")
 	strict := fset.Bool("strict", false, "exit 1 when a skew is found (CI)")
+	var bindings, compiled repeated
+	fset.Var(&bindings, "binding", "a binding file whose format to check (repeatable)")
+	fset.Var(&compiled, "compiled", "a compiled model (gotogether compile's) to check against its binding and sources: stale or not (repeatable)")
 	fset.Parse(args)
 	var ps []piece
 	cli := buildOf(debug.ReadBuildInfo())
@@ -59,6 +64,13 @@ func doctor(out io.Writer, args []string) (int, error) {
 		ps = append(ps, binaryPiece(bin, mod))
 	}
 	ps = append(ps, quintPieces()...)
+	ps = append(ps, cachePiece())
+	for _, b := range bindings {
+		ps = append(ps, bindingPiece(b))
+	}
+	for _, c := range compiled {
+		ps = append(ps, compiledPiece(c))
+	}
 	for _, p := range ps {
 		v := p.version
 		if p.note != "" {
@@ -332,6 +344,9 @@ func quintPieces() []piece {
 	}
 	out, _ := exec.Command(bin, "--version").Output()
 	q.version = strings.TrimSpace(string(out))
+	if !validate.QuintSupported(q.version) {
+		q.skew = fmt.Sprintf("quint %s is older than the 0.32 gotogether needs: npm i -g @informalsystems/quint@0.33.0 (or the Action's quint-version)", q.version)
+	}
 	want := evaluatorOf(bin)
 	if want == "" {
 		ev.version = "unknown"
@@ -371,4 +386,64 @@ func evaluatorOf(bin string) string {
 		}
 	}
 	return ""
+}
+
+// cachePiece is the cache of quint's typechecks and compiles across
+// processes (validate.CacheDir): where, and how much it holds.
+func cachePiece() piece {
+	p := piece{name: "quint cache (GOTOGETHER_CACHE)"}
+	dir := validate.CacheDir()
+	if dir == "" {
+		p.version, p.note = "off", "every process typechecks and compiles its models again"
+		return p
+	}
+	n, size := 0, int64(0)
+	filepath.WalkDir(dir, func(_ string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				n++
+				size += info.Size()
+			}
+		}
+		return nil
+	})
+	p.version, p.note = dir, fmt.Sprintf("%d files, %.1f MB; CI caches it (docs/ci.md)", n, float64(size)/1e6)
+	return p
+}
+
+// bindingPiece is a binding file's format, a skew if this gotogether
+// cannot read it (a later major: the fix is the reader's upgrade).
+func bindingPiece(path string) piece {
+	p := piece{name: "binding " + path}
+	b, err := binding.Load(path)
+	if err != nil {
+		p.version, p.skew = "unreadable", err.Error()
+		return p
+	}
+	p.version = b.Format
+	if p.version == "" {
+		p.version, p.note = binding.FormatName, "no format key"
+	}
+	if err := b.CheckSpec(); err != nil {
+		p.skew = err.Error()
+	}
+	return p
+}
+
+// compiledPiece is a compiled model checked as validate -compiled checks
+// it: against its binding (named in it, relative to it) and the sources
+// present, a stale one a skew with the fix.
+func compiledPiece(path string) piece {
+	p := piece{name: "compiled model " + path}
+	cm, err := validate.LoadCompiled(path)
+	if err != nil {
+		p.version, p.skew = "unreadable", err.Error()
+		return p
+	}
+	p.version, p.note = cm.Format, "quint "+cm.Quint
+	bind := filepath.Join(filepath.Dir(path), filepath.FromSlash(cm.Binding.Path))
+	if _, err := validate.NewCompiledChecker(bind, path, validate.Options{}); err != nil {
+		p.skew = err.Error()
+	}
+	return p
 }
