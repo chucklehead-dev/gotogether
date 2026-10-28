@@ -1792,6 +1792,21 @@ build and run and the four seeds. `grist new`'s capacity is a rule
 too (its overlay mutant now `noInvalid`, the generated `drop-capacity`
 beside it).
 
+### GR10 designed: grist on a platform
+
+docs/grist-platform.md, from the maintainer's aims of 2026-10-28
+(Kubernetes-aware and -native, nothing mandatory; qload and qmeta to
+size limits, retries and timeouts) and three reviewers' brainstorms (a
+newcomer deploying `grist new`'s shop, a designer, a Go specialist),
+whose ideas taken and left the doc's §11 lists. Found while reading
+grist at 0da5013: every pod's node records as `<app>-1` (pid 1 in every
+container), so a multi-pod run's merged steps get Reconstruct's
+duplicate error and no verdict; `serve`'s drain (10 + 10 + 10 s) equals
+the default grace, so a slow drain is killed in its flush; `-addr`
+defaults to loopback. The reviewers disagreed on a Kubernetes Lease as
+a hint; the design keeps no Lease at all (heartbeats and the fence in
+the log), the specialist's minimal-client elector the alternative.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

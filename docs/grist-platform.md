@@ -1,0 +1,937 @@
+# grist on a platform (GR10): Kubernetes-aware, never Kubernetes-bound
+
+Status: design, 2026-10-28, for docs/ROADMAP.md's GR10. Nothing below
+is built; every proposed API is in ```text blocks, and every name it
+takes from an existing package (`qenv.Stalls`, `qmeta.CalibrateTimeout`,
+`qnemesis.Target`, ...) exists today. Read docs/grist.md (§2.6
+processors, §3.4 leases, §3.5 seams, §3.8 the real tier) and
+docs/grist-instrumentation.md (GR3: declared calls; this note copies
+its shape) first; "grist §x" and "GR3 §x" cite them, "DESIGN §x"
+docs/DESIGN.md. Folded in: three reviewers' brainstorms (a newcomer
+deploying `grist new`'s shop, a designer, a Go specialist), §11 says
+what was taken and what was left.
+
+The maintainer's aims (2026-10-28): a grist application can become
+Kubernetes-aware and Kubernetes-native (the downward API, projected
+secrets and certificates, leader election, limits, disruption budgets,
+autoscalers, the Gateway API, Kubernetes primitives as integrations),
+none of it mandatory; and qload and qmeta estimate limits, retries,
+timeouts and the like. Two lenses, each a section: **what can be
+simulated and tested** (every cluster behaviour that can change an
+app's correctness or liveness, §4) and **what an app can use to be a
+better app** (§5).
+
+The thesis, in one line: **a cluster is an environment, and qenv already
+models environments as named choices.** Most of what Kubernetes does to
+a process (kill it, pause it, skew its clock, cut its network, run two
+versions of it) is a qenv fault today; what is missing is a handful of
+choices (a graceful termination, a router that lags, a store that fails
+over, a scaler that reacts late) and a core that serves well on a
+platform without importing one. Kubernetes buys a grist app efficiency
+and operability, never correctness: replicas are already safe without a
+leader (grist §2.6's checkpoint compare-and-set).
+
+## 1. Inventory: what grist does today at each seam
+
+Read from grist/ (main.go, processor.go, relay.go, http.go, overhttp.go,
+gristsim, gristtest) at 0da5013.
+
+| seam | grist today | what a cluster does to it | gap |
+| --- | --- | --- | --- |
+| identity | the node's recorder is `<app>-<pid>` (main.go); store-side steps' process is the App's name | every container is pid 1: two pods, or two incarnations of one, share the id | **a real bug on Kubernetes** (below) |
+| listen | `-addr` defaults to `127.0.0.1:8080` | a Service's endpoints reach the pod IP | a pod serving on loopback has no endpoints |
+| health | none: no `/livez`, `/readyz` | probes decide routing and restarts | teams write probes that hit the database (a DB blip restarts every pod) |
+| termination | `Main` stops on SIGTERM: server drain (`ShutdownTimeout` 10 s), settle (`SettleTimeout` 10 s), relay flush (`FlushTimeout` 10 s), the node outliving the signal so an effect in flight keeps its ctx | SIGTERM while endpoints still route for 1-10 s; SIGKILL at `terminationGracePeriodSeconds`, default 30 s | stops accepting at once (refused connections in the lag); worst case 30 s = the default grace: SIGKILL lands in the flush, committed steps unrecorded in this file, the settle lost |
+| replicas | `gristsim.Config.Nodes` and two real nodes are safe: every node polls every processor of every tenant, the checkpoint CAS picks one commit (`TestPayoutTwoNodes`) | N replicas | at-least-once effects run on several nodes (harmless only for `Keyed` calls); condition retries grow with N; every node's relay records the whole step log from its first row at every start (the durable relay cursor is grist §8's left item) |
+| leadership | none needed; grist §3.4 designs leases **in the tenant's log**, fenced in the commit (slice 3, not built) | client-go's leader election is not a fence: a paused leader acts after its Lease expired | the tempting wrong tool is one import away |
+| config, secrets | flags: `-db postgres:DSN` (in the pod spec, in `ps`); `OverHTTP`'s `http.Client` built once | Secrets and ConfigMaps as files, swapped atomically (`..data`), 30-90 s apart per pod; cert-manager rotating certificates | credentials in args; an open `*sql.DB` keeps old credentials; certificates cached until restart |
+| decisions' inputs | an `Envelope` (`ID`, `Tenant`, `Actor`) and `Reads`; no clock, no config (GR3 §1) | a ConfigMap read by one pod and not yet by another | none today, by construction: keep it so (§3.6) |
+| resources | nothing: `GOMEMLIMIT` unset; `GOMAXPROCS` is container-aware since Go 1.25 (the cgroup's CPU limit, rounded up, updated as it changes; grist needs Go 1.26.1) | memory limits (OOMKill: SIGKILL, no grace); CPU limits (CFS throttling: stalls of up to the 100 ms period) | read models fold from the log on every read (grist §2.2, slice 1), so memory and CPU per query grow with the log: a limit sized in week one OOMs in week four |
+| metrics | none in grist; qrole exists (gauges u, v), unused by grist | HPA, KEDA, alerts | processor lag, relay backlog, oldest pending effect are not exposed |
+| inbound HTTP | every command requires `Idempotency-Key` (400 without, http.go); 503 + `Retry-After` for an unknown outcome; `WriteTimeout` 2 m | Gateway/HTTPRoute and mesh timeouts and retries | a retried command is safe; the timeout chain is not ordered (a gateway timing out at 15 s turns a slow commit into a 504 and a retry); `-actor-header` trusts a header the Gateway forwards unless a filter strips it |
+| outbound calls | `OverHTTP` (`CallTimeout` 10 s), declared calls (GR3) | DNS, endpoint lag, NetworkPolicy, conntrack-pinned connections | already modelled: a reset is an unknown outcome, never a refusal |
+| store | sqlstore on PostgreSQL or SQLite, `-poll` 250 ms | managed PostgreSQL failover (async replication loses a committed tail), CSI snapshot restore (the log rewinds), `max_connections` against replicas × pool; SQLite on a PVC (RWO with a surge deadlocks a rollout, RWX corrupts) | none of these is a fault grist or qenv can make |
+| steps | `-steps FILE` (`qobs.PerStep`), on the container's filesystem | lost with the pod (emptyDir) or interleaved (a shared PV) | commit steps survive in the store's step log (grist §2.10), but only a relay records them, and no command exports them |
+| simulation | gristsim: n crashable nodes, the first serving the API; crashes, commit faults, `rpc.*` faults; Clocks and Stalls available but unused | graceful kills, routing lag, mixed versions, zones, autoscaling | no graceful termination, no router, no hosts or zones, no rollout in gristsim |
+
+The finding that matters most: **on Kubernetes every pod's node
+records under the same recorder id** (`fmt.Sprintf("%s-%d", app.Name,
+os.Getpid())` is `shop-1` in every container), so two pods' merged step
+files share (recorder, seq) pairs, and `qtrace.Reconstruct` reports
+each pair that differs as an error ("is two different records": its
+guard against two logs numbering one recorder), so a multi-pod run gets
+no verdict at all; a restarted container's incarnation collides with
+its predecessor's the same way. The second:
+**30 s of drain inside 30 s of grace**. Both are fixed in slice 1
+without any Kubernetes code.
+
+What already holds and must keep holding: replicas need no leader; every
+command is keyed, so any layer's retry of it is safe; a reset or a 5xx
+from a dependency is an unknown outcome; commit steps are durable in the
+store; decisions see no clock and no configuration.
+
+## 2. Options, weighed against the constraints
+
+The constraints: the core free of heavy dependencies (grist is a
+published module linked into production binaries: OTel and yaml.v3
+only, no client-go); determinism under qenv (every choice through the
+Chooser); the spec as ground truth (a cluster behaviour is a choice the
+model judges, never a check loosened); a step the model must see
+recorded at the effect's site; **nothing mandatory** (an app on a VM,
+under systemd or on Nomad loses nothing).
+
+**(a) client-go in grist.** Leases, informers, Events and the downward
+API's files are all reachable without it except the API calls. Rejected
+for the core: measured by the Go specialist, a binary electing a
+leader through client-go is 37.6 MB (518 packages) where a minimal
+client over net/http is 5.8 MB, and nothing the core needs requires the
+API server (§3.5 shows leadership does not). A client-go adapter is the
+choice of an app that watches objects (GR7's operators), in a module of
+its own.
+
+**(b) A platform seam in the core, stdlib only, with Kubernetes as one
+reading of it.** The core learns what any orchestrator gives: an
+identity (from the environment if present), health endpoints, a drain
+schedule, files that change, a memory limit, gauges. Kubernetes' names
+appear only as the environment variables and file paths it reads, all
+optional. **Chosen.**
+
+**(c) A module of its own for what is Kubernetes-shaped.**
+`grist/kube`: manifests from the catalog, the pre-deploy lint, the kind
+tier, the canary gate. It needs YAML and text only (yaml.v3, already a
+core dependency), not client-go. GR7's controllers, which do need
+client-go, get their own module (`grist/gristkube`), as GR3 §2 planned
+for gRPC and franz-go. **Chosen.**
+
+**(d) Simulating Kubernetes' components** (kube-scheduler, kubelet,
+kube-proxy, a full API server). Rejected: an app sees outcomes (killed,
+paused, terminated with a grace, not routed, routed late, scaled late,
+its files changed), and qenv makes outcomes. Where an app talks to the
+API server (GR7, the CR source of §5), kubesim's semantics, published by
+H7, are the double, and kwok or kind the real tier.
+
+**(e) A Kubernetes Lease as grist's leader election.** Rejected for
+correctness, and also as an efficiency layer (§3.5, question 6): it does
+not fence (a paused or partitioned holder acts after expiry, as
+examples/lease shows of every clock-trusting lease), it couples grist's
+liveness to the control plane, and grist §3.4's lease in the tenant's
+log fences in the commit with no API server at all.
+
+**(f) The API server or etcd as grist's event store.** Rejected: object
+size limits, no multi-object transactions, compaction loses history.
+
+**(g) Admission webhooks for HTTP commands.** Rejected: they duplicate
+grist's own validation and refusals and put the API server's
+availability in a command's path. Admission is offered only for commands
+whose source is a custom resource (§5.6), and only for refusals that need
+no reads.
+
+## 3. The design: what the user writes
+
+### 3.1 Layers
+
+| layer | module | imports | what it is |
+| --- | --- | --- | --- |
+| a good server anywhere | grist (core) | stdlib, qobs, qrole | identity, `/livez` `/readyz` `/metrics` on a side port, the drain schedule, file sources, `GOMEMLIMIT`, gauges, the store-incident checks |
+| the simulated cluster | qenv, qload (core); gristsim | as today | terminate, router, hosts and zones, store failover and restore, file projection, a delayed scaler (§4) |
+| Kubernetes-shaped output | grist/kube (new module, no client-go) | grist, yaml.v3 | `<app> manifests`, `gotogether lint -kube`'s rules, the kind tier, the canary gate, `<app> sizing`'s writer |
+| sizing | grist/gristload (new package of grist, test-only by use) | qload, qmeta, gristsim | `<app> sizing`'s engine: never linked into a production binary unless asked |
+| the API server as a source | grist/gristkube (GR7's module) | client-go | CRs as commands, status from read models (§5.6) |
+
+An app that wants none of it writes nothing: `grist.Main(App)` gains
+health endpoints and a corrected drain, and nothing else changes.
+
+### 3.2 Identity
+
+```text
+// package grist (core): read once at start, every field optional
+type Identity struct {
+	Node        string // GRIST_NODE, else POD_NAME, else os.Hostname()
+	Incarnation string // a random nonce per start: a restarted container keeps its pod name
+	Namespace   string // POD_NAMESPACE
+	Host        string // NODE_NAME (the Kubernetes node: a failure domain)
+	Zone        string // GRIST_ZONE (the downward API cannot read a node's labels; the manifest passes it, or "")
+	Config      string // a hash of the operational options and files in effect (§3.6)
+}
+func IdentityFromEnv() Identity
+func WithIdentity(id Identity) ServeOption // tests and other orchestrators
+```
+
+The node's recorder id becomes `<app>/<node>/<incarnation>` (the
+`-steps` file name defaults to it), the served dependencies'
+`<app>/<node>/<incarnation>/<dep>`; relayed steps keep `RecorderID`
+(store and tenant: the same row is the same record wherever relayed).
+The other fields go on the recorder's metadata, not on steps: G8's "a
+step's location separate from its incarnation" is the core change that
+puts them in reports (qnemesis's loss records then name pods). The
+generated manifest sets the variables from the downward API
+(`fieldRef: metadata.name`, `spec.nodeName`).
+
+### 3.3 Lifecycle: probes and the drain schedule
+
+`Main` serves, on a side port (`-health-addr`, default `:8081` when an
+orchestrator is detected, else off):
+
+- `/livez`: the node's loop is ticking (every poller woke within a
+  bound: a deadlock or a stuck goroutine). **Never the store**: a
+  database blip must not restart every pod.
+- `/readyz`: the store answered once since start, the node started, not
+  draining. **Never a dependency, never processor lag**: lag caused by a
+  slow bank would take every pod out of the Service and turn a slow
+  dependency into an outage. Today queries fold at the store's head on
+  every read, so there is no catch-up to wait for; when H7's snapshots
+  and caches land, readiness adds "caches loaded at the head read at
+  start", and queries take a `Grist-Min-Position` header (a client's
+  last receipt position) and wait for it, so read-your-writes holds
+  across pods.
+- `/metrics`: grist's gauges in Prometheus' text format, written with
+  the standard library (no Prometheus client): per processor and tenant
+  the lag (head minus checkpoint) and the oldest unhandled trigger's
+  age; the relay's backlog; in-flight effects; the qrole gauges u and v
+  of the API (§3.7). qrole's OTel `MetricsSink` stays the way to push
+  them.
+
+The drain becomes a schedule, each phase an option, the grace its
+budget:
+
+```text
+// package grist (core)
+type Drain struct {
+	Delay    time.Duration // not ready at once, keep serving: the router's lag (default 5 s on an orchestrator, 0 otherwise)
+	Shutdown time.Duration // the server drains its requests (ShutdownTimeout, 10 s)
+	Settle   time.Duration // the node quiets, a settle recorded (SettleTimeout, 10 s)
+	Flush    time.Duration // the relay records every committed step (FlushTimeout, 10 s)
+	Grace    time.Duration // -grace: the orchestrator's kill deadline; the phases shrink to fit, flush first served
+}
+func WithDrain(d Drain) ServeOption
+```
+
+On SIGTERM: `/readyz` fails at once; the server keeps serving for
+`Delay` (endpoint propagation: the preStop `sleep` action, on by default
+since Kubernetes 1.30, does the same outside the binary, and the
+generated manifest uses one or the other, not both); then Shutdown,
+Settle, Flush as today. Given `-grace`, `Main` budgets the phases from
+the deadline backwards (the flush keeps its share: a settle skipped is
+an unjudged eventual val, a flush cut is unrecorded commits) and prints
+at start what it needs (`shop: drain needs a grace of 35 s; -grace 30s
+leaves the settle 5 s`). `-addr` on loopback with `KUBERNETES_SERVICE_HOST`
+set fails, naming `-addr :8080`.
+
+### 3.4 Store incidents
+
+Two incidents an event-sourced app meets in production and no test of
+grist's sees: a managed PostgreSQL failing over with asynchronous
+replication (the last committed transactions are gone: a client holds
+a receipt for an event no longer in the log, a checkpoint points past
+the head), and a restore from a CSI snapshot or backup (the log
+rewinds: at-least-once and at-most-once effects run again). grist cannot
+prevent either; it must **see** them, fail closed for effects, and the
+simulation must make them (§4):
+
+- Each node remembers the highest head it read per tenant; a head below
+  it (or a checkpoint above the head) is `ErrRewound`: the tenant's
+  pollers and relay stop, `/readyz` stays up for commands (the log is
+  consistent from here on), and the error names the positions and the
+  fix (`<app> resume -tenant t1 -from 812` after an operator decides).
+  A rewind across a restart is seen only by a node that kept running;
+  `<app> steps -export` (§7) gives an operator the comparison.
+- SQLite in a Deployment is refused by the manifest generator and the
+  lint (`-db sqlite:` means a StatefulSet of one replica, `Recreate`).
+- The connection pool is an option (`-db-pool`), and the sizing rule
+  `replicas_max × pool ≤ max_connections - reserve` is linted.
+
+### 3.5 Replicas, leadership, sharding
+
+Correctness never depends on who polls: two pollers race on the
+checkpoint and one commit wins (grist §2.6). Leadership is efficiency:
+fewer duplicate at-least-once effects, fewer condition retries, one
+relay per tenant instead of N. The design keeps grist §3.4's lease **in
+the tenant's log** (fenced in the commit, no API server) and adds the
+assignment it lacked, without a leader:
+
+- Each node heartbeats into the reserved tenant `grist` (grist §3.4
+  already puts heartbeats there): `member{node, incarnation, until}`.
+- A tenant's owner is the live member that ranks first for it by
+  rendezvous hashing; a node polls and relays the tenants it owns, and
+  every tenant whose owner's heartbeat is stale by `Lease.Takeover`.
+- Owning is taking the tenant's log lease (a conditioned append of
+  `grist.lease{node, term}`); every processor commit's condition
+  includes "no newer term", so a deposed owner cannot advance a
+  checkpoint whatever its clock says.
+- The heartbeat is read through the store's clock (the commit's time,
+  taken under the tenant's lock), never compared across nodes' clocks.
+
+```text
+grist.Main(App, grist.Shard(grist.Lease{Heartbeat: 2 * time.Second, Takeover: 10 * time.Second}))
+```
+
+Off by default; on, with a control-plane outage nothing changes (no
+API server in the path); under split views two nodes poll a tenant for a
+while, which is today's behaviour. A Kubernetes Lease is not offered
+(question 6). EndpointSlices are not needed for membership; GR4's peer
+discovery may use them.
+
+The reviewers disagreed here, and the decision is recorded with its
+alternative. The newcomer and the designer: never a Kubernetes Lease
+for correctness, at most a hint. The Go specialist: a Lease elector in
+`grist/kube` over a minimal client (no client-go; client-go's defaults
+are 15 s duration, 10 s renew deadline, 2 s retry), used as a hint of
+which pod polls a tenant first, its epoch fenced through the store. The
+design takes the fence from all three and drops the Lease: heartbeats
+in the reserved tenant cost the store one small append per node every
+few seconds, and in exchange the control plane is never in grist's
+path (an API server outage changes nothing), no RBAC is needed, and the
+same code runs off Kubernetes. The alternative stays open if the
+heartbeat writes measure too costly on a large fleet (question 6).
+
+### 3.6 Configuration, secrets, certificates
+
+Three kinds, three rules:
+
+- **Secrets and certificates** are files that change. A `FileSource`
+  reads a projected volume and notices the atomic `..data` swap by
+  polling the link (no fsnotify dependency); `-db-file PATH` reads the
+  DSN from one and reopens the pool on an authentication failure;
+  `OverHTTP` and `ServeCalls` take TLS from files through
+  `GetClientCertificate`/`GetCertificate`, re-read on swap. `subPath`
+  mounts never update, which the lint flags.
+- **Operational options** (timeouts, poll intervals, tries, batch size)
+  are per pod and may differ for a while during a ConfigMap update, as
+  versions differ during a rollout. They do not change what a decision
+  decides, only when and how often; their hash is `Identity.Config`, so
+  a report names which pods ran which.
+- **Anything a decision reads** (a feature flag, a limit, a price) is
+  an event, never a file: a source's new version becomes a command
+  (`grist.FromSource(src, SetConfig)`, its id `<source>/<content
+  hash>`, so every pod sending it commits once by the marker), and the
+  decision reads it through `Reads` like any read model. The model then
+  judges decisions on the configuration the log says was in force, and
+  two pods cannot decide under two flags at one position. This is the
+  sketch's "config recorded in steps, declared like reads", made literal.
+
+### 3.7 Resources and gauges
+
+- `GOMEMLIMIT`: when unset, `Main` calls `debug.SetMemoryLimit` at 90%
+  of the container's limit: `GRIST_MEMORY_LIMIT` if set (the manifest's
+  `resourceFieldRef: limits.memory`, in bytes), else the cgroup's own
+  `memory.max` (cgroup v2), which any container runtime gives and no
+  orchestrator needs to pass. `GOGC` is left alone (never off), and
+  `runtime.GOMAXPROCS` is never called. It logs the effective
+  `GOMAXPROCS` beside the CPU limit; the generated manifest sets **no
+  CPU limit** by default (throttling stalls the pollers and the API in
+  100 ms periods, §4), a request from sizing.
+- The API is a qrole server (`qrole.Serve`), each declared call a qrole
+  call (`qrole.Call`), each processor and tenant a queue whose length is
+  its lag: the u and v that retrystorm's alerts use, now for every grist
+  app. Two cautions carried from docs/agents/metastability.md: a
+  running system's v is only the waiting part (`Sample.Waiting`), and
+  the alert regions come from a chain calibrated with `CalibrateTimeout`.
+
+### 3.8 Traffic: Gateway, mesh, timeouts
+
+Every command already carries an `Idempotency-Key`, so a Gateway's,
+a mesh's or a client's retry of one is safe; what is not safe is the
+product of retry layers (a storm) and timeouts in the wrong order (an
+outer timeout shorter than the server's handling turns a commit into a
+504, an unknown outcome and a retry). The design:
+
+- A server-side request deadline (`-request-timeout`, default 25 s,
+  below a Gateway's usual 30 s) bounding a command's condition and
+  transient retries, answered 503 + `Retry-After` when exceeded (the
+  outcome unknown, as today).
+- The generated HTTPRoute (`<app> manifests -gateway`): one rule per
+  route family (`/t/*/commands/*`, `/t/*/queries/*`), timeouts from
+  sizing, retries only where sizing says the product of layers recovers
+  (commands are safe to retry, not free to), a `RequestHeaderModifier`
+  removing the actor header from client requests when `-actor-header`
+  is used (the authenticating proxy sets it after).
+- The lint checks the chain: client per-attempt timeout > Gateway
+  request timeout > grist's request deadline > the longest declared
+  call's `CallTimeout` × tries it may spend inline (none: effects are
+  asynchronous, so a command never waits on a dependency).
+
+Tenant routing to an owner (grain's 503 + `Retry-After`) is not needed
+for correctness (any node can serve any tenant against the shared
+store) and is left to GR4's measurements.
+
+### 3.9 Versions
+
+A rolling update runs two versions on one log for minutes. The rules
+(raftkv's lesson, DESIGN §47: a v2 that writes its new format at once
+breaks the v1 nodes still running):
+
+- `<app> catalog -diff deployed.json` classifies a change: **safe**
+  (a new command, query or processor; a field added with a zero
+  default), **readers first** (a new event type or a field a v1 fold
+  must not ignore: ship the readers, then the writers behind a flag set
+  after the rollout, §3.6), **breaking** (a renamed tag, a removed
+  event: needs H7's upcasters). CI runs it against the deployed catalog.
+- `gristtest.Upgrade(t, v1, v2, cfg)` runs both Apps' nodes on one
+  store in gristsim, rolling one node at a time (`Sim.Upgrades`), each
+  version's steps judged by the same model (an event v1 does not know is
+  v1's refusal to fold, named, never a crash).
+
+## 4. Lens (a): what is simulated, and how
+
+Every row is a named choice (option 0 nominal), so Explore samples it,
+Exhaust bounds it, Hegel shrinks it away, Coverage says whether a run
+met it, and a Script or a qnemesis journal names it.
+
+| cluster behaviour | in qenv today | new | claim it serves |
+| --- | --- | --- | --- |
+| OOMKill, SIGKILL, node loss, spot reclaim | crash nemesis `nemesis.crash.<proc>` | hosts: processes sharing a failure domain, `nemesis.host.<h>` crashing all of them | at-least-once repeats, at-most-once losses: admitted, and named |
+| eviction, preemption, rolling restart, scale-down | none (a crash has no grace) | `nemesis.terminate.<proc>`: a context the process's tasks read (`qenv.Terminating(ctx)`), then a crash at the grace; option `short` (node-pressure eviction's reduced grace) | drain within grace (one at least the longest call's timeout): no at-most-once outcome unknown, the settle recorded |
+| endpoints lag (kube-proxy, Gateway, mesh) | none | a router double `qenv.NewRouter(s, name, procs...)`: which ready backend is a schedule choice `route.<name>`; its view lags by `route.<name>.lag` (`stale`: a terminating backend still chosen, a ready one not yet) | no client sees an error the app could have avoided; `Completes()` |
+| PodDisruptionBudget | none | `Cluster.Disruptions`: terminate nemeses enabled only while fewer than that many nodes are terminating or down by them (crashes are involuntary: not budgeted, as a PDB does not cover them) | availability through a drain |
+| CFS throttling, GC, node pressure | `Sim.Stalls` (`Pause`, `Slow`) | presets: `gristsim.Throttled(cpuLimit)` | leases and timeouts survive stalls |
+| NTP skew, drift, VM pause | `Sim.Clocks` | none | §3.5's lease, as examples/lease |
+| NetworkPolicy, zone partition | `Network.Partition`, `PartitionNemesis` | zones: a group of hosts, `nemesis.zone.<z>` cutting it off (and, as an option, the store with it) | `Completes()` and `Settles()` after the heal |
+| DNS failure, conntrack to a dead pod | `rpc.<name>.request`, `.response` | none: a reset is an unknown outcome | GR3's call claims |
+| mesh or Gateway retries and timeouts | `rpc.<name>.request` duplicate, `.delay` | a proxy double in front of the API with its own timeout and retry policy (`proxy.<name>`) | idempotency under duplicates; storms are qload's (§8) |
+| rolling update, mixed versions | `Sim.Upgrades`, `Process.RestartAs` | `Cluster.Rollout` (maxSurge, maxUnavailable) driving them | §3.9 |
+| ConfigMap and Secret updates | none | `qenv.NewProjection(s, name, versions...)`: a file whose content changes by nemesis, `nemesis.project.<name>`, per process at its own time | §3.6: decisions agree; a rotated secret causes no failure |
+| certificate expiry | none (TLS is not simulated) | the projection's versions carry `NotAfter` in virtual time; a double's transport refuses an expired one | a cached certificate fails the eventual vals after expiry |
+| managed PostgreSQL failover | `store.<name>.commit` (applied, answer lost) | `store.<name>.failover`: in-flight commits unknown, connections reset, read-only for a while; option `loseTail` (asynchronous replication: the last k commits gone) | `ErrRewound` raised; a receipt without its event named by the clients' binding |
+| CSI snapshot restore, backup restore | none | `nemesis.restore.<store>`: the store back to an earlier commit | effects re-run: Keyed dependencies replay, unkeyed ones apply twice (`Rejects("<c>Served")`) |
+| `max_connections` | none | `qenv.Store.Connections`: a begin beyond it waits or fails (`store.<name>.connect`) | sizing's pool rule |
+| ephemeral storage | `qenv.Disk` (`ErrNoSpace`, `powerLoss`, `tornWrite`) | none | a steps file on a full disk |
+| HPA, KEDA, VPA | none | in qload: `qload.Autoscaler` (metric, target, sync period, stabilization, startup delay) changing a server's workers over time; VPA's resize is a terminate | recovery with the scaler's delay (§8) |
+| node NotReady, then pod deletion after the toleration (5 min) | partition plus crash | none: a Deployment's replacement runs beside the partitioned original (two nodes polling: safe by the CAS); a StatefulSet's waits, so SQLite's single writer holds | §3.4's StatefulSet rule |
+| CSI attach and detach, RWO multi-attach while a pod moves | none | a restart delay on the moved process (`Process.RestartAfter`) | `within` bounds on recovery; the lint's StatefulSet rule |
+| API server: watches, 410 relists, conflicts, informer lag, throttling, outages | kubesim (fleetrollout; published by H7): conflicts, lost responses, status lag | an unstructured kubesim: watches with resourceVersion and bookmarks, `kube.watch.gone` (410 after compaction), `kube.watch.lag` (informer staleness: a read of one's own write fails), `kube.request.throttled` (429 + `Retry-After`), finalizers and owner-reference GC, `nemesis.apiserver` (an outage, then a relist storm: a qload case) | only for apps using the API (§5.6, GR7): grist itself never calls it |
+
+What gristsim gains is one optional field:
+
+```text
+gristsim.Config{Nodes: 3, Cluster: &gristsim.Cluster{
+	Hosts: 2, Zones: 2,             // nodes spread round-robin (nemesis.host.*, nemesis.zone.*)
+	Grace: 45 * time.Second,        // nemesis.terminate.node*: drain as Main does, then the kill
+	EndpointLag: 3 * time.Second,   // every node serves the API behind a router (route.api, route.api.lag)
+	Disruptions: 1,                 // a PDB of maxUnavailable 1
+	Rollout: &gristsim.Rollout{To: appV2, MaxSurge: 1},
+	Store: gristsim.Managed{Failover: true, LoseTail: 2, Restore: false},
+}}
+```
+
+With `Cluster` set, every node serves the API (not only the first), the
+node runs `Main`'s drain schedule (the same code: `grist.Drain` is a
+function of `qenv.Sleep` and the node's state), and the claims a
+deployment needs are ready-made:
+
+```text
+// package gristtest
+func Deploy(t *testing.T, sys qtest.System, c gristsim.Cluster) // the TestDeploy checklist, each a claim:
+//   a rolling restart under load: Conforms, All(Completes), All(Settles), NoClientErrors
+//   two replicas: Conforms; an unkeyed call's double duplicates are named (Some(Rejects("<c>Served")) where it applies twice)
+//   a rotated secret: Settles (RecoversAfter("nemesis.project.<name>"))
+//   v1 and v2 nodes: Conforms (Upgrade)
+func NoClientErrors() qtest.Claim // no client call exhausted its tries or saw a refusal no model action explains
+```
+
+What is deliberately **not** simulated: the scheduler's placement
+(only its outcome: pending pods are a smaller capacity in qload), the
+kubelet's probe loop beyond its outcome (a liveness failure is a
+terminate), CNI and CSI internals.
+
+### 4.1 Liveness under the cluster
+
+Several behaviours are liveness, not safety: a liveness probe that
+fails under load restarts healthy pods (capacity lost, latency up, more
+probes fail: a metastable loop, §8); a scaler's delay; a certificate
+cached past expiry; a rewound tenant stopped by `ErrRewound`. They are
+judged by settles and `within` (DESIGN §48: "every trigger handled
+within 30 s after a terminate"), and under load by qload's recovery.
+
+## 5. Lens (b): what an app can use
+
+Ranked by what each gives a team for its cost.
+
+### 5.1 A canary judged by the model
+
+The unique thing grist can offer: **the spec gates the deploy**. v2
+takes a share of the traffic (HTTPRoute `backendRefs` weights, or Argo
+Rollouts' canary steps), both versions record (the identity says which
+pod ran which version), and an analysis step validates the canary's
+window with the app's bindings: a `Rejects` or `Mismatch` aborts the
+rollout, beside the latency checks teams already have. A window never
+settles, so it judges safety and the `within` obligations whose bound
+fell inside it, not eventual vals; and a rejection names the step's pod,
+so a v1 step's fault is not charged to v2.
+
+```text
+# generated by `shop manifests -rollouts`: an Argo Rollouts AnalysisTemplate, Job provider
+- name: conforms
+  provider: {job: {spec: {template: {spec: {containers: [{name: validate, image: shop-validate:v2,
+    args: [validate, -binding, shop.binding.yaml, -since, 10m, -steps, /steps, -exit-on, reject,mismatch]}]}}}}}
+```
+
+The validating image is the app's model and bindings over a gotogether
+image (quint included, for failing runs' reports; H1's Go evaluator
+decides passing ones), never the production image. It reads either a
+window as a partial log (DESIGN §50) or, exact and dearer, the touched
+tenants' whole logs from the store (`<app> steps -export`, §7). Without Argo, a CronJob runs the same check over the last
+hour and writes its verdict as a Kubernetes Event and a condition on
+the Deployment's annotation: continuous conformance in production.
+
+### 5.2 Generated, annotated manifests
+
+`<app> manifests` writes plain YAML (no Helm, no operator, kustomize-
+friendly), committed and diffed in CI like the bindings
+(`gristtest.Generated`), every field with a "because" naming its source:
+
+```text
+terminationGracePeriodSeconds: 45  # because: drain 5 + shutdown 10 + settle 10 + flush 10 + 10 margin (grist.Drain)
+resources: {requests: {cpu: 250m, memory: 256Mi}}  # because: shop sizing, 2026-10-28 (deploy/sizing.yaml)
+# no cpu limit: because throttling stalls the pollers in 100 ms periods (§3.7)
+```
+
+From the catalog and declared features: a Deployment (or a StatefulSet
+of one for SQLite), the probes on the side port, the drain's preStop,
+`GOMEMLIMIT` from the downward API, a PodDisruptionBudget sized against
+the replicas (never `minAvailable` equal to them), topology spread
+across zones and hosts, a NetworkPolicy whose egress is the catalog's
+dependencies (`-dependency` URLs) and the store, the HTTPRoute of §3.8,
+a native sidecar collector for steps (§7; an init container with
+`restartPolicy: Always`, GA since Kubernetes 1.33, so it outlives the
+app's flush), a migration Job (sqlstore's schema once, not N pods
+racing at boot), HPA or a KEDA ScaledObject from sizing (§8). Validated
+with kubeconform in grist/kube's tests.
+
+`gotogether lint -kube DIR` checks hand-written or edited manifests
+against the same rules, each finding naming the field and the fix:
+loopback `-addr`; a liveness probe reaching the store; a grace below the
+drain; `-actor-header` not stripped at the Gateway; retries on routes
+whose product of layers sizing rejects; the timeout chain out of order;
+a PDB that blocks drains; a CPU limit; no `GOMEMLIMIT`; secrets in env
+or args; `subPath` secret mounts; replicas without spread; SQLite in a
+Deployment; `replicas_max × pool > max_connections`; steps on a
+container filesystem without a collector.
+
+### 5.3 Scaling on what the app knows
+
+KEDA's Prometheus scaler or an HPA on external metrics, fed by §3.3's
+gauges, tuned by §8 before shipping. The rule sizing makes visible: **a
+grist tenant is a serialization unit and a processor is sequential per
+tenant**, so pods add API throughput and parallelism across tenants,
+never a hot tenant's commit rate or a processor's rate on one tenant;
+and scaling on a lag caused by a slow dependency adds pods that wait on
+the same dependency. Lag-based scaling is right only with sharding
+(§3.5) and a per-pod bottleneck; the HPA's target is otherwise the API's
+u (qrole), not CPU.
+
+### 5.4 Jobs for replays, rebuilds and backfills
+
+`<app> replay -tenant t1 -processor restock -from 0` (a processor's
+checkpoint moved back under its log lease, its effects keyed as before
+so a Keyed dependency replays rather than repeats), `<app> rebuild`
+(H7's snapshots), `<app> steps -export` (§7), each run first in gristsim
+on a copy (`gristtest.Replay`: the backfilled events equal the on-time
+ones), each idempotent by position so a retried Job is harmless.
+
+### 5.5 Platform services as plain files
+
+cert-manager certificates and external-secrets (or the Secrets Store
+CSI driver) reach grist as projected files (§3.6), with rotation handled
+and simulated; a dependency's SPIFFE ID, when mTLS is on, checked and
+recorded as the callee's identity on the caller's step. The OTel
+operator's auto-instrumentation stays useful beside grist for services
+that are not grist apps, their spans converted to steps (`convert`,
+GR3 slice 6).
+
+### 5.6 Kubernetes as a command source (with GR7)
+
+A CRD per command (`grist kube crd`: the OpenAPI schema from the
+argument struct), a controller in grist/gristkube sending each custom
+resource as the command, `Idempotency-Key` = uid + generation
+(level-triggered: the latest spec, not every edit), and the outcome as
+status conditions (`Applied`, `Refused(short)`, `Unknown`) by
+server-side apply, owner references and finalizers as at-least-once
+effects keyed by uid. A `ValidatingAdmissionPolicy` (CEL) is generated
+only from refusals that need no reads (the generator can tell: a branch
+of the decision with no `Needs`), so admission never decides on stale
+state. Watches are where kubesim's faults matter (410 relists redeliver
+every object, which the marker dedupes). This is GR7's design to
+finish; GR10 fixes only the command-id rule and the admission rule.
+
+### 5.7 SLOs from the model
+
+An eventual val with a `within` bound ("every retirement paid within
+30 s") is a simulation claim today; `<app> manifests -slo` writes the
+same as a Prometheus recording rule over the gauges (oldest unhandled
+trigger's age) and a canary check: one statement, three uses.
+
+### 5.8 Not to do
+
+etcd or the API server as the event store; leader election for
+correctness, or a Kubernetes Lease at all (§3.5); admission webhooks for
+HTTP commands; Kubernetes Events per refusal (Events are for rare
+lifecycle facts: a rewind detected, a migration done, a slow catch-up);
+client-go, Helm or an operator in grist's core; CTMC numbers as absolute
+recommendations (§8.5); readiness on processor lag or a dependency's
+health (§3.3); configuration a decision reads from a file (§3.6);
+weaving client-go's leader election into qenv to simulate it as it is
+(the wrong tool, §2e, and its goroutines and timers would need qgosim);
+simulating the scheduler or the kubelet beyond the outcomes an app sees.
+
+## 6. What the generator writes
+
+| command | writes | judged by |
+| --- | --- | --- |
+| `<app> model` (today) | the model's skeleton and bindings | `gristtest.Generated` |
+| `<app> manifests [-gateway] [-rollouts] [-keda] [-slo] [-sizing deploy/sizing.yaml]` | deploy/*.yaml, annotated | kubeconform; `gristtest.Generated`'s diff; `lint -kube` clean |
+| `<app> catalog -diff OLD` | safe / readers first / breaking, each change named | CI against the deployed catalog |
+| `<app> sizing -steps FILES [-rate R] [-burst 3x30s]` | deploy/sizing.yaml (values, reasons, tool, margin) and deploy/sizing/ (SVG fields, recovery curves) | §8's confirmation runs |
+| `<app> steps -export` | the store's committed steps, as JSONL | the bindings |
+
+`manifests` reads `sizing.yaml` only when given it: a recommendation
+never enters a manifest silently, and each value it takes carries its
+reason into the comment.
+
+## 7. The real tier on a cluster
+
+`gristtest.KubeTier` (grist/kube) runs the app's image on kind (kwok
+cannot run an app's containers; it serves for scheduling-only questions
+such as a PDB's effect on a node drain) with a PostgreSQL in the
+cluster, the clients outside it through a Gateway (Envoy Gateway in
+kind), and a qnemesis `Target` per pod:
+
+```text
+type Pod struct{ Namespace, Name string } // qnemesis.Target: Kill = delete --grace-period=0 --force,
+                                          // Start = wait for the replacement Ready, Pause/Resume = SIGSTOP/SIGCONT via kubectl debug
+func Evict(ctx context.Context, p Pod) error // the eviction API: graceful, PDB-respecting (429 when blocked)
+```
+
+qnemesis keeps its standard-library rule: the pod target lives in
+grist/kube and shells out to kubectl, as crossdb's kind scripts do.
+Faults: evictions, kills, rolling restarts (`kubectl rollout restart`),
+node drains (`kubectl drain` on a kind worker), the Gateway's retries
+configured, a PostgreSQL failover (CloudNativePG's switchover, when the
+operator is installed; skipped otherwise, said so).
+
+**Steps.** The store's step log already holds every commit's step
+(grist §2.10): `<app> steps -export -db ... -since T` writes them as a
+JSONL file, so a pod's loss loses no commit. What only pods hold
+(effects' caller steps, served dependencies' sites, settles) goes to a
+native sidecar collector (OTLP, qobs's OTel recording) or to a PVC per
+pod named by identity; never to the container's filesystem alone. The
+tier merges both and validates with the same bindings
+(`<app>.real.binding.yaml` where a third party's sites are missing, GR3
+decision 4). Pod lifecycle facts (evicted, OOMKilled, restarted, scaled)
+are read from the API's Events into a qnemesis journal, so a cluster's
+real disruptions become a `qenv.Script` replayable in gristsim
+("last Tuesday's node rotation against v2").
+
+## 8. Sizing with qload and qmeta
+
+The maintainer's addition: estimate resource requests, replica counts,
+autoscaler thresholds, timeouts, retry policies, Gateway retries, grace
+periods and lease durations **from the app's own service times**, with
+**recovery as the criterion**: a setting is acceptable when the system,
+so configured, recovers from every stressor it must survive (the spikes
+and dips the team declares), and the margin is how far the nearest
+failing setting is.
+
+### 8.1 Inputs, measured not assumed
+
+- **Service times per block** from the app's steps: a command's
+  invocation and completion on the clients' recorder (`qobs.Invoke`,
+  `Call.Done`), a commit's time on the relay, a declared call's
+  interval on the caller's step (the dependency's latency), an effect's
+  from its trigger's commit to its step. `qmeta.Measure` per block; its
+  `Exponential()` says whether the chain's verdicts can be trusted
+  (docs/agents/metastability.md: constant service made a queue longer
+  than μ × timeout absorbing, where exponential service drains it).
+- **Growth with the log**: the same measured at 1k, 10k, 100k events per
+  tenant (a gristsim prologue fills the log), since queries fold from
+  the log until H7's snapshots: memory and CPU per query are lines, not
+  points.
+- **CPU per request** from a real-tier profile (`go test -cpuprofile`
+  on the tier, or the binary's `runtime/metrics`), not from qenv's
+  virtual-time profile, which has no CPU.
+- **Arrivals**: a declared rate and bursts (`-rate 40/s -burst
+  3x30s`), qrole's gauges from production, or a SimKube trace's shape
+  (sktrace, `qload.Piecewise`).
+- **Policies in force**: grist/client's `MaxAttempts`, `RetryDelay`,
+  `Budget` (a `qload.Retrier` as it stands: retrystorm's method, the
+  library itself in the loop), the Gateway's and mesh's, `EffectTries`.
+
+### 8.2 The three tiers, each checking the next
+
+1. **The chain** (`qmeta.New` over `Params{Lambda, Mu, Workers,
+   Timeout, Retries, Queue, Orbit, Backoff, RetryBudget}`), one per hop:
+   the API (workers = replicas × per-pod concurrency, bounded by the
+   pool), each hot tenant (workers = 1: its head lock), each processor
+   on a tenant (workers = 1, μ from the effect's time). Seconds per
+   configuration: it **ranks** settings and draws the recovery region
+   (`Region`, `RecoveryWithin`), and its field (`SVG`) is the evidence
+   a reviewer reads. Calibrated on simulated trajectories with
+   `CalibrateTimeout` (λ held) before any number is quoted.
+2. **The simulation**: `qload` with the measured service
+   (`Service.Draw`), the retry library in the loop, `qload.Autoscaler`
+   for HPA; then the app itself under load (`gristsim.Load`: gristsim
+   as a `qload.Experiment`, goodput counted from its own steps, checked
+   against its model in the same run, as examples/checkout's load.go
+   does). `qload.Recovers`/`Mostly` decide; `qhegel.FindTrigger` finds
+   the smallest stressor that breaks the chosen setting, which is the
+   margin.
+3. **The cluster**: the trigger found, replayed on the kind tier with
+   the generated manifests (§7): one run that confirms, not a search.
+
+### 8.3 What each setting comes from
+
+| setting | tool | criterion | caveat |
+| --- | --- | --- | --- |
+| replicas (min) | chain, then simulation | the smallest count whose region holds peak λ plus the spike, after losing one zone (PDB plus a zone outage) | per-tenant and per-processor limits do not scale with replicas: reported apart, with a per-tenant rate limit recommended where a hot tenant's λ nears its μ |
+| client per-attempt timeout, Gateway timeout, `-request-timeout` | `CalibrateTimeout`, then simulation | above p99 under load, below the next layer out; reject one making a queue absorbing (queue > μ × timeout) | the chain's service is exponential: check with `Exponential()`, confirm in simulation |
+| retries, backoff, budget (client, Gateway, mesh) | chain ranks, simulation confirms, FindTrigger margins | recovery from the declared bursts with layers composed (attempts multiply; a budget must cover every loop, DESIGN §11.6) | retrystorm's finding: backoff alone can recover worse than immediate retries under rejection |
+| HPA target, stabilization, KEDA threshold | simulation only (a delayed control loop is not Markov in the chain's state) | recovery with the scaler's sync period, stabilization and pod start time; no oscillation N ↔ 2N | the pod start time is measured (kind), not assumed |
+| CPU request | arithmetic | λ_peak × CPU per request / replicas + headroom | from a real profile; no CPU limit by default |
+| memory limit, `GOMEMLIMIT` | measurement | peak heap per read model × the largest tenant's log at the horizon, plus batches | no queueing model; grows with the log until snapshots |
+| pool size, `max_connections` | Little's law | pool ≥ λ × mean transaction time per pod; replicas_max × pool ≤ max_connections − reserve | arithmetic; the HPA's max included |
+| `terminationGracePeriodSeconds`, drain delay | sum | grace ≥ drain delay (measured endpoint lag p99 on the tier) + p99.9 request + settle + flush + margin | the endpoint lag is the cluster's, measured once per cluster |
+| lease heartbeat and takeover (§3.5) | arithmetic, then exploration | takeover > heartbeat + max stall (Stalls, GC) + drift × takeover; failover within a `within` bound | no chain: correctness is fenced, this is lag and duplicates |
+
+### 8.4 The API
+
+Generic helpers go into qmeta and qload (core), the catalog's part into
+grist/gristload:
+
+```text
+// package qmeta: Measure already gives a measured Service (Mean, CV, Exponential, Draw)
+func Size(p Params, peak float64, healthy func(State) bool, within float64, prob float64) (workers int, r *Region)
+	// the smallest Workers whose RecoveryWithin(healthy, within) is at least prob from every state the peak reaches
+func TimeoutFor(p Params, data []Trajectory, s Service) (timeout float64, why string)
+	// CalibrateTimeout's fit, bounded below by the service's p99.9 plus queueing at the target u,
+	// refusing one that makes a queue absorbing (queue > μ × timeout)
+// package qload
+type Autoscaler struct{ Metric string; Target float64; Sync, Stabilization, Startup time.Duration; Min, Max int }
+	// ServerConfig.Replicas behind a balancer, changed over time by the Autoscaler (a lagging, closed loop)
+// package gristload (grist)
+func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error) // every row of §8.3: value, formula, tool, margin, evidence
+```
+
+The formulas the report prints beside each value:
+- timeout ≥ p99.9(service) + the queueing delay at the target u, and
+  below the next layer out;
+- retry budget: attempts × λ stays below the storm's threshold λ* the
+  chain places (Size's region edge), the layers' attempts multiplied;
+- grace ≥ endpoint lag + drain + settle + flush + margin;
+- lease takeover > heartbeat + worst stall + drift × takeover (no
+  skew term: heartbeats are timed by the store's clock, §3.5);
+- pool ≥ λ × mean transaction time per pod, replicas_max × pool ≤
+  max_connections − reserve.
+
+Never sized from the mean when the CV is far from 1 or the process runs
+under a CPU limit. VPA in recommendation mode is a cross-check of the
+memory row, never its source.
+
+### 8.5 What the chain can and cannot predict
+
+It can: where the tipping point lies (which λ, which timeout, which
+retry count leaves a stable storm), how policies rank, and an alert
+region (qmeta's `Rules`) a running system can check. It cannot: absolute
+times (its recovery times were days where the simulation's were
+minutes, DESIGN §11.3; assert orderings and orders of magnitude);
+non-exponential service; several request classes sharing a CPU; more
+than one server (a request path of API → store → dependency is several
+chains, not one); correlated failures, delayed control, CFS periods,
+GC, memory; and anything beyond its orbit bound (keep it well above the
+storm's size). So the report never prints a bare number: each
+recommendation carries the tool that produced it, its margin (the
+smallest failing stressor or the nearest failing setting), its caveat,
+and the file of its evidence.
+
+```text
+# deploy/sizing.yaml (generated by `shop sizing`)
+server:
+  requestTimeout: {value: 2s, because: "p99.9 210 ms under 40/s; recovery within 60 s 0.999 at 2s, 0.62 at 500ms",
+                   tool: calibrated chain + qload (6 of 6 seeds), margin: "fails at 450ms", evidence: sizing/timeout.svg}
+gateway:
+  retries: {value: {GET: 1, POST: 0}, because: "POST at 3 attempts × client 3 has a stable storm above 55/s",
+            tool: qload + FindTrigger, margin: "smallest trigger +15/s for 40s"}
+```
+
+## 9. Slices
+
+Each is one agent's work, reviewed before the next; each acceptance
+names the mutant it must catch (an overlay, `gristtest.Mutants`), with
+the faithful app's claim beside it, and its test fails with the feature
+ablated.
+
+1. **Identity, probes, the drain schedule (core, S-M).** `Identity`,
+   recorder ids `<app>/<node>/<incarnation>`, `/livez` `/readyz`
+   `/metrics` on a side port, `Drain` with `-grace`, the loopback
+   refusal, `GOMEMLIMIT`, the startup line. **Example: counters**, two
+   real nodes as two processes (`TestRealTwoPods`), merged.
+   **Acceptance**: the mutant `pidIdentity` (both nodes `counters-1`,
+   as two containers' pid 1 make them) gets Reconstruct's duplicate
+   error on the merged files, no verdict; the faithful run
+   conforms; a `-grace 20s` run records its settle and flush (the
+   phases shrunk) where today's schedule is killed in the flush.
+2. **Graceful termination and the router in qenv and gristsim (core,
+   M).** `nemesis.terminate.<proc>`, `qenv.Terminating`, the router
+   double (`route.<name>`, `route.<name>.lag`), `gristsim.Cluster`'s
+   `Grace`, `EndpointLag`, `Disruptions`, every node serving the API.
+   **Example: counters** (the at-most-once payout). **Acceptance**: the
+   mutant `stopNodeAtSignal` (the node's ctx cancelled at SIGTERM, the
+   bug main.go's comment records) leaves an at-most-once outcome
+   `grist.unknown` in some run under terminations within grace, where
+   the faithful app records none and is `All(Completes())`; a router
+   without lag (ablation) makes the endpoint-lag test pass the mutant
+   `noDrainDelay`, which with lag fails `NoClientErrors`.
+3. **Store failover and restore (core, M).** `store.<name>.failover`
+   with `loseTail`, `nemesis.restore.<store>`, `Store.Connections`;
+   grist's `ErrRewound` and `<app> resume`. **Example: wallet-grist**
+   (transfers, the ledger's Keyed posts). **Acceptance**: under
+   `loseTail` the bindings name the incident (a position committed
+   twice, or a receipt with no commit), never a silent pass; under a
+   restore the faithful app stops the tenant's effects with
+   `ErrRewound` (the run's outcome names it), and once resumed its
+   effects replay at the Keyed ledger, where `ledgerNoDedupe` is
+   `Some(Rejects("ledgerPostServed"))`; with `ErrRewound` ablated an
+   at-most-once effect runs again unasked (two calls of one key,
+   `Some(Rejects(...))` at its caller step).
+4. **Versions (M, after H7's upcasting).** `<app> catalog -diff`,
+   `gristtest.Upgrade`, `gristsim.Cluster.Rollout`. **Example:
+   counters v2** (a field added to an event, a new event behind a
+   flag). **Acceptance**: the mutant `eagerV2` (v2 appends the new
+   event before the rollout ends) fails the v1 nodes' folds, named
+   (`Some(Mismatch(...))` or the fold's refusal); the faithful
+   readers-first rollout conforms; `catalog -diff` classifies each of a
+   table of changes (golden test).
+5. **Configuration and secrets (core, M).** `FileSource`, `-db-file`
+   with reopen, TLS from files, `grist.FromSource` (configuration as
+   commands), `qenv.NewProjection`, certificate expiry in virtual time.
+   **Example: library** (a mailer over mTLS, a loan limit as a flag).
+   **Acceptance**: the mutant `certOnce` (the client certificate read
+   at start) fails `All(Settles())` after a rotation and the old
+   certificate's expiry; the mutant `flagFromFile` (the decision reads
+   the flag's file directly) is `Some(Rejects(...))` at the command
+   when two nodes see two versions (the model decides on the logged
+   flag); the faithful app conforms through both.
+6. **Sizing, the chain and the arithmetic (grist/gristload, M).**
+   Measurement from steps, per-hop chains, calibration, the arithmetic
+   rows, `<app> sizing` writing sizing.yaml with evidence. **Example:
+   counters** with grist/client's budget as the `Retrier`.
+   **Acceptance**: for a configuration mutant `postRetries3` (Gateway
+   retries 3 on commands, client 3) the report recommends against it,
+   and `qload.Recovers` agrees: the recommended setting
+   `Recovered()`, the mutant `StaysDegraded()` after the declared
+   burst, in most of 6 seeds.
+7. **The app under load and the scaler (core qload + gristsim, M).**
+   `gristsim.Load`, `qload.Autoscaler`, the HPA rows of sizing.
+   **Example: counters** (processors' lag as the queue). **Acceptance**:
+   an HPA with a stabilization window longer than the spike's slope
+   allows `StaysDegraded()`, the recommended one `Recovered()`;
+   correctness checked in the same runs (Conforms through the storm).
+8. **Manifests and the lint (grist/kube, M).** `<app> manifests`,
+   annotations, `lint -kube`'s rules, kubeconform in tests, the shop of
+   `grist new` given manifests (`TestNewIsGreen` extended). **Example:
+   `grist new`'s scaffold**. **Acceptance**: each of a table of
+   manifest mutants (one per lint rule: a liveness probe on the store, a
+   grace below the drain, the actor header forwarded, ...) is reported
+   naming its field and fix; the generated manifests are clean and
+   valid.
+9. **The kind tier (grist/kube, M-L).** `KubeTier`, the pod target,
+   steps exported from the store and collected from a native sidecar,
+   Events into a journal and a Script. **Example: counters** on kind
+   with PostgreSQL. **Acceptance**: slice 2's `stopNodeAtSignal`
+   caught by a rolling restart under load on kind (a `grist.unknown`
+   outcome after a graceful termination), the faithful image
+   conforming and settling; the journal's disruptions replayed in gristsim.
+10. **The canary gate (grist/kube, S-M).** The validating image over a
+    window (a partial log, or the tenants' export), the AnalysisTemplate, the HTTPRoute weights variant.
+    **Example: counters v2 on kind**. **Acceptance**: v2 =
+    `wrongAmount` aborts the canary (`Rejects("bankPayServed")` in the
+    window); the faithful v2 is promoted.
+11. **Sharding (core, M-L, after grist slice 3's leases).** Member
+    heartbeats, rendezvous ownership, takeover, the relay per owner (the
+    durable relay cursor). **Example: wallet-grist with 3 nodes**.
+    **Acceptance**: the mutant `trustLease` (a holder commits its
+    checkpoint unconditioned, trusting the lease instead of the CAS) is
+    `Some(Rejects(...))` at the processor's step under Stalls and Clocks
+    (a trigger handled twice by two believed owners); the faithful app
+    conforms; condition retries and duplicate effects
+    measured lower than without sharding (stated, not asserted as a
+    score).
+
+GR7 owns §5.6 (CRs as commands, admission from read-free refusals,
+kubesim's watch faults); slice 5's `FromSource` is the shape it reuses.
+
+Order: 1 and 2 first (they fix today's two bugs and every later tier
+needs them), then 3, 6, 8, 9, 10, with 4 after H7 and 11 after grist
+slice 3's leases; 5 and 7 alongside.
+
+## 10. Open questions for the maintainer
+
+1. **Where the Kubernetes-shaped code lives.** Recommendation: `grist/kube`
+   as a published module with no client-go (manifests, lint rules, the
+   kind tier, the canary gate), and GR7's `grist/gristkube` for
+   client-go; the core gains only §3.1's first row. The alternative, a
+   `gotogether/kube` in the toolkit for non-grist services too, waits
+   until a non-grist example asks.
+2. **The drain's defaults.** Recommendation: keep each phase's 10 s, add
+   the 5 s delay on an orchestrator, and generate the grace as their sum
+   plus a margin (45 s) rather than shrinking the defaults to fit 30 s;
+   `-grace` makes a shorter grace work by budget.
+3. **A detected rewind.** Recommendation: fail closed for effects
+   (`ErrRewound` stops the tenant's pollers and relay, commands go on),
+   an operator's `<app> resume` restarting them; never an automatic
+   resume, since an at-most-once effect would run again.
+4. **Sizing into manifests.** Recommendation: `<app> sizing` writes
+   sizing.yaml with its evidence, `manifests` takes it only with
+   `-sizing`, each value's reason in its comment; no silent defaults
+   from a chain.
+5. **The canary's packaging.** Recommendation: an Argo Rollouts
+   AnalysisTemplate with the Job provider plus a plain HTTPRoute-weights
+   recipe; no controller of ours, no Flagger-specific webhook until a
+   user asks.
+6. **Kubernetes Leases at all.** Recommendation: none in grist, not even
+   as a hint: membership as heartbeats in the reserved tenant `grist`,
+   ownership by rendezvous, the fence in the log (§3.5), so the control
+   plane is never in grist's path. The alternative (the Go specialist's):
+   a Lease elector in grist/kube over a minimal client, a hint only, the
+   fence still the store's; worth it only if heartbeat appends measure
+   too costly on a large fleet.
+
+## 11. The reviewers' ideas: taken and left
+
+- **Newcomer** (deploying `grist new`'s shop). Taken: the first month's
+  bites (§1), never a Kubernetes Lease for correctness (§3.5), the
+  cluster as declared fault kinds (§4), `lint -kube` and manifests with
+  a "because" per field (§5.2), the deploy checklist (`gristtest.Deploy`,
+  `NoClientErrors`), `sizing` with reasons and recovery probabilities
+  (§8.5), `catalog -diff` and `Upgrade` (§3.9), the canary gate (§5.1),
+  CRs as commands keyed by uid + generation and admission from read-free
+  refusals (§5.6), KEDA on lag (§5.3, with its limit), SLOs from eventual
+  vals (§5.7), a cluster's Events as a Script (§7). Left:
+  `RequireIdempotencyKey` and a 428 (every command already requires the
+  key, 400 without); `kube.endpoints.lag` (the lag is a router's, Gateway
+  and mesh included: `route.<name>.lag`).
+- **Designer**. Taken: the mapping onto qenv's primitives and what is
+  missing (§4), failover with a lost tail and snapshot restore (§3.4,
+  slice 3), a minimum-position header once caches exist (§3.3), SQLite
+  as a StatefulSet, native sidecars, Events for rare facts only, the
+  sizing table's tool and caveat per row (§8.3), the "not to do" list
+  (§5.8). Corrected: `nemesis.machine.<n>`: qenv's `Machine` is the
+  native runtime's platform interface, and DESIGN §10.7 lists simulated
+  machines as not built, so the grouping is new, named
+  `nemesis.host.<h>`. Left: a load-correlated OOM nemesis (a crash at a
+  chosen point already explores the outcome; the correlation is
+  sizing's, answered by measuring heap) and `dns.<name>` kinds (a
+  resolver failure is what `rpc.<name>.*` already makes).
+- **Go specialist**. Taken: the binary sizes (§2a), the memory limit
+  from `memory.max` with `GOGC` and `GOMAXPROCS` left alone (§3.7), the
+  drain order (§3.3), the fence through the store (§3.5), the doubles
+  and kubesim's gaps (§4), `Size`, `TimeoutFor`, the `Autoscaler` and
+  the report's formulas (§8.4), informers as operators' tool, not CRUD
+  apps' (§5.6). Left: `qmeta.ServiceOf` (`Measure` already returns a
+  Service with its CV), a kubelet-restart fault (no outcome an app
+  sees), EndpointSlices for dependency discovery (a Service's name is
+  what `-dependency` takes; GR4 decides peers), the in-cluster token
+  re-read (only grist/gristkube calls the API).
+- **Where they disagreed**: the Lease. Newcomer and designer: a hint at
+  most; specialist: a Lease elector without client-go as a hint, fenced
+  through the store. Decided: the fence from all three, no Lease
+  (heartbeats in the log, §3.5); the specialist's elector is question
+  6's alternative.

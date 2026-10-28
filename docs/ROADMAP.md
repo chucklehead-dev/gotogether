@@ -14,8 +14,8 @@ Standing decisions, with the maintainer:
 - MIT license.
 
 Order: H1 → H3 → H2 with P5 → P1, P3, P4, P7 → H4 → H5 → H6 (with P8)
-→ H7 → P2 → P6, with GR3's slices 4-6 after H4, GR4-GR9 after H5 and
-H6, and P9 after GR4; G8-G12 and the items left from S, X, Y, T and E
+→ H7 → GR10 → P2 → P6, with GR3's slices 4-6 after H4, GR4-GR9 after
+H5 and H6, and P9 after GR4; G8-G12 and the items left from S, X, Y, T and E
 alongside; R5 when the maintainer says.
 
 ## Tenth review: one product (H)
@@ -318,6 +318,23 @@ Then, in order, each item reviewed before the next:
   double; checkout's claims (isolation levels, crashes, idempotency,
   the outbox) carried over, plus the system model's; a real tier with
   three processes. The proof that GR4 and GR8 compose.
+- **GR10. Platform: Kubernetes-aware, never Kubernetes-bound (L).**
+  Designed in docs/grist-platform.md. A core that serves well on any
+  orchestrator without importing one (an identity from the environment,
+  `/livez` `/readyz` `/metrics` on a side port, a drain schedule
+  budgeted by the grace, files that change, `GOMEMLIMIT` from the
+  cgroup); the cluster simulated as named qenv choices (a graceful
+  terminate, a router whose endpoints lag, hosts and zones, a store that
+  fails over or is restored, projected files, a delayed autoscaler in
+  qload); `grist/kube` (no client-go) writing annotated manifests, a
+  pre-deploy lint, the kind tier and a canary gated by the model;
+  sizing from the app's own service times with recovery as the
+  criterion (`<app> sizing`). Correctness stays the store's: no
+  Kubernetes Lease, ownership fenced in the log. Eleven slices; the
+  first two fix today's recorder ids shared by every pod (pid 1) and
+  30 s of drain inside the default 30 s grace. After H7 (slice 4 needs
+  its upcasting; slice 11 grist slice 3's leases); six questions for
+  the maintainer (§10).
 - **Slice 3's rest**: upcasting, snapshots, gristpure, gristhegel,
   leases, screens and Datastar (the read models' cost on long histories
   first: snapshots before a second real app).
