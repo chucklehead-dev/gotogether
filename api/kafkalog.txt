@@ -1,0 +1,13 @@
+== github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog
+func NewReader(brokers []string, topic, group string, opts ...kgo.Opt) (*Reader, error)
+func NewWriter(brokers []string, topic string, idempotent bool, opts ...kgo.Opt) (*Writer, error)
+type Reader struct
+    field OnCommit func(ctx context.Context, partition, next int)
+    method (*Reader) Close()
+    method (*Reader) Commit(ctx context.Context, partition, next int) error
+    method (*Reader) Poll(ctx context.Context) ([]simlog.Record, error)
+type Writer struct
+    method (*Writer) Close()
+    method (*Writer) Flush(ctx context.Context)
+    method (*Writer) Produce(ctx context.Context, key string, value []byte, done func(error))
+

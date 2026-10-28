@@ -3,20 +3,20 @@ module github.com/chucklehead-dev/gotogether/examples/streams
 go 1.26.1
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.47.3
-	github.com/aws/aws-sdk-go-v2/service/kinesis v1.56.6
 	github.com/chucklehead-dev/gotogether v0.0.0
+	github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog v0.0.0
+	github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog v0.0.0
 	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
-	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20261020234411-c06330b92452
-	github.com/twmb/franz-go/pkg/kmsg v1.15.0
 	hegel.dev/go/hegel v0.9.27
 )
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.47.3 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.6 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/kinesis v1.56.6 // indirect
 	github.com/aws/smithy-go v1.28.5 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8 // indirect
@@ -24,6 +24,8 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/twmb/franz-go v1.22.2 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	go.opentelemetry.io/otel v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
@@ -34,3 +36,7 @@ require (
 replace github.com/chucklehead-dev/gotogether => ../..
 
 replace github.com/chucklehead-dev/gotogether/qhegel => ../../qhegel
+
+replace github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog => ../../qenv/simlog/kafkalog
+
+replace github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog => ../../qenv/simlog/kinesislog

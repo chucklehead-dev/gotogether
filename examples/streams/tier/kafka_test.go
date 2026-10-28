@@ -1,4 +1,4 @@
-package kafkalog_test
+package tier_test
 
 import (
 	"context"
@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/streams/kafkalog"
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
 	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
 	"github.com/chucklehead-dev/gotogether/qenv/simlog"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -18,9 +18,9 @@ import (
 
 const binding = "../streams.binding.yaml"
 
-// run runs the pipeline with m on an in-process Kafka cluster (kfake, two
-// partitions), its steps recorded.
-func run(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
+// runKafka runs the pipeline with m on an in-process Kafka cluster (kfake,
+// two partitions), its steps recorded.
+func runKafka(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
 	t.Helper()
 	c, err := kfake.NewCluster(kfake.NumBrokers(1), kfake.SeedTopics(2, "events"))
 	if err != nil {
@@ -40,6 +40,7 @@ func run(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
 		if err != nil {
 			return nil, nil, err
 		}
+		r.OnCommit = tier.RecordCommit
 		return r, r.Close, nil
 	})
 	if err != nil {
@@ -53,7 +54,7 @@ func run(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
 // binding as the simulated runs.
 func TestKafkaConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	steps, res := run(t, pipeline.Faithful)
+	steps, res := runKafka(t, pipeline.Faithful)
 	if !res.Complete {
 		t.Fatalf("the projection is incomplete after the timeout")
 	}
@@ -72,7 +73,7 @@ func TestKafkaMutants(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, m := range []pipeline.Mutation{pipeline.CommitFirst, pipeline.OffByOne} {
 		t.Run(fmt.Sprint(m), func(t *testing.T) {
-			steps, _ := run(t, m)
+			steps, _ := runKafka(t, m)
 			qtest.Validate(t, binding, steps).Expect(t, qtest.Violates("committedApplied"))
 		})
 	}

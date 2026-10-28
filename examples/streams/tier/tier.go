@@ -33,6 +33,13 @@ type Result struct {
 	Complete   bool // every key's last event was applied before the timeout
 }
 
+// RecordCommit records a commit as the model's step: a real tier's
+// Reader.OnCommit (kafkalog, kinesislog), called when the client is told
+// the commit landed.
+func RecordCommit(ctx context.Context, partition, next int) {
+	qobs.Record(ctx, "commit", nil, "partition", partition, "offset", next)
+}
+
 // Run runs the pipeline: w writes, newReader(i) is consumer i's Reader
 // and close function.
 func Run(ctx context.Context, cfg Config, w simlog.Writer, newReader func(i int) (simlog.Reader, func(), error)) (*Result, error) {

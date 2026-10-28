@@ -1,7 +1,18 @@
-// Package kafkalog runs the pipeline on Kafka with franz-go: Writer and
-// Reader over kgo clients, and Run, a whole deployment against a broker
-// (kfake's in-process cluster in the tests and the demo, any cluster
-// otherwise).
+// Package kafkalog is qenv/simlog's seams on Kafka, with franz-go: a
+// Writer and a Reader over kgo clients, so code written against
+// simlog.Writer and simlog.Reader, checked on the simulated log, runs on
+// a Kafka cluster unchanged (kfake's in-process cluster in tests, any
+// cluster otherwise).
+//
+// The Writer is kgo's producer, idempotent unless asked not to be; the
+// Reader is a member of a consumer group with automatic commits off: the
+// application commits after processing, and a member of an older
+// generation is refused. A commit is reported when the coordinator
+// accepted it (Reader.OnCommit): a real client cannot see one that landed
+// with its response lost.
+//
+// kafkalog is a module of its own (it needs franz-go, which the core does
+// not): go get github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog.
 package kafkalog
 
 import (
@@ -9,7 +20,6 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv/simlog"
-	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
@@ -22,11 +32,12 @@ type Writer struct {
 	topic string
 }
 
-// NewWriter connects a producer. With idempotent false, the producer's
-// idempotence is off (pipeline.NonIdempotentProducer): its retries can
-// then reorder and duplicate.
-func NewWriter(brokers []string, topic string, idempotent bool) (*Writer, error) {
-	opts := []kgo.Opt{kgo.SeedBrokers(brokers...), kgo.DefaultProduceTopic(topic)}
+// NewWriter connects a producer of topic, with any further kgo options
+// (TLS, SASL). With idempotent false, the producer's idempotence is off,
+// with five requests in flight: its retries can then reorder and
+// duplicate.
+func NewWriter(brokers []string, topic string, idempotent bool, opts ...kgo.Opt) (*Writer, error) {
+	opts = append([]kgo.Opt{kgo.SeedBrokers(brokers...), kgo.DefaultProduceTopic(topic)}, opts...)
 	if !idempotent {
 		opts = append(opts, kgo.DisableIdempotentWrite(), kgo.MaxProduceRequestsInflightPerBroker(5))
 	}
@@ -50,23 +61,29 @@ func (w *Writer) Flush(ctx context.Context) { _ = w.cl.Flush(ctx) }
 func (w *Writer) Close() { w.cl.Close() }
 
 // Reader is a simlog.Reader over a kgo consumer in a group, with
-// automatic commits off: the pipeline commits after applying.
+// automatic commits off: the application commits after processing.
 type Reader struct {
+	// OnCommit, if set, is called when a commit was accepted, before
+	// Commit returns.
+	OnCommit func(ctx context.Context, partition, next int)
+
 	cl    *kgo.Client
 	topic string
 }
 
-// NewReader joins group as a consumer of topic.
-func NewReader(brokers []string, topic, group string) (*Reader, error) {
-	cl, err := kgo.NewClient(kgo.SeedBrokers(brokers...), kgo.ConsumerGroup(group), kgo.ConsumeTopics(topic),
-		kgo.DisableAutoCommit(), kgo.FetchMaxWait(100*time.Millisecond), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+// NewReader joins group as a consumer of topic, reading a partition with
+// no committed offset from its start, with any further kgo options.
+func NewReader(brokers []string, topic, group string, opts ...kgo.Opt) (*Reader, error) {
+	cl, err := kgo.NewClient(append([]kgo.Opt{kgo.SeedBrokers(brokers...), kgo.ConsumerGroup(group), kgo.ConsumeTopics(topic),
+		kgo.DisableAutoCommit(), kgo.FetchMaxWait(100 * time.Millisecond), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart())}, opts...)...)
 	if err != nil {
 		return nil, err
 	}
 	return &Reader{cl: cl, topic: topic}, nil
 }
 
-// Poll implements simlog.Reader: the records fetched within 200 ms.
+// Poll implements simlog.Reader: the records fetched within 200 ms, at
+// most 10.
 func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 	pctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
@@ -81,9 +98,9 @@ func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 	return out, nil
 }
 
-// Commit implements simlog.Reader, recording the commit when the
-// coordinator accepted it. A member of an older generation is refused
-// (Kafka's ILLEGAL_GENERATION, REBALANCE_IN_PROGRESS).
+// Commit implements simlog.Reader, calling OnCommit when the coordinator
+// accepted it. A member of an older generation is refused (Kafka's
+// ILLEGAL_GENERATION, REBALANCE_IN_PROGRESS).
 func (r *Reader) Commit(ctx context.Context, partition, next int) error {
 	var cerr error
 	offsets := map[string]map[int32]kgo.EpochOffset{r.topic: {int32(partition): {Epoch: -1, Offset: int64(next)}}}
@@ -103,7 +120,9 @@ func (r *Reader) Commit(ctx context.Context, partition, next int) error {
 	if cerr != nil {
 		return cerr
 	}
-	qobs.Record(ctx, "commit", nil, "partition", partition, "offset", next)
+	if r.OnCommit != nil {
+		r.OnCommit(ctx, partition, next)
+	}
 	return nil
 }
 

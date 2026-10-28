@@ -15,13 +15,13 @@ import (
 	"path/filepath"
 
 	"github.com/chucklehead-dev/gotogether/examples/streams"
-	"github.com/chucklehead-dev/gotogether/examples/streams/kafkalog"
-	"github.com/chucklehead-dev/gotogether/examples/streams/kinesisfake"
-	"github.com/chucklehead-dev/gotogether/examples/streams/kinesislog"
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
 	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qenv/simlog"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog/kinesisfake"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/twmb/franz-go/pkg/kfake"
 )
@@ -88,6 +88,7 @@ func runKafka(ctx context.Context, m pipeline.Mutation) error {
 		if err != nil {
 			return nil, nil, err
 		}
+		r.OnCommit = tier.RecordCommit
 		return r, r.Close, nil
 	})
 	return err
@@ -100,7 +101,7 @@ func runKinesis(ctx context.Context, m pipeline.Mutation) error {
 	cps := &kinesislog.Checkpoints{}
 	_, err := tier.Run(ctx, tier.Config{Mutation: m, Consumers: 1}, &kinesislog.Writer{C: c, Stream: "events"},
 		func(int) (simlog.Reader, func(), error) {
-			return &kinesislog.Reader{C: c, Stream: "events", Checkpoints: cps}, func() {}, nil
+			return &kinesislog.Reader{C: c, Stream: "events", Checkpoints: cps, OnCommit: tier.RecordCommit}, func() {}, nil
 		})
 	return err
 }

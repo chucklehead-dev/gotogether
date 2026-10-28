@@ -1,11 +1,20 @@
-// Package kinesislog runs the pipeline on Kinesis with aws-sdk-go-v2:
-// a Writer over PutRecord and a Reader over the shards with
-// GetShardIterator and GetRecords, checkpointing to a Checkpoints store.
+// Package kinesislog is qenv/simlog's seams on Kinesis, with
+// aws-sdk-go-v2: a Writer over PutRecord and a Reader over a stream's
+// shards with GetShardIterator and GetRecords, checkpointing to a
+// Checkpoints store, so code written against simlog.Writer and
+// simlog.Reader, checked on the simulated log, runs on Kinesis unchanged
+// (kinesisfake's in-process endpoint in tests, AWS otherwise).
 //
 // Kinesis has no consumer groups: the KCL coordinates shard leases in
 // DynamoDB. The Reader here owns every shard (one consumer); its
 // checkpoints are what a restarted consumer resumes from, and the store a
-// lease table would hold.
+// lease table would hold. A shard's partition number is its index in
+// ListShards' order by id, and a record's offset its index in the shard.
+// Kinesis has no idempotent producer either: a PutRecord retried after a
+// lost response writes the record twice.
+//
+// kinesislog is a module of its own (it needs the AWS SDK, which the core
+// does not): go get github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog.
 package kinesislog
 
 import (
@@ -19,7 +28,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"github.com/chucklehead-dev/gotogether/qenv/simlog"
-	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // Client is a Kinesis client for endpoint (the fake's URL, or "" for
@@ -52,8 +60,8 @@ func (w *Writer) Produce(ctx context.Context, key string, value []byte, done fun
 func (w *Writer) Flush(context.Context) {}
 
 // Checkpoints are a consumer's committed positions, per shard index: the
-// next offset and the sequence number of the record before it. A commit
-// that lands here is the model's commit step.
+// next offset and the sequence number of the record before it. Readers
+// that share one resume from each other's commits.
 type Checkpoints struct {
 	mu  sync.Mutex
 	pos map[int]checkpoint
@@ -70,6 +78,9 @@ type Reader struct {
 	C           *kinesis.Client
 	Stream      string
 	Checkpoints *Checkpoints
+	// OnCommit, if set, is called when a commit was checkpointed, before
+	// Commit returns.
+	OnCommit func(ctx context.Context, partition, next int)
 
 	shards []string
 	iters  map[int]string
@@ -143,7 +154,7 @@ func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 }
 
 // Commit implements simlog.Reader: it checkpoints shard partition at
-// next, and records the commit.
+// next (a record this Reader read must be at next-1), and calls OnCommit.
 func (r *Reader) Commit(ctx context.Context, partition, next int) error {
 	seq, ok := r.seqAt[partition][next-1]
 	if !ok {
@@ -152,6 +163,8 @@ func (r *Reader) Commit(ctx context.Context, partition, next int) error {
 	r.Checkpoints.mu.Lock()
 	r.Checkpoints.pos[partition] = checkpoint{next, seq}
 	r.Checkpoints.mu.Unlock()
-	qobs.Record(ctx, "commit", nil, "partition", partition, "offset", next)
+	if r.OnCommit != nil {
+		r.OnCommit(ctx, partition, next)
+	}
 	return nil
 }

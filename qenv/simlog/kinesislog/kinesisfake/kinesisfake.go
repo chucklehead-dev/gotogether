@@ -1,6 +1,6 @@
-// Package kinesisfake is an in-process Kinesis endpoint for the
-// pipeline's Kinesis tier: the four data-plane calls it makes
-// (PutRecord, ListShards, GetShardIterator, GetRecords), in the
+// Package kinesisfake is an in-process Kinesis endpoint for kinesislog's
+// tests and a test's real tier: the four data-plane calls kinesislog
+// makes (PutRecord, ListShards, GetShardIterator, GetRecords), in the
 // awsJson1_1 protocol the AWS SDK speaks, over an httptest server. A
 // partition key goes to the shard whose hash-key range holds its MD5, as
 // in Kinesis; sequence numbers increase within a shard. It holds no
@@ -45,7 +45,9 @@ func New(stream string, n int) *Server {
 
 func shardID(i int) string { return fmt.Sprintf("shardId-%012d", i) }
 
-var space = new(big.Int).Lsh(big.NewInt(1), 128) // the hash-key space
+// space is the hash-key space, 2^128.
+// Read-only.
+var space = new(big.Int).Lsh(big.NewInt(1), 128)
 
 func (s *Server) rangeOf(i int) (lo, hi *big.Int) {
 	n := big.NewInt(int64(len(s.shards)))

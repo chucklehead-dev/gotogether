@@ -35,12 +35,15 @@ Kinesis through the AWS SDK.
 
   The pipeline sees every log through simlog's two seams, `Writer` and
   `Reader`, and encodes its events in the records' values (`n:value`).
-- **The real tiers**: `kafkalog/` runs on Kafka (kgo's consumer group,
-  manual commits; the tests use kfake, an in-process cluster: no Docker).
-  `kinesislog/` runs on Kinesis (PutRecord, GetShardIterator, GetRecords,
-  checkpoints in a store). Its tests use `kinesisfake/`, an in-process
-  endpoint for those calls in the SDK's JSON protocol. `tier/` is the
-  harness both share.
+- **The real tiers**, simlog's seams over real clients, published
+  modules first written here: [`qenv/simlog/kafkalog`](../../qenv/simlog/kafkalog)
+  runs on Kafka (kgo's consumer group, manual commits; the tests use
+  kfake, an in-process cluster: no Docker).
+  [`qenv/simlog/kinesislog`](../../qenv/simlog/kinesislog) runs on Kinesis
+  (PutRecord, GetShardIterator, GetRecords, checkpoints in a store). Its
+  tests use its `kinesisfake`, an in-process endpoint for those calls in
+  the SDK's JSON protocol. `tier/` is the harness both share, and runs
+  the pipeline on each.
 
 Steps are recorded where they take effect:
 - `apply` at the projection's commit;
@@ -70,8 +73,8 @@ Steps are recorded where they take effect:
 | `TestHegelShrinksReorder` | Hegel shrinks the reorder to its faults; the shrunk choices replay it step for step |
 | `TestFaithfulSweep` | pairwise rows of partitions × consumers × fault kinds on/off: all conform |
 | `FuzzFaithful` | Go's fuzzer over the run's choices, the model as oracle |
-| `kafkalog: TestKafkaConforms`, `TestKafkaMutants` | the same model on Kafka (kfake): faithful conforms, `commit-first` and `off-by-one` caught |
-| `kinesislog: TestKinesisConforms`, `TestKinesisMutants` | the same on Kinesis (fake endpoint, AWS SDK) |
+| `tier: TestKafkaConforms`, `TestKafkaMutants` | the same model on Kafka (kfake): faithful conforms, `commit-first` and `off-by-one` caught |
+| `tier: TestKinesisConforms`, `TestKinesisMutants` | the same on Kinesis (fake endpoint, AWS SDK) |
 
 ```sh
 go test -short ./...                      # quick; skips shrinking and the sweep, runs fewer seeds

@@ -50,6 +50,8 @@ var Modules = []Module{
 	{Dir: "qnav", Path: "github.com/chucklehead-dev/gotogether/qnav", File: "api/qnav.txt"},
 	{Dir: "qenv/simgrpc", Path: "github.com/chucklehead-dev/gotogether/qenv/simgrpc", File: "api/simgrpc.txt"},
 	{Dir: "qenv/kubesim", Path: "github.com/chucklehead-dev/gotogether/qenv/kubesim", File: "api/kubesim.txt"},
+	{Dir: "qenv/simlog/kafkalog", Path: "github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog", File: "api/kafkalog.txt"},
+	{Dir: "qenv/simlog/kinesislog", Path: "github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog", File: "api/kinesislog.txt"},
 	{Dir: "qgosim", Path: "github.com/chucklehead-dev/gotogether/qgosim", File: "api/qgosim.txt", Tags: []string{"sim"}},
 }
 

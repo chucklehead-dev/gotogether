@@ -1,0 +1,22 @@
+== github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog
+func Client(endpoint string) *kinesis.Client
+type Checkpoints struct
+type Reader struct
+    field C *kinesis.Client
+    field Stream string
+    field Checkpoints *Checkpoints
+    field OnCommit func(ctx context.Context, partition, next int)
+    method (*Reader) Commit(ctx context.Context, partition, next int) error
+    method (*Reader) Poll(ctx context.Context) ([]simlog.Record, error)
+type Writer struct
+    field C *kinesis.Client
+    field Stream string
+    method (*Writer) Flush(context.Context)
+    method (*Writer) Produce(ctx context.Context, key string, value []byte, done func(error))
+
+== github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog/kinesisfake
+func New(stream string, n int) *Server
+type Server struct
+    embed *httptest.Server
+    field Stream string
+
