@@ -1640,6 +1640,34 @@ Two reviews after E, their findings ROADMAP's G track:
 - both suggested an example on two hosts with a collector, which
   webjobs does not cover (G10).
 
+
+### Tenth review (after GR3 slice 3)
+
+Three reviews, their findings ROADMAP's H track:
+- performance (docs/performance.md): a verdict's cost is quint
+  processes, and a quint process is a typecheck (counters' model 4.7
+  CPU s; a step's evaluation about 2 ms); the Go side of counters' suite
+  was 2 CPU s of 449 once a killed node's pollers stopped spinning
+  (7bc208e: 88% of its Go CPU, counters 1469 CPU s on CI). Fixed: short
+  batches in one quint process (counters 1038 to 438 CPU s on CI,
+  checkout 251 to 96, validate -29%, qtest -20%), binding's and qeval's
+  quint processes in parallel with each spec typechecked once,
+  GOTOGETHER_CHECK quadratic in a run's length (a Store transaction at
+  4000 transactions 80 to 11 µs), a string per fault choice, CI's
+  longest part from 23-31 minutes to 8-14;
+- a designer's product review: the core reads as one product, grist as
+  a second built on it (its own actor, CLI, environment variable, mutant
+  harness, docs layout); the doubles grist's GR5-GR7 need are inside
+  unpublished examples; no upcasting or snapshots; about 60 exported
+  identifiers no user calls; four ways to plant a mutant;
+- a newcomer did three tasks end to end (a service simulated against a
+  fault with a mutant caught in 12 minutes; a grist app with a refusal
+  and a declared dependency in 8 plus test time; an HTTP handler's run
+  validated by the CLI in 3): every error said what to do next; the
+  time went on rejections that do not say which condition failed, a
+  fold silently changed by a new event type, Recorder.Close not closing
+  its sink, and grist outside the CLI and the front page.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

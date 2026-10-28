@@ -1,6 +1,6 @@
 # Roadmap
 
-What is open. What is done (the A–D, U, V, W, R1–R4, X, Y, Z, T and E tracks,
+What is open. What is done (the A–D, U, V, W, R1–R4, X, Y, Z, T, E and G tracks,
 the move to gotogether) and the reviews that shaped it are in
 docs/HISTORY.md; why the code is the way it is, in DESIGN.md.
 
@@ -13,8 +13,73 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: G1 → G2 → G3 → G4 → G5 → G6 → G7 → G8 → G9 → G10 → G11 → G12; the
-items left from S, X, Y, T and E alongside; R5 when the maintainer says.
+Order: H1 → H2 → H3 → H4 → H5 → H6 → H7, with GR3's slices 4-6 after H4
+and GR4-GR9 after H5 and H6; G8-G12 and the items left from S, X, Y, T
+and E alongside; R5 when the maintainer says.
+
+## Tenth review: one product (H)
+
+Three reviews after GR3 slice 3 (a performance review across every
+module, a designer's product review, a newcomer's three tasks end to
+end; docs/HISTORY.md), the maintainer's decisions of 2026-10-28, each
+item as recommended:
+
+- **H1. The Go evaluator decides passing runs (M).** After the batch fix
+  (d6640dc) a grist suite's quint CPU is mostly the processes that
+  decide passing runs (counters 231 of 428 CPU s, wallet-grist 210 of
+  319); the evaluator judges counters' real-tier run in 27-76 ms after a
+  7 CPU s compile, against quint's 25 s. quint keeps judging failing
+  runs (their reports, their states); bindings with hidden actions are
+  the evaluator's already; the nightly's evaluator-shadow jobs stay the
+  guard. Then one quint process per run instead of per actor (D2:
+  validate's single checks were 274 of its 730 processes; renames the
+  per-actor files), then a content-addressed cache of typechecks and
+  compiles across processes (D3: overlay mutants' test binaries, the
+  CLI, CI's binding and qeval packages; one binding entry point added).
+  docs/performance.md.
+- **H2. Why a step was rejected (M).** A rejection names the conjunct
+  that is false, with its values (a grist read set: "does not cover
+  removeItemNeeds(...): stockReads(b)"); the newcomer's largest time
+  sink in two of three tasks. Info lines that do not apply to the
+  binding checked are silent (Linearize on a store-side binding,
+  "actors: left out").
+- **H3. Recorder.Close closes its sink and returns its error (S,
+  breaking).** The newcomer's only compile error; a standalone program's
+  recording documented (recorder, sink, close).
+- **H4. One vocabulary (M, breaking, before tags).** grist's actor (the
+  authenticated principal) becomes the caller (`WithCaller`, `CallerOf`,
+  `Callers`, `CallerFromHeader`); `grist.Delivery` renamed
+  (`Guarantee`); gristtest's Exercised and Takes become qtest's claims
+  parameterised by the catalog; the overlay mutant harness moves to the
+  core (`qtest.Mutants`, `qtest.Mutant()`, `GOTOGETHER_MUTANT`), its
+  mutants found from testdata/mutants instead of listed, webjobs' and
+  payd's own Overlay helpers deleted; overlays the taught way to plant a
+  mutant by hand (hello's in-code enum and scaffold's retired), qmut the
+  generated one.
+- **H5. Hide what no user calls (S-M, breaking for no user code).** The
+  woven call targets (qenv/weave's 15, qcover's, qmut's) in one
+  documented ABI package; grist's generator, CLI plumbing and limit
+  constants under grist/internal or a generator package; storetest's
+  per-check functions unexported (Checks lists them). About 60
+  identifiers out of api/*.txt.
+- **H6. The grist path, shorter and at the front (S).** `gristsim.System`
+  and `ExploreConfig.ShortSeeds` (the closure and `seeds()` 14 and 12
+  examples define); Config.Gen derived from the command types by default;
+  the generator warns when an existing rule's inputs changed (a fold
+  whose events gained a type); grist a capability in README's front
+  section and AGENTS.md, an Install line and `gotogether help` naming it;
+  docs/grist.md's §0 notes moved to HISTORY; the skills trimmed to
+  triggers and steps (about 18,600 words across ten SKILL.md files).
+- **H7. Upcasting and snapshots before GR4, the doubles published
+  before GR5-GR7 (L).** A team's first change to an event struct breaks
+  replay of every stored log, and read models refold from 0 on every
+  start: grist's upcasting and snapshots (slice 3's rest) come before
+  GR4. simgrpc (grpcledger), simlog and its Kafka/Kinesis adapters
+  (streams) and kubesim (fleetrollout) become published packages or
+  small modules, the examples importing them, before GR5-GR7 need them.
+- **Upstream:** quint 0.33's REPL fails on counters' multi-module file
+  with QNT101, which blocks loading a model once per session (D4); the
+  maintainer reports it.
 
 ## grist (codename)
 
