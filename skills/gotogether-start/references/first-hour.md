@@ -6,7 +6,8 @@ From the gotogether-start skill (its SKILL.md says when to read this).
 
 The `examples/...` paths in these skills are in the gotogether repository
 (https://github.com/chucklehead-dev/gotogether/tree/main/examples), not in
-your project: clone it to read and run them. In your own module, `go get
+your project: clone it to read and run them. A new HTTP service starts from `gotogether init -kind http NAME` (below);
+in your own module, `go get
 github.com/chucklehead-dev/gotogether@latest` (and `.../qhegel@latest`
 for Hegel) and start from `gotogether scaffold`; the examples' `replace`
 lines are only for working inside the repository. To run the CLI without
@@ -61,13 +62,34 @@ providing package go.opentelemetry.io/otel/sdk/trace`).
 - **Weaving**: rewriting code at build time (`qweave`, Orchestrion) to
   record steps or simulate `sync` without changing the source.
 
+## A new HTTP service
+
+```sh
+gotogether init -kind http stock && cd stock && go test -short -v ./...
+```
+
+writes a module that passes as written (about 15 s after the first
+build): `stock.go`, a handler recording each reservation where it takes
+effect; `client.go`, a client that retries a refused connection and
+nothing else; `model/stock.qnt` and `stock.binding.yaml` (its first line
+names the binding's JSON Schema, for the editor); `sim_test.go`, the
+service on `qenv/qhttp`, its server's process started before the client
+(a client that starts first has every request refused until the server
+calls Handle), `TestConforms` and `TestExercised` apart; `real_test.go`,
+the same handler over `httptest` through `qobshttp.Handler`; and the
+mutant `testdata/mutants/offByOne` (`>` for `>=`), caught as
+`Some(Rejects("reserve"))`. Change the model first, then the handler and
+the binding. grpc and queue kinds are not written yet: init names the
+example to start from (examples/grpcledger, examples/streams).
+
 ## First commands
 
 ```sh
+gotogether init -kind http stock                   # a new HTTP service's project, green as written
 quint typecheck model.qnt
 gotogether scaffold -spec model.qnt -module M -out m.binding.yaml      # a binding skeleton
-gotogether scaffold -system -binding m.binding.yaml -pkg app -out system_test.go   # a qtest.System test to fill in
-gotogether lint -binding m.binding.yaml -src .     # binding vs model, annotations vs binding
+gotogether scaffold -system -binding m.binding.yaml -pkg app -out system_test.go   # a qtest.System test to fill in (-http: on qenv/qhttp)
+gotogether lint -binding m.binding.yaml -src .     # binding vs its schema and model, annotations vs binding
 gotogether lint -sim .                             # code that escapes a simulation
 gotogether validate -binding m.binding.yaml run.jsonl
 ```

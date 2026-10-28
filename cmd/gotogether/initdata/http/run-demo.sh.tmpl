@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# {{.Name}}: the HTTP service explored in a simulation (qenv/qhttp: lost,
+# duplicated and late requests, lost responses, refused connections,
+# crashes) and over a real socket (qobshttp), every run checked against
+# model/{{.Name}}.qnt. MUTANT=offByOne runs the planted bug
+# (testdata/mutants/offByOne) and shows what catches it.
+# Exit 0 when the demo showed what README.md says, 1 when not, 2 when it
+# could not run.
+set -euo pipefail
+cd "$(dirname "$0")"
+command -v quint >/dev/null || { echo "quint is not on PATH (npm i -g @informalsystems/quint)" >&2; exit 2; }
+if [ -n "${MUTANT:-}" ]; then
+  [ -d "testdata/mutants/$MUTANT" ] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestConforms$|TestExercised$|TestRealConforms$'
+fi
+if go test -count=1 -run "$run" -v . | grep -E '^(--- |ok|FAIL)|gotogether: '; then
+  exit 0
+fi
+exit 1

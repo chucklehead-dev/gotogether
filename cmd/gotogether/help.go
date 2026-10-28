@@ -17,21 +17,24 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"scaffold", "lint", "simulate", "validate", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
+var helpOrder = []string{"init", "scaffold", "lint", "simulate", "validate", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
 
 var commands = map[string]command{
-	"scaffold": {"write a binding skeleton for a model (or, with -system, a qtest.System test for a binding): the first step",
-		"gotogether scaffold -spec model/stock.qnt -module stock -out stock.binding.yaml\n  gotogether scaffold -system -binding stock.binding.yaml -out stock_test.go",
-		"where do I start? a binding skeleton for a model; -system, a qtest.System test for a binding"},
+	"init": {"write a new service's project, green as written: an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
+		"gotogether init -kind http stock && cd stock && go test -short -v ./...\n  gotogether init -kind http -dir svc -module github.com/me/svc stock",
+		"a new service? its whole project (http; grpc and queue: the example to start from), green as written"},
+	"scaffold": {"write a binding skeleton for a model (or, with -system, a qtest.System test for a binding; -http, on qenv/qhttp): the first step for code you have",
+		"gotogether scaffold -spec model/stock.qnt -module stock -out stock.binding.yaml\n  gotogether scaffold -system -binding stock.binding.yaml -out stock_test.go   (-http: an HTTP service on qenv/qhttp)",
+		"where do I start with code I have? a binding skeleton for a model; -system, a qtest.System test for a binding (-http: an HTTP service)"},
 	"simulate": {"run the model alone with the binding's invariants: which it guarantees (simulate.holds), which it lets fail (simulate.allows), and what it must be able to do (simulate.possible)",
 		"gotogether simulate -binding stock.binding.yaml -graph\n  gotogether simulate -binding stock.binding.yaml   (sampled by quint, for a model too big to enumerate)",
 		"what does the model alone allow? invariants held or broken, scenarios possible; -graph: every reachable state, a proof for a small model"},
 	"evidence": {"sum up a suite's explorations (written under GOTOGETHER_EVIDENCE): each test's verdicts, and what no test tried",
 		"GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence ev",
 		"what did a suite's explorations try, and what did no test try?"},
-	"lint": {"check a binding against its model, the code's Record calls against the binding, or code meant for simulation or weaving",
-		"gotogether lint -binding stock.binding.yaml -src .",
-		"does the binding fit the model, and the code's Record calls the binding? -sim, -weave: code meant for simulation or weaving"},
+	"lint": {"check a binding against its schema (every problem at its line) and its model, the code's Record calls against the binding, span conversion rules against their schema (-convert), or code meant for simulation or weaving",
+		"gotogether lint -binding stock.binding.yaml -src .\n  gotogether lint -convert spans.convert.yaml",
+		"does the binding fit its schema and the model, and the code's Record calls the binding? -convert: rule files; -sim, -weave: code meant for simulation or weaving"},
 	"steps": {"list recorded steps, or select and sanitize them into a step log",
 		"gotogether steps -actors node1 -out node1.jsonl runs/*.jsonl",
 		"which steps were recorded? list them, or select and sanitize them into a step log"},
@@ -111,7 +114,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
+var commandNames = []string{"init", "scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

@@ -1,0 +1,36 @@
+// The {{.Name}} service's model: what reserving stock may do. Each reserve
+// takes qty of a sku if that much is left, and is refused otherwise. The
+// service records a step where a reservation takes effect (its handler),
+// so a duplicated or retried request is two steps, each judged here.
+module {{.Name}} {
+  // the stock each sku starts with
+  const INITIAL: str -> int
+
+  var stock: str -> int
+
+  action init = stock' = INITIAL
+
+  // a reservation of qty of sku: "ok" takes it, "refused" (not enough
+  // left) changes nothing
+  action reserve(sku: str, qty: int, result: str): bool = all {
+    INITIAL.keys().contains(sku),
+    qty > 0,
+    if (stock.get(sku) >= qty) all {
+      result == "ok",
+      stock' = stock.set(sku, stock.get(sku) - qty),
+    } else all {
+      result == "refused",
+      stock' = stock,
+    },
+  }
+
+  action step = {
+    nondet sku = INITIAL.keys().oneOf()
+    nondet qty = 1.to(3).oneOf()
+    nondet result = Set("ok", "refused").oneOf()
+    reserve(sku, qty, result)
+  }
+
+  // no sku is ever oversold
+  val neverOversold = INITIAL.keys().forall(s => stock.get(s) >= 0)
+}

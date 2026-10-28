@@ -1,0 +1,30 @@
+package {{.Name}}
+
+import (
+	"errors"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qobs/qobshttp"
+	"github.com/chucklehead-dev/gotogether/qtest"
+)
+
+// The same service over a real socket: net/http serves each request on a
+// goroutine of its own, which qobshttp.Handler records into this run;
+// the same binding judges the run.
+func TestRealConforms(t *testing.T) {
+	qtest.RequireQuint(t)
+	qtest.Record(t, "{{.Name}}.binding.yaml", func(rec *qobs.Recorder) {
+		h := qobshttp.Handler(New(NewInventory(Initial())), rec)
+		srv := httptest.NewServer(h)
+		defer h.Wait()    // the handlers still running: their steps are in the run
+		defer srv.Close() // the requests in flight
+		c := &Client{Base: srv.URL, HTTP: srv.Client()}
+		for _, w := range workload {
+			if err := c.Reserve(t.Context(), w.sku, w.qty); err != nil && !errors.Is(err, ErrRefused) {
+				t.Errorf("reserve %d of %s: %v", w.qty, w.sku, err)
+			}
+		}
+	}).Expect(t, qtest.Conforms())
+}

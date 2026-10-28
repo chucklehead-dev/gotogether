@@ -1,0 +1,88 @@
+package {{.Name}}
+
+import (
+	"context"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/qhttp"
+	"github.com/chucklehead-dev/gotogether/qtest"
+)
+
+// workload is the client's reservations, in order: apple runs out on
+// the third, pear on the second.
+var workload = []struct {
+	sku string
+	qty int
+}{ {"apple", 1}, {"pear", 1}, {"apple", 1}, {"pear", 1}, {"apple", 1}}
+
+// system deploys the service and a client in a simulation made from c:
+// the server's process first, so it has called Handle before the client
+// sends (a client that starts first has every request refused until the
+// server listens: Client.Reserve retries a refused connection). The
+// network loses, duplicates and delays requests and loses responses, and
+// the server's process crashes and restarts: every one a choice that
+// seeds explore and Hegel shrinks. In a mutant's binary (TestMutants) it
+// names the mutant.
+func system() qtest.System {
+	return qtest.System{Binding: "{{.Name}}.binding.yaml", Mutant: qtest.Mutant(), Run: func(c qenv.Chooser) error {
+		s := qenv.New(c)
+		defer s.Close()
+		inv := NewInventory(Initial()) // the database: it outlives the process
+		var srv *qhttp.Server
+		// the server's main, at every incarnation: serve the handler
+		proc := s.Process("{{.Name}}", true, func(ctx context.Context) {
+			srv.Handle(ctx, New(inv))
+		})
+		srv = qhttp.NewServer(s, "{{.Name}}", proc)
+		s.Spawn("client", func(ctx context.Context) {
+			tr := qhttp.NewTransport(srv)
+			tr.Refuse = true // the network refuses some connections too: the client retries them
+			c := &Client{Base: srv.URL(), HTTP: &http.Client{Transport: tr, Timeout: time.Second}}
+			for _, w := range workload {
+				c.Reserve(ctx, w.sku, w.qty) // its errors are the run's: the server records what took effect
+			}
+		})
+		return s.Run(time.Minute) // a task waiting forever is an error (qenv.ErrStuck)
+	}}
+}
+
+// The service conforms to the model through every seed's faults.
+func TestConforms(t *testing.T) {
+	qtest.RequireQuint(t)
+	system().Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+}
+
+// The runs exercise what the model and the environment offer: every
+// action taken, every fault option injected. A check of a fault never
+// injected says nothing of it; a failure here names what no seed reached,
+// and the line that excepts it (with the reason why it need not be).
+func TestExercised(t *testing.T) {
+	qtest.RequireQuint(t)
+	system().Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Exercised())
+}
+
+// TestMutant states what catches the mutant this binary was built with:
+// which check fails (Rejects, Mismatch, Violates; over runs Some, All,
+// None). A check no mutant can fail proves nothing.
+func TestMutant(t *testing.T) {
+	switch qtest.Mutant() {
+	case "":
+		t.Skip("the service as it is: TestMutants runs this test in each mutant's binary")
+	case "offByOne": // > for >=: the last unit of a sku is refused
+		qtest.RequireQuint(t)
+		system().Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Some(qtest.Rejects("reserve")))
+	default:
+		t.Fatalf("mutant %s: say in TestMutant what catches it", qtest.Mutant())
+	}
+}
+
+// A mutant is a directory of testdata/mutants whose files replace the
+// package's of the same names: a copy of a file, a bug planted in it.
+// TestMutants builds the tests with each one's overlay and runs
+// TestMutant there.
+func TestMutants(t *testing.T) {
+	qtest.Mutants{}.Run(t)
+}

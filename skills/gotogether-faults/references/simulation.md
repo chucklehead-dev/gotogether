@@ -154,8 +154,15 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   app.binding.yaml -pkg app -out system_test.go` writes a System test whose Run deploys
   nothing yet, a commented `qobs.Record` per action with the fields the
   binding reads, a conformance test that fails until steps are recorded,
-  and the overlay mutants' harness (`qtest.Mutants`) with a claim to fill in. `examples/hello` is the smallest one
-  filled in.
+  a test of what the runs exercised (`TestExercised`, apart: its failure
+  names what no seed reached and the `qtest.Exercised(...)` claim that
+  excepts it), and the overlay mutants' harness (`qtest.Mutants`) with a
+  claim to fill in. `examples/hello` is the smallest one filled in. With
+  `-http` the Run deploys an HTTP service on `qenv/qhttp`: its server's
+  process created before the client (a client that starts first has
+  every request refused until the server calls Handle), the records in a
+  handler, a client whose `send` retries a refused connection; `gotogether
+  init -kind http NAME` writes a whole project of that shape, green.
 - **Write a `Run(chooser, Config)`** for the whole deployment, so tests,
   Hegel and a CLI that writes step logs all share it.
 - **Two models of one system** (leadership, and the clients' history):

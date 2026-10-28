@@ -9,6 +9,7 @@ description: Start here for checking Go code against a Quint model with gotogeth
 
 | Question | Skill |
 |---|---|
+| A new HTTP service, from nothing | `gotogether init -kind http NAME`: a green project to change ([references/first-hour.md](references/first-hour.md)) |
 | A new component: what order, which tests, CI? | gotogether-workflow (model first) |
 | A team arrives with existing code and no model | gotogether-migration (walked through in examples/migrate-payments) |
 | Writing the model; what it should allow | gotogether-model, gotogether-patterns |
@@ -35,8 +36,8 @@ tiers, a model compiled for a pipeline with no quint):
 2. Read `model/hello.qnt`, `hello.binding.yaml`, `hello.go`,
    `hello_test.go`, in that order.
 3. Model your component first and simulate it.
-4. Scaffold a binding and a System test; record steps until the faithful
-   system conforms.
+4. Scaffold a binding and a System test (`-http` for an HTTP service);
+   record steps until the faithful system conforms.
 5. Plant a mutant (`testdata/mutants/<name>`) and state how it is caught.
 6. Shrink its failure with Hegel; validate real runs.
 
@@ -57,7 +58,8 @@ tiers, a model compiled for a pipeline with no quint):
 | `; a sample, no proof: a failure 1 run in 10 shows is missed at most 5% of the time, ...` | the seeds bound how rare a missed failure is, not that there is none | more seeds for rarer failures; `System.Exhaust` for every run within a bound |
 | `no step was recorded; the run's doubles saw a request to bank refused, nothing listening` | a client ran before its server listened | start the server's process first, or retry a refused connection |
 | `NO VERDICT (needs quint)` from `validate -compiled` | the Go evaluator alone could not decide it | validate without `-compiled` ([references/ci.md](references/ci.md)) |
-| `gotogether lint` errors | the binding, an annotation or simulated code does not fit | each names the fix |
+| `gotogether lint` errors | the binding (its schema first, each problem at its line), an annotation or simulated code does not fit | each names the fix |
+| `not exercised: fault ... (reached, never taken) ... in the claim: qtest.Exercised("rpc.stock.delay.late") // why: ...` | no seed injected that fault option | more seeds or a higher rate; or that claim, with the reason |
 | a verdict you cannot place | a claim's report | gotogether-workflow's verdicts reference |
 
 ## Run it, do not infer it

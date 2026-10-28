@@ -3354,6 +3354,72 @@ still judged at the sum of its states; incremental invariants (only the
 entries a step changed judged again) would make it linear for
 entry-wise invariants, and are I19's sequel if a whole-log case needs
 it.
+### I33 and I36: an HTTP service from nothing, analyzers that fix
+
+ROADMAP's I33 and I36, from the designer's persona A (review 11): a REST
+developer spent most of a 35-minute first hour on the Quint model and on
+wiring qhttp, and a client spawned before its server had every request
+refused, which the report blamed on a reconstruction issue.
+
+**I33, `gotogether init`.** `gotogether init -kind http NAME` writes a
+module that passes `go test -short ./...` as written (about 15 s with
+quint after the first build; `TestInitIsGreen` writes one with
+`-replace` and runs it, full mode): a stock-reserving handler recording
+each reservation under the lock that orders it, a client that retries
+a refused connection (nothing was sent) and nothing else (a lost
+response may have taken effect), model/NAME.qnt and its binding, a
+simulated test on qenv/qhttp under every network fault and crashes, a
+real-socket test (`qtest.Record`, httptest, `qobshttp.Handler`) judged by
+the same binding, run-demo.sh and a README with the test table.
+Decided:
+- **The server's process first.** The Run creates the server's process
+  before the client's task, and the client still retries a refusal
+  (`Transport.Refuse` injects them): either alone left the newcomer's
+  failure possible, by schedule or by fault.
+- **State outside the process.** The inventory is made once per run,
+  outside the process's start function, as a database would be: in the
+  handler, a crash and restart reset the stock and every later step was
+  rejected, a bug of the harness, not the code.
+- **The mutant from the written file.** `testdata/mutants/offByOne/NAME.go`
+  is the rendered service with its one line changed (init fails if the
+  template loses that line), so it cannot drift from the file it
+  replaces; the test checks the two differ in one line.
+- **grpc and queue name their example.** Their projects would be
+  grpcledger's and streams' shapes; until written, `-kind grpc` and
+  `-kind queue` say which example to start from. Flags, not a wizard: a
+  prompt cannot be scripted or tested, and there is one question.
+- **Exercised apart.** Every scaffolded System test has `TestExercised`
+  beside `TestConforms`, so the first green is conformance; Exercised's
+  failure now ends with the claim that excepts what is missing
+  (`qtest.Exercised("rpc.stock.delay.late") // why: <...>`), the
+  exceptions it had kept. `scaffold -system -http` writes init's wiring
+  around a handler to fill in; the binding scaffold's `possible:` lists
+  each action's call form, a bare name being reached as soon as it is
+  enabled.
+
+**I36, fixes and schemas.** quintweave's fixes mark a function
+literal's go statement `//qenv:go` (another call's would need its
+arguments evaluated first) and call a nullary sync method value from a
+function literal; quintaction's name a local the function returns in
+one place as that result (`(string, error)` to `(id string, _ error)`,
+its `:=` an assignment; none where returns put it in two places or its
+type is not the result's), spell a misspelled parameter, name a
+misspelled action as the model's nearest (`binding.Model.NearestAction`,
+the lint's did-you-mean) in a directive or a `qobs.Record` literal, and
+record a field the binding uses from the parameter or named result of
+its name. Each is checked against a golden file, and one finding per
+fixture has no fix, where none is certain. The JSON Schemas
+(schemas/gotogether.binding-1.json, gotogether.convert-1.json: a file
+per format and major, so a binding/2 adds one and binding/1's stays for
+the files written in it) are generated from binding.Binding and
+convert.Rules, their doc comments the descriptions; a possible's string
+or mapping, the intern scopes, a rule's action-or-drop are written by
+hand in the generator. `schemas.Check` reads the subset of JSON Schema
+they use (and refuses a schema using more), so the core needs no
+validator dependency; every binding and rule file in the repository that
+loads validates (`TestFilesValidate`), and `gotogether lint` prints every
+schema problem at its line before loading, where the strict decoder
+stopped at the first.
 
 ### H4: one vocabulary
 

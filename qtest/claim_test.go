@@ -318,6 +318,14 @@ func TestTakesAndExercised(t *testing.T) {
 			t.Errorf("%s: %q", c.claim, msg)
 		}
 	}
+	// the failure writes the claim that would except what is missing,
+	// the exceptions it already has kept
+	if msg := Exercised().judgeRuns([]*Run{ok, rejected}, model); !strings.Contains(msg, `in the claim: qtest.Exercised("cancel") // why:`) {
+		t.Errorf("Exercised() names no exception line: %q", msg)
+	}
+	if msg := Exercised("replay").judgeRuns([]*Run{rejected}, model); !strings.Contains(msg, `qtest.Exercised("apply", "cancel", "replay") // why:`) {
+		t.Errorf("Exercised(replay) names no exception line keeping replay: %q", msg)
+	}
 	if m := modelCoverage([]*Run{ok, rejected}, model); m.Taken["apply"] != 1 || len(m.Never) != 1 || m.Never[0] != "cancel" {
 		t.Errorf("model coverage %+v, want apply once and cancel never", m)
 	}

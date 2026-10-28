@@ -1,0 +1,65 @@
+package {{.Name}}
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"syscall"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/qenv"
+)
+
+// A Client reserves stock from the service at Base.
+type Client struct {
+	Base string
+	HTTP *http.Client
+	// Attempts bounds the tries of one reservation whose connection is
+	// refused (0: 5).
+	Attempts int
+}
+
+// ErrRefused is a reservation the service refused: not enough stock.
+var ErrRefused = errors.New("{{.Name}}: not enough left")
+
+// Reserve reserves qty of sku. A refused connection (the server not
+// listening yet, or restarting) is retried after a backoff: nothing was
+// sent, so a retry cannot reserve twice. Any other error is returned:
+// a request that timed out or lost its response may have taken effect,
+// and retrying it could reserve twice.
+func (c *Client) Reserve(ctx context.Context, sku string, qty int) error {
+	attempts := c.Attempts
+	if attempts == 0 {
+		attempts = 5
+	}
+	u := c.Base + "/reserve?" + url.Values{"sku": {sku}, "qty": {strconv.Itoa(qty)}}.Encode()
+	backoff := 50 * time.Millisecond
+	for i := 1; ; i++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := c.HTTP.Do(req)
+		if errors.Is(err, syscall.ECONNREFUSED) && i < attempts {
+			qenv.Sleep(ctx, backoff) // virtual time in a simulation, real time outside
+			backoff *= 2
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil
+		case http.StatusConflict:
+			return ErrRefused
+		}
+		return fmt.Errorf("{{.Name}}: %s: %s", resp.Status, body)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -417,6 +418,27 @@ func (e Exercise) String() string {
 
 func (e Exercise) judge([]*validate.Report) judgment { return judgment{show: -1} }
 
+// exceptLine is the claim that excepts names too, as a newcomer would
+// write it (the reason a comment: Exercised takes names only), or ""
+// when every missing one is a misspelled exception's.
+func (e Exercise) exceptLine(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	all := slices.Sorted(maps.Keys(e.except))
+	for _, n := range names {
+		if !slices.Contains(all, n) {
+			all = append(all, n)
+		}
+	}
+	slices.Sort(all)
+	q := make([]string, len(all))
+	for i, n := range all {
+		q[i] = strconv.Quote(n)
+	}
+	return fmt.Sprintf(" in the claim: qtest.Exercised(%s) // why: <what makes them unneeded here>", strings.Join(q, ", "))
+}
+
 // excepted reports whether the except list covers name: name itself, or a
 // prefix of it at a dot.
 func (e Exercise) excepted(name string) bool {
@@ -432,16 +454,18 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 	if actions == nil {
 		return fmt.Sprintf("want %s, but the model's actions are unknown (no binding's model)", e)
 	}
-	var missing []string
+	var missing, names []string
 	for _, a := range modelCoverage(runs, actions).Never {
 		if !e.excepted(a) {
 			missing = append(missing, "action "+a+" (never taken)")
+			names = append(names, a)
 		}
 	}
 	known, never := exercisedFaults(runs)
 	for _, n := range never {
 		if !e.excepted(n.name) {
 			missing = append(missing, n.what)
+			names = append(names, n.name)
 		}
 	}
 	for x := range e.except {
@@ -457,7 +481,7 @@ func (e Exercise) judgeRuns(runs []*Run, actions map[string]bool) string {
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		return fmt.Sprintf("want %s; not exercised: %s. Drive the runs to them (rates, seeds, workload), or except "+
-			"them with the reason", e, strings.Join(missing, "; "))
+			"them with the reason%s", e, strings.Join(missing, "; "), e.exceptLine(names))
 	}
 	return ""
 }

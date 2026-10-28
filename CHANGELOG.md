@@ -36,6 +36,24 @@ The first release. What a user meets, by module:
   allocates nothing. `ci/bench.sh` and the nightly's benchmarks job
   compare the core's benchmarks with a day before.
 
+- `gotogether init -kind http NAME` (ROADMAP I33) writes a new HTTP
+  service's module, green as written: a handler recording each step, a
+  client retrying a refused connection, model and binding, a test on
+  qenv/qhttp (the server's process before the client), one over a real
+  socket through qobshttp, an overlay mutant caught. `scaffold -system
+  -http` writes that wiring around one's own handler; every scaffolded
+  System test has `TestExercised` apart; `qtest.Exercised`'s failure
+  ends with the claim that excepts what is missing.
+- JSON Schemas for bindings (`gotogether.binding/1`) and span conversion
+  rules (`gotogether.convert/1`), package `schemas` (`Binding`,
+  `Convert`, `BindingURL`, `ConvertURL`, `Check`, `Problem`), for
+  editors; `gotogether lint` checks a binding against its schema first,
+  rule files with `-convert`. `binding.Model.NearestAction` (ROADMAP I36).
+- qanalysis: quintweave's and quintaction's findings carry fixes where
+  the rewrite is mechanical (`quintvet -fix`): `//qenv:go`, a method
+  value wrapped, a returned local named as the result, a misspelled
+  parameter or action, a field the binding uses recorded (ROADMAP I36).
+
 - The Go evaluator matches quint where a differential test against
   both backends found it did not (ROADMAP I11): a `val` inside an
   expression is evaluated where its name is read (`{ val n = 1 / 0; 0 }`

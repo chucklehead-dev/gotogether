@@ -1,0 +1,133 @@
+{
+  "$id": "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A gotogether span conversion rule file (gotogether.convert/1): which OpenTelemetry spans or span events become which model steps. Generated from the Go type that reads it (GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/).",
+  "properties": {
+    "actor": {
+      "description": "Defaults applied to every rule that does not set them.",
+      "type": "string"
+    },
+    "format": {
+      "const": "gotogether.convert/1",
+      "description": "Format, if set, names the rule file's format (FormatName, gotogether.convert/1): a later major is refused with the fix, not with its new keys \"unknown\". Empty: gotogether.convert/1.",
+      "type": "string"
+    },
+    "process": {
+      "type": "string"
+    },
+    "recorder": {
+      "description": "Recorder groups steps for numbering: an expression; default resource:service.instance.id, else resource:service.name.",
+      "type": "string"
+    },
+    "ref": {
+      "description": "Ref, an expression, is each step's link to its artifact (qtrace.Step.Ref): \"attr:app.screenshot\", \"=trace.jsonl\". A span (or matched event) carrying quint.ref keeps it when no rule sets one.",
+      "type": "string"
+    },
+    "rules": {
+      "items": {
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "action"
+            ]
+          },
+          {
+            "properties": {
+              "drop": {
+                "const": true
+              }
+            },
+            "required": [
+              "drop"
+            ]
+          }
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "args": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "drop": {
+            "description": "Drop: matched spans produce no step (and stop later rules matching them).",
+            "type": "boolean"
+          },
+          "event": {
+            "description": "if set, match the span's events of this name instead of the span",
+            "type": "string"
+          },
+          "obs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "order": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "process": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "the step's ref (Rules.Ref)",
+            "type": "string"
+          },
+          "span": {
+            "description": "span name glob (required)",
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          },
+          "where": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "attribute filters: attr:K semantics, string equality (\"*\" = present)",
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "span"
+        ],
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "array"
+    },
+    "thread": {
+      "type": "string"
+    }
+  },
+  "title": "gotogether span conversion rules",
+  "type": "object"
+}

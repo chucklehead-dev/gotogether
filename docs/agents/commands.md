@@ -34,6 +34,12 @@ AGENTS.md has the general requirements.
   module (`-init` writes a first model/<app>.qnt), or `GRIST_UPDATE=1 go
   test -run TestGenerated`; grist's own golden files:
   `GRIST_UPDATE=1 go test -run TestGenerateGolden .` in grist/.
+- `gotogether init` (cmd/gotogether): `TestInitIsGreen`, full mode, writes
+  an HTTP service's project with `-replace` to the checkout and runs its
+  `go test -short ./...` (about 20 s). The JSON Schemas of bindings and
+  rule files are generated from binding.Binding and convert.Rules:
+  `GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/` after adding a field
+  (`TestSchemasAreGenerated` fails until then).
 - The doubles' modules (qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog,
   qenv/simlog/kinesislog): `cd <dir> && GOWORK=off GOTOGETHER_CHECK=1 go test
   ./...`, as CI's doubles job runs them (and under `-race`), on their own

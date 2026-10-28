@@ -90,3 +90,51 @@ func TestLintInternalChoice(t *testing.T) {
 		}
 	}
 }
+
+// lintOut runs lint with args, its standard output captured.
+func lintOut(t *testing.T, args ...string) (int, string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = w
+	code, err := lint(args)
+	os.Stdout = stdout
+	w.Close()
+	out, _ := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code, string(out)
+}
+
+// lint checks a binding against its schema before it loads it, naming
+// every problem at its line (the strict decoder named the first alone),
+// and a rule file with -convert; neither needs quint.
+func TestLintSchema(t *testing.T) {
+	dir := t.TempDir()
+	bad := filepath.Join(dir, "b.binding.yaml")
+	os.WriteFile(bad, []byte("spec: m.qnt\nmodule: m\nactions:\n  pay:\n    arg: {}\ninvariants: ok\n"), 0o644)
+	code, out := lintOut(t, "-binding", bad)
+	for _, want := range []string{
+		bad + ":5:5: actions.pay.arg: unknown key (did you mean args?)",
+		bad + ":6:13: invariants: a string, want array",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in:\n%s", want, out)
+		}
+	}
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	rules := filepath.Join(dir, "r.convert.yaml")
+	os.WriteFile(rules, []byte("rules:\n  - span: GET /x\n"), 0o644)
+	if code, out := lintOut(t, "-convert", rules); code != 1 || !strings.Contains(out, rules+":2:5: rules[0]: missing action (required)") {
+		t.Errorf("exit %d:\n%s", code, out)
+	}
+	if code, out := lintOut(t, "-convert", "../../examples/kvstore/kv.convert.yaml"); code != 0 || !strings.Contains(out, "fits its schema and loads") {
+		t.Errorf("kvstore's rules: exit %d:\n%s", code, out)
+	}
+}

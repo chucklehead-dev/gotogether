@@ -413,7 +413,19 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   drawn from another action's nondet; run-nav titles in words ("after 4
   choices: client ran 4 times") before the schedule id; "in the then
   branch of if (...)" in `why:`.
-- **I33. Scaffold for an HTTP service (M).** `scaffold -system -http`:
+- **I33. Scaffold for an HTTP service (M). Done** (HISTORY: "I33 and
+  I36: an HTTP service from nothing, analyzers that fix"). `gotogether
+  init -kind http NAME` writes a module green as written (`go test -short
+  ./...`, about 15 s; `TestInitIsGreen` runs it): a handler recording
+  each step where it takes effect, a client retrying a refused connection
+  and nothing else, model, binding (its schema named for the editor), a
+  qenv/qhttp test with the server's process before the client, a
+  real-socket test through qobshttp, an overlay mutant caught. grpc and
+  queue kinds name the example to start from. `scaffold -system -http`
+  writes the same wiring around a handler of one's own; every scaffolded
+  System test has `TestExercised` apart, whose failure writes the
+  `qtest.Exercised(...) // why:` claim; the binding scaffold's
+  `possible:` shows the call form. What it was: `scaffold -system -http`:
   the server's process before the client's, a retrying client, qhttp
   wired; `Exercised()` in a test of its own, its failure suggesting the
   exact `qtest.Exercised("rpc.stock.delay.late") // why: ...` line;
@@ -451,7 +463,22 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   - a front page for migrate-payments with each stage's time, linked
     from the quickstart as "I have code and no model"; wallet to
     wallet-grist as the migration skill's second walk-through.
-- **I36. Analyzers that fix (S-M).** SuggestedFixes in quintsim (`go
+- **I36. Analyzers that fix (S-M). Done** (quintsim and quintctx in
+  79c034c; the rest with I33, HISTORY "I33 and I36"). quintweave fixes
+  (`//qenv:go` above a function literal's go statement, a nullary sync
+  method value called from a function literal) and quintaction's (a
+  returned local named as its result, a misspelled parameter, a
+  misspelled action named as the model's nearest in a directive or a
+  `qobs.Record` call, a field the binding uses recorded from the
+  parameter of its name), each against a golden file. JSON Schemas for
+  `gotogether.binding/1` and `gotogether.convert/1` in schemas/,
+  generated from the Go types (a field added without regenerating fails
+  `TestSchemasAreGenerated`), every binding and rule file of the
+  repository checked against them; `gotogether lint` checks a binding's
+  schema first (every problem at its line), rule files with `-convert`.
+  Left: gopls itself runs none of them (it loads only analyzers compiled
+  in), so editors see the schema's checks and golangci-lint's. What it
+  was: SuggestedFixes in quintsim (`go
   f()` to `qenv.Go`, `time.Now()` to `qenv.Now(ctx)`, `time.Sleep` to
   `qenv.Sleep`); a quintctx analyzer (`context.Background()` in a
   function with a ctx, or a test's check without `t.Context()`); gopls

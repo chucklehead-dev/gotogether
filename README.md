@@ -45,6 +45,26 @@ Read `hello.go` and `hello_test.go` (189 lines together), then pick a
 workflow from the table below. Agents start from the `gotogether-start`
 skill (`gotogether skills install`).
 
+An HTTP service of your own starts green, its wiring written:
+
+```sh
+go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest
+gotogether init -kind http stock && cd stock
+go test -short -v ./...                   # about 15 s with quint on PATH, after the first build
+```
+
+`gotogether init` writes a module: a stock-reserving handler that
+records each reservation where it takes effect, a client that retries a
+refused connection (and nothing else: a lost response may have taken
+effect), its model and binding, a test in a simulation on `qenv/qhttp`
+(the server's process started before the client, under lost, duplicated
+and late requests, lost responses, refused connections and crashes), one
+over a real socket through `qobshttp`, and a mutant (`>` for `>=`) that
+`TestMutants` shows caught. Change the model first, then the handler:
+the tests say what no longer fits. For a service you already have,
+`gotogether scaffold -system -http -binding b.yaml` writes the same
+simulated wiring around your handler.
+
 ### Words
 
 - **Model**: a Quint specification of what the system may do; the
@@ -193,8 +213,16 @@ inside this repository):
 go mod init example.com/app
 go get github.com/chucklehead-dev/gotogether@latest github.com/chucklehead-dev/gotogether/qhegel@latest
 gotogether scaffold -spec model/app.qnt -module app -out app.binding.yaml   # then set its constants
-gotogether scaffold -system -binding app.binding.yaml -pkg app -out system_test.go
+gotogether scaffold -system -binding app.binding.yaml -pkg app -out system_test.go   # -http: an HTTP service on qenv/qhttp
 ```
+
+Bindings and span conversion rules have JSON Schemas (`schemas/`,
+`gotogether.binding-1.json` and `gotogether.convert-1.json`, one per
+format and major): an editor with the YAML language server validates a
+file as it is written when its first line names the schema (`#
+yaml-language-server: $schema=<URL>`, the URLs in package `schemas`),
+and `gotogether lint` checks a binding against it (every problem at its
+line) before loading it, rule files with `-convert`.
 
 Go: 1.26.x. The core needs 1.26.1 (hegel-go's minimum); the gosim fork
 translates one release's standard library, 1.26's, and says so under
@@ -645,7 +673,8 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qtrace` | the step schema, `Reconstruct` (order, gaps, restarts, real-time order from `Invoked`), step logs (`ReadJSONL` keeps a torn tail's steps: `TornTail`, the tail declared lost), lost prefixes and tails (`Trace.Lost`, `MarkLost`), `Linearize`, `Filter` (select and pseudonymize; refs dropped when sanitizing unless `KeepRefs`), step refs (`quint.ref`, `qobs.Ref`: a step's link to its artifact, shown at a failing step), `Mutations` (a log's single mutations: drop, dup, swap, corrupt, retime, reactor; `MutateOps`, `MutateLimit`) |
 | `otelio` | an OTLP/JSON file exporter and reader; span events to steps |
 | `convert` | an application's own spans to steps, by YAML rules |
-| `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |
+| `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords`, `Model.NearestAction` |
+| `schemas` | the JSON Schemas of bindings and conversion rules (`Binding`, `Convert`, their URLs), generated from the Go types; `Check` validates a YAML file against one, every problem at its line |
 | `validate` | replay in the Go evaluator (passes) or with `quint test` (failures, and what it cannot judge): `Checker` (`Check`, `CheckBatch`, `MutateSteps`: a log's observation mutants), `Cached`, `ValidateITF`; structured verdicts (`Report.Verdict`); run manifests (`NewManifest`, `ReadManifest`, `Verify`, `Bundle`) |
 | `validate/cli` | the CLI's check of files in Go: `Check` (as `gotogether validate` makes it, and its `Manifest`), `Replay` (a manifest's run judged again: `validate -replay`); its own package, so `validate` brings no OpenTelemetry SDK |
 | `qshrink` | a driver's failing actions shrunk outside a test: `Shrink` (ddmin over reruns, `Calibration`, `SameFailure`, `Resetter`, `ErrDiverged`), what `qtest.ShrinkActions` and `gotogether shrink` run |
@@ -676,7 +705,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qdriver` | an external driver's request log (protocol `gotogether.requests/1`, JSONL a driver writes itself): `Read`, `ReadFile`, `New`, `Log.Steps` (each request an invocation record, completed only by its own response; steps a driver saw; its times, refs and correlation ids), `Log.Warnings`, `Log.Write`, `Sniff`; Playwright's adapter is [adapters/playwright](adapters/playwright) |
 | `qdriver/bombadil` | Bombadil's `trace.jsonl` with a page that logs its requests, as a request log (`Log`, `LogFile`; its steps for `qtest.Validate`): `Options` (the spec's extract, its custom actions in `Clicks`, the log's `Fields`, the display as `Show` steps), `States` (experimental) for a mapping of your own |
 | `skills` | the agent skills below, embedded, and their install |
-| `cmd/gotogether` | the CLI: `scaffold`, `lint`, `simulate` (the model alone: which invariants it guarantees, which the code must, and what it must be able to do, its `possible` list, each reached with a witness or failing as too strict; `-verify N`, Apalache to depth N; `-graph`, every reachable state by the Go evaluator, with the shortest counterexamples, deadlocks, the actions never enabled, and each eventual val as fair cycles: a lasso that keeps it false forever), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-strict` for CI), `skills` |
+| `cmd/gotogether` | the CLI: `init` (a new HTTP service's project, green as written), `scaffold` (`-system -http`: on qenv/qhttp), `lint` (a binding's schema first), `simulate` (the model alone: which invariants it guarantees, which the code must, and what it must be able to do, its `possible` list, each reached with a witness or failing as too strict; `-verify N`, Apalache to depth N; `-graph`, every reachable state by the Go evaluator, with the shortest counterexamples, deadlocks, the actions never enabled, and each eventual val as fair cycles: a lasso that keeps it false forever), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-strict` for CI), `skills` |
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qnav` (module) | `gotogether-nav`, the navigators' TUI (Charm's v2 libraries): a model's states or a run's choices, enter to take a branch, back, fold, the failing step, save; its VHS tapes are its docs' GIFs ([qnav](qnav)) |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |

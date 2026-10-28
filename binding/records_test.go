@@ -114,6 +114,13 @@ func f() {
 	if strings.Join(errs, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(errs, "\n"), strings.Join(want, "\n"))
 	}
+	// the suggestion alone, for an analyzer's fix
+	if got := bankModel().NearestAction("depositt"); got != "deposit" {
+		t.Errorf("NearestAction(depositt) = %q, want deposit", got)
+	}
+	if got := bankModel().NearestAction("close"); got != "" {
+		t.Errorf("NearestAction(close) = %q, want none", got)
+	}
 }
 
 // A step recording a field under a name Quint keeps (item) for a model

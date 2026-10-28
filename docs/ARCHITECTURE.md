@@ -69,7 +69,7 @@ package-level variable says whether it is read-only or process-wide
 | simulation | `qenv` and its doubles (`qenv/qhttp`, `qenv/qsql`, `qenv/simlog`), `qenv/weave`, `qenv/fault`, `qhistory`, `qnemesis` | the system on virtual time with every nondeterministic choice made by a Chooser: processes, crashes, a transactional Store, queues, lossy RPC; real deployments' nemeses |
 | load | `qmeta` (imports nothing of the module), `qload` | a CTMC predicting recovery from a load spike; a load simulation on qenv confirming it |
 | model-based tests | `connect` | Quint traces drive the code (quint-connect's API) |
-| the CLI | `cmd/gotogether` | every check from the shell: lint, scaffold, simulate, validate, compile, nav, evidence, doctor |
+| the CLI | `cmd/gotogether` | every check from the shell: init (a new HTTP service's project), lint (a binding's schema first: `schemas`), scaffold, simulate, validate, compile, nav, evidence, doctor |
 
 Simulation sits below exploration in the import graph's sense (qtest
 imports qenv, not the reverse), but a run's state flows back up through

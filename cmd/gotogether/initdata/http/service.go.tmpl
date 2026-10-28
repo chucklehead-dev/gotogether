@@ -1,0 +1,64 @@
+// Package {{.Name}} is an HTTP service that reserves stock: POST
+// /reserve?sku=apple&qty=1 answers 200 "ok" and takes qty of sku if that
+// much is left, 409 "refused" if not. Its handler records each
+// reservation as a step of model/{{.Name}}.qnt's reserve, where it takes
+// effect, so the tests can check every run against the model: simulated
+// (sim_test.go, qenv/qhttp) and over a real socket (real_test.go,
+// qobshttp).
+package {{.Name}}
+
+import (
+	"net/http"
+	"strconv"
+	"sync"
+
+	"github.com/chucklehead-dev/gotogether/qobs"
+)
+
+// Initial is the stock the service starts with (the binding's INITIAL).
+func Initial() map[string]int { return map[string]int{"apple": 2, "pear": 1} }
+
+// Inventory is the stock left, by sku: the service's database. It
+// outlives the server's process (a crash and restart keep it), as a
+// database would; keep state that must survive in it, not in the handler.
+type Inventory struct {
+	mu    sync.Mutex
+	stock map[string]int
+}
+
+// NewInventory is an inventory holding stock.
+func NewInventory(stock map[string]int) *Inventory { return &Inventory{stock: stock} }
+
+// New is the service's handler over inv.
+func New(inv *Inventory) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /reserve", func(w http.ResponseWriter, r *http.Request) {
+		sku := r.URL.Query().Get("sku")
+		qty, err := strconv.Atoi(r.URL.Query().Get("qty"))
+		if err != nil || qty <= 0 {
+			http.Error(w, "qty: a positive integer", http.StatusBadRequest)
+			return
+		}
+		inv.mu.Lock()
+		left, known := inv.stock[sku]
+		if !known {
+			inv.mu.Unlock()
+			http.Error(w, "unknown sku", http.StatusNotFound)
+			return
+		}
+		result := "refused"
+		if left >= qty {
+			inv.stock[sku] = left - qty
+			result = "ok"
+		}
+		// the step, where the reservation takes effect: a request the
+		// network duplicates is two steps, each judged by the model
+		qobs.Record(r.Context(), "reserve", nil, "sku", sku, "qty", qty, "result", result)
+		inv.mu.Unlock()
+		if result == "refused" {
+			w.WriteHeader(http.StatusConflict)
+		}
+		w.Write([]byte(result))
+	})
+	return mux
+}

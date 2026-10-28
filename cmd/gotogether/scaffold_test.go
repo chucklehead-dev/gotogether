@@ -28,13 +28,14 @@ func TestScaffoldSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := systemTest("scaffolded", "../bank/bank.binding.yaml", b, m)
+	src := systemTest("scaffolded", "../bank/bank.binding.yaml", b, m, false)
 	for _, want := range []string{
 		`qobs.Record(ctx, "deposit", err, "account", account, "amount", amount, "obs.balance", observedBalance)`,
 		`qtest.Some(qtest.Violates("noOverdraft"))`,
-		`Expect(t, qtest.Conforms(), qtest.Exercised())`, // and what the runs exercised
-		`Mutant: qtest.Mutant()`,                         // a mutant is not the application in the evidence
-		`qtest.Mutants{}.Run(t)`,                         // its mutants found in testdata/mutants
+		`Expect(t, qtest.Conforms())`,  // the first green is conformance
+		`Expect(t, qtest.Exercised())`, // what the runs exercised, a test of its own
+		`Mutant: qtest.Mutant()`,       // a mutant is not the application in the evidence
+		`qtest.Mutants{}.Run(t)`,       // its mutants found in testdata/mutants
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("missing %s in:\n%s", want, src)
@@ -83,7 +84,7 @@ func TestScaffoldSystemSettles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := systemTest("scaffolded", "../quorumkv/quorumkv.binding.yaml", b, m)
+	src := systemTest("scaffolded", "../quorumkv/quorumkv.binding.yaml", b, m, false)
 	for _, want := range []string{"return s.Settle(time.Minute)", "qtest.All(qtest.Settles())"} {
 		if !strings.Contains(src, want) {
 			t.Errorf("missing %s in:\n%s", want, src)
@@ -368,7 +369,7 @@ func TestScaffoldReservedName(t *testing.T) {
 		t.Fatalf("a parameter named item: %v", err)
 	}
 	var out strings.Builder
-	if err := scaffoldTo(&out, "", write("item_"), "stock", false, "", "", "quint"); err != nil {
+	if err := scaffoldTo(&out, "", write("item_"), "stock", false, false, "", "", "quint"); err != nil {
 		t.Fatal(err)
 	}
 	if want := "      item_: '{{.item}}'   # str; the step's field item, a name quint keeps for a built-in (QNT101)\n"; !strings.Contains(out.String(), want) {

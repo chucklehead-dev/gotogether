@@ -1,0 +1,36 @@
+# {{.Name}}
+
+An HTTP service that reserves stock, checked against a Quint model:
+written by `gotogether init -kind http {{.Name}}` as a start for your own.
+`POST /reserve?sku=apple&qty=1` answers 200 `ok` and takes the stock, or
+409 `refused` when not enough is left.
+
+| file | what it is |
+|---|---|
+| `{{.Name}}.go` | the service's handler; it records each reservation (`qobs.Record`) where it takes effect |
+| `client.go` | a client that retries a refused connection (and nothing else: a lost response may have taken effect) |
+| `model/{{.Name}}.qnt` | what a reservation may do; `neverOversold` |
+| `{{.Name}}.binding.yaml` | how a recorded step becomes a call of the model's `reserve` |
+| `sim_test.go` | the service in a simulation (`qenv/qhttp`): its server's process started before the client, faults chosen by seeds |
+| `real_test.go` | the same service over a real socket, its handler's steps recorded through `qobshttp` |
+| `testdata/mutants/offByOne/{{.Name}}.go` | a planted bug: `>` for `>=` |
+
+```sh
+go test -short -v ./...        # about 15 s with quint on PATH
+gotogether simulate -binding {{.Name}}.binding.yaml -graph   # the model alone
+./run-demo.sh; MUTANT=offByOne ./run-demo.sh
+```
+
+| test | checks | catches |
+|---|---|---|
+| `TestConforms` | 30 seeds of faults, each run judged by the model (`Conforms`) | a reservation the model cannot take |
+| `TestExercised` | the same runs took every action and injected every fault option (`Exercised`) | a workload or rates too tame to say anything |
+| `TestRealConforms` | one run over `httptest` (`qtest.Record`, `qobshttp.Handler`) | the same, outside a simulation |
+| `TestMutants` / `TestMutant` | each mutant of `testdata/mutants`, built with its overlay | `offByOne`: `Some(Rejects("reserve"))`, the last unit refused |
+
+Make it yours: change the model first (`gotogether simulate` checks it
+alone), then the handler and the binding, then plant a bug of your own in
+a copy of a file under `testdata/mutants/<name>/` and say in `TestMutant`
+what catches it. State that outlives a crash belongs outside the process
+(here `Inventory`; in a real service a database: `qenv.Store` or
+`qenv/qsql` in the simulation).

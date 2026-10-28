@@ -296,19 +296,32 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 	return errs, warns
 }
 
-// notAnAction says that name is not an action of m, with the closest
-// action if one is near, and the list.
-func (m *Model) notAnAction(name string) string {
+// stepActions are m's actions a step may name: not init or step (the
+// state machine), not a helper (part of another).
+func (m *Model) stepActions() []string {
 	var names []string
 	for _, a := range m.ActionNames() {
 		if a == "init" || a == "step" || m.Helpers[a] {
-			continue // the state machine, not steps; a helper is part of one
+			continue
 		}
 		names = append(names, a)
 	}
+	return names
+}
+
+// NearestAction is the action of m a step may name that is closest to
+// name, a likely misspelling of it ("" when none is near): the one a
+// lint's "did you mean" names, and an analyzer's fix writes.
+func (m *Model) NearestAction(name string) string {
+	return nearest.Name(name, m.stepActions())
+}
+
+// notAnAction says that name is not an action of m, with the closest
+// action if one is near, and the list.
+func (m *Model) notAnAction(name string) string {
 	msg := fmt.Sprintf("%s is not an action of %s", name, m.Module)
-	if best := nearest.Name(name, names); best != "" {
+	if best := m.NearestAction(name); best != "" {
 		msg += fmt.Sprintf(" (did you mean %s?)", best)
 	}
-	return msg + "; its actions: " + strings.Join(names, ", ")
+	return msg + "; its actions: " + strings.Join(m.stepActions(), ", ")
 }
