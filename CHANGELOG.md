@@ -42,6 +42,14 @@ The first release. What a user meets, by module:
   `Catalog.Take(name)`: the twins of the model-wide `Exercised` and
   `Takes`, which grist's `gristtest.Exercised` and `gristtest.Takes`
   were (`gristtest.Catalog(App)` builds one).
+- A failing run of an overlay mutant's binary is reproduced and navigated
+  in the mutant (H4): its reproduce line runs the harness's subtest of
+  the mutant (`GOTOGETHER_MUTANT_TEST`, set by `qtest.Mutants.Run`,
+  which rebuilds it and passes `GOTOGETHER_RUN` on), and its navigate
+  line sets `GOTOGETHER_MUTANT=<name>`, with which `gotogether nav -run`
+  and qnav's `gotogether-nav -run` build the test binary with the
+  mutant's overlay (`internal/overlay`). qnav's hello tape navigates
+  `TestMutant#1:seed=1` of hello's noDedupe so.
 - Breaking, grist (ROADMAP H4): the authenticated principal of a command
   or query is its **caller**, not its actor: "actor" already means a
   recorder's sequence of steps in the core (qobs.WithActor, a report's

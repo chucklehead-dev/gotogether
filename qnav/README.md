@@ -23,9 +23,12 @@ gotogether-nav -run 'TestX#2:seed=17' [-pkg DIR] [-at fail|start|<schedule>@<k>]
 A run is navigated through a session of its test's binary
 (`GOTOGETHER_NAV=serve`): compiled once (`go test -c`), then each node is
 a replay of the run with its choices forced, a few hundred milliseconds
-with its verdict, rather than a `go test` process (seconds).
+with its verdict, rather than a `go test` process (seconds). A mutant's
+run is its mutant binary's: `GOTOGETHER_MUTANT=<name>`, as the run's
+navigate line sets it, has the binary built with the overlay of
+`testdata/mutants/<name>` (`qtest.Mutants`).
 
-![a failing run: hello's NoDedupe](tapes/media/hello.gif)
+![a failing run: hello's noDedupe mutant](tapes/media/hello.gif)
 
 ## Keys
 
@@ -81,7 +84,7 @@ recorded so far, each actor's model state (changes from the node before
 marked `*`; a step the model rejects, with why), the simulation's tasks.
 
 ```
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:2@6
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1,5:2@6
 path: fail › 2 counter.handle
 verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
 
@@ -123,7 +126,7 @@ against its golden (`tapes/testdata/*.golden.txt`).
 | tape | shows |
 |---|---|
 | [limiter.tape](tapes/limiter.tape) | a model: take `admit("a")`, `admit("b")`, read why `admit` is disabled at the limit, go back |
-| [hello.tape](tapes/hello.tape) | a failing run (hello's NoDedupe) at `fail`: the steps, the model's state and the verdict, the run's option (the duplicate rejected, with why), another branch, saved to a corpus |
+| [hello.tape](tapes/hello.tape) | a failing run (hello's noDedupe mutant, its binary built with the mutant's overlay: `GOTOGETHER_MUTANT=noDedupe`) at `fail`: the steps, the model's state and the verdict, the run's option (the duplicate rejected, with why), another branch, saved to a corpus |
 | [grist.tape](tapes/grist.tape) | counters' blind mutant's run at its failing step: why, in grist's words (a concurrent append) |
 | [fold.tape](tapes/fold.tape) | folding: the ticks model's five single ticks in one move |
 
@@ -154,8 +157,9 @@ render.sh set it for root).
 messages and compares its screens with goldens, without a terminal: the
 limiter (two admits, the change marked, admit's why, back), the filter,
 folding the ticks model, `NO_COLOR`, a run node's change from its parent,
-counters' blind mutant's rejection read as grist's, and hello's NoDedupe
-run through a session of its test binary (skipped under `-short`).
+counters' blind mutant's rejection read as grist's, and hello's noDedupe
+mutant's run through a session of its test binary built with the
+mutant's overlay (skipped under `-short`).
 Charm's teatest has no released v2, so the tests call Update directly.
 
 Versions: bubbletea v2.1.0, lipgloss v2.0.6, bubbles v2.2.1

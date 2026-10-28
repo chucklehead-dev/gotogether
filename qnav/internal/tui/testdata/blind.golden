@@ -20,7 +20,7 @@ branches (26)
 the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name",
     "c")), "ok"))
-    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", principal =
+    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", caller =
       "client2", readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is
       disabled:
       in createCounter, else of if (result == "idempotency-key-reused"), else of if (result
@@ -39,11 +39,11 @@ the run's next call, which the model rejects
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
       enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a",
-        id = "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "name", "a")),
-        result = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id =
-        "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result
-        = "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
-        principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
+        id = "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result
+        = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1",
+        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
+        "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
+        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
 ── lines 1–28 of 202 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
@@ -61,7 +61,7 @@ branches (26)
 the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name",
     "c")), "ok"))
-    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", principal =
+    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", caller =
       "client2", readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is
       disabled:
       in createCounter, else of if (result == "idempotency-key-reused"), else of if (result
@@ -80,11 +80,11 @@ the run's next call, which the model rejects
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
       enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a",
-        id = "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "name", "a")),
-        result = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id =
-        "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result
-        = "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
-        principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
+        id = "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result
+        = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1",
+        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
+        "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
+        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
         "unknown-counter")), showCounter(counter = "a", readPos = 1), showCounter(counter = "b",
         readPos = 1), welcome(trigger = 1, ok = true), and 3 more
 

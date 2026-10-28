@@ -15,8 +15,8 @@ branches (26)
 
 the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name", "c")), "ok"))
-    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", principal =
-      "client2", readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is disabled:
+    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", caller = "client2",
+      readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is disabled:
       in createCounter, else of if (result == "idempotency-key-reused"), else of if (result ==
         "conflict"): conditionHolds(log, readPos, reads_) is false
         where log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c", "client1"],
@@ -45,8 +45,8 @@ branches (26)
 
 the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name", "c")), "ok"))
-    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", principal =
-      "client2", readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is disabled:
+    why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", caller = "client2",
+      readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is disabled:
       in createCounter, else of if (result == "idempotency-key-reused"), else of if (result ==
         "conflict"): conditionHolds(log, readPos, reads_) is false
         where log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c", "client1"],
@@ -62,9 +62,9 @@ the run's next call, which the model rejects
         decision read through position 0, matches its read of counter-created events tagged name="c": a
         concurrent append, which the commit should have conflicted on (its condition)
       enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a", id =
-        "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result =
-        "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1",
-        principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
+        "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result = "ok")),
+        incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1", caller = "a",
+        readPos = 1, reads = Set(("counter-created", "counter", "a")), result = "unknown-counter")),
 ── lines 1–23 of 191 (pgup/pgdn scroll)
 
 /showCounter

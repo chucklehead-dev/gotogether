@@ -1,4 +1,5 @@
-# A failing run: hello's NoDedupe at its failing choice. Read the steps,
+# A failing run: hello's noDedupe mutant at its failing choice (its binary
+# built with the mutant's overlay: GOTOGETHER_MUTANT names it). Read the steps,
 # the model's state and the verdict, take the run's option (the duplicate's
 # second apply, rejected, and why), go back, take another, save it.
 Output media/hello.gif
@@ -21,7 +22,7 @@ Hide
 Type "stty rows 38 cols 105 && cd ../../examples/hello && rm -rf /tmp/gotogether-nav-tape-corpus && clear" Enter
 Show
 
-Type "gotogether-nav -run 'TestNoDedupeCountsRetries#1:seed=1' -at fail" Sleep 400ms Enter
+Type "GOTOGETHER_MUTANT=noDedupe gotogether-nav -run 'TestMutant#1:seed=1' -at fail" Sleep 400ms Enter
 Wait+Screen@120s /next choice: sched.task/
 Sleep 2.5s
 Enter

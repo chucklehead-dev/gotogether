@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -54,6 +55,8 @@ func Test(ref string) (name, pattern string, err error) {
 
 // Start compiles the test binary of pkg (a directory) and starts it as
 // ref's session: an error, with the binary's output, if it names no node.
+// A mutant's run is its mutant binary's: GOTOGETHER_MUTANT names it, and
+// the binary is built with its overlay (testdata/mutants/<name>).
 func Start(pkg, ref string) (*Session, error) {
 	_, pattern, err := Test(ref)
 	if err != nil {
@@ -71,7 +74,16 @@ func Start(pkg, ref string) (*Session, error) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	build := exec.Command("go", "test", "-c", "-o", bin, ".")
+	args := []string{"test", "-c", "-o", bin}
+	// a mutant's run (GOTOGETHER_MUTANT, as its navigate line sets it):
+	// the binary built with the mutant's overlay, if it has one
+	if o, err := overlay.Of(abs, overlay.Mutant(), dir); err != nil {
+		os.RemoveAll(dir)
+		return nil, fmt.Errorf("the session of %s: %w", ref, err)
+	} else if o != "" {
+		args = append(args, "-overlay", o)
+	}
+	build := exec.Command("go", append(args, ".")...)
 	build.Dir = abs
 	if out, err := build.CombinedOutput(); err != nil {
 		os.RemoveAll(dir)

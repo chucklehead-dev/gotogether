@@ -1,4 +1,4 @@
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1@5
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1@5
 path: fail
 verdict rejects apply  (the run this node makes, nominal after it; after 5 choices, at 0s)
 
@@ -24,7 +24,7 @@ enter take • ←/⌫ back • f fold • g failing step • s save • / filte
 
 ========
 
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:2@6
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1,5:2@6
 path: fail › 2 counter.handle
 verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
 
@@ -55,7 +55,7 @@ enter take • ←/⌫ back • f fold • g failing step • s save • / filte
 
 ========
 
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1@5
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1@5
 path: fail
 verdict rejects apply  (the run this node makes, nominal after it; after 5 choices, at 0s)
 
@@ -81,7 +81,7 @@ enter take • ←/⌫ back • f fold • g failing step • s save • / filte
 
 ========
 
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1@5
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1@5
 path: fail
 verdict rejects apply  (the run this node makes, nominal after it; after 5 choices, at 0s)
 
@@ -107,7 +107,7 @@ enter take • ←/⌫ back • f fold • g failing step • s save • / filte
 
 ========
 
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
 path: fail › 1 counter.handle
 verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
 
@@ -132,7 +132,7 @@ enter take • ←/⌫ back • f fold • g failing step • s save • / filte
 
 ========
 
-gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
 path: fail › 1 counter.handle
 verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
 
@@ -153,5 +153,5 @@ tasks
   counter.handle: runnable
   counter.main: runnable
 
-saved to the corpus: /tmp/gotogether-nav-tape-corpus/TestNoDedupeCountsRetries/d12d6b468a79.json
+saved to the corpus: /tmp/gotogether-nav-tape-corpus/TestMutant/812f030e30a4.json
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

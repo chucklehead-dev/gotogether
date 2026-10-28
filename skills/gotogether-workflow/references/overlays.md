@@ -47,6 +47,12 @@ func TestMutants(t *testing.T) { qtest.Mutants{}.Run(t) }
   `FullOnly` are mutants built in full mode only; `Generated` are mutants
   a binary makes of itself with no overlay (grist's dropped rules,
   `gristtest.RuleMutants(App)`); `Show` names output lines to log.
+- A failing run in a mutant's binary is reproduced through its harness
+  (its reproduce line runs `TestMutants`' subtest of the mutant, which
+  rebuilds it and passes `GOTOGETHER_RUN` on) and navigated in the
+  mutant: its navigate line sets `GOTOGETHER_MUTANT=<name>`, and
+  `gotogether nav` and `gotogether-nav` build the test binary with the
+  mutant's overlay.
 - Each mutant costs a link (about a second, cached after). Its binary is
   the service's own: nothing of the toolkit is woven in.
 

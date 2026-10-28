@@ -200,8 +200,9 @@ func TestNoColor(t *testing.T) {
 	}
 }
 
-// hello's NoDedupe run (the exploration's seed 1 fails): opened at
-// fail, a session of hello's test binary. The failing node's screen
+// hello's noDedupe mutant's run (its TestMutant exploration's seed 1
+// fails): opened at fail, a session of hello's test binary built with the
+// mutant's overlay (GOTOGETHER_MUTANT, as the run's navigate line sets it). The failing node's screen
 // (the cursor on the run's option), the run's option taken (the
 // duplicate's second apply, which the model rejects), back, another
 // option, and a save without a corpus says it is not saved.
@@ -215,7 +216,8 @@ func TestHelloRun(t *testing.T) {
 		t.Skip("no examples/hello beside the module")
 	}
 	t.Setenv("GOTOGETHER_KEEP", t.TempDir())
-	s, err := session.Start(pkg, "TestNoDedupeCountsRetries#1:seed=1")
+	t.Setenv("GOTOGETHER_MUTANT", "noDedupe")
+	s, err := session.Start(pkg, "TestMutant#1:seed=1")
 	if err != nil {
 		t.Fatal(err)
 	}
