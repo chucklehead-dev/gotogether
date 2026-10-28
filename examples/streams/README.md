@@ -21,15 +21,20 @@ Kinesis through the AWS SDK.
 - **The binding** (`streams.binding.yaml`) has no templates: every
   parameter is the step field of its name. The same binding checks all
   three logs.
-- **The simulated log** (`simlog/`) is Kafka's contract on qenv, each
-  fault a named kind with option 0 nominal:
+- **The simulated log** ([`qenv/simlog`](../../qenv/simlog), a package
+  of the core, first written here) is Kafka's contract on qenv, each fault
+  a named kind with option 0 nominal:
   - a partitioned log, an idempotent producer client (5 requests in
     flight, retries kept in order by the log's sequence check);
-  - `fault.log.produce` (`lost`, `lostAck`), `fault.log.commit` (`lost`,
-    `lostAck`), `fault.log.fetch` (`rewind`, a duplicate delivery);
-  - a consumer group with generations and fencing: `rebalance.<consumer>`
-    nemeses evict a consumer at any step, mid-batch;
+  - `log.events.produce` (`lost`, `lostAck`), `log.events.commit` (`lost`,
+    `lostAck`), `log.events.fetch` (`rewind`, a duplicate delivery);
+  - a consumer group with generations and fencing:
+    `rebalance.events.<consumer>` nemeses evict a consumer at any step,
+    mid-batch;
   - consumer and publisher crashes.
+
+  The pipeline sees every log through simlog's two seams, `Writer` and
+  `Reader`, and encodes its events in the records' values (`n:value`).
 - **The real tiers**: `kafkalog/` runs on Kafka (kgo's consumer group,
   manual commits; the tests use kfake, an in-process cluster: no Docker).
   `kinesislog/` runs on Kinesis (PutRecord, GetShardIterator, GetRecords,
@@ -39,8 +44,8 @@ Kinesis through the AWS SDK.
 
 Steps are recorded where they take effect:
 - `apply` at the projection's commit;
-- `commit` where the log takes it (simlog), or when the client is told it
-  landed (Kafka, Kinesis's checkpoint store);
+- `commit` where the log takes it (simlog's `OnCommit`), or when the
+  client is told it landed (Kafka, Kinesis's checkpoint store);
 - `read` when a consumer receives a record;
 - `publish` when the publisher learns a record landed and clears it from
   the outbox.

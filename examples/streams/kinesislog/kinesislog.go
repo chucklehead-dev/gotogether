@@ -12,15 +12,13 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis"
 	"github.com/aws/aws-sdk-go-v2/service/kinesis/types"
-	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -35,7 +33,7 @@ func Client(endpoint string) *kinesis.Client {
 	return kinesis.New(o)
 }
 
-// Writer is a pipeline.Writer over PutRecord, one record at a time: a
+// Writer is a simlog.Writer over PutRecord, one record at a time: a
 // key's records land in the order produced (Kinesis has no idempotent
 // producer; a retried PutRecord after a lost response writes twice).
 type Writer struct {
@@ -43,14 +41,14 @@ type Writer struct {
 	Stream string
 }
 
-// Produce implements pipeline.Writer; done is called before it returns.
-func (w *Writer) Produce(ctx context.Context, key string, n, value int, done func(error)) {
+// Produce implements simlog.Writer; done is called before it returns.
+func (w *Writer) Produce(ctx context.Context, key string, value []byte, done func(error)) {
 	_, err := w.C.PutRecord(ctx, &kinesis.PutRecordInput{StreamName: aws.String(w.Stream), PartitionKey: aws.String(key),
-		Data: fmt.Appendf(nil, "%d:%d", n, value)})
+		Data: value})
 	done(err)
 }
 
-// Flush implements pipeline.Writer: Produce is synchronous.
+// Flush implements simlog.Writer: Produce is synchronous.
 func (w *Writer) Flush(context.Context) {}
 
 // Checkpoints are a consumer's committed positions, per shard index: the
@@ -66,7 +64,7 @@ type checkpoint struct {
 	seq  string
 }
 
-// Reader is a pipeline.Reader over every shard of Stream. A shard's
+// Reader is a simlog.Reader over every shard of Stream. A shard's
 // partition number is its index in ListShards' order by id.
 type Reader struct {
 	C           *kinesis.Client
@@ -95,15 +93,15 @@ func (r *Reader) open(ctx context.Context) error {
 	return nil
 }
 
-// Poll implements pipeline.Reader: up to 10 records of each shard, from
+// Poll implements simlog.Reader: up to 10 records of each shard, from
 // the checkpoint on a shard's first read.
-func (r *Reader) Poll(ctx context.Context) ([]pipeline.Record, error) {
+func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 	if r.shards == nil {
 		if err := r.open(ctx); err != nil {
 			return nil, err
 		}
 	}
-	var out []pipeline.Record
+	var out []simlog.Record
 	for i, id := range r.shards {
 		if r.iters[i] == "" {
 			r.Checkpoints.mu.Lock()
@@ -126,14 +124,11 @@ func (r *Reader) Poll(ctx context.Context) ([]pipeline.Record, error) {
 		}
 		r.iters[i] = aws.ToString(got.NextShardIterator)
 		for _, rec := range got.Records {
-			a, b, _ := strings.Cut(string(rec.Data), ":")
-			n, _ := strconv.Atoi(a)
-			v, _ := strconv.Atoi(b)
 			if r.seqAt[i] == nil {
 				r.seqAt[i] = map[int]string{}
 			}
 			r.seqAt[i][r.pos[i]] = aws.ToString(rec.SequenceNumber)
-			out = append(out, pipeline.Record{Partition: i, Offset: r.pos[i], Key: aws.ToString(rec.PartitionKey), N: n, Value: v})
+			out = append(out, simlog.Record{Partition: i, Offset: r.pos[i], Key: aws.ToString(rec.PartitionKey), Value: rec.Data})
 			r.pos[i]++
 		}
 	}
@@ -147,7 +142,7 @@ func (r *Reader) Poll(ctx context.Context) ([]pipeline.Record, error) {
 	return out, nil
 }
 
-// Commit implements pipeline.Reader: it checkpoints shard partition at
+// Commit implements simlog.Reader: it checkpoints shard partition at
 // next, and records the commit.
 func (r *Reader) Commit(ctx context.Context, partition, next int) error {
 	seq, ok := r.seqAt[partition][next-1]

@@ -9,6 +9,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/streams/kafkalog"
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
 	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -34,7 +35,7 @@ func run(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
 	defer w.Close()
 	mem := &qobs.MemorySink{}
 	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(mem))
-	res, err := tier.Run(ctx, tier.Config{Mutation: m, Timeout: 15 * time.Second}, w, func(int) (pipeline.Reader, func(), error) {
+	res, err := tier.Run(ctx, tier.Config{Mutation: m, Timeout: 15 * time.Second}, w, func(int) (simlog.Reader, func(), error) {
 		r, err := kafkalog.NewReader(brokers, "events", "projection")
 		if err != nil {
 			return nil, nil, err

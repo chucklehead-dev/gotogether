@@ -10,6 +10,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/streams/kinesislog"
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
 	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -29,7 +30,7 @@ func run(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
 	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(mem))
 	cps := &kinesislog.Checkpoints{}
 	res, err := tier.Run(ctx, tier.Config{Mutation: m, Consumers: 1, Timeout: 15 * time.Second}, &kinesislog.Writer{C: c, Stream: "events"},
-		func(int) (pipeline.Reader, func(), error) {
+		func(int) (simlog.Reader, func(), error) {
 			return &kinesislog.Reader{C: c, Stream: "events", Checkpoints: cps}, func() {}, nil
 		})
 	if err != nil {

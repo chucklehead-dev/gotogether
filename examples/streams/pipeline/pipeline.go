@@ -2,21 +2,20 @@
 // events from a transactional outbox to a partitioned log, and consumers
 // that read the log, apply each event to a projection and commit how far
 // they got. It runs on Kafka (franz-go), on Kinesis (aws-sdk-go-v2) and
-// on the simulated log (package simlog) through two seams, Writer and
-// Reader, and a transactional store (qenv.DB) for the outbox and the
-// projection.
+// on the simulated log (qenv/simlog) through simlog's two seams, Writer
+// and Reader, and a transactional store (qenv.DB) for the outbox and the
+// projection. A record's value is its event, "n:value".
 //
 // Model steps (../model/streams.qnt) are recorded where they take effect:
 // publish when the publisher learns a record landed (and removes it from
 // the outbox), read when a consumer receives a record, apply at the
 // projection's commit (Txn.OnCommit). commit is recorded by the log where
-// a commit lands (simlog) or, for the real clients, when the client is
-// told it landed.
+// a commit lands (simlog's OnCommit) or, for the real clients, when the
+// client is told it landed.
 package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -26,41 +25,33 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
-// A Record is one record of the log, as a consumer reads it: its partition
-// (Kafka partition, Kinesis shard by index) and offset (its index in the
-// partition), and the event it carries: the key's N-th event.
-type Record struct {
+// An Event is what a record carries: the key's N-th event and its value.
+type Event struct {
 	Partition, Offset int
 	Key               string
 	N, Value          int
 }
 
-// Writer is the producer side of the log. Produce sends a record and
-// calls done once with the outcome, nil when the log acknowledged it.
-// Records of one key go to one partition, and are sent in the order
-// produced; whether they land in that order after a retry is the client's
-// business (Kafka's idempotent producer keeps it). done may run on
-// another goroutine. Flush waits until every record produced is done.
-type Writer interface {
-	Produce(ctx context.Context, key string, n, value int, done func(error))
-	Flush(ctx context.Context)
-}
+// Encode is an event's record value, "n:value".
+func Encode(n, value int) []byte { return fmt.Appendf(nil, "%d:%d", n, value) }
 
-// Reader is one consumer's view of the log: it is assigned partitions
-// (consumer group, leases), reads them from their committed offsets, and
-// commits offsets. Commit(p, next) says that every record of p before next
-// was processed; it may fail, and a consumer that lost the partition in a
-// rebalance is refused (ErrFenced).
-type Reader interface {
-	Poll(ctx context.Context) ([]Record, error)
-	Commit(ctx context.Context, partition, next int) error
+// Decode is the event r carries.
+func Decode(r simlog.Record) (Event, error) {
+	a, b, ok := strings.Cut(string(r.Value), ":")
+	if !ok {
+		return Event{}, fmt.Errorf("pipeline: partition %d offset %d: bad value %q", r.Partition, r.Offset, r.Value)
+	}
+	n, err := strconv.Atoi(a)
+	if err != nil {
+		return Event{}, err
+	}
+	v, err := strconv.Atoi(b)
+	return Event{Partition: r.Partition, Offset: r.Offset, Key: r.Key, N: n, Value: v}, err
 }
-
-// ErrFenced is a commit from a consumer that no longer owns the partition.
-var ErrFenced = errors.New("pipeline: fenced: the partition was reassigned")
 
 // Mutation selects a bug.
 type Mutation int
@@ -107,7 +98,7 @@ func outboxKey(key string, n int) string { return fmt.Sprintf("outbox/%s/%06d", 
 // recorded; rows the client gave up on are produced again. A restarted
 // publisher resumes with what is left (rows acknowledged but not yet
 // removed are written twice: the consumers deduplicate).
-func Publish(ctx context.Context, w Writer, db qenv.DB) error {
+func Publish(ctx context.Context, w simlog.Writer, db qenv.DB) error {
 	for {
 		tx := db.Begin(ctx)
 		rows := tx.Scan("outbox/")
@@ -120,7 +111,7 @@ func Publish(ctx context.Context, w Writer, db qenv.DB) error {
 		for i, r := range rows {
 			parts := strings.Split(r.Key, "/")
 			n, _ := strconv.Atoi(parts[2])
-			w.Produce(ctx, parts[1], n, r.Val.(int), func(err error) {
+			w.Produce(ctx, parts[1], Encode(n, r.Val.(int)), func(err error) {
 				mu.Lock()
 				defer mu.Unlock()
 				acked[i] = err == nil
@@ -154,7 +145,7 @@ func Publish(ctx context.Context, w Writer, db qenv.DB) error {
 // key, a version (the last n applied) and a total. Apply is idempotent by
 // the version: an event at or below it is a redelivery.
 type Consumer struct {
-	Reader   Reader
+	Reader   simlog.Reader
 	DB       qenv.DB
 	Mutation Mutation
 	last     map[int]int // OffByOne: the last offset seen per partition
@@ -173,12 +164,19 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 // Process handles one batch: read steps, applies, then a commit per
-// partition of the offset after its last record.
-func (c *Consumer) Process(ctx context.Context, recs []Record) {
+// partition of the offset after its last record. A record that carries no
+// event is skipped (and committed past).
+func (c *Consumer) Process(ctx context.Context, batch []simlog.Record) {
 	next := map[int]int{}
-	for _, r := range recs {
+	var recs []Event
+	for _, b := range batch {
+		next[b.Partition] = b.Offset + 1
+		r, err := Decode(b)
+		if err != nil {
+			continue
+		}
 		qobs.Record(ctx, "read", nil, "partition", r.Partition, "offset", r.Offset, "key", r.Key, "n", r.N)
-		next[r.Partition] = r.Offset + 1
+		recs = append(recs, r)
 	}
 	if c.Mutation == CommitFirst {
 		c.commit(ctx, next)
@@ -209,7 +207,7 @@ func (c *Consumer) commit(ctx context.Context, next map[int]int) {
 	}
 }
 
-func (c *Consumer) apply(ctx context.Context, r Record) error {
+func (c *Consumer) apply(ctx context.Context, r Event) error {
 	return qenv.Retry(ctx, c.DB, 20, func(tx qenv.Txn) error {
 		ver := 0
 		if v, ok := tx.Get("ver/" + r.Key); ok {

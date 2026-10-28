@@ -1,6 +1,6 @@
 // Package streams deploys the pipeline (package pipeline) into a qenv
 // simulation: a publisher and consumers as crashable processes, the
-// partitioned log of package simlog with its faults and rebalances, and
+// partitioned log of qenv/simlog with its faults and rebalances, and
 // a serializable store for the projection. Every choice of that
 // environment is made by one qenv.Chooser: Hegel, a seed, a fuzz input or
 // a replay.
@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
-	"github.com/chucklehead-dev/gotogether/examples/streams/simlog"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -57,6 +57,11 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	cfg.defaults()
 	d := &Deployment{Sim: s, Log: simlog.New(s, "events", cfg.Partitions), Outbox: qenv.NewStore(s, "outbox", qenv.Serializable),
 		Projection: qenv.NewStore(s, "projection", qenv.Serializable), Keys: pipeline.Keys(cfg.Keys)}
+	// a commit is the model's step where the log takes it, whether or not
+	// the consumer hears of it
+	d.Log.OnCommit = func(ctx context.Context, partition, next int) {
+		qobs.Record(ctx, "commit", nil, "partition", partition, "offset", next)
+	}
 	for _, k := range d.Keys {
 		for n := 1; n <= cfg.Events; n++ {
 			d.Outbox.Load(fmt.Sprintf("outbox/%s/%06d", k, n), n)

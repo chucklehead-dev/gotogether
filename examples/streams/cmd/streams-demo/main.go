@@ -21,6 +21,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
 	"github.com/chucklehead-dev/gotogether/examples/streams/tier"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/twmb/franz-go/pkg/kfake"
 )
@@ -82,7 +83,7 @@ func runKafka(ctx context.Context, m pipeline.Mutation) error {
 		return err
 	}
 	defer w.Close()
-	_, err = tier.Run(ctx, tier.Config{Mutation: m}, w, func(int) (pipeline.Reader, func(), error) {
+	_, err = tier.Run(ctx, tier.Config{Mutation: m}, w, func(int) (simlog.Reader, func(), error) {
 		r, err := kafkalog.NewReader(c.ListenAddrs(), "events", "projection")
 		if err != nil {
 			return nil, nil, err
@@ -98,7 +99,7 @@ func runKinesis(ctx context.Context, m pipeline.Mutation) error {
 	c := kinesislog.Client(srv.URL)
 	cps := &kinesislog.Checkpoints{}
 	_, err := tier.Run(ctx, tier.Config{Mutation: m, Consumers: 1}, &kinesislog.Writer{C: c, Stream: "events"},
-		func(int) (pipeline.Reader, func(), error) {
+		func(int) (simlog.Reader, func(), error) {
 			return &kinesislog.Reader{C: c, Stream: "events", Checkpoints: cps}, func() {}, nil
 		})
 	return err

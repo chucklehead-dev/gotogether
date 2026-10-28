@@ -945,6 +945,42 @@ type Options struct
     field BadConn bool
     field OnCommit func(ctx context.Context, changes []Change)
 
+== github.com/chucklehead-dev/gotogether/qenv/simlog
+func New(s *qenv.Sim, name string, n int) *Log
+type Log struct
+    field Name string
+    field Batch int
+    field OnCommit func(ctx context.Context, partition, next int)
+    method (*Log) Committed(p int) int
+    method (*Log) Member(ctx context.Context, name string) *Member
+    method (*Log) Partition(key string) int
+    method (*Log) Producer(idempotent bool) *Producer
+    method (*Log) Records(p int) []Record
+type Member struct
+    field Name string
+    method (*Member) Commit(ctx context.Context, partition, next int) error
+    method (*Member) Poll(ctx context.Context) ([]Record, error)
+type Producer struct
+    field Idempotent bool
+    field InFlight int
+    method (*Producer) Flush(ctx context.Context)
+    method (*Producer) Produce(ctx context.Context, key string, value []byte, done func(error))
+type Reader interface
+    Poll(ctx context.Context) ([]Record, error)
+    Commit(ctx context.Context, partition, next int) error
+type Record struct
+    field Partition int
+    field Offset int
+    field Key string
+    field Value []byte
+type Writer interface
+    Produce(ctx context.Context, key string, value []byte, done func(error))
+    Flush(ctx context.Context)
+var ErrFenced = errors.New("simlog: fenced: the partition was reassigned")
+var ErrLost = errors.New("simlog: request lost")
+var ErrLostAck = errors.New("simlog: acknowledgement lost")
+var ErrOutOfOrder = errors.New("simlog: out of order sequence")
+
 == github.com/chucklehead-dev/gotogether/qhistory
 const Aborted Outcome = iota (spec 2 of its group)
 const Append OpKind = iota

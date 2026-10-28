@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -34,7 +35,7 @@ type Result struct {
 
 // Run runs the pipeline: w writes, newReader(i) is consumer i's Reader
 // and close function.
-func Run(ctx context.Context, cfg Config, w pipeline.Writer, newReader func(i int) (pipeline.Reader, func(), error)) (*Result, error) {
+func Run(ctx context.Context, cfg Config, w simlog.Writer, newReader func(i int) (simlog.Reader, func(), error)) (*Result, error) {
 	if cfg.Consumers == 0 {
 		cfg.Consumers = 2
 	}

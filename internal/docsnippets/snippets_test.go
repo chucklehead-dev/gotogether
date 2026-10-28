@@ -32,7 +32,7 @@ var packages = map[string]string{
 	"qmeta": "qmeta", "qmut": "qmut", "qobs": "qobs", "qobshttp": "qobs/qobshttp", "qrole": "qrole", "qrun": "qrun", "qsweep": "qsweep",
 	"qtest": "qtest", "qtrace": "qtrace", "sktrace": "examples/sktrace", "validate": "validate",
 	"qgosim": "qgosim", "qweave": "qweave", "qlint": "qlint", "qdriver": "qdriver", "bombadil": "qdriver/bombadil",
-	"simgrpc": "qenv/simgrpc", "kubesim": "qenv/kubesim",
+	"simgrpc": "qenv/simgrpc", "kubesim": "qenv/kubesim", "simlog": "qenv/simlog",
 }
 
 // docs are the files whose snippets are checked: HISTORY's and ROADMAP's

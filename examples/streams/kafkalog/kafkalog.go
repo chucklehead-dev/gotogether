@@ -6,21 +6,17 @@ package kafkalog
 
 import (
 	"context"
-	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/streams/pipeline"
+	"github.com/chucklehead-dev/gotogether/qenv/simlog"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
 
-// Writer is a pipeline.Writer over a kgo producer. Records are keyed, so
-// kgo's default partitioner sends a key to one partition; the value is
-// "n:value".
+// Writer is a simlog.Writer over a kgo producer. Records are keyed, so
+// kgo's default partitioner sends a key to one partition.
 type Writer struct {
 	cl    *kgo.Client
 	topic string
@@ -41,19 +37,19 @@ func NewWriter(brokers []string, topic string, idempotent bool) (*Writer, error)
 	return &Writer{cl: cl, topic: topic}, nil
 }
 
-// Produce implements pipeline.Writer.
-func (w *Writer) Produce(ctx context.Context, key string, n, value int, done func(error)) {
-	r := &kgo.Record{Topic: w.topic, Key: []byte(key), Value: fmt.Appendf(nil, "%d:%d", n, value)}
+// Produce implements simlog.Writer.
+func (w *Writer) Produce(ctx context.Context, key string, value []byte, done func(error)) {
+	r := &kgo.Record{Topic: w.topic, Key: []byte(key), Value: value}
 	w.cl.Produce(ctx, r, func(_ *kgo.Record, err error) { done(err) })
 }
 
-// Flush implements pipeline.Writer.
+// Flush implements simlog.Writer.
 func (w *Writer) Flush(ctx context.Context) { _ = w.cl.Flush(ctx) }
 
 // Close closes the producer.
 func (w *Writer) Close() { w.cl.Close() }
 
-// Reader is a pipeline.Reader over a kgo consumer in a group, with
+// Reader is a simlog.Reader over a kgo consumer in a group, with
 // automatic commits off: the pipeline commits after applying.
 type Reader struct {
 	cl    *kgo.Client
@@ -70,39 +66,22 @@ func NewReader(brokers []string, topic, group string) (*Reader, error) {
 	return &Reader{cl: cl, topic: topic}, nil
 }
 
-// Poll implements pipeline.Reader: the records fetched within 200 ms.
-func (r *Reader) Poll(ctx context.Context) ([]pipeline.Record, error) {
+// Poll implements simlog.Reader: the records fetched within 200 ms.
+func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 	pctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 	fs := r.cl.PollRecords(pctx, 10)
 	if fs.IsClientClosed() {
 		return nil, kgo.ErrClientClosed
 	}
-	var out []pipeline.Record
-	var bad error
+	var out []simlog.Record
 	fs.EachRecord(func(rec *kgo.Record) {
-		n, v, err := decode(rec.Value)
-		if err != nil {
-			bad = err
-			return
-		}
-		out = append(out, pipeline.Record{Partition: int(rec.Partition), Offset: int(rec.Offset), Key: string(rec.Key), N: n, Value: v})
+		out = append(out, simlog.Record{Partition: int(rec.Partition), Offset: int(rec.Offset), Key: string(rec.Key), Value: rec.Value})
 	})
-	return out, bad
+	return out, nil
 }
 
-func decode(b []byte) (n, v int, err error) {
-	a, c, ok := strings.Cut(string(b), ":")
-	if !ok {
-		return 0, 0, fmt.Errorf("kafkalog: bad value %q", b)
-	}
-	if n, err = strconv.Atoi(a); err == nil {
-		v, err = strconv.Atoi(c)
-	}
-	return n, v, err
-}
-
-// Commit implements pipeline.Reader, recording the commit when the
+// Commit implements simlog.Reader, recording the commit when the
 // coordinator accepted it. A member of an older generation is refused
 // (Kafka's ILLEGAL_GENERATION, REBALANCE_IN_PROGRESS).
 func (r *Reader) Commit(ctx context.Context, partition, next int) error {

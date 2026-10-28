@@ -41,7 +41,7 @@ func TestFaithfulSweep(t *testing.T) {
 		t.Skip("sweeps hundreds of runs")
 	}
 	space := []qsweep.Factor{qsweep.Ints("partitions", 1, 2, 3), qsweep.Ints("consumers", 1, 2, 3)}
-	for _, k := range []string{"log.produce", "log.commit", "log.fetch", "nemesis"} {
+	for _, k := range []string{"log.events.produce", "log.events.commit", "log.events.fetch", "nemesis"} {
 		space = append(space, qsweep.FaultKind(k))
 	}
 	sys := qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
