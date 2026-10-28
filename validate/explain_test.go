@@ -143,7 +143,10 @@ func TestRejectionReadsAsGrist(t *testing.T) {
 	if !found {
 		t.Errorf("want covers(reads_, n) among the false conditions: %+v", f.Why.Conditions)
 	}
-	for _, want := range []string{`the decision read nothing of item-added events tagged item="pen" (its read set: nothing)`, "read model stock"} {
+	for _, want := range []string{`the decision read nothing of item-added events tagged item="pen" (its read set: nothing)`,
+		// both read models cover the need: items folds every item-added
+		// event, stock those of one item (its key)
+		"read it through the read model items or stock, or the Reads of the event type"} {
 		if !strings.Contains(f.Why.Reading, want) {
 			t.Errorf("the grist reading %q lacks %q", f.Why.Reading, want)
 		}
