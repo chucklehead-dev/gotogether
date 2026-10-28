@@ -3530,6 +3530,20 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### I18's rest: the step's records, the knob rule
+
+`qtrace.Step`'s six record fields (an invocation's, a settle's, a loss's,
+a watermark's) are one embedded struct, `qtrace.Record`: the step's v1
+shape says which fields are a record's, and Reconstruct's guarantee that
+a Trace's steps have it zero is stated and tested
+(`TestTraceStepsHaveNoRecord`). Promotion kept every read and write; a
+throwaway AST rewrite moved the composite literals of 43 files (a
+literal nested two levels deep, a map of slices of steps, by hand). A
+stream of a sum type was weighed and left: every signature of the
+recording side for a split Reconstruct makes once. DESIGN §71 writes the
+rule for a new knob, from the shapes the API already has. The model
+navigator stays in validate.
+
 ### Formats: the current major only (the maintainer, 2026-10-28)
 
 "This is a prerelease library. Once our own examples are migrated we

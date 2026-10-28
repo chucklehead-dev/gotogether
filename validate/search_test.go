@@ -224,8 +224,8 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 func TestResolutionsCrossing(t *testing.T) {
 	t.Parallel()
 	ms := func(n int) time.Time { return time.Unix(0, 0).Add(time.Duration(n) * time.Millisecond) }
-	p := qtrace.Step{Action: "op", Recorder: "b", Seq: 1, Time: ms(100), Invocation: true}
-	st := qtrace.Step{Action: "settled", Recorder: "b", Seq: 2, Time: ms(0), Settled: true}
+	p := qtrace.Step{Action: "op", Recorder: "b", Seq: 1, Time: ms(100), Record: qtrace.Record{Invocation: true}}
+	st := qtrace.Step{Action: "settled", Recorder: "b", Seq: 2, Time: ms(0), Record: qtrace.Record{Settled: true}}
 	s := qtrace.Step{Action: "op", Recorder: "a", Seq: 1, Time: ms(50)}
 	got, _, crossing := resolutions(&qtrace.Trace{Steps: []qtrace.Step{s}, Pending: []qtrace.Step{p}}, []qtrace.Step{st}, 100, 0)
 	if !slices.Equal(crossing, []int{0}) || len(got) != 1 || got[0][0] != -1 {
@@ -481,7 +481,7 @@ func TestJudgeAgreesWithQuint(t *testing.T) {
 					Args: map[string]any{"amount": int64(1 + r.IntN(60))}, Obs: map[string]any{"balance": int64(r.IntN(120))}})
 			}
 			if r.IntN(2) == 0 {
-				steps = append(steps, qtrace.Step{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(20)})
+				steps = append(steps, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(20)})
 			}
 			return steps
 		},
@@ -491,7 +491,7 @@ func TestJudgeAgreesWithQuint(t *testing.T) {
 				Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
 			w := qtrace.Step{Action: "withdraw", Recorder: "b", Seq: 1, Thread: "b", Actor: "x", Process: "p", Invoked: at(0), Time: at(10),
 				Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(0)}}
-			return []qtrace.Step{d, w, {Action: "settled", Settled: true, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(20)}}
+			return []qtrace.Step{d, w, {Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(20)}}
 		},
 		"testdata/procs.yaml": func() []qtrace.Step {
 			var steps []qtrace.Step
@@ -663,7 +663,7 @@ func TestConfirmByCheck(t *testing.T) {
 		ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 		return []qtrace.Step{
 			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 			{Action: "deposit", Recorder: "c", Seq: 3, Time: ms(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}},
 		}
 	}
@@ -764,7 +764,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 	step := func(action, rec string, from, to int, args, obs map[string]any) qtrace.Step {
 		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Actor: "x", Process: "p", Invoked: at(from), Time: at(to), Args: args, Obs: obs}
 	}
-	settle := qtrace.Step{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(50)}
+	settle := qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "s", Seq: 1, Thread: "s", Actor: "x", Process: "p", Time: at(50)}
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	for _, x := range []struct {
 		name, binding string
@@ -776,12 +776,12 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 		{"eventual, linearize", "../qtest/testdata/probed.yaml", nil, 2, SearchOptions{Linearize: true}, []qtrace.Step{
 			step("write", "a", 0, 10, map[string]any{"value": int64(1)}, nil), step("write", "b", 0, 10, map[string]any{"value": int64(0)}, nil), settle}},
 		{"eventual, resolve", "../qtest/testdata/probed.yaml", nil, 2, SearchOptions{ResolvePending: true}, []qtrace.Step{
-			{Action: "write", Recorder: "c", Seq: 1, Time: ms(1), Invocation: true, Args: map[string]any{"value": int64(1)}},
+			{Action: "write", Recorder: "c", Seq: 1, Time: ms(1), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"value": int64(1)}},
 			{Action: "observe", Recorder: "o", Seq: 1, Time: ms(2), Obs: map[string]any{"value": int64(0)}},
-			{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: ms(9)}}},
+			{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "s", Seq: 1, Time: ms(9)}}},
 		{"invariant, resolve", "testdata/blind.yaml", []string{"underLimit"}, 3, SearchOptions{ResolvePending: true}, []qtrace.Step{
 			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}},
-			{Action: "deposit", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(95)}}}},
+			{Action: "deposit", Recorder: "c", Seq: 2, Time: ms(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(95)}}}},
 	} {
 		t.Run(x.name, func(t *testing.T) {
 			c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
@@ -919,7 +919,7 @@ func TestShadowMode(t *testing.T) {
 		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}})
 	pending := []qtrace.Step{
 		{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-		{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+		{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 		{Action: "deposit", Recorder: "c", Seq: 3, Time: ms(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(12)}},
 	}
 	for _, x := range []struct {
@@ -992,7 +992,7 @@ func TestSettledAsCountsRecordedSteps(t *testing.T) {
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	assumed := qtrace.Step{Action: "withdraw", Time: ms(2), Ambiguous: true, Args: map[string]any{"amount": int64(3)}}
 	step := qtrace.Step{Action: "deposit", Time: ms(1), Args: map[string]any{"amount": int64(10)}}
-	pending := qtrace.Step{Action: "deposit", Time: ms(3), Invocation: true, Args: map[string]any{"amount": int64(5)}}
+	pending := qtrace.Step{Action: "deposit", Time: ms(3), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(5)}}
 	effect := pending
 	effect.Invocation, effect.Ambiguous = false, true
 	tr := &qtrace.Trace{Steps: []qtrace.Step{step, assumed}, Pending: []qtrace.Step{pending}, Settled: true}

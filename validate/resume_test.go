@@ -331,7 +331,7 @@ func TestResumeRecurringStates(t *testing.T) {
 func TestHiddenOnePath(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	settled := qtrace.Step{Action: "settled", Recorder: "r", Seq: 9, Settled: true, Time: time.Unix(9, 0)}
+	settled := qtrace.Step{Action: "settled", Recorder: "r", Seq: 9, Record: qtrace.Record{Settled: true}, Time: time.Unix(9, 0)}
 	for _, x := range []struct {
 		binding string
 		steps   []qtrace.Step

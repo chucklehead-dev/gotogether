@@ -59,7 +59,7 @@ func TestReconstructMergesLosses(t *testing.T) {
 		return Step{Action: "a", Recorder: rec, Actor: actor, Process: "p", Seq: seq, Time: at(ts), Args: map[string]any{}}
 	}
 	loss := func(rec, kind string, after uint64, ts int64) Step {
-		return Step{Action: "lost", Recorder: rec, Process: rec, Lost: kind, LostAfter: after, Time: at(ts)}
+		return Step{Action: "lost", Recorder: rec, Process: rec, Record: Record{Lost: kind, LostAfter: after}, Time: at(ts)}
 	}
 	steps := []Step{
 		step("r", "x", 3, 3), step("r", "x", 4, 4),
@@ -90,9 +90,9 @@ func TestSteplessRecorderLossReachesItsActor(t *testing.T) {
 	at := func(s int64) time.Time { return time.Unix(s, 0) }
 	steps := []Step{
 		{Action: "a", Recorder: "r", Actor: "x", Process: "p", Seq: 1, Time: at(1), Args: map[string]any{}},
-		{Action: "lost", Recorder: "r", Actor: "y", Process: "p", Lost: "suffix", LostAfter: 1, Time: at(1)},
+		{Action: "lost", Recorder: "r", Actor: "y", Process: "p", Record: Record{Lost: "suffix", LostAfter: 1}, Time: at(1)},
 		{Action: "b", Recorder: "s", Actor: "y", Process: "q", Seq: 1, Time: at(2), Args: map[string]any{}},
-		{Action: "lost", Recorder: "k", Actor: "y", Process: "q", Lost: "suffix", Time: at(3)},
+		{Action: "lost", Recorder: "k", Actor: "y", Process: "q", Record: Record{Lost: "suffix"}, Time: at(3)},
 	}
 	traces, _ := Reconstruct(steps)
 	got := map[string][]Lost{}
@@ -127,7 +127,7 @@ func TestLossesInRecorderOrder(t *testing.T) {
 func TestStepAfterSettleUnsettles(t *testing.T) {
 	steps := []Step{
 		{Action: "a", Recorder: "r", Actor: "x", Process: "p", Seq: 1, Time: time.Unix(1, 0), Args: map[string]any{}},
-		{Action: "settled", Recorder: "r", Actor: "x", Process: "p", Seq: 2, Settled: true, Time: time.Unix(2, 0)},
+		{Action: "settled", Recorder: "r", Actor: "x", Process: "p", Seq: 2, Record: Record{Settled: true}, Time: time.Unix(2, 0)},
 		{Action: "b", Recorder: "r", Actor: "x", Process: "p", Seq: 3, Time: time.Unix(3, 0), Args: map[string]any{}},
 	}
 	traces, _ := Reconstruct(steps)

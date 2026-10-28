@@ -92,10 +92,10 @@ func TestMutateStepsFinish(t *testing.T) {
 	RequireQuint(t)
 	t0 := time.Unix(700, 0)
 	steps := []qtrace.Step{
-		{Action: "tick", Seq: 1, Recorder: "c", Actor: "ev", Process: "c", Thread: "c", Time: t0, Invocation: true},
+		{Action: "tick", Seq: 1, Recorder: "c", Actor: "ev", Process: "c", Thread: "c", Time: t0, Record: qtrace.Record{Invocation: true}},
 		{Action: "tick", Seq: 2, Recorder: "c", Actor: "ev", Process: "c", Thread: "c", Time: t0.Add(time.Millisecond), Call: 1},
 		{Action: "inc", Seq: 3, Recorder: "c", Actor: "ev", Process: "c", Thread: "c", Time: t0.Add(2 * time.Millisecond)},
-		{Action: "settled", Seq: 4, Recorder: "c", Actor: "ev", Process: "c", Thread: "c", Time: t0.Add(3 * time.Millisecond), Settled: true},
+		{Action: "settled", Seq: 4, Recorder: "c", Actor: "ev", Process: "c", Thread: "c", Time: t0.Add(3 * time.Millisecond), Record: qtrace.Record{Settled: true}},
 	}
 	rep := MutateSteps(t, "testdata/ev-finish.yaml", steps, StepMutations(qtrace.MutateOps("drop", "dup")))
 	rep.Original.Expect(t, Finishes())

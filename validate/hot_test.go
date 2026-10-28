@@ -60,7 +60,7 @@ func TestMarkHot(t *testing.T) {
 	if r := check(hotRun("submit", "process", "submit", "process")); r.Hot != nil {
 		t.Fatalf("drained between: %+v", r.Hot)
 	}
-	settled := append(hotRun("submit", "retry", "retry"), qtrace.Step{Action: "settled", Settled: true, Recorder: "q", Seq: 4, Time: atSec(4)})
+	settled := append(hotRun("submit", "retry", "retry"), qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "q", Seq: 4, Time: atSec(4)})
 	if r := check(settled); r.Hot != nil || !r.Settled {
 		t.Fatalf("settled: %+v", r)
 	}

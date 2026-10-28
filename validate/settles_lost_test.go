@@ -15,9 +15,9 @@ func TestSettlesAfterABoundedLoss(t *testing.T) {
 	steps := func(bound time.Time) []qtrace.Step {
 		return []qtrace.Step{
 			{Action: "inc", Recorder: "srv", Seq: 1, Time: at(0)},
-			{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: bound},
-			{Action: "settled", Recorder: "h", Seq: 1, Time: at(5), Settled: true},
-			{Action: "settled", Recorder: "h", Seq: 2, Time: at(20), Settled: true},
+			{Action: "lost", Recorder: "srv", Record: qtrace.Record{Lost: "suffix", LostAfter: 1, LostBefore: bound}, Time: at(0)},
+			{Action: "settled", Recorder: "h", Seq: 1, Time: at(5), Record: qtrace.Record{Settled: true}},
+			{Action: "settled", Recorder: "h", Seq: 2, Time: at(20), Record: qtrace.Record{Settled: true}},
 		}
 	}
 	if got := settlesOf(steps(at(10))); len(got) != 1 || !got[0].Time.Equal(at(20)) {

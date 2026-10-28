@@ -531,7 +531,7 @@ func (r *Recorder) Settled(ctx context.Context) {
 	if site.Discard {
 		return
 	}
-	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Settled: true}
+	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Record: qtrace.Record{Settled: true}}
 	s.Seq, s.Time = r.stamp(site)
 	r.write(ctx, s)
 }
@@ -560,7 +560,7 @@ func (r *Recorder) CompleteThrough(ctx context.Context, t time.Time) {
 	if site.Discard {
 		return
 	}
-	s := &qtrace.Step{Action: "complete", Recorder: r.id, Actor: r.actor, Process: r.process, CompleteThrough: t, Time: site.Now()}
+	s := &qtrace.Step{Action: "complete", Recorder: r.id, Actor: r.actor, Process: r.process, Record: qtrace.Record{CompleteThrough: t}, Time: site.Now()}
 	r.write(ctx, s)
 }
 

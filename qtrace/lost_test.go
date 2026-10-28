@@ -50,7 +50,7 @@ func TestReadJSONLLostTail(t *testing.T) {
 	var b bytes.Buffer
 	in := []Step{
 		{Action: "a", Recorder: "r", Seq: 1, Actor: "x", Time: time.Unix(1, 0)},
-		{Action: "settled", Recorder: "r", Seq: 2, Actor: "x", Settled: true, Time: time.Unix(2, 0)},
+		{Action: "settled", Recorder: "r", Seq: 2, Actor: "x", Record: Record{Settled: true}, Time: time.Unix(2, 0)},
 		{Action: "b", Recorder: "r", Seq: 3, Actor: "x", Time: time.Unix(3, 0)},
 	}
 	if err := WriteJSONL(&b, in); err != nil {

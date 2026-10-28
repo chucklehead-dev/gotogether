@@ -43,7 +43,7 @@ func TestAbsentClaims(t *testing.T) {
 	dep := func(seq uint64, balance int64) qtrace.Step {
 		return qtrace.Step{Action: "deposit", Recorder: "r", Seq: seq, Time: at(int(seq)), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}}
 	}
-	inv := qtrace.Step{Action: "withdraw", Recorder: "r", Seq: 2, Time: at(2), Invocation: true, Args: map[string]any{"amount": int64(3)}}
+	inv := qtrace.Step{Action: "withdraw", Recorder: "r", Seq: 2, Time: at(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}}
 	funds := "../validate/testdata/funds.binding.yaml"
 	collecting := Validate(t, funds, qtrace.MarkComplete([]qtrace.Step{dep(1, 5), inv, dep(3, 10)}, "r", at(3)))
 	collecting.Expect(t, Absent("withdraw", validate.Uncollected), Undecided(Completes(), "not be collected yet"), Undecided(Finishes(), "still being collected"))

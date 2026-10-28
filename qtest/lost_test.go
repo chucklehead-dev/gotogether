@@ -27,7 +27,7 @@ func TestClaimsOverLostTails(t *testing.T) {
 	}
 	lost := qtrace.Lost{Recorder: "a", After: 1}
 	over := qtrace.MarkLost([]qtrace.Step{acct("a", 10, 5, 5), acct("b", 30, 100, 105)}, lost)
-	settled := qtrace.MarkLost([]qtrace.Step{acct("a", 10, 5, 5), {Action: "settled", Recorder: "s", Seq: 1, Settled: true, Time: at(50)}}, lost)
+	settled := qtrace.MarkLost([]qtrace.Step{acct("a", 10, 5, 5), {Action: "settled", Recorder: "s", Seq: 1, Record: qtrace.Record{Settled: true}, Time: at(50)}}, lost)
 	for _, x := range []struct {
 		name  string
 		steps []qtrace.Step
@@ -69,7 +69,7 @@ func TestPendingOverLostTails(t *testing.T) {
 	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
 	steps := []qtrace.Step{
 		{Action: "deposit", Recorder: "a", Seq: 1, Time: at(10), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}},
-		{Action: "withdraw", Recorder: "a", Seq: 2, Time: at(15), Invocation: true, Args: map[string]any{"amount": int64(5)}},
+		{Action: "withdraw", Recorder: "a", Seq: 2, Time: at(15), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(5)}},
 	}
 	for _, x := range []struct {
 		lost                          bool
@@ -104,8 +104,8 @@ func TestUnknownClaimsEverywhere(t *testing.T) {
 	}
 	at := func(ms int) time.Time { return time.Unix(0, int64(ms)*int64(time.Millisecond)) }
 	deposit := qtrace.Step{Action: "deposit", Recorder: "a", Seq: 1, Time: at(10), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
-	maybe := qtrace.Step{Action: "withdraw", Recorder: "a", Seq: 2, Time: at(15), Invocation: true, Args: map[string]any{"amount": int64(5)}}
-	certain := qtrace.Step{Action: "withdraw", Recorder: "b", Seq: 1, Time: at(30), Invocation: true, Args: map[string]any{"amount": int64(1)}}
+	maybe := qtrace.Step{Action: "withdraw", Recorder: "a", Seq: 2, Time: at(15), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(5)}}
+	certain := qtrace.Step{Action: "withdraw", Recorder: "b", Seq: 1, Time: at(30), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(1)}}
 	lost := qtrace.Lost{Recorder: "a", After: 2}
 	check := func(steps []qtrace.Step) *Run {
 		rep, err := c.Check(context.Background(), qtrace.MarkLost(steps, lost))
@@ -153,7 +153,7 @@ func TestClaimsOverGaps(t *testing.T) {
 		return qtrace.Step{Action: "deposit", Recorder: "a", Thread: "a", Seq: seq, Time: time.Unix(int64(seq), 0),
 			Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}}
 	}
-	settle := qtrace.Step{Action: "settled", Settled: true, Recorder: "a", Thread: "a", Seq: 5, Time: time.Unix(5, 0)}
+	settle := qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "a", Thread: "a", Seq: 5, Time: time.Unix(5, 0)}
 	funds := "../validate/testdata/funds.binding.yaml"
 	gapped := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 20), settle})
 	beside := Validate(t, funds, []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 15), settle}) // conforms as recorded

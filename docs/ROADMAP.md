@@ -239,22 +239,20 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   its invariants within three steps. Left: `qtest.Model` takes no
   options (constants, a bound of the test's own); a claim on the
   actions never enabled (twophase's walk checked none was).
-- **I18. validate split (M, breaking, before tags). Done** but its
-  "with it" (DESIGN §70, HISTORY "I18"): model analysis in
+- **I18. validate split (M, breaking, before tags). Done** (DESIGN
+  §70, §71; HISTORY "I18", "I18's rest"): model analysis in
   `validate/model` (`Simulate`, `Analyzer`: `Graph`, `Possible`), above
   validate through an internal bridge (validate/internal/evalshare); the
   run navigation protocol in `validate/navproto` (a leaf, versioned),
-  which qnav reads; validate keeps runs, manifests, step mutants and the
-  model navigator (it starts from a run's state). Left: the model
-  navigator out of validate once the run internals it shares (plans,
-  partitions, explanations) have a package; `qtrace.Step`'s record
-  fields (invocation, settle, loss, watermark) said to be Reconstruct's,
-  zero in a Trace's steps, or a `Record` type of their own; DESIGN's
-  rule for a new knob ("a struct for a run's knobs, an Option for a
-  test's"). What it was: validate is 86
-  exported identifiers and 10.7k lines: runs, model checking, the model
-  navigator, the run navigator's wire protocol (qnav imports validate
-  for it), manifests, step mutants, all to freeze as one v1 surface.
+  which qnav reads; `qtrace.Step`'s record fields one embedded
+  `qtrace.Record`, zero in every step of a Trace; DESIGN's rule for a
+  new knob (a configuration struct's field for what a run is, an Option
+  for how a test carries a check out, an environment variable for a
+  person around the suite, never a context value). The model navigator
+  stays in validate for v1: it starts from a run's state and explains
+  with the runs' explanations. What it was: validate was 86 exported
+  identifiers and 10.7k lines of five concerns, all to freeze as one v1
+  surface.
 
 ### Adoption: scale and on-call
 

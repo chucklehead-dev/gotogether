@@ -36,19 +36,19 @@ func TestCollectedThrough(t *testing.T) {
 		// a: seqs 1, 2 and 4, logged out of order, its watermark at 1ms:
 		// complete through seq 2's time (the hole at 3 stops it)
 		step("a", 2, 20), step("a", 1, 10), step("a", 4, 40),
-		{Action: "complete", Recorder: "a", Time: ms(1), CompleteThrough: ms(1)},
+		{Action: "complete", Recorder: "a", Time: ms(1), Record: Record{CompleteThrough: ms(1)}},
 		// b: no seqs, a watermark at 50ms, then a lower one
 		step("b", 0, 5),
-		{Action: "complete", Recorder: "b", Time: ms(50), CompleteThrough: ms(50)},
-		{Action: "complete", Recorder: "b", Time: ms(30), CompleteThrough: ms(30)},
+		{Action: "complete", Recorder: "b", Time: ms(50), Record: Record{CompleteThrough: ms(50)}},
+		{Action: "complete", Recorder: "b", Time: ms(30), Record: Record{CompleteThrough: ms(30)}},
 		// c: no watermark of its own, AllRecorders' at 60ms
 		step("c", 0, 5),
-		{Action: "complete", Recorder: AllRecorders, Time: ms(60), CompleteThrough: ms(60)},
+		{Action: "complete", Recorder: AllRecorders, Time: ms(60), Record: Record{CompleteThrough: ms(60)}},
 		// d: a carried watermark at 2ms: neither AllRecorders' nor its seqs raise it
 		step("d", 1, 5), step("d", 2, 7),
 		CarryWatermark("d", "A", ms(2), false),
 		// a loss record is no step
-		{Recorder: "e", Lost: "tail"},
+		{Recorder: "e", Record: Record{Lost: "tail"}},
 	}
 	got := CollectedThrough(steps)
 	want := map[string]time.Time{"a": ms(60), "b": ms(60), "c": ms(60), "d": ms(2)}
@@ -68,11 +68,11 @@ func TestCollectedThrough(t *testing.T) {
 		t.Errorf("each its own: %v, want %v", got, want)
 	}
 	// a watermark below its recorder's dense seqs, which raise it
-	if got := CollectedThrough([]Step{step("a", 1, 10), step("a", 2, 20), {Action: "complete", Recorder: "a", CompleteThrough: ms(15)}}); !got["a"].Equal(ms(20)) {
+	if got := CollectedThrough([]Step{step("a", 1, 10), step("a", 2, 20), {Action: "complete", Recorder: "a", Record: Record{CompleteThrough: ms(15)}}}); !got["a"].Equal(ms(20)) {
 		t.Errorf("dense seqs past the watermark: %v, want 20ms", got)
 	}
 	// one above them stands
-	if got := CollectedThrough([]Step{step("a", 1, 10), step("a", 2, 20), {Action: "complete", Recorder: "a", CompleteThrough: ms(25)}}); !got["a"].Equal(ms(25)) {
+	if got := CollectedThrough([]Step{step("a", 1, 10), step("a", 2, 20), {Action: "complete", Recorder: "a", Record: Record{CompleteThrough: ms(25)}}}); !got["a"].Equal(ms(25)) {
 		t.Errorf("a watermark past the seqs: %v, want 25ms", got)
 	}
 }
@@ -132,7 +132,7 @@ func TestFilterClampsWatermarks(t *testing.T) {
 		{until.Add(-time.Second), until.Add(-time.Second)},
 	} {
 		// a watermark goes with a step of its recorder kept
-		got := f.Apply([]Step{{Action: "x", Recorder: "r", Seq: 1, Time: until.Add(-time.Hour)}, {Action: "complete", Recorder: "r", CompleteThrough: c.at}})
+		got := f.Apply([]Step{{Action: "x", Recorder: "r", Seq: 1, Time: until.Add(-time.Hour)}, {Action: "complete", Recorder: "r", Record: Record{CompleteThrough: c.at}}})
 		if len(got) != 2 || !got[1].CompleteThrough.Equal(c.want) {
 			t.Errorf("a watermark at %v: %v, want %v", c.at, got, c.want)
 		}
@@ -145,7 +145,7 @@ func TestKeyOfCarriedWatermarks(t *testing.T) {
 	var k Keyer
 	at := time.Unix(1, 0)
 	whole, part := CarryWatermark("r", "A", at, true), CarryWatermark("r", "A", at, false)
-	plain := Step{Action: "complete", Recorder: "r", Process: "r", Actor: "A", Time: at, CompleteThrough: at}
+	plain := Step{Action: "complete", Recorder: "r", Process: "r", Actor: "A", Time: at, Record: Record{CompleteThrough: at}}
 	kw, kp, kn := k.Step(&whole), k.Step(&part), k.Step(&plain)
 	if kw == kp || kp == kn || kw == kn {
 		t.Errorf("carried whole, carried and stated watermarks share keys: %q %q %q", kw, kp, kn)

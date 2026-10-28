@@ -32,7 +32,7 @@ func TestNoClientErrors(t *testing.T) {
 		"refused in process": {clients([]binding.Call{call(map[string]any{"id": "c1", "refused": 2}, "")}), false, true},
 		"refused, read back": {clients([]binding.Call{call(map[string]any{"id": "c1", "refused": int64(1)}, "")}), false, true},
 		"an error":           {clients([]binding.Call{call(nil, "boom")}), false, true},
-		"pending":            {clients(nil, qtrace.Step{Action: "createCounter", Invocation: true}), false, true},
+		"pending":            {clients(nil, qtrace.Step{Action: "createCounter", Record: qtrace.Record{Invocation: true}}), false, true},
 		"no client actor":    {&validate.Report{Actors: []*validate.Result{{Actor: "t1", Conforms: validate.Pass}}}, false, false},
 	} {
 		run := &qtest.Run{Report: c.r}

@@ -39,10 +39,10 @@ func TestReadJSONLTornTail(t *testing.T) {
 // which a validated log once lost, its expect checked after all.
 func TestJSONLKeepsRecordKinds(t *testing.T) {
 	in := []Step{
-		{Action: "write", Seq: 1, Recorder: "r", Invocation: true, Time: time.Unix(1, 0)},
+		{Action: "write", Seq: 1, Recorder: "r", Record: Record{Invocation: true}, Time: time.Unix(1, 0)},
 		{Action: "write", Seq: 2, Recorder: "r", Call: 1, Time: time.Unix(2, 0)},
 		{Action: "write", Seq: 3, Recorder: "r", Ambiguous: true, Time: time.Unix(3, 0)},
-		{Action: "settled", Seq: 4, Recorder: "r", Settled: true, Time: time.Unix(4, 0)},
+		{Action: "settled", Seq: 4, Recorder: "r", Record: Record{Settled: true}, Time: time.Unix(4, 0)},
 	}
 	var b bytes.Buffer
 	if err := WriteJSONL(&b, in); err != nil {

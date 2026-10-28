@@ -70,7 +70,7 @@ func TestEqualKeysEqualVerdicts(t *testing.T) {
 			a = append(a, qtrace.Step{Action: action, Recorder: "n", Seq: uint64(len(a) + 1), Time: at(now)})
 		}
 		if hegel.Draw(ht, hegel.Booleans()) {
-			a = append(a, qtrace.Step{Action: "settled", Settled: true, Recorder: "n", Seq: uint64(len(a) + 1), Time: at(now)})
+			a = append(a, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "n", Seq: uint64(len(a) + 1), Time: at(now)})
 		}
 		b := append([]qtrace.Step(nil), a...)
 		i := hegel.Draw(ht, hegel.Integers(0, len(b)-1))
@@ -98,7 +98,7 @@ func TestEqualKeysEqualVerdicts(t *testing.T) {
 			if last := b[len(b)-1]; last.Settled {
 				b = b[:len(b)-1]
 			} else {
-				b = append(b, qtrace.Step{Action: "settled", Settled: true, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
+				b = append(b, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
 			}
 		case 4: // an action replaced
 			if !b[i].Settled {

@@ -49,8 +49,8 @@ func TestReconstructIgnoresInputOrder(t *testing.T) {
 		{Action: "w", Recorder: "d", Thread: "t", Seq: 2, Actor: "y", Time: ms(40)},
 		{Action: "w", Recorder: "d", Thread: "t", Seq: 3, Actor: "y", Time: ms(45)},
 		// pending calls, invoked out of their seq order
-		{Action: "p", Recorder: "e", Seq: 2, Actor: "y", Time: ms(5), Invocation: true},
-		{Action: "p", Recorder: "e", Seq: 1, Actor: "y", Time: ms(8), Invocation: true},
+		{Action: "p", Recorder: "e", Seq: 2, Actor: "y", Time: ms(5), Record: Record{Invocation: true}},
+		{Action: "p", Recorder: "e", Seq: 1, Actor: "y", Time: ms(8), Record: Record{Invocation: true}},
 		// an actor whose name sorts first
 		{Action: "w", Recorder: "f", Seq: 1, Actor: "a", Time: ms(1)},
 		// order keys that contradict their thread: a cycle

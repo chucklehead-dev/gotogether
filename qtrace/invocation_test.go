@@ -14,7 +14,7 @@ import (
 func TestInvocationOrder(t *testing.T) {
 	at := func(ms int) time.Time { return time.Unix(100, 0).Add(time.Duration(ms) * time.Millisecond) }
 	inv := func(seq uint64, ms int) Step {
-		return Step{Action: "put", Recorder: "r", Actor: "a", Seq: seq, Time: at(ms), Invocation: true}
+		return Step{Action: "put", Recorder: "r", Actor: "a", Seq: seq, Time: at(ms), Record: Record{Invocation: true}}
 	}
 	done := func(seq, call uint64, ms int) Step {
 		return Step{Action: "put", Recorder: "r", Actor: "a", Seq: seq, Call: call, Time: at(ms), Outcome: "ok"}

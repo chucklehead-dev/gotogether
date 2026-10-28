@@ -216,7 +216,7 @@ func TestHistorySVGAxis(t *testing.T) {
 	const left, right = 140, 890
 	call := func(from, to time.Time) []Step {
 		return []Step{
-			{Action: "w", Recorder: "c", Thread: "c", Seq: 1, Time: from, Invocation: true},
+			{Action: "w", Recorder: "c", Thread: "c", Seq: 1, Time: from, Record: Record{Invocation: true}},
 			{Action: "w", Recorder: "c", Thread: "c", Seq: 2, Time: to, Call: 1},
 		}
 	}

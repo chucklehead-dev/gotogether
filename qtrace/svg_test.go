@@ -17,11 +17,11 @@ func TestHistorySVG(t *testing.T) {
 	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
 	call := func(rec string, from, to int, action string, args, obs map[string]any) []Step {
 		return []Step{
-			{Action: action, Recorder: rec, Seq: 1, Thread: rec, Actor: "r", Time: at(from), Invocation: true, Args: args},
+			{Action: action, Recorder: rec, Seq: 1, Thread: rec, Actor: "r", Time: at(from), Record: Record{Invocation: true}, Args: args},
 			{Action: action, Recorder: rec, Seq: 2, Thread: rec, Actor: "r", Time: at(to), Call: 1, Args: args, Obs: obs},
 		}
 	}
-	recorded := []Step{{Action: "write", Recorder: "timedout", Seq: 1, Thread: "timedout", Actor: "r", Time: at(0), Invocation: true, Args: map[string]any{"v": int64(1)}}}
+	recorded := []Step{{Action: "write", Recorder: "timedout", Seq: 1, Thread: "timedout", Actor: "r", Time: at(0), Record: Record{Invocation: true}, Args: map[string]any{"v": int64(1)}}}
 	recorded = append(recorded, call("reader", 5, 6, "read", map[string]any{}, map[string]any{"v": int64(1)})...)
 	recorded = append(recorded, call("writer", 10, 14, "write", map[string]any{"v": int64(2)}, nil)...)
 	recorded = append(recorded, call("late", 11, 12, "read", map[string]any{}, map[string]any{"v": int64(7)})...)

@@ -86,27 +86,27 @@ func genBag(r *rand.Rand) []Step {
 		}
 		switch r.IntN(6) {
 		case 0:
-			bag = append(bag, Step{Action: "lost", Recorder: name, Actor: actor, Lost: "suffix", LostAfter: seq - 1, Time: at(clock + 5)})
+			bag = append(bag, Step{Action: "lost", Recorder: name, Actor: actor, Record: Record{Lost: "suffix", LostAfter: seq - 1}, Time: at(clock + 5)})
 		case 1:
-			bag = append(bag, Step{Action: "lost", Recorder: name, Actor: actor, Lost: "suffix", LostAfter: seq - 1 - uint64(r.IntN(2)), LostBefore: at(clock + r.IntN(40)), Time: at(clock)})
+			bag = append(bag, Step{Action: "lost", Recorder: name, Actor: actor, Record: Record{Lost: "suffix", LostAfter: seq - 1 - uint64(r.IntN(2)), LostBefore: at(clock + r.IntN(40))}, Time: at(clock)})
 		case 2:
-			bag = append(bag, Step{Action: "lost", Recorder: name, Lost: "prefix", LostAfter: uint64(r.IntN(3))})
+			bag = append(bag, Step{Action: "lost", Recorder: name, Record: Record{Lost: "prefix", LostAfter: uint64(r.IntN(3))}})
 		}
 		switch r.IntN(5) {
 		case 0:
-			bag = append(bag, Step{Action: "complete", Recorder: name, Actor: actor, CompleteThrough: at(clock - r.IntN(30)), Time: at(clock)})
+			bag = append(bag, Step{Action: "complete", Recorder: name, Actor: actor, Record: Record{CompleteThrough: at(clock - r.IntN(30))}, Time: at(clock)})
 		case 1:
 			bag = append(bag, CarryWatermark(name, actor, at(clock-r.IntN(30)), r.IntN(2) == 0))
 		}
 	}
 	if r.IntN(6) == 0 {
-		bag = append(bag, Step{Action: "complete", Recorder: AllRecorders, CompleteThrough: at(r.IntN(200))})
+		bag = append(bag, Step{Action: "complete", Recorder: AllRecorders, Record: Record{CompleteThrough: at(r.IntN(200))}})
 	}
 	for i := range r.IntN(3) { // spans without seqs, each its own recorder (their order among equal keys is no input's)
 		bag = append(bag, Step{Action: "span", Recorder: fmt.Sprintf("span%d", i), Actor: fmt.Sprintf("a%d", r.IntN(3)), Outcome: "ok", Time: at(r.IntN(200) + i)})
 	}
 	if r.IntN(10) == 0 {
-		bag = append(bag, Step{Action: "lost", Recorder: "gone", Actor: "a0", Lost: "suffix", LostAfter: 0}) // a recorder all lost
+		bag = append(bag, Step{Action: "lost", Recorder: "gone", Actor: "a0", Record: Record{Lost: "suffix", LostAfter: 0}}) // a recorder all lost
 	}
 	r.Shuffle(len(bag), func(i, j int) { bag[i], bag[j] = bag[j], bag[i] })
 	return bag

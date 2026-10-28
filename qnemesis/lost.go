@@ -47,7 +47,7 @@ func lossRecords(t Target, inc int, actor string, dead time.Time) []qtrace.Step 
 	for _, id := range recorders {
 		// bounded: the incarnation, reaped by dead, recorded nothing after
 		// it, so a settle later than dead follows every lost step
-		rec := qtrace.Step{Action: "lost", Recorder: id, Process: id, Actor: actor, Lost: "suffix", Time: started, LostBefore: dead}
+		rec := qtrace.Step{Action: "lost", Recorder: id, Process: id, Actor: actor, Record: qtrace.Record{Lost: "suffix", LostBefore: dead}, Time: started}
 		if l, ok := last[id]; ok {
 			rec.LostAfter, rec.Time, rec.Actor, rec.Process = l.Seq, l.Time, l.Actor, l.Process
 		}

@@ -62,7 +62,7 @@ func (l Lost) Issue() Issue {
 // the loss: for a suffix the last with a seq up to l.After (the last
 // recorded, with After 0), for a prefix its first.
 func MarkLost(steps []Step, l Lost) []Step {
-	rec := Step{Action: "lost", Recorder: l.Recorder, Process: l.Recorder, Lost: "suffix", LostAfter: l.After, LostBefore: l.Before}
+	rec := Step{Action: "lost", Recorder: l.Recorder, Process: l.Recorder, Record: Record{Lost: "suffix", LostAfter: l.After, LostBefore: l.Before}}
 	if l.Prefix {
 		rec.Lost = "prefix"
 	}

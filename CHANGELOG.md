@@ -19,6 +19,13 @@ The first release. What a user meets, by module:
   are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
   raises the process's GC percent to 400 while it runs, unless it is
   already higher or off, and puts it back.
+- `qtrace.Record` (ROADMAP I18's rest; breaking for composite
+  literals): a step's record fields (`Invocation`, `Settled`, `Lost`,
+  `LostAfter`, `LostBefore`, `CompleteThrough`) are one struct embedded
+  in `qtrace.Step`, zero in every step of a Trace. Reads and writes are
+  unchanged (`s.Settled`); a literal writes `qtrace.Step{Action:
+  "settled", Record: qtrace.Record{Settled: true}}`.
+
 - Formats, the current major only (the maintainer's decision of
   2026-10-28; breaking): pre-release, every reader reads its format's
   current major, refusing an earlier one with how to write it anew.

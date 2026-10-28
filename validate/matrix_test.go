@@ -83,7 +83,7 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		}
 		return steps
 	}
-	settled := qtrace.Step{Action: "settled", Settled: true}
+	settled := qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}}
 	restore := func(balance int64) qtrace.Step {
 		return qtrace.Step{Action: "restore", Args: map[string]any{"b": balance, "n": int64(1)}}
 	}
@@ -114,7 +114,7 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 	pending := func(balance int64) []qtrace.Step {
 		return []qtrace.Step{
 			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 			{Action: "deposit", Recorder: "c", Seq: 3, Time: ms(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}},
 		}
 	}

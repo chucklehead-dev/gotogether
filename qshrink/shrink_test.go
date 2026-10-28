@@ -66,7 +66,7 @@ func (f *fakeApp) rerun(_ context.Context, idx []int) (steps []qtrace.Step, err 
 		server := fmt.Sprintf("server-%d", f.boots)
 		defer func() {
 			steps = append(steps, qtrace.Step{Recorder: server, Seq: 1, Action: "drained", Time: time.Now()},
-				qtrace.Step{Recorder: server, Seq: 2, Settled: true, Time: time.Now()})
+				qtrace.Step{Recorder: server, Seq: 2, Record: qtrace.Record{Settled: true}, Time: time.Now()})
 		}()
 	}
 	for _, i := range idx {

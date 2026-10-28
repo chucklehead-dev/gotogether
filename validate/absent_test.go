@@ -160,7 +160,7 @@ func TestAbsentWithin(t *testing.T) {
 	}
 	settled := func(h []qtrace.Step) []qtrace.Step {
 		last := h[len(h)-1]
-		return append(h, qtrace.Step{Action: "settled", Settled: true, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
+		return append(h, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
 	}
 	gapped := steps("crash", 0, "heal", 1, "tick", 6)
 	gapped[2].Seq = 4 // seq 3, recorded between 1s and 6s, was lost
@@ -170,7 +170,7 @@ func TestAbsentWithin(t *testing.T) {
 	slow := qtrace.MarkComplete([]qtrace.Step{
 		{Action: "crash", Recorder: "m", Seq: 1, Time: atSec(0)},
 		{Action: "heal", Recorder: "n", Seq: 1, Time: atSec(1)},
-		{Action: "tick", Recorder: "n", Seq: 2, Time: atSec(2), Invocation: true},
+		{Action: "tick", Recorder: "n", Seq: 2, Time: atSec(2), Record: qtrace.Record{Invocation: true}},
 		{Action: "tick", Recorder: "n", Seq: 3, Time: atSec(6), Call: 2},
 	}, "n", atSec(10))
 	name := "within 3s after healed: hasLeader"
@@ -211,7 +211,7 @@ func TestAbsentEventually(t *testing.T) {
 		return qtrace.Step{Action: action, Recorder: "r", Seq: seq, Time: atSec(int(seq)), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
 	}
 	settle := func(seq uint64) qtrace.Step {
-		return qtrace.Step{Action: "settled", Settled: true, Recorder: "r", Seq: seq, Time: atSec(int(seq))}
+		return qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "r", Seq: seq, Time: atSec(int(seq))}
 	}
 	name := EventuallyName("funded")
 	checkAbsent(t, "testdata/funds.binding.yaml", []absentRun{
@@ -221,7 +221,7 @@ func TestAbsentEventually(t *testing.T) {
 		{"a lost tail", qtrace.MarkLost([]qtrace.Step{op("deposit", 1, 5, 5), op("withdraw", 2, 5, 0)}, qtrace.Lost{Recorder: "r", After: 2}), name, Dropped, ""},
 		{"no settle", []qtrace.Step{op("deposit", 1, 5, 5), op("withdraw", 2, 5, 0)}, name, Uncollected, ""},
 		{"a watermark before the settle", qtrace.MarkComplete([]qtrace.Step{op("deposit", 1, 5, 5), op("withdraw", 2, 5, 0),
-			{Action: "settled", Settled: true, Recorder: "h", Seq: 1, Time: atSec(3)}}, "r", atSec(2)), name, Uncollected, ""},
+			{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "h", Seq: 1, Time: atSec(3)}}, "r", atSec(2)), name, Uncollected, ""},
 		{"a lagging watermark, dense seqs to the settle", qtrace.MarkComplete([]qtrace.Step{op("deposit", 1, 5, 5), op("withdraw", 2, 5, 0), settle(3)}, "r", atSec(1)), name, Defect, Fail},
 		{"a watermark at the settle", qtrace.MarkComplete([]qtrace.Step{op("deposit", 1, 5, 5), op("withdraw", 2, 5, 0), settle(3)}, "r", atSec(3)), name, Defect, Fail},
 	}, searches()...)
@@ -249,11 +249,11 @@ func TestAbsentPending(t *testing.T) {
 	}
 	dep := func(seq uint64, balance int64) qtrace.Step { return depOn("r", seq, int(seq), balance) }
 	invAt := func(seq uint64, at int) qtrace.Step {
-		return qtrace.Step{Action: "withdraw", Recorder: "r", Seq: seq, Time: atSec(at), Invocation: true, Args: map[string]any{"amount": int64(3)}}
+		return qtrace.Step{Action: "withdraw", Recorder: "r", Seq: seq, Time: atSec(at), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}}
 	}
 	inv := func(seq uint64) qtrace.Step { return invAt(seq, int(seq)) }
 	settleAt := func(seq uint64, at int) qtrace.Step {
-		return qtrace.Step{Action: "settled", Settled: true, Recorder: "r", Seq: seq, Time: atSec(at)}
+		return qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "r", Seq: seq, Time: atSec(at)}
 	}
 	settle := func(seq uint64) qtrace.Step { return settleAt(seq, int(seq)) }
 	rows := []struct {
@@ -295,7 +295,7 @@ func TestWatermarkRecords(t *testing.T) {
 	steps := []qtrace.Step{
 		{Action: "a", Recorder: "x", Seq: 1, Time: atSec(1)},
 		{Action: "b", Recorder: "x", Seq: 3, Time: atSec(5)},
-		{Action: "settled", Recorder: "x", Seq: 4, Time: atSec(6), Settled: true},
+		{Action: "settled", Recorder: "x", Seq: 4, Time: atSec(6), Record: qtrace.Record{Settled: true}},
 	}
 	steps = qtrace.MarkComplete(qtrace.MarkComplete(steps, "x", atSec(2)), qtrace.AllRecorders, atSec(4))
 	trs, issues := qtrace.Reconstruct(steps)
@@ -344,7 +344,7 @@ func TestWatermarkReachesSettle(t *testing.T) {
 	steps := func(w time.Time, rec string) []qtrace.Step {
 		return qtrace.MarkComplete([]qtrace.Step{
 			{Action: "inc", Recorder: "r", Time: atSec(1)}, // no seqs: the watermark alone
-			{Action: "settled", Settled: true, Recorder: "h", Seq: 1, Time: settle},
+			{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "h", Seq: 1, Time: settle},
 		}, rec, w)
 	}
 	for _, x := range []struct {
@@ -479,7 +479,7 @@ func TestGapFailures(t *testing.T) {
 	}
 	dep := func(seq uint64, amount, balance int64) qtrace.Step { return depAt("r", seq, int(seq), amount, balance) }
 	settle := func(rec string, seq uint64, at int) qtrace.Step {
-		return qtrace.Step{Action: "settled", Settled: true, Recorder: rec, Thread: rec, Seq: seq, Time: atSec(at)}
+		return qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: rec, Thread: rec, Seq: seq, Time: atSec(at)}
 	}
 	wd := func(seq uint64, amount, balance int64) qtrace.Step {
 		s := dep(seq, amount, balance)

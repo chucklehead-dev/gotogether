@@ -45,10 +45,10 @@ func TestValidateRequireFinish(t *testing.T) {
 		return qtrace.Step{Action: "deposit", Actor: actor, Recorder: "r", Seq: seq, Time: ms(int(seq)), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
 	}
 	withdraw := func(actor string, seq uint64) qtrace.Step {
-		return qtrace.Step{Action: "withdraw", Actor: actor, Recorder: "r", Seq: seq, Time: ms(int(seq)), Invocation: true, Args: map[string]any{"amount": int64(3)}}
+		return qtrace.Step{Action: "withdraw", Actor: actor, Recorder: "r", Seq: seq, Time: ms(int(seq)), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}}
 	}
 	settle := func(seq uint64) qtrace.Step {
-		return qtrace.Step{Action: "settled", Settled: true, Recorder: "r", Seq: seq, Time: ms(int(seq))}
+		return qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "r", Seq: seq, Time: ms(int(seq))}
 	}
 	for _, x := range []struct {
 		name  string

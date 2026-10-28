@@ -166,8 +166,8 @@ func TestDomainClockGroups(t *testing.T) {
 // trace: an actor that took no step has no eventual property to judge (its
 // state is the model's initial one, whatever its call did).
 func TestReconstructOnlyPending(t *testing.T) {
-	traces, issues := Reconstruct([]Step{{Action: "withdraw", Seq: 1, Recorder: "r", Actor: "a", Invocation: true, Time: time.Unix(1, 0)},
-		{Action: "settled", Seq: 2, Recorder: "r", Actor: "a", Settled: true, Time: time.Unix(2, 0)}})
+	traces, issues := Reconstruct([]Step{{Action: "withdraw", Seq: 1, Recorder: "r", Actor: "a", Record: Record{Invocation: true}, Time: time.Unix(1, 0)},
+		{Action: "settled", Seq: 2, Recorder: "r", Actor: "a", Record: Record{Settled: true}, Time: time.Unix(2, 0)}})
 	if len(issues) > 0 || len(traces) != 1 || len(traces[0].Steps) != 0 || len(traces[0].Pending) != 1 || len(traces[0].Issues) > 0 || traces[0].Settled {
 		t.Fatalf("traces %+v, issues %v", traces, issues)
 	}
@@ -182,7 +182,7 @@ func TestSettleAcrossRecorders(t *testing.T) {
 	dep := func(seq uint64, u int) Step {
 		return Step{Action: "deposit", Recorder: "s", Process: "p", Seq: seq, Thread: "s", Time: at(u)}
 	}
-	settle := Step{Action: "settled", Recorder: "h", Process: "p", Seq: 1, Settled: true, Time: at(2)}
+	settle := Step{Action: "settled", Recorder: "h", Process: "p", Seq: 1, Record: Record{Settled: true}, Time: at(2)}
 	traces, issues := Reconstruct([]Step{dep(1, 1), settle, dep(2, 3)})
 	if traces[0].Settled || !strings.Contains(fmt.Sprint(issues), "after recorder h's settle") {
 		t.Errorf("a step after the settle elsewhere: settled %v, issues %v", traces[0].Settled, issues)
@@ -200,9 +200,9 @@ func TestSettleAcrossRecorders(t *testing.T) {
 func TestRecordTimesAcrossSkewedMachines(t *testing.T) {
 	at := func(ms int) time.Time { return time.Unix(0, 0).Add(time.Duration(ms) * time.Millisecond) }
 	steps := []Step{
-		{Action: "write", Recorder: "c1", Seq: 1, Thread: "c1", Invocation: true, Time: at(100), Order: map[string]int64{"lamport": 1}},
+		{Action: "write", Recorder: "c1", Seq: 1, Thread: "c1", Record: Record{Invocation: true}, Time: at(100), Order: map[string]int64{"lamport": 1}},
 		{Action: "write", Recorder: "c1", Seq: 2, Thread: "c1", Call: 1, Time: at(101), Order: map[string]int64{"lamport": 2}},
-		{Action: "read", Recorder: "c2", Seq: 1, Thread: "c2", Invocation: true, Time: at(96), Order: map[string]int64{"lamport": 3}},
+		{Action: "read", Recorder: "c2", Seq: 1, Thread: "c2", Record: Record{Invocation: true}, Time: at(96), Order: map[string]int64{"lamport": 3}},
 		{Action: "read", Recorder: "c2", Seq: 2, Thread: "c2", Call: 1, Time: at(97), Order: map[string]int64{"lamport": 4}},
 	}
 	traces, issues := Reconstruct(steps)

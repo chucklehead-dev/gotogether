@@ -2104,6 +2104,13 @@ type OrderCheck func(orders [][]Step) (failed []int, states []string, err error)
 type Proof struct
     field Rejected [][]Step
     field Merged [][2][]Step
+type Record struct
+    field Invocation bool
+    field Settled bool
+    field Lost string
+    field LostAfter uint64
+    field LostBefore time.Time
+    field CompleteThrough time.Time
 type Step struct
     field Action string
     field Seq uint64
@@ -2115,13 +2122,8 @@ type Step struct
     field Error string
     field Time time.Time
     field Invoked time.Time
-    field Invocation bool
     field Call uint64
-    field Settled bool
-    field Lost string
-    field LostAfter uint64
-    field LostBefore time.Time
-    field CompleteThrough time.Time
+    embed Record
     field Ambiguous bool
     field Args map[string]any
     field Obs map[string]any

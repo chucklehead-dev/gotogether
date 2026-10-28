@@ -118,7 +118,7 @@ func TestSnapshotStart(t *testing.T) {
 	// effect after it, if at all: the deposit that saw 10 (init's 5, and
 	// 5) is no balance from 50
 	pendingRun := append([]qtrace.Step{
-		{Action: "deposit", Recorder: "p", Seq: 1, Invocation: true, Time: time.Unix(0, int64(time.Millisecond)), Args: map[string]any{"amount": int64(5)}}}, fail...)
+		{Action: "deposit", Recorder: "p", Seq: 1, Record: qtrace.Record{Invocation: true}, Time: time.Unix(0, int64(time.Millisecond)), Args: map[string]any{"amount": int64(5)}}}, fail...)
 	pendingRun[2].Obs = map[string]any{"balance": int64(10)}
 	pendingRun[2].Invoked = time.Unix(0, int64(15*time.Millisecond)) // after the snapshot: no overlap
 	if j, err := c.Judge(ctx, pendingRun, SearchOptions{ResolvePending: true}); err != nil || j.Report.OK() {

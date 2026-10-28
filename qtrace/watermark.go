@@ -58,7 +58,7 @@ func (g Gap) String() string {
 // into Trace.Collected. A recorder's later watermark replaces an earlier
 // one; one of AllRecorders and one of its own, the later of the two.
 func MarkComplete(steps []Step, recorder string, t time.Time) []Step {
-	return append(slices.Clip(steps), Step{Action: "complete", Recorder: recorder, Process: recorder, Time: t, CompleteThrough: t})
+	return append(slices.Clip(steps), Step{Action: "complete", Recorder: recorder, Process: recorder, Time: t, Record: Record{CompleteThrough: t}})
 }
 
 // CarryWatermark is the watermark record a search's order carries for
@@ -69,7 +69,7 @@ func MarkComplete(steps []Step, recorder string, t time.Time) []Step {
 // trace's own end bounds. The order's check then judges what the steps
 // as recorded were judged.
 func CarryWatermark(recorder, actor string, through time.Time, whole bool) Step {
-	return Step{Action: "complete", Recorder: recorder, Process: recorder, Actor: actor, Time: through, CompleteThrough: through, carried: true, carriedWhole: whole}
+	return Step{Action: "complete", Recorder: recorder, Process: recorder, Actor: actor, Time: through, Record: Record{CompleteThrough: through}, carried: true, carriedWhole: whole}
 }
 
 // CollectedThrough is how far each recorder of steps that stated a

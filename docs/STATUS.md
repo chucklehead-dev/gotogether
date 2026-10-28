@@ -7,10 +7,9 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-28.** main at the published modules' bump to `d6f2fd8`,
-the format policy's commit (pre-release, the current major only;
-HISTORY "Formats: the current major only"), after I24 (`78d96d6`). CI
-green through I24. **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-28.** main at I18's rest (`qtrace.Record`, the knob
+rule; HISTORY "I18's rest") and the published modules' bump to it,
+after I26 (`a6be970`). **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
@@ -79,7 +78,7 @@ review" on.
 | I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
 | I16 | explicit quantifiers | 03fa005 |
 | I17 | `model.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
-| I18 | validate split: `validate/model`, `validate/navproto` (the model navigator, `qtrace.Step`'s record fields and the knob rule left) | 263333b |
+| I18 | validate split: `validate/model`, `validate/navproto`; `qtrace.Record`, the knob rule (DESIGN §71) | 263333b and I18's rest |
 | I19 | validation at volume: `partition:` | f27adb0 |
 | I20 | on-call reports, `-json` | a985abe |
 | I21 | the Action, the image, `compile`/`-compiled` | 1c0e469, 7173581 |
@@ -165,23 +164,21 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I18's rest: `qtrace.Step`'s record fields (Reconstruct's, zero in a Trace's steps, or a `Record` type), DESIGN's knob rule, the model navigator out of validate | S-M, breaking | before tags: the record fields are the step's v1 shape |
-| 2 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
-| 3 | GR4, several services simulated together | L | after H5, H6, I22 (all done) |
-| 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
-| 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
-| 6 | P9, grist apps explored in-process | L | after GR4 |
-| 7 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
+| 1 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
+| 2 | GR4, several services simulated together | L | after H5, H6, I22 (all done) |
+| 3 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
+| 4 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
+| 5 | P9, grist apps explored in-process | L | after GR4 |
+| 6 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
 
 Also proposed, not built: GR10b (a poller a daemon only while it waits)
 and GR10c (`Settle` naming down processes), both S and qenv-level.
 
-**Recommended next: I18's rest, then the maintainer's R5.** The
-validate split is on main (`validate/model`, `validate/navproto`); what
-I18 named "with it" is the last breaking shape before tags:
-`qtrace.Step`'s record fields, and the knob rule written down. The
-model navigator can stay in validate for v1 (it is of runs as much as
-of the model).
+**Recommended next: the maintainer's R5.** I1-I10, I12-I14 and I16-I18
+are in: the breaking shapes the tag recommendation lists are settled
+(the step's records in `qtrace.Record`, the knob rule in DESIGN §71, the
+model navigator in validate for v1). Then the list
+above, in order.
 
 ## 5. Decisions for the maintainer
 
@@ -191,7 +188,7 @@ there). **Open:**
 - **Tags and v0.1 (R5).** v0.1.0 of every published module once I1-I10,
   I12-I14 and I16-I18 are in; tag order gosim, core, qweave, qhegel,
   qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
-  Left before then: I18's rest (whether I12's M half
+  Left before then: nothing of the list (whether I12's M half
   and I15's rest must come first is the maintainer's call).
 - **The "grist" name.** A codename since grist.md §10.5; recommended:
   keep it and drop "codename", or rename in one commit before an

@@ -17,8 +17,8 @@ func TestBoundedLossVoidsOnlyEarlierSettles(t *testing.T) {
 		steps := []Step{
 			{Action: "inc", Recorder: "srv", Seq: 1, Time: at(0)},
 			{Action: "saw", Recorder: "client", Seq: 1, Time: at(1)},
-			{Action: "lost", Recorder: "srv", Process: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: bound},
-			{Action: "settled", Recorder: "client", Seq: 2, Time: at(settle), Settled: true},
+			{Action: "lost", Recorder: "srv", Process: "srv", Record: Record{Lost: "suffix", LostAfter: 1, LostBefore: bound}, Time: at(0)},
+			{Action: "settled", Recorder: "client", Seq: 2, Time: at(settle), Record: Record{Settled: true}},
 		}
 		trs, _ := Reconstruct(steps)
 		if len(trs) != 1 {
@@ -44,15 +44,15 @@ func TestBoundedLossVoidsOnlyEarlierSettles(t *testing.T) {
 	// a recorder's bounded and unbounded losses together: unbounded
 	steps := []Step{
 		{Action: "inc", Recorder: "srv", Seq: 1, Time: at(0)},
-		{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: at(10)},
-		{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0)},
-		{Action: "settled", Recorder: "client", Seq: 1, Time: at(20), Settled: true},
+		{Action: "lost", Recorder: "srv", Record: Record{Lost: "suffix", LostAfter: 1, LostBefore: at(10)}, Time: at(0)},
+		{Action: "lost", Recorder: "srv", Record: Record{Lost: "suffix", LostAfter: 1}, Time: at(0)},
+		{Action: "settled", Recorder: "client", Seq: 1, Time: at(20), Record: Record{Settled: true}},
 	}
 	if trs, _ := Reconstruct(steps); len(trs) != 1 || trs[0].Settled || !trs[0].Lost[0].Before.IsZero() {
 		t.Errorf("a bounded and an unbounded loss merged into a bounded one: %+v", trs)
 	}
 	// the bound survives the step log
-	s := Step{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: at(10)}
+	s := Step{Action: "lost", Recorder: "srv", Record: Record{Lost: "suffix", LostAfter: 1, LostBefore: at(10)}, Time: at(0)}
 	b, err := s.MarshalLine()
 	if err != nil {
 		t.Fatal(err)
@@ -71,16 +71,16 @@ func TestLossBoundInKeyAndMerge(t *testing.T) {
 	at := func(ms int) time.Time { return t0.Add(time.Duration(ms) * time.Millisecond) }
 	key := func(before time.Time) string {
 		var k Keyer
-		return k.Step(&Step{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: before})
+		return k.Step(&Step{Action: "lost", Recorder: "srv", Record: Record{Lost: "suffix", LostAfter: 1, LostBefore: before}, Time: at(0)})
 	}
 	if key(at(10)) == key(at(30)) || key(at(10)) == key(time.Time{}) {
 		t.Errorf("keys %q, %q, %q: a bound is not in the key", key(at(10)), key(at(30)), key(time.Time{}))
 	}
 	steps := []Step{
 		{Action: "inc", Recorder: "srv", Seq: 1, Time: at(0)},
-		{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: at(10)},
-		{Action: "lost", Recorder: "srv", Lost: "suffix", LostAfter: 1, Time: at(0), LostBefore: at(30)},
-		{Action: "settled", Recorder: "client", Seq: 1, Time: at(20), Settled: true},
+		{Action: "lost", Recorder: "srv", Record: Record{Lost: "suffix", LostAfter: 1, LostBefore: at(10)}, Time: at(0)},
+		{Action: "lost", Recorder: "srv", Record: Record{Lost: "suffix", LostAfter: 1, LostBefore: at(30)}, Time: at(0)},
+		{Action: "settled", Recorder: "client", Seq: 1, Time: at(20), Record: Record{Settled: true}},
 	}
 	if trs, _ := Reconstruct(steps); len(trs) != 1 || trs[0].Settled || !trs[0].Lost[0].Before.Equal(at(30)) {
 		t.Errorf("two bounds merged into %+v; want the later (30ms), which the settle at 20ms precedes", trs[0].Lost)

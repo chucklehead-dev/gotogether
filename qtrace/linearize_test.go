@@ -819,7 +819,7 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 		}
 		var settles []Step
 		if rng.IntN(2) == 0 {
-			settles = []Step{{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: time.Unix(0, 0).Add(time.Duration(5+rng.IntN(10)) * 10 * time.Millisecond)}}
+			settles = []Step{{Action: "settled", Record: Record{Settled: true}, Recorder: "s", Seq: 1, Time: time.Unix(0, 0).Add(time.Duration(5+rng.IntN(10)) * 10 * time.Millisecond)}}
 		}
 		final := int64(-1)
 		if rng.IntN(3) == 0 {
@@ -1017,7 +1017,7 @@ func TestLinearizePendingAcrossASettle(t *testing.T) {
 		return p
 	}
 	p1, p2 := pending("p1", 1, 2), pending("p2", 2, 6)
-	settles := []Step{{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: at(4)}, {Action: "settled", Settled: true, Recorder: "s", Seq: 2, Time: at(20)}}
+	settles := []Step{{Action: "settled", Record: Record{Settled: true}, Recorder: "s", Seq: 1, Time: at(4)}, {Action: "settled", Record: Record{Settled: true}, Recorder: "s", Seq: 2, Time: at(20)}}
 	check := registerFinal(1, 1, 1, 2) // ends at 1, both written: 2 before 1
 	if _, ok, _, cut, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, check, false, RealTimeSlack); ok || cut {
 		t.Errorf("ok %v, cut %v: the write invoked after the settle placed before the one invoked before it", ok, cut)

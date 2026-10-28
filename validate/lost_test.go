@@ -34,7 +34,7 @@ func TestLostSuffixOtherRecorder(t *testing.T) {
 	lostA := func(steps ...qtrace.Step) []qtrace.Step {
 		return qtrace.MarkLost(steps, qtrace.Lost{Recorder: "a", After: 1})
 	}
-	settle := qtrace.Step{Action: "settled", Recorder: "b", Seq: 1, Settled: true, Time: at(50)}
+	settle := qtrace.Step{Action: "settled", Recorder: "b", Seq: 1, Record: qtrace.Record{Settled: true}, Time: at(50)}
 	cases := []struct {
 		name   string
 		steps  []qtrace.Step
@@ -193,9 +193,9 @@ func TestLostSuffixSettleBoundsNothing(t *testing.T) {
 	dep := func(rec string, seq uint64, ms int, amount, balance int64) qtrace.Step {
 		return qtrace.Step{Action: "deposit", Recorder: rec, Seq: seq, Time: at(ms), Args: map[string]any{"amount": amount}, Obs: map[string]any{"balance": balance}}
 	}
-	pending := qtrace.Step{Action: "deposit", Recorder: "p", Seq: 1, Invocation: true, Time: at(5), Args: map[string]any{"amount": int64(5)}}
+	pending := qtrace.Step{Action: "deposit", Recorder: "p", Seq: 1, Record: qtrace.Record{Invocation: true}, Time: at(5), Args: map[string]any{"amount": int64(5)}}
 	steps := qtrace.MarkLost([]qtrace.Step{dep("a", 1, 10, 5, 5), pending,
-		{Action: "settled", Recorder: "s", Seq: 1, Settled: true, Time: at(20)},
+		{Action: "settled", Recorder: "s", Seq: 1, Record: qtrace.Record{Settled: true}, Time: at(20)},
 		dep("s", 2, 30, 1, 6), dep("s", 3, 40, 1, 12)}, qtrace.Lost{Recorder: "a", After: 1})
 	j, err := c.Judge(context.Background(), steps, SearchOptions{ResolvePending: true})
 	if err != nil {

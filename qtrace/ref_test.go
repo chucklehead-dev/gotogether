@@ -12,7 +12,7 @@ import (
 func TestRefRoundTrip(t *testing.T) {
 	ref := "bombadil/trace.jsonl:42 screenshot=screenshots/42.webp"
 	steps := []Step{
-		{Action: "submit", Recorder: "r", Seq: 1, Time: time.Unix(0, 1), Invocation: true, Ref: ref},
+		{Action: "submit", Recorder: "r", Seq: 1, Time: time.Unix(0, 1), Record: Record{Invocation: true}, Ref: ref},
 		{Action: "submit", Recorder: "r", Seq: 2, Time: time.Unix(0, 2), Call: 1, Outcome: "ok"},
 		{Action: "cancel", Recorder: "r", Seq: 3, Time: time.Unix(0, 3), Outcome: "ok", Ref: "line 7"},
 	}

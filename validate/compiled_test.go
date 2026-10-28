@@ -67,7 +67,7 @@ func TestCompiledAgreesWithQuint(t *testing.T) {
 	}
 	settled := func(h []qtrace.Step) []qtrace.Step {
 		last := h[len(h)-1]
-		return append(h, qtrace.Step{Action: "settled", Settled: true, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
+		return append(h, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
 	}
 	for _, m := range []struct {
 		binding, spec string

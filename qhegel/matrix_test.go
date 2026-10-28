@@ -47,7 +47,7 @@ func TestCaseCheckerVerdictMatrix(t *testing.T) {
 		}
 		return s
 	}
-	settled := qtrace.Step{Action: "settled", Settled: true}
+	settled := qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}}
 	td := "../validate/testdata/"
 	for _, x := range []struct {
 		name, binding        string

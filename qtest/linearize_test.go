@@ -81,9 +81,9 @@ func TestLinearizeKeepsPendingAndSettle(t *testing.T) {
 	steps := []qtrace.Step{
 		{Action: "deposit", Recorder: "a", Seq: 1, Thread: "a", Invoked: at(0), Time: at(10),
 			Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-		{Action: "withdraw", Recorder: "a", Seq: 2, Thread: "a", Invocation: true, Time: at(11),
+		{Action: "withdraw", Recorder: "a", Seq: 2, Thread: "a", Record: qtrace.Record{Invocation: true}, Time: at(11),
 			Args: map[string]any{"amount": int64(10)}},
-		{Action: "settled", Recorder: "a", Seq: 3, Settled: true, Time: at(12)},
+		{Action: "settled", Recorder: "a", Seq: 3, Record: qtrace.Record{Settled: true}, Time: at(12)},
 	}
 	funds := "../validate/testdata/funds.binding.yaml"
 	for _, opts := range [][]Option{nil, {Linearize()}} {
@@ -96,7 +96,7 @@ func TestLinearizeKeepsPendingAndSettle(t *testing.T) {
 	// the withdrawal completed: the account is empty when the run settles
 	done := append(steps[:2:2], qtrace.Step{Action: "withdraw", Recorder: "a", Seq: 3, Thread: "a", Call: 2, Time: at(13),
 		Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(0)}},
-		qtrace.Step{Action: "settled", Recorder: "a", Seq: 4, Settled: true, Time: at(14)})
+		qtrace.Step{Action: "settled", Recorder: "a", Seq: 4, Record: qtrace.Record{Settled: true}, Time: at(14)})
 	for _, opts := range [][]Option{nil, {Linearize()}} {
 		Validate(t, funds, done, opts...).Expect(t, Completes(), Violates(validate.EventuallyName("funded")))
 	}
@@ -170,7 +170,7 @@ func TestLinearizeTakesInvocationTimes(t *testing.T) {
 	RequireQuint(t)
 	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
 	inv := func(rec string, u int, action string, args map[string]any) qtrace.Step {
-		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Time: at(u), Invocation: true, Args: args}
+		return qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Time: at(u), Record: qtrace.Record{Invocation: true}, Args: args}
 	}
 	done := func(rec string, u int, action string, args, obs map[string]any) qtrace.Step {
 		return qtrace.Step{Action: action, Recorder: rec, Seq: 2, Thread: rec, Time: at(u), Call: 1, Args: args, Obs: obs}
@@ -206,7 +206,7 @@ func TestLinearizeCutJudgesNoInvariant(t *testing.T) {
 			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(60)}},
 		{Action: "withdraw", Recorder: "b", Seq: 1, Thread: "b", Invoked: at(1), Time: at(11),
 			Args: map[string]any{"amount": int64(60)}, Obs: map[string]any{"balance": int64(0)}},
-		{Action: "settled", Recorder: "b", Seq: 2, Thread: "b", Time: at(12), Settled: true},
+		{Action: "settled", Recorder: "b", Seq: 2, Thread: "b", Time: at(12), Record: qtrace.Record{Settled: true}},
 	}
 	run := Validate(t, "../validate/testdata/funds.binding.yaml", steps, LinearizeBudget(1))
 	a := run.Report.Actors[0]
@@ -272,7 +272,7 @@ func TestLinearizeByKeyKeepsTheSettle(t *testing.T) {
 		return qtrace.Step{Action: "write", Recorder: "r", Seq: seq, Thread: "c", Invoked: at(u), Time: at(u + 1),
 			Args: map[string]any{"key": key, "value": int64(1)}}
 	}
-	steps := []qtrace.Step{w(1, "a", 0), w(2, "b", 2), {Action: "settled", Recorder: "r", Seq: 3, Settled: true, Time: at(5)}}
+	steps := []qtrace.Step{w(1, "a", 0), w(2, "b", 2), {Action: "settled", Recorder: "r", Seq: 3, Record: qtrace.Record{Settled: true}, Time: at(5)}}
 	run := Validate(t, "testdata/registers.yaml", steps, LinearizeByKey("key"))
 	run.Expect(t, Conforms())
 	if !Settles().Holds(run) {
@@ -328,14 +328,14 @@ func TestLinearizeResolvesPendingCalls(t *testing.T) {
 	RequireQuint(t)
 	at := func(u int) time.Time { return time.Unix(0, 0).Add(time.Duration(u) * 10 * time.Millisecond) }
 	call := func(rec string, from, to int, action string, args, obs map[string]any) []qtrace.Step {
-		inv := qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Time: at(from), Invocation: true, Args: args}
+		inv := qtrace.Step{Action: action, Recorder: rec, Seq: 1, Thread: rec, Time: at(from), Record: qtrace.Record{Invocation: true}, Args: args}
 		done := qtrace.Step{Action: action, Recorder: rec, Seq: 2, Thread: rec, Time: at(to), Call: 1, Args: args, Obs: obs}
 		return []qtrace.Step{inv, done}
 	}
 	history := func(seen int64) []qtrace.Step {
 		var steps []qtrace.Step
 		// the timed-out write: invoked, never completed
-		steps = append(steps, qtrace.Step{Action: "write", Recorder: "t", Seq: 1, Thread: "t", Time: at(0), Invocation: true,
+		steps = append(steps, qtrace.Step{Action: "write", Recorder: "t", Seq: 1, Thread: "t", Time: at(0), Record: qtrace.Record{Invocation: true},
 			Args: map[string]any{"key": "a", "value": int64(1)}})
 		steps = append(steps, call("r", 5, 6, "read", map[string]any{"key": "a"}, map[string]any{"value": seen})...)
 		// overlapping, the read recorded first
@@ -369,7 +369,7 @@ func TestPendingCallKeepsItsProcess(t *testing.T) {
 	}
 	steps := []qtrace.Step{
 		look("A", 1, 0, 0, false),
-		{Action: "write", Recorder: "r", Process: "A", Seq: 2, Thread: "r", Invocation: true, Time: at(1)},
+		{Action: "write", Recorder: "r", Process: "A", Seq: 2, Thread: "r", Record: qtrace.Record{Invocation: true}, Time: at(1)},
 		look("B", 3, 5, 0, false),
 		look("B", 4, 9, 1, true),
 	}

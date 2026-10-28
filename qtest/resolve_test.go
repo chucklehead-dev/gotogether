@@ -22,7 +22,7 @@ func TestResolvePending(t *testing.T) {
 	history := func(balance int) []qtrace.Step {
 		return []qtrace.Step{
 			{Action: "deposit", Recorder: "c", Seq: 1, Time: at(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-			{Action: "withdraw", Recorder: "c", Seq: 2, Time: at(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+			{Action: "withdraw", Recorder: "c", Seq: 2, Time: at(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 			{Action: "deposit", Recorder: "c", Seq: 3, Time: at(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(balance)}},
 		}
 	}
@@ -59,11 +59,11 @@ func TestResolvePendingKeepsCallsAndOrder(t *testing.T) {
 	at := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	const account = "../validate/testdata/account.yaml"
 	steps := []qtrace.Step{
-		{Action: "deposit", Recorder: "c", Seq: 1, Time: at(1), Invocation: true, Args: map[string]any{"amount": int64(10)}},
+		{Action: "deposit", Recorder: "c", Seq: 1, Time: at(1), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(10)}},
 		{Action: "deposit", Recorder: "c", Seq: 2, Time: at(2), Call: 1, Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-		{Action: "deposit", Recorder: "c", Seq: 3, Time: at(3), Invocation: true, Args: map[string]any{"amount": int64(5)}},
+		{Action: "deposit", Recorder: "c", Seq: 3, Time: at(3), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(5)}},
 		{Action: "deposit", Recorder: "c", Seq: 4, Time: at(4), Call: 3, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(15)}},
-		{Action: "withdraw", Recorder: "c", Seq: 5, Time: at(5), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+		{Action: "withdraw", Recorder: "c", Seq: 5, Time: at(5), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 	}
 	run := Validate(t, account, steps, ResolvePending())
 	run.Expect(t, Conforms())
@@ -72,7 +72,7 @@ func TestResolvePendingKeepsCallsAndOrder(t *testing.T) {
 	}
 	same := []qtrace.Step{
 		{Action: "deposit", Recorder: "c", Seq: 1, Time: at(1), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(8)}},
-		{Action: "deposit", Recorder: "c", Seq: 2, Time: at(1), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+		{Action: "deposit", Recorder: "c", Seq: 2, Time: at(1), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 	}
 	Validate(t, account, same, ResolvePending()).Expect(t, Mismatch("deposit"))
 }
@@ -86,10 +86,10 @@ func TestResolvePendingStopsAtTheSettle(t *testing.T) {
 	RequireQuint(t)
 	at := func(u int) time.Time { return time.Unix(100, 0).Add(time.Duration(u) * time.Second) }
 	steps := []qtrace.Step{
-		{Action: "write", Recorder: "r", Seq: 1, Thread: "c", Invocation: true, Time: at(1), Args: map[string]any{"value": int64(1)}},
-		{Action: "settled", Recorder: "r", Seq: 2, Settled: true, Time: at(2)},
+		{Action: "write", Recorder: "r", Seq: 1, Thread: "c", Record: qtrace.Record{Invocation: true}, Time: at(1), Args: map[string]any{"value": int64(1)}},
+		{Action: "settled", Recorder: "r", Seq: 2, Record: qtrace.Record{Settled: true}, Time: at(2)},
 		{Action: "observe", Recorder: "r", Seq: 3, Thread: "probe", Time: at(3), Obs: map[string]any{"value": int64(0)}},
-		{Action: "settled", Recorder: "r", Seq: 4, Settled: true, Time: at(4)},
+		{Action: "settled", Recorder: "r", Seq: 4, Record: qtrace.Record{Settled: true}, Time: at(4)},
 	}
 	run := Validate(t, "testdata/probed.yaml", steps, ResolvePending())
 	if Conforms().Holds(run) {
@@ -105,8 +105,8 @@ func TestResolvePendingIgnoresASettleWorkedPast(t *testing.T) {
 	RequireQuint(t)
 	at := func(u int) time.Time { return time.Unix(100, 0).Add(time.Duration(u) * time.Second) }
 	steps := []qtrace.Step{
-		{Action: "write", Recorder: "c", Seq: 1, Thread: "c", Invocation: true, Time: at(1), Args: map[string]any{"value": int64(1)}},
-		{Action: "settled", Recorder: "h", Seq: 1, Settled: true, Time: at(2)},
+		{Action: "write", Recorder: "c", Seq: 1, Thread: "c", Record: qtrace.Record{Invocation: true}, Time: at(1), Args: map[string]any{"value": int64(1)}},
+		{Action: "settled", Recorder: "h", Seq: 1, Record: qtrace.Record{Settled: true}, Time: at(2)},
 		{Action: "observe", Recorder: "s", Seq: 1, Thread: "s", Time: at(30), Obs: map[string]any{"value": int64(0)}},
 		{Action: "observe", Recorder: "s", Seq: 2, Thread: "s", Time: at(50), Obs: map[string]any{"value": int64(1)}},
 	}
@@ -160,7 +160,7 @@ func TestResolvePendingInvariantsAgainstBruteForce(t *testing.T) {
 		for pos := 0; pos <= len(recorded); pos++ {
 			for _, f := range from {
 				if f == pos {
-					add(qtrace.Step{Action: "inc", Invocation: true})
+					add(qtrace.Step{Action: "inc", Record: qtrace.Record{Invocation: true}})
 				}
 			}
 			if pos < len(recorded) {

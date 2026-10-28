@@ -84,8 +84,12 @@ const (
 	PrefixOrder = "quint.order." // a domain logical clock: steps carrying the same domain are ordered by its value
 )
 
-// Step is one observed model step, decoded from a quint.step event (or
-// recorded directly in memory by qobs.MemorySink).
+// Step is one line of a run as recorded: an observed model step, decoded
+// from a quint.step event (or recorded directly in memory by
+// qobs.MemorySink), or a record about the run (Record: an invocation, a
+// settle, a loss, a watermark), which a recorder writes in the same
+// stream and Reconstruct takes out. A Trace's steps are model steps
+// alone, their Record zero.
 type Step struct {
 	Action   string
 	Seq      uint64
@@ -100,25 +104,12 @@ type Step struct {
 	// step took effect at some point between Invoked and Time. Zero:
 	// unknown, some time before Time (no real-time bound).
 	Invoked time.Time
-	// Invocation marks an invocation record (KeyInvocation), not a step:
-	// Reconstruct pairs it with its completion, whose Call is its Seq, and
-	// keeps it in Trace.Pending if there is none.
-	Invocation bool
-	Call       uint64
-	// Settled marks a settle record (KeySettled), not a step.
-	Settled bool
-	// Lost marks a loss record (KeyLost), not a step: "suffix" (its
-	// recorder lost every step after seq LostAfter) or "prefix" (every
-	// step up to it); "" for any other.
-	Lost      string
-	LostAfter uint64
-	// LostBefore, if set, bounds a lost suffix: its steps were all
-	// recorded before it (KeyLostBefore).
-	LostBefore time.Time
-	// CompleteThrough, if set, marks a watermark record
-	// (KeyCompleteThrough), not a step: its recorder's steps through this
-	// time are all in the input.
-	CompleteThrough time.Time
+	// Call is, on a completion, its invocation record's seq (KeyCall).
+	Call uint64
+	// Record is what a record line is (an invocation, a settle, a loss, a
+	// watermark), zero on a step: Reconstruct takes the records out of the
+	// steps, so every step of a Trace has it zero (Model).
+	Record
 	// Ambiguous marks a step whose effect is assumed, not observed: a
 	// pending call resolved as having taken effect (qtest.ResolvePending).
 	// It has no outcome and no observations, and the binding checks no
@@ -148,6 +139,30 @@ type Step struct {
 	// every reader. It is no model data: no verdict, and no verdict cache
 	// key (Keyer), depends on it.
 	Ref string
+}
+
+// A Record is what a record line of a run says, a line that is no model
+// step: Reconstruct reads each kind into its Trace (Pending, Settled,
+// Lost, Collected) and keeps none in Trace.Steps. At most one kind is set;
+// all zero on a model step (Step.Model).
+type Record struct {
+	// Invocation marks an invocation record (KeyInvocation): the operation
+	// began; Reconstruct pairs it with its completion, whose Call is its
+	// Seq, and keeps it in Trace.Pending if there is none.
+	Invocation bool
+	// Settled marks a settle record (KeySettled): the system was quiet.
+	Settled bool
+	// Lost marks a loss record (KeyLost): "suffix" (its recorder lost
+	// every step after seq LostAfter) or "prefix" (every step up to it).
+	Lost      string
+	LostAfter uint64
+	// LostBefore, if set, bounds a lost suffix: its steps were all
+	// recorded before it (KeyLostBefore).
+	LostBefore time.Time
+	// CompleteThrough, if set, marks a watermark record
+	// (KeyCompleteThrough): its recorder's steps through this time are
+	// all in the input.
+	CompleteThrough time.Time
 }
 
 // SpanSource is the Source of a step read from an OTel span: "span

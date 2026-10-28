@@ -137,11 +137,11 @@ func TestValidateVerdictMatrix(t *testing.T) {
 	pending := func(balance int64) []qtrace.Step {
 		return []qtrace.Step{
 			{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
-			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Invocation: true, Args: map[string]any{"amount": int64(3)}},
+			{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}},
 			{Action: "deposit", Recorder: "c", Seq: 3, Time: ms(3), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": balance}},
 		}
 	}
-	settled := qtrace.Step{Action: "settled", Settled: true}
+	settled := qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}}
 	for _, x := range []struct {
 		name, binding string
 		flags         []string
@@ -163,11 +163,11 @@ func TestValidateVerdictMatrix(t *testing.T) {
 		{"require-settle: no settle", "funds.binding.yaml", []string{"-require-finish"}, seq(acct("deposit", 5, 5), settled),
 			seq(acct("deposit", 5, 5)), "1 of 1 actor: 1 incomplete (no settle)"},
 		{"require-settle: pending", "funds.binding.yaml", []string{"-require-finish"}, seq(acct("deposit", 5, 5), settled),
-			seq(acct("deposit", 5, 5), qtrace.Step{Action: "withdraw", Invocation: true, Args: map[string]any{"amount": int64(3)}}, settled),
+			seq(acct("deposit", 5, 5), qtrace.Step{Action: "withdraw", Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(3)}}, settled),
 			"1 of 1 actor: 1 incomplete (pending calls)"},
 		// a call -resolve-pending places was still never answered
 		{"require-settle: resolved pending", "funds.binding.yaml", []string{"-require-finish", "-resolve-pending"},
-			seq(acct("deposit", 5, 5), settled), append(pending(12), qtrace.Step{Action: "settled", Settled: true, Recorder: "c", Seq: 4, Time: ms(4)}),
+			seq(acct("deposit", 5, 5), settled), append(pending(12), qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "c", Seq: 4, Time: ms(4)}),
 			"1 of 1 actor: 1 incomplete (pending calls)"},
 		// the checked invariants and declared losses are the manifest's too:
 		// without them, a replay judges the passing runs otherwise
@@ -275,7 +275,7 @@ func TestValidateLost(t *testing.T) {
 		a, o := amount(5, balance)
 		return acct("a", seq, int(seq)*10, "deposit", a, o)
 	}
-	gap := write("gap.jsonl", []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 20), {Action: "settled", Settled: true, Recorder: "a", Process: "p", Seq: 5, Time: at(50)}}, 0)
+	gap := write("gap.jsonl", []qtrace.Step{dep(1, 5), dep(2, 10), dep(4, 20), {Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "a", Process: "p", Seq: 5, Time: at(50)}}, 0)
 	for _, c := range []struct {
 		name    string
 		args    []string

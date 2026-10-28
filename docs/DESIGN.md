@@ -5488,3 +5488,55 @@ one v1 surface, and qnav imported all of it for the protocol's types.
   disabled actions with the runs' explanations: half of validate's run
   internals. It stays in validate until those have a package of their
   own. Manifests and step mutants stay too: they are of runs.
+
+## 71. A run's records apart, and where a new knob goes (I18's rest)
+
+**qtrace.Step's records.** A run's stream holds model steps and records
+about the run: an invocation (qobs.Invoke), a settle (qobs.Settled), a
+loss (MarkLost, a torn tail), a watermark (CompleteThrough). They were
+six flags and values among the step's fields, so a reader of a Trace's
+steps could not tell from the type which fields were ever set there.
+Three shapes were weighed:
+- **A type of their own in the stream** ([]Entry of steps or records):
+  the honest one, and every reader, sink and search would take a sum
+  type for a distinction Reconstruct already makes once. Rejected for
+  v1: the cost is every signature of the recording side, for no
+  verdict.
+- **Fields said to be Reconstruct's** in a comment: no cost, and nothing
+  a reader sees in the type.
+- **Chosen: `qtrace.Record`, embedded in `Step`.** The record fields
+  (Invocation, Settled, Lost, LostAfter, LostBefore, CompleteThrough)
+  are one struct, `Step.Record`, documented once: what a record line
+  says, zero on a model step. Reads and writes go through promotion
+  (`s.Settled`), so only composite literals changed (`Step{Action:
+  "settled", Record: qtrace.Record{Settled: true}}`; a one-off AST
+  rewrite migrated 43 files). Reconstruct's guarantee is stated on the
+  type and tested (`TestTraceStepsHaveNoRecord`): every step of a Trace
+  has its Record zero, each kind read into the Trace's own field
+  (Pending, Settled, Lost, Collected). `Call` and `Invoked` stay on the
+  step: they are a completion's, and a completion is a model step.
+
+**Where a new knob goes.** One rule, so the API keeps one shape:
+- **What a run is** (its seeds, bounds, rates, constants, budgets, the
+  model's instance) is a field of the configuration struct the call
+  takes (`ExploreConfig`, `Bound`, `SweepConfig`, `model.SimulateOptions`,
+  `validate.Options`, `qload.Experiment`, a binding's key), its zero
+  value the documented default. It may change a verdict, so the run's
+  evidence or manifest records it.
+- **How a test carries a check out** (a recorder installed globally,
+  files kept, what it prints) is an `Option` of the package
+  (`qtest.Option`, `qobs.Option`): variadic, composable, and it changes
+  how a verdict is reached or reported, never which.
+- **An environment variable** (`GOTOGETHER_*`) is for a person around a
+  run of the suite (keep, run one seed, verbose, update goldens), each
+  readable from the code that a test file can see. Never a semantic only
+  the environment carries.
+- **Never a context value** for configuration: a context carries a run
+  (qrun) and its recorder, not settings (grist's `SnapshotEvery` became
+  an App option, I24, for that reason).
+- A knob that would fit two of these goes where its effect on the
+  verdict puts it: if it can change one, it is the run's.
+
+**The model navigator** stays in validate for v1 (§70): it starts from
+a recorded run's state and explains disabled actions with the runs'
+explanations.

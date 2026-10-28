@@ -130,16 +130,16 @@ func contractLog() []Step {
 	t0 := time.Unix(2000, 0)
 	at := func(ms int) time.Time { return t0.Add(time.Duration(ms) * time.Millisecond) }
 	return []Step{
-		{Action: "put", Seq: 1, Recorder: "c", Actor: "kv", Process: "c", Thread: "c", Time: at(0), Invocation: true, Args: map[string]any{"k": "x", "v": int64(1)}},
+		{Action: "put", Seq: 1, Recorder: "c", Actor: "kv", Process: "c", Thread: "c", Time: at(0), Record: Record{Invocation: true}, Args: map[string]any{"k": "x", "v": int64(1)}},
 		{Action: "put", Seq: 2, Recorder: "c", Actor: "kv", Process: "c", Thread: "c", Time: at(3), Call: 1, Invoked: at(0), Args: map[string]any{"k": "x", "v": int64(1)}, Outcome: "ok"},
-		{Action: "get", Seq: 3, Recorder: "c", Actor: "kv", Process: "c", Thread: "c", Time: at(4), Invocation: true, Args: map[string]any{"k": "x"}},
+		{Action: "get", Seq: 3, Recorder: "c", Actor: "kv", Process: "c", Thread: "c", Time: at(4), Record: Record{Invocation: true}, Args: map[string]any{"k": "x"}},
 		{Action: "get", Seq: 4, Recorder: "c", Actor: "kv", Process: "c", Thread: "c", Time: at(7), Call: 3, Invoked: at(4), Args: map[string]any{"k": "x"}, Obs: map[string]any{"v": int64(1), "found": true}},
 		{Action: "apply", Seq: 1, Recorder: "s", Actor: "kv", Process: "c", Thread: "s", Time: at(2), Args: map[string]any{"k": "x"}},
 		{Action: "tick", Seq: 2, Recorder: "s", Actor: "clock", Process: "s1", Thread: "s", Time: at(5)},
 		{Action: "tick", Seq: 3, Recorder: "s", Actor: "clock", Process: "s2", Thread: "s", Time: at(6), Order: map[string]int64{"lamport": 4}},
 		{Action: "drained", Seq: 4, Recorder: "s", Actor: "clock", Process: "s2", Thread: "s", Time: at(8)},
-		{Action: "settle", Seq: 5, Recorder: "s", Actor: "clock", Process: "s2", Thread: "s", Time: at(9), Settled: true},
-		{Action: "lost", Recorder: "c", Time: at(10), Lost: "suffix", LostAfter: 4},
+		{Action: "settle", Seq: 5, Recorder: "s", Actor: "clock", Process: "s2", Thread: "s", Time: at(9), Record: Record{Settled: true}},
+		{Action: "lost", Recorder: "c", Time: at(10), Record: Record{Lost: "suffix", LostAfter: 4}},
 	}
 }
 
@@ -171,12 +171,12 @@ func shapes() map[string][]Step {
 			{Action: "c", Seq: 1, Recorder: "q", Actor: "B", Process: "q", Thread: "q", Time: at(3)},
 			// at c's time, after it: c has no room to move
 			{Action: "c2", Seq: 2, Recorder: "q", Actor: "B", Process: "q", Thread: "q", Time: at(3)},
-			{Action: "settled", Seq: 3, Recorder: "r", Actor: "A", Process: "r", Thread: "r", Time: at(5), Settled: true},
+			{Action: "settled", Seq: 3, Recorder: "r", Actor: "A", Process: "r", Thread: "r", Time: at(5), Record: Record{Settled: true}},
 		}, "r", at(5)), "q", at(5)),
 		"no seqs": {
 			{Action: "a", Recorder: "r", Actor: "A", Process: "r", Thread: "r", Time: at(0), Args: map[string]any{"s": ""}},
 			// a watermark between them is in no sequence: a and b are adjacent
-			{Action: "complete", Recorder: "r", Process: "r", Time: at(0), CompleteThrough: at(0)},
+			{Action: "complete", Recorder: "r", Process: "r", Time: at(0), Record: Record{CompleteThrough: at(0)}},
 			{Action: "b", Recorder: "r", Actor: "A", Process: "r", Thread: "r", Time: at(1), Args: map[string]any{"f": 1.5}},
 			{Action: "c", Recorder: "q", Actor: "B", Process: "q", Thread: "q", Time: at(2)},
 		},

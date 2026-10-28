@@ -65,8 +65,8 @@ func TestFinishesNamesTheMissingPart(t *testing.T) {
 	RequireQuint(t)
 	steps := journeySteps("submit", "accept", "ready", "collect")
 	steps = append(steps,
-		qtrace.Step{Action: "submit", Recorder: "r", Seq: 5, Time: time.Unix(110, 0), Invocation: true, Process: "web"},
-		qtrace.Step{Action: "settled", Recorder: "r", Seq: 6, Time: time.Unix(111, 0), Settled: true})
+		qtrace.Step{Action: "submit", Recorder: "r", Seq: 5, Time: time.Unix(110, 0), Record: qtrace.Record{Invocation: true}, Process: "web"},
+		qtrace.Step{Action: "settled", Recorder: "r", Seq: 6, Time: time.Unix(111, 0), Record: qtrace.Record{Settled: true}})
 	run := Validate(t, "testdata/journey.yaml", steps)
 	run.Expect(t, Conforms(), Settles())
 	v, why := finishes(run.Report)
@@ -87,7 +87,7 @@ func TestFinishesNamesTheMissingPart(t *testing.T) {
 	// no eventual val: nothing says where the journey ends
 	counter := Validate(t, "testdata/counter.yaml", []qtrace.Step{
 		{Action: "inc", Recorder: "r", Seq: 1, Time: time.Unix(1, 0)},
-		{Action: "settled", Recorder: "r", Seq: 2, Time: time.Unix(2, 0), Settled: true},
+		{Action: "settled", Recorder: "r", Seq: 2, Time: time.Unix(2, 0), Record: qtrace.Record{Settled: true}},
 	})
 	counter.Expect(t, Conforms(), Settles(), Completes())
 	if v, why := finishes(counter.Report); v != no || !strings.Contains(why, "add the journey's end as an eventual val on a ghost flag") {

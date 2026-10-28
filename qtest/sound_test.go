@@ -38,7 +38,7 @@ func TestSoundResolveKeepsInvariants(t *testing.T) {
 	t.Parallel()
 	at := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	steps := []qtrace.Step{
-		{Action: "inc", Recorder: "c", Seq: 1, Time: at(1), Invocation: true},
+		{Action: "inc", Recorder: "c", Seq: 1, Time: at(1), Record: qtrace.Record{Invocation: true}},
 		{Action: "finish", Recorder: "c", Seq: 2, Time: at(2)},
 	}
 	for says, opts := range map[string][]Option{"inc() took effect first": {ResolvePending()}, "inc() at step 1": {ResolvePending(), Linearize()}} {
@@ -51,7 +51,7 @@ func TestSoundResolveKeepsInvariants(t *testing.T) {
 	// finished before inc was invoked: no placement keeps ok
 	late := []qtrace.Step{
 		{Action: "finish", Recorder: "c", Seq: 1, Time: at(1)},
-		{Action: "inc", Recorder: "c", Seq: 2, Time: at(2), Invocation: true},
+		{Action: "inc", Recorder: "c", Seq: 2, Time: at(2), Record: qtrace.Record{Invocation: true}},
 	}
 	Validate(t, "testdata/flag.yaml", late, ResolvePending()).Expect(t, Violates("ok"))
 }

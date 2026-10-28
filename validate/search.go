@@ -569,7 +569,7 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 			after(p)
 		}
 		if part.Settled {
-			after(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
+			after(qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Time: lastSettle(steps)})
 		}
 		if w, ok := carried(tr, "linearized:"+actor); ok {
 			w.Actor = actor
@@ -1253,7 +1253,7 @@ func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
 			out[i] = o
 			continue
 		}
-		s := qtrace.Step{Action: "settled", Settled: true, Actor: tr.Actor, Seq: uint64(len(o) + 1)}
+		s := qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Actor: tr.Actor, Seq: uint64(len(o) + 1)}
 		if len(o) > 0 {
 			s.Recorder, s.Process = o[len(o)-1].Recorder, o[len(o)-1].Process
 		}
@@ -1311,7 +1311,7 @@ func resolve(ch, full *Checker, steps []qtrace.Step, budget int) (out []qtrace.S
 			add(p)
 		}
 		if tr.Settled {
-			add(qtrace.Step{Action: "settled", Settled: true, Time: lastSettle(steps)})
+			add(qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Time: lastSettle(steps)})
 		}
 		if w, ok := carried(tr, "resolved:"+tr.Actor); ok {
 			out = append(out, w)

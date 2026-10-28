@@ -34,7 +34,7 @@ func TestWithin(t *testing.T) {
 	}
 	settled := func(h []qtrace.Step) []qtrace.Step {
 		last := h[len(h)-1]
-		return append(h, qtrace.Step{Action: "settled", Settled: true, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
+		return append(h, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "n", Seq: last.Seq + 1, Time: last.Time})
 	}
 	for _, x := range []struct {
 		name  string
@@ -118,11 +118,11 @@ func TestWithinIntervals(t *testing.T) {
 		seq := uint64(1)
 		for _, cl := range calls {
 			out = append(out,
-				qtrace.Step{Action: cl[0].(string), Recorder: "n", Seq: seq, Thread: "n", Invocation: true, Time: sec(cl[1].(float64))},
+				qtrace.Step{Action: cl[0].(string), Recorder: "n", Seq: seq, Thread: "n", Record: qtrace.Record{Invocation: true}, Time: sec(cl[1].(float64))},
 				qtrace.Step{Action: cl[0].(string), Recorder: "n", Seq: seq + 1, Thread: "n", Call: seq, Time: sec(cl[2].(float64))})
 			seq += 2
 		}
-		return append(out, qtrace.Step{Action: "settled", Settled: true, Recorder: "n", Seq: seq, Time: out[len(out)-1].Time})
+		return append(out, qtrace.Step{Action: "settled", Record: qtrace.Record{Settled: true}, Recorder: "n", Seq: seq, Time: out[len(out)-1].Time})
 	}
 	for _, x := range []struct {
 		name  string
