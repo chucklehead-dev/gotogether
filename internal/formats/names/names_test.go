@@ -28,6 +28,7 @@ func TestNamesAreTheTables(t *testing.T) {
 		{evidence.Format, formats.Evidence},
 		{validate.NavProtocol, formats.Nav},
 		{validate.CompiledFormat, formats.Model},
+		{validate.ReportFormat, formats.Report},
 		{formats.Choices.At(qenv.BytesVersion), formats.Choices},
 	} {
 		if c.name != c.f.Name() {

@@ -32,10 +32,11 @@ MUTANT=staleSnapshot ./run-demo.sh          # a rotated log headed by an old sta
 ```
 $ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl      (MUTANT=staleCAS)
   conformance: FAIL
-    step 112 is not a transition of the model from the state reached
-      quint:    cas("a", 39, "y", Ok)
-      observed: cas(expected=39, key=a, value=y) (seq 112, span 85ea63b66b1bd28e)
+    record span 85ea63b66b1bd28e is not a transition of the model from the state reached
+      record:   span 85ea63b66b1bd28e, 2026-10-02T09:00:01.27Z, process kvserver, trace 9a1f0c3e2b7d4c6a8e5f1b2c3d4e5f60
+      observed: cas(expected=39, key=a, value=y)
       obs:      revision=46
+      quint:    cas("a", 39, "y", Ok)
 ```
 
 Or by hand:

@@ -167,7 +167,7 @@ func StepsFromTracesData(td *TracesData) ([]qtrace.Step, error) {
 					if err != nil {
 						return nil, fmt.Errorf("span %s: %w", sp.SpanID, err)
 					}
-					s.Source = "span " + sp.SpanID
+					s.Source = qtrace.SpanSource(sp.SpanID, sp.TraceID)
 					out = append(out, s)
 				}
 			}

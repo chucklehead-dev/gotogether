@@ -65,12 +65,15 @@ Scenarios and actual results (`validate` exits 0 or 1):
 === scenario manifest-first
 actor edge-1/traces: 6 steps
   conformance: FAIL
-    step 2 is not a transition of the model from the state reached
+    record span efdc40821aced020 is not a transition of the model from the state reached
+      record:   span efdc40821aced020, 2026-09-24T10:00:00.002Z, process edge-1, trace 4bf92f3577b34da6a3ce929d0e0e4736
+      observed: writeManifest(batch=1, gen=g20260924T100000, payload=req-1)
       quint:    writeManifest(px(1, 1, 1, 1, ParquetDone), Ok)
-      observed: writeManifest(batch=1, gen=g20260924T100000, payload=req-1) (seq 2, span efdc40821aced020)
 ```
 
-Each scenario, each of the three paths (`run-demo.sh` output):
+Each scenario, each of the three paths (`run-demo.sh` output; each input
+names its failing record its own way, a span, a log line or none for
+ITF, so the demo reads the replay's step from `validate -v`):
 
 ```
 === scenario happy

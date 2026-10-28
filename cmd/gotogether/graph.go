@@ -72,9 +72,9 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	if r.Bound.Depth > 0 {
 		bounds += fmt.Sprintf(", depth %d", r.Bound.Depth)
 	}
-	fmt.Printf("simulate %s: %s(%s), its state graph by the Go evaluator (%s)\n", bpath, b.Module, strings.Join(constantList(b, overrides), ", "), bounds)
-	fmt.Printf("  graph   %s, %.1fs\n", r.Extent(), r.Elapsed.Seconds())
-	fmt.Print(sampledLine)
+	simPrintf("simulate %s: %s(%s), its state graph by the Go evaluator (%s)\n", bpath, b.Module, strings.Join(constantList(b, overrides), ", "), bounds)
+	simPrintf("  graph   %s, %.1fs\n", r.Extent(), r.Elapsed.Seconds())
+	simPrint(sampledLine)
 	where := "no reachable state"
 	if !r.Complete {
 		where = fmt.Sprintf("none of the %d states explored", r.States)
@@ -90,62 +90,62 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		switch {
 		case v.Unsupported != "" && !v.Violated:
 			unchecked = true
-			fmt.Printf("  unchecked %s: the Go evaluator cannot evaluate it in %s (%s), and it holds in the %d it could; simulate without -graph samples it with quint\n",
+			simPrintf("  unchecked %s: the Go evaluator cannot evaluate it in %s (%s), and it holds in the %d it could; simulate without -graph samples it with quint\n",
 				inv, plural(v.Unchecked, "state"), v.Unsupported, v.Checked)
 			continue
 		case v.Error != "":
 			code = 1
-			fmt.Printf("  FAIL    %s: evaluating it fails in a reachable state (%s): the model's own error, fix the model. The path:\n%s", inv, v.Error, cexText(v.Counterexample))
+			simPrintf("  FAIL    %s: evaluating it fails in a reachable state (%s): the model's own error, fix the model. The path:\n%s", inv, v.Error, cexText(v.Counterexample))
 			continue
 		}
 		switch {
 		case holds[inv] && v.Held() && r.Complete:
-			fmt.Printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
+			simPrintf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
 		case holds[inv] && v.Held():
-			fmt.Printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s)\n", inv, where, raise)
+			simPrintf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s)\n", inv, where, raise)
 		case allows[inv] && v.Violated:
-			fmt.Printf("  allows  %s: a state %d steps from init violates it (the code must not): %s\n", inv, len(v.Counterexample.Steps)-1, callsOf(v.Counterexample))
+			simPrintf("  allows  %s: a state %d steps from init violates it (the code must not): %s\n", inv, len(v.Counterexample.Steps)-1, callsOf(v.Counterexample))
 		case holds[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should guarantee it, and a reachable state violates it: fix the model if it must hold, "+
+			simPrintf("  FAIL    %s: the model should guarantee it, and a reachable state violates it: fix the model if it must hold, "+
 				"or move it to simulate.allows if it is a requirement on the code. The shortest counterexample:\n%s", inv, cexText(v.Counterexample))
 		case allows[inv] && r.Complete:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should allow its violation, and no reachable state violates it: checking the code against it proves nothing. "+
+			simPrintf("  FAIL    %s: the model should allow its violation, and no reachable state violates it: checking the code against it proves nothing. "+
 				"Move it to simulate.holds (the graph proves it for this instance), or loosen the model\n", inv)
 		case allows[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should allow its violation, and %s violates it: checking the code against it proves nothing. "+
+			simPrintf("  FAIL    %s: the model should allow its violation, and %s violates it: checking the code against it proves nothing. "+
 				"%s, or move it to simulate.holds\n", inv, where, capitalize(raise))
 		case v.Violated:
 			code = 1
-			fmt.Printf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model. "+
+			simPrintf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model. "+
 				"The shortest counterexample:\n%s", inv, cexText(v.Counterexample))
 		case r.Complete:
-			fmt.Printf("  holds   %s: no reachable state violates it (unclassified: add it to simulate.holds to keep it so)\n", inv)
+			simPrintf("  holds   %s: no reachable state violates it (unclassified: add it to simulate.holds to keep it so)\n", inv)
 		default:
-			fmt.Printf("  bounded %s: %s violates it, which proves nothing past them (unclassified, the graph truncated)\n", inv, where)
+			simPrintf("  bounded %s: %s violates it, which proves nothing past them (unclassified, the graph truncated)\n", inv, where)
 		}
 	}
 	switch {
 	case r.Deadlocks > 0:
 		code = 1
-		fmt.Printf("  FAIL    deadlock: %s the step cannot leave%s. If the model means to stop there, say where with simulate.terminal "+
+		simPrintf("  FAIL    deadlock: %s the step cannot leave%s. If the model means to stop there, say where with simulate.terminal "+
 			"(a predicate over the state); else find the guard that disables every action (gotogether nav -binding %s). The nearest:\n%s",
 			plural(r.Deadlocks, "reachable state"), terminalNote(r), bpath, cexText(r.Deadlock))
 	case r.Terminals > 0:
-		fmt.Printf("  ends    %s the step cannot leave, each terminal (simulate.terminal)\n", plural(r.Terminals, "reachable state"))
+		simPrintf("  ends    %s the step cannot leave, each terminal (simulate.terminal)\n", plural(r.Terminals, "reachable state"))
 	}
 	if r.Quiescent > 0 {
 		// not deadlocks: a model whose step can always stutter (a read, a
 		// grist query) never deadlocks, so say where it stops
-		fmt.Printf("  quiet   %s only a stutter leaves (every edge back to itself), so no deadlock there\n", plural(r.Quiescent, "reachable state"))
+		simPrintf("  quiet   %s only a stutter leaves (every edge back to itself), so no deadlock there\n", plural(r.Quiescent, "reachable state"))
 	}
 	if never := r.NeverEnabled(); len(never) > 0 {
 		if r.Complete {
-			fmt.Printf("  never   %s: no reachable state enables it (dead in this instance: a guard too strict, or constants too small to reach it)\n", strings.Join(never, ", "))
+			simPrintf("  never   %s: no reachable state enables it (dead in this instance: a guard too strict, or constants too small to reach it)\n", strings.Join(never, ", "))
 		} else {
-			fmt.Printf("  never   %s: no state explored enables it (within the bound)\n", strings.Join(never, ", "))
+			simPrintf("  never   %s: no state explored enables it (within the bound)\n", strings.Join(never, ", "))
 		}
 	}
 	// the binding's actions the step never calls: no state of the graph
@@ -162,7 +162,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		}
 	}
 	if len(outside) > 0 {
-		fmt.Printf("  outside %s: the binding's, never called by step, so no state of the graph comes from them (an invariant about their effect holds vacuously)\n",
+		simPrintf("  outside %s: the binding's, never called by step, so no state of the graph comes from them (an invariant about their effect holds vacuously)\n",
 			strings.Join(outside, ", "))
 	}
 	var cov []string
@@ -172,7 +172,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		}
 	}
 	if len(cov) > 0 {
-		fmt.Printf("  covered %s\n", strings.Join(cov, ", "))
+		simPrintf("  covered %s\n", strings.Join(cov, ", "))
 	}
 	ec, eu := reportEventually(r, holds, allows)
 	code, unchecked = max(code, ec), unchecked || eu
@@ -196,7 +196,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		if len(left) > 0 {
 			// the one quint process -graph runs: say so, the header
 			// having promised the evaluator's graph
-			fmt.Printf("  sampling %s the Go evaluator did not find with quint (%d traces of %d steps): not part of the graph's verdicts\n",
+			simPrintf("  sampling %s the Go evaluator did not find with quint (%d traces of %d steps): not part of the graph's verdicts\n",
 				plural(len(left), "possible"), samples, steps)
 			dir, err := os.MkdirTemp("", "gotogether-simulate-*")
 			if err != nil {
@@ -226,14 +226,14 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		if err := writeReplays(b, overrides, out, runs); err != nil {
 			return 2, err
 		}
-		fmt.Printf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, filepath.Base(out))
+		simPrintf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, filepath.Base(out))
 	}
 	if evalBug {
 		return 1, nil
 	}
 	if code == 0 && (unchecked || r.Cut == "unsupported" || r.Cut == "error") {
 		if r.Cut == "unsupported" || r.Cut == "error" {
-			fmt.Printf("  stopped %s\n", r.Stopped)
+			simPrintf("  stopped %s\n", r.Stopped)
 		}
 		return 2, nil
 	}

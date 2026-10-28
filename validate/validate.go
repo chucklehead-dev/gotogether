@@ -197,6 +197,12 @@ type Failure struct {
 	// (Kind "disabled"), by the Go evaluator: an addition to quint's
 	// report, never a verdict (explain.go). nil when no evaluator asked.
 	Why *Explanation
+	// Changes, for a mismatch or an invariant violated after a step, are
+	// what the step changed in the model's state, from the state before
+	// it to State (the Go evaluator's diff, I20); nil when it cannot say.
+	// A rejected step's are its Why's: what the step the model expects
+	// instead would change.
+	Changes []Change
 	// noState says why State is empty, where the report would show it
 	noState string
 	// window is when a within failure's response was due (its trigger's
@@ -833,8 +839,17 @@ func (r *Result) JudgedBy() string {
 	return "quint"
 }
 
-// Summary renders a result for humans.
-func (r *Result) Summary() string {
+// Summary renders a result for humans. A failing record is named once,
+// by RecordID, with its wall time and recorder (I20); VerboseSummary
+// adds its other indices and the model's whole state.
+func (r *Result) Summary() string { return r.summary(false) }
+
+// VerboseSummary is Summary with each failing record's place in the
+// replay and its recorder's seq, every example of the actions enabled
+// instead, every change, and the model's state in full (validate -v).
+func (r *Result) VerboseSummary() string { return r.summary(true) }
+
+func (r *Result) summary(verbose bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "actor %s: %d steps\n", r.Actor, r.Steps)
 	for _, i := range r.Issues {
@@ -851,24 +866,41 @@ func (r *Result) Summary() string {
 		case r.Conforms == NotEvaluated: // a search cut short (qtest.Linearize): its furthest order, not a verdict
 			fmt.Fprintf(&b, "    no verdict: the order checked is the one that got furthest, where it failed:\n")
 		}
-		fmt.Fprintf(&b, "%s", f.describe("    "))
+		fmt.Fprintf(&b, "%s", f.describe("    ", verbose))
 	}
+	// the invariants a failure leaves unchecked, in one line: one per
+	// invariant buried the blast radius under a screen of "not checked"
+	var unchecked []string
+	why := ""
 	for _, i := range r.Invariants {
 		v := strings.ToUpper(string(i.Verdict))
 		switch {
+		case i.Verdict == NotEvaluated && r.Conforms == NotEvaluated && i.Failure == nil:
+			unchecked, why = append(unchecked, i.Name), "the run's conformance has no verdict"
+			continue
 		case i.Verdict == NotEvaluated && r.Conforms == NotEvaluated:
 			v = "not checked: the run's conformance has no verdict"
 		case i.Verdict == NotEvaluated && i.cause != "" && i.Failure != nil:
 			v = "no verdict (" + i.cause + ")"
 		case i.Verdict == NotEvaluated && r.noVerdict != "" && i.Failure != nil:
 			v = "no verdict (" + r.noVerdict + ")"
+		case i.Verdict == NotEvaluated && i.Failure == nil:
+			unchecked, why = append(unchecked, i.Name), "the run does not conform, so the model's states after the failure are not the run's"
+			continue
 		case i.Verdict == NotEvaluated:
 			v = "not checked: the run does not conform, so the model's states after the failure are not the run's"
 		}
 		fmt.Fprintf(&b, "  invariant %s: %s\n", i.Name, v)
 		if i.Failure != nil {
-			fmt.Fprintf(&b, "%s", i.Failure.describe("    "))
+			fmt.Fprintf(&b, "%s", i.Failure.describe("    ", verbose))
 		}
+	}
+	switch len(unchecked) {
+	case 0:
+	case 1:
+		fmt.Fprintf(&b, "  invariant %s: not checked: %s\n", unchecked[0], why)
+	default:
+		fmt.Fprintf(&b, "  invariants not checked (%d: %s): %s\n", len(unchecked), strings.Join(unchecked, ", "), why)
 	}
 	if r.Hot != nil {
 		fmt.Fprintf(&b, "  hot cycle (evidence, no verdict: the run did not settle): %s\n", r.Hot)
@@ -902,7 +934,7 @@ func (r *Result) Summary() string {
 	return b.String()
 }
 
-func (f *Failure) describe(pfx string) string {
+func (f *Failure) describe(pfx string, verbose bool) string {
 	var b strings.Builder
 	start := f.Index < 0 && f.Step != nil // the snapshot step the replay starts from
 	switch {
@@ -915,33 +947,59 @@ func (f *Failure) describe(pfx string) string {
 	default:
 		f.describeKind(&b, pfx)
 	}
-	return f.describeRest(&b, pfx)
+	return f.describeRest(&b, pfx, verbose)
+}
+
+// At names where f is, as a report names it: its record ("record
+// day.jsonl:12", RecordID), else the replay's step ("step 3": an
+// inferred one, a restart's, has no record).
+func (f *Failure) At() string {
+	if f.Step != nil {
+		return "record " + RecordID(f.Step)
+	}
+	return fmt.Sprintf("step %d", f.Index+1)
 }
 
 // describeKind says what kind of failure f is, and where.
 func (f *Failure) describeKind(b *strings.Builder, pfx string) {
 	switch f.Kind {
 	case "disabled":
-		fmt.Fprintf(b, "%sstep %d is not a transition of the model from the state reached\n", pfx, f.Index+1)
+		fmt.Fprintf(b, "%s%s is not a transition of the model from the state reached\n", pfx, f.At())
 	case "state":
-		fmt.Fprintf(b, "%safter step %d the model's state does not match what was observed\n", pfx, f.Index+1)
+		fmt.Fprintf(b, "%safter %s the model's state does not match what was observed\n", pfx, f.At())
 	case "invariant":
 		if f.Index < 0 {
 			fmt.Fprintf(b, "%sviolated in the initial state\n", pfx)
 		} else {
-			fmt.Fprintf(b, "%sviolated after step %d\n", pfx, f.Index+1)
+			fmt.Fprintf(b, "%sviolated after %s\n", pfx, f.At())
 		}
 	case "within":
 		// the obligation's story: when it opened, and what came of it
 		fmt.Fprintf(b, "%s%s\n", pfx, f.Note)
 	default:
-		fmt.Fprintf(b, "%sfailed at step %d\n", pfx, f.Index+1)
+		fmt.Fprintf(b, "%sfailed at %s\n", pfx, f.At())
 	}
 }
 
-// describeRest is the rest of f's description, after its kind: the call,
-// the expect, the step observed, the model's state.
-func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
+// describeRest is the rest of f's description, after its kind: the
+// record and the step observed, the call, the expect, why the model
+// cannot take it, what the step changed, the model's state.
+func (f *Failure) describeRest(b *strings.Builder, pfx string, verbose bool) string {
+	if s := f.Step; s != nil {
+		// the record once, by one index, with what on-call looks up next:
+		// when, who (the process, the pod), the trace
+		fmt.Fprintf(b, "%s  record:   %s\n", pfx, recordWhere(s, f.Index, verbose))
+		fmt.Fprintf(b, "%s  observed: %s\n", pfx, s.String())
+		if s.Ref != "" { // the driver's own record of the step: where a person looks next
+			fmt.Fprintf(b, "%s  ref:      %s\n", pfx, s.Ref)
+		}
+		if len(s.Obs) > 0 {
+			fmt.Fprintf(b, "%s  obs:      %s\n", pfx, obsString(s.Obs))
+		}
+		if s.Error != "" {
+			fmt.Fprintf(b, "%s  error:    %s\n", pfx, s.Error)
+		}
+	}
 	if f.Call != "" {
 		fmt.Fprintf(b, "%s  quint:    %s\n", pfx, f.Call)
 	}
@@ -956,32 +1014,17 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 	if f.Step == nil && f.Note != "" && f.Kind != "within" {
 		fmt.Fprintf(b, "%s  observed: %s\n", pfx, f.Note)
 	}
-	if s := f.Step; s != nil {
-		// the step as recorded: its own sequence number, and where it came
-		// from (a log line, a span), which differ from the step's number
-		// in the run when steps were skipped or interleave other actors'
-		where := fmt.Sprintf("seq %d", s.Seq)
-		if s.Source != "" {
-			where += ", " + s.Source
-		}
-		fmt.Fprintf(b, "%s  observed: %s (%s)\n", pfx, s.String(), where)
-		if s.Ref != "" { // the driver's own record of the step: where a person looks next
-			fmt.Fprintf(b, "%s  ref:      %s\n", pfx, s.Ref)
-		}
-		if len(s.Obs) > 0 {
-			fmt.Fprintf(b, "%s  obs:      %s\n", pfx, obsString(s.Obs))
-		}
-		if s.Error != "" {
-			fmt.Fprintf(b, "%s  error:    %s\n", pfx, s.Error)
-		}
-	}
 	if f.Kind == "error" {
 		// quint's own message only where the report has no reading of it:
 		// a disabled step, a state mismatch and an invariant are said above
 		fmt.Fprintf(b, "%s  %s\n", pfx, f.Quint)
 	}
+	diffed := len(f.Changes) > 0 || f.Why != nil && f.Why.Expected != ""
 	if f.Why != nil {
-		b.WriteString(f.Why.String(pfx + "  "))
+		b.WriteString(f.Why.render(pfx+"  ", verbose))
+	}
+	if len(f.Changes) > 0 {
+		writeChanges(b, pfx+"  ", "the step changed, in the model's state:", f.Changes, verbose)
 	}
 	if f.noState != "" && f.Kind != "error" {
 		fmt.Fprintf(b, "%s  model state: %s\n", pfx, f.noState)
@@ -991,7 +1034,6 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 		if f.StateAfter {
 			when = "after the step"
 		}
-		fmt.Fprintf(b, "%s  model state %s:\n", pfx, when)
 		names := make([]string, 0, len(f.State))
 		for k := range f.State {
 			if !strings.HasPrefix(k, "mbt::") {
@@ -999,19 +1041,38 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 			}
 		}
 		sort.Strings(names)
+		if diffed && !verbose {
+			// the diff says what moved: the whole state is -v's
+			fmt.Fprintf(b, "%s  model state %s: %s (-v prints it)\n", pfx, when, fmt.Sprintf("%d %s", len(names), plural(len(names), "variable", "variables")))
+			return b.String()
+		}
+		fmt.Fprintf(b, "%s  model state %s:\n", pfx, when)
 		for i, k := range names {
-			if i == 12 {
-				fmt.Fprintf(b, "%s    ... and %d more variables\n", pfx, len(names)-12)
+			if i == 12 && !verbose {
+				fmt.Fprintf(b, "%s    ... and %d more variables (-v prints them)\n", pfx, len(names)-12)
 				break
 			}
 			v := f.State[k].String()
-			if len(v) > 240 {
-				v = v[:240] + " ..."
+			if !verbose {
+				v = cutValue(v, 240)
 			}
 			fmt.Fprintf(b, "%s    %s = %s\n", pfx, k, v)
 		}
 	}
 	return b.String()
+}
+
+// cutValue is a value's text cut to about n bytes at an element's end
+// (after a ", " separator), not mid-value, saying how much is left.
+func cutValue(v string, n int) string {
+	if len(v) <= n {
+		return v
+	}
+	cut := strings.LastIndex(v[:n], ", ")
+	if cut < n/2 {
+		cut = n
+	}
+	return fmt.Sprintf("%s, ... (%d more characters; -v prints it whole)", v[:cut], len(v)-cut)
 }
 
 func obsString(m map[string]any) string {

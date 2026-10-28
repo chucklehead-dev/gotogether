@@ -46,6 +46,11 @@ type validateRun struct {
 	// out is where the report goes (os.Stdout; a test's buffer, so tests
 	// run in parallel)
 	out io.Writer
+	// machine are the machine-readable reports asked for (-json, -report,
+	// GOTOGETHER_REPORT_DIR), and doc the one they render, filled as the
+	// text report is printed
+	machine machineReports
+	doc     *validate.Document
 }
 
 func runValidate(args []string) (int, error) { return validateTo(os.Stdout, args) }
@@ -53,7 +58,8 @@ func runValidate(args []string) (int, error) { return validateTo(os.Stdout, args
 // validateTo is the validate command, its report written to out.
 func validateTo(out io.Writer, args []string) (int, error) {
 	fset := commandFlags("validate")
-	v := validateRun{out: out}
+	v := validateRun{out: out, doc: validate.NewDocument("validate")}
+	v.machine.flags(fset)
 	fset.StringVar(&v.binding, "binding", "", "binding file (optional for ITF written by gotogether)")
 	fset.StringVar(&v.dir, "dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
 	fset.StringVar(&v.backend, "backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
@@ -64,7 +70,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.module, "module", "", "ITF input: the parameterised module")
 	fset.StringVar(&v.instance, "instance", "", "ITF input: replay against this instance module (e.g. currentDesign), e.g. for quint run --mbt traces")
 	fset.BoolVar(&v.novars, "novars", false, "ITF input: do not compare model variables carried by the trace")
-	fset.BoolVar(&v.verbose, "v", false, "print quint's output")
+	fset.BoolVar(&v.verbose, "v", false, "verbose: each failing record's place in the replay and its recorder's seq besides its id, every example of the actions enabled instead, the model's whole state, and quint's output")
 	fset.StringVar(&v.conv, "convert", "", "convert OTLP/JSON spans with this rule file (see gotogether convert)")
 	invs := fset.String("invariants", "", "comma-separated model invariants to check instead of the binding's")
 	fset.BoolVar(&v.withITF, "itf", false, "also write the ITF of conforming runs, the model's state at every step (slow for models with a large state); failing runs always get theirs")
@@ -88,15 +94,25 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.IntVar(&v.mutateLimit, "mutate-limit", 0, "with -mutate-steps: at most this many mutants of each op, spread over the log (default: every one)")
 	replay := fset.String("replay", "", "judge a run again from its manifest (validate -manifest's, or a test's under GOTOGETHER_EVIDENCE), refusing an input whose hash changed; exit as validate does, and 1 if the verdict is not the manifest's")
 	fset.Parse(args)
-	if *settle {
-		fmt.Fprintln(out, "warning: -require-settle is deprecated: it checks the run finished (qtest.Finishes), of which settling is one part; say -require-finish")
+	if err := v.machine.resolve(&v.out); err != nil {
+		return 2, err
+	}
+	code, err := v.command(fset, *settle, *noITF, *replay, *invs, *lin)
+	return v.machine.write(v.doc, out, code, err)
+}
+
+// command is the validate command after its flags are parsed.
+func (v *validateRun) command(fset *flag.FlagSet, settle, noITF bool, replay, invs string, lin bool) (int, error) {
+	out := v.out
+	if settle {
+		v.note("warning: -require-settle is deprecated: it checks the run finished (qtest.Finishes), of which settling is one part; say -require-finish")
 		v.requireFinish = true
 	}
-	if *noITF {
+	if noITF {
 		return 2, fmt.Errorf("validate: -noitf is the default now: drop it (-itf writes the ITF of conforming runs)")
 	}
-	if *replay != "" {
-		return replayManifest(out, *replay, fset)
+	if replay != "" {
+		return v.replayManifest(replay, fset)
 	}
 	if v.runInfo != "" && v.manifest == "" {
 		return 2, fmt.Errorf("validate: -run-info %s says what goes in a manifest: add -manifest out.json", v.runInfo)
@@ -109,13 +125,14 @@ func validateTo(out io.Writer, args []string) (int, error) {
 			return 2, fmt.Errorf("validate -mutate-ops: %q is no mutation; the ops are %s", op, strings.Join(qtrace.MutationOps, ", "))
 		}
 	}
-	v.search.Linearize = *lin || v.search.Key != "" || v.search.Skew > 0
+	v.search.Linearize = lin || v.search.Key != "" || v.search.Skew > 0
 	if v.compiled != "" && v.manifest != "" {
 		return 2, fmt.Errorf("validate -compiled: -manifest records a judgment validate -replay makes again with quint: drop one of them")
 	}
-	if *invs != "" {
-		v.invariants = strings.Split(*invs, ",")
+	if invs != "" {
+		v.invariants = strings.Split(invs, ",")
 	}
+	_ = out
 	v.files = fset.Args()
 	if len(v.files) == 0 {
 		return 2, needs("validate", "a binding and the FILEs to check (step logs, OTLP/JSON, ITF)")
@@ -128,13 +145,14 @@ func validateTo(out io.Writer, args []string) (int, error) {
 // depend on it), a new manifest of the replay. The others are the
 // manifest's to say.
 // Read-only.
-var replayFlags = map[string]bool{"replay": true, "dir": true, "quint": true, "v": true, "backend": true, "manifest": true, "history": true, "itf": true}
+var replayFlags = map[string]bool{"replay": true, "dir": true, "quint": true, "v": true, "backend": true, "manifest": true, "history": true, "itf": true,
+	"json": true, "report": true}
 
 // replayManifest judges the run of the manifest at path again
 // (cli.Replay): its files unchanged (refused otherwise, naming
 // each), as it was judged, and reports whether the verdict is the
 // manifest's.
-func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error) {
+func (v0 *validateRun) replayManifest(path string, fset *flag.FlagSet) (int, error) {
 	var extra []string
 	fset.Visit(func(f *flag.Flag) {
 		if !replayFlags[f.Name] {
@@ -142,7 +160,7 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 		}
 	})
 	if len(extra) > 0 || fset.NArg() > 0 {
-		return 2, fmt.Errorf("validate -replay %s: %s: the manifest says the inputs and how they were judged; drop them (-dir, -quint, -backend, -v, -history, -itf and -manifest go with -replay)",
+		return 2, fmt.Errorf("validate -replay %s: %s: the manifest says the inputs and how they were judged; drop them (-dir, -quint, -backend, -v, -history, -itf, -manifest, -json and -report go with -replay)",
 			path, strings.Join(append(extra, fset.Args()...), " "))
 	}
 	m, err := validate.ReadManifest(path)
@@ -150,16 +168,17 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 		return 2, err
 	}
 	get := func(name string) string { return fset.Lookup(name).Value.String() }
-	v := validateRun{out: out, verbose: get("v") == "true", history: get("history"), manifest: get("manifest"), withITF: get("itf") == "true"}
+	v := v0
+	v.verbose, v.history, v.manifest, v.withITF = get("v") == "true", get("history"), get("manifest"), get("itf") == "true"
 	r, err := cli.Replay(context.Background(), m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
 	if r == nil && err != nil {
 		return 2, fmt.Errorf("validate -replay %s: %w", path, err)
 	}
 	for _, w := range r.Warnings {
-		fmt.Fprintln(out, "warning:", w)
+		v.note("warning: " + w)
 	}
 	for _, n := range r.Notes {
-		fmt.Fprintln(out, "note:", n)
+		v.note("note: " + n)
 	}
 	code, err := v.report(r.Got, err)
 	if err != nil {
@@ -167,12 +186,13 @@ func replayManifest(out io.Writer, path string, fset *flag.FlagSet) (int, error)
 	}
 	if r.Same {
 		if r.Differs != "" {
-			fmt.Fprintln(out, "note:", r.Differs)
+			v.note("note: " + r.Differs)
 		}
-		fmt.Fprintf(out, "replay: the manifest's verdict, reproduced: %s\n", r.Got.Verdict)
+		v.note(fmt.Sprintf("replay: the manifest's verdict, reproduced: %s", r.Got.Verdict))
 		return code, nil
 	}
-	fmt.Fprintf(out, "replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s\n", r.Want, r.Got.Verdict, r.Differs)
+	v.note(fmt.Sprintf("replay: the verdict is not the manifest's (the inputs are the ones it hashed: the model's imports, the tools or the check changed)\n  manifest: %s\n  replay:   %s\n  differs:  %s", r.Want, r.Got.Verdict, r.Differs))
+	v.doc.Verdict, v.doc.Reason = "fail", "the verdict is not the manifest's"
 	return 1, nil
 }
 
@@ -210,21 +230,30 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 	defer func() {
 		if code == 0 && !v.withITF {
 			j.Close() // a temporary directory; -dir's is kept
+		} else if j.Dir != "" {
+			v.doc.Artifacts = j.Dir
 		}
 	}()
+	v.doc.Binding = v.binding
 	for _, in := range j.Inputs {
+		di := validate.DocInput{Path: in.Path, Format: string(in.Format), Steps: len(in.Steps)}
 		if in.Converted {
 			fmt.Fprintf(v.out, "input %s: OTLP/JSON spans, converted with %s: %d steps\n", in.Path, v.conv, len(in.Steps))
+			v.doc.Inputs = append(v.doc.Inputs, di)
 			continue
 		}
 		fmt.Fprintf(v.out, "input %s: %s\n", in.Path, map[input.Format]string{input.OTLP: "OTLP/JSON spans", input.StepLog: "native step log", input.Requests: "a driver's request log",
 			input.ITF: "model-level ITF", input.Unknown: "empty"}[in.Format])
 		if in.Torn != nil {
-			fmt.Fprintf(v.out, "  warning: %v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict\n", in.Torn)
+			w := fmt.Sprintf("%v; its recorders' tails are lost after their last steps: eventual vals not judged, and a later step's failure that may depend on them is no verdict", in.Torn)
+			fmt.Fprintf(v.out, "  warning: %s\n", w)
+			di.Warnings = append(di.Warnings, w)
 		}
 		for _, w := range in.Warnings {
 			fmt.Fprintf(v.out, "  warning: %s\n", w)
+			di.Warnings = append(di.Warnings, w)
 		}
+		v.doc.Inputs = append(v.doc.Inputs, di)
 	}
 	if j.Dir == "" {
 		return 2, jerr
@@ -244,7 +273,12 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 				return 2, err
 			}
 		}
-		fmt.Fprint(v.out, rep.Summary())
+		if v.verbose {
+			fmt.Fprint(v.out, rep.VerboseSummary())
+		} else {
+			fmt.Fprint(v.out, rep.Summary())
+		}
+		v.doc.AddReport(rep)
 		v.navLines(rep)
 		if v.verbose {
 			for _, a := range rep.Actors {
@@ -256,7 +290,7 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 			if f.Actor != "" {
 				who = "actor " + f.Actor
 			}
-			fmt.Fprintf(v.out, "%s: %s (%s): %s\n", who, f.Reason, finishWhy(j), f.Why)
+			v.note(fmt.Sprintf("%s: %s (%s): %s", who, f.Reason, finishWhy(j), f.Why))
 		}
 		if v.mutateSteps && jerr == nil {
 			if err := v.mutate(j.Checker, j.Steps, rep.OK() && j.Unfinished == nil); err != nil {
@@ -274,12 +308,15 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 		}
 		r := j.ITF[itfs]
 		itfs++
-		fmt.Fprint(v.out, r.Summary())
 		if v.verbose {
+			fmt.Fprint(v.out, r.VerboseSummary())
 			fmt.Fprintln(v.out, r.Output)
+		} else {
+			fmt.Fprint(v.out, r.Summary())
 		}
+		v.doc.Actors = append(v.doc.Actors, r.Doc())
 		if j.Finish && r.OK() {
-			fmt.Fprintf(v.out, "%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps\n", in.Path, finishWhy(j))
+			v.note(fmt.Sprintf("%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps", in.Path, finishWhy(j)))
 		}
 	}
 	if jerr != nil {
@@ -296,10 +333,10 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 		if err := m.Write(v.manifest); err != nil {
 			return 2, err
 		}
-		fmt.Fprintf(v.out, "manifest: %s (gotogether validate -replay %s judges it again)\n", v.manifest, v.manifest)
+		v.note(fmt.Sprintf("manifest: %s (gotogether validate -replay %s judges it again)", v.manifest, v.manifest))
 	}
 	if j.OK {
-		fmt.Fprintf(v.out, "RESULT: PASS (%s)\n", passSummary(j.Results))
+		v.result("PASS", passSummary(j.Results))
 		return 0, nil
 	}
 	// Only a defect is a FAIL (DESIGN §53): a run whose every failure has
@@ -309,8 +346,26 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 	if j.Verdict.Verdict == validate.NotEvaluated {
 		word = "NO VERDICT"
 	}
-	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, failSummary(j.Results))
+	v.doc.Reason = j.Verdict.Reason
+	if v.doc.Reason == "" && j.Unfinished != nil {
+		v.doc.Reason = j.Unfinished.Reason
+	}
+	v.result(word, failSummary(j.Results))
 	return 1, nil
+}
+
+// note prints a line of the report that is neither an actor's nor the
+// result, and keeps it for the machine-readable report.
+func (v *validateRun) note(line string) {
+	fmt.Fprintln(v.out, line)
+	v.doc.Notes = append(v.doc.Notes, line)
+}
+
+// result prints the result line, "RESULT: <word> (<summary>)", and
+// keeps it for the machine-readable report.
+func (v *validateRun) result(word, summary string) {
+	fmt.Fprintf(v.out, "RESULT: %s (%s)\n", word, summary)
+	v.doc.Verdict, v.doc.Result = strings.ToLower(word), summary
 }
 
 // finishWhy is why the finish check was judged, as the report says it.
@@ -367,7 +422,12 @@ func (v *validateRun) navLines(rep *validate.Report) {
 		if a.Actor != "" {
 			actor = fmt.Sprintf(" -actor '%s'", a.Actor)
 		}
-		fmt.Fprintf(v.out, "navigate: gotogether nav -binding %s -run %s%s -at %d   (the model before step %d: its branches, and why the step is not one)\n",
-			v.binding, v.files[0], actor, f.Index, f.Index+1)
+		cmd := fmt.Sprintf("gotogether nav -binding %s -run %s%s -at %d", v.binding, v.files[0], actor, f.Index)
+		fmt.Fprintf(v.out, "navigate: %s   (the model before %s: its branches, and why the step is not one)\n", cmd, f.At())
+		for i := range v.doc.Actors {
+			if v.doc.Actors[i].Actor == a.Actor {
+				v.doc.Actors[i].Nav = cmd
+			}
+		}
 	}
 }

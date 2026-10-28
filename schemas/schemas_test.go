@@ -16,6 +16,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/schemas"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // docs are the doc comments of a package's struct fields, by type and
@@ -71,6 +72,10 @@ type generator struct {
 	fields map[string]map[string]any
 	// structs add keywords to a struct type's schema
 	structs map[string]map[string]any
+	// tag is the struct tag naming the keys: "yaml" (a file's, the
+	// default) or "json" (a report's, whose omitempty fields are absent
+	// rather than null)
+	tag string
 }
 
 func (g *generator) schema(t reflect.Type) map[string]any {
@@ -84,16 +89,22 @@ func (g *generator) schema(t reflect.Type) map[string]any {
 		return map[string]any{"type": "string"}
 	case reflect.Bool:
 		return map[string]any{"type": "boolean"}
-	case reflect.Int, reflect.Int64:
+	case reflect.Int, reflect.Int64, reflect.Uint64:
 		return map[string]any{"type": "integer"}
+	case reflect.Interface: // a step's argument: any scalar, or a collection's JSON text
+		return map[string]any{"type": []string{"string", "number", "boolean", "null"}}
 	case reflect.Slice:
 		return map[string]any{"type": "array", "items": g.schema(t.Elem())}
 	case reflect.Map:
 		return map[string]any{"type": []string{"object", "null"}, "additionalProperties": g.schema(t.Elem())}
 	case reflect.Struct:
 		props := map[string]any{}
+		key := g.tag
+		if key == "" {
+			key = "yaml"
+		}
 		for f := range t.Fields() {
-			tag := f.Tag.Get("yaml")
+			tag := f.Tag.Get(key)
 			name, _, _ := strings.Cut(tag, ",")
 			if name == "-" || !f.IsExported() {
 				continue
@@ -168,6 +179,22 @@ func bindingSchema(t *testing.T) []byte {
 		"A gotogether binding file ("+binding.FormatName+"): how a Go program's recorded steps become calls of a Quint model's actions.")
 }
 
+func reportSchema(t *testing.T) []byte {
+	g := &generator{docs: docs(t, "../validate"), tag: "json",
+		structs: map[string]map[string]any{
+			"Document": {"required": []string{"format", "command", "verdict", "exit"}},
+		},
+		fields: map[string]map[string]any{
+			"Document.Verdict":   {"enum": []any{"pass", "fail", "no verdict", "error"}},
+			"Document.Command":   {"enum": []any{"validate", "simulate"}},
+			"DocFailure.Verdict": {"enum": []any{"fail", "n/a"}},
+			"Change.Kind":        {"enum": []any{"changed", "added", "removed"}},
+		},
+	}
+	return g.root(reflect.TypeFor[validate.Document](), validate.ReportFormat, schemas.ReportURL, "gotogether report",
+		"A gotogether command's machine-readable report ("+validate.ReportFormat+"): validate -json's and simulate -json's.")
+}
+
 func convertSchema(t *testing.T) []byte {
 	g := &generator{docs: docs(t, "../convert"),
 		structs: map[string]map[string]any{
@@ -192,6 +219,7 @@ func TestSchemasAreGenerated(t *testing.T) {
 	}{
 		{"gotogether.binding-1.json", bindingSchema(t), schemas.Binding()},
 		{"gotogether.convert-1.json", convertSchema(t), schemas.Convert()},
+		{"gotogether.report-1.json", reportSchema(t), schemas.Report()},
 	} {
 		if os.Getenv("GOTOGETHER_UPDATE_SCHEMA") == "1" {
 			if err := os.WriteFile(c.file, c.gen, 0o644); err != nil {
@@ -320,5 +348,34 @@ simulate:
 func TestCheckRefusesUnknownKeywords(t *testing.T) {
 	if _, err := schemas.Check([]byte(`{"type": "object", "properties": {"a": {"pattern": "x"}}}`), []byte("a: b\n")); err == nil || !strings.Contains(err.Error(), "pattern") {
 		t.Errorf("a schema with pattern: %v", err)
+	}
+}
+
+// A report validate writes validates against the report's schema: its
+// document, every field filled, read as the YAML Check reads.
+func TestReportValidates(t *testing.T) {
+	d := validate.NewDocument("validate")
+	d.Verdict, d.Exit, d.Reason, d.Binding = "fail", 1, "violates r", "b.yaml"
+	d.Inputs = []validate.DocInput{{Path: "day.jsonl", Format: "steps", Steps: 15, Warnings: []string{"w"}}}
+	d.Partitions = []validate.DocPartition{{Actor: "a", Key: "id", Pass: 2, Of: 3, Steps: 9}}
+	d.Actors = []validate.DocActor{{Actor: "a", Steps: 15, Verdict: "fail", Conformance: "fail",
+		Invariants: []validate.DocInvariant{{Name: "r", Kind: "invariant", Verdict: "n/a", Cause: "lost steps"}},
+		Failures: []validate.DocFailure{{Check: "conformance", Kind: "disabled", Verdict: "fail", At: "record day.jsonl:12", Brief: "b", Text: "t",
+			Record: &validate.DocRecord{ID: "day.jsonl:12", Seq: 11, Step: 11, Action: "refund", Args: map[string]any{"amount": int64(500), "id": "ch_3", "ok": true},
+				Time: "2026-10-02T09:00:31Z", TraceID: "cf2a", Text: "refund(amount=500, id=ch_3)"},
+			Why: &validate.Explanation{Action: "refund(...)", Conditions: []validate.Condition{{In: "refund", Expr: "x", Values: []validate.NamedValue{{Name: "x", Value: "1"}}}},
+				Expected: "refund(...)", Changes: []validate.Change{{Path: "charges", Kind: "added", After: "1"}}, Enabled: []string{"e"}, More: 1},
+			State: map[string]string{"charges": "Map()"}}}}}
+	d.Checks = []validate.DocCheck{{Name: "i", Kind: "invariant", Verdict: "holds", Detail: "d"}}
+	ps, err := schemas.Check(schemas.Report(), d.JSON())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range ps {
+		t.Errorf("%s", p)
+	}
+	d.Verdict = "maybe"
+	if ps, _ := schemas.Check(schemas.Report(), d.JSON()); len(ps) != 1 {
+		t.Errorf("a verdict outside the enum: %v", ps)
 	}
 }

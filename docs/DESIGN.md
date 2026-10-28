@@ -4928,6 +4928,7 @@ per format):
 | `gotogether.run/2` | validate's run manifest | the current only |
 | `gotogether.evidence/2` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
+| `gotogether.report/1` | validate's and simulate's `-json` (validate.Document, §68) | 1 on |
 | `gotogether.nav/1` | RunSession and RunNode's `protocol` | 1 on; none: 1 |
 
 **Unversioned is major 1.** Every log, binding, rule file and session
@@ -5321,3 +5322,73 @@ Review 11 asked for it decided before tags; it is, as I16 put it:
   `ClientErrors` and `WritersFirst`, are `Not(NoClientErrors())` and
   `Not(ReadersFirst())`, with the same verdicts on every report (a
   report with no client actor has none).
+
+## 68. Reports for on-call (I20)
+
+**The report served the model's author.** The adopter's flipped step
+(eleventh review, B5) read "step 16 is not a transition", then "(seq 7,
+steps/x.jsonl:19)": three indices for one record, none with the time,
+the pod or the trace on-call looks up next; "enabled instead" listed
+arguments drawn from the instance's constants (`createCounter(counter =
+"a", name = "a", id = "i1", ...)`) that read as records; the model's
+state was dumped and cut at 240 characters, mid-value, past the field
+that differed; every invariant after the failure had a line saying "not
+checked"; and nothing was machine-readable.
+
+**One index: where the record was read.** A report names a failing
+record by `validate.RecordID`: its `Source` (a step log's `file:line`
+as package input writes it, `line N`, a span's id), else
+`<recorder>#<seq>`, which every reader keeps. The step's place in the
+replay and its recorder's seq stay in the data (`DocRecord.Step`,
+`Seq`) and in `-v` (`VerboseSummary`): they are what `nav -at` and the
+manifest's failing step use, and a person reading the report greps the
+line. A step with no record (an inferred restart) is still "step N".
+The failure's `record:` line adds the step's wall time (UTC), its
+process, its recorder when that says more (grist's
+`<app>/<node>/<incarnation>`, read as the node and its start), and the
+trace of a span's step: otelio and convert write `Source` as `span <id>
+trace <id>` (`qtrace.SpanSource`). A store-side grist step is the
+relay's (`grist/<store>/<tenant>`): the store does not record which
+node committed, so it has no pod to show (G8's location would carry it).
+
+**A diff, not a dump.** For a mismatch or a violation the Go evaluator
+replays the plan to the step and diffs the state before it against the
+successor equal to quint's state after it (`Failure.Changes`): by path
+in the model's names, into records, maps' keys, sets' elements, lists of
+one length and variants of one label (`charges["ch_3"].refunded: 700 ->
+1200`). A successor quint's state is not, or an evaluator that cannot
+replay, gives no diff, and the dump stays (cut at an element's end
+now). For a rejected step the evaluator looks among the model's moves
+for the same request: the rejected action's transitions whose
+parameters the binding does not fill from the outcome, observations or
+error all equal the step's. That is the model's answer to what the code
+answered otherwise (`the model expects: void(id = "ch_2", result =
+"ok"), which changes: charges["ch_2"].status: "authorized" ->
+"voided"`), `Explanation.Expected` and `Changes`. With a diff the state
+is `-v`'s.
+
+**The model's moves are labelled.** "enabled instead (the model's moves
+from this state, not records)"; an action enabled many ways is shown by
+its count, and `-v` adds the example whose arguments agree most with
+the rejected step's (the request's parameters weighing twice the
+response's), so it reads the record's values where the model allows
+them. The invariants a non-conforming run leaves unchecked are one line.
+
+**A document for machines.** `validate -json` and `simulate -json`
+print `validate.Document`, `gotogether.report/1` in internal/formats'
+table: the verdict, exit status, reason and result line; inputs;
+validate's actors (each failure's record, `brief` line, `why`,
+`changes` and whole `state`, the text as printed), the passing
+partitions folded as the text folds them (§66); simulate's checks.
+`-report junit=FILE` and `-report sarif=FILE` render it for CI's test
+and code-scanning views (SARIF's results at a record's file and line);
+`GOTOGETHER_REPORT_DIR` makes every validate and simulate write its JSON
+there, which the Action's job summary and annotations read instead of
+grepping the RESULT line. simulate's checks are read from the lines it
+prints (each "  <verdict> <name>: <detail>"), so its text and its
+document cannot disagree; a new kind of line must keep that shape. Its
+JSON Schema is generated from validate.Document as the binding's is from
+binding.Binding (schemas/gotogether.report-1.json, `schemas.Report`,
+I36's generator reading json tags), and a filled document is checked
+against it.
+

@@ -1,0 +1,709 @@
+{
+  "$id": "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A gotogether command's machine-readable report (gotogether.report/1): validate -json's and simulate -json's. Generated from the Go type that reads it (GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/).",
+  "properties": {
+    "actors": {
+      "description": "Actors are validate's: each actor's (or entity's) result, but the passing partitions of a partitioned log, folded into Partitions.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "absent": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "cause": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "conformance": {
+            "description": "\"pass\", \"fail\", \"n/a\"",
+            "type": "string"
+          },
+          "constants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failures": {
+            "description": "Failures are its conformance's failure and its invariants', the failing ones first.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "at": {
+                  "description": "At names where it is, as the report does: \"record day.jsonl:12\", or \"step 3\" for an inferred step.",
+                  "type": "string"
+                },
+                "brief": {
+                  "description": "Brief is the failure in a line, for an alert or a summary's table: the step observed, then the model's answer to it or what it changed (\"void(id=ch_2) -> invalid_state; the model expects void(id = \"ch_2\", result = \"ok\")\").",
+                  "type": "string"
+                },
+                "changes": {
+                  "description": "Changes are what a mismatched or violating step changed in the model's state.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "after": {
+                        "type": "string"
+                      },
+                      "before": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "description": "\"changed\", \"added\" or \"removed\"",
+                        "enum": [
+                          "changed",
+                          "added",
+                          "removed"
+                        ],
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "check": {
+                  "description": "Check is what failed: \"conformance\", or the invariant's name.",
+                  "type": "string"
+                },
+                "expect": {
+                  "description": "a mismatch's post-state check, as rendered",
+                  "type": "string"
+                },
+                "expectTemplate": {
+                  "description": "ExpectTemplate is the binding's expect that rendered it.",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "Kind is \"disabled\" (the model cannot take the step), \"state\" (the state after it differs from what was observed), \"invariant\", \"within\" or \"error\" (quint could not evaluate the step).",
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "quint": {
+                  "description": "the model's call",
+                  "type": "string"
+                },
+                "record": {
+                  "additionalProperties": false,
+                  "description": "Record is the failing step's record, when it has one.",
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "actor": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "invoked": {
+                      "description": "RFC 3339, UTC",
+                      "type": "string"
+                    },
+                    "obs": {
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "process": {
+                      "type": "string"
+                    },
+                    "recorder": {
+                      "type": "string"
+                    },
+                    "ref": {
+                      "description": "the driver's link to its artifact",
+                      "type": "string"
+                    },
+                    "seq": {
+                      "type": "integer"
+                    },
+                    "source": {
+                      "description": "where it was read",
+                      "type": "string"
+                    },
+                    "spanId": {
+                      "type": "string"
+                    },
+                    "step": {
+                      "type": "integer"
+                    },
+                    "text": {
+                      "description": "Text is the step as a report prints it.",
+                      "type": "string"
+                    },
+                    "thread": {
+                      "type": "string"
+                    },
+                    "time": {
+                      "description": "RFC 3339, UTC",
+                      "type": "string"
+                    },
+                    "traceId": {
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "State is the model's state at the failure (before a rejected step, after any other), each variable as a Quint literal, whole.",
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "stateAfter": {
+                  "type": "boolean"
+                },
+                "text": {
+                  "description": "Text is the failure as the text report prints it.",
+                  "type": "string"
+                },
+                "verdict": {
+                  "description": "Verdict is \"fail\", or \"n/a\" for a failure that is no verdict.",
+                  "enum": [
+                    "fail",
+                    "n/a"
+                  ],
+                  "type": "string"
+                },
+                "why": {
+                  "additionalProperties": false,
+                  "description": "Why is why the model cannot take a rejected step (its Expected and Changes: the model's answer to the request, and what it changes).",
+                  "properties": {
+                    "action": {
+                      "description": "Action is the call explained, as the model names it: admit(client = \"c\")",
+                      "type": "string"
+                    },
+                    "branches": {
+                      "description": "Branches, for an any {} none of whose branches is enabled: each branch's own conditions",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "conditions": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "expr": {
+                                  "type": "string"
+                                },
+                                "in": {
+                                  "type": "string"
+                                },
+                                "values": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "changes": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "after": {
+                            "type": "string"
+                          },
+                          "before": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "description": "\"changed\", \"added\" or \"removed\"",
+                            "enum": [
+                              "changed",
+                              "added",
+                              "removed"
+                            ],
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "conditions": {
+                      "description": "Conditions are the false conditions from the action's own conjunct to the most specific one (the last), each where it is",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expr": {
+                            "type": "string"
+                          },
+                          "in": {
+                            "type": "string"
+                          },
+                          "values": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "enabled": {
+                      "description": "Enabled are the actions the model's step could take in that state instead, with their arguments; More how many others there are. They are the model's moves from that state, not records: an action enabled many ways is shown with the example whose arguments agree most with the rejected step's.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "expected": {
+                      "description": "Expected is the step of the rejected step's own action the model can take there for the same request (its arguments but those the binding fills from the outcome, observations or error): the answer the model gives the request the code answered otherwise. Changes are what it would change in the model's state.",
+                      "type": "string"
+                    },
+                    "more": {
+                      "type": "integer"
+                    },
+                    "reading": {
+                      "description": "Reading is a grist application's reading of the conditions, in its terms: a read missing from a decision's read set, a concurrent append, a key answered or applied twice",
+                      "type": "string"
+                    },
+                    "unexplained": {
+                      "description": "Unexplained says why there is no explanation, when there is none",
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "invariants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "cause": {
+                  "description": "Cause says why an n/a has no verdict, when it has a cause.",
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "\"invariant\", \"eventually\", \"within\"",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "type": "string"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "itf": {
+            "type": "string"
+          },
+          "judgedBy": {
+            "description": "\"quint\", \"evaluator\", \"both\"",
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "nav": {
+            "description": "Nav is the gotogether nav command that opens the model before the rejected step, when the CLI can name one.",
+            "type": "string"
+          },
+          "partition": {
+            "type": "string"
+          },
+          "pending": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "string"
+                },
+                "args": {
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "error": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "invoked": {
+                  "description": "RFC 3339, UTC",
+                  "type": "string"
+                },
+                "obs": {
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "outcome": {
+                  "type": "string"
+                },
+                "process": {
+                  "type": "string"
+                },
+                "recorder": {
+                  "type": "string"
+                },
+                "ref": {
+                  "description": "the driver's link to its artifact",
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer"
+                },
+                "source": {
+                  "description": "where it was read",
+                  "type": "string"
+                },
+                "spanId": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "integer"
+                },
+                "text": {
+                  "description": "Text is the step as a report prints it.",
+                  "type": "string"
+                },
+                "thread": {
+                  "type": "string"
+                },
+                "time": {
+                  "description": "RFC 3339, UTC",
+                  "type": "string"
+                },
+                "traceId": {
+                  "type": "string"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer"
+          },
+          "verdict": {
+            "description": "Verdict is \"pass\", \"fail\" or \"no verdict\"; Reason why it is not a pass (Result.Reason).",
+            "type": "string"
+          }
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "array"
+    },
+    "artifacts": {
+      "description": "Artifacts is where the generated modules and failing runs' ITF are.",
+      "type": "string"
+    },
+    "binding": {
+      "type": "string"
+    },
+    "checks": {
+      "description": "Checks are simulate's: each invariant's, possible's and the graph's verdict.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "\"invariant\", \"possible\", \"graph\"",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string"
+          }
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "array"
+    },
+    "command": {
+      "description": "\"validate\", \"simulate\"",
+      "enum": [
+        "validate",
+        "simulate"
+      ],
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "exit": {
+      "type": "integer"
+    },
+    "format": {
+      "const": "gotogether.report/1",
+      "description": "ReportFormat",
+      "type": "string"
+    },
+    "inputs": {
+      "description": "Inputs are what was read, each with its warnings.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "description": "\"otlp\", \"steps\", \"requests\", \"itf\", \"\" (empty)",
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "array"
+    },
+    "issues": {
+      "description": "Issues are the run's reconstruction issues, as the report prints them.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "notes": {
+      "description": "Notes are what else the report says: warnings, the finish check, a replay's comparison with its manifest, where the manifest went.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "partitions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "of": {
+            "type": "integer"
+          },
+          "pass": {
+            "type": "integer"
+          },
+          "steps": {
+            "type": "integer"
+          }
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "array"
+    },
+    "reason": {
+      "description": "Reason is the first failure's, in the claims' words (\"violates refundsWithinCapture\", \"rejects void\"); Result the result line's text after its verdict.",
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "verdict": {
+      "description": "Verdict is \"pass\", \"fail\", \"no verdict\" (every failure has none: lost or dropped steps, a search's budget) or \"error\" (the tool failed: Error says how); Exit the command's exit status.",
+      "enum": [
+        "pass",
+        "fail",
+        "no verdict",
+        "error"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "command",
+    "verdict",
+    "exit"
+  ],
+  "title": "gotogether report",
+  "type": "object"
+}

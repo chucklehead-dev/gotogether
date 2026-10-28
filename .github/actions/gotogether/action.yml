@@ -1,7 +1,10 @@
 # gotogether's GitHub Action (ROADMAP I21, docs/ci.md): Go, Node, quint and
 # its Rust evaluator at pinned versions, the gotogether CLI, quint's
 # install and the cache of typechecks and compiles kept between runs,
-# gotogether doctor, then your command, its result in the job summary.
+# gotogether doctor, then your command, its result in the job summary
+# (read from each validate's and simulate's JSON report,
+# gotogether.report/1: GOTOGETHER_REPORT_DIR) and an annotation per
+# failure at its record's line.
 #
 #   - uses: chucklehead-dev/gotogether/.github/actions/gotogether@<commit>
 #     with:
@@ -42,7 +45,7 @@ inputs:
     default: "true"
 outputs:
   result:
-    description: "The last RESULT line's verdict: PASS, FAIL, NO VERDICT, or empty (the command printed none)"
+    description: "The last report's verdict: PASS, FAIL, NO VERDICT, ERROR (the last validate's or simulate's JSON report), else the last RESULT line's, or empty (the command printed none)"
     value: ${{ steps.run.outputs.result }}
 runs:
   using: composite
@@ -105,24 +108,69 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         GOTOGETHER_RUN: ${{ inputs.run }}
+        WORKDIR: ${{ inputs.working-directory }}
       run: |
         out="$RUNNER_TEMP/gotogether-output.txt"
+        # each validate and simulate the command runs writes its report as
+        # JSON here (gotogether.report/1): the summary and annotations are
+        # read from it, not from the text
+        export GOTOGETHER_REPORT_DIR="$RUNNER_TEMP/gotogether-reports"
+        rm -rf "$GOTOGETHER_REPORT_DIR"
         set +e
         bash -o pipefail -c "$GOTOGETHER_RUN" 2>&1 | tee "$out"
         code=${PIPESTATUS[0]}
         set -e
-        result=$( (grep -E '^RESULT: ' "$out" || true) | tail -1 | sed -E 's/^RESULT: (PASS|FAIL|NO VERDICT).*/\1/')
+        reports=()
+        if command -v jq > /dev/null && [ -d "$GOTOGETHER_REPORT_DIR" ]; then
+          mapfile -t reports < <(ls "$GOTOGETHER_REPORT_DIR"/*.json 2> /dev/null | sort)
+        fi
+        if [ ${#reports[@]} -gt 0 ]; then
+          result=$(jq -r '.verdict | ascii_upcase' "${reports[-1]}")
+          # each failure an annotation: at its record's line when it was
+          # read from a step log, with its time, process and trace
+          for r in "${reports[@]}"; do
+            jq -r --arg wd "$WORKDIR" '
+              (.actors[]? | . as $a | .failures[]? | select(.verdict == "fail")
+                | (.record.source // "") as $src
+                | ($src | capture("^(?<f>.+):(?<l>[0-9]+)$")? // null) as $fl
+                | "::error " + (if $fl then "file=" + (if ($fl.f | startswith("/")) then $fl.f else ($wd + "/" + $fl.f) end) + ",line=" + $fl.l + "," else "" end)
+                  + "title=gotogether " + $a.reason + "::actor " + $a.actor + ": " + .at
+                  + (if .record.time then ", " + .record.time else "" end)
+                  + (if .record.process then ", process " + .record.process else "" end)
+                  + (if .record.traceId then ", trace " + .record.traceId else "" end)),
+              (.checks[]? | select(.verdict == "fail") | "::error title=gotogether simulate::" + .name + ": " + (.detail | split("\n")[0])),
+              (if .error then "::error title=gotogether " + .command + "::" + .error else empty end)
+            ' "$r"
+          done
+        else
+          result=$( (grep -E '^RESULT: ' "$out" || true) | tail -1 | sed -E 's/^RESULT: (PASS|FAIL|NO VERDICT).*/\1/')
+          # each failing result line an annotation on the run
+          (grep -E '^RESULT: (FAIL|NO VERDICT)' "$out" || true) | while IFS= read -r line; do
+            echo "::error title=gotogether::${line#RESULT: }"
+          done
+        fi
         echo "result=$result" >> "$GITHUB_OUTPUT"
-        # each failing result line an annotation on the run
-        (grep -E '^RESULT: (FAIL|NO VERDICT)' "$out" || true) | while IFS= read -r line; do
-          echo "::error title=gotogether::${line#RESULT: }"
-        done
         {
           first=$(head -1 <<<"$GOTOGETHER_RUN")
           [ "$first" = "$GOTOGETHER_RUN" ] || first="$first ..."
           echo "### gotogether: \`$first\`"
           echo
-          if grep -qE '^RESULT: ' "$out"; then
+          if [ ${#reports[@]} -gt 0 ]; then
+            for r in "${reports[@]}"; do
+              jq -r '
+                def cell: tostring | gsub("\\|"; "\\|") | gsub("\n"; " ");
+                "- `gotogether \(.command)`: **\(.verdict | ascii_upcase)**" + (if .result then " (\(.result))" else "" end) + (if .error then ": " + (.error | cell) else "" end),
+                ([.actors[]? | . as $a | .failures[]? | select(.verdict == "fail") | [$a.actor, .check, (.record.id // .at), (.record.time // ""),
+                   ((.record.process // "") + (if (.record.recorder // "") != "" and .record.recorder != .record.process then ", " + .record.recorder else "" end)),
+                   (.record.traceId // ""), .brief]] as $rows
+                 | if ($rows | length) > 0 then "", "  | actor | check | record | time | process | trace | failure |", "  |---|---|---|---|---|---|---|",
+                     ($rows[] | "  | " + (map(cell) | join(" | ")) + " |") else empty end),
+                ([.checks[]? | select(.verdict == "fail") | [.name, .kind, (.detail | split("\n")[0])]] as $rows
+                 | if ($rows | length) > 0 then "", "  | check | kind | detail |", "  |---|---|---|",
+                     ($rows[] | "  | " + (map(cell) | join(" | ")) + " |") else empty end)
+              ' "$r"
+            done
+          elif grep -qE '^RESULT: ' "$out"; then
             grep -E '^RESULT: ' "$out" | sed 's/^/- /'
           else
             echo "- exit status $code (no RESULT line)"

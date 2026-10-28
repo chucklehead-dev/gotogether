@@ -76,6 +76,11 @@ var (
 	// the current major is read.
 	Model = Format{Thing: "model", Major: 1, Oldest: 1, What: "compiled model (gotogether compile; validate -compiled)",
 		Older: "compile it again (gotogether compile -binding B -o model.json)"}
+	// Report is a command's machine-readable report (validate -json,
+	// simulate -json; validate.Document), read by alert routing, CI and
+	// the Action's job summary. An added field is optional; a changed or
+	// removed one is a new major, and a reader keeps reading the old.
+	Report = Format{Thing: "report", Major: 1, Oldest: 1, What: "a command's machine-readable report (validate -json, simulate -json)"}
 	// Nav is the run navigation protocol between a test binary
 	// (GOTOGETHER_NAV=serve) and gotogether-nav: a session's first line
 	// names it. A session that names none is nav/1.
@@ -85,7 +90,7 @@ var (
 
 // All is every format, for doctor and the docs.
 func All() []Format {
-	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Nav}
+	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Report, Nav}
 }
 
 // Name is the format's name at the major this build writes.

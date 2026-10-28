@@ -60,7 +60,7 @@ func TestAccountModel(t *testing.T) {
 					found = true
 				}
 			}
-			if r.Conforms != Pass || !found || !strings.Contains(rep.Summary(), "violated after step 2") {
+			if r.Conforms != Pass || !found || !strings.Contains(rep.Summary(), "violated after record ") || !strings.Contains(rep.VerboseSummary(), "step 2 of the replay") {
 				t.Errorf("%s: want conforming trace violating %s\n%s", tc.name, tc.inv, rep.Summary())
 			}
 		}

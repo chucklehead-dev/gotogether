@@ -26,7 +26,9 @@ $ gotogether validate -binding jobqueue.binding.yaml steps.jsonl
 $ gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl
   conformance: PASS
   invariant exactlyOnce: FAIL
-    violated after step 59
+    violated after record steps.jsonl:60
+      record:   steps.jsonl:60, 2026-10-02T09:00:12.4Z, process w2
+      observed: perform(job=4, worker=w2)
       quint:    perform("w2", 4)
 ```
 

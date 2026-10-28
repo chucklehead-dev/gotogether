@@ -46,9 +46,9 @@ and whether the invariants hold.
 
 | Report says | Means | Next |
 |---|---|---|
-| `step i is not a transition` (QNT513) | the model cannot take the step | `why:` first: the code, or the binding's mapping, outcome or restart |
+| `record <id> is not a transition` (QNT513) | the model cannot take the step | `why:` and `the model expects:` first: the code, or the binding's mapping, outcome or restart |
 | `state does not match what was observed` (QNT508) | the observed state differs | `expect:` vs `obs:` |
-| `invariant X: FAIL, violated after step i` | a design bug now seen in code | fix the design, or the property |
+| `invariant X: FAIL, violated after record <id>` | a design bug now seen in code | `the step changed` lines; fix the design, or the property |
 | `issue: error gap` | steps lost or sampled | fix the pipeline: no verdict |
 | `issue: error lost-prefix` | a log started after seq 1 | a snapshot step, or `resume:` |
 | `issue: warn lost-suffix`, `conformance: N/A` | a lost tail | a log that kept them; `Synced` |
@@ -56,6 +56,12 @@ and whether the invariants hold.
 | `issue: error cycle` | contradictory order keys | the instrumentation's order keys |
 | `real time bounds none of its N steps` | no invocation times | `qobs.Invoke` |
 | exit 2, no verdict | the binding or model does not fit | the message names step and template |
+
+A record is named once, where it was read (`day.jsonl:12`, `span …`, else
+`<recorder>#<seq>`), its wall time, process and trace on its `record:`
+line; `-v` adds the replay's step and the seq. `validate -json`
+(`gotogether.report/1`), `-report junit=F`, `-report sarif=F` are for
+machines and CI.
 
 Every verdict: [../gotogether-workflow/references/verdicts.md](../gotogether-workflow/references/verdicts.md).
 

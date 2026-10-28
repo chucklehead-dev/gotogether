@@ -1,7 +1,9 @@
 // Package schemas holds the JSON Schemas of the toolkit's YAML files, one
 // per format and major (internal/formats' table): a binding file
 // (gotogether.binding/1) and a span conversion rule file
-// (gotogether.convert/1). Editors validate a file against its schema as
+// (gotogether.convert/1); and of the report validate -json and simulate
+// -json print (gotogether.report/1, validate.Document), for a consumer
+// that checks what it reads. Editors validate a file against its schema as
 // it is written, given its URL (BindingURL, ConvertURL) in a first-line
 // comment the YAML language server reads:
 //
@@ -38,6 +40,7 @@ import (
 const (
 	BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json"
 	ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
+	ReportURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
 )
 
 // binding and convert are the schemas' bytes. Read-only.
@@ -46,6 +49,8 @@ var (
 	binding []byte
 	//go:embed gotogether.convert-1.json
 	convert []byte
+	//go:embed gotogether.report-1.json
+	report []byte
 )
 
 // Binding is the binding file's schema (gotogether.binding/1), as JSON.
@@ -54,6 +59,10 @@ func Binding() []byte { return slices.Clone(binding) }
 // Convert is the span conversion rule file's schema (gotogether.convert/1),
 // as JSON.
 func Convert() []byte { return slices.Clone(convert) }
+
+// Report is a command's machine-readable report's schema
+// (gotogether.report/1: validate -json, simulate -json), as JSON.
+func Report() []byte { return slices.Clone(report) }
 
 // A Problem is one place where a file breaks its schema.
 type Problem struct {

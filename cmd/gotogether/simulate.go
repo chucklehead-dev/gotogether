@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -52,7 +53,19 @@ import (
 // forbidden, when the evaluator's search saw the whole state graph, else
 // not found in the samples or within the bound.
 func simulate(args []string) (int, error) {
+	var mr machineReports
+	log := &simLog{}
+	simCapture = log
+	defer func() { simCapture = nil }()
+	code, err := simulateCmd(args, &mr, log)
+	return mr.write(log.document(), os.Stdout, code, err)
+}
+
+// simulateCmd is the simulate command, its machine-readable reports'
+// flags in mr and its lines in log.
+func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	fset := commandFlags("simulate")
+	mr.flags(fset)
 	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
 	steps := fset.Int("steps", 0, "steps per trace (default: the binding's simulate.steps, else 30)")
 	samples := fset.Int("samples", 0, "traces per invariant (default: the binding's simulate.samples, else 1000)")
@@ -70,6 +83,11 @@ func simulate(args []string) (int, error) {
 	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
+	var text io.Writer = os.Stdout
+	if err := mr.resolve(&text); err != nil {
+		return 2, err
+	}
+	log.quiet, log.binding = text != os.Stdout, *bpath
 	if *bpath == "" {
 		return 2, fmt.Errorf("simulate needs -binding b.yaml")
 	}
@@ -91,12 +109,12 @@ func simulate(args []string) (int, error) {
 		sim = &binding.Simulation{}
 	}
 	if sim.Skip != "" {
-		fmt.Printf("simulate %s: skipped: %s\n", *bpath, sim.Skip)
+		simPrintf("simulate %s: skipped: %s\n", *bpath, sim.Skip)
 		return 0, nil
 	}
 	capped := ""
 	if *verify > 0 && sim.VerifySkip != "" {
-		fmt.Printf("simulate %s: not verified: %s\n", *bpath, sim.VerifySkip)
+		simPrintf("simulate %s: not verified: %s\n", *bpath, sim.VerifySkip)
 		return 0, nil
 	}
 	if sim.VerifySteps > 0 && *verify >= sim.VerifySteps {
@@ -115,7 +133,7 @@ func simulate(args []string) (int, error) {
 		// an eventual val holds when a run settles, which a sampled trace of
 		// the model never says: there is nothing to sample (-graph judges
 		// it as cycles)
-		fmt.Printf("simulate %s: no invariants, and its eventual vals (%s) are judged after a run settles, not on sampled traces: nothing to simulate (-graph judges them as cycles)\n",
+		simPrintf("simulate %s: no invariants, and its eventual vals (%s) are judged after a run settles, not on sampled traces: nothing to simulate (-graph judges them as cycles)\n",
 			*bpath, strings.Join(b.Eventually, ", "))
 		return 0, nil
 	}
@@ -181,9 +199,9 @@ func simulate(args []string) (int, error) {
 		return 2, err
 	}
 	if *verify > 0 {
-		fmt.Printf("simulate %s: %s(%s), every trace of up to %d steps (quint verify%s)\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *verify, capped)
+		simPrintf("simulate %s: %s(%s), every trace of up to %d steps (quint verify%s)\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *verify, capped)
 	} else {
-		fmt.Printf("simulate %s: %s(%s), %d traces of %d steps, seed %s\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *samples, *steps, *seed)
+		simPrintf("simulate %s: %s(%s), %d traces of %d steps, seed %s\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *samples, *steps, *seed)
 	}
 	// the Go evaluator's search for the possibles first (milliseconds a
 	// state, the shortest witness with its arguments); quint samples what
@@ -252,14 +270,14 @@ func simulate(args []string) (int, error) {
 		}
 		switch {
 		case holds[inv] && !violated && *verify > 0:
-			fmt.Printf("  holds   %s: no trace of up to %d steps violates it\n", inv, *verify)
+			simPrintf("  holds   %s: no trace of up to %d steps violates it\n", inv, *verify)
 		case holds[inv] && !violated:
-			fmt.Printf("  holds   %s: none of %d sampled traces of up to %d steps violates it (a sample, no proof: %s; -graph searches every state)\n", inv, *samples, *steps, confidence.Sentence(*samples, "trace", "a violation"))
+			simPrintf("  holds   %s: none of %d sampled traces of up to %d steps violates it (a sample, no proof: %s; -graph searches every state)\n", inv, *samples, *steps, confidence.Sentence(*samples, "trace", "a violation"))
 		case allows[inv] && violated:
-			fmt.Printf("  allows  %s: a trace violates it (the code must not)\n", inv)
+			simPrintf("  allows  %s: a trace violates it (the code must not)\n", inv)
 		case holds[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should guarantee it, and a trace violates it: fix the model if it must hold, "+
+			simPrintf("  FAIL    %s: the model should guarantee it, and a trace violates it: fix the model if it must hold, "+
 				"or move it to simulate.allows if it is a requirement on the code (the model lets it fail, the code must prevent it). The trace:\n%s\n", inv, out)
 		case allows[inv] && *verify > 0:
 			code = 1
@@ -267,19 +285,19 @@ func simulate(args []string) (int, error) {
 			if capped != "" { // the binding caps the depth: a deeper search is the binding's to allow
 				raise = "Raise the binding's simulate.verifySteps if quint verify finishes deeper, run without -verify for longer sampled traces"
 			}
-			fmt.Printf("  FAIL    %s: the model should allow its violation, and no trace of up to %d steps violates it: "+
+			simPrintf("  FAIL    %s: the model should allow its violation, and no trace of up to %d steps violates it: "+
 				"checking the code against it proves nothing. %s, or move it to simulate.holds\n", inv, *verify, raise)
 		case allows[inv]:
 			code = 1
-			fmt.Printf("  FAIL    %s: the model should allow its violation, and none of %d sampled traces of up to %d steps violates it: "+
+			simPrintf("  FAIL    %s: the model should allow its violation, and none of %d sampled traces of up to %d steps violates it: "+
 				"checking the code against it proves nothing. Raise -samples or -steps, or move it to simulate.holds\n", inv, *samples, *steps)
 		case violated:
 			code = 1
-			fmt.Printf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model\n", inv)
+			simPrintf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model\n", inv)
 		case *verify > 0: // held: not wrong, only unsaid
-			fmt.Printf("  holds   %s: no trace of up to %d steps violates it (unclassified: add it to simulate.holds to keep it so)\n", inv, *verify)
+			simPrintf("  holds   %s: no trace of up to %d steps violates it (unclassified: add it to simulate.holds to keep it so)\n", inv, *verify)
 		default:
-			fmt.Printf("  holds   %s: none of %d sampled traces of up to %d steps violates it (unclassified: add it to simulate.holds to keep it so; a sample, no proof)\n", inv, *samples, *steps)
+			simPrintf("  holds   %s: none of %d sampled traces of up to %d steps violates it (unclassified: add it to simulate.holds to keep it so; a sample, no proof)\n", inv, *samples, *steps)
 		}
 	}
 	if len(possibles) > 0 {

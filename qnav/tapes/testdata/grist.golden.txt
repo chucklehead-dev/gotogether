@@ -29,7 +29,7 @@ the run's next call, which the model rejects
         not(matches(log[i], r))) is false
         where i < readPos = false, reads.forall(r => not(matches(log[i], r))) = false, i = 0
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after the
-── lines 1–17 of 179 (pgup/pgdn scroll)
+── lines 1–17 of 175 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -61,11 +61,11 @@ the run's next call, which the model rejects
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after the
         decision read through position 0, matches its read of counter-created events tagged name="c": a
         concurrent append, which the commit should have conflicted on (its condition)
-      enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a", id =
-        "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result = "ok")),
-        incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1", caller = "a",
-        readPos = 1, reads = Set(("counter-created", "counter", "a")), result = "unknown-counter")),
-── lines 1–23 of 179 (pgup/pgdn scroll)
+      enabled instead (the model's moves from this state, not records): createCounter (8 ways),
+        incrementCounter (8 ways), retireCounter (4 ways), showCounter(counter = "a", readPos = 1),
+        showCounter(counter = "b", readPos = 1), welcome(trigger = 1, ok = true), and 3 more
+
+── lines 1–23 of 175 (pgup/pgdn scroll)
 
 /showCounter
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

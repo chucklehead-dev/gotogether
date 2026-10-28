@@ -10,10 +10,10 @@ mutants) ends in one of these verdicts.
 |---|---|---|---|
 | conforms | `conformance: PASS`, every invariant `PASS` | `qtest.Conforms()` | the run is a behaviour of the model and its properties hold |
 | conforms, decided in Go | as above, and `judged by the Go evaluator, with no quint replay` | as above | the Go evaluator (internal/qeval) passed it; every failing verdict below is quint's, from its replay (`GOTOGETHER_EVAL=quint` replays passes with quint too, `=shadow` with both, failing on any difference) |
-| a step the model cannot take | `step i is not a transition of the model from the state reached` | `qtest.Rejects("action")` (`""`: any) | the code did something the model forbids from that state |
+| a step the model cannot take | `record <id> is not a transition of the model from the state reached` (`step i` for an inferred step), with `the model expects: <call>, which changes:` when the model answers that request otherwise | `qtest.Rejects("action")` (`""`: any) | the code did something the model forbids from that state |
 | a state mismatch | `does not match` with `expect:` and `obs:` | `qtest.Mismatch("action")` | the step was allowed, but the observed state (`obs.*`) differs from the model's after it |
 | an eventual val false at the end | `invariant eventually V: FAIL` | `qtest.Violates(validate.EventuallyName("V"))` | the run ended (settled, in a simulation) with work the model says is pending: a livelock or lost work |
-| an invariant violated | `conformance: PASS`, `invariant I: FAIL` | `qtest.Violates("I")` | the model allows the behaviour and the property rules it out: a design bug, or a property stronger than the requirement |
+| an invariant violated | `conformance: PASS`, `invariant I: FAIL`, `violated after record <id>`, `the step changed, in the model's state:` | `qtest.Violates("I")` | the model allows the behaviour and the property rules it out: a design bug, or a property stronger than the requirement |
 | an issue | `issue: ...` (cycles in the recorded order, an order real time contradicts; `issue: error duplicate: recorder r seq n is two different records`, two logs numbering one recorder) | `qtest.HasIssue(kind)` (`"duplicate"`, `"cycle"`, ...) where a mutant's defect is the input's, the report failing on it alone; otherwise fix the recording | the steps could not be put in one order; a pass would mean little |
 | no verdict (dropped steps) | `issue: error gap: recorder r is missing seq [n]`, a failure after it `issue: warn gap: conformance not evaluated: the failure at step i ... comes after recorder r lost seq n`, Reason `no verdict (dropped steps)`, `RESULT: NO VERDICT` | none: not a `Rejects`, `Mismatch` or `Violates`, not OK, `Finishes()` and `SameFailure` unknown | a recorder lost a step mid-log (a sampled or dropped export): a failure at or after the gap (a later seq of its recorder, a later time on another; any failure but the initial state's when the order is linearized or the actor's steps carry a domain clock, which may put the dropped step first) may be the dropped step's doing; a failure before every gap stands, a FAIL, whatever another check's after it says; recorded steps that pass beside it are no verdict too; repair the telemetry |
 | a lost prefix | `issue: error lost-prefix` | none: record a snapshot | a log starts after seq 1 (rotated, truncated): its first state is not `init`; a trace that starts with the binding's `snapshot` step is judged from its state instead (`issue: info lost-prefix: judged from the state recorded by A at seq N`) |
@@ -34,9 +34,42 @@ mutants) ends in one of these verdicts.
 if neither does and one has none. A run with no verdict for an
 expectation neither meets nor misses it, wherever it is read: `Holds`
 is false, `Run.Expect` fails saying so, `Some` is not shown by it and
-`All` and `None` do not hold over it. A report's summary shows the model's state
-around the failing step: read it before deciding whose bug it is (the
+`All` and `None` do not hold over it. A report's summary shows what the failing
+step changed in the model's state (or would have, for the model's
+answer to a rejected request), and `-v` the whole state: read it before deciding whose bug it is (the
 workflow skill's triage table).
+
+## Reading a failure at 3 a.m. (validate's report)
+
+A report names a failing record once, by where it was read: `record
+day.jsonl:12` (a step log's file and line), `record span 5b8a…` (a span,
+its trace on the `record:` line), else `record <recorder>#<seq>`. Grep
+that. The `record:` line adds the step's wall time (UTC), its process,
+and its recorder when that says more (grist's
+`<app>/<node>/<incarnation>`: the pod and its start). `-v` adds the
+step's place in the replay and its recorder's seq, every example of the
+actions enabled instead (the model's moves, never records: an action
+enabled many ways shows its count without `-v`), and the model's state
+whole. The invariants a failure leaves unchecked are one line, `invariants
+not checked (N: ...)`: the model's states after a rejected step are not
+the run's, so nothing after it is judged.
+
+`validate -json` (and `simulate -json`) prints the report as data,
+`gotogether.report/1`: each failure's `record` (`id`, `time`, `process`,
+`recorder`, `traceId`, `spanId`, `step`, `seq`), `brief` (one line for an
+alert), `why.expected`, `changes`, the `state` whole. `-report
+junit=FILE`, `-report sarif=FILE` write the CI renderings beside the
+text; `GOTOGETHER_REPORT_DIR` makes every validate and simulate write
+its JSON there (the Action's job summary reads it).
+
+| Verdict (`reason`) | Severity | First look | Then |
+|---|---|---|---|
+| `rejects <action>` | page: the code did what the model forbids | the record's line in the log, its time and pod; `the model expects` is the answer the model would have given that request | the code path that answered otherwise (fix the code), or the binding's mapping of the outcome; `gotogether nav ... -at N` opens the model before the step |
+| `mismatch after <action>` | page: the step was allowed, the state observed differs | `expect:` against `obs:`; the step's `changed` lines | a read that saw stale or partial state, or an expect that reads the wrong field |
+| `violates <I>` | page when `I` is a requirement on the code (`simulate.allows`), else the model's bug | `the step changed` lines: the field that broke `I` | the decision that let the step happen (a check missing, a race); a property stronger than the requirement is the model's to fix |
+| `no verdict (...)` | ticket, not a page: the telemetry lost steps | the `issue:` line naming the recorder and the seqs lost | repair the export; a failure before every gap is a FAIL and pages |
+| `incomplete (...)` | ticket: a run that never finished | the finish line (`no settle`, `pending calls`) | the run's end: a settle not recorded, a call never answered |
+| tool error (exit 2, `"verdict": "error"`) | the pipeline's, not the service's | the error's text: it names the fix | the binding, the model or quint |
 
 ## A prefix vs a finished run
 

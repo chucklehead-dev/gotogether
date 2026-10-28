@@ -36,26 +36,26 @@ func reportEventually(r *validate.GraphResult, holds, allows map[string]bool) (c
 	// what is checked, said as it is (review 11, O2): true infinitely
 	// often (at quiescence, for a run that settles), not true once, and
 	// under per-action weak fairness, not the most fairness there is
-	fmt.Printf("  cycles  %s judged as true infinitely often (at quiescence, for a run that settles): a fair cycle of states where one is false refutes it; "+
+	simPrintf("  cycles  %s judged as true infinitely often (at quiescence, for a run that settles): a fair cycle of states where one is false refutes it; "+
 		"%s, fairness weak and per action (per-call or strong fairness would rule out more cycles, so a lasso may be no behaviour of a system that has them, "+
 		"and live is so only for a system at least this fair); a stutter is no step\n", plural(len(r.Eventually), "eventual val"), fairness)
 	for _, v := range r.Eventually {
 		ev := v.Name
 		if v.Error != "" {
 			code = 1
-			fmt.Printf("  FAIL    %s: evaluating it fails in a reachable state (%s): the model's own error, fix the model. The path:\n%s", ev, v.Error, cexText(v.Counterexample))
+			simPrintf("  FAIL    %s: evaluating it fails in a reachable state (%s): the model's own error, fix the model. The path:\n%s", ev, v.Error, cexText(v.Counterexample))
 			continue
 		}
 		if v.Hot {
 			switch {
 			case holds[ev]:
 				code = 1
-				fmt.Printf("  FAIL    %s: the model should drive it, and a fair cycle keeps it false forever: fix the model if it must, move it to simulate.allows if it is the code's "+
+				simPrintf("  FAIL    %s: the model should drive it, and a fair cycle keeps it false forever: fix the model if it must, move it to simulate.allows if it is the code's "+
 					"to reach, or name the actions a run stops before it settles (simulate.stops) or need not take (simulate.unfair). The lasso:\n%s", ev, lassoText(ev, v))
 			case allows[ev]:
-				fmt.Printf("  allows  %s: a fair cycle keeps it false forever (the code must leave it): %s, then %s forever\n", ev, callsOf(v.Lasso.Prefix), cycleOf(v.Lasso))
+				simPrintf("  allows  %s: a fair cycle keeps it false forever (the code must leave it): %s, then %s forever\n", ev, callsOf(v.Lasso.Prefix), cycleOf(v.Lasso))
 			default:
-				fmt.Printf("  hot     %s: a fair cycle keeps it false forever (unclassified: simulate.holds if the model must drive it, which then fails; simulate.allows if it is the code's to reach). The lasso:\n%s",
+				simPrintf("  hot     %s: a fair cycle keeps it false forever (unclassified: simulate.holds if the model must drive it, which then fails; simulate.allows if it is the code's to reach). The lasso:\n%s",
 					ev, lassoText(ev, v))
 			}
 			continue
@@ -67,14 +67,14 @@ func reportEventually(r *validate.GraphResult, holds, allows map[string]bool) (c
 		switch {
 		case v.Unsupported != "":
 			unchecked = true
-			fmt.Printf("  unchecked %s: the Go evaluator cannot evaluate it in %s (%s), which are in no cycle, and no fair cycle of the others keeps it false%s\n",
+			simPrintf("  unchecked %s: the Go evaluator cannot evaluate it in %s (%s), which are in no cycle, and no fair cycle of the others keeps it false%s\n",
 				ev, plural(v.Unchecked, "state"), v.Unsupported, note)
 		case r.Complete && allows[ev]:
-			fmt.Printf("  live    %s: no fair cycle keeps it false: the model drives it itself (the whole graph, %d states%s; it could be in simulate.holds)%s\n", ev, r.States, depthNote(r), note)
+			simPrintf("  live    %s: no fair cycle keeps it false: the model drives it itself (the whole graph, %d states%s; it could be in simulate.holds)%s\n", ev, r.States, depthNote(r), note)
 		case r.Complete:
-			fmt.Printf("  live    %s: no fair cycle keeps it false (the whole graph, %d states%s)%s\n", ev, r.States, depthNote(r), note)
+			simPrintf("  live    %s: no fair cycle keeps it false (the whole graph, %d states%s)%s\n", ev, r.States, depthNote(r), note)
 		default:
-			fmt.Printf("  bounded %s: no fair cycle among the %d states explored keeps it false, which proves nothing past them%s\n", ev, r.States, note)
+			simPrintf("  bounded %s: no fair cycle among the %d states explored keeps it false, which proves nothing past them%s\n", ev, r.States, note)
 		}
 	}
 	return code, unchecked

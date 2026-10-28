@@ -53,6 +53,24 @@ The first release. What a user meets, by module:
   the rewrite is mechanical (`quintvet -fix`): `//qenv:go`, a method
   value wrapped, a returned local named as the result, a misspelled
   parameter or action, a field the binding uses recorded (ROADMAP I36).
+- On-call reports (ROADMAP I20): a failing record is named once
+  (`validate.RecordID`: where it was read, else `<recorder>#<seq>`),
+  its `record:` line with its wall time, process, recorder (a grist
+  node's pod) and trace (`qtrace.SpanSource`: otelio's and convert's
+  `Source` now carries the span's trace id); `Result.VerboseSummary` and
+  `Report.VerboseSummary` (validate `-v`) add the replay's step and seq.
+  A mismatch's or violation's report says what the step changed
+  (`Failure.Changes`, `validate.Change`) instead of dumping the state; a
+  rejected step's, the model's answer to the same request
+  (`Explanation.Expected`, `Explanation.Changes`); "enabled instead" is
+  labelled the model's, its examples behind `-v`; unchecked invariants
+  are one line; `Failure.At` names where a failure is.
+  `validate -json`, `simulate -json` (`gotogether.report/1`:
+  `validate.Document`, `DocActor`, `DocFailure`, `DocRecord`, ...,
+  `ReportFormat`, `NewDocument`, `Document.AddReport`, `Result.Doc`,
+  `Failure.Doc`, `Document.JSON`, `JUnit`, `SARIF`), `-report
+  json|junit|sarif=FILE`, `GOTOGETHER_REPORT_DIR`; the Action's job
+  summary reads the JSON. Its schema: `schemas.Report`, `schemas.ReportURL`.
 
 - The Go evaluator matches quint where a differential test against
   both backends found it did not (ROADMAP I11): a `val` inside an

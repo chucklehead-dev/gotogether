@@ -67,8 +67,8 @@ func TestRejectionNamesTheConjunct(t *testing.T) {
 			`why: the model's admit(client = "c") is disabled:`,
 			`in admit: admitted.size() < LIMIT is false`,
 			`where admitted.size() = 2, admitted = Set("a", "b"), LIMIT = 2`,
-			`enabled instead: release(client = "a"), release(client = "b")`,
-			"model state before the step:", // quint's, as before
+			`enabled instead (the model's moves from this state, not records): release(client = "a"), release(client = "b")`,
+			"model state before the step:", // quint's, as before: no expectation's diff to show instead
 		} {
 			if !strings.Contains(sum, want) {
 				t.Errorf("the report lacks %q:\n%s", want, sum)

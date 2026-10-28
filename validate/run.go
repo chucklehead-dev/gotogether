@@ -235,7 +235,13 @@ func (r *Report) Reason() string {
 // Summary renders a report for humans: its issues (but the info naming
 // the actors its binding leaves out, which is in Issues), each actor's
 // result.
-func (r *Report) Summary() string {
+func (r *Report) Summary() string { return r.summary(false) }
+
+// VerboseSummary is Summary with every actor's VerboseSummary: each
+// failing record's other indices, and the model's whole state.
+func (r *Report) VerboseSummary() string { return r.summary(true) }
+
+func (r *Report) summary(verbose bool) string {
 	s := ""
 	if r.Unsettled != "" {
 		s += r.Unsettled + "\n"
@@ -255,7 +261,7 @@ func (r *Report) Summary() string {
 		s += l + "\n"
 	}
 	for _, a := range actors {
-		sum := a.Summary()
+		sum := a.summary(verbose)
 		if len(r.Actors) == 1 && a.Actor == "default" {
 			// one actor, unnamed: "actor default" on every report read as
 			// a setting to change

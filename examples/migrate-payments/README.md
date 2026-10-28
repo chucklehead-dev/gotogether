@@ -63,8 +63,19 @@ scenario, and `TestScenariosPossible` claims three of them in Go
   service's logger replaced by `auditsteps.Handler` (`recorded`): all 12
   conform. Under the draft, `TestPartialCapture`'s run was rejected.
 - The production log of 2026-10-02, read by `auditsteps.ReadLog`:
-  `invariant refundsWithinCapture: FAIL, violated after step 11`, the
-  second refund of `ch_3` (700, then 500, of 1000). Under the draft its
+  `invariant refundsWithinCapture: FAIL, violated after record
+  day.jsonl:12`, the second refund of `ch_3` (700, then 500, of 1000),
+  as on-call reads it:
+  ```
+  violated after record day.jsonl:12
+    record:   day.jsonl:12, 2026-10-02T09:00:31.37Z, process payments-1
+    observed: refund(amount=500, id=ch_3)
+    quint:    refund("ch_3", 500, "ok")
+    the step changed, in the model's state:
+      charges["ch_3"].refunded: 700 -> 1200
+  ```
+  (`-v` adds the replay's step 11 and the recorder's seq; `-json` the
+  same as `gotogether.report/1`.) Under the draft its
   second record, a client's retry answered with its charge (`replayed`),
   was rejected: nothing in the draft knew idempotency keys.
 - An older log, rotated, starts at `audit_seq` 4113: `issue: error

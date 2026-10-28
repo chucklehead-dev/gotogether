@@ -401,12 +401,22 @@ step, then the run's option, whose step the model rejects, with why.
 ```
 actor default: 10 steps
   conformance: FAIL
-    after step 3 the model's state does not match what was observed
+    after record run.jsonl:4 the model's state does not match what was observed
+      record:   run.jsonl:4, 2026-10-02T09:00:03Z, process bank-1
+      observed: deposit(account=carol, amount=2)
+      obs:      balance=4
       quint:    deposit("carol", 2)
       expect:   balances.get("carol") == 4
-      observed: deposit(account=carol, amount=2) (seq 3)
-      obs:      balance=4
+      the step changed, in the model's state:
+        balances["carol"]: 3 -> 5
 ```
+
+A failing record is named once, where it was read, with its wall time,
+process (a grist node's pod) and trace; `-v` adds its place in the
+replay and the model's whole state. `validate -json` and `simulate
+-json` print the report as data (`gotogether.report/1`), `-report
+junit=FILE` and `-report sarif=FILE` write it for CI, and the Action's
+job summary reads it (`GOTOGETHER_REPORT_DIR`).
 
 Reconstruction orders steps from many recorders. It uses dense sequence
 numbers (so a lost step is reported; a log that starts after seq 1 lost

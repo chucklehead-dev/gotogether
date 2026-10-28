@@ -246,9 +246,9 @@ Production logs are selected and sanitized before they are checked
 
 | Verdict | Meaning | Usual cause |
 |---|---|---|
-| `step i is not a transition` (disabled, QNT513) | the model cannot take the observed step from the state reached | implementation bug; or a wrong binding (argument mapping, missing restart, wrong outcome) |
+| `record <id> is not a transition` (disabled, QNT513) | the model cannot take the observed step from the state reached | implementation bug; or a wrong binding (argument mapping, missing restart, wrong outcome) |
 | `state does not match what was observed` (QNT508) | the step was possible but `expect` fails; the report shows `expect:`, `obs:` and the model's state after the step | implementation computed a different state, or a wrong `expect`/observation |
-| `invariant X: FAIL, violated after step i` | the run is a behaviour of the model, and the model's own property fails on it | a **design** bug the model already allows, now seen in real code |
+| `invariant X: FAIL, violated after record <id>` | the run is a behaviour of the model, and the model's own property fails on it | a **design** bug the model already allows, now seen in real code |
 | `issue: error gap` | sequence numbers are missing: steps were lost or sampled | fix the pipeline; the pass is unsound |
 | `issue: error lost-prefix` | a log starts after seq 1: its first state is not `init` | record a snapshot step at each log's head and name its action (`snapshot:`), or name the states it may start in (`resume:`) |
 | `issue: warn lost-suffix`, `conformance: N/A` | a recorder lost its tail and a later failure may depend on it: no verdict | check a log that has the steps; record so they survive (`qobs.Synced`) |
@@ -261,7 +261,28 @@ text, with its free names' values (`in admit: admitted.size() < LIMIT is
 false / where admitted.size() = 2, LIMIT = 2`), descended through the
 actions and definitions it calls; a grist app's in its terms too
 (`grist: the decision read nothing of ... read it through the read model
-...`); and what the model could have done instead (`enabled instead:`).
+...`); the answer the model gives the same request and what it would
+change (`the model expects: capture(id = "ch_1", amount = 1000, result =
+"ok"), which changes: charges["ch_1"].status: "authorized" ->
+"captured"`); and the model's own moves from that state (`enabled
+instead (the model's moves from this state, not records):`, examples
+behind `-v`). A mismatch or a violation says what the step changed
+(`the step changed, in the model's state: charges["ch_3"].refunded: 700
+-> 1200`), the whole state behind `-v`.
+
+The failing record is named once (`record day.jsonl:12`: where it was
+read; a span's id, its trace beside it; else `<recorder>#<seq>`), and
+its `record:` line carries its wall time (UTC), process, and recorder
+when it says more (grist's `<app>/<node>/<incarnation>`). Grep the id,
+then the logs and traces at that time and pod. `-v` adds the replay's
+step and the recorder's seq. The invariants a rejected step leaves
+unchecked are one line. For alerting and CI, `validate -json` prints
+the report as `gotogether.report/1` (each failure's `record`, `brief`,
+`why`, `changes`, `state`); `-report junit=FILE` and `-report
+sarif=FILE` write JUnit and SARIF beside the text, and
+`GOTOGETHER_REPORT_DIR=dir` keeps every run's JSON (the Action's job
+summary and annotations read it). The runbook by verdict is
+[verdicts.md](../../gotogether-workflow/references/verdicts.md) ("Reading a failure at 3 a.m.").
 Read the false condition first: it names the field the code got wrong or
 the binding mapped wrong. `why: not explained: ...` says why there is
 none (a model outside the evaluator's fragment): quint's report is the

@@ -33,14 +33,26 @@ echo; echo "\$ gotogether lint -binding binding.yaml -src publisher"
 status=0
 verdict() { # file -> one line: conformance, failing step, invariants, exit status
   local name=$1; shift
-  local out; out=$("$OUT/gotogether" validate "$@" 2>&1); local rc=$?
+  # -v: a failing record's line says its step in the replay, which the
+  # three inputs share (each names its record its own way: a span, a
+  # line, none for ITF)
+  local out; out=$("$OUT/gotogether" validate -v "$@" 2>&1); local rc=$?
   case "$sc" in
     happy | rotation-race) [ $rc -eq 0 ] || status=1 ;;
     *) [ $rc -ne 0 ] || status=1 ;;
   esac
   [ -n "${VERBOSE:-}" ] && echo "$out"
   printf '  %-9s %-28s exit %d  %s\n' "$name" "$(grep -m1 -o 'input .*: [a-zA-Z/ -]*$' <<<"$out" | sed 's/^input [^:]*: //')" "$rc" \
-    "$(grep -E 'conformance:|invariant .*: (FAIL|PASS)|step [0-9]+ |violated after' <<<"$out" | sed -E 's/^ +//; s/ is not a transition.*/ disabled/; s/the model.s state does not match.*/state mismatch/' | paste -sd ';' -)"
+    "$(awk '{ sub(/^ +/, "") }
+      /^(conformance:|invariant .*: (FAIL|PASS))/ { print; next }
+      /^step [0-9]+ is not a transition/ { print $1 " " $2 " disabled"; next }
+      /^after step [0-9]+ the model.s state does not match/ { print $2 " " $3 " state mismatch"; next }
+      /^violated after step [0-9]+/ { print; next }
+      /^record [^ ]+ is not a transition/ { k = "disabled"; next }
+      /^after record .* does not match/ { k = "state mismatch"; next }
+      /^violated after record / { k = "violated"; next }
+      k != "" && /^record: .* of the replay/ { match($0, /step [0-9]+ of the replay/); n = substr($0, RSTART, RLENGTH - 14)
+        print (k == "violated" ? "violated after " n : n " " k); k = "" }' <<<"$out" | paste -sd ';' -)"
 }
 
 for sc in ${SCENARIOS:-happy rotation-race ambiguous-seal manifest-first no-lock}; do

@@ -101,7 +101,9 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_CACHE=off` asks quint every time, `GOTOGETHER_CACHE=<dir>`
   keeps it there. An entry unused for a week is pruned.
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
-  qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
+  qhegel. `GOTOGETHER_REPORT_DIR=/dir` makes every `gotogether validate`
+  and `simulate` write its report as JSON there (`gotogether.report/1`,
+  a file per command, in the order run: the Action's job summary). `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.
   With it, `GOTOGETHER_NAV` (start, fail, `@k`, `<schedule>@k`) navigates

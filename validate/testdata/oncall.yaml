@@ -1,0 +1,16 @@
+spec: oncall.qnt
+module: oncall
+constants:
+  IDS: '{{ set "id" }}'
+  AMOUNTS: '{{ set "amount" }}'
+outcomes:
+  ok: '"ok"'
+  invalid_state: '"invalid_state"'
+actions:
+  authorize:
+    args: { result: '{{.outcome}}' }
+  capture:
+    args: { result: '{{.outcome}}' }
+  refund:
+    args: { result: '{{.outcome}}' }
+invariants: [refundsWithinCapture, capturedAuthorized]

@@ -2028,6 +2028,7 @@ func MutateOps(ops ...string) MutationOption
 func Mutations(steps []Step, opts ...MutationOption) []StepMutant
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
+func SpanSource(spanID, traceID string) string
 func UncorruptedFields(steps []Step) []string
 func WriteJSONL(w io.Writer, steps []Step) error
 type ClockAssumption struct
@@ -2151,9 +2152,11 @@ var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"
 == github.com/chucklehead-dev/gotogether/schemas
 const BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json"
 const ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
+const ReportURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
 func Binding() []byte
 func Check(schema, data []byte) ([]Problem, error)
 func Convert() []byte
+func Report() []byte
 type Problem struct
     field Line int
     field Column int
@@ -2191,6 +2194,7 @@ const ManifestFormat = "gotogether.run/2"
 const NavProtocol = "gotogether.nav/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
+const ReportFormat = "gotogether.report/1"
 const Uncollected Cause = "uncollected"
 func CacheDir() string
 func Cached(bindingPath string, o Options) (*Checker, error)
@@ -2204,9 +2208,11 @@ func IsManifest(path string) bool
 func LoadCompiled(path string) (*CompiledModel, error)
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker, error)
+func NewDocument(command string) *Document
 func NewManifest(r RunRecord) (*Manifest, error)
 func QuintSupported(v string) bool
 func ReadManifest(path string) (*Manifest, error)
+func RecordID(s *qtrace.Step) string
 func SplitPath(s string) []string
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Absence struct
@@ -2241,6 +2247,12 @@ type Branch struct
     field Name string `json:"name"`
     field Conditions []Condition `json:"conditions,omitempty"`
 type Cause string
+type Change struct
+    field Path string `json:"path"`
+    field Kind string `json:"kind"`
+    field Before string `json:"before,omitempty"`
+    field After string `json:"after,omitempty"`
+    method (Change) String() string
 type Checker struct
     field Binding *binding.Binding
     field Model *binding.Model
@@ -2281,6 +2293,105 @@ type Counterexample struct
 type Disabled struct
     field Action string `json:"action"`
     field Why *Explanation `json:"why,omitempty"`
+type DocAbsence struct
+    field Kind string `json:"kind"`
+    field Name string `json:"name"`
+    field Cause string `json:"cause"`
+    field Why string `json:"why"`
+type DocActor struct
+    field Actor string `json:"actor"`
+    field Partition string `json:"partition,omitempty"`
+    field Steps int `json:"steps"`
+    field Verdict string `json:"verdict"`
+    field Reason string `json:"reason,omitempty"`
+    field Conformance string `json:"conformance"`
+    field Invariants []DocInvariant `json:"invariants,omitempty"`
+    field Failures []DocFailure `json:"failures,omitempty"`
+    field Issues []string `json:"issues,omitempty"`
+    field Pending []DocRecord `json:"pending,omitempty"`
+    field Absent []DocAbsence `json:"absent,omitempty"`
+    field Constants []string `json:"constants,omitempty"`
+    field JudgedBy string `json:"judgedBy,omitempty"`
+    field Module string `json:"module,omitempty"`
+    field ITF string `json:"itf,omitempty"`
+    field Nav string `json:"nav,omitempty"`
+type DocCheck struct
+    field Name string `json:"name"`
+    field Kind string `json:"kind"`
+    field Verdict string `json:"verdict"`
+    field Detail string `json:"detail,omitempty"`
+type DocFailure struct
+    field Check string `json:"check"`
+    field Kind string `json:"kind"`
+    field Verdict string `json:"verdict"`
+    field At string `json:"at"`
+    field Record *DocRecord `json:"record,omitempty"`
+    field Quint string `json:"quint,omitempty"`
+    field Expect string `json:"expect,omitempty"`
+    field ExpectTemplate string `json:"expectTemplate,omitempty"`
+    field Why *Explanation `json:"why,omitempty"`
+    field Changes []Change `json:"changes,omitempty"`
+    field State map[string]string `json:"state,omitempty"`
+    field StateAfter bool `json:"stateAfter,omitempty"`
+    field Note string `json:"note,omitempty"`
+    field Brief string `json:"brief"`
+    field Text string `json:"text"`
+type DocInput struct
+    field Path string `json:"path"`
+    field Format string `json:"format"`
+    field Steps int `json:"steps"`
+    field Warnings []string `json:"warnings,omitempty"`
+type DocInvariant struct
+    field Name string `json:"name"`
+    field Kind string `json:"kind"`
+    field Verdict string `json:"verdict"`
+    field Cause string `json:"cause,omitempty"`
+type DocPartition struct
+    field Actor string `json:"actor"`
+    field Key string `json:"key"`
+    field Pass int `json:"pass"`
+    field Of int `json:"of"`
+    field Steps int `json:"steps"`
+type DocRecord struct
+    field ID string `json:"id"`
+    field Step int `json:"step,omitempty"`
+    field Seq uint64 `json:"seq"`
+    field Recorder string `json:"recorder,omitempty"`
+    field Process string `json:"process,omitempty"`
+    field Actor string `json:"actor,omitempty"`
+    field Thread string `json:"thread,omitempty"`
+    field Time string `json:"time,omitempty"`
+    field Invoked string `json:"invoked,omitempty"`
+    field Action string `json:"action"`
+    field Args map[string]any `json:"args,omitempty"`
+    field Obs map[string]any `json:"obs,omitempty"`
+    field Outcome string `json:"outcome,omitempty"`
+    field Error string `json:"error,omitempty"`
+    field Source string `json:"source,omitempty"`
+    field Ref string `json:"ref,omitempty"`
+    field TraceID string `json:"traceId,omitempty"`
+    field SpanID string `json:"spanId,omitempty"`
+    field Text string `json:"text"`
+type Document struct
+    field Format string `json:"format"`
+    field Command string `json:"command"`
+    field Verdict string `json:"verdict"`
+    field Exit int `json:"exit"`
+    field Reason string `json:"reason,omitempty"`
+    field Result string `json:"result,omitempty"`
+    field Error string `json:"error,omitempty"`
+    field Binding string `json:"binding,omitempty"`
+    field Inputs []DocInput `json:"inputs,omitempty"`
+    field Artifacts string `json:"artifacts,omitempty"`
+    field Issues []string `json:"issues,omitempty"`
+    field Actors []DocActor `json:"actors,omitempty"`
+    field Partitions []DocPartition `json:"partitions,omitempty"`
+    field Checks []DocCheck `json:"checks,omitempty"`
+    field Notes []string `json:"notes,omitempty"`
+    method (*Document) AddReport(rep *Report)
+    method (*Document) JSON() []byte
+    method (*Document) JUnit() []byte
+    method (*Document) SARIF() []byte
 type Driver struct
     field Name string `json:"name"`
     field Version string `json:"version,omitempty"`
@@ -2314,6 +2425,8 @@ type Explanation struct
     field Reading string `json:"reading,omitempty"`
     field Enabled []string `json:"enabled,omitempty"`
     field More int `json:"more,omitempty"`
+    field Expected string `json:"expected,omitempty"`
+    field Changes []Change `json:"changes,omitempty"`
     field Unexplained string `json:"unexplained,omitempty"`
     method (*Explanation) String(pfx string) string
 type FailingStep struct
@@ -2334,6 +2447,9 @@ type Failure struct
     field State map[string]itf.Value
     field StateAfter bool
     field Why *Explanation
+    field Changes []Change
+    method (*Failure) At() string
+    method (*Failure) Doc(check string, verdict Verdict) DocFailure
 type File struct
     field Path string `json:"path"`
     field SHA256 string `json:"sha256"`
@@ -2504,6 +2620,7 @@ type Report struct
     method (*Report) OK() bool
     method (*Report) Reason() string
     method (*Report) Summary() string
+    method (*Report) VerboseSummary() string
     method (*Report) Verdict() RunVerdict
     method (*Report) WithoutRefs() *Report
 type Result struct
@@ -2527,11 +2644,13 @@ type Result struct
     field Calls []binding.Call
     field Output string
     field Unfinished string
+    method (*Result) Doc() DocActor
     method (*Result) JudgedBy() string
     method (*Result) OK() bool
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
     method (*Result) Summary() string
+    method (*Result) VerboseSummary() string
 type RunBranch struct
     field Option int `json:"option"`
     field Name string `json:"name,omitempty"`

@@ -93,8 +93,11 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 	}
 	// a mismatch says the model's value, in a chunk as alone: the chunk's
 	// backend wrote no ITF for a failing test, and the report had only
-	// the rendered expect ("balance == 11") over the observation (11)
-	wants := []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "model state after the step:", "balance = 10"}
+	// the rendered expect ("balance == 11") over the observation (11);
+	// the model's value is in what the step changed (I20), the state
+	// whole -v's
+	wants := []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "the step changed, in the model's state:", "balance: 5 -> 10",
+		"model state after the step: 2 variables (-v prints it)"}
 	if os.Getenv("QUINT_BACKEND") == "typescript" { // the user's choice: no ITF, and the report says so
 		wants = []string{"expect:   balance == 11", "binding:  balance == {{.obs.balance}}", "model state: not reported: the TypeScript backend"}
 	}
@@ -102,6 +105,9 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 		if s := batch[2].Summary(); !strings.Contains(s, want) {
 			t.Errorf("the mismatch's report lacks %q:\n%s", want, s)
 		}
+	}
+	if s := batch[2].VerboseSummary(); os.Getenv("QUINT_BACKEND") != "typescript" && !strings.Contains(s, "balance = 10") {
+		t.Errorf("the verbose report lacks the model's state:\n%s", s)
 	}
 	t0 = time.Now()
 	for _, r := range runs[:6] {

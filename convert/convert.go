@@ -413,7 +413,7 @@ func (rs *Rules) matchesAny(sp *otelio.Span, res map[string]any) (bool, error) {
 
 func (rs *Rules) step(ru *Rule, c *ctx, t time.Time) (qtrace.Step, string, error) {
 	s := qtrace.Step{Action: ru.Action, Time: t, Args: map[string]any{}, Obs: map[string]any{}, Order: map[string]int64{},
-		Source: "span " + c.sp.SpanID}
+		Source: qtrace.SpanSource(c.sp.SpanID, c.sp.TraceID)}
 	var err error
 	rec, err := c.str(rs.Recorder, "")
 	if err != nil {

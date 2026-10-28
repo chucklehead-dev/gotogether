@@ -350,16 +350,16 @@ func reportPossibles(bpath string, cs []*possibleCheck, rs []validate.PossibleRe
 		nav := fmt.Sprintf("gotogether nav -binding %s shows each action disabled in a state, with why", bpath)
 		switch {
 		case r != nil && r.Found:
-			fmt.Printf("  possible %s: %s (the Go evaluator's search)\n", c.p.Text(), r.Verdict())
+			simPrintf("  possible %s: %s (the Go evaluator's search)\n", c.p.Text(), r.Verdict())
 		case c.quintFound:
-			fmt.Printf("  possible %s: reached (%s; %s)\n", c.p.Text(), quintSays, evalSays)
+			simPrintf("  possible %s: reached (%s; %s)\n", c.p.Text(), quintSays, evalSays)
 		case r != nil && r.Complete:
 			code = 1
-			fmt.Printf("  FAIL    possible %s: %s; %s. The model forbids it: if a conforming run must be able to show it, find the guard that forbids it "+
+			simPrintf("  FAIL    possible %s: %s; %s. The model forbids it: if a conforming run must be able to show it, find the guard that forbids it "+
 				"(%s) and loosen it; if it must be impossible, drop it from simulate.possible\n", what, evalSays, quintSays, nav)
 		default:
 			code = 1
-			fmt.Printf("  FAIL    possible %s: %s; %s. The model may be too strict for any conforming run to show it: "+
+			simPrintf("  FAIL    possible %s: %s; %s. The model may be too strict for any conforming run to show it: "+
 				"find the guard that forbids it (%s) and loosen it if the requirement allows it; "+
 				"if it is only rare or deep, raise simulate.searchStates (or -states) for the evaluator's search, -samples or -steps for quint's\n", what, quintSays, evalSays, nav)
 		}

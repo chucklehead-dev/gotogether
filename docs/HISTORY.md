@@ -3461,6 +3461,61 @@ said, before tags:
   tables say the quantifier. `TestSkillsAvoidDeprecated` refuses the
   old forms, and now reads the grist guide too.
 
+### I20: on-call reports
+
+The adopter's blocker 5 (eleventh review, AD1): the 3 a.m. report suited
+a modeller. Done (DESIGN §68):
+
+- one index for a record, where it was read (`record day.jsonl:12`,
+  `record span 5b8a…`, else `<recorder>#<seq>`: `validate.RecordID`),
+  the replay's step and the seq behind `-v` (`VerboseSummary`);
+- the failing `record:` line with the step's wall time, process, a
+  grist node's pod and start (`<app>/<node>/<incarnation>`), and a
+  span's trace (`qtrace.SpanSource`, written by otelio and convert);
+- what the step changed, by path in the model's names, in place of the
+  dump cut mid-value (`Failure.Changes`); for a rejected step the
+  model's answer to the same request and what it would change
+  (`Explanation.Expected`, `Changes`);
+- "enabled instead" labelled as the model's moves, examples behind `-v`
+  and chosen closest to the record; the invariants left unchecked in one
+  line;
+- `validate -json` and `simulate -json` (`gotogether.report/1`,
+  `validate.Document`), `-report junit=FILE`, `-report sarif=FILE`,
+  `GOTOGETHER_REPORT_DIR`; the Action's job summary and annotations read
+  the JSON (a table of failing records with their time, process, trace
+  and brief), the RESULT line its fallback;
+- a verdict-to-runbook table in verdicts.md.
+
+migrate-payments' production day, before:
+
+```
+  invariant refundsWithinCapture: FAIL
+    violated after step 11
+      quint:    refund("ch_3", 500, "ok")
+      observed: refund(amount=500, id=ch_3) (seq 11, day.jsonl:12)
+      model state after the step:
+        byKey = Map("ord-1001" -> "ch_1", "ord-1002" -> "ch_2", "ord-1003" -> "ch_3")
+        charges = Map("ch_1" -> { authorized: 1000, captured: 600, ..., "ch_3" -> { authorized: 1000, captured: 1000 ...
+```
+
+after:
+
+```
+  invariant refundsWithinCapture: FAIL
+    violated after record day.jsonl:12
+      record:   day.jsonl:12, 2026-10-02T09:00:31.37Z, process payments-1
+      observed: refund(amount=500, id=ch_3)
+      quint:    refund("ch_3", 500, "ok")
+      the step changed, in the model's state:
+        charges["ch_3"].refunded: 700 -> 1200
+      model state after the step: 2 variables (-v prints it)
+```
+
+Its JSON Schema is schemas/gotogether.report-1.json (`schemas.Report`),
+generated from validate.Document by I36's generator. Left: the incident
+walkthrough as an example, and a store-side grist step's pod (the
+relay's steps carry the store's name; G8).
+
 ### I19: validation at production volume
 
 The adopter's blocker 2 (eleventh review): a synthetic payments day

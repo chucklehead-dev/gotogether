@@ -140,7 +140,7 @@ type Step struct {
 	// (CarryWatermark), taken as it is; carriedWhole: some recorder of
 	// the actor stated none
 	carried, carriedWhole bool
-	Source                string // where it came from, for diagnostics (span id, "line N" of a step log read alone, file:N read by package input, ...)
+	Source                string // where it came from, for diagnostics (SpanSource's "span <id> trace <id>", "line N" of a step log read alone, file:N read by package input, ...)
 	// Ref is the step's link to its artifact (KeyRef, qobs.Ref): a
 	// driver's trace line, a screenshot ("bombadil/trace.jsonl:42
 	// screenshot=screenshots/42.webp"). Unlike Source, which says where
@@ -148,6 +148,17 @@ type Step struct {
 	// every reader. It is no model data: no verdict, and no verdict cache
 	// key (Keyer), depends on it.
 	Ref string
+}
+
+// SpanSource is the Source of a step read from an OTel span: "span
+// <span id>", and " trace <trace id>" when the span has one, so a
+// report names the trace on-call jumps to (validate.RecordID reads it
+// back).
+func SpanSource(spanID, traceID string) string {
+	if traceID == "" {
+		return "span " + spanID
+	}
+	return "span " + spanID + " trace " + traceID
 }
 
 // Model reports whether s is a model step: not an invocation record, a
