@@ -246,10 +246,11 @@ On CI, run 442 (both, 54f0867) against run 431: counters 438 → 280 CPU
 s, lease 72 → 30, bank 37 → 23, twophase 61 → 47, validate 706 → 603
 and qtest 295 → 181 (internal/qeval, unchanged, 180 → 221: a slower
 runner); the core part's wall time 13.6 → 7.4 minutes (run 434's), the
-examples part's 8.3 → 7.0. webjobs rose, 135-155 → 179: each overlay
-mutant's process compiles the evaluation module (one entry per
-mutant's build, which the cache cannot share). ci/test-times.txt
-follows run 442.
+examples part's 8.3 → 7.0. webjobs rose, 135-155 → 179, not yet
+explained: its overlay mutants' processes each load an evaluator (the
+compile cached across them, the first one's paid on a fresh runner),
+and its suite is mostly overlay builds. ci/test-times.txt follows run
+442.
 
 ### D4. A quint session for many replays
 
