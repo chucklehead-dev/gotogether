@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -35,9 +36,9 @@ import (
 // Binding is the parsed binding file.
 type Binding struct {
 	// Format, if set, names the binding format the file is written in
-	// (FormatName, gotogether.binding/1): a binding of a later major is
-	// refused with the fix (upgrade gotogether), not with its new keys
-	// "unknown". Empty: gotogether.binding/1.
+	// (FormatName, gotogether.binding/2; binding/1 is read too): a binding
+	// of a later major is refused with the fix (upgrade gotogether), not
+	// with its new keys "unknown". Empty: gotogether.binding/1.
 	Format string `yaml:"format,omitempty"`
 	// Spec is the .qnt file (relative to the binding file) and Module the
 	// parameterised module in it to instantiate.
@@ -191,10 +192,11 @@ type Simulation struct {
 	// conforming run would show fails `gotogether simulate` here, before
 	// any code is checked against it.
 	Possible []Possible `yaml:"possible"`
-	// SearchStates bounds the Go evaluator's search for the possibles
-	// (default 2000 states; its depth is Steps): a search the bound cut
-	// says "not found within the bound", never "impossible".
-	SearchStates int `yaml:"searchStates"`
+	// Search bounds the Go evaluator's every search of the model on its
+	// own: `simulate -graph`'s state graph, the possibles' search, and
+	// qtest.Model's claims (gotogether.binding/2; binding/1's
+	// searchStates, graphStates and graphDepth are read into it).
+	Search SearchBound `yaml:"search"`
 	// Steps and Samples bound the run (default 30 and 1000).
 	Steps   int `yaml:"steps"`
 	Samples int `yaml:"samples"`
@@ -216,12 +218,6 @@ type Simulation struct {
 	// by a stutter (a read) is never a deadlock, so a model that can
 	// always read needs none: the report counts such states as quiet.
 	Terminal string `yaml:"terminal"`
-	// GraphStates and GraphDepth bound `gotogether simulate -graph`'s
-	// state graph for this model (default 100000 states, no depth bound):
-	// a model whose state grows without end (grist's log) needs the
-	// depth bound to explore every state near its start.
-	GraphStates int `yaml:"graphStates"`
-	GraphDepth  int `yaml:"graphDepth"`
 	// Unfair and Stops are the step's actions `simulate -graph`'s liveness
 	// search does not hold to weak fairness (every other action is weakly
 	// fair: one enabled throughout a cycle must be taken in it, a stutter
@@ -231,6 +227,89 @@ type Simulation struct {
 	// or an input the driver stops sending before it settles).
 	Unfair []string `yaml:"unfair"`
 	Stops  []string `yaml:"stops"`
+
+	// v1Keys and v2Keys are the keys read of one major only, for Load
+	v1Keys, v2Keys []string
+}
+
+// A SearchBound bounds the Go evaluator's searches of a model on its
+// own (Simulation.Search): at most States states (0: 100000) and paths of
+// at most Depth transitions from init (0: none). A search the state bound
+// cuts is a breadth-first prefix, which proves nothing past it; one only
+// the depth bound cuts saw every state within Depth steps, a bounded
+// proof (every trace of up to Depth steps). A model whose state grows
+// without end (grist's log) needs Depth for that.
+type SearchBound struct {
+	// States bounds the states a search visits (default 100000): one it
+	// cut proves nothing past them.
+	States int `yaml:"states"`
+	// Depth bounds a search's paths from init (default none): one only
+	// it cut saw every state within Depth steps.
+	Depth int `yaml:"depth"`
+}
+
+// UnmarshalYAML reads a simulate section strictly, as Load reads the
+// rest, with binding/1's three bounds (searchStates for the possibles,
+// graphStates and graphDepth for -graph) read into Search: states the
+// larger of the two, depth graphDepth. Load refuses each in the major
+// that does not have it.
+func (s *Simulation) UnmarshalYAML(n *yaml.Node) error {
+	type plain Simulation
+	type withV1 struct {
+		plain        `yaml:",inline"`
+		SearchStates int `yaml:"searchStates"`
+		GraphStates  int `yaml:"graphStates"`
+		GraphDepth   int `yaml:"graphDepth"`
+	}
+	known := map[string]bool{}
+	for _, f := range reflect.VisibleFields(reflect.TypeFor[withV1]()) {
+		if name, _, _ := strings.Cut(f.Tag.Get("yaml"), ","); name != "" {
+			known[name] = true
+		}
+	}
+	var keys []string
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k := n.Content[i]
+			if !known[k.Value] {
+				// the strict decoder's own words, so Load's hint applies
+				return fmt.Errorf("line %d: field %s not found in type binding.Simulation", k.Line, k.Value)
+			}
+			keys = append(keys, k.Value)
+		}
+	}
+	var v withV1
+	if err := n.Decode(&v); err != nil {
+		return err
+	}
+	*s = Simulation(v.plain)
+	for _, k := range keys {
+		switch k {
+		case "searchStates", "graphStates", "graphDepth":
+			s.v1Keys = append(s.v1Keys, k)
+		case "search":
+			s.v2Keys = append(s.v2Keys, k)
+		}
+	}
+	if len(s.v1Keys) > 0 {
+		s.Search = SearchBound{States: max(v.SearchStates, v.GraphStates), Depth: v.GraphDepth}
+	}
+	return nil
+}
+
+// checkMajor refuses a key of the section that the file's major m does
+// not have, with the fix.
+func (s *Simulation) checkMajor(m int) error {
+	switch {
+	case s == nil:
+	case m < 2 && len(s.v2Keys) > 0:
+		return fmt.Errorf("simulate.search is %s's, and the binding is %s (no format key: binding/1): add format: %s at its top, "+
+			"or bound the searches as binding/1 does (searchStates, graphStates, graphDepth)", formats.Binding.At(2), formats.Binding.At(m), formats.Binding.At(2))
+	case m >= 2 && len(s.v1Keys) > 0:
+		return fmt.Errorf("simulate.%s is %s's: %s bounds every search of the model alone with one bound, search: {states: N, depth: D} "+
+			"(searchStates and graphStates were the possibles' and the graph's states, graphDepth the graph's depth)", s.v1Keys[0], formats.Binding.At(1), formats.Binding.At(m))
+	}
+	return nil
 }
 
 // Action says how to call one model action from an observed step.
@@ -260,7 +339,8 @@ func Load(path string) (*Binding, error) {
 	}
 	// the format first: a later binding's keys are unknown here, and
 	// the fix is a newer gotogether, not removing them
-	if err := checkFormat(b, formats.Binding); err != nil {
+	major, err := checkFormat(b, formats.Binding)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	var bd Binding
@@ -268,6 +348,9 @@ func Load(path string) (*Binding, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&bd); err != nil {
 		return nil, fmt.Errorf("%s: %w%s", path, err, unknownKeyHint(err, formats.Binding))
+	}
+	if err := bd.Simulate.checkMajor(major); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	abs, _ := filepath.Abs(path)
 	bd.Dir, bd.Path = filepath.Dir(abs), abs
@@ -288,22 +371,23 @@ func Load(path string) (*Binding, error) {
 	return &bd, nil
 }
 
-// FormatName is the binding format this version reads and writes, the
-// value of a binding's optional format key.
-const FormatName = "gotogether.binding/1"
+// FormatName is the binding format this version writes, the value of a
+// binding's optional format key. It reads gotogether.binding/1 too (a
+// file with no format key is binding/1), forever: binding/2 replaced
+// its simulate section's three search bounds with one, search.
+const FormatName = "gotogether.binding/2"
 
-// checkFormat refuses YAML whose format key names a major of f this
-// version does not read, with the fix. No key, or YAML that does not
-// parse (the strict decode reports it), passes.
-func checkFormat(b []byte, f formats.Format) error {
+// checkFormat is the major of f that YAML's format key names, refusing
+// one this version does not read, with the fix. No key, or YAML that does
+// not parse (the strict decode reports it), is major 1.
+func checkFormat(b []byte, f formats.Format) (int, error) {
 	var head struct {
 		Format string `yaml:"format"`
 	}
 	if yaml.Unmarshal(b, &head) != nil || head.Format == "" {
-		return nil
+		return 1, nil
 	}
-	_, err := f.Check(head.Format)
-	return err
+	return f.Check(head.Format)
 }
 
 // unknownKeyHint is what an unknown key's error adds: the key may be a

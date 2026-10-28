@@ -87,11 +87,10 @@ type SimulateOptions struct {
 	// Graph explores the model's state graph with the Go evaluator
 	// instead of sampling with quint.
 	Graph bool
-	// States bounds the Go evaluator's search for the possibles (0:
-	// simulate.searchStates, else 2000; its depth is Steps, or Verify) and,
-	// with Graph, the graph's states (0: simulate.graphStates, else
-	// DefaultGraphStates); Depth the graph's depth (0: simulate.graphDepth,
-	// else none), the possibles' with it.
+	// States and Depth bound the Go evaluator's searches, the graph's and
+	// the possibles' (0: simulate.search, else DefaultSearchStates states
+	// and no depth bound; with Verify and no depth, the possibles' search
+	// goes Verify steps deep).
 	States, Depth int
 	// Unfair and Stops are the actions the liveness search does not hold
 	// to weak fairness (nil: simulate.unfair and simulate.stops).
@@ -180,9 +179,9 @@ func (b ModelBound) String() string {
 	case "complete":
 		return fmt.Sprintf("the whole state graph, %d states", b.States)
 	case "depth":
-		return fmt.Sprintf("every state within %d steps of init, %d states (a bounded proof: every trace of up to %d steps)", b.Depth, b.States, b.Depth)
+		return fmt.Sprintf("the states within %d steps of init (%d; a bounded proof: every trace of up to %d steps)", b.Depth, b.States, b.Depth)
 	case "states":
-		return fmt.Sprintf("the first %d states breadth first, truncated by the state bound: no proof past them (raise simulate.graphStates, or set graphDepth for a bounded proof)", b.States)
+		return fmt.Sprintf("the first %d states breadth first, truncated by the state bound: no proof past them (raise simulate.search.states, or set search.depth for a bounded proof)", b.States)
 	case "stopped":
 		return fmt.Sprintf("%d states, then the Go evaluator stopped (%s)", b.States, b.Stopped)
 	case "verified":
@@ -235,8 +234,8 @@ func simulate(bpath string, b *binding.Binding, checker *Checker, opt SimulateOp
 	if opt.Graph && opt.Verify > 0 {
 		return nil, fmt.Errorf("simulate: -graph and -verify are two ways to check every trace: pick one")
 	}
-	if !opt.Graph && (opt.Depth > 0 || opt.Out != "" || opt.Unfair != nil || opt.Stops != nil || opt.Replay) {
-		return nil, fmt.Errorf("simulate: -depth, -out, -unfair and -stops are -graph's: add -graph")
+	if !opt.Graph && (opt.Out != "" || opt.Unfair != nil || opt.Stops != nil || opt.Replay) {
+		return nil, fmt.Errorf("simulate: -out, -unfair and -stops are -graph's: add -graph")
 	}
 	if err := b.CheckSpec(); err != nil {
 		return nil, err
@@ -358,11 +357,11 @@ func simulate(bpath string, b *binding.Binding, checker *Checker, opt SimulateOp
 	var host *hostedSample
 	hostInv := ""
 	if len(possibles) > 0 {
-		depth := steps
-		if verify > 0 {
-			depth = verify
+		depth := opt.Depth
+		if depth == 0 && verify > 0 {
+			depth = verify // quint verify's bound, so their verdicts compare
 		}
-		rs, evalErr = checker.Possible(possibleList, PossibleSearch{Constants: overrides, States: orInt(opt.States, sec.SearchStates), Depth: depth})
+		rs, evalErr = checker.Possible(possibleList, PossibleSearch{Constants: overrides, States: opt.States, Depth: depth})
 		for i, c := range possibles {
 			if evalErr == nil && rs[i].Found {
 				c.quintSkip = "found by the Go evaluator, not sampled"

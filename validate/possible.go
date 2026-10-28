@@ -19,7 +19,9 @@ import (
 
 // A PossibleSearch bounds Checker.Possible's search and sets its
 // instance: Constants (NAME=expr, over the binding's), at most States
-// search nodes (default 2000) and Depth transitions (default 30).
+// search nodes and Depth transitions (default: the binding's
+// simulate.search, else DefaultSearchStates and no depth bound: one bound
+// for every search of the model alone, the graph's too).
 type PossibleSearch struct {
 	Constants     []string
 	States, Depth int
@@ -124,13 +126,7 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 			qgoals[i].Steps = append(qgoals[i].Steps, m)
 		}
 	}
-	bound := qeval.Bound{States: cfg.States, Depth: cfg.Depth}
-	if bound.States <= 0 {
-		bound.States = 2000
-	}
-	if bound.Depth <= 0 {
-		bound.Depth = 30
-	}
+	bound := searchBound(c.Binding.Simulate, cfg.States, cfg.Depth)
 	rs, err := e.m.Reach(consts, init, step, qgoals, bound)
 	if err != nil {
 		return nil, fmt.Errorf("possible: %w", err)

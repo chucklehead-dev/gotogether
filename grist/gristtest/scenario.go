@@ -19,7 +19,7 @@ import (
 //	fill := gristtest.Scenario("fill an item",
 //		Add.With(AddItem{Item: "a", Qty: 3}),
 //		Add.With(AddItem{Item: "a", Qty: 3}).Refused(ErrFull))
-//	qtest.Possible(t, "app.binding.yaml", fill) // the model can
+//	qtest.Model(t, "app.binding.yaml").Expect(t, qtest.Possible(fill)) // the model can
 //	system(commits, cfg).Explore(t, qtest.ExploreConfig{}).Expect(t, qtest.Some(fill)) // and a run does
 //
 // A run that misses it is reported with how far it got, where it

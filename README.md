@@ -494,7 +494,7 @@ var retried = qtest.NamedScenario("a retry recognised",
 	qtest.Takes("apply").With("id", "1"), qtest.Takes("replay").With("id", "1"), qtest.Takes("done"))
 
 func TestRetryPossible(t *testing.T) {
-	qtest.Possible(t, "hello.binding.yaml", retried)
+	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Possible(retried))
 }
 
 func TestMutant(t *testing.T) {

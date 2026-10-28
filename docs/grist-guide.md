@@ -664,7 +664,7 @@ var fillUp = gristtest.Scenario("fill up",
 	Add.With(AddItem{Item: "a", Qty: 3}).Refused(ErrFull))
 
 func TestScenariosPossible(t *testing.T) {
-	qtest.Possible(t, commits, fillUp)
+	qtest.Model(t, commits).Expect(t, qtest.Possible(fillUp))
 }
 ```
 

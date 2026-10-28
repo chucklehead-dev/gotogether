@@ -16,7 +16,7 @@ import (
 // judged as the simulate section classifies it over every state the
 // graph holds, then its deadlocks, the actions it never took, the
 // eventual vals as cycles, and the possibles (searched by the evaluator
-// as deep as the graph, what it did not find sampled by quint as
+// within the graph's bound, what it did not find sampled by quint as
 // without Graph: with the cross-check, the only quint processes but the
 // cached compile). A violation prints its shortest counterexample and
 // the Quint run that replays it (all of them in Out's module). Code 1
@@ -78,7 +78,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *Checker, possible
 	if !r.Complete {
 		where = fmt.Sprintf("none of the %d states explored", r.States)
 	}
-	raise := "raise -states or -depth (simulate.graphStates, simulate.graphDepth) for a proof"
+	raise := "raise -states or -depth (simulate.search.states, simulate.search.depth) for a proof"
 	if r.Cut == "unsupported" || r.Cut == "error" {
 		raise = "simulate without -graph samples the model with quint, bounded too"
 	}
@@ -187,11 +187,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *Checker, possible
 		for i, c := range possibles {
 			ps[i] = c.p
 		}
-		depthP := r.Bound.Depth
-		if depthP == 0 {
-			depthP = 1 << 30 // none: the state bound bounds it
-		}
-		rs, evalErr := checker.Possible(ps, PossibleSearch{Constants: overrides, States: r.Bound.States, Depth: depthP})
+		rs, evalErr := checker.Possible(ps, PossibleSearch{Constants: overrides, States: r.Bound.States, Depth: r.Bound.Depth})
 		var left []*possibleCheck
 		for i, c := range possibles {
 			if evalErr == nil && rs[i].Found {

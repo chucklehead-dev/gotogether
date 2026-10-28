@@ -212,8 +212,7 @@ for it. No binding is written by hand.
    `gristtest.Scenario("at the limit", JoinCmd.With(Join{Member: "a"}),
    ..., BorrowCmd.With(Borrow{Member: "a", Book: "b"}).Refused(ErrLimit))`
    (`Command.With(args)`, `Invocation.Refused(err)`: a declared refusal),
-   checked possible in the model first (`qtest.Possible(t, commits,
-   scenario)`, arguments in the model's STRS and INTS) and claimed of
+   checked possible in the model first (`qtest.Model(t, commits).Expect(t, qtest.Possible(scenario))`, arguments in the model's STRS and INTS) and claimed of
    runs like any expectation (`All(scenario)`, `Some`): a miss names, per
    run, how far it got and where it stopped. The
    summary's "never" list names the binding's actions (the app's

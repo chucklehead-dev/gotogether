@@ -44,9 +44,11 @@ gets the shortest counterexample, with a Quint run that replays it
 cex.qnt`). It also fails on a deadlock (a reachable state the step
 cannot leave: declare a model's intended end with `simulate.terminal:
 <predicate>`) and lists the actions never enabled and how often each
-was taken. A truncated graph (`-states`, default 100000; `-depth` or
-`simulate.graphDepth` for a model whose state grows, like a grist
-log) says so and claims no proof; exit 2 means the evaluator stopped (a
+was taken. One bound, `simulate.search: {states, depth}` (binding/2:
+`format: gotogether.binding/2`; `-states`, default 100000, and `-depth`
+override it), bounds the graph and the possibles' search alike; a
+truncated graph says so and claims no proof, and a depth bound alone
+(for a model whose state grows, like a grist log) is a bounded proof; exit 2 means the evaluator stopped (a
 construct outside its fragment, named): sample without `-graph`.
 
 Liveness under `-graph`: each eventual val is judged as cycles, as true
@@ -71,7 +73,8 @@ livelock).
 
 Model first means scenarios first, each with a possibility check, then
 safety, then liveness, then code. Write each acceptance scenario as a
-`possible` (or, in Go, `qtest.Scenario` checked by `qtest.Possible`):
+`possible` (or, in Go, a `qtest.Scenario` claimed by `qtest.Model(t,
+binding).Expect(t, qtest.Possible(scenario))`):
 a model too strict to reach it passes every invariant and judges a code
 that never shows it faithful.
 
@@ -91,7 +94,11 @@ many sampled traces it held in), or FAIL: "the model
 forbids it" after a search that saw the whole state graph, "not
 reached in N sampled traces ... not found within the bound" otherwise.
 Find the guard with `gotogether nav -binding`; raise `-samples`,
-`-steps` or `simulate.searchStates` only if it is rare, not forbidden.
+`-steps` or `simulate.search.states` only if it is rare, not forbidden.
+In Go the same verdicts are claims: `qtest.Model(t, binding).Expect(t,
+qtest.Proves(inv), qtest.Refutes(inv).InAtMost(n), qtest.Live(val),
+qtest.NoDeadlocks(), qtest.Possible(scenario))`, each with its bound
+(a truncated graph is no verdict, so the test fails naming the bound).
 A grist app's bindings carry one per command outcome and per processor
 step, generated.
 - Also check that each `holds` property *can* fail. Temporarily break

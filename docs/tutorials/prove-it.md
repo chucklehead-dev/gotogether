@@ -278,7 +278,7 @@ $ cd ../hello
 $ gotogether simulate -graph -states 5 -binding hello.binding.yaml
 simulate hello.binding.yaml: hello(REQUESTS = 1.to(3)), its state graph by the Go evaluator (at most 5 states)
   graph   truncated by the state bound (5): 5 states, 6 transitions, depth 2, 0.0s
-  bounded exactlyOnce: none of the 5 states explored violates it, which proves nothing past them (the graph is truncated: raise -states or -depth (simulate.graphStates, simulate.graphDepth) for a proof)
+  bounded exactlyOnce: none of the 5 states explored violates it, which proves nothing past them (the graph is truncated: raise -states or -depth (simulate.search.states, simulate.search.depth) for a proof)
   never   done: no state explored enables it (within the bound)
   covered apply 5 in 2 states, replay 1 in 1 state
   sampling 1 possible the Go evaluator did not find with quint (1000 traces of 30 steps): not part of the graph's verdicts
@@ -289,8 +289,16 @@ simulate hello.binding.yaml: hello(REQUESTS = 1.to(3)), its state graph by the G
 The bound is printed with the verdict, and so is what it hid (`never
 done ... within the bound`). For a model the size of quorumkv, prove the logic on a smaller instance (fewer replicas
 or keys, by `-const`), and keep sampling, and the runs' own checks, for
-the full one. A binding can set the bounds it wants for CI:
-`simulate.graphStates` and `simulate.graphDepth`.
+the full one. A binding can set the bound it wants for CI, one for the
+graph and the possibles alike: `simulate.search: {states, depth}`
+(`format: gotogether.binding/2`). In `go test` the same proof is a
+claim, failing where the graph is truncated:
+
+```go
+func TestModelProves(t *testing.T) {
+	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Proves("exactlyOnce"), qtest.NoDeadlocks())
+}
+```
 
 ## What you saw
 

@@ -88,7 +88,7 @@
     },
     "format": {
       "const": "gotogether.binding/1",
-      "description": "Format, if set, names the binding format the file is written in (FormatName, gotogether.binding/1): a binding of a later major is refused with the fix (upgrade gotogether), not with its new keys \"unknown\". Empty: gotogether.binding/1.",
+      "description": "Format, if set, names the binding format the file is written in (FormatName, gotogether.binding/2; binding/1 is read too): a binding of a later major is refused with the fix (upgrade gotogether), not with its new keys \"unknown\". Empty: gotogether.binding/1.",
       "type": "string"
     },
     "hidden": {
@@ -168,10 +168,11 @@
           ]
         },
         "graphDepth": {
+          "description": "GraphDepth bounds the paths every search of the model alone explores (binding/2's search.depth; default none).",
           "type": "integer"
         },
         "graphStates": {
-          "description": "GraphStates and GraphDepth bound `gotogether simulate -graph`'s state graph for this model (default 100000 states, no depth bound): a model whose state grows without end (grist's log) needs the depth bound to explore every state near its start.",
+          "description": "GraphStates bounds `gotogether simulate -graph`'s state graph (default 100000 states); with searchStates, the larger is the one search bound.",
           "type": "integer"
         },
         "holds": {
@@ -218,7 +219,7 @@
           "type": "integer"
         },
         "searchStates": {
-          "description": "SearchStates bounds the Go evaluator's search for the possibles (default 2000 states; its depth is Steps): a search the bound cut says \"not found within the bound\", never \"impossible\".",
+          "description": "SearchStates bounds the Go evaluator's search for the possibles (default 100000 states, as binding/2's search.states).",
           "type": "integer"
         },
         "skip": {

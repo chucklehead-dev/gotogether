@@ -49,7 +49,10 @@ var (
 	// Requests is an external driver's request log (qdriver).
 	Requests = Format{Thing: "requests", Major: 1, Oldest: 1, What: "driver request log (qdriver)"}
 	// Binding is a binding file's optional format key; absent, binding/1.
-	Binding = Format{Thing: "binding", Major: 1, Oldest: 1, What: "binding YAML (format: key optional)"}
+	// binding/2 bounds the model's searches with one simulate.search,
+	// where binding/1 had searchStates, graphStates and graphDepth: a
+	// person wrote every one, so binding/1 is read forever.
+	Binding = Format{Thing: "binding", Major: 2, Oldest: 1, What: "binding YAML (format: key optional)"}
 	// Convert is a span conversion rule file's optional format key.
 	Convert = Format{Thing: "convert", Major: 1, Oldest: 1, What: "span conversion rules YAML (format: key optional)"}
 	// Corpus is an exploration's corpus entry (qtest), checked into

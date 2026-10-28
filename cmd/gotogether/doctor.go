@@ -422,7 +422,7 @@ func bindingPiece(path string) piece {
 	}
 	p.version = b.Format
 	if p.version == "" {
-		p.version, p.note = binding.FormatName, "no format key"
+		p.version, p.note = "gotogether.binding/1", "no format key: binding/1"
 	}
 	if err := b.CheckSpec(); err != nil {
 		p.skew = err.Error()

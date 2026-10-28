@@ -33,7 +33,7 @@ the walk-through: read its README's table first.
    `model/<name>_rules.qnt`, the invariants in `model/<name>.qnt`;
    `go tool gotogether simulate -binding <name>.binding.yaml`.
 4. `gristtest.Generated(t, App)`; each scenario `gristtest.Scenario`,
-   checked by `qtest.Possible`.
+   checked by `qtest.Model(t, commits).Expect(t, qtest.Possible(s))`.
 5. `gristsim.System(commits, App, cfg).WithRates(faulty).Explore(t,
    qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).Expect(t,
    qtest.Conforms(), qtest.All(qtest.Settles()), gristtest.Catalog(App).Exercised())`.

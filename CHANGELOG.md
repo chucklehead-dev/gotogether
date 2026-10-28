@@ -19,6 +19,27 @@ The first release. What a user meets, by module:
   are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
   raises the process's GC percent to 400 while it runs, unless it is
   already higher or off, and puts it back.
+- Model claims through one Expect (ROADMAP I17's second half;
+  breaking): `qtest.Possible(t, binding, scenarios...)` is gone, its
+  name now the claim (I17's first half called it `qtest.Follows`):
+  write `qtest.Model(t, binding).Expect(t, qtest.Possible(scenarios...))`,
+  which samples with quint what the Go evaluator does not find where
+  the function failed "not searched". The binding format is
+  `gotogether.binding/2` (`binding.FormatName`): its simulate section
+  bounds every search of the model alone with one `search: {states,
+  depth}` (`binding.SearchBound`, `Simulation.Search`; default 100000
+  states, no depth), the possibles' search included (it was 2000 states,
+  as deep as `steps`). binding/1, a file with no format key among them,
+  is read forever, its `searchStates`, `graphStates` and `graphDepth`
+  read into `Search` (states the larger, depth graphDepth); each major
+  refuses the other's keys with the fix. `validate.DefaultGraphStates`
+  is `validate.DefaultSearchStates`; `simulate -depth` bounds the
+  possibles without `-graph` too. `schemas.BindingURL` and `Binding()`
+  are binding/2's (gotogether.binding-2.json), `Binding1URL`,
+  `Binding1()` binding/1's, `BindingFor(data)` a file's by its format
+  key (`gotogether lint` checks each binding against its own); `init`
+  writes `format: gotogether.binding/2`.
+
 - Model claims and one engine for the model alone (ROADMAP I17, its
   additive half): `validate.Simulate(binding, SimulateOptions)` and
   `Checker.Simulate` are what `gotogether simulate` ran (quint sampling,

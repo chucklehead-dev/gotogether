@@ -28,9 +28,8 @@ import (
 // Invariants to check (nil: the binding's), Terminal (a predicate: a
 // state the step cannot leave where it holds is an end the model means,
 // not a deadlock; "": the binding's simulate.terminal), at most States
-// states (default: the binding's simulate.graphStates, else 100000) and
-// paths of at most Depth transitions (default: the binding's
-// simulate.graphDepth, else none). Eventually are the eventual vals
+// states and paths of at most Depth transitions (default: the binding's
+// simulate.search, else DefaultSearchStates states and no depth bound). Eventually are the eventual vals
 // judged as cycles (nil: the binding's), Unfair and Stops the step's
 // actions not weakly fair (nil: the binding's simulate.unfair and
 // simulate.stops; every other action is).
@@ -43,9 +42,10 @@ type GraphSearch struct {
 	Unfair, Stops []string
 }
 
-// DefaultGraphStates bounds a graph whose search and binding give no
-// bound: 10^5 states, under a minute at the evaluator's usual cost.
-const DefaultGraphStates = 100000
+// DefaultSearchStates bounds a search of the model alone (a graph, a
+// possible's search) whose options and binding give no bound: 10^5
+// states, under a minute at the evaluator's usual cost.
+const DefaultSearchStates = 100000
 
 // A GraphResult is Checker.Graph's report on a model's state graph.
 type GraphResult struct {
@@ -264,16 +264,7 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	if stops == nil {
 		stops = sim.Stops
 	}
-	bound := qeval.Bound{States: cfg.States, Depth: cfg.Depth}
-	if bound.States <= 0 {
-		bound.States = sim.GraphStates
-	}
-	if bound.States <= 0 {
-		bound.States = DefaultGraphStates
-	}
-	if bound.Depth <= 0 {
-		bound.Depth = sim.GraphDepth
-	}
+	bound := searchBound(sim, cfg.States, cfg.Depth)
 	preds := slices.Clone(invs)
 	if terminal != "" {
 		preds = append(preds, terminal)
@@ -473,6 +464,22 @@ func (c *Checker) simulationInstance(overrides []string) *Checker {
 	cc := *c
 	cc.Binding = &b
 	return &cc
+}
+
+// searchBound is a search's bounds: states and depth as given, else the
+// binding's simulate.search, else DefaultSearchStates and no depth.
+func searchBound(sim *binding.Simulation, states, depth int) qeval.Bound {
+	b := qeval.Bound{States: states, Depth: depth}
+	if b.States <= 0 && sim != nil {
+		b.States = sim.Search.States
+	}
+	if b.States <= 0 {
+		b.States = DefaultSearchStates
+	}
+	if b.Depth <= 0 && sim != nil {
+		b.Depth = sim.Search.Depth
+	}
+	return b
 }
 
 // stateText is a state as a report says it.

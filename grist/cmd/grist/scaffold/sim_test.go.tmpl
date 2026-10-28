@@ -72,7 +72,7 @@ var fillUp = gristtest.Scenario("fill up",
 // never refused past the capacity would fail here).
 func TestScenariosPossible(t *testing.T) {
 	t.Parallel()
-	qtest.Possible(t, commits, fillUp)
+	qtest.Model(t, commits).Expect(t, qtest.Possible(fillUp))
 }
 
 // TestFull: the faithful app at the mutant's shape refuses past the

@@ -63,8 +63,8 @@ resends its decision until each participant answers.
 
 | Test | Workflow | Shows |
 |---|---|---|
-| `TestGraphProvesInvariants` | `simulate -graph` (`validate.Checker.Graph`) | the model's whole graph, 99 states: both invariants proved for three participants, its 9 ends terminal, every action enabled somewhere |
-| `TestGraphFindsEarlyDecision` | `simulate -graph` on a model mutant | the coordinator deciding on one vote: consistency violated four steps from init, the counterexample replayed by quint test |
+| `TestGraphProvesInvariants` | the model alone (`qtest.Model`: `Proves`, `NoDeadlocks`) | the model's whole graph, 99 states: both invariants proved for three participants, its 9 ends terminal |
+| `TestGraphFindsEarlyDecision` | the model alone, a mutant (`qtest.Refutes("consistency").InAtMost(4)`) | the coordinator deciding on one vote: consistency violated four steps from init, the counterexample replayed by quint test |
 | `TestChoreoBinding` | validation of recorded steps | a choreo model binds like any other: a run conforms, an early commit is rejected |
 | `TestFaithfulConforms` | `System.Explore`, 60 seeds, crashes and message faults | every run conforms; `Evidence` lists the faults reached |
 | `TestMutants` | `System.Explore` with and without faults | `EarlyCommit` is rejected at `decideCommit` without faults; `ImpatientParticipant` (rejected at `abort`) and `VolatileDecision` (rejected at `decideAbort`) conform without faults and fail with them |

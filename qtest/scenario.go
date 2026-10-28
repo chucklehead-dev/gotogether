@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -18,7 +17,8 @@ import (
 // acceptance criterion ("a submitted order, verified ok, then opened")
 // stated over the model's actions, judged over runs like any
 // expectation (Some, All, None), and checked possible in the model on
-// its own (Possible) before any code runs.
+// its own (qtest.Model(...).Expect(t, qtest.Possible(...))) before any
+// code runs.
 
 // a scenario: its name ("" for none) and steps
 type scenario struct {
@@ -207,45 +207,38 @@ func (x *Exploration) scenarioMisses(c Claim) string {
 	return b.String()
 }
 
-// modelVerdict is whether the model on its own follows sc, as a line.
+// modelVerdict is whether the model on its own follows sc, as a line:
+// Simulate's verdict on it as a possible (the evaluator's search, then
+// quint's sampling), as qtest.Possible judges it.
 func modelVerdict(c *validate.Checker, sc *scenario) string {
-	r, err := scenarioPossible(c, sc)
+	p, err := scenarioAsPossible(c.Binding, sc)
+	if err != nil {
+		return "not searched (" + err.Error() + ")"
+	}
+	rep, err := c.Simulate(validate.SimulateOptions{Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{p}})
 	switch {
 	case err != nil:
 		return "not searched (" + err.Error() + ")"
-	case r.Found:
-		return r.Verdict() + ": the system is to be driven there (the workload, the faults, the seeds)"
-	case r.Complete:
-		return r.Verdict() + ": the scenario names what the model forbids (a wrong step, or a model too strict)"
+	case rep.Skipped != "" || len(rep.Possibles) == 0:
+		return "not searched (" + rep.Skipped + ")"
 	}
-	return r.Verdict()
+	v := rep.Possibles[0]
+	switch {
+	case v.Found:
+		return v.Verdict + ": the system is to be driven there (the workload, the faults, the seeds)"
+	case v.Impossible:
+		return v.Verdict + ": the scenario names what the model forbids (a wrong step, or a model too strict)"
+	}
+	return v.Verdict
 }
 
-// scenarioPossible searches c's model for sc with the Go evaluator: each
-// step's action, its arguments, and its outcome where the binding passes
-// the step's outcome to a parameter (args: { result: '{{.outcome}}' }),
-// as the binding's outcomes map it. An outcome the binding passes to no
-// parameter is no search: the model's step would be looked for with any
-// outcome, and found where the outcome asked for is impossible.
-func scenarioPossible(c *validate.Checker, sc *scenario) (validate.PossibleResult, error) {
-	p, err := scenarioAsPossible(c.Binding, sc)
-	if err != nil {
-		return validate.PossibleResult{}, err
-	}
-	search := validate.PossibleSearch{}
-	if sim := c.Binding.Simulate; sim != nil {
-		search.States = sim.SearchStates
-		search.Constants = constantsOf(sim.Constants)
-	}
-	rs, err := c.Possible([]binding.Possible{p}, search)
-	if err != nil {
-		return validate.PossibleResult{}, err
-	}
-	return rs[0], nil
-}
-
-// scenarioAsPossible is sc as a possible of b's model, as
-// scenarioPossible searches it.
+// scenarioAsPossible is sc as a possible of b's model, for the Go
+// evaluator's search: each step's action, its arguments, and its outcome
+// where the binding passes the step's outcome to a parameter (args: {
+// result: '{{.outcome}}' }), as the binding's outcomes map it. An outcome
+// the binding passes to no parameter is no search: the model's step would
+// be looked for with any outcome, and found where the outcome asked for
+// is impossible.
 func scenarioAsPossible(b *binding.Binding, sc *scenario) (binding.Possible, error) {
 	var steps []string
 	for _, k := range sc.steps {
@@ -268,16 +261,6 @@ func scenarioAsPossible(b *binding.Binding, sc *scenario) (binding.Possible, err
 		steps = append(steps, s)
 	}
 	return binding.Possible{Name: sc.String(), Steps: steps}, nil
-}
-
-// constantsOf are cs as NAME=expr.
-func constantsOf(cs map[string]string) []string {
-	var out []string
-	for k, v := range cs {
-		out = append(out, k+"="+v)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // outcomeParam is the parameter of action that b passes a step's outcome
@@ -305,38 +288,4 @@ func outcomeParam(b *binding.Binding, action, o string) (param, value string, ok
 		return param, v, true
 	}
 	return param, strconv.Quote(o), true
-}
-
-// Possible fails t unless the model of binding (a binding file) on its
-// own can follow each of scenarios, each searched with the Go evaluator
-// from init by the model's step: the model-first check of an acceptance
-// criterion (a scenario a model forbids, no conforming run can show).
-// Each found is logged with its witness; one not found is a failure
-// naming the search's extent (only a complete search says impossible).
-func Possible(t testing.TB, binding string, scenarios ...Expectation) {
-	t.Helper()
-	RequireQuint(t)
-	c, err := validate.NewChecker(binding, validate.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-	for _, e := range scenarios {
-		if e.scenario == nil {
-			t.Fatalf("qtest.Possible: %s is no scenario (qtest.Scenario, gristtest.Scenario)", e)
-		}
-		r, err := scenarioPossible(c, e.scenario)
-		switch {
-		case err != nil:
-			t.Errorf("%s: not searched: %v. Without the Go evaluator's search the model is not checked here: claim the scenario of runs (Explore(...).Expect(t, Some(scenario))), "+
-				"and state its actions in turn as a simulate.possible of the binding (steps: [a, b]), which gotogether simulate samples with quint", e.scenario, err)
-		case r.Found:
-			t.Logf("%s: possible in the model, %s", e.scenario, r.Verdict())
-		case r.Complete:
-			t.Errorf("%s: the model on its own cannot follow it, %s: a step names what the model forbids, or the model is too strict for any conforming run to show it "+
-				"(gotogether nav -binding %s shows each disabled action with why)", e.scenario, r.Verdict(), binding)
-		default:
-			t.Errorf("%s: %s: raise the binding's simulate.searchStates, or check its steps' order", e.scenario, r.Verdict())
-		}
-	}
 }

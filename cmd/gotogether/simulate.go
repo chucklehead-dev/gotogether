@@ -14,7 +14,8 @@ import (
 // options, its report printed (and, with -json and the other machine
 // reports, read from its lines). By default quint samples; with -verify
 // N, quint verify checks every trace of up to N steps; with -graph, the
-// Go evaluator explores the state graph within -states and -depth, with
+// Go evaluator explores the state graph within one search bound
+// (simulate.search, -states and -depth), the possibles' too, with
 // deadlocks, the actions never enabled, the shortest counterexamples and
 // each eventual val judged as cycles. The section's possibles are
 // searched by the evaluator, what it did not find sampled by quint.
@@ -39,11 +40,10 @@ func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	consts := fset.String("const", "", "constants to set, NAME=expr,... (over the binding's and its simulate section's)")
 	invs := fset.String("invariants", "", "comma-separated invariants instead of the binding's (classified as the binding says)")
 	verify := fset.Int("verify", 0, "check each invariant in every trace of up to this many steps with quint verify (Apalache), instead of sampling with quint run")
-	states := fset.Int("states", 0, "states the Go evaluator's search for the possibles visits at most (default: the binding's simulate.searchStates, else 2000); "+
-		"with -graph, the graph's (default: the binding's simulate.graphStates, else 100000)")
+	states := fset.Int("states", 0, fmt.Sprintf("states the Go evaluator's searches visit at most, the possibles' and -graph's (default: the binding's simulate.search.states, else %d)", validate.DefaultSearchStates))
 	graph := fset.Bool("graph", false, "explore the model's state graph with the Go evaluator instead of sampling with quint: every invariant in every reachable state "+
 		"(within -states and -depth), deadlocks, actions never enabled, the shortest counterexamples, and each eventual val as cycles (a fair one keeping it false forever)")
-	depth := fset.Int("depth", 0, "with -graph: the longest path from init explored (default: the binding's simulate.graphDepth, else none)")
+	depth := fset.Int("depth", 0, "the longest path from init the Go evaluator's searches explore, the possibles' and -graph's (default: the binding's simulate.search.depth, else none)")
 	out := fset.String("out", "", "with -graph: write a Quint module of the binding's instance with a run replaying each counterexample (quint test --match 'gtg_' replays them)")
 	unfair := fset.String("unfair", "", "with -graph: comma-separated actions the liveness search does not oblige (default: the binding's simulate.unfair)")
 	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")

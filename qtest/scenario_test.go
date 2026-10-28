@@ -233,7 +233,7 @@ func TestScenarioOutcomeWithoutParameter(t *testing.T) {
 		"refund": {Args: map[string]string{"result": "{{ .outcome }}"}, Outcomes: map[string]string{"lost": "skip"}},
 	}}}
 	for _, k := range []Take{Takes("buy").Outcome("short"), Takes("refund").Outcome("lost")} {
-		_, err := scenarioPossible(c, Scenario(k).scenario)
+		_, err := scenarioAsPossible(c.Binding, Scenario(k).scenario)
 		if err == nil || !strings.Contains(err.Error(), "passes "+k.action+"'s outcome to none of its parameters") || !strings.Contains(err.Error(), "drop the Outcome") {
 			t.Errorf("%s: %v, want no search, saying why", k.what(), err)
 		}

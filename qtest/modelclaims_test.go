@@ -67,9 +67,10 @@ func TestModelProvesAndRefutes(t *testing.T) {
 	wantModel(t, "../validate/testdata/graph_ends.yaml", []ModelClaim{NoDeadlocks(), Proves("positive")})
 }
 
-// A truncated graph proves nothing: with graphStates 3 every claim that
-// needs the whole graph has no verdict, naming the bound; a depth bound
-// alone is a bounded proof, said so.
+// A truncated graph proves nothing: with search.states 3 every claim
+// that needs the whole graph has no verdict, naming the bound; a depth
+// bound alone is a bounded proof, said so. A binding/1 file's graphStates
+// is the same bound.
 func TestModelBounds(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
@@ -82,13 +83,15 @@ func TestModelBounds(t *testing.T) {
 		}
 		return p
 	}
-	cut := write("cut.yaml", "simulate: {graphStates: 3, steps: 10, samples: 50}\n")
+	cut := write("cut.yaml", "format: gotogether.binding/2\nsimulate: {search: {states: 3}, steps: 10, samples: 50}\n")
 	wantModel(t, cut, []ModelClaim{Proves("positive"), NoDeadlocks()},
 		"the model has no verdict on proving positive: no state violates it in the first 3 states breadth first, truncated by the state bound",
 		"the model has no verdict on having no deadlock")
-	deep := write("deep.yaml", "simulate: {graphDepth: 1, steps: 10, samples: 50}\n")
+	old := write("old.yaml", "simulate: {graphStates: 3, steps: 10, samples: 50}\n")
+	wantModel(t, old, []ModelClaim{Proves("positive")}, "the first 3 states breadth first")
+	deep := write("deep.yaml", "format: gotogether.binding/2\nsimulate: {search: {depth: 1}, steps: 10, samples: 50}\n")
 	f := modelExpect(t, deep, Proves("positive"))
-	if f.failed || !strings.Contains(strings.Join(f.logs, "\n"), "every state within 1 steps of init") {
+	if f.failed || !strings.Contains(strings.Join(f.logs, "\n"), "the states within 1 steps of init") {
 		t.Errorf("a depth bound: %s %s", f.errs, f.logs)
 	}
 }
@@ -105,7 +108,7 @@ func TestModelLive(t *testing.T) {
 	wantModel(t, storm, []ModelClaim{Live("drained")}, "the model fails driving drained (live): a fair cycle keeps it false forever")
 }
 
-// Follows is a scenario the model can follow, found by the Go
+// Possible is a scenario the model can follow, found by the Go
 // evaluator (graph's two initial states it cannot start from: quint's
 // sampling finds it); one it forbids (vending_strict's three sold of
 // two) fails, impossible by a complete search; a name of neither kind
@@ -115,11 +118,11 @@ func TestModelPossible(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
 	g := "../validate/testdata/graph.yaml"
-	wantModel(t, g, []ModelClaim{Follows(Scenario(Takes("inc"), Takes("reset")))})
+	wantModel(t, g, []ModelClaim{Possible(Scenario(Takes("inc"), Takes("reset")))})
 	strict := "../validate/testdata/vending_strict.yaml"
 	sold := Takes("buy").Outcome("ok")
-	wantModel(t, strict, []ModelClaim{Follows(Scenario(Takes("insert"), sold))})
-	wantModel(t, strict, []ModelClaim{Follows(NamedScenario("three of two", sold, sold, sold))},
+	wantModel(t, strict, []ModelClaim{Possible(Scenario(Takes("insert"), sold))})
+	wantModel(t, strict, []ModelClaim{Possible(NamedScenario("three of two", sold, sold, sold))},
 		`the model fails able to follow the scenario "three of two"`, "impossible: no trace reaches it")
 	f := modelExpect(t, g, Proves("smal"))
 	if !f.failed || !strings.Contains(strings.Join(f.errs, ""), "smal is no invariant of the binding (invariants: small, positive)") {

@@ -64,7 +64,7 @@ var retried = qtest.NamedScenario("a retry recognised",
 	qtest.Takes("apply").With("id", "1"), qtest.Takes("replay").With("id", "1"), qtest.Takes("done"))
 
 func TestRetryPossible(t *testing.T) {
-	qtest.Possible(t, "hello.binding.yaml", retried)
+	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Possible(retried))
 }
 ```
 
@@ -75,16 +75,18 @@ recognised it. Run both:
 ```console
 $ go test -count=1 -run 'TestRetryPossible|TestFaithfulConforms' -v .
 === RUN   TestRetryPossible
-    hello_test.go:33: the scenario "a retry recognised" (apply(id = 1) -> replay(id = 1) -> done): possible in the model, reached by apply(id = 1), replay(id = 1), apply(id = 2), apply(id = 3), done
+    hello_test.go:36: the model able to follow the scenario "a retry recognised" (apply(id = 1) -> replay(id = 1) -> done): reached by apply(id = 1), replay(id = 1), apply(id = 2), apply(id = 3), done (the Go evaluator's search)
 --- PASS: TestRetryPossible (0.58s)
 === RUN   TestFaithfulConforms
-    hello_test.go:40: gotogether: TestFaithfulConforms#1: 30 runs, all conform (quint confirmed 2, the Go evaluator alone the other 28); model actions taken 3 of 3; fault kinds faulted 3 of 3 reached; a sample, no proof: a failure 1 run in 10 shows is missed at most 5% of the time, a rarer one more often, one the runs cannot reach always
+    hello_test.go:53: gotogether: TestFaithfulConforms#1: 30 runs, all conform (quint confirmed 2, the Go evaluator alone the other 28); model actions taken 3 of 3; fault kinds faulted 3 of 3 reached; a sample, no proof: a failure 1 run in 10 shows is missed at most 5% of the time, a rarer one more often, one the runs cannot reach always
 --- PASS: TestFaithfulConforms (1.43s)
 PASS
 ok  	github.com/chucklehead-dev/gotogether/examples/hello	2.063s
 ```
 
-The two checks answer different questions. `qtest.Possible`: *can* the
+The two checks answer different questions. `qtest.Possible`, a claim
+of `qtest.Model` (the model alone, as `gotogether simulate` judges it:
+the Go evaluator's search, then quint's sampling): *can* the
 model follow it (no run needed)? `qtest.Some(retried)`: *did* some run
 follow it (the runs reached the case the scenario names)? A scenario
 needs both: the first keeps the model honest, the second keeps the
@@ -184,7 +186,7 @@ var atTheLimit = gristtest.Scenario("a member at the limit",
 	BorrowCmd.With(Borrow{Member: "a", Book: "b"}).Refused(ErrLimit))
 ```
 
-checked by `qtest.Possible(t, commits, atTheLimit)`, and claimed of every
+checked by `qtest.Model(t, commits).Expect(t, qtest.Possible(atTheLimit))`, and claimed of every
 run of a workload shaped like it, `qtest.All(atTheLimit)`:
 
 ```console
@@ -229,7 +231,7 @@ quint's sampling found it: still reached, and the line says by whom.
 | you write | checked by | fails when |
 |---|---|---|
 | `simulate.possible:` in the binding | `gotogether simulate` (and `-graph`) | the model cannot reach it: "impossible" over a complete search, "not reached" within a bound |
-| `qtest.NamedScenario` / `gristtest.Scenario` | `qtest.Possible(t, binding, s)` | the same, in `go test` |
+| `qtest.NamedScenario` / `gristtest.Scenario` | `qtest.Model(t, binding).Expect(t, qtest.Possible(s))` | the same, in `go test` |
 | the scenario as a claim | `qtest.Some(s)`, `qtest.All(s)`, `qtest.None(s)` | no run (or not every run, or some run) followed it |
 
 ## Read next

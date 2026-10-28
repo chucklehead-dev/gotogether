@@ -26,53 +26,15 @@ func system(storm bool) qtest.System {
 // seconds before the settle.
 var lossy = qenv.Rates{Default: 0.2}
 
-// graph is the binding's model explored whole by the Go evaluator, as
-// `gotogether simulate -graph` explores it, with reconciled's verdict.
-func graph(t *testing.T, b string) (*validate.GraphResult, validate.EventualVerdict) {
-	t.Helper()
-	qtest.RequireQuint(t) // the evaluator compiles the model with quint once
-	c, err := validate.NewChecker(b, validate.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-	r, err := c.Graph(validate.GraphSearch{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(r.Eventually) != 1 || r.Eventually[0].Name != "reconciled" {
-		t.Fatalf("%s: eventual verdicts %+v", b, r.Eventually)
-	}
-	return r, r.Eventually[0]
-}
-
 // The faithful model is live: in its whole graph no fair cycle keeps
 // reconciled false (a requeue is a stutter, which fairness counts as no
 // step: requeueing forever is no cycle), so the model drives it itself.
 func TestModelLive(t *testing.T) {
-	r, v := graph(t, "requeue.binding.yaml")
-	if !r.Complete || !v.Live() {
-		t.Fatalf("faithful model: complete %v, %+v", r.Complete, v)
-	}
+	qtest.Model(t, "requeue.binding.yaml").Expect(t, qtest.Live("reconciled"))
 }
 
-// The storm's model is not: a fair cycle keeps reconciled false, the
-// cloud's advance to warming and the resend's replacement back to
-// pending, forever. advance, enabled in both, is weakly fair and taken
-// in it; its step to ready is enabled in warming only, which fairness
-// does not oblige.
 func TestStormModelHasLasso(t *testing.T) {
-	r, v := graph(t, "requeue.storm.binding.yaml")
-	if !r.Complete || !v.Hot || v.Lasso.Stutter {
-		t.Fatalf("storm model: complete %v, %+v", r.Complete, v)
-	}
-	var cycle []string
-	for _, st := range v.Lasso.Cycle {
-		cycle = append(cycle, st.Call)
-	}
-	if !slices.Equal(cycle, []string{"advance", "create"}) || !slices.Equal(v.Lasso.Obliged, []string{"advance"}) {
-		t.Fatalf("storm's lasso: cycle %v, obliged %v", cycle, v.Lasso.Obliged)
-	}
+	qtest.Model(t, "requeue.storm.binding.yaml").Expect(t, qtest.Refutes("reconciled"))
 }
 
 // Through lost, duplicated and late applies the faithful controller

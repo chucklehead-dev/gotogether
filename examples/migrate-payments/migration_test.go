@@ -76,7 +76,7 @@ func TestRequirementsHaveProvenance(t *testing.T) {
 // possible in it (the binding's simulate.possible says the same to
 // gotogether simulate).
 func TestScenariosPossible(t *testing.T) {
-	qtest.Possible(t, bindingFile,
+	qtest.Model(t, bindingFile).Expect(t, qtest.Possible(
 		qtest.NamedScenario("R1 R3 R5 authorized, part captured, refunded in two, a third refused",
 			qtest.Takes("authorize").With("id", `"ch_1"`).With("amount", "1000").Outcome("ok"),
 			qtest.Takes("capture").With("id", `"ch_1"`).With("amount", "600").Outcome("ok"),
@@ -89,7 +89,7 @@ func TestScenariosPossible(t *testing.T) {
 		qtest.NamedScenario("R6 R8 a voided charge is not captured",
 			qtest.Takes("void").With("id", `"ch_1"`).Outcome("ok"),
 			qtest.Takes("capture").With("id", `"ch_1"`).Outcome("invalid_state")),
-	)
+	))
 }
 
 // Stage 3, the draft: its capture takes the whole authorization (from

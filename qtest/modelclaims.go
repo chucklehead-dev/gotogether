@@ -15,18 +15,18 @@ import (
 // prints), with the vocabulary runs' claims have:
 //
 //	qtest.Model(t, "hello.binding.yaml").Expect(t,
-//		qtest.Proves("exactlyOnce"), qtest.NoDeadlocks(), qtest.Follows(retried))
+//		qtest.Proves("exactlyOnce"), qtest.NoDeadlocks(), qtest.Possible(retried))
 //
 // Each claim has three values and says its bound (DESIGN §65): it holds,
 // it fails, or it has no verdict, which fails the test too. Proves,
 // Live and NoDeadlocks need the Go evaluator's state graph within the
-// binding's simulate.graphStates and graphDepth: complete (every reachable state), or, for
-// Proves and NoDeadlocks, bounded by simulate.graphDepth alone (every state
+// binding's simulate.search: complete (every reachable state), or, for
+// Proves and NoDeadlocks, bounded by simulate.search.depth alone (every state
 // within that many steps: a bounded proof, said so). A graph the state
 // bound truncated is a breadth-first prefix and proves nothing: no
 // verdict, naming the bound to raise. A violation, a lasso or a deadlock
 // is a witness wherever the graph found it, replayed by quint test.
-// Follows is found by the evaluator's search or quint's sampling, and
+// Possible is found by the evaluator's search or quint's sampling, and
 // impossible only by a complete search.
 
 // Model is the model of binding (a binding file) on its own, for claims
@@ -43,7 +43,7 @@ type ModelCheck struct {
 }
 
 // A ModelClaim is what a test expects of a model on its own
-// (ModelCheck.Expect): Proves, Refutes, Live, NoDeadlocks, Follows.
+// (ModelCheck.Expect): Proves, Refutes, Live, NoDeadlocks, Possible.
 type ModelClaim interface {
 	String() string
 	// needs adds what the claim needs simulated to n
@@ -80,7 +80,7 @@ func (n *modelNeeds) eventual(name string) {
 func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 	t.Helper()
 	if len(claims) == 0 {
-		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, Follows)")
+		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, Possible)")
 	}
 	b, err := binding.Load(m.binding)
 	if err != nil {
@@ -167,7 +167,7 @@ type proves struct{ inv string }
 
 // Proves claims the model guarantees the invariant inv: no reachable
 // state violates it, in the Go evaluator's complete state graph (a proof
-// for the binding's instance) or every state within simulate.graphDepth
+// for the binding's instance) or every state within simulate.search.depth
 // (a bounded proof). A violation fails it with the shortest
 // counterexample; a graph the state bound cut has no verdict.
 func Proves(inv string) ModelClaim { return proves{inv} }
@@ -329,7 +329,7 @@ type noDeadlocks struct{}
 
 // NoDeadlocks claims every reachable state the step cannot leave is one
 // simulate.terminal declares an end: in the complete graph, or within
-// simulate.graphDepth (bounded). A deadlock fails it with the nearest.
+// simulate.search.depth (bounded). A deadlock fails it with the nearest.
 func NoDeadlocks() ModelClaim { return noDeadlocks{} }
 
 func (noDeadlocks) String() string { return "having no deadlock" }
@@ -357,7 +357,7 @@ type possible struct {
 	errs []error
 }
 
-// Follows claims the model on its own can follow each of scenarios
+// Possible claims the model on its own can follow each of scenarios
 // (qtest.Scenario, gristtest.Scenario): an acceptance criterion checked
 // before any code runs, since a scenario the model forbids no conforming
 // run can show. Each is searched by the Go evaluator from init (its
@@ -366,17 +366,16 @@ type possible struct {
 // sequence of actions with no arguments); found, it holds with its
 // witness; impossible only by a complete search; else no verdict.
 //
-// It is qtest.Possible(t, binding, scenarios...) as a claim, with quint's
-// sampling where the evaluator does not find one (ROADMAP I17 folds
-// Possible into it).
-func Follows(scenarios ...Expectation) ModelClaim {
+// It replaces qtest.Possible(t, binding, scenarios...), which failed "not
+// searched" where quint would have sampled.
+func Possible(scenarios ...Expectation) ModelClaim {
 	if len(scenarios) == 0 {
-		panic("qtest.Follows: no scenarios")
+		panic("qtest.Possible: no scenarios")
 	}
 	p := &possible{}
 	for _, e := range scenarios {
 		if e.scenario == nil {
-			panic(fmt.Sprintf("qtest.Follows: %s is no scenario (qtest.Scenario, qtest.NamedScenario, gristtest.Scenario)", e))
+			panic(fmt.Sprintf("qtest.Possible: %s is no scenario (qtest.Scenario, qtest.NamedScenario, gristtest.Scenario)", e))
 		}
 		p.scenarios = append(p.scenarios, e.scenario)
 	}
@@ -426,7 +425,10 @@ func (p *possible) judgeModel(rep *validate.SimulateReport) (tri, string) {
 			continue
 		}
 		pv := rep.Possibles[p.at[i]]
-		line := sc.String() + ": " + pv.Verdict
+		line := pv.Verdict
+		if len(p.scenarios) > 1 {
+			line = sc.String() + ": " + line // the claim's name says one
+		}
 		switch {
 		case pv.Found:
 			lines = append(lines, line)

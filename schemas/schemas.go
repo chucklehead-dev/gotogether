@@ -7,7 +7,7 @@
 // it is written, given its URL (BindingURL, ConvertURL) in a first-line
 // comment the YAML language server reads:
 //
-//	# yaml-language-server: $schema=https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json
+//	# yaml-language-server: $schema=https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json
 //
 // or in the editor's settings (VS Code's yaml.schemas, mapping
 // "*.binding.yaml" to the URL). Check validates a file against one from
@@ -36,25 +36,46 @@ import (
 )
 
 // The URLs editors fetch the schemas from: the files of this directory
-// on the repository's main branch.
+// on the repository's main branch. BindingURL is the current binding
+// format's (gotogether.binding/2), Binding1URL binding/1's.
 const (
-	BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json"
-	ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
-	ReportURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
+	BindingURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
+	Binding1URL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json"
+	ConvertURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
+	ReportURL   = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
 )
 
-// binding and convert are the schemas' bytes. Read-only.
+// binding, binding1, convert and report are the schemas' bytes. Read-only.
 var (
-	//go:embed gotogether.binding-1.json
+	//go:embed gotogether.binding-2.json
 	binding []byte
+	//go:embed gotogether.binding-1.json
+	binding1 []byte
 	//go:embed gotogether.convert-1.json
 	convert []byte
 	//go:embed gotogether.report-1.json
 	report []byte
 )
 
-// Binding is the binding file's schema (gotogether.binding/1), as JSON.
+// Binding is the binding file's schema (gotogether.binding/2), as JSON.
 func Binding() []byte { return slices.Clone(binding) }
+
+// Binding1 is gotogether.binding/1's schema, as JSON: a binding with no
+// format key is binding/1, read forever.
+func Binding1() []byte { return slices.Clone(binding1) }
+
+// BindingFor is the schema of the binding in data, by its format key:
+// binding/1's for none or gotogether.binding/1, else the current one
+// (whose format const reports a major it does not have).
+func BindingFor(data []byte) []byte {
+	var head struct {
+		Format string `yaml:"format"`
+	}
+	if yaml.Unmarshal(data, &head) == nil && (head.Format == "" || head.Format == "gotogether.binding/1") {
+		return Binding1()
+	}
+	return Binding()
+}
 
 // Convert is the span conversion rule file's schema (gotogether.convert/1),
 // as JSON.

@@ -21,10 +21,12 @@ invariant and judges code that never shows it faithful.
 ## Steps
 
 1. **Scenarios**: each acceptance scenario a `possible` (`steps: [deposit,
-   'withdraw(result = "insufficient")']`) or a `qtest.Scenario`
-   checked by `qtest.Possible`; `gotogether simulate -binding m.binding.yaml`.
+   'withdraw(result = "insufficient")']`) or a `qtest.Scenario` claimed
+   by `qtest.Model(t, b).Expect(t, qtest.Possible(s))`; `gotogether
+   simulate -binding m.binding.yaml`.
 2. **Safety**: each property a `val`, in `holds` (no trace violates it)
-   or `allows` (some trace must); `-graph` for every reachable state.
+   or `allows` (some trace must); `-graph` for every reachable state,
+   `qtest.Proves`, `Refutes`, `NoDeadlocks` in Go.
 3. **Liveness**: eventual vals in the binding's `eventually:`, judged at
    a recorded settle; a model's intended end as `simulate.terminal`.
 4. **Code**: record each step where it takes effect; `gotogether
@@ -51,8 +53,8 @@ Before merging:
 | Result | Means | Next |
 |---|---|---|
 | `possible X: FAIL`, the model forbids it | the model is too strict for a scenario | `gotogether nav -binding` to the guard |
-| `not reached in N sampled traces (a state that 1 trace in K shows is missed at most 5% ...)`, `not found within the bound` | rare, or forbidden | `-graph`, or raise `-samples`, `simulate.searchStates` |
-| `holds X: none of N sampled traces ... (a sample, no proof: ...)`, `bounded X` | no violation found within the bound, none proven absent | `-graph` for a complete graph's `holds` |
+| `not reached in N sampled traces (a state that 1 trace in K shows is missed at most 5% ...)`, `not found within the bound` | rare, or forbidden | `-graph`, or raise `-samples`, `simulate.search.states` |
+| `holds X: none of N sampled traces ... (a sample, no proof: ...)`, `bounded X`, `the model has no verdict on proving X` | no violation found within the bound, none proven absent | `-graph` for a complete graph's `holds`, or `simulate.search.depth` for a bounded proof |
 | a `holds` invariant violated | a design bug, or the property is wrong | the shortest counterexample: `-graph -out cex.qnt` |
 | an `allows` invariant never violated | a vacuous check of the code | the model or the property |
 | a deadlock | a state the step cannot leave | fix it, or declare `simulate.terminal` |

@@ -153,7 +153,10 @@ func (g *generator) root(t reflect.Type, f, id, title, what string) []byte {
 	return buf.Bytes()
 }
 
-func bindingSchema(t *testing.T) []byte {
+// bindingSchema is binding/major's schema: binding/2's from the type,
+// binding/1's with the simulate section's three bounds in place of
+// search (Simulation.UnmarshalYAML reads both).
+func bindingSchema(t *testing.T, major int) []byte {
 	g := &generator{docs: docs(t, "../binding"),
 		types: map[reflect.Type]map[string]any{
 			// a possible is a string (a predicate, an action, a call) or
@@ -175,8 +178,19 @@ func bindingSchema(t *testing.T) []byte {
 			"Within":  {"required": []string{"after", "holds", "bound"}},
 		},
 	}
-	return g.root(reflect.TypeFor[binding.Binding](), binding.FormatName, schemas.BindingURL, "gotogether binding",
-		"A gotogether binding file ("+binding.FormatName+"): how a Go program's recorded steps become calls of a Quint model's actions.")
+	name, url := binding.FormatName, schemas.BindingURL
+	if major == 1 {
+		name, url = "gotogether.binding/1", schemas.Binding1URL
+		sim := g.schema(reflect.TypeFor[binding.Simulation]())
+		props := sim["properties"].(map[string]any)
+		delete(props, "search")
+		props["searchStates"] = map[string]any{"type": "integer", "description": "SearchStates bounds the Go evaluator's search for the possibles (default 100000 states, as binding/2's search.states)."}
+		props["graphStates"] = map[string]any{"type": "integer", "description": "GraphStates bounds `gotogether simulate -graph`'s state graph (default 100000 states); with searchStates, the larger is the one search bound."}
+		props["graphDepth"] = map[string]any{"type": "integer", "description": "GraphDepth bounds the paths every search of the model alone explores (binding/2's search.depth; default none)."}
+		g.types[reflect.TypeFor[binding.Simulation]()] = sim
+	}
+	return g.root(reflect.TypeFor[binding.Binding](), name, url, "gotogether binding",
+		"A gotogether binding file ("+name+"): how a Go program's recorded steps become calls of a Quint model's actions.")
 }
 
 func reportSchema(t *testing.T) []byte {
@@ -217,7 +231,8 @@ func TestSchemasAreGenerated(t *testing.T) {
 		gen  []byte
 		have []byte
 	}{
-		{"gotogether.binding-1.json", bindingSchema(t), schemas.Binding()},
+		{"gotogether.binding-2.json", bindingSchema(t, 2), schemas.Binding()},
+		{"gotogether.binding-1.json", bindingSchema(t, 1), schemas.Binding1()},
 		{"gotogether.convert-1.json", convertSchema(t), schemas.Convert()},
 		{"gotogether.report-1.json", reportSchema(t), schemas.Report()},
 	} {
@@ -260,11 +275,11 @@ func files(t *testing.T, suffix string) []string {
 func TestFilesValidate(t *testing.T) {
 	for _, c := range []struct {
 		suffix string
-		schema []byte
+		schema func([]byte) []byte
 		load   func(string) error
 	}{
-		{".binding.yaml", schemas.Binding(), func(p string) error { _, err := binding.Load(p); return err }},
-		{".convert.yaml", schemas.Convert(), func(p string) error { _, err := convert.Load(p); return err }},
+		{".binding.yaml", schemas.BindingFor, func(p string) error { _, err := binding.Load(p); return err }},
+		{".convert.yaml", func([]byte) []byte { return schemas.Convert() }, func(p string) error { _, err := convert.Load(p); return err }},
 	} {
 		fs := files(t, c.suffix)
 		if len(fs) < 3 {
@@ -278,7 +293,7 @@ func TestFilesValidate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ps, err := schemas.Check(c.schema, b)
+			ps, err := schemas.Check(c.schema(b), b)
 			if err != nil {
 				t.Errorf("%s: %v", f, err)
 			}
@@ -294,7 +309,7 @@ func TestFilesValidate(t *testing.T) {
 // missing required key, a format of another major, an intern scope, a
 // possible's key, a rule with neither action nor drop.
 func TestCheckFindsProblems(t *testing.T) {
-	bad := `format: gotogether.binding/2
+	bad := `format: gotogether.binding/3
 spec: model/stock.qnt
 constants:
   INITIAL: 'Map()'
@@ -319,7 +334,7 @@ simulate:
 	}
 	want := []string{
 		`line 1: the document: missing module (required)`,
-		`line 1: format: "gotogether.binding/2", want gotogether.binding/1`,
+		`line 1: format: "gotogether.binding/3", want gotogether.binding/2`,
 		`line 5: intern.id: "thread", want one of actor, process`,
 		`line 8: actions.reserve.arg: unknown key (did you mean args?)`,
 		`line 9: invariants: a string, want array`,

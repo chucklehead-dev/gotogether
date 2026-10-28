@@ -283,7 +283,7 @@ func lint(args []string) (int, error) {
 	fset.Parse(args)
 	simFindings := 0
 	if *conv != "" {
-		bad, err := lintSchema(*conv, schemas.Convert(), func(p string) error { _, err := convert.Load(p); return err })
+		bad, err := lintSchema(*conv, func([]byte) []byte { return schemas.Convert() }, func(p string) error { _, err := convert.Load(p); return err })
 		if err != nil {
 			return 2, err
 		}
@@ -333,7 +333,7 @@ func lint(args []string) (int, error) {
 	}
 	// every binding against its schema first: all its problems at once,
 	// each at its line, where the strict decoder stops at the first
-	if bad, err := lintSchema(*bpath, schemas.Binding(), nil); err != nil {
+	if bad, err := lintSchema(*bpath, schemas.BindingFor, nil); err != nil {
 		return 2, err
 	} else if bad {
 		return 1, nil
@@ -405,17 +405,18 @@ func lint(args []string) (int, error) {
 	return 0, nil
 }
 
-// lintSchema checks the comma-separated files against schema, printing
-// each problem as an error at its line, and with load (after a file
-// that fits) loads it, printing its error: whether any file had one.
-func lintSchema(paths string, schema []byte, load func(string) error) (bool, error) {
+// lintSchema checks the comma-separated files against their schemas
+// (schema of a file's bytes: a binding's by its format key's major),
+// printing each problem as an error at its line, and with load (after a
+// file that fits) loads it, printing its error: whether any file had one.
+func lintSchema(paths string, schema func([]byte) []byte, load func(string) error) (bool, error) {
 	bad := false
 	for path := range strings.SplitSeq(paths, ",") {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return false, err
 		}
-		ps, err := schemas.Check(schema, data)
+		ps, err := schemas.Check(schema(data), data)
 		if err != nil {
 			return false, fmt.Errorf("%s: %w", path, err)
 		}

@@ -146,7 +146,7 @@ var atTheLimit = gristtest.Scenario("a member at the limit",
 // would fail here, with the search's extent).
 func TestAtTheLimitPossible(t *testing.T) {
 	t.Parallel()
-	qtest.Possible(t, commits, atTheLimit)
+	qtest.Model(t, commits).Expect(t, qtest.Possible(atTheLimit))
 }
 
 // limit is the scenario as a workload: its first six calls a prologue,

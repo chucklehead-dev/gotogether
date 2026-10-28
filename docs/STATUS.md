@@ -28,7 +28,7 @@ is the front door, [ARCHITECTURE.md](ARCHITECTURE.md) the structure.
 | Published doubles | `qenv/simgrpc`, `qenv/kubesim`, `qenv/simlog/kafkalog`, `qenv/simlog/kinesislog` as modules; `qenv/simlog` in the core | api/simgrpc.txt etc., ci/consumer |
 | Metastability and sizing | qload simulation, qmeta's CTMC, `FindTrigger`, alert rules from qrole gauges; sizing from an app's own steps (`qmeta.Size`, grist's `<app> sizing`) | README §5, [examples/retrystorm](../examples/retrystorm), skill `gotogether-metastability` |
 | The Go evaluator | decides passing runs (quint judges failing ones); `simulate -graph` (a complete state graph: invariants proved for the instance, cross-checked against quint's samples), liveness as lassos under per-action weak fairness, deadlocks, possibles and scenarios, partitioned validation of serial logs (`partition:`), `gotogether compile` + `validate -compiled` with no Node or quint | DESIGN §56, §61, §62, §66, §64; [tutorials](tutorials/README.md) |
-| Model claims in tests | `qtest.Model` with `qtest.Proves`, `qtest.Refutes`, `qtest.Live`, `qtest.NoDeadlocks`, `qtest.Follows`; explicit quantifiers on run claims (`Some`, `All`, `None`, `qtest.Not`) | qtest/modelclaims.go, DESIGN §67 |
+| Model claims in tests | `qtest.Model` with `qtest.Proves`, `qtest.Refutes`, `qtest.Live`, `qtest.NoDeadlocks`, `qtest.Possible`; explicit quantifiers on run claims (`Some`, `All`, `None`, `qtest.Not`) | qtest/modelclaims.go, DESIGN §67 |
 | grist | event-sourced framework checked by its model: events with upcasters and rolling versions, read models with snapshots, commands, rules, queries, processors, declared calls, the HTTP API, `grist.Main`, memstore, simstore, sqlstore (SQLite, PostgreSQL, qsql), the generated model and bindings, `grist new`, gristtest's harnesses; GR10 slices 1, 2, 3, 4, 6 (identity, probes, drain, rolling restarts, failover and `<app> resume`, `catalog -diff`, sizing) | [grist-guide.md](grist-guide.md), [examples/counters](../examples/counters), skill `grist` |
 | Packaging | the composite Action (`.github/actions/gotogether`), the image (`ci/image/Dockerfile`, built by CI, published nowhere), `gotogether doctor`, `gotogether init -kind http`, CI tiers | [ci.md](ci.md), DESIGN §64 |
 | Analyzers | quintvet (quintsim, quintweave, quintaction, quintctx with fixes), golangci plugin, JSON Schemas for bindings and rule files | qanalysis/, [agents/analysis.md](agents/analysis.md) |
@@ -102,7 +102,7 @@ four, L more; agent-days in practice).
 1. **I17's breaking half** (ROADMAP I17, steps 1-4; prototyped once and
    reverted, about a day). Breaking: must land before tags.
    1. Remove the function `qtest.Possible`; rename the claim
-      `qtest.Follows` to `Possible`. CHANGELOG line, and
+      `qtest.Possible` to `Possible`. CHANGELOG line, and
       `TestSkillsAvoidDeprecated` refusing the old call form. Migrate
       hello's `TestRetryPossible`, library's sim_test.go,
       migrate-payments' `TestScenariosPossible`, README's hello snippet,

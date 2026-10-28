@@ -370,7 +370,7 @@ func (s *sim) reportPossibles(bpath string, cs []*possibleCheck, rs []PossibleRe
 			code = 1
 			v.Verdict = fmt.Sprintf("%s; %s. The model may be too strict for any conforming run to show it: "+
 				"find the guard that forbids it (%s) and loosen it if the requirement allows it; "+
-				"if it is only rare or deep, raise simulate.searchStates (or -states) for the evaluator's search, -samples or -steps for quint's", quintSays, evalSays, nav)
+				"if it is only rare or deep, raise simulate.search.states (or -states) for the evaluator's search, -samples or -steps for quint's", quintSays, evalSays, nav)
 			v.Line = fmt.Sprintf("  FAIL    possible %s: %s\n", what, v.Verdict)
 		}
 		s.printf("%s", v.Line)

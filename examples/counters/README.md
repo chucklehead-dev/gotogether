@@ -80,6 +80,7 @@ for field, not only of its key).
 
 | test | configuration | catches | rate (2026-10-27) |
 |---|---|---|---|
+| `TestModelProvesWithinDepth` | none: the model alone (`qtest.Model`, the generated binding with `simulate.search.depth` 3, binding/2) | nothing: `Proves("uniqueNames")`, `Proves("averageAsOfTrigger")`; the log grows without end, so only a depth bound makes the proof bounded rather than a breadth-first prefix | both held in the 3780 states within three steps |
 | `TestFaithful` | the app at Serializable and ReadCommitted (Snapshot's runs are Serializable's: every append writes the head), one tenant, names from two letters; commit faults (`store.counters.commit`), node crashes, lost and late requests | nothing: `Conforms`, `All(Settles)`, both faults reached | 40 of 40 conform at each level |
 | `TestFaithfulAtClients` | the same runs, judged at the clients (`<tenant>/clients`: `Invoke`/`Done`) by `counters.calls.binding.yaml`, `qtest.Linearize()` | nothing: a retry's duplicate would be a later read's `Mismatch` | 40 of 40 |
 | `TestFaithfulAtClaim1` | claim 1's configuration (two clients creating in one tenant, no faults, ReadCommitted), the app as it is | `None(Rejects("createCounter"))`: claim 1's contrast; with grist's condition taken out of the runtime, 13 of 20 runs reject | 40 of 40 conform |

@@ -48,7 +48,7 @@ and, in Go, the same scenarios as claims over a simulation's runs:
 var refundTwice = qtest.NamedScenario("R7 second refund refused",
 	qtest.Takes("refund").Outcome("ok"), qtest.Takes("refund").Outcome("refunded"))
 
-func TestScenariosPossible(t *testing.T) { qtest.Possible(t, "payments.binding.yaml", refundTwice) }
+func TestScenariosPossible(t *testing.T) { qtest.Model(t, "payments.binding.yaml").Expect(t, qtest.Possible(refundTwice)) }
 ```
 
 `gotogether simulate -binding payments.binding.yaml` reports each

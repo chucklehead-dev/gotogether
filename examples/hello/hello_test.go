@@ -1,6 +1,9 @@
 package hello
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -30,7 +33,17 @@ var retried = qtest.NamedScenario("a retry recognised",
 // whose replay needed something no run does would fail here, with the
 // search's extent, where every run would still conform to it.
 func TestRetryPossible(t *testing.T) {
-	qtest.Possible(t, "hello.binding.yaml", retried)
+	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Possible(retried))
+}
+
+// The model proves exactlyOnce for REQUESTS = 1.to(3) before any code
+// runs: no reachable state of its whole graph violates it, and every
+// state the step cannot leave is the client done. A model mutant whose
+// replay counts again (the design error a counter without dedupe makes)
+// is refuted, its shortest counterexample replayed by quint.
+func TestModelProves(t *testing.T) {
+	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Proves("exactlyOnce"), qtest.NoDeadlocks())
+	qtest.Model(t, modelMutant(t)).Expect(t, qtest.Refutes("exactlyOnce").InAtMost(2))
 }
 
 // Through lost requests, lost responses and duplicates, every request
@@ -113,4 +126,36 @@ func TestMutant(t *testing.T) {
 func TestMutants(t *testing.T) {
 	t.Parallel() // each mutant's binary is a process of its own
 	qtest.Mutants{}.Run(t)
+}
+
+// modelMutant is hello's binding over a model whose replay counts the
+// request again: a copy, in a temporary directory, with the binding.
+func modelMutant(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.CopyFS(filepath.Join(dir, "model"), os.DirFS("model")); err != nil {
+		t.Fatal(err)
+	}
+	spec := filepath.Join(dir, "model", "hello.qnt")
+	src, err := os.ReadFile(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const replay = "applied.contains(id),\n    applied' = applied,\n    count' = count,"
+	if strings.Count(string(src), replay) != 1 {
+		t.Fatalf("the model's replay is no longer %q", replay)
+	}
+	mutant := strings.Replace(string(src), replay, "applied.contains(id),\n    applied' = applied,\n    count' = count + 1,", 1)
+	if err := os.WriteFile(spec, []byte(mutant), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile("hello.binding.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bpath := filepath.Join(dir, "hello.binding.yaml")
+	if err := os.WriteFile(bpath, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return bpath
 }
