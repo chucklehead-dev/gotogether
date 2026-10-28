@@ -3435,6 +3435,25 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### I17 (second half): Possible a claim, the walks gone, binding/2
+
+What the first half left, in its order. The function `qtest.Possible`
+removed and the claim named so (`Follows` for the first half's
+fortnight): hello's, library's and migrate-payments' tests, the README,
+the skills, the grist guide, grist's scaffold template and the
+tutorials say `qtest.Model(t, b).Expect(t, qtest.Possible(s))`;
+`TestSkillsAvoidDeprecated` refuses the old call. twophase's,
+crossdb's and requeue's graph tests are claims (`Proves`, `NoDeadlocks`,
+`Refutes(...).InAtMost(n)`, `Live`); the exact replay string, the state
+counts and the storm's cycle shape they checked went with the walks, the
+replay by quint now Refutes' own. `gotogether.binding/2`
+(DESIGN §69). hello's `TestModelProves` (proved for `REQUESTS =
+1.to(3)`, 8 states; a model mutant whose replay counts again refuted in
+two steps) and counters' `TestModelProvesWithinDepth` (3780 states
+within three commands) are the examples. Also fixed, from the status
+writer: ROADMAP marks I10, I12's S half and I15's landed part done;
+docs/grist.md lists GR10's slices 3, 4 and 6 as built.
+
 ### I17 (first half): one engine for the model alone, model claims
 
 Review 11's architect, F4: "can the model ...?" had three engines and two

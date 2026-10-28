@@ -30,9 +30,11 @@ source (internal/docsnippets checks every other backticked name exists).
 Status: slices 1 and 2 built (grist/, the SQL store, the HTTP API,
 `grist/client`, `grist.Main`, `AtMostOnce`), the generator, `grist new`
 and the test harnesses (GR2), GR3's declared calls (simulated and on
-the real tier over HTTP) and GR10's slice 1 (identity, probes, the
-drain) and slice 2 (graceful termination, the lagging router,
-`gristsim.Cluster`); gristflow is design, as is slice 3. What building each slice and
+the real tier over HTTP) and GR10's slices 1 (identity, probes, the
+drain), 2 (graceful termination, the lagging router,
+`gristsim.Cluster`), 3 (store failover and restore, with I25's
+operations basics), 4 (versions that roll, with I22) and 6 (sizing from
+the chain); gristflow is design, as are GR10's later slices. What building each slice and
 each review changed here is in docs/HISTORY.md ("grist's build notes",
 §0 to §0.16, cited below as §0.x). Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the

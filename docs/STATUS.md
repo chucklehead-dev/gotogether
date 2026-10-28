@@ -7,10 +7,10 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-28.** main at `c40570f` (I17's first half). CI
-(`ci` workflow, run 552) green at `c40570f`; runs 548-550 just before it
-failed in qnav's golden and the TypeScript-backend variant, fixed by
-`a47cc46`. **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-28.** main at `bdf7854` (I17 done: `55d2504`, the
+published modules bumped to it in `bdf7854`), then this page's docs
+commit. CI green at `c40570f` (run 552); runs on I17's commits are
+watched to green. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
@@ -28,7 +28,7 @@ is the front door, [ARCHITECTURE.md](ARCHITECTURE.md) the structure.
 | Published doubles | `qenv/simgrpc`, `qenv/kubesim`, `qenv/simlog/kafkalog`, `qenv/simlog/kinesislog` as modules; `qenv/simlog` in the core | api/simgrpc.txt etc., ci/consumer |
 | Metastability and sizing | qload simulation, qmeta's CTMC, `FindTrigger`, alert rules from qrole gauges; sizing from an app's own steps (`qmeta.Size`, grist's `<app> sizing`) | README §5, [examples/retrystorm](../examples/retrystorm), skill `gotogether-metastability` |
 | The Go evaluator | decides passing runs (quint judges failing ones); `simulate -graph` (a complete state graph: invariants proved for the instance, cross-checked against quint's samples), liveness as lassos under per-action weak fairness, deadlocks, possibles and scenarios, partitioned validation of serial logs (`partition:`), `gotogether compile` + `validate -compiled` with no Node or quint | DESIGN §56, §61, §62, §66, §64; [tutorials](tutorials/README.md) |
-| Model claims in tests | `qtest.Model` with `qtest.Proves`, `qtest.Refutes`, `qtest.Live`, `qtest.NoDeadlocks`, `qtest.Possible`; explicit quantifiers on run claims (`Some`, `All`, `None`, `qtest.Not`) | qtest/modelclaims.go, DESIGN §67 |
+| Model claims in tests | `qtest.Model` with `qtest.Proves`, `qtest.Refutes`, `qtest.Live`, `qtest.NoDeadlocks`, `qtest.Possible`; explicit quantifiers on run claims (`Some`, `All`, `None`, `qtest.Not`) | qtest/modelclaims.go, DESIGN §67, §69 |
 | grist | event-sourced framework checked by its model: events with upcasters and rolling versions, read models with snapshots, commands, rules, queries, processors, declared calls, the HTTP API, `grist.Main`, memstore, simstore, sqlstore (SQLite, PostgreSQL, qsql), the generated model and bindings, `grist new`, gristtest's harnesses; GR10 slices 1, 2, 3, 4, 6 (identity, probes, drain, rolling restarts, failover and `<app> resume`, `catalog -diff`, sizing) | [grist-guide.md](grist-guide.md), [examples/counters](../examples/counters), skill `grist` |
 | Packaging | the composite Action (`.github/actions/gotogether`), the image (`ci/image/Dockerfile`, built by CI, published nowhere), `gotogether doctor`, `gotogether init -kind http`, CI tiers | [ci.md](ci.md), DESIGN §64 |
 | Analyzers | quintvet (quintsim, quintweave, quintaction, quintctx with fixes), golangci plugin, JSON Schemas for bindings and rule files | qanalysis/, [agents/analysis.md](agents/analysis.md) |
@@ -78,7 +78,7 @@ review" on.
 | I14 | one core version (`ci/bump-core.sh`, the consumer job) | e93b353 |
 | I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
 | I16 | explicit quantifiers | 03fa005 |
-| I17 (first half) | `validate.Simulate`, model claims | c40570f |
+| I17 | `validate.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
 | I19 | validation at volume: `partition:` | f27adb0 |
 | I20 | on-call reports, `-json` | a985abe |
 | I21 | the Action, the image, `compile`/`-compiled` | 1c0e469, 7173581 |
@@ -91,37 +91,16 @@ review" on.
 | I35 | five tutorials | 70f1839 |
 | I37-I41 | recording, Reconstruct, qeval, scheduler costs; nightly benchmarks | 3047ddb, 075ce15, cbd8849, 089889b, 65bfb9d |
 
-ROADMAP does not yet mark I10, I12's S half or I15's part done; the
-commits above did them (ROADMAP's next edit should say so).
-
 ## 3. Half done: exactly what remains
 
 In the order to take them. Sizes as in ROADMAP (S under a week, M two to
 four, L more; agent-days in practice).
 
-1. **I17's breaking half** (ROADMAP I17, steps 1-4; prototyped once and
-   reverted, about a day). Breaking: must land before tags.
-   1. Remove the function `qtest.Possible`; rename the claim
-      `qtest.Possible` to `Possible`. CHANGELOG line, and
-      `TestSkillsAvoidDeprecated` refusing the old call form. Migrate
-      hello's `TestRetryPossible`, library's sim_test.go,
-      migrate-payments' `TestScenariosPossible`, README's hello snippet,
-      gristtest/scenario.go's doc, the grist guide, the skills
-      (gotogether-workflow, grist, gotogether-migration); `modelVerdict`
-      on `Checker.Simulate`.
-   2. Replace the `GraphResult` walks with claims: twophase's
-      graph_test.go, crossdb's, requeue's; each example README's table.
-   3. `gotogether.binding/2` with one bound, `simulate.search: {states,
-      depth}`; binding/1 read forever, its three keys mapped; schema
-      `gotogether.binding-2.json`; init's template; doctor; format tests.
-   4. Docs: DESIGN §68 (engine, claims, bound; note §68 is now taken by
-      I20, so pick the next free number), the skills' Results tables,
-      the grist guide, the tutorials re-quoted.
-2. **I4's pinned replays (M).** Replays with the evaluator's witness
+1. **I4's pinned replays (M).** Replays with the evaluator's witness
    pinned, so quint confirms a path instead of sampling one; needs a
    replay of a step naming its choice, which no binding template writes
    yet (HISTORY "Eleventh review: silent wrong answers").
-3. **I35's rest.** (1) a test that every `gotogether` line in a
+2. **I35's rest.** (1) a test that every `gotogether` line in a
    tutorial names a real command and flags (as cmd/gotogether's
    TestCommandNeeds); (2) `ci/tutorials.sh` running each `$` line and
    diffing the quoted output, `[...]` a wildcard; (3) the designer's
@@ -129,36 +108,36 @@ four, L more; agent-days in practice).
    a migrate-payments front page with stage times, wallet to wallet-grist
    as the migration skill's second walk-through, kind for grist (waits
    on GR10 slice 9); run-side hot cycles and strong fairness when built.
-4. **I12's M half.** One quint slot limiter per machine (a token
+3. **I12's M half.** One quint slot limiter per machine (a token
    directory with flock) in place of per-binary `quintSlots`.
-5. **I15's rest (S).** A pinned staticcheck job; grist in
+4. **I15's rest (S).** A pinned staticcheck job; grist in
    ci/test-times.txt with a -short tier per push and the full run
    nightly; a `GOTOOLCHAIN=go1.25` build of the core (the Go-floor
    decision needs it); ask hegel-go for an `io.Writer` option.
-6. **I19's incremental invariants.** A log whose entities interact
+5. **I19's incremental invariants.** A log whose entities interact
    cannot be partitioned and is still judged at the sum of its states;
    judging only the entries a step changed would make entry-wise
    invariants linear. Also the million-step example.
-7. **I20's incident example.** An incident walkthrough from alert to
+6. **I20's incident example.** An incident walkthrough from alert to
    fix with `-json`, `nav` and `validate -replay`, doubling as the
    runbook; a store-side grist step's pod (needs G8's location).
-8. **I25's leftovers**, each concrete in ROADMAP: (1) PostgreSQL
+7. **I25's leftovers**, each concrete in ROADMAP: (1) PostgreSQL
    `LISTEN/NOTIFY` (an `sqlstore.Options` hook, `pg_notify` in the
    append); (2) an admin command listing and re-driving `grist.failed`
    dead letters; (3) `resume -from P` with a model step
    `gristSkipped`; (4) rewinds' memory in the store (a marker per
    rewind); (5) the Store's connection faults; (6) slice 5's DSN reopen
    on an authentication failure. Then the guide's ops section (I27).
-9. **I21's publishing.** Publish the image and tag the Action (after
+8. **I21's publishing.** Publish the image and tag the Action (after
    R5's tags); the CI-budget reference repository; `-manifest` and
    searches under `-compiled`.
-10. **H7 and I22 leftovers.** Schema changes beyond upcasting (an event
+9. **H7 and I22 leftovers.** Schema changes beyond upcasting (an event
     split, a field whose meaning changed: grist.md §9); a processor
     reading behind the head refolds from the start when the only
     snapshot is later than its trigger; a new event type stays readers
     first with no API to hold it back (an app's flag, grist-platform
     §3.6); crossdb's kube interceptor onto kubesim (GR7's).
-11. **GR10's remaining slices** ([grist-platform.md](grist-platform.md)
+10. **GR10's remaining slices** ([grist-platform.md](grist-platform.md)
     §9; the order there: 8, 9, 10, with 5 and 7 alongside, 11 last):
     - 5, configuration and secrets (M): `FileSource`, `-db-file` with
       reopen, TLS from files, configuration as commands, projections,
@@ -171,7 +150,7 @@ four, L more; agent-days in practice).
       PostgreSQL.
     - 10, the canary gate (S-M), an Argo Rollouts AnalysisTemplate.
     - 11, sharding (M-L, after grist slice 3's leases).
-12. **Small leftovers**, one line each in ROADMAP: I1's library
+11. **Small leftovers**, one line each in ROADMAP: I1's library
     upcaster-fix example; I2's `examples/shards`; I7's kvstore two-host
     example; I11's multi-variable actions; I23's PostgreSQL benchmark in
     CI; I27's grist/README.md (after grist's tag); I36's gopls note;
@@ -183,7 +162,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I18, validate split (`validate/model`, `validate/navproto`, qnav on it; `qtrace.Step`'s record fields) | M, breaking | before tags; after I17, which moves model analysis first |
+| 1 | I18, validate split (`validate/model`, `validate/navproto`, qnav on it; `qtrace.Step`'s record fields) | M, breaking | before tags; I17 has moved model analysis into validate/simulate*.go, the first thing to split out |
 | 2 | I24, grist's reads at scale (memo, fold and snapshot metrics, pruning, `Snapshots(every)` as an App option) | M | before grist's tag and a second real grist app |
 | 3 | I26, the generator warns on what an app forgot | S-M | a newcomer's silent bug; cheap |
 | 4 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
@@ -196,12 +175,11 @@ four, L more; agent-days in practice).
 Also proposed, not built: GR10b (a poller a daemon only while it waits)
 and GR10c (`Settle` naming down processes), both S and qenv-level.
 
-**Recommended next: I17's breaking half.** It is the one breaking API
-move left that the tag recommendation lists (I1-I10, I12-I14, I16-I18),
-the first half is on main with its plan written step by step and a
-prototype measured at a day, and every later doc and tutorial quotes its
-names. Then I18, which builds on it, and R5 becomes the maintainer's
-call alone.
+**Recommended next: I18, the validate split.** It is the one breaking
+API move left that the tag recommendation lists (I1-I10, I12-I14,
+I16-I18): I17 is done, and its engine (validate/simulate*.go, the model
+claims' only dependency) is the first piece to move to `validate/model`.
+Then R5 becomes the maintainer's call alone.
 
 ## 5. Decisions for the maintainer
 
@@ -211,7 +189,7 @@ there). **Open:**
 - **Tags and v0.1 (R5).** v0.1.0 of every published module once I1-I10,
   I12-I14 and I16-I18 are in; tag order gosim, core, qweave, qhegel,
   qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
-  Left before then: I17's second half and I18 (whether I12's M half
+  Left before then: I18 (whether I12's M half
   and I15's rest must come first is the maintainer's call).
 - **Format and ABI policy** (DESIGN §63, built on the recommendation).
   Two choices to confirm: derived files (manifests, evidence) read

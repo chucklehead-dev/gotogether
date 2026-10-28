@@ -4346,7 +4346,8 @@ invariant and judges a code that never shows the scenario faithful.
   shorter one reaches (two of vending's 125 three-step sequences, each
   reported "not found" with a path within the bound;
   `TestReachDepthBoundAgainstBruteForce`). Bounded by states (default 2000,
-  `simulate.searchStates`, `-states`) and depth (the trace's steps): a
+  binding/1's `searchStates`, `-states`; since §69 the one
+  `simulate.search`, default 100000 and no depth) and depth (the trace's steps): a
   search a bound cut says "not found within the bound", with its extent;
   only a search no bound cut says impossible, the whole state graph seen.
   The predicates are vals of a module of their own
@@ -4405,7 +4406,7 @@ invariant and judges a code that never shows the scenario faithful.
   searched, saying so, where the search once dropped the outcome and
   called possible a step the outcome made impossible. A `With` naming no
   parameter of its action fails the claim before any verdict, as a
-  misspelled action does (`None` of it held for nothing). `qtest.Possible(t, binding, scenarios...)` is the model-first
+  misspelled action does (`None` of it held for nothing). `qtest.Model(t, binding).Expect(t, qtest.Possible(scenarios...))` is the model-first
   check, no run needed.
 - **grist's scenario** is written in the catalog's values:
   `Command.With(args)` is a `grist.Invocation` (the command's action,
@@ -4550,8 +4551,9 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   equal keys are equal states (operators, which no state holds, aside).
   A state at the depth bound cuts it even if it has no successor
   (unknown, since it is not expanded). The default bound is 100000
-  states (`-states`, `simulate.graphStates`) and no depth bound
-  (`-depth`, `simulate.graphDepth`): grist's log grows without end, so
+  states (`-states`, binding/1's `graphStates`) and no depth bound
+  (`-depth`, binding/1's `graphDepth`; since §69 both are
+  `simulate.search`): grist's log grows without end, so
   its graphs are always cut, and the depth bound makes the cut "every
   state within D steps" rather than a breadth-first prefix.
 - **Unsupported is never complete.** A construct outside the evaluator's
@@ -5392,3 +5394,66 @@ binding.Binding (schemas/gotogether.report-1.json, `schemas.Report`,
 I36's generator reading json tags), and a filled document is checked
 against it.
 
+
+## 69. The model alone: one engine, claims, one bound (I17)
+
+Review 11's architect (F4) found three engines answering "can the model
+...?" with two semantics: `gotogether simulate` asked the Go evaluator
+and sampled with quint what it did not find; `qtest.Possible` asked the
+evaluator only and failed "not searched" where the CLI would sample; a
+test of `-graph`'s verdicts walked `GraphResult` by hand (twophase's,
+crossdb's, requeue's), the walk of a report the conventions forbid for
+runs. And the binding's simulate section had three state bounds.
+
+- **One engine.** `validate.Simulate(binding, SimulateOptions)` (and
+  `Checker.Simulate`, reusing a checker's compile) is what the command
+  ran, moved whole from cmd/gotogether: quint's sampling, `Verify`
+  (Apalache), `Graph` (the evaluator's state graph, its cross-check
+  against quint's samples, deadlocks, actions never enabled, eventual
+  vals as cycles), and the possibles (the evaluator's search, then
+  quint's sampling of what it did not find, hosted in an invariant's
+  run). Its `SimulateReport` carries every verdict as data beside the
+  text the CLI prints unchanged (and I20's `-json` reads from it):
+  `ModelVerdict` (held, violated, or neither: an error, a construct the
+  evaluator refused) with a `ModelBound`, `PossibleVerdict` (found,
+  impossible, or neither), the graph, `Code`.
+- **Bounds stated (§65).** A `ModelBound` is one of: complete (every
+  reachable state of the instance), depth (every state within D steps,
+  the state bound never reached: every trace of up to D steps, a
+  bounded proof), states (a breadth-first prefix the state bound cut,
+  which proves nothing past it), stopped (the evaluator could not go
+  on), verified (quint verify's), sampled (quint run's, with the rule
+  of three). `Proves()` is true of the first, second and fifth.
+- **Claims, three-valued.** `qtest.Model(t, binding).Expect(t, ...)`
+  takes `ModelClaim`s (qtest/modelclaims.go, the claims table in
+  qtest/claims.go), simulating once for all of them, graph only if one
+  needs it. `Proves(inv)` holds where the invariant held within a
+  proving bound; a violation fails it with the shortest counterexample;
+  a truncated graph is no verdict, failing the test with the bound to
+  raise. `Refutes(name)` wants a witness: an invariant's violation, or
+  an eventual val's lasso, each replayed by `quint test` (Replay); a path
+  quint fails is the evaluator's error, no verdict; a proving bound with
+  none fails it (the model guarantees what the binding would check the
+  code against). `.InAtMost(n)` bounds the witness's length. `Live(val)`
+  holds only of a complete graph: a cycle may close past any bound, so a
+  depth bound proves no liveness. `NoDeadlocks()` holds within a proving
+  bound. `Possible(scenarios...)` is a scenario as a possible (its
+  steps' actions, arguments, and outcomes the binding passes to a
+  parameter), found by the evaluator or quint, impossible only by a
+  complete search. A name that is no invariant or eventual val of the
+  binding fails before anything runs, as a misspelled run claim does.
+- **One bound, binding/2.** `simulate.search: {states, depth}` bounds
+  every search of the model alone, the graph's and the possibles' (it
+  was `searchStates`, 2000 for the possibles, as deep as `steps`;
+  `graphStates`, 100000, and `graphDepth` for the graph). Default 100000
+  states and no depth: a possible's search now goes as far as the graph
+  would, stricter in what "not found within the bound" means, and found
+  witnesses are real however deep. Removing three keys is a breaking
+  change of the binding format (§63), so it is `gotogether.binding/2`;
+  binding/1 (any file with no format key) is read forever, its three
+  keys read into `search` (states the larger, depth graphDepth), each
+  major refusing the other's keys with the fix (`Simulation.UnmarshalYAML`
+  reads the section strictly and records which keys it saw; `Load`
+  checks them by the file's major). Both schemas stay in schemas/ (-1
+  and -2), and `gotogether lint` checks each file against its own
+  major's.

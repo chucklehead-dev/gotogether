@@ -116,7 +116,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   confidence for sampling ("a bug reached by 1 trace in K is missed with
   probability (1-1/K)^N"), the nightly's per-claim confidence (Left from
   Y) with it.
-- **I10. Coverage scoped to its runs (S).** `Coverage.Unreached` reads
+- **I10. Coverage scoped to its runs (S). Done** (64b99ce): a site
+  declared in a run is the run's (`hooks.FaultNames`), one declared
+  outside any run (woven code's, at init) the process's;
+  `qenv.CoverageWith(runs, sites...)`; CI's shuffle part (d0afb10). Left:
+  nothing. What it was: `Coverage.Unreached` reads
   the process-wide registry of declared sites, so in a user's suite it
   reports sites another test declared; qenv's `TestFaultPoints` fails 4
   of 5 times under `-count=5` and under `-shuffle`. Declarations made in
@@ -142,7 +146,13 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Adoption: stability
 
-- **I12. quint's processes die with their check (S, then M).**
+- **I12. quint's processes die with their check (S, then M). S half
+  done** (6fcfdfb): every quint invocation through
+  `internal/quintcmd.Command` (its own process group, killed whole on
+  cancel, a WaitDelay), qtest's and connect's checks under
+  `t.Context()`. Left: the M half, one slot limiter per machine (a token
+  directory with flock) instead of `quintSlots` per test binary. What it
+  was:
   `exec.CommandContext` kills node, not the Rust evaluator it spawns:
   a cancelled check leaves a CPU-bound `quint_evaluator` with ppid 1
   that ignores SIGTERM, inflating neighbours' CPU budgets and outliving
@@ -187,7 +197,12 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   module (no replace, no workspace): an order-sync service publishing
   through kafkalog and served by simgrpc, explored with `qtest.System`,
   the first user of GR5-GR7's doubles.
-- **I15. The suite's own guards (S).** The race job widened to qtest
+- **I15. The suite's own guards (S). Partly done** (d0afb10): shuffled
+  -short tests (`-shuffle=on -count=2`), the race job widened to qtest,
+  qhistory, qsweep, qnemesis, qload, qshrink and internal/qeval, qhegel
+  capturing at fd 1. Left: an `io.Writer` option asked of hegel-go, the
+  pinned staticcheck job, grist's -short tier in ci/test-times.txt, the
+  `GOTOOLCHAIN=go1.25` build. What it was: The race job widened to qtest
   (whose explorations run seeds in parallel), qhistory, qsweep,
   qnemesis, qload, qshrink and internal/qeval (all pass today, about 4
   CPU minutes); qhegel's capture of Hegel's output by assigning
@@ -209,44 +224,19 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   PerMutant(claims...), NoSurvivors(...))` as Explore's; gristtest's
   `ClientErrors` folded into the negation.
 - **I17. Model claims through one Expect (M, breaking for
-  `qtest.Possible`). Half done** (HISTORY "I17"): `validate.Simulate`
-  (and `Checker.Simulate`) is the one engine, `gotogether simulate` a
-  thin wrapper printing its report; `qtest.Model(t, binding).Expect(t,
-  qtest.Proves("consistency"), qtest.Refutes("x").InAtMost(4),
-  qtest.Live("val"), qtest.NoDeadlocks(), qtest.Follows(scenario))`,
-  three-valued with each bound stated (qtest/modelclaims.go). Left, in
-  this order:
-  1. `qtest.Possible(t, b, scenarios...)` removed: `Follows` renamed
-     `Possible` (the claim), the old function's fix in the CHANGELOG and
-     `TestSkillsAvoidDeprecated` ("qtest.Possible(t" → "qtest.Model(t,
-     b).Expect(t, qtest.Possible(...))"); its callers migrated: hello's
-     `TestRetryPossible`, library's (`sim_test.go`), migrate-payments'
-     `TestScenariosPossible`, README's hello snippet, gristtest/scenario.go's
-     doc, the grist guide, skills (gotogether-workflow SKILL.md and
-     workflow.md, grist SKILL.md and loop.md, gotogether-migration's
-     first-model.md); `modelVerdict` (scenario.go) on `Checker.Simulate`.
-  2. The `GraphResult` walks replaced by claims: twophase's
-     graph_test.go (`Proves` both invariants, `NoDeadlocks`; the early
-     decision mutant `Refutes("consistency").InAtMost(4)`, its quint
-     replay now Refutes' own), crossdb's (`Refutes("oneDatabasePerResource").InAtMost(2)`,
-     `NoDeadlocks`), requeue's (`Live("reconciled")`, the storm's
-     `Refutes("reconciled")`); each example README's test table.
-  3. One bound, `gotogether.binding/2`: `simulate.search: {states,
-     depth}` for `searchStates`, `graphStates` and `graphDepth`
-     (default 100000 states, no depth), binding/1 read forever with its
-     three keys mapped (states the larger, depth graphDepth) and refused
-     in /2 with the fix, `search` refused in /1 naming `format:`
-     (`Simulation.UnmarshalYAML` reading the section strictly, Load
-     checking by major). formats.Binding Major 2 Oldest 1;
-     schemas/gotogether.binding-2.json beside -1 (BindingURL -2,
-     `Binding1URL`, `BindingFor(data)` for `lint`'s per-file schema);
-     init's template `format: gotogether.binding/2`; doctor's "no format
-     key" binding/1; binding/format_test.go's later major /3. Prototyped
-     and reverted to keep main whole: about a day.
-  4. Docs: DESIGN §68 (one engine, the claims, the bound), the skills'
-     Results tables, the grist guide, I35's tutorials re-quoted. Example:
-     hello's `Model(t, b).Expect(t, Proves("exactlyOnce"), ...)` and a
-     model mutant refuted; a bounded `graphDepth` claim in counters.
+  `qtest.Possible`). Done** (DESIGN §69, HISTORY "I17"): one engine for
+  the model alone, `validate.Simulate` (and `Checker.Simulate`), the CLI
+  a thin wrapper printing its report; `qtest.Model(t, binding).Expect(t,
+  qtest.Proves(inv), qtest.Refutes(x).InAtMost(n), qtest.Live(val),
+  qtest.NoDeadlocks(), qtest.Possible(scenario))`, three-valued with
+  each bound stated; the function `qtest.Possible` removed (its callers
+  and the twophase, crossdb and requeue `GraphResult` walks migrated);
+  `gotogether.binding/2` with one `simulate.search: {states, depth}`
+  for the graph and the possibles alike, binding/1 read forever. hello
+  proves exactlyOnce and refutes it in a model mutant; counters proves
+  its invariants within three steps. Left: `qtest.Model` takes no
+  options (constants, a bound of the test's own); a claim on the
+  actions never enabled (twophase's walk checked none was).
 - **I18. validate split (M, breaking, before tags).** validate is 86
   exported identifiers and 10.7k lines: runs, model checking, the model
   navigator, the run navigator's wire protocol (qnav imports validate
