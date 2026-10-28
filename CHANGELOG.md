@@ -101,7 +101,9 @@ The first release. What a user meets, by module:
   tail against a fold from the start; `gristsim.Config.SnapshotEvery`;
   `gristtest.Log`, `Capture`, `WriteLog`, `ReadLog` and
   `TierConfig.Log` keep a deployed version's log and judge later versions
-  on it. examples/library's book-added is at version 2.
+  on it. examples/library's book-added is at version 2. A read model's
+  fingerprint holds its upcasters' probes (a fixed upcaster refolds), and
+  grist.lock takes a field added to a version as that version.
 - Skills in pavlov's shape (ROADMAP P8): each SKILL.md at most about 80
   lines, with a "choose your path" list (each reference and when to read
   it), steps, checklists, a results table (each verdict and report line,

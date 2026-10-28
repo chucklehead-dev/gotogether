@@ -612,3 +612,43 @@ func TestLockRefusesAChangedShape(t *testing.T) {
 		t.Errorf("a fold doubled at version 1: %v %v, want its fingerprint's change warned of", g.Warnings, err)
 	}
 }
+
+type (
+	shelfNoted struct {
+		Book   string `json:"book" grist:"tag"`
+		Copies int    `json:"copies"`
+		Note   string `json:"note"`
+	}
+	shelfTagged struct {
+		Book   string `json:"book" grist:"tag"`
+		Copies int    `json:"copies"`
+		Floor  string `json:"floor" grist:"tag"`
+	}
+)
+
+func shelfOf[E any](copies func(E) int) *grist.App {
+	a := grist.New("shelf")
+	e := grist.NewEvent[E](a, "book-added")
+	grist.NewReadModel(a, "copies", 1, func() int { return 0 }, grist.On(e, func(s int, e E, _ grist.Meta) int { return s + copies(e) }))
+	return a
+}
+
+// A field added to a version, and nothing else, is no new shape: stored
+// events read it as its zero value and a node that does not know it
+// ignores it, so the version rolls out as it is (a warning says so). A
+// tag added is a new shape: the stored events were indexed without it.
+func TestLockTakesAnAddedField(t *testing.T) {
+	dir := t.TempDir()
+	g, err := gen.Generate(shelfApp(1, false), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Write(dir)
+	g, err = gen.Generate(shelfOf(func(e shelfNoted) int { return e.Copies }), dir)
+	if err != nil || !strings.Contains(strings.Join(g.Warnings, "\n"), "event book-added version 1 gained note since grist.lock was written") {
+		t.Errorf("a field added: %v %v, want it taken, with a warning", err, g.Warnings)
+	}
+	if _, err := gen.Generate(shelfOf(func(e shelfTagged) int { return e.Copies }), dir); err == nil || !strings.Contains(err.Error(), "changed shape") {
+		t.Errorf("a tag added: %v, want a changed shape", err)
+	}
+}

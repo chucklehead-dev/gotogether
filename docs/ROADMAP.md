@@ -87,7 +87,15 @@ item as recommended:
   snapshots"): versioned events with an upcaster chain checked by
   generated values, old logs judged by today's model, grist.lock,
   snapshots keyed by a fold's fingerprint in every store tier, checked
-  against a fold from the start (docs/grist.md §2.1, §2.2). The second
+  against a fold from the start (docs/grist.md §2.1, §2.2); a fixed
+  upcaster refolds (its probe in the fingerprint); a field added to a
+  version is taken as that version. **Next, with GR10 slice 4 and before
+  GR4: versions that roll.** A new version's writers write it at once,
+  and the older nodes refuse it (`NewerVersionError`): `grist.WritesVersion`
+  (writing an older version, through a downcaster, until every node reads
+  the new one), `gristtest.Upgrade`, counters v2 with the `eagerV2`
+  mutant, and NewerVersionError's advice made an API; then a runtime
+  snapshot audit (a sampled key refolded from the start, a metric). The second
   half done (HISTORY: "H7's second half: the doubles
   published"): `qenv/simlog` in the core, `qenv/simgrpc`,
   `qenv/kubesim`, `qenv/simlog/kafkalog` and `qenv/simlog/kinesislog`

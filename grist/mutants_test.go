@@ -11,7 +11,8 @@ import (
 
 // grist's own mutants, each a directory of testdata/mutants whose files
 // replace grist's of the same name (qtest.Mutants): snapshots taken at
-// the wrong position, and reused after their fold changed. TestMutant
+// the wrong position, reused after their fold changed, and reused after
+// an upcaster was fixed. TestMutant
 // states the harness that catches each; the faithful grist passes it
 // (TestCheckSnapshotsAgree, TestSnapshotOfAChangedFold).
 func TestMutant(t *testing.T) {
@@ -46,6 +47,13 @@ func TestMutant(t *testing.T) {
 		err := newApp.CheckSnapshots(ctx, s)
 		if err == nil || !strings.Contains(err.Error(), "its stored snapshot plus the events after it gives 20 at the head (20); a fold from the start gives 40") {
 			t.Errorf("CheckSnapshots: %v, want the reused snapshot named", err)
+		}
+	case "upcasterFixKeepsSnapshots":
+		// the fingerprint without the upcasters: a fixed upcaster keeps it,
+		// and the snapshot folded through the buggy one answers for the
+		// fix (TestFixedUpcasterRefolds is the contrast)
+		if _, _, n := buggyThenFixed(t); n != 0 {
+			t.Errorf("the fixed upcaster's count: %d, want 0, the buggy snapshot reused", n)
 		}
 	default:
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", qtest.Mutant())

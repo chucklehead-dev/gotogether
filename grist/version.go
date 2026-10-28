@@ -61,8 +61,8 @@ type NewerVersionError struct {
 
 func (e *NewerVersionError) Error() string {
 	return fmt.Sprintf("%s is version %d, and this app reads %s up to version %d: a newer version of the app appended it, "+
-		"and this one cannot know what its fields mean; finish the rollout, and ship a version's readers before its writers "+
-		"(docs/grist-platform.md §3.9)", e.Type, e.Version, e.Type, e.Newest)
+		"and this one cannot know what its fields mean; finish the rollout. A field added needs no new version (grist.lock takes it, and old readers ignore it); "+
+		"a new version's writes cannot yet wait for every node to read it, so its readers ship first only by holding the writers back (docs/grist-platform.md §3.9)", e.Type, e.Version, e.Type, e.Newest)
 }
 
 // storedVersion is a stored event's version: 0, an Event written by hand

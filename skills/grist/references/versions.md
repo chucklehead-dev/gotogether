@@ -53,7 +53,13 @@ every field of the old struct into the next unless it says
 before any fold, handler or rule sees the event; appends write the
 newest; a stored version newer than the app's (a v2 event read by a v1
 node in a rollout) is a `*grist.NewerVersionError`, the read's error by
-name, never a guess. Ship a version's readers before its writers.
+name, never a guess. A field added to a version, nothing else changed,
+needs no new version: grist.lock takes it (old events read it as zero,
+old nodes ignore it), which is how a field rolls out. A new version does
+not roll yet: its writers write it at once, so deploy it when no older
+node runs (writing an older version until the rollout ends,
+`WritesVersion`, is not built). Fixing an upcaster refolds the read
+models over it: the upcasters are in their fingerprint.
 
 ## A deployed version's log, judged by today's model
 

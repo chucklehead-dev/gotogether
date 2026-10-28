@@ -342,3 +342,40 @@ func TestCheckSnapshotsAgree(t *testing.T) {
 		t.Errorf("%d snapshots taken, want one at each position that matters", s.puts.Load())
 	}
 }
+
+// buggyThenFixed is a log of 20 additions of x stored at version 1, a
+// snapshot of it taken by an app whose upcaster forgot qty (every count
+// 0), and the app with the upcaster fixed: what the fixed app answers.
+func buggyThenFixed(t *testing.T) (buggy, fixed *grist.App, answer int) {
+	forgets := grist.Upcast(1, func(v ItemAddedV1) ItemAddedV2 { return ItemAddedV2{Item: v.Item} })
+	buggy, _, bq := items(forgets, grist.Upcast(2, v2ToV3))
+	fixed, _, fq := items(grist.Upcast(1, v1ToV2), grist.Upcast(2, v2ToV3))
+	s := newCounting(t)
+	ctx := context.Background()
+	for range 20 {
+		s.Append(ctx, "t1", storeBatch(raw(1, ItemAddedV1{Item: "x", Qty: 1})))
+	}
+	every := grist.SnapshotEvery(ctx, 5)
+	if n, _, err := bq.Run(every, s, grist.Envelope{ID: "q1", Tenant: "t1"}, ItemQuery{Item: "x"}); err != nil || n != 0 || s.puts.Load() != 1 {
+		t.Fatalf("the buggy upcaster's count: %d (%v), %d snapshots; want 0 and 1", n, err, s.puts.Load())
+	}
+	n, _, err := fq.Run(every, s, grist.Envelope{ID: "q2", Tenant: "t1"}, ItemQuery{Item: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return buggy, fixed, n
+}
+
+// A fixed upcaster refolds: the fingerprint holds what each upcaster
+// makes of generated values of its own version, so the snapshot folded
+// through the buggy one is another fingerprint's, and the fixed app folds
+// the old events through the fix.
+func TestFixedUpcasterRefolds(t *testing.T) {
+	buggy, fixed, n := buggyThenFixed(t)
+	if b, f := buggy.Catalog().ReadModels[0].Fingerprint, fixed.Catalog().ReadModels[0].Fingerprint; b == f {
+		t.Errorf("the buggy and the fixed upcaster's read model share fingerprint %s", b)
+	}
+	if n != 20 {
+		t.Errorf("the fixed upcaster's count: %d, want 20 (the buggy one's snapshot never read)", n)
+	}
+}

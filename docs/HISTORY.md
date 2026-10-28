@@ -1838,6 +1838,16 @@ model's whole log. What was built (docs/grist.md §2.1, §2.2):
   and a shelf added (`MainShelf` for version 1's), the model's
   `bookAdded(book, count, shelf)` its only shape.
 
+After the eleventh review's architect (I1-I3): the fingerprint holds
+each upcaster's probe (what it makes of generated values of its own
+version), since a buggy upcaster and its fix shared one and the buggy
+snapshots stayed in use (`TestFixedUpcasterRefolds`; mutant
+`upcasterFixKeepsSnapshots`); grist.lock takes a field added to a
+version, nothing else changed, with a warning (`TestLockTakesAnAddedField`),
+as grist-platform §3.9 calls one safe; a new version's rollout
+(`WritesVersion`, `gristtest.Upgrade`) is ROADMAP H7's next item, and
+§3.9 says what does not work yet.
+
 Left: `grist.Reindex` (an upcaster that must change a tag); schema
 changes beyond upcasting (grist.md §9: an event split, a field whose
 meaning changed); a processor reading behind the head refolds from the

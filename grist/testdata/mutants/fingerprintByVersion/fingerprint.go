@@ -38,8 +38,11 @@ func eventShape(info *eventInfo) string {
 // types (each state's JSON, in turn). A snapshot taken by another fold is
 // then another fingerprint's, never read: a fold given a new event type,
 // an event whose shape changed, or a fold whose code changed what it makes
-// of the probe's events. A change the probe cannot see (a branch none of
-// its events takes) is the version's to say.
+// of the probe's events. Each upcaster of those types is in it too, by
+// what it makes of generated values of its own version (upcastProbe), so
+// a fixed upcaster refolds every snapshot folded through the buggy one. A
+// change the probes cannot see (a branch none of their values takes) is
+// the version's to say.
 func (m *ReadModel[S]) fingerprint() (string, bool) {
 	h := sha256.New()
 	fmt.Fprintf(h, "grist.snapshot/1\x00%s\x00%d\x00%q\x00", m.info.name, m.info.version, m.info.keys)
@@ -96,4 +99,22 @@ func (m *ReadModel[S]) probe(see func([]byte)) (survives bool) {
 		}
 	}
 	return survives
+}
+
+// upcastProbe gives see what each upcaster of info's chain makes, through
+// the rest of the chain, of generated values of its own version (their
+// newest-version JSON, or the failure): the upcasters' part of a
+// fingerprint.
+func upcastProbe(info *eventInfo, see func([]byte)) {
+	for _, u := range info.ups {
+		for _, v := range values.All(u.in, probeAlphabet, probeInts, probeSamples) {
+			out, err := info.upcastFrom(u.from, reflect.ValueOf(v))
+			if err != nil {
+				see(fmt.Appendf(nil, "v%d error: %v", u.from, err))
+				continue
+			}
+			b, _ := json.Marshal(out.Interface())
+			see(fmt.Appendf(nil, "v%d %s", u.from, b))
+		}
+	}
 }

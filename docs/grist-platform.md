@@ -392,6 +392,15 @@ breaks the v1 nodes still running):
   must not ignore: ship the readers, then the writers behind a flag set
   after the rollout, §3.6), **breaking** (a renamed tag, a removed
   event: needs H7's upcasters). CI runs it against the deployed catalog.
+- What H7 built, and what it did not: a field added to a version is
+  taken by grist.lock as the same version (old events read it as zero,
+  old nodes ignore it), so it is safe as this list says. A new version
+  is not yet: appends write the newest at once, and a node still on the
+  older version refuses its events by name (`grist.NewerVersionError`),
+  so "readers first" has no API: the writers would need to write the
+  older version until the rollout ends (`grist.WritesVersion(n)`, with a
+  downcaster from the newest), which slice 4 builds with
+  `gristtest.Upgrade` (ROADMAP H7's next item).
 - `gristtest.Upgrade(t, v1, v2, cfg)` runs both Apps' nodes on one
   store in gristsim, rolling one node at a time (`Sim.Upgrades`), each
   version's steps judged by the same model (an event v1 does not know is

@@ -173,7 +173,16 @@ newest only. The decisions, with their reasons:
   another shape ("book-added version 1 changed shape since grist.lock
   was written ...: keep the old struct, register version 2 with an
   upcaster; if never deployed, delete its entry"), and one older than
-  the lock (a version it records that the app lacks). So the struct
+  the lock (a version it records that the app lacks). A field added,
+  and nothing else (the old fields' schema and the tags unchanged), is
+  taken with a warning: the stored events read it as its zero value and
+  a node that does not know it ignores it, so it rolls out without a new
+  version, which a rolling update needs. A new version cannot yet: its
+  writers write it at once, and a node still on the older one refuses
+  its events (`NewerVersionError`). Writing an older version until every
+  node reads the new one (`grist.WritesVersion`, a downcaster) and
+  `gristtest.Upgrade` are the next item (docs/grist-platform.md §3.9,
+  ROADMAP H7). So the struct
   changed in place is an error at `<app> model` (and in
   `gristtest.Generated`, CI's), not a decode failure deep in a fold; an
   upcaster missing from the chain is Verify's, at boot. An event the app
@@ -255,8 +264,11 @@ The decisions, with their reasons:
   fold makes of generated events of its types (each state's JSON, in
   turn). An event that gained a field, a fold given a new type, or a
   fold whose code makes something else of the probe's events gets a new
-  fingerprint by itself, and its old snapshots are never read; the
-  declared version is the backstop for a change of meaning no generated
+  fingerprint by itself, and its old snapshots are never read; so does
+  each upcaster of those types, by what it makes of generated values of
+  its own version, so a fixed upcaster refolds every snapshot folded
+  through the buggy one (the mutant `upcasterFixKeepsSnapshots` leaves
+  it out); the declared version is the backstop for a change of meaning no generated
   event shows. grist.lock records each read model's fingerprint, and
   `<app> model` warns when it changed at the same version (the H6
   warnings' companion: its snapshots refold from the start after the
@@ -283,7 +295,11 @@ The decisions, with their reasons:
   past the position it folded (`snapshotPastItsPosition`), and a
   fingerprint of the name and version alone, which reuses a changed
   fold's snapshot (`fingerprintByVersion`), both grist's own
-  (grist/testdata/mutants), both caught by CheckSnapshots.
+  (grist/testdata/mutants), both caught by CheckSnapshots; and a
+  fingerprint without the upcasters (`upcasterFixKeepsSnapshots`),
+  caught by `TestFixedUpcasterRefolds`' claim. Not built: a runtime
+  audit refolding a sampled key from the start against its snapshot,
+  behind a metric.
 
 ### 2.3 Reads: one position, a set of queries
 
