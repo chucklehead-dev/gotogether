@@ -7,7 +7,7 @@ From the gotogether-faults skill (its SKILL.md says when to read this).
 ```go
 sys := qtest.System{Binding: "app.binding.yaml", Run: func(c qenv.Chooser) error { return app.Run(c, cfg) }}
 sys.Rates = rates // the environment's fault rates, for every workflow (sys.WithRates(r): a copy at others)
-sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, qtest.Violates("chargedAtMostOnce")) // or Conforms(), Some/All/None(...)
+sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, qtest.Some(qtest.Violates("chargedAtMostOnce"))) // or Conforms(), All/None(...)
 qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("chargedAtMostOnce"))
 ```
 

@@ -670,8 +670,9 @@ func TestScenariosPossible(t *testing.T) {
 
 `qtest.Possible` asks the model on its own whether it can follow the
 scenario (arguments within `STRS` and `INTS`): a model too strict for it
-fails before any run is judged. Runs then claim it like any expectation:
-`.Expect(t, fillUp)`, `qtest.Some(fillUp)`, `qtest.All(fillUp)`. A miss
+fails before any run is judged. Runs then claim it like any expectation,
+with its quantifier: `qtest.Some(fillUp)`, `qtest.All(fillUp)`,
+`qtest.None(fillUp)` (alone it panics, naming them). A miss
 says, per run, how far it got.
 
 ### 6.5 Mutants
@@ -936,13 +937,13 @@ func TestRollingUpdate(t *testing.T) {
 	up := gristtest.Upgrade(t, "shop.binding.yaml", release1.App, App, rolling)
 	up.Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	up.WithBinding("shop.calls.binding.yaml", qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), gristtest.ReadersFirst())
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), qtest.All(gristtest.ReadersFirst()))
 }
 ```
 
 `gristtest.ReadersFirst()` claims no call was refused by an older node
 for an event it cannot read; a release writing the new version at once
-shows `qtest.Some(gristtest.WritersFirst())` (counters' `eagerV2`
+shows its negation in some run, `qtest.Some(qtest.Not(gristtest.ReadersFirst()))` (counters' `eagerV2`
 mutant).
 
 ## 8. Snapshots
@@ -1059,9 +1060,9 @@ unknown though the bank was asked).
 `gristsim.Config.Cluster` simulates one: nodes behind a router whose view
 lags (`EndpointLag`), each drained as the binary drains (`Drain`, `Grace`),
 `Disruptions` at a time, `Rolling` from a point the run chooses. Claim
-`qtest.All(qtest.Completes())` and `gristtest.NoClientErrors()` at the
+`qtest.All(qtest.Completes())` and `qtest.All(gristtest.NoClientErrors())` at the
 clients: with a drain delay shorter than the router's lag, tries are
-refused (`noDrainDelay`: `qtest.Some(gristtest.ClientErrors())`).
+refused (`noDrainDelay`: `qtest.Some(qtest.Not(gristtest.NoClientErrors()))`).
 examples/counters runs the same restart on three real pods
 (`TestRealRollingRestart`, `ROLLING=1 ./run-demo.sh`).
 

@@ -83,20 +83,21 @@ together (`Exploration.Expect`):
 
 | Claim | Holds when |
 |---|---|
-| an expectation alone, e.g. `qtest.Rejects("ship")` | some run shows it (the run is logged) |
+| `qtest.Some(qtest.Rejects("ship"))` | some run shows it (the run is logged). An expectation alone over runs panics, naming `Some`, `All` and `None`, but the four whose names say every run: `Conforms`, `Settles`, `Completes`, `Finishes` |
 | `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle; a run with no verdict (a search's budget, a lost tail, dropped steps) neither conforms nor fails, so the claim fails as `N of M runs have no verdict` |
-| `qtest.Pending("action")` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
+| `qtest.Some(qtest.Pending("action"))` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
 | `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; one with none that lost its tail (or whose log is still being collected) may have settled out of sight, and has no verdict; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
 | `qtest.Finishes()` | every run is a finished one: it conforms, settled, every eventual val was judged and holds (a binding with none finishes no run), and every invoked call completed; a run that may have finished in a lost tail has no verdict. A miss names the part missing and the fix |
 | `qtest.Some(a, b)` | one run shows both |
+| `qtest.Some(qtest.Not(e))` | some run misses e (`gristtest.NoClientErrors`' negation: a client call refused, erring or unanswered); a run with no verdict for e has none for `Not(e)`; `Not(Conforms())` panics: name the failure |
 | `qtest.All(a)` | every run shows it |
 | `qtest.None(a)` | no run shows it, and every run has a verdict for it: one with no verdict on its conformance, or on an invariant (or eventual val) `a` names (a lost tail's, hidden actions past their cap), fails it |
 | `qtest.Reaches("kind").Faulted().InAtLeast(p)` | a share p of the runs reach a fault point of the kind (and fault it) |
 | `qtest.Takes("action").InAtLeast(p)` | a share p of the runs take the model action (up to a failing step) |
 | `qtest.NotVacuous()` | every invariant's antecedent (`A` of `A implies B`, or the binding's `antecedents`) held in some run where it passed; `Evidence` lists the vacuous ones. It fails when it cannot judge: no invariant with an antecedent, or one quint cannot evaluate |
 | `qtest.Exercised(except...)` | every model action is taken, every option of every reached fault kind taken (by name, among those its choices offered: `drop` does not stand for `duplicate`), and every nemesis a run enabled fired (by name: `crash.a` does not stand for `crash.b`; heals aside, since a cut heals by itself), each in some run, but those named, which may be any declared kind or option, reached or not; a name covers those below it (`"nemesis.partition"`, `"rpc.payments"`) |
-| `qtest.Scenario(qtest.Takes("submit"), qtest.Takes("verify").Outcome("ok"), qtest.Takes("open"))` | a run's steps take each in turn, others between (a Take's `With(param, literal)` wants an argument too); alone or under `Some` one run, `All` every run, `None` no run. Missed: per run the longest prefix taken, each at its step, where it stopped, the next step's near misses, and whether the model on its own can follow it (`NamedScenario` names it; `gristtest.Scenario` from the catalog's `Command.With(...).Refused(err)`) |
+| `qtest.Scenario(qtest.Takes("submit"), qtest.Takes("verify").Outcome("ok"), qtest.Takes("open"))` | a run's steps take each in turn, others between (a Take's `With(param, literal)` wants an argument too); under `Some` one run, `All` every run, `None` no run. Missed: per run the longest prefix taken, each at its step, where it stopped, the next step's near misses, and whether the model on its own can follow it (`NamedScenario` names it; `gristtest.Scenario` from the catalog's `Command.With(...).Refused(err)`) |
 
 Every claim has three values: it holds, it fails, or it has no verdict,
 which fails the test too. Over no runs at all (`Seeds` below 1, a filter

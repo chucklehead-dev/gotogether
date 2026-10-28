@@ -421,7 +421,7 @@ its new format at once breaks the v1 nodes still running):
   `nemesis.upgrade.<node>` a node (`Sim.Upgrades`), finished before the
   settle. Clients send what both releases serve; an older node's refusal
   is counted on its call's step (`olderRefused`), judged by
-  `gristtest.ReadersFirst()` and its negation `WritersFirst()`. It
+  `gristtest.ReadersFirst()` and its negation `qtest.Not(gristtest.ReadersFirst())`. It
   first compares the two catalogs as `catalog -diff` does, failing t on
   a breaking change. examples/counters: release 1 kept as the package
   `release1`, release 2 renaming counter-created's creator to owner
@@ -479,7 +479,7 @@ node runs `Main`'s drain schedule (the same code: grist's `runDrain`,
 the schedule, the settle on `qenv.Now` and `qenv.Sleep`, the stop and
 the flush, each tier giving its server's delay and shutdown), and the
 claims a deployment needs are ready-made (slice 2 built
-`NoClientErrors` and its negation `ClientErrors`; `Deploy` waits for
+`NoClientErrors` and its negation, `qtest.Not(NoClientErrors())`; `Deploy` waits for
 the later slices' faults):
 
 ```text
@@ -974,7 +974,7 @@ ablated.
    fails `NoClientErrors`. As built (docs/HISTORY.md (grist §0.16)): no call of
    the mutant's fails, its refused tries being retried under their
    keys, so `NoClientErrors` counts the tries and the mutant's claim is
-   `Some(ClientErrors())`; the lag's ablation holds once a try sent
+   `Some(Not(NoClientErrors()))` (`Some(ClientErrors())` until I16); the lag's ablation holds once a try sent
    before the shutdown is served, as an `http.Server`'s shutdown serves
    its connections; `stopNodeAtSignal` needed `qenv.Service.Call` to
    stop at a cancelled context (it ran to its answer), and a payment in
@@ -1003,7 +1003,7 @@ ablated.
    takes it) and so tests nothing of a rollout. **Acceptance**, as
    built: the mutant `eagerV2` (version 2 written at once) has some run
    whose release 1 node refuses a call for an event it cannot read
-   (`Some(gristtest.WritersFirst())`), not a mismatch or a failed fold:
+   (`Some(qtest.Not(gristtest.ReadersFirst()))`), not a mismatch or a failed fold:
    the old node serves nothing from such an event, so no step of it is
    wrong, and the refusal is what shows; the faithful readers-first
    rollout conforms, completes and has none (`ReadersFirst()`);

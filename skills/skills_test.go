@@ -170,6 +170,14 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qshrink.Yes", "qshrink.Reproduced"},
 		{"qshrink.Unknown", "qshrink.Undecided"},
 		{"-require-settle", "-require-finish (the old name is a deprecated alias)"},
+		// I16: explicit quantifiers (an expectation alone over runs
+		// panics but Conforms, Settles, Completes, Finishes), every
+		// report's claims in its Expect, grist's negations by qtest.Not
+		{"an expectation alone is about some run", "Some, All or None: only Conforms, Settles, Completes and Finishes stand alone"},
+		{"Mutate(t, cfg, ", "Mutate(t, cfg).Expect(t, qtest.PerMutant(claims...), qtest.NoSurvivors(...))"},
+		{"gristtest.ClientErrors", "qtest.Not(gristtest.NoClientErrors())"},
+		{"Some(ClientErrors", "qtest.Some(qtest.Not(gristtest.NoClientErrors()))"},
+		{"WritersFirst", "qtest.Not(gristtest.ReadersFirst())"},
 		// grist slice 1's review
 		{"grist.Query{", "grist.Selector{ (Reads.Select), or grist.Events(r, t, tags...)"},
 		{"freshCause", "freshKey(answered, id) (grist.qnt: a refusal answers its key too)"},
@@ -279,7 +287,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 	// in the names of their time
 	docs, _ := filepath.Glob("../examples/*/README.md")
 	agents, _ := filepath.Glob("../docs/agents/*.md") // AGENTS.md's pages by area
-	docs = append(append(docs, agents...), "../README.md", "../AGENTS.md", "../qgosim/README.md", "../qnav/README.md", "../qweave/README.md", "../qanalysis/README.md", "../docs/instrumentation.md")
+	docs = append(append(docs, agents...), "../README.md", "../AGENTS.md", "../qgosim/README.md", "../qnav/README.md", "../qweave/README.md", "../qanalysis/README.md", "../docs/instrumentation.md", "../docs/grist-guide.md")
 	for _, p := range docs {
 		b, err := os.ReadFile(p)
 		if err != nil {

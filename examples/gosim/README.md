@@ -59,7 +59,7 @@ module of its own that runs on gosim's runtime. Hegel cannot run in there
 | `broadcast.TestHegelFindsNoRetry` (not `-short`) | `qhegel.Choices` | `NoRetry` | `qhegel.FindViolation`: `convergedWhenSettled`, shrunk to gossip lost to an isolated node |
 | `edgepublish.TestExploredRunsConformOnGosim` | `System.Explore`, crashes of the exporter's machine | none | conforms |
 | `edgepublish.TestInvariantsHoldWithoutAmbiguousWritesOnGosim` | `System.Explore` | none, no ambiguous writes | conforms, invariants hold |
-| `edgepublish.TestMutantsOnGosim` | `System.Explore`, no crashes | `ManifestBeforeTable` | `qtest.Rejects("writeManifest")` |
+| `edgepublish.TestMutantsOnGosim` | `System.Explore`, no crashes | `ManifestBeforeTable` | `qtest.Some(qtest.Rejects("writeManifest"))` |
 | | | `NoRotationLock` | a rotation or write the model rejects (29 of 30 runs) |
 | `checkout.TestFaithfulConformsOnGosim` | `System.Explore`, crashes 1 in 20 | none, at each isolation level | conforms |
 | `checkout.TestMutantsOnGosim` | `System.Explore` | `LockWithoutWrite` at snapshot isolation | a ship or cancel the model rejects (write skew) |

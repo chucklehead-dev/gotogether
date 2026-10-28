@@ -3321,6 +3321,55 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### I16: explicit quantifiers, one place for claims
+
+Review 11's architect (F5, F15, and the cut of `ClientErrors`): a bare
+expectation's quantifier was its constructor's, `Some` for `Rejects`,
+`Mismatch`, `Violates` and `Scenario`, `All` for `Conforms`, `Settles`,
+`Completes`, `Satisfies` and therefore gristtest's `NoClientErrors`, so
+`.Expect(t, Scenario(...))` meant some run and `.Expect(t,
+NoClientErrors())` every run, which only each doc said. Decided as I16
+said, before tags:
+- **Quantifiers required**: over runs `Some`, `All` or `None`, except
+  `Conforms`, `Settles`, `Completes` and `Finishes`, whose names say
+  every run. Any other alone panics in `Exploration.Expect` (and as
+  `PerMutant` is made), before anything is judged: `qtest: "a rejection
+  of apply" alone is a claim over runs with no quantifier: write
+  qtest.Some(...) (some run shows it), qtest.All(...) (every run) or
+  qtest.None(...) (no run); alone it meant Some(...)`. A panic, not a
+  compile error: the four stand alone and are Expectations too. The
+  normalization is one function (`quantify`) every claim goes through,
+  so failures print their quantifier: `want some run showing a
+  rejection of apply`, where a bare claim's said `want a rejection of
+  apply`, and an expected failure logs `as expected, some run showing
+  ...`. A run's own Expect (Validate's, Record's, a Violation's, a
+  shrink's) takes an expectation bare, as before: one run has no
+  quantifier.
+- **Every report's claims in its Expect**: `System.Mutate(t, cfg,
+  claims...)` judged the claims inside Mutate, the one report whose
+  claims were not its Expect's. Now `Mutate(t, cfg).Expect(t,
+  PerMutant(claims...), NoSurvivors(...))`: the baseline must meet them,
+  and Expect kills each survivor whose exploration misses one (Mutate
+  keeps the survivors' explorations for it; `Killed` and `Survived` say
+  so after Expect). The claim types and the table of which Expect takes
+  which are in qtest/claims.go.
+- **Negation**: `qtest.Not(e)`, three-valued (a run with no verdict for
+  e has none for `Not(e)`). The grist §0.16 review had kept
+  `ClientErrors` by hand because a general negation has no one meaning
+  for most expectations; `Not(Conforms())`, the case it named, panics
+  naming `Rejects`, `Mismatch` and `Violates`. `gristtest.ClientErrors()`
+  is `qtest.Not(gristtest.NoClientErrors())` and `WritersFirst()`,
+  the same pattern, `qtest.Not(gristtest.ReadersFirst())`.
+- **Migrated**: every bare claim over runs rewritten to the quantifier
+  it implied, found by type (an Expectation converted to a Claim) rather
+  than by text: 13 in the root's tests, 51 in twelve examples (5 of them in
+  mutants tables' struct fields, which a first search by call arguments
+  and slices missed, the examples' own runs caught), the grist scaffold's fill-up
+  scenario, hello's Mutate claim, counters' three
+  negations; the skills, the grist guide, the README and the examples'
+  tables say the quantifier. `TestSkillsAvoidDeprecated` refuses the
+  old forms, and now reads the grist guide too.
+
 ### I19: validation at production volume
 
 The adopter's blocker 2 (eleventh review): a synthetic payments day

@@ -56,6 +56,7 @@ a run replays from its choices and Hegel's shrinking removes faults.
 | `ran twice made two runs, first different at ...` | nondeterminism outside the Chooser | `lint -sim`, sorted iteration |
 | `scripted faults never happened` | a Script's fault had no choice of its kind | the fault's kind and the run's phase |
 | `reproduce: GOTOGETHER_RUN=...` | the failing run alone | rerun it; `-v` |
+| panic: `"..." alone is a claim over runs with no quantifier` | an expectation over runs without `Some`, `All` or `None` (only `Conforms`, `Settles`, `Completes`, `Finishes` stand alone) | write the quantifier meant; alone it meant the one the panic names |
 
 Every other verdict: [../gotogether-workflow/references/verdicts.md](../gotogether-workflow/references/verdicts.md).
 

@@ -22,7 +22,7 @@ import (
 //	up := gristtest.Upgrade(t, "shop.binding.yaml", deployed.App, App, cfg)
 //	up.Explore(t, n).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 //	up.WithBinding("shop.calls.binding.yaml", qtest.Linearize()).Explore(t, n).
-//		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), gristtest.ReadersFirst())
+//		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), qtest.All(gristtest.ReadersFirst()))
 //
 // A node of from never decides from an event it cannot read: its reads
 // of one refuse the call (retried, counted: ReadersFirst) and its

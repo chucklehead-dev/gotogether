@@ -197,7 +197,8 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   -short; counters 253-440 CPU s on the same code); a `GOTOOLCHAIN=go1.25`
   build of the core (the floor: For the maintainer).
 - **I16. Explicit quantifiers, one place for claims (S, breaking,
-  before tags).** A bare expectation means `All` for `Conforms`,
+  before tags). Done** (DESIGN §67; `qtest.Not` the negation, which
+  WritersFirst folded into too). A bare expectation means `All` for `Conforms`,
   `Settles`, `Completes`, `Satisfies` and `NoClientErrors`, and `Some`
   for `Rejects`, `Mismatch`, `Violates`, `Scenario` (Left from Y's
   arity). Decided: a quantifier required except on the claims whose
@@ -632,7 +633,7 @@ Decisions only the maintainer takes, each with the recommendation:
   Recommended: `go 1.25` for the core (and grist if it builds) after I15's
   `GOTOOLCHAIN=go1.25` build passes; qhegel stays at 1.26.1.
 - **Bare expectations' quantifier (I16).** Breaking for every example's
-  bare claims. Recommended as I16 says, before tags.
+  bare claims. Done as I16 says, before tags (DESIGN §67).
 - **GR10's slice order.** Recommended: slice 3 (failover and restore)
   beside slice 4, before GR4 (I25): a managed PostgreSQL failover that
   loses an asynchronously replicated tail goes unseen today, which a

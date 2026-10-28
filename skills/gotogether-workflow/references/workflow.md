@@ -192,7 +192,9 @@ qtest.MutateSteps(t, "m.binding.yaml", steps).Expect(t,
   explore seeds with `System.Explore`, and shrink with `qhegel.Choices`.
 
 State what a set of runs must show with claims:
-- an expectation alone is about some run (`Conforms()` about every run);
+- each says its quantifier: `Some`, `All` or `None`; only `Conforms()`,
+  `Settles()`, `Completes()` and `Finishes()` stand alone (every run, as
+  their names say), and any other alone panics with the fix;
 - several are judged one by one;
 - `qtest.Some(a, b)` wants one run showing both;
 - `qtest.All(e)` wants every run;

@@ -64,6 +64,7 @@ the walk-through: read its README's table first.
 | `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |
 | `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
 | `NO VERDICT`, `checks the actors */clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
+| panic: `"..." alone is a claim over runs with no quantifier` | a scenario or `NoClientErrors` over runs bare | `qtest.Some(scenario)`, `qtest.All(gristtest.NoClientErrors())`; a mutant's client errors `qtest.Some(qtest.Not(gristtest.NoClientErrors()))` |
 | `missing go.sum entry` running `gotogether` | the CLI is not a tool of the app | `go get -tool .../cmd/gotogether`, then `go tool gotogether` |
 
 ## Run it, do not infer it

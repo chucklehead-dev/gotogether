@@ -5281,3 +5281,43 @@ The "of it" column is with quint's sample off (GOTOGETHER_EVAL_SAMPLE=0);
 the rest is quint's one audit process. validate's `TestPartitionAtVolume`
 judges 10⁴ steps under a 30 s budget on every push (about 2 s) and 10⁵
 in the nightly (GOTOGETHER_SCALE_STEPS=100000, about 5 s).
+
+## 67. Explicit quantifiers, one place for claims (I16)
+
+§18 made an expectation alone a claim about some run, with `Conforms`
+about every run by a flag; `Settles`, `Completes`, `Satisfies` (and so
+gristtest's `NoClientErrors`) took the flag later, so a bare claim's
+quantifier was its constructor's: `.Expect(t, Scenario(...))` meant some
+run, `.Expect(t, NoClientErrors())` every run. A reader had to know each.
+Review 11 asked for it decided before tags; it is, as I16 put it:
+
+- **Over runs, a claim says its quantifier.** `Conforms`, `Settles`,
+  `Completes` and `Finishes` alone are `All` of themselves: their names
+  say every run (an `alone` flag, apart from `every`, which still marks
+  what a passing run meets for ShrinkActions' Keep). Any other
+  expectation alone panics, naming `Some(...)`, `All(...)` and
+  `None(...)` and the quantifier it meant alone, so a migration is
+  mechanical. A panic, not a compile error, because the four are
+  Expectations too, and one run's Expect (Validate's, Record's, a
+  Violation's, a shrink's) takes any expectation bare. Every claim goes
+  through one function (`quantify`) at `Exploration.Expect` and at
+  `PerMutant`, before anything runs or is judged, so the verdict code
+  sees quantified claims only and every failure prints its quantifier.
+- **Every report's claims are its Expect's.** `Mutate` judged claims
+  given to it, the one report that did. `Mutate(t, cfg).Expect(t,
+  PerMutant(claims...), NoSurvivors(...))` keeps each survivor's
+  exploration so Expect can kill the ones that miss a claim (judged by
+  `verdict`, as the baseline is); Mutate itself kills only what any
+  exploration would (a broken run, no steps, a rejection). The six
+  Expects and their claim types are listed in one place, qtest/claims.go,
+  where the types live: Claim (explorations), RunClaim (a run, a
+  Violation), MutationClaim, StepClaim, ShrinkClaim. qhegel's and
+  gristtest's claims are qtest's types; qload's recovery claims are of
+  a chain, not runs, and stay there.
+- **One negation.** `qtest.Not(e)`: met where e is missed, unknown where
+  e is. grist §0.16 had refused a general negation, since most
+  expectations' have no one meaning; that case, `Not(Conforms())`,
+  panics naming the three failures. gristtest's two by-hand negations,
+  `ClientErrors` and `WritersFirst`, are `Not(NoClientErrors())` and
+  `Not(ReadersFirst())`, with the same verdicts on every report (a
+  report with no client actor has none).

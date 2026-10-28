@@ -99,9 +99,10 @@ rep.Expect(t, qtest.NoSurvivors("(Payer).Pay: drop call: ack()")) // equivalent 
   step carried the stock. Recording it and an `expect: 'stock ==
   {{.obs.stock}}'` killed it.
 - A step whose absence no run's check can see (the client's "done") is
-  a claim over runs: give it to Mutate, `sys.Mutate(t, cfg,
-  qtest.Takes("done").InAtLeast(0.9))`. The baseline must meet it, and a
-  mutant that does not is killed. A mutant whose runs record nothing at
+  a claim over runs: give it to the report's Expect, `sys.Mutate(t,
+  cfg).Expect(t, qtest.PerMutant(qtest.Takes("done").InAtLeast(0.9)),
+  qtest.NoSurvivors(...))`. The baseline must meet it, and a mutant that
+  does not is killed (Killed and Survived say so after Expect). A mutant whose runs record nothing at
   all is killed too.
 - examples/hello's `TestMutationOfTheCounter` ends in `NoSurvivors` with
   three marked equivalent, each with its reason. Its first run had a

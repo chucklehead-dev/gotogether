@@ -147,8 +147,9 @@ an agent reads off a failing run.
   on for the delay, shut down, quiet, stop, flush, exit), then restarts.
   A client's try no server took (an endpoint gone, a listener closed) is
   retried and counted on its call's step (`refused`); judge the clients'
-  binding with `gristtest.NoClientErrors()` (and `ClientErrors()` for a
-  mutant that causes them). Give the drain's delay more than the
+  binding with `qtest.All(gristtest.NoClientErrors())` (and
+  `qtest.Some(qtest.Not(gristtest.NoClientErrors()))` for a mutant that
+  causes them). Give the drain's delay more than the
   router's lag, and never cancel an effect's context at the signal
   (`grist.Terminating` is for work that may stop at once): an
   at-most-once call cancelled in flight is `grist.unknown`. Not on the
