@@ -379,3 +379,44 @@ func TestFixedUpcasterRefolds(t *testing.T) {
 		t.Errorf("the fixed upcaster's count: %d, want 20 (the buggy one's snapshot never read)", n)
 	}
 }
+
+// A deployed node audits a sample of its reads from snapshots
+// (SnapshotAudit): the key refolded from the start and compared. A wrong
+// snapshot (here one claiming 8 at position 4, where the fold is 4) is
+// answered by the refold, replaced, and counted, for Main's /metrics;
+// unaudited, the read answers the snapshot's sum. A right one is counted
+// audited only.
+func TestSnapshotAudit(t *testing.T) {
+	a, added, q := items()
+	s := newCounting(t)
+	addItems(t, s, added, "x", 12)
+	snap := store.Snapshot{Name: "counts", Key: "item=x", Fingerprint: a.Catalog().ReadModels[0].Fingerprint, Pos: 4, State: json.RawMessage(`8`)}
+	snap.Sum = grist.SnapshotSum(snap)
+	s.Store.PutSnapshot(context.Background(), "t1", snap)
+	ctx := grist.SnapshotEvery(context.Background(), 10)
+	count := func(ctx context.Context) int {
+		t.Helper()
+		n, _, err := q.Run(ctx, s, grist.Envelope{ID: "q", Tenant: "t1"}, ItemQuery{Item: "x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(grist.SnapshotAudit(ctx, 0)); n != 8+8 {
+		t.Fatalf("unaudited, the read from the wrong snapshot: %d, want its 8 plus the 8 after it (the test's premise)", n)
+	}
+	if n := count(grist.SnapshotAudit(ctx, 1)); n != 12 {
+		t.Errorf("audited: %d, want the refold's 12", n)
+	}
+	if audited, wrong := a.SnapshotAudits(); audited != 1 || wrong != 1 {
+		t.Errorf("SnapshotAudits: %d audited, %d wrong; want 1 and 1", audited, wrong)
+	}
+	// the snapshot replaced: the next read from it is right, unaudited
+	if n := count(grist.SnapshotAudit(ctx, 0)); n != 12 {
+		t.Errorf("after the audit, unaudited: %d, want 12 from the replaced snapshot", n)
+	}
+	count(grist.SnapshotAudit(ctx, 1))
+	if audited, wrong := a.SnapshotAudits(); audited != 2 || wrong != 1 {
+		t.Errorf("SnapshotAudits: %d audited, %d wrong; want 2 and 1: the replaced snapshot is right", audited, wrong)
+	}
+}

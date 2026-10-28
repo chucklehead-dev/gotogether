@@ -1,6 +1,7 @@
 package grist
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -121,6 +122,23 @@ func (m *ReadModel[S]) getWith(r *Reads, tags []TagPair, every int, check bool) 
 	if s = m.foldEvents(r, s, evs); r.bad != nil {
 		return s
 	}
+	if sound && !check && audited(r.ctx, snap, r.pos) {
+		// refold from the start, through the same position: the same
+		// selector, so the read set is what it was
+		all := m.selector(tags...)
+		full := m.foldRead(r, all, m.init())
+		if r.err != nil || r.bad != nil {
+			return full
+		}
+		r.app.audits.Add(1)
+		a, _ := json.Marshal(s)
+		b, _ := json.Marshal(full)
+		if !bytes.Equal(a, b) {
+			r.app.auditMisses.Add(1)
+			m.save(r, ss, key, fp, full)
+			return full
+		}
+	}
 	// never replace an intact later snapshot with this earlier one (a
 	// processor reading behind the head)
 	if !check && folded >= every && r.err == nil && !(intact && snap.Pos >= r.pos) {
@@ -133,7 +151,7 @@ func (m *ReadModel[S]) getWith(r *Reads, tags []TagPair, every int, check bool) 
 func (m *ReadModel[S]) foldEvents(r *Reads, s S, evs []Stored) S {
 	s, err := m.foldOnto(s, evs)
 	if err != nil {
-		r.misuse("%v", err)
+		r.misuse("%w", err)
 	}
 	return s
 }

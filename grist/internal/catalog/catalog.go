@@ -100,6 +100,9 @@ type CatalogEvent struct {
 	// Older are its older versions, oldest first, each with the upcaster
 	// to the next (grist.Upcast): what a stored event of each may be.
 	Older []CatalogVersion
+	// Writes is the version an append writes when it is an older one
+	// (grist.WritesVersion, while a rollout lasts); 0: Version.
+	Writes int
 }
 
 // A CatalogVersion is an older version of an event type: the struct its
@@ -177,7 +180,8 @@ func (e CatalogEvent) MarshalJSON() ([]byte, error) {
 		Body    map[string]any   `json:"body"`
 		Tags    []string         `json:"tags"`
 		Older   []CatalogVersion `json:"older,omitempty"`
-	}{e.Name, e.Version, Schema(e.Body), NonNil(e.Tags), e.Older})
+		Writes  int              `json:"writes,omitempty"`
+	}{e.Name, e.Version, Schema(e.Body), NonNil(e.Tags), e.Older, e.Writes})
 }
 
 // MarshalJSON writes the block with its arguments and result as JSON

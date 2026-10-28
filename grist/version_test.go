@@ -46,7 +46,7 @@ func v2ToV3(v ItemAddedV2) ItemAdded {
 
 // items is an app of the event at its newest version, with a keyed read
 // model of each item's count and a query of it.
-func items(ups ...grist.Upcaster) (*grist.App, *grist.EventType[ItemAdded], *grist.QueryBlock[ItemQuery, int]) {
+func items(ups ...grist.EventOption) (*grist.App, *grist.EventType[ItemAdded], *grist.QueryBlock[ItemQuery, int]) {
 	a := grist.New("items")
 	added := grist.NewEvent[ItemAdded](a, "item-added", ups...)
 	counts := grist.NewKeyedReadModel(a, "counts", 1, grist.Keys("item"), func() int { return 0 },
@@ -133,19 +133,19 @@ func TestNewerVersionRefused(t *testing.T) {
 func TestUpcastChainVerified(t *testing.T) {
 	for _, c := range []struct {
 		name string
-		ups  []grist.Upcaster
+		ups  []grist.EventOption
 		want string
 	}{
-		{"a version's upcaster missing", []grist.Upcaster{grist.Upcast(2, v2ToV3)},
+		{"a version's upcaster missing", []grist.EventOption{grist.Upcast(2, v2ToV3)},
 			"its 1 upcasters are from versions [2], where version 2 needs one from each of 1 to 1"},
-		{"a gap", []grist.Upcaster{grist.Upcast(1, v1ToV2), grist.Upcast(3, v2ToV3)},
+		{"a gap", []grist.EventOption{grist.Upcast(1, v1ToV2), grist.Upcast(3, v2ToV3)},
 			"from versions [1 3], where version 3 needs one from each of 1 to 2"},
-		{"version 0", []grist.Upcaster{grist.Upcast(0, v1ToV2)}, "Upcast(0, ...): versions start at 1"},
-		{"a link that does not chain", []grist.Upcaster{grist.Upcast(1, v1ToV2), grist.Upcast(2, func(v ItemAddedV1) ItemAdded { return ItemAdded{} })},
+		{"version 0", []grist.EventOption{grist.Upcast(0, v1ToV2)}, "Upcast(0, ...): versions start at 1"},
+		{"a link that does not chain", []grist.EventOption{grist.Upcast(1, v1ToV2), grist.Upcast(2, func(v ItemAddedV1) ItemAdded { return ItemAdded{} })},
 			"the upcaster from version 1 returns grist_test.ItemAddedV2, but the upcaster from version 2 takes grist_test.ItemAddedV1"},
-		{"the last not the event", []grist.Upcaster{grist.Upcast(1, v1ToV2)},
+		{"the last not the event", []grist.EventOption{grist.Upcast(1, v1ToV2)},
 			"the upcaster from version 1 returns grist_test.ItemAddedV2, but the event's own struct is grist_test.ItemAdded"},
-		{"a dropped field it does not have", []grist.Upcaster{grist.Upcast(1, v1ToV2).Drops("quantity"), grist.Upcast(2, v2ToV3)},
+		{"a dropped field it does not have", []grist.EventOption{grist.Upcast(1, v1ToV2).Drops("quantity"), grist.Upcast(2, v2ToV3)},
 			`the upcaster from version 1 drops "quantity", which grist_test.ItemAddedV1 has no field of (its fields by JSON name: [item qty])`},
 	} {
 		a, _, _ := items(c.ups...)

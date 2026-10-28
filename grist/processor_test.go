@@ -266,3 +266,39 @@ func TestPollerCheckpointRaced(t *testing.T) {
 		t.Errorf("effect runs %v: the first trigger, checkpointed by the other poller before this one read it, ran here", runs)
 	}
 }
+
+// A processor of an older release whose trigger is a version its release
+// cannot read (a rolling update's newer node appended it) waits, as for a
+// store error, for a node that reads it: it never checkpoints the
+// trigger with grist.failed, which is final, and handles the triggers
+// before it.
+func TestProcessorWaitsForANewerVersion(t *testing.T) {
+	a, added, _ := procApp(nil)
+	calls := 0
+	grist.NewProcessor(a, "count", added, func(ctx context.Context, r *grist.Reads, e Added, m grist.Meta) grist.Result {
+		calls++
+		return grist.Skip()
+	})
+	s := qenv.New(qenv.NewSeeded(1))
+	defer s.Close()
+	st := simstore.New(qenv.NewStore(s, "procs", qenv.Serializable))
+	ctx := s.Context()
+	st.CreateTenant(ctx, "t1")
+	st.Append(ctx, "t1", store.Batch{Events: []grist.Event{added.Of(Added{By: 1})}})
+	st.Append(ctx, "t1", store.Batch{Events: []grist.Event{{Type: "added", Version: 2, Body: []byte(`{"by":2,"unit":"kg"}`)}}})
+	s.Process("node", true, func(ctx context.Context) {
+		if err := a.Start(ctx, st); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	log, _, _ := st.Read(ctx, "t1", grist.Selector{Types: []string{"grist.failed"}}, 0)
+	if len(log) != 0 || calls != 1 {
+		t.Errorf("%d grist.failed events, %d handled; want none (the version 2 trigger waits) and the version 1 one", len(log), calls)
+	}
+	if cp, _ := st.Checkpoint(ctx, "t1", "count"); cp != 1 {
+		t.Errorf("count's checkpoint %d, want 1: before the trigger it cannot read", cp)
+	}
+}

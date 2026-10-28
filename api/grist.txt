@@ -3,6 +3,7 @@ const AtLeastOnce = catalog.AtLeastOnce
 const AtMostOnce = catalog.AtMostOnce
 const CauseHeader = "Grist-Cause"
 const DefaultDrainDelay = 5 * time.Second
+const DefaultSnapshotAudit = 100
 const DefaultSnapshotEvery = 1000
 const ReplayedHeader = "Idempotent-Replayed"
 func Appends(types ...EventName) Option
@@ -39,7 +40,7 @@ func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Re
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewDep[T any](name string, fallback T) *Dep[T]
 func NewDependency(app *App, name string) *Dependency
-func NewEvent[E any](app *App, name string, upcasters ...Upcaster) *EventType[E]
+func NewEvent[E any](app *App, name string, opts ...EventOption) *EventType[E]
 func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
 func NewIdentity() Identity
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
@@ -60,6 +61,7 @@ func Replayed(ctx context.Context)
 func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
+func SnapshotAudit(ctx context.Context, n int) context.Context
 func SnapshotEvery(ctx context.Context, n int) context.Context
 func Tag(key string, value any) TagPair
 func Terminating(ctx context.Context) context.Context
@@ -71,6 +73,7 @@ func WithCaller(ctx context.Context, caller string) context.Context
 func WithDrain(d Drain) ServeOption
 func WithIdentity(id Identity) ServeOption
 func WithRelay(r *Relay) StartOption
+func WritesVersion[New, Old any](version int, down func(New) Old) EventOption
 type App struct
     field Name string
     method (*App) ArgsType(name string) reflect.Type
@@ -84,6 +87,7 @@ type App struct
     method (*App) Queries() []string
     method (*App) Query(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (json.RawMessage, Position, error)
     method (*App) ResultType(name string) reflect.Type
+    method (*App) SnapshotAudits() (audited, mismatched int64)
     method (*App) Start(ctx context.Context, s Store, opts ...StartOption) error
     method (*App) Verify() error
 type CallHandler struct
@@ -143,6 +147,7 @@ type CatalogEvent = catalog.CatalogEvent
     field Body reflect.Type
     field Tags []string
     field Older []CatalogVersion
+    field Writes int
     method (CatalogEvent) MarshalJSON() ([]byte, error)
 type CatalogProcessor = catalog.CatalogProcessor
     field Name string `json:"name"`
@@ -206,12 +211,15 @@ type Event = store.Event
 type EventName interface
     Name() string
     registered() *eventInfo
+type EventOption interface
+    eventOption()
 type EventRef = store.EventRef
 type EventType[E any] struct
     method (*EventType[E]) Decode(s Stored) (E, error)
     method (*EventType[E]) Name() string
     method (*EventType[E]) Of(e E) Event
     method (*EventType[E]) Version() int
+    method (*EventType[E]) Writes() int
 type Failed struct
     field Processor string `json:"processor" grist:"tag"`
     field Trigger int64 `json:"trigger"`
@@ -274,6 +282,7 @@ type Relay struct
     method (*Relay) Behind(ctx context.Context) (int64, error)
     method (*Relay) Err() error
     method (*Relay) Flush(ctx context.Context) error
+    method (*Relay) RenderAs(a *App)
 type Result struct
 type Rule[E any] struct
     method (*Rule[E]) Name() string
@@ -449,6 +458,7 @@ const DefaultGrace = 45 * time.Second
 const DependencyTimeout = time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
+const Upgraded = "upgraded"
 func ClientsActor(tenant string) string
 func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope, name string, args json.RawMessage) error
 func Gen(typ reflect.Type, alphabet []string, ints []int, pick func(n int) int) any
@@ -485,6 +495,7 @@ type Config struct
     field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
     field Horizon time.Duration
     field Cluster *Cluster
+    field From *grist.App
     field Log func(string)
 type Doubles map[*grist.Dependency]grist.Handlers
 
@@ -498,11 +509,14 @@ func Generated(t testing.TB, app *grist.App)
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
 func NoClientErrors() qtest.Expectation
 func ReadLog(t testing.TB, path string) Log
+func ReadersFirst() qtest.Expectation
 func RuleMutants(app *grist.App) []string
 func Scenario(name string, steps ...grist.Invocation) qtest.Expectation
 func Snapshots(t testing.TB, app *grist.App, st grist.Store)
 func Upcasts(t testing.TB, app *grist.App)
+func Upgrade(t testing.TB, binding string, from, app *grist.App, cfg gristsim.Config) qtest.System
 func WriteLog(l Log, path string) error
+func WritersFirst() qtest.Expectation
 type Capturing struct
     embed grist.Store
     method (*Capturing) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)

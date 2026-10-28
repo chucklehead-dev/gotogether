@@ -16,9 +16,17 @@ import (
 
 // The events.
 type (
-	// CounterCreated: a counter, under a name no other counter has, by
-	// its creator (the caller that created it: the one who may retire it).
+	// CounterCreated: a counter, under a name no other counter has, and
+	// its owner (the caller that created it: the one who may retire it).
+	// Version 2: version 1 (CounterCreatedV1) called the owner creator.
 	CounterCreated struct {
+		Counter string `json:"counter" grist:"tag"`
+		Name    string `json:"name" grist:"tag"`
+		Owner   string `json:"owner"`
+	}
+	// CounterCreatedV1 is counter-created as release 1 stored it, kept
+	// as it was: the owner was its creator.
+	CounterCreatedV1 struct {
 		Counter string `json:"counter" grist:"tag"`
 		Name    string `json:"name" grist:"tag"`
 		Creator string `json:"creator"`
@@ -57,7 +65,18 @@ var App = grist.New("counters")
 
 // The event types.
 var (
-	Created     = grist.NewEvent[CounterCreated](App, "counter-created")
+	// Created is at version 2, read by this release (release 2) and
+	// written as version 1 (WritesVersion), which release 1's nodes read,
+	// while the rolling update from release 1 lasts; release 3 drops
+	// WritesVersion and writes version 2 (rollout_test.go, docs/grist.md
+	// §2.1: readers first).
+	Created = grist.NewEvent[CounterCreated](App, "counter-created",
+		grist.Upcast(1, func(v CounterCreatedV1) CounterCreated {
+			return CounterCreated{Counter: v.Counter, Name: v.Name, Owner: v.Creator}
+		}),
+		grist.WritesVersion(1, func(v CounterCreated) CounterCreatedV1 {
+			return CounterCreatedV1{Counter: v.Counter, Name: v.Name, Creator: v.Owner}
+		}))
 	Incremented = grist.NewEvent[CounterIncremented](App, "counter-incremented")
 	Averaged    = grist.NewEvent[AverageComputed](App, "average-computed")
 	Welcomed    = grist.NewEvent[Notified](App, "notified")

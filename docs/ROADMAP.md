@@ -14,10 +14,9 @@ Standing decisions, with the maintainer:
 - MIT license.
 
 Order: H1 → H3 → H2 with P5 → P1, P3, P4, P7 → H4 → H5 → H6 (with P8)
-→ H7 → GR10 → P2 → P6 (all done but H7's next item and GR10's
-slices), then the eleventh review's I track: I1-I11 first (most in
-progress), I12-I18 before R5, I22 (H7's next) and GR10 slices 3-4
-before GR4, I23-I25 before a second real grist app, I26-I36 alongside,
+→ H7 → GR10 → P2 → P6 (all done but GR10's slices), then the
+eleventh review's I track: I1-I11 first (most in progress), I12-I18
+before R5, I22 (done, with GR10 slice 4) and GR10 slice 3 before GR4, I23-I25 before a second real grist app, I26-I36 alongside,
 I37-I41 after I13, and I42-I51 each decided before it starts. GR3's
 slices 4-6 after H4, GR4-GR9 after H5, H6 and I22, P9 after GR4; G8-G12
 and the items left from S, X, Y, T and E alongside; R5 when the
@@ -46,7 +45,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   buggy upcaster stayed in use after its fix, and `CheckSnapshots` (a
   fresh store) could not see it. Left: library's upcaster-fix example
   (a `buggyUpcaster` mutant, snapshots taken under it, then the fix:
-  the regression as an example); the runtime audit is I24's.
+  the regression as an example); the runtime audit was built with I22.
 - **I2. Sound set folds in the Go evaluator (S). Done** (4bdec87:
   operators of a commuting shape, else every order up to 10 elements,
   else `Unsupported`; left: the example `examples/shards`).
@@ -265,12 +264,17 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### grist's gaps
 
-- **I22. Versions that roll (M, with GR10 slice 4, before GR4). In
-  progress** for the lock's gap (3b20911: a field added to a version is
-  taken as that version, as grist-platform §3.9 calls it safe). The rest
-  is H7's **Next** (`grist.WritesVersion` with a downcaster,
-  `gristtest.Upgrade`, counters v2 with the `eagerV2` mutant), not
-  repeated here.
+- **I22. Versions that roll (M, with GR10 slice 4, before GR4). Done**
+  (HISTORY: "Versions that roll"; docs/grist.md §2.1,
+  docs/grist-platform.md §3.9). `grist.WritesVersion` (a release reads
+  the new version and writes the old through a downcaster, the next
+  writes the new), `<app> catalog -diff` (safe, readers first,
+  breaking), gristsim's `Config.From` and `gristtest.Upgrade` (both
+  releases' nodes on one store, the Cluster's rolling restart the
+  rollout; `ReadersFirst`, `WritersFirst`), an older node serving nothing
+  from a newer event (503, its processors waiting), counters v2 with the
+  `eagerV2` mutant; I1's runtime snapshot audit with it
+  (`grist.SnapshotAudit`, two counters on `/metrics`).
 - **I23. sqlstore reads in one query (S-M, before grist's tag). Done**
   (HISTORY: "I23: sqlstore reads in one query"). `sqlstore.Read`
   fetched positions from `grist_index`, then one `SELECT` per event:
@@ -288,10 +292,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   fingerprints' snapshots are never pruned. A memo keyed by (tenant,
   read model, fingerprint, key); `grist_fold_events` and
   `grist_snapshot_{hits,misses,put_failures}`; pruning after a put,
-  deferred while two fingerprints are live in a rollout; I1's runtime
-  audit (a sampled key refolded from 0 against its snapshot, a metric);
+  deferred while two fingerprints are live in a rollout;
   `grist.Snapshots(every)` an App option in place of the context
-  setting, gristsim's field mapped to it. Example: counters at 10⁵
+  setting, gristsim's field mapped to it (the audit built with I22:
+  `grist.SnapshotAudit`, the same setting's shape). Example: counters at 10⁵
   events, snapshots on and off, the fold cost printed.
 - **I25. grist's operations basics (M; GR10 slice 3 moved up).** The
   DSN from a file or the environment (a flag shows in `ps` and the pod
@@ -636,13 +640,8 @@ item as recommended:
   snapshots keyed by a fold's fingerprint in every store tier, checked
   against a fold from the start (docs/grist.md §2.1, §2.2); a fixed
   upcaster refolds (its probe in the fingerprint); a field added to a
-  version is taken as that version. **Next, with GR10 slice 4 and before
-  GR4: versions that roll** (the eleventh review's I22). A new version's writers write it at once,
-  and the older nodes refuse it (`NewerVersionError`): `grist.WritesVersion`
-  (writing an older version, through a downcaster, until every node reads
-  the new one), `gristtest.Upgrade`, counters v2 with the `eagerV2`
-  mutant, and NewerVersionError's advice made an API; then a runtime
-  snapshot audit (a sampled key refolded from the start, a metric). The second
+  version is taken as that version; versions that roll and the runtime
+  snapshot audit (I22: HISTORY "Versions that roll"). The second
   half done (HISTORY: "H7's second half: the doubles
   published"): `qenv/simlog` in the core, `qenv/simgrpc`,
   `qenv/kubesim`, `qenv/simlog/kafkalog` and `qenv/simlog/kinesislog`
@@ -952,7 +951,9 @@ Then, in order, each item reviewed before the next:
   `eventually` vals are judged knowing them, or the settle reported
   `Unsettled` while a process that has work is down.
 - **Slice 3's rest**: gristpure, gristhegel, leases, screens and
-  Datastar (upcasting and snapshots built in H7; `grist.Reindex` left).
+  Datastar (upcasting and snapshots built in H7, rolling versions in
+  I22; rewriting the index at boot dropped: a tag that changes is a new
+  event type).
 
 ## Release (R5)
 

@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -105,7 +106,9 @@ func (e exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(e)
 
 // mainUsage is the commands' summary.
 const mainUsage = `commands:
-  catalog                     print the App's registry as JSON (App.Catalog)
+  catalog [-diff DEPLOYED]    print the App's registry as JSON (App.Catalog)
+      -diff DEPLOYED                   compare it with the deployed release's (its catalog's JSON): safe, readers first
+                                       or breaking, each change with its fix; exit status 0, 3 (readers first) or 4 (breaking)
   verify                      check the registry (App.Verify), as the node does at boot, and every upcaster (App.CheckUpcasters)
   model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings under DIR (default .)
       -check                           write nothing: fail if a generated file differs (CI's diff)
@@ -132,12 +135,7 @@ func mainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 	}
 	switch args[0] {
 	case "catalog":
-		b, err := json.MarshalIndent(app.Catalog(), "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintf(stdout, "%s\n", b)
-		return err
+		return catalogMain(app, args[1:], stdout)
 	case "verify":
 		if err := app.Verify(); err != nil {
 			return err
@@ -200,6 +198,42 @@ func helperMain(ctx context.Context, app *App, name string, args []string, stdou
 func isExecutable(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0
+}
+
+// catalogMain is the catalog command: the catalog's JSON, or with -diff
+// its comparison with a deployed release's (docs/grist-platform.md
+// §3.9), the exit status saying how it may roll out.
+func catalogMain(app *App, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet(app.Name+" catalog", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	deployed := fs.String("diff", "", "")
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 {
+		return &usageError{Msg: fmt.Sprintf("usage: %s catalog [-diff DEPLOYED.json]\n%s", app.Name, mainUsage)}
+	}
+	b, err := json.MarshalIndent(app.Catalog(), "", "  ")
+	if err != nil {
+		return err
+	}
+	if *deployed == "" {
+		_, err = fmt.Fprintf(stdout, "%s\n", b)
+		return err
+	}
+	old, err := os.ReadFile(*deployed)
+	if err != nil {
+		return fmt.Errorf("%s catalog -diff: %w (write it with the deployed release's binary: `%s catalog > deployed.json`)", app.Name, err, app.Name)
+	}
+	d, err := catalog.CompareCatalogs(old, b)
+	if err != nil {
+		return fmt.Errorf("%s catalog -diff %s: %w", app.Name, *deployed, err)
+	}
+	fmt.Fprint(stdout, d)
+	switch d.Verdict() {
+	case catalog.ReadersFirst:
+		return exitStatus(3)
+	case catalog.Breaking:
+		return exitStatus(4)
+	}
+	return nil
 }
 
 // modelMain is the model command (the generator's, grist/internal/gen).

@@ -19,7 +19,7 @@ func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
 	if r.Exists(Created, grist.Tag("name", c.Name)) {
 		return nil, ErrNameTaken
 	}
-	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name, Creator: r.Caller()})}, nil
+	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name, Owner: r.Caller()})}, nil
 }
 
 // Create is the create-counter command.
@@ -60,7 +60,7 @@ var ErrNotCreator = grist.Rejection("not-creator")
 // createdBy reports whether caller created counter under some name, in r.
 func createdBy(r *grist.Reads, counter, caller string) bool {
 	for _, e := range grist.Events(r, Created, grist.Tag("counter", counter)) {
-		if e.Creator == caller {
+		if e.Owner == caller {
 			return true
 		}
 	}

@@ -61,8 +61,9 @@ type NewerVersionError struct {
 
 func (e *NewerVersionError) Error() string {
 	return fmt.Sprintf("%s is version %d, and this app reads %s up to version %d: a newer version of the app appended it, "+
-		"and this one cannot know what its fields mean; finish the rollout. A field added needs no new version (grist.lock takes it, and old readers ignore it); "+
-		"a new version's writes cannot yet wait for every node to read it, so its readers ship first only by holding the writers back (docs/grist-platform.md §3.9)", e.Type, e.Version, e.Type, e.Newest)
+		"and this one cannot know what its fields mean. Finish the rollout; readers ship before writers: the release that adds version %d writes version %d while nodes of this one run "+
+		"(grist.WritesVersion(%d, downcaster)), and the next release writes version %d. A field added needs no new version (grist.lock takes it, and old readers ignore it) (docs/grist.md §2.1)",
+		e.Type, e.Version, e.Type, e.Newest, e.Version, e.Newest, e.Newest, e.Version)
 }
 
 // storedVersion is a stored event's version: 0, an Event written by hand
@@ -244,6 +245,7 @@ func (a *App) upcasterProblems(fieldUse bool) []string {
 		for _, u := range info.ups {
 			ps = append(ps, info.checkUpcaster(u, fieldUse)...)
 		}
+		ps = append(ps, info.downcasterProblems(fieldUse)...)
 	}
 	return ps
 }

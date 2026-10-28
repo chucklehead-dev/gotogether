@@ -125,6 +125,9 @@ func (a *App) Catalog() Catalog {
 
 func catalogEvent(i *eventInfo) CatalogEvent {
 	e := CatalogEvent{Name: i.name, Version: i.version, Body: i.typ, Tags: i.tagKeys()}
+	if i.writes != nil {
+		e.Writes = i.writes.version
+	}
 	for _, u := range i.ups {
 		var tags []string
 		for _, t := range u.inTags {

@@ -164,7 +164,7 @@ func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E {
 	for _, s := range r.read(Selector{Types: []string{t.info.name}, Tags: tags}) {
 		e, err := t.Decode(s)
 		if err != nil {
-			r.misuse("event %d (%s): %v", s.Pos, s.Type, err)
+			r.misuse("event %d (%s): %w", s.Pos, s.Type, err)
 			return nil
 		}
 		out = append(out, e)

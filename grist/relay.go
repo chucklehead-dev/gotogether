@@ -49,7 +49,8 @@ type Relay struct {
 	log store.StepLog
 	// app, once a node started with the relay (App.Start), re-renders a
 	// row's events stored at an older version as the newest (upcast):
-	// the model sees only the newest shapes
+	// the model sees only the newest shapes. Of the Apps started with it,
+	// the newest release's (one reading every version the others read)
 	app atomic.Pointer[App]
 
 	mu      sync.Mutex // tenants and errs only: no seam is reached while it is held
@@ -82,6 +83,15 @@ func NewRelay(s Store) (*Relay, error) {
 	}
 	return &Relay{s: s, log: log, tenants: map[string]*relayed{}, errs: map[string]error{}, stopped: map[string]bool{}}, nil
 }
+
+// RenderAs makes the relay render its rows' events as a reads them:
+// those stored at an older version than a's newest upcast, so their steps
+// are recorded in a's shapes, its model's. App.Start renders as the newest
+// release started with the relay (one reading every version the others
+// read); a relay that records a rolling update from its first step, its
+// older release's nodes starting first (gristsim's Config.From), renders
+// as the newer release from the start.
+func (r *Relay) RenderAs(a *App) { r.app.Store(a) }
 
 // A StartOption configures App.Start (WithRelay). The zero StartOption
 // changes nothing.
@@ -259,6 +269,9 @@ func (r *Relay) decode(ctx context.Context, t string, row store.StepRow) ([]rela
 		if err := app.upcastRow(ctx, r.s, t, steps); err != nil {
 			return nil, err
 		}
+	}
+	for i := range steps {
+		steps[i].kv = dropKV(steps[i].kv, renderedKey) // the relay's, no step's field
 	}
 	return steps, nil
 }
@@ -441,7 +454,7 @@ func (a *App) upcastRow(ctx context.Context, s Store, t string, steps []relaySte
 	for i := range steps {
 		st := &steps[i]
 		types := kvStrings(st.kv, "obs.events")
-		if st.events == 0 || len(types) != st.events || !a.versioned(types) {
+		if st.events == 0 || len(types) != st.events || !a.versioned(types) || a.renderedNewest(types, kvInts(st.kv, renderedKey)) {
 			continue
 		}
 		evs, _, err := s.Read(ctx, t, Selector{Types: uniq(types), After: st.head - Position(st.events)}, st.head)
@@ -505,6 +518,64 @@ func kvStrings(kv []any, key string) []string {
 		}
 	}
 	return nil
+}
+
+// renderedKey is a row step's record of the version each of its events'
+// observations were rendered in (batchObs): the relay re-reads a row's
+// events only when the app reads a newer version of one than that, a
+// row an older release committed, and drops the key before recording.
+const renderedKey = "grist.rendered"
+
+// renderedNewest reports whether a row's events of types were rendered
+// in versions (renderedKey's) at least a's newest: no re-rendering, and
+// no read, needed. A row without the key (an older grist's) is not.
+func (a *App) renderedNewest(types []string, versions []int64) bool {
+	if len(versions) != len(types) {
+		return false
+	}
+	for i, t := range types {
+		if info := a.events[t]; info != nil && versions[i] < int64(info.version) {
+			return false
+		}
+	}
+	return true
+}
+
+// kvInts is the list of integers at key in kv (a decoded row's pairs:
+// json.Numbers, as decodeRow decodes them).
+func kvInts(kv []any, key string) []int64 {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i] == key {
+			l, _ := kv[i+1].([]any)
+			out := make([]int64, 0, len(l))
+			for _, v := range l {
+				switch n := v.(type) {
+				case json.Number:
+					if k, err := n.Int64(); err == nil {
+						out = append(out, k)
+					}
+				case float64:
+					out = append(out, int64(n))
+				case int64:
+					out = append(out, n)
+				case int:
+					out = append(out, int64(n))
+				}
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+// dropKV is kv without key.
+func dropKV(kv []any, key string) []any {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i] == key {
+			return append(kv[:i:i], kv[i+2:]...)
+		}
+	}
+	return kv
 }
 
 // setKV sets key's value in kv.

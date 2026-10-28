@@ -96,10 +96,13 @@ func callName(s qtrace.Step) string {
 	return s.Action
 }
 
-// refused is a client call's count of refused tries (calls.RefusedField):
-// an int in process, a float64 read back from JSON.
-func refused(s qtrace.Step) int {
-	switch v := s.Args[calls.RefusedField].(type) {
+// refused is a client call's count of refused tries (calls.RefusedField).
+func refused(s qtrace.Step) int { return count(s, calls.RefusedField) }
+
+// count is a client call's count field: an int in process, a float64
+// read back from JSON.
+func count(s qtrace.Step, field string) int {
+	switch v := s.Args[field].(type) {
 	case int:
 		return v
 	case int64:
@@ -108,4 +111,59 @@ func refused(s qtrace.Step) int {
 		return int(v)
 	}
 	return 0
+}
+
+// ReadersFirst: in a rolling update (gristtest.Upgrade, gristsim's
+// Config.From), no node of the older release met an event it cannot read
+// (a version newer than it reads: the newer release wrote it before
+// every node read it), so no client call had a try refused for one. A
+// node that meets one serves nothing (it cannot know what the event's
+// fields mean): the call is retried under its key, which a newer node
+// answers, and counted on its step (the field olderRefused). The fix is
+// the newer release writing the older version until the rollout ends
+// (grist.WritesVersion). Judged by the clients' binding, as
+// NoClientErrors is: a report with no client actor has no verdict.
+func ReadersFirst() qtest.Expectation {
+	return qtest.Satisfies("no client call refused by an older release's node for an event it cannot read", func(r *validate.Report) error {
+		if err := judgesClients(r); err != nil {
+			return err
+		}
+		return olderRefusal(r)
+	})
+}
+
+// WritersFirst: some client call had a try refused by a node of the older
+// release for an event it cannot read (ReadersFirst's negation): what a
+// release that writes a new version at once shows in some run of its
+// rolling update, Some(WritersFirst()).
+func WritersFirst() qtest.Expectation {
+	return qtest.Satisfies("some client call refused by an older release's node for an event it cannot read", func(r *validate.Report) error {
+		if err := judgesClients(r); err != nil {
+			return err
+		}
+		if olderRefusal(r) == nil {
+			return errors.New("no older release's node met an event it cannot read")
+		}
+		return nil
+	})
+}
+
+// olderRefusal is r's first client call a node of an older release
+// refused a try of, or nil.
+func olderRefusal(r *validate.Report) error {
+	for _, a := range r.Actors {
+		if !strings.HasSuffix(a.Actor, "/clients") {
+			continue
+		}
+		for _, c := range a.Calls {
+			if c.Step == nil {
+				continue
+			}
+			if n := count(*c.Step, calls.OlderField); n > 0 {
+				return fmt.Errorf("%s had %d tries refused by a node of the older release, which met an event it cannot read: the newer release wrote it before every node read it; "+
+					"write the older version until the rollout ends (grist.WritesVersion), and the newer in the release after", callName(*c.Step), n)
+			}
+		}
+	}
+	return nil
 }

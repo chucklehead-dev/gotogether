@@ -3,6 +3,8 @@ package gristsim
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
@@ -89,7 +91,8 @@ type apiState struct {
 // startCluster starts cfg.Nodes nodes under cfg.Cluster: each a crashable
 // process starting the App, serving its API and draining at its
 // termination.
-func startCluster(s *qenv.Sim, app *grist.App, st grist.Store, relay *grist.Relay, deps func(context.Context) context.Context, cfg Config) *cluster {
+func startCluster(w *workload, st grist.Store, relay *grist.Relay, deps func(context.Context) context.Context) *cluster {
+	s, cfg := w.s, w.cfg
 	c := *cfg.Cluster
 	if c.Grace <= 0 {
 		c.Grace = DefaultGrace
@@ -109,7 +112,7 @@ func startCluster(s *qenv.Sim, app *grist.App, st grist.Store, relay *grist.Rela
 		nodeCtx, stop := context.WithCancel(ctx)
 		var drainer drainhook.Node
 		hook := func(n drainhook.Node) { drainer = n }
-		if err := app.Start(drainhook.With(deps(nodeCtx), hook), st, grist.WithRelay(relay)); err != nil {
+		if err := w.release(p).Start(drainhook.With(deps(nodeCtx), hook), st, grist.WithRelay(relay)); err != nil {
 			panic(fmt.Sprintf("gristsim: %s could not start: %v", p.Name, err))
 		}
 		qenv.Go(ctx, "drain", func(ctx context.Context) {
@@ -128,8 +131,9 @@ func startCluster(s *qenv.Sim, app *grist.App, st grist.Store, relay *grist.Rela
 		}
 		p := s.Process(name, true, start)
 		cl.nodes = append(cl.nodes, p)
+		w.starts[p] = start
 		cl.apis[p] = qenv.NewService(s, "api."+name, p, func(ctx context.Context, req request) (response, error) {
-			return serve(deps(ctx), app, st, req), nil
+			return serve(deps(ctx), w.release(qenv.ProcessOf(ctx)), st, req), nil
 		})
 	}
 	s.Terminations(qenv.Termination{Grace: c.Grace, Budget: c.Disruptions}, cl.nodes...)
@@ -141,12 +145,32 @@ func startCluster(s *qenv.Sim, app *grist.App, st grist.Store, relay *grist.Rela
 			for _, p := range cl.nodes {
 				qenv.Wait(ctx, func() bool { return cl.allUp() })
 				inc := p.Incarnation
+				if cfg.From != nil {
+					w.rolled[p] = true // its replacement runs the App: a rolling update
+					if s.Log != nil {
+						s.Log(fmt.Sprintf("%v gristsim: %s's replacement runs the new release", s.Elapsed(), p.ID()))
+					}
+				}
 				p.Terminate()
 				qenv.Wait(ctx, func() bool { return p.Incarnation > inc && !p.Down() })
 			}
 		})
 	}
 	return cl
+}
+
+// nodesOr are the cluster's nodes in order, or (no cluster) nodes'
+// sorted by name.
+func (cl *cluster) nodesOr(nodes map[*qenv.Process]bool) []*qenv.Process {
+	if cl != nil {
+		return cl.nodes
+	}
+	out := make([]*qenv.Process, 0, len(nodes))
+	for p := range nodes {
+		out = append(out, p)
+	}
+	slices.SortFunc(out, func(a, b *qenv.Process) int { return strings.Compare(a.Name, b.Name) })
+	return out
 }
 
 // api is the API state of p's current incarnation.
@@ -181,7 +205,7 @@ func (cl *cluster) allUp() bool {
 // retried. One sent before the shutdown is served: the shutdown waits
 // for it.
 func (cl *cluster) send(ctx context.Context, req request) response {
-	refused := 0
+	refused, older := 0, 0
 	for try := 1; try <= MaxAttempts; try++ {
 		ep, err := cl.router.Pick(ctx)
 		if err != nil || ep.Gone() || cl.apiOf(ep).closed {
@@ -193,13 +217,16 @@ func (cl *cluster) send(ctx context.Context, req request) response {
 			as.inflight--
 			as.idle.Notify()
 			if err == nil && !resp.Retry {
-				resp.refused = refused
+				resp.refused, resp.olderRefused = refused, older
 				return resp
+			}
+			if err == nil && resp.older {
+				older++ // a node of the older release could not read the log
 			}
 		}
 		qenv.Sleep(ctx, RetryDelay)
 	}
-	return response{Err: "unanswered", refused: refused}
+	return response{Err: "unanswered", refused: refused, olderRefused: older}
 }
 
 // apiServer is a node incarnation's API as its drain's server.

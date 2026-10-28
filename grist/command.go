@@ -289,12 +289,18 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 					ruled, derr = c.app.applyRules(r, events)
 					err = r.err // a store error: the try is retried
 				}
+				if derr == nil && ruled == nil && err == nil {
+					derr = c.app.written("command "+c.info.name, events) // as the store keeps them: WritesVersion's
+				}
 				switch {
 				case err != nil:
 				case ruled != nil:
 					outcome, events, byRule = ruled.rej.Name, nil, true
 				case derr != nil && errors.As(derr, &rej):
 					outcome, events = rej.Name, nil
+				case derr != nil && newerIn(derr) != nil:
+					// a newer release's event: nothing decided, nothing recorded
+					return Receipt{}, false, &olderRelease{block: "command " + c.info.name, nv: newerIn(derr)}
 				case derr != nil:
 					r.Position()
 					onReturn(r, derr) // the code's fault, recorded with its text, not remembered

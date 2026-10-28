@@ -25,7 +25,7 @@ module countersRules {
     names.keys().filter(n => names.get(n) == counter).size()
   // caller created counter under some name: the one caller who may retire it
   pure def createdBy(log: List[Event], counter: str, caller: str): bool =
-    log.select(e => e.typ == "counter-created" and counterCreatedCounter(e) == counter and counterCreatedCreator(e) == caller).length() > 0
+    log.select(e => e.typ == "counter-created" and counterCreatedCounter(e) == counter and counterCreatedOwner(e) == caller).length() > 0
   pure def isCounter(log: List[Event], counter: str): bool = existsTagged(log, "counter-created", "counter", counter)
 
   // create-counter: refused when a counter has the name, which its read

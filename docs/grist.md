@@ -123,7 +123,8 @@ BookAdded {...})` and the version 1 upcaster's result is renamed
 `BookAddedV2`; no upcaster is edited again). Reads upcast before any
 fold, handler, rule or `Events` sees an event (`EventType.Decode`
 decodes it as its stored version and runs the chain); appends write the
-newest only. The decisions, with their reasons:
+newest, unless `grist.WritesVersion` holds them back while a rollout
+lasts (below). The decisions, with their reasons:
 
 - **Old shapes are Go structs, not JSON transforms.** A struct is what
   grist already reads everything from (the schema, the tags, the
@@ -157,14 +158,57 @@ newest only. The decisions, with their reasons:
 - **A newer version refuses, never mis-decodes.** A stored version
   newer than the app's newest (a v2 node's event read by a v1 node in a
   rolling update) is a `*grist.NewerVersionError` naming the type, both
-  versions and the fix (finish the rollout; readers before writers),
-  the fold's error by name: what docs/grist-platform.md §3.9's mixed
-  rollout (`gristtest.Upgrade`, slice 4) needs from the v1 nodes.
+  versions and the fix (readers first: `WritesVersion`), never decoded.
+  A node that meets one serves nothing from it: a command or query
+  answers it as `ErrUnavailable` (a 503, retried under its key, which a
+  node of the newer release serves), recording no step, since nothing
+  was decided; a processor's trigger waits (backoff, as for a store
+  error) instead of failing, since `grist.failed` is final and a newer
+  node can handle it.
+- **Readers first, then writers: `WritesVersion`.** A rolling update
+  runs both releases on one log for minutes, so the release that adds a
+  version must not write it while nodes of the release before it run:
+  it reads the new version and writes the old, through a downcaster,
+  and the next release drops the option and writes the new one:
+
+  ```go
+  var Added = grist.NewEvent[BookAdded](App, "book-added",
+  	grist.Upcast(1, func(v BookAddedV1) BookAdded { return BookAdded{Book: v.Book, Count: v.Copies, Shelf: "main"} }),
+  	grist.WritesVersion(1, func(v BookAdded) BookAddedV1 { return BookAddedV1{Book: v.Book, Copies: v.Count} }))
+  ```
+
+  The downcast happens at append (a command's, a processor's emits and
+  outcomes), after the rules, so every block decides in the newest
+  shape and the step records it in that shape (the model's). Verify
+  checks the downcaster over generated values as it checks upcasters
+  (total, pure, tags kept), CheckUpcasters that it undoes the upcasters
+  (a stored version 1, upcast and written again, is what it was), and an
+  append that the older version cannot hold (downcast, then upcast,
+  gives another event: a shelf other than version 1's "main") fails,
+  naming the fix, rather than store an event without it: until the
+  release that writes the new version, the app decides only what the
+  old one can say. Why a downcaster and not a flag: the option is the
+  rollout's state, in the code of the release that needs it, checked at
+  boot and in the catalog (`writes`), where a flag set at runtime would
+  let two nodes of one release write two versions. `<app> catalog -diff
+  deployed.json` (Main) compares a release's catalog with the deployed
+  one's: **safe** (a new command, query, processor or read model, a
+  field added to a version or a block's arguments, a new version written
+  as the deployed newest), **readers first** (a new event type, a new
+  version written at once: exit status 3) or **breaking** (an event or a
+  version removed, a version's field removed or changed, a tag changed,
+  a block removed or its arguments' or result's fields changed: exit
+  status 4), each change with its fix; CI runs it against the deployed
+  release's catalog. `gristtest.Upgrade(t, binding, deployed.App, App,
+  cfg)` explores the rolling update (docs/grist-platform.md §3.9):
+  examples/counters' `TestRollingUpdate`, release 1 kept as the package
+  `release1`, and its mutant `eagerV2`.
 - **Upcasters must not change tags**: the index was written at append
   time from the stored version's tags, so an upcaster that adds, drops
   or changes one makes queries disagree with folds; Verify refuses it,
-  and a tag that must change is a new event type. `grist.Reindex()`,
-  rewriting the index at boot, is not built.
+  and a tag that must change is a new event type (rewriting a log's
+  index at boot, once sketched here, is not planned: a new type keeps
+  every index true without rewriting a stored row).
 - **grist.lock** (`<app> model` writes it beside the app, checked in) is
   the catalog's record of what has been stored: every version of every
   event type with its shape (a hash of its JSON Schema and tags, and its
@@ -177,12 +221,8 @@ newest only. The decisions, with their reasons:
   and nothing else (the old fields' schema and the tags unchanged), is
   taken with a warning: the stored events read it as its zero value and
   a node that does not know it ignores it, so it rolls out without a new
-  version, which a rolling update needs. A new version cannot yet: its
-  writers write it at once, and a node still on the older one refuses
-  its events (`NewerVersionError`). Writing an older version until every
-  node reads the new one (`grist.WritesVersion`, a downcaster) and
-  `gristtest.Upgrade` are the next item (docs/grist-platform.md §3.9,
-  ROADMAP H7). So the struct
+  version. A new version rolls out readers first (`WritesVersion`,
+  above). So the struct
   changed in place is an error at `<app> model` (and in
   `gristtest.Generated`, CI's), not a decode failure deep in a fold; an
   upcaster missing from the chain is Verify's, at boot. An event the app
@@ -299,9 +339,20 @@ The decisions, with their reasons:
   fold's snapshot (`fingerprintByVersion`), both grist's own
   (grist/testdata/mutants), both caught by CheckSnapshots; and a
   fingerprint without the upcasters (`upcasterFixKeepsSnapshots`),
-  caught by `TestFixedUpcasterRefolds`' claim. Not built: a runtime
-  audit refolding a sampled key from the start against its snapshot,
-  behind a metric.
+  caught by `TestFixedUpcasterRefolds`' claim.
+- **Audited where it runs.** CheckSnapshots checks a test's store
+  before a deploy; a deployed node audits its own: one in
+  `grist.DefaultSnapshotAudit` (100) reads from a snapshot also refolds
+  its key from the start, through the same position and selector (the
+  read set unchanged), and compares (`grist.SnapshotAudit(ctx, n)`
+  changes the rate, 0 turns it off). The sample is a hash of the
+  snapshot and the read's position, not a random draw, so a
+  simulation's runs replay. A wrong snapshot is answered by the refold,
+  replaced by it, and counted: `grist_snapshot_audits_total` and
+  `grist_snapshot_audit_mismatches_total` on Main's `/metrics`
+  (`App.SnapshotAudits`), an alert's input, since a mismatch is a fold
+  changed without a new fingerprint or a store returning another
+  snapshot than was put (`TestSnapshotAudit`).
 
 ### 2.3 Reads: one position, a set of queries
 
@@ -1657,8 +1708,8 @@ measured on the real tier.
 
 Periodic tasks (`Every`, `Cron`, ticks, catch-up, a claim of one report
 per slot under two schedulers and crashes); upcasting with the tag rule
-and read-model snapshots (built in H7: §2.1, §2.2; `Reindex` not
-built); gristpure, with the new
+and read-model snapshots (built in H7: §2.1, §2.2), rolling versions
+(`WritesVersion`, `catalog -diff`, `gristtest.Upgrade`: I22); gristpure, with the new
 map-range rule and a `Facts` export of each pure function for
 gristflow; gristhegel; PostgreSQL (row-level security, `lock_timeout`,
 the idle timeout, a claim under a real failover); leases (§3.4) and

@@ -23,6 +23,9 @@ type eventInfo struct {
 	// ups are the upcasters, ups[k-1] from version k to k+1 (nil when
 	// the chain does not verify: Verify says why)
 	ups []Upcaster
+	// writes is the version an append writes, through its downcaster
+	// (WritesVersion); nil: the newest
+	writes *downcaster
 }
 
 type tagField struct {
@@ -67,7 +70,12 @@ type EventType[E any] struct {
 // read upcasts before any fold, handler or rule sees the event; an append
 // writes the newest version only; a stored version newer than E's is
 // refused by name (a *NewerVersionError), never decoded.
-func NewEvent[E any](app *App, name string, upcasters ...Upcaster) *EventType[E] {
+//
+// A release that reads a new version while nodes of the previous one
+// still run (a rolling update) writes the older version until they are
+// gone: WritesVersion(n, downcaster), removed in the next release
+// (docs/grist.md §2.1, readers first).
+func NewEvent[E any](app *App, name string, opts ...EventOption) *EventType[E] {
 	typ := reflect.TypeFor[E]()
 	app.register("event", name)
 	info := &eventInfo{name: name, version: 1, typ: typ}
@@ -83,7 +91,18 @@ func NewEvent[E any](app *App, name string, upcasters ...Upcaster) *EventType[E]
 			app.problems = append(app.problems, fmt.Sprintf("event %q: %s", name, p))
 		}
 	}
+	var upcasters []Upcaster
+	var writes []*downcaster
+	for _, o := range opts {
+		switch o := o.(type) {
+		case Upcaster:
+			upcasters = append(upcasters, o)
+		case *downcaster:
+			writes = append(writes, o)
+		}
+	}
 	app.problems = append(app.problems, info.chain(upcasters)...)
+	app.problems = append(app.problems, info.writesProblems(writes)...)
 	if app.events[name] == nil {
 		app.events[name] = info
 		app.eventOrder = append(app.eventOrder, name)
@@ -128,8 +147,13 @@ func (t *EventType[E]) Of(e E) Event {
 	return Event{Type: t.info.name, Version: t.info.version, Tags: tags, Body: body}
 }
 
-// Version is the event type's newest version: what an append writes.
+// Version is the event type's newest version: what reads upcast to, and
+// what an append writes unless WritesVersion holds it back (Writes).
 func (t *EventType[E]) Version() int { return t.info.version }
+
+// Writes is the version an append of the event type writes: its newest,
+// or WritesVersion's while a rollout lasts.
+func (t *EventType[E]) Writes() int { return t.info.writesVersion() }
 
 // Decode is a stored event's body as E: decoded as the version it was
 // stored at and upcast to the newest (NewEvent's upcasters). A version

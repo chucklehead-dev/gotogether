@@ -12,6 +12,15 @@
             "name string tag",
             "creator string"
           ]
+        },
+        {
+          "version": 2,
+          "shape": "2c437d90992811ad",
+          "fields": [
+            "counter string tag",
+            "name string tag",
+            "owner string"
+          ]
         }
       ]
     },
@@ -84,7 +93,7 @@
     {
       "name": "counter-names",
       "version": 1,
-      "fingerprint": "f32567e164b1cff63b80eadb0"
+      "fingerprint": "f68efac7d148bb179b2064def"
     },
     {
       "name": "totals",

@@ -4,7 +4,8 @@ Status: design, 2026-10-28, for docs/ROADMAP.md's GR10; slice 1
 (identity, probes, the drain) built 2026-10-28 (docs/HISTORY.md (grist §0.15)
 says what building it changed, and what its acceptance got wrong), and
 slice 2 (graceful termination, the router, `gristsim.Cluster`) the same
-day (docs/HISTORY.md (grist §0.16), likewise). Nothing else below is built; every
+day (docs/HISTORY.md (grist §0.16), likewise), slice 6 (sizing) and
+slice 4 (versions, §3.9) since. Nothing else below is built; every
 proposed API is in ```text blocks (slice 2's are as built: §4 says
 where it differs), and every name it
 takes from an existing package (`qenv.Stalls`, `qmeta.CalibrateTimeout`,
@@ -382,29 +383,47 @@ store) and is left to GR4's measurements.
 
 ### 3.9 Versions
 
-A rolling update runs two versions on one log for minutes. The rules
-(raftkv's lesson, DESIGN §47: a v2 that writes its new format at once
-breaks the v1 nodes still running):
+Built (slice 4, 2026-10-28; docs/grist.md §2.1, docs/HISTORY.md
+"Versions that roll"). A rolling update runs two versions on one log
+for minutes. The rules (raftkv's lesson, DESIGN §47: a v2 that writes
+its new format at once breaks the v1 nodes still running):
 
-- `<app> catalog -diff deployed.json` classifies a change: **safe**
-  (a new command, query or processor; a field added with a zero
-  default), **readers first** (a new event type or a field a v1 fold
-  must not ignore: ship the readers, then the writers behind a flag set
-  after the rollout, §3.6), **breaking** (a renamed tag, a removed
-  event: needs H7's upcasters). CI runs it against the deployed catalog.
-- What H7 built, and what it did not: a field added to a version is
-  taken by grist.lock as the same version (old events read it as zero,
-  old nodes ignore it), so it is safe as this list says. A new version
-  is not yet: appends write the newest at once, and a node still on the
-  older version refuses its events by name (`grist.NewerVersionError`),
-  so "readers first" has no API: the writers would need to write the
-  older version until the rollout ends (`grist.WritesVersion(n)`, with a
-  downcaster from the newest), which slice 4 builds with
-  `gristtest.Upgrade` (ROADMAP H7's next item).
-- `gristtest.Upgrade(t, v1, v2, cfg)` runs both Apps' nodes on one
-  store in gristsim, rolling one node at a time (`Sim.Upgrades`), each
-  version's steps judged by the same model (an event v1 does not know is
-  v1's refusal to fold, named, never a crash).
+- `<app> catalog -diff deployed.json` classifies a release against the
+  deployed one's catalog: **safe** (a new command, query, processor or
+  read model; a field added to an event's version or a block's
+  arguments; a new version written as the deployed newest), **readers
+  first** (a new event type; a new version written at once: the
+  deployed nodes refuse it), **breaking** (an event or a version
+  removed, a version's field removed or changed in place, a tag
+  changed, a command or query removed or its arguments' or result's
+  fields removed or changed). Exit status 0, 3, 4; each change printed
+  with its fix. CI runs it against the deployed catalog. A new event
+  type stays readers first: no API holds its appends back (a flag set
+  after the rollout, §3.6, is the app's).
+- A field added to a version is taken by grist.lock as the same version
+  (old events read it as zero, old nodes ignore it): safe. A new version
+  is readers first: the release that adds it reads it and writes the
+  older one, `grist.WritesVersion(n, downcaster)` on its `NewEvent`
+  (the downcast at append, after the rules, refusing an event version n
+  cannot hold; Verify and CheckUpcasters check the downcaster), and the
+  next release drops it. A node meeting a version newer than it reads
+  serves nothing from it: its command or query is `ErrUnavailable`
+  (503, retried; a newer node serves it), its processor's trigger
+  waits; nothing is decided or failed (`grist.failed` would be final).
+- `gristtest.Upgrade(t, binding, deployed.App, App, cfg)` is the rolling
+  update as a `qtest.System`: gristsim's `Config.From` runs the deployed
+  release's nodes beside the new one's on one store, every step judged
+  by the new model (the relay renders in its shapes from the first
+  step), the rollout a `Cluster`'s rolling restart when it has
+  `Rolling` (each node's replacement runs the new release), else one
+  `nemesis.upgrade.<node>` a node (`Sim.Upgrades`), finished before the
+  settle. Clients send what both releases serve; an older node's refusal
+  is counted on its call's step (`olderRefused`), judged by
+  `gristtest.ReadersFirst()` and its negation `WritersFirst()`. It
+  first compares the two catalogs as `catalog -diff` does, failing t on
+  a breaking change. examples/counters: release 1 kept as the package
+  `release1`, release 2 renaming counter-created's creator to owner
+  (version 2, written as 1), `TestRollingUpdate`, the mutant `eagerV2`.
 
 ## 4. Lens (a): what is simulated, and how
 
@@ -423,7 +442,7 @@ met it, and a Script or a qnemesis journal names it.
 | NetworkPolicy, zone partition | `Network.Partition`, `PartitionNemesis` | zones: a group of hosts, `nemesis.zone.<z>` cutting it off (and, as an option, the store with it) | `Completes()` and `Settles()` after the heal |
 | DNS failure, conntrack to a dead pod | `rpc.<name>.request`, `.response` | none: a reset is an unknown outcome | GR3's call claims |
 | mesh or Gateway retries and timeouts | `rpc.<name>.request` duplicate, `.delay` | a proxy double in front of the API with its own timeout and retry policy (`proxy.<name>`) | idempotency under duplicates; storms are qload's (§8) |
-| rolling update, mixed versions | `Sim.Upgrades`, `Process.RestartAs` | `Cluster.Rollout` (maxSurge, maxUnavailable) driving them | §3.9 |
+| rolling update, mixed versions | `Sim.Upgrades`, `Process.RestartAs` | built (slice 4): `Config.From`, the `Cluster`'s rolling restart as the rollout (maxSurge left: a surge node is one more node of the new release) | §3.9 |
 | ConfigMap and Secret updates | none | `qenv.NewProjection(s, name, versions...)`: a file whose content changes by nemesis, `nemesis.project.<name>`, per process at its own time | §3.6: decisions agree; a rotated secret causes no failure |
 | certificate expiry | none (TLS is not simulated) | the projection's versions carry `NotAfter` in virtual time; a double's transport refuses an expired one | a cached certificate fails the eventual vals after expiry |
 | managed PostgreSQL failover | `store.<name>.commit` (applied, answer lost) | `store.<name>.failover`: in-flight commits unknown, connections reset, read-only for a while; option `loseTail` (asynchronous replication: the last k commits gone) | `ErrRewound` raised; a receipt without its event named by the clients' binding |
@@ -961,14 +980,20 @@ ablated.
    `Some(Rejects("ledgerPostServed"))`; with `ErrRewound` ablated an
    at-most-once effect runs again unasked (two calls of one key,
    `Some(Rejects(...))` at its caller step).
-4. **Versions (M, after H7's upcasting).** `<app> catalog -diff`,
-   `gristtest.Upgrade`, `gristsim.Cluster.Rollout`. **Example:
-   counters v2** (a field added to an event, a new event behind a
-   flag). **Acceptance**: the mutant `eagerV2` (v2 appends the new
-   event before the rollout ends) fails the v1 nodes' folds, named
-   (`Some(Mismatch(...))` or the fold's refusal); the faithful
-   readers-first rollout conforms; `catalog -diff` classifies each of a
-   table of changes (golden test).
+4. **Versions (M, after H7's upcasting). Built** 2026-10-28 (§3.9).
+   `<app> catalog -diff`, `grist.WritesVersion`, `gristtest.Upgrade`,
+   gristsim's `Config.From` (no `Cluster.Rollout` of its own: the
+   rolling restart is the rollout). **Example: counters v2**: a changed
+   event (counter-created's creator renamed owner, version 2 written as
+   1), not the sketch's added field, which needs no version (grist.lock
+   takes it) and so tests nothing of a rollout. **Acceptance**, as
+   built: the mutant `eagerV2` (version 2 written at once) has some run
+   whose release 1 node refuses a call for an event it cannot read
+   (`Some(gristtest.WritersFirst())`), not a mismatch or a failed fold:
+   the old node serves nothing from such an event, so no step of it is
+   wrong, and the refusal is what shows; the faithful readers-first
+   rollout conforms, completes and has none (`ReadersFirst()`);
+   `catalog -diff` classifies a table of changes (`TestCatalogDiff`).
 5. **Configuration and secrets (core, M).** `FileSource`, `-db-file`
    with reopen, TLS from files, `grist.FromSource` (configuration as
    commands), `qenv.NewProjection`, certificate expiry in virtual time.

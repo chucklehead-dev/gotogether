@@ -38,11 +38,21 @@ type Answer struct {
 	// down; each was retried. The call's step records it as its field
 	// RefusedField when there were any (gristtest.NoClientErrors).
 	Refused int
+	// Older counts the call's tries a node of an older release refused,
+	// a read meeting an event a newer one appended (a rollout's, writers
+	// before readers: grist.NewerVersionError); each was retried. The
+	// call's step records it as its field OlderField when there were any
+	// (gristtest.ReadersFirst).
+	Older int
 }
 
 // RefusedField is a client call's step field counting its refused tries
 // (Answer.Refused), absent when none was: no model parameter takes it.
 const RefusedField = "refused"
+
+// OlderField is a client call's step field counting its tries an older
+// release's node refused (Answer.Older), absent when none was.
+const OlderField = "olderRefused"
 
 // IsQuery reports whether name is one of app's queries.
 func IsQuery(app *grist.App, name string) bool {
@@ -78,6 +88,9 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	var refused []any
 	if a.Refused > 0 {
 		refused = []any{RefusedField, a.Refused}
+	}
+	if a.Older > 0 {
+		refused = append(refused, OlderField, a.Older)
 	}
 	switch {
 	case a.Pending:

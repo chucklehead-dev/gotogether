@@ -1,4 +1,4 @@
-# Versions and snapshots: an event that changes, a read model that is long
+# Versions and snapshots: an event that changes, a release that rolls, a read model that is long
 
 From the grist skill (its SKILL.md says when to read this). The design
 is docs/grist.md §2.1 (versioning) and §2.2 (snapshots);
@@ -51,15 +51,63 @@ event by them: a tag that must change is a new event type); it carries
 every field of the old struct into the next unless it says
 `.Drops("field")` (CheckUpcasters names one it ignores). Reads upcast
 before any fold, handler or rule sees the event; appends write the
-newest; a stored version newer than the app's (a v2 event read by a v1
-node in a rollout) is a `*grist.NewerVersionError`, the read's error by
-name, never a guess. A field added to a version, nothing else changed,
+newest unless `WritesVersion` holds them back (below); a stored version
+newer than the app's (a v2 event read by a v1 node in a rollout) is a
+`*grist.NewerVersionError`, never a guess: the node's command or query
+answers `ErrUnavailable` (503, retried, a newer node serves it) and its
+processor waits. A field added to a version, nothing else changed,
 needs no new version: grist.lock takes it (old events read it as zero,
-old nodes ignore it), which is how a field rolls out. A new version does
-not roll yet: its writers write it at once, so deploy it when no older
-node runs (writing an older version until the rollout ends,
-`WritesVersion`, is not built). Fixing an upcaster refolds the read
-models over it: the upcasters are in their fingerprint.
+old nodes ignore it), which is how a field rolls out. Fixing an
+upcaster refolds the read models over it: the upcasters are in their
+fingerprint.
+
+## A new version in a rolling update: readers first
+
+A release that adds a version must not write it while nodes of the
+release before it run: they would refuse its events. So it ships in two
+releases:
+
+1. **Release N+1 reads version 2 and writes version 1**: the upcaster,
+   plus a downcaster from the newest struct to the old one:
+
+   ```go
+   var Added = grist.NewEvent[BookAdded](App, "book-added",
+   	grist.Upcast(1, func(v BookAddedV1) BookAdded { return BookAdded{Book: v.Book, Count: v.Copies, Shelf: "main"} }),
+   	grist.WritesVersion(1, func(v BookAdded) BookAddedV1 { return BookAddedV1{Book: v.Book, Copies: v.Count} }))
+   ```
+
+   Blocks decide in the newest shape; the append is downcast, and fails
+   (naming the fix) when version 1 cannot hold the event (a shelf other
+   than "main"): decide only what version 1 can say in this release.
+   Verify checks the downcaster (total, pure, tags kept), CheckUpcasters
+   that it undoes the upcaster.
+2. **Release N+2 drops `WritesVersion`**, once no node of release N
+   runs: it writes version 2.
+
+Check each release before it ships:
+- `go run ./cmd/<app> catalog -diff deployed.json` (the deployed
+  release's `<app> catalog`, kept in CI): `safe` (exit 0), `readers
+  first` (exit 3: a version written at once, a new event type) or
+  `breaking` (exit 4: a version or event removed, a shape changed in
+  place, a tag, a block removed), each change with its fix.
+- `gristtest.Upgrade(t, binding, deployed.App, App, cfg)`: a qtest.System
+  of the rolling update, the deployed release kept as a package of its
+  own (examples/counters' `release1`), every node's steps judged by
+  today's model; with a `gristsim.Cluster` with `Rolling`, its rolling
+  restart is the rollout:
+
+```go
+func TestRollingUpdate(t *testing.T) {
+	up := gristtest.Upgrade(t, "shop.binding.yaml", release1.App, App, rolling)
+	up.Explore(t, n).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	up.WithBinding("shop.calls.binding.yaml", qtest.Linearize()).Explore(t, n).
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), gristtest.ReadersFirst())
+}
+```
+
+  `gristtest.ReadersFirst()`: no call refused by an older node for an
+  event it cannot read; a release writing the new version at once shows
+  `qtest.Some(gristtest.WritersFirst())` (counters' `eagerV2` mutant).
 
 ## A deployed version's log, judged by today's model
 
@@ -107,6 +155,9 @@ values), or the read model is never snapshotted.
 - `gristsim.Config{SnapshotEvery: 2}` explores decisions made from
   snapshots, through `store.<app>.snapshot` faults (torn, lost) and
   crashes; claim `qtest.Reaches("store.<app>.snapshot").Faulted()`.
+- A deployed node audits one in 100 reads from a snapshot (refolds the
+  key, compares, answers and replaces a wrong one: `grist.SnapshotAudit`
+  to change the rate); alert on `grist_snapshot_audit_mismatches_total`.
 
 ## Results
 
@@ -115,6 +166,9 @@ values), or the read model is never snapshotted.
 | `event X version N changed shape since grist.lock was written` | the struct of a stored version changed | keep it as `XVN`, register version N+1 with an upcaster; if never deployed, delete its lock entry |
 | `the upcaster from version N ignores F` | an old field reaches no later version | copy it, or `.Drops("F")` on purpose |
 | `an upcaster keeps every tag` | the upcast changed a tag | keep the tag; a new tag is a new event type |
-| `X is version N, and this app reads X up to version M` | a newer node's event | finish the rollout; readers before writers |
+| `X is version N, and this app reads X up to version M` | a newer node's event | finish the rollout; the newer release writes M with `WritesVersion` until no older node runs |
+| `... which cannot hold it: written as version N it reads back as ...` | a decision only the newest version can record, while writing an older | decide only what version N says until the release that writes the newest |
+| `catalog -diff`: `readers first` | the release writes what deployed nodes refuse | `WritesVersion(deployed newest, ...)` in this release, dropped in the next |
+| `had N tries refused by a node of the older release` (ReadersFirst) | a rolling update's older node met an event it cannot read | as above |
 | `read model R folds otherwise than when grist.lock was written` | its fingerprint changed | expected after a fold change; bump its version if its meaning changed |
 | `its stored snapshot plus the events after it gives ...` | a snapshot of another fold, or taken at the wrong position | a fold changed without a new fingerprint: bump the version |

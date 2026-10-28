@@ -94,6 +94,9 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 		if r.bad != nil {
 			err = r.bad
 		}
+		if nv := newerIn(err); nv != nil {
+			return zero, 0, &olderRelease{block: "query " + b.info.name, nv: nv} // not this release's to answer
+		}
 		r.Position()
 		kv := append(append([]any{}, argKV...), "caller", env.Caller, "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
 		var obs []any

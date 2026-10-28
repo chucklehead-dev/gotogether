@@ -25,19 +25,35 @@ func record(ctx context.Context, s Store, tenant, action string, err error, kv .
 // "processor:<name>".
 func (a *App) batchObs(events []Event, causeKind, causeName string) []any {
 	types, strs, ints, causes := []string{}, []string{}, []int64{}, [][]string{}
+	rendered := []int64{}
 	for _, e := range events {
 		types = append(types, e.Type)
+		rendered = append(rendered, 0)
 		causes = append(causes, []string{causeKind, causeName})
 		var info *eventInfo
 		if a != nil {
 			info = a.events[e.Type]
 		}
 		if info != nil {
-			s, n := scalars(info.typ, e.Body)
+			body := e.Body
+			if storedVersion(e.Version) < info.version {
+				// written as an older version (WritesVersion): recorded in the
+				// newest's shape, the model's, as the relay renders it
+				if b, err := info.currentBody(e); err == nil {
+					body = b
+				}
+			}
+			s, n := scalars(info.typ, body)
 			strs, ints = append(strs, s...), append(ints, n...)
+			rendered[len(rendered)-1] = int64(info.version)
 		}
 	}
-	return []any{"obs.events", types, "obs.strs", strs, "obs.ints", ints, "obs.causes", causes}
+	kv := []any{"obs.events", types, "obs.strs", strs, "obs.ints", ints, "obs.causes", causes}
+	if len(events) > 0 {
+		// a commit's row: the relay reads it (renderedKey), never a step
+		kv = append(kv, renderedKey, rendered)
+	}
+	return kv
 }
 
 // commitOrder is a commit step's place on the tenant's domain clock

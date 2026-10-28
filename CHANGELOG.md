@@ -90,7 +90,18 @@ The first release. What a user meets, by module:
 - One core version (ROADMAP I14): every published module requires the
   core at one commit (`ci/bump-core.sh`), checked on every push, and a
   consumer module outside the repository builds them as a user does.
-
+- grist's versions roll (ROADMAP I22): `grist.WritesVersion(n,
+  downcaster)`, an `EventOption` of `NewEvent` beside `Upcast` (whose
+  variadic is now `...EventOption`), writes an older version while a
+  rollout lasts (`EventType.Writes`, the catalog's `writes`); a node
+  meeting a newer version answers `ErrUnavailable` and its processors
+  wait, where a command answered a 500 and a processor failed the
+  trigger; `<app> catalog -diff deployed.json` (safe, readers first,
+  breaking: exit 0, 3, 4); gristsim's `Config.From` (with `Upgraded`),
+  `Relay.RenderAs`, `gristtest.Upgrade`, `ReadersFirst` and
+  `WritersFirst`. The runtime snapshot audit: `grist.SnapshotAudit`,
+  `DefaultSnapshotAudit`, `App.SnapshotAudits`, two counters on
+  `/metrics`.
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams

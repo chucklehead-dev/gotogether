@@ -10,11 +10,11 @@ module countersEvents {
   export grist.*
 
   // counter-created (strs: its strings, ints: its integers and booleans, in field order)
-  pure def counterCreated(counter: str, name: str, creator: str): Event =
-    { typ: "counter-created", strs: [counter, name, creator], ints: [], tags: Set(("counter", counter), ("name", name)), cause: UNCAUSED }
+  pure def counterCreated(counter: str, name: str, owner: str): Event =
+    { typ: "counter-created", strs: [counter, name, owner], ints: [], tags: Set(("counter", counter), ("name", name)), cause: UNCAUSED }
   pure def counterCreatedCounter(e: Event): str = e.strs[0]
   pure def counterCreatedName(e: Event): str = e.strs[1]
-  pure def counterCreatedCreator(e: Event): str = e.strs[2]
+  pure def counterCreatedOwner(e: Event): str = e.strs[2]
   pure val counterCreatedRead: Read = { typ: "counter-created", tags: Set() }
   pure def counterCreatedByCounter(v: str): Read = { typ: "counter-created", tags: Set(("counter", v)) }
   pure def counterCreatedByName(v: str): Read = { typ: "counter-created", tags: Set(("name", v)) }

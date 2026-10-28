@@ -130,6 +130,12 @@ func (h *health) metrics(ctx context.Context, now time.Time) string {
 	value("grist_draining", bit(h.draining.Load()))
 	gauge("grist_api_requests_in_flight", "The API's requests being served.")
 	value("grist_api_requests_in_flight", h.requests.Load())
+	counter := func(name, help string, v int64) {
+		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s counter\n%s %d\n", name, help, name, name, v)
+	}
+	audited, wrong := h.app.SnapshotAudits()
+	counter("grist_snapshot_audits_total", "Reads from a snapshot refolded from the start to check it (grist.SnapshotAudit).", audited)
+	counter("grist_snapshot_audit_mismatches_total", "Audited snapshots whose state was not the refold's: a fold changed without a new fingerprint, or a store's snapshot not what was put.", wrong)
 	n, ref, relay := h.node.Load(), h.st.Load(), h.relay.Load()
 	if n != nil {
 		gauge("grist_effects_in_flight", "Processors' effects running.")

@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 )
@@ -54,6 +55,10 @@ type App struct {
 	deps       map[string]*Dependency // by name
 	depOrder   []*Dependency          // in registration order, for the Catalog
 	problems   []string
+	// audits counts the snapshot reads refolded from the start to check
+	// them (SnapshotAudit), auditMisses those whose snapshot was wrong:
+	// Main's /metrics, SnapshotAudits
+	audits, auditMisses atomic.Int64
 }
 
 // New returns an empty App named name.

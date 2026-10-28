@@ -155,6 +155,22 @@ type Config struct {
 	// gracefully, draining as grist.Main does (Cluster); Nodes then
 	// defaults to 3. Not with HTTP yet.
 	Cluster *Cluster
+	// From, if set, is the release deployed before the App (the same
+	// app's previous version): a rolling update from it to the App. The
+	// nodes start running From and are upgraded to the App while the
+	// clients call, one at a time: under a Cluster with Rolling its
+	// rolling restart is the rollout (each node's replacement runs the
+	// App), otherwise each node is upgraded at a point the run chooses
+	// (nemesis.upgrade.<node>, qenv.Sim.Upgrades); every node runs the App
+	// before the run settles. The clients send what both releases serve,
+	// and every step is judged by the App's model (the relay renders as
+	// the App). A node of From whose read meets an event it cannot read
+	// (a version From does not know: the App wrote it before every node
+	// read it) refuses the call, which its client retries and counts
+	// (gristtest.ReadersFirst), and its processors wait; it never fails a
+	// trigger or decides without the event. gristtest.Upgrade runs it.
+	// Not with HTTP yet.
+	From *grist.App
 	// Log, if set, receives the simulation's log (crashes, upgrades:
 	// qenv.Sim.Log), for a failing run's story.
 	Log func(string)
@@ -213,12 +229,12 @@ func (t simTransport) Call(ctx context.Context, c grist.CallInfo, call string, r
 }
 
 // serveDependencies serves each of app's dependencies with its doubles as
-// a qenv.Service of s, returning what attaches them to a context.
-func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (func(context.Context) context.Context, error) {
+// a qenv.Service of s, returning what attaches them to a context; and
+// from's (a rollout's older release, nil for none), each one of app's of
+// its name served by the same Service, so both releases' calls reach one
+// double, any other by its default double.
+func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles, from *grist.App) (func(context.Context) context.Context, error) {
 	deps := app.Dependencies()
-	if len(deps) == 0 {
-		return func(ctx context.Context) context.Context { return ctx }, nil
-	}
 	var ds Doubles
 	if doubles != nil {
 		ds = doubles()
@@ -228,6 +244,7 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (fun
 			return nil, fmt.Errorf("gristsim: Config.Doubles has handlers of dependency %s, which is not %s's: declare it on the App (grist.NewDependency)", d.Name(), app.Name)
 		}
 	}
+	byName := map[string]grist.Transport{}
 	trs := make([]grist.Transport, len(deps))
 	for i, d := range deps {
 		h, ok := ds[d]
@@ -241,18 +258,24 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (fun
 		if err := h.Serves(d); err != nil {
 			return nil, fmt.Errorf("gristsim: Config.Doubles' handlers of %s: %w", d.Name(), err)
 		}
-		local := grist.Local(h)
-		trs[i] = simTransport{svc: qenv.NewService(s, d.Name(), nil, func(ctx context.Context, r callRequest) (callResponse, error) {
-			out, err := local.Call(ctx, r.Info, r.Call, r.Body)
-			var rej *grist.Rejected
-			switch {
-			case errors.As(err, &rej):
-				return callResponse{Rejected: rej.Name}, nil
-			case err != nil:
-				return callResponse{Err: err.Error()}, nil
+		trs[i] = simTransport{svc: serviceOf(s, d.Name(), h)}
+		byName[d.Name()] = trs[i]
+	}
+	if from != nil {
+		// the older release's: one of the App's name is served by the same
+		// Service, so both releases' calls reach one double; any other by
+		// its default double
+		for _, d := range from.Dependencies() {
+			tr := byName[d.Name()]
+			if tr == nil {
+				h, err := defaultDouble(d)
+				if err != nil {
+					return nil, fmt.Errorf("gristsim: dependency %s of Config.From, which the App does not declare, has no default double: %w", d.Name(), err)
+				}
+				tr = simTransport{svc: serviceOf(s, d.Name(), h)}
 			}
-			return callResponse{Body: out}, nil
-		})}
+			deps, trs = append(deps, d), append(trs, tr)
+		}
 	}
 	return func(ctx context.Context) context.Context {
 		for i, d := range deps {
@@ -260,6 +283,22 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles) (fun
 		}
 		return ctx
 	}, nil
+}
+
+// serviceOf serves h as the qenv.Service name.
+func serviceOf(s *qenv.Sim, name string, h grist.Handlers) *qenv.Service[callRequest, callResponse] {
+	local := grist.Local(h)
+	return qenv.NewService(s, name, nil, func(ctx context.Context, r callRequest) (callResponse, error) {
+		out, err := local.Call(ctx, r.Info, r.Call, r.Body)
+		var rej *grist.Rejected
+		switch {
+		case errors.As(err, &rej):
+			return callResponse{Rejected: rej.Name}, nil
+		case err != nil:
+			return callResponse{Err: err.Error()}, nil
+		}
+		return callResponse{Body: out}, nil
+	})
 }
 
 // A Call is one call of a Prologue: a command or query by name, with its
@@ -292,9 +331,17 @@ type response struct {
 	Rejected string
 	Err      string
 	Retry    bool
-	// refused counts the client's tries no server took (a Cluster's)
-	refused int
+	// older: the node's release could not read an event a newer one
+	// appended (Config.From), and served nothing: Retry
+	older bool
+	// refused counts the client's tries no server took (a Cluster's),
+	// olderRefused those a node of an older release refused (older)
+	refused, olderRefused int
 }
+
+// Upgraded is the version a node upgraded to the App runs
+// (qenv.Process.Version), under Config.From.
+const Upgraded = "upgraded"
 
 // CallerHeader is the header the HTTP tier's clients name their caller in
 // (grist.CallerFromHeader).
@@ -329,6 +376,19 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		return err
 	}
 	cfg = defaults(cfg)
+	if from := cfg.From; from != nil {
+		if err := from.Verify(); err != nil {
+			return fmt.Errorf("gristsim: Config.From: %w", err)
+		}
+		switch {
+		case from == app:
+			return errors.New("gristsim: Config.From is the App itself: give the deployed release's App (a package of its own), or no From")
+		case from.Name != app.Name:
+			return fmt.Errorf("gristsim: Config.From is app %s, and the App %s: a rollout is of one app, from its deployed release", from.Name, app.Name)
+		case cfg.HTTP:
+			return errors.New("gristsim: Config.From with Config.HTTP: a rollout's nodes serve the API as qenv.Services; the HTTP tier's is not built yet")
+		}
+	}
 	for _, t := range cfg.Tenants {
 		if err := grist.CheckTenant(t); err != nil {
 			return fmt.Errorf("gristsim: Config.Tenants: %w", err)
@@ -357,13 +417,16 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	if err != nil {
 		return err
 	}
+	if cfg.From != nil {
+		relay.RenderAs(app) // the older release's nodes start first
+	}
 	for _, t := range cfg.Tenants {
 		if err := st.CreateTenant(setup, t); err != nil {
 			return err
 		}
 	}
 	db.CommitFaults = cfg.CommitFaults
-	served, err := serveDependencies(s, app, cfg.Doubles)
+	served, err := serveDependencies(s, app, cfg.Doubles, cfg.From)
 	if err != nil {
 		return err
 	}
@@ -388,15 +451,21 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 		handler = h
 	}
-	w := &workload{app: app, cfg: cfg, s: s}
+	w := &workload{app: app, cfg: cfg, s: s, rolled: map[*qenv.Process]bool{}, starts: map[*qenv.Process]func(context.Context){}}
 	nodes := map[*qenv.Process]bool{}
 	if cfg.Cluster != nil {
-		w.cluster = startCluster(s, app, st, relay, deps, cfg)
+		w.cluster = startCluster(w, st, relay, deps)
 		for _, p := range w.cluster.nodes {
 			nodes[p] = true
 		}
 	} else {
 		w.startNodes(st, relay, deps, nodes, handler)
+	}
+	if cfg.From != nil && (cfg.Cluster == nil || !cfg.Cluster.Rolling) {
+		// the rollout at points the run chooses, one nemesis a node
+		for p := range nodes {
+			s.Upgrades(Upgraded, w.starts[p], p)
+		}
 	}
 	// a supervisor: a node that crashed itself (an effect's crash point)
 	// restarts as one the nemesis crashed does
@@ -408,6 +477,12 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	names := cfg.Send
 	if len(names) == 0 {
 		names = append(app.Commands(), app.Queries()...)
+		if cfg.From != nil {
+			// what both releases serve: a block the older lacks is refused
+			// (404) by its nodes by right, until the rollout ends
+			olds := append(cfg.From.Commands(), cfg.From.Queries()...)
+			names = slices.DeleteFunc(names, func(n string) bool { return !slices.Contains(olds, n) })
+		}
 	}
 	// the prologue, if any, before every client's first call
 	prologue, err := w.prologue()
@@ -443,6 +518,16 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	if err := s.Run(cfg.Horizon); err != nil {
 		return err
 	}
+	if cfg.From != nil {
+		// the rollout finished before the settle (faults, upgrade nemeses
+		// among them, are off from there), in node order
+		for _, p := range w.cluster.nodesOr(nodes) {
+			if w.release(p) != app {
+				w.rolled[p] = true
+				p.Upgrade(Upgraded, w.starts[p])
+			}
+		}
+	}
 	if err := s.Settle(time.Minute); err != nil {
 		return err
 	}
@@ -475,23 +560,26 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 // serving the API: a qenv.Service of requests, or with HTTP handler on a
 // qhttp.Server, which the clients' grist/client calls.
 func (w *workload) startNodes(st grist.Store, relay *grist.Relay, deps func(context.Context) context.Context, nodes map[*qenv.Process]bool, handler http.Handler) {
-	s, app, cfg := w.s, w.app, w.cfg
+	s, cfg := w.s, w.cfg
 	var srv *qhttp.Server
-	node := s.Process("node", true, func(ctx context.Context) {
-		if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
+	first := func(ctx context.Context) {
+		if err := w.release(qenv.ProcessOf(ctx)).Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
 			panic(fmt.Sprintf("gristsim: the node could not start: %v", err))
 		}
 		if srv != nil {
 			srv.Handle(ctx, handler) // every incarnation listens again
 		}
-	})
-	nodes[node] = true
+	}
+	node := s.Process("node", true, first)
+	nodes[node], w.starts[node] = true, first
 	for i := 2; i <= cfg.Nodes; i++ {
-		nodes[s.Process(fmt.Sprintf("node%d", i), true, func(ctx context.Context) {
-			if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
+		start := func(ctx context.Context) {
+			if err := w.release(qenv.ProcessOf(ctx)).Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
 				panic(fmt.Sprintf("gristsim: node %d could not start: %v", i, err))
 			}
-		})] = true
+		}
+		p := s.Process(fmt.Sprintf("node%d", i), true, start)
+		nodes[p], w.starts[p] = true, start
 	}
 	if cfg.HTTP {
 		srv = qhttp.NewServer(s, "api", node)
@@ -502,12 +590,12 @@ func (w *workload) startNodes(st grist.Store, relay *grist.Relay, deps func(cont
 		// after its effect committed is one the model cannot place (each
 		// call is still bounded by MaxAttempts; the budget's own test is
 		// grist's TestClientBackoffAndBudget)
-		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader,
+		w.http = &client.Client{App: w.app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader,
 			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
 		return
 	}
 	w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
-		return serve(deps(ctx), app, st, req), nil
+		return serve(deps(ctx), w.release(qenv.ProcessOf(ctx)), st, req), nil
 	})
 }
 
@@ -547,6 +635,8 @@ func serve(ctx context.Context, app *grist.App, st grist.Store, req request) res
 	if req.Query {
 		res, pos, err := app.Query(ctx, st, req.Env, req.Name, req.Args)
 		switch {
+		case errors.As(err, new(*grist.NewerVersionError)):
+			return response{Retry: true, older: true}
 		case errors.Is(err, grist.ErrUnavailable):
 			return response{Retry: true}
 		case errors.As(err, &rej):
@@ -558,6 +648,8 @@ func serve(ctx context.Context, app *grist.App, st grist.Store, req request) res
 	}
 	rc, err := app.Execute(ctx, st, req.Env, req.Name, req.Args)
 	switch {
+	case errors.As(err, new(*grist.NewerVersionError)):
+		return response{Retry: true, older: true}
 	case errors.As(err, &rej):
 		return response{Rejected: rej.Name}
 	case errors.Is(err, grist.ErrConflict):
@@ -580,6 +672,19 @@ type workload struct {
 	http *client.Client
 	// cluster is a Cluster's nodes and router (Config.Cluster), api nil
 	cluster *cluster
+	// rolled are the nodes a rollout (Config.From) has upgraded, or is
+	// upgrading: their next boot runs the App; starts each node's start
+	rolled map[*qenv.Process]bool
+	starts map[*qenv.Process]func(context.Context)
+}
+
+// release is the App node p runs: Config.From until the rollout reaches
+// it, then the App.
+func (w *workload) release(p *qenv.Process) *grist.App {
+	if w.cfg.From == nil || p == nil || p.Version == Upgraded || w.rolled[p] {
+		return w.app
+	}
+	return w.cfg.From
 }
 
 // prologue are the Prologue's requests, in order, each call to each of
@@ -679,11 +784,15 @@ func (w *workload) call(ctx context.Context, req request) {
 		w.record(ctx, req, func() response { return w.cluster.send(ctx, req) })
 		return
 	}
+	older := 0
 	send := func() (response, bool) {
 		for try := 1; try <= MaxAttempts; try++ {
 			resp, err := w.api.Call(ctx, req, CallTimeout)
 			if err == nil && !resp.Retry {
 				return resp, true
+			}
+			if err == nil && resp.older {
+				older++
 			}
 			qenv.Sleep(ctx, RetryDelay)
 		}
@@ -692,8 +801,9 @@ func (w *workload) call(ctx context.Context, req request) {
 	w.record(ctx, req, func() response {
 		resp, ok := send()
 		if !ok {
-			return response{Err: "unanswered"}
+			resp = response{Err: "unanswered"}
 		}
+		resp.olderRefused = older
 		return resp
 	})
 }
@@ -744,11 +854,11 @@ func (w *workload) record(ctx context.Context, req request, do func() response) 
 func answerOf(r response) calls.Answer {
 	switch {
 	case r.Err == "unanswered", r.Retry:
-		return calls.Answer{Pending: true, Refused: r.refused}
+		return calls.Answer{Pending: true, Refused: r.refused, Older: r.olderRefused}
 	case r.Err != "":
-		return calls.Answer{Err: r.Err, Refused: r.refused}
+		return calls.Answer{Err: r.Err, Refused: r.refused, Older: r.olderRefused}
 	case r.Rejected != "":
-		return calls.Answer{Rejected: r.Rejected, Refused: r.refused}
+		return calls.Answer{Rejected: r.Rejected, Refused: r.refused, Older: r.olderRefused}
 	}
-	return calls.Answer{Result: r.Result, Refused: r.refused}
+	return calls.Answer{Result: r.Result, Refused: r.refused, Older: r.olderRefused}
 }

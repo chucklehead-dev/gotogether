@@ -1848,10 +1848,83 @@ as grist-platform §3.9 calls one safe; a new version's rollout
 (`WritesVersion`, `gristtest.Upgrade`) is ROADMAP H7's next item, and
 §3.9 says what does not work yet.
 
-Left: `grist.Reindex` (an upcaster that must change a tag); schema
-changes beyond upcasting (grist.md §9: an event split, a field whose
+Left: schema changes beyond upcasting (grist.md §9: an event split, a field whose
 meaning changed); a processor reading behind the head refolds from the
 start when the only snapshot is later than its trigger.
+
+### Versions that roll (I22, GR10 slice 4)
+
+H7's first half left a new version unable to survive a rolling update:
+appends wrote the newest at once, and a node still on the older release
+refused the events by name. What was built (docs/grist.md §2.1,
+docs/grist-platform.md §3.9):
+- **`grist.WritesVersion(n, downcaster)`**, an option of `NewEvent`
+  beside its upcasters (`grist.EventOption`): the release that adds a
+  version reads it and writes version n; the next drops the option. The
+  downcast is at append (a command's, a processor's emits and
+  outcomes), after the rules, so blocks decide and steps record in the
+  newest shape; an append version n cannot hold (downcast then upcast is
+  another event) fails with the fix rather than store an event without
+  it. Verify runs the downcaster over generated values (total, pure,
+  tags kept), CheckUpcasters requires it to undo the upcasters. The
+  catalog says `writes`. A step's observations are computed from the
+  newest shape (`batchObs` upcasts an older body), and a relay renders as
+  the newest release started with it (`Relay.RenderAs` for one whose
+  older nodes start first). `TestWritesVersion`, with the downcast
+  ablated, finds version 2 stored. A row records the version its
+  observations were rendered in (`grist.rendered`, dropped before the
+  step is recorded), so the relay reads back only an older release's
+  rows: re-reading every row with a versioned event's moved counters'
+  schedules enough that `TestFaithful`'s four short seeds stopped
+  reaching a commit fault.
+- **An older node serves nothing from a newer event.** A command or
+  query whose read meets a `NewerVersionError` answers `ErrUnavailable`
+  (503, retried under its key; a newer node serves it) and records no
+  step; a processor's trigger waits as for a store error. Before, a
+  processor failed the trigger (`grist.failed`, final) and a command
+  answered a 500. The error's advice now names `WritesVersion`, and it
+  wraps through the read's error (`%w`), where `%v` lost its type.
+- **`<app> catalog -diff deployed.json`**: safe, readers first or
+  breaking, each change with its fix, exit status 0, 3 or 4 (grist's
+  internal/catalog `CompareCatalogs`, on the catalogs' JSON).
+  `TestCatalogDiff` is the table.
+- **gristsim's `Config.From` and `gristtest.Upgrade`**: the deployed
+  release's nodes beside the new one's on one store, the rollout a
+  Cluster's rolling restart (each replacement runs the new release) or
+  one upgrade nemesis a node, finished before the settle; the clients
+  send what both serve, the dependencies of both releases reach one
+  double by name. An older node's refusal is counted on the call's step
+  (`olderRefused`): `gristtest.ReadersFirst()` and `WritersFirst()`.
+  Upgrade compares the catalogs first and fails t on a breaking change.
+  gristsim's `TestRollout` is the mechanism without a model (refusals
+  when written at once, none held back, every commit in the new shape).
+- **examples/counters v2**: counter-created's creator renamed owner
+  (version 2, written as 1); release 1 kept as the package `release1`;
+  `TestRollingUpdate` (the rolling restart's shape: conforming,
+  settling, completing, `ReadersFirst`, `NoClientErrors`) and the mutant
+  `eagerV2` (`WritesVersion` dropped a release early:
+  `Some(WritersFirst())`).
+- **H7's leftovers**: the runtime snapshot audit (`grist.SnapshotAudit`:
+  one in 100 reads from a snapshot refolds its key through the same
+  position, answers and replaces a wrong snapshot, and counts it on
+  `/metrics`; sampled by a hash of the snapshot and the read's position,
+  so simulations replay; `TestSnapshotAudit`); `grist.Reindex`, which
+  grist.md named as not built, dropped from the docs (a tag that must
+  change is a new event type).
+
+What the docs had wrong: grist-platform §9's slice 4 sketched counters
+v2 as "a field added to an event, a new event behind a flag", but an
+added field needs no version (grist.lock takes it), so it tests nothing
+of a rollout: a rename does. Its acceptance expected `eagerV2` to fail
+"the v1 nodes' folds" (`Some(Mismatch(...))`): with a v1 node serving
+nothing from an event it cannot read, no step is wrong, and the
+refusal is what shows. `gristsim.Cluster.Rollout` (maxSurge,
+maxUnavailable) was not needed: the rolling restart with a disruption
+budget is the rollout. §3.9 wrote `Upgrade(t, v1, v2, cfg)` and
+`Sim.Upgrades` alone; Upgrade takes the binding, and returns a System
+whose claims the test states. The header said nothing past slice 2 was
+built, though slice 6 was. A new event type stays readers first with no
+API to hold it back (the app's flag, §3.6).
 
 ### H7's second half: the doubles published
 

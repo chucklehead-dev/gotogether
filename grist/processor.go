@@ -224,7 +224,19 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 	} else if r.s != s {
 		return fmt.Errorf("grist: WithRelay's relay is of store %s (%T), Start's store is %s (%T): a relay records one store's step log; give Start that store, or a relay of this one (NewRelay)", r.s.Name(), r.s, s.Name(), s)
 	}
-	r.app.CompareAndSwap(nil, a) // its rows' old events upcast to this App's newest
+	// its rows' old events upcast to the newest an App started with it
+	// reads: a relay that outlives a rolling update's nodes (gristsim's)
+	// renders with the newer release, which reads every version the older
+	// does, where the older would leave the newer's events as recorded
+	for {
+		cur := r.app.Load()
+		if cur != nil && (cur == a || !a.readsAll(cur)) {
+			break
+		}
+		if r.app.CompareAndSwap(cur, a) {
+			break
+		}
+	}
 	feed, ok := s.(store.TenantFeed)
 	if !ok {
 		return fmt.Errorf("grist: store %s (%T) is no store.TenantFeed: a node relays and handles every tenant, those created after it started included, waiting on WaitTenants", s.Name(), s)
@@ -358,11 +370,14 @@ func (n *node) watch(ctx context.Context, feed store.TenantFeed) {
 
 // A poller runs one processor for one tenant.
 type poller struct {
-	app     *App
-	s       Store
-	p       *processorInfo
-	tenant  string
-	tries   int           // transient errors in a row
+	app    *App
+	s      Store
+	p      *processorInfo
+	tenant string
+	tries  int // transient errors in a row
+	// newer counts the tries in a row that met an event of a newer
+	// release (waitNewer), not reset by a read that succeeds
+	newer   int
 	waiting *atomic.Int64 // the node's count of idle pollers (node.idle)
 	effects *atomic.Int64 // the node's count of effects in flight
 	// busy is when the poller last made progress on its batch of
@@ -375,6 +390,16 @@ type poller struct {
 func (pl *poller) pause(ctx context.Context) {
 	pl.tries++
 	backoff(ctx, min(pl.tries, 6))
+	pl.progress(ctx)
+}
+
+// waitNewer backs off from a trigger whose handling met an event of a
+// newer release, for longer each time in a row (to 10 s): a node of that
+// release, or this one's replacement, handles it; the rollout takes
+// minutes, and every try reads the log again.
+func (pl *poller) waitNewer(ctx context.Context) {
+	pl.newer++
+	qenv.Sleep(ctx, min(100*time.Millisecond<<min(pl.newer, 7), 10*time.Second))
 	pl.progress(ctx)
 }
 
@@ -489,6 +514,14 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 			pl.pause(ctx)
 			return Result{}, false
 		}
+		if newerIn(r.bad, res.err) != nil {
+			// an event of a newer release (a rollout): the trigger waits
+			// for a node that reads it, never failed (grist.failed would be
+			// final)
+			pl.waitNewer(ctx)
+			return Result{}, false
+		}
+		pl.newer = 0
 		if r.bad != nil {
 			res = Fail(r.bad)
 		} else if err := res.check(pl.p.name); err != nil {
@@ -502,6 +535,8 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 			}
 		}
 		if err := checkEvents("processor "+pl.p.name, res.events); err != nil {
+			res = Fail(err)
+		} else if err := pl.app.written("processor "+pl.p.name, res.events); err != nil {
 			res = Fail(err)
 		}
 		if err := pl.blocked(r, res); r.err != nil {
@@ -684,7 +719,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 		backoff(ctx, try)
 	}
 	for _, ev := range outcome {
-		if pl.app.events[ev.Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil {
+		if pl.app.events[ev.Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil || pl.app.written("processor "+pl.p.name, outcome) != nil {
 			outcome, ok = []Event{failedEvent(pl.p.name, e.Pos)}, false // an unregistered or unstorable outcome event: the code's fault
 		}
 	}
@@ -731,7 +766,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	case res.onSuccess != nil:
 		outcome = []Event{*res.onSuccess}
 	}
-	if len(outcome) > 0 && (pl.app.events[outcome[0].Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil) {
+	if len(outcome) > 0 && (pl.app.events[outcome[0].Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil || pl.app.written("processor "+pl.p.name, outcome) != nil) {
 		// the code's fault: the effect succeeded (or failed known), but its
 		// outcome event cannot be stored
 		outcome, err = []Event{failedEvent(pl.p.name, e.Pos)}, NotApplied(errors.New("an unregistered or unstorable outcome event"))
