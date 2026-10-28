@@ -95,6 +95,7 @@ type Sim struct {
 	now       time.Time
 	start     time.Time
 	tasks     []*task   // every task, in creation order (task id-1)
+	checking  []*task   // the tasks selfCheck looks at: every task but those it saw ended and unqueued (Check)
 	runq      fenwick   // the queued runnable tasks, by id: k-th in O(log n)
 	pred      []*task   // tasks waiting on a predicate (evaluated every step)
 	timers    timerHeap // deadlines of waiting tasks
@@ -392,6 +393,7 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 		t.inc = p.Incarnation
 	}
 	s.tasks = append(s.tasks, t)
+	s.checking = append(s.checking, t) // (whether Check is on yet or not: it may be set later)
 	ctx := qrun.With(context.WithValue(parent, ctxKey{}, t), runkeys.Task, any(t))
 	t.ctx = ctx
 	if s.nat != nil {
@@ -1348,8 +1350,21 @@ func (s *Sim) selfCheck() {
 	fail := func(format string, args ...any) {
 		panic(fmt.Sprintf("qenv: scheduler invariant: "+format+"\n%s", append(args, s.Tasks())...))
 	}
+	// Only tasks still in play: a task that ended and is not queued can
+	// fail no check below again (a finished task queued anew would be
+	// counted by the run queue and not here, which the count check
+	// reports). Every task ever spawned, at every step, made a run of many
+	// short tasks (a Service's calls) quadratic.
+	live := s.checking[:0]
+	for _, t := range s.checking {
+		if t.queued || !t.done && !t.killed {
+			live = append(live, t)
+		}
+	}
+	clear(s.checking[len(live):])
+	s.checking = live
 	queued := 0
-	for _, t := range s.tasks {
+	for _, t := range s.checking {
 		if t.queued {
 			queued++
 			if t.done || t.killed {
@@ -1374,7 +1389,7 @@ func (s *Sim) selfCheck() {
 			timers[e.t] = true
 		}
 	}
-	for _, t := range s.tasks {
+	for _, t := range s.checking {
 		if t.waiting && !t.done && !t.killed && !t.deadline.IsZero() && !timers[t] {
 			fail("task %s waits until %v with no live timer", t.name, t.deadline.Sub(s.start))
 		}

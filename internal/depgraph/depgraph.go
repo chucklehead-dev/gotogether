@@ -280,6 +280,18 @@ func (g *Graph) singleThrough(n int64, in everyNode) []Hop {
 			}
 		}
 	}
+	// no rw edge out of n's reach: no such cycle, whatever reaches n (the
+	// backward search was over every earlier transaction that reaches the
+	// newest commit, at every commit of a store's GOTOGETHER_CHECK)
+	rw := false
+	for u := range fwd {
+		for _, e := range g.out[u] {
+			rw = rw || e.Kind == "rw" && in.has(e.To)
+		}
+	}
+	if !rw {
+		return nil
+	}
 	for queue := []int64{n}; len(queue) > 0; queue = queue[1:] {
 		for _, e := range g.in[queue[0]] { // e.To is the edge's source
 			if _, ok := back[e.To]; in.has(e.To) && e.Kind != "rw" && !ok {
