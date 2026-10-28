@@ -111,6 +111,22 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 	traces, _ := c.Binding.Reconstruct(start.Steps)
 	var tr *qtrace.Trace
 	var actors []string
+	wholes := map[*qtrace.Trace]*qtrace.Trace{} // a partition's whole trace, whose instance it is planned in
+	if key := c.Binding.Partition; key != "" {
+		// the actors a partitioned check reports: each entity's steps
+		var parts []*qtrace.Trace
+		for _, t := range traces {
+			ps, _, missing := splitTrace(t, key, snapshotFirst(c.Binding, t))
+			if missing != nil {
+				return nil, fmt.Errorf("nav: partition %s: step %s has no %s argument", key, missing.String(), key)
+			}
+			for _, p := range ps {
+				p.Processes, wholes[p] = t.Processes, t
+			}
+			parts = append(parts, ps...)
+		}
+		traces = parts
+	}
 	for _, t := range traces {
 		actors = append(actors, nameOf(t.Actor))
 		if start.Actor == "" && len(traces) == 1 || start.Actor != "" && (t.Actor == start.Actor || nameOf(t.Actor) == start.Actor) {
@@ -120,7 +136,11 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 	if tr == nil {
 		return nil, fmt.Errorf("nav: the run's actors the binding checks are %v: name one (-actor)", actors)
 	}
-	plan, err := c.Binding.Plan(c.Model, tr)
+	whole := tr
+	if w := wholes[tr]; w != nil {
+		whole = w
+	}
+	plan, err := c.Binding.Planner(c.Model, whole).Plan(tr)
 	if err != nil {
 		return nil, fmt.Errorf("nav: actor %s: %w", nameOf(tr.Actor), err)
 	}

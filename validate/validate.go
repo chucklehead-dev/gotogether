@@ -80,7 +80,11 @@ const (
 // Result is the outcome of validating one actor's trace.
 type Result struct {
 	Actor string
-	Steps int // replayed steps, including inferred ones and the snapshot it starts from
+	// Partition is the entity the result judges, "<argument>=<value>"
+	// (Actor is "<actor> <argument>=<value>"), when the binding partitions
+	// the log by an argument (binding.Partition); "" else.
+	Partition string
+	Steps     int // replayed steps, including inferred ones and the snapshot it starts from
 
 	// Conformance: is the observed trace a behaviour of the model, with the
 	// observed state projections holding after each step?
@@ -289,7 +293,13 @@ func observedBase(t *qtrace.Trace) string { return "observed_" + sanitize(t.Acto
 // did not says so, or a run that never settled (no Settle, a step after
 // it, its error dropped) would pass with them unjudged and no word.
 func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
-	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: p.ConstantList(),
+	return newResultWith(b, t, p, p.ConstantList())
+}
+
+// newResultWith is newResult with the instance's constants listed
+// already (a partition's, its whole's).
+func newResultWith(b *binding.Binding, t *qtrace.Trace, p *binding.Plan, constants []string) *Result {
+	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: constants,
 		Gaps: t.Gaps, Collected: t.Collected}
 	if len(b.Eventually) > 0 && !t.Settled {
 		res.Issues = append(res.Issues, notJudged(b.Eventually, t.Lost))

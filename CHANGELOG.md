@@ -85,6 +85,16 @@ The first release. What a user meets, by module:
   unfaulted; `gotogether help` one line per command, `validate` without
   files saying what it needs, a run node's path in words
   (`RunNode.Path`).
+- Validation at production volume (I19, DESIGN §66): `partition:` in a
+  binding (`binding.Binding.Partition`, api/core.txt) judges a serial
+  log entity by entity, in parallel, every failing entity reported with
+  its module and `nav` line (`validate.Result.Partition` names it), the
+  passes one line; the model's factoring by the entity is checked on
+  each run by the Go evaluator's footprint of the entries every step and
+  judged val reads and writes, and a run where it fails is refused,
+  naming the step and the entry. A day of 10⁵ payment steps: 13.5 s,
+  where 10⁴ judged whole took over ten minutes. examples/migrate-payments'
+  model keeps R2's index (`byKey`) so it factors by charge.
 - A cancelled check kills all of quint (eleventh review, H1): every
   quint invocation runs in a process group of its own, killed whole on
   cancel, where only node was killed and its Rust evaluator kept running

@@ -5161,3 +5161,123 @@ and what bound limits it, in its text and in its machine-readable form.
   bound, and a run-demo relies on the exit. Linearize's budget was
   already no verdict (I5's second search too); a "not linearizable"
   verdict is a complete search with a Proof.
+
+## 66. Validation at volume: a serial log by entity (I19)
+
+**The cost was the model's states, not the evaluator.** A synthetic day
+of payments (examples/migrate-payments, each charge authorized, captured
+and refunded) took 0.6 s at 102 steps, 63 s at 1,002 and over ten
+minutes at 10,002, compile cached. The profile at 1,002 steps: 98% of
+the time in the walk's check of the invariants after each step
+(validate/eval.go), none in the replay of the steps. Each state's
+invariants are judged over every charge so far, so a log judged whole
+costs the sum of its states' sizes, quadratic in the log for an
+invariant that judges each charge, and cubic for payments'
+`oneChargePerKey`, which compared every pair of charges. No evaluator
+can judge "every pair of charges, after every step" of a day in linear
+time; what is linear is judging each charge's history alone, when the
+model says the charges do not interact. The evaluator's own per-step
+costs were linear in the state too (each successor's key, the whole
+state written as a string to deduplicate a successor that is alone:
+gone), and so was splitting a log by key (a scan of the parts for a
+name's collision: a map).
+
+**`partition:` in the binding** names the argument that says whose each
+step is. A trace is split by its value (the split LinearizeByKey's
+search uses, `splitTrace`), each part an actor of its own (`payments
+id=ch_3`), planned in the whole log's instance, judged by the batch
+(`CheckBatch`: the evaluator's passes in parallel, the failures' quint
+replays in shared processes), and reported each: the passes folded into
+one line, every failing entity in full with its module and its `nav`
+line (Nav splits the run the same way). That is the continuation after
+a failure: a day's report lists every entity that disagrees, where a
+log judged whole stops at its first failure, its later states not the
+run's. Within one entity a failure still ends that entity's check.
+Under `validate -compiled` (§64) the parts are judged by the compiled
+model's evaluator alone, the factoring checked by the same footprint.
+
+**The factoring is checked, never assumed.** The partition's verdicts
+are the whole log's only if each entity's steps neither read nor change
+another's state. LinearizeByKey assumes it, in its doc comment; a
+binding's partition is judged on every production log, so a model
+that does not factor would give a pass the whole log would not. Each
+part is replayed first by the Go evaluator with a footprint
+(qeval.Footprint, `Model.Tracking`): every map variable's value is
+tainted with its name as it is read, and the builtins that reach an
+entry record it (get, contains of the map's keys, put, set, setBy, the
+maps they make tainted in turn); a tainted map passed whole to any other
+builtin (keys, size, eq, filter, fold), a scalar variable read, or a
+map variable assigned something not made from it entry by entry, is a
+whole access. Then the run is refused, an error naming the step, the
+entity and the access, when
+
+- a step, an expect or a judged val made a whole access;
+- two entities' steps wrote one entry;
+- a step accessed an entry another entity's step wrote before it in the
+  log's order (it would have read that entity's value);
+- a judged val read an entry another entity's step writes at all (the
+  whole log judges its vals after every step, that one's too).
+
+Otherwise, by induction over the log's steps, every step reads the same
+entries with the same values in the whole log as in its entity's trace,
+so it takes the same branch and writes the same entries; the whole
+log's state is the union of the entities' at every step. A judged val
+(an invariant, an eventual val) may take a forall over a state map's
+keys at a conjunctive position (the val, an `and` of such, a val or def
+it names) as each entry's judgment: such a val holds of the union
+exactly when it holds of each entity's state. The same forall anywhere
+else (under a not, an or, nested in another's body, cached and reused
+outside a conjunction) is a whole access. The footprint walk judges
+every invariant in every state and every eventual val past the first
+false one, as quint's detail replay does, so it sees what quint will
+evaluate. `TestPartitionAgreesWithWhole` checks the claim against the
+whole log on random logs small enough to judge whole: where the
+partition is accepted, it passes exactly when the whole passes, and the
+whole's first failure is a failing entity's; transfers, which join two
+accounts' histories, are refused when they do (with the conflict check
+ablated, a transfer's run passes whole and fails partitioned).
+
+The check is of the run, not of the model: a path no step of this log
+took is not checked, and needs not be, since the verdict is this log's.
+Its limits are conservative, never unsound: a map the model's init (or
+a snapshot) fills is read by every part's forall, so a log whose
+entities write such entries is refused; and a bug that crosses entities
+(one idempotency key making two charges) is a refusal, not a verdict,
+which judging that log whole then gives. A partition does not combine
+with hidden actions, a resume, a restart (each a step of no entity's, or
+of every one's) or a search (a client history is partitioned by
+`-linearize-key`).
+
+**Payments restated to factor.** R2's lookup of a key's charge was a
+scan of every charge (`charges.keys().filter(c => charges.get(c).key ==
+key)`), a whole access. The model now keeps the index the code keeps
+(charge.go's `byKey: str -> str`), and `oneChargePerKey` says each
+keyed charge is its key's and each key's charge has it: two foralls of
+one entry each, in place of a pair over every charge. The example's
+suite, its mutants and its README's verdicts are unchanged.
+
+**The instance.** The parts share the whole log's instance (a constant
+an action reads, LIMIT from the log's largest amount, keeps the whole
+log's value), but a constant no evaluation of any part read (a day's
+IDS, every charge) takes the first part's value: every failing part's
+quint replay typechecked a set of thousands (two failing parts of a
+10,000-step log: 7 minutes; now 4 s). Its report says which constants
+were read by none. Quint's audit of a sample of the evaluator's passes
+(GOTOGETHER_EVAL_SAMPLE, 1 in 50) takes at most one quint process's
+worth of a partitioned trace's passes (64): 1 in 50 of 33,000 charges
+took quint 37 s.
+
+**What it costs** (examples/migrate-payments' synthetic day, the CLI,
+compile cached, a 4-core machine shared with other agents):
+
+| steps | before (whole) | whole, the model restated | partitioned | of it the Go side |
+|---|---|---|---|---|
+| 10² | 0.6 s | 0.5 s | 0.4 s | |
+| 10³ | 63 s | 4.4 s | 2.9 s | |
+| 10⁴ | over 10 min (killed) | over 20 min (killed) | 4.9 s | 1.1 s |
+| 10⁵ | (cubic: days) | (quadratic: hours) | 13.5 s | 10.4 s |
+
+The "of it" column is with quint's sample off (GOTOGETHER_EVAL_SAMPLE=0);
+the rest is quint's one audit process. validate's `TestPartitionAtVolume`
+judges 10⁴ steps under a 30 s budget on every push (about 2 s) and 10⁵
+in the nightly (GOTOGETHER_SCALE_STEPS=100000, about 5 s).

@@ -24,7 +24,8 @@ names the mistake and the fix.
 6. A bounded mechanism model, with the lemma it needs tested by Hegel.
 7. Outcomes, refusals and restarts are part of the model.
 8. Separate what the design promises from what it checks (`allows`).
-9. Keep long replays cheap: ids abstracted, invariants linear.
+9. Keep long replays cheap: ids abstracted, invariants linear, a log of
+   independent entities partitioned (`partition:`).
 
 ## Checklist for a new model
 

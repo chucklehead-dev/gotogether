@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -22,6 +23,11 @@ import (
 // is split across processes only past it, where the parallel evaluation
 // saves more wall time than the extra typechecks cost.
 const chunkSteps = 1000
+
+// maxSampledParts is how many passing partitions of one trace quint
+// judges too, at most, by sample (GOTOGETHER_EVAL_SAMPLE): the most one
+// quint process replays (chunkSize).
+const maxSampledParts = 64
 
 // chunkSize is how many of total traces (of steps steps in all) one quint
 // process replays: about one chunk per CPU, but no fewer traces than
@@ -101,6 +107,10 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		judged  bool
 		decided bool
 		sampled bool // a pass quint judges too (GOTOGETHER_EVAL_SAMPLE)
+		// consts are a partition's instance, its whole's, parsed once, and
+		// whole the trace it is a partition of (nil: none)
+		consts map[string]qeval.Value
+		whole  *qtrace.Trace
 	}
 	var all []*item
 	groups := map[string][]*item{}
@@ -120,6 +130,26 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				judgeLost(c.Binding, r, t.Lost)
 				judgeAbsent(c.Binding, r, t.Lost, t.Gaps, nil, nil)
 				reports[i].Actors = append(reports[i].Actors, r)
+				continue
+			}
+			if c.partitionedChecks() {
+				// each entity's steps an item, in the whole's instance, once the
+				// model is checked to factor by it on their evaluation
+				pt, err := c.partition(t)
+				if err != nil {
+					errs[i] = err
+					break
+				}
+				k := strings.Join(pt.constants, ", ")
+				if _, ok := groups[k]; !ok && len(pt.parts) > 0 {
+					keys = append(keys, k)
+				}
+				for j, res := range c.partitionResults(pt) {
+					it := &item{run: i, trace: pt.parts[j], plan: pt.plans[j], res: res, consts: pt.consts, whole: t}
+					all = append(all, it)
+					reports[i].Actors = append(reports[i].Actors, it.res)
+					groups[k] = append(groups[k], it)
+				}
 				continue
 			}
 			whole := t
@@ -145,28 +175,41 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	// replay (decide.go); one it rejects goes to quint's detail replay
 	re := c.runEvaluator()
 	if re != nil {
-		var wg sync.WaitGroup
-		sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+		// a partitioned trace's passes are sampled as any run's, but at most
+		// one quint process's worth of them (maxSampledParts) per trace: a
+		// day of 33,000 charges sampled at 1 in 50 took quint 37 s
+		sampledParts := map[*qtrace.Trace]int{}
 		for _, it := range all {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				var err error
-				it.sampled = re.takes(it.plan)
-				it.ev, err = re.e.judgeRun(c, it.trace, it.plan, !opt.NoITF || re.shadow || it.sampled)
-				it.judged = err == nil
-				it.sampled = it.sampled && it.judged && it.ev.pass
-				if err != nil {
-					re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(it.trace.Actor), len(it.plan.Calls), err))
-				}
-				if it.judged && it.ev.pass && !re.shadow && !it.sampled {
-					it.decided = re.decide(c, it.trace, it.plan, it.ev, it.res, opt, fmt.Sprintf("run%d_%s", it.run, sanitize(it.trace.Actor)))
-				}
-			}()
+			if it.whole == nil || !re.takes(it.plan) {
+				continue
+			}
+			if sampledParts[it.whole] < maxSampledParts {
+				sampledParts[it.whole]++
+				it.sampled = true
+			}
 		}
-		wg.Wait()
+		forEach(len(all), func(k int) {
+			it := all[k]
+			var err error
+			if it.whole == nil {
+				it.sampled = re.takes(it.plan)
+			}
+			ie := re.e
+			if it.consts != nil {
+				pe := *re.e
+				pe.consts = it.consts
+				ie = &pe
+			}
+			it.ev, err = ie.judgeRun(c, it.trace, it.plan, !opt.NoITF || re.shadow || it.sampled)
+			it.judged = err == nil
+			it.sampled = it.sampled && it.judged && it.ev.pass
+			if err != nil {
+				re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(it.trace.Actor), len(it.plan.Calls), err))
+			}
+			if it.judged && it.ev.pass && !re.shadow && !it.sampled {
+				it.decided = re.decide(c, it.trace, it.plan, it.ev, it.res, opt, fmt.Sprintf("run%d_%s", it.run, sanitize(it.trace.Actor)))
+			}
+		})
 	}
 	for _, k := range keys {
 		groups[k] = slices.DeleteFunc(groups[k], func(it *item) bool { return it.decided })

@@ -235,7 +235,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Adoption: scale and on-call
 
-- **I19. Validation at production volume (M-L).** A synthetic payments
+- **I19. Validation at production volume (M-L). Done** (DESIGN §66,
+  HISTORY "I19"; left: incremental invariants for a log that cannot be
+  partitioned, and a million-step example). A synthetic payments
   log took 1.5 s at 90 steps, 5.3 s at 300, 54 s at 900 (all in the Go
   evaluator, compile cached) and over 10 minutes at 9000: about n², and
   a payments service writes millions of steps a day. Reconstruct

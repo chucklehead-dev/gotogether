@@ -66,6 +66,24 @@ jobs:
         working-directory: internal/hegelprops
         run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 50m ./...
 
+  volume:
+    # validation at production volume (I19): a serial log of 10^5 steps
+    # judged by entity under a time budget (every push runs 10^4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: 10^5 steps partitioned
+        run: GOTOGETHER_SCALE_STEPS=100000 go test -count=1 -run '^TestPartitionAtVolume$' -v ./validate
+
   core-mutants:
     # the toolkit's own mutation testing: each core package's unit tests run
     # once per woven mutant; survivors are code they do not constrain

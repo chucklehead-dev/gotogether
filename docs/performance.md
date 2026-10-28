@@ -183,6 +183,30 @@ the five the tamper tests make on purpose. The runs the evaluator
 refused (a model's runtime error such as a missing map key, a literal
 of a constructor its model lacks) went to quint.
 
+### 8. A day's log judged by entity (I19)
+
+A synthetic payments day (examples/migrate-payments) took 0.6 s at 10²
+steps, 63 s at 10³ and over ten minutes at 10⁴, compile cached: 98% of
+the profile in the invariants judged after every step over every
+charge so far (`walk`'s check), which grows with the log, and cubic for
+an invariant over pairs of charges. The fix is not a faster evaluator
+but less to judge: `partition:` in the binding judges each entity's
+steps alone, once the evaluator's footprint shows the model factors by
+it on the run (DESIGN §66). Then 10², 10³, 10⁴ and 10⁵ steps take 0.4,
+2.9, 4.9 and 13.5 s (the CLI; with quint's sample of the passes off,
+10⁴ 1.1 s and 10⁵ 10.4 s: linear). On the way, three costs linear in
+the state or the log at each step went: a lone successor's key (the
+whole state written out to deduplicate nothing), a scan of the parts
+for a name's collision when splitting by key, and Reconstruct's
+unsized slice and maps. Two costs the partition met and capped: quint
+typechecking a day's IDS (every charge) in each failing part's replay
+(constants no part reads take one part's value: 7 minutes to 4 s for a
+10⁴-step log with two failures), and quint's 1-in-50 audit of the
+passes (at most 64 of a trace's parts: 37 s to one process at 10⁵).
+
+CI's lines are not changed here: validate's and the example's new tests
+add a few CPU seconds, and the next runs set them.
+
 ## For the maintainer's decision
 
 ### D2. A check's actors in one quint process

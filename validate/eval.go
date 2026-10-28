@@ -30,6 +30,17 @@ type evaluator struct {
 	em  *binding.EvalModule
 	m   *qeval.Model
 	err error // why the binding has none
+	// consts, if set, are every plan's constants as values: a partitioned
+	// trace's parts share their whole's instance, parsed once
+	consts map[string]qeval.Value
+	// phase, if set, is told what a walk evaluates next: the step of
+	// position pos (its call and expect), or (judging) the vals over
+	// position pos's state; a partition's footprint is kept by it
+	phase func(pos int, judging bool)
+	// judgeAll: a walk judges every invariant in every state, and every
+	// eventual val, past the first false one, as quint's detail replay
+	// does (a footprint's walk: what those evaluations read)
+	judgeAll bool
 }
 
 // Process-wide: each evaluation module compiled once, by its text and
@@ -301,6 +312,9 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 
 // constants are plan's instance, as the evaluation module's constants.
 func (e *evaluator) constants(plan *binding.Plan) (map[string]qeval.Value, error) {
+	if e.consts != nil {
+		return e.consts, nil
+	}
 	consts := map[string]qeval.Value{}
 	for k, name := range e.em.Consts {
 		v, err := e.literal(plan.Constants[k])
@@ -345,17 +359,22 @@ func (e *evaluator) walk(c *Checker, consts map[string]qeval.Value, plan *bindin
 		s = states[0]
 	}
 	check := func(pos int) error {
-		if !invariants || w.violated >= 0 {
+		if !invariants || w.violated >= 0 && !e.judgeAll {
 			return nil
+		}
+		if e.phase != nil {
+			e.phase(pos, true)
 		}
 		for _, inv := range c.Binding.Invariants {
 			v, err := e.m.Eval(consts, s, e.em.Invariants[inv])
 			if err != nil {
 				return err
 			}
-			if v != qeval.Bool(true) {
+			if v != qeval.Bool(true) && w.violated < 0 {
 				w.violated = pos
-				return nil
+				if !e.judgeAll {
+					return nil
+				}
 			}
 		}
 		return nil
@@ -379,6 +398,9 @@ func (e *evaluator) walk(c *Checker, consts map[string]qeval.Value, plan *bindin
 				return w, err
 			}
 			args = append(args, v)
+		}
+		if e.phase != nil {
+			e.phase(i+1, false)
 		}
 		next, ok, err := e.m.Step(consts, s, e.em.Actions[call.Action], args...)
 		if err != nil {
@@ -404,14 +426,19 @@ func (e *evaluator) walk(c *Checker, consts map[string]qeval.Value, plan *bindin
 	}
 	w.final = s
 	if settled {
+		if e.phase != nil {
+			e.phase(len(plan.Calls), true)
+		}
 		for _, ev := range c.Binding.Eventually {
 			v, err := e.m.Eval(consts, s, e.em.Eventually[ev])
 			if err != nil {
 				return w, err
 			}
-			if v != qeval.Bool(true) {
+			if v != qeval.Bool(true) && w.eventual == "" {
 				w.eventual = ev
-				break
+				if !e.judgeAll {
+					break
+				}
 			}
 		}
 	}

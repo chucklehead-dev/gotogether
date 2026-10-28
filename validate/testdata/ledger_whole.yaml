@@ -1,0 +1,7 @@
+spec: ledger.qnt
+module: ledger
+
+constants:
+  ACCTS: '{{ set "acct" }}'
+  LIMIT: '{{ max "amount" }}'
+invariants: [nonNegative]

@@ -353,6 +353,7 @@ gotogether validate -binding app.binding.yaml server.jsonl requests.jsonl       
 gotogether validate -binding bank.binding.yaml -lost-suffix node-2 steps.jsonl      # a log that lost its tail (killed), which it cannot show
 gotogether validate -binding bank.binding.yaml -require-finish steps.jsonl          # a finished run, not a prefix: settled, no call pending
 gotogether validate -binding bank.binding.yaml -complete-through '*=2026-10-26T12:00:00Z' steps.jsonl  # a collector's watermark: a step due before it and absent is a defect, after it uncollected
+gotogether validate -binding payments.day.binding.yaml day.jsonl                    # partition: id in the binding: a day's log judged charge by charge, every failing one reported (the model checked to factor)
 gotogether validate -binding bank.binding.yaml -manifest run.json -run-info driver.json steps.jsonl  # a portable failure (gotogether.run/2)
 gotogether validate -replay run.json                                                 # judged again: its hashed inputs unchanged, the same verdict (validate/cli.Replay in Go)
 gotogether shrink -binding bank.binding.yaml -actions journey.json -- ./driver -play {actions} -steps {steps}  # a driver's failing actions, shrunk by rerunning it

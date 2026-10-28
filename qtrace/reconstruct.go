@@ -91,9 +91,11 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		rec string
 		seq uint64
 	}
-	seen := map[rk]int{} // the index in uniq of the record kept
+	// presized: grown by doubling, a 100,000-step log copied its steps
+	// about 17 times (I19)
+	seen := make(map[rk]int, len(steps)) // the index in uniq of the record kept
 	dupIssues := map[string][]Issue{}
-	uniq := steps[:0:0]
+	uniq := make([]Step, 0, len(steps))
 	for _, s := range steps {
 		if s.Seq != 0 {
 			k := rk{s.Recorder, s.Seq}
@@ -126,10 +128,10 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	recActors := map[string]map[string]bool{}
 	firstAt := map[string]time.Time{} // each recorder's first step's time
 	firstSeq := map[string]uint64{}
-	declared := map[string][]Step{} // loss records, by recorder
-	marks := map[string]time.Time{} // watermarks, by recorder (AllRecorders: every one's)
-	whole := map[string]bool{}      // recorders whose carried watermark says a log of the actor was whole
-	seqAt := map[rk]time.Time{}     // each record's time, by its seq: when a gap's steps were lost
+	declared := map[string][]Step{}            // loss records, by recorder
+	marks := map[string]time.Time{}            // watermarks, by recorder (AllRecorders: every one's)
+	whole := map[string]bool{}                 // recorders whose carried watermark says a log of the actor was whole
+	seqAt := make(map[rk]time.Time, len(uniq)) // each record's time, by its seq: when a gap's steps were lost
 	for _, s := range uniq {
 		if !s.CompleteThrough.IsZero() {
 			if s.CompleteThrough.After(marks[s.Recorder]) { // a watermark only rises

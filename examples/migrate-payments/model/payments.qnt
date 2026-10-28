@@ -24,18 +24,22 @@ module payments {
   type Charge = { key: str, authorized: int, captured: int, refunded: int, status: str }
 
   var charges: str -> Charge
+  // each idempotency key's charge, as charge.go's byKey holds it: an index,
+  // so that an authorization reads its key's entry, not every charge (the
+  // model factors by charge and key: payments.binding.yaml's partition)
+  var byKey: str -> str
 
   // every result an operation answers: ok, or a refusal's name
   pure val RESULTS = Set("ok", "replayed", "invalid", "not_found", "invalid_state", "exceeds")
 
-  action init = charges' = Map()
+  action init = all { charges' = Map(), byKey' = Map() }
 
   def known(id: str): bool = charges.keys().contains(id)
-  // the charge a key already made (none for the empty key)
-  def keyed(key: str): Set[str] = charges.keys().filter(c => key != "" and charges.get(c).key == key)
+  // a key that already made a charge (never the empty key)
+  def keyed(key: str): bool = key != "" and byKey.keys().contains(key)
   def remaining(id: str): int = charges.get(id).captured - charges.get(id).refunded
   // a refusal: the result names it, and nothing changes
-  action refused(result: str, name: str): bool = all { result == name, charges' = charges }
+  action refused(result: str, name: str): bool = all { result == name, charges' = charges, byKey' = byKey }
 
   // req R1: an authorization of a positive amount creates an authorized
   //   charge; any other amount is refused (invalid).
@@ -48,11 +52,12 @@ module payments {
   //   model rejected the log's replay (owner, 2026-10-28). Mutant replayCreatesCharge.
   action authorize(id: str, key: str, amount: int, result: str): bool = all {
     if (amount <= 0) refused(result, "invalid")
-    else if (keyed(key) != Set()) all { result == "replayed", keyed(key).contains(id), charges' = charges }
+    else if (keyed(key)) all { result == "replayed", byKey.get(key) == id, charges' = charges, byKey' = byKey }
     else all {
       result == "ok",
       not(known(id)),
       charges' = charges.put(id, { key: key, authorized: amount, captured: 0, refunded: 0, status: "authorized" }),
+      byKey' = if (key != "") byKey.put(key, id) else byKey,
     },
   }
 
@@ -71,7 +76,7 @@ module payments {
     else if (amount <= 0) refused(result, "invalid")
     else if (charges.get(id).status != "authorized") refused(result, "invalid_state")
     else if (amount > charges.get(id).authorized) refused(result, "exceeds")
-    else all { result == "ok", charges' = charges.setBy(id, c => { ...c, captured: amount, status: "captured" }) },
+    else all { result == "ok", charges' = charges.setBy(id, c => { ...c, captured: amount, status: "captured" }), byKey' = byKey },
   }
 
   // req R5: refunds of a charge add up to at most its capture.
@@ -90,8 +95,8 @@ module payments {
     if (not(known(id))) refused(result, "not_found")
     else if (amount <= 0) refused(result, "invalid")
     else if (charges.get(id).status != "captured") refused(result, "invalid_state")
-    else if (result == "exceeds") all { amount > remaining(id), charges' = charges }
-    else all { result == "ok", charges' = charges.setBy(id, c => { ...c, refunded: c.refunded + amount }) },
+    else if (result == "exceeds") all { amount > remaining(id), charges' = charges, byKey' = byKey }
+    else all { result == "ok", charges' = charges.setBy(id, c => { ...c, refunded: c.refunded + amount }), byKey' = byKey },
   }
 
   // req R6: only an authorized charge is voided; a captured one is refused (invalid_state).
@@ -99,7 +104,7 @@ module payments {
   action void(id: str, result: str): bool = all {
     if (not(known(id))) refused(result, "not_found")
     else if (charges.get(id).status != "authorized") refused(result, "invalid_state")
-    else all { result == "ok", charges' = charges.setBy(id, c => { ...c, status: "voided" }) },
+    else all { result == "ok", charges' = charges.setBy(id, c => { ...c, status: "voided" }), byKey' = byKey },
   }
 
   // req R7: a lookup answers with the charge as it is (the binding
@@ -112,6 +117,7 @@ module payments {
   action lookup(id: str, result: str): bool = all {
     result == (if (known(id)) "ok" else "not_found"),
     charges' = charges,
+    byKey' = byKey,
   }
 
   action step = {
@@ -127,9 +133,12 @@ module payments {
   val refundsWithinCapture = charges.keys().forall(c => charges.get(c).refunded <= charges.get(c).captured)
   // R3 (above): a capture never passes its authorization.
   val captureWithinAuthorization = charges.keys().forall(c => charges.get(c).captured <= charges.get(c).authorized)
-  // R2 (above): one key, one charge.
-  val oneChargePerKey = charges.keys().forall(a => charges.keys().forall(b =>
-    a == b or charges.get(a).key == "" or charges.get(a).key != charges.get(b).key))
+  // R2 (above): one key, one charge: each keyed charge is its key's (two
+  // charges of one key cannot both be), and each key's charge has it.
+  val oneChargePerKey = and {
+    charges.keys().forall(c => charges.get(c).key == "" or (byKey.keys().contains(charges.get(c).key) and byKey.get(charges.get(c).key) == c)),
+    byKey.keys().forall(k => charges.keys().contains(byKey.get(k)) and charges.get(byKey.get(k)).key == k),
+  }
   // req R8: a voided charge has nothing captured.
   //   code: charge.go capture (c.Status != "authorized" refuses a voided charge)
   //   assumed: no test voids then captures, no log line shows it; for the owner to confirm.

@@ -125,12 +125,28 @@ record for record, and violates R5.
 | `TestStagingSpans` | none | the staging spans, converted | `Conforms()`, no span unmatched; the draft's rules leave two |
 | `TestDraftLacksRecordedLookup` | none | the actions `auditsteps` records against each model | the draft lacks `lookup`; the model lacks none |
 | `TestProductionDayReplayedConforms` | none: the fixed code | the production day's requests, replayed and recorded | `Conforms()` |
+| `TestProductionDayAtVolume` | none | a synthetic day of 10⁴ steps (3,334 charges), the binding partitioned by charge (`partition: id`) | `Rejects("refund")` and `Violates("refundsWithinCapture")`, two charges' disagreements both reported, within a budget (judged whole: over 20 minutes, and the first alone) |
 | `TestMutant` (`forgetsPriorRefunds`), run by `TestMutants` | each refund checked against the capture alone | the legacy tests recorded; the production day replayed; the staging spans | the legacy tests pass and conform; the replay is the log, record for record, and `Violates("refundsWithinCapture")`; the spans conform: staging never refunded twice |
 | `TestMutant` (`replayCreatesCharge`) | a retried key makes a second charge | the same | the legacy tests pass and conform; the replay and the spans `Rejects("authorize")` |
 | `TestMutant` (`staleLookup`) | a lookup answers from a copy taken at the capture | the same | the legacy tests pass and conform; the replay and the spans `Mismatch("lookup")` |
 
 In every mutant the legacy suite passes: what catches them is the model
 judging the runs the system already makes.
+
+## A day at volume
+
+A day's log judged whole costs the sum of the model's states it passes
+through: every invariant over every charge so far, after every step
+(10⁴ steps: over 20 minutes). The charges are independent, so the log
+is judged charge by charge: `partition: id` in a binding (DESIGN §66),
+each charge's steps alone, in parallel, every failing charge reported
+(10⁵ steps: about 15 s). validate checks on each run that the model
+factors by the charge: R2's lookup of a key's charge goes through an
+index (`byKey`, as charge.go keeps it), not a scan of every charge, and
+`oneChargePerKey` judges one charge, or one key, at a time. A run where
+a step touches another charge's entries (the mutant
+`replayCreatesCharge`: one key, two charges) is refused, naming the
+step and the entry: judge that log whole, as this README's stages do.
 
 ## Run it
 

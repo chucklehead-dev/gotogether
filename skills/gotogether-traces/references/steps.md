@@ -82,7 +82,19 @@ hidden: [settleAny]              # nullary actions no step records: searched bet
 hiddenDepth: 4                   # at most this many between two recorded steps (default 4)
 snapshot: restore                # an action of the whole state: a trace that starts with one starts from its state
 resume: resumeAny                # without a snapshot: the states a log that lost its head may start in
+# partition: account             # a serial log of independent entities: each one's steps judged alone (not with hidden, resume, restart)
 ```
+
+`partition` names the argument that says whose each step is (a charge's
+id, an account) in a serial log: each entity's steps are judged alone,
+in parallel and in the whole log's instance, and every failing entity
+is reported, where a log judged whole costs the sum of its states and
+stops at its first failure. validate checks on each run that the model
+factors by it (each step reads and writes only map entries no other
+entity's step writes, each invariant a forall over a map's keys judging
+one entry) and refuses the run otherwise, naming the step and the entry:
+drop `partition` for that log. A client history is partitioned by its
+search's key instead (`-linearize-key`).
 
 `hidden` names actions the system takes without recording them (a
 background gossip, a timer): the Go evaluator searches the states they

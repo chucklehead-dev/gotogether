@@ -203,6 +203,10 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		return nil, fmt.Errorf("a search (Linearize, ResolvePending) with hidden actions (%s): not combined, each candidate would be a search over the hidden actions' states; check the recorded order, or record the steps the search would order where they take effect",
 			strings.Join(c.Binding.Hidden, ", "))
 	}
+	if c.Binding.Partition != "" && (opt.Linearize || opt.ResolvePending) {
+		return nil, fmt.Errorf("a search (Linearize, ResolvePending) of a binding that partitions the log (partition: %s): not combined, a partition being a serial log's; "+
+			"a client history is partitioned by the search's key (-linearize-key, qtest.LinearizeByKey)", c.Binding.Partition)
+	}
 	if opt.Linearize || opt.ResolvePending {
 		traces, _ := reconstruct(c.Binding, steps)
 		for _, tr := range traces {
@@ -597,13 +601,25 @@ func partitions(tr *qtrace.Trace, key string, snapshot bool) []*qtrace.Trace {
 	if key == "" {
 		return []*qtrace.Trace{tr}
 	}
-	var out []*qtrace.Trace
-	by := map[string]*qtrace.Trace{}
-	of := func(s qtrace.Step) *qtrace.Trace {
+	out, _, missing := splitTrace(tr, key, snapshot)
+	if missing != nil {
+		fail("LinearizeByKey(%q): step %s has no %s argument: partition only a history whose every step names one key "+
+			"(a step over several keys, a scan, makes them dependent: use Linearize)", key, missing.String(), key)
+	}
+	return out
+}
+
+// splitTrace is tr split by the value of argument key, as partitions
+// says, and each part's steps' indices in tr.Steps (the snapshot's, 0,
+// first in each); missing is a step (or a pending call, index -1) with
+// no such argument, and nothing else then.
+func splitTrace(tr *qtrace.Trace, key string, snapshot bool) (out []*qtrace.Trace, at [][]int, missing *qtrace.Step) {
+	by := map[string]int{}
+	names := map[string]bool{} // the parts' names: a lookup, not a scan of the parts (a day's log has a part per charge)
+	of := func(s qtrace.Step) int {
 		v, ok := s.Args[key]
 		if !ok {
-			fail("LinearizeByKey(%q): step %s has no %s argument: partition only a history whose every step names one key "+
-				"(a step over several keys, a scan, makes them dependent: use Linearize)", key, s.String(), key)
+			return -1
 		}
 		actor := tr.Actor
 		if actor == "" {
@@ -611,39 +627,51 @@ func partitions(tr *qtrace.Trace, key string, snapshot bool) []*qtrace.Trace {
 		}
 		name := fmt.Sprintf("%s %s=%v", actor, key, v)
 		id := fmt.Sprintf("%T:%v", v, v) // 1 and "1" are two keys
-		p := by[id]
-		if p == nil {
-			if slices.ContainsFunc(out, func(o *qtrace.Trace) bool { return o.Actor == name }) {
+		p, ok := by[id]
+		if !ok {
+			if names[name] {
 				name += fmt.Sprintf(" (%T)", v)
 			}
-			p = &qtrace.Trace{Actor: name, Settled: tr.Settled}
+			names[name] = true
+			p = len(out)
 			by[id] = p
-			out = append(out, p)
+			out = append(out, &qtrace.Trace{Actor: name, Settled: tr.Settled})
+			at = append(at, nil)
 		}
 		return p
 	}
-	steps := tr.Steps
+	first := 0
 	if snapshot {
-		steps = steps[1:]
+		first = 1
 	}
-	for _, s := range steps {
+	for i := first; i < len(tr.Steps); i++ {
+		s := tr.Steps[i]
 		p := of(s)
-		s.Actor = p.Actor
-		p.Steps = append(p.Steps, s)
+		if p < 0 {
+			return nil, nil, &tr.Steps[i]
+		}
+		s.Actor = out[p].Actor
+		out[p].Steps = append(out[p].Steps, s)
+		at[p] = append(at[p], i)
 	}
-	for _, s := range tr.Pending {
+	for i := range tr.Pending {
+		s := tr.Pending[i]
 		p := of(s)
-		s.Actor = p.Actor
-		p.Pending = append(p.Pending, s)
+		if p < 0 {
+			return nil, nil, &tr.Pending[i]
+		}
+		s.Actor = out[p].Actor
+		out[p].Pending = append(out[p].Pending, s)
 	}
 	if snapshot {
-		for _, p := range out {
+		for p, part := range out {
 			s := tr.Steps[0]
-			s.Actor = p.Actor
-			p.Steps = append([]qtrace.Step{s}, p.Steps...)
+			s.Actor = part.Actor
+			part.Steps = append([]qtrace.Step{s}, part.Steps...)
+			at[p] = append([]int{0}, at[p]...)
 		}
 	}
-	return out
+	return out, at, nil
 }
 
 // order finds an order of one actor's steps the model accepts, within

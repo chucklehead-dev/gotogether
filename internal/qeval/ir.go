@@ -91,6 +91,8 @@ type Model struct {
 	ren *renames
 	// confirm memoizes Unconfirmed (confirm.go)
 	confirm *confirmMemo
+	// fp, if set, records what evaluations read and write (Tracking)
+	fp *Footprint
 }
 
 // AsReplayed is m judging steps as a quint replay of them takes each:

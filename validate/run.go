@@ -250,7 +250,11 @@ func (r *Report) Summary() string {
 		}
 		s += fmt.Sprintf("issue: %s\n", i)
 	}
-	for _, a := range r.Actors {
+	folded, actors := foldPartitions(r.Actors)
+	for _, l := range folded {
+		s += l + "\n"
+	}
+	for _, a := range actors {
 		sum := a.Summary()
 		if len(r.Actors) == 1 && a.Actor == "default" {
 			// one actor, unnamed: "actor default" on every report read as
@@ -273,6 +277,12 @@ func reconstruct(b *binding.Binding, steps []qtrace.Step) ([]*qtrace.Trace, []qt
 func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
 	if c.compiled != nil {
 		return c.checkCompiled(ctx, steps)
+	}
+	if c.partitionedChecks() {
+		// each entity's trace an item of a batch: judged in parallel, the
+		// failures' quint replays shared
+		reps, errs := c.CheckBatch(ctx, [][]qtrace.Step{steps}, 0)
+		return reps[0], errs[0]
 	}
 	traces, issues := reconstruct(c.Binding, steps)
 	rep := &Report{Issues: issues}

@@ -130,6 +130,17 @@ type Binding struct {
 	// confirms its verdict): it conforms if some admitted state explains
 	// the rest. A snapshot step, where there is one, is used instead.
 	Resume string `yaml:"resume"`
+	// Partition is the argument naming each step's entity (a charge's id,
+	// an account), for a serial log of entities the model treats
+	// independently: each entity's steps are judged alone, in parallel, in
+	// the whole log's instance, every failing entity reported (a log
+	// judged whole stops at its first failure). Sound only if the model
+	// factors by it: a step of one entity reads and writes only entries,
+	// keyed by its own, of the state's maps, and each invariant is a
+	// conjunction of foralls over a map's keys judging an entry at a time.
+	// validate checks it on each run's own evaluation and refuses a run
+	// where it does not hold, naming the step and the entry (DESIGN §66).
+	Partition string `yaml:"partition"`
 	// Simulate says what the model alone does with its invariants
 	// (`gotogether simulate`): which it guarantees, which it allows to fail.
 	Simulate *Simulation `yaml:"simulate"`
@@ -585,6 +596,20 @@ func (b *Binding) Lint(m *Model) []string {
 			if r := readVars(m, a); r != "" {
 				errs = append(errs, fmt.Sprintf("snapshot %s reads %s: a trace starts in it from no state, so it assigns every variable from its parameters alone", a, r))
 			}
+		}
+	}
+	if a := b.Partition; a != "" {
+		var has []string
+		for _, act := range slices.Sorted(maps.Keys(m.Actions)) {
+			if slices.ContainsFunc(m.Actions[act], func(p Param) bool { return p.Name == a }) {
+				has = append(has, act)
+			}
+		}
+		switch {
+		case len(has) == 0:
+			errs = append(errs, fmt.Sprintf("partition %s: no action of %s takes a parameter %s: name the argument each step's entity is (a charge's id)", a, m.Module, a))
+		case len(b.Hidden) > 0 || b.Resume != "" || b.Restart != "":
+			errs = append(errs, fmt.Sprintf("partition %s with hidden, resume or restart: not combined, since each is a step of no entity's, or of every one's; judge the log whole", a))
 		}
 	}
 	if a := b.Resume; a != "" {

@@ -3321,6 +3321,40 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### I19: validation at production volume
+
+The adopter's blocker 2 (eleventh review): a synthetic payments day
+took 1.5 s at 90 steps, 54 s at 900 and over ten minutes at 9,000. The
+profile put it in the invariants, not the evaluator's replay: each
+state's are judged over every charge so far, a cost the sum of the
+states' sizes, and payments' `oneChargePerKey` compared every pair of
+charges (cubic in the log). Done (DESIGN §66):
+
+- the evaluator's linear per-step costs gone (a lone successor's key, a
+  scan of the parts in splitting a log by key) and Reconstruct presized;
+- `partition:` in the binding: a serial log judged entity by entity, in
+  parallel, every failing entity reported (the continuation after a
+  failure), the passes one line, each failure's module and `nav` line
+  kept;
+- the factoring checked on each run by the evaluator's footprint of the
+  entries every step and judged val reads and writes, and the run
+  refused, naming the step and the entry, where it does not hold;
+  checked against the whole log on random logs
+  (`TestPartitionAgreesWithWhole`), ablations failing it;
+- examples/migrate-payments' R2 restated with the code's own index
+  (`byKey`), so the model factors by charge; `TestProductionDayAtVolume`
+  judges 10⁴ steps with two planted disagreements, both reported;
+- budget tests: 10⁴ steps on every push, 10⁵ in the nightly (`volume`).
+
+The curve (CLI, compile cached): 10², 10³, 10⁴, 10⁵ steps took 0.6 s,
+63 s, over 10 minutes and (by its growth) days before; partitioned,
+0.4 s, 2.9 s, 4.9 s and 13.5 s, the Go side of the last 10.4 s.
+Left: a log that cannot be partitioned (one whose entities interact) is
+still judged at the sum of its states; incremental invariants (only the
+entries a step changed judged again) would make it linear for
+entry-wise invariants, and are I19's sequel if a whole-log case needs
+it.
+
 ### H4: one vocabulary
 
 ROADMAP's H4 as built, with two leftovers of P7's review. The decisions

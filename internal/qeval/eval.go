@@ -91,10 +91,27 @@ type evaluation struct {
 	// every value of the choices it does not take (kvstore's write(key,
 	// value) once for each expected revision)
 	acts map[string][]succ
+	// fp, if set, records the state entries read and written (Tracking),
+	// tainted the maps of the state's variables (and those made from them
+	// by put, set, setBy) by variable, conj whether the expression about
+	// to be evaluated is at a conjunctive position of a judged val
+	// (Footprint.Judging), cur the conj of the node name, app or builtin
+	// evaluates, and privileged the vals whose value took a forall over a
+	// state map's keys as each entry's (cached: a use of one elsewhere is
+	// whole)
+	fp         *Footprint
+	tainted    map[*Map]string
+	conj, cur  bool
+	privileged map[int64]bool
+	perEntry   int // the foralls taken as each entry's so far
 }
 
 func (m *Model) evaluation(consts map[string]Value, s State) *evaluation {
-	return &evaluation{m: m, consts: consts, state: s, cache: map[int64]Value{}}
+	ev := &evaluation{m: m, consts: consts, state: s, cache: map[int64]Value{}, fp: m.fp}
+	if ev.fp != nil && s != nil {
+		ev.conj = ev.fp.Judging
+	}
+	return ev
 }
 
 // Eval is the value of the definition name (a val, or a def applied to
@@ -136,6 +153,12 @@ func (m *Model) Successors(consts map[string]Value, s State, name string, args .
 				return nil, unsupported(name, "leaves %s unassigned", v)
 			}
 			st[v] = x
+		}
+		if len(succs) == 1 {
+			// one successor, nothing to deduplicate: its key would write
+			// the whole state, a cost linear in it at every step (I19)
+			out = append(out, st)
+			continue
 		}
 		if k := m.Key(st); !seen[k] {
 			seen[k] = true
@@ -313,6 +336,9 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 		switch e.Opcode {
 		case "assign":
 			v := ev.varName(e.Args[0])
+			if ev.fp != nil {
+				return []succ{{a: assignment{v: ev.assigned(v, e.Args[1], en)}}}, nil
+			}
 			return []succ{{a: assignment{v: ev.eval(e.Args[1], en)}}}, nil
 		case "actionAll":
 			out := []succ{{a: assignment{}}}
@@ -649,6 +675,10 @@ func (ev *evaluation) eval(e *Expr, en *env) Value {
 	if ev.depth > 10000 {
 		throw(unsupported("recursion", "deeper than 10000"))
 	}
+	// a conjunctive position is the node's alone: its children are not,
+	// but where it says so (and's, a let's body, a val's or def's)
+	conj := ev.conj
+	ev.conj = false
 	switch e.Kind {
 	case "int":
 		n, err := strconv.ParseInt(e.Value.String(), 10, 64)
@@ -661,6 +691,7 @@ func (ev *evaluation) eval(e *Expr, en *env) Value {
 	case "str":
 		return Str(e.Value.String())
 	case "name":
+		ev.cur = conj
 		return ev.name(e, en)
 	case "lambda":
 		return &Lambda{params: paramNames(e), body: e.Expr, env: en}
@@ -668,8 +699,11 @@ func (ev *evaluation) eval(e *Expr, en *env) Value {
 		if e.Opdef.Qualifier == "nondet" {
 			throw(unsupported("nondet", "a choice outside an action"))
 		}
-		return ev.eval(e.Expr, ev.bindLet(e.Opdef, en))
+		en = ev.bindLet(e.Opdef, en)
+		ev.conj = conj
+		return ev.eval(e.Expr, en)
 	case "app":
+		ev.cur = conj
 		return ev.app(e, en)
 	}
 	throw(unsupported(e.Kind, "an expression of this kind"))
@@ -707,10 +741,23 @@ func (ev *evaluation) name(e *Expr, en *env) Value {
 		if !ok {
 			throw(internal("%s has no value", d.Name))
 		}
+		if ev.fp != nil {
+			if m, ok := v.(*Map); ok {
+				ev.taint(m, d.Name) // its entries recorded as they are read
+			} else {
+				ev.whole("reads %s", d.Name)
+			}
+		}
 		return v
 	case "const":
 		d := ev.m.byID[r.decl]
 		if v, ok := ev.consts[d.Name]; ok {
+			if ev.fp != nil {
+				if ev.fp.Consts == nil {
+					ev.fp.Consts = map[string]bool{}
+				}
+				ev.fp.Consts[d.Name] = true
+			}
 			return v
 		}
 		throw(internal("constant %s has no value: give the instance's", d.Name))
@@ -725,11 +772,23 @@ func (ev *evaluation) name(e *Expr, en *env) Value {
 		if d.Qualifier == "action" {
 			throw(unsupported(e.Name, "an action as a value"))
 		}
+		conj := ev.cur
 		if v, ok := ev.cache[d.ID]; ok {
+			if ev.fp != nil && !conj && ev.privileged[d.ID] {
+				ev.whole("%s, a forall over a state map's keys, used where it is not each entry's judgment", ev.m.Display(d.Name))
+			}
 			return v
 		}
+		before := ev.perEntry
+		ev.conj = conj
 		v := ev.eval(d.Expr, nil)
 		ev.cache[d.ID] = v
+		if ev.perEntry > before {
+			if ev.privileged == nil {
+				ev.privileged = map[int64]bool{}
+			}
+			ev.privileged[d.ID] = true
+		}
 		return v
 	}
 	throw(unsupported(e.Name, "a name of kind %s", r.kind))
@@ -757,6 +816,7 @@ func mul(a, b int64) int64 {
 
 // app is an operator applied: a definition of the model's, or a builtin.
 func (ev *evaluation) app(e *Expr, en *env) Value {
+	conj := ev.cur
 	if f, ok := en.lookup(e.Opcode); ok { // a let-bound operator, or one passed as a parameter
 		args := make([]Value, len(e.Args))
 		for i, a := range e.Args {
@@ -780,18 +840,36 @@ func (ev *evaluation) app(e *Expr, en *env) Value {
 		if d == nil {
 			throw(unsupported(e.Opcode, "a definition not in the IR"))
 		}
+		ev.conj = conj // a def's body is where its application is
 		v, err := ev.apply(d, args, nil, d.Name)
+		ev.conj = false
 		if err != nil {
 			throw(err)
 		}
 		return v
 	}
+	ev.cur = conj
 	return ev.builtin(e, en)
 }
 
 func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	op := e.Opcode
+	if ev.fp != nil {
+		if v, ok := ev.tracked(e, en, ev.cur); ok {
+			return v
+		}
+	}
 	arg := func(i int) Value { return ev.eval(e.Args[i], en) }
+	if ev.fp != nil && op != "ite" {
+		// a state map passed whole to any other builtin is read whole
+		arg = func(i int) Value {
+			v := ev.eval(e.Args[i], en)
+			if name := ev.taintOf(v); name != "" {
+				ev.whole("%s read whole (%s)", name, op)
+			}
+			return v
+		}
+	}
 	all := func() []Value {
 		out := make([]Value, len(e.Args))
 		for i := range e.Args {

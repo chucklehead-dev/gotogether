@@ -46,6 +46,7 @@ type Binding struct
     field HiddenDepth int `yaml:"hiddenDepth"`
     field Snapshot string `yaml:"snapshot"`
     field Resume string `yaml:"resume"`
+    field Partition string `yaml:"partition"`
     field Simulate *Simulation `yaml:"simulate"`
     field Dir string `yaml:"-"`
     field Path string `yaml:"-"`
@@ -2465,6 +2466,7 @@ type Report struct
     method (*Report) WithoutRefs() *Report
 type Result struct
     field Actor string
+    field Partition string
     field Steps int
     field Conforms Verdict
     field Failure *Failure

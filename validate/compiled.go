@@ -390,6 +390,28 @@ func (c *Checker) checkCompiled(ctx context.Context, steps []qtrace.Step) (*Repo
 		if o, err = o.resolve(); err != nil {
 			return nil, err
 		}
+		if c.partitionedChecks() {
+			// each entity's trace judged alone, as a quint check's partitions
+			pt, err := c.partition(t)
+			if err != nil {
+				return rep, err
+			}
+			pe := *e
+			pe.consts = pt.consts
+			for i, r := range c.partitionResults(pt) {
+				part, p := pt.parts[i], pt.plans[i]
+				if err := c.judgeCompiled(&pe, part, p, r, o); err != nil {
+					return rep, fmt.Errorf("actor %s: %w", part.Actor, err)
+				}
+				c.explainResult(p, r, o)
+				c.judgeWithin(part, r)
+				r.byEvaluator, r.compiled = true, true
+				judgeLost(c.Binding, r, part.Lost)
+				judgeAbsent(c.Binding, r, part.Lost, part.Gaps, nil, nil)
+				rep.Actors = append(rep.Actors, r)
+			}
+			continue
+		}
 		var r *Result
 		if len(c.Binding.Hidden) > 0 || c.resumes(t) {
 			r = newResult(c.Binding, t, &binding.Plan{})

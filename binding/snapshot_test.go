@@ -63,6 +63,30 @@ func TestLintResume(t *testing.T) {
 	}
 }
 
+// A partition names a parameter of some action, and does not combine
+// with hidden actions, a resume or a restart: lint says which.
+func TestLintPartition(t *testing.T) {
+	skip.Quint(t)
+	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		b    Binding
+		want string
+	}{
+		{Binding{Partition: "a"}, ""},
+		{Binding{Partition: "id"}, "partition id: no action of snap takes a parameter id"},
+		{Binding{Partition: "a", Resume: "resumeAny"}, "partition a with hidden, resume or restart: not combined"},
+		{Binding{Partition: "a", Restart: "sameY"}, "partition a with hidden, resume or restart: not combined"},
+	} {
+		got := strings.Join(c.b.Lint(m), "\n")
+		if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("partition %s: lint %q, want %q", c.b.Partition, got, c.want)
+		}
+	}
+}
+
 // A snapshot step first in its trace is the plan's start, not a call; one
 // anywhere else is skipped, with an issue that says so.
 func TestPlanSnapshotStart(t *testing.T) {

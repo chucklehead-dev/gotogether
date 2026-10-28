@@ -232,7 +232,20 @@ says when a real run hit the design's limit.
   work. For long runs:
   - prefer ghosts to scans (4) and bounded mechanism state (6);
   - leave out `-itf` (the default) unless you need the ITF of a
-    conforming run.
+    conforming run;
+  - for a serial log of independent entities (a day of charges),
+    partition it: `partition: id` in the binding judges each entity's
+    steps alone, in parallel, every failing entity reported (a log judged
+    whole stops at its first failure). Its cost is linear in the log
+    (10⁵ payment steps in about 15 s, where 10⁴ judged whole took over
+    20 minutes). The model must factor by the entity, which validate
+    checks on each run and refuses with the step and the entry where it
+    does not: keep the state in maps keyed by the entity, reach another
+    key through an index map (`byKey: str -> str`, not
+    `charges.keys().filter(...)`), and state invariants as foralls over a
+    map's keys that judge one entry each. A bug that crosses entities
+    (one key making two charges) is then a refusal, not a verdict: judge
+    that log whole.
 
   Measured on a 2841-step log, the four unique-id models take 64 s, 20 s,
   21 s and 7 s (README of examples/glomers).
