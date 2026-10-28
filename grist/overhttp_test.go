@@ -65,15 +65,33 @@ func TestCallOverHTTP(t *testing.T) {
 	if len(served) != 3 || len(byAction(sink.Steps(), "bankPayServed")) != 0 {
 		t.Fatalf("served %v: want three, all recorded by the bank's own recorder", served)
 	}
-	want := map[int64]string{1: "ok", 2: "declined", 3: "unknown"}
+	// Each call is known by its amount, not by its trigger's position: the
+	// processor appends its outcome events while the adds are still being
+	// executed, so the declined payment's grist.failed may land before the
+	// third add's amount (which is then trigger 4, not 3).
+	log, _, err := st.Read(context.Background(), "t1", grist.Selector{Types: []string{"amount", "grist.failed", "grist.unknown"}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	posOf := map[int64]int64{}
+	var outs []grist.Stored
+	for _, e := range log {
+		var am amount
+		if e.Type == "amount" && json.Unmarshal(e.Body, &am) == nil {
+			posOf[int64(am.N)] = int64(e.Pos)
+		} else if e.Type != "amount" {
+			outs = append(outs, e)
+		}
+	}
+	want := map[int64]string{5: "ok", 13: "declined", 7: "unknown"}
 	byTrigger := map[int64]qtrace.Step{}
 	for _, c := range calls {
-		tr := c.Args["trigger"].(int64)
+		tr, n := c.Args["trigger"].(int64), c.Args["amount"].(int64)
 		byTrigger[tr] = c
-		if c.Outcome != want[tr] {
-			t.Errorf("caller step of trigger %d: outcome %q, want %q", tr, c.Outcome, want[tr])
+		if c.Outcome != want[n] || tr != posOf[n] {
+			t.Errorf("caller step of amount %d at trigger %d: outcome %q, want %q at the amount's position %d", n, tr, c.Outcome, want[n], posOf[n])
 		}
-		if tr == 1 && c.Args["ref"] != "ref-payer/t1/1" {
+		if n == 5 && c.Args["ref"] != fmt.Sprint("ref-payer/t1/", tr) {
 			t.Errorf("caller step %v: want the bank's ref, decoded from its answer", c)
 		}
 	}
@@ -84,12 +102,9 @@ func TestCallOverHTTP(t *testing.T) {
 			t.Errorf("served step %+v: want the caller's tenant and process, the bank's recorder, the caller's key, processor, request and order.pos (%+v)", s, c)
 		}
 	}
-	log, _, err := st.Read(context.Background(), "t1", grist.Selector{Types: []string{"grist.failed", "grist.unknown"}}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := outcomes(log); len(got) != 2 || !strings.HasPrefix(got[0], "grist.failed") || !strings.HasPrefix(got[1], "grist.unknown") {
-		t.Errorf("outcome events %v: want the declined payment grist.failed and the failed one grist.unknown (a 500: it may have happened)", got)
+	if got := outcomes(outs); len(got) != 2 || !strings.HasPrefix(got[0], "grist.failed") || !strings.HasPrefix(got[1], "grist.unknown") ||
+		!strings.Contains(got[0], fmt.Sprintf(`"trigger":%d`, posOf[13])) || !strings.Contains(got[1], fmt.Sprintf(`"trigger":%d`, posOf[7])) {
+		t.Errorf("outcome events %v: want the declined payment's (trigger %d) grist.failed and the failed one's (trigger %d) grist.unknown (a 500: it may have happened)", got, posOf[13], posOf[7])
 	}
 }
 
