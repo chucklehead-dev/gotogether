@@ -4249,13 +4249,13 @@ The navigators share the explanation and the transitions.
   call), a failing run's `navigate:` line and validate's (the model
   before the rejected or mismatched step). The TUI (P5's people's front
   end, Charm's libraries) is a module of its own, kept out of the core:
-  it reads the same types (validate.Node, validate.RunNode) and drives the
+  it reads the same types (validate.Node, navproto.Node) and drives the
   same commands.
 - **Sessions** (`GOTOGETHER_NAV=serve`): a node cost a go test process
   (seconds: the build check, the binary's start, quint's checker), where
   its replay is milliseconds. A session is the test binary answering
-  requests (`validate.RunRequest`: a node, options to follow, fold,
-  save) a line at a time with `validate.RunResponse` lines, the base run
+  requests (`navproto.Request`: a node, options to follow, fold,
+  save) a line at a time with `navproto.Response` lines, the base run
   made once and again first (the first-seed-twice check: a base that
   does not replay fails the test and the session's first line says so),
   the checker kept, every node still a replay from the start (a node
@@ -4330,7 +4330,7 @@ invariant and judges a code that never shows the scenario faithful.
   unambiguous, and a `when:` naming one fails with the `steps:` to write
   (quint refused it as a val, naming neither). A mapping takes name,
   when and steps alone: a misspelled key fails the load.
-- **The Go evaluator searches first** (`validate.Checker.Possible`,
+- **The Go evaluator searches first** (`model.Analyzer.Possible`,
   `qeval.Model.Reach`): from init by the model's step, distinct states
   by Key, a parent tree for the witness. The predicates and one-step
   sequences share one breadth-first search (a predicate's path is the
@@ -4499,7 +4499,7 @@ being what a simulated client's retries are reasoned about by.
 computes a state's transitions in microseconds, so a binding's model
 small enough is checked in every reachable state instead, with no
 quint process but the cached compile: `gotogether simulate -graph`, and
-`validate.Checker.Graph` beneath it.
+`model.Analyzer.Graph` beneath it.
 
 - **One search core** (internal/qeval/graph.go). P3's Reach and the
   explorer are one search: nodes by Key (and a sequence goal's progress),
@@ -4968,7 +4968,7 @@ alias of corpus/1, read forever: entries are checked into testdata
 **The navigation protocol.** A test binary is built against the user's
 core, `gotogether nav` and `gotogether-nav` against theirs. The session's
 first line and a one-shot node name `gotogether.nav/1`
-(`validate.NavProtocol`), and both navigators refuse a later one with
+(`navproto.Protocol`), and both navigators refuse a later one with
 `CheckNavProtocol`'s fix: install the navigator at the module's version.
 
 **The woven ABI.** qweave is a module of its own (no core requirement),
@@ -5405,8 +5405,8 @@ test of `-graph`'s verdicts walked `GraphResult` by hand (twophase's,
 crossdb's, requeue's), the walk of a report the conventions forbid for
 runs. And the binding's simulate section had three state bounds.
 
-- **One engine.** `validate.Simulate(binding, SimulateOptions)` (and
-  `Checker.Simulate`, reusing a checker's compile) is what the command
+- **One engine.** `model.Simulate(binding, SimulateOptions)` (and
+  `model.Analyzer.Simulate`, reusing a checker's compile) is what the command
   ran, moved whole from cmd/gotogether: quint's sampling, `Verify`
   (Apalache), `Graph` (the evaluator's state graph, its cross-check
   against quint's samples, deadlocks, actions never enabled, eventual
@@ -5457,3 +5457,41 @@ runs. And the binding's simulate section had three state bounds.
   checks them by the file's major). Both schemas stay in schemas/ (-1
   and -2), and `gotogether lint` checks each file against its own
   major's.
+
+## 70. validate split: the model alone and the nav protocol apart (I18)
+
+Review 11's architect (F6): validate was 86 exported identifiers of five
+concerns (runs judged, the model alone, the model navigator, the run
+navigator's wire protocol, manifests and step mutants), all to freeze as
+one v1 surface, and qnav imported all of it for the protocol's types.
+
+- **The import graph.** `validate/navproto` is a leaf (internal/formats
+  alone); `validate` judges runs; `validate/model` sits above it. qtest
+  imports all three (its claims over runs, `qtest.Model`'s over the
+  model, its run navigator's lines), the CLI the same, qnav navproto and
+  validate (for the model navigator). Nothing in validate imports model:
+  the trial move of graph.go, possible.go, live.go and simulate*.go
+  compiled validate untouched, so the analyses never were the runs'.
+- **One bridge, internal.** The analyses need the evaluator validate
+  compiles and caches per model (its quint compile, the D3 cache, the
+  compiled-artifact refusal), which validate's run judging uses through
+  methods taking its Checker. Rather than export that, or move it to a
+  package both import and turn every method into a function,
+  `validate/internal/evalshare` holds what the analyses read (`Eval`:
+  module, IR, error, a literal reader) and the two transition helpers
+  both use; validate sets `evalshare.EvaluatorOf` in its init, which
+  every importer of model has run (model imports validate).
+- **The API.** `model.Simulate(path, opts)` as before; for a checker in
+  hand, `model.For(c)` (or `model.New(path, opts)`, which owns its
+  checker) is an `Analyzer` with `Graph`, `Possible` and `Simulate`:
+  methods of the package's own type, since another package's type takes
+  none. Names lose the package they now have: `Report`, `Verdict`,
+  `Bound`; navproto's `Node`, `Request`, `Response`, `Session`,
+  `Protocol`, `CheckProtocol`. navproto has its own `NamedValue` (a
+  wire type), validate keeps its explanation's.
+- **What stayed.** The model navigator (`Checker.Nav`, `Navigator`,
+  `Node`, `NavStart`, `SplitPath`) starts from a recorded run's state
+  (its plan, a partition's whole trace, a resumed snapshot) and explains
+  disabled actions with the runs' explanations: half of validate's run
+  internals. It stays in validate until those have a package of their
+  own. Manifests and step mutants stay too: they are of runs.

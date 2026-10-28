@@ -3435,6 +3435,26 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### I18: validate split
+
+Review 11's architect, F6. A trial move of graph.go, possible.go,
+live.go and simulate*.go to a package of their own left validate
+compiling untouched: nothing of the runs used them. What they used of
+validate was its evaluator (compiled per model, cached, refused for a
+compiled artifact), shortName and branchEvent: an internal bridge,
+validate/internal/evalshare, set by validate's init, carries them, so
+validate/model sits above validate with no export added to it. The
+model analyses are methods of model's own type over a validate.Checker
+(`model.For(c)`, `model.New`), as another package's type takes no
+methods. The run navigation protocol is validate/navproto, a leaf,
+names shortened (`navproto.Node`, `Request`, `Protocol`); qnav reads it
+there and keeps validate for the model navigator, which stayed: it
+starts from a recorded run's state and explains with the runs'
+explanations. TestMarkHot, of runs, went back to validate (hot_test.go);
+the model's tests moved with it and read validate's testdata. Left
+(ROADMAP I18): the navigator, `qtrace.Step`'s record fields, the knob
+rule.
+
 ### I17 (second half): Possible a claim, the walks gone, binding/2
 
 What the first half left, in its order. The function `qtest.Possible`

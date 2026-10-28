@@ -7,10 +7,9 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-28.** main at `bdf7854` (I17 done: `55d2504`, the
-published modules bumped to it in `bdf7854`), then this page's docs
-commit. CI green at `c40570f` (run 552); runs on I17's commits are
-watched to green. **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-28.** main at `3e54d77` (I18: `263333b`, the published
+modules bumped to it in `3e54d77`), then this page's docs commit. CI
+green through I17 (`9615f04`); I18's runs are watched to green. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
@@ -79,6 +78,7 @@ review" on.
 | I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
 | I16 | explicit quantifiers | 03fa005 |
 | I17 | `model.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
+| I18 | validate split: `validate/model`, `validate/navproto` (the model navigator, `qtrace.Step`'s record fields and the knob rule left) | 263333b |
 | I19 | validation at volume: `partition:` | f27adb0 |
 | I20 | on-call reports, `-json` | a985abe |
 | I21 | the Action, the image, `compile`/`-compiled` | 1c0e469, 7173581 |
@@ -162,7 +162,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I18, validate split (`validate/model`, `validate/navproto`, qnav on it; `qtrace.Step`'s record fields) | M, breaking | before tags; I17 has moved model analysis into validate/simulate*.go, the first thing to split out |
+| 1 | I18's rest: `qtrace.Step`'s record fields (Reconstruct's, zero in a Trace's steps, or a `Record` type), DESIGN's knob rule, the model navigator out of validate | S-M, breaking | before tags: the record fields are the step's v1 shape |
 | 2 | I24, grist's reads at scale (memo, fold and snapshot metrics, pruning, `Snapshots(every)` as an App option) | M | before grist's tag and a second real grist app |
 | 3 | I26, the generator warns on what an app forgot | S-M | a newcomer's silent bug; cheap |
 | 4 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
@@ -175,11 +175,12 @@ four, L more; agent-days in practice).
 Also proposed, not built: GR10b (a poller a daemon only while it waits)
 and GR10c (`Settle` naming down processes), both S and qenv-level.
 
-**Recommended next: I18, the validate split.** It is the one breaking
-API move left that the tag recommendation lists (I1-I10, I12-I14,
-I16-I18): I17 is done, and its engine (validate/simulate*.go, the model
-claims' only dependency) is the first piece to move to `validate/model`.
-Then R5 becomes the maintainer's call alone.
+**Recommended next: I18's rest, then the maintainer's R5.** The
+validate split is on main (`validate/model`, `validate/navproto`); what
+I18 named "with it" is the last breaking shape before tags:
+`qtrace.Step`'s record fields, and the knob rule written down. The
+model navigator can stay in validate for v1 (it is of runs as much as
+of the model).
 
 ## 5. Decisions for the maintainer
 
@@ -189,7 +190,7 @@ there). **Open:**
 - **Tags and v0.1 (R5).** v0.1.0 of every published module once I1-I10,
   I12-I14 and I16-I18 are in; tag order gosim, core, qweave, qhegel,
   qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
-  Left before then: I18 (whether I12's M half
+  Left before then: I18's rest (whether I12's M half
   and I15's rest must come first is the maintainer's call).
 - **Format and ABI policy** (DESIGN §63, built on the recommendation).
   Two choices to confirm: derived files (manifests, evidence) read

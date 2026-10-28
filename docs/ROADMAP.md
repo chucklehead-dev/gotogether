@@ -225,7 +225,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   `ClientErrors` folded into the negation.
 - **I17. Model claims through one Expect (M, breaking for
   `qtest.Possible`). Done** (DESIGN §69, HISTORY "I17"): one engine for
-  the model alone, `validate.Simulate` (and `Checker.Simulate`), the CLI
+  the model alone, `model.Simulate` (and `model.Analyzer.Simulate`), the CLI
   a thin wrapper printing its report; `qtest.Model(t, binding).Expect(t,
   qtest.Proves(inv), qtest.Refutes(x).InAtMost(n), qtest.Live(val),
   qtest.NoDeadlocks(), qtest.Possible(scenario))`, three-valued with
@@ -237,17 +237,22 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   its invariants within three steps. Left: `qtest.Model` takes no
   options (constants, a bound of the test's own); a claim on the
   actions never enabled (twophase's walk checked none was).
-- **I18. validate split (M, breaking, before tags).** validate is 86
+- **I18. validate split (M, breaking, before tags). Done** but its
+  "with it" (DESIGN §70, HISTORY "I18"): model analysis in
+  `validate/model` (`Simulate`, `Analyzer`: `Graph`, `Possible`), above
+  validate through an internal bridge (validate/internal/evalshare); the
+  run navigation protocol in `validate/navproto` (a leaf, versioned),
+  which qnav reads; validate keeps runs, manifests, step mutants and the
+  model navigator (it starts from a run's state). Left: the model
+  navigator out of validate once the run internals it shares (plans,
+  partitions, explanations) have a package; `qtrace.Step`'s record
+  fields (invocation, settle, loss, watermark) said to be Reconstruct's,
+  zero in a Trace's steps, or a `Record` type of their own; DESIGN's
+  rule for a new knob ("a struct for a run's knobs, an Option for a
+  test's"). What it was: validate is 86
   exported identifiers and 10.7k lines: runs, model checking, the model
   navigator, the run navigator's wire protocol (qnav imports validate
   for it), manifests, step mutants, all to freeze as one v1 surface.
-  Model analysis to a package of its own (`validate/model`), the
-  navigation protocol to `validate/navproto` with I13's version, qnav
-  on it; validate keeps runs. With it: `qtrace.Step`'s record fields
-  (invocation, settle, loss, watermark) said to be Reconstruct's, zero
-  in a Trace's steps, or a `Record` type of their own; DESIGN's rule
-  for a new knob ("a struct for a run's knobs, an Option for a
-  test's").
 
 ### Adoption: scale and on-call
 
@@ -806,7 +811,7 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   Emit a rule blocks fails visibly (block-until for processors later).
 - **P2. A state-graph explorer over the Go evaluator (M-L). Done**
   (DESIGN §61; HISTORY: "P2: the state-graph explorer"; `gotogether
-  simulate -graph`, `validate.Checker.Graph`). A
+  simulate -graph`, `model.Analyzer.Graph`). A
   breadth-first graph of a model from Init with qeval's Successors (made
   to return labelled edges: the action and its picks) and Key, dense ids,
   a parent tree for shortest counterexamples, bounded by states and
@@ -1205,12 +1210,12 @@ The Y track (Y1–Y12) is done and in HISTORY ("Fifth review: what X left
 Consider: the nightly's confidence per claim ((1−p̂)ⁿ for Some, the
 binomial tail for InAtLeast), and fleetrollout, edgepublish and gosim in
 it; simulate's and evidence's logic as library calls
-(`validate.Simulate`, `qtest.Suite`); a `Machine` grouping processes for
+(`model.Simulate`, `qtest.Suite`); a `Machine` grouping processes for
 disks, clocks and partitions; bare expectations' arity (`Conforms` every
 run, the rest some) and contradictory pairs; "run 3" not "schedule 3";
 `Reaches` by prefix as Rates are.
 
-Taken into the I track: `validate.Simulate` (I17), bare expectations'
+Taken into the I track: `model.Simulate` (I17), bare expectations'
 arity (I16), the nightly's confidence per claim (I9).
 
 ## Eighth review: whole product (S)
