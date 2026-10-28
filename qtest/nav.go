@@ -506,7 +506,11 @@ func actorStates(cc *validate.Checker, steps []qtrace.Step) []validate.ActorStat
 
 // navCommand is how a failing run's report opens its failing node.
 func (x *Exploration) navCommand(r *Run) string {
-	return fmt.Sprintf("gotogether nav -run '%s:%s' -at fail (in the test's package directory; -json for agents)", x.ref(), r.ID())
+	env := ""
+	if m := Mutant(); m != "" { // the navigator builds the mutant's binary with its overlay
+		env = MutantEnv + "=" + m + " "
+	}
+	return fmt.Sprintf("%sgotogether nav -run '%s:%s' -at fail (in the test's package directory; -json for agents)", env, x.ref(), r.ID())
 }
 
 // Unwrap implements qenv.Wrapper: the forcing chooser's error is the

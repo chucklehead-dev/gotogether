@@ -190,3 +190,28 @@ func TestAllFaultsReproduced(t *testing.T) {
 		t.Errorf("corpus without it %q", got)
 	}
 }
+
+// A run of a mutant's binary is reproduced through its harness (the
+// subtest Mutants.Run names in GOTOGETHER_MUTANT_TEST, which rebuilds it
+// with its overlay), or, in a binary built by hand, with the mutant
+// named; its navigate line names the mutant, which the navigator builds.
+func TestMutantRunReproduced(t *testing.T) {
+	x := &Exploration{test: "TestMutant", id: 1}
+	r := &Run{origin: origin{kind: "seed", seed: 3}}
+	t.Setenv(MutantEnv, "noDedupe")
+	t.Setenv("GOTOGETHER_MUTANT_TEST", "^TestMutants$/^noDedupe$")
+	if got, want := x.reproduce(r), "GOTOGETHER_RUN='TestMutant#1:seed=3' go test -run '^TestMutants$/^noDedupe$'"; got != want {
+		t.Errorf("reproduce line %q, want %q", got, want)
+	}
+	t.Setenv("GOTOGETHER_MUTANT_TEST", "")
+	if got, want := x.reproduce(r), "GOTOGETHER_MUTANT=noDedupe GOTOGETHER_RUN='TestMutant#1:seed=3' go test -run '^TestMutant$'"; got != want {
+		t.Errorf("reproduce line by hand %q, want %q", got, want)
+	}
+	if got := x.navCommand(r); !strings.HasPrefix(got, "GOTOGETHER_MUTANT=noDedupe gotogether nav -run 'TestMutant#1:seed=3' -at fail") {
+		t.Errorf("navigate line %q", got)
+	}
+	t.Setenv(MutantEnv, "")
+	if got := x.navCommand(r); !strings.HasPrefix(got, "gotogether nav -run") {
+		t.Errorf("navigate line of the system as it is %q", got)
+	}
+}

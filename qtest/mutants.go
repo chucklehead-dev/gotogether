@@ -1,7 +1,6 @@
 package qtest
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,25 +9,21 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/internal/overlay"
 )
 
 // MutantEnv is the environment variable naming the mutant a test binary
 // runs as: Mutants.Run sets it for each mutant's binary. qmut reads the
 // same variable for a woven mutant's number (GOTOGETHER_MUTANT=3, or
 // list), which Mutant does not report.
-const MutantEnv = "GOTOGETHER_MUTANT"
+const MutantEnv = "GOTOGETHER_MUTANT" // overlay.Env
 
 // Mutant is the mutant this test binary runs as ("" for the system as
 // it is): what a TestMutant switches on, and what System's Mutant field
 // takes. It is MutantEnv's value, but for qmut's (a number, or list),
 // which name a woven mutant, not an overlay's.
-func Mutant() string {
-	m := os.Getenv(MutantEnv)
-	if _, err := strconv.Atoi(m); err == nil || m == "list" {
-		return ""
-	}
-	return m
-}
+func Mutant() string { return overlay.Mutant() }
 
 // Mutants are a package's planted bugs, the taught way to plant one by
 // hand: each a directory of Dir whose .go files replace the package's
@@ -76,7 +71,7 @@ type Mutants struct {
 
 func (m Mutants) dir() string {
 	if m.Dir == "" {
-		return filepath.Join("testdata", "mutants")
+		return filepath.FromSlash(overlay.Dir)
 	}
 	return m.Dir
 }
@@ -133,25 +128,12 @@ func (m Mutants) Names(t testing.TB) []string {
 // replaces none of the package's, fails t.
 func (m Mutants) Overlay(t testing.TB, name string) string {
 	t.Helper()
-	here, err := os.Getwd()
+	pkg := m.Package
+	if pkg == "" {
+		pkg = "."
+	}
+	path, err := overlay.Write(pkg, filepath.Join(m.dir(), name), t.TempDir())
 	if err != nil {
-		t.Fatal(err)
-	}
-	files, err := filepath.Glob(filepath.Join(here, m.dir(), name, "*.go"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("mutant %s has no files in %s", name, filepath.Join(m.dir(), name))
-	}
-	replace := map[string]string{}
-	for _, f := range files {
-		target := filepath.Join(here, m.Package, filepath.Base(f))
-		if _, err := os.Stat(target); err != nil {
-			t.Fatalf("%s replaces no file of the package: %v", filepath.Join(m.dir(), name, filepath.Base(f)), err)
-		}
-		replace[target] = f
-	}
-	b, _ := json.Marshal(map[string]any{"Replace": replace})
-	path := filepath.Join(t.TempDir(), "overlay.json")
-	if err := os.WriteFile(path, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -161,7 +143,10 @@ func (m Mutants) Overlay(t testing.TB, name string) string {
 // and runs Test in each, MutantEnv naming it (in parallel, -short and the
 // deadline passed on), failing with the binary's output when it fails or
 // runs no Test, and logging its summaries. In a mutant's own binary it
-// skips.
+// skips. A failing run's reproduce line in a mutant's binary runs this
+// test's subtest of the mutant, GOTOGETHER_RUN passed on to it, and its
+// navigate line names the mutant (GOTOGETHER_MUTANT=<name> gotogether
+// nav ...), which the navigator builds with its overlay.
 func (m Mutants) Run(t *testing.T) {
 	t.Helper()
 	if Mutant() != "" {
@@ -189,11 +174,12 @@ func (m Mutants) Run(t *testing.T) {
 			// a mutant's claims have their stated miss chance at their own
 			// seeds: a nightly's GOTOGETHER_SEEDS would only make it slow
 			for _, e := range os.Environ() {
-				if !strings.HasPrefix(e, "GOTOGETHER_SEEDS=") && !strings.HasPrefix(e, MutantEnv+"=") {
+				if !strings.HasPrefix(e, "GOTOGETHER_SEEDS=") && !strings.HasPrefix(e, MutantEnv+"=") && !strings.HasPrefix(e, overlay.TestEnv+"=") {
 					cmd.Env = append(cmd.Env, e)
 				}
 			}
-			cmd.Env = append(cmd.Env, MutantEnv+"="+name)
+			// a failing run's reproduce line reruns it from here
+			cmd.Env = append(cmd.Env, MutantEnv+"="+name, overlay.TestEnv+"=^"+strings.ReplaceAll(t.Name(), "/", "$/^")+"$")
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("mutant %s: %v\n%s", name, err, out)

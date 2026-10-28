@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/overlay"
 )
 
 // Reproducing one run. A failing run's report names it by its
@@ -251,7 +253,17 @@ func (x *Exploration) reproduce(r *Run) string {
 	if allFaults() { // the run's choices are every fault family's
 		env = "GOTOGETHER_ALL_FAULTS=1 "
 	}
-	return fmt.Sprintf("%sGOTOGETHER_RUN='%s:%s' go test -run '^%s$'", env, x.ref(), r.ID(), strings.ReplaceAll(x.test, "/", "$/^"))
+	pattern := "^" + strings.ReplaceAll(x.test, "/", "$/^") + "$"
+	if m := Mutant(); m != "" {
+		if harness := os.Getenv(overlay.TestEnv); harness != "" {
+			// a mutant's binary: its harness rebuilds it with its overlay,
+			// GOTOGETHER_RUN passed on
+			pattern = harness
+		} else {
+			env += MutantEnv + "=" + m + " " // built by hand: with its overlay
+		}
+	}
+	return fmt.Sprintf("%sGOTOGETHER_RUN='%s:%s' go test -run '%s'", env, x.ref(), r.ID(), pattern)
 }
 
 // universal reports whether c holds of every run, so a run alone can be

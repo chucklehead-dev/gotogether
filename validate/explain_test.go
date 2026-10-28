@@ -124,7 +124,7 @@ func TestRejectionReadsAsGrist(t *testing.T) {
 		t.Fatal(err)
 	}
 	step := qtrace.Step{Action: "addItem", Recorder: "r", Seq: 1, Actor: "t1", Process: "store", Outcome: "ok",
-		Args: map[string]any{"item": "pen", "qty": int64(1), "of": "x", "id": "c1", "principal": "p", "readPos": int64(0), "reads": []any{}},
+		Args: map[string]any{"item": "pen", "qty": int64(1), "of": "x", "id": "c1", "caller": "p", "readPos": int64(0), "reads": []any{}},
 		Obs:  map[string]any{"head": int64(1), "events": `["item-added"]`, "strs": `["pen", "x"]`, "ints": `[1]`, "causes": `[["command", "c1"]]`}}
 	rep, err := c.Check(context.Background(), []qtrace.Step{step})
 	if err != nil {

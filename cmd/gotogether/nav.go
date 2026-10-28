@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/input"
+	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -162,7 +163,8 @@ func printNode(out io.Writer, node any, asJSON bool, text string) (int, error) {
 }
 
 // navRun has the test binary of ref's test navigate it: go test in pkg
-// with GOTOGETHER_RUN naming the run and GOTOGETHER_NAV the node.
+// with GOTOGETHER_RUN naming the run and GOTOGETHER_NAV the node, built
+// with the overlay of the mutant GOTOGETHER_MUTANT names.
 func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, error) {
 	i := strings.LastIndex(ref[:strings.LastIndex(ref, ":")], "#")
 	test := ref[:i]
@@ -176,7 +178,15 @@ func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, er
 		at = "start"
 	}
 	pattern := "^" + strings.ReplaceAll(regexp.QuoteMeta(test), "/", "$/^") + "$"
-	cmd := exec.Command("go", "test", "-count=1", "-run", pattern, ".")
+	args := []string{"test", "-count=1"}
+	// a mutant's run (GOTOGETHER_MUTANT, as its navigate line sets it):
+	// its test binary built with its overlay, if it has one
+	if o, err := overlay.Of(pkg, overlay.Mutant(), dir); err != nil {
+		return nil, fmt.Errorf("nav -run %s: %w", ref, err)
+	} else if o != "" {
+		args = append(args, "-overlay", o)
+	}
+	cmd := exec.Command("go", append(args, "-run", pattern, ".")...)
 	cmd.Dir = pkg
 	cmd.Env = append(os.Environ(), "GOTOGETHER_RUN="+ref, "GOTOGETHER_NAV="+at, "GOTOGETHER_NAV_FOLLOW="+follow, "GOTOGETHER_NAV_OUT="+outFile)
 	if save {

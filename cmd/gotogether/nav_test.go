@@ -83,3 +83,27 @@ func TestNavFoldFlag(t *testing.T) {
 		t.Errorf("folded from init: %s", buf.String())
 	}
 }
+
+// A mutant's failing run navigates in the mutant: GOTOGETHER_MUTANT, as
+// its navigate line sets it, has the test binary built with the
+// mutant's overlay (examples/hello's noDedupe), whose TestMutant runs;
+// without it the system as it is skips TestMutant and writes no node.
+func TestNavMutantRun(t *testing.T) {
+	skip.Quint(t)
+	if testing.Short() {
+		t.Skip("builds hello's test binary with its mutant's overlay")
+	}
+	pkg := "../../examples/hello"
+	t.Setenv("GOTOGETHER_MUTANT", "noDedupe")
+	n, err := navRun("TestMutant#1:seed=1", pkg, "fail", "", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(n.Verdict, "rejects apply") {
+		t.Errorf("node %s: %s, want the mutant's rejected apply", n.ID, n.Verdict)
+	}
+	t.Setenv("GOTOGETHER_MUTANT", "")
+	if _, err := navRun("TestMutant#1:seed=1", pkg, "fail", "", false, false); err == nil || !strings.Contains(err.Error(), "wrote no node") {
+		t.Errorf("the system as it is: %v, want no node", err)
+	}
+}
