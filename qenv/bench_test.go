@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // The doubles' cost per operation, inside a simulation: a guard against
@@ -65,4 +66,73 @@ func BenchmarkServiceCall(b *testing.B) {
 	if err := s.Run(time.Hour); err != nil {
 		b.Fatal(err)
 	}
+}
+
+// BenchmarkNemesisSteps is the scheduler's cost per step with crashable
+// processes, whose crash nemeses are considered at every step: a
+// fault choice per family, at Seeded's rates (none fires: the rate is
+// zero, so the steps are comparable).
+func BenchmarkNemesisSteps(b *testing.B) {
+	c := qenv.NewSeeded(1)
+	c.Rates = c.Rates.Set("nemesis", 0)
+	s := qenv.New(c)
+	defer s.Close()
+	s.MaxSteps = b.N + 100
+	for i := range 4 {
+		s.Process(fmt.Sprint("p", i), true, func(ctx context.Context) {
+			for range b.N / 4 {
+				qenv.Yield(ctx)
+			}
+		})
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	if err := s.Run(time.Hour); err != nil {
+		b.Fatal(err)
+	}
+}
+
+// BenchmarkRecordInSim is a step recorded by a simulated task: through
+// its context's recorder (Context), and with context.Background(), found
+// through the task's goroutine (Background).
+func BenchmarkRecordInSim(b *testing.B) {
+	for _, bg := range []bool{false, true} {
+		name := "Context"
+		if bg {
+			name = "Background"
+		}
+		b.Run(name, func(b *testing.B) {
+			rec := qobs.NewRecorder(&qobs.MemorySink{})
+			s := qenv.New(qenv.WithContext(qenv.Nominal{}, qobs.WithRecorder(context.Background(), rec)))
+			defer s.Close()
+			s.MaxSteps = b.N + 100
+			s.Spawn("t", func(ctx context.Context) {
+				if bg {
+					ctx = context.Background()
+				}
+				for i := range b.N {
+					qobs.Record(ctx, "step", nil, "i", i)
+				}
+			})
+			b.ReportAllocs()
+			b.ResetTimer()
+			if err := s.Run(time.Hour); err != nil {
+				b.Fatal(err)
+			}
+		})
+	}
+}
+
+// BenchmarkOwnerLookupParallel is the goroutine-to-simulation lookup a
+// woven call or a step without a task in its context makes, from
+// parallel explorations' goroutines.
+func BenchmarkOwnerLookupParallel(b *testing.B) {
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		s := qenv.New(qenv.Nominal{})
+		defer s.Close()
+		for pb.Next() {
+			qenv.From(context.Background())
+		}
+	})
 }

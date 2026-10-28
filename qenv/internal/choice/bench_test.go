@@ -19,3 +19,12 @@ func BenchmarkSeededSchedule(b *testing.B) {
 		s.Choose("schedule", 4)
 	}
 }
+
+// BenchmarkSeededFaultDefault is a fault choice at DefaultRates, an
+// exploration's.
+func BenchmarkSeededFaultDefault(b *testing.B) {
+	s := NewSeeded(1)
+	for b.Loop() {
+		s.Choose("fault.rpc.payments.request", 3)
+	}
+}
