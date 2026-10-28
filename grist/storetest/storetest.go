@@ -322,22 +322,34 @@ func readsAgainstBruteForce(ctx context.Context, s store.Store) error {
 }
 
 // checkpoints: a checkpoint moves only from where it is (a
-// compare-and-set), alone or with events, and Checkpoint reads it.
+// compare-and-set), alone or with events, never past the head after the
+// batch (a trigger the log does not hold), and Checkpoint reads it.
 func checkpoints(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
+		return err
+	}
+	ev := store.Event{Type: "a-happened", Version: 1, Body: []byte(`{}`)}
+	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev, ev, ev}}); err != nil {
 		return err
 	}
 	if _, err := s.Append(ctx, "t1", store.Batch{Checkpoint: &store.CheckpointMove{Processor: "p", From: 0, To: 3}}); err != nil {
 		return fmt.Errorf("checkpoints: moving p from 0 to 3: %v", err)
 	}
 	_, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{{Type: "a-happened", Version: 1, Body: []byte(`{}`)}},
-		Checkpoint: &store.CheckpointMove{Processor: "p", From: 0, To: 5}})
+		Checkpoint: &store.CheckpointMove{Processor: "p", From: 0, To: 2}})
 	var cm *store.CheckpointMoved
 	if !errors.As(err, &cm) || cm.Found != 3 || cm.Expected != 0 {
 		return fmt.Errorf("checkpoints: moving p from 0 when it is at 3: %v, want a *store.CheckpointMoved found at 3", err)
 	}
-	if h, _ := s.Heads(ctx); h["t1"] != 0 {
+	if h, _ := s.Heads(ctx); h["t1"] != 3 {
 		return fmt.Errorf("checkpoints: a refused move appended its events (head %d)", h["t1"])
+	}
+	var cf *store.ConditionFailed
+	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}, Checkpoint: &store.CheckpointMove{Processor: "p", From: 3, To: 4}}); !errors.As(err, &cf) || !cf.Past {
+		return fmt.Errorf("checkpoints: moving p to 4, past the head before the batch (3): %v, want a *store.ConditionFailed, Past (a trigger the log does not hold)", err)
+	}
+	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{{Type: "a-happened", Version: 1, Body: []byte(`{}`)}}}); err != nil {
+		return err
 	}
 	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{{Type: "a-happened", Version: 1, Body: []byte(`{}`)}},
 		Checkpoint: &store.CheckpointMove{Processor: "p", From: 3, To: 4}}); err != nil {
@@ -443,8 +455,8 @@ func concurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 					q.Tags = q.Tags[:1]
 				}
 				a.cond = store.Condition{After: head, Selectors: []store.Selector{q}}
-				if j%2 == 0 {
-					a.move = &store.CheckpointMove{Processor: "p", From: cp, To: cp + 1}
+				if j%2 == 0 && head > cp {
+					a.move = &store.CheckpointMove{Processor: "p", From: cp, To: head} // a trigger the log holds
 				}
 				qenv.Sleep(ctx, time.Duration(r.IntN(3))*time.Millisecond) // a decision's think time: others commit meanwhile
 				// An append that lost the race before its commit (a
@@ -575,6 +587,85 @@ func waitWakes(ctx context.Context, s store.Store) error {
 		return fmt.Errorf("wait: Wait(t1, 0) did not return after an append moved the head to 1")
 	}
 	return s.Wait(ctx, "t1", 0) // past already: returns at once
+}
+
+// Rewinds is the contract's check of a store whose log goes backwards (a
+// failover's lost tail, a restore from a backup), for a tier that can
+// make one: backup takes a backup, restore puts it back. A waiter on the
+// head (Wait) and one on the step log (WaitSteps), each at what it read
+// after more commits, return at the restore (the log below what they
+// wait on), as they must for a node to see the rewind at once
+// (grist.ErrRewound), and the head and the step count are the backup's.
+// Run outside the Checks, by each tier's tests with its own backup.
+func Rewinds(ctx context.Context, s store.Store, backup, restore func(ctx context.Context) error) error {
+	sl, ok := s.(store.StepLog)
+	if !ok {
+		return fmt.Errorf("rewinds: %T is no store.StepLog", s)
+	}
+	if err := s.CreateTenant(ctx, "t1"); err != nil {
+		return err
+	}
+	ev := store.Event{Type: "a-happened", Version: 1, Body: []byte(`{}`)}
+	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}, Step: []byte(`{"n":1}`)}); err != nil {
+		return err
+	}
+	if err := backup(ctx); err != nil {
+		return err
+	}
+	for i := 2; i <= 3; i++ {
+		if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}, Step: []byte(fmt.Sprintf(`{"n":%d}`, i))}); err != nil {
+			return err
+		}
+	}
+	var head, steps, waiting atomic.Int32
+	qenv.Go(ctx, "storetest.headwaiter", func(ctx context.Context) {
+		waiting.Add(1)
+		if s.Wait(ctx, "t1", 3) == nil {
+			head.Store(1)
+		}
+	})
+	qenv.Go(ctx, "storetest.stepwaiter", func(ctx context.Context) {
+		waiting.Add(1)
+		if sl.WaitSteps(ctx, "t1", 3) == nil {
+			steps.Store(1)
+		}
+	})
+	if !qenv.WaitFor(ctx, func() bool { return waiting.Load() == 2 }, 10*time.Second) {
+		return fmt.Errorf("rewinds: the waiters never started")
+	}
+	qenv.Sleep(ctx, 50*time.Millisecond)
+	if head.Load() == 1 || steps.Load() == 1 {
+		return fmt.Errorf("rewinds: Wait(t1, 3) or WaitSteps(t1, 3) returned at the head and count it waited on, before the restore")
+	}
+	if err := restore(ctx); err != nil {
+		return err
+	}
+	if !qenv.WaitFor(ctx, func() bool { return head.Load() == 1 && steps.Load() == 1 }, 10*time.Second) {
+		return fmt.Errorf("rewinds: after the restore (head 1, 1 step row) Wait(t1, 3) returned %v and WaitSteps(t1, 3) %v: a wait that sleeps through a log going backwards hides the rewind from the node", head.Load() == 1, steps.Load() == 1)
+	}
+	_, h, err := s.Read(ctx, "t1", store.Selector{}, 0)
+	if err != nil {
+		return err
+	}
+	n, err := sl.StepCount(ctx, "t1")
+	if err != nil {
+		return err
+	}
+	if h != 1 || n != 1 {
+		return fmt.Errorf("rewinds: after the restore the head is %d and the step count %d, want the backup's 1 and 1", h, n)
+	}
+	// a decision that read the gone history (through 3), and a checkpoint
+	// moved to a trigger the log no longer holds, do not commit
+	var cf *store.ConditionFailed
+	_, err = s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}, Condition: &store.Condition{After: 3}})
+	if !errors.As(err, &cf) || !cf.Past {
+		return fmt.Errorf("rewinds: an append conditioned after position 3 of a log of 1: %v, want a *store.ConditionFailed, Past", err)
+	}
+	_, err = s.Append(ctx, "t1", store.Batch{Checkpoint: &store.CheckpointMove{Processor: "p", From: 0, To: 3}})
+	if !errors.As(err, &cf) || !cf.Past {
+		return fmt.Errorf("rewinds: a checkpoint moved to 3 in a log of 1: %v, want a *store.ConditionFailed, Past", err)
+	}
+	return nil
 }
 
 // noSharedSlices: a reader that mutates an event's tags or body in place
@@ -836,7 +927,10 @@ func TwoStores(ctx context.Context, a, b store.Store) error {
 	})
 	qenv.Go(ctx, "storetest.stepwaiter", func(ctx context.Context) {
 		waiting.Add(1)
-		if al.WaitSteps(ctx, "t1", steps+1) == nil { // the append's row, then the refusal's
+		// the append's row, then the refusal's: a wait past a row the log
+		// does not have yet would return at once (a log shorter than it
+		// went backwards)
+		if al.WaitSteps(ctx, "t1", steps) == nil && al.WaitSteps(ctx, "t1", steps+1) == nil {
 			step.Store(1)
 		}
 	})

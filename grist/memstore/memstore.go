@@ -97,6 +97,10 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 			return 0, &store.ConditionFailed{Marker: b.Marker.ID}
 		}
 	}
+	if c := b.Checkpoint; c != nil && c.To > store.Position(len(tn.log)) {
+		s.mu.Unlock()
+		return 0, &store.ConditionFailed{Event: c.To, Past: true, Head: store.Position(len(tn.log))}
+	}
 	if c := b.Checkpoint; c != nil && tn.checkpoints[c.Processor] != c.From {
 		s.mu.Unlock()
 		return 0, &store.CheckpointMoved{Processor: c.Processor, Expected: c.From, Found: tn.checkpoints[c.Processor]}
@@ -182,12 +186,12 @@ func (s *Store) Heads(context.Context) (map[string]store.Position, error) {
 
 // Wait implements store.Store.
 func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
-	return s.wait(ctx, t, func(tn *tenant) bool { return store.Position(len(tn.log)) > p })
+	return s.wait(ctx, t, func(tn *tenant) bool { return store.Position(len(tn.log)) != p })
 }
 
 // WaitSteps implements store.StepLog.
 func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
-	return s.wait(ctx, t, func(tn *tenant) bool { return int64(len(tn.steps)) > after })
+	return s.wait(ctx, t, func(tn *tenant) bool { return int64(len(tn.steps)) != after })
 }
 
 // StepCount implements store.StepLog.
@@ -228,6 +232,47 @@ func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) err
 			return ctx.Err()
 		}
 	}
+}
+
+// A Backup is a memstore's whole state at a point (Store.Backup), for a
+// test of what a restore does to a node: Store.Restore puts it back.
+type Backup struct{ tenants map[string]*tenant }
+
+// Backup is a copy of the store's state now.
+func (s *Store) Backup() *Backup {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &Backup{tenants: copyTenants(s.tenants)}
+}
+
+// Restore puts the store back to b, as a restore from a backup does to a
+// database (every commit after it gone), and wakes every waiter: a node
+// waiting on the head it read sees it go backwards (grist.ErrRewound).
+func (s *Store) Restore(b *Backup) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tenants = copyTenants(b.tenants)
+	s.wake()
+}
+
+// copyTenants is a copy of ts that shares nothing a later append changes.
+func copyTenants(ts map[string]*tenant) map[string]*tenant {
+	out := make(map[string]*tenant, len(ts))
+	for name, tn := range ts {
+		c := &tenant{log: append([]store.Stored(nil), tn.log...), steps: append([]store.StepRow(nil), tn.steps...),
+			markers: map[string]store.Marker{}, checkpoints: map[string]store.Position{}, snapshots: map[[3]string]store.Snapshot{}}
+		for k, v := range tn.markers {
+			c.markers[k] = v
+		}
+		for k, v := range tn.checkpoints {
+			c.checkpoints[k] = v
+		}
+		for k, v := range tn.snapshots {
+			c.snapshots[k] = v
+		}
+		out[name] = c
+	}
+	return out
 }
 
 // PutSnapshot implements store.SnapshotStore.

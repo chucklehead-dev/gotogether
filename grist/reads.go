@@ -34,13 +34,16 @@ type Reads struct {
 	sels   []Selector
 	id     string // the command id, for ID
 	caller string // the envelope's caller, for Caller
+	// base is the tenant's clock base when the reads began (clockBase): a
+	// step of what they read is recorded on that clock
+	base int64
 	// err is the first store error (transient: the try is retried); bad
 	// the first misuse (the code's fault)
 	err, bad error
 }
 
 func newReads(ctx context.Context, app *App, s Store, env Envelope) *Reads {
-	return &Reads{ctx: ctx, app: app, store: s, tenant: env.Tenant, id: env.ID, caller: env.Caller}
+	return &Reads{ctx: ctx, app: app, store: s, tenant: env.Tenant, id: env.ID, caller: env.Caller, base: clockBase(ctx, env.Tenant)}
 }
 
 // readsAt is a Reads pinned at p.

@@ -58,6 +58,7 @@ func RecorderID(storeName, tenant string) string
 func Refuses(rejections ...error) Option
 func Rejection(name string) error
 func Replayed(ctx context.Context)
+func Resume(ctx context.Context, s Store, tenant string) error
 func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
@@ -98,6 +99,7 @@ type CallInfo struct
     field Trigger Position
     field Head Position
     field Key string
+    field Clock int64
 type CallName interface
     Name() string
     call() *callInfo
@@ -281,9 +283,21 @@ type Rejected struct
 type Relay struct
     method (*Relay) Behind(ctx context.Context) (int64, error)
     method (*Relay) Err() error
+    method (*Relay) FailOpen()
     method (*Relay) Flush(ctx context.Context) error
+    method (*Relay) OnRewind(f func(*RewoundError))
     method (*Relay) RenderAs(a *App)
+    method (*Relay) Rewound() []*RewoundError
+    method (*Relay) With(ctx context.Context) context.Context
 type Result struct
+type RewoundError struct
+    field Tenant string
+    field Seen Position
+    field Head Position
+    field Processor string
+    field Steps string
+    method (*RewoundError) Error() string
+    method (*RewoundError) Is(target error) bool
 type Rule[E any] struct
     method (*Rule[E]) Name() string
 type Selector = store.Selector
@@ -310,6 +324,7 @@ var ErrConflict = errors.New("grist: conflict: the decision's reads changed on e
 var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the caller")
 var ErrKeyReused = Rejection("idempotency-key-reused")
 var ErrOutcomeUnknown = errors.New("grist: the command's outcome is unknown (an append may have committed): retry it with the same id")
+var ErrRewound = errors.New("grist: the tenant's log went backwards")
 var ErrUnavailable = errors.New("grist: the store kept failing before anything committed: retry later")
 
 == github.com/chucklehead-dev/gotogether/grist/client
@@ -496,8 +511,17 @@ type Config struct
     field Horizon time.Duration
     field Cluster *Cluster
     field From *grist.App
+    field Store *Managed
     field Log func(string)
 type Doubles map[*grist.Dependency]grist.Handlers
+type Managed struct
+    field Failover *qenv.Failover
+    field Restore bool
+    field RestoreEvery time.Duration
+    field LoseAfter int
+    field Lose int
+    field Resume time.Duration
+    field FailOpen bool
 
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
@@ -562,8 +586,10 @@ type TierConfig struct
 
 == github.com/chucklehead-dev/gotogether/grist/memstore
 func New(name string) *Store
+type Backup struct
 type Store struct
     method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
+    method (*Store) Backup() *Backup
     method (*Store) Checkpoint(_ context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(_ context.Context, t string) error
     method (*Store) GetSnapshot(_ context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error)
@@ -572,6 +598,7 @@ type Store struct
     method (*Store) Name() string
     method (*Store) PutSnapshot(_ context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) Restore(b *Backup)
     method (*Store) StepCount(_ context.Context, t string) (int64, error)
     method (*Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(context.Context) ([]string, error)
@@ -599,6 +626,7 @@ type Store struct
     method (*Store) WaitTenants(ctx context.Context, n int) error
 
 == github.com/chucklehead-dev/gotogether/grist/sqlstore
+const SchemaVersion = 1
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 func SQLiteDSN(path string, busy time.Duration) string
 type Dialect struct
@@ -609,6 +637,12 @@ type Options struct
     field LockTimeout time.Duration
     field IdleTimeout time.Duration
     field Poll time.Duration
+type Pruned struct
+    field Steps int64
+    field Markers int64
+type Retention struct
+    field StepsBefore time.Time
+    field MarkersBefore time.Time
 type Store struct
     method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
     method (*Store) Checkpoint(ctx context.Context, t, processor string) (store.Position, error)
@@ -617,11 +651,13 @@ type Store struct
     method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) Prune(ctx context.Context, r Retention) (Pruned, error)
     method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
+    method (*Store) Version(ctx context.Context) (int64, error)
     method (*Store) Wait(ctx context.Context, t string, p store.Position) error
     method (*Store) WaitSteps(ctx context.Context, t string, after int64) error
     method (*Store) WaitTenants(ctx context.Context, n int) error
@@ -662,6 +698,8 @@ type ConditionFailed struct
     field Selector Selector
     field Event Position
     field Marker string
+    field Past bool
+    field Head Position
     method (*ConditionFailed) Error() string
 type Event struct
     field Type string
@@ -750,6 +788,7 @@ var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store
 
 == github.com/chucklehead-dev/gotogether/grist/storetest
 func Checks() []Check
+func Rewinds(ctx context.Context, s store.Store, backup, restore func(ctx context.Context) error) error
 func Run(t *testing.T, h Harness)
 func TwoStores(ctx context.Context, a, b store.Store) error
 type Check struct

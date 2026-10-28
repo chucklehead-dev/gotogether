@@ -5,7 +5,8 @@ Status: design, 2026-10-28, for docs/ROADMAP.md's GR10; slice 1
 says what building it changed, and what its acceptance got wrong), and
 slice 2 (graceful termination, the router, `gristsim.Cluster`) the same
 day (docs/HISTORY.md (grist §0.16), likewise), slice 6 (sizing) and
-slice 4 (versions, §3.9) since. Nothing else below is built; every
+slice 4 (versions, §3.9) since, and slice 3 (store failover and restore,
+§3.4) with ROADMAP I25 (docs/HISTORY.md (grist §0.18)). Nothing else below is built; every
 proposed API is in ```text blocks (slice 2's are as built: §4 says
 where it differs), and every name it
 takes from an existing package (`qenv.Stalls`, `qmeta.CalibrateTimeout`,
@@ -270,6 +271,71 @@ simulation must make them (§4):
   `<app> steps -export` (§7) gives an operator the comparison.
 - SQLite in a Deployment is refused by the manifest generator and the
   lint (`-db sqlite:` means a StatefulSet of one replica, `Recreate`).
+
+**As built** (slice 3, docs/HISTORY.md (grist §0.18)). The node's memory
+is its relay's (`grist.Relay`): the head and each processor's checkpoint
+its pollers saw, and every row its relay recorded (seq, head, time and
+checksum, the ids it answered, the checkpoints after it). A rewind is
+seen four ways: a poller reads a head below one it read, or a
+checkpoint below one it read or committed, or past the head (each
+poller's own: two pollers' reads do not compare, one begun before the
+other's commit may end after it, which made false rewinds); the relay finds the row it last
+recorded gone or another in its place (a log that went back and grew
+again: the head alone missed it); a poller checks each trigger's cause
+against the one its relay recorded at that position, and handles only
+triggers its relay has recorded, or once its relay caught up with every
+row the log has (a poller that outran its relay acted on a history that
+was gone before anyone saw it). `Store.Wait` and
+`WaitSteps` return when the log is below what they wait on (the store
+contract, storetest's `Rewinds` on every tier), so the relay sees a
+restore at once. The store refuses a decision whose read position is
+past its head and a checkpoint moved past it (`ConditionFailed.Past`):
+a command that read the gone history decides again, and a poller's
+commit for a trigger that is gone does not land. What the doc did not
+say, and the building found:
+
+- **A rewind is a step of the model.** The relay records `gristRewound`
+  (the position it went back to, each processor's checkpoint there, the
+  ids answered after it), which every generated model has: the log
+  truncated, the ids lost answerable again, the processors disabled
+  (`rewound`) until `gristResumed`, which forgets the effect steps and
+  calls of the triggers after the checkpoints (they are handled again);
+  what the dependencies applied (their records) stays. The steps after
+  a rewind are on the tenant's clock past every one before it (each
+  `order.*` value shifted, the sites' too through `CallInfo.Clock`), so
+  the new history is judged after the old one, not interleaved with it.
+  Without the model action no step after a rewind could be judged.
+- **Effect keys are positions, and a rewind gives positions back.** A
+  deposit lost by a restore had been posted under `post/t1/1`; the next
+  deposit took position 1, and the Keyed ledger answered its post from
+  the lost one's record: the new move never posted
+  (`Rejects("ledgerPostReplayed")`, the replay's request not the
+  record's). After a rewind to position P, a trigger past P is keyed
+  `<processor>/<tenant>/<trigger>~<n>` (the n-th rewind), which
+  `ServeCalls` accepts; triggers at or before P keep their keys, so a
+  restored event's effect replays at the dependency. A node's memory: a
+  node started after the rewind keys by position again (left: the
+  rewinds in the store).
+- **`loseTail` is named by whichever side saw it, not always the store's.**
+  A commit acknowledged and lost before any node read it leaves the
+  store's side nothing to judge (its steps are the history that remains,
+  and conform: `TestLostTail`); the clients' side names it (a read
+  missing an acknowledged deposit, `All(Mismatch("read"))`). A commit the
+  relay recorded is a `gristRewound`; one it had not recorded but whose
+  consequence happened (a checkpoint lost after its effect) is named at
+  the first step that followed it (`Rejects("ledgerPost")`,
+  `Rejects("bankPay")`). The doc's "a position committed twice" does not
+  occur: the relay recorded the rewind instead.
+- **A restore that loses a posted move is a dependency ahead of the
+  log.** The ledger holds a post of a move the store lost: the faithful
+  app's runs violate the app's own `postedApplied` at the settle, which
+  is the incident's name, not a fault of the app's.
+- `<app> resume -tenant t1 -from 812` is `resume -tenant t1` (left:
+  `-from`, moving checkpoints past triggers an operator decides were
+  handled, needs its own model step). `store.<name>.failover` is
+  `qenv.Store.Failovers`, `nemesis.restore.<store>` `Store.Restores`, a
+  scenario's incident at its k-th commit `gristsim.Managed.LoseAfter`;
+  `Store.Connections` (`max_connections`) is left.
 - The connection pool is an option (`-db-pool`), and the sizing rule
   `replicas_max × pool ≤ max_connections - reserve` is linted.
 
@@ -982,7 +1048,7 @@ ablated.
    in 40. Two slice-1 defects found: `grist_processor_lag` never 0 for
    a caught-up processor while other events came, and a stopped poller
    counted as running (a cancelled node never idle).
-3. **Store failover and restore (core, M).** `store.<name>.failover`
+3. **Done** (docs/HISTORY.md (grist §0.18); §3.4's *As built*). **Store failover and restore (core, M).** `store.<name>.failover`
    with `loseTail`, `nemesis.restore.<store>`, `Store.Connections`;
    grist's `ErrRewound` and `<app> resume`. **Example: wallet-grist**
    (transfers, the ledger's Keyed posts). **Acceptance**: under
@@ -993,7 +1059,24 @@ ablated.
    effects replay at the Keyed ledger, where `ledgerNoDedupe` is
    `Some(Rejects("ledgerPostServed"))`; with `ErrRewound` ablated an
    at-most-once effect runs again unasked (two calls of one key,
-   `Some(Rejects(...))` at its caller step).
+   `Some(Rejects(...))` at its caller step). As built: under a restore
+   that loses a post's checkpoint its relay recorded (wallet-grist's
+   `TestRestoreReplays`, the 4th and 6th commits) the faithful app
+   records `gristRewound`, stops, and once resumed replays the post at
+   the ledger (`ledgerPostReplayed`): both sides conform and settle;
+   `ledgerNoDedupe` is `All(Rejects("ledgerPostServed"))` there. A lost
+   acknowledged deposit no node read is named at the clients
+   (`TestLostTail`, `All(Mismatch("read"))`), the store's side
+   conforming by right. The at-most-once half is counters'
+   (`TestRewindFailsClosed`: wallet-grist has no at-most-once effect): the
+   store's 5th and 6th commits lost, the payout's checkpoint among them,
+   after the bank was paid: the faithful app calls the payout's key once
+   and no run rejects `bankPay`; with the fail-closed ablated
+   (`gristsim.Managed.FailOpen`) twice, `Some(Rejects("bankPay"))` (a
+   processor's step while rewound; another run's first rejection is the
+   welcome's). The verification's extra read moved counters'
+   `TestPayoutTwoNodes` schedules: its faulty half needed 20 seeds per
+   push (was 3) to reach a bank replay.
 4. **Versions (M, after H7's upcasting). Built** 2026-10-28 (§3.9).
    `<app> catalog -diff`, `grist.WritesVersion`, `gristtest.Upgrade`,
    gristsim's `Config.From` (no `Cluster.Rollout` of its own: the

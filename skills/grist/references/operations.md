@@ -1,0 +1,63 @@
+# Operating a grist node, and its store's incidents
+
+Read this before running an app's binary in production (secrets, logs,
+metrics, migrations, retention), or when a node reports a rewind
+(`grist.ErrRewound`, `grist_rewound 1`, a `rewound` log line), or when
+a test simulates a managed database's failover or a restore. The design
+is docs/grist.md §2.11 and docs/grist-platform.md §3.4.
+
+## The binary's commands
+
+```sh
+app serve -db-file /secrets/dsn -addr :8080 -health-addr :8081 -steps /steps/   # the DSN out of ps and the pod spec
+app resume -db-file /secrets/dsn -tenant t1         # after a rewind, once an operator decided: never automatic
+app steps -export -db-file /secrets/dsn -tenant t1  # every committed step as JSONL, as a relay records them
+app prune -db-file /secrets/dsn -steps 720h -markers 2160h   # retention: step rows and markers past the horizon
+```
+
+- serve's stderr has JSON lifecycle lines (`starting`, `serving`,
+  `draining`, `drain` per phase, `stopped`, `rewound`), each with the app,
+  node and incarnation; the plain startup lines stay.
+- `/metrics`: `grist_requests_total{kind,block,code}`,
+  `grist_request_duration_seconds` (histogram), `go_*`,
+  `grist_build_info`, `grist_rewound{tenant}`, beside the processor,
+  relay and snapshot gauges.
+- `sqlstore.Open` migrates under `grist_schema`'s lock: pods starting at
+  once are safe; a database a newer grist migrated is refused.
+- A marker pruned is a key whose retry runs again: give `-markers` a
+  horizon far past any client's retries. `steps -export` before pruning
+  where a whole history is wanted.
+- One tenant's appends serialize on its head row: hundreds a second on
+  PostgreSQL (docs/grist.md §2.11 has the numbers); a busier one is two
+  tenants.
+
+## A rewind
+
+A failover that lost its asynchronously replicated tail, or a restore,
+makes a tenant's log go backwards under a running node. The node records
+it (`gristRewound`, a model step), stops the tenant's processors (no
+effect runs again for a trigger it already ran for) and keeps serving
+commands and queries. Decide what the lost commits did (the clients'
+receipts, the dependencies' records, `steps -export` and another node's
+steps file), then `app resume -tenant T`: the processors go on from their
+checkpoints, at-least-once effects replay under their keys (a Keyed
+dependency answers from its record), at-most-once ones run again.
+
+## Simulating it
+
+```go
+cfg.Store = &gristsim.Managed{
+	Failover: &qenv.Failover{LoseTail: 2, ReadOnly: time.Second}, // store.<app>.failover at commits the run chooses
+	Restore:  true,                                               // nemesis.restore.<app>, from a backup every RestoreEvery
+	Resume:   5 * time.Second,                                    // the operator resumes 5 s after a rewind
+}
+cfg.Store = &gristsim.Managed{LoseAfter: 4, Lose: 1, Resume: 5 * time.Second} // the 4th commit lost, at a point the test chooses
+```
+
+| A run shows | Means |
+|---|---|
+| `gristRewound`, then `gristResumed`, conforming | the incident, and the operator's resume, as the model admits them |
+| `Mismatch("read")` at the clients only | a commit acknowledged and lost before any node read it: a receipt with no commit |
+| the first step after a lost commit rejected (`ledgerPost`, `bankPay`) | a lost commit whose consequence (an effect) happened |
+| an app's val violated at the settle (`postedApplied`) | a dependency holds what the log lost |
+| `Rejects("<p>")` or `Rejects("<call>")` while rewound | a processor ran after a rewind unasked: what `Managed.FailOpen` (the ablation) shows |

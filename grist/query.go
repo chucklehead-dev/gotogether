@@ -107,10 +107,10 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 			}
 		}
 		if err != nil {
-			record(ctx, s, env.Tenant, b.info.quint, err, kv...)
+			record(withBase(ctx, env.Tenant, r.base), s, env.Tenant, b.info.quint, err, kv...)
 			return zero, r.pos, err
 		}
-		record(ctx, s, env.Tenant, b.info.quint, nil, append(kv, obs...)...)
+		record(withBase(ctx, env.Tenant, r.base), s, env.Tenant, b.info.quint, nil, append(kv, obs...)...)
 		return res, r.pos, nil
 	}
 }

@@ -2464,6 +2464,30 @@ capacity. The two findings are rows: replicas never speed up a hot
 tenant (a rate limit instead), and a slow dependency's lag is no pod's
 to clear. What the design got wrong is §8.4's list.
 
+### I25 and GR10 slice 3: grist's operations basics, store failover and restore
+
+ROADMAP I25 (the adopter's review's AD5 and AD6), docs/grist.md §2.11,
+docs/grist-platform.md §3.4's *As built* and §9's slice 3, docs/HISTORY.md
+(grist §0.18). The core: `qenv.Store.Failovers` (`store.<name>.failover`,
+options failover and loseTail), `Store.Restores` (`nemesis.restore.<name>`),
+`FailOver`, `Backup`, `Restore`, `Commits`, `qenv.ErrUnavailable` (qsql's
+25006), the history checker started afresh after a rewind. grist: a
+rewind seen by a node's pollers and relay (`grist.ErrRewound`), recorded
+as the model step `gristRewound`, the tenant's processors stopped until
+`<app> resume` (`gristResumed`); the steps after it on the tenant's clock
+past the old history's; effect keys of positions a rewind gave back
+suffixed; the store refusing a decision or checkpoint past its head.
+Operations: `-db-file`, JSON lifecycle logs, request and runtime metrics,
+`grist_schema` migrations under a lock, `prune`, `steps -export`, the
+append ceiling measured on PostgreSQL. Acceptance: wallet-grist's
+`TestRestoreReplays` (conforms and settles, the post replayed at the
+ledger; `ledgerNoDedupe` rejected there), `TestLostTail` (named at the
+clients) and counters' `TestRewindFailsClosed` (one call of the payout's
+key; two with the fail-closed ablated, `Some(Rejects("bankPay"))`). Checked
+against I9's claim semantics (no vacuous claim was relied on); counters'
+`TestPayoutTwoNodes` faulty half takes 20 seeds per push (the
+verification's read moved its schedules).
+
 ### Eleventh review (after H, P and GR10 slices 1, 2, 6)
 
 Five reviews at 65e5d23 (H7's first half just landed), their findings
@@ -6232,6 +6256,47 @@ Left: the HPA rows and `qload.Autoscaler` (slice 7), the lease row
 (slice 11), reading CPU and heap from a profile (an input today),
 gristsim prologues for growth at 10k and 100k events, and manifests
 taking sizing.yaml (`-sizing`, slice 8).
+
+### grist §0.18: What building I25 and GR10's slice 3 changed (operations, failover and restore)
+
+docs/grist-platform.md §3.4's *As built* says what slice 3's design got
+wrong (a rewind is a step of the model; effect keys are positions, which
+a rewind gives back; a lost tail is named by whichever side saw it).
+Built, each with a test that fails with it taken out:
+
+- **The core** (qenv/failover.go): `TestFailoverLosesTail` (loseTail
+  loses the commit in flight and the two acknowledged before it; option
+  failover none; a transaction open at it reset; the read-only window),
+  `TestFailoverReleasesLocks`, `TestRestoreNemesis` (the history checker
+  panics without its restart from the restored state), `TestBackupRestore`,
+  qsql's `TestFailoverReadOnly` (25006).
+- **The store contract**: `Wait` and `WaitSteps` return on a log below
+  what they wait on (storetest's `Rewinds`, run by memstore, simstore,
+  sqlstore on qsql and on SQLite; a `>` instead of `!=` fails it); a
+  condition or a checkpoint past the head is `ConditionFailed.Past`
+  (`Checkpoints` and `Rewinds`). memstore gained `Backup`/`Restore`.
+- **grist** (rewind.go): the relay's row marks and causes, the pollers'
+  memory, `verify` (a poller handles a trigger once its relay recorded
+  it, and checks its cause), `gristRewound` and `gristResumed` in the
+  generator (every example regenerated), the clock bases, keys past a
+  rewind's position suffixed, `Relay.Rewound`, `With`, `OnRewind`,
+  `FailOpen`, `grist.Resume`. The probes before the fixes: effects acting
+  on the new history before the relay saw it (the verification), a
+  checkpoint committed for a trigger the restore removed (the store's
+  `Past`), a post answered from a lost move's record (the keys), an
+  effect beside the resume's step (the base moved past it).
+- **Operations**: `TestMainDBFile`, `TestMainLifecycleLogs`,
+  `TestMainRequestMetrics`, `TestMainStepsExport`,
+  `TestMainRewindResumePrune` (a restore made with SQL under a running
+  node on SQLite: `grist_rewound 1`, the log's error, `resume`, the
+  steps file's `gristRewound gristResumed`, `prune`), sqlstore's
+  `TestMigrations` and `TestMigrationsLocked`, `TestAppendCeiling`.
+- **Left**: `LISTEN/NOTIFY` (database/sql has no notification API: a
+  driver-supplied option), `resume -from`, the rewinds' memory in the
+  store (a node started after one keys by position again, and sees no
+  rewind across its own restart), `Store.Connections`, slice 5's reopen
+  on an authentication failure, the admin command for `grist.failed`
+  dead letters.
 
 ## Why AGENTS.md's gotchas say what they say
 

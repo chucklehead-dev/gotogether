@@ -33,6 +33,8 @@ actions:
     args: { result: '{{.outcome}}' }
   ledgerPostReplayed:
     args: { result: '{{.outcome}}' }
+  gristRewound: {}
+  gristResumed: {}
 
 invariants: []
 eventually: [everyMovePostedOnce]

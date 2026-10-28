@@ -202,11 +202,14 @@ func Uses(calls ...CallName) Option {
 // processor and the trigger it is made for, the head the poller read when
 // it took the trigger, and the call's key (the effect's). The site's
 // record is placed at it (order.pos 2·Head+1), so it follows the commit
-// holding the trigger.
+// holding the trigger. Clock is the tenant's clock base the effect's
+// steps are recorded at (0 until a rewind, ErrRewound): the site's record
+// is placed on the same clock.
 type CallInfo struct {
 	App, Tenant, Processor string
 	Trigger, Head          Position
 	Key                    string
+	Clock                  int64
 }
 
 // A Transport answers a dependency's calls: JSON requests and responses,
@@ -270,12 +273,13 @@ func (c *Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error) {
 	if err != nil {
 		return zero, NotApplied(fmt.Errorf("grist: call %s: its request: %w", ci.label(), err))
 	}
-	info := CallInfo{App: ec.app.Name, Tenant: ec.tenant, Processor: ec.p.name, Trigger: ec.trigger, Head: ec.head, Key: ec.key}
+	base := orderBase(ctx, ec.tenant)
+	info := CallInfo{App: ec.app.Name, Tenant: ec.tenant, Processor: ec.p.name, Trigger: ec.trigger, Head: ec.head, Key: ec.key, Clock: base}
 	kv := append([]any{"actor", ec.tenant, "process", ec.s.Name(), "processor", ec.p.name, "trigger", int64(ec.trigger), "key", ec.key}, reqKV...)
 	// ordered as the effect step it precedes on the poller's thread: after
 	// the commits through the head, among the processor's steps at the
 	// effect's place
-	kv = append(kv, "order.pos", readOrder(ec.head), "order.p."+ec.p.quint, 2*int64(ec.trigger)+ec.slot)
+	kv = append(kv, "order.pos", base+readOrder(ec.head), "order.p."+ec.p.quint, base+2*int64(ec.trigger)+ec.slot)
 	call := qobs.Invoke(ctx, ci.quint, kv...)
 	out, err := t.Call(ctx, info, ci.name, body)
 	zeroKV := ci.zeroResponse()
@@ -471,7 +475,7 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 		reqKV, _ := rec.StepFields(ci.req, body, "")
 		i := hc.info
 		all := append([]any{"actor", i.Tenant, "process", ci.dep.app.Name, "thread", "grist.served/" + i.Key,
-			"processor", i.Processor, "trigger", int64(i.Trigger), "key", i.Key, "order.pos", sv.clock.at(i.Key, readOrder(i.Head))}, reqKV...)
+			"processor", i.Processor, "trigger", int64(i.Trigger), "key", i.Key, "order.pos", sv.clock.at(i.Key, i.Clock+readOrder(i.Head))}, reqKV...)
 		action := ci.quint + "Served"
 		if hc.replayed {
 			action = ci.quint + "Replayed"

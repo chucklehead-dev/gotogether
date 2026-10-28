@@ -115,8 +115,12 @@ func (e *callUnknown) Is(target error) bool { return target == ErrOutcomeUnknown
 
 // encodeCause is c as CauseHeader's value.
 func encodeCause(c CallInfo) string {
-	return strings.Join([]string{url.PathEscape(c.App), url.PathEscape(c.Tenant), url.PathEscape(c.Processor),
-		strconv.FormatInt(int64(c.Trigger), 10), strconv.FormatInt(int64(c.Head), 10)}, "/")
+	parts := []string{url.PathEscape(c.App), url.PathEscape(c.Tenant), url.PathEscape(c.Processor),
+		strconv.FormatInt(int64(c.Trigger), 10), strconv.FormatInt(int64(c.Head), 10)}
+	if c.Clock != 0 {
+		parts = append(parts, strconv.FormatInt(c.Clock, 10)) // after a rewind only: an older grist's server reads five
+	}
+	return strings.Join(parts, "/")
 }
 
 // userNames are the names of the processors that use ci.
@@ -128,11 +132,30 @@ func userNames(ci *callInfo) []string {
 	return out
 }
 
+// rewoundKey reports whether key is base's for a position a rewind gave
+// back (base~n, the poller's key after a rewind: rewind.go).
+func rewoundKey(key, base string) bool {
+	n, ok := strings.CutPrefix(key, base+"~")
+	if !ok {
+		return false
+	}
+	k, err := strconv.Atoi(n)
+	return err == nil && k > 0 && strconv.Itoa(k) == n
+}
+
 // decodeCause is CauseHeader's value v and the key as a CallInfo.
 func decodeCause(v, key string) (CallInfo, error) {
 	parts := strings.Split(v, "/")
+	var clock int64
+	if len(parts) == 6 {
+		c, err := strconv.ParseInt(parts[5], 10, 64)
+		if err != nil || c < 0 {
+			return CallInfo{}, fmt.Errorf("%s %q: its clock is the tenant's clock base, a non-negative integer, as grist.OverHTTP sends it", CauseHeader, v)
+		}
+		clock, parts = c, parts[:5]
+	}
 	if len(parts) != 5 {
-		return CallInfo{}, fmt.Errorf("%s %q: want <app>/<tenant>/<processor>/<trigger>/<head>, as grist.OverHTTP sends it", CauseHeader, v)
+		return CallInfo{}, fmt.Errorf("%s %q: want <app>/<tenant>/<processor>/<trigger>/<head>[/<clock>], as grist.OverHTTP sends it", CauseHeader, v)
 	}
 	var s [3]string
 	for i := range s {
@@ -152,7 +175,7 @@ func decodeCause(v, key string) (CallInfo, error) {
 	if key == "" {
 		return CallInfo{}, errors.New("no Idempotency-Key: a call carries its key (the effect's), as grist.OverHTTP sends it")
 	}
-	return CallInfo{App: s[0], Tenant: s[1], Processor: s[2], Trigger: Position(trigger), Head: Position(head), Key: key}, nil
+	return CallInfo{App: s[0], Tenant: s[1], Processor: s[2], Trigger: Position(trigger), Head: Position(head), Key: key, Clock: clock}, nil
 }
 
 // ServeCalls is an HTTP handler serving dependency d's calls with h, for
@@ -230,7 +253,7 @@ func (s *callServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case !slices.ContainsFunc(ci.users, func(p *processorInfo) bool { return p.name == info.Processor }):
 		// its record would name a processor no rule makes the call for
 		err = fmt.Errorf("a call of processor %q, which does not use call %s (grist.Uses): its users are %v", info.Processor, ci.label(), userNames(ci))
-	case info.Key != effectKeyOf(info.Processor, info.Tenant, info.Trigger):
+	case info.Key != effectKeyOf(info.Processor, info.Tenant, info.Trigger) && !rewoundKey(info.Key, effectKeyOf(info.Processor, info.Tenant, info.Trigger)):
 		// a grist caller's key is its effect's: another would record a
 		// second application of the trigger under a key of its own
 		err = fmt.Errorf("Idempotency-Key %q: a call for processor %s's trigger %d in tenant %s carries its effect's key, %s (grist.EffectKey)", info.Key, info.Processor, info.Trigger, info.Tenant, effectKeyOf(info.Processor, info.Tenant, info.Trigger))

@@ -902,7 +902,7 @@ func (g *gen) vars() [][2]string {
 		cps[i] = fmt.Sprintf("%q -> 0", p.Name)
 	}
 	vs := [][2]string{{"log", "[]"}, {"checkpoints", "Map(" + strings.Join(cps, ", ") + ")"}, {"appended", "[]"},
-		{"effects", "[]"}, {"answered", "Set()"}}
+		{"effects", "[]"}, {"answered", "Set()"}, {"rewound", "false"}}
 	for _, s := range g.c.Sites {
 		vs = append(vs, [2]string{s.Quint + "Records", "[]"})
 	}
@@ -933,6 +933,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 	b.WriteString("  // the batch the last step appended (what its observations are checked against)\n  var appended: List[Event]\n")
 	b.WriteString("  // the effect steps: (processor, trigger, key, ok)\n  var effects: List[Effect]\n")
 	b.WriteString("  // the command ids answered so far, by a commit or a committed refusal\n  var answered: Set[str]\n")
+	b.WriteString("  // the log went backwards (gristRewound) and no operator has resumed the\n  // processors since (gristResumed): they take no step\n  var rewound: bool\n")
 	for _, s := range g.c.Sites {
 		fmt.Fprintf(b, "  // what the %s site recorded, in order\n  var %sRecords: List[%sRecord]\n", s.Name, s.Quint, upper(s.Quint))
 	}
@@ -953,12 +954,24 @@ func (g *gen) storeModule(b *strings.Builder) {
 	b.WriteString("  action readsThrough(readPos: int): bool = all {\n    log.length() == readPos,\n")
 	b.WriteString(g.frame("    ", map[string]string{"appended": "[]"}))
 	b.WriteString("  }\n\n")
-	b.WriteString("  // a processor's handling of trigger, appending b with its checkpoint\n  action processes(b: List[Event], p: str, trigger: int): bool = all {\n")
+	b.WriteString("  // a processor's handling of trigger, appending b with its checkpoint\n  action processes(b: List[Event], p: str, trigger: int): bool = all {\n    not(rewound),\n")
 	b.WriteString(g.frame("    ", map[string]string{"log": "log.concat(b)", "appended": "b", "checkpoints": "checkpoints.set(p, trigger)"}))
 	b.WriteString("  }\n\n")
 	b.WriteString("  // an effect step of processor p for trigger, under key (the same on every\n  // effect step of the trigger, no other trigger's: keyStable)\n")
-	b.WriteString("  action effectStep(p: str, trigger: int, key: str, ok: bool): bool = all {\n    keyStable(effects, p, trigger, key),\n")
+	b.WriteString("  action effectStep(p: str, trigger: int, key: str, ok: bool): bool = all {\n    not(rewound),\n    keyStable(effects, p, trigger, key),\n")
 	b.WriteString(g.frame("    ", map[string]string{"appended": "[]", "effects": "effects.append((p, trigger, key, ok))"}))
+	b.WriteString("  }\n")
+	b.WriteString("\n  // the log went backwards (grist.ErrRewound: a failover lost its tail, a\n  // restore put a backup back), as a node's relay saw it: back to position\n  // pos, each processor's checkpoint there cps, the ids answered after it lost. The\n  // processors stop until an operator resumes them (gristResumed); what the\n  // dependencies and the effects did stays done\n")
+	b.WriteString("  action gristRewound(pos: int, cps: str -> int, lost: Set[str]): bool = all {\n    pos <= log.length(),\n    cps.keys() == checkpoints.keys(),\n")
+	b.WriteString(g.frame("    ", map[string]string{"log": "log.slice(0, pos)", "checkpoints": "cps", "appended": "[]", "answered": "answered.exclude(lost)", "rewound": "true"}))
+	b.WriteString("  }\n\n")
+	b.WriteString("  // an operator's resume (`<app> resume`): the processors go on from their\n  // checkpoints, and the effect steps and calls of the triggers after them\n  // are forgotten: those triggers are handled again (at least once, under\n  // the same key, or a key of its own where the position was given back\n  // and filled by another event; at most once, again: the operator's\n  // decision). What the dependencies applied stays (their records)\n")
+	b.WriteString("  action gristResumed: bool = all {\n")
+	resumed := map[string]string{"appended": "[]", "rewound": "false", "effects": "effects.select(e => e._2 <= checkpoints.get(e._1))"}
+	for _, c := range g.calls() {
+		resumed[c.Quint+"Calls"] = c.Quint + "Calls.select(c => c.trigger <= checkpoints.get(c.processor))"
+	}
+	b.WriteString(g.frame("    ", resumed))
 	b.WriteString("  }\n")
 	g.rulesDefs(b)
 	for _, c := range g.c.Commands {
@@ -1072,7 +1085,7 @@ func (g *gen) processor(b *strings.Builder, p CatalogProcessor) {
 		fmt.Fprintf(b, "\n  // %s's outcome, if present (a crash after the effect loses it): its\n  // success after the one ok effect step; after a failed one grist.failed\n  // when the failure is known, else grist.unknown with the error\n", p.Name)
 		fmt.Fprintf(b, "  action %sOutcome(trigger: int, ok: bool, known: bool, error: str): bool = {\n    val isTrigger = %s\n    val success = if (isTrigger) %s else []\n",
 			p.Quint, isTrigger, success)
-		fmt.Fprintf(b, "    all {\n      isTrigger,\n      atMostOnceDone(log, effects, %q, trigger, ok, success),\n      val b = atMostOnceOutcome(%q, trigger, ok, known, error, success)\n      all {\n", p.Name, p.Name)
+		fmt.Fprintf(b, "    all {\n      isTrigger,\n      not(rewound),\n      atMostOnceDone(log, effects, %q, trigger, ok, success),\n      val b = atMostOnceOutcome(%q, trigger, ok, known, error, success)\n      all {\n", p.Name, p.Name)
 		b.WriteString(g.frame("        ", map[string]string{"log": "log.concat(b)", "appended": "b"}))
 		b.WriteString("      },\n    }\n  }\n")
 	}
@@ -1489,6 +1502,9 @@ func (g *gen) binding(name string, m marks) []byte {
 			entry(s.Quint, argTemplates(fs), "")
 		}
 		g.callBindings(entry)
+		// a rewind as a node's relay records it, and an operator's resume
+		entry("gristRewound", "", "")
+		entry("gristResumed", "", "")
 	}
 	inv, ev, viol := m.of(name)
 	if !calls && observe {

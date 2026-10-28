@@ -4,8 +4,11 @@
 // driver: the application opens the database with its own (pgx's stdlib,
 // modernc.org/sqlite) and names its Dialect.
 //
-// Tables (Open creates them):
+// Tables (Open migrates the database to them, SchemaVersion, under
+// grist_schema's lock: two nodes opening one database at once migrate it
+// once):
 //
+//	grist_schema(id, version)                    the schema's version, its row the migrations' lock
 //	grist_heads(tenant, head, steps)             the tenant's lock, its head, its step rows' count
 //	grist_events(tenant, pos, type, version, at_ms, cause, tags, body)
 //	grist_index(tenant, k, pos)                  k: i/<type>, or g/<type>/<key>=<value>
@@ -99,7 +102,8 @@ type Store struct {
 	sim *qenv.Store
 }
 
-// schema is the tables, in the SQL every dialect runs. Read-only.
+// schema is the tables, in the SQL every dialect runs: migration 1
+// (migrations). Read-only.
 var schema = []string{
 	`CREATE TABLE IF NOT EXISTS grist_heads (tenant TEXT NOT NULL, head BIGINT NOT NULL, steps BIGINT NOT NULL, PRIMARY KEY (tenant))`,
 	`CREATE TABLE IF NOT EXISTS grist_events (tenant TEXT NOT NULL, pos BIGINT NOT NULL, type TEXT NOT NULL, version BIGINT NOT NULL, at_ms BIGINT NOT NULL, cause TEXT NOT NULL, tags TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (tenant, pos))`,
@@ -148,10 +152,8 @@ func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 			return nil, err
 		}
 	}
-	for _, q := range schema {
-		if _, err := db.ExecContext(ctx, q); err != nil {
-			return nil, fmt.Errorf("sqlstore: creating grist's tables (%s): %w", q, err)
-		}
+	if err := migrate(ctx, db); err != nil {
+		return nil, err
 	}
 	s := &Store{db: db, d: d, o: o, sim: qsql.StoreOf(db)}
 	// one transaction at the level, as every append begins one: a level
@@ -485,6 +487,9 @@ func (s *Store) tryAppend(ctx context.Context, t string, b store.Batch) (store.P
 		return 0, classify(err)
 	}
 	h := store.Position(newHead) - store.Position(n) // the head before the batch
+	if c := b.Checkpoint; c != nil && c.To > h {
+		return 0, &store.ConditionFailed{Event: c.To, Past: true, Head: h}
+	}
 	if m := b.Marker; m != nil {
 		var hash string
 		switch err := tx.QueryRowContext(ctx, `SELECT hash FROM grist_markers WHERE tenant = $1 AND id = $2`, t, m.ID).Scan(&hash); {
@@ -504,6 +509,9 @@ func (s *Store) tryAppend(ctx context.Context, t string, b store.Batch) (store.P
 		}
 	}
 	if c := b.Condition; c != nil {
+		if c.After > h {
+			return 0, &store.ConditionFailed{Event: c.After, Past: true, Head: h}
+		}
 		for _, q := range c.Selectors {
 			if err := s.check(ctx, tx, t, q, c.After, h); err != nil {
 				return 0, err
@@ -719,7 +727,7 @@ func (s *Store) Steps(ctx context.Context, t string, after int64, limit int) ([]
 func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 	return s.wait(ctx, func() (bool, error) {
 		h, err := head(ctx, s.db, t)
-		return h > p, err
+		return h != p, err
 	})
 }
 
@@ -727,7 +735,7 @@ func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
 	return s.wait(ctx, func() (bool, error) {
 		n, err := s.StepCount(ctx, t)
-		return n > after, err
+		return n != after, err
 	})
 }
 

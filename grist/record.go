@@ -13,7 +13,9 @@ import (
 // commit's step is not recorded here but from its step row (Relay), with
 // the same actor and process.
 func record(ctx context.Context, s Store, tenant, action string, err error, kv ...any) {
-	qobs.Record(ctx, action, err, append([]any{"actor", tenant, "process", s.Name()}, kv...)...)
+	kv = append([]any{"actor", tenant, "process", s.Name()}, kv...)
+	shiftOrders(kv, orderBase(ctx, tenant)) // after a rewind, on the tenant's new clock
+	qobs.Record(ctx, action, err, kv...)
 }
 
 // batchObs are a commit's observations but its head (obs.head, which

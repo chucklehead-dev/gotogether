@@ -48,6 +48,8 @@ actions:
     args: { result: '{{.outcome}}' }
   bankPayReplayed:
     args: { result: '{{.outcome}}' }
+  gristRewound: {}
+  gristResumed: {}
 
 invariants: []
 eventually: [everyRetirementPaidOnce, everyPayoutOutcomeLogged]

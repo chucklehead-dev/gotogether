@@ -321,7 +321,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   setting, gristsim's field mapped to it (the audit built with I22:
   `grist.SnapshotAudit`, the same setting's shape). Example: counters at 10⁵
   events, snapshots on and off, the fold cost printed.
-- **I25. grist's operations basics (M; GR10 slice 3 moved up).** The
+- **I25. grist's operations basics (M; GR10 slice 3 moved up). Done**
+  (docs/HISTORY.md (I25 and GR10 slice 3; grist §0.18)): all of it but
+  the dead-letter admin command and `LISTEN/NOTIFY`, both left there. The
   DSN from a file or the environment (a flag shows in `ps` and the pod
   spec; slice 5's first part); structured lifecycle logs (the drain
   logs nothing); request rate, latency and errors by outcome, Go

@@ -889,15 +889,18 @@ whose `Wait` returns at once fails the wake-up check.
     wait on the database's own signal (`qsql.StoreOf`,
     `qenv.Store.Changed`), notified at every commit whoever made it, and
     no timer runs, so a second Store over the database wakes them and a
-    settled system is quiet. A wait returns as soon as its read holds.
-    `LISTEN/NOTIFY` is an optimisation for later.
+    settled system is quiet. A wait returns as soon as its read holds,
+    and when the head (or the step count) is below what it waits on: a
+    log that went backwards (§2.11). `LISTEN/NOTIFY` is left (§2.11):
+    database/sql has no notification API, so it needs the driver's.
 - **sqlstore on qsql** (slice 2, built): the same code on `qsql.Open`
   over a `qenv.Store` (`sqlstore.QSQL`, `gristsim.Config.SQL`), so the
   SQL tier is explored with qsql's anomalies, SQLSTATEs and commit faults.
   qsql's extension came first (§8.2); the statements needed no other
   dialect, since `set_config` is PostgreSQL's alone.
 
-**Retention and erasure** (a gap, §9). History is kept forever by
+**Retention and erasure** (a gap, §9; the step log's and the markers'
+retention is built, §2.11). History is kept forever by
 default. grain's one bounded policy is inert until an operator
 activates it durably; compaction then deletes old events of a tagged
 kind under the tenant's lock and appends a receipt, and processors may
@@ -907,6 +910,82 @@ personal data is such a deletion or crypto-shredding (fields encrypted
 with a per-subject key, the key deleted). **State in tables** comes
 later: `grist.Table(rm)` writes a read model's state in the append's
 transaction, conditioned on the rows' versions; the model is unchanged.
+
+### 2.11 Operating a node (I25, built)
+
+What a node needs to run in production beside its model (ROADMAP I25,
+the adopter's review's AD5 and AD6; GR10 slice 3 is
+docs/grist-platform.md §3.4):
+
+- **The DSN from a file.** `serve -db-file PATH` (and every command that
+  opens the store: `resume`, `steps`, `prune`) reads `-db`'s value from
+  a file, trimmed: a mounted Secret's key, kept out of `ps` and the pod
+  spec. It is read at start; slice 5's reopen on an authentication
+  failure is left.
+- **Lifecycle logs.** serve writes JSON lines (log/slog) to stderr beside
+  its plain startup lines: `starting` (the address, the drain's budget,
+  the memory limit), `serving`, `draining`, a `drain` line per phase
+  (`delay`, `shutdown`, `settle`, `flush`, each with how long it took and
+  whether it was cut), `stopped` (uptime), and `rewound` as an error;
+  every line carries the app, node and incarnation (and the namespace,
+  host and zone when known).
+- **Request metrics.** `/metrics` adds `grist_requests_total{kind,block,code}`
+  (kind command, query or other; an unknown block is `other`, so a
+  client cannot grow the series; errors are their codes),
+  `grist_request_duration_seconds` (a histogram per block, 5 ms to 10 s),
+  the Go runtime's gauges (`go_goroutines`, the heap, GC cycles,
+  GOMAXPROCS, GOMEMLIMIT), `grist_build_info{path,version,goversion}` and
+  `grist_rewound{tenant}`.
+- **Migrations.** `sqlstore.Open` migrates the database under the
+  `grist_schema` row's lock (`UPDATE ... RETURNING`, as an append takes
+  its tenant's head): two nodes opening it at once migrate it once, the
+  second waiting and finding nothing to do (`TestMigrationsLocked`: a
+  migration that is not idempotent fails a second runner without the
+  lock). Version 1 is slice 2's tables, so a database its boots made
+  migrates with its rows; one at a later version than the binary's
+  (`sqlstore.SchemaVersion`) is refused, naming the fix. A migration is
+  appended, never edited.
+- **Retention.** `<app> prune -steps AGE -markers AGE` (`sqlstore.Store.Prune`):
+  step rows committed before the horizon (each tenant's last row kept,
+  which a running relay reads to tell a pruned log from one that went
+  backwards), and markers of positions appended before it (a key's
+  answer is final only within the horizon: give one far past any
+  client's retries). A node started after a prune records a tenant's step
+  log from its oldest row kept; `steps -export` first where a whole
+  history is wanted. Events, the index, checkpoints and snapshots are
+  never pruned (erasure is the gap above).
+- **`steps -export`.** `<app> steps -export -db ... [-tenant T] [-after N]`
+  writes every committed step as JSONL, rendered as a relay records them:
+  a pod's lost steps file rebuilt from the store (docs/grist-platform.md
+  §7), and an operator's comparison after a rewind.
+- **A tenant's append ceiling.** Every append in a tenant takes its
+  `grist_heads` row (`UPDATE ... RETURNING`: dense positions in commit
+  order, the condition checked under the lock, by design), so one
+  tenant's appends serialize on a commit's lock hold, and tenants of
+  their own scale until the database does. `BenchmarkAppendCeiling`
+  (grist/sqlstore; `TestAppendCeiling` checks its harness: every append
+  committed once, at dense positions) measured commands' appends (one
+  event, a condition, a marker, a step row) on a 4-core VM with its disk
+  fsynced: PostgreSQL 16, one tenant, 573/s from 1 writer, 837/s from 8,
+  564/s from 32 (no lost race: writers queue on the lock); 8 writers on
+  8 tenants 3,658/s. SQLite (one writer for the whole file): about
+  1,000-1,260/s, tenants or not. A tenant that needs more than its
+  ceiling is two tenants (sharding by tenant is GR10 slice 11's).
+- **Other processes' appends** are found by polling (`-poll`, 250 ms).
+  `LISTEN/NOTIFY` was judged not cheap here: database/sql has no
+  notification API, so a listener needs the driver's own connection
+  (pgx's `WaitForNotification` through `Conn.Raw`), which sqlstore, which
+  imports no driver, would take as an option the binary supplies; left,
+  with the poll's latency the cost (a processor on another node starts up
+  to 250 ms later).
+- **Rewinds** (GR10 slice 3: docs/grist-platform.md §3.4): a node that
+  sees a tenant's log go backwards records it (`gristRewound`, a model
+  action every generated model has), stops the tenant's processors
+  (`grist.ErrRewound`: fail closed for effects, commands and queries go
+  on) and waits for `<app> resume -tenant T` (`grist.Resume`, recorded as
+  `gristResumed`), never resuming on its own. A decision that read the
+  gone history, or a checkpoint moved to a trigger the log no longer
+  holds, does not commit (`*store.ConditionFailed`, `Past`).
 
 ## 3. What a grist application gets from gotogether
 

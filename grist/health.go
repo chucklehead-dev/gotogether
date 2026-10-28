@@ -3,12 +3,15 @@ package grist
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,7 +38,95 @@ type health struct {
 	ready    atomic.Bool  // the store answered and the node started
 	draining atomic.Bool  // SIGTERM came
 	requests atomic.Int64 // the API's requests in flight
+	red      red          // the API's requests by block and answer: rate, errors, latency
 }
+
+// red is the API's request counters (rate, errors, duration): per kind
+// (command, query, other) and block, a count per status code and a
+// latency histogram. A block's name is the App's (an unknown name is
+// "other", so a client cannot grow the series).
+type red struct {
+	mu   sync.Mutex
+	by   map[[2]string]*redRow
+	keys [][2]string // in first-seen order, sorted when written
+}
+
+// redRow is one block's counters.
+type redRow struct {
+	codes   map[int]int64
+	buckets []int64 // per latencyBuckets bound, cumulative when written
+	count   int64
+	sum     float64 // seconds
+}
+
+// latencyBuckets are the request duration histogram's upper bounds, in
+// seconds: a query's milliseconds to a command's transient retries.
+// Read-only.
+var latencyBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+
+// observe counts one request of block (kind, name) answered code after d.
+func (r *red) observe(kind, name string, code int, d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.by == nil {
+		r.by = map[[2]string]*redRow{}
+	}
+	k := [2]string{kind, name}
+	row := r.by[k]
+	if row == nil {
+		row = &redRow{codes: map[int]int64{}, buckets: make([]int64, len(latencyBuckets))}
+		r.by[k] = row
+		r.keys = append(r.keys, k)
+	}
+	row.codes[code]++
+	row.count++
+	row.sum += d.Seconds()
+	for i, b := range latencyBuckets {
+		if d.Seconds() <= b {
+			row.buckets[i]++
+			break
+		}
+	}
+}
+
+// blockOf is a request's kind and block, by the API's routes (NewHandler):
+// POST /t/{tenant}/commands/{name}, GET /t/{tenant}/queries/{name}; a
+// name the App does not register, and every other path, is "other".
+func blockOf(app *App, path string) (string, string) {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) == 4 && parts[0] == "t" {
+		switch {
+		case parts[2] == "commands" && app.commands[parts[3]] != nil:
+			return "command", parts[3]
+		case parts[2] == "queries" && slices.Contains(app.Queries(), parts[3]):
+			return "query", parts[3]
+		}
+	}
+	return "other", "other"
+}
+
+// statusWriter records a response's status code.
+type statusWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	if w.code == 0 {
+		w.code = code
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Write(b []byte) (int, error) {
+	if w.code == 0 {
+		w.code = http.StatusOK
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+// Unwrap is the ResponseWriter wrapped (http.ResponseController's).
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // storeRef boxes a Store for an atomic.Pointer.
 type storeRef struct{ Store }
@@ -56,7 +147,17 @@ func (h *health) count(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.requests.Add(1)
 		defer h.requests.Add(-1)
-		next.ServeHTTP(w, r)
+		start := time.Now() //qenv:ok the real tier's request latency, outside any simulation
+		sw := &statusWriter{ResponseWriter: w}
+		defer func() {
+			code := sw.code
+			if code == 0 {
+				code = http.StatusOK // nothing written: net/http answers 200
+			}
+			kind, name := blockOf(h.app, r.URL.Path)
+			h.red.observe(kind, name, code, time.Since(start)) //qenv:ok the real tier's request latency
+		}()
+		next.ServeHTTP(sw, r)
 	})
 }
 
@@ -133,6 +234,8 @@ func (h *health) metrics(ctx context.Context, now time.Time) string {
 	counter := func(name, help string, v int64) {
 		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s counter\n%s %d\n", name, help, name, name, v)
 	}
+	h.redMetrics(&b)
+	runtimeMetrics(&b)
 	audited, wrong := h.app.SnapshotAudits()
 	counter("grist_snapshot_audits_total", "Reads from a snapshot refolded from the start to check it (grist.SnapshotAudit).", audited)
 	counter("grist_snapshot_audit_mismatches_total", "Audited snapshots whose state was not the refold's: a fold changed without a new fingerprint, or a store's snapshot not what was put.", wrong)
@@ -199,7 +302,79 @@ func (h *health) metrics(ctx context.Context, now time.Time) string {
 	}
 	gauge("grist_store_up", "1 when every read of this scrape answered.")
 	value("grist_store_up", bit(up))
+	if relay != nil {
+		gauge("grist_rewound", "1 for a tenant whose log went backwards under this node (grist.ErrRewound): its processors are stopped until `<app> resume`.")
+		rewound := map[string]bool{}
+		for _, e := range relay.Rewound() {
+			rewound[e.Tenant] = true
+		}
+		for _, t := range tenants {
+			value("grist_rewound", bit(rewound[t]), "tenant", t)
+		}
+	}
 	return b.String()
+}
+
+// redMetrics writes the API's request counters: grist_requests_total by
+// kind, block and status code (rate, and errors: a code of 4xx or 5xx),
+// grist_request_duration_seconds by kind and block.
+func (h *health) redMetrics(b *strings.Builder) {
+	h.red.mu.Lock()
+	defer h.red.mu.Unlock()
+	keys := slices.Clone(h.red.keys)
+	slices.SortFunc(keys, func(x, y [2]string) int { return strings.Compare(x[0]+"/"+x[1], y[0]+"/"+y[1]) })
+	b.WriteString("# HELP grist_requests_total The API's requests answered, by kind (command, query, other), block and status code.\n# TYPE grist_requests_total counter\n")
+	for _, k := range keys {
+		row := h.red.by[k]
+		codes := slices.Sorted(maps.Keys(row.codes))
+		for _, c := range codes {
+			fmt.Fprintf(b, "grist_requests_total{kind=\"%s\",block=\"%s\",code=\"%d\"} %d\n", k[0], labelEscaper.Replace(k[1]), c, row.codes[c])
+		}
+	}
+	b.WriteString("# HELP grist_request_duration_seconds The API's request durations, by kind and block.\n# TYPE grist_request_duration_seconds histogram\n")
+	for _, k := range keys {
+		row := h.red.by[k]
+		labels := fmt.Sprintf("kind=\"%s\",block=\"%s\"", k[0], labelEscaper.Replace(k[1]))
+		var cum int64
+		for i, bound := range latencyBuckets {
+			cum += row.buckets[i]
+			fmt.Fprintf(b, "grist_request_duration_seconds_bucket{%s,le=\"%s\"} %d\n", labels, strconv.FormatFloat(bound, 'g', -1, 64), cum)
+		}
+		fmt.Fprintf(b, "grist_request_duration_seconds_bucket{%s,le=\"+Inf\"} %d\n", labels, row.count)
+		fmt.Fprintf(b, "grist_request_duration_seconds_sum{%s} %g\n", labels, row.sum)
+		fmt.Fprintf(b, "grist_request_duration_seconds_count{%s} %d\n", labels, row.count)
+	}
+}
+
+// runtimeMetrics writes the Go runtime's gauges and the build's info:
+// goroutines, the heap, GC cycles, GOMAXPROCS and GOMEMLIMIT, and
+// grist_build_info (the main module's version and path, Go's).
+func runtimeMetrics(b *strings.Builder) {
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	for _, g := range []struct {
+		name, help string
+		v          any
+	}{
+		{"go_goroutines", "Goroutines that exist.", runtime.NumGoroutine()},
+		{"go_memstats_heap_alloc_bytes", "Bytes of allocated heap objects.", ms.HeapAlloc},
+		{"go_memstats_heap_sys_bytes", "Bytes of heap obtained from the OS.", ms.HeapSys},
+		{"go_gc_cycles_total", "Completed GC cycles.", ms.NumGC},
+		{"go_gomaxprocs", "GOMAXPROCS.", runtime.GOMAXPROCS(0)},
+		{"go_gomemlimit_bytes", "The runtime's soft memory limit (GOMEMLIMIT).", debug.SetMemoryLimit(-1)},
+	} {
+		typ := "gauge"
+		if strings.HasSuffix(g.name, "_total") {
+			typ = "counter"
+		}
+		fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s %s\n%s %v\n", g.name, g.help, g.name, typ, g.name, g.v)
+	}
+	version, path := "(unknown)", "(unknown)"
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		version, path = bi.Main.Version, bi.Main.Path
+	}
+	fmt.Fprintf(b, "# HELP grist_build_info The binary's build: its main module's path and version, and Go's.\n# TYPE grist_build_info gauge\ngrist_build_info{path=\"%s\",version=\"%s\",goversion=\"%s\"} 1\n",
+		labelEscaper.Replace(path), labelEscaper.Replace(version), runtime.Version())
 }
 
 // labelEscaper escapes a label value as Prometheus' text format does:

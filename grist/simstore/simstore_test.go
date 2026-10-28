@@ -55,3 +55,25 @@ func TestTwoStores(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// A restore of the qenv.Store (nemesis.restore.<name>'s, here Backup and
+// Restore) wakes the simstore's waiters with the log below what they wait
+// on (storetest.Rewinds), the history checker on.
+func TestRewinds(t *testing.T) {
+	sim := qenv.New(qenv.NewSeeded(1))
+	defer sim.Close()
+	sim.Check = true
+	db := qenv.NewStore(sim, "grist", qenv.Serializable)
+	var err error
+	sim.Spawn("rewinds", func(ctx context.Context) {
+		err = storetest.Rewinds(ctx, simstore.New(db),
+			func(context.Context) error { db.Backup(); return nil },
+			func(context.Context) error { db.Restore(); return nil })
+	})
+	if rerr := sim.Run(time.Minute); rerr != nil {
+		t.Fatal(rerr)
+	}
+	if err != nil {
+		t.Error(err)
+	}
+}

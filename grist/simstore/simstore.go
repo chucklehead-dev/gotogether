@@ -196,6 +196,9 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 			return 0, &store.ConditionFailed{Marker: b.Marker.ID}
 		}
 	}
+	if c := b.Checkpoint; c != nil && c.To > h {
+		return 0, &store.ConditionFailed{Event: c.To, Past: true, Head: h}
+	}
 	if c := b.Checkpoint; c != nil {
 		v, _, err := tx.GetForUpdate(checkpointKey(t, c.Processor))
 		if err != nil {
@@ -207,6 +210,9 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 		}
 	}
 	if c := b.Condition; c != nil {
+		if c.After > h {
+			return 0, &store.ConditionFailed{Event: c.After, Past: true, Head: h}
+		}
 		for _, q := range c.Selectors {
 			for _, p := range positions(tx, t, q, c.After, h) {
 				if v, ok := tx.Get(eventKey(t, p)); ok && q.Matches(v.(store.Stored).Event) {
@@ -316,10 +322,11 @@ func (s *Store) Heads(ctx context.Context) (map[string]store.Position, error) {
 }
 
 // Wait implements store.Store: it waits on the store's signal, notified
-// at every append's commit, so a poller costs the scheduler nothing
-// while the tenant is quiet.
+// at every append's commit (and at a failover or a restore of the
+// qenv.Store, which may rewind the head), so a poller costs the scheduler
+// nothing while the tenant is quiet.
 func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
-	return s.wait(ctx, headKey(t), true, func(v any) bool { return v.(store.Position) > p })
+	return s.wait(ctx, headKey(t), true, func(v any) bool { return v.(store.Position) != p })
 }
 
 // StepCount implements store.StepLog.
@@ -352,7 +359,7 @@ func (s *Store) WaitSteps(ctx context.Context, t string, after int64) error {
 	if _, ok := s.db.Read(headKey(t)); !ok {
 		return store.ErrUnknownTenant
 	}
-	return s.wait(ctx, stepSeqKey(t), false, func(v any) bool { n, _ := v.(int64); return n > after })
+	return s.wait(ctx, stepSeqKey(t), false, func(v any) bool { n, _ := v.(int64); return n != after })
 }
 
 // wait waits on the signal until done holds of key's committed value

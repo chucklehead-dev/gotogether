@@ -171,9 +171,43 @@ type Config struct {
 	// trigger or decides without the event. gristtest.Upgrade runs it.
 	// Not with HTTP yet.
 	From *grist.App
+	// Store, if set, makes the store's incidents (docs/grist-platform.md
+	// §3.4): a managed database's failovers, restores from backups, and
+	// the operator who resumes a tenant a rewind stopped (Managed).
+	Store *Managed
 	// Log, if set, receives the simulation's log (crashes, upgrades:
 	// qenv.Sim.Log), for a failing run's story.
 	Log func(string)
+}
+
+// Managed is a run's store incidents: what a managed PostgreSQL does to
+// an app (docs/grist-platform.md §3.4), and what its operator does after.
+type Managed struct {
+	// Failover, if set, fails the store over at commits the run chooses
+	// (qenv.Store.Failovers: store.<app>.failover, its options failover and,
+	// with LoseTail, loseTail).
+	Failover *qenv.Failover
+	// Restore, if set, restores the store once, at a point the run
+	// chooses, from a backup taken every RestoreEvery of virtual time (0:
+	// before every commit, so the restore loses the last; qenv.Store.Restores:
+	// nemesis.restore.<app>).
+	Restore      bool
+	RestoreEvery time.Duration
+	// LoseAfter, if set, makes the store lose its last Lose commits
+	// (default 1; at most the run's) right after its LoseAfter-th of the
+	// run (the tenants' creation aside), every open transaction reset: a failover's lost
+	// tail, or a restore from a backup taken before them, at a point the
+	// test chooses (Failover's and Restore's are the run's).
+	LoseAfter, Lose int
+	// Resume is how long after a rewind stopped a tenant's processors
+	// (grist.ErrRewound) the operator resumes it (grist.Resume), 0 for
+	// never: the processors stay stopped, as they do until an operator
+	// decides.
+	Resume time.Duration
+	// FailOpen is the fail-closed's ablation (grist.Relay.FailOpen): the
+	// processors go on after a rewind, unasked, as a grist without
+	// ErrRewound would; for the test that shows what it prevents.
+	FailOpen bool
 }
 
 // Doubles are a run's handlers of the App's dependencies, by dependency.
@@ -426,11 +460,35 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 	}
 	db.CommitFaults = cfg.CommitFaults
+	if m := cfg.Store; m != nil {
+		if m.Failover != nil {
+			db.Failovers(*m.Failover)
+		}
+		if m.Restore {
+			db.Restores(m.RestoreEvery, 1)
+		}
+		if k := m.LoseAfter; k > 0 {
+			lose, from := max(m.Lose, 1), db.Commits()
+			s.Spawn("incident", func(ctx context.Context) {
+				qenv.Daemon(ctx)
+				qenv.Wait(ctx, func() bool { return db.Commits() >= from+k })
+				db.FailOver(min(lose, db.Commits()-from), 0) // the run's commits only: its tenants stay
+			})
+		}
+		if m.FailOpen {
+			relay.FailOpen()
+		}
+		if m.Resume > 0 {
+			operate(s, st, relay, m.Resume)
+		}
+	}
 	served, err := serveDependencies(s, app, cfg.Doubles, cfg.From)
 	if err != nil {
 		return err
 	}
-	deps := served
+	// requests served beside the nodes record on each tenant's clock as
+	// the nodes' relay keeps it (after a rewind, past the old history)
+	deps := func(ctx context.Context) context.Context { return relay.With(served(ctx)) }
 	if cfg.Setup != nil {
 		if d := cfg.Setup(s, st); d != nil {
 			deps = func(ctx context.Context) context.Context { return d(served(ctx)) }
@@ -554,6 +612,32 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	// a relay that cannot read a row records none after it: the run's
 	// commits are not all in its trace, and no verdict on it would hold
 	return relay.Err()
+}
+
+// operate is the operator: a while (after) after a rewind stops a
+// tenant's processors (grist.ErrRewound), it resumes the tenant
+// (grist.Resume), having decided the lost commits' effects may run again.
+func operate(s *qenv.Sim, st grist.Store, relay *grist.Relay, after time.Duration) {
+	var rewound qenv.Signal
+	relay.OnRewind(func(*grist.RewoundError) { rewound.Notify() })
+	s.Spawn("operator", func(ctx context.Context) {
+		qenv.Daemon(ctx)
+		for ctx.Err() == nil {
+			if len(relay.Rewound()) == 0 {
+				rewound.Wait(ctx, 0)
+				continue
+			}
+			qenv.Sleep(ctx, after)
+			for _, e := range relay.Rewound() {
+				if err := grist.Resume(ctx, st, e.Tenant); err != nil && s.Log != nil {
+					s.Log(fmt.Sprintf("%v gristsim: the operator could not resume %s: %v", s.Elapsed(), e.Tenant, err))
+				}
+			}
+			// the resume's row reaches the relay, which lets the processors
+			// go on: wait for it before looking again
+			qenv.Wait(ctx, func() bool { return len(relay.Rewound()) == 0 })
+		}
+	})
 }
 
 // startNodes starts cfg.Nodes nodes on st (nodes gets them), the first

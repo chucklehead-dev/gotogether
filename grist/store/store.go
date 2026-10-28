@@ -169,7 +169,9 @@ type Store interface {
 	Checkpoint(ctx context.Context, tenant, processor string) (Position, error)
 	// Heads are every tenant's head: a change feed's poll.
 	Heads(ctx context.Context) (map[string]Position, error)
-	// Wait blocks until tenant's head is past p, or ctx is done.
+	// Wait blocks until tenant's head is not p (past it, or below it: the
+	// log went backwards, a failover's lost tail or a restore, which a
+	// waiter must see at once: grist.ErrRewound), or ctx is done.
 	Wait(ctx context.Context, tenant string, p Position) error
 }
 
@@ -185,7 +187,8 @@ type StepLog interface {
 	// Steps are tenant's step rows after seq (0: from the first), in commit
 	// order, at most limit (0: all).
 	Steps(ctx context.Context, tenant string, after int64, limit int) ([]StepRow, error)
-	// WaitSteps blocks until tenant's step log has a row after seq, or ctx
+	// WaitSteps blocks until tenant's step log has a row after seq, or
+	// fewer than seq rows (it went backwards, as Wait's head may), or ctx
 	// is done. A refusal commits its marker and its step without moving
 	// the head, so Store.Wait would sleep through it.
 	WaitSteps(ctx context.Context, tenant string, after int64) error
@@ -289,7 +292,10 @@ type Batch struct {
 	// in by the store.
 	Marker *Marker
 	// Checkpoint, if set, moves a processor's checkpoint, a
-	// compare-and-set: from From (else *CheckpointMoved), to To.
+	// compare-and-set: from From (else *CheckpointMoved), to To, at most
+	// the head before the batch (a trigger the log holds; else a
+	// *ConditionFailed, Past: the log went backwards since the trigger was
+	// read).
 	Checkpoint *CheckpointMove
 	// Time is the append's time, Unix milliseconds (qenv.Now).
 	Time int64
@@ -357,9 +363,18 @@ type ConditionFailed struct {
 	Selector Selector
 	Event    Position
 	Marker   string
+	// Past is a condition whose position (Event) is past the head (Head),
+	// or a checkpoint moved past it: the decision read a log that has since
+	// gone backwards (a failover's lost tail, a restore), so it decided on
+	// events that are gone. Decide again.
+	Past bool
+	Head Position
 }
 
 func (e *ConditionFailed) Error() string {
+	if e.Past {
+		return fmt.Sprintf("grist: condition failed: the decision read through position %d, past the head %d: the log went backwards since it read (a failover's lost tail, a restore); decide again", e.Event, e.Head)
+	}
 	if e.Marker != "" {
 		return fmt.Sprintf("grist: condition failed: marker %s exists (the key has its outcome already)", e.Marker)
 	}
@@ -455,10 +470,15 @@ func Transient(err error) bool {
 }
 
 // CheckCondition is the reference evaluation of c over a tenant's whole
-// log (events in position order): the first event after c.After matching
-// one of its selectors, as a *ConditionFailed, or nil. Stores may check
+// log (events in position order): a position past the log's head (the
+// log went backwards since the decision read it), or the first event
+// after c.After matching one of its selectors, as a *ConditionFailed, or
+// nil. Stores may check
 // it with indexes; storetest checks them against this.
 func CheckCondition(log []Stored, c Condition) error {
+	if head := Position(len(log)); c.After > head {
+		return &ConditionFailed{Event: c.After, Past: true, Head: head}
+	}
 	for _, e := range log {
 		if e.Pos <= c.After {
 			continue

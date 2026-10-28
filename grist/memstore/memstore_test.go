@@ -17,3 +17,16 @@ func TestContract(t *testing.T) {
 		}
 	})
 }
+
+// A restore (Backup, Restore) wakes the memstore's waiters with the log
+// below what they wait on (storetest.Rewinds).
+func TestRewinds(t *testing.T) {
+	s := memstore.New("grist")
+	var b *memstore.Backup
+	err := storetest.Rewinds(context.Background(), s,
+		func(context.Context) error { b = s.Backup(); return nil },
+		func(context.Context) error { s.Restore(b); return nil })
+	if err != nil {
+		t.Error(err)
+	}
+}

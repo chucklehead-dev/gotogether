@@ -19,6 +19,7 @@ the walk-through: read its README's table first.
 - A failure: the Results, then [references/triage.md](references/triage.md).
 - The generated model, its holes, Quint's reserved names: [references/model.md](references/model.md).
 - A command touching several entities: [references/entities.md](references/entities.md).
+- Production (`-db-file`, logs, metrics, migrations, `prune`, `steps -export`), a rewind (`grist.ErrRewound`, `<app> resume`), a failover or restore simulated (`gristsim.Managed`): [references/operations.md](references/operations.md).
 - An event whose shape changes (upcasters, grist.lock, a deployed version's log judged by today's model), a new version in a rolling update (readers first: `grist.WritesVersion`, `<app> catalog -diff deployed.json`, `gristtest.Upgrade`), a read model whose log is long (snapshots, their audit): [references/versions.md](references/versions.md).
 
 ## Steps
@@ -59,6 +60,7 @@ the walk-through: read its README's table first.
 | `reject <command>` (`Rejects`) | a commit the model forbids | the decision's rule, its condition, a read not covered (`covers`), a key answered twice |
 | `show a mismatch after <block>` | head, batch or causes differ | a raw append, or a fold disagreeing with its def |
 | `grist.ErrOutcomeUnknown` | an append's outcome is unknown | retry with the same id |
+| `grist.ErrRewound`, `grist_rewound 1`, `gristRewound` | the tenant's log went backwards; its processors stopped | [references/operations.md](references/operations.md): decide, then `<app> resume` |
 | `event X version N changed shape since grist.lock was written` | a stored version's struct changed | [references/versions.md](references/versions.md): a new version, an upcaster |
 | `X is version N, and this app reads X up to version M`; `catalog -diff` says `readers first` | a release writes what older nodes refuse | [references/versions.md](references/versions.md): `WritesVersion` until the rollout ends |
 | `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |

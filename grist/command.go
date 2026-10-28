@@ -213,7 +213,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 	onReturn := func(r *Reads, outcome error, kv ...any) {
 		all := append(append(fields(r), kv...), "order.pos", readOrder(r.pos))
 		all = append(all, "obs.head", int64(r.pos))
-		record(ctx, s, env.Tenant, c.info.quint, outcome, append(all, c.app.batchObs(nil, "command", env.ID)...)...)
+		record(withBase(ctx, env.Tenant, r.base), s, env.Tenant, c.info.quint, outcome, append(all, c.app.batchObs(nil, "command", env.ID)...)...)
 	}
 	answer := func(m store.Marker) (Receipt, error) {
 		if m.Hash != hash {

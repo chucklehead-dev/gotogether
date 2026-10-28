@@ -71,6 +71,10 @@ func TestMutant(t *testing.T) {
 		// crashes so: every run rejects, at one seed per push
 		system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1, Chooser: crashAfterPost}).
 			Expect(t, qtest.All(qtest.Rejects("ledgerPostServed")))
+		// and after a restore that lost the post's checkpoint, once the
+		// operator resumed the tenant (TestRestoreReplays is the contrast)
+		system(commits, lost(4)).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}).
+			Expect(t, qtest.All(qtest.Rejects("ledgerPostServed")))
 	case "ledgerAcksUnposted":
 		// a proxy answering every post booked without posting: every step
 		// the model's actions judge is admitted (the call's answer is the

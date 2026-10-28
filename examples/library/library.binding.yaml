@@ -47,6 +47,8 @@ actions:
     args: { result: '{{.outcome}}' }
   mailerSendReplayed:
     args: { result: '{{.outcome}}' }
+  gristRewound: {}
+  gristResumed: {}
 
 invariants: [copiesHeld, withinLimit]
 eventually: [everyBorrowReceipted, receiptsEventuallyHandled, mailerSendEventuallyServed]

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -43,12 +44,22 @@ import (
 //	           stubbed) and model/<app>.qnt (no invariant yet)
 //	           where there are none.
 //	           It lists the holes the app's model has not filled
+//	resume     after a rewind (ErrRewound: a failover's lost tail, a restore)
+//	           stopped -tenant's processors on every node, lets them go on
+//	           (Resume): the operator's decision, never automatic
+//	steps      -export: every committed step of the store's step log as JSONL
+//	           (qobs's), each tenant's from its first row kept or -after
+//	           a row, as a relay records them (for a pod's lost file, or an
+//	           operator's comparison after a rewind)
+//	prune      deletes step rows and markers older than -steps and
+//	           -markers (retention: both tables grow with every commit)
 //	sizing     runs <app>-sizing, the app's sizing binary (gristload.Main), with
 //	           the arguments after it: found beside this binary, else on PATH
 //	           (qload, qmeta and gristsim stay out of the app's binary, which
 //	           links none of them); its exit status is sizing's
 //	serve      the HTTP API (NewHandler, opts applied) on grist/sqlstore over -db
-//	           (sqlite:PATH, postgres:DSN), the node (App.Start: relay, pollers,
+//	           (sqlite:PATH, postgres:DSN; or -db-file, a file holding it, kept
+//	           out of ps and the pod spec), the node (App.Start: relay, pollers,
 //	           the tenant watcher) beside it, every step recorded to -steps
 //	           (qobs.FileSink, PerStep: a new file each time; in a directory, a
 //	           file per node and start) for validation with the app's bindings,
@@ -116,6 +127,7 @@ const mainUsage = `commands:
   sizing [flags]              run <app>-sizing (gristload.Main: deploy/sizing.yaml from the app's steps), a binary of its own
   serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
       -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
+      -db-file PATH                    the file holding -db's value (a mounted Secret): not in ps or the pod spec
       -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port; on loopback in a pod, refused)
       -health-addr HOST:PORT           /livez, /readyz and /metrics on a side port (default :8081 in a pod, else off)
       -grace DURATION                  the orchestrator's kill deadline after SIGTERM: the drain is budgeted into it
@@ -125,7 +137,11 @@ const mainUsage = `commands:
                                        (in a pod give a directory: a restart truncates a file, losing the earlier start's steps)
       -caller-header NAME              take the request's caller from header NAME (behind an authenticating proxy only)
       -poll DURATION                   how often the store reads other processes' appends (default 250ms)
-      -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)`
+      -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)
+  resume (-db DB | -db-file PATH) -tenant T   let T's processors go on after a rewind stopped them (grist.ErrRewound),
+                                   from their checkpoints: the effects of the triggers after them run again (decide first)
+  steps -export (-db DB | -db-file PATH) [-tenant T] [-after N]   every committed step as JSONL on stdout
+  prune (-db DB | -db-file PATH) [-steps AGE] [-markers AGE]   delete step rows and markers older than AGE (a duration, as 720h)`
 
 // mainArgs runs one of Main's commands, args the binary's arguments
 // after its name (Main says what each does).
@@ -151,6 +167,12 @@ func mainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 		return serveMain(ctx, app, args[1:], stderr, opts)
 	case "sizing":
 		return helperMain(ctx, app, "sizing", args[1:], stdout, stderr)
+	case "resume":
+		return resumeMain(ctx, app, args[1:], stdout)
+	case "steps":
+		return stepsMain(ctx, app, args[1:], stdout)
+	case "prune":
+		return pruneMain(ctx, app, args[1:], stdout)
 	case "help", "-h", "-help", "--help":
 		fmt.Fprintf(stdout, "usage: %s <command>\n%s\n", app.Name, mainUsage)
 		return nil
@@ -282,6 +304,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	fs := flag.NewFlagSet(app.Name+" serve", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	dbSpec := fs.String("db", "", "")
+	dbFile := fs.String("db-file", "", "")
 	addr := fs.String("addr", "127.0.0.1:8080", "")
 	steps := fs.String("steps", "", "")
 	callerHeader := fs.String("caller-header", "", "")
@@ -294,8 +317,11 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if err := fs.Parse(args); err != nil {
 		return &usageError{Msg: fmt.Sprintf("%s serve: %v\n%s", app.Name, err, mainUsage)}
 	}
+	if err := dbFromFile(app, "serve", dbSpec, *dbFile); err != nil {
+		return err
+	}
 	if *dbSpec == "" || fs.NArg() > 0 {
-		return &usageError{Msg: fmt.Sprintf("%s serve: give -db (and only flags)\n%s", app.Name, mainUsage)}
+		return &usageError{Msg: fmt.Sprintf("%s serve: give -db or -db-file (and only flags)\n%s", app.Name, mainUsage)}
 	}
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
@@ -353,6 +379,11 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	// the startup line: who this node is, what its drain needs of the
 	// orchestrator's grace, and its memory limit
 	fmt.Fprintf(stderr, "%s: %s; %s; %s\n", app.Name, id, drain.line(), mem)
+	lg := lifecycle(stderr, app, id)
+	b := drain.budget()
+	lg.Info("starting", "addr", *addr, "health_addr", *healthAddr, "orchestrator", orchestrator, "grace", drain.Grace.String(),
+		"delay", b.Delay.String(), "shutdown", b.Shutdown.String(), "settle", b.Settle.String(), "flush", b.Flush.String(), "memory", mem)
+	started := time.Now() //qenv:ok the real tier's uptime, outside any simulation
 	var hs *health
 	if *healthAddr != "" {
 		// first, before the store: /livez answers while the store is down,
@@ -444,6 +475,12 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if err != nil {
 		return err
 	}
+	relay.OnRewind(func(e *RewoundError) {
+		lg.Error("rewound", "tenant", e.Tenant, "seen", int64(e.Seen), "found", int64(e.Head), "processor", e.Processor, "steps", e.Steps, "error", e.Error())
+	})
+	// requests record on each tenant's clock as the relay keeps it (after
+	// a rewind, past the old history's steps)
+	ctx = relay.With(ctx)
 	var n *node
 	if err := app.Start(nodeCtx, st, WithRelay(relay), StartOption{apply: func(c *startConfig) { c.onNode = func(x *node) { n = x } }}); err != nil {
 		return err
@@ -463,11 +500,13 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		hs.started(st, relay, n)
 	}
 	srv := newMainServer(ctx, h)
+	lg.Info("serving", "addr", ln.Addr().String())
 	fmt.Fprintf(stderr, "%s serving on http://%s\n", app.Name, ln.Addr())
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }() //qenv:ok the real tier's server, outside any simulation
 	select {
 	case err := <-done:
+		lg.Error("stopped", "error", fmt.Sprint(err), "uptime", time.Since(started).Round(time.Millisecond).String()) //qenv:ok the real tier's uptime
 		return err
 	case <-ctx.Done():
 	}
@@ -476,8 +515,168 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if hs != nil {
 		hs.draining.Store(true)
 	}
-	return runDrain(ctx, drain, mainServer{srv: srv, done: done}, st, relay, n, stopNode, true,
-		func(msg string) { fmt.Fprintln(stderr, msg) })
+	lg.Info("draining", "grace", drain.Grace.String())
+	err = runDrain(ctx, drain, mainServer{srv: srv, done: done}, st, relay, n, stopNode, true,
+		func(msg string) { fmt.Fprintln(stderr, msg) }, func(phase string, kv ...any) { lg.Info("drain", append([]any{"phase", phase}, kv...)...) })
+	lg.Info("stopped", "error", fmt.Sprint(err), "uptime", time.Since(started).Round(time.Millisecond).String()) //qenv:ok the real tier's uptime
+	return err
+}
+
+// lifecycle is serve's structured log of its lifecycle on w, one JSON
+// object a line (log/slog's), each carrying the node's identity: starting,
+// serving, draining and each phase of the drain, stopped; a rewind
+// (ErrRewound) as an error. Beside the plain startup lines, which stay
+// for people and the tests that read them.
+func lifecycle(w io.Writer, app *App, id Identity) *slog.Logger {
+	kv := []any{"app", app.Name, "node", id.Node, "incarnation", id.Incarnation}
+	for _, f := range [][2]string{{"namespace", id.Namespace}, {"host", id.Host}, {"zone", id.Zone}} {
+		if f[1] != "" {
+			kv = append(kv, f[0], f[1])
+		}
+	}
+	return slog.New(slog.NewJSONHandler(w, nil)).With(kv...)
+}
+
+// dbFromFile sets *spec from file (-db-file: the DSN kept out of ps and
+// the pod spec, a mounted Secret's file), trimmed; both given is a usage
+// error. The file is read once, at start: a rotated password reaches the
+// node at its next start (slice 5's -db-file reopens the pool on an
+// authentication failure).
+func dbFromFile(app *App, cmd string, spec *string, file string) error {
+	if file == "" {
+		return nil
+	}
+	if *spec != "" {
+		return &usageError{Msg: fmt.Sprintf("%s %s: give -db or -db-file, not both", app.Name, cmd)}
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("%s %s: -db-file: %w (give the file holding -db's value, as sqlite:PATH or postgres:DSN: a mounted Secret's key)", app.Name, cmd, err)
+	}
+	*spec = strings.TrimSpace(string(b))
+	if *spec == "" {
+		return &usageError{Msg: fmt.Sprintf("%s %s: -db-file %s is empty: it holds -db's value, as sqlite:PATH or postgres:DSN", app.Name, cmd, file)}
+	}
+	return nil
+}
+
+// openStore opens the store a command's -db or -db-file names.
+func openStore(ctx context.Context, app *App, cmd, spec, file string) (*sqlstore.Store, func(), error) {
+	if err := dbFromFile(app, cmd, &spec, file); err != nil {
+		return nil, nil, err
+	}
+	if spec == "" {
+		return nil, nil, &usageError{Msg: fmt.Sprintf("%s %s: give -db or -db-file\n%s", app.Name, cmd, mainUsage)}
+	}
+	db, dialect, err := openDB(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	st, err := sqlstore.Open(ctx, db, dialect, sqlstore.Options{Name: app.Name})
+	if err != nil {
+		db.Close()
+		return nil, nil, err
+	}
+	return st, func() { db.Close() }, nil
+}
+
+// resumeMain is the resume command (Resume).
+func resumeMain(ctx context.Context, app *App, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet(app.Name+" resume", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	spec, file, tenant := fs.String("db", "", ""), fs.String("db-file", "", ""), fs.String("tenant", "", "")
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *tenant == "" {
+		return &usageError{Msg: fmt.Sprintf("usage: %s resume (-db DB | -db-file PATH) -tenant T\n%s", app.Name, mainUsage)}
+	}
+	st, closeDB, err := openStore(ctx, app, "resume", *spec, *file)
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+	if err := Resume(ctx, st, *tenant); err != nil {
+		return err
+	}
+	_, head, err := st.Read(ctx, *tenant, Selector{}, 0)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "%s: tenant %s resumed at head %d: every node's processors go on from their checkpoints once their relay reads it\n", app.Name, *tenant, head)
+	return nil
+}
+
+// stepsMain is the steps command: -export writes every committed step of
+// the store's step log as JSONL, each tenant's (or -tenant's) rows after
+// -after rendered as a relay records them (Relay), so a pod's lost steps
+// file is rebuilt from the store, and an operator compares two
+// histories after a rewind.
+func stepsMain(ctx context.Context, app *App, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet(app.Name+" steps", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	export := fs.Bool("export", false, "")
+	spec, file := fs.String("db", "", ""), fs.String("db-file", "", "")
+	var tenants names
+	fs.Var(&tenants, "tenant", "")
+	after := fs.Int64("after", 0, "")
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || !*export || *after < 0 {
+		return &usageError{Msg: fmt.Sprintf("usage: %s steps -export (-db DB | -db-file PATH) [-tenant T] [-after N]\n%s", app.Name, mainUsage)}
+	}
+	st, closeDB, err := openStore(ctx, app, "steps", *spec, *file)
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+	relay, err := NewRelay(st)
+	if err != nil {
+		return err
+	}
+	relay.RenderAs(app)
+	sink := qobs.NewJSONLSink(stdout, qobs.PerStep)
+	rec := qobs.NewRecorder(sink, qobs.WithID(app.Name+"/export"))
+	defer rec.Close()
+	ctx = qobs.WithRecorder(ctx, rec)
+	if len(tenants) == 0 {
+		ts, err := st.Tenants(ctx)
+		if err != nil {
+			return err
+		}
+		tenants = ts
+	}
+	for _, t := range tenants {
+		if err := relay.export(ctx, t, *after); err != nil {
+			return fmt.Errorf("%s steps -export: tenant %s: %w", app.Name, t, err)
+		}
+	}
+	return relay.Err()
+}
+
+// pruneMain is the prune command (sqlstore.Store.Prune).
+func pruneMain(ctx context.Context, app *App, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet(app.Name+" prune", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	spec, file := fs.String("db", "", ""), fs.String("db-file", "", "")
+	steps, markers := fs.Duration("steps", 0, ""), fs.Duration("markers", 0, "")
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *steps < 0 || *markers < 0 || *steps+*markers == 0 {
+		return &usageError{Msg: fmt.Sprintf("usage: %s prune (-db DB | -db-file PATH) [-steps AGE] [-markers AGE] (at least one)\n%s", app.Name, mainUsage)}
+	}
+	st, closeDB, err := openStore(ctx, app, "prune", *spec, *file)
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+	now := time.Now() //qenv:ok the real tier's retention, outside any simulation
+	r := sqlstore.Retention{}
+	if *steps > 0 {
+		r.StepsBefore = now.Add(-*steps)
+	}
+	if *markers > 0 {
+		r.MarkersBefore = now.Add(-*markers)
+	}
+	n, err := st.Prune(ctx, r)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "%s: pruned %d step rows and %d markers\n", app.Name, n.Steps, n.Markers)
+	return nil
 }
 
 // mainServer is Main's HTTP server as a drain's.

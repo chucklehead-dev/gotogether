@@ -53,6 +53,10 @@ type Relay struct {
 	// the newest release's (one reading every version the others read)
 	app atomic.Pointer[App]
 
+	// clocks are the node's memory of each tenant's log (rewind.go): what
+	// a rewind is seen against, and the base its steps' clocks are at
+	clocks clocks
+
 	mu      sync.Mutex // tenants and errs only: no seam is reached while it is held
 	tenants map[string]*relayed
 	errs    map[string]error // a tenant's relay's error: why it stopped, or its last transient one
@@ -73,6 +77,16 @@ type relayed struct {
 	done    atomic.Int64 // rows, for Behind: read without mu
 	scratch *qobs.Recorder
 	sink    *qobs.MemorySink
+	// marks are the rows recorded, to tell whether the log still holds
+	// them (rewind.go); epoch counts the rewinds recorded, so a flush that
+	// read rows before one records none of them
+	marks []rowMark
+	epoch int
+	// verified is the head after the last row recorded, causes each
+	// recorded event's cause by position (the last markWindow): what a
+	// poller checks a trigger against before it handles it (verify)
+	verified atomic.Int64
+	causes   map[Position]string
 }
 
 // NewRelay returns a relay of s's step log: an error if s keeps none.
@@ -232,12 +246,49 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 	}
 	p := r.tenant(t)
 	for {
-		// rows after the progress: another flush may record some of them
-		// first, which record skips (the log is dense, so the next row
-		// not recorded is always the next one read)
-		rows, err := r.log.Steps(ctx, t, p.done.Load(), relayBatch)
+		if r.clocks.toRecord(t) {
+			if err := r.recordRewind(ctx, t, p); err != nil {
+				return err
+			}
+		}
+		// the last row recorded, then the rows after the progress: another
+		// flush may record some of them first, which record skips (the log
+		// is dense, so the next row not recorded is always the next one
+		// read). The last row is read again to see that the log still holds
+		// it: a log that went backwards (ErrRewound) no longer has it, or has
+		// another in its place
+		done := p.done.Load()
+		p.mu.Lock()
+		epoch := p.epoch
+		mark, marked := p.markOf(done)
+		p.mu.Unlock()
+		rows, err := r.log.Steps(ctx, t, max(done-1, 0), relayBatch+1)
 		if err != nil {
 			return err
+		}
+		if done > 0 && marked {
+			switch {
+			case len(rows) > 0 && rows[0].Seq > done:
+				// pruned (sqlstore.Prune): the rows after it are there, which
+				// a log that went back would not have
+			case len(rows) == 0:
+				n, err := r.log.StepCount(ctx, t)
+				if err != nil {
+					return err
+				}
+				if n >= done {
+					break // pruned, the count kept
+				}
+				r.clocks.stopFor(t, &RewoundError{Tenant: t, Seen: mark.head, Steps: fmt.Sprintf("row %d, which it recorded, is gone (%d rows)", done, n)})
+				continue
+			case !mark.same(rows[0]):
+				r.clocks.stopFor(t, &RewoundError{Tenant: t, Seen: mark.head, Head: rows[0].Head,
+					Steps: fmt.Sprintf("row %d is not the row it recorded (head %d, now %d)", done, mark.head, rows[0].Head)})
+				continue
+			}
+		}
+		if len(rows) > 0 && rows[0].Seq == done && done > 0 {
+			rows = rows[1:]
 		}
 		for _, row := range rows {
 			if row.Seq <= p.done.Load() {
@@ -248,7 +299,7 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 			if err != nil {
 				return err
 			}
-			if err := r.record(ctx, t, p, row, steps); err != nil {
+			if err := r.record(ctx, t, p, row, steps, epoch); err != nil {
 				return err
 			}
 		}
@@ -278,17 +329,26 @@ func (r *Relay) decode(ctx context.Context, t string, row store.StepRow) ([]rela
 
 // record records one row's steps, if it is the next of t's (under p.mu,
 // reaching no seam).
-func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.StepRow, steps []relayStep) error {
+func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.StepRow, steps []relayStep, epoch int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	switch {
+	case p.epoch != epoch:
+		return nil // read before a rewind was recorded: the next flush reads the new history
 	case row.Seq <= p.rows:
 		return nil // recorded already, by another flush
+	case p.rows == 0 && len(p.marks) == 0 && row.Seq > 1:
+		// a log pruned before its first row this relay reads
+		// (sqlstore.Prune): recorded from its oldest row kept
 	case row.Seq != p.rows+1:
 		return &rowError{fmt.Errorf("grist: tenant %s's step log has row %d after %d: its rows must be numbered densely from 1 (store.StepRow.Seq)", t, row.Seq, p.rows)}
 	}
+	base := r.clocks.base(t)
+	resumed := false
 	for _, s := range steps {
+		shiftOrders(s.kv, base)                                          // after a rewind, on the tenant's new clock
 		p.scratch.Record(context.Background(), s.action, s.err, s.kv...) // an error's step keeps its kv's outcome
+		resumed = resumed || s.action == "gristResumed"
 	}
 	out := p.sink.Steps()
 	p.sink.Reset()
@@ -304,7 +364,25 @@ func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.Step
 	}
 	p.rows = row.Seq
 	p.done.Store(p.rows)
+	r.mark(p, row, steps)
+	p.noteCauses(steps)
+	p.verified.Store(int64(row.Head))
+	r.clocks.saw(t, row.Head)
+	if resumed {
+		r.clocks.resume(t) // an operator's resume (Resume): the processors go on
+	}
 	return nil
+}
+
+// export records tenant t's rows after row after into ctx's recorder:
+// `<app> steps -export`'s, a fresh relay's.
+func (r *Relay) export(ctx context.Context, t string, after int64) error {
+	p := r.tenant(t)
+	p.mu.Lock()
+	p.rows = after
+	p.done.Store(after)
+	p.mu.Unlock()
+	return r.flush(ctx, t)
 }
 
 // run relays tenant t until ctx is done: a daemon waiting on the step

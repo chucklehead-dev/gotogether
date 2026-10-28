@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -261,6 +262,9 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 		backoff(ctx, try)
 	}
 	n.count = len(tenants)
+	// the node's tasks record on each tenant's clock as its relay keeps
+	// it: after a rewind, past every step before it
+	ctx = r.With(ctx)
 	for _, t := range tenants {
 		n.start(ctx, t)
 	}
@@ -331,7 +335,7 @@ func (n *node) start(ctx context.Context, t string) {
 	for _, p := range n.app.processors {
 		p := p
 		n.pollers.Add(1)
-		pl := &poller{app: n.app, s: n.s, p: p, tenant: t, waiting: &n.waiting, effects: &n.effects}
+		pl := &poller{app: n.app, s: n.s, p: p, tenant: t, waiting: &n.waiting, effects: &n.effects, relay: n.relay, clocks: &n.relay.clocks}
 		n.mu.Lock()
 		n.list = append(n.list, pl)
 		n.mu.Unlock()
@@ -380,6 +384,11 @@ type poller struct {
 	newer   int
 	waiting *atomic.Int64 // the node's count of idle pollers (node.idle)
 	effects *atomic.Int64 // the node's count of effects in flight
+	// relay and clocks: the node's memory of the tenant's log, against
+	// which a poller sees a rewind (ErrRewound), and the relay that
+	// records it
+	relay  *Relay
+	clocks *clocks
 	// busy is when the poller last made progress on its batch of
 	// triggers (began a trigger, or came back from a backoff; Unix
 	// nanoseconds, qenv.Now), 0 when it holds none (node.stuck)
@@ -413,6 +422,18 @@ func (pl *poller) progress(ctx context.Context) {
 
 func (pl *poller) run(ctx context.Context) {
 	for ctx.Err() == nil {
+		if pl.clocks.stopped(pl.tenant) != nil {
+			// a rewind (ErrRewound): fail closed for effects until an
+			// operator resumes the tenant, idle meanwhile; then on a thread
+			// of its own, the steps after the resume not ordered after the
+			// old history's by the thread
+			pl.waiting.Add(1)
+			pl.clocks.waitResumed(ctx, pl.tenant)
+			pl.waiting.Add(-1)
+			ctx = qobs.Thread(ctx)
+			continue
+		}
+		base := pl.clocks.base(pl.tenant)
 		cp, err := pl.s.Checkpoint(ctx, pl.tenant, pl.p.name)
 		if err != nil {
 			pl.pause(ctx)
@@ -421,6 +442,10 @@ func (pl *poller) run(ctx context.Context) {
 		evs, head, err := pl.s.Read(ctx, pl.tenant, store.Selector{Types: []string{pl.p.on}, After: cp, Limit: pl.p.opts.batchSize}, 0)
 		if err != nil {
 			pl.pause(ctx)
+			continue
+		}
+		if pl.clocks.observe(pl.tenant, pl.p.name, pl.markKey(), cp, head) != nil {
+			pl.relay.recordRewindNow(ctx, pl.tenant) // the rewind's step before any step of the new history
 			continue
 		}
 		pl.tries = 0
@@ -441,7 +466,7 @@ func (pl *poller) run(ctx context.Context) {
 			continue
 		}
 		pl.busy.Store(qenv.Now(ctx).UnixNano())
-		pl.handle(ctx, cp, head, evs)
+		pl.handle(withBase(ctx, pl.tenant, base), cp, head, evs) // its steps on the clock it read at
 		pl.busy.Store(0)
 	}
 }
@@ -474,6 +499,11 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 	}
 	for _, e := range evs {
 		pl.progress(ctx)
+		if pl.relay.verify(ctx, pl.tenant, e) != nil && !pl.clocks.noStop {
+			flush()
+			pl.relay.recordRewindNow(ctx, pl.tenant)
+			return // a rewind: fail closed, until a resume
+		}
 		res, ok := pl.decide(ctx, e)
 		if !ok {
 			flush()
@@ -588,7 +618,19 @@ func (pl *poller) effectContext(ctx context.Context, trigger, head Position, key
 	return context.WithValue(ctx, causeKey{}, &effectCause{app: pl.app, s: pl.s, p: pl.p, tenant: pl.tenant, trigger: trigger, head: head, key: key, slot: slot})
 }
 
-func (pl *poller) key(t Position) string { return effectKeyOf(pl.p.name, pl.tenant, t) }
+// markKey is the poller's key among its node's (clocks.observe).
+func (pl *poller) markKey() string { return fmt.Sprintf("%p", pl) }
+
+func (pl *poller) key(t Position) string {
+	k := effectKeyOf(pl.p.name, pl.tenant, t)
+	if n := pl.clocks.keyEpoch(pl.tenant, t); n > 0 {
+		// a position a rewind gave back and the log filled again: another
+		// event's, whose effect must not be answered from the lost one's
+		// record at a Keyed dependency (rewind.go)
+		k += "~" + strconv.Itoa(n)
+	}
+	return k
+}
 
 // effectKeyOf is the effect key of processor's effect for trigger t in
 // tenant (EffectKey): what ServeCalls requires a call's key to be.
@@ -626,9 +668,13 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(steps)}
 	for {
+		if pl.clocks.stopped(pl.tenant) != nil {
+			return 0, false // a rewind: nothing more of the trigger's until a resume
+		}
 		head, err := pl.s.Append(ctx, pl.tenant, b)
 		if err == nil {
 			pl.tries = 0
+			pl.clocks.committed(pl.tenant, pl.p.name, pl.markKey(), b.Checkpoint.To, head)
 			return head, true
 		}
 		if !store.Transient(err) {
@@ -694,6 +740,9 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 	var outcome []Event
 	ok := false
 	for try := 1; ; try++ {
+		if pl.clocks.stopped(pl.tenant) != nil {
+			return 0, false // a rewind: no effect until a resume, which handles the trigger again
+		}
 		if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 			proc.Crash()
 		}
@@ -747,6 +796,11 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	sim, proc := qenv.From(ctx), qenv.ProcessOf(ctx)
 	if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 		proc.Crash() // the checkpoint moved, the effect never runs: lost, by right
+	}
+	if pl.clocks.stopped(pl.tenant) != nil {
+		// a rewind since its checkpoint: it does not run (lost, as after
+		// a crash between the two), whatever the log holds now
+		return 0, false
 	}
 	pl.effects.Add(1)
 	err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 1))

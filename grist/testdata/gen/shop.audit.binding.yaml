@@ -53,6 +53,8 @@ actions:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
   warehouseHoldReplayed:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
+  gristRewound: {}
+  gristResumed: {}
 
 invariants: [stockBounded, picksAdded]
 eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled]

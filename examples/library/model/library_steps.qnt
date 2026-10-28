@@ -25,6 +25,9 @@ module libraryGen {
   var effects: List[Effect]
   // the command ids answered so far, by a commit or a committed refusal
   var answered: Set[str]
+  // the log went backwards (gristRewound) and no operator has resumed the
+  // processors since (gristResumed): they take no step
+  var rewound: bool
   // the calls of mailer/send as their callers saw them (Call.Do), and as the dependency
   // applied them (its served records), in order
   var mailerSendCalls: List[MailerSendRecord]
@@ -36,6 +39,7 @@ module libraryGen {
     appended' = [],
     effects' = [],
     answered' = Set(),
+    rewound' = false,
     mailerSendCalls' = [],
     mailerSendRecords' = [],
   }
@@ -57,6 +61,7 @@ module libraryGen {
     appended' = b,
     effects' = effects,
     answered' = answered.union(Set(id)),
+    rewound' = rewound,
     mailerSendCalls' = mailerSendCalls,
     mailerSendRecords' = mailerSendRecords,
   }
@@ -77,17 +82,20 @@ module libraryGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
+    rewound' = rewound,
     mailerSendCalls' = mailerSendCalls,
     mailerSendRecords' = mailerSendRecords,
   }
 
   // a processor's handling of trigger, appending b with its checkpoint
   action processes(b: List[Event], p: str, trigger: int): bool = all {
+    not(rewound),
     log' = log.concat(b),
     checkpoints' = checkpoints.set(p, trigger),
     appended' = b,
     effects' = effects,
     answered' = answered,
+    rewound' = rewound,
     mailerSendCalls' = mailerSendCalls,
     mailerSendRecords' = mailerSendRecords,
   }
@@ -95,13 +103,50 @@ module libraryGen {
   // an effect step of processor p for trigger, under key (the same on every
   // effect step of the trigger, no other trigger's: keyStable)
   action effectStep(p: str, trigger: int, key: str, ok: bool): bool = all {
+    not(rewound),
     keyStable(effects, p, trigger, key),
     log' = log,
     checkpoints' = checkpoints,
     appended' = [],
     effects' = effects.append((p, trigger, key, ok)),
     answered' = answered,
+    rewound' = rewound,
     mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
+  }
+
+  // the log went backwards (grist.ErrRewound: a failover lost its tail, a
+  // restore put a backup back), as a node's relay saw it: back to position
+  // pos, each processor's checkpoint there cps, the ids answered after it lost. The
+  // processors stop until an operator resumes them (gristResumed); what the
+  // dependencies and the effects did stays done
+  action gristRewound(pos: int, cps: str -> int, lost: Set[str]): bool = all {
+    pos <= log.length(),
+    cps.keys() == checkpoints.keys(),
+    log' = log.slice(0, pos),
+    checkpoints' = cps,
+    appended' = [],
+    effects' = effects,
+    answered' = answered.exclude(lost),
+    rewound' = true,
+    mailerSendCalls' = mailerSendCalls,
+    mailerSendRecords' = mailerSendRecords,
+  }
+
+  // an operator's resume (`<app> resume`): the processors go on from their
+  // checkpoints, and the effect steps and calls of the triggers after them
+  // are forgotten: those triggers are handled again (at least once, under
+  // the same key, or a key of its own where the position was given back
+  // and filled by another event; at most once, again: the operator's
+  // decision). What the dependencies applied stays (their records)
+  action gristResumed: bool = all {
+    log' = log,
+    checkpoints' = checkpoints,
+    appended' = [],
+    effects' = effects.select(e => e._2 <= checkpoints.get(e._1)),
+    answered' = answered,
+    rewound' = false,
+    mailerSendCalls' = mailerSendCalls.select(c => c.trigger <= checkpoints.get(c.processor)),
     mailerSendRecords' = mailerSendRecords,
   }
 
@@ -263,6 +308,7 @@ module libraryGen {
     appended' = [],
     effects' = effects,
     answered' = answered,
+    rewound' = rewound,
     mailerSendCalls' = mailerSendCalls,
     mailerSendRecords' = mailerSendRecords,
   }
@@ -297,6 +343,7 @@ module libraryGen {
       appended' = [],
       effects' = effects,
       answered' = answered,
+      rewound' = rewound,
       mailerSendCalls' = mailerSendCalls.append(rec_),
       mailerSendRecords' = mailerSendRecords,
     }
@@ -323,6 +370,7 @@ module libraryGen {
       appended' = [],
       effects' = effects,
       answered' = answered,
+      rewound' = rewound,
       mailerSendCalls' = mailerSendCalls,
       mailerSendRecords' = mailerSendRecords.append(rec_),
     }
@@ -343,6 +391,7 @@ module libraryGen {
       appended' = [],
       effects' = effects,
       answered' = answered,
+      rewound' = rewound,
       mailerSendCalls' = mailerSendCalls,
       mailerSendRecords' = mailerSendRecords,
     }

@@ -72,6 +72,20 @@ The first release. What a user meets, by module:
   back to a backup taken every period), `Store.Backup`, `Store.Restore`,
   `Store.Restored`, `Store.Lost`, `Store.Commits` and `qenv.ErrUnavailable` (qsql's
   SQLSTATE 25006). The history checker starts afresh after a rewind.
+- grist's store incidents and operations (GR10 slice 3, ROADMAP I25):
+  `grist.ErrRewound`, `RewoundError`, `grist.Resume`, `Relay.Rewound`,
+  `Relay.With`, `Relay.OnRewind`, `Relay.FailOpen`; `CallInfo.Clock`;
+  the generated model's `gristRewound` and `gristResumed` actions and its
+  `rewound` variable (regenerate: `<app> model`); effect keys of
+  positions a rewind gave back suffixed `~n`; `store.ConditionFailed`'s
+  `Past` and `Head` (a condition or a checkpoint past the head), `Wait`
+  and `WaitSteps` returning on a log below what they wait on;
+  `memstore.Store.Backup`/`Restore`, `storetest.Rewinds`;
+  `gristsim.Config.Store` (`gristsim.Managed`); `<app> resume`,
+  `steps -export`, `prune`, `serve -db-file`, JSON lifecycle logs,
+  request and runtime metrics; `sqlstore.SchemaVersion`,
+  `Store.Version`, `Store.Prune`, `Retention`, `Pruned` (migrations
+  under `grist_schema`'s lock).
 
 - Verdicts state their bounds (ROADMAP I9): no claim has a verdict over
   no runs (`All` and `None` held of none), `Conforms()` and `Settles()`

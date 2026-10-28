@@ -280,6 +280,56 @@ func TestTwoStores(t *testing.T) {
 	})
 }
 
+// A log going backwards wakes the sqlstore's waiters (storetest.Rewinds):
+// on qsql the qenv.Store's restore notifies its signal; on SQLite a
+// restore made with SQL (every row after the backup's deleted, the head
+// row put back) is found by the poll.
+func TestRewinds(t *testing.T) {
+	t.Run("qsql", func(t *testing.T) {
+		sim := qenv.New(qenv.NewSeeded(1))
+		defer sim.Close()
+		sim.Check = true
+		st := qenv.NewStore(sim, "grist", qenv.ReadCommitted)
+		db := qsql.Open(sim, st)
+		var err error
+		sim.Spawn("rewinds", func(ctx context.Context) {
+			var s *sqlstore.Store
+			if s, err = sqlstore.Open(ctx, db, sqlstore.QSQL, sqlstore.Options{}); err != nil {
+				return
+			}
+			err = storetest.Rewinds(ctx, s,
+				func(context.Context) error { st.Backup(); return nil },
+				func(context.Context) error { st.Restore(); return nil })
+		})
+		if rerr := sim.Run(time.Minute); rerr != nil {
+			t.Fatal(rerr)
+		}
+		if err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("SQLite", func(t *testing.T) {
+		db := openSQLite(t)
+		ctx := context.Background()
+		s, err := sqlstore.Open(ctx, db, sqlstore.SQLite, sqlstore.Options{Poll: 10 * time.Millisecond})
+		if err != nil {
+			t.Fatal(err)
+		}
+		restore := func(ctx context.Context) error {
+			for _, q := range []string{`DELETE FROM grist_events WHERE pos > 1`, `DELETE FROM grist_index WHERE pos > 1`,
+				`DELETE FROM grist_steps WHERE seq > 1`, `UPDATE grist_heads SET head = 1, steps = 1`} {
+				if _, err := db.ExecContext(ctx, q); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := storetest.Rewinds(ctx, s, func(context.Context) error { return nil }, restore); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 // A waiter whose read finds what it waits for returns, even when a
 // commit landed while it read: it once read again for that commit, so a
 // busy tenant (a commit in every read) kept its waiters reading.

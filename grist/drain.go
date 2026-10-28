@@ -179,21 +179,33 @@ var errShutdownCut = errors.New("the bound passed with requests in flight")
 // grace (schedule). A node that does not quiet in time is warned of, not
 // an error. Main and gristsim's Cluster run it, in real and virtual time
 // (qenv.Now and qenv.Sleep).
-func runDrain(ctx context.Context, d Drain, srv drainServer, st Store, relay *Relay, n *node, stop func(), record bool, warn func(string)) error {
+func runDrain(ctx context.Context, d Drain, srv drainServer, st Store, relay *Relay, n *node, stop func(), record bool, warn func(string), logPhase func(string, ...any)) error {
+	if logPhase == nil {
+		logPhase = func(string, ...any) {}
+	}
 	sched := newSchedule(d, qenv.Now(ctx))
+	begun := qenv.Now(ctx)
+	took := func() string { return qenv.Now(ctx).Sub(begun).Round(time.Millisecond).String() }
 	if err := srv.keep(ctx, sched.delay(qenv.Now(ctx))); err != nil {
 		return err
 	}
+	logPhase("delay", "took", took())
+	begun = qenv.Now(ctx)
 	var err error
 	if serr := srv.shutdown(ctx, sched.shutdown(qenv.Now(ctx))); serr != nil {
 		err = fmt.Errorf("%s: requests still in flight when the drain's shutdown ended (%w): their clients retry under their keys", n.app.Name, serr)
 	}
+	logPhase("shutdown", "took", took(), "cut", err != nil)
+	begun = qenv.Now(ctx)
 	// no request is left: once the processors and the relay are done with
 	// what the requests committed, the run has settled, and a settle in
 	// the file is what judges the bindings' eventual vals (qobs.Settled)
-	if serr := settle(ctx, st, relay, n, qenv.Now(ctx), sched.settle(qenv.Now(ctx)), record); serr != nil {
+	serr := settle(ctx, st, relay, n, qenv.Now(ctx), sched.settle(qenv.Now(ctx)), record)
+	if serr != nil {
 		warn(fmt.Sprintf("%s: no settle recorded (the steps file's eventual vals get no verdict): %v", n.app.Name, serr))
 	}
+	logPhase("settle", "took", took(), "settled", serr == nil)
+	begun = qenv.Now(ctx)
 	stop()
 	// every committed step into the file before it closes: a row the
 	// relay had not reached would otherwise be recorded only by the next
@@ -201,9 +213,11 @@ func runDrain(ctx context.Context, d Drain, srv drainServer, st Store, relay *Re
 	// its whole timeout draining slow requests leaves the flush its own
 	flush, cancel := phase(ctx, sched.flush(qenv.Now(ctx)))
 	defer cancel()
-	if ferr := relay.Flush(flush); err == nil {
+	ferr := relay.Flush(flush)
+	if err == nil {
 		err = ferr
 	}
+	logPhase("flush", "took", took(), "flushed", ferr == nil)
 	return err
 }
 
@@ -267,7 +281,7 @@ func (sn simNode) Drain(ctx context.Context, d any, srv drainhook.Server, stop f
 	if sim := qenv.From(ctx); sim != nil && sim.Log != nil {
 		warn = func(msg string) { sim.Log(fmt.Sprintf("%v %s", sim.Elapsed(), msg)) }
 	}
-	return runDrain(ctx, d.(Drain).withDefaults(true), hookServer{srv}, sn.n.s, sn.n.relay, sn.n, stop, false, warn)
+	return runDrain(ctx, d.(Drain).withDefaults(true), hookServer{srv}, sn.n.s, sn.n.relay, sn.n, stop, false, warn, nil)
 }
 
 // hookServer is a drainhook.Server as a drain's.

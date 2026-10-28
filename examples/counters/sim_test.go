@@ -420,7 +420,7 @@ func TestPayoutTwoNodes(t *testing.T) {
 	}
 	faults := twoNodes
 	faults.CommitFaults = true
-	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
+	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 20}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted(),
 			qtest.Reaches("rpc.bank.request").Faulted(), qtest.Reaches("rpc.bank.response").Faulted(),
 			qtest.Takes("bankPay").Outcome("unknown"), qtest.Takes("bankPayReplayed"))
