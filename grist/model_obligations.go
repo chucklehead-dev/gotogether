@@ -111,15 +111,18 @@ func (g *gen) obligationVals(b *strings.Builder) {
 }
 
 // ownClashes are the generated obligations the application's model
-// defines itself (module <aq>), which quint would refuse as a name
-// defined twice.
-func (g *gen) ownClashes(own []byte) []string {
+// defines itself (module <aq>), or its rules (module <aq>Rules, which
+// <aq>Gen imports), which quint would refuse as a name defined twice
+// (QNT101, at a line of the generated file the app never edits).
+func (g *gen) ownClashes(own []byte) (model, rules []string) {
 	defined := definedIn(own, g.aq)
-	var out []string
 	for _, n := range g.obligationNames() {
 		if defined[n] {
-			out = append(out, n)
+			model = append(model, n)
+		}
+		if g.defined[n] {
+			rules = append(rules, n)
 		}
 	}
-	return out
+	return model, rules
 }

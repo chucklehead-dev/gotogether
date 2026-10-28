@@ -147,13 +147,17 @@ func (unrecorded) Call(ctx context.Context, c grist.CallInfo, call string, req j
 func TestObligations(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3}
+	faithful := board("")
+	// every board has one catalog (a stall is in a handler), so one model
+	// judges them all: its quint compile, cached by the files' paths, is
+	// made once, not once per case
+	binding := boardBinding(t, faithful)
 	// a stalled run violates at every seed: one is enough
 	explore := func(t *testing.T, app *grist.App, cfg gristsim.Config, seeds int) *qtest.Exploration {
-		return qtest.System{Binding: boardBinding(t, app), Rates: qenv.NoFaults,
+		return qtest.System{Binding: binding, Rates: qenv.NoFaults,
 			Run: func(ch qenv.Chooser) error { return gristsim.Run(ch, app, cfg) }}.
 			Explore(t, qtest.ExploreConfig{Seeds: seeds})
 	}
-	faithful := board("")
 	t.Run("faithful", func(t *testing.T) {
 		t.Parallel()
 		explore(t, faithful, cfg, 2).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))

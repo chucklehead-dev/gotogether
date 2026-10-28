@@ -157,9 +157,12 @@ func Generate(app *App, dir string) (Generated, error) {
 	if _, err := parseMarks(rules, g.aq); err != nil {
 		return Generated{}, fmt.Errorf("grist model: %s: %w", rulesFile(app.Name), err)
 	}
-	if c := g.ownClashes(own); len(c) > 0 {
+	if c, r := g.ownClashes(own); len(c) > 0 {
 		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines now (an obligation the catalog implies, judged by the bindings): delete the app's own, or rename it if it says more",
 			modelFile(app.Name), strings.Join(c, ", "), stepsFile(app.Name))
+	} else if len(r) > 0 {
+		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines (an obligation the catalog implies) and imports the rules beside: rename the rules' def",
+			rulesFile(app.Name), strings.Join(r, ", "), stepsFile(app.Name))
 	}
 	out := Generated{Files: map[string][]byte{
 		"model/grist.qnt":                gristQnt,

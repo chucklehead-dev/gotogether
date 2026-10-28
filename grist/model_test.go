@@ -276,8 +276,15 @@ func TestGenerateRefuses(t *testing.T) {
 			t.Errorf("marks %q: %v, want %q", src, err, want)
 		}
 	}
-	// a mark in the rules' file, which no binding reads
+	// an obligation's name defined by the rules, which the generated steps
+	// module imports: quint would refuse it there (QNT101), in a file the
+	// app never edits
 	os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte("module shop {}\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte("module shopRules {\n  pure val notifyEventuallyHandled = true\n}\n"), 0o644)
+	if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt defines notifyEventuallyHandled") {
+		t.Errorf("an obligation's name in the rules: %v, want refused", err)
+	}
+	// a mark in the rules' file, which no binding reads
 	os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte("module shopRules {\n  // grist: invariant\n  val x = true\n}\n"), 0o644)
 	if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt") || !strings.Contains(err.Error(), "mark vals in shop or shopCalls") {
 		t.Errorf("a mark in the rules: %v, want refused", err)
