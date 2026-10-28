@@ -16,6 +16,10 @@ The first release. What a user meets, by module:
   a stale model leaves no empty artifacts directory; grist's `serve`
   logs a clean stop without an error field.
 
+- The Go evaluator's searches (`simulate -graph`, liveness, `Reach`)
+  are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
+  raises the process's GC percent to 400 while it runs, unless it is
+  already higher or off, and puts it back.
 - Explicit quantifiers, one place for claims (ROADMAP I16; breaking): a
   claim over runs says its quantifier. `Conforms()`, `Settles()`,
   `Completes()` and `Finishes()` alone are `All` of themselves, as their

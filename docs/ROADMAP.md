@@ -534,12 +534,17 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   input, each step copied once: 100k steps 851 → 101 MiB, 1.30 → 0.37 s
   (before I19's presizing), checked against the copying implementation
   on generated bags and the repository's logs.
-- **I39. qeval's quick wins (S).** The bank explore is 270 KB and 3,000
-  allocs a state: a struct seen-key in place of `k + "#" + p`, sized
-  event slices, binary state keys, int literals parsed at Load, an
-  integer kind switch, `SetGCPercent(400)` during a search (32% alone),
-  an Explore benchmark: an estimated 2-3x for the graph, liveness and
-  `Reach`.
+- **I39. qeval's quick wins (S). Done** (HISTORY "I39",
+  performance.md item 10). Benchmarks (Explore on bank, kvstore, payd;
+  Step; Key; in the nightly, which now installs quint), a struct
+  seen-key, sized event slices, binary state, label and call keys
+  (collision-free, `TestKeyCollisionFree`), int literals parsed at Load,
+  integer kinds and opcodes, the GC at 400% during a search: an explore
+  1.6-2x faster at load 5-10 (2.7x at load 40), allocations halved, Key
+  3x. Left, for I50: the labels (a successor's event list and its slice,
+  36% of an explore's bytes), `action`'s successor slices and merged
+  assignments (26%), environments by name; Explore encodes a new node's
+  label twice (added and edge), a small saving.
 - **I40. The scheduler's small costs (S). Done** (089889b). A fault
   choice's rate found by its kind's dot-prefixes (120 → 57 ns), no
   options closure or nemesis maps per step (a bare step 0 allocations,

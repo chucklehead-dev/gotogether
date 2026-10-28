@@ -4299,6 +4299,24 @@ Left: a step without its task in its context (woven calls, a
 decoding; examples/perf and the qobshttp example; the nested modules'
 benchmarks in the nightly.
 
+### I39: qeval's quick wins
+
+The specialist's M4 (docs/performance.md, item 10). Benchmarks first
+(Explore on bank, kvstore and payd, Step, Key), then a struct seen-key,
+sized event slices, binary keys, int literals parsed at Load, integer
+kinds and opcodes, and the GC at 400% during a search: an explore
+1.6-2x faster at low load (2.7x at load 40), its allocations halved, a
+Key 3x faster with one allocation. Soundness: the keys replaced a text
+encoding P2's review had checked as canonical, so the binary one has
+its argument in key.go (self-delimiting, Compare-canonical) and a test
+that decodes keys back (`TestKeyCollisionFree`, failing with a string's
+length or the Tup/List tags dropped). A call memo key's nested operator
+is now its identity (the text wrote every operator as `<operator>`, so
+two calls with different nested closures shared a key; no model of the
+repository passes one). The GC percent is process-wide: searches share
+one raise, the last restoring it. Shadow over bank, payd and kvstore: no
+disagreement. Left: the labels and successor slices, which are I50's.
+
 ## grist's build notes (docs/grist.md's §0 to §0.16)
 
 What each slice of grist, and each review of it, changed in its design

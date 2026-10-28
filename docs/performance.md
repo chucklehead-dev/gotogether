@@ -284,6 +284,64 @@ against 4.1 on one), on a machine whose four cores ran other agents'
 tests at once; its recorder holds a lock only to stamp the step and to
 write it.
 
+### 10. The Go evaluator's explorer (I39)
+
+The Go specialist measured a bank explore at 270 KB and 3,000
+allocations a state, a third of its time in the collector, and found no
+benchmark of qeval. Benchmarks first (internal/qeval/bench_test.go:
+`BenchmarkExplore` on bank, kvstore and payd, 2000/1000/1000 states;
+`BenchmarkStep`, one deterministic action as a replay takes it and one
+state's transitions; `BenchmarkKey`), then, each measured against the
+one before:
+
+- **A struct seen-key** in the search core (`k + "#" + p` was a string
+  per transition): 27% fewer bytes on bank, with sized event slices.
+- **Binary keys** (key.go): a state's Key, a label's, an action call's
+  memo key and Transitions' dedupe key are tagged, length-prefixed
+  encodings appended to a reused buffer, looked up without a copy, in
+  place of Quint text with every string `strconv.Quote`d. A key is
+  collision-free by construction: every value's encoding is
+  self-delimiting and decodes to one value (`TestKeyCollisionFree`
+  decodes 3000 random states back and checks keys against Compare on
+  7000 more, many equal; a string without its length or a Tup and a
+  List under one tag fail it). The allocations of an explore halve.
+- **Int literals parsed at Load and integer kinds and opcodes** (ops.go):
+  no change measurable on these models (evaluation proper is 15% of an
+  explore), kept as the base of I50's compiler.
+- **The GC at 400% during a search** (gc.go): shared by searches running
+  at once, the last restoring the percent; a percent off or higher is
+  left alone (`TestRaiseGC`).
+
+Measured with internal/qeval's test binaries at the base (dce024f plus
+the benchmarks) and at the end, interleaved, 6 runs each, benchstat, at
+load 5-10 on the shared 4-core machine (at load 40 the explore's gain
+was 2.7x: the collector's share grows with the load):
+
+| benchmark | sec/op before → after | B/op | allocs/op |
+|---|---|---|---|
+| Explore bank (2000 states) | 708 ms → 398 ms | 442 Mi → 275 Mi | 5.11M → 2.68M |
+| Explore kvstore (1000) | 766 ms → 480 ms | 406 Mi → 308 Mi | 6.20M → 2.99M |
+| Explore payd (1000) | 427 ms → 216 ms | 285 Mi → 190 Mi | 3.24M → 1.11M |
+| Step bank/deposit | 3.2 µs (~) | 2.26 Ki | 29 |
+| Step bank/transitions | 414 µs → 285 µs | 263 Ki → 173 Ki | 2863 → 1793 |
+| Step kvstore/transitions | 571 µs (~) | 339 Ki → 277 Ki | 4577 → 2787 |
+| Step payd/transitions | 17.5 ms → 12.5 ms | 10.4 Mi → 7.5 Mi | 102k → 46k |
+| Key bank | 370 ns → 125 ns | 128 → 64 | 5 → 1 |
+| Key kvstore | 410 ns → 231 ns | 136 → 64 | 6 → 1 |
+| Key payd | 778 ns → 280 ns | 264 → 64 | 7 → 1 |
+
+(~: no significant change.) The explore is 1.6-2x faster here, short of
+the review's 2-3x estimate at this load. What is left, from the profile
+after: the labels (each successor's event list and its slice, 36% of
+the bytes), `action`'s successor slices and assignments (`merge`, 26%),
+and the environments' bindings; they are the closures and slot-resolved
+environments of I50. Checked: TestAgreesWithQuint, the differential
+tests, the brute-force graph, reach, transitions and lasso tests, the
+footprint and partition tests (I19's, migrate-payments' volume test),
+and `GOTOGETHER_EVAL=shadow` over the bank, payd and kvstore suites (56
+tests, no disagreement). The nightly's benchmarks job installs quint so
+that these benchmarks run (they skip without it).
+
 ## For the maintainer's decision
 
 ### D2. A check's actors in one quint process

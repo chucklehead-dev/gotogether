@@ -61,32 +61,13 @@ type Transition struct {
 	key string
 }
 
-// eventsKey is a list of events as a string, equal exactly when the
-// events are: each action's name and arguments, each choice's name and
-// value, as written in full (String cuts long values short, and two
-// labels differing past the cut are two labels).
-func eventsKey(b *strings.Builder, evs []Event) {
+// appendEvents appends a list of events' encoding (appendEvent), ended
+// by tagEnd: equal exactly when the events are.
+func appendEvents(b []byte, evs []Event) []byte {
 	for _, e := range evs {
-		eventKey(b, e)
+		b = appendEvent(b, e)
 	}
-}
-
-// eventKey is one event of eventsKey.
-func eventKey(b *strings.Builder, e Event) {
-	if e.Action != "" {
-		b.WriteString(e.Action)
-		b.WriteByte('(')
-		for _, a := range e.Args {
-			write(b, a)
-			b.WriteByte(',')
-		}
-		b.WriteByte(')')
-	} else {
-		b.WriteString(e.Pick)
-		b.WriteByte('=')
-		write(b, e.Value)
-	}
-	b.WriteByte('|')
+	return append(b, tagEnd)
 }
 
 // Actions are the transition's actions, outermost first.
@@ -140,7 +121,7 @@ func (m *Model) Transitions(consts map[string]Value, s State, name string, args 
 	}
 	states := map[unsafe.Pointer]built{}
 	display := map[string]string{}
-	var key strings.Builder
+	var key []byte // reused: a lookup of seen copies nothing
 	for _, sc := range succs {
 		p := reflect.ValueOf(sc.a).UnsafePointer()
 		bs, ok := states[p]
@@ -156,13 +137,13 @@ func (m *Model) Transitions(consts map[string]Value, s State, name string, args 
 			bs.key = m.Key(bs.st)
 			states[p] = bs
 		}
-		key.Reset()
+		key = key[:0]
 		for l := sc.lab; l != nil; l = l.next {
-			eventKey(&key, l.ev)
+			key = appendEvent(key, l.ev)
 		}
-		key.WriteString(bs.key)
-		if k := key.String(); !seen[k] {
-			seen[k] = true
+		key = append(append(key, tagEnd), bs.key...)
+		if !seen[string(key)] {
+			seen[string(key)] = true
 			evs := sc.lab.slice()
 			for i, l := range evs {
 				if l.Action != "" {

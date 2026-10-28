@@ -1,12 +1,13 @@
 package qeval
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
+	"unsafe"
 )
 
 // Unsupported is what the evaluator cannot evaluate: an operator outside
@@ -89,8 +90,10 @@ type evaluation struct {
 	// depend on nothing else (its body binds only its parameters), and a
 	// step's choices call the same branch with the same arguments for
 	// every value of the choices it does not take (kvstore's write(key,
-	// value) once for each expected revision)
-	acts map[string][]succ
+	// value) once for each expected revision), with the buffer each
+	// call's key is written in; made at the first call (a field of the
+	// evaluation itself cost a step an allocation)
+	acts *callMemo
 	// fp, if set, records the state entries read and written (Tracking),
 	// tainted the maps of the state's variables (and those made from them
 	// by put, set, setBy) by variable, conj whether the expression about
@@ -169,16 +172,13 @@ func (m *Model) Successors(consts map[string]Value, s State, name string, args .
 }
 
 // Key is a state as a string, equal exactly when the states are: its
-// variables' values in the order of Vars.
+// variables' values in the order of Vars, in binary (key.go): a key to
+// compare and to index by, not to print.
 func (m *Model) Key(s State) string {
-	var b strings.Builder
-	for _, v := range m.Vars {
-		if x, ok := s[v]; ok {
-			write(&b, x)
-		}
-		b.WriteByte(';')
-	}
-	return b.String()
+	// the buffer is the string, as a strings.Builder's is: nothing writes
+	// it after
+	b := m.appendState(make([]byte, 0, 64), s)
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 // Step is what action name, applied to args, does in state s: whether it
@@ -289,6 +289,13 @@ func (ev *evaluation) apply(d *Decl, args []Value, e *env, name string) (Value, 
 // an assignment: the variables an action assigns, by name
 type assignment map[string]Value
 
+// a callMemo is an evaluation's action calls' successors, by the call's
+// key (callAction), and the buffer the key is written in
+type callMemo struct {
+	succs map[string][]succ
+	buf   []byte
+}
+
 // a succ is one successor of an action: its assignment and, in a
 // labelled evaluation (Transitions), what led to it: the actions called
 // and the choices made, in order.
@@ -316,7 +323,11 @@ func (x *events) then(y *events) *events {
 
 // slice is the events in order.
 func (x *events) slice() []Event {
-	var out []Event
+	n := 0
+	for l := x; l != nil; l = l.next {
+		n++
+	}
+	out := make([]Event, 0, n)
 	for ; x != nil; x = x.next {
 		out = append(out, x.ev)
 	}
@@ -331,16 +342,16 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 	if ev.depth > 10000 {
 		return nil, unsupported("recursion", "deeper than 10000")
 	}
-	switch e.Kind {
-	case "app":
-		switch e.Opcode {
-		case "assign":
+	switch e.kind {
+	case kindApp:
+		switch e.op {
+		case opAssign:
 			v := ev.varName(e.Args[0])
 			if ev.fp != nil {
 				return []succ{{a: assignment{v: ev.assigned(v, e.Args[1], en)}}}, nil
 			}
 			return []succ{{a: assignment{v: ev.eval(e.Args[1], en)}}}, nil
-		case "actionAll":
+		case opActionAll:
 			out := []succ{{a: assignment{}}}
 			for _, a := range e.Args {
 				next, err := ev.action(a, en)
@@ -370,7 +381,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				}
 			}
 			return out, nil
-		case "actionAny":
+		case opActionAny:
 			var out []succ
 			for _, a := range e.Args {
 				next, err := ev.action(a, en)
@@ -380,7 +391,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				out = append(out, next...)
 			}
 			return out, nil
-		case "ite":
+		case opIte:
 			if ev.boolOf(e.Args[0], en) {
 				return ev.action(e.Args[1], en)
 			}
@@ -389,11 +400,11 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 		if d, args, ok := ev.calledAction(e, en); ok {
 			return ev.callAction(d, args, true)
 		}
-	case "name":
+	case kindName:
 		if d, _, ok := ev.calledAction(e, en); ok {
 			return ev.callAction(d, nil, false)
 		}
-	case "let":
+	case kindLet:
 		d := e.Opdef
 		if d.Qualifier == "nondet" {
 			// a choice: each value of the set, its successors
@@ -402,7 +413,11 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				return nil, err
 			}
 			var out []succ
-			disabled := 0 // values with no successor
+			disabled := 0   // values with no successor
+			var pick string // the choice's name, once (label's alone)
+			if ev.labels {
+				pick = ev.m.Display(d.Name)
+			}
 			for _, x := range s.Elems {
 				next, err := ev.action(e.Expr, en.bind(d.Name, x))
 				if err != nil {
@@ -411,7 +426,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				if len(next) == 0 {
 					disabled++
 				}
-				out = append(out, ev.label(next, Event{Pick: ev.m.Display(d.Name), Value: x})...)
+				out = append(out, ev.label(next, Event{Pick: pick, Value: x})...)
 				if len(out) > maxSet {
 					return nil, unsupported("nondet", "more than %d successors", maxSet)
 				}
@@ -465,11 +480,6 @@ func (ev *evaluation) calledAction(e *Expr, en *env) (*Decl, []Value, bool) {
 // (acts). The result is the caller's to change: label rewrites its
 // elements.
 func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, error) {
-	var b strings.Builder
-	b.WriteString(strconv.FormatInt(d.ID, 10))
-	if applied {
-		b.WriteByte('(')
-	}
 	memo := true
 	for _, a := range args {
 		if _, ok := a.(*Lambda); ok {
@@ -478,12 +488,26 @@ func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, e
 			memo = false
 			break
 		}
-		b.WriteByte(',')
-		write(&b, a)
 	}
-	k := b.String()
-	if out, ok := ev.acts[k]; ok && memo {
-		return slices.Clone(out), nil
+	var k string
+	if memo {
+		// the call's key in the evaluation's buffer: a lookup copies
+		// nothing, and the action's own calls reuse the buffer after it
+		if ev.acts == nil {
+			ev.acts = &callMemo{succs: map[string][]succ{}}
+		}
+		b := binary.AppendVarint(ev.acts.buf[:0], d.ID)
+		if applied {
+			b = append(b, 1)
+		} else {
+			b = append(b, 0)
+		}
+		b = appendSeq(b, args)
+		ev.acts.buf = b
+		if out, ok := ev.acts.succs[string(b)]; ok {
+			return slices.Clone(out), nil
+		}
+		k = string(b)
 	}
 	body, e2, err := ev.bindArgs(d, args, nil, d.Name)
 	if err != nil {
@@ -501,10 +525,7 @@ func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, e
 	if !memo {
 		return out, nil
 	}
-	if ev.acts == nil {
-		ev.acts = map[string][]succ{}
-	}
-	ev.acts[k] = slices.Clone(out)
+	ev.acts.succs[k] = slices.Clone(out)
 	return out, nil
 }
 
@@ -679,30 +700,29 @@ func (ev *evaluation) eval(e *Expr, en *env) Value {
 	// but where it says so (and's, a let's body, a val's or def's)
 	conj := ev.conj
 	ev.conj = false
-	switch e.Kind {
-	case "int":
-		n, err := strconv.ParseInt(e.Value.String(), 10, 64)
-		if err != nil {
+	switch e.kind {
+	case kindInt:
+		if e.big {
 			throw(unsupported("int", "the literal %s past 64 bits", e.Value))
 		}
-		return Int(n)
-	case "bool":
+		return Int(e.n)
+	case kindBool:
 		return Bool(e.Bool)
-	case "str":
+	case kindStr:
 		return Str(e.Value.String())
-	case "name":
+	case kindName:
 		ev.cur = conj
 		return ev.name(e, en)
-	case "lambda":
+	case kindLambda:
 		return &Lambda{params: paramNames(e), body: e.Expr, env: en}
-	case "let":
+	case kindLet:
 		if e.Opdef.Qualifier == "nondet" {
 			throw(unsupported("nondet", "a choice outside an action"))
 		}
 		en = ev.bindLet(e.Opdef, en)
 		ev.conj = conj
 		return ev.eval(e.Expr, en)
-	case "app":
+	case kindApp:
 		ev.cur = conj
 		return ev.app(e, en)
 	}
@@ -877,55 +897,55 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		return out
 	}
-	switch op {
+	switch e.op {
 	// Booleans, short-circuit
-	case "and":
+	case opAnd:
 		for _, a := range e.Args {
 			if !ev.boolOf(a, en) {
 				return Bool(false)
 			}
 		}
 		return Bool(true)
-	case "or":
+	case opOr:
 		for _, a := range e.Args {
 			if ev.boolOf(a, en) {
 				return Bool(true)
 			}
 		}
 		return Bool(false)
-	case "not":
+	case opNot:
 		return Bool(!ev.boolOf(e.Args[0], en))
-	case "implies":
+	case opImplies:
 		return Bool(!ev.boolOf(e.Args[0], en) || ev.boolOf(e.Args[1], en))
-	case "iff":
+	case opIff:
 		return Bool(ev.boolOf(e.Args[0], en) == ev.boolOf(e.Args[1], en))
-	case "eq":
+	case opEq:
 		return Bool(Compare(arg(0), arg(1)) == 0)
-	case "neq":
+	case opNeq:
 		return Bool(Compare(arg(0), arg(1)) != 0)
-	case "ite":
+	case opIte:
 		if ev.boolOf(e.Args[0], en) {
 			return arg(1)
 		}
 		return arg(2)
-	case "assert":
+	case opAssert:
 		if !ev.boolOf(e.Args[0], en) {
 			throw(evalErr("assertion failed"))
 		}
 		return Bool(true)
 
 	// integers
-	case "iadd":
+	case opIadd:
 		return Int(add(ev.intOf(arg(0), op), ev.intOf(arg(1), op)))
-	case "isub":
+	case opIsub:
 		b := ev.intOf(arg(1), op)
 		if b == math.MinInt64 {
 			throw(unsupported(op, "past 64 bits"))
 		}
 		return Int(add(ev.intOf(arg(0), op), -b))
-	case "imul":
+	case opImul:
 		return Int(mul(ev.intOf(arg(0), op), ev.intOf(arg(1), op)))
-	case "idiv", "imod":
+	case opIdiv, opImod:
 		a, b := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
 		if b == 0 {
 			throw(evalErr("division by zero"))
@@ -935,11 +955,11 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		// as quint's backends do: truncated, the remainder with the
 		// dividend's sign (-7 % 2 is -1), Go's / and %
-		if op == "idiv" {
+		if e.op == opIdiv {
 			return Int(a / b)
 		}
 		return Int(a % b)
-	case "ipow":
+	case opIpow:
 		a, b := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
 		if b < 0 || a == 0 && b == 0 {
 			throw(evalErr("%d^%d is undefined", a, b))
@@ -954,25 +974,25 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			}
 		}
 		return Int(r)
-	case "iuminus":
+	case opIuminus:
 		a := ev.intOf(arg(0), op)
 		if a == math.MinInt64 {
 			throw(unsupported(op, "past 64 bits"))
 		}
 		return Int(-a)
-	case "igt":
+	case opIgt:
 		return Bool(ev.intOf(arg(0), op) > ev.intOf(arg(1), op))
-	case "igte":
+	case opIgte:
 		return Bool(ev.intOf(arg(0), op) >= ev.intOf(arg(1), op))
-	case "ilt":
+	case opIlt:
 		return Bool(ev.intOf(arg(0), op) < ev.intOf(arg(1), op))
-	case "ilte":
+	case opIlte:
 		return Bool(ev.intOf(arg(0), op) <= ev.intOf(arg(1), op))
 
 	// sets
-	case "Set":
+	case opSetCons:
 		return NewSet(all())
-	case "to":
+	case opTo:
 		lo, hi := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
 		if hi > lo && (hi-lo >= maxSet || hi-lo < 0) {
 			throw(unsupported(op, "%d..%d, more than %d values", lo, hi, maxSet))
@@ -982,9 +1002,9 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			out = append(out, Int(i))
 		}
 		return &Set{out}
-	case "contains", "in":
+	case opContains, opIn:
 		s, x := arg(0), arg(1)
-		if op == "in" {
+		if e.op == opIn {
 			s, x = x, s
 		}
 		if inf, ok := s.(infinite); ok {
@@ -992,9 +1012,9 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			return Bool(isInt && (!inf.nat || i >= 0))
 		}
 		return Bool(ev.setOf(s, op).has(x))
-	case "union":
+	case opUnion:
 		return NewSet(append(slices.Clone(ev.setOf(arg(0), op).Elems), ev.setOf(arg(1), op).Elems...))
-	case "intersect":
+	case opIntersect:
 		a, b := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
 		var out []Value
 		for _, x := range a.Elems {
@@ -1003,7 +1023,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			}
 		}
 		return &Set{out}
-	case "exclude":
+	case opExclude:
 		a, b := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
 		var out []Value
 		for _, x := range a.Elems {
@@ -1012,7 +1032,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			}
 		}
 		return &Set{out}
-	case "subseteq":
+	case opSubseteq:
 		a, b := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
 		for _, x := range a.Elems {
 			if !b.has(x) {
@@ -1020,12 +1040,12 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			}
 		}
 		return Bool(true)
-	case "size":
+	case opSize:
 		return Int(len(ev.setOf(arg(0), op).Elems))
-	case "isFinite":
+	case opIsFinite:
 		_, ok := arg(0).(*Set)
 		return Bool(ok)
-	case "filter", "select":
+	case opFilter, opSelect:
 		if l, ok := arg(0).(List); ok {
 			f := arg(1)
 			var out List
@@ -1044,14 +1064,14 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			}
 		}
 		return &Set{out}
-	case "map":
+	case opMap:
 		s, f := ev.setOf(arg(0), op), arg(1)
 		out := make([]Value, len(s.Elems))
 		for i, x := range s.Elems {
 			out[i] = ev.call(f, x)
 		}
 		return NewSet(out)
-	case "exists", "forall":
+	case opExists, opForall:
 		// every element, not to the first witness: quint's TypeScript
 		// backend evaluates each (Set(5, 33).forall(x => x == 33 implies
 		// 1 / 0 > 0) is a division by zero), its Rust backend stops at a
@@ -1060,7 +1080,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		// only when no element decides (both backends fail); otherwise
 		// the backends disagree, and the evaluator refuses.
 		s, f := ev.setOf(arg(0), op), arg(1)
-		witness := op == "exists" // the value that decides
+		witness := e.op == opExists // the value that decides
 		decided := false
 		var failure *EvalError
 		for _, x := range s.Elems {
@@ -1084,15 +1104,15 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			throw(failure)
 		}
 		return Bool(decided == witness)
-	case "fold":
+	case opFold:
 		return ev.foldSet(ev.setOf(arg(0), op), arg(1), arg(2), op)
-	case "flatten":
+	case opFlatten:
 		var out []Value
 		for _, x := range ev.setOf(arg(0), op).Elems {
 			out = append(out, ev.setOf(x, op).Elems...)
 		}
 		return NewSet(out)
-	case "powerset":
+	case opPowerset:
 		s := ev.setOf(arg(0), op)
 		if len(s.Elems) > 16 {
 			throw(unsupported(op, "of %d elements", len(s.Elems)))
@@ -1108,7 +1128,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			out = append(out, &Set{sub})
 		}
 		return NewSet(out)
-	case "tuples":
+	case opTuples:
 		sets := make([]*Set, len(e.Args))
 		n := 1
 		for i := range e.Args {
@@ -1129,11 +1149,11 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			out = next
 		}
 		return NewSet(out)
-	case "chooseSome", "oneOf":
+	case opChooseSome, opOneOf:
 		throw(unsupported(op, "a choice outside a nondet"))
 
 	// maps
-	case "Map":
+	case opMapCons:
 		var ks, vs []Value
 		for _, p := range all() {
 			t, ok := p.(Tup)
@@ -1143,14 +1163,14 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			ks, vs = append(ks, t[0]), append(vs, t[1])
 		}
 		return NewMap(ks, vs)
-	case "mapBy":
+	case opMapBy:
 		s, f := ev.setOf(arg(0), op), arg(1)
 		vs := make([]Value, len(s.Elems))
 		for i, x := range s.Elems {
 			vs[i] = ev.call(f, x)
 		}
 		return &Map{Keys: slices.Clone(s.Elems), Vals: vs}
-	case "setToMap":
+	case opSetToMap:
 		var ks, vs []Value
 		for _, p := range ev.setOf(arg(0), op).Elems {
 			t := p.(Tup)
@@ -1164,9 +1184,9 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			ks, vs = append(ks, t[0]), append(vs, t[1])
 		}
 		return NewMap(ks, vs)
-	case "keys":
+	case opKeys:
 		return &Set{slices.Clone(ev.mapOf(arg(0), op).Keys)}
-	case "get":
+	case opGet:
 		if l, ok := arg(0).(List); ok { // a list's [i]
 			i := ev.intOf(arg(1), op)
 			if i < 0 || i >= int64(len(l)) {
@@ -1180,15 +1200,15 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			throw(evalErr("key %s not in the map", String(k)))
 		}
 		return m.Vals[i]
-	case "set":
+	case opSet:
 		m, k := ev.mapOf(arg(0), op), arg(1)
 		if _, ok := m.find(k); !ok {
 			throw(evalErr("set: key %s not in the map", String(k)))
 		}
 		return m.put(k, arg(2))
-	case "put":
+	case opPut:
 		return ev.mapOf(arg(0), op).put(arg(1), arg(2))
-	case "setBy":
+	case opSetBy:
 		m, k, f := ev.mapOf(arg(0), op), arg(1), arg(2)
 		i, ok := m.find(k)
 		if !ok {
@@ -1197,7 +1217,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		return m.put(k, ev.call(f, m.Vals[i]))
 
 	// records, tuples, variants
-	case "Rec":
+	case opRecCons:
 		var names []string
 		var vals []Value
 		for i := 0; i+1 < len(e.Args); i += 2 {
@@ -1208,7 +1228,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			names, vals = append(names, string(n)), append(vals, arg(i+1))
 		}
 		return NewRec(names, vals)
-	case "field":
+	case opField:
 		r, ok := arg(0).(*Rec)
 		if !ok {
 			throw(internal("field: expected a record"))
@@ -1219,7 +1239,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			throw(internal("no field %s", n))
 		}
 		return v
-	case "with":
+	case opWith:
 		r, ok := arg(0).(*Rec)
 		if !ok {
 			throw(internal("with: expected a record"))
@@ -1232,16 +1252,16 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		out := &Rec{Names: r.Names, Vals: slices.Clone(r.Vals)}
 		out.Vals[i] = arg(2)
 		return out
-	case "fieldNames":
+	case opFieldNames:
 		r := arg(0).(*Rec)
 		out := make([]Value, len(r.Names))
 		for i, n := range r.Names {
 			out[i] = Str(n)
 		}
 		return &Set{out}
-	case "Tup":
+	case opTupCons:
 		return Tup(all())
-	case "item":
+	case opItem:
 		t, ok := arg(0).(Tup)
 		if !ok {
 			throw(internal("item: expected a tuple"))
@@ -1251,9 +1271,9 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			throw(evalErr("item %d of a tuple of %d", i, len(t)))
 		}
 		return t[i-1]
-	case "variant":
+	case opVariant:
 		return Variant{Label: string(arg(0).(Str)), Val: arg(1)}
-	case "matchVariant":
+	case opMatchVariant:
 		v, ok := arg(0).(Variant)
 		if !ok {
 			throw(internal("match: expected a variant"))
@@ -1267,33 +1287,33 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		throw(evalErr("match: no case for %s", v.Label))
 
 	// lists
-	case "List":
+	case opListCons:
 		return List(all())
-	case "append":
+	case opAppend:
 		return List(append(slices.Clone(ev.seqOf(arg(0), op)), arg(1)))
-	case "concat":
+	case opConcat:
 		return List(append(slices.Clone(ev.seqOf(arg(0), op)), ev.seqOf(arg(1), op)...))
-	case "head":
+	case opHead:
 		l := ev.seqOf(arg(0), op)
 		if len(l) == 0 {
 			throw(evalErr("head of an empty list"))
 		}
 		return l[0]
-	case "tail":
+	case opTail:
 		l := ev.seqOf(arg(0), op)
 		if len(l) == 0 {
 			throw(evalErr("tail of an empty list"))
 		}
 		return List(slices.Clone(l[1:]))
-	case "length":
+	case opLength:
 		return Int(len(ev.seqOf(arg(0), op)))
-	case "nth":
+	case opNth:
 		l, i := ev.seqOf(arg(0), op), ev.intOf(arg(1), op)
 		if i < 0 || i >= int64(len(l)) {
 			throw(evalErr("nth %d of a list of %d", i, len(l)))
 		}
 		return l[i]
-	case "replaceAt":
+	case opReplaceAt:
 		l, i := ev.seqOf(arg(0), op), ev.intOf(arg(1), op)
 		if i < 0 || i >= int64(len(l)) {
 			throw(evalErr("replaceAt %d of a list of %d", i, len(l)))
@@ -1301,13 +1321,13 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		out := slices.Clone(l)
 		out[i] = arg(2)
 		return List(out)
-	case "slice":
+	case opSlice:
 		l, s, t := ev.seqOf(arg(0), op), ev.intOf(arg(1), op), ev.intOf(arg(2), op)
 		if s < 0 || t > int64(len(l)) || s > t {
 			throw(evalErr("slice %d..%d of a list of %d", s, t, len(l)))
 		}
 		return List(slices.Clone(l[s:t]))
-	case "range":
+	case opRange:
 		lo, hi := ev.intOf(arg(0), op), ev.intOf(arg(1), op)
 		if lo > hi {
 			// quint's backends differ: Rust's is empty, TypeScript's counts
@@ -1322,20 +1342,20 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			out = append(out, Int(i))
 		}
 		return out
-	case "indices":
+	case opIndices:
 		l := ev.seqOf(arg(0), op)
 		out := make([]Value, len(l))
 		for i := range l {
 			out[i] = Int(i)
 		}
 		return &Set{out}
-	case "foldl":
+	case opFoldl:
 		l, acc, f := ev.seqOf(arg(0), op), arg(1), arg(2)
 		for _, x := range l {
 			acc = ev.call(f, acc, x)
 		}
 		return acc
-	case "foldr":
+	case opFoldr:
 		l, acc, f := ev.seqOf(arg(0), op), arg(1), arg(2)
 		for i := len(l) - 1; i >= 0; i-- {
 			acc = ev.call(f, l[i], acc)

@@ -13,7 +13,7 @@ import (
 )
 
 // compile compiles testdata's module name (with its init and step) to IR.
-func compile(t *testing.T, file, main, init, step string) *Model {
+func compile(t testing.TB, file, main, init, step string) *Model {
 	t.Helper()
 	skip.Quint(t)
 	out := filepath.Join(t.TempDir(), "ir.json")

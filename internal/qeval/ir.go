@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -23,6 +24,13 @@ type Expr struct {
 	Qualifier string      `json:"qualifier"`
 	Expr      *Expr       `json:"expr"`
 	Opdef     *Decl       `json:"opdef"`
+
+	// kind and op are Kind and Opcode as integers (ops.go), n an int
+	// literal's value, big one past 64 bits: set when the IR is read
+	kind exprKind
+	op   opcode
+	n    int64
+	big  bool
 }
 
 // A Param is a lambda's parameter.
@@ -66,6 +74,13 @@ func (e *Expr) UnmarshalJSON(b []byte) error {
 		e.Value = json.Number(s) // a string literal's text
 	default:
 		e.Value = json.Number(v)
+	}
+	e.kind, e.op = kinds[e.Kind], opcodes[e.Opcode]
+	if e.kind == kindInt {
+		// parsed once, not at each evaluation; one past 64 bits is refused
+		// where it is evaluated, as before
+		n, err := strconv.ParseInt(e.Value.String(), 10, 64)
+		e.n, e.big = n, err != nil
 	}
 	return nil
 }

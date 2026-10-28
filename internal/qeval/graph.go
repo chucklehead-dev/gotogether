@@ -4,8 +4,6 @@ import (
 	"container/heap"
 	"errors"
 	"slices"
-	"strconv"
-	"strings"
 )
 
 // The search core (P2's state-graph explorer and P3's Reach): from its
@@ -43,7 +41,7 @@ type search struct {
 	// since best first may reach it first by a longer one (more steps
 	// taken sooner) and the bound would then cut what the shorter one
 	// reaches. Breadth first never does: its first path is the shortest.
-	seen     map[string]int
+	seen     map[seenKey]int
 	complete bool
 	cut      string
 	depth    int
@@ -51,6 +49,12 @@ type search struct {
 	added    func(j int) (stop bool, err error)
 	edge     func(i int, t Transition, j int) (stop bool)
 	expanded func(i int, ts []Transition)
+}
+
+// a seenKey is a node's identity: its state's Key and its progress
+type seenKey struct {
+	key      string
+	progress int
 }
 
 // pathTo is the transitions from node i's start to it.
@@ -67,18 +71,19 @@ func (s *search) pathTo(i int) []Transition {
 // or the state bound cuts it. An error is the evaluator's (Unsupported,
 // EvalError) or a hook's: the nodes found before it stay.
 func (s *search) run(starts []State) error {
-	s.seen, s.complete = map[string]int{}, true
+	defer raiseGC()()
+	s.seen, s.complete = map[seenKey]int{}, true
 	q := &frontier{nodes: &s.nodes}
 	for _, st := range starts {
 		k := s.m.Key(st)
-		if _, ok := s.seen[k+"#0"]; ok {
+		if _, ok := s.seen[seenKey{k, 0}]; ok {
 			continue
 		}
 		if s.b.States > 0 && len(s.nodes) >= s.b.States {
 			s.complete, s.cut = false, "states"
 			return nil
 		}
-		s.seen[k+"#0"] = len(s.nodes)
+		s.seen[seenKey{k, 0}] = len(s.nodes)
 		s.nodes = append(s.nodes, node{s: st, key: k, parent: -1})
 		if s.added != nil {
 			if stop, err := s.added(len(s.nodes) - 1); err != nil || stop {
@@ -111,7 +116,7 @@ func (s *search) run(starts []State) error {
 			if k == "" {
 				k = s.m.Key(t.State)
 			}
-			id := k + "#" + strconv.Itoa(p)
+			id := seenKey{k, p}
 			if j, ok := s.seen[id]; ok && (s.b.Depth == 0 || s.nodes[j].depth <= nd.depth+1) {
 				if s.edge != nil && s.edge(i, t, j) {
 					return nil
@@ -205,6 +210,7 @@ type Graph struct {
 
 	ids    map[string]int
 	labels map[string]int
+	buf    []byte // label's
 	m      *Model
 }
 
@@ -298,13 +304,11 @@ func cutOf(err error) string {
 
 // label is the id of a transition's events, interned.
 func (g *Graph) label(evs []Event) int {
-	var b strings.Builder
-	eventsKey(&b, evs)
-	k := b.String()
-	if id, ok := g.labels[k]; ok {
+	g.buf = appendEvents(g.buf[:0], evs)
+	if id, ok := g.labels[string(g.buf)]; ok {
 		return id
 	}
-	g.labels[k] = len(g.Labels)
+	g.labels[string(g.buf)] = len(g.Labels)
 	g.Labels = append(g.Labels, evs)
 	return len(g.Labels) - 1
 }

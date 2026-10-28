@@ -12,7 +12,7 @@ import (
 )
 
 // compileFile compiles a .qnt file's module main (init and step) to IR.
-func compileFile(t *testing.T, path, main string) *Model {
+func compileFile(t testing.TB, path, main string) *Model {
 	t.Helper()
 	skip.Quint(t)
 	abs, _ := filepath.Abs(path)
