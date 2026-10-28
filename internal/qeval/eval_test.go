@@ -190,3 +190,78 @@ func TestAsReplayedRefusesPartialChoices(t *testing.T) {
 		t.Errorf("pickAny as compiled: %v %v", ok, err)
 	}
 }
+
+// A set's fold is the evaluator's only when every order gives it (an
+// operator known to commute, or a small set tried in every order), and
+// then quint's, on both backends; otherwise it is quint's to give.
+// Folded sorted and reversed alone, the round robin and the second
+// element agreed both ways (review 11, F1).
+func TestSetFoldsAgreeWithQuintOrAreRefused(t *testing.T) {
+	m := compile(t, "folds.qnt", "folds", "init", "step")
+	for _, name := range []string{"roundRobin", "second", "putBig", "notMin", "failsSome"} {
+		_, err := m.Eval(nil, nil, name)
+		if _, ok := err.(*Unsupported); !ok {
+			t.Errorf("%s: %v, want Unsupported", name, err)
+		}
+	}
+	s, err := m.Init(nil, "init")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s["folds::out"]
+	if got == nil {
+		got = s["out"]
+	}
+	for _, backend := range []string{"rust", "typescript"} {
+		dir := t.TempDir()
+		out := filepath.Join(dir, "t.itf.json")
+		abs, _ := filepath.Abs("testdata/folds.qnt")
+		cmd := exec.Command("quint", "run", "--backend", backend, "--max-steps", "0", "--max-samples", "1", "--out-itf", out, abs)
+		cmd.Dir = filepath.Dir(abs)
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("quint run (%s): %v\n%s", backend, err, b)
+		}
+		tr, err := itf.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := FromITF(tr.States[0].Vars["out"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if Compare(want, got) != 0 {
+			t.Errorf("%s: quint %s, the evaluator %s", backend, String(want), String(got))
+		}
+	}
+	// the shapes known to commute are taken whatever the set's size: the
+	// five over 20 elements were not tried in every order
+	for _, name := range []string{"sumBig", "sumCond", "minBig", "maxBig", "unionBig"} {
+		if !commutesIn(t, m, name) {
+			t.Errorf("%s: not recognised as commuting", name)
+		}
+	}
+	for _, name := range []string{"roundRobin", "second", "putSmall", "notMin", "failsSome"} {
+		if commutesIn(t, m, name) {
+			t.Errorf("%s: recognised as commuting", name)
+		}
+	}
+}
+
+// commutesIn reports whether the fold the val name applies has an
+// operator commutes recognises.
+func commutesIn(t *testing.T, m *Model, name string) bool {
+	t.Helper()
+	d, ok := m.Decl(name)
+	if !ok {
+		t.Fatalf("no val %s", name)
+	}
+	e := d.Expr
+	for e.Kind == "app" && e.Opcode != "fold" && len(e.Args) > 0 {
+		e = e.Args[0]
+	}
+	if e.Opcode != "fold" || e.Args[2].Kind != "lambda" {
+		t.Fatalf("%s: no fold of a lambda", name)
+	}
+	ev := &evaluation{m: m}
+	return ev.commutes(&Lambda{params: paramNames(e.Args[2]), body: e.Args[2].Expr})
+}

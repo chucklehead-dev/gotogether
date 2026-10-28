@@ -48,9 +48,10 @@ func TestAgreesWithQuint(t *testing.T) {
 				continue
 			}
 			seen[key] = true
-			t.Run(strings.TrimPrefix(p, "../../"), func(t *testing.T) {
+			name := strings.TrimPrefix(p, "../../")
+			t.Run(name, func(t *testing.T) {
 				t.Parallel()
-				if agree(t, b) {
+				if agree(t, b, mayRefuse[name]) {
 					agreed.Add(1)
 				}
 			})
@@ -62,6 +63,13 @@ func TestAgreesWithQuint(t *testing.T) {
 	}
 	t.Logf("%d models agree with quint", checked)
 }
+
+// mayRefuse are models outside the evaluator's fragment on purpose: a
+// refusal is right, a successor quint's trace does not take is not.
+// rr's round robin folds a set in an order that matters, which folded
+// sorted and reversed agreed both ways, and not in quint's order
+// (review 11, F1).
+var mayRefuse = map[string]bool{"qtest/testdata/rr.yaml": true}
 
 // templated reports whether a binding's constants come from its steps
 // (set, max, count): no instance without a history.
@@ -75,8 +83,9 @@ func templated(cs map[string]string) bool {
 }
 
 // agree runs quint on b's model and checks the evaluator's successors
-// against its traces; false if the evaluator refused the model.
-func agree(t *testing.T, b *binding.Binding) bool {
+// against its traces; false if the evaluator refused the model (an
+// error unless refused may).
+func agree(t *testing.T, b *binding.Binding, refused bool) bool {
 	dir := t.TempDir()
 	spec, _ := filepath.Abs(b.SpecPath())
 	rel, err := filepath.Rel(dir, spec)
@@ -140,6 +149,10 @@ func agree(t *testing.T, b *binding.Binding) bool {
 			succ, err := m.Successors(nil, prev, action)
 			if err != nil {
 				var u *Unsupported
+				if asUnsupported(err, &u) && refused {
+					t.Logf("refused, as it may: %v", err)
+					return false
+				}
 				if asUnsupported(err, &u) {
 					// every model of the repository is in the fragment: a
 					// refusal is a regression (or a model that left it)

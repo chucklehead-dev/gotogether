@@ -2735,6 +2735,24 @@ out of the binding every run conforms. Pre-existing, not P7's: a
 trigger fails), so the at-least-once obligation's `grist.failed` is
 only an effect's that failed every try.
 
+### Eleventh review: silent wrong answers
+
+The formal-methods review (review 11) built adversarial inputs and found
+verdicts quint does not give. Each reproduction is a regression test now
+(qtest/sound_test.go and the packages' own), failing without its fix:
+- **F1, a set fold's order** (critical). The Go evaluator folded a set
+  sorted and reversed and took agreement as order-independence. A round
+  robin over `Set(1, 33, 2)` agrees both ways and not in quint's order
+  (which is no documented one: TypeScript's hash order depends on the
+  insertion order too, Rust's is another), so `simulate -graph` said
+  "holds" over a complete graph of an invariant quint violates, and a
+  replay passed a step quint rejects. A fold is now the evaluator's only
+  when every order gives it: an operator of a shape that commutes (sums,
+  min and max, unions), or a set of at most 10 elements tried in every
+  order; otherwise Unsupported, and quint judges. The repository's folds
+  (grist's min, the examples' sums and maxima) are all of the shapes;
+  `TestAgreesWithQuint` agrees on every model as before.
+
 ### H4: one vocabulary
 
 ROADMAP's H4 as built, with two leftovers of P7's review. The decisions

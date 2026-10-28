@@ -2928,11 +2928,27 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   ite, lets and nondet, actions called from actions) and values with a
   total order (sets and maps sorted, records by field). What it cannot
   evaluate (an unknown operator, a choice outside an action, an integer
-  past 64 bits, a fold whose result depends on the set's order, which
-  quint's backends fold differently, a value of a kind it did not expect)
-  is `Unsupported`; the search sends that candidate and the rest to
+  past 64 bits, a fold over a set that some order of the set changes, a
+  value of a kind it did not expect) is `Unsupported`; the search sends that candidate and the rest to
   quint. The model's own runtime errors (a missing key, a division by
   zero) are `EvalError`s, and also go to quint.
+- **Set folds.** Quint folds a set in an order of its own, and neither
+  backend's is documented or the other's: TypeScript's is a hash order
+  that also depends on the order elements were added (`Set("b", "a")`
+  and `Set("a", "b")` fold differently), Rust's another (`Set(1, 33, 2)`
+  folds as `[1, 33, 2]` in TypeScript, otherwise in Rust). So the
+  evaluator gives a fold's result only where every order gives it: an
+  operator whose shape commutes whatever the elements (a sum `acc + E`,
+  conditionals of sums, a min or max `if (E < acc) E else acc`, a union,
+  E never reading acc), or a set of at most 10 elements tried in every
+  order (by subsets: `f(acc(T \ {x}), x)` the same for each x of each
+  subset T, n·2^(n-1) applications); anything else is `Unsupported`, and
+  so is a fold that fails in some order (the failure may be in an order
+  quint does not take). It once folded sorted and reversed and took
+  agreement as order-independence: a round robin over three nodes
+  agrees both ways and not in quint's order, and `simulate -graph`
+  "proved" an invariant quint violates (review 11, F1;
+  `TestSetFoldsAgreeWithQuintOrAreRefused`, rr in `TestAgreesWithQuint`).
 - **Judged as quint's replay reports.** A candidate is planned within
   its history (`binding.Planner`), replayed from init, each call's expect the
   definition applied to the call's `ExpectArgs`; its failure index is

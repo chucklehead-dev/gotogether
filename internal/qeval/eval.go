@@ -920,24 +920,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		return Bool(true)
 	case "fold":
-		// quint folds a set in an order of its own (its backends' differ):
-		// folded both ways, a result that depends on the order is quint's to
-		// give
-		s, init, f := ev.setOf(arg(0), op), arg(1), arg(2)
-		acc := init
-		for _, x := range s.Elems {
-			acc = ev.call(f, acc, x)
-		}
-		if len(s.Elems) > 1 {
-			back := init
-			for i := len(s.Elems) - 1; i >= 0; i-- {
-				back = ev.call(f, back, s.Elems[i])
-			}
-			if Compare(acc, back) != 0 {
-				throw(unsupported(op, "a fold whose result depends on the set's order"))
-			}
-		}
-		return acc
+		return ev.foldSet(ev.setOf(arg(0), op), arg(1), arg(2), op)
 	case "flatten":
 		var out []Value
 		for _, x := range ev.setOf(arg(0), op).Elems {
