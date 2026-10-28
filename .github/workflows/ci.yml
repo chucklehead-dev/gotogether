@@ -24,13 +24,14 @@ env:
 jobs:
   test:
     # one job ran every part in turn: its parts run side by side. The
-    # core's variants (race, self-checks, the TypeScript backend: 14 of the
-    # core part's 30 minutes) are a part of their own, so the core's tests
-    # are no longer followed by them on the critical path.
+    # core's variants (self-checks, the TypeScript backend), its race
+    # detector and the examples' demos are parts of their own, so none
+    # follows another on the critical path (run 431: core-variants 12.9
+    # minutes with the race detector, examples 13.0 with the demos).
     strategy:
       fail-fast: false
       matrix:
-        part: [core, core-variants, hegel, examples, tools]
+        part: [core, core-variants, race, hegel, examples, demos, tools]
     name: test (${{ matrix.part }})
     runs-on: ubuntu-latest
     steps:
@@ -75,7 +76,7 @@ jobs:
         if: matrix.part == 'core'
         run: go run ./cmd/gotogether lint -sim .
       - name: the race detector on what runs real goroutines
-        if: matrix.part == 'core-variants'
+        if: matrix.part == 'race'
         run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest' ./qenv/
       - name: test (qenv self-checks)
         if: matrix.part == 'core-variants'
@@ -129,7 +130,7 @@ jobs:
         if: matrix.part == 'examples'
         run: for m in checkout twophase; do (cd examples/$m && GOTOGETHER_CHECK=1 go test -short -count=1 -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1; done
       - name: example app demos
-        if: matrix.part == 'examples'
+        if: matrix.part == 'demos'
         run: |
           examples/kvstore/run-demo.sh
           examples/jobqueue/run-demo.sh
