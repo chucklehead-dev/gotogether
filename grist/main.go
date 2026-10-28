@@ -414,12 +414,18 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		return err
 	}
 	if hs != nil {
-		hs.started(st, relay, n) // the store answered (Start read its tenants), the node runs
 		h = hs.count(h)
 	}
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return err
+	}
+	if hs != nil {
+		// ready once the API listens: the store answered (Start read its
+		// tenants), the node runs, and a request the Service sends is not
+		// refused (a probe between Start and the listen saw a ready pod
+		// whose API port refused connections)
+		hs.started(st, relay, n)
 	}
 	srv := newMainServer(ctx, h)
 	fmt.Fprintf(stderr, "%s serving on http://%s\n", app.Name, ln.Addr())
