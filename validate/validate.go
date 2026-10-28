@@ -174,6 +174,10 @@ type Failure struct {
 	// invariant (StateAfter). Variables as quint reports them.
 	State      map[string]itf.Value
 	StateAfter bool
+	// Why is why the model cannot take the step, for a step it rejects
+	// (Kind "disabled"), by the Go evaluator: an addition to quint's
+	// report, never a verdict (explain.go). nil when no evaluator asked.
+	Why *Explanation
 	// noState says why State is empty, where the report would show it
 	noState string
 	// window is when a within failure's response was due (its trigger's
@@ -921,6 +925,9 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string) string {
 		// quint's own message only where the report has no reading of it:
 		// a disabled step, a state mismatch and an invariant are said above
 		fmt.Fprintf(b, "%s  %s\n", pfx, f.Quint)
+	}
+	if f.Why != nil {
+		b.WriteString(f.Why.String(pfx + "  "))
 	}
 	if f.noState != "" && f.Kind != "error" {
 		fmt.Fprintf(b, "%s  model state: %s\n", pfx, f.noState)

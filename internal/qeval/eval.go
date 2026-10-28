@@ -72,6 +72,8 @@ type evaluation struct {
 	state  State
 	cache  map[int64]Value
 	depth  int
+	// labels: each successor carries what led to it (Transitions)
+	labels bool
 }
 
 func (m *Model) evaluation(consts map[string]Value, s State) *evaluation {
@@ -108,7 +110,8 @@ func (m *Model) Successors(consts map[string]Value, s State, name string, args .
 		return nil, err
 	}
 	seen := map[string]bool{}
-	for _, a := range succs {
+	for _, sc := range succs {
+		a := sc.a
 		st := State{}
 		for _, v := range m.Vars {
 			x, ok := a[v]
@@ -225,9 +228,17 @@ func (ev *evaluation) apply(d *Decl, args []Value, e *env, name string) (Value, 
 // an assignment: the variables an action assigns, by name
 type assignment map[string]Value
 
-// action is what e does as an action: its successors' assignments (none:
-// disabled). A Boolean expression is an action that assigns nothing.
-func (ev *evaluation) action(e *Expr, en *env) ([]assignment, error) {
+// a succ is one successor of an action: its assignment and, in a
+// labelled evaluation (Transitions), what led to it: the actions called
+// and the choices made, in order.
+type succ struct {
+	a   assignment
+	lab []Event
+}
+
+// action is what e does as an action: its successors (none: disabled). A
+// Boolean expression is an action that assigns nothing.
+func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 	ev.depth++
 	defer func() { ev.depth-- }()
 	if ev.depth > 10000 {
@@ -238,41 +249,45 @@ func (ev *evaluation) action(e *Expr, en *env) ([]assignment, error) {
 		switch e.Opcode {
 		case "assign":
 			v := ev.varName(e.Args[0])
-			return []assignment{{v: ev.eval(e.Args[1], en)}}, nil
+			return []succ{{a: assignment{v: ev.eval(e.Args[1], en)}}}, nil
 		case "actionAll":
-			out := []assignment{{}}
+			out := []succ{{a: assignment{}}}
 			for _, a := range e.Args {
-				succ, err := ev.action(a, en)
+				next, err := ev.action(a, en)
 				if err != nil {
 					return nil, err
 				}
-				if len(succ) == 0 {
+				if len(next) == 0 {
 					return nil, nil
 				}
-				var next []assignment
+				var prod []succ
 				for _, x := range out {
-					for _, y := range succ {
-						z, err := merge(x, y)
+					for _, y := range next {
+						z, err := merge(x.a, y.a)
 						if err != nil {
 							return nil, err
 						}
-						next = append(next, z)
+						var lab []Event
+						if ev.labels {
+							lab = append(slices.Clip(x.lab), y.lab...)
+						}
+						prod = append(prod, succ{z, lab})
 					}
 				}
-				out = next
+				out = prod
 				if len(out) > maxSet {
 					return nil, unsupported("actionAll", "more than %d successors", maxSet)
 				}
 			}
 			return out, nil
 		case "actionAny":
-			var out []assignment
+			var out []succ
 			for _, a := range e.Args {
-				succ, err := ev.action(a, en)
+				next, err := ev.action(a, en)
 				if err != nil {
 					return nil, err
 				}
-				out = append(out, succ...)
+				out = append(out, next...)
 			}
 			return out, nil
 		case "ite":
@@ -281,49 +296,42 @@ func (ev *evaluation) action(e *Expr, en *env) ([]assignment, error) {
 			}
 			return ev.action(e.Args[2], en)
 		}
-		if r, ok := ev.m.refs[e.ID]; ok && r.kind == "def" {
-			d := ev.m.byID[r.decl]
-			if d != nil && d.Qualifier == "action" {
-				args := make([]Value, len(e.Args))
-				for i, a := range e.Args {
-					args[i] = ev.eval(a, en)
-				}
-				body, e2, err := ev.bindArgs(d, args, nil, d.Name)
-				if err != nil {
-					return nil, err
-				}
-				return ev.action(body, e2)
+		if d, args, ok := ev.calledAction(e, en); ok {
+			body, e2, err := ev.bindArgs(d, args, nil, d.Name)
+			if err != nil {
+				return nil, err
 			}
+			out, err := ev.action(body, e2)
+			return ev.label(out, Event{Action: d.Name, Params: ev.m.paramsOf(d), Args: args}), err
 		}
 	case "name":
-		if r, ok := ev.m.refs[e.ID]; ok && r.kind == "def" {
-			if d := ev.m.byID[r.decl]; d != nil && d.Qualifier == "action" {
-				body, e2, err := ev.bindArgs(d, nil, nil, d.Name)
-				if err != nil {
-					return nil, err
-				}
-				return ev.action(body, e2)
+		if d, _, ok := ev.calledAction(e, en); ok {
+			body, e2, err := ev.bindArgs(d, nil, nil, d.Name)
+			if err != nil {
+				return nil, err
 			}
+			out, err := ev.action(body, e2)
+			return ev.label(out, Event{Action: d.Name}), err
 		}
 	case "let":
 		d := e.Opdef
 		if d.Qualifier == "nondet" {
 			// a choice: each value of the set, its successors
-			if d.Expr.Kind != "app" || d.Expr.Opcode != "oneOf" {
-				return nil, unsupported("nondet", "%s is no oneOf", d.Name)
+			s, err := ev.choiceSet(d, en)
+			if err != nil {
+				return nil, err
 			}
-			s := ev.setOf(ev.eval(d.Expr.Args[0], en), "oneOf")
-			var out []assignment
+			var out []succ
 			disabled := 0 // values with no successor
 			for _, x := range s.Elems {
-				succ, err := ev.action(e.Expr, en.bind(d.Name, x))
+				next, err := ev.action(e.Expr, en.bind(d.Name, x))
 				if err != nil {
 					return nil, err
 				}
-				if len(succ) == 0 {
+				if len(next) == 0 {
 					disabled++
 				}
-				out = append(out, succ...)
+				out = append(out, ev.label(next, Event{Pick: ev.m.Display(d.Name), Value: x})...)
 				if len(out) > maxSet {
 					return nil, unsupported("nondet", "more than %d successors", maxSet)
 				}
@@ -336,9 +344,50 @@ func (ev *evaluation) action(e *Expr, en *env) ([]assignment, error) {
 		return ev.action(e.Expr, ev.bindLet(d, en))
 	}
 	if ev.boolOf(e, en) {
-		return []assignment{{}}, nil
+		return []succ{{a: assignment{}}}, nil
 	}
 	return nil, nil
+}
+
+// choiceSet is the set a nondet chooses from.
+func (ev *evaluation) choiceSet(d *Decl, en *env) (*Set, error) {
+	if d.Expr.Kind != "app" || d.Expr.Opcode != "oneOf" {
+		return nil, unsupported("nondet", "%s is no oneOf", d.Name)
+	}
+	return ev.setOf(ev.eval(d.Expr.Args[0], en), "oneOf"), nil
+}
+
+// calledAction is the action definition e applies (or names), with its
+// arguments' values, if e is a call of one.
+func (ev *evaluation) calledAction(e *Expr, en *env) (*Decl, []Value, bool) {
+	r, ok := ev.m.refs[e.ID]
+	if !ok || r.kind != "def" {
+		return nil, nil, false
+	}
+	d := ev.m.byID[r.decl]
+	if d == nil || d.Qualifier != "action" {
+		return nil, nil, false
+	}
+	if e.Kind == "name" {
+		return d, nil, true
+	}
+	args := make([]Value, len(e.Args))
+	for i, a := range e.Args {
+		args[i] = ev.eval(a, en)
+	}
+	return d, args, true
+}
+
+// label puts what led to out (a call, a pick) before each successor's
+// own labels, in a labelled evaluation.
+func (ev *evaluation) label(out []succ, l Event) []succ {
+	if !ev.labels {
+		return out
+	}
+	for i := range out {
+		out[i].lab = append([]Event{l}, out[i].lab...)
+	}
+	return out
 }
 
 func merge(a, b assignment) (assignment, error) {

@@ -49,9 +49,12 @@ type search struct {
 	issues    []qtrace.Issue
 	undecided map[string]bool
 	kept      map[string][]qtrace.Issue
-	// intervals: no search ran, and the steps are a client's history (a
-	// failing actor's report suggests Linearize)
-	intervals bool
+	// intervals are the actors whose own steps are a client's history
+	// (they carry invocation times or records), when no search ran: a
+	// failing one's report suggests Linearize. Another actor's do not
+	// make the hint apply to it (a store's commits beside its clients'
+	// calls, each side its own binding's)
+	intervals map[string]bool
 	// claims are the orders the Go evaluator found that quint has not
 	// confirmed, by actor (byCheck); again searches with quint alone
 	claims map[string]*claim
@@ -255,7 +258,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		s.gaps, s.collected, s.pending, s.recorded, s.searched = recordedOf(c.Binding, steps, "")
 		return s, nil
 	}
-	s.Steps, s.intervals = steps, intervals(steps)
+	s.Steps, s.intervals = steps, intervalActors(c.Binding, steps)
 	return s, nil
 }
 
@@ -381,6 +384,29 @@ func judgeOverlaps(a *Result, overlaps []string) {
 			"record the snapshot when no operation is in flight (under the lock that rotates the log)", strings.Join(overlaps, ", "))})
 }
 
+// intervalActors are the actors of steps that b checks whose own steps
+// (or pending calls) carry invocation times or records with no domain
+// clock: a client's history, in the order its calls returned. A step a
+// domain clock orders (order.*: a store's or a processor's, placed where
+// it took effect) is checked in that order, whatever its interval, so
+// no order real time allows is the hint's to suggest.
+func intervalActors(b *binding.Binding, steps []qtrace.Step) map[string]bool {
+	out := map[string]bool{}
+	traces, _ := reconstruct(b, steps)
+	for _, t := range traces {
+		var free []qtrace.Step
+		for _, s := range append(slices.Clip(t.Steps), t.Pending...) {
+			if len(s.Order) == 0 {
+				free = append(free, s)
+			}
+		}
+		if intervals(free) {
+			out[t.Actor] = true
+		}
+	}
+	return out
+}
+
 // intervals reports whether steps carry invocation times or records: a
 // client's history, recorded where calls returned.
 func intervals(steps []qtrace.Step) bool {
@@ -401,7 +427,7 @@ func intervals(steps []qtrace.Step) bool {
 func (s *search) mark(rep *Report) {
 	rep.Issues = append(rep.Issues, s.issues...)
 	for _, a := range rep.Actors {
-		if s.intervals && a.Conforms == Fail {
+		if s.intervals[a.Actor] && a.Conforms == Fail {
 			a.Issues = append(a.Issues, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: "its steps carry invocation times, a client's history: " +
 				"calls that overlapped return in another order than they took effect, which the recorded order checks; if they were recorded where they returned, " +
 				"check in an order real time allows (qtest.Linearize(), gotogether validate -linearize)"})

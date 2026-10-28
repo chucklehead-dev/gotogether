@@ -2014,6 +2014,9 @@ type Artifact struct
     field Path string `json:"path"`
     field SHA256 string `json:"sha256,omitempty"`
 type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error)
+type Branch struct
+    field Name string `json:"name"`
+    field Conditions []Condition `json:"conditions,omitempty"`
 type Cause string
 type Checker struct
     field Binding *binding.Binding
@@ -2028,12 +2031,25 @@ type Checker struct
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type Condition struct
+    field In string `json:"in"`
+    field Expr string `json:"expr"`
+    field Values []NamedValue `json:"values,omitempty"`
 type Driver struct
     field Name string `json:"name"`
     field Version string `json:"version,omitempty"`
     field Seed string `json:"seed,omitempty"`
     field Origin string `json:"origin,omitempty"`
     field Args []string `json:"args,omitempty"`
+type Explanation struct
+    field Action string `json:"action"`
+    field Conditions []Condition `json:"conditions,omitempty"`
+    field Branches []Branch `json:"branches,omitempty"`
+    field Reading string `json:"reading,omitempty"`
+    field Enabled []string `json:"enabled,omitempty"`
+    field More int `json:"more,omitempty"`
+    field Unexplained string `json:"unexplained,omitempty"`
+    method (*Explanation) String(pfx string) string
 type FailingStep struct
     field Actor string `json:"actor"`
     field Recorder string `json:"recorder"`
@@ -2051,6 +2067,7 @@ type Failure struct
     field Quint string
     field State map[string]itf.Value
     field StateAfter bool
+    field Why *Explanation
 type File struct
     field Path string `json:"path"`
     field SHA256 string `json:"sha256"`
@@ -2103,6 +2120,9 @@ type Manifest struct
     method (*Manifest) Bundle(dir string) error
     method (*Manifest) Verify() (warnings []string, err error)
     method (*Manifest) Write(path string) error
+type NamedValue struct
+    field Name string `json:"name"`
+    field Value string `json:"value"`
 type Options struct
     field Quint string
     field Backend string

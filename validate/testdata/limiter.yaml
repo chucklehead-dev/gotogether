@@ -1,0 +1,9 @@
+spec: limiter.qnt
+module: limiter
+constants:
+  LIMIT: '2'
+  CLIENTS: 'Set("a", "b", "c")'
+actions:
+  admit: {}
+  release: {}
+invariants: [underLimit]

@@ -159,6 +159,9 @@ func agree(t *testing.T, b *binding.Binding) bool {
 				t.Fatalf("%s state %d (%s): quint's state is none of the evaluator's %d successors\n  quint: %s\n  first: %s",
 					filepath.Base(tp), i, st.Action, len(succ), showState(want), showFirst(succ))
 			}
+			if i > 0 {
+				transitionsAgree(t, m, prev, want, succ, st.Action, filepath.Base(tp), i)
+			}
 			prev = want
 		}
 	}
@@ -205,4 +208,42 @@ func showFirst(ss []State) string {
 		return "(disabled)"
 	}
 	return showState(ss[0])
+}
+
+// transitionsAgree checks the labelled successors of step in prev (the
+// navigator's branches) against Successors' and quint's: the same
+// states, and the state quint took (want) reached by a transition that
+// applies the action quint's trace says it took.
+func transitionsAgree(t *testing.T, m *Model, prev, want State, succ []State, action, trace string, i int) {
+	t.Helper()
+	ts, err := m.Transitions(nil, prev, "step")
+	if err != nil {
+		t.Fatalf("%s state %d: Transitions: %v", trace, i, err)
+	}
+	keys := map[string]bool{}
+	for _, tr := range ts {
+		keys[m.Key(tr.State)] = true
+	}
+	if len(keys) != len(succ) {
+		t.Fatalf("%s state %d: the transitions reach %d states, Successors %d", trace, i, len(keys), len(succ))
+	}
+	for _, s := range succ {
+		if !keys[m.Key(s)] {
+			t.Fatalf("%s state %d: a successor no transition reaches: %s", trace, i, showState(s))
+		}
+	}
+	if action == "" || action == "step" {
+		return
+	}
+	for _, tr := range ts {
+		if !sameState(tr.State, want) {
+			continue
+		}
+		for _, a := range tr.Actions() {
+			if a.Action == action {
+				return
+			}
+		}
+	}
+	t.Fatalf("%s state %d: quint took %s to %s, which no transition reaching it applies", trace, i, action, showState(want))
 }

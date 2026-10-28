@@ -1,6 +1,7 @@
 package counters
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
@@ -54,9 +55,12 @@ func TestMutant(t *testing.T) {
 		// clients creating three each), so the claim is ReadCommitted's.
 		// TestFaithfulAtClaim1 is its contrast
 		claim1 := gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}
-		system(commits, claim1).
-			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
-			Expect(t, qtest.Some(qtest.Rejects("createCounter")))
+		x := system(commits, claim1).
+			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)})
+		x.Expect(t, qtest.Some(qtest.Rejects("createCounter")))
+		// the rejection says why (H2), in grist's terms: the blind commit's
+		// condition, which an append after its reads broke
+		explained(t, x, "createCounter", "conditionHolds(log, readPos, reads_)", "a concurrent append")
 		// the same on the SQL tier (sqlstore over qsql at read committed:
 		// the loser of the race for the head lock waits for it, then
 		// commits blind): 25 of 40 runs, 4 seeds miss with chance 2%.
@@ -180,4 +184,29 @@ func TestMutant(t *testing.T) {
 func TestMutants(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
 	gristtest.Mutants{Names: mutants, FullOnly: fullOnly}.Run(t)
+}
+
+// explained fails t unless a run of x rejects action with an explanation
+// (validate.Failure.Why) naming cond among its false conditions and whose
+// grist reading says reading: what the report of a rejection says, not
+// its verdict (Expect's).
+func explained(t *testing.T, x *qtest.Exploration, action, cond, reading string) {
+	t.Helper()
+	for _, r := range x.Runs {
+		if r.Report == nil {
+			continue
+		}
+		for _, a := range r.Report.Actors {
+			f := a.Failure
+			if f == nil || f.Kind != "disabled" || f.Step == nil || f.Step.Action != action || f.Why == nil {
+				continue
+			}
+			for _, c := range f.Why.Conditions {
+				if c.Expr == cond && strings.Contains(f.Why.Reading, reading) {
+					return
+				}
+			}
+		}
+	}
+	t.Errorf("no rejection of %s explained by %s (%q): the explanation of a rejected step (validate.Explanation) lost it", action, cond, reading)
 }

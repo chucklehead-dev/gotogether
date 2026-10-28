@@ -213,12 +213,22 @@ func (r *Report) Reason() string {
 	return "fails"
 }
 
+// Summary renders a report for humans: its issues (but the info naming
+// the actors its binding leaves out, which is in Issues), each actor's
+// result.
 func (r *Report) Summary() string {
 	s := ""
 	if r.Unsettled != "" {
 		s += r.Unsettled + "\n"
 	}
 	for _, i := range r.Issues {
+		if i.Severity == "info" && i.Kind == "actors" {
+			// the actors the binding's actors: patterns leave out are
+			// another binding's by its own declaration: in Issues (the
+			// data), not in every run's report (a grist run's clients, on
+			// each store-side report)
+			continue
+		}
 		s += fmt.Sprintf("issue: %s\n", i)
 	}
 	for _, a := range r.Actors {
@@ -269,6 +279,7 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 		if shadowErr == nil {
 			shadowErr = serr
 		}
+		c.explainResult(p, r, o)
 		c.judgeWithin(t, r)
 		judgeLost(c.Binding, r, t.Lost)
 		judgeAbsent(c.Binding, r, t.Lost, t.Gaps, nil, nil)
