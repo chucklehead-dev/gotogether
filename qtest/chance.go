@@ -16,6 +16,14 @@ type runsClaim interface {
 	judgeRuns(runs []*Run, actions map[string]bool) string
 }
 
+// shared is a runs claim over a share of the runs (InAtLeast): how many
+// runs met it and how many it needs, ok if it states a share. A share
+// that held of a sample may fall short of another: the binomial tail at
+// the rate measured says how likely (Exploration.shareRisk).
+type shared interface {
+	shareCount(runs []*Run, actions map[string]bool) (n, need int, ok bool)
+}
+
 // A Reach is a claim that runs reached a fault kind: made a choice of it,
 // faulted or not, in at least a share of the runs (Reaches). It is what an
 // exploration must show before its verdicts mean anything about the kind:
@@ -57,8 +65,8 @@ func (r Reach) String() string {
 // judge is never called: an exploration judges a Reach over its runs.
 func (r Reach) judge([]*validate.Report) judgment { return judgment{show: -1} }
 
-func (r Reach) judgeRuns(runs []*Run, _ map[string]bool) string {
-	n := 0
+// count is how many runs reached (or faulted) the kind, and how many must.
+func (r Reach) count(runs []*Run) (n, need int) {
 	for _, run := range runs {
 		for _, c := range run.Choices {
 			if strings.TrimPrefix(c.Kind, "fault.") == r.kind && (!r.faulted || c.Value != 0) {
@@ -67,10 +75,21 @@ func (r Reach) judgeRuns(runs []*Run, _ map[string]bool) string {
 			}
 		}
 	}
-	need := 1
+	need = 1
 	if r.share > 0 {
 		need = int(r.share*float64(len(runs)) + 0.999999)
 	}
+	return n, need
+}
+
+// shareCount implements shared: a share's count, for a claim with one.
+func (r Reach) shareCount(runs []*Run, _ map[string]bool) (n, need int, ok bool) {
+	n, need = r.count(runs)
+	return n, need, r.share > 0
+}
+
+func (r Reach) judgeRuns(runs []*Run, _ map[string]bool) string {
+	n, need := r.count(runs)
 	if n >= need {
 		return ""
 	}

@@ -9,8 +9,16 @@ import "math/rand/v2"
 // task that ran last drops below every other. A bug that needs Depth
 // orderings to happen (a task to run entirely before another's step, then
 // one more) is found with probability at least 1/(n·Steps^(Depth-1)) per
-// run for n tasks, where a uniformly random schedule may need every step
-// to go one way: 2^-100 for a task that must finish 100 steps first.
+// run, where a uniformly random schedule may need every step to go one
+// way: 2^-100 for a task that must finish 100 steps first. The bound is
+// the paper's under two conditions a run must meet, which Seen reports
+// on: Steps at least the run's scheduling steps (its choices among more
+// than one runnable task: a change point past Steps is never drawn, so a
+// longer run's later steps are covered by no guarantee), and n every
+// task the run ever creates, not those alive at once (qenv makes tasks
+// as the run goes: a task's goroutines, a restart's, a double's). It is
+// a lower bound per run: over r runs a bug is missed with probability at
+// most (1-p)^r, and one of a depth above Depth has no bound at all.
 //
 // It chooses among tasks by id (ChooseTask, which qenv's scheduler asks
 // it through the chain of wrappers), and leaves every other choice
@@ -78,6 +86,13 @@ func (p *PCT) ChooseTask(runnable []int) int {
 	}
 	return best
 }
+
+// Seen is what the run showed of the guarantee's conditions: the
+// scheduling steps it chose at (ChooseTask's calls), and the tasks it
+// gave priorities to, every task that was ever runnable beside another.
+// The bound 1/(tasks·Steps^(Depth-1)) holds of the run only if steps is
+// at most Steps.
+func (p *PCT) Seen() (steps, tasks int) { return p.step, len(p.prio) }
 
 // highest is the index of the runnable task of the highest priority,
 // giving each one first seen its random priority.

@@ -63,13 +63,17 @@ type (
 	// PCT schedules by Probabilistic Concurrency Testing (Burckhardt et
 	// al., ASPLOS 2010): a random priority per task, the highest-priority
 	// runnable task always runs, and at Depth-1 random steps in 1..Steps
-	// the task that ran last drops below every other. A bug that needs one
-	// task to run entirely before another's step is found in a run with
-	// probability about 1/n (n tasks), where a uniformly random schedule
-	// may need 2^-steps. Its fields are Base (every other choice: faults,
-	// a queue's order), Depth and Steps; NewPCT makes one, ChooseTask is
-	// what the scheduler asks, and its picks are recorded as schedule
-	// choices, so a ChoiceLog of its run replays without it.
+	// the task that ran last drops below every other. A bug of depth d
+	// (d orderings that must happen: a task to run entirely before
+	// another's step is depth 1) is found in a run with probability at
+	// least 1/(n·Steps^(d-1)), d at most Depth, where a uniformly random
+	// schedule may need 2^-steps; on two conditions: Steps at least the
+	// run's scheduling steps, and n counting every task the run ever
+	// creates (Seen reports both; qtest's summary checks them). Its fields
+	// are Base (every other choice: faults, a queue's order), Depth and
+	// Steps; NewPCT makes one, ChooseTask is what the scheduler asks, and
+	// its picks are recorded as schedule choices, so a ChoiceLog of its
+	// run replays without it.
 	PCT = choice.PCT
 
 	// ChoiceLog records the choices of the Chooser it wraps (its field C),

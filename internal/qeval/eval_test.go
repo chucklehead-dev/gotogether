@@ -265,3 +265,20 @@ func commutesIn(t *testing.T, m *Model, name string) bool {
 	ev := &evaluation{m: m}
 	return ev.commutes(&Lambda{params: paramNames(e.Args[2]), body: e.Args[2].Expr})
 }
+
+// Unconfirmed names what makes a pass less sure: a set fold whose
+// operator is of no commuting shape, reached through the definitions an
+// action calls; a fold of a commuting one, or none, is "".
+func TestUnconfirmedFolds(t *testing.T) {
+	m := compile(t, "folds.qnt", "folds", "init", "step")
+	for name, want := range map[string]bool{"sumBig": false, "minBig": false, "unionBig": false, "step": false,
+		"putSmall": true, "countSmall": true, "roundRobin": true, "init": true} {
+		if got := m.Unconfirmed(name) != ""; got != want {
+			t.Errorf("Unconfirmed(%s) = %q, want it said: %v", name, m.Unconfirmed(name), want)
+		}
+	}
+	// memoized, the same answer (and AsReplayed's copy shares it)
+	if a, b := m.Unconfirmed("init"), m.AsReplayed().Unconfirmed("init"); a != b || a == "" {
+		t.Errorf("Unconfirmed(init) = %q, then %q", a, b)
+	}
+}

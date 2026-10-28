@@ -45,7 +45,7 @@ func TestSummaryNamesUntakenActions(t *testing.T) {
 		Helpers: map[string]bool{"same": true}}
 	ok := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "put"}}}}}
 	x := &Exploration{Runs: []*Run{{Report: ok}}, steps: stepActions(m, nil), given: true}
-	if s, want := x.summary(), "model actions taken 1 of 3 (never: appends, get)"; !strings.Contains(s, want) {
+	if s, want := x.summary(false), "model actions taken 1 of 3 (never: appends, get)"; !strings.Contains(s, want) {
 		t.Errorf("summary %q: want %q", s, want)
 	}
 	if s := x.Evidence().String(); !strings.Contains(s, "1 of 3 actions taken; never: appends, get") {

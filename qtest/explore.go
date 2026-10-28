@@ -20,6 +20,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
@@ -503,6 +504,10 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines()}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
+	}
+	if p, ok := qenv.As[*qenv.PCT](ch); ok {
+		steps, tasks := p.Seen()
+		run.pct = &pctRun{depth: p.Depth, bound: p.Steps, steps: steps, tasks: tasks}
 	}
 	return run
 }
@@ -1070,13 +1075,15 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	if failedAny {
 		t.FailNow()
 	}
-	t.Logf("gotogether: %s", x.summary())
+	t.Logf("gotogether: %s", x.summary(slices.ContainsFunc(claims, universal)))
 }
 
 // summary is a passing exploration's evidence in one line: what its runs
 // showed and what they tried (Evidence has the rest; the vacuity search,
-// which runs quint, only if a claim asked for it).
-func (x *Exploration) summary() string {
+// which runs quint, only if a claim asked for it), and what bounds its
+// claims: universal, a claim about every run or none passed, which a
+// sample of seeds supports only as far as it says.
+func (x *Exploration) summary(universal bool) string {
 	e := evidenceOf(x.Runs)
 	// who judged the passes: the Go evaluator, a sample of them quint too
 	// (GOTOGETHER_EVAL_SAMPLE; a disagreement fails its run). Said in a
@@ -1101,8 +1108,10 @@ func (x *Exploration) summary() string {
 	if e.Conform == e.Runs && e.Runs > 1 {
 		conform = "all conform"
 	}
-	if both > 0 && !verbose() {
-		conform += fmt.Sprintf(" (quint confirmed %d)", both)
+	if !verbose() {
+		// the share quint did not see said too: a pass the evaluator
+		// judged alone is no quint verdict (review 11, O3)
+		conform += x.judges().conformWords(e.Conform)
 	}
 	line := fmt.Sprintf("%s: %d runs, %s", x.ref(), e.Runs, conform)
 	for _, r := range slices.Sorted(maps.Keys(e.FailingBy)) {
@@ -1170,13 +1179,7 @@ func (x *Exploration) summary() string {
 	if x.vacuity != nil && len(x.vacuity.found) > 0 {
 		line += fmt.Sprintf("; %d invariants held vacuously", len(x.vacuity.found))
 	}
-	if x.search != nil {
-		line += fmt.Sprintf("; search of %d delays, %d faults", x.search.bound.Delays, x.search.bound.Faults)
-		if x.search.left > 0 {
-			line += fmt.Sprintf(", %d runs left (truncated)", x.search.left)
-		}
-	}
-	return line
+	return line + x.boundWords(universal)
 }
 
 // rejectedFirst is the action every run's first step was rejected at,
@@ -1227,6 +1230,24 @@ func (x *Exploration) power(n int) string {
 		runs, 100*miss, need(p), need(low), 100*low)
 }
 
+// shareRisk says, for a share claim that held of a seeded exploration,
+// how likely as many seeds are to fall short of it at the rate measured
+// (the binomial tail), when that is more than one time in a thousand: a
+// share held by a margin of one run fails another day. Nothing for a
+// search, which is no sample.
+func (x *Exploration) shareRisk(sc shared, actions map[string]bool) string {
+	n, need, ok := sc.shareCount(x.Runs, actions)
+	runs := len(x.Runs)
+	if !ok || x.search != nil || runs == 0 {
+		return ""
+	}
+	short := confidence.Short(runs, need, float64(n)/float64(runs))
+	if short <= 0.001 {
+		return ""
+	}
+	return fmt.Sprintf(": %d of %d runs (want %d); at that rate %d runs fall short of it %.1f%% of the time: more seeds, or a lower share", n, runs, need, runs, 100*short)
+}
+
 // reports are the runs' reports, in order.
 func (x *Exploration) reports() []*validate.Report {
 	reps := make([]*validate.Report, len(x.Runs))
@@ -1249,6 +1270,13 @@ type claimVerdict struct {
 // and Mutate's meets use, so a mutant is killed by exactly what fails a
 // test.
 func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
+	if len(x.Runs) == 0 {
+		// a claim over no runs holds or fails for nothing: no verdict,
+		// which fails the test (All and None once held of none)
+		return claimVerdict{say: func(testing.TB) string {
+			return fmt.Sprintf("want %s; %s has no runs, so the claim has no verdict: give it seeds (ExploreConfig.Seeds), or the runs it is to judge", c, x.ref())
+		}}
+	}
 	if _, ok := c.(vacuityClaim); ok {
 		return x.vacuityVerdict()
 	}
@@ -1261,7 +1289,13 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 			actions = x.steps
 		}
 		msg := rc.judgeRuns(x.Runs, actions)
-		return claimVerdict{ok: msg == "", say: func(testing.TB) string { return msg }}
+		v := claimVerdict{ok: msg == "", say: func(testing.TB) string { return msg }}
+		if sc, ok := rc.(shared); ok && v.ok {
+			if risk := x.shareRisk(sc, actions); risk != "" {
+				v.log = func(testing.TB) string { return "as expected, " + rc.String() + risk }
+			}
+		}
+		return v
 	}
 	bad := len(x.Failing())
 	j := c.judge(reps)

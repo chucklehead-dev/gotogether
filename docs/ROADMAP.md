@@ -104,7 +104,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   per-action weak fairness (per-call or strong fairness oblige more, so
   `live` can be wrong for a system with weaker fairness); "a proof for
   the instance" says "under per-action weak fairness".
-- **I9. Verdicts that state their bounds (S).** `All(...)` over zero
+- **I9. Verdicts that state their bounds (S). Done** (DESIGN §65; the
+  operators-new-since-a-clean-nightly list, `qeval.Unshadowed`, is kept
+  by hand: the nightly does not write it). `All(...)` over zero
   runs holds vacuously: fail it. Exhaust's "complete" printed with its
   bound ("complete within 2 delays, 1 fault"). PCT's guarantee stated
   as conditional on `Steps` at least the run's length and `n` counting

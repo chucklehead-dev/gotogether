@@ -84,9 +84,9 @@ together (`Exploration.Expect`):
 | Claim | Holds when |
 |---|---|
 | an expectation alone, e.g. `qtest.Rejects("ship")` | some run shows it (the run is logged) |
-| `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle |
+| `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle; a run with no verdict (a search's budget, a lost tail, dropped steps) neither conforms nor fails, so the claim fails as `N of M runs have no verdict` |
 | `qtest.Pending("action")` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
-| `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
+| `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; one with none that lost its tail (or whose log is still being collected) may have settled out of sight, and has no verdict; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |
 | `qtest.Finishes()` | every run is a finished one: it conforms, settled, every eventual val was judged and holds (a binding with none finishes no run), and every invoked call completed; a run that may have finished in a lost tail has no verdict. A miss names the part missing and the fix |
 | `qtest.Some(a, b)` | one run shows both |
@@ -98,6 +98,15 @@ together (`Exploration.Expect`):
 | `qtest.Exercised(except...)` | every model action is taken, every option of every reached fault kind taken (by name, among those its choices offered: `drop` does not stand for `duplicate`), and every nemesis a run enabled fired (by name: `crash.a` does not stand for `crash.b`; heals aside, since a cut heals by itself), each in some run, but those named, which may be any declared kind or option, reached or not; a name covers those below it (`"nemesis.partition"`, `"rpc.payments"`) |
 | `qtest.Scenario(qtest.Takes("submit"), qtest.Takes("verify").Outcome("ok"), qtest.Takes("open"))` | a run's steps take each in turn, others between (a Take's `With(param, literal)` wants an argument too); alone or under `Some` one run, `All` every run, `None` no run. Missed: per run the longest prefix taken, each at its step, where it stopped, the next step's near misses, and whether the model on its own can follow it (`NamedScenario` names it; `gristtest.Scenario` from the catalog's `Command.With(...).Refused(err)`) |
 
+Every claim has three values: it holds, it fails, or it has no verdict,
+which fails the test too. Over no runs at all (`Seeds` below 1, a filter
+that left none) no claim has one: `All` and `None` would hold of
+nothing, so each fails with `want ...; TestX#1 has no runs, so the claim
+has no verdict`, as `qtest.Runs()` with none does. `TakesEach()` of no
+takes, or a catalog's `Exercised` that excepts every block, panics: it
+would hold of any runs. A `Satisfies` function returns an error wrapping
+`qtest.NoVerdict` for a run it cannot judge.
+
 `Takes` and `Exercised` say the runs exercised what the model and the
 environment offer: an exploration whose runs never take `cancel` conforms
 about cancel vacuously. `Evidence` lists the actions never taken.
@@ -106,6 +115,32 @@ Several claims are judged one by one, by one judgment: `System.Mutate`
 kills a mutant by exactly what would fail the test (NotVacuous included). A bug that needs faults is "some
 run", not "every run": the faults are chance. State the run's count by
 seeds, not by hand.
+
+## What bounds a pass
+
+A claim about every run or no run (`All`, `None`, `Conforms`) is a
+proof only of the runs made. A passing exploration's summary line, and
+its `Evidence`, say what bounds it:
+
+| The summary says | Evidence | Means |
+|---|---|---|
+| `30 runs, all conform (quint confirmed 2, the Go evaluator alone the other 28)` | `judges: {evaluator: 28, confirmed: 2}` | the Go evaluator passed 28 runs with no quint replay; quint judged 2 too (`GOTOGETHER_EVAL_SAMPLE`, 1 in 50 by default, at least 1 in 5 for a plan whose actions reach a set fold of no commuting shape or an operator new since the last shadow-clean nightly). A failure is always quint's. `(the Go evaluator's, none confirmed by quint)`: no pass was sampled |
+| `; a sample, no proof: a failure 1 run in 10 shows is missed at most 5% of the time, a rarer one more often, one the runs cannot reach always` | `sample: {runs: 30, rate: 0.095, oneIn: 10}` | seeded runs: a universal claim that held bounds the rate of a failure it forbids below `rate` at 95% confidence (about 3/runs), and says nothing of a fault never on, a workload that never asks, a run too short. Said when a universal claim passed; a claim some run shows has its witness |
+| `; complete within 2 delays and 1 fault: every run within that bound, none beyond it` | `search: {delays: 2, faults: 1, complete: true}` | `System.Exhaust`: every run within the bound ran; a run of a third delay was never tried |
+| `; truncated within 1 delay and 0 faults: at least 7 runs within it left untried (Bound.Partial), ...` | `search: {complete: false, left: 7}` | MaxRuns cut it: the claims are about the runs it got to (without `Partial` the test fails) |
+| `; PCT depth 3, Steps 500: a bug of depth up to 3 is found in a run with probability at least 1/(4 tasks·500^2) = 1e-06, ...` | `pct: {depth: 3, steps: 500, maxSteps: 400, maxTasks: 4, probability: 1e-06}` | `qenv.NewPCT`'s guarantee per run, n the most tasks a run created; over r runs a bug is missed at most (1-p)^r |
+| `; PCT depth 3, Steps 500: runs took up to 900 scheduling steps, past Steps, so its guarantee holds of none of them ...` | `probability: 0` | the change points fall only in the first Steps: set Steps to the run's length |
+| `as expected, taking put in at least 50% of the runs: 16 of 30 runs (want 15); at that rate 30 runs fall short of it 36.2% of the time` | | a share claim (`InAtLeast`) that held by a margin as many seeds may miss another day: more seeds, or a lower share (said when above one in a thousand) |
+
+`gotogether evidence` adds each test's bound to its line: `(complete
+within 2 delays and 1 fault)`, `(search truncated)`, `(a sample: a
+failure in under 9.5% of runs may be missed)`, `(28 judged by the Go
+evaluator alone)`. A manifest's actors say `judgedBy: "evaluator"` (or
+`"both"`) for a pass quint did not judge alone. `simulate`'s sampled
+`holds` says `(a sample, no proof: a violation that 1 trace in 334 shows
+is missed at most 5% of the time by 1000 traces, a rarer one more often;
+-graph searches every state)`; `-graph`'s `bounded` is a truncated
+graph's, which proves nothing past the states explored.
 
 ## Where each workflow states it
 

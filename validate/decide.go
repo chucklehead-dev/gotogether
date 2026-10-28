@@ -283,7 +283,7 @@ func (c *Checker) checkPlan(ctx context.Context, re *runEval, t *qtrace.Trace, p
 		r, err := validatePlanIn(ctx, c.Binding, t, p, o, res, false)
 		return r, nil, err
 	}
-	sampled := re.sample.takes(p)
+	sampled := re.takes(p)
 	v, verr := re.e.judgeRun(c, t, p, !o.NoITF || re.shadow || sampled)
 	if verr != nil {
 		re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(t.Actor), len(p.Calls), verr))
@@ -648,6 +648,29 @@ func parseRate(s string) (float64, bool) {
 		return 0, false
 	}
 	return f, true
+}
+
+// raisedSample is the least share of passes quint judges of a plan
+// whose actions reach what makes an evaluator's pass less sure
+// (qeval.Model.Unconfirmed: a set fold of no commuting shape, an
+// operator new since the last shadow-clean nightly), unless sampling is
+// off ("0").
+const raisedSample = 1.0 / 5
+
+// takes reports whether plan's pass is sampled: re's sampling, raised to
+// raisedSample for a plan that calls an action the evaluator's model
+// says is unconfirmed (I9).
+func (re *runEval) takes(plan *binding.Plan) bool {
+	s := re.sample
+	if s.rate > 0 && s.rate < raisedSample && re.e != nil && re.e.m != nil {
+		for _, c := range plan.Calls {
+			if re.e.m.Unconfirmed(c.Action) != "" {
+				s.rate = raisedSample
+				break
+			}
+		}
+	}
+	return s.takes(plan)
 }
 
 // takes reports whether plan's pass is sampled: its hash, with the seed,

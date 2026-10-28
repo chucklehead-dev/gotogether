@@ -55,8 +55,19 @@ type View struct {
 		Never []string       `json:"never,omitempty"`
 	} `json:"model,omitempty"`
 	Exhaust *struct {
+		Delays   int  `json:"delays"`
+		Faults   int  `json:"faults"`
 		Complete bool `json:"complete"`
 	} `json:"search,omitempty"`
+	Sample *struct {
+		Runs  int     `json:"runs"`
+		Rate  float64 `json:"rate"`
+		OneIn int     `json:"oneIn"`
+	} `json:"sample,omitempty"`
+	Judges *struct {
+		Evaluator int `json:"evaluator"`
+		Confirmed int `json:"confirmed"`
+	} `json:"judges,omitempty"`
 }
 
 // Faulted counts the faults of a point's options taken, nominal (0)

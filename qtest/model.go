@@ -299,6 +299,15 @@ func (k Take) count(runs []*Run, m *ModelCoverage) (n, need int) {
 	return n, need
 }
 
+// shareCount implements shared: a share's count, for a Take with one.
+func (k Take) shareCount(runs []*Run, actions map[string]bool) (n, need int, ok bool) {
+	if k.share == 0 || k.unknown(actions, modelOf(runs)) != "" {
+		return 0, 0, false
+	}
+	n, need = k.count(runs, modelCoverage(runs, actions))
+	return n, need, true
+}
+
 func (k Take) judgeRuns(runs []*Run, actions map[string]bool) string {
 	if u := k.unknown(actions, modelOf(runs)); u != "" {
 		return k.String() + ": " + u
@@ -325,7 +334,13 @@ type TakeEach struct{ takes []Take }
 // first missed. Exercised is the model-wide twin, over every action and
 // fault; this one asks for the takes it is given, so a model's helpers
 // and the outcomes a test does not care for are not wanted.
-func TakesEach(takes ...Take) TakeEach { return TakeEach{takes: append([]Take(nil), takes...)} }
+// It panics with none: a claim of no takes would hold of any runs.
+func TakesEach(takes ...Take) TakeEach {
+	if len(takes) == 0 {
+		panic("qtest: TakesEach(): no Take to want, so it would hold of any runs, none at all included: name the takes the runs must reach")
+	}
+	return TakeEach{takes: append([]Take(nil), takes...)}
+}
 
 func (e TakeEach) String() string {
 	names := make([]string, len(e.takes))

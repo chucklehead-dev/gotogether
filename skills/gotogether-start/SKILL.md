@@ -53,7 +53,8 @@ tiers, a model compiled for a pipeline with no quint):
 |---|---|---|
 | tests `SKIP`: `quint not installed` | `qtest.RequireQuint` skipped them | install quint (`GOTOGETHER_STRICT=1` makes it fail) |
 | under `TestMutants`: `as expected, some run showing an apply step the model cannot take: 23 of 30 runs`, then `step 2, apply(id=1): the model's apply(id = 1) is disabled: ...` | a catch: a mutant's build, its runs failing as its claim says (`TestMutant` itself SKIPs in the app's build) | its `navigate:` line opens the step; `GOTOGETHER_VERBOSE=1` prints the whole report |
-| `30 runs, all conform (quint confirmed 2)` | every run conforms; quint judged a sample of them too | `GOTOGETHER_VERBOSE=1` for the evaluator's breakdown |
+| `30 runs, all conform (quint confirmed 2, the Go evaluator alone the other 28)` | every run conforms; quint judged a sample of them too, the Go evaluator the rest | `GOTOGETHER_VERBOSE=1` for the evaluator's breakdown |
+| `; a sample, no proof: a failure 1 run in 10 shows is missed at most 5% of the time, ...` | the seeds bound how rare a missed failure is, not that there is none | more seeds for rarer failures; `System.Exhaust` for every run within a bound |
 | `no step was recorded; the run's doubles saw a request to bank refused, nothing listening` | a client ran before its server listened | start the server's process first, or retry a refused connection |
 | `NO VERDICT (needs quint)` from `validate -compiled` | the Go evaluator alone could not decide it | validate without `-compiled` ([references/ci.md](references/ci.md)) |
 | `gotogether lint` errors | the binding, an annotation or simulated code does not fit | each names the fix |

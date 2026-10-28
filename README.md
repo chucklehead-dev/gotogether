@@ -19,7 +19,7 @@ picks them) and checks every run against a Quint model
 (`model/hello.qnt`), one line each:
 
 ```
-hello_test.go:40: gotogether: TestFaithfulConforms#1: 30 runs, all conform (quint confirmed 2); model actions taken 3 of 3; fault kinds faulted 3 of 3 reached
+hello_test.go:40: gotogether: TestFaithfulConforms#1: 30 runs, all conform (quint confirmed 2, the Go evaluator alone the other 28); model actions taken 3 of 3; fault kinds faulted 3 of 3 reached; a sample, no proof: a failure 1 run in 10 shows is missed at most 5% of the time, a rarer one more often, one the runs cannot reach always
 ```
 
 One test plants a bug (a *mutant*: a copy of `hello.go` in

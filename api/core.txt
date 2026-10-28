@@ -724,6 +724,7 @@ type PCT = choice.PCT
     field Steps int
     method (*PCT) Choose(kind string, n int) int
     method (*PCT) ChooseTask(runnable []int) int
+    method (*PCT) Seen() (steps, tasks int)
     method (*PCT) Unwrap() Chooser
 type PairCoverage struct
     field A string
@@ -1759,6 +1760,9 @@ type Evidence struct
     field Model *ModelCoverage `json:"model,omitempty"`
     field Rows int `json:"rows,omitempty"`
     field Exhaust *Extent `json:"search,omitempty"`
+    field Sample *SampleBound `json:"sample,omitempty"`
+    field PCT *PCTBound `json:"pct,omitempty"`
+    field Judges *Judges `json:"judges,omitempty"`
     field Vacuous []Vacuity `json:"vacuous,omitempty"`
     field Code *qcover.Summary `json:"code,omitempty"`
     field Mutants *MutationReport `json:"mutants,omitempty"`
@@ -1795,6 +1799,9 @@ type Fault struct
     field Name string
     field Recorded bool
 type FaultMap map[string]func(s *connect.Step) *Fault
+type Judges struct
+    field Evaluator int `json:"evaluator"`
+    field Confirmed int `json:"confirmed"`
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
@@ -1820,6 +1827,12 @@ type MutationReport struct
     method (*MutationReport) Score() float64
     method (*MutationReport) String() string
 type Option func(*settings)
+type PCTBound struct
+    field Depth int `json:"depth"`
+    field Steps int `json:"steps"`
+    field MaxSteps int `json:"maxSteps"`
+    field MaxTasks int `json:"maxTasks"`
+    field Probability float64 `json:"probability"`
 type Rate = qshrink.Rate
 type Reach struct
     method (Reach) Faulted() Reach
@@ -1853,6 +1866,10 @@ type RunPanic struct
     field Stack string
     field InTask bool
     method (*RunPanic) Error() string
+type SampleBound struct
+    field Runs int `json:"runs"`
+    field Rate float64 `json:"rate"`
+    field OneIn int `json:"oneIn"`
 type ShrinkClaim interface
     String() string
     holdsShrunk(n int, r *Run) (bool, string)
@@ -2170,6 +2187,7 @@ type ActorVerdict struct
     field Verdict Verdict `json:"verdict"`
     field Reason string `json:"reason,omitempty"`
     field Action string `json:"action,omitempty"`
+    field JudgedBy string `json:"judgedBy,omitempty"`
 type Artifact struct
     field Name string `json:"name"`
     field Path string `json:"path"`

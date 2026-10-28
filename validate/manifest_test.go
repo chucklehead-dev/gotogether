@@ -250,7 +250,7 @@ func TestVerdictSameCauseAndActors(t *testing.T) {
 	two := func(first, second string) RunVerdict {
 		return RunVerdict{Verdict: Fail, Reason: "mismatch after " + first,
 			Failing: &FailingStep{Actor: "a", Recorder: "r", Seq: 1, Action: first},
-			Actors:  []ActorVerdict{{"a", Fail, "mismatch after " + first, first}, {"b", Fail, "mismatch after " + second, second}}}
+			Actors:  []ActorVerdict{{Actor: "a", Verdict: Fail, Reason: "mismatch after " + first, Action: first}, {Actor: "b", Verdict: Fail, Reason: "mismatch after " + second, Action: second}}}
 	}
 	if same, note := two("deposit", "withdraw").Same(two("deposit", "transfer")); same || !strings.Contains(note, "actor b fails at withdraw") {
 		t.Errorf("a second actor's failing action: %v %q", same, note)

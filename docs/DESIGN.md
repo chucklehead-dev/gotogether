@@ -5073,3 +5073,86 @@ compiled for, which is a wrong answer that looks like one. Why not
 gzip: an artifact is 100-200 KB of JSON for the repository's models,
 and readable JSON is diffable in review.
 
+
+## 65. Verdicts state their bounds (I9)
+
+Review 11's formal-methods reviewer found claims that read as proofs
+and were bounded searches, or that held of nothing: `All(...)` over zero
+runs passed (`(kind == "some") == (n > 0)` is true for "all" at 0), an
+exhaustive search printed "search of 2 delays" where its evidence said
+"complete", the summary's "all conform (quint confirmed 2)" left unsaid
+that the Go evaluator alone passed the other 28, and "none of 1000
+sampled traces violates it" said nothing of what 1000 traces bound. The
+rule since: a claim has three values (it holds, it fails, it has no
+verdict, which fails the test too), and every pass says what it covers
+and what bound limits it, in its text and in its machine-readable form.
+
+- **No runs, no verdict.** `quantified.judge` holds of no claim over no
+  runs, and `Exploration.verdict` says so for every claim (runs claims
+  included: `InAtLeast(p)` of zero runs needed zero, and held). An
+  exploration of no runs comes from `Seeds` below 1 or a filter that
+  left none; `qtest.Runs()` with none was refused already. `TakesEach()`
+  of no takes panics, as a catalog's `Exercised` excepting every block
+  did: it would hold of any runs.
+- **Conforms and Settles are three-valued.** `Conforms()` of a run whose
+  report has no verdict (`Report.Verdict` NotEvaluated: a search's
+  budget, a lost tail, dropped steps) is unknown, not "does not
+  conform": `All(Conforms())` fails of it as unjudged, with the fix
+  (raise the budget, keep the tail). `Settles()` of a run that recorded
+  no settle and lost its tail (a recorder's lost suffix, or watermarks
+  that reach no settle) is unknown: the settle may be out of sight, as
+  `Report.Finished` already said. Settles is judged whatever the run's
+  conformance (`undecided`), so `None(Settles())` over a run with no
+  conformance verdict but no settle holds.
+- **Who judged the passes.** A failing verdict is always quint's (§56);
+  a pass the evaluator's unless quint sampled it. The summary says
+  "quint confirmed 2, the Go evaluator alone the other 28" (by run: a
+  run is the evaluator's if one of its actors is), or "the Go
+  evaluator's, none confirmed by quint"; `Evidence.Judges` and a
+  manifest actor's `judgedBy` carry it. The sample is at least 1 in 5
+  (`raisedSample`, unless sampling is off) for a plan whose actions reach
+  a set fold of no commuting shape, or an operator in
+  `qeval.Unshadowed` (new to the evaluator since the last shadow-clean
+  nightly): `qeval.Model.Unconfirmed`, a static walk of the action's
+  definitions, memoized per model. Static, not the evaluation's own
+  record of what it touched: the evaluator is on I19's hot path, and a
+  plan's actions are known before it runs. After I2 the fold is sound
+  (every order up to 10 elements, else Unsupported); the raise is for
+  the class of plans an evaluator bug would be likeliest in, as the
+  review asked, not a fix of one. CI's 1/5 is unchanged by it.
+- **A sample's bound.** A seeded exploration's universal claim (All,
+  None, Conforms) that passed is a sample: none of N independent runs
+  showed the failure, which bounds its rate below 1 - 0.05^(1/N) at 95%
+  confidence (about 3/N, the rule of three). The summary says "a
+  sample, no proof: a failure 1 run in 10 shows is missed at most 5% of
+  the time, a rarer one more often, one the runs cannot reach always";
+  `Evidence.Sample` has the rate. Only after a universal claim: a claim
+  some run shows has its witness. Not stated of a search, a run alone or
+  runs given one by one (not a sample of anything). What it does not
+  bound is said in words, not numbers: a fault never on, a workload that
+  never asks, a run too short. `simulate`'s sampled holds says the same
+  of its traces; a possible quint did not reach, of states.
+- **A share's margin.** A share claim (`Reaches(...).InAtLeast(p)`,
+  `Takes(...).InAtLeast(p)`) that held logs, when above one time in a
+  thousand, how likely as many seeds are to fall short of it at the rate
+  measured (the binomial tail, `confidence.Short`): the nightly's
+  per-claim confidence, beside Some's `(1-p̂)^n` (power, I31).
+- **Exhaust's bound.** "complete within 2 delays and 1 fault: every run
+  within that bound, none beyond it", or "truncated within ...: at least
+  7 runs within it left untried"; Evidence's String and the evidence
+  command's line say the bound too.
+- **PCT's guarantee, on its conditions.** The paper's bound
+  1/(n·k^(d-1)) holds for k at most Steps (change points are drawn in
+  1..Steps, so a longer run's tail has none) and n counting every task
+  the run ever created (qenv creates them as it goes). `PCT.Seen`
+  reports both from the run; the summary prints the bound with the most
+  tasks a run ranked, or that it is void when a run took more than Steps
+  scheduling steps, with the Steps to set. qenv's doc said "about 1/n",
+  which is depth 1's.
+- **Unchanged, checked.** `-graph`'s `bounded` already said "which
+  proves nothing past them", and a complete graph's `holds` is a proof
+  for the instance, cross-checked by quint's sampling (I3); a truncated
+  graph still exits 0, as a sampled `holds` does: both state their
+  bound, and a run-demo relies on the exit. Linearize's budget was
+  already no verdict (I5's second search too); a "not linearizable"
+  verdict is a complete search with a Proof.

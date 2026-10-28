@@ -3219,6 +3219,60 @@ writes them. Decided:
   the walk-through linked; loop.md and triage.md link the guide (by URL:
   installed skills carry no docs/).
 
+### I9: verdicts that state their bounds
+
+Review 11's formal-methods reviewer (O3-O6, G7): claims that held of
+nothing, or read as proofs of bounded searches. Each change below has a
+test that fails without it (qtest's bounds_test.go, validate's
+TestSampleRaisedForUnconfirmed, qeval's TestUnconfirmedFolds,
+internal/confidence's against simulated coins); the wording, before and
+after:
+- **No runs**: `All(a)` and `None(a)` held over zero runs, `InAtLeast(p)`
+  needed zero of zero. Now `want every run showing a; TestX#1 has no
+  runs, so the claim has no verdict: give it seeds (ExploreConfig.Seeds),
+  or the runs it is to judge`. `TakesEach()` of no takes panics.
+- **No verdict is no failure, and no pass**: `Conforms()` of a run with
+  no verdict (a search's budget, a lost tail) counted as "1 of 30 runs
+  do not have it"; now `1 of 30 runs have no verdict (...)`, with the
+  fix. `Settles()` of a run that lost its tail and recorded no settle was
+  "does not settle"; now no verdict, as `Finishes()` said.
+- **Who judged**: `30 runs, all conform (quint confirmed 2)` became `30
+  runs, all conform (quint confirmed 2, the Go evaluator alone the other
+  28)`, or `(the Go evaluator's, none confirmed by quint)`, which before
+  said nothing at all. `Evidence.Judges`, a manifest actor's `judgedBy`.
+  A plan reaching a set fold of no commuting shape is sampled at least
+  1 in 5.
+- **A sample**: a passing universal claim's summary adds `a sample, no
+  proof: a failure 1 run in 10 shows is missed at most 5% of the time, a
+  rarer one more often, one the runs cannot reach always`
+  (`Evidence.Sample`); `simulate`'s `holds   inv: none of 1000 sampled
+  traces of up to 20 steps violates it` adds `(a sample, no proof: a
+  violation that 1 trace in 334 shows is missed at most 5% of the time
+  by 1000 traces, a rarer one more often; -graph searches every state)`,
+  its possibles' `not reached in N sampled traces` the same of a state;
+  a share claim that held narrowly logs `at that rate 30 runs fall short
+  of it 36.2% of the time`.
+- **Exhaust**: `; search of 2 delays, 1 faults` (and `, 7 runs left
+  (truncated)`) became `; complete within 2 delays and 1 fault: every run
+  within that bound, none beyond it` (or `; truncated within ...: at
+  least 7 runs within it left untried (Bound.Partial), so the claims are
+  about the runs it got to`); Evidence's `search    complete: every run
+  within 1 delays and 0 faults` became `search    complete within 1 delay
+  and 0 faults: every run within that bound, none beyond it`; the
+  evidence command's line `(complete within 2 delays and 1 fault)`.
+- **PCT**: qenv's doc said a depth-1 bug is found "with probability about
+  1/n"; it now states the paper's 1/(n·Steps^(d-1)) on its conditions
+  (Steps at least the run's scheduling steps, n every task ever
+  created), and the summary checks them from the runs (`PCT.Seen`):
+  `PCT depth 3, Steps 500: a bug of depth up to 3 is found in a run with
+  probability at least 1/(4 tasks·500^2) = 1e-06`, or `runs took up to
+  900 scheduling steps, past Steps, so its guarantee holds of none of
+  them`.
+- **Checked, unchanged**: `-graph`'s `bounded` (already "proves nothing
+  past them"), Linearize's budget (no verdict, I5's search too), a
+  catalog's `Exercised` (it panicked on nothing to want already),
+  `Satisfies`' `NoVerdict`.
+
 ### H4: one vocabulary
 
 ROADMAP's H4 as built, with two leftovers of P7's review. The decisions

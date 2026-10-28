@@ -51,7 +51,8 @@ Before merging:
 | Result | Means | Next |
 |---|---|---|
 | `possible X: FAIL`, the model forbids it | the model is too strict for a scenario | `gotogether nav -binding` to the guard |
-| `not reached in N sampled traces`, `not found within the bound` | rare, or forbidden | `-graph`, or raise `-samples`, `simulate.searchStates` |
+| `not reached in N sampled traces (a state that 1 trace in K shows is missed at most 5% ...)`, `not found within the bound` | rare, or forbidden | `-graph`, or raise `-samples`, `simulate.searchStates` |
+| `holds X: none of N sampled traces ... (a sample, no proof: ...)`, `bounded X` | no violation found within the bound, none proven absent | `-graph` for a complete graph's `holds` |
 | a `holds` invariant violated | a design bug, or the property is wrong | the shortest counterexample: `-graph -out cex.qnt` |
 | an `allows` invariant never violated | a vacuous check of the code | the model or the property |
 | a deadlock | a state the step cannot leave | fix it, or declare `simulate.terminal` |

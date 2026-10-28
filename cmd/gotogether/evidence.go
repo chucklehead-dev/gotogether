@@ -188,8 +188,18 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 		for _, r := range slices.Sorted(maps.Keys(e.FailingBy)) {
 			fmt.Fprintf(&b, ", %d %s", e.FailingBy[r], r)
 		}
-		if e.Exhaust != nil && !e.Exhaust.Complete {
+		// what bounds the line's verdicts (I9): a search's bound, a
+		// sample's reach, the passes no quint replay judged
+		switch x := e.Exhaust; {
+		case x != nil && !x.Complete:
 			b.WriteString(" (search truncated)")
+		case x != nil:
+			fmt.Fprintf(&b, " (complete within %s and %s)", plural(x.Delays, "delay"), plural(x.Faults, "fault"))
+		case e.Sample != nil:
+			fmt.Fprintf(&b, " (a sample: a failure in under %.2g%% of runs may be missed)", 100*e.Sample.Rate)
+		}
+		if j := e.Judges; j != nil && j.Evaluator > 0 {
+			fmt.Fprintf(&b, " (%d judged by the Go evaluator alone)", j.Evaluator)
 		}
 		if e.Role != ev.RoleFaithful {
 			fmt.Fprintf(&b, " (%s: not counted below)", e.Role)

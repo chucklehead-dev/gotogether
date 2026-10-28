@@ -154,7 +154,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				sem <- struct{}{}
 				defer func() { <-sem }()
 				var err error
-				it.sampled = re.sample.takes(it.plan)
+				it.sampled = re.takes(it.plan)
 				it.ev, err = re.e.judgeRun(c, it.trace, it.plan, !opt.NoITF || re.shadow || it.sampled)
 				it.judged = err == nil
 				it.sampled = it.sampled && it.judged && it.ev.pass

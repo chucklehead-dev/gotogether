@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -331,7 +332,7 @@ func reportPossibles(bpath string, cs []*possibleCheck, rs []validate.PossibleRe
 		case verify > 0:
 			quintSays = fmt.Sprintf("quint verify: no trace of up to %d steps (a bounded proof)", verify)
 		default:
-			quintSays = fmt.Sprintf("quint: not reached in %d sampled traces of up to %d steps", samples, steps)
+			quintSays = fmt.Sprintf("quint: not reached in %d sampled traces of up to %d steps (%s)", samples, steps, confidence.Sentence(samples, "trace", "a state"))
 		}
 		if r != nil && !r.Found && r.Complete && c.quintFound {
 			return 2, fmt.Errorf("simulate: possible %q: quint reached it (%s) and the Go evaluator's complete search says no trace of up to %d steps does: "+

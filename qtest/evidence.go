@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/evidence"
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -48,14 +49,21 @@ type Evidence struct {
 	Conform int    `json:"conform"`
 	// FailingBy counts the failing runs by reason: "violates I", "rejects a
 	// (step the model cannot take)", "mismatch after a", "issue".
-	FailingBy map[string]int  `json:"failing"`
-	Faults    *qenv.Coverage  `json:"faults,omitempty"`
-	Model     *ModelCoverage  `json:"model,omitempty"`   // the model's actions the runs took (nil: no model)
-	Rows      int             `json:"rows,omitempty"`    // a sweep's rows (0: not a sweep)
-	Exhaust   *Extent         `json:"search,omitempty"`  // an exhaustive search's extent (nil: seeded runs)
-	Vacuous   []Vacuity       `json:"vacuous,omitempty"` // invariants that held only because their antecedent never did
-	Code      *qcover.Summary `json:"code,omitempty"`    // when the code is woven with qweave -cover (nil: not)
-	Mutants   *MutationReport `json:"mutants,omitempty"` // from System.Mutate, if set
+	FailingBy map[string]int `json:"failing"`
+	Faults    *qenv.Coverage `json:"faults,omitempty"`
+	Model     *ModelCoverage `json:"model,omitempty"`  // the model's actions the runs took (nil: no model)
+	Rows      int            `json:"rows,omitempty"`   // a sweep's rows (0: not a sweep)
+	Exhaust   *Extent        `json:"search,omitempty"` // an exhaustive search's extent (nil: seeded runs)
+	// Sample is what seeded runs bound of a failure none showed (nil: a
+	// search, a run alone, runs given one by one)
+	Sample *SampleBound `json:"sample,omitempty"`
+	// PCT is a PCT schedule's guarantee and its conditions (nil: none)
+	PCT *PCTBound `json:"pct,omitempty"`
+	// Judges is who judged the conforming runs (nil: quint, every one)
+	Judges  *Judges         `json:"judges,omitempty"`
+	Vacuous []Vacuity       `json:"vacuous,omitempty"` // invariants that held only because their antecedent never did
+	Code    *qcover.Summary `json:"code,omitempty"`    // when the code is woven with qweave -cover (nil: not)
+	Mutants *MutationReport `json:"mutants,omitempty"` // from System.Mutate, if set
 }
 
 // WriteJSON writes the evidence to path as JSON, for tools that read a
@@ -125,6 +133,7 @@ func (x *Exploration) Evidence() *Evidence {
 		e.Code = x.codeCoverage()
 	}
 	e.Vacuous = x.Vacuous()
+	e.Sample, e.PCT, e.Judges = x.sampleBound(), x.pctBound(), x.judges()
 	if x.search != nil {
 		e.Exhaust = &Extent{Delays: x.search.bound.Delays, Faults: x.search.bound.Faults, Complete: x.search.left == 0 && x.alone == nil, Left: x.search.left}
 	}
@@ -196,11 +205,22 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, ", %d rows", e.Rows)
 	}
 	if sr := e.Exhaust; sr != nil && sr.Complete {
-		fmt.Fprintf(&b, "\n  search    complete: every run within %d delays and %d faults", sr.Delays, sr.Faults)
+		fmt.Fprintf(&b, "\n  search    complete within %s and %s: every run within that bound, none beyond it", plural(sr.Delays, "delay"), plural(sr.Faults, "fault"))
 	} else if sr != nil {
-		fmt.Fprintf(&b, "\n  search    truncated: at least %d runs within %d delays and %d faults left (MaxRuns)", sr.Left, sr.Delays, sr.Faults)
+		fmt.Fprintf(&b, "\n  search    truncated: at least %d runs within %s and %s left (MaxRuns)", sr.Left, plural(sr.Delays, "delay"), plural(sr.Faults, "fault"))
+	}
+	if s := e.Sample; s != nil {
+		fmt.Fprintf(&b, "\n  sample    %d seeded runs, no proof: %s", s.Runs, confidence.Sentence(s.Runs, "run", "a failure"))
+	}
+	if p := e.PCT; p != nil && p.Probability > 0 {
+		fmt.Fprintf(&b, "\n  pct       depth %d, Steps %d: a bug of depth up to %d found per run with probability at least %.2g (%d tasks, %d steps at most)", p.Depth, p.Steps, p.Depth, p.Probability, p.MaxTasks, p.MaxSteps)
+	} else if p != nil {
+		fmt.Fprintf(&b, "\n  pct       depth %d, Steps %d: void, runs took up to %d scheduling steps (set Steps to it)", p.Depth, p.Steps, p.MaxSteps)
 	}
 	fmt.Fprintf(&b, "\n  verdicts  %d conform", e.Conform)
+	if j := e.Judges; j != nil {
+		fmt.Fprintf(&b, " (%d by the Go evaluator alone, %d of its passes confirmed by quint)", j.Evaluator, j.Confirmed)
+	}
 	reasons := slices.Sorted(maps.Keys(e.FailingBy))
 	for _, r := range reasons {
 		fmt.Fprintf(&b, " · %d %s", e.FailingBy[r], r)

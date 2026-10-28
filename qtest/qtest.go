@@ -300,6 +300,9 @@ type Run struct {
 	driver    *validate.Driver
 	artifacts []validate.Artifact
 	name      string
+	// pct is what a PCT chooser saw of its guarantee's conditions (nil:
+	// none scheduled the run)
+	pct *pctRun
 	// scripted is a run a Script chose for: it makes only its own faults;
 	// misnamed are what is wrong with its script's faults (Script.Misnamed)
 	scripted bool

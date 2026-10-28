@@ -86,9 +86,21 @@ func (e Expectation) String() string { return e.desc }
 func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.value(r.Report) == yes }
 
 // Conforms: every actor's run is a behaviour of the model and satisfies
-// its invariants.
+// its invariants. A run with no verdict (validate.Report.Verdict's
+// NotEvaluated: a search out of its budget, a lost tail, dropped steps)
+// neither meets nor misses it: All(Conforms()) fails of it as
+// unjudged, not as a run that does not conform.
 func Conforms() Expectation {
-	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true}
+	conforms := func(r *validate.Report) tri {
+		switch {
+		case r.OK():
+			return yes
+		case r.Unsettled == "" && len(r.Actors) > 0 && r.Verdict().Verdict == validate.NotEvaluated:
+			return unknown
+		}
+		return no
+	}
+	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true, tri: conforms}
 }
 
 // Settles: the system settled, whatever its steps: the run recorded a
@@ -96,23 +108,34 @@ func Conforms() Expectation {
 // after it. A run that never settles (no Settle, a Settle whose error was
 // dropped, the native runtime, which cannot tell) does not; one that
 // does not settle does not conform either. Over runs, None(Settles())
-// states a livelock.
+// states a livelock. A run that recorded no settle and lost its tail (a
+// recorder's lost suffix, or a log still being collected) may have
+// settled out of sight: no verdict for it, whatever its conformance.
 func Settles() Expectation {
-	return Expectation{desc: "a system that settles", check: settled, every: true}
+	return Expectation{desc: "a system that settles", check: func(r *validate.Report) bool { return settles(r) == yes }, every: true, tri: settles, undecided: true}
 }
 
-// settled reports whether the run recorded a settle last, and settled
-// when asked to.
-func settled(r *validate.Report) bool {
+// settles is Settles' value of r: yes if the run recorded a settle last
+// (and settled when asked to), unknown if it did not and a recorder's
+// tail is out of sight, else no.
+func settles(r *validate.Report) tri {
 	if r.Unsettled != "" {
-		return false
+		return no
 	}
+	hidden := false
 	for _, a := range r.Actors {
 		if a.Settled {
-			return true
+			return yes
 		}
+		for _, l := range a.Lost {
+			hidden = hidden || !l.Prefix
+		}
+		hidden = hidden || len(a.Collected) > 0
 	}
-	return false
+	if hidden {
+		return unknown
+	}
+	return no
 }
 
 // Completes: every operation recorded at its invocation (qobs.Invoke)
@@ -702,7 +725,10 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 			}
 		}
 	}
-	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0
+	// over no runs, no claim has a verdict: All and None would hold of
+	// nothing (All once did), and Some fails for want of a run, not of a
+	// witness
+	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0 && len(rs) > 0
 	return j
 }
 

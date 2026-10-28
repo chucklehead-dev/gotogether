@@ -38,10 +38,11 @@ func views(t *testing.T, es ...*qtest.Evidence) []*suiteEvidence {
 func TestSuiteReport(t *testing.T) {
 	m := "model/m.qnt:m"
 	es := []*qtest.Evidence{
-		{Test: "TestA", Role: qtest.RoleFaithful, Spec: m, Runs: 2, Conform: 2,
+		{Test: "TestA", Role: qtest.RoleFaithful, Spec: m, Runs: 2, Conform: 2, Exhaust: &qtest.Extent{Delays: 2, Faults: 1, Complete: true},
 			Model:  &qtest.ModelCoverage{Taken: map[string]int{"put": 2}, Never: []string{"get", "del"}},
 			Faults: &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "rpc.db", Runs: 2, Injected: []int{3, 1}}, {Kind: "disk.node.crash", Sites: []string{"a.go:1"}}}}},
 		{Test: "TestB", Role: qtest.RoleFaithful, Spec: m, Runs: 3, Conform: 1, FailingBy: map[string]int{"violates inv": 2},
+			Sample: &qtest.SampleBound{Runs: 3, Rate: 0.63, OneIn: 1}, Judges: &qtest.Judges{Evaluator: 1},
 			Model:  &qtest.ModelCoverage{Taken: map[string]int{"get": 1}, Never: []string{"put", "del"}},
 			Faults: &qenv.Coverage{Points: []*qenv.PointCoverage{{Kind: "queue.jobs.ack", Runs: 3, Injected: []int{5}}}}},
 		// a mutant takes del, which the system never does: not counted
@@ -50,7 +51,8 @@ func TestSuiteReport(t *testing.T) {
 	}
 	report, gaps := suiteReport(views(t, es...))
 	for _, want := range []string{
-		"TestB: 3 runs, 1 conform, 2 violates inv",
+		"TestA: 2 runs, 2 conform (complete within 2 delays and 1 fault)",
+		"TestB: 3 runs, 1 conform, 2 violates inv (a sample: a failure in under 63% of runs may be missed) (1 judged by the Go evaluator alone)",
 		"suite: 3 explorations, 6 runs",
 		"TestB#2: 1 runs, 0 conform (mutant: not counted below)",
 		"model/m.qnt:m: no test took del",

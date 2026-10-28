@@ -183,6 +183,11 @@ type ActorVerdict struct {
 	// it: RunVerdict.Same compares it for every actor, not only the
 	// first, whatever the reason's wording.
 	Action string `json:"action,omitempty"`
+	// JudgedBy is who passed a passing actor when quint did not alone
+	// (Result.JudgedBy: "evaluator", the Go evaluator with no quint
+	// replay; "both", a pass quint sampled and agreed with): a pass of
+	// the evaluator's alone is no quint verdict.
+	JudgedBy string `json:"judgedBy,omitempty"`
 }
 
 // FailingStep is the step a run's first failure is at, as recorded: the
@@ -233,6 +238,9 @@ func runVerdictOf(results []*Result) RunVerdict {
 		}
 		if a.Verdict == Fail {
 			a.Action = r.failingAction()
+		}
+		if by := r.JudgedBy(); a.Verdict == Pass && by != "quint" {
+			a.JudgedBy = by
 		}
 		// the run's reason and failing step are its first actor's of the
 		// run's verdict: a defect anywhere is the run's, ahead of an

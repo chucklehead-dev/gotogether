@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -253,7 +254,7 @@ func simulate(args []string) (int, error) {
 		case holds[inv] && !violated && *verify > 0:
 			fmt.Printf("  holds   %s: no trace of up to %d steps violates it\n", inv, *verify)
 		case holds[inv] && !violated:
-			fmt.Printf("  holds   %s: none of %d sampled traces of up to %d steps violates it\n", inv, *samples, *steps)
+			fmt.Printf("  holds   %s: none of %d sampled traces of up to %d steps violates it (a sample, no proof: %s; -graph searches every state)\n", inv, *samples, *steps, confidence.Sentence(*samples, "trace", "a violation"))
 		case allows[inv] && violated:
 			fmt.Printf("  allows  %s: a trace violates it (the code must not)\n", inv)
 		case holds[inv]:
@@ -275,8 +276,10 @@ func simulate(args []string) (int, error) {
 		case violated:
 			code = 1
 			fmt.Printf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model\n", inv)
-		default: // held: not wrong, only unsaid
-			fmt.Printf("  holds   %s (unclassified: add it to simulate.holds to keep it so)\n", inv)
+		case *verify > 0: // held: not wrong, only unsaid
+			fmt.Printf("  holds   %s: no trace of up to %d steps violates it (unclassified: add it to simulate.holds to keep it so)\n", inv, *verify)
+		default:
+			fmt.Printf("  holds   %s: none of %d sampled traces of up to %d steps violates it (unclassified: add it to simulate.holds to keep it so; a sample, no proof)\n", inv, *samples, *steps)
 		}
 	}
 	if len(possibles) > 0 {

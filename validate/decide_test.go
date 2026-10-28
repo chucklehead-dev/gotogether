@@ -317,6 +317,44 @@ func TestSampleCatchesAWrongPass(t *testing.T) {
 	}
 }
 
+// A plan of an action that reaches a set fold of no commuting shape
+// (rr's round robin) is sampled at raisedSample, not at the rate set; a
+// plan of another action, and a sampling turned off, are not raised.
+func TestSampleRaisedForUnconfirmed(t *testing.T) {
+	needQuint(t)
+	t.Setenv("GOTOGETHER_EVAL", "")
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "1/50")
+	c, err := NewChecker("testdata/rr.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	re := c.runEvaluator()
+	if re == nil || re.e.m == nil {
+		t.Fatalf("rr has no evaluator: %+v", re)
+	}
+	count := func(re *runEval, action string) int {
+		n := 0
+		for i := range 400 {
+			if re.takes(&binding.Plan{Calls: []binding.Call{{Action: action, Quint: fmt.Sprintf("%s(%d)", action, i)}}}) {
+				n++
+			}
+		}
+		return n
+	}
+	if n := count(re, "place"); n < 50 || n > 110 {
+		t.Errorf("place (a round-robin fold): %d of 400 plans sampled, want about 80 (1 in 5)", n)
+	}
+	if n := count(re, "init"); n > 25 {
+		t.Errorf("init (no fold): %d of 400 plans sampled, want about 8 (1 in 50)", n)
+	}
+	off := *re
+	off.sample = sampling{}
+	if n := count(&off, "place"); n != 0 {
+		t.Errorf("sampling off: %d plans sampled", n)
+	}
+}
+
 // A pass is sampled by its plan's hash and the setting's seed: the same
 // choice every time for the same plan and seed (a rerun judges the same
 // passes), about the rate's share of plans, another seed another choice.

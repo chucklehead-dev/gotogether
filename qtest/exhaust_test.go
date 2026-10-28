@@ -3,6 +3,7 @@ package qtest
 import (
 	"context"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +80,7 @@ func TestExhaust(t *testing.T) {
 	}
 	x = sys.Exhaust(t, Bound{Delays: 1})
 	x.Expect(t, Rejects("withdraw"), Some(Conforms()))
-	if e := x.Evidence().String(); !strings.Contains(e, "search    complete: every run within 1 delays and 0 faults") {
+	if e := x.Evidence().String(); !strings.Contains(e, "search    complete within 1 delay and 0 faults: every run within that bound, none beyond it") {
 		t.Errorf("evidence:\n%s", e)
 	}
 	bad := x.Failing()[0]
@@ -154,7 +155,7 @@ func TestExpectedFailureLogged(t *testing.T) {
 		!strings.HasPrefix(lines[1], "    step ") || !strings.Contains(lines[1], ", withdraw(") || !strings.Contains(lines[1], "the model's withdraw(") ||
 		!strings.HasPrefix(lines[2], "    navigate: gotogether nav -run 'TestExpectedFailureLogged#1:schedule=") ||
 		!strings.HasSuffix(lines[2], "; GOTOGETHER_VERBOSE=1 prints the whole report") ||
-		!strings.Contains(lines[3], "1 conform, 1 reject withdraw") {
+		!regexp.MustCompile(`1 conform( \([^)]*\))?, 1 reject withdraw`).MatchString(lines[3]) { // who judged the pass: the sample's
 		t.Errorf("want the catch in three lines, then the summary:\n%s", log.logs)
 	}
 	t.Setenv("GOTOGETHER_VERBOSE", "1")

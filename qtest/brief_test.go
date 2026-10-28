@@ -54,11 +54,11 @@ func TestSummaryRejectedAtTheFirstStep(t *testing.T) {
 	}
 	m := &binding.Model{Actions: map[string][]binding.Param{"init": nil, "step": nil, "ship": nil, "pay": nil}}
 	x := &Exploration{Runs: []*Run{rejected(0), rejected(0)}, steps: stepActions(m, nil), given: true}
-	if s, want := x.summary(), "2 runs, 0 conform, 2 reject ship; every run rejected at its first step, ship, so no model action taken; fault"; !strings.Contains(s, want) {
+	if s, want := x.summary(false), "2 runs, 0 conform, 2 reject ship; every run rejected at its first step, ship, so no model action taken; fault"; !strings.Contains(s, want) {
 		t.Errorf("summary %q: want %q", s, want)
 	}
 	x.Runs[1] = rejected(1) // one got further
-	if s := x.summary(); !strings.Contains(s, "model actions taken 0 of 2") {
+	if s := x.summary(false); !strings.Contains(s, "model actions taken 0 of 2") {
 		t.Errorf("summary %q: want the count", s)
 	}
 }

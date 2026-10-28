@@ -29,6 +29,21 @@ The first release. What a user meets, by module:
   `Store.Restored`, `Store.Lost` and `qenv.ErrUnavailable` (qsql's
   SQLSTATE 25006). The history checker starts afresh after a rewind.
 
+- Verdicts state their bounds (ROADMAP I9): no claim has a verdict over
+  no runs (`All` and `None` held of none), `Conforms()` and `Settles()`
+  are three-valued (a run with no verdict, a lost tail that may hold the
+  settle), and `TakesEach()` of no takes panics. A passing exploration's
+  summary and `Evidence` say what bounds it: who judged the passes
+  (`Evidence.Judges`, "quint confirmed 2, the Go evaluator alone the
+  other 28"), a seeded sample's reach (`Evidence.Sample`,
+  `SampleBound`), an exhaustive search's bound ("complete within 2
+  delays and 1 fault"), a PCT schedule's guarantee and its conditions
+  (`Evidence.PCT`, `PCTBound`, `qenv.PCT.Seen`), and a share claim's
+  chance of falling short. A manifest's actor says `judgedBy` for a pass
+  quint did not judge alone (`validate.ActorVerdict.JudgedBy`); a plan
+  whose actions reach a set fold of no commuting shape is sampled for
+  quint at least 1 in 5; `simulate`'s sampled `holds` states its
+  sample's bound.
 - Packaging (ROADMAP I21): `gotogether compile -binding b.yaml -o
   model.json` writes a compiled model (`gotogether.model/1`: quint's
   typecheck and the evaluation module's IR, with the binding's and the
