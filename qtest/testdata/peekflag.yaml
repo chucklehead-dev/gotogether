@@ -1,0 +1,8 @@
+spec: peekflag.qnt
+module: peekflag
+actions:
+  inc: {}
+  finish: {}
+  peek:
+    expect: 'x == {{.obs.x}}'
+invariants: [ok]

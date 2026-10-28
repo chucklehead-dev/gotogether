@@ -3023,6 +3023,16 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   placement rejected. A review also found a failed eventual val left
   unconfirmed (it is no conformance failure in the report, but rejects
   the order in a search).
+  The placement taken must not make the run look violating either, as
+  an order of Linearize's must not: when the first that conforms
+  violates an invariant (the evaluator's word that it holds suffices,
+  else quint's), the later placements are searched, with quint and the
+  invariants, for one that conforms with every invariant holding, and
+  that one is taken; none, and the run violates; none within a budget
+  that cut the placements, and the run has no verdict. Judged on the
+  first alone, a pending inc's "no effect" violated an invariant its
+  effect keeps, and ResolvePending said Violates where Linearize found
+  the placement (review 11, F3; `TestResolvePendingInvariantsAgainstBruteForce`).
 
 quorumkv's contended-key mutants took 51 s with the evaluator's
 unconfirmed negative verdicts, 214 s with quint searching them again,

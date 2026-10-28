@@ -1,0 +1,6 @@
+spec: flag.qnt
+module: flag
+actions:
+  inc: {}
+  finish: {}
+invariants: [ok]

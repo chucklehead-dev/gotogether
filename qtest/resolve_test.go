@@ -2,11 +2,13 @@ package qtest
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A withdrawal left pending (its caller crashed) and a later deposit's
@@ -109,4 +111,113 @@ func TestResolvePendingIgnoresASettleWorkedPast(t *testing.T) {
 		{Action: "observe", Recorder: "s", Seq: 2, Thread: "s", Time: at(50), Obs: map[string]any{"value": int64(1)}},
 	}
 	Validate(t, "testdata/probed.yaml", steps, ResolvePending()).Expect(t, Conforms())
+}
+
+// On small random histories of a counter (incs, a finish, peeks that
+// observe it) with pending incs, ResolvePending's verdicts are a brute
+// force's over every placement: the run conforms if some placement does,
+// and violates ok only if every placement that conforms violates it. A
+// pending inc takes effect after the steps recorded before its
+// invocation, or never. Judged on the first placement that conforms
+// alone, it said Violates where another placement kept ok (review 11, F3).
+func TestResolvePendingInvariantsAgainstBruteForce(t *testing.T) {
+	RequireQuint(t)
+	if testing.Short() {
+		t.Skip("a validation per history")
+	}
+	t.Parallel()
+	rng := rand.New(rand.NewPCG(11, 3))
+	at := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
+	counts := map[string]int{}
+	for trial := range 24 {
+		type rec struct {
+			action string
+			x      int64 // a peek's observation
+		}
+		var recorded []rec
+		for range 2 + rng.IntN(3) {
+			switch rng.IntN(3) {
+			case 0:
+				recorded = append(recorded, rec{action: "inc"})
+			case 1:
+				recorded = append(recorded, rec{action: "finish"})
+			default:
+				recorded = append(recorded, rec{action: "peek", x: int64(rng.IntN(3))})
+			}
+		}
+		// pending incs, invoked after from[i] recorded steps
+		var from []int
+		for range 1 + rng.IntN(2) {
+			from = append(from, rng.IntN(len(recorded)+1))
+		}
+		var steps []qtrace.Step
+		seq := 0
+		add := func(s qtrace.Step) {
+			seq++
+			s.Recorder, s.Seq, s.Time = "c", uint64(seq), at(seq)
+			steps = append(steps, s)
+		}
+		for pos := 0; pos <= len(recorded); pos++ {
+			for _, f := range from {
+				if f == pos {
+					add(qtrace.Step{Action: "inc", Invocation: true})
+				}
+			}
+			if pos < len(recorded) {
+				r := recorded[pos]
+				s := qtrace.Step{Action: r.action}
+				if r.action == "peek" {
+					s.Obs = map[string]any{"x": r.x}
+				}
+				add(s)
+			}
+		}
+		// brute force: every placement (-1: no effect)
+		conforms, keeps := false, false
+		var place func(i int, pl []int)
+		place = func(i int, pl []int) {
+			if i == len(from) {
+				x, done, ok, fits := int64(0), false, true, true
+				for pos := 0; pos <= len(recorded) && fits; pos++ {
+					for _, p := range pl {
+						if p == pos {
+							x++
+						}
+					}
+					ok = ok && (!done || x >= 2)
+					if pos == len(recorded) {
+						break
+					}
+					switch r := recorded[pos]; r.action {
+					case "inc":
+						x++
+					case "finish":
+						done = true
+					case "peek":
+						fits = r.x == x
+					}
+					ok = ok && (!done || x >= 2)
+				}
+				conforms = conforms || fits
+				keeps = keeps || fits && ok
+				return
+			}
+			place(i+1, append(pl, -1))
+			for pos := from[i]; pos <= len(recorded); pos++ {
+				place(i+1, append(pl, pos))
+			}
+		}
+		place(0, nil)
+		run := Validate(t, "testdata/peekflag.yaml", steps, ResolvePending())
+		gotConforms := run.Report.Actors[0].Conforms == validate.Pass
+		gotViolates := Violates("ok").Holds(run)
+		if gotConforms != conforms || gotViolates != (conforms && !keeps) {
+			t.Fatalf("trial %d: conforms %v violates %v, brute force conforms %v keeps ok %v, for\n%v\n%s", trial, gotConforms, gotViolates, conforms, keeps, steps, run.Report.Summary())
+		}
+		counts[fmt.Sprintf("conforms=%v keeps=%v", conforms, keeps)]++
+	}
+	if len(counts) < 3 {
+		t.Errorf("verdicts %v: the property compared too little", counts)
+	}
+	t.Logf("verdicts: %v", counts)
 }

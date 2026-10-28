@@ -253,7 +253,10 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		if budget == 0 {
 			budget = DefaultResolveBudget
 		}
-		s.Steps, s.issues, s.undecided, s.kept, s.claims = resolve(lc, steps, budget)
+		fc := *c // the invariants' search (a resolution that violates one): verdicts only too
+		fc.mode.byCheck = byCheck
+		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "resolve-invariants"), true, true
+		s.Steps, s.issues, s.undecided, s.kept, s.claims = resolve(lc, &fc, steps, budget)
 		s.lost, s.binding = lostOf(c.Binding, steps, ""), c.Binding
 		s.gaps, s.collected, s.pending, s.recorded, s.searched = recordedOf(c.Binding, steps, "")
 		return s, nil
@@ -1199,11 +1202,13 @@ func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
 
 // resolve replaces each actor's steps by a resolution of its pending
 // calls the model accepts (checked with ch, conformance only), within
-// budget per actor, re-sequenced onto one thread per actor. It returns the
+// budget per actor, re-sequenced onto one thread per actor; one that
+// violates an invariant gives way to a later one that keeps them all
+// (checked with full, ch with the run's invariants). It returns the
 // steps, an issue per actor with pending calls, the actors whose search
 // was cut short, and the issues each actor's steps had as recorded that no
 // resolution removes (gaps, cycles).
-func resolve(ch *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
+func resolve(ch, full *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
 	traces, issues := reconstruct(ch.Binding, steps)
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
 	for _, tr := range traces {
@@ -1217,7 +1222,7 @@ func resolve(ch *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, i
 			var issue qtrace.Issue
 			var cut bool
 			var cl *claim
-			chosen, issue, cut, cl = resolution(ch, tr, settlesOf(steps), budget)
+			chosen, issue, cut, cl = resolution(ch, full, tr, settlesOf(steps), budget)
 			issues = append(issues, issue)
 			if cl != nil {
 				claims[tr.Actor] = cl
@@ -1439,8 +1444,15 @@ func describe(tr *qtrace.Trace, pl placement) string {
 }
 
 // resolution searches the placements of one actor's pending calls for one
-// the model accepts.
-func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+// the model accepts. The first that conforms (the fewest effects, then
+// the earliest) is taken, unless it violates one of the run's invariants
+// (full's) and a later one conforms with every invariant holding: a run
+// must not look violating by the placement picked, as an order of
+// Linearize's must not (orderIssue). Judged on the first alone, a pending
+// call's "no effect" violated an invariant its effect keeps, and
+// Violates held where Linearize found the placement that keeps it
+// (review 11, F3).
+func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 	a := tr.Actor
 	if a == "" {
 		a = "default"
@@ -1467,19 +1479,27 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 			orders[i] = append(orders[i], s)
 		}
 	}
+	// found is resolution i, conforming, as the search's outcome: with a
+	// later one if i violates an invariant and that one keeps them
+	found := func(i int, sev, extra string, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+		j, kept, undecided := keepInvariants(full, tr, a, orders, i, cut)
+		if j != i && cl != nil {
+			cl.order = orders[j] // quint judged it, and the rejections before i still stand
+		}
+		if undecided {
+			sev = "warn"
+		}
+		return apply(tr, pls[j]), qtrace.Issue{Severity: sev, Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
+			a, len(tr.Pending), j+1, describe(tr, pls[j])) + kept + note + extra}, undecided, cl
+	}
 	// the first the Go evaluator accepts, confirmed by quint with the ones
 	// it rejected before it (or by the caller's check); none, or a
 	// refusal, and quint checks them all, as a verdict of none needs every
 	// one rejected
 	disagreed := ""
 	if i, ok := resolveEval(ch).first(ch, tr, a, orders); ok {
-		found := func() ([]qtrace.Step, qtrace.Issue, bool, *claim) {
-			return apply(tr, pls[i]), qtrace.Issue{Severity: "info", Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
-				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note}, false, nil
-		}
 		if ch.mode.byCheck {
-			o, issue, cut, _ := found()
-			return o, issue, cut, &claim{ch: ch, tr: tr, order: orders[i], rejected: orders[:i]}
+			return found(i, "info", "", &claim{ch: ch, tr: tr, order: orders[i], rejected: orders[:i]})
 		}
 		// quint confirms it, and the evaluator's rejections before it: the
 		// run's invariants are judged on the one taken (one batch)
@@ -1489,7 +1509,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 			agrees = agrees && f >= 0
 		}
 		if agrees {
-			return found()
+			return found(i, "info", "", nil)
 		}
 		// quint rejects it: its batch decides, as without the evaluator,
 		// and the issue says so, as the order's search does (it once fell
@@ -1515,8 +1535,7 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 			if disagreed != "" {
 				sev = "warn"
 			}
-			return apply(tr, pls[i]), qtrace.Issue{Severity: sev, Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
-				a, len(tr.Pending), i+1, describe(tr, pls[i])) + note + disagreed}, false, nil
+			return found(i, sev, disagreed, nil)
 		}
 		if at > bestAt {
 			best, bestAt = i, at
@@ -1531,6 +1550,42 @@ func resolution(ch *Checker, tr *qtrace.Trace, settles []qtrace.Step, budget int
 	}
 	return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conforms (%d tried): "+
 		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}, false, nil
+}
+
+// keepInvariants is the resolution to take of orders, i the first that
+// conforms: i if it keeps every invariant of full's (the Go evaluator's
+// word, else quint's), else the first after it that conforms with every
+// invariant holding (quint's), what the issue adds, and undecided when
+// none does and the budget cut the placements short (another may keep
+// them: no verdict, as a cut search's). None, with every placement
+// tried, and i is taken: the run violates whatever its calls did.
+func keepInvariants(full *Checker, tr *qtrace.Trace, a string, orders [][]qtrace.Step, i int, cut bool) (int, string, bool) {
+	if full == nil || len(full.Binding.Invariants) == 0 {
+		return i, "", false
+	}
+	inst := inHistory(full, tr)
+	if ev := newEvalUse(inst, inst); !ev.off {
+		if f, _, err := ev.e.judge(inst, tr, settledAs(tr, orders[i:i+1])[0], len(orders[i]), true); err == nil && f < 0 {
+			return i, "", false
+		}
+	}
+	quintInv := quintChecker(inst, tr, a, true)
+	if first(quintInv(orders[i:i+1])) < 0 {
+		return i, "", false
+	}
+	if rest := orders[i+1:]; len(rest) > 0 {
+		fs, _ := quintInv(rest)
+		for k, f := range fs {
+			if f < 0 {
+				return i + 1 + k, fmt.Sprintf(", with every invariant holding (resolution %d, the first that conforms, violates one)", i+1), false
+			}
+		}
+	}
+	if cut {
+		return i, fmt.Sprintf("; it violates an invariant, and no other resolution in the budget (%d) conforms with every invariant holding: no verdict for the invariants. "+
+			"Raise the budget (validate.SearchOptions.ResolveBudget), or record where the pending calls took effect", len(orders)), true
+	}
+	return i, fmt.Sprintf("; it violates an invariant, and so does every other resolution that conforms (%d tried)", len(orders)), false
 }
 
 // resolveEval is how a resolution uses the Go evaluator.

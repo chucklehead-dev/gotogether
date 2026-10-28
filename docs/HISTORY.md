@@ -2752,6 +2752,15 @@ verdicts quint does not give. Each reproduction is a regression test now
   order; otherwise Unsupported, and quint judges. The repository's folds
   (grist's min, the examples' sums and maxima) are all of the shapes;
   `TestAgreesWithQuint` agrees on every model as before.
+- **F3, ResolvePending's first placement** (high). The run's invariants
+  were judged on the first placement of its pending calls that conforms;
+  one that violates an invariant hid a later one that keeps them, which
+  Linearize's second search (orderIssue) found: the same history was
+  Violates with ResolvePending alone, not with Linearize too. The
+  resolution now searches its later placements for one that conforms
+  with every invariant holding, and a cut search is no verdict
+  (`TestSoundResolveKeepsInvariants`,
+  `TestResolvePendingInvariantsAgainstBruteForce`).
 - **F4, an unknown outcome's timeout as its completion** (medium).
   qhistory's real-time edges used `Completed` of every committed or seen
   transaction, an Unknown one's too: a timeout at 1 of an append a later
