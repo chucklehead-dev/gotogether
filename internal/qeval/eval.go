@@ -1076,6 +1076,13 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		var ks, vs []Value
 		for _, p := range ev.setOf(arg(0), op).Elems {
 			t := p.(Tup)
+			// the pairs are sorted: a key's pairs are neighbours
+			if n := len(ks); n > 0 && Compare(ks[n-1], t[0]) == 0 {
+				// which pair quint keeps is its set order's (Rust keeps
+				// one, TypeScript another): the evaluator kept the
+				// greatest (found by the differential test)
+				throw(unsupported(op, "two pairs of the key %s: which value quint keeps depends on the order it iterates the set in", String(t[0])))
+			}
 			ks, vs = append(ks, t[0]), append(vs, t[1])
 		}
 		return NewMap(ks, vs)

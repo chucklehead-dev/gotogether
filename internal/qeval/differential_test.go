@@ -87,6 +87,11 @@ var differentialFindings = []struct{ typ, expr, want string }{
 	{"bool", "Set(0, 1).exists(x => 1 / x > 5)", "error"},
 	{"bool", "Set(0, 1).exists(x => 1 / x > 0)", "refused"}, // both backends fail, Rust by its order
 	{"bool", "Set(1, 2).forall(x => x > 0)", "value true"},
+	// setToMap of two pairs of one key: which one quint keeps is its
+	// set's order (Rust the first here, TypeScript the last); the
+	// evaluator kept the greatest pair's
+	{"str -> List[str]", `Set(("k", ["a", "a", ""]), ("k", ["ab", "a", "ab"])).setToMap()`, "refused"},
+	{"int -> int", "Set((1, 2), (3, 2), (1, 2)).setToMap()", "value Map(1 -> 2, 3 -> 2)"},
 }
 
 func TestDifferentialFindings(t *testing.T) {
