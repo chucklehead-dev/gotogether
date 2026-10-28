@@ -158,7 +158,7 @@ func RunLive(ctx context.Context, l Live) (*LiveRun, error) {
 	defer cancel()
 	srv.Shutdown(shut)
 	app.Drain()
-	if err := sink.Close(); err != nil {
+	if err := rec.Close(); err != nil { // closes the step log
 		return nil, err
 	}
 	// the arguments as a reader runs them again: from the module's

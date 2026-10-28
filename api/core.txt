@@ -1250,7 +1250,7 @@ const RecorderID = "nemesis"
 func DefaultRecording() Recording
 func FromScript(sc *qenv.Script) Schedule
 func Kinds(family string, names ...string) []string
-func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, *qobs.JSONLSink, error)
+func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, error)
 func Random(seed int64, mix Mix, interval, dur time.Duration) Schedule
 func ReadJournal(r io.Reader) (*Journal, error)
 func StepsIn(patterns ...string) func() int
@@ -1404,7 +1404,7 @@ type Outcomer interface
 type Recorder struct
     method (*Recorder) Actor() string
     method (*Recorder) Add(steps ...qtrace.Step)
-    method (*Recorder) Close()
+    method (*Recorder) Close() error
     method (*Recorder) CompleteThrough(ctx context.Context, t time.Time)
     method (*Recorder) Count() int
     method (*Recorder) ID() string
@@ -1424,6 +1424,7 @@ type SlogHandler struct
     method (*SlogHandler) WithGroup(name string) slog.Handler
 type StepRef string
 type Tee []Sink
+    method (Tee) Close() error
     method (Tee) Record(ctx context.Context, s *qtrace.Step)
 
 == github.com/chucklehead-dev/gotogether/qobs/qobshttp
@@ -1448,6 +1449,7 @@ func Serve(ctx context.Context, name string) func(err error)
 func WithRoles(ctx context.Context, r *Roles) context.Context
 type MetricsSink struct
     field Next qobs.Sink
+    method (*MetricsSink) Close() error
     method (*MetricsSink) Record(ctx context.Context, s *qtrace.Step)
 type Roles struct
     method (*Roles) Attempts(service string) (ok, failed int)

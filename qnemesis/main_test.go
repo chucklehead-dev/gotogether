@@ -177,10 +177,10 @@ func readLog(t *testing.T, path string) ([]qtrace.Step, error) {
 func nemesisRec(t *testing.T, dir string) (*qobs.Recorder, string) {
 	t.Helper()
 	path := filepath.Join(dir, "nemesis.jsonl")
-	rec, sink, err := NewRecorder(path)
+	rec, err := NewRecorder(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = sink.Close() })
+	t.Cleanup(func() { _ = rec.Close() })
 	return rec, path
 }

@@ -33,9 +33,15 @@ orders it, and before spawning work that depends on it. The step's final
 `error` is its outcome; `obs.<name>` keys are observations of the state
 after it.
 
+A program records into a recorder on a sink (`sink, err :=
+qobs.FileSink("steps.jsonl", qobs.PerStep)`, `rec :=
+qobs.NewRecorder(sink)`, `qobs.SetGlobal(rec)` or
+`qobshttp.Handler(h, rec)`) and ends with `if err := rec.Close(); err !=
+nil { ... }`, which closes the sink and says whether the log is whole.
+
 Read [references/emitting.md](references/emitting.md) for the keys a step
 takes (identity, `when:`, `order.<domain>`), outcomes an error can name,
-and the sinks.
+the sinks and who closes them.
 
 ## 2. Write the binding
 

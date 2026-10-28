@@ -93,6 +93,32 @@ Sinks (`qobs.NewRecorder(sink)`, installed in a program's main with
   samples them out: a dropped step is a reported gap;
 - `Tee{...}` to send steps to several sinks.
 
+The recorder owns its sink: `rec.Close()` closes it (a `FileSink`'s
+file, flushed; each of a `Tee`'s) and returns its error, so a program's
+recording ends with it, after the work that records has stopped (an
+HTTP server: `Shutdown`, then `qobshttp`'s `Recording.Wait`):
+
+```go
+sink, err := qobs.FileSink("steps.jsonl", qobs.PerStep)
+if err != nil {
+	log.Fatal(err)
+}
+rec := qobs.NewRecorder(sink, qobs.WithActor("kv"))
+h := qobshttp.Handler(api, rec) // or qobs.SetGlobal(rec), for woven //quint:action
+/* ... serve h; on a signal: */
+_ = srv.Shutdown(ctx)
+h.Wait()
+if err := rec.Close(); err != nil {
+	log.Fatalf("step log: %v", err) // incomplete: say so, do not validate it as whole
+}
+```
+
+`NewJSONLSink(w, d)` flushes to `w` on Close and leaves it open: the
+writer is the caller's. A sink several recorders share is its owner's:
+give each `struct{ qobs.Sink }{shared}` (which hides its Close) and
+close the sink once, after them. A step recorded after Close goes to
+`rec.Late()`, not to the closed sink.
+
 ## Recording a server in a test
 
 `qtest.Record` gives the scenario a recorder of its own (`rec`) and makes

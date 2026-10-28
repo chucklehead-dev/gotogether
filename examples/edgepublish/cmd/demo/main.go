@@ -76,10 +76,14 @@ func main() {
 	if *itfDir != "" {
 		sinks = append(sinks, mem)
 	}
-	qobs.SetGlobal(qobs.NewRecorder(sinks))
+	rec := qobs.NewRecorder(sinks)
+	qobs.SetGlobal(rec)
 
 	scenarios.Run(*scenario, os.Stdout)
 	qobs.SetGlobal(nil)
+	if err := rec.Close(); err != nil { // closes the step log (the OTel sink is the provider's: Shutdown below)
+		log.Fatal(err)
+	}
 
 	fmt.Printf("scenario %s: %s\n", *scenario, scenarios.Describe[*scenario])
 	if tp != nil {
@@ -89,9 +93,6 @@ func main() {
 		fmt.Printf("wrote %s (OTLP/JSON)\n", *out)
 	}
 	if stepLog != nil {
-		if err := stepLog.Close(); err != nil {
-			log.Fatal(err)
-		}
 		fmt.Printf("wrote %s (step log)\n", *steps)
 	}
 	if *itfDir != "" {

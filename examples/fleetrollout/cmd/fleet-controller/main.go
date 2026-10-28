@@ -101,8 +101,9 @@ func run(ms members, image string, maxUnavailable int, mutation, steps string, v
 	if err != nil {
 		return err
 	}
-	defer sink.Close()
-	qobs.SetGlobal(qobs.NewRecorder(sink, qobs.WithActor("fleet")))
+	rec := qobs.NewRecorder(sink, qobs.WithActor("fleet"))
+	defer rec.Close() // closes the step log
+	qobs.SetGlobal(rec)
 
 	names := slices.Sorted(maps.Keys(ms))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

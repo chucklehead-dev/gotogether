@@ -8,6 +8,19 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Breaking: `qobs.Recorder.Close` returns an error and closes the
+  recorder's sink (ROADMAP H3): a standalone program ends with `if err
+  := rec.Close(); err != nil { ... }`, where it closed the sink itself
+  and `rec.Close()` was no value. The recorder owns the sink it is
+  given: a `FileSink`'s file is flushed and closed, a `NewJSONLSink`'s
+  writer flushed and left to the caller, a `Tee`'s sinks and a
+  `qrole.MetricsSink`'s `Next` closed (`Tee.Close`,
+  `MetricsSink.Close`, errors joined); a sink several recorders share is
+  given to each as `struct{ qobs.Sink }{shared}` and closed by its
+  owner. A second Close closes nothing and returns the first one's
+  error. `qnemesis.NewRecorder` returns the recorder alone (closing it
+  closes the nemesis's log). qobshttp's package example is a standalone
+  program's recording: recorder, sink, handler, shutdown, close.
 - `qhistory.Record(db, h, lists)` (docs/refactors.md B1): a `qenv.DB`
   whose transactions are recorded in a `qhistory.History` as a
   list-append workload's (reads, appends, outcomes: an unknown commit

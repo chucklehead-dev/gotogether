@@ -47,7 +47,7 @@ func main() {
 		if _, err := lease.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), m, cl); err != nil {
 			fail(err)
 		}
-		if err := sink.Close(); err != nil {
+		if err := rec.Close(); err != nil { // closes the step log
 			fail(err)
 		}
 	}

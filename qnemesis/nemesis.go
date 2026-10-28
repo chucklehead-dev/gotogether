@@ -110,14 +110,14 @@ const RecorderID = "nemesis"
 
 // NewRecorder opens the nemesis's step log at path (PerStep: a killed
 // test loses none of it) and returns its recorder, id RecorderID, with
-// opts after (qobs.WithActor, for a binding's actor), and the sink to
-// Close.
-func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, *qobs.JSONLSink, error) {
+// opts after (qobs.WithActor, for a binding's actor). Close the recorder
+// when done: it closes the log.
+func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, error) {
 	sink, err := qobs.FileSink(path, qobs.PerStep)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return qobs.NewRecorder(sink, append([]qobs.Option{qobs.WithID(RecorderID), qobs.WithProcess(RecorderID)}, opts...)...), sink, nil
+	return qobs.NewRecorder(sink, append([]qobs.Option{qobs.WithID(RecorderID), qobs.WithProcess(RecorderID)}, opts...)...), nil
 }
 
 // StepsIn counts the system's steps in the step logs matching patterns

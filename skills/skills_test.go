@@ -95,6 +95,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"BufferedFileSink", "qobs.FileSink(path, qobs.Buffered)"},
 		{"SyncedFileSink", "qobs.FileSink(path, qobs.Synced)"},
 		{"NewSyncedJSONLSink", "qobs.NewJSONLSink(w, qobs.Synced)"},
+		{"rec, sink, err := qnemesis.NewRecorder", "rec, err := qnemesis.NewRecorder (rec.Close() closes the log)"},
 		{"qobs.Strict", "internal/hooks.Strict (the core's own)"},
 		{"qobs.Escaped", "internal/hooks.Escaped (the core's own)"},
 		{"qenv.WaitUntil", "qenv.WaitFor (a duration)"},

@@ -480,6 +480,10 @@ working there:
   fsyncs each step. `Buffered` buffers, and a killed process loses its
   last steps, undetectably: use it only where nothing crashes. `qtrace.ReadJSONL` keeps the steps before a torn last
   line and returns a `*TornTail` (input.File.Torn; validate warns).
+  A recorder owns its sink: `Recorder.Close` closes it (a Tee's sinks,
+  a MetricsSink's Next; a NewJSONLSink's writer is flushed, not closed)
+  and returns its error, once. A sink recorders share goes to each as
+  `struct{ qobs.Sink }{shared}` and is closed by its owner.
 - A `qenv.Signal` waiter is tagged with the task's wait generation; a
   timed-out wait must not be woken by a later `Notify`. Keep the tag when
   touching the scheduler.

@@ -38,7 +38,9 @@ qobs.Record(ctx, "withdraw", err, "account", acct, "amount", n, "obs.balance", b
 
 // Install a recorder at start-up, choosing where the steps go:
 qobs.SetGlobal(qobs.NewRecorder(qobs.NewOTelSink(tp), qobs.WithActor("bank-1")))   // span events
-sink, _ := qobs.FileSink("steps.jsonl", qobs.PerStep); qobs.SetGlobal(qobs.NewRecorder(sink)) // step log
+sink, _ := qobs.FileSink("steps.jsonl", qobs.PerStep); rec := qobs.NewRecorder(sink); qobs.SetGlobal(rec) // step log
+/* ... */
+if err := rec.Close(); err != nil { /* ... */ } // at exit: closes (flushes) the sink, and says if a step was lost
 ```
 
 With Orchestrion, an annotation on a function records a step when the

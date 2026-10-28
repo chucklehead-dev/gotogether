@@ -35,7 +35,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	qobs.SetGlobal(qobs.NewRecorder(sink))
+	rec := qobs.NewRecorder(sink)
+	qobs.SetGlobal(rec)
 
 	svc := queue.New(queue.Config{LeaseTTL: *ttl, Mutation: m})
 	r := rand.New(rand.NewPCG(*seed, 0))
@@ -80,7 +81,7 @@ func main() {
 	}
 	cancel()
 	wg.Wait()
-	if err := sink.Close(); err != nil {
+	if err := rec.Close(); err != nil { // closes the step log
 		log.Fatal(err)
 	}
 	twice := 0

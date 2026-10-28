@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qrun"
+	"io"
 	"reflect"
 	"runtime"
 	"strings"
@@ -58,20 +59,40 @@ type Recorder struct {
 
 	// closing makes Close wait for the writes under way: a step is in the
 	// sink, or late, never written to a sink its owner has closed
-	closing sync.RWMutex
-	closed  bool
+	closing  sync.RWMutex
+	closed   bool
+	closeErr error // the sink's Close's, returned again by a later Close
 }
 
-// Close ends the recorder's run: a step recorded after it (by work the
-// run left running: a handler, a goroutine) is written to no sink, since
-// the run was judged without it. It is kept (Late) and logged as escaped
-// (strict runs fail on it), never dropped silently. qtest.Record closes
-// its run's recorder when the scenario returns. Close waits for the
-// writes under way.
-func (r *Recorder) Close() {
+// Close ends the recorder's run and closes its sink, returning the
+// sink's error: a standalone program's last word on its step log is
+//
+//	if err := rec.Close(); err != nil { /* the log is incomplete */ }
+//
+// The recorder owns the sink it was given: Close closes it if it has a
+// Close() error method (a FileSink's file, flushed first; a Tee's
+// sinks, each; a NewJSONLSink's buffer is flushed, its writer left to the
+// caller). A sink several recorders share is its owner's to close once:
+// give each recorder struct{ qobs.Sink }{shared}, which hides its Close,
+// and close the sink after them.
+//
+// A step recorded after Close (by work the run left running: a handler,
+// a goroutine) is written to no sink, since the run was judged without
+// it. It is kept (Late) and logged as escaped (strict runs fail on it),
+// never dropped silently. qtest.Record closes its run's recorder when the
+// scenario returns. Close waits for the writes under way. A second Close
+// closes nothing and returns the first one's error.
+func (r *Recorder) Close() error {
 	r.closing.Lock()
 	defer r.closing.Unlock()
+	if r.closed {
+		return r.closeErr
+	}
 	r.closed = true
+	if c, ok := r.sink.(io.Closer); ok {
+		r.closeErr = c.Close()
+	}
+	return r.closeErr
 }
 
 // Late returns the steps recorded after Close, in the order recorded.
@@ -676,4 +697,16 @@ func (t Tee) Record(ctx context.Context, s *qtrace.Step) {
 	for _, x := range t {
 		x.Record(ctx, s)
 	}
+}
+
+// Close closes each of its sinks that has a Close() error method (a
+// recorder closing its Tee closes them) and returns their errors joined.
+func (t Tee) Close() error {
+	var errs []error
+	for _, x := range t {
+		if c, ok := x.(io.Closer); ok {
+			errs = append(errs, c.Close())
+		}
+	}
+	return errors.Join(errs...)
 }

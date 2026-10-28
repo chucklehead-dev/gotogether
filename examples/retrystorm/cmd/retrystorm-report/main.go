@@ -135,8 +135,9 @@ func record(path, mutation string) error {
 	if err != nil {
 		return err
 	}
-	qobs.SetGlobal(qobs.NewRecorder(sink, qobs.WithActor("client")))
+	rec := qobs.NewRecorder(sink, qobs.WithActor("client"))
+	qobs.SetGlobal(rec)
 	retrystorm.Burst(&retry.Budget{Ratio: retrystorm.BudgetRatio, Max: retrystorm.BudgetMax, Mutation: mut})
 	qobs.SetGlobal(nil)
-	return sink.Close()
+	return rec.Close() // closes the step log
 }

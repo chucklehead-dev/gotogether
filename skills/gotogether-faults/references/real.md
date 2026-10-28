@@ -22,7 +22,7 @@ t.Cleanup(func() { _ = p1.Close() }) // kills the process group: nothing left ru
 proxy := &qnemesis.Toxiproxy{URL: "http://127.0.0.1:8474"}
 t.Cleanup(func() { _ = proxy.Close() })
 addr, err := proxy.Link("n1", "n2", n2Addr) // n1 dials addr to reach n2; one proxy per direction
-rec, sink, err := qnemesis.NewRecorder("logs/nemesis.jsonl") // id "nemesis", PerStep
+rec, err := qnemesis.NewRecorder("logs/nemesis.jsonl") // id "nemesis", PerStep; rec.Close() closes the log
 n := &qnemesis.Nemesis{
 	Targets: map[string]qnemesis.Target{"n1": p1, "n2": p2, "n3": p3},
 	Net:     proxy,

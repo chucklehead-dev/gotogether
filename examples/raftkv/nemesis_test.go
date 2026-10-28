@@ -215,7 +215,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 
 	// the nemesis records the faults the cluster's model has, in its
 	// process: one actor's trace whose process does not change
-	rec, nsink, err := qnemesis.NewRecorder(filepath.Join(steps, "nemesis.jsonl"), qobs.WithProcess("cluster"))
+	rec, err := qnemesis.NewRecorder(filepath.Join(steps, "nemesis.jsonl"), qobs.WithProcess("cluster"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 			}
 		}
 	}
-	nsink.Close()
+	rec.Close()
 	agreed(t, direct, dir, 15*time.Second)
 
 	// the probe and the settles, as TestRealCluster's

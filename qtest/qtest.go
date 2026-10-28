@@ -409,7 +409,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	// the run is judged as the scenario left it: a step recorded later
 	// (a handler still running, a goroutine) fails the test, named, when
 	// it ends, and after it is logged as escaped, never lost silently
-	rec.Close()
+	closeErr := rec.Close() // closes the step log (the Tee's file)
 	t.Cleanup(func() {
 		if late := rec.Late(); len(late) > 0 {
 			t.Errorf("gotogether: %d steps were recorded on the run's recorder after the scenario returned (the first: %s): the run was judged "+
@@ -417,8 +417,8 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 				"Recording.Wait, which waits for hijacked connections' handlers too; a goroutine: wait for it)", len(late), late[0].String())
 		}
 	})
-	if err := file.Close(); err != nil {
-		t.Fatalf("gotogether: step log: %v", err)
+	if closeErr != nil {
+		t.Fatalf("gotogether: step log: %v", closeErr)
 	}
 	if n, msgs := hooks.Escaped(mark); n > mark && !c.Global {
 		// a verdict on a run missing steps would only mislead

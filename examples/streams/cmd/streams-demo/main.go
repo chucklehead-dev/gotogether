@@ -48,7 +48,8 @@ func main() {
 		if err != nil {
 			fail(err)
 		}
-		ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink, qobs.WithActor(name)))
+		rec := qobs.NewRecorder(sink, qobs.WithActor(name))
+		ctx := qobs.WithRecorder(context.Background(), rec)
 		switch *backend {
 		case "sim":
 			c := qenv.NewSeeded(uint64(i))
@@ -64,7 +65,7 @@ func main() {
 		if err != nil {
 			fail(err)
 		}
-		if err := sink.Close(); err != nil {
+		if err := rec.Close(); err != nil { // closes the step log
 			fail(err)
 		}
 	}

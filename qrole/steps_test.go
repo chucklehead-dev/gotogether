@@ -51,3 +51,22 @@ func TestMetricsSink(t *testing.T) {
 		t.Errorf("counts %v, passed on %d", got, next.n)
 	}
 }
+
+type closer struct {
+	countSink
+	closed bool
+}
+
+func (c *closer) Close() error { c.closed = true; return errors.New("closed") }
+
+// A recorder's Close reaches the sink behind a MetricsSink.
+func TestMetricsSinkClose(t *testing.T) {
+	next := &closer{}
+	sink, err := qrole.NewMetricsSink(sdkmetric.NewMeterProvider().Meter("test"), next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := qobs.NewRecorder(sink).Close(); err == nil || !next.closed {
+		t.Errorf("Close: %v, next closed %v", err, next.closed)
+	}
+}

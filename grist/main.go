@@ -275,7 +275,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		if err != nil {
 			return err
 		}
-		defer fsink.Close()
+		defer fsink.Close() // shared by the recorders below (the node's, each served dependency's): closed once, by its owner
 		sink = fsink
 		ctx = qobs.WithRecorder(ctx, qobs.NewRecorder(sink, qobs.WithID(recorderID)))
 	}

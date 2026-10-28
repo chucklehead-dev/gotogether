@@ -29,10 +29,9 @@ func main() {
 	flag.Parse()
 
 	cfg := webjobs.Config{Seed: *seed, MinWork: *minWork, MaxWork: *maxWork}
-	var sink *qobs.JSONLSink
 	if *steps != "" {
-		var err error
-		if sink, err = qobs.FileSink(*steps, qobs.PerStep); err != nil {
+		sink, err := qobs.FileSink(*steps, qobs.PerStep)
+		if err != nil {
 			log.Fatal(err)
 		}
 		cfg.Recorder = qobs.NewRecorder(sink, qobs.WithID("server"), qobs.WithActor("webjobs"), qobs.WithProcess("webjobs"))
@@ -57,8 +56,8 @@ func main() {
 		log.Print(err)
 	}
 	app.Drain()
-	if sink != nil {
-		if err := sink.Close(); err != nil {
+	if cfg.Recorder != nil {
+		if err := cfg.Recorder.Close(); err != nil { // closes the step log
 			log.Fatal(err)
 		}
 	}

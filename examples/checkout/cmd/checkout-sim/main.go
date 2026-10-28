@@ -45,7 +45,7 @@ func main() {
 		if _, err := checkout.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), cfg); err != nil {
 			fail(err)
 		}
-		if err := sink.Close(); err != nil {
+		if err := rec.Close(); err != nil { // closes the step log
 			fail(err)
 		}
 	}

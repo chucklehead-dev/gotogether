@@ -63,8 +63,9 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	defer sink.Close()
-	qobs.SetGlobal(qobs.NewRecorder(sink, qobs.WithActor("crossdb"), qobs.WithProcess("crossdb")))
+	rec := qobs.NewRecorder(sink, qobs.WithActor("crossdb"), qobs.WithProcess("crossdb"))
+	defer rec.Close() // closes the step log
+	qobs.SetGlobal(rec)
 	rnd := rand.New(rand.NewPCG(*seed, 11))
 
 	type res struct {

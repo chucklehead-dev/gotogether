@@ -45,13 +45,14 @@ const (
 	// per step.
 	Synced
 	// Buffered buffers steps, for long runs nothing kills: fewer writes.
-	// Close (or Flush) it when done: steps still in the buffer are lost if
-	// the process dies, undetectably.
+	// Close its recorder (or it) when done: steps still in the buffer
+	// are lost if the process dies, undetectably.
 	Buffered
 )
 
 // NewJSONLSink writes the step log to w, as durably as d says (Synced
-// syncs w if it has a Sync method, as *os.File and qenv.File have).
+// syncs w if it has a Sync method, as *os.File and qenv.File have). w
+// stays the caller's: Close flushes to it and leaves it open.
 func NewJSONLSink(w io.Writer, d Durability) *JSONLSink {
 	j := &JSONLSink{w: w, sync: d == Synced}
 	if _, ok := w.(interface{ Sync() error }); d == Synced && !ok {
@@ -67,7 +68,8 @@ func NewJSONLSink(w io.Writer, d Durability) *JSONLSink {
 }
 
 // FileSink creates (truncating) a step log file written as durably as d
-// says: PerStep, the default, loses no step to a killed process.
+// says: PerStep, the default, loses no step to a killed process. The
+// sink owns the file, which its Close (or its recorder's) closes.
 func FileSink(path string, d Durability) (*JSONLSink, error) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -114,7 +116,12 @@ func (j *JSONLSink) Record(_ context.Context, s *qtrace.Step) {
 // Err is the first write error, if any.
 func (j *JSONLSink) Err() error { j.mu.Lock(); defer j.mu.Unlock(); return j.err }
 
-// Close closes the file of a FileSink and returns the first error.
+// Close flushes a Buffered log and closes a FileSink's file, and returns
+// the first error the log met. A writer given to NewJSONLSink is the
+// caller's: Close flushes to it but does not close it. A step recorded
+// after Close is an error (Err), and a second Close returns the first
+// one's error again. Recorder.Close calls it: a sink given to a recorder
+// is closed by closing the recorder.
 func (j *JSONLSink) Close() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()

@@ -2,6 +2,7 @@ package qrole
 
 import (
 	"context"
+	"io"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -43,4 +44,13 @@ func (m *MetricsSink) Record(ctx context.Context, s *qtrace.Step) {
 	if m.Next != nil {
 		m.Next.Record(ctx, s)
 	}
+}
+
+// Close closes Next if it has a Close() error method: a recorder closing
+// its MetricsSink closes the sink behind it.
+func (m *MetricsSink) Close() error {
+	if c, ok := m.Next.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
