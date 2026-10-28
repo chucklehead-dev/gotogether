@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/examples/payd/payd"
@@ -94,7 +96,7 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	if err := payd.Migrate(context.Background(), setup); err != nil {
 		panic(err)
 	}
-	for _, a := range sortedKeys(Accounts) {
+	for _, a := range slices.Sorted(maps.Keys(Accounts)) {
 		if _, err := setup.Exec(`INSERT INTO accounts (id, balance, n_charges) VALUES (?, ?, 0)`, a, Accounts[a]); err != nil {
 			panic(err)
 		}

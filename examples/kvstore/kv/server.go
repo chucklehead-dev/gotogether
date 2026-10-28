@@ -72,8 +72,7 @@ func finish(span trace.Span, w http.ResponseWriter, res Result, err error) {
 	}
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		var oe outcomeErr
-		if errors.As(err, &oe) {
+		if oe, ok := errors.AsType[outcomeErr](err); ok {
 			span.SetAttributes(attribute.String("kv.outcome", oe.outcome))
 		}
 	} else {

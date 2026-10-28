@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -97,7 +99,7 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 	if err := payd.Migrate(ctx, db); err != nil {
 		return nil, err
 	}
-	for _, a := range sortedKeys(Accounts) {
+	for _, a := range slices.Sorted(maps.Keys(Accounts)) {
 		if _, err := db.ExecContext(ctx, `INSERT INTO accounts (id, balance, n_charges) VALUES (?, ?, 0)`, a, Accounts[a]); err != nil {
 			return nil, err
 		}
@@ -141,7 +143,7 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for _, a := range sortedKeys(Accounts) {
+	for _, a := range slices.Sorted(maps.Keys(Accounts)) {
 		var b int64
 		if err := db.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id = ?`, a).Scan(&b); err != nil {
 			return nil, err
@@ -191,7 +193,7 @@ func (b *barrier) arrive(key string) {
 // senders clients at once (a page submitted from several tabs), keys
 // spread over the accounts.
 func Concurrent(n, senders int) [][]Op {
-	accounts := sortedKeys(Accounts)
+	accounts := slices.Sorted(maps.Keys(Accounts))
 	w := make([][]Op, senders)
 	for k := range n {
 		op := Op{Key: fmt.Sprintf("k%d", k+1), Account: accounts[k%len(accounts)], Amount: int64(10 + k)}

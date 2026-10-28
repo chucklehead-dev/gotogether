@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 )
 
@@ -100,12 +101,7 @@ func errFor(f Fault, op Op) error {
 func (m *MemStore) Keys() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var ks []string
-	for k := range m.objects {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
+	return slices.Sorted(maps.Keys(m.objects))
 }
 
 // Tables returns, per table, the batch ids inserted into it.

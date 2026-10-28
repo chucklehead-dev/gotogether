@@ -125,16 +125,13 @@ func (c *Client) try(ctx context.Context, key string, body []byte) (*Charge, err
 // retried with its key: its outcome is unknown (a timeout, a reset), it
 // was never sent (a refused connection), or payd failed (5xx).
 func Retryable(err error) bool {
-	var api *APIError
-	if errors.As(err, &api) {
+	if api, ok := errors.AsType[*APIError](err); ok {
 		return api.StatusCode >= 500
 	}
-	var ue *url.Error
-	if errors.As(err, &ue) && ue.Timeout() {
+	if ue, ok := errors.AsType[*url.Error](err); ok && ue.Timeout() {
 		return true
 	}
-	var ne net.Error
-	if errors.As(err, &ne) && ne.Timeout() {
+	if ne, ok := errors.AsType[net.Error](err); ok && ne.Timeout() {
 		return true
 	}
 	return errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED)

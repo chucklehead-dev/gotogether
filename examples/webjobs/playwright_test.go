@@ -139,8 +139,7 @@ func playwright(t *testing.T) (string, []string) {
 	check := exec.Command(node, "-e", "require.resolve('playwright')")
 	check.Env = env
 	if out, err := check.CombinedOutput(); err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) {
+		if _, exit := errors.AsType[*exec.ExitError](err); exit {
 			qtest.Optional(t, fmt.Sprintf("the playwright package is not installed (npm i -g playwright, and npx playwright install chromium): %s", bytes.TrimSpace(out)))
 		}
 		t.Fatal(err)

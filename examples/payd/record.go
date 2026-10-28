@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"sort"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
@@ -74,15 +73,4 @@ func (rt *Recording) RoundTrip(req *http.Request) (*http.Response, error) {
 	qobs.Record(ctx, "response", nil, "client", rt.Client, "key", key, "account", ask.Account, "amount", ask.Amount,
 		"status", status, "id", id, "chargeAccount", chAccount, "chargeAmount", chAmount)
 	return resp, err
-}
-
-// sortedKeys are m's keys in order: a run's setup must not depend on a
-// map's.
-func sortedKeys[V any](m map[string]V) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Strings(ks)
-	return ks
 }

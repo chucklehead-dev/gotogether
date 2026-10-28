@@ -13,9 +13,9 @@ package sktrace
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -150,11 +150,11 @@ func objects(v any) []Object {
 func lifecycles(v any) []Lifecycle {
 	idx, _ := v.(map[string]any)
 	var out []Lifecycle
-	for _, gvk := range sortedKeys(idx) {
+	for _, gvk := range slices.Sorted(maps.Keys(idx)) {
 		owners, _ := idx[gvk].(map[string]any)
-		for _, owner := range sortedKeys(owners) {
+		for _, owner := range slices.Sorted(maps.Keys(owners)) {
 			mtimes, _ := owners[owner].(map[string]any)
-			for _, mt := range sortedKeys(mtimes) {
+			for _, mt := range slices.Sorted(maps.Keys(mtimes)) {
 				mtime, _ := strconv.ParseInt(mt, 10, 64)
 				pods, _ := mtimes[mt].([]any)
 				for _, p := range pods {
@@ -172,15 +172,6 @@ func lifecycles(v any) []Lifecycle {
 			}
 		}
 	}
-	return out
-}
-
-func sortedKeys(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }
 

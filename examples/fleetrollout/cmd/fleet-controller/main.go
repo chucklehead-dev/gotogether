@@ -15,9 +15,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"os/signal"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -103,11 +104,7 @@ func run(ms members, image string, maxUnavailable int, mutation, steps string, v
 	defer sink.Close()
 	qobs.SetGlobal(qobs.NewRecorder(sink, qobs.WithActor("fleet")))
 
-	var names []string
-	for n := range ms {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(ms))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

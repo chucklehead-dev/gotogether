@@ -25,7 +25,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 )
@@ -147,14 +148,7 @@ func (c *Cloud) Create(ctx context.Context, in CreateInput) (Database, error) {
 	return d.Database, nil
 }
 
-func (c *Cloud) ids() []string {
-	ids := make([]string, 0, len(c.dbs))
-	for id := range c.dbs {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
-}
+func (c *Cloud) ids() []string { return slices.Sorted(maps.Keys(c.dbs)) }
 
 // Get implements API.
 func (c *Cloud) Get(_ context.Context, id string) (Database, error) {

@@ -125,8 +125,7 @@ func TestTornTrace(t *testing.T) {
 		return &l
 	})
 	steps, err := Steps(dir)
-	var torn *qtrace.TornTail
-	if !errors.As(err, &torn) {
+	if _, torn := errors.AsType[*qtrace.TornTail](err); !torn {
 		t.Fatalf("err %v, want a torn tail", err)
 	}
 	qtest.Validate(t, "webjobs.binding.yaml", steps).Expect(t, qtest.Conforms(), qtest.Undecided(qtest.Finishes(), "lost its tail"))

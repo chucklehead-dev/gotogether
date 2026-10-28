@@ -11,7 +11,8 @@
 package kafka
 
 import (
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/examples/glomers/maelstrom"
@@ -86,7 +87,7 @@ func Setup(n *maelstrom.Node, mut Mutation) {
 		if err := req.Decode(&b); err != nil {
 			return err
 		}
-		keys := sortedKeys(b.Offsets)
+		keys := slices.Sorted(maps.Keys(b.Offsets))
 		out := map[string][][2]int{}
 		var next func(i int)
 		next = func(i int) {
@@ -167,7 +168,7 @@ func Setup(n *maelstrom.Node, mut Mutation) {
 		if err := req.Decode(&b); err != nil {
 			return err
 		}
-		keys := sortedKeys(b.Offsets)
+		keys := slices.Sorted(maps.Keys(b.Offsets))
 		var next func(i int)
 		next = func(i int) {
 			if i == len(keys) {
@@ -209,15 +210,6 @@ func Setup(n *maelstrom.Node, mut Mutation) {
 		next(0)
 		return nil
 	})
-}
-
-func sortedKeys(m map[string]int) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // KV returns lin-kv for a Sim, recording the log and commit operations.

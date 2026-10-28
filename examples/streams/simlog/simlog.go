@@ -27,6 +27,8 @@ import (
 	"context"
 	"errors"
 	"hash/fnv"
+	"maps"
+	"slices"
 	"sort"
 	"time"
 
@@ -298,12 +300,7 @@ func (m *Member) Poll(ctx context.Context) ([]pipeline.Record, error) {
 		}
 	}
 	var out []pipeline.Record
-	ps := make([]int, 0, len(m.pos))
-	for p := range m.pos {
-		ps = append(ps, p)
-	}
-	sort.Ints(ps)
-	for _, p := range ps {
+	for _, p := range slices.Sorted(maps.Keys(m.pos)) {
 		recs := l.parts[p][m.pos[p]:]
 		recs = recs[:min(len(recs), l.Batch)]
 		out = append(out, recs...)

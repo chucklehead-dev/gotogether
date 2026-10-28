@@ -97,8 +97,8 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 				// unqualified, SQLite takes the existing row's v; Postgres
 				// refuses it (42702), and so does qsql
 				if bare := strings.NewReplacer("t.v + ", "v + ", "WHERE t.v", "WHERE v").Replace(stmt); bare != stmt {
-					var e *qsql.Error
-					if _, err := q.Exec(bare, args...); !errors.As(err, &e) || e.Code != "42702" {
+					_, err := q.Exec(bare, args...)
+					if e, ok := errors.AsType[*qsql.Error](err); !ok || e.Code != "42702" {
 						t.Fatalf("round %d: %s: got %v, want 42702 (ambiguous, as Postgres says)", round, bare, err)
 					}
 				}

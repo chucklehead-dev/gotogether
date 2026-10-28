@@ -339,8 +339,14 @@ types buys users nothing they would notice.
   spelled).
 - The examples: the A1 pattern in ten files of ten modules (counters,
   glomers ×2, sktrace, payd, crossdb, edgepublish, fleetrollout,
-  streams ×2). Not changed: each is its own module with its own suite;
-  worth doing when each is next touched, since users copy their idioms.
+  streams ×2). Done outside grist's examples ("examples: sorted keys
+  with slices.Sorted, errors.AsType"): glomers' kafka, sktrace, payd,
+  crossdb, edgepublish, fleetrollout, streams' pipeline and simlog, and
+  `errors.AsType` in kvstore, payd and webjobs. Left: glomers'
+  broadcast, whose empty read must send `[]` to Maelstrom
+  (`slices.Sorted` returns nil, sent as null); payd's `retryable`, whose target is an interface that is not an
+  error (`SQLState()`); webjobs' harness switch, whose `exit` serves two
+  cases; counters, wallet-grist and library while GR3 is under way.
 - qanalysis (proposed): quintsim and quintweave delegate to qlint's
   syntactic checks, shared with `gotogether lint`, and so see only calls:
   `now := time.Now` or `draw := rand.IntN`, a function value called

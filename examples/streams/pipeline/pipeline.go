@@ -18,7 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,12 +203,7 @@ func (c *Consumer) Process(ctx context.Context, recs []Record) {
 }
 
 func (c *Consumer) commit(ctx context.Context, next map[int]int) {
-	ps := make([]int, 0, len(next))
-	for p := range next {
-		ps = append(ps, p)
-	}
-	sort.Ints(ps)
-	for _, p := range ps {
+	for _, p := range slices.Sorted(maps.Keys(next)) {
 		// a failed commit is covered by the next batch's, or redelivers
 		_ = c.Reader.Commit(ctx, p, next[p])
 	}

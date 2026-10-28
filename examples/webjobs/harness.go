@@ -48,12 +48,11 @@ func Steps(dir string) ([]qtrace.Step, error) {
 	}
 	server, serr := qtrace.ReadJSONL(f)
 	f.Close()
-	var torn *qtrace.TornTail
-	if serr != nil && !errors.As(serr, &torn) {
+	if _, torn := errors.AsType[*qtrace.TornTail](serr); serr != nil && !torn {
 		return nil, fmt.Errorf("%s: %w", ServerFile, serr)
 	}
 	page, perr := qbombadil.LogFile(filepath.Join(dir, TraceFile), journey.Bombadil)
-	if perr != nil && !errors.As(perr, &torn) {
+	if _, torn := errors.AsType[*qtrace.TornTail](perr); perr != nil && !torn {
 		return nil, perr
 	}
 	return append(server, page.Steps()...), errors.Join(serr, perr)
