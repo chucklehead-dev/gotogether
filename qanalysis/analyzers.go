@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
-	"go/token"
 	"go/types"
 	"maps"
 	"path/filepath"
@@ -59,25 +58,24 @@ var Sim = &analysis.Analyzer{
 // Weave reports what qenv/weave cannot bring into a simulation: unmarked
 // go statements, lock methods used as values, embedded sync types
 // (qlint.WovenFile). Run it on packages built with qenv/weave's aspects.
+// It suggests the fix where one is mechanical (weaveFixes): //qenv:go
+// above a function literal's go statement, a method value called from a
+// function literal.
 var Weave = &analysis.Analyzer{
 	Name: "quintweave",
 	Doc:  "report what qenv/weave cannot rewrite (unmarked go statements, sync method values, embedded sync types)",
 	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run: func(pass *analysis.Pass) (any, error) {
-		return nil, report(pass, qlint.WovenFile, false)
+		for _, f := range pass.Files {
+			if strings.HasSuffix(pass.Fset.File(f.Pos()).Name(), "_test.go") {
+				continue
+			}
+			for _, x := range qlint.WovenFile(pass.Fset, f) {
+				pass.Report(analysis.Diagnostic{Pos: x.At, Message: x.What + ": " + x.Fix, SuggestedFixes: weaveFixes(pass, f, x.At)})
+			}
+		}
+		return nil, nil
 	},
-}
-
-func report(pass *analysis.Pass, check func(*token.FileSet, *ast.File) []qlint.Finding, tests bool) error {
-	for _, f := range pass.Files {
-		if !tests && strings.HasSuffix(pass.Fset.File(f.Pos()).Name(), "_test.go") {
-			continue
-		}
-		for _, x := range check(pass.Fset, f) {
-			pass.Reportf(x.At, "%s: %s", x.What, x.Fix)
-		}
-	}
-	return nil
 }
 
 // Action checks //quint:action annotations. Without a binding: each names
@@ -128,10 +126,17 @@ func runAction(pass *analysis.Pass) (any, error) {
 				pass.Reportf(a.At, "//quint:action on %s without action:NAME: name the model action the step is", a.Func)
 				continue
 			}
-			checkScope(pass, a)
+			c := directive(f, a)
+			checkScope(pass, c, a)
 			if lint != nil {
 				for _, e := range lint(a) {
-					pass.Reportf(a.At, "%s", strings.TrimPrefix(e, a.Pos+": "))
+					var fixes []analysis.SuggestedFix
+					if _, ok := model.Actions[a.Action]; !ok {
+						fixes = renameAction(c, a.Action, model.NearestAction(a.Action))
+					} else if m := unrecorded.FindStringSubmatch(e); m != nil {
+						fixes = recordField(pass, c, a, m[1])
+					}
+					pass.Report(analysis.Diagnostic{Pos: a.At, Message: strings.TrimPrefix(e, a.Pos+": "), SuggestedFixes: fixes})
 				}
 			}
 		}
@@ -148,7 +153,7 @@ func checkRecords(pass *analysis.Pass, m *binding.Model, f *ast.File) {
 			continue
 		}
 		for _, e := range binding.LintRecords(m, []binding.RecordCall{r}) {
-			pass.Reportf(r.At, "%s", strings.TrimPrefix(e, r.Pos+": "))
+			pass.Report(analysis.Diagnostic{Pos: r.At, Message: strings.TrimPrefix(e, r.Pos+": "), SuggestedFixes: recordFix(m, r)})
 		}
 	}
 }
@@ -165,12 +170,13 @@ func isQobsRecord(obj types.Object) bool {
 // (package, universe), declared before the body: go/types puts the
 // body's top-level locals in the parameters' scope, and the advice
 // cannot see them.
-func checkScope(pass *analysis.Pass, a binding.Annotation) {
+func checkScope(pass *analysis.Pass, c *ast.Comment, a binding.Annotation) {
 	scope := pass.TypesInfo.Scopes[a.Decl.Type]
 	if scope == nil || a.Decl.Body == nil {
 		return
 	}
 	keys := slices.Sorted(maps.Keys(a.Keys))
+	fixed := map[string]bool{}
 	for _, k := range keys {
 		if notExpressions[k] {
 			continue
@@ -182,7 +188,13 @@ func checkScope(pass *analysis.Pass, a binding.Annotation) {
 		}
 		for _, name := range freeNames(e) {
 			if _, obj := scope.LookupParent(name, a.Decl.Body.Lbrace); obj == nil {
-				pass.Reportf(a.At, "//quint:action %s: %s uses %s, which is not a parameter, the receiver or a named result of %s: the step is recorded on return, where locals are out of scope; name the result or pass it in", a.Action, k, name, a.Func)
+				var fixes []analysis.SuggestedFix
+				if !fixed[name] { // one fix per name: two keys using one local name it once
+					fixes = scopeFix(pass, c, a, k, name)
+					fixed[name] = fixes != nil
+				}
+				pass.Report(analysis.Diagnostic{Pos: a.At, SuggestedFixes: fixes,
+					Message: fmt.Sprintf("//quint:action %s: %s uses %s, which is not a parameter, the receiver or a named result of %s: the step is recorded on return, where locals are out of scope; name the result or pass it in", a.Action, k, name, a.Func)})
 			}
 		}
 	}

@@ -56,3 +56,36 @@ func TestSimFixes(t *testing.T) {
 func TestCtx(t *testing.T) {
 	analysistest.RunWithSuggestedFixes(t, analysistest.TestData(), qanalysis.Ctx, "ctxapp")
 }
+
+// quintweave's findings carry their fix where one is mechanical:
+// //qenv:go above a function literal's go statement, a method value
+// that takes nothing called from a function literal.
+func TestWeaveFixes(t *testing.T) {
+	analysistest.RunWithSuggestedFixes(t, analysistest.TestData(), qanalysis.Weave, "weavefix")
+}
+
+// quintaction's scope findings carry their fix: a local the function
+// returns named as its result, a misspelled parameter spelled as it;
+// none for a local it does not return.
+func TestActionFixes(t *testing.T) {
+	analysistest.RunWithSuggestedFixes(t, analysistest.TestData(), qanalysis.Action, "actionfix")
+}
+
+// With a binding, quintaction's findings carry their fix: a misspelled
+// action (a directive's, a Record call's) named as the model's nearest,
+// a field the binding uses recorded from the parameter or named result
+// of its name. Loading the model runs quint.
+func TestActionWithBindingFixes(t *testing.T) {
+	if _, err := exec.LookPath("quint"); err != nil {
+		t.Skip("quint not on PATH")
+	}
+	b, err := filepath.Abs(filepath.Join(analysistest.TestData(), "bank.binding.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := qanalysis.Action.Flags.Set("binding", b); err != nil {
+		t.Fatal(err)
+	}
+	defer qanalysis.Action.Flags.Set("binding", "")
+	analysistest.RunWithSuggestedFixes(t, analysistest.TestData(), qanalysis.Action, "bindingfix")
+}

@@ -1,7 +1,7 @@
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/chucklehead-dev/gotogether v0.0.0-20261028174947-854e8bfcd300 h1:Ly2dOhP36JtDqKhCT9pL+qyI957mz5hqo+ZaI2zbZrs=
-github.com/chucklehead-dev/gotogether v0.0.0-20261028174947-854e8bfcd300/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
+github.com/chucklehead-dev/gotogether v0.0.0-20261028175750-97083790cb0e h1:hi7gle3Mz2Bhm4CgXr5SvRGT18GqEhN3SjC7sZd9NzE=
+github.com/chucklehead-dev/gotogether v0.0.0-20261028175750-97083790cb0e/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
 github.com/go-logr/logr v1.4.4 h1:tG4xh9yMsRCAiodLVTxyrkzSZ9+o0L1Kg/+cPVcbP/8=
 github.com/go-logr/logr v1.4.4/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
