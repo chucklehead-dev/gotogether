@@ -12,3 +12,6 @@ func WaitFor(s *Store, ctx context.Context, done func() (bool, error)) error {
 
 // Committed counts a COMMIT of s's, as an append's does.
 func Committed(s *Store) { s.commits.Add(1) }
+
+// ReadStmt is the statement a read runs per type, for its plan's test.
+const ReadStmt = readStmt

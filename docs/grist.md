@@ -243,9 +243,11 @@ started afresh; one machine, -short and full):
 | 10^5 | 100,000 events read, 2.5 s | 1,000 events read, 25 ms |
 
 (The read that takes the snapshot costs what a read without one does,
-once. sqlstore reads an event per statement, so a read's cost is its
-events'; a read's first SnapshotEvery events come from each of its
-types' index with a LIMIT, never the whole index.)
+once. sqlstore reads a type's events in one statement (ROADMAP I23:
+`grist_index JOIN grist_events`, about 6-8 µs an event on SQLite and
+PostgreSQL), so a read's cost is still its events'; a read's first
+SnapshotEvery events come from each of its types' index with a LIMIT,
+never the whole index.)
 
 The decisions, with their reasons:
 
@@ -759,7 +761,9 @@ whose `Wait` returns at once fails the wake-up check.
   checkpoint and the conditions (`SELECT pos FROM grist_index WHERE
   tenant = $1 AND k = $2 AND pos > $3 AND pos <= $4 ORDER BY pos ASC
   LIMIT 1`; a selector of several tags reads the events' other tags),
-  then the rows and COMMIT. Taking the lock after the condition instead
+  then the rows and COMMIT. A read is the head, then one statement per
+  type of its selector, `grist_index JOIN grist_events ON (tenant, pos)`
+  (qsql's lookup join; ROADMAP I23), not one per event. Taking the lock after the condition instead
   fails storetest's concurrent check at read committed, on qsql and on
   PostgreSQL. sqlstore retries nothing itself: a transient error goes back
   to grist, whose retry starts again at the key's marker, as with

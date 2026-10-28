@@ -400,3 +400,42 @@ func TestNotCommittedBeforeCommit(t *testing.T) {
 		t.Error("NotCommitted of a permanent error: want it permanent, unmarked")
 	}
 }
+
+// A read's statement searches both tables by their keys on SQLite: a
+// range of grist_index's key, then grist_events' row by (tenant, pos),
+// never a scan (EXPLAIN QUERY PLAN; PostgreSQL's plan, a nested loop
+// over the two primary keys or a hash join for a large share of a
+// tenant's events, is in docs/HISTORY.md's I23).
+func TestReadPlanOnSQLite(t *testing.T) {
+	db := openSQLite(t)
+	if _, err := sqlstore.Open(context.Background(), db, sqlstore.SQLite, sqlstore.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query(`EXPLAIN QUERY PLAN `+sqlstore.ReadStmt+`ASC LIMIT $5`, "t", "i/a", 0, 10, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"SEARCH grist_index USING COVERING INDEX", "(tenant=? AND k=? AND pos>? AND pos<?)", "SEARCH grist_events USING INDEX", "(tenant=? AND pos=?)"}
+	all := strings.Join(plan, "\n")
+	for _, w := range want {
+		if !strings.Contains(all, w) {
+			t.Errorf("the read's plan does not say %q:\n%s", w, all)
+		}
+	}
+	if strings.Contains(all, "SCAN") || strings.Contains(all, "TEMP B-TREE") {
+		t.Errorf("the read's plan scans or sorts:\n%s", all)
+	}
+}

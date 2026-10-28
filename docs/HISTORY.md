@@ -2857,6 +2857,84 @@ verdicts quint does not give. Each reproduction is a regression test now
   same classifier) has no real-time edges and only committed
   transactions, so nothing there changes.
 
+### I23: sqlstore reads in one query
+
+ROADMAP's I23, from the Go specialist's finding (review 11): a read
+fetched the index's positions, then each event in a statement of its
+own. Now a read is the head, then one statement per type of the
+selector (a selector's types are a property of the read model, not of
+the log):
+
+    SELECT grist_events.pos, ..., grist_events.body FROM grist_index
+      JOIN grist_events ON grist_events.tenant = grist_index.tenant AND grist_events.pos = grist_index.pos
+      WHERE grist_index.tenant = $1 AND grist_index.k = $2 AND grist_index.pos > $3 AND grist_index.pos <= $4
+      ORDER BY grist_index.pos [ASC|DESC] [LIMIT $5]
+
+The decisions:
+- **qsql gained a join, rather than sqlstore a dialect's statement.**
+  sqlstore's promise is one SQL on every dialect, so the simulated tier
+  runs the real tier's statements. qsql's join is a lookup: ON fixes the
+  joined table's whole primary key from the first table's columns, an
+  inner join, every column qualified, WHERE and ORDER BY on the first
+  table, no aliases and no FOR UPDATE (TestJoinAgainstBruteForce, payd's
+  TestQsqlAgainstSQLite). Each joined row is a read of its own, so at
+  read committed a commit may fall between them, where PostgreSQL reads
+  one snapshot; events below the head never change, so a read sees the
+  same.
+- **One statement per type, merged in Go**, not `k IN (...)` or a
+  `UNION`: qsql ranges one key prefix at a time, and a type's events are
+  no other type's, so the merge is a sort. A type named twice is read
+  once (storetest's reads now check it; the old code deduplicated
+  positions). With two tags or more the second is checked on the rows,
+  and a type's rows are read until the limit matches.
+- **A condition with at most one tag still reads positions only**, under
+  the head lock; one of more tags reads through the join, until a match.
+- **The tags column is decoded without encoding/json** when it is what
+  json.Marshal writes for strings that need no escape (a third of a
+  read's time went to json.Unmarshal); anything else falls back to it
+  (TestDecodeTagsAgainstJSON, against json.Unmarshal on marshalled,
+  cut and mutated inputs).
+
+`BenchmarkRead` (grist/sqlstore: events alternating two types, each
+tagged with one of 10 accounts and one of 3 kinds; medians of 3; SQLite
+a temp file, PostgreSQL 16 over a local socket; qsql the simulation's
+Store at read committed):
+
+| read | events returned | SQLite before → after | PostgreSQL before → after | qsql before → after |
+|---|---|---|---|---|
+| 10^3, both types | 1,000 | 38.7 → 7.7 ms | 49.9 → 6.2 ms | 69.5 → 49.7 ms |
+| 10^3, one type | 500 | 19.3 → 2.8 ms | 21.3 → 2.7 ms | 32.3 → 22.3 ms |
+| 10^3, one account | 100 | 3.3 → 0.75 ms | 4.9 → 0.69 ms | 6.0 → 5.5 ms |
+| 10^4, both types | 10,000 | 368 → 83 ms | 480 → 65 ms | 559 → 333 ms |
+| 10^4, one type | 5,000 | 158 → 37 ms | 262 → 31 ms | 342 → 226 ms |
+| 10^4, one account | 1,000 | 36.6 → 8.4 ms | 45.0 → 6.2 ms | 78.2 → 66.8 ms |
+| 10^4, two tags | 333 | 41.4 → 6.9 ms | 42.2 → 5.3 ms | 73.7 → 40.7 ms |
+| 10^4, LIMIT 100 | 100 | 4.3 → 1.6 ms | 6.0 → 1.4 ms | 23.9 → 28.4 ms |
+
+About 37 µs an event before on SQLite, 8 after; 48 before on
+PostgreSQL over a socket, 6.5 after (and one round trip per type, not
+per event, over a network). Allocations fell by two thirds (10^4 events:
+550,000 to 180,000). qsql gains least: every row the join looks up is a
+read of the Store, a scheduling point, as the statement per event was;
+its LIMIT 100 is slower by the noise of a range it materializes whole
+either way.
+
+The indexes: SQLite searches grist_index's primary key for the range
+and grist_events' by (tenant, pos), no scan and no sort
+(TestReadPlanOnSQLite, which fails if ON drops the tenant: `SCAN
+grist_events`). PostgreSQL 16, ten tenants of 10^4 events, ANALYZEd:
+an account's events with a LIMIT are a nested loop of an index-only scan
+of grist_index_pkey and an index scan of grist_events_pkey (0.4 ms for
+100); a fifth of a tenant's events (2,000) a hash join of bitmap scans
+of both primary keys, then a sort (3.6 ms), the planner's choice for a
+large share; one tenant alone, a sequential scan of grist_events (the
+tenant is the table). No index is missing.
+
+The adopter's other store findings are not the read path: every append
+in a tenant serializing on its head row is by design (dense positions,
+conditions under the lock), and is in I25 with LISTEN/NOTIFY; steps and
+markers growing forever was in I25 already (retention).
+
 ### H4: one vocabulary
 
 ROADMAP's H4 as built, with two leftovers of P7's review. The decisions

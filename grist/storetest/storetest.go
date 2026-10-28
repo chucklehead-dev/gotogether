@@ -304,6 +304,20 @@ func readsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if twoFound < 5 {
 		return fmt.Errorf("reads: %d queries of two tags found events: too few to test them", twoFound)
 	}
+	// a type named twice selects its events once
+	for _, q := range []store.Selector{
+		{Types: []string{types[0], types[0]}},
+		{Types: []string{types[1], types[0], types[1]}, Reverse: true, Limit: 3},
+		{Types: []string{types[0], types[0]}, Tags: []store.TagPair{{Key: "k", Value: values[0]}, {Key: "j", Value: values[0]}}},
+	} {
+		got, _, err := s.Read(ctx, "t1", q, 0)
+		if err != nil {
+			return err
+		}
+		if want := store.Select(log, q, store.Position(len(log))); !same(got, want) {
+			return fmt.Errorf("reads: %s (reverse %v, limit %d), a type named twice: got %v, want %v", q, q.Reverse, q.Limit, positions(got), positions(want))
+		}
+	}
 	return nil
 }
 

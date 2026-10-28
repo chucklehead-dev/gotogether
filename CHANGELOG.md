@@ -10,6 +10,13 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- qsql joins by a key (ROADMAP I23): `SELECT t.c, u.d FROM t JOIN u ON
+  u.k = t.c ... WHERE t.... ORDER BY t.... LIMIT n` looks u's rows up by
+  its whole primary key, an inner join, every column qualified. grist's
+  sqlstore reads a selector's events in one such statement per type
+  (PostgreSQL, SQLite and qsql alike) instead of one per event: 4-8x
+  faster on SQLite and PostgreSQL (`BenchmarkRead`).
+
 - The first hour (ROADMAP I28-I32): a test that catches what it expects
   logs the catch in three lines (the run, the step and why the model
   refuses it, where to navigate; `qtest.Run.Brief`), the whole report

@@ -271,12 +271,15 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   is H7's **Next** (`grist.WritesVersion` with a downcaster,
   `gristtest.Upgrade`, counters v2 with the `eagerV2` mutant), not
   repeated here.
-- **I23. sqlstore reads in one query (S-M, before grist's tag).**
-  `sqlstore.Read` fetches positions from `grist_index`, then one
-  `SELECT` per event: 31-37 µs an event on SQLite (5,000 events 155
-  ms), a round trip each on PostgreSQL (a 5,000-event rebuild 1.5-5 s).
-  One `grist_index JOIN grist_events` query is 6.2 µs an event; a Read
-  benchmark in storetest on SQLite and PostgreSQL in CI.
+- **I23. sqlstore reads in one query (S-M, before grist's tag). Done**
+  (HISTORY: "I23: sqlstore reads in one query"). `sqlstore.Read`
+  fetched positions from `grist_index`, then one `SELECT` per event:
+  31-37 µs an event on SQLite (5,000 events 155 ms), a round trip each
+  on PostgreSQL (a 5,000-event rebuild 1.5-5 s). Now one `grist_index
+  JOIN grist_events` statement per type of the selector, on every
+  dialect (qsql gained a lookup join): 4-8x faster
+  (`BenchmarkRead`, grist/sqlstore). Left: PostgreSQL in CI, so its
+  numbers are measured there too (I41's nightly benchmarks).
 - **I24. grist's reads at scale (M).** A read with snapshots on costs
   about twice `SnapshotEvery` events (dc959e8 kept short logs as they
   were), with no in-process memo though folds are pure; a failed
@@ -297,7 +300,12 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   runtime metrics and build info; a schema-version table and
   migrations (today `CREATE TABLE IF NOT EXISTS` at boot); retention for
   `grist_steps` and `grist_markers`; `steps -export` (from slice 9) and
-  an admin command for `grist.failed` dead letters. GR10 slice 3
+  an admin command for `grist.failed` dead letters. A tenant's appends
+  serialize on its `grist_heads` row (`UPDATE ... RETURNING`: dense
+  positions in commit order, conditions under the lock, by design):
+  measure a tenant's append ceiling on PostgreSQL and say it in the
+  docs, beside `LISTEN/NOTIFY` for other processes' appends (polled
+  every 250 ms today; the adopter's review). GR10 slice 3
   (failover and restore: `ErrRewound`, `<app> resume`) is built next to
   slice 4, before anyone runs grist on managed PostgreSQL. Example: a
   store failover in wallet-grist where `ErrRewound` meets an at-most-once

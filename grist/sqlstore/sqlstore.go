@@ -29,6 +29,12 @@
 // transient error grist retries from the key's marker (the head-lock
 // conflict).
 //
+// A read is the head, then one statement per type of its selector:
+// `grist_index JOIN grist_events` on (tenant, pos), a range of the
+// index's key and each event's row looked up by its key (not a statement
+// per event: a round trip each on PostgreSQL), with its LIMIT when the
+// index holds every condition of the selector.
+//
 // Errors: a failed condition, a marker that exists and a moved
 // checkpoint are the contract's (*store.ConditionFailed,
 // *store.CheckpointMoved); a statement no retry fixes (a missing table,
@@ -247,21 +253,38 @@ func head(ctx context.Context, q querier, t string) (store.Position, error) {
 	return store.Position(h), nil
 }
 
-// indexed are the positions in (after, through] the index has under the
-// key of each of sel's types, distinct, in position order (newest first
-// if reverse); with at most one tag every one matches, so a limit is each
-// type's query's (the first n of the union are among the first n of each
-// type: a read model's first SnapshotEvery events, read from an index of
-// every one of its events, without the rest).
-func indexed(ctx context.Context, q querier, t string, sel store.Selector, after, through store.Position, reverse bool, limit int) ([]store.Position, error) {
-	seen := map[store.Position]bool{}
-	var out []store.Position
+// readStmt reads one index key's events in (after, through], joined to
+// their rows in grist_events, in position order (ORDER BY's direction
+// and a LIMIT appended): one statement for every event under the key, a
+// range of grist_index's key and a lookup of grist_events' per row, on
+// PostgreSQL, SQLite and qsql alike. Read-only.
+const readStmt = `SELECT grist_events.pos, grist_events.type, grist_events.version, grist_events.at_ms, grist_events.cause, grist_events.tags, grist_events.body ` +
+	`FROM grist_index JOIN grist_events ON grist_events.tenant = grist_index.tenant AND grist_events.pos = grist_index.pos ` +
+	`WHERE grist_index.tenant = $1 AND grist_index.k = $2 AND grist_index.pos > $3 AND grist_index.pos <= $4 ORDER BY grist_index.pos `
+
+// events are t's events in (after, through] matching sel, in position
+// order (newest first if reverse), at most limit of them (0: all): one
+// statement per distinct type of sel, the index key of the type and
+// sel's first tag joined to the events, whose other tags are checked
+// here. A type's events are another's of none, so the union is their
+// merge. With at most one tag every row matches, and the limit is each
+// statement's (the first n of the union are among the first n of each
+// type: a read model's first SnapshotEvery events, read from an index
+// of every one of its events, without the rest); with more, a type's
+// rows are read until limit of them match.
+func events(ctx context.Context, q querier, t string, sel store.Selector, after, through store.Position, reverse bool, limit int) ([]store.Stored, error) {
 	order := "ASC"
 	if reverse {
 		order = "DESC"
 	}
+	var out []store.Stored
+	seen := map[string]bool{}
 	for _, typ := range sel.Types {
-		stmt := `SELECT pos FROM grist_index WHERE tenant = $1 AND k = $2 AND pos > $3 AND pos <= $4 ORDER BY pos ` + order
+		if seen[typ] {
+			continue
+		}
+		seen[typ] = true
+		stmt := readStmt + order
 		args := []any{t, indexKey(typ, sel.Tags), int64(after), int64(through)}
 		if limit > 0 && len(sel.Tags) <= 1 {
 			stmt += ` LIMIT $5`
@@ -271,15 +294,16 @@ func indexed(ctx context.Context, q querier, t string, sel store.Selector, after
 		if err != nil {
 			return nil, classify(err)
 		}
-		for rows.Next() {
-			var p int64
-			if err := rows.Scan(&p); err != nil {
+		n := 0
+		for (limit == 0 || n < limit) && rows.Next() {
+			e, err := scanEvent(rows, t)
+			if err != nil {
 				rows.Close()
-				return nil, classify(err)
+				return nil, err
 			}
-			if !seen[store.Position(p)] {
-				seen[store.Position(p)] = true
-				out = append(out, store.Position(p))
+			if sel.Matches(e.Event) {
+				out = append(out, e)
+				n++
 			}
 		}
 		err = rows.Err()
@@ -288,33 +312,99 @@ func indexed(ctx context.Context, q querier, t string, sel store.Selector, after
 			return nil, classify(err)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] != reverse })
+	if len(seen) > 1 {
+		sort.Slice(out, func(i, j int) bool { return out[i].Pos < out[j].Pos != reverse })
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
 	return out, nil
 }
 
-// event is t's event at p.
-func event(ctx context.Context, q querier, t string, p store.Position) (store.Stored, error) {
-	var typ, cause, tags, body string
-	var version, at int64
-	err := q.QueryRowContext(ctx, `SELECT type, version, at_ms, cause, tags, body FROM grist_events WHERE tenant = $1 AND pos = $2`, t, int64(p)).
-		Scan(&typ, &version, &at, &cause, &tags, &body)
-	if err != nil {
+// scanEvent is t's event in a row of readStmt.
+func scanEvent(rows *sql.Rows, t string) (store.Stored, error) {
+	var typ, cause, tags string
+	var body []byte // a copy of its own (Scan's), so the event's body is the caller's
+	var p, version, at int64
+	if err := rows.Scan(&p, &typ, &version, &at, &cause, &tags, &body); err != nil {
 		return store.Stored{}, classify(err)
 	}
-	var pairs [][2]string
-	if err := json.Unmarshal([]byte(tags), &pairs); err != nil {
-		return store.Stored{}, store.Permanent(fmt.Errorf("sqlstore: event %d of %s: tags %q: %v", p, t, tags, err))
+	e := store.Stored{Event: store.Event{Type: typ, Version: int(version), Body: json.RawMessage(body)}, Tenant: t, Pos: store.Position(p), Time: at, Cause: cause}
+	pairs, ok := decodeTags(tags)
+	if !ok {
+		var kvs [][2]string
+		if err := json.Unmarshal([]byte(tags), &kvs); err != nil {
+			return store.Stored{}, store.Permanent(fmt.Errorf("sqlstore: event %d of %s: tags %q: %v", p, t, tags, err))
+		}
+		for _, kv := range kvs {
+			pairs = append(pairs, store.TagPair{Key: kv[0], Value: kv[1]})
+		}
 	}
-	e := store.Stored{Event: store.Event{Type: typ, Version: int(version), Body: json.RawMessage(body)}, Tenant: t, Pos: p, Time: at, Cause: cause}
-	for _, kv := range pairs {
-		e.Tags = append(e.Tags, store.TagPair{Key: kv[0], Value: kv[1]})
-	}
+	e.Tags = pairs
 	return e, nil
 }
 
+// decodeTags decodes the tags column as json.Marshal of [][2]string
+// writes it when no string needs an escape: [["k","v"],...], no space,
+// no backslash, no control character, valid UTF-8. It reports false
+// for anything else, which json.Unmarshal then reads (a third of a
+// read's time went to it). Its strings share tags's memory.
+func decodeTags(tags string) ([]store.TagPair, bool) {
+	if len(tags) < 2 || tags[0] != '[' || tags[len(tags)-1] != ']' {
+		return nil, false
+	}
+	i := 1
+	str := func() (string, bool) {
+		if i >= len(tags) || tags[i] != '"' {
+			return "", false
+		}
+		j := i + 1
+		for j < len(tags) && tags[j] != '"' {
+			if c := tags[j]; c == '\\' || c < 0x20 {
+				return "", false
+			}
+			j++
+		}
+		if j >= len(tags) || !utf8.ValidString(tags[i+1:j]) {
+			return "", false
+		}
+		s := tags[i+1 : j]
+		i = j + 1
+		return s, true
+	}
+	expect := func(c byte) bool {
+		if i < len(tags) && tags[i] == c {
+			i++
+			return true
+		}
+		return false
+	}
+	var out []store.TagPair
+	for first := true; i < len(tags)-1; first = false {
+		if !first && !expect(',') {
+			return nil, false
+		}
+		if !expect('[') {
+			return nil, false
+		}
+		k, ok := str()
+		if !ok || !expect(',') {
+			return nil, false
+		}
+		v, ok := str()
+		if !ok || !expect(']') {
+			return nil, false
+		}
+		out = append(out, store.TagPair{Key: k, Value: v})
+	}
+	return out, i == len(tags)-1
+}
+
 // Read implements store.Store: in one read-only transaction, the head,
-// the index's positions and each event (rows below the head never
-// change, so read committed's statement snapshots agree).
+// then each of the selector's types' events in one statement (rows
+// below the head never change, so read committed's statement snapshots
+// agree, and a join that reads its rows one by one, as qsql's does,
+// reads what one snapshot would).
 func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error) {
 	tx, err := s.begin(ctx, true)
 	if err != nil {
@@ -332,23 +422,11 @@ func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.P
 	if len(q.Types) == 0 {
 		return out, at, nil
 	}
-	ps, err := indexed(ctx, tx, t, q, q.After, at, q.Reverse, q.Limit)
+	evs, err := events(ctx, tx, t, q, q.After, at, q.Reverse, q.Limit)
 	if err != nil {
 		return nil, 0, err
 	}
-	for _, p := range ps {
-		if q.Limit > 0 && len(out) >= q.Limit {
-			break
-		}
-		e, err := event(ctx, tx, t, p)
-		if err != nil {
-			return nil, 0, err
-		}
-		if q.Matches(e.Event) {
-			out = append(out, e)
-		}
-	}
-	return out, at, nil
+	return append(out, evs...), at, nil
 }
 
 // Append implements store.Store.
@@ -485,35 +563,33 @@ func (s *Store) tryAppend(ctx context.Context, t string, b store.Batch) (store.P
 
 // check is a condition's selector checked under the lock: the first
 // event after after, through h, matching q, as a *store.ConditionFailed.
-// With at most one tag the index's first position is the answer; with
-// more, the events' other tags are read.
+// With at most one tag the index's first position under each type's key
+// is the answer, read without the event; with more, events reads each
+// type's events until one matches.
 func (s *Store) check(ctx context.Context, tx *sql.Tx, t string, q store.Selector, after, h store.Position) error {
-	limit := 0
-	if len(q.Tags) <= 1 {
-		limit = 1
-	}
 	var first store.Position
-	for _, typ := range q.Types {
-		one := store.Selector{Types: []string{typ}, Tags: q.Tags}
-		ps, err := indexed(ctx, tx, t, one, after, h, false, limit)
+	if len(q.Tags) > 1 {
+		evs, err := events(ctx, tx, t, q, after, h, false, 1)
 		if err != nil {
 			return err
 		}
-		for _, p := range ps {
-			if first != 0 && p >= first {
-				break
+		if len(evs) > 0 {
+			first = evs[0].Pos
+		}
+	} else {
+		for _, typ := range q.Types {
+			var p int64
+			err := tx.QueryRowContext(ctx, `SELECT pos FROM grist_index WHERE tenant = $1 AND k = $2 AND pos > $3 AND pos <= $4 ORDER BY pos ASC LIMIT 1`,
+				t, indexKey(typ, q.Tags), int64(after), int64(h)).Scan(&p)
+			switch {
+			case errors.Is(err, sql.ErrNoRows):
+				continue
+			case err != nil:
+				return classify(err)
 			}
-			if len(q.Tags) > 1 {
-				e, err := event(ctx, tx, t, p)
-				if err != nil {
-					return err
-				}
-				if !q.Matches(e.Event) {
-					continue
-				}
+			if first == 0 || store.Position(p) < first {
+				first = store.Position(p)
 			}
-			first = p
-			break
 		}
 	}
 	if first != 0 {
