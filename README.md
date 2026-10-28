@@ -685,8 +685,12 @@ The skills in [`skills/`](skills) teach a coding agent this toolkit:
   rather than one solution, the environment's real guarantees,
   linearization points, ghost variables, settle-conditioned properties,
   mechanism models with a lemma;
-- `gotogether-workflow`: the order of work (model, simulate,
-  record, bind, mutants, Hegel, real environment) and triage of verdicts;
+- `gotogether-workflow`: the order of work, model first (scenarios with
+  possibility checks, safety, liveness, then code, bind, mutants, Hegel,
+  the real environment) and triage of verdicts;
+- `gotogether-migration`: an existing system brought under a model: a
+  bounded context, requirements with their provenance from code, tests,
+  logs and traces, the existing runs judged before any change;
 - `gotogether-faults`: seams, `qenv` deployments, contract profiles,
   `System.Explore`, shrinking with `qhegel.Choices`, and the real environment;
 - `gotogether-metastability`: retry storms and other metastable failures: the
@@ -694,8 +698,10 @@ The skills in [`skills/`](skills) teach a coding agent this toolkit:
 - `grist`: an event-sourced app on grist, its model generated from its
   catalog: blocks, holes, `gristsim.System` explorations, mutants.
 
-Each SKILL.md is short (triggers and steps); its mechanics are in its
-`references/`, each linked with when to read it.
+Each SKILL.md is short: a "choose your path" list, steps, checklists, a
+results table (each report line, what to do next) and "run it, do not
+infer it"; its mechanics are in its `references/`, each linked with when
+to read it.
 
 They are in the [Agent Skills](https://agentskills.io) format, one
 `SKILL.md` per directory. In this repository they are exposed where agents

@@ -5,48 +5,60 @@ description: Build an event-sourced Go application on grist, gotogether's framew
 
 # grist: an application checked by its model
 
-grist records every block's step itself (each commit from the row it
-wrote in its own transaction, each query, each effect); the app writes
-its decisions and folds, and its model is one tenant's log, the
-skeleton and both bindings generated from the App's catalog.
-examples/counters is the walk-through: read its README's table first.
+grist records every block's step itself; the app writes its decisions,
+folds and rules, its model is one tenant's log, and the skeleton and
+both bindings are generated from the App's catalog. examples/counters is
+the walk-through: read its README's table first.
+
+## Choose your path
+
+- A new app: `grist new <name>`, then the Steps.
+- Every block's API, rules, dependencies, the generator's layout, explorations: [references/loop.md](references/loop.md).
+- The real tier, the HTTP API, the binary, a simulated cluster (`gristsim.Cluster`), PostgreSQL, a store of your own: [references/triage.md](references/triage.md).
+- A failure: the Results, then [references/triage.md](references/triage.md).
+- The generated model, its holes, Quint's reserved names: [references/model.md](references/model.md).
+- A command touching several entities: [references/entities.md](references/entities.md).
 
 ## Steps
 
-1. Start green: `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist
-   new <name>` (`-replace <checkout>` inside this repository).
-2. Add one block at a time in Go: events, read models, a command (reads
-   and arguments in, events or a `grist.Rejection` out), a query, a rule,
-   a processor; `Authorize` or `Internal` on each; `App.Verify()` names
-   every problem.
-3. Declare its shape: `Refuses`, `Appends`, `Emits` or `Delivers`,
-   `Uses` for a dependency's calls.
-4. Generate: `go run ./cmd/<name> model`; it names each new hole with a
-   stub and warns when a rule's inputs changed. Fill the holes in
+1. `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>`.
+2. One block at a time in Go, `Authorize` or `Internal` on each, its
+   shape declared (`Refuses`, `Appends`, `Emits`/`Delivers`, `Uses`).
+3. `go run ./cmd/<name> model`; fill the named holes in
    `model/<name>_rules.qnt`, the invariants in `model/<name>.qnt`.
-5. Witness it: `gristtest.Generated(t, App)`.
-6. Explore: `gristsim.System(commits, App, cfg).WithRates(faulty).Explore(t,
+4. `gristtest.Generated(t, App)`; each scenario `gristtest.Scenario`,
+   checked by `qtest.Possible`.
+5. `gristsim.System(commits, App, cfg).WithRates(faulty).Explore(t,
    qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).Expect(t,
-   qtest.Conforms(), qtest.All(qtest.Settles()),
-   gristtest.Catalog(App).Exercised())`; the clients' side with
-   `.WithBinding(calls, qtest.Linearize())`.
-7. Prove each check can fail: a mutant per claim in
-   `testdata/mutants/<name>`, and each rule's generated `drop-<rule>`
-   (`qtest.Mutants{Generated: gristtest.RuleMutants(App)}`).
-8. Serve it for real (`grist.Main`, `serve -db sqlite:... -steps`) and
-   validate the recorded steps with the same binding.
+   qtest.Conforms(), qtest.All(qtest.Settles()), gristtest.Catalog(App).Exercised())`.
+6. A mutant per claim, and each rule's `drop-<rule>`:
+   `qtest.Mutants{Generated: gristtest.RuleMutants(App)}.Run(t)`.
+7. Serve it (`grist.Main`: `serve -db sqlite:... -steps`) and validate.
 
-## References (when to read each)
+## Checklist
 
-- [references/loop.md](references/loop.md): the first hour and the loop
-  in full: every block's API and options, rules, dependencies, the
-  generator's layout, explorations' configuration, mutants.
-- [references/triage.md](references/triage.md): what each grist failure
-  means (`Rejects`, `Mismatch`, unknown outcomes, unsettled runs) and
-  what to do; a store of your own (storetest); the real tier, the HTTP
-  API, an app's binary, a simulated cluster (`gristsim.Cluster`),
-  PostgreSQL.
-- [references/model.md](references/model.md): the generated model, its
-  holes and Quint's reserved names.
-- [references/entities.md](references/entities.md): a command that
-  touches more than one entity.
+- [ ] Every command is conditioned on its reads (`Unconditioned` only with its reason).
+- [ ] Every block is authorized or internal; `App.Verify()` is clean.
+- [ ] The generated files are committed and `TestGenerated` passes.
+- [ ] The generator printed no warning left unread (a fold's inputs changed).
+- [ ] The clients' side is judged too: `.WithBinding(calls, qtest.Linearize())`.
+
+## Results
+
+| Report says | Means | Next |
+|---|---|---|
+| `<app> model: ... does not define X, which the skeleton calls` | a new block's hole | paste the stub, then write the rule |
+| `<app> model: warning: XEvents folds T now` | a fold's inputs changed | handle T in every fold over XEvents |
+| `generated files differ from what the ... catalog generates` | a block changed without regenerating | `go run ./cmd/<app> model`, commit |
+| `reject <command>` (`Rejects`) | a commit the model forbids | the decision's rule, its condition, a read not covered (`covers`), a key answered twice |
+| `show a mismatch after <block>` | head, batch or causes differ | a raw append, or a fold disagreeing with its def |
+| `grist.ErrOutcomeUnknown` | an append's outcome is unknown | retry with the same id |
+| `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |
+| `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
+
+## Run it, do not infer it
+
+Let the generator name the holes and warnings, and the exploration the
+failing run (`reproduce:`, `navigate:`); do not hand-write a binding or
+guess what the model's rules admit: `gotogether nav -binding
+<app>.binding.yaml -json`.

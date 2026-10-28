@@ -171,14 +171,12 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   generated steps module (`<processor>EventuallyHandled`,
   `<call>EventuallyServed`), judged at a settle by the store's bindings
   beside the user's own; the examples' hand-written duplicates removed.
-- **P8. Skills in pavlov's shape (S, with H6).** Each SKILL.md short (at
-  most about 80 lines) with a "choose your path" list; a results table
-  (one row per verdict and report line, with what to do next);
-  checklists; "run it, do not infer it"; a migration skill for a team
-  arriving with code (bounded contexts, requirements from code, tests,
-  logs and traces with their provenance, then the model, its `possible:`
-  and scenario claims); the workflow skill model-first: scenarios each
-  with a possibility check, then safety, then liveness, then code.
+- **P8. Skills in pavlov's shape (S, with H6). Done** (HISTORY: "P8:
+  skills in pavlov's shape"). Each SKILL.md at most about 80 lines with
+  a "choose your path" list, steps, checklists, a results table and "run
+  it, do not infer it"; `gotogether-migration` (bounded contexts,
+  requirements with provenance, the model's `possible` and scenario
+  claims, existing runs judged first); `gotogether-workflow` model first.
 - **P9. grist apps explored in-process (L, after GR4).** The Go program
   checked against its rules on every input in small domains, with no
   quint process: commands' argument domains as Go enumerators, decisions

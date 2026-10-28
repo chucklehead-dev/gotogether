@@ -9,28 +9,49 @@ One model serves three ways: its traces drive the code (`connect`), it
 judges Hegel's runs (`qhegel`), and it replays recorded runs
 (`validate`). A few conventions make that possible.
 
+## Choose your path
+
+- The nine conventions in full, cheap replays, Choreo models, the commands, the errors' table: [references/conventions.md](references/conventions.md).
+- What the model should allow (requirement vs solution, the environment, ghosts, settles): the gotogether-patterns skill.
+- The order of work (scenarios, safety, liveness, then code): the gotogether-workflow skill.
+
 ## Steps
 
-1. Name every action the code performs; `step` is an `any { ... }` of
-   named actions, never an inline `all { }`.
-2. Give actions the parameters the code observes, and pick each in
-   `step` with `nondet <param> = S.oneOf()` under the parameter's name.
-3. Put sizes and sets in `const`s, with an instance module for the
-   deployed design (`import bank(ACCOUNTS = ...).*`).
-4. State properties as boolean `val`s; model a restart as a parameterless
-   action and an outcome as a value; lift hidden choices into parameters.
-5. `quint typecheck`, then `quint run --invariant`, then, with a binding,
-   `gotogether simulate -binding` (`-graph` for every reachable state):
-   `holds`, `allows` and `possible` each checked.
-6. Check the traces name what the code needs: `quint run --mbt` and
-   read `mbt::actionTaken` and `mbt::nondetPicks`.
-7. Scaffold the binding: `gotogether scaffold -spec model.qnt -module M`.
+1. Name every action the code performs; `step` is an `any { }` of them.
+2. Parameters the code observes, each picked in `step` as `nondet
+   <param> = S.oneOf()`.
+3. `const`s for sizes and sets, an instance module for the design.
+4. Properties as boolean `val`s; a restart a parameterless action; an
+   outcome a value; hidden choices lifted into parameters.
+5. `quint typecheck`, `quint run --invariant`, then `gotogether simulate
+   -binding` (`-graph`) with `holds`, `allows` and `possible`.
+6. `quint run --mbt` once: read `mbt::actionTaken` and `mbt::nondetPicks`.
+7. `gotogether scaffold -spec model.qnt -module M -out m.binding.yaml`.
 
-## References (when to read each)
+## Checklist
 
-- [references/conventions.md](references/conventions.md): the nine
-  conventions in full, cheap replays (history properties, growing
-  state), Choreo models, the workflow's commands and the common errors'
-  table (`anonymous action`, `unknown nondet pick`, QNT500, QNT101,
-  QNT513).
-- The gotogether-patterns skill: what the model should allow.
+- [ ] No inline `all { }` in `step`; every action named.
+- [ ] Every `nondet` named like the parameter it feeds.
+- [ ] No identifier Quint reserves (`to`, `of`, `get`, `set`, `size`, ...).
+- [ ] Each acceptance scenario is a `possible`, each property a `val` in `holds` or `allows`.
+- [ ] A crashable process has a restart action, a failing operation an outcome value.
+- [ ] History properties are checked on arrival, with a ghost.
+
+## Results
+
+| Error | Means | Next |
+|---|---|---|
+| `an anonymous action was taken` | an inline `all {}` in `step` | name it |
+| `unknown nondet pick "x"` | the pick is named otherwise, or missing | rename it after the parameter |
+| `QNT500 Uninitialized const` | the parameterised module was run | `--main` the instance |
+| `QNT101` (or `QNT008`) on a name | a reserved name | rename it, and the binding's keys |
+| `possible ...: FAIL` (the model forbids it) | too strict for a scenario | `gotogether nav -binding` to the guard |
+| a `holds` invariant violated in `simulate` | a design bug, or the property is wrong | the counterexample (`-graph -out cex.qnt`) |
+| an `allows` invariant never violated | its check of the code would be vacuous | the model is too strict, or the property moved |
+| `Cannot continue in "then"` (QNT513) in validation | a recorded step not enabled | the gotogether-traces skill |
+
+## Run it, do not infer it
+
+Do not decide by reading the spec what it allows: run `gotogether
+simulate`, and walk states with `gotogether nav -binding m.binding.yaml
+-json` (`-follow` takes branches).

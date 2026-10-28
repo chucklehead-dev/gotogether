@@ -1761,6 +1761,43 @@ what every grist app wrote before its first claim. What changed:
   not). twophase's `MUTANT=earlyCommit` stops on an unsettled run
   (exit 2), as it did before.
 
+### P8: skills in pavlov's shape
+
+pavlov's newcomer review found its skills short, each with a
+choose-your-path list, a results table and checklists, and ours long
+(H6 had already moved their mechanics into references). Each SKILL.md
+now has, in at most about 80 lines: its triggers (the description), a
+"choose your path" list naming each reference and when to read it, the
+steps, checklists (before code, before merging, per requirement), a
+results table whose rows are the report lines the skill's tools print
+(`K reject <action>`, `qenv: stuck`, `possible X: FAIL`, `<app> model:
+warning: ...`), each with what it means and what to do next, and "run
+it, do not infer it": the command that answers the question instead of
+reasoning about the model or the run (`gotogether simulate`, `nav
+-binding`, `nav -run ... -at fail`, a `reproduce:` line). The table
+rows quote what the code prints, checked against its sources when
+written. Eleven skills, 680 lines and 6,400 words of SKILL.md (H6 left
+ten at 3,400 words of triggers and steps; before H6, 20,300), the
+longest 73 lines; `TestSkillsShape` holds each to about 80 lines and
+the five sections.
+
+Two skills changed in substance. `gotogether-workflow` is model first:
+acceptance scenarios, each a `possible` (or `qtest.Scenario` checked by
+`qtest.Possible`), then safety (`holds`, `allows`), then liveness
+(eventual vals at a settle), all on the model alone, then code, its
+results table opening with what `simulate` says. `gotogether-migration`
+is new, for a team arriving with code: one bounded context (its map a
+comment at the top of the model), requirements extracted from code,
+tests, logs and traces with a provenance comment each (its sources'
+kinds and places, `assumed` when only one, a disagreement's decision
+recorded on it), then the model with its `possible` scenarios and
+claims, and the system's existing runs judged (legacy tests recorded,
+spans converted, production logs validated) before any code changes,
+every disagreement triaged into the code's bug, the model's mistake or
+an undocumented requirement. pavlov keeps provenance as metadata on its
+bthreads; ours is a comment beside the `val` or `possible` that states
+the requirement, the model being the specification.
+
 ### The acyclic model layout (grist)
 
 quint 0.33's REPL refuses a file that a file it imports imports back

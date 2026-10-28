@@ -194,6 +194,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   and every Go block of a doc comment, parses, and names only what the
   toolkit's packages export (`internal/docsnippets`): write elided code
   as `/* ... */`.
+- A SKILL.md is at most about 80 lines, in one shape (TestSkillsShape):
+  a "choose your path" list, steps, checklists, a results table (each
+  report line its tools print, what it means, what to do next) and "run
+  it, do not infer it"; everything else is a reference.
 - Skills live in `skills/<name>/SKILL.md`, never directly in `.agents/` or
   `.claude/`, which only hold symlinks to them. Add a symlink in both when
   adding a skill (`skills_test.go` checks it). A skill's front-matter

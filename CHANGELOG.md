@@ -8,6 +8,16 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Skills in pavlov's shape (ROADMAP P8): each SKILL.md at most about 80
+  lines, with a "choose your path" list (each reference and when to read
+  it), steps, checklists, a results table (each verdict and report line,
+  what it means and what to do next) and "run it, do not infer it". New
+  skill `gotogether-migration`: a team arriving with code brings one
+  bounded context under a model, its requirements extracted from code,
+  tests, logs and traces with their provenance, the model's `possible`
+  scenarios checked and the system's existing runs judged before any code
+  changes. `gotogether-workflow` is model first: scenarios each with a
+  possibility check, then safety, then liveness, then code.
 - `grist.DefaultDrainDelay` (5 s), the drain's default delay on an
   orchestrator, exported again after H5: an app that wants it wherever it
   runs (a `gristsim.Cluster`'s nodes) sets `Drain{Delay:

@@ -407,3 +407,32 @@ func mentions(text, name string) bool {
 func isIdent(c byte) bool {
 	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
+
+// Every SKILL.md is short and in one shape (ROADMAP P8, after pavlov's):
+// a "choose your path" list, steps, a checklist, a results table and
+// "run it, do not infer it", in at most about 80 lines; its mechanics
+// are in its references.
+func TestSkillsShape(t *testing.T) {
+	list, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range list {
+		b, err := fs.ReadFile(FS(), s.Name+"/SKILL.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(b)
+		if n := strings.Count(text, "\n"); n > 85 {
+			t.Errorf("%s/SKILL.md has %d lines: keep it to about 80, moving mechanics into references/", s.Name, n)
+		}
+		for _, want := range []string{"## Choose your path", "## Steps", "- [ ] ", "## Results\n", "## Run it, do not infer it"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s/SKILL.md lacks %q (every skill has a choose-your-path list, steps, a checklist, a results table and run-it)", s.Name, want)
+			}
+		}
+		if !regexp.MustCompile(`(?m)^\|---\|`).MatchString(text) {
+			t.Errorf("%s/SKILL.md's results are no table", s.Name)
+		}
+	}
+}

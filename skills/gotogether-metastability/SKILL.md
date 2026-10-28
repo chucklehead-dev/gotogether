@@ -8,37 +8,50 @@ description: Find and prevent metastable failures (retry storms, a queue that st
 A metastable failure is a degraded state the system cannot leave after
 its trigger is gone: timed-out requests' retries keep the queue full.
 Correctness checks do not see it; these check "within W after the
-stressor ends, goodput is back to 90% of before". Work in tiers,
-cheapest first, each checking the next.
+stressor ends, goodput is back to 90% of before", cheapest tier first.
+
+## Choose your path
+
+- Each tier with code, mitigations, what the examples found: [references/workflow.md](references/workflow.md).
+- Writing the simulation (Retrier contract, closed loops, triggers, measured service, SimKube workloads): [references/simulation.md](references/simulation.md).
+- Loading the application itself: [references/experiment.md](references/experiment.md).
+- Roles, calibration, alert rules, the flight recorder: [references/alerts.md](references/alerts.md).
 
 ## Steps
 
-1. Predict with the chain: `qmeta.New(qmeta.Params{Lambda, Mu, Workers,
-   Timeout, Retries, Queue, Orbit, ...})`, `HittingTimes`, `SVG`. Rank
-   policies and find the tipping point; do not trust its absolute times.
-2. Confirm in a simulation: `qload.Recovers(cfg, seeds, trigger,
-   within)` with the real retry library behind `qload.Retrier`;
-   controllers as closed loops (`Population`); a healthy baseline set.
-3. Or load the application itself: `qload.Experiment`, its dependency
-   given a capacity, a model step's rate as goodput (`qload.Assess`).
-4. Search the smallest trigger: `qhegel.FindTrigger(t, sys, space,
-   ...).Expect(t, qload.SomeTrigger())` for a fragile design,
-   `NoTrigger()` for the mitigation. Keep it out of `-short`.
-5. Alert: mark the roles (`//quint:serve`, `//quint:operation`,
-   `//quint:call`), calibrate with λ held (`qmeta.CalibrateTimeout`),
-   and commit the region's rules (`Region`, `Rules`).
-6. Check the mitigation's own logic against a small Quint model (a
-   budget's bound as an invariant): storms are too rare to catch it.
+1. Predict: `qmeta.New(qmeta.Params{...})`, `HittingTimes`, `SVG`; rank
+   policies and find the tipping point.
+2. Confirm: `qload.Recovers(cfg, seeds, trigger, within)`, the real
+   retry library behind `qload.Retrier`; or `qload.Experiment` on the app.
+3. Search: `qhegel.FindTrigger(t, sys, space, ...).Expect(t,
+   qload.SomeTrigger())` (fragile) or `NoTrigger()` (the mitigation).
+4. Alert: mark the roles, `qmeta.CalibrateTimeout` with λ held, commit
+   `Region`'s `Rules`.
+5. Check the mitigation's own logic against a small Quint model.
 
-## References (when to read each)
+## Checklist
 
-- [references/workflow.md](references/workflow.md): each tier with code,
-  mitigations, and what the examples found (retrystorm, crossdb,
-  checkout).
-- [references/simulation.md](references/simulation.md): writing the
-  simulation (the Retrier contract, closed loops, triggers, measured
-  service times, SimKube workloads).
-- [references/experiment.md](references/experiment.md): deploying an
-  application into an Experiment.
-- [references/alerts.md](references/alerts.md): roles, calibration, the
-  rules and the flight recorder.
+- [ ] The chain's orbit bound (`Orbit`) is well above the storm's size.
+- [ ] Controllers are closed loops (`Population`, `Think`).
+- [ ] The Experiment has a healthy baseline (`Healthy`).
+- [ ] Service is measured (`qmeta.Measure(...).Exponential()`) before the chain's verdict is trusted.
+- [ ] Claims are orderings or orders of magnitude, never the chain's seconds.
+- [ ] Trigger searches stay out of `-short`.
+
+## Results
+
+| Result | Means | Next |
+|---|---|---|
+| recovery times growing by orders of magnitude with λ | the metastable region | find the tipping point; try a mitigation |
+| `qload: want ..., got ...` from `Recovers` | the simulation disagrees with the claim | count over seeds (`qload.Mostly`), check the baseline |
+| `Experiment.Healthy is not set` | no baseline: a collapsed system would "recover" | set `Healthy` |
+| `FindTrigger` returns the empty trigger | it collapses on noise alone | a design bound (concurrency past capacity × timeout) |
+| `SomeTrigger` holds | the design is fragile; `r.Trigger` is the shrunk one | compare mitigations against it |
+| `NoTrigger` fails | a trigger in the space breaks the mitigation | widen the mitigation, or the claim |
+| `Exponential()` false | the chain's verdicts may be wrong, not only its numbers | simulate with `Service.Draw` |
+
+## Run it, do not infer it
+
+A policy's recovery is a measurement: run the chain, then the
+simulation, then the search, and state the outcome with `Expect`; do not
+reason from the retry code alone.
