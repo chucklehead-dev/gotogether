@@ -3959,6 +3959,28 @@ ones that fail.
   every example so (the grist examples added), and print how many runs
   the two judged and how many the evaluator refused
   (`GOTOGETHER_SHADOW_LOG`); a disagreement fails the job by name.
+- **A sample of the passes, judged by quint too.** Outside shadow, a
+  share of the evaluator's passes (`GOTOGETHER_EVAL_SAMPLE`, 1/50 unset,
+  1/5 in CI's workflow, 0 for none, `rate:seed` for another choice) goes
+  to quint as well, compared as the shadow compares (decide.go's
+  sampling). The choice is a hash of the actor's plan (its instance, its
+  start, its calls) with the seed against the rate, not a draw: a rerun
+  of the same code samples the same passes, its verdict and cost the
+  same, and a disagreement found is found again. A sampled pass quint
+  does not agree with is an evaluator bug: the verdict is quint's (its
+  report, or a result quint passed made to fail), with an error issue
+  that says the Go evaluator passed the run and names
+  `GOTOGETHER_EVAL=shadow` to reproduce it; the shadow log records it
+  as DISAGREE; nothing swallows it. A sampled pass's summary says it was
+  judged by both (`Result.JudgedBy`), and an exploration's summary
+  counts the evaluator's passes and the sampled ones. The evaluator
+  never runs without quint: its IR, cached or not (§57), is found by a
+  key that asks quint for its version, and the model's typecheck is
+  quint's, so there is no run to sample without it. Cost (-short, CI's flags,
+  a cold cache): counters 235 CPU s at 0, 239 at 1/50 (one pass
+  sampled), 303 at 1/5 (13); webjobs 82, 85 (none sampled), 107 (3).
+  A sampled pass joins its batch's quint chunk when one runs anyway, so
+  the cost is less than a process a sample.
 - **Shown before it decided.** TestAgreesWithQuint over every model of
   the repository, and the shadow over the examples' -short suites and
   the core's validate and qtest (performance.md, D1, for the numbers).

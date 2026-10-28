@@ -1078,6 +1078,25 @@ func (x *Exploration) summary() string {
 	if pending > 0 {
 		line += fmt.Sprintf("; %d left calls pending", pending)
 	}
+	// who judged the passes: the Go evaluator, a sample of them quint too
+	// (GOTOGETHER_EVAL_SAMPLE; a disagreement fails its run)
+	byEval, both := 0, 0
+	for _, r := range x.Runs {
+		if r == nil || r.Report == nil {
+			continue
+		}
+		for _, a := range r.Report.Actors {
+			switch a.JudgedBy() {
+			case "evaluator":
+				byEval++
+			case "both":
+				both++
+			}
+		}
+	}
+	if byEval+both > 0 {
+		line += fmt.Sprintf("; passes judged by the Go evaluator %d, %d of them also by quint", byEval+both, both)
+	}
 	if x.steps != nil {
 		// of the model's actions but init, step and frame helpers: an action
 		// only other actions call (a grist model's appends) is one too, so

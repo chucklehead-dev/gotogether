@@ -20,6 +20,10 @@ env:
   # run no test that skips. Opt-in gates (GOTOGETHER_VERIFY, RAFTKV_REAL,
   # -short) are plain skips, not the toolkit's.
   GOTOGETHER_STRICT: "1"
+  # quint judges one in five of the Go evaluator's passes too (a pass
+  # it rejects fails its run, saying the evaluator passed it), where a
+  # user's default is one in fifty: docs/DESIGN.md §56
+  GOTOGETHER_EVAL_SAMPLE: "1/5"
 
 jobs:
   test:

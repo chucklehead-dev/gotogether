@@ -104,6 +104,15 @@ The first release. What a user meets, by module:
   session of its test binary. `gotogether nav` opens it on a terminal
   when it is installed (`-text` prints the node). Its VHS tapes
   (qnav/tapes) render the docs' GIFs and are checked as text.
+- `GOTOGETHER_EVAL_SAMPLE=<fraction>[:seed]`: a share of the Go
+  evaluator's passes is judged by quint too (1/50 unset, 1/5 in CI, 0
+  for none), chosen by a hash of each actor's plan so reruns sample the
+  same passes. A sampled pass quint does not agree with fails its run
+  with quint's verdict and an error issue saying the evaluator passed it
+  (an evaluator bug: `GOTOGETHER_EVAL=shadow` reproduces it).
+  `(*validate.Result).JudgedBy()` says who judged ("quint",
+  "evaluator", "both"); an exploration's summary counts the passes
+  judged by the evaluator and the sampled ones (docs/DESIGN.md §56).
 - The Go evaluator also decides passing runs of bindings with `within`
   obligations (docs/DESIGN.md §56): a run it passes has its bounded
   responses judged on its own states, and is a pass with no quint

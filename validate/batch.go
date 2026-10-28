@@ -99,6 +99,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		ev      runVerdict
 		judged  bool
 		decided bool
+		sampled bool // a pass quint judges too (GOTOGETHER_EVAL_SAMPLE)
 	}
 	var all []*item
 	groups := map[string][]*item{}
@@ -152,12 +153,14 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				sem <- struct{}{}
 				defer func() { <-sem }()
 				var err error
-				it.ev, err = re.e.judgeRun(c, it.trace, it.plan, !opt.NoITF || re.shadow)
+				it.sampled = re.sample.takes(it.plan)
+				it.ev, err = re.e.judgeRun(c, it.trace, it.plan, !opt.NoITF || re.shadow || it.sampled)
 				it.judged = err == nil
+				it.sampled = it.sampled && it.judged && it.ev.pass
 				if err != nil {
 					re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(it.trace.Actor), len(it.plan.Calls), err))
 				}
-				if it.judged && it.ev.pass && !re.shadow {
+				if it.judged && it.ev.pass && !re.shadow && !it.sampled {
 					it.decided = re.decide(c, it.trace, it.plan, it.ev, it.res, opt, fmt.Sprintf("run%d_%s", it.run, sanitize(it.trace.Actor)))
 				}
 			}()
@@ -239,14 +242,18 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		}(ch)
 	}
 	wg.Wait()
-	if re != nil && re.shadow {
+	if re != nil {
 		// quint's verdicts, before the checks below add to them, against
-		// the evaluator's
+		// the evaluator's: every one under shadow, a sampled pass's else
 		for _, it := range all {
-			if it.judged && errs[it.run] == nil {
+			switch {
+			case !it.judged || errs[it.run] != nil:
+			case re.shadow:
 				if err := re.compare(c, it.trace, it.plan, it.ev, it.res); err != nil {
 					setErr(it.run, err)
 				}
+			case it.sampled:
+				re.checkSample(c, it.trace, it.plan, it.ev, it.res)
 			}
 		}
 	}

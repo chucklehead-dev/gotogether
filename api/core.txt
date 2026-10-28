@@ -2231,6 +2231,7 @@ type Result struct
     field Calls []binding.Call
     field Output string
     field Unfinished string
+    method (*Result) JudgedBy() string
     method (*Result) OK() bool
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string

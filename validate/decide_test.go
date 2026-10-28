@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -59,6 +61,7 @@ func accountSteps(withdrawn, balance int64) []qtrace.Step {
 // every run with quint.
 func TestEvaluatorDecidesPasses(t *testing.T) {
 	skip.Quint(t)
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "0") // no pass of the evaluator's judged by quint too
 	bin, log := countingQuint(t)
 	pass, fail := accountSteps(3, 7), accountSteps(3, 8)
 	ctx := context.Background()
@@ -138,7 +141,8 @@ func TestEvaluatorITFIsQuints(t *testing.T) {
 // tampered evaluator's pass stands, which is what the shadow guards.
 func TestShadowCatchesAWrongPass(t *testing.T) {
 	skip.Quint(t)
-	t.Setenv("GOTOGETHER_SHADOW_LOG", "") // its disagreements are made: not the nightly's to count
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "0") // no pass of the evaluator's judged by quint too
+	t.Setenv("GOTOGETHER_SHADOW_LOG", "")   // its disagreements are made: not the nightly's to count
 	defer hooks.TamperEval.Store(0)
 	ctx := context.Background()
 	fail := accountSteps(3, 8)
@@ -180,6 +184,7 @@ func withinSteps(electAt int) []qtrace.Step {
 // judged on quint's states; GOTOGETHER_EVAL=quint replays every run.
 func TestEvaluatorDecidesWithin(t *testing.T) {
 	skip.Quint(t)
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "0") // no pass of the evaluator's judged by quint too
 	bin, log := countingQuint(t)
 	ctx := context.Background()
 	for _, eval := range []string{"go", "quint"} {
@@ -243,7 +248,8 @@ func TestEvaluatorDecidesWithin(t *testing.T) {
 // missed, and the shadow catches it, by Check and CheckBatch.
 func TestShadowCatchesAWrongWithin(t *testing.T) {
 	skip.Quint(t)
-	t.Setenv("GOTOGETHER_SHADOW_LOG", "") // its disagreements are made: not the nightly's to count
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "0") // no pass of the evaluator's judged by quint too
+	t.Setenv("GOTOGETHER_SHADOW_LOG", "")   // its disagreements are made: not the nightly's to count
 	defer hooks.TamperEval.Store(0)
 	ctx := context.Background()
 	late := withinSteps(5)
@@ -266,6 +272,83 @@ func TestShadowCatchesAWrongWithin(t *testing.T) {
 			t.Errorf("shadow, Check: %v", err)
 		case eval == "shadow" && (errs[0] == nil || !strings.Contains(errs[0].Error(), "GOTOGETHER_EVAL=shadow")):
 			t.Errorf("shadow, CheckBatch: %v", errs)
+		}
+	}
+}
+
+// GOTOGETHER_EVAL_SAMPLE=1 has quint judge every pass of the evaluator's
+// too, outside shadow: a pass quint agrees with is both's; an evaluator
+// that passes every run (TamperEval 6) is caught on a failing one, the
+// verdict quint's and the report saying loudly that the evaluator passed
+// it, by Check and CheckBatch. At 0 a pass starts no quint replay.
+func TestSampleCatchesAWrongPass(t *testing.T) {
+	skip.Quint(t)
+	t.Setenv("GOTOGETHER_SHADOW_LOG", "") // its disagreements are made: not the nightly's to count
+	defer hooks.TamperEval.Store(0)
+	bin, log := countingQuint(t)
+	ctx := context.Background()
+	c, err := NewChecker("testdata/account.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: "go", NoITF: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pass, fail := accountSteps(3, 7), accountSteps(3, 8)
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "0")
+	c.Check(ctx, pass) // the evaluator's compile, once
+	replays(t, log)
+	if rep, err := c.Check(ctx, pass); err != nil || !rep.OK() || rep.Actors[0].JudgedBy() != "evaluator" || replays(t, log) != 0 {
+		t.Errorf("rate 0: a pass %v %v, or it started quint", err, rep)
+	}
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "1")
+	rep, err := c.Check(ctx, pass)
+	if err != nil || !rep.OK() || rep.Actors[0].JudgedBy() != "both" || replays(t, log) == 0 || !strings.Contains(rep.Summary(), "a sample of its passes") {
+		t.Errorf("rate 1: a pass not judged by both: %v\n%v", err, rep)
+	}
+	hooks.TamperEval.Store(6)
+	rep, err = c.Check(ctx, fail)
+	reps, errs := c.CheckBatch(ctx, [][]qtrace.Step{fail}, 0)
+	for i, r := range []*Report{rep, reps[0]} {
+		if i == 0 && err != nil || i == 1 && errs[0] != nil {
+			t.Fatalf("%v %v", err, errs)
+		}
+		s := r.Summary()
+		if r.OK() || r.Actors[0].Conforms != Fail || r.Actors[0].Module == "" || !strings.Contains(s, "the Go evaluator passed this run") || !strings.Contains(s, "GOTOGETHER_EVAL=shadow") {
+			t.Errorf("sampled, a wrong evaluator's pass (check %d):\n%s", i, s)
+		}
+	}
+}
+
+// A pass is sampled by its plan's hash and the setting's seed: the same
+// choice every time for the same plan and seed (a rerun judges the same
+// passes), about the rate's share of plans, another seed another choice.
+func TestSampleStable(t *testing.T) {
+	plan := func(i int) *binding.Plan {
+		return &binding.Plan{Calls: []binding.Call{{Quint: fmt.Sprintf("deposit(%d)", i), Expect: "balance > 0"}}}
+	}
+	a, b, other := sampling{rate: 0.5, seed: "7"}, sampling{rate: 0.5, seed: "7"}, sampling{rate: 0.5, seed: "8"}
+	taken, moved := 0, 0
+	for i := range 400 {
+		x := a.takes(plan(i))
+		if x != b.takes(plan(i)) {
+			t.Fatalf("plan %d: chosen once and not again", i)
+		}
+		if x {
+			taken++
+		}
+		if x != other.takes(plan(i)) {
+			moved++
+		}
+	}
+	if taken < 150 || taken > 250 || moved == 0 {
+		t.Errorf("%d of 400 plans taken at 1/2, %d moved by another seed", taken, moved)
+	}
+	for _, x := range []struct {
+		v    string
+		rate float64
+		seed string
+	}{{"", defaultSample, ""}, {"0", 0, ""}, {"1/5", 0.2, ""}, {"0.25:9", 0.25, "9"}, {"oops", defaultSample, ""}, {"2", defaultSample, ""}} {
+		t.Setenv("GOTOGETHER_EVAL_SAMPLE", x.v)
+		if s := evalSample(); s.rate != x.rate || s.seed != x.seed {
+			t.Errorf("%q: %+v", x.v, s)
 		}
 	}
 }

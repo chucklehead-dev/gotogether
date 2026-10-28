@@ -280,10 +280,13 @@ Before the switch, the shadow judged every run of both examples' -short
 and full suites both ways, the obligations judged on each one's states:
 webjobs 15 runs -short and 383 full (139 with obligations compared, 2
 missed ones among them), raftkv 97 -short (82 with obligations, 12
-missed: late leaders after a heal), and in full mode 248 (the same 82 and 12; its TestLinearizeScale, which the nightly skips for its length in shadow, was cut at 2h30m with every test before it judged), and validate's
+missed: late leaders after a heal), and in full mode 248 (the same 82 and 12; its TestLinearizeScale, which the nightly skips for its length in shadow, was cut at 2h30m: the tests before it judged, those after it not run), and validate's
 and qtest's within, resume, absent and lost tests (162 runs, 82 with
 obligations): no disagreement.
 
+**Sampling the passes** (`GOTOGETHER_EVAL_SAMPLE`, §56): the same
+flags, counters 235 CPU s at 0, 239 at the default 1/50 (one pass
+sampled), 303 at CI's 1/5 (13 passes); webjobs 82, 85 (none), 107 (3).
 
 ### D4. A quint session for many replays
 

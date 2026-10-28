@@ -60,7 +60,14 @@ AGENTS.md has the general requirements.
   every run checked (Check, CheckBatch) judged by both, its plan as the
   check plans it, and fails on a disagreement of a verdict, a passing
   result or an ITF state, naming the run (the nightly's
-  `evaluator-shadow`; as slow as quint alone). `GOTOGETHER_SHADOW_LOG=file`
+  `evaluator-shadow`; as slow as quint alone).
+  `GOTOGETHER_EVAL_SAMPLE=<fraction>[:seed]` (`0`, `0.2`, `1/5:7`) has
+  quint judge that share of the evaluator's passes too, chosen by a hash
+  of each actor's plan and the seed, so a rerun samples the same passes;
+  unset it is 1/50, CI sets 1/5, shadow judges them all. A sampled pass
+  quint rejects fails its run with quint's report and an error issue
+  saying the evaluator passed it (an evaluator bug: reproduce with
+  `GOTOGETHER_EVAL=shadow`). `GOTOGETHER_SHADOW_LOG=file`
   appends a line per run so judged (`agree`, `DISAGREE`) or refused by
   the evaluator (`refused`, with why).
   validate keeps quint's typechecks and the evaluation modules' compiles

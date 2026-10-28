@@ -148,8 +148,9 @@ type Result struct {
 	// judged, for Absent
 	withins []obligation
 	// byEvaluator: the Go evaluator passed it, with no quint replay
-	// (decide.go)
-	byEvaluator bool
+	// (decide.go); sampled: the evaluator passed it and quint judged it
+	// too, a sample of its passes (GOTOGETHER_EVAL_SAMPLE)
+	byEvaluator, sampled bool
 	// Unfinished, set by a check that judges the finish (a recorded
 	// run's -require-finish, validate/cli), is why a result that
 	// passes is no finished run ("incomplete (no settle)", "no verdict
@@ -787,6 +788,20 @@ func (r *Result) Reason() string {
 	return "issue"
 }
 
+// JudgedBy says who gave r's verdict: "quint", "evaluator" (the Go
+// evaluator passed it, with no quint replay) or "both" (it passed, and
+// quint judged it too: a sample of its passes, GOTOGETHER_EVAL_SAMPLE;
+// a disagreement is an error issue of r's, its verdict quint's).
+func (r *Result) JudgedBy() string {
+	switch {
+	case r.byEvaluator:
+		return "evaluator"
+	case r.sampled:
+		return "both"
+	}
+	return "quint"
+}
+
 // Summary renders a result for humans.
 func (r *Result) Summary() string {
 	var b strings.Builder
@@ -841,6 +856,9 @@ func (r *Result) Summary() string {
 	}
 	if r.byEvaluator {
 		fmt.Fprintf(&b, "  judged by the Go evaluator, with no quint replay (GOTOGETHER_EVAL=quint replays it with quint)\n")
+	}
+	if r.sampled {
+		fmt.Fprintf(&b, "  judged by quint and by the Go evaluator, which passed it: a sample of its passes (GOTOGETHER_EVAL_SAMPLE)\n")
 	}
 	if r.ITF != "" {
 		fmt.Fprintf(&b, "  itf: %s\n", r.ITF)

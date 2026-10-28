@@ -2,12 +2,15 @@ package validate
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -39,6 +42,10 @@ import (
 // Process-wide: how many actors' traces the Go evaluator passed with no
 // quint replay (a test's, to see a pass spare quint).
 var evalPassed atomic.Int64
+
+// Process-wide: how many of the evaluator's passes quint judged too, by
+// sample, and agreed or not (a test's).
+var sampleAgreed, sampleDisagreed atomic.Int64
 
 // A runVerdict is the evaluator's verdict on one actor's plan: whether it
 // passes, and where it fails otherwise, in a Result's terms (call
@@ -114,6 +121,7 @@ func (ev runVerdict) agrees(q runVerdict) bool {
 type runEval struct {
 	e      *evaluator
 	shadow bool
+	sample sampling // the passes quint judges too, outside shadow
 }
 
 // runEvaluator is how c's checks of runs use the evaluator, nil when
@@ -131,7 +139,11 @@ func (c *Checker) runEvaluator() *runEval {
 	if e.err != nil {
 		return nil
 	}
-	return &runEval{e: e.replaying(), shadow: mode == "shadow"}
+	re := &runEval{e: e.replaying(), shadow: mode == "shadow"}
+	if !re.shadow {
+		re.sample = evalSample()
+	}
+	return re
 }
 
 // replaying is e judging steps as quint's replay takes them
@@ -270,18 +282,43 @@ func (c *Checker) checkPlan(ctx context.Context, re *runEval, t *qtrace.Trace, p
 		r, err := validatePlanIn(ctx, c.Binding, t, p, o, res, false)
 		return r, nil, err
 	}
-	v, verr := re.e.judgeRun(c, t, p, !o.NoITF || re.shadow)
+	sampled := re.sample.takes(p)
+	v, verr := re.e.judgeRun(c, t, p, !o.NoITF || re.shadow || sampled)
 	if verr != nil {
 		re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(t.Actor), len(p.Calls), verr))
 	}
-	if verr == nil && v.pass && !re.shadow && re.decide(c, t, p, v, res, o, observedBase(t)) {
+	sampled = sampled && verr == nil && v.pass
+	if verr == nil && v.pass && !re.shadow && !sampled && re.decide(c, t, p, v, res, o, observedBase(t)) {
 		return res, nil, nil
 	}
 	r, err := validatePlanIn(ctx, c.Binding, t, p, o, res, verr == nil && !v.pass)
-	if err != nil || verr != nil || !re.shadow {
+	switch {
+	case err != nil || verr != nil:
 		return r, nil, err
+	case sampled:
+		re.checkSample(c, t, p, v, r)
+		return r, nil, nil
+	case !re.shadow:
+		return r, nil, nil
 	}
 	return r, re.compare(c, t, p, v, r), nil
+}
+
+// checkSample judges quint's result r of a sampled pass v of the
+// evaluator's against it (compare): agreed, r says it was sampled; not,
+// the evaluator passed a run quint does not, an evaluator bug, and r
+// fails with an error issue that says so, beside quint's verdict (never
+// swallowed), and the shadow log records the disagreement.
+func (re *runEval) checkSample(c *Checker, t *qtrace.Trace, p *binding.Plan, v runVerdict, r *Result) {
+	r.sampled = true
+	if err := re.compare(c, t, p, v, r); err != nil {
+		sampleDisagreed.Add(1)
+		r.Issues = append(r.Issues, qtrace.Issue{Severity: "error", Kind: "eval", Msg: "the Go evaluator passed this run, and quint, judging a sample of the evaluator's passes " +
+			"(GOTOGETHER_EVAL_SAMPLE), does not agree: an evaluator bug; the verdict is quint's. Reproduce with GOTOGETHER_EVAL=shadow and report it with the run's steps " +
+			"(GOTOGETHER_KEEP keeps them). " + strings.TrimPrefix(err.Error(), "GOTOGETHER_EVAL=shadow: ")})
+		return
+	}
+	sampleAgreed.Add(1)
 }
 
 // compare is nil when quint's result q of trace t's plan p is what the
@@ -544,7 +581,7 @@ func sameAsPassed(res, q *Result) bool {
 // deciding it covered (the nightly prints its counts).
 func (re *runEval) note(line string) {
 	path := os.Getenv("GOTOGETHER_SHADOW_LOG")
-	if !re.shadow || path == "" {
+	if !re.shadow && re.sample.rate == 0 || path == "" {
 		return
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -553,4 +590,80 @@ func (re *runEval) note(line string) {
 	}
 	defer f.Close()
 	f.Write([]byte(strings.ReplaceAll(line, "\n", " ") + "\n")) // one write: lines of parallel tests stay whole
+}
+
+// A sampling is which of the evaluator's passes quint judges too
+// (GOTOGETHER_EVAL_SAMPLE): a fraction of them, chosen by a hash of the
+// plan and a seed, so a run's choice is the same at every rerun of the
+// same code (its cost and verdict do not change, and a disagreement found
+// is found again).
+type sampling struct {
+	rate float64 // 0: none
+	seed string
+}
+
+// defaultSample is the share of passes quint judges when the setting is
+// unset: one in fifty (docs/performance.md says what it costs).
+const defaultSample = 1.0 / 50
+
+// evalSample is GOTOGETHER_EVAL_SAMPLE: "0" for none, a fraction ("0.2"
+// or "1/5"), with an optional seed after a colon ("1/5:7"); unset, the
+// default. A value it cannot read is the default.
+func evalSample() sampling {
+	v, ok := os.LookupEnv("GOTOGETHER_EVAL_SAMPLE")
+	if !ok || strings.TrimSpace(v) == "" {
+		return sampling{rate: defaultSample}
+	}
+	rate, seed, _ := strings.Cut(strings.TrimSpace(v), ":")
+	f, ok := parseRate(rate)
+	if !ok {
+		return sampling{rate: defaultSample, seed: seed}
+	}
+	return sampling{rate: f, seed: seed}
+}
+
+// parseRate reads "0.2" or "1/5" as a fraction in [0, 1].
+func parseRate(s string) (float64, bool) {
+	var f float64
+	if n, d, ok := strings.Cut(s, "/"); ok {
+		a, err1 := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		b, err2 := strconv.ParseFloat(strings.TrimSpace(d), 64)
+		if err1 != nil || err2 != nil || b <= 0 {
+			return 0, false
+		}
+		f = a / b
+	} else {
+		x, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return 0, false
+		}
+		f = x
+	}
+	if f < 0 || f > 1 {
+		return 0, false
+	}
+	return f, true
+}
+
+// takes reports whether plan's pass is sampled: its hash, with the seed,
+// below the rate. The plan is what the run's verdict depends on: its
+// instance, its start and its calls, as replayed.
+func (s sampling) takes(plan *binding.Plan) bool {
+	if s.rate <= 0 {
+		return false
+	}
+	if s.rate >= 1 {
+		return true
+	}
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%q\x00", s.seed, plan.ConstantList())
+	if st := plan.Start; st != nil {
+		fmt.Fprintf(h, "start %s %s\x00", st.Quint, st.Expect)
+	}
+	for _, c := range plan.Calls {
+		fmt.Fprintf(h, "%s\x00%s\x00", c.Quint, c.Expect)
+	}
+	sum := h.Sum(nil)
+	x := binary.BigEndian.Uint64(sum[:8])
+	return float64(x)/float64(^uint64(0)) < s.rate
 }
