@@ -124,7 +124,7 @@ jobs:
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           go build -o "$RUNNER_TEMP/cputime" ./internal/cputime
           export GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt"
-          for m in bank checkout counters glomers hello jobqueue kvstore lease migrate-payments retrystorm sktrace twophase webjobs; do
+          for m in bank checkout counters glomers hello jobqueue kvstore lease migrate-payments requeue retrystorm sktrace twophase webjobs; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
               GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1
@@ -152,6 +152,9 @@ jobs:
           MUTANT=wallInterval CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
           MUTANT=noFencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
           MUTANT=noDedupe examples/hello/run-demo.sh && exit 1 || true
+          examples/requeue/run-demo.sh
+          MUTANT=stampSpec examples/requeue/run-demo.sh && exit 1 || true
+          MUTANT=giveUp examples/requeue/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
           examples/counters/run-demo.sh && MUTANT=blind examples/counters/run-demo.sh
           examples/migrate-payments/run-demo.sh

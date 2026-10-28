@@ -12,6 +12,7 @@ use (
 	./examples/gosim
 	./examples/grpcledger
 	./examples/hello
+	./examples/requeue
 	./examples/jobqueue
 	./examples/kvstore
 	./examples/lease

@@ -1,0 +1,25 @@
+# How the controller's and the cloud's recorded steps become calls of
+# model/requeue.qnt's actions: none takes an argument. The cloud records
+# create and advance where they take effect; the controller requeue and
+# finish.
+spec: model/requeue.qnt
+module: requeue
+
+constants:
+  RESEND: 'false'
+
+actions:
+  create: {}
+  advance: {}
+  requeue: {}
+  finish: {}
+
+eventually: [reconciled]
+
+# The model on its own (gotogether simulate -graph): reconciled is the
+# model's to drive (every action weakly fair, the controller's requeue a
+# stutter that obliges and satisfies nothing), proved live in the whole
+# graph; a marked object is the end the model means.
+simulate:
+  holds: [reconciled]
+  terminal: ready

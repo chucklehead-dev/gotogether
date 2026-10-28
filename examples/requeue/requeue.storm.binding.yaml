@@ -1,0 +1,23 @@
+# requeue.binding.yaml's model with RESEND: an apply after the first
+# replaces the resource (its spec changed), which the cloud provisions
+# again. gotogether simulate -graph fails on it: a fair cycle of
+# advances and replacements keeps reconciled false forever (the lasso).
+# Runs of the stampSpec mutant conform to it and never settle, the same
+# cycle their report's hot cycle line.
+spec: model/requeue.qnt
+module: requeue
+
+constants:
+  RESEND: 'true'
+
+actions:
+  create: {}
+  advance: {}
+  requeue: {}
+  finish: {}
+
+eventually: [reconciled]
+
+simulate:
+  holds: [reconciled]
+  terminal: ready
