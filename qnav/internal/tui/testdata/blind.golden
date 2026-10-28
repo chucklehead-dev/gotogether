@@ -44,7 +44,7 @@ the run's next call, which the model rejects
         caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
         "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
         caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
-── lines 1–28 of 202 (pgup/pgdn scroll)
+── lines 1–28 of 189 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -95,7 +95,7 @@ state  (* changed by the last move)
   bankPayRecords = []
   checkpoints = Map("average" -> 0, "payout" -> 0, "welcome" -> 0)
   effects = [("welcome", 1, "welcome/t1/1", true)]
-── lines 1–38 of 202 (pgup/pgdn scroll)
+── lines 1–38 of 189 (pgup/pgdn scroll)
 
 [37m/[m[37mshowCounter[m 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
