@@ -14,13 +14,34 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
+// chunkSteps is about the steps a quint process replays in the time it
+// takes to load the model: a process typechecks the model and the module
+// first (counters': 5 of 5.3 CPU s for a trace of 20 steps; three such
+// traces in one process 5.4), then evaluates at about 2 ms a step. A batch
+// is split across processes only past it, where the parallel evaluation
+// saves more wall time than the extra typechecks cost.
+const chunkSteps = 1000
+
+// chunkSize is how many of total traces (of steps steps in all) one quint
+// process replays: about one chunk per CPU, but no fewer traces than
+// chunkSteps' worth, and at most 64 (a module of 64 runs takes quint
+// about a gigabyte).
+func chunkSize(total, steps, cpus int) int {
+	per := (total + cpus - 1) / cpus
+	if total > 0 && steps > 0 {
+		avg := max(1, steps/total)
+		per = min(max(per, chunkSteps/avg), total)
+	}
+	return max(1, min(per, 64))
+}
+
 // CheckBatch checks many independent runs with as few quint processes as
 // possible: each run is reconstructed and planned in Go, the actors' traces
 // are grouped by their instance constants (traces of one instance can share
 // a module), and each group is replayed by one `quint test` process
 // holding a conformance test and invariant tests per trace. Groups run in
-// parallel, in chunks of at most perProcess traces (0: about one chunk per
-// CPU, at most 64 traces each).
+// parallel, in chunks of at most perProcess traces (0: chunkSize's, about
+// one chunk per CPU when the traces are long enough to repay a process).
 //
 // Process start-up and model loading cost ~0.5 s per quint process and
 // dominate short replays, so this is much faster than a Check per run
@@ -110,13 +131,15 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			groups[k] = append(groups[k], it)
 		}
 	}
-	total := 0
+	total, steps := 0, 0
 	for _, k := range keys {
 		total += len(groups[k])
+		for _, it := range groups[k] {
+			steps += len(it.plan.Calls)
+		}
 	}
 	if perProcess <= 0 {
-		perProcess = (total + runtime.GOMAXPROCS(0) - 1) / runtime.GOMAXPROCS(0)
-		perProcess = max(1, min(perProcess, 64))
+		perProcess = chunkSize(total, steps, runtime.GOMAXPROCS(0))
 	}
 	type chunk struct {
 		n     int

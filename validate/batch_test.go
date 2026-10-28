@@ -181,3 +181,21 @@ func TestQuintProcessesBoundedProcessWide(t *testing.T) {
 		t.Errorf("at most %d quint processes at once, want 1..%d (GOMAXPROCS)", most, limit)
 	}
 }
+
+// A batch of short traces is one quint process: each process typechecks
+// the model before it replays anything, which costs more than replaying
+// a thousand steps. Long traces still spread over the CPUs.
+func TestChunkSize(t *testing.T) {
+	for _, c := range []struct{ total, steps, cpus, want int }{
+		{6, 120, 4, 6},         // 20 steps each: one process, not four
+		{64, 64 * 500, 4, 16},  // long traces: a chunk per CPU
+		{40, 40 * 100, 4, 10},  // 100 steps each: ten per process
+		{200, 200 * 10, 4, 64}, // at most 64 runs in a module
+		{3, 0, 4, 1},           // no steps known: a chunk per CPU
+		{0, 0, 4, 1},
+	} {
+		if got := chunkSize(c.total, c.steps, c.cpus); got != c.want {
+			t.Errorf("chunkSize(%d traces, %d steps, %d CPUs) = %d, want %d", c.total, c.steps, c.cpus, got, c.want)
+		}
+	}
+}
