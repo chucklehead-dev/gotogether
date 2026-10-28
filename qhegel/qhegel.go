@@ -288,7 +288,7 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 // run's steps and verdict.
 func checkAll(t testing.TB, c *validate.Checker, runs [][]qtrace.Step) []*validate.Report {
 	t.Helper()
-	reps, errs := c.CheckBatch(context.Background(), runs, 0)
+	reps, errs := c.CheckBatch(t.Context(), runs, 0)
 	bad := 0
 	for i, rep := range reps {
 		switch {
@@ -369,7 +369,7 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 			return // the body's own checks failed, and Hegel shrank that already
 		}
 		// 2. Check the round in bulk.
-		vs, err := cc.Prefetch(context.Background(), runs)
+		vs, err := cc.Prefetch(t.Context(), runs)
 		if err != nil {
 			t.Fatalf("qhegel: checking round %d: %v", r, err)
 		}

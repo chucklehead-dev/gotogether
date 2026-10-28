@@ -1,7 +1,6 @@
 package qhegel
 
 import (
-	"context"
 	crand "crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -122,7 +121,7 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 			if len(steps) == 0 && cfg.AllowEmpty {
 				return
 			}
-			v, err := cc.Check(context.Background(), steps)
+			v, err := cc.Check(t.Context(), steps)
 			if err != nil {
 				tc.Errorf("qhegel: checking the run: %v", err)
 				return
@@ -159,7 +158,7 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 	}
 	found.found = true
 	found.QuintRuns, found.CacheHits = q, hits
-	if found.Report, err = c.Check(context.Background(), found.Steps); err != nil {
+	if found.Report, err = c.Check(t.Context(), found.Steps); err != nil {
 		t.Fatalf("qhegel: checking the shrunk run: %v", err)
 	}
 	found.Report.Unsettled = found.Unsettled
@@ -284,19 +283,25 @@ func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	return v
 }
 
-// stdoutMu serializes the redirections of os.Stdout: one Hegel run's at a
-// time.
+// stdoutMu serializes the captures of standard output: one Hegel run's
+// at a time. Process-wide.
 var stdoutMu sync.Mutex
 
-// captured is os.Stdout redirected into a buffer until stop.
+// captured is standard output redirected into a buffer until stop.
 type captured struct {
-	old, w *os.File
-	done   chan string
+	restore func() // puts standard output back
+	w       *os.File
+	done    chan string
 }
 
-// captureStdout redirects os.Stdout into a buffer (nil if it cannot).
-// Output of other tests in parallel lands there too, which is the price
-// of a quiet expected failure: Hegel writes to os.Stdout and nowhere else.
+// captureStdout redirects standard output into a buffer (nil if it
+// cannot): Hegel writes its replay of the failure to os.Stdout and
+// nowhere else, and its native library to file descriptor 1. On unix
+// descriptor 1 itself is redirected (redirectStdout), os.Stdout left
+// alone: assigning the variable raced with every goroutine that printed
+// (fmt.Print reads it), and missed the native writes. Output of other
+// tests in parallel lands there too, the go test framework's own lines
+// among them, which is the price of a quiet expected failure.
 func captureStdout() *captured {
 	stdoutMu.Lock()
 	r, w, err := os.Pipe()
@@ -304,23 +309,29 @@ func captureStdout() *captured {
 		stdoutMu.Unlock()
 		return nil
 	}
-	c := &captured{old: os.Stdout, w: w, done: make(chan string)}
+	restore, err := redirectStdout(w)
+	if err != nil {
+		r.Close()
+		w.Close()
+		stdoutMu.Unlock()
+		return nil
+	}
+	c := &captured{restore: restore, w: w, done: make(chan string)}
 	go func() { //qenv:ok drains Hegel's stdout pipe, outside any simulation, so writers never block
 		var b strings.Builder
 		_, _ = io.Copy(&b, r)
 		r.Close()
 		c.done <- b.String()
 	}()
-	os.Stdout = w
 	return c
 }
 
-// stop restores os.Stdout and returns what was written.
+// stop restores standard output and returns what was written.
 func (c *captured) stop() string {
 	if c == nil {
 		return ""
 	}
-	os.Stdout = c.old
+	c.restore() // descriptor 1 no longer holds the pipe's write end
 	c.w.Close()
 	out := <-c.done
 	stdoutMu.Unlock()

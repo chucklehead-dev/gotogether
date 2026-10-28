@@ -1,7 +1,6 @@
 package qhegel
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -22,7 +21,7 @@ func Traces(t testing.TB, c connect.Config) []*itf.Trace {
 	if v, ok := traceCache.Load(key); ok {
 		return v.([]*itf.Trace)
 	}
-	files, rc, err := connect.GenerateRun(context.Background(), c)
+	files, rc, err := connect.GenerateRun(t.Context(), c)
 	if err != nil {
 		t.Fatalf("qhegel: generating traces: %v", err)
 	}

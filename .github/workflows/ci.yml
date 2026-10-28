@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [core, core-variants, race, hegel, examples, demos, tools]
+        part: [core, core-variants, race, shuffle, hegel, examples, demos, tools]
     name: test (${{ matrix.part }})
     runs-on: ubuntu-latest
     steps:
@@ -49,7 +49,7 @@ jobs:
       - name: Install quint
         run: ci/install-quint.sh
       - name: Install toxiproxy-server (qnemesis' network tests, strict here)
-        if: matrix.part == 'core'
+        if: matrix.part == 'core' || matrix.part == 'race' || matrix.part == 'shuffle'
         run: |
           go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0
           mv "$(go env GOPATH)/bin/server" "$(go env GOPATH)/bin/toxiproxy-server"
@@ -81,7 +81,15 @@ jobs:
         run: go run ./cmd/gotogether lint -sim .
       - name: the race detector on what runs real goroutines
         if: matrix.part == 'race'
-        run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest|Signal' ./qenv/
+        # qtest's explorations run seeds in parallel goroutines, qnemesis
+        # drives real processes; all passed the detector when added
+        # (eleventh review, M5)
+        run: |
+          go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ \
+            ./qtest/ ./qhistory/ ./qsweep/ ./qnemesis/ ./qload/ ./qshrink/ ./internal/qeval/
+          go test -race -short -count=1 -run 'Native|Synctest|Signal' ./qenv/
+          # Hegel's output captured at descriptor 1, os.Stdout never assigned
+          (cd qhegel && go test -race -count=1 -run '^TestCaptureStdoutAtTheDescriptor$' .)
       - name: the race detector on grist's real tier (Main, the platform, calls over HTTP, two pods)
         if: matrix.part == 'race'
         # grist on its own go.mod (its pinned core), the pods the test
@@ -89,6 +97,12 @@ jobs:
         run: |
           (cd grist && go test -race -short -count=1 -run '^(TestMain|TestDrainBudget|TestMemoryLimit|TestMetricsLabelEscaping|TestPauseIsProgress|TestCallOverHTTP|TestServeCalls|TestOverHTTPAnswers|TestCallAnswerOfNoRefusal)' .)
           (cd examples/counters && go test -race -count=1 -run '^TestRealTwoPods$' .)
+      - name: the core's -short tests shuffled, twice (no test depends on another's order or state)
+        if: matrix.part == 'shuffle'
+        # TestFaultPoints passed or failed by order (a process-wide
+        # registry: eleventh review, M1); -count=2 runs each test after
+        # itself too. A failure prints the -shuffle seed that replays it.
+        run: go test -short -shuffle=on -count=2 -timeout 40m ./...
       - name: test (qenv self-checks)
         if: matrix.part == 'core-variants'
         run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
@@ -177,7 +191,11 @@ jobs:
         if: matrix.part == 'tools'
         run: |
           go build -C qanalysis -o "$RUNNER_TEMP/quintvet" ./cmd/quintvet
-          "$RUNNER_TEMP/quintvet" -quintweave=false ./...
+          "$RUNNER_TEMP/quintvet" -quintweave=false -quintctx=false ./...
+          # quintctx on the core's code, its tests aside (a test's
+          # context.Background() is often deliberate, and t.Context() ends
+          # before its cleanups)
+          "$RUNNER_TEMP/quintvet" -quintsim=false -quintweave=false -quintaction=false -test=false ./...
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
         if: matrix.part == 'tools'
         working-directory: examples/checkout

@@ -30,6 +30,10 @@ The first release. What a user meets, by module:
   it (`t.Context()`). quintsim's findings carry fixes where a context is
   in scope: `go f()` to `qenv.Go(ctx, "f", ...)`, `time.Now()` and
   `time.Sleep(d)` to qenv's (eleventh review, tooling).
+- qhegel captures Hegel's output at file descriptor 1 (unix), never
+  assigning `os.Stdout`: the assignment raced with any goroutine that
+  printed, and native writes went past it (eleventh review, M6). Its
+  checks run under the test's context.
 - A fault site declared inside a run is that run's (eleventh review,
   M1): `qenv.DeclareFaultSite` from a simulation's task or its creator,
   or a qtest scenario, no longer adds a point to every later test's
