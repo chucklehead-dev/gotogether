@@ -71,7 +71,7 @@ func TestExplore(t *testing.T) {
 	}
 	System{Binding: b, Run: scenario(true)}.Explore(t, ExploreConfig{Seeds: 20}).Expect(t, Conforms())
 	x := System{Binding: b, Run: scenario(false)}.Explore(t, ExploreConfig{Seeds: 20})
-	x.Expect(t, AnyOf(Mismatch("withdraw"), Rejects("withdraw")))
+	x.Expect(t, Some(AnyOf(Mismatch("withdraw"), Rejects("withdraw"))))
 	if len(x.Failing()) == 20 {
 		t.Fatal("every interleaving overdrew: the schedule is not being explored")
 	}

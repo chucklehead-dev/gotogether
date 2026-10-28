@@ -28,7 +28,13 @@ func RequireQuint(t testing.TB) {
 type Expectation struct {
 	desc  string
 	check func(*validate.Report) bool
-	every bool // as a Claim alone: every run (Conforms), not some run
+	// every: a passing run meets it (Conforms, Satisfies), which
+	// ShrinkActions' Keep refuses
+	every bool
+	// alone: its name says every run (Conforms, Settles, Completes,
+	// Finishes), so alone over runs it is All of itself; any other
+	// Expectation takes Some, All or None (quantify)
+	alone bool
 	// the actions and invariants it names, checked against the model: a
 	// misspelled name would make None(...) hold vacuously
 	actions, invariants []string
@@ -100,7 +106,7 @@ func Conforms() Expectation {
 		}
 		return no
 	}
-	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true, tri: conforms}
+	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true, alone: true, tri: conforms}
 }
 
 // Settles: the system settled, whatever its steps: the run recorded a
@@ -112,7 +118,7 @@ func Conforms() Expectation {
 // recorder's lost suffix, or a log still being collected) may have
 // settled out of sight: no verdict for it, whatever its conformance.
 func Settles() Expectation {
-	return Expectation{desc: "a system that settles", check: func(r *validate.Report) bool { return settles(r) == yes }, every: true, tri: settles, undecided: true}
+	return Expectation{desc: "a system that settles", check: func(r *validate.Report) bool { return settles(r) == yes }, every: true, alone: true, tri: settles, undecided: true}
 }
 
 // settles is Settles' value of r: yes if the run recorded a settle last
@@ -162,7 +168,7 @@ func Completes() Expectation {
 		}
 		return v
 	}
-	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool { return completes(r) == yes }, every: true, tri: completes,
+	return Expectation{desc: "every invoked operation completing", check: func(r *validate.Report) bool { return completes(r) == yes }, every: true, alone: true, tri: completes,
 		why: pendingWhy("")}
 }
 
@@ -180,7 +186,7 @@ func Completes() Expectation {
 func Finishes() Expectation {
 	value := func(r *validate.Report) tri { v, _ := finishes(r); return v }
 	return Expectation{desc: "a finished run (conforming, settled, every eventual val judged and true, every invoked call completed)",
-		check: func(r *validate.Report) bool { return value(r) == yes }, every: true, tri: value, undecided: true,
+		check: func(r *validate.Report) bool { return value(r) == yes }, every: true, alone: true, tri: value, undecided: true,
 		why: func(r *validate.Report) string { _, why := finishes(r); return why }}
 }
 
@@ -462,9 +468,9 @@ func HasIssue(kind string) Expectation {
 // error says why a run misses it, and a failure prints it; an error
 // wrapping NoVerdict says the report cannot judge it (what it judges was
 // not recorded, or not by this binding), and no claim holds by such a
-// run: None(e) would otherwise hold of reports that judge nothing. As a
-// claim alone it is about every run, as Conforms is; Some, All and None
-// quantify it as any other.
+// run: None(e) would otherwise hold of reports that judge nothing. Over
+// runs Some, All or None quantify it, as any expectation but Conforms,
+// Settles, Completes and Finishes.
 func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
 	value := func(r *validate.Report) tri {
 		switch err := f(r); {
@@ -488,6 +494,41 @@ func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
 // cannot judge its expectation (fmt.Errorf("%w: ...", NoVerdict)): the
 // run is unjudged for it, not missing it.
 var NoVerdict = errors.New("no verdict")
+
+// Not: the run misses e, a claim of its own where e's negation means
+// one thing (grist's gristtest.NoClientErrors: some client call refused,
+// erring or left unanswered, Some(Not(NoClientErrors()))). A run with no
+// verdict for e has none for Not(e): no claim holds by it. Conforms has
+// no one negation (a rejection, a mismatch, an invariant violated), and
+// Not(Conforms()) panics: name the failure, Rejects, Mismatch or
+// Violates.
+func Not(e Expectation) Expectation {
+	if e.desc == Conforms().desc {
+		panic("qtest: Not(Conforms()): conformance fails as a rejection, a mismatch or an invariant violated: claim the one meant, qtest.Rejects(action), qtest.Mismatch(action) or qtest.Violates(invariant)")
+	}
+	value := func(r *validate.Report) tri {
+		switch e.value(r) {
+		case yes:
+			return no
+		case no:
+			return yes
+		}
+		return unknown
+	}
+	return Expectation{desc: "not (" + e.desc + ")", check: func(r *validate.Report) bool { return value(r) == yes }, tri: value,
+		actions: e.actions, invariants: e.invariants, undecided: e.undecided,
+		why: func(r *validate.Report) string {
+			switch e.value(r) {
+			case yes:
+				return "it meets " + e.desc
+			case unknown:
+				if e.why != nil {
+					return e.why(r)
+				}
+			}
+			return ""
+		}}
+}
 
 // AnyOf: the report meets at least one of es.
 func AnyOf(es ...Expectation) Expectation {
@@ -610,140 +651,6 @@ func aStep(action string) string {
 	return "a " + action + " step"
 }
 
-// A Claim is what a test expects of a set of runs (Exploration.Expect,
-// Sweep.Expect): that some, every or no run meets expectations. An
-// Expectation alone is a claim about some run (Some), except Conforms,
-// which is about every run (All); several claims are judged one by one,
-// so Expect(t, Violates("a"), Violates("b")) wants each shown by some
-// run, not one run showing both (Some(a, b) says that).
-type Claim interface {
-	judge(reports []*validate.Report) judgment
-	String() string
-}
-
-// judgment is a claim's verdict: show is the run to print (-1: none).
-type judgment struct {
-	ok   bool
-	show int
-	n    int // runs meeting (Some, None) or missing (All) the expectations
-	// unjudged are None's runs that meet none of its expectations but have
-	// no verdict to meet them with (a search out of budget): None holds of
-	// none of them, which once passed it over runs judged by nothing
-	unjudged int
-}
-
-func (e Expectation) judge(rs []*validate.Report) judgment {
-	if e.every {
-		return All(e).judge(rs)
-	}
-	return Some(e).judge(rs)
-}
-
-type quantified struct {
-	kind string // "some", "all", "none"
-	es   []Expectation
-}
-
-// Some: one run meets every one of es.
-func Some(es ...Expectation) Claim { return quantified{"some", es} }
-
-// All: every run meets every one of es.
-func All(es ...Expectation) Claim { return quantified{"all", es} }
-
-// None: no run meets any of es: what a bug must not do, or a row where a
-// fault cannot happen must never show.
-func None(es ...Expectation) Claim { return quantified{"none", es} }
-
-func (q quantified) String() string {
-	var d []string
-	for _, e := range q.es {
-		d = append(d, e.desc)
-	}
-	switch q.kind {
-	case "some":
-		return "some run showing " + strings.Join(d, " and ")
-	case "all":
-		return "every run showing " + strings.Join(d, " and ")
-	}
-	return "no run showing " + strings.Join(d, ", or ")
-}
-
-// meets is the run's value for q's expectations together: all of them
-// (yes if each is, no if one is not, else unknown) and any of them (yes
-// if one is, unknown if none is and one is unknown, else no).
-func (q quantified) meets(r *validate.Report) (all, any tri) {
-	all, any = yes, no
-	for _, e := range q.es {
-		switch e.value(r) {
-		case yes:
-			any = yes
-		case no:
-			all = no
-		case unknown:
-			if all == yes {
-				all = unknown
-			}
-			if any == no {
-				any = unknown
-			}
-		}
-	}
-	return all, any
-}
-
-func (q quantified) judge(rs []*validate.Report) judgment {
-	j := judgment{show: -1}
-	for i, r := range rs {
-		all, any := q.meets(r)
-		switch q.kind {
-		case "some":
-			if all == yes {
-				j.n++
-				if j.show < 0 {
-					j.show = i
-				}
-			}
-		case "all":
-			switch all {
-			case no:
-				j.n++
-				if j.show < 0 {
-					j.show = i
-				}
-			case unknown:
-				j.unjudged++ // (Completes of a run whose calls may have completed in a lost tail)
-			}
-		case "none":
-			switch {
-			case any == yes:
-				j.n++
-				if j.show < 0 {
-					j.show = i
-				}
-			case any == unknown || undecided(r) && !judgesUndecided(q.es):
-				j.unjudged++
-			}
-		}
-	}
-	// over no runs, no claim has a verdict: All and None would hold of
-	// nothing (All once did), and Some fails for want of a run, not of a
-	// witness
-	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0 && len(rs) > 0
-	return j
-}
-
-// judgesUndecided reports whether every one of es judges a run whose
-// conformance has no verdict itself (Finishes: a settled run of a binding
-// with no eventual val is missed whatever the search found).
-func judgesUndecided(es []Expectation) bool {
-	for _, e := range es {
-		if !e.undecided {
-			return false
-		}
-	}
-	return len(es) > 0
-}
-
 // invariantUnknown reports whether r has no verdict for one of
 // invariants (or a within, or an eventual val), in an actor that
 // conforms: one a lost tail left unjudged (validate.Result.Lost), or
@@ -859,28 +766,6 @@ func expectReport(t testing.TB, r *validate.Report, actions, checks map[string]b
 		}
 	}
 }
-
-// A RunClaim is what a test expects of one run (Run.Expect, a qhegel
-// Violation's): an Expectation, or a claim only one run can have
-// (ShrunkTo), which an exploration's Expect does not take.
-type RunClaim interface {
-	Holds(r *Run) bool
-	String() string
-}
-
-// ShrunkTo claims the run has at most n faults: what Hegel's shrinking of
-// a failure must reach, with the claim on its verdict.
-//
-//	qhegel.Shrink(t, sys).Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
-//
-// It is a claim on one run (a Violation, a Run with its choices), not on
-// an exploration: it is a RunClaim, not a Claim.
-func ShrunkTo(n int) RunClaim { return shrunkTo(n) }
-
-type shrunkTo int
-
-func (n shrunkTo) Holds(r *Run) bool { return len(r.Faults()) <= int(n) }
-func (n shrunkTo) String() string    { return fmt.Sprintf("a run shrunk to at most %d fault(s)", int(n)) }
 
 // Expect fails t unless the run meets every claim: its report each
 // Expectation, its faults ShrunkTo. A failure prints the report and names

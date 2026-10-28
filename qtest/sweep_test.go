@@ -26,7 +26,7 @@ func TestSweepWithTheSystemsRun(t *testing.T) {
 	sys.Sweep(t, SweepConfig{Factors: []qsweep.Factor{qsweep.Ints("amount", 50, 150)}, Explore: ExploreConfig{Seeds: 1},
 		Expect: func(row qsweep.Row) []Claim {
 			if row.Int("amount") > 100 {
-				return []Claim{Violates("underLimit")}
+				return []Claim{Some(Violates("underLimit"))}
 			}
 			return []Claim{Conforms()}
 		}})

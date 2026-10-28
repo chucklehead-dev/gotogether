@@ -13,9 +13,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// Claims over runs: a bare expectation is about some run (Conforms about
-// every run); several are judged one by one; Some(a, b) wants one run
-// with both; None wants no run with either.
+// Claims over runs: several are judged one by one; Some(a, b) wants one
+// run with both; None wants no run with either.
 func TestClaims(t *testing.T) {
 	t.Parallel()
 	// three runs: one shows a, one shows a and b, one shows neither
@@ -28,8 +27,8 @@ func TestClaims(t *testing.T) {
 		ok    bool
 		show  int
 	}{
-		{a, true, 0},
-		{c, false, -1},
+		{Some(a), true, 0},
+		{Some(c), false, -1},
 		{Some(a, b), true, 1},
 		{Some(b, c), false, -1},
 		{All(a), false, 2},
@@ -42,10 +41,84 @@ func TestClaims(t *testing.T) {
 			t.Errorf("%s: ok %v show %d, want %v %d", k.claim, j.ok, j.show, k.ok, k.show)
 		}
 	}
-	every := Expectation{desc: "every", check: func(r *validate.Report) bool { return len(r.Issues) > 0 }, every: true}
-	if !every.judge(runs).ok {
-		t.Error("an every-run expectation alone is not judged over every run")
+	alone := Expectation{desc: "every", check: func(r *validate.Report) bool { return len(r.Issues) > 0 }, every: true, alone: true}
+	if !alone.judge(runs).ok {
+		t.Error("an expectation that stands alone is not judged over every run")
 	}
+}
+
+// Over runs, only Conforms, Settles, Completes and Finishes stand alone
+// (All of themselves); any other expectation alone panics, naming the
+// quantifiers and what it meant alone before: Some for a failure's, All
+// for Satisfies'. PerMutant's claims panic as they are made.
+func TestBareClaims(t *testing.T) {
+	t.Parallel()
+	for _, e := range []Expectation{Conforms(), Settles(), Completes(), Finishes()} {
+		if q, ok := quantify(e).(quantified); !ok || q.kind != "all" {
+			t.Errorf("%s alone: %v, want All of it", e, quantify(e))
+		}
+	}
+	few := Satisfies("few issues", func(*validate.Report) error { return nil })
+	for _, c := range []struct {
+		e     Expectation
+		meant string
+	}{
+		{Rejects("apply"), "Some"}, {Violates("inv").At("apply"), "Some"}, {Scenario(Takes("a")), "Some"},
+		{AnyOf(Rejects("a"), Mismatch("a")), "Some"}, {few, "All"}, {Undecided(Completes()), "All"}, {Not(few), "Some"},
+	} {
+		for _, f := range []func(){
+			func() { quantify(c.e) },
+			func() { (&Exploration{}).Expect(t, c.e) },
+			func() { PerMutant(c.e) },
+		} {
+			func() {
+				defer func() {
+					p := fmt.Sprint(recover())
+					if !strings.Contains(p, "write qtest.Some(...) (some run shows it), qtest.All(...) (every run) or qtest.None(...) (no run)") ||
+						!strings.Contains(p, "alone it meant "+c.meant+"(...)") {
+						t.Errorf("%s alone: panic %q, want the quantifiers and %s named", c.e, p, c.meant)
+					}
+				}()
+				f()
+			}()
+		}
+	}
+}
+
+// Not is a run's other verdict: met where e is missed, missed where e is
+// met, unknown where e is. Not(Conforms()) panics, naming the failures.
+func TestNot(t *testing.T) {
+	t.Parallel()
+	few := Satisfies("few issues", func(r *validate.Report) error {
+		switch {
+		case r.Issues == nil:
+			return fmt.Errorf("%w: none recorded", NoVerdict)
+		case len(r.Issues) > 2:
+			return fmt.Errorf("%d issues", len(r.Issues))
+		}
+		return nil
+	})
+	for _, c := range []struct {
+		r    *validate.Report
+		want tri
+	}{
+		{&validate.Report{Issues: make([]qtrace.Issue, 1)}, no},
+		{&validate.Report{Issues: make([]qtrace.Issue, 3)}, yes},
+		{&validate.Report{}, unknown},
+	} {
+		if got := Not(few).value(c.r); got != c.want {
+			t.Errorf("Not over %d issues: %v, want %v", len(c.r.Issues), got, c.want)
+		}
+	}
+	if why := Not(few).explain(&validate.Report{Issues: make([]qtrace.Issue, 1)}); !strings.Contains(why, "it meets few issues") {
+		t.Errorf("Not's explanation of a run meeting e: %q", why)
+	}
+	defer func() {
+		if p := fmt.Sprint(recover()); !strings.Contains(p, "qtest.Rejects(action), qtest.Mismatch(action) or qtest.Violates(invariant)") {
+			t.Errorf("Not(Conforms()): panic %q, want the failures named", p)
+		}
+	}()
+	Not(Conforms())
 }
 
 // HasIssue holds of a run whose report fails on a reconstruction error
@@ -83,8 +156,8 @@ func TestHasIssue(t *testing.T) {
 	HasIssue("duplicat")
 }
 
-// Satisfies is its function's verdict on each run, about every run as a
-// claim alone, its error the failure's explanation.
+// Satisfies is its function's verdict on each run, quantified as any
+// expectation, its error the failure's explanation.
 func TestSatisfies(t *testing.T) {
 	t.Parallel()
 	few := Satisfies("few issues", func(r *validate.Report) error {
@@ -94,8 +167,8 @@ func TestSatisfies(t *testing.T) {
 		return nil
 	})
 	runs := []*validate.Report{{Issues: make([]qtrace.Issue, 1)}, {Issues: make([]qtrace.Issue, 3)}}
-	if j := few.judge(runs); j.ok || j.show != 1 {
-		t.Errorf("alone: ok %v show %d, want a failure showing run 1 (about every run)", j.ok, j.show)
+	if j := All(few).judge(runs); j.ok || j.show != 1 {
+		t.Errorf("All: ok %v show %d, want a failure showing run 1", j.ok, j.show)
 	}
 	if !Some(few).judge(runs).ok || None(few).judge(runs).ok {
 		t.Error("Some and None do not quantify it")
@@ -112,7 +185,7 @@ func TestSatisfies(t *testing.T) {
 		return nil
 	})
 	none := []*validate.Report{{}, {}}
-	for _, c := range []Claim{judged, Some(judged), All(judged), None(judged)} {
+	for _, c := range []Claim{Some(judged), All(judged), None(judged)} {
 		if c.judge(none).ok {
 			t.Errorf("%v held of runs it cannot judge", c)
 		}

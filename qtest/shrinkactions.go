@@ -237,30 +237,6 @@ func nextShrink(t testing.TB) int {
 	return shrinks.n[t.Name()]
 }
 
-// A ShrinkClaim is what a test expects of a shrink (ShrunkActions.Expect):
-// an Expectation of its minimal run, or a claim on the sequence
-// (AtMostActions).
-type ShrinkClaim interface {
-	String() string
-	// holdsShrunk reports whether the claim holds of a shrink to n
-	// actions whose run is r, and if not, what it saw.
-	holdsShrunk(n int, r *Run) (bool, string)
-}
-
-func (e Expectation) holdsShrunk(_ int, r *Run) (bool, string) { return e.Holds(r), "" }
-
-// AtMostActions claims the shrink reached at most n actions.
-func AtMostActions(n int) ShrinkClaim { return atMostActions(n) }
-
-type atMostActions int
-
-func (n atMostActions) String() string {
-	return fmt.Sprintf("a sequence shrunk to at most %d action(s)", int(n))
-}
-func (n atMostActions) holdsShrunk(k int, _ *Run) (bool, string) {
-	return k <= int(n), fmt.Sprintf("it has %d", k)
-}
-
 // Expect fails t unless every claim holds: each Expectation of the
 // minimal run (as Run.Expect judges it, printing its report), each
 // AtMostActions of the sequence.

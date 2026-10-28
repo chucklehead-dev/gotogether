@@ -155,7 +155,7 @@ func TestScenarioOverRuns(t *testing.T) {
 		runs  []*Run
 		ok    bool
 	}{
-		{sc, []*Run{half, full}, true},
+		{Some(sc), []*Run{half, full}, true},
 		{Some(sc), []*Run{half}, false},
 		{All(sc), []*Run{half, full}, false},
 		{All(sc), []*Run{full, full}, true},
@@ -169,7 +169,7 @@ func TestScenarioOverRuns(t *testing.T) {
 		}
 	}
 	x := Runs(half, run("submit.ok"))
-	if msg := x.verdict(sc, x.reports()).say(t); !strings.Contains(msg, "run 1: 1 of 2 steps") || !strings.Contains(msg, "run 2: 1 of 2 steps") {
+	if msg := x.verdict(Some(sc), x.reports()).say(t); !strings.Contains(msg, "run 1: 1 of 2 steps") || !strings.Contains(msg, "run 2: 1 of 2 steps") {
 		t.Errorf("a scenario no run follows: %s", msg)
 	}
 	// two actors: submit at t=2 by one, open at t=1 by the other is no scenario

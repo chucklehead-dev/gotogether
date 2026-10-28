@@ -1,10 +1,13 @@
 package qtest
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qmut"
+	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // NoSurvivors names each unmarked survivor with its mark, and each mark
@@ -39,5 +42,40 @@ func TestNoSurvivors(t *testing.T) {
 	(&MutationReport{Survived: []qmut.Mutant{moved}, Killed: []qmut.Mutant{twin}}).Expect(f, NoSurvivors("(Payer).Pay: drop call: ack()"))
 	if len(f.errs) != 1 || !strings.Contains(f.errs[0], `names 2 mutants (pay.go:50, pay.go:60): mark the equivalent one by its position, "pay.go:50"`) {
 		t.Errorf("an ambiguous mark: %v", f.errs)
+	}
+}
+
+// PerMutant's claims, given to Expect, must hold of the baseline and
+// kill each survivor whose exploration misses one: the claim that once
+// was Mutate's argument.
+func TestPerMutant(t *testing.T) {
+	t.Parallel()
+	done := Satisfies("a done step", func(r *validate.Report) error {
+		if len(r.Issues) == 0 {
+			return errors.New("no done step")
+		}
+		return nil
+	})
+	with, without := &Run{Report: &validate.Report{Issues: make([]qtrace.Issue, 1)}}, &Run{Report: &validate.Report{}}
+	lost := qmut.Mutant{ID: 1, File: "/src/c.go", Line: 3, Func: "example.com/c.Run", Op: "drop call", Code: "done()"}
+	kept := qmut.Mutant{ID: 2, File: "/src/c.go", Line: 9, Func: "example.com/c.Run", Op: "<= for <", Code: "n < 3"}
+	rep := &MutationReport{Baseline: Runs(with), Survived: []qmut.Mutant{lost, kept},
+		survivors: map[int]*Exploration{1: Runs(without), 2: Runs(with)}}
+	f := &failTB{TB: t}
+	rep.Expect(f, PerMutant(All(done)), NoSurvivors("c.go:9"))
+	if len(f.errs) != 0 || len(rep.Killed) != 1 || rep.Killed[0].ID != 1 || len(rep.Survived) != 1 || rep.Survived[0].ID != 2 {
+		t.Errorf("a survivor missing the claim is killed: %v, killed %v, survived %v", f.errs, rep.Killed, rep.Survived)
+	}
+	// the baseline missing it fails the test
+	rep = &MutationReport{Baseline: Runs(without)}
+	f = &failTB{TB: t}
+	end := make(chan struct{})
+	go func() { // the baseline's Expect ends with FailNow's Goexit
+		defer close(end)
+		rep.Expect(f, PerMutant(All(done)))
+	}()
+	<-end
+	if len(f.errs) == 0 || !strings.Contains(strings.Join(f.errs, "\n"), "want a done step in every run") {
+		t.Errorf("a baseline missing the claim: %v", f.errs)
 	}
 }

@@ -29,6 +29,10 @@ type MutationReport struct {
 	Undecided []qmut.Mutant
 	// Baseline is the exploration with every mutant off.
 	Baseline *Exploration `json:"-"`
+
+	// survivors are the explorations of the mutants that survived, by
+	// id: PerMutant's claims, judged in Expect, kill those that miss one
+	survivors map[int]*Exploration
 }
 
 // Evidence is the baseline's evidence with the mutants' verdicts: the
@@ -41,24 +45,6 @@ func (r *MutationReport) Evidence() *Evidence {
 	e.Mutants = r
 	return e
 }
-
-// A MutationClaim is what a test expects of a mutation run
-// (MutationReport.Expect).
-type MutationClaim struct {
-	equivalent []string
-}
-
-// NoSurvivors claims every reached mutant is killed, but those marked
-// equivalent: a mutant the environment makes harmless (a dropped ack that
-// is redelivered, a retry's boundary) survives by right. Mark one by its
-// function, change and code, as a survivor's report prints it, which
-// stays put when the code around it moves:
-//
-//	qtest.NoSurvivors("(Counter).Add: drop call: qobs.Record(ctx, \"replay\", nil, ...")
-//
-// or by its position, "file.go:42", or position and change, "file.go:42
-// drop call", which a line added above it moves.
-func NoSurvivors(equivalent ...string) MutationClaim { return MutationClaim{equivalent} }
 
 // markOf is a mutant's mark by function, change and code.
 func markOf(m qmut.Mutant) string {
@@ -86,13 +72,32 @@ func (c MutationClaim) marked(m qmut.Mutant) bool {
 
 // Expect fails t unless the mutation run meets every claim, naming each
 // surviving mutant and how to mark it, and each mark that matched no
-// survivor (stale after the code changed). NoSurvivors names every
+// survivor (stale after the code changed). PerMutant's claims must hold
+// of the baseline, and kill each survivor whose exploration misses one:
+// Killed and Survived say so after Expect. NoSurvivors names every
 // equivalent mutant at once; several are one with all their marks.
 func (r *MutationReport) Expect(t testing.TB, cs ...MutationClaim) {
 	t.Helper()
 	var c MutationClaim
 	for _, x := range cs {
 		c.equivalent = append(c.equivalent, x.equivalent...)
+		c.per = append(c.per, x.per...)
+	}
+	if len(c.per) > 0 {
+		if r.Baseline != nil {
+			r.Baseline.Expect(t, c.per...)
+		}
+		// a survivor whose exploration misses a claim is killed by it,
+		// judged as the baseline was (verdict)
+		var survived []qmut.Mutant
+		for _, m := range r.Survived {
+			if x := r.survivors[m.ID]; x != nil && !x.meets(c.per) {
+				r.Killed = append(r.Killed, m)
+				continue
+			}
+			survived = append(survived, m)
+		}
+		r.Survived = survived
 	}
 	// a mark by function and code names every mutant of that text in the
 	// function (two "if err != nil" in one): one marked equivalent would
@@ -174,13 +179,15 @@ func (r *MutationReport) String() string {
 // none woven it skips, or fails under GOTOGETHER_STRICT=1: Optional): a baseline exploration with every mutant off,
 // which must conform and says which mutants' code is reached, then each
 // reached mutant with cfg's seeds. A mutant is killed
-// when some run is rejected by the model, errs or panics, when no run
-// records a step, or when one of claims fails for it: what the baseline
-// shows besides conforming (qtest.Takes("done").InAtLeast(0.9): a step
-// whose absence no single run's model check can see). Verdicts are
-// shared across the explorations: most mutants' runs repeat the
-// baseline's steps.
-func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport {
+// when some run is rejected by the model, errs or panics, or when no run
+// records a step; one that survives these is killed in Expect by a
+// PerMutant claim it misses: what the baseline shows besides conforming
+// (qtest.Takes("done").InAtLeast(0.9): a step whose absence no single
+// run's model check can see). Verdicts are shared across the
+// explorations: most mutants' runs repeat the baseline's steps.
+//
+//	sys.Mutate(t, cfg).Expect(t, qtest.PerMutant(done), qtest.NoSurvivors(marks...))
+func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 	t.Helper()
 	all := qmut.Mutants()
 	if len(all) == 0 {
@@ -191,8 +198,8 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 	base := explore(t, s.Binding, spec, func(c qenv.Chooser) error {
 		return s.Run(qenv.WithContext(c, qmut.WithReach(qenv.ContextOf(c), reach)))
 	})
-	base.Expect(t, append([]Claim{Conforms()}, claims...)...)
-	rep := &MutationReport{Baseline: base}
+	base.Expect(t, Conforms())
+	rep := &MutationReport{Baseline: base, survivors: map[int]*Exploration{}}
 	for _, m := range all {
 		if !reach.Reached(m.ID) {
 			rep.Unreached = append(rep.Unreached, m)
@@ -223,10 +230,9 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *Mutati
 			rep.Killed = append(rep.Killed, m)
 		case anyUndecided(x.Runs):
 			rep.Undecided = append(rep.Undecided, m)
-		case !x.meets(claims):
-			rep.Killed = append(rep.Killed, m)
 		default:
 			rep.Survived = append(rep.Survived, m)
+			rep.survivors[m.ID] = x
 		}
 	}
 	return rep
@@ -253,7 +259,8 @@ func anyUndecided(runs []*Run) bool {
 }
 
 // meets reports whether the exploration meets every claim, without
-// failing anything: a mutant's, judged as the baseline was (verdict).
+// failing anything: a survivor's PerMutant claims, judged as the
+// baseline's were (verdict).
 func (x *Exploration) meets(claims []Claim) bool {
 	reps := x.reports()
 	for _, c := range claims {

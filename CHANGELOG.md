@@ -10,6 +10,23 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Explicit quantifiers, one place for claims (ROADMAP I16; breaking): a
+  claim over runs says its quantifier. `Conforms()`, `Settles()`,
+  `Completes()` and `Finishes()` alone are `All` of themselves, as their
+  names say; any other Expectation alone (`Rejects`, `Mismatch`,
+  `Violates`, `Scenario`, `HasIssue`, `AnyOf`, `Satisfies`, gristtest's
+  `NoClientErrors`) panics, naming `Some(...)`, `All(...)` and `None(...)`
+  and what it meant alone (Some for a failure, All for `Satisfies`):
+  write `Some(qtest.Rejects("apply"))`. Every failure prints its
+  quantifier. `System.Mutate(t, cfg, claims...)` is `Mutate(t,
+  cfg).Expect(t, qtest.PerMutant(claims...), qtest.NoSurvivors(...))`,
+  as every report's claims are its Expect's. `qtest.Not(e)`: a run that
+  misses e (`Not(Conforms())` panics, naming the failures), which
+  replaces grist's by-hand negations: `gristtest.ClientErrors()` is
+  `qtest.Not(gristtest.NoClientErrors())`, `gristtest.WritersFirst()`
+  `qtest.Not(gristtest.ReadersFirst())`. The claim types are in
+  qtest/claims.go, its doc the table of which Expect takes which.
+
 - Performance (ROADMAP I37, I38, I40, I41): `qtrace.Step.AppendLine`
   appends a step-log line to a buffer, the bytes `MarshalLine` and
   `json.Marshal(s.Attributes())` give, about 8x faster; recording a step

@@ -196,25 +196,6 @@ func (s StepSelector) String() string {
 	return b.String()
 }
 
-// A StepClaim is what a test expects of observation mutants
-// (StepMutationReport.Expect): that the ones a selector names are all
-// killed (Killed) or all survive (Survived).
-type StepClaim struct {
-	fate string
-	sel  StepSelector
-}
-
-// Killed claims every mutant sel names is killed: a field the model or
-// the binding must constrain, and does.
-func Killed(sel StepSelector) StepClaim { return StepClaim{FateKilled, sel} }
-
-// Survived claims every mutant sel names survives: an equivalent one,
-// stated (a trailing probe the model does not need, an idempotent read
-// duplicated, an observation the binding does not compare).
-func Survived(sel StepSelector) StepClaim { return StepClaim{FateSurvived, sel} }
-
-func (c StepClaim) String() string { return c.sel.String() + " " + c.fate }
-
 // Expect fails t unless every claim holds: each names at least one
 // mutant (a selector that names none, a misspelled action or field,
 // would hold for nothing), and every one it names has its fate. An

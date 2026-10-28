@@ -79,7 +79,7 @@ func TestExhaust(t *testing.T) {
 		t.Errorf("%d runs with no deviation, want the nominal one", len(x.Runs))
 	}
 	x = sys.Exhaust(t, Bound{Delays: 1})
-	x.Expect(t, Rejects("withdraw"), Some(Conforms()))
+	x.Expect(t, Some(Rejects("withdraw")), Some(Conforms()))
 	if e := x.Evidence().String(); !strings.Contains(e, "search    complete within 1 delay and 0 faults: every run within that bound, none beyond it") {
 		t.Errorf("evidence:\n%s", e)
 	}
@@ -147,8 +147,8 @@ func TestExpectedFailureLogged(t *testing.T) {
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	log := &logTB{TB: t}
-	sys.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))
-	brief := "gotogether: as expected, a withdraw step the model cannot take: 1 of 2 runs (failing: 1 rejects withdraw); the first, schedule "
+	sys.Exhaust(t, Bound{Delays: 1}).Expect(log, Some(Rejects("withdraw")))
+	brief := "gotogether: as expected, some run showing a withdraw step the model cannot take: 1 of 2 runs (failing: 1 rejects withdraw); the first, schedule "
 	head, _, _ := strings.Cut(log.logs, "\n")
 	lines := strings.Split(strings.TrimSpace(log.logs), "\n")
 	if !strings.HasPrefix(head, brief) || len(lines) != 4 ||
@@ -160,8 +160,8 @@ func TestExpectedFailureLogged(t *testing.T) {
 	}
 	t.Setenv("GOTOGETHER_VERBOSE", "1")
 	log = &logTB{TB: t}
-	sys.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))
-	for _, want := range []string{"as expected, a withdraw step the model cannot take: 1 of 2 runs (failing: 1 rejects withdraw); the first:",
+	sys.Exhaust(t, Bound{Delays: 1}).Expect(log, Some(Rejects("withdraw")))
+	for _, want := range []string{"as expected, some run showing a withdraw step the model cannot take: 1 of 2 runs (failing: 1 rejects withdraw); the first:",
 		"    schedule ", "its files are not kept: GOTOGETHER_KEEP=dir keeps them", "1 conform, 1 reject withdraw"} {
 		if !strings.Contains(log.logs, want) {
 			t.Errorf("verbose logs lack %q:\n%s", want, log.logs)

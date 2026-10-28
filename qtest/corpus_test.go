@@ -43,7 +43,7 @@ func TestCorpus(t *testing.T) {
 	// after seeds that never fail (every choice nominal)
 	rerun(t)
 	x := sys.Explore(t, ExploreConfig{Seeds: 1, Corpus: dir, Chooser: func(uint64) qenv.Chooser { return qenv.Nominal{} }})
-	x.Expect(t, Rejects("withdraw"), Some(Conforms()))
+	x.Expect(t, Some(Rejects("withdraw")), Some(Conforms()))
 	if len(x.Runs) != 2 || x.Runs[1].origin.value != saved[0] || x.Runs[1].OK() {
 		t.Errorf("runs: %d, the corpus run %q OK %v", len(x.Runs), x.Runs[len(x.Runs)-1].origin.value, x.Runs[len(x.Runs)-1].OK())
 	}

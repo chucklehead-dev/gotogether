@@ -967,14 +967,19 @@ func anySettled(runs []*Run) bool {
 }
 
 // Expect states what the exploration must show, claim by claim: Some,
-// All or None of the runs meeting expectations, or an Expectation alone
-// (some run; every run for Conforms). With no claims, every run conforms.
+// All or None of the runs meeting expectations, or what they reached and
+// took (Reaches, Takes, Exercised). Conforms, Settles, Completes and
+// Finishes alone are about every run; any other Expectation alone panics,
+// naming its quantifiers. With no claims, every run conforms.
+// Every failure says its quantifier ("in every run", "in no run", "some
+// run showing").
 // A claim that holds by a failing run is logged with that run; one that
 // does not fails t with the run that shows why (its report and faults,
 // its step log saved), or, when no run fails at all, the fault kinds the
 // runs never faulted.
 func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	t.Helper()
+	claims = quantifyAll(claims) // a bare claim's panic, before anything is judged
 	if x.navigated {
 		t.Logf("gotogether: %s navigated (GOTOGETHER_NAV): its claims are not judged", x.ref())
 		return
@@ -1300,7 +1305,7 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 	bad := len(x.Failing())
 	j := c.judge(reps)
 	q, isQ := c.(quantified)
-	every := !isQ && c.(Expectation).every || isQ && q.kind == "all"
+	every := !isQ && c.(Expectation).alone || isQ && q.kind == "all"
 	switch {
 	case !j.ok && j.unjudged > 0 && j.n == 0:
 		return claimVerdict{say: func(testing.TB) string {

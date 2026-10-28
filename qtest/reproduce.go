@@ -278,7 +278,7 @@ func (x *Exploration) reproduce(r *Run) string {
 func universal(c Claim) bool {
 	switch c := c.(type) {
 	case Expectation:
-		return c.every
+		return c.alone
 	case quantified:
 		return c.kind == "all" || c.kind == "none"
 	}

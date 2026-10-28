@@ -1689,9 +1689,11 @@ func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...
 func NamedScenario(name string, steps ...Take) Expectation
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim
+func Not(e Expectation) Expectation
 func NotVacuous() Claim
 func Optional(t testing.TB, reason string)
 func Pending(action string) Expectation
+func PerMutant(claims ...Claim) MutationClaim
 func Possible(t testing.TB, binding string, scenarios ...Expectation)
 func Quint(o validate.Options) Option
 func Reaches(kind string) Reach
@@ -1929,7 +1931,7 @@ type System struct
     method (System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration
     method (System) Fuzz(f *testing.F, seeds ...[]byte)
     method (System) Judge(t testing.TB, ch qenv.Chooser) *Run
-    method (System) Mutate(t testing.TB, cfg ExploreConfig, claims ...Claim) *MutationReport
+    method (System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport
     method (System) Sweep(t *testing.T, sw SweepConfig) *SweepResult
     method (System) WithBinding(bind string, opts ...Option) System
     method (System) WithRates(r qenv.Rates) System

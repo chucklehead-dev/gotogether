@@ -85,5 +85,5 @@ func TestFaultScriptDrivesProgram(t *testing.T) {
 func TestFaultScriptCatchesForgetfulRestart(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	journalSystem(true).FollowTraces(t, journalTraces, journalFaults).Expect(t, qtest.Mismatch("restart"))
+	journalSystem(true).FollowTraces(t, journalTraces, journalFaults).Expect(t, qtest.Some(qtest.Mismatch("restart")))
 }

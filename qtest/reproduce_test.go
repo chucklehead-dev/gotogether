@@ -17,7 +17,7 @@ func TestRunAlone(t *testing.T) {
 	RequireQuint(t)
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	first := sys.Explore(t, ExploreConfig{Seeds: 20})
-	first.Expect(t, Rejects("withdraw"), Some(Conforms()))
+	first.Expect(t, Some(Rejects("withdraw")), Some(Conforms()))
 	bad := first.Failing()[0]
 	if want := fmt.Sprintf("GOTOGETHER_RUN='%s#1:seed=%d'", t.Name(), bad.origin.seed); !strings.Contains(first.reproduce(bad), want) {
 		t.Fatalf("reproduce line %q, want %s", first.reproduce(bad), want)

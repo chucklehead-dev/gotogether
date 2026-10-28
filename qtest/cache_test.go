@@ -28,7 +28,7 @@ func TestVerdictCacheKeysTheInstance(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
 	cfg := ExploreConfig{Seeds: 1}
-	System{Binding: "../validate/testdata/account.yaml", Run: overdraw}.Explore(t, cfg).Expect(t, Violates("underLimit"))
+	System{Binding: "../validate/testdata/account.yaml", Run: overdraw}.Explore(t, cfg).Expect(t, Some(Violates("underLimit")))
 	// an instance of its own each time the test runs (-count): verdicts are
 	// the test binary's, and a LIMIT checked by an earlier run is rightly
 	// a cache hit
@@ -47,7 +47,7 @@ func TestClaimNamesAreChecked(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
 	x := System{Binding: "../validate/testdata/account.yaml", Run: overdraw}.Explore(t, ExploreConfig{Seeds: 1})
-	for _, c := range []Claim{None(Violates("underLimt")), Rejects("depositt")} {
+	for _, c := range []Claim{None(Violates("underLimt")), Some(Rejects("depositt"))} {
 		f := &failTB{TB: t}
 		done := make(chan struct{})
 		go func() { defer close(done); x.Expect(f, c) }() //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
@@ -137,7 +137,7 @@ func TestNoneOverRunsWithNoVerdict(t *testing.T) {
 		}
 	}
 	sys.Opts = []Option{Linearize()}
-	sys.Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Mismatch(""))
+	sys.Explore(t, ExploreConfig{Seeds: 1}).Expect(t, Some(Mismatch("")))
 }
 
 // A claim's invariant names are the binding's: with no invariant listed
