@@ -7,9 +7,9 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-28.** main at `3e54d77` (I18: `263333b`, the published
-modules bumped to it in `3e54d77`), then this page's docs commit. CI
-green through I17 (`9615f04`); I18's runs are watched to green. **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-28.** main at `78d96d6` (I24) and, after it, the
+format policy's commit (pre-release, the current major only; HISTORY
+"Formats: the current major only"). CI green through I24. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
@@ -192,12 +192,6 @@ there). **Open:**
   qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
   Left before then: I18's rest (whether I12's M half
   and I15's rest must come first is the maintainer's call).
-- **Format and ABI policy** (DESIGN §63, built on the recommendation).
-  Two choices to confirm: derived files (manifests, evidence) read
-  only their current major, while data nobody can write again (step
-  logs, bindings, corpus) is read from major 1 forever; and the step
-  log keeps the `quint.` attribute namespace. Plus a one-minor
-  deprecation window after v0.1.
 - **The "grist" name.** A codename since grist.md §10.5; recommended:
   keep it and drop "codename", or rename in one commit before an
   adopter. A trademark check is the maintainer's.
@@ -216,8 +210,10 @@ there). **Open:**
   also worth filing: quint's evaluator not killed with node (I12 works
   around it), hegel-go's output `io.Writer` (I15).
 
-**Already decided** (do not reopen): H's and P's items (2026-10-28, as
-recommended); bare expectations' quantifiers (I16, done); GR10's slice
+**Already decided** (do not reopen): the format policy (2026-10-28:
+pre-release, a reader reads the current major only, a file naming none
+read as the current; after v0.1 the maintainer decides; DESIGN §63);
+H's and P's items (2026-10-28, as recommended); bare expectations' quantifiers (I16, done); GR10's slice
 order (slice 3 beside 4, done); GR10's six decisions of 2026-10-28
 (grist-platform.md §10: no Kubernetes Lease; 45 s grace; a rewind fails
 closed until `resume`; no app binary links client-go; sizing into

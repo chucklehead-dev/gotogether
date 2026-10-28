@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// A navigator speaks its protocol and every earlier one; a session of a
-// later one is refused with the fix, and one naming none (a binary from
-// before the protocol had a name) is nav/1.
+// A navigator speaks its protocol only; a session of a later one is
+// refused with the upgrade, an earlier one with the rebuild, and one
+// naming none is read as the current.
 func TestCheckNavProtocol(t *testing.T) {
 	for _, p := range []string{"", Protocol} {
 		if err := CheckProtocol(p); err != nil {
@@ -16,5 +16,8 @@ func TestCheckNavProtocol(t *testing.T) {
 	}
 	if err := CheckProtocol("gotogether.nav/2"); err == nil || !strings.Contains(err.Error(), "later version") || !strings.Contains(err.Error(), "gotogether-nav@") {
 		t.Errorf("a later protocol: %v", err)
+	}
+	if err := CheckProtocol("gotogether.nav/0"); err == nil || !strings.Contains(err.Error(), "older version") || !strings.Contains(err.Error(), "rebuild the test binary") {
+		t.Errorf("an earlier protocol: %v", err)
 	}
 }

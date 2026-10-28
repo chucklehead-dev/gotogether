@@ -47,7 +47,7 @@ qdriver/      an external driver's request log (gotogether.requests/1): requests
 binding/ validate/ qtest/              binding YAML, quint-test-based validator (validate/cli: the CLI's check of files, Replay), test helpers (Expect, Explore);
               validate/model: the model alone (Simulate, Graph, possibles, liveness), above validate;
               validate/navproto: the run navigation protocol (a leaf), which qnav reads
-schemas/      JSON Schemas of bindings and conversion rules (gotogether.binding-1.json, ...), generated from the Go types; Check
+schemas/      JSON Schemas of bindings and conversion rules (gotogether.binding-2.json, ...), generated from the Go types; Check
 qshrink/      a driver's failing actions shrunk by reruns (ddmin, calibration, SameFailure): ShrinkActions' and gotogether shrink's core
 qenv/         deterministic simulation: scheduler, virtual time, processes; Store, Queue, Service doubles;
               internal/choice (choosers, byte rule, rates) and internal/profile (virtual-time pprof), qenv's API

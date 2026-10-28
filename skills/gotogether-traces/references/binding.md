@@ -47,11 +47,11 @@ Rules:
 - To also emit a model-level ITF in-process, write argument templates as
   Quint literals (no operator calls). `expect` may be any Quint boolean.
 
-A binding's JSON Schema (`schemas/gotogether.binding-1.json`, one per
-format and major; conversion rules' `gotogether.convert-1.json`) lets an
+A binding's JSON Schema (`schemas/gotogether.binding-2.json`, one per
+format at its current major; conversion rules' `gotogether.convert-1.json`) lets an
 editor's YAML language server check it as it is written: name it on the
 file's first line, `# yaml-language-server:
-$schema=https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json`
+$schema=https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json`
 (or map `*.binding.yaml` to it in the editor's settings).
 
 Then lint: `gotogether lint -binding bank.binding.yaml -src ./pkg`. It checks

@@ -122,7 +122,7 @@ func Parse(b []byte) (*Rules, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&r); err != nil {
 		if strings.Contains(err.Error(), "not found in type") {
-			return nil, fmt.Errorf("%w (this gotogether reads %s: a key a later version added is unknown here; upgrade gotogether, or remove the key)", err, formats.Convert.Range())
+			return nil, fmt.Errorf("%w (this gotogether reads %s: a key another version of the format has is unknown here: write it in this version's, or upgrade gotogether for a later one's)", err, formats.Convert.Name())
 		}
 		return nil, err
 	}

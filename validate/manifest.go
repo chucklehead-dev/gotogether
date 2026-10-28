@@ -725,8 +725,7 @@ func IsManifest(path string) bool {
 		return false
 	}
 	var format string
-	// a corpus entry named gotogether.run/1 (its old name) is none
-	return d.Decode(&format) == nil && formats.Manifest.Is(format) && !formats.Corpus.Is(format)
+	return d.Decode(&format) == nil && formats.Manifest.Is(format)
 }
 
 // copy is a copy of m whose files can be rewritten.

@@ -213,7 +213,7 @@ func TestUnmatched(t *testing.T) {
 }
 
 // A rule file may name its format; a later major is refused with the
-// upgrade, not with its new keys unknown.
+// upgrade, not with its new keys unknown, an earlier one with the fix.
 func TestRulesFormat(t *testing.T) {
 	if _, err := Parse([]byte("format: " + FormatName + "\nrules: []\n")); err != nil {
 		t.Errorf("this version's format: %v", err)
@@ -221,7 +221,10 @@ func TestRulesFormat(t *testing.T) {
 	if _, err := Parse([]byte("format: gotogether.convert/2\nsampled: true\nrules: []\n")); err == nil || !strings.Contains(err.Error(), "gotogether.convert/2 is a later version than this gotogether reads") {
 		t.Errorf("a later major: %v", err)
 	}
-	if _, err := Parse([]byte("sampled: true\nrules: []\n")); err == nil || !strings.Contains(err.Error(), "a key a later version added") {
+	if _, err := Parse([]byte("format: gotogether.convert/0\nrules: []\n")); err == nil || !strings.Contains(err.Error(), "gotogether.convert/0 is an older version than this gotogether reads (gotogether.convert/1, pre-release") {
+		t.Errorf("an earlier major: %v", err)
+	}
+	if _, err := Parse([]byte("sampled: true\nrules: []\n")); err == nil || !strings.Contains(err.Error(), "a key another version of the format has") {
 		t.Errorf("an unknown key: %v", err)
 	}
 }

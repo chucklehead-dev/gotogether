@@ -93,9 +93,17 @@ func TestCorpusStaleAndForeign(t *testing.T) {
 	if errs := explore(later); len(errs) == 0 || !strings.Contains(errs[0], "gotogether.corpus/2 is a later version than this gotogether reads") || !strings.Contains(errs[0], "delete it") {
 		t.Errorf("a later version's entry: %q", errs)
 	}
-	// an entry under the format's old name (gotogether.run/1) is read as
-	// corpus/1: here it replays, and is stale
-	for _, format := range []string{corpusFormat, "gotogether.run/1"} {
+	// an entry of an earlier major, or under another format's name (the
+	// manifest's, gotogether.run/1), is refused with the fix
+	for _, format := range []string{"gotogether.corpus/0", "gotogether.run/1"} {
+		old := t.TempDir()
+		write(old, "old.json", corpusEntry{Format: format, Exploration: t.Name() + "#1", Seed: 3})
+		if errs := explore(old); len(errs) == 0 || !strings.Contains(errs[0], format) || !strings.Contains(errs[0], "delete it") {
+			t.Errorf("an entry of %s: %q", format, errs)
+		}
+	}
+	// an entry of the current format that replays, and is stale
+	for _, format := range []string{corpusFormat} {
 		stale := t.TempDir()
 		write(stale, "stale.json", corpusEntry{Format: format, Exploration: t.Name() + "#1", Seed: 3,
 			Choices: []qenv.Choice{{Kind: "fault.no.such.kind", N: 7, Value: 5}}})

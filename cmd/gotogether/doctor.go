@@ -80,7 +80,7 @@ func doctor(out io.Writer, args []string) (int, error) {
 	}
 	fmt.Fprintln(out, "\nformats this gotogether reads:")
 	for _, f := range formats.All() {
-		fmt.Fprintf(out, "  %-28s %s\n", f.Range(), f.What)
+		fmt.Fprintf(out, "  %-28s %s\n", f.Name(), f.What)
 	}
 	var env []string
 	for _, kv := range os.Environ() {
@@ -412,7 +412,7 @@ func cachePiece() piece {
 }
 
 // bindingPiece is a binding file's format, a skew if this gotogether
-// cannot read it (a later major: the fix is the reader's upgrade).
+// cannot read it (another major: the fix in the error).
 func bindingPiece(path string) piece {
 	p := piece{name: "binding " + path}
 	b, err := binding.Load(path)
@@ -422,7 +422,7 @@ func bindingPiece(path string) piece {
 	}
 	p.version = b.Format
 	if p.version == "" {
-		p.version, p.note = "gotogether.binding/1", "no format key: binding/1"
+		p.version, p.note = binding.FormatName, "no format key: read as the current"
 	}
 	if err := b.CheckSpec(); err != nil {
 		p.skew = err.Error()

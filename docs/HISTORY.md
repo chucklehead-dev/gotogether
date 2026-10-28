@@ -3495,6 +3495,29 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### Formats: the current major only (the maintainer, 2026-10-28)
+
+"This is a prerelease library. Once our own examples are migrated we
+can drop support or references to earlier data formats or other
+interfaces." internal/formats' `Oldest` and `Aliases` are gone: every
+reader reads its format's current major, refusing a later one with the
+upgrade and an earlier one with its `Older` fix (each format has one
+now, which names_test requires). binding/1 is no longer read: its three
+search keys, their mapping into `simulate.search`, the strict section
+reader that recorded them and the per-major refusals went, with the -1
+schema (`Binding1URL`, `Binding1`, `BindingFor`; `lint` checks every
+binding against the one schema). A binding with no format key is read as
+the current, not refused: none of the repository's bindings carries one
+(init's template does), a step log with no record and a session naming
+no protocol were already read that way, and an error would ask every
+file for a line that says nothing. The corpus entry's alias
+`gotogether.run/1` went; raftkv's two entries say `gotogether.corpus/1`.
+Removed tests were of removed paths (binding/1's mapping, the alias
+replaying, qtest's graphStates bound); the earlier-major refusals of the
+step log, request log, rule file, nav protocol, corpus entry and binding
+each have a test. DESIGN §63's policy, ROADMAP's and STATUS's decision
+lists say it.
+
 ### I18: validate split
 
 Review 11's architect, F6. A trial move of graph.go, possible.go,

@@ -88,7 +88,7 @@
     },
     "format": {
       "const": "gotogether.binding/2",
-      "description": "Format, if set, names the binding format the file is written in (FormatName, gotogether.binding/2; binding/1 is read too): a binding of a later major is refused with the fix (upgrade gotogether), not with its new keys \"unknown\". Empty: gotogether.binding/1.",
+      "description": "Format, if set, names the binding format the file is written in (FormatName): a binding of another major is refused with the fix (upgrade gotogether for a later one, rewrite an earlier one), not with its keys \"unknown\". Empty: the current one.",
       "type": "string"
     },
     "hidden": {
@@ -212,7 +212,7 @@
         },
         "search": {
           "additionalProperties": false,
-          "description": "Search bounds the Go evaluator's every search of the model on its own: `simulate -graph`'s state graph, the possibles' search, and qtest.Model's claims (gotogether.binding/2; binding/1's searchStates, graphStates and graphDepth are read into it).",
+          "description": "Search bounds the Go evaluator's every search of the model on its own: `simulate -graph`'s state graph, the possibles' search, and qtest.Model's claims.",
           "properties": {
             "depth": {
               "description": "Depth bounds a search's paths from init (default none): one only it cut saw every state within Depth steps.",

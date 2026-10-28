@@ -3652,7 +3652,7 @@ carries a user's name no pseudonym reaches (`KeepRefs` keeps them).
 
 **E4. Run manifests.** A failure did not travel: nothing said which
 binding, model, logs, tools and driver it was judged with, or whether
-they had changed. `gotogether.run/1` (`validate.Manifest`) records
+they had changed. `gotogether.run/2` (`validate.Manifest`) records
 gotogether's and quint's versions, the binding, spec and convert rules
 with their sha256, the instance (constants, invariants, backend), how it
 was judged (searches, the finish check, declared losses, watermarks),
@@ -4346,8 +4346,8 @@ invariant and judges a code that never shows the scenario faithful.
   shorter one reaches (two of vending's 125 three-step sequences, each
   reported "not found" with a path within the bound;
   `TestReachDepthBoundAgainstBruteForce`). Bounded by states (default 2000,
-  binding/1's `searchStates`, `-states`; since §69 the one
-  `simulate.search`, default 100000 and no depth) and depth (the trace's steps): a
+  since §69 the one `simulate.search`, `-states`; default 100000 and no
+  depth) and depth (the trace's steps): a
   search a bound cut says "not found within the bound", with its extent;
   only a search no bound cut says impossible, the whole state graph seen.
   The predicates are vals of a module of their own
@@ -4551,9 +4551,8 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   equal keys are equal states (operators, which no state holds, aside).
   A state at the depth bound cuts it even if it has no successor
   (unknown, since it is not expanded). The default bound is 100000
-  states (`-states`, binding/1's `graphStates`) and no depth bound
-  (`-depth`, binding/1's `graphDepth`; since §69 both are
-  `simulate.search`): grist's log grows without end, so
+  states and no depth bound (`-states`, `-depth`, `simulate.search`
+  since §69): grist's log grows without end, so
   its graphs are always cut, and the depth bound makes the cut "every
   state within D steps" rather than a breadth-first prefix.
 - **Unsupported is never complete.** A construct outside the evaluator's
@@ -4898,46 +4897,48 @@ and the core itself, pinned by every published module. The eleventh
 review found the step log, the binding, the nav protocol and the ABI
 unversioned, and seven core pins across the published modules.
 
-**The policy** (the maintainer's to confirm, ROADMAP's "For the
-maintainer"; one table, `internal/formats`, so adjusting it is a field
-per format):
+**The policy** (decided by the maintainer on 2026-10-28: "this is a
+prerelease library; once our own examples are migrated we can drop
+support for earlier data formats"; one table, `internal/formats`, so
+adjusting it is a field per format):
 - Every format is named `gotogether.<thing>/<major>`. A breaking change
   (a field renamed, a meaning changed) bumps the major; an added
   optional field does not.
-- A reader refuses a later major with the fix, upgrading the reader
-  (`Format.Check`: "gotogether.steps/2 is a later version than this
-  gotogether reads (gotogether.steps/1): upgrade gotogether ..."), and
-  another format's name with what it wanted.
-- A reader reads every older major from the format's `Oldest`. For data
-  nobody can write again (step logs, request logs, corpus entries in
-  testdata, bindings and rule files), `Oldest` stays 1 forever. For
-  what every run writes anew (manifests, evidence) only the current
-  major is read, and an older one is refused with how to write it anew,
-  as it was before the policy; the encoded choices' byte rule is the
-  same, for another reason: old bytes under a new rule are another run.
+- **Pre-release, a reader reads the current major only.** A later one is
+  refused with the upgrade (`Format.Check`: "gotogether.steps/2 is a
+  later version than this gotogether reads (gotogether.steps/1): upgrade
+  gotogether ..."), an earlier one with how to write it anew (each
+  format's `Older`: record the run again, rewrite the binding, save the
+  corpus entry again), another format's name with what it wanted. A
+  major's change migrates the repository's own files in the same change
+  (raftkv's corpus entries, every example's binding).
+- **After v0.1, the maintainer decides** whether data nobody can write
+  again (step logs, request logs, corpus entries, bindings and rule
+  files) is read from an older major on (ROADMAP's "For the
+  maintainer").
 - The step log's attributes keep the `quint.` namespace: they name model
-  steps, and renaming them would break every log written. Its format
-  key is `quint.format` too.
+  steps. Its format key is `quint.format` too.
 
 | format | where | reads |
 |---|---|---|
-| `gotogether.steps/1` | step logs (a format record), OTel steps (span or resource attribute) | 1 on; none named: 1 |
-| `gotogether.requests/1` | qdriver's request log header | 1 |
-| `gotogether.binding/1` | a binding's optional `format:` | 1 on; none: 1 |
-| `gotogether.convert/1` | a rule file's optional `format:` | 1 on; none: 1 |
-| `gotogether.corpus/1` | qtest's corpus entries | 1 on; `gotogether.run/1` is corpus/1 |
+| `gotogether.steps/1` | step logs (a format record), OTel steps (span or resource attribute) | the current only; none named: the current |
+| `gotogether.requests/1` | qdriver's request log header | the current only |
+| `gotogether.binding/2` | a binding's optional `format:` | the current only; none: the current |
+| `gotogether.convert/1` | a rule file's optional `format:` | the current only; none: the current |
+| `gotogether.corpus/1` | qtest's corpus entries | the current only |
 | `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
 | `gotogether.run/2` | validate's run manifest | the current only |
 | `gotogether.evidence/2` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
-| `gotogether.report/1` | validate's and simulate's `-json` (validate.Document, §68) | 1 on |
-| `gotogether.nav/1` | RunSession and RunNode's `protocol` | 1 on; none: 1 |
+| `gotogether.report/1` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
+| `gotogether.nav/1` | navproto's Session and Node's `protocol` | the current only; none: the current |
 
-**Unversioned is major 1.** Every log, binding, rule file and session
-written before the policy is the first version of its format, so a log
-without a format record reads as `gotogether.steps/1`, forever. A major
-0 would claim an earlier, different format that never existed, and make
-every reader keep a case for it.
+**None named is the current.** A binding with no format key, a log with
+no format record, a session naming no protocol is read as this version's
+major: the files a person writes need no key to be current, and none of
+the repository's carries one but init's template. A file of an earlier
+major that names none fails on what changed: a key that major had is
+unknown here, with the hint that it may be another version's.
 
 **The step log's record.** A line holding `quint.format` alone, which
 WriteJSONL and JSONLSink write first, and any reader skips (several, for
@@ -4954,22 +4955,21 @@ An old gotogether reading a new log fails on its first line ("missing
 quint.action"): nothing older promised to read later logs.
 
 **Bindings and rule files** are decoded strictly (`KnownFields`), so a
-key a later version added is "unknown" to an older one. The format key
-is read first, loosely, and a later major refused with the upgrade
-before the strict decode names its new keys; an unknown key in a file
-naming no later major gets the hint that it may be a later version's.
+key another version has is "unknown" here. The format key is read
+first, loosely, and another major refused with its fix before the
+strict decode names its keys; an unknown key in a file naming no other
+major gets the hint that it may be another version's.
 
-**The corpus entry** was named `gotogether.run/1`, the manifest's thing,
-which made a corpus entry an "other version's manifest" to a tool
-walking evidence. It is `gotogether.corpus/1` now, and the old name an
-alias of corpus/1, read forever: entries are checked into testdata
-(raftkv's two).
+**The corpus entry** is `gotogether.corpus/1`, a name of its own (it was
+the manifest's, `gotogether.run/1`, until I13; raftkv's two entries were
+rewritten when the alias went).
 
 **The navigation protocol.** A test binary is built against the user's
 core, `gotogether nav` and `gotogether-nav` against theirs. The session's
 first line and a one-shot node name `gotogether.nav/1`
-(`navproto.Protocol`), and both navigators refuse a later one with
-`CheckNavProtocol`'s fix: install the navigator at the module's version.
+(`navproto.Protocol`), and both navigators refuse another with
+`navproto.CheckProtocol`'s fix: install the navigator at the module's
+version, or rebuild the test binary at the navigator's.
 
 **The woven ABI.** qweave is a module of its own (no core requirement),
 so the code it writes (`Hit`, `RegisterBlocks`, `Cond`, `Pick`,
@@ -5444,19 +5444,12 @@ runs. And the binding's simulate section had three state bounds.
   binding fails before anything runs, as a misspelled run claim does.
 - **One bound, binding/2.** `simulate.search: {states, depth}` bounds
   every search of the model alone, the graph's and the possibles' (it
-  was `searchStates`, 2000 for the possibles, as deep as `steps`;
-  `graphStates`, 100000, and `graphDepth` for the graph). Default 100000
-  states and no depth: a possible's search now goes as far as the graph
-  would, stricter in what "not found within the bound" means, and found
-  witnesses are real however deep. Removing three keys is a breaking
-  change of the binding format (§63), so it is `gotogether.binding/2`;
-  binding/1 (any file with no format key) is read forever, its three
-  keys read into `search` (states the larger, depth graphDepth), each
-  major refusing the other's keys with the fix (`Simulation.UnmarshalYAML`
-  reads the section strictly and records which keys it saw; `Load`
-  checks them by the file's major). Both schemas stay in schemas/ (-1
-  and -2), and `gotogether lint` checks each file against its own
-  major's.
+  was three: one for the possibles, 2000 states as deep as `steps`, two
+  for the graph). Default 100000 states and no depth: a possible's
+  search now goes as far as the graph would, and found witnesses are
+  real however deep. Removing keys is a breaking change of the binding
+  format (§63), so it is `gotogether.binding/2`, read alone, as every
+  format is pre-release.
 
 ## 70. validate split: the model alone and the nav protocol apart (I18)
 

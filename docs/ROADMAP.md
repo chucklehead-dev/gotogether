@@ -166,12 +166,13 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 - **I13. Formats and ABIs versioned (S each, policy: For the
   maintainer). Done** on the recommended policy (DESIGN §63, HISTORY
   "I13 and I14"): one table, internal/formats; `gotogether.steps/1` as a
-  format record (an unversioned log is steps/1), `format:` in bindings
-  and rule files, `gotogether.corpus/1`, the nav protocol in
-  `RunSession`/`RunNode`, `woven.ABI1` checked by qweave, and `gotogether
-  doctor`'s version report (the rest of doctor stays I21's). Left for the
-  maintainer: confirm the policy, above all that derived files
-  (manifests, evidence) read their current major only. What it was: The step log, the longest-lived artifact, has no
+  format record, `format:` in bindings and rule files,
+  `gotogether.corpus/1`, the nav protocol (navproto), `woven.ABI1`
+  checked by qweave, and `gotogether doctor`'s version report (the rest
+  of doctor stays I21's). The policy decided by the maintainer on
+  2026-10-28: pre-release, every reader reads the current major only (a
+  file naming none is read as it); after v0.1, the maintainer decides.
+  What it was: The step log, the longest-lived artifact, has no
   version (every other format does: `gotogether.run/2`,
   `gotogether.evidence/2`, `gotogether.requests/1`); bindings have no
   `format:` key, so a newer binding fails an older CLI with "unknown
@@ -179,7 +180,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   against whatever `woven` the user's module resolves; the
   run-navigation protocol between a test binary and `gotogether-nav`
   has no version. `gotogether.steps/1` (a header record; readers refuse
-  a newer major with the fix), an optional `format: gotogether.binding/1`,
+  a newer major with the fix), an optional `format:` in bindings,
   woven code referencing `woven.ABI1` (skew fails to compile, by name)
   with qweave checking the resolved core, a `version` in the nav
   handshake.
@@ -232,7 +233,8 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   each bound stated; the function `qtest.Possible` removed (its callers
   and the twophase, crossdb and requeue `GraphResult` walks migrated);
   `gotogether.binding/2` with one `simulate.search: {states, depth}`
-  for the graph and the possibles alike, binding/1 read forever. hello
+  for the graph and the possibles alike (binding/1 no longer read since
+  the format policy's decision of 2026-10-28). hello
   proves exactlyOnce and refutes it in a model mutant; counters proves
   its invariants within three steps. Left: `qtest.Model` takes no
   options (constants, a bound of the test's own); a claim on the
@@ -525,7 +527,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   misspelled action named as the model's nearest in a directive or a
   `qobs.Record` call, a field the binding uses recorded from the
   parameter of its name), each against a golden file. JSON Schemas for
-  `gotogether.binding/1` and `gotogether.convert/1` in schemas/,
+  `gotogether.binding/2` and `gotogether.convert/1` in schemas/,
   generated from the Go types (a field added without regenerating fails
   `TestSchemasAreGenerated`), every binding and rule file of the
   repository checked against them; `gotogether lint` checks a binding's
@@ -651,16 +653,20 @@ Decisions only the maintainer takes, each with the recommendation:
   in R5's order (gosim, the core, qweave, qhegel, qanalysis, qgosim,
   then grist, qnav and the doubles), each `<dir>/v0.1.0`; v0.x for long
   enough that GR4-GR7 settle.
-- **Format and ABI policy.** Recommended: every wire format named
-  `gotogether.<thing>/<major>`; a reader refuses a newer major with the
-  fix and reads every older major it ever read (the step log is
-  production data: forever); a breaking change bumps the major, an
-  added optional field does not. The step log's attributes keep the
-  `quint.` namespace (they describe model steps; renaming breaks every
-  log written). The woven ABI's version in a constant's name
-  (`woven.ABI1`), bumped on any change, qweave refusing a mismatch. A
-  deprecation window of one minor release for exported API after v0.1,
-  in a CHANGELOG by module.
+- **Format and ABI policy. Decided** by the maintainer on 2026-10-28
+  ("this is a prerelease library; once our own examples are migrated we
+  can drop support for earlier data formats or other interfaces"):
+  every wire format named `gotogether.<thing>/<major>`; pre-release, a
+  reader reads the current major only, refusing a newer one with the
+  upgrade and an older one with how to write it anew, a file naming none
+  read as the current; a breaking change bumps the major, an added
+  optional field does not, and the repository's own files migrate with
+  it. After v0.1 the maintainer decides what older majors are read
+  (step logs and corpus entries are the case for keeping them). The step
+  log's attributes keep the `quint.` namespace. The woven ABI's version
+  in a constant's name (`woven.ABI1`), bumped on any change, qweave
+  refusing a mismatch. Still recommended, for after v0.1: a deprecation
+  window of one minor release for exported API, in a CHANGELOG by module.
 - **The "grist" rename.** Where it comes from: docs/grist.md §10.5
   (6fdafe2, 2026-10-27), a default "the maintainer may override":
   "'grist' is a codename ... it also names gristlabs' spreadsheet

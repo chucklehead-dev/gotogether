@@ -1,10 +1,11 @@
 // Package formats names the toolkit's formats and holds their version
 // policy (docs/DESIGN.md, "Formats and their versions"): every format a
 // file or a pipe carries between independently installed pieces is
-// named gotogether.<thing>/<major>; a reader refuses a newer major with
-// the fix (upgrade the reader) and reads every older major from Oldest
-// on; a breaking change bumps the major, an added optional field does
-// not. One table, so the policy is changed in one place and `gotogether
+// named gotogether.<thing>/<major>, and, while the toolkit is
+// pre-release, a reader reads its current major only: a later one is
+// refused with the upgrade, an earlier one with how to write it anew. A
+// breaking change bumps the major; an added optional field does not.
+// One table, so the policy is changed in one place and `gotogether
 // doctor` lists what this version reads.
 package formats
 
@@ -18,76 +19,75 @@ import (
 const Prefix = "gotogether."
 
 // A Format is one format of the toolkit at the version this build
-// writes.
+// writes, and reads: pre-release, only that one.
 type Format struct {
 	// Thing is the format's name between Prefix and the major ("steps").
 	Thing string
-	// Major is the version this build writes; it reads Oldest to Major.
-	Major, Oldest int
+	// Major is the version this build writes and reads.
+	Major int
 	// What says what the format is, for doctor and the docs.
 	What string
-	// Older is the fix for a major below Oldest: what writes it anew.
+	// Older is the fix for an earlier major: what writes it anew.
 	Older string
 	// Upgrade is the fix for a newer major: which reader to upgrade.
 	// Empty: the gotogether module and CLI.
 	Upgrade string
-	// Aliases are older names of a major (an old corpus entry's
-	// "gotogether.run/1" is corpus/1), read as that major forever.
-	Aliases map[string]int
 }
 
 // upgradeCore is the fix for a newer major read by the core.
 const upgradeCore = "upgrade gotogether where it reads it (go get github.com/chucklehead-dev/gotogether@latest in the module, go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest for the CLI)"
 
-// The formats, at the versions this build writes. Read-only.
+// The formats, at the versions this build writes and reads. A file or a
+// line that names none (a binding with no format key, a step log with no
+// format record, a session naming no protocol) is read as the current
+// major. Read-only.
 var (
 	// Steps is the step log (qobs.JSONLSink, qtrace.ReadJSONL) and the
-	// attributes of OTel step events: production data, so every major is
-	// read forever. A log without a format record is steps/1, the format
-	// as it was before it had a name.
-	Steps = Format{Thing: "steps", Major: 1, Oldest: 1, What: "step log (JSON lines; OTel span events)"}
+	// attributes of OTel step events.
+	Steps = Format{Thing: "steps", Major: 1, What: "step log (JSON lines; OTel span events)",
+		Older: "record the run again with this version"}
 	// Requests is an external driver's request log (qdriver).
-	Requests = Format{Thing: "requests", Major: 1, Oldest: 1, What: "driver request log (qdriver)"}
-	// Binding is a binding file's optional format key; absent, binding/1.
-	// binding/2 bounds the model's searches with one simulate.search,
-	// where binding/1 had searchStates, graphStates and graphDepth: a
-	// person wrote every one, so binding/1 is read forever.
-	Binding = Format{Thing: "binding", Major: 2, Oldest: 1, What: "binding YAML (format: key optional)"}
+	Requests = Format{Thing: "requests", Major: 1, What: "driver request log (qdriver)",
+		Older: "record the driver's run again with this version"}
+	// Binding is a binding file's optional format key.
+	Binding = Format{Thing: "binding", Major: 2, What: "binding YAML (format: key optional)",
+		Older: "write it as " + Prefix + "binding/2: the simulate section bounds every search of the model alone with search: {states: N, depth: D}"}
 	// Convert is a span conversion rule file's optional format key.
-	Convert = Format{Thing: "convert", Major: 1, Oldest: 1, What: "span conversion rules YAML (format: key optional)"}
+	Convert = Format{Thing: "convert", Major: 1, What: "span conversion rules YAML (format: key optional)",
+		Older: "write it in this version's rules (docs/instrumentation.md)"}
 	// Corpus is an exploration's corpus entry (qtest), checked into
-	// testdata: it was named gotogether.run/1 until it had a name of its
-	// own, and that name is read as corpus/1 forever.
-	Corpus = Format{Thing: "corpus", Major: 1, Oldest: 1, What: "exploration corpus entry (testdata/corpus)",
-		Aliases: map[string]int{"gotogether.run/1": 1}}
+	// testdata.
+	Corpus = Format{Thing: "corpus", Major: 1, What: "exploration corpus entry (testdata/corpus)",
+		Older: "save the run again (GOTOGETHER_CORPUS) with this version"}
 	// Choices is the byte rule of an encoded run (qenv.EncodeChoices),
-	// whose binary header carries the major (qenv.BytesVersion). A rule's
-	// change makes old bytes another run, so only the current is read.
-	Choices = Format{Thing: "choices", Major: 1, Oldest: 1, What: "encoded choices (qenv.EncodeChoices; binary header)",
+	// whose binary header carries the major (qenv.BytesVersion): old
+	// bytes under a new rule are another run.
+	Choices = Format{Thing: "choices", Major: 1, What: "encoded choices (qenv.EncodeChoices; binary header)",
 		Older: "encode the run again (qenv.EncodeChoices) from its choices"}
 	// Manifest is a validated run's manifest (validate.Manifest), written
-	// anew by every run: only the current major is read.
-	Manifest = Format{Thing: "run", Major: 2, Oldest: 2, What: "run manifest (validate -manifest)",
+	// anew by every run.
+	Manifest = Format{Thing: "run", Major: 2, What: "run manifest (validate -manifest)",
 		Older: "write it anew with this version (gotogether validate -manifest, or the test under GOTOGETHER_EVIDENCE)"}
 	// Evidence is an exploration's evidence (qtest.Evidence), written
-	// anew by every run: only the current major is read.
-	Evidence = Format{Thing: "evidence", Major: 2, Oldest: 2, What: "exploration evidence (GOTOGETHER_EVIDENCE)",
+	// anew by every run.
+	Evidence = Format{Thing: "evidence", Major: 2, What: "exploration evidence (GOTOGETHER_EVIDENCE)",
 		Older: "run the tests again to write it anew"}
 	// Model is a compiled model (gotogether compile; validate
 	// -compiled): the Go evaluator's IR of a binding's model, compiled by
-	// quint. A breaking change makes an artifact another check, so only
-	// the current major is read.
-	Model = Format{Thing: "model", Major: 1, Oldest: 1, What: "compiled model (gotogether compile; validate -compiled)",
+	// quint.
+	Model = Format{Thing: "model", Major: 1, What: "compiled model (gotogether compile; validate -compiled)",
 		Older: "compile it again (gotogether compile -binding B -o model.json)"}
 	// Report is a command's machine-readable report (validate -json,
 	// simulate -json; validate.Document), read by alert routing, CI and
 	// the Action's job summary. An added field is optional; a changed or
-	// removed one is a new major, and a reader keeps reading the old.
-	Report = Format{Thing: "report", Major: 1, Oldest: 1, What: "a command's machine-readable report (validate -json, simulate -json)"}
+	// removed one is a new major.
+	Report = Format{Thing: "report", Major: 1, What: "a command's machine-readable report (validate -json, simulate -json)",
+		Older: "run the command again with this version"}
 	// Nav is the run navigation protocol between a test binary
 	// (GOTOGETHER_NAV=serve) and gotogether-nav: a session's first line
-	// names it. A session that names none is nav/1.
-	Nav = Format{Thing: "nav", Major: 1, Oldest: 1, What: "run navigation protocol (GOTOGETHER_NAV=serve, gotogether-nav)",
+	// names it.
+	Nav = Format{Thing: "nav", Major: 1, What: "run navigation protocol (GOTOGETHER_NAV=serve, gotogether-nav)",
+		Older:   "rebuild the test binary at the navigator's gotogether version",
 		Upgrade: "install the navigator at the module's gotogether version (go install github.com/chucklehead-dev/gotogether/cmd/gotogether@<version> for gotogether nav, github.com/chucklehead-dev/gotogether/qnav/cmd/gotogether-nav@<version> for the interactive one; gotogether doctor names the versions)"}
 )
 
@@ -124,20 +124,14 @@ func Parse(name string) (thing string, major int, ok bool) {
 
 // Is reports whether name is one of f's names, at any major.
 func (f Format) Is(name string) bool {
-	if _, ok := f.Aliases[name]; ok {
-		return true
-	}
 	thing, _, ok := Parse(name)
 	return ok && thing == f.Thing
 }
 
-// Check returns the major of name, one f reads, or an error that names
-// the fix: a newer major's says to upgrade the reader, an older one's
-// how to write it anew, another format's what was wanted.
+// Check returns the major of name if it is the one f reads, or an
+// error that names the fix: a newer major's says to upgrade the reader,
+// an older one's how to write it anew, another format's what was wanted.
 func (f Format) Check(name string) (int, error) {
-	if m, ok := f.Aliases[name]; ok {
-		return m, nil
-	}
 	thing, m, ok := Parse(name)
 	switch {
 	case !ok || thing != f.Thing:
@@ -147,18 +141,9 @@ func (f Format) Check(name string) (int, error) {
 		if up == "" {
 			up = upgradeCore
 		}
-		return m, fmt.Errorf("%s is a later version than this gotogether reads (%s): %s", name, f.Range(), up)
-	case m < f.Oldest:
-		return m, fmt.Errorf("%s is an older version than this gotogether reads (%s): %s", name, f.Range(), f.Older)
+		return m, fmt.Errorf("%s is a later version than this gotogether reads (%s): %s", name, f.Name(), up)
+	case m < f.Major:
+		return m, fmt.Errorf("%s is an older version than this gotogether reads (%s, pre-release: the current one only): %s", name, f.Name(), f.Older)
 	}
 	return m, nil
-}
-
-// Range is the names this build reads, "gotogether.steps/1" or
-// "gotogether.x/1 to gotogether.x/3".
-func (f Format) Range() string {
-	if f.Oldest == f.Major {
-		return f.Name()
-	}
-	return f.At(f.Oldest) + " to " + f.Name()
 }

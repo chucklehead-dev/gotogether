@@ -167,7 +167,6 @@ type Simulation struct
     field Terminal string `yaml:"terminal"`
     field Unfair []string `yaml:"unfair"`
     field Stops []string `yaml:"stops"`
-    method (*Simulation) UnmarshalYAML(n *yaml.Node) error
 type StepPattern struct
     field Action string
     field Params []string
@@ -2166,13 +2165,10 @@ type Watermark struct
 var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap"}
 
 == github.com/chucklehead-dev/gotogether/schemas
-const Binding1URL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-1.json"
 const BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
 const ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
 const ReportURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
 func Binding() []byte
-func Binding1() []byte
-func BindingFor(data []byte) []byte
 func Check(schema, data []byte) ([]Problem, error)
 func Convert() []byte
 func Report() []byte

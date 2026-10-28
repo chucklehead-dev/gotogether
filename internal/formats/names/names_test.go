@@ -43,11 +43,11 @@ func TestNamesAreTheTables(t *testing.T) {
 			t.Errorf("two formats named %s", f.Thing)
 		}
 		seen[f.Thing] = true
-		if f.Oldest > f.Major || f.Oldest < 1 || f.What == "" {
-			t.Errorf("%s: reads %d to %d, %q", f.Thing, f.Oldest, f.Major, f.What)
+		if f.Major < 1 || f.What == "" {
+			t.Errorf("%s: major %d, %q", f.Thing, f.Major, f.What)
 		}
-		if f.Oldest > 1 && f.Older == "" {
-			t.Errorf("%s reads no major below %d, and says no fix for one", f.Thing, f.Oldest)
+		if f.Older == "" {
+			t.Errorf("%s refuses every earlier major, and says no fix for one", f.Thing)
 		}
 	}
 }

@@ -19,6 +19,18 @@ The first release. What a user meets, by module:
   are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
   raises the process's GC percent to 400 while it runs, unless it is
   already higher or off, and puts it back.
+- Formats, the current major only (the maintainer's decision of
+  2026-10-28; breaking): pre-release, every reader reads its format's
+  current major, refusing an earlier one with how to write it anew.
+  `gotogether.binding/1` is no longer read: write `simulate.search:
+  {states, depth}` for `searchStates`, `graphStates` and `graphDepth`
+  (a binding with no format key is read as binding/2).
+  `schemas.Binding1URL`, `schemas.Binding1`, `schemas.BindingFor` and
+  gotogether.binding-1.json are gone. A corpus entry named
+  `gotogether.run/1` is refused: save the run again, or rename its
+  format `gotogether.corpus/1`. internal/formats' `Oldest`, `Aliases`
+  and `Range` are gone (internal).
+
 - validate split (ROADMAP I18; breaking): model analysis has its own
   package, `validate/model`, and the run navigation protocol its own,
   `validate/navproto`; validate keeps judging runs (and the model

@@ -1,5 +1,5 @@
 {
- "format": "gotogether.run/1",
+ "format": "gotogether.corpus/1",
  "exploration": "TestPendingTransfers#1",
  "seed": 20753119,
  "choices": [

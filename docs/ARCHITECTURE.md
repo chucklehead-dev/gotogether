@@ -190,23 +190,24 @@ nav` walks the same graph, or a recorded run against it.
 
 Every format a file or a pipe carries between independently installed
 pieces is named `gotogether.<thing>/<major>` (internal/formats, the one
-table; DESIGN §63). A reader refuses a newer major with the fix
-(upgrade the reader) and reads every older major from its oldest on; an
-added optional field is no new major. `gotogether doctor` lists what
+table; DESIGN §63). Pre-release, a reader reads the current major
+only, refusing a newer one with the upgrade and an older one with how to
+write it anew (after v0.1 the maintainer decides); an added optional
+field is no new major, and a file naming none is read as the current. `gotogether doctor` lists what
 this build reads.
 
 | format | what it is | reads |
 |---|---|---|
-| `gotogether.steps/1` | the step log (JSON lines; OTel span events); an unversioned log is steps/1 | every major, forever: production data |
-| `gotogether.requests/1` | an external driver's request log (qdriver) | from 1 |
-| `gotogether.binding/1` | a binding's optional `format:` key | from 1 |
-| `gotogether.convert/1` | a span conversion rule file's optional `format:` key | from 1 |
-| `gotogether.corpus/1` | an exploration's corpus entry in testdata (once `gotogether.run/1`, read as corpus/1 forever) | from 1 |
+| `gotogether.steps/1` | the step log (JSON lines; OTel span events) | the current only |
+| `gotogether.requests/1` | an external driver's request log (qdriver) | the current only |
+| `gotogether.binding/2` | a binding's optional `format:` key | the current only |
+| `gotogether.convert/1` | a span conversion rule file's optional `format:` key | the current only |
+| `gotogether.corpus/1` | an exploration's corpus entry in testdata | the current only |
 | `gotogether.choices/1` | encoded choices (`qenv.EncodeChoices`, a binary header) | the current only: another rule is another run |
 | `gotogether.run/2` | a validated run's manifest (`validate -manifest`) | the current only: written anew by every run |
 | `gotogether.evidence/2` | an exploration's evidence (`GOTOGETHER_EVIDENCE`) | the current only |
 | `gotogether.model/1` | a compiled model (`gotogether compile`) | the current only |
-| `gotogether.nav/1` | the run navigation protocol between a test binary and gotogether-nav | from 1 |
+| `gotogether.nav/1` | the run navigation protocol between a test binary and gotogether-nav | the current only |
 
 Beside them, two ABIs: `woven.ABI1`, which qweave's generated code
 references by name (a skew fails to compile, naming it), and grist's

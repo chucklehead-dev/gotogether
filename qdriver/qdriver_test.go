@@ -123,6 +123,7 @@ func TestRefused(t *testing.T) {
 		want   string
 	}{
 		{"a later version", `{"protocol":"gotogether.requests/2","recorder":"ui"}`, nil, "line 1: protocol gotogether.requests/2 is a later version than this gotogether reads (gotogether.requests/1): upgrade gotogether"},
+		{"an earlier version", `{"protocol":"gotogether.requests/0","recorder":"ui"}`, nil, "line 1: protocol gotogether.requests/0 is an older version than this gotogether reads (gotogether.requests/1, pre-release: the current one only): record the driver's run again"},
 		{"no recorder", `{"protocol":"gotogether.requests/1"}`, nil, "line 1: the header names no recorder"},
 		{"no header", `{"event":"request","req":"1","action":"a","time":"` + at(0) + `"}`, nil, "line 1: not the header of a request log"},
 		{"a misspelt field", "", []string{`{"event":"request","req":"1","action":"a","time":"` + at(0) + `","arg":{"k":1}}`}, `line 2: not a record of a request log (gotogether.requests/1): json: unknown field "arg"`},

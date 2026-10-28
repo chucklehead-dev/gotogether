@@ -24,7 +24,7 @@ type NamedValue struct {
 // build, read it): ID is "<schedule>@<k>", the choices before k fixed.
 type Node struct {
 	// Protocol is the navigation protocol of the binary that wrote the
-	// node (Protocol; "" before it had one: nav/1)
+	// node (Protocol; "": none named, read as the current)
 	Protocol string `json:"protocol,omitempty"`
 	Run      string `json:"run"`
 	ID       string `json:"id"`
@@ -92,8 +92,8 @@ const Protocol = "gotogether.nav/1"
 
 // CheckProtocol refuses a protocol a session or node names that this
 // version does not speak, with the fix (a later one: upgrade the
-// navigator). "" is a binary's from before the protocol had a name:
-// nav/1.
+// navigator; an earlier one: rebuild the test binary). "" names none and
+// is read as the current one.
 func CheckProtocol(p string) error {
 	if p == "" {
 		return nil
@@ -132,9 +132,9 @@ type Response struct {
 // its base run made (but entropy); Notes say what to know of every node
 // (the base run drew entropy, or did not replay).
 type Session struct {
-	// Protocol is the session's navigation protocol (Protocol; ""
-	// from a binary built before it had one: nav/1): a navigator
-	// refuses one it does not speak (CheckProtocol)
+	// Protocol is the session's navigation protocol (Protocol; "":
+	// none named, read as the current): a navigator refuses one it does
+	// not speak (CheckProtocol)
 	Protocol string   `json:"protocol,omitempty"`
 	Run      string   `json:"run"`
 	Choices  int      `json:"choices"`

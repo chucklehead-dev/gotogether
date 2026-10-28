@@ -43,9 +43,11 @@ nil { ... }`, which closes the sink and says whether the log is whole.
 
 A step log's first line names its format, `{"quint.format":
 "gotogether.steps/1"}` (the sinks and `qtrace.WriteJSONL` write it);
-a log another tool writes may start with it or not (none reads as
-steps/1), and a later major is refused with "upgrade gotogether". A
-binding may say `format: gotogether.binding/1` the same way. When a
+a log another tool writes may start with it or not (none reads as the
+current), and another major is refused with its fix ("upgrade
+gotogether", or "record the run again": pre-release, only the current
+major is read). A binding may say `format: gotogether.binding/2` the
+same way. When a
 check refuses a version, `gotogether doctor` lists the installed
 pieces' versions (CLI, the module's core, qweave's woven ABI,
 gotogether-nav, quint and its evaluator) and names the skew with its

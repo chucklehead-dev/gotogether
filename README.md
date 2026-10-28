@@ -205,9 +205,8 @@ runs/*.jsonl`, the Go evaluator alone judging, a run it cannot decide no
 verdict, a stale artifact refused (DESIGN §64).
 
 Every file format is named and versioned (`gotogether.steps/1`,
-`gotogether.binding/1`, ...): a later major is refused with the fix,
-and step logs of every earlier major are read for good (docs/DESIGN.md
-§63).
+`gotogether.binding/2`, ...); pre-release, only the current major is
+read, another refused with the fix (docs/DESIGN.md §63).
 
 In a module of your own (the examples' `replace` lines are for working
 inside this repository):
@@ -220,8 +219,8 @@ gotogether scaffold -system -binding app.binding.yaml -pkg app -out system_test.
 ```
 
 Bindings and span conversion rules have JSON Schemas (`schemas/`,
-`gotogether.binding-1.json` and `gotogether.convert-1.json`, one per
-format and major): an editor with the YAML language server validates a
+`gotogether.binding-2.json` and `gotogether.convert-1.json`, one per
+format at its current major): an editor with the YAML language server validates a
 file as it is written when its first line names the schema (`#
 yaml-language-server: $schema=<URL>`, the URLs in package `schemas`),
 and `gotogether lint` checks a binding against it (every problem at its

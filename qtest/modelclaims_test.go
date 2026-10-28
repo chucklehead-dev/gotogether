@@ -69,8 +69,7 @@ func TestModelProvesAndRefutes(t *testing.T) {
 
 // A truncated graph proves nothing: with search.states 3 every claim
 // that needs the whole graph has no verdict, naming the bound; a depth
-// bound alone is a bounded proof, said so. A binding/1 file's graphStates
-// is the same bound.
+// bound alone is a bounded proof, said so.
 func TestModelBounds(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
@@ -87,8 +86,6 @@ func TestModelBounds(t *testing.T) {
 	wantModel(t, cut, []ModelClaim{Proves("positive"), NoDeadlocks()},
 		"the model has no verdict on proving positive: no state violates it in the first 3 states breadth first, truncated by the state bound",
 		"the model has no verdict on having no deadlock")
-	old := write("old.yaml", "simulate: {graphStates: 3, steps: 10, samples: 50}\n")
-	wantModel(t, old, []ModelClaim{Proves("positive")}, "the first 3 states breadth first")
 	deep := write("deep.yaml", "format: gotogether.binding/2\nsimulate: {search: {depth: 1}, steps: 10, samples: 50}\n")
 	f := modelExpect(t, deep, Proves("positive"))
 	if f.failed || !strings.Contains(strings.Join(f.logs, "\n"), "the states within 1 steps of init") {

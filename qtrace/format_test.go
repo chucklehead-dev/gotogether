@@ -43,7 +43,10 @@ func TestStepLogFormat(t *testing.T) {
 			t.Errorf("a later major's log %q: %v", log, err)
 		}
 	}
-	if _, err := ReadJSONL(strings.NewReader(`{"quint.format":"gotogether.binding/1"}` + "\n")); err == nil || !strings.Contains(err.Error(), "is no step log") {
+	if _, err := ReadJSONL(strings.NewReader(`{"quint.format":"gotogether.steps/0"}` + "\n")); err == nil || !strings.Contains(err.Error(), "gotogether.steps/0 is an older version than this gotogether reads (gotogether.steps/1, pre-release: the current one only): record the run again") {
+		t.Errorf("an earlier major's log: %v", err)
+	}
+	if _, err := ReadJSONL(strings.NewReader(`{"quint.format":"gotogether.binding/2"}` + "\n")); err == nil || !strings.Contains(err.Error(), "is no step log") {
 		t.Errorf("another format's record: %v", err)
 	}
 	// an OTel step: the format on its event, span or resource

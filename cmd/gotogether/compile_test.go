@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -109,7 +110,7 @@ func TestDoctorCompiled(t *testing.T) {
 	if p := compiledPiece(model); p.skew != "" || p.version != "gotogether.model/1" {
 		t.Errorf("a fresh compiled model: %+v", p)
 	}
-	if p := bindingPiece(bind); p.skew != "" || p.version != "gotogether.binding/1" {
+	if p := bindingPiece(bind); p.skew != "" || p.version != binding.FormatName {
 		t.Errorf("a binding: %+v", p)
 	}
 	if err := os.WriteFile(bind, append(mustRead(t, bind), "\n# edited\n"...), 0o644); err != nil {

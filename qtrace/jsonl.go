@@ -16,9 +16,8 @@ import (
 const KeyTime = "quint.time_unix_nano"
 
 // StepsFormat is the step log's format at the version this build writes
-// (KeyFormat): a reader refuses a later major with the fix and reads
-// every earlier one. A log without a format record is
-// gotogether.steps/1, as every log written before it had a name.
+// (KeyFormat): a reader reads this major only (pre-release), refusing
+// another with the fix. A log without a format record is read as it.
 const StepsFormat = "gotogether.steps/1"
 
 // FormatLine is a step log's format record (with the newline): the
