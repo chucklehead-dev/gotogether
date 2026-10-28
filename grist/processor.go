@@ -283,17 +283,20 @@ type node struct {
 	list    []*poller
 }
 
-// stuck names a poller that has held one batch of triggers for longer
-// than bound at now (Unix nanoseconds), "" when none has: a deadlock or a
-// goroutine stuck in a handler or an effect. A poller waiting on the
-// store, or backing off from its errors, holds none: /livez never
-// depends on the store.
+// stuck names a poller that has worked on one trigger for longer than
+// bound at now (Unix nanoseconds), "" when none has: a deadlock or a
+// goroutine stuck in a handler or an effect. The clock restarts at each
+// trigger of a batch (a batch of BatchSize effects on a slow dependency
+// takes far longer than one, legitimately) and after each backoff from a
+// store error (a commit retried through a database outage is waiting on
+// the store): /livez never depends on the store or on a dependency's
+// speed.
 func (n *node) stuck(now int64, bound time.Duration) string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for _, pl := range n.list {
 		if since := pl.busy.Load(); since != 0 && time.Duration(now-since) > bound {
-			return fmt.Sprintf("processor %s of tenant %s has handled one batch of triggers for %v (more than %v)", pl.p.name, pl.tenant, time.Duration(now-since).Round(time.Second), bound)
+			return fmt.Sprintf("processor %s of tenant %s has worked on one trigger for %v (more than %v): a deadlock, or a handler or an effect stuck", pl.p.name, pl.tenant, time.Duration(now-since).Round(time.Millisecond), bound)
 		}
 	}
 	return ""
@@ -365,7 +368,8 @@ type poller struct {
 	tries   int           // transient errors in a row
 	waiting *atomic.Int64 // the node's count of idle pollers (node.idle)
 	effects *atomic.Int64 // the node's count of effects in flight
-	// busy is when the poller began handling its batch of triggers (Unix
+	// busy is when the poller last made progress on its batch of
+	// triggers (began a trigger, or came back from a backoff; Unix
 	// nanoseconds, qenv.Now), 0 when it holds none (node.stuck)
 	busy atomic.Int64
 }
@@ -374,6 +378,15 @@ type poller struct {
 func (pl *poller) pause(ctx context.Context) {
 	pl.tries++
 	backoff(ctx, min(pl.tries, 6))
+	pl.progress(ctx)
+}
+
+// progress restarts /livez's clock of a poller holding a batch
+// (node.stuck): it began a trigger, or waited on the store.
+func (pl *poller) progress(ctx context.Context) {
+	if pl.busy.Load() != 0 {
+		pl.busy.Store(qenv.Now(ctx).UnixNano())
+	}
 }
 
 func (pl *poller) run(ctx context.Context) {
@@ -438,6 +451,7 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 		return ok
 	}
 	for _, e := range evs {
+		pl.progress(ctx)
 		res, ok := pl.decide(ctx, e)
 		if !ok {
 			flush()

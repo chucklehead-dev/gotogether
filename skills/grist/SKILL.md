@@ -361,8 +361,8 @@ for it. No binding is written by hand.
   server serves on for `Delay` (5 s in a pod), then shutdown, settle and
   flush, 10 s each: give the pod a 45 s grace, or pass `-grace` to budget
   the phases into a shorter one (the startup line says what each gets).
-  `-health-addr` (on by default in a pod) serves `/livez` (a poller stuck
-  past `LiveBound`; never the store), `/readyz` (started, not draining;
+  `-health-addr` (on by default in a pod) serves `/livez` (a poller stuck on
+  one trigger past `LiveBound`; never the store), `/readyz` (started, not draining;
   never a dependency or processor lag: point no probe at the database)
   and `/metrics` (processor lag and oldest trigger, relay backlog,
   effects and requests in flight). In a pod `-addr` on loopback is

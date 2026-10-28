@@ -1849,9 +1849,13 @@ each with a test that fails with it taken out:
   `-grace` the drain is still in its shutdown at the kill, no settle.
 - **The side port** (`-health-addr`, default `:8081` on an
   orchestrator, else off; grist/health.go): `/livez` fails only when a
-  poller has held one batch of triggers past `LiveBound` (5 m: a
-  deadlock or a stuck handler; a poller waiting on the store or backing
-  off from its errors holds none, so never the store); `/readyz` is the
+  poller has worked on one trigger past `LiveBound` (5 m: a deadlock or
+  a stuck handler; the clock restarts at each trigger of a batch and
+  after each backoff from a store error, so neither a batch of slow
+  effects nor a commit retried through a database outage fails it:
+  never the store: `TestMainLivezPerTrigger`, `TestPauseIsProgress`;
+  as first built the bound was the whole batch's, and four 400 ms
+  effects in one failed a 1 s bound); `/readyz` is the
   node started (the store answered: `App.Start` read its tenants) and
   not draining, never a dependency or processor lag; `/metrics`, in
   Prometheus' text format with the standard library, has

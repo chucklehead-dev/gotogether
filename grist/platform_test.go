@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -377,5 +379,54 @@ func TestMemoryLimit(t *testing.T) {
 	t.Setenv("GOMEMLIMIT", "2GiB")
 	if grist.SetMemoryLimit(write("1000000000")); debug.SetMemoryLimit(-1) != old {
 		t.Errorf("GOMEMLIMIT set: the limit changed to %d", debug.SetMemoryLimit(-1))
+	}
+}
+
+// /livez's bound is per trigger, not per batch: a batch of effects on a
+// slow dependency, each well inside the bound, takes longer than it in
+// all, legitimately, and a probe failing there restarted the pod in the
+// middle of its work (a slow dependency made an outage).
+func TestMainLivezPerTrigger(t *testing.T) {
+	defer grist.SetLiveBound(time.Second)()
+	first, release := make(chan struct{}), make(chan struct{})
+	var done atomic.Int64
+	a, added := amoApp(func(ctx context.Context, m grist.Meta) error {
+		defer done.Add(1)
+		if m.Pos == 1 {
+			close(first)
+			<-release // the other triggers commit meanwhile: one batch
+			return nil
+		}
+		time.Sleep(400 * time.Millisecond) // well inside the bound
+		return nil
+	})
+	grist.NewCommand(a, "add", func(r *grist.Reads, c Added) ([]grist.Event, error) {
+		return []grist.Event{added.Of(c)}, nil
+	}, grist.Authorize(grist.Authenticated))
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	errOut, url, done2 := serving(t, ctx, a, t.TempDir(), []string{"-addr", "127.0.0.1:0", "-health-addr", "127.0.0.1:0"})
+	hu := healthURL(t, errOut)
+	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
+	for i := 1; i <= 5; i++ {
+		if _, err := c.Command(ctx, grist.Envelope{ID: fmt.Sprint("k", i), Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 {
+			<-first
+		}
+	}
+	close(release) // a batch of four triggers, 1.6 s of effects
+	for deadline := time.Now().Add(10 * time.Second); done.Load() < 5; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d of 5 effects ran", done.Load())
+		}
+		if code, body := get(t, hu+"/livez"); code != 200 {
+			t.Fatalf("/livez in a batch of effects each inside the bound: %d %s, want ok", code, body)
+		}
+	}
+	stop()
+	if err := <-done2; err != nil {
+		t.Fatal(err)
 	}
 }
