@@ -13,7 +13,7 @@ do. They can be combined in two directions:
 | Who chooses the operations | Hegel rules (`Rule*` methods), invalid inputs included | the model's traces (`quint run --mbt`) |
 | Finds | the code doing what the model forbids (accepting a forbidden request), wrong states, invariant violations | divergence on behaviours the model allows, under concrete variations the model abstracts (payloads, timing, noise) |
 | Shrinks to | the shortest run the model rejects | the simplest trace, shortest prefix, simplest details |
-| Cost | one `quint test` per checked run (~0.5–1 s), cached across shrinking | one `quint run` per test binary; replay is in-process |
+| Cost | a passing run judged in Go (milliseconds), a failing one by `quint test` (~0.5–1 s), cached across shrinking | one `quint run` per test binary; replay is in-process |
 
 Use both. Model-driven tests alone cannot find what the model forbids,
 because the model never asks for a disabled step.

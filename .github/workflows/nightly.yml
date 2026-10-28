@@ -201,7 +201,12 @@ jobs:
     # batch a search judges and on each actor of every run checked, in
     # every example: a disagreement fails the test, naming the candidate.
     # Quint checks everything too, so it takes what quint alone does, and
-    # more: a search's every candidate batch goes to quint as well.
+    # more: a search's every candidate batch goes to quint as well. It
+    # guards the evaluator's passes, which decide every run outside shadow
+    # (validate/decide.go): each run's plan is judged by the evaluator as
+    # a check judges it, and by quint, and a verdict, a passing result or
+    # an ITF state they differ on is the run's error. The log
+    # (GOTOGETHER_SHADOW_LOG) counts the runs compared and refused.
     #
     # seeds: the explorations' count where 500 would not fit 110m, each
     # measured in shadow on 4 cores (nightly 6, and nights 4 and 5, timed
@@ -217,6 +222,8 @@ jobs:
     # - wallet: own, 28 minutes (TestPendingTransfersLinearized 20; at 100
     #   seeds its first exploration alone took 43), and the core's searches
     #   after it, 27.
+    # - counters, wallet-grist, library, webjobs: own (added with the
+    #   evaluator deciding passes, the runs it decides most of).
     # - raftkv: own, in two shards: TestLostSnapshots 40 minutes; the rest
     #   about 52 (TestPendingTransfers 23, TestRollingUpgrade 19). Not
     #   TestLinearizeScale: its five 200-operation histories took more
@@ -228,7 +235,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet, payd]
+        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet, payd, counters, wallet-grist, library, webjobs]
         include:
           - example: fleetrollout
             seeds: "150"
@@ -237,6 +244,16 @@ jobs:
           - example: streams
             seeds: "100"
           - example: wallet
+            seeds: own
+          # the grist examples: own, their suites' cost being quint's
+          # detail replays and real-tier runs, not seeds
+          - example: counters
+            seeds: own
+          - example: wallet-grist
+            seeds: own
+          - example: library
+            seeds: own
+          - example: webjobs
             seeds: own
           - example: raftkv
             shard: lost-snapshots
@@ -264,10 +281,21 @@ jobs:
           SKIP: ${{ matrix.skip }}
         run: |
           if [ "$SEEDS" = own ]; then unset GOTOGETHER_SEEDS; else export GOTOGETHER_SEEDS=$SEEDS; fi
+          export GOTOGETHER_SHADOW_LOG="$RUNNER_TEMP/shadow.log"
           GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ${RUN:+-run "$RUN"} ${SKIP:+-skip "$SKIP"} ./...
       - name: the core's searches, checked by both
         if: matrix.example == 'wallet'
+        env:
+          GOTOGETHER_SHADOW_LOG: ${{ runner.temp }}/shadow.log
         run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 60m ./validate ./qtest
+      - name: the runs compared
+        if: always()
+        run: |
+          log="$RUNNER_TEMP/shadow.log"
+          touch "$log"
+          echo "runs judged by both: $(grep -c '^agree ' "$log") agreed, $(grep -c '^DISAGREE ' "$log") disagreed; refused by the evaluator (quint's alone): $(grep -c '^refused ' "$log")"
+          grep '^refused ' "$log" | cut -d' ' -f2 | sort | uniq -c || true
+          if grep '^DISAGREE ' "$log"; then echo "::error::the Go evaluator and quint disagree (above): the evaluator decides passing runs outside shadow"; exit 1; fi
 
   webjobs-live:
     # webjobs explored live by Bombadil (headless, ubuntu's Chrome): the

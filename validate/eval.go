@@ -1,7 +1,6 @@
 package validate
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -65,88 +64,6 @@ func shadowCheck(a string, orders [][]qtrace.Step, fs []int, quint func([][]qtra
 	}
 }
 
-// shadowRuns is, under GOTOGETHER_EVAL=shadow, runs' checks shadowed:
-// each actor's steps, on one thread in the order checked, judged by the
-// evaluator and, all of them in one batch, by quint; a disagreement is
-// its run's error. It covers every binding a run is checked against,
-// where the searches' shadow covers only theirs. A search's candidates
-// (c.mode.history set) are its shadow's, and an actor the evaluator refuses is
-// quint's alone.
-func (c *Checker) shadowRuns(runs [][]qtrace.Step) []error {
-	errs := make([]error, len(runs))
-	if c.Options.evalMode() != "shadow" || c.mode.history != nil || c.mode.shadowed || len(c.Binding.Hidden) > 0 {
-		return errs // (a binding with hidden actions is the evaluator's alone: quint has nothing to compare)
-	}
-	e := evaluatorFor(c)
-	if e.err != nil {
-		return errs
-	}
-	inv := len(c.Binding.Invariants) > 0
-	type item struct {
-		run   int
-		actor string
-		order []qtrace.Step
-		f     int
-	}
-	var items []item
-	var batch [][]qtrace.Step
-	for r, steps := range runs {
-		traces, _ := reconstruct(c.Binding, steps)
-		for _, tr := range traces {
-			if len(tr.Steps) == 0 {
-				continue
-			}
-			order := make([]qtrace.Step, len(tr.Steps))
-			for i, s := range tr.Steps {
-				s.Recorder, s.Thread, s.Seq, s.Order, s.Call = "shadow:"+tr.Actor, "shadow", uint64(i+1), nil, 0
-				order[i] = s
-			}
-			// planned in itself, as a check plans an actor's steps alone
-			settled := settledAs(tr, [][]qtrace.Step{order})[0]
-			f, _, err := e.judge(inHistory(c, tr), tr, settled, len(order), inv)
-			if err != nil {
-				continue
-			}
-			items = append(items, item{run: r, actor: nameOf(tr.Actor), order: order, f: f})
-			batch = append(batch, settled)
-		}
-	}
-	if len(batch) == 0 {
-		return errs
-	}
-	dir, err := os.MkdirTemp("", "gotogether-shadow-")
-	if err != nil {
-		for i := range errs {
-			errs[i] = err
-		}
-		return errs
-	}
-	defer os.RemoveAll(dir)
-	q := *c
-	q.mode.shadowed, q.Options.Dir, q.Options.VerdictsOnly, q.Options.NoITF = true, dir, true, true
-	reps, qerrs := q.CheckBatch(context.Background(), batch, 0)
-	for k, it := range items {
-		if errs[it.run] != nil {
-			continue
-		}
-		if qerrs[k] != nil {
-			errs[it.run] = qerrs[k]
-			continue
-		}
-		f := failedAt(reps[k], len(it.order))
-		if inv && f < 0 {
-			f = violatedAt(reps[k], len(it.order))
-		}
-		if f != it.f {
-			errs[it.run] = fmt.Errorf("GOTOGETHER_EVAL=shadow: actor %s: the Go evaluator and quint disagree on its steps as checked (the evaluator: %s, quint: %s): "+
-				"a bug of the evaluator (internal/qeval) or of the binding's evaluation module (binding.EvalModule); report it with this run's steps "+
-				"(GOTOGETHER_KEEP keeps them), and check with GOTOGETHER_EVAL=quint meanwhile\n  %s",
-				it.actor, verdictOf(it.f), verdictOf(f), stepsString(it.order))
-		}
-	}
-	return errs
-}
-
 // stepsString is an order's steps, one line.
 func stepsString(o []qtrace.Step) string {
 	parts := make([]string, len(o))
@@ -187,15 +104,29 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return &evaluator{err: err}
 	}
-	qnt := filepath.Join(dir, "eval.qnt")
-	if err := os.WriteFile(qnt, []byte(em.Text), 0o644); err != nil {
-		return &evaluator{err: err}
-	}
-	out := filepath.Join(dir, "ir.json")
-	f, err := os.Create(out)
+	// the module and its IR under names of this process's own: the
+	// directory is shared by every process compiling the same module (a
+	// test binary, its overlay mutants' subprocesses, the CLI), and one
+	// truncating a file another reads gave that one no evaluator
+	qf, err := os.CreateTemp(dir, "eval-*.qnt")
 	if err != nil {
 		return &evaluator{err: err}
 	}
+	qnt := qf.Name()
+	defer os.Remove(qnt)
+	_, err = qf.WriteString(em.Text)
+	if cerr := qf.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return &evaluator{err: err}
+	}
+	f, err := os.CreateTemp(dir, "ir-*.json")
+	if err != nil {
+		return &evaluator{err: err}
+	}
+	out := f.Name()
+	defer os.Remove(out)
 	quint := c.Options.Quint
 	if quint == "" {
 		quint = "quint"
@@ -287,13 +218,9 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 	if err != nil {
 		return 0, "", err
 	}
-	consts := map[string]qeval.Value{}
-	for k, name := range e.em.Consts {
-		v, err := e.literal(plan.Constants[k])
-		if err != nil {
-			return 0, "", err
-		}
-		consts[name] = v
+	consts, err := e.constants(plan)
+	if err != nil {
+		return 0, "", err
 	}
 	// the deepest prefix of the plan's calls a candidate before this one
 	// was accepted with: its state, judged again from there (each was
@@ -302,23 +229,90 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 	// the memo's keys need not say it)
 	keys := c.memo.keys(plan.Calls)
 	from, s := c.memo.deepest(keys)
-	startAt := n - 1 // quint names no step for init's state
+	w, err := e.walk(c, consts, plan, from, s, invariants, tr.Settled, nil)
+	if err != nil {
+		return 0, "", err
+	}
+	// a position's index in the order: the start's (quint names no step
+	// for init's state), else its call's
+	startAt := n - 1
 	if plan.Start != nil {
 		startAt = stepAt([]binding.Call{*plan.Start}, 0, n)
 	}
+	at := func(pos int) int {
+		if pos == 0 {
+			return startAt
+		}
+		return stepAt(plan.Calls, pos-1, n)
+	}
+	switch {
+	case w.startFailed:
+		return startAt, "", nil
+	case w.rejected >= 0:
+		return stepAt(plan.Calls, w.rejected, n), "", nil
+	}
+	if w.violated < 0 {
+		c.memo.put(keys[len(plan.Calls)], w.final) // before the settle's vals: an extension adds steps
+	}
+	if w.eventual != "" {
+		return n - 1, "", nil // the order's, as failedAt says: another may end as the probe saw
+	}
+	if w.violated >= 0 {
+		return at(w.violated), "", nil
+	}
+	if hooks.TamperEval.Load() == 1 {
+		return 0, "", nil
+	}
+	return -1, e.m.Key(w.final), nil
+}
+
+// constants are plan's instance, as the evaluation module's constants.
+func (e *evaluator) constants(plan *binding.Plan) (map[string]qeval.Value, error) {
+	consts := map[string]qeval.Value{}
+	for k, name := range e.em.Consts {
+		v, err := e.literal(plan.Constants[k])
+		if err != nil {
+			return nil, err
+		}
+		consts[name] = v
+	}
+	return consts, nil
+}
+
+// A walk is what the evaluator's replay of a plan found, as quint's
+// fused replay (the conformance run with every invariant, and each
+// eventual val's run) checks it. Positions count states: 0 is the
+// start's (init's, or the snapshot's), i+1 the state after call i.
+type walk struct {
+	startFailed bool   // the start is no state: its action disabled, or its expect false
+	rejected    int    // the call the model cannot take, or whose expect is false; -1 none
+	violated    int    // the position where an invariant first fails; -1 none
+	eventual    string // an eventual val false in the last state of a settled trace
+	final       qeval.State
+}
+
+// walk replays plan's calls from call from in state s (from 0 with s nil:
+// from the plan's start), checking each call's expect, with invariants
+// every invariant in each state from position from on (a prefix's were
+// held already), and, settled, every eventual val in the last state.
+// keep, if set, is given each state from the start's on. An error is the
+// evaluator's refusal.
+func (e *evaluator) walk(c *Checker, consts map[string]qeval.Value, plan *binding.Plan, from int, s qeval.State, invariants, settled bool, keep func(qeval.State)) (walk, error) {
+	w := walk{rejected: -1, violated: -1}
 	if s == nil {
+		from = 0
 		states, failed, err := e.start(c, consts, plan)
 		if err != nil {
-			return 0, "", err
+			return w, err
 		}
 		if failed {
-			return startAt, "", nil
+			w.startFailed = true
+			return w, nil
 		}
 		s = states[0]
 	}
-	violated := -1
-	check := func(at int) error {
-		if !invariants || violated >= 0 {
+	check := func(pos int) error {
+		if !invariants || w.violated >= 0 {
 			return nil
 		}
 		for _, inv := range c.Binding.Invariants {
@@ -327,83 +321,68 @@ func (e *evaluator) judge(c *Checker, history *qtrace.Trace, order []qtrace.Step
 				return err
 			}
 			if v != qeval.Bool(true) {
-				violated = at
+				w.violated = pos
 				return nil
 			}
 		}
 		return nil
 	}
 	if from == 0 {
-		if err := check(startAt); err != nil {
-			return 0, "", err
+		if keep != nil {
+			keep(s)
+		}
+		if err := check(0); err != nil {
+			return w, err
 		}
 	}
 	for i, call := range plan.Calls {
 		if i < from {
 			continue // the prefix's: accepted, every invariant held
 		}
-		at := stepAt(plan.Calls, i, n)
 		var args []qeval.Value
 		for _, p := range c.Model.Actions[call.Action] {
 			v, err := e.literal(call.Args[p.Name])
 			if err != nil {
-				return 0, "", err
+				return w, err
 			}
 			args = append(args, v)
 		}
 		next, ok, err := e.m.Step(consts, s, e.em.Actions[call.Action], args...)
 		if err != nil {
-			return 0, "", err
+			return w, err
 		}
 		if !ok {
-			return at, "", nil
+			w.rejected = i
+			return w, nil
 		}
 		s = next
-		if call.Expect != "" {
-			if call.ExpectArgs == nil {
-				return 0, "", &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
-			}
-			var xs []qeval.Value
-			for _, a := range call.ExpectArgs {
-				v, err := e.literal(a)
-				if err != nil {
-					return 0, "", err
-				}
-				xs = append(xs, v)
-			}
-			v, err := e.m.Eval(consts, s, e.em.Expects[call.Action], xs...)
-			if err != nil {
-				return 0, "", err
-			}
-			if v != qeval.Bool(true) {
-				return at, "", nil
-			}
+		if keep != nil {
+			keep(s)
 		}
-		if err := check(at); err != nil {
-			return 0, "", err
+		if ok, err := e.holds(consts, s, &call); err != nil {
+			return w, err
+		} else if !ok {
+			w.rejected = i
+			return w, nil
+		}
+		if err := check(i + 1); err != nil {
+			return w, err
 		}
 	}
-	if violated < 0 {
-		c.memo.put(keys[len(plan.Calls)], s) // before the settle's vals: an extension adds steps
-	}
-	if tr.Settled {
+	w.final = s
+	if settled {
 		for _, ev := range c.Binding.Eventually {
 			v, err := e.m.Eval(consts, s, e.em.Eventually[ev])
 			if err != nil {
-				return 0, "", err
+				return w, err
 			}
 			if v != qeval.Bool(true) {
-				return n - 1, "", nil // the order's, as failedAt says: another may end as the probe saw
+				w.eventual = ev
+				break
 			}
 		}
 	}
-	if violated >= 0 {
-		return violated, "", nil
-	}
-	if hooks.TamperEval.Load() == 1 {
-		return 0, "", nil
-	}
-	return -1, e.m.Key(s), nil
+	return w, nil
 }
 
 // start is the states plan's replay starts in: init's, or (plan.Start)

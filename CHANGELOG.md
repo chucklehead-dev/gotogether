@@ -21,6 +21,23 @@ The first release. What a user meets, by module:
   error. `qnemesis.NewRecorder` returns the recorder alone (closing it
   closes the nemesis's log). qobshttp's package example is a standalone
   program's recording: recorder, sink, handler, shutdown, close.
+- The Go evaluator decides the runs that pass (docs/DESIGN.md §56): a
+  check (`Check`, `CheckBatch`, `Judge`, qtest, the CLI) replays each
+  actor's plan in internal/qeval first, and a plan it accepts is a pass
+  with no quint process, its summary saying "judged by the Go
+  evaluator", no module, and its ITF written from the evaluator's states
+  (quint's states; NoITF writes none). A plan it rejects is quint's
+  detail replay alone, so every failing report (its position, message
+  and the model's state) is quint's; one it refuses, a model outside its
+  fragment, a binding with bounded responses, and every run under
+  `GOTOGETHER_EVAL=quint` are quint's as before. `GOTOGETHER_EVAL=shadow`
+  judges each run's plan with both and fails it on any difference (the
+  nightly's evaluator-shadow jobs, the grist examples added);
+  `GOTOGETHER_SHADOW_LOG=file` lists the runs compared and refused. A
+  step some values of a `nondet` choice disable, which quint's replay
+  takes or not at random, is refused for runs. No API change.
+  (counters' -short suite: 443 → 279 CPU s, 63 → 38 quint processes;
+  qtest's 392 → 204; docs/performance.md, item 7.)
 - `qhistory.Record(db, h, lists)` (docs/refactors.md B1): a `qenv.DB`
   whose transactions are recorded in a `qhistory.History` as a
   list-append workload's (reads, appends, outcomes: an unknown commit

@@ -954,6 +954,7 @@ func TestShadowMode(t *testing.T) {
 func TestShadowChecksRuns(t *testing.T) {
 	skip.Quint(t)
 	t.Setenv("GOTOGETHER_EVAL", "shadow")
+	t.Setenv("GOTOGETHER_SHADOW_LOG", "") // its disagreements are made: not the nightly's to count
 	defer hooks.TamperEval.Store(0)
 	ms := func(u int) time.Time { return time.Unix(0, int64(u)*int64(time.Millisecond)) }
 	steps := []qtrace.Step{

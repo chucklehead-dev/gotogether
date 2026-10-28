@@ -9,6 +9,7 @@ mutants) ends in one of these verdicts.
 | Verdict | Report says | Expectation | Means |
 |---|---|---|---|
 | conforms | `conformance: PASS`, every invariant `PASS` | `qtest.Conforms()` | the run is a behaviour of the model and its properties hold |
+| conforms, decided in Go | as above, and `judged by the Go evaluator, with no quint replay` | as above | the Go evaluator (internal/qeval) passed it; every failing verdict below is quint's, from its replay (`GOTOGETHER_EVAL=quint` replays passes with quint too, `=shadow` with both, failing on any difference) |
 | a step the model cannot take | `step i is not a transition of the model from the state reached` | `qtest.Rejects("action")` (`""`: any) | the code did something the model forbids from that state |
 | a state mismatch | `does not match` with `expect:` and `obs:` | `qtest.Mismatch("action")` | the step was allowed, but the observed state (`obs.*`) differs from the model's after it |
 | an eventual val false at the end | `invariant eventually V: FAIL` | `qtest.Violates(validate.EventuallyName("V"))` | the run ended (settled, in a simulation) with work the model says is pending: a livelock or lost work |

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -93,7 +94,13 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		trace *qtrace.Trace
 		plan  *binding.Plan
 		res   *Result
+		// the Go evaluator's verdict, if it gave one (judged), and whether
+		// it decided the item (a pass, no quint replay)
+		ev      runVerdict
+		judged  bool
+		decided bool
 	}
+	var all []*item
 	groups := map[string][]*item{}
 	var keys []string
 	for i, steps := range runs {
@@ -123,6 +130,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 				break
 			}
 			it := &item{run: i, trace: t, plan: p, res: newResult(c.Binding, t, p)}
+			all = append(all, it)
 			reports[i].Actors = append(reports[i].Actors, it.res)
 			k := strings.Join(p.ConstantList(), ", ")
 			if _, ok := groups[k]; !ok {
@@ -130,6 +138,34 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			}
 			groups[k] = append(groups[k], it)
 		}
+	}
+	// the Go evaluator first: a plan it passes is decided, with no quint
+	// replay (decide.go); one it rejects goes to quint's detail replay
+	re := c.runEvaluator()
+	if re != nil {
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+		for _, it := range all {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				var err error
+				it.ev, err = re.e.judgeRun(c, it.trace, it.plan, !opt.NoITF || re.shadow)
+				it.judged = err == nil
+				if err != nil {
+					re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(it.trace.Actor), len(it.plan.Calls), err))
+				}
+				if it.judged && it.ev.pass && !re.shadow {
+					it.decided = re.e.passed(c.Binding, it.res, it.plan, it.ev, opt, fmt.Sprintf("run%d_%s", it.run, sanitize(it.trace.Actor)))
+				}
+			}()
+		}
+		wg.Wait()
+	}
+	for _, k := range keys {
+		groups[k] = slices.DeleteFunc(groups[k], func(it *item) bool { return it.decided })
 	}
 	total, steps := 0, 0
 	for _, k := range keys {
@@ -174,15 +210,17 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			calls := make([][]binding.Call, len(ch.items))
 			starts := make([]*binding.Call, len(ch.items))
 			results := make([]*Result, len(ch.items))
+			detail := make([]bool, len(ch.items))
 			for i, it := range ch.items {
 				calls[i], starts[i] = it.plan.Calls, it.plan.Start
 				results[i] = it.res
+				detail[i] = it.judged && !it.ev.pass // the evaluator rejected it
 			}
 			copt := opt
 			if !chosen && len(ch.items) > 1 {
 				copt.Backend, copt.detailBackend = "typescript", "rust"
 			}
-			for i, err := range evaluate(ctx, ms, calls, starts, name, copt, results) {
+			for i, err := range evaluate(ctx, ms, calls, starts, name, copt, results, detail) {
 				if err == nil {
 					continue
 				}
@@ -201,18 +239,22 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		}(ch)
 	}
 	wg.Wait()
-	for _, ch := range chunks {
-		for _, it := range ch.items {
-			if errs[it.run] == nil {
-				c.judgeWithin(it.trace, it.res)
-				judgeLost(c.Binding, it.res, it.trace.Lost)
-				judgeAbsent(c.Binding, it.res, it.trace.Lost, it.trace.Gaps, nil, nil)
+	if re != nil && re.shadow {
+		// quint's verdicts, before the checks below add to them, against
+		// the evaluator's
+		for _, it := range all {
+			if it.judged && errs[it.run] == nil {
+				if err := re.compare(c, it.trace, it.plan, it.ev, it.res); err != nil {
+					setErr(it.run, err)
+				}
 			}
 		}
 	}
-	for i, err := range c.shadowRuns(runs) {
-		if errs[i] == nil {
-			errs[i] = err
+	for _, it := range all {
+		if errs[it.run] == nil {
+			c.judgeWithin(it.trace, it.res)
+			judgeLost(c.Binding, it.res, it.trace.Lost)
+			judgeAbsent(c.Binding, it.res, it.trace.Lost, it.trace.Gaps, nil, nil)
 		}
 	}
 	for i := range reports {

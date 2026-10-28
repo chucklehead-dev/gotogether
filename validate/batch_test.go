@@ -131,7 +131,7 @@ func TestCheckerScratchRemovedByClose(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		roots = append(roots, filepath.Dir(filepath.Dir(rep.Actors[0].Module)))
+		roots = append(roots, filepath.Dir(filepath.Dir(rep.Actors[0].ITF))) // (a pass the Go evaluator gives has no module, its ITF there too)
 	}
 	if roots[0] != roots[1] || !strings.Contains(roots[0], "gotogether-") {
 		t.Fatalf("two checks' directories under %v, want one root of the checker's", roots)

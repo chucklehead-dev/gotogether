@@ -137,30 +137,53 @@ for the nightly's long runs.
 at every fault choice, and the scheduler makes one choice per nemesis
 family at every step: `BenchmarkSeededFault` 180 → 100 ns.
 
-## For the maintainer's decision
+### 7. The Go evaluator decides passing runs (H1, D1 below as decided)
 
-### D1. The Go evaluator's verdict for passing runs, quint's for failing ones
-
-After item 2, a grist suite's quint CPU is mostly the fast-path batch
+Before it, a grist suite's quint CPU was mostly the fast-path batch
 processes that decide passing runs: counters 231 of 428 CPU s (36
-processes), wallet-grist 210 of 319, library 79 of 165; the rest is the
-detail processes of failing runs (102, 62, 42), typechecks and compiles.
-The Go evaluator already judges whole runs (`evaluator.judge`): on
-counters' real-tier run of two actors (107 and 53 steps), quint took 25 s
-of wall (~16 CPU s), the evaluator 27 to 76 ms after a one-time
-`quint compile` of 7 CPU s per binding.
+processes), wallet-grist 210 of 319, library 79 of 165. Now a check
+asks the evaluator first; a plan it passes is a pass with no quint
+process, one it rejects goes to quint's detail replay alone (its report
+quint's), one it refuses to quint as before (docs/DESIGN.md §56).
 
-Proposed: CheckBatch asks the evaluator first; a run it passes is
-passed, a run it fails (or refuses) goes to quint's detail process,
-which gives the failure's location and ITF as now. Buys 50-65% of every
-grist suite's CPU and a similar share of validate's and qtest's.
-Precedent: bindings with hidden actions are already judged by the
-evaluator alone, and searches' candidates are. Risk: a passing verdict
-then rests on internal/qeval, not quint. The nightly's evaluator-shadow
-jobs (`GOTOGETHER_EVAL=shadow`) compare the two on every run; a
-GOTOGETHER_EVAL=quint override would keep quint's verdicts for whoever
-wants them. Behaviour change (who decides a pass), no API change.
-Recommendation: yes, with the shadow job kept as the guard.
+Here, back to back on the same 4-core machine shared with other agents
+(load 8-28; CPU s are user + sys of `go test` and its children, quint
+processes counted by the PATH wrapper above):
+
+| -short unless said | CPU s before → after | quint processes | of them `quint test` | `quint compile` |
+|---|---|---|---|---|
+| examples/counters | 443 → 279 (−37%) | 63 → 38 | 56 → 23 | 1 → 9 |
+| examples/wallet-grist | 342 → 240 (−30%) | 56 → 40 | 48 → 25 | 1 → 8 |
+| examples/library | 178 → 143 (−20%) | 26 → 20 | 19 → 8 | 1 → 6 |
+| examples/checkout | 91 → 62 (−32%) | 18 → 9 | 17 → 6 | 0 → 2 |
+| validate (full) | 940 → 718 (−24%) | 730 → 557 | 686 → 506 | 20 → 26 |
+| qtest (full) | 392 → 204 (−48%) | 332 → 179 | 300 → 133 | 10 → 24 |
+
+(grist's examples on edb8a81's acyclic model layout, the rest on
+7e83d66.) Less than the 50-65% D1 estimated, for two reasons the
+counts show: the remaining `quint test` processes are failing runs'
+detail replays (mutants, the claims that expect a rejection: validate's
+own tests are mostly those), and every process that judges runs now
+compiles the binding's evaluation module once (`quint compile`, about
+as costly as a typecheck): counters' overlay mutants and its packages'
+test binaries compile it nine times. D3's cache answers the second.
+
+Soundness before the switch: TestAgreesWithQuint over every model of
+the repository (42 models, 16 of them examples', none refused, on
+edb8a81), and the shadow (`GOTOGETHER_EVAL=shadow`, each run's plan
+judged by both, verdict, passing result and ITF states compared) over
+the -short suites of counters, wallet-grist, library, checkout, wallet,
+quorumkv, bank, twophase, lease, hello, jobqueue, kvstore, raftkv,
+glomers, streams and retrystorm, and the full validate and qtest
+packages: about 2,000 runs judged both ways (passes and failures:
+eventual vals false at a settle, invariants violated, rejected steps,
+mutants' runs, linearized and resolved orders, pending calls, snapshots
+and constants, replays past 20 steps in segments), no disagreement but
+the five the tamper tests make on purpose. The runs the evaluator
+refused (a model's runtime error such as a missing map key, a literal
+of a constructor its model lacks) went to quint.
+
+## For the maintainer's decision
 
 ### D2. A check's actors in one quint process
 
@@ -173,6 +196,13 @@ typecheck per extra actor: validate's single checks were 274 processes
 files (`observed_<actor>.qnt`), which tests and the CLI read; a change
 of artifact names. Recommendation: worth it after D1, which removes most
 of these processes anyway.
+
+**After D1 (item 7): not done.** A check's quint processes are now its
+failing actors' detail replays only; grouping them saves a typecheck
+only for a run with two or more failing actors of one instance, which
+no suite measured here has many of, against a change of artifact names
+(`observed_<actor>.qnt`, its ITF) that tests, the CLI and users'
+scripts read. Left until a measurement shows such runs.
 
 ### D3. A content-addressed cache of typechecks and compiles across processes
 

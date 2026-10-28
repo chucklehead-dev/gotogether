@@ -534,7 +534,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `otelio` | an OTLP/JSON file exporter and reader; span events to steps |
 | `convert` | an application's own spans to steps, by YAML rules |
 | `binding` | the YAML binding: lint against `quint typecheck`, the plan, the generated Quint module and ITF; `ScanRecords`/`LintRecords` |
-| `validate` | replay with `quint test`: `Checker` (`Check`, `CheckBatch`, `MutateSteps`: a log's observation mutants), `Cached`, `ValidateITF`; structured verdicts (`Report.Verdict`); run manifests (`NewManifest`, `ReadManifest`, `Verify`, `Bundle`) |
+| `validate` | replay in the Go evaluator (passes) or with `quint test` (failures, and what it cannot judge): `Checker` (`Check`, `CheckBatch`, `MutateSteps`: a log's observation mutants), `Cached`, `ValidateITF`; structured verdicts (`Report.Verdict`); run manifests (`NewManifest`, `ReadManifest`, `Verify`, `Bundle`) |
 | `validate/cli` | the CLI's check of files in Go: `Check` (as `gotogether validate` makes it, and its `Manifest`), `Replay` (a manifest's run judged again: `validate -replay`); its own package, so `validate` brings no OpenTelemetry SDK |
 | `qshrink` | a driver's failing actions shrunk outside a test: `Shrink` (ddmin over reruns, `Calibration`, `SameFailure`, `Resetter`, `ErrDiverged`), what `qtest.ShrinkActions` and `gotogether shrink` run |
 | `qtest` | tests that check against the model: `System` (`Explore`, with `ExploreConfig.Steer` toward rare states, `Exhaust`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`: a trace's faults, `FaultScript`, imposed on the whole system), `Validate`, `Record`, `Runs` (runs made one by one, a real deployment's, under claims over runs); claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `Settles`, `Completes`, `Finishes` (a finished journey, not a conforming prefix), `Pending`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes`, `Exercised`, `NotVacuous`; `Linearize` for histories recorded by clients, `LinearizeByKey` per independent key, `ResolvePending` for calls never completed; `Violates(...).At`; a shrunk run's `ShrunkTo`); observation mutants of a recorded log (`MutateSteps`; claims `Killed`, `Survived` over `StepOp` selectors); a driver's failing actions shrunk (`ShrinkActions`, `ActionShrink`, `Resetter`, `SameFailure`, `ErrDiverged`, `Calibration`; `AtMostActions`); `Evidence`; `RequireQuint` and `Optional` (skips that strict mode fails); options (`Constants`, `Invariants`, `Quint`, `Global`) |
@@ -656,7 +656,11 @@ imports it.
   effect needs the implementation to know which (`QuintOutcome()`).
   Branching replay (Apalache) is not built.
 - **Cost of trace checks.** Trace validation is post hoc and bounded by
-  run length. Each check is one `quint test` process (~0.5–1 s).
+  run length. A run that passes is decided by the Go evaluator
+  (internal/qeval, milliseconds after one `quint compile` per binding,
+  for models in its fragment); a failing one is one `quint test` process
+  (~0.5–1 s), whose report it is (`GOTOGETHER_EVAL=quint`: quint for
+  every run).
 - **`connect.Test`.** `quint test` traces carry no action annotations,
   so `connect.Test` needs `NondetPath`.
 - **Conversion.** Converted spans cannot reveal lost spans.

@@ -12,8 +12,11 @@ then works through the following stages:
    numbers, program-order threads and domain clocks. It detects lost steps
    and restarts.
 2. **Map.** A **binding** maps each step to a Quint call.
-3. **Replay.** It generates a Quint module and replays the run with
-   `quint test`.
+3. **Replay.** It replays the run in the model: the Go evaluator
+   (internal/qeval) decides a run that passes, with no quint process; a
+   run it rejects, or cannot judge, is replayed by `quint test` in a
+   generated module, so every failure is reported by quint
+   (`GOTOGETHER_EVAL=quint` has quint replay every run).
 4. **Report.** For each step it says whether the step is a transition of
    the model, whether the observed state matches, and whether the
    invariants hold.
@@ -138,7 +141,8 @@ templates (collections, outcomes, ITF), or setting up the analyzers
 
   On a miss, the failure message is the report.
 - In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use
-  `CheckBatch` for many runs in one quint process per chunk.
+  `CheckBatch` for many runs: the evaluator passes what it can, and the
+  rest share one quint process per chunk.
 - From files: `gotogether validate -binding b.yaml FILE...`. FILE may be
   OTLP/JSON, a step log, a driver's request log (package qdriver) or
   ITF, detected by content. Add
@@ -230,9 +234,11 @@ Production logs are selected and sanitized before they are checked
 | `issue: error overlap` | an incarnation acted after its successor started | a split brain (fence the old incarnation), or wrong process ids or skewed clocks (order with a domain clock) |
 | `issue: error cycle` | contradictory order keys | instrumentation order keys are wrong |
 
-The generated module (`module:` in the report) is a plain Quint file:
-`quint test` it, edit it, or keep it as a regression test. The `itf:` file
-of a conforming run carries the model's full state and `mbt::nondetPicks`,
+The generated module (`module:` in a failing report) is a plain Quint file:
+`quint test` it, edit it, or keep it as a regression test. A passing run
+the Go evaluator decided has no module (its report says "judged by the Go
+evaluator"; `GOTOGETHER_EVAL=quint` writes one). The `itf:` file
+of a conforming run (the evaluator's or quint's: the same states) carries the model's full state and `mbt::nondetPicks`,
 so `connect.Replay` (with `itf.ReadFile`) can drive the implementation with it again.
 
 Soundness is relative to the binding: a wrong template can hide or invent

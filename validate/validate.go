@@ -147,6 +147,9 @@ type Result struct {
 	// withins are the bounded responses judgeWithin found not met or not
 	// judged, for Absent
 	withins []obligation
+	// byEvaluator: the Go evaluator passed it, with no quint replay
+	// (decide.go)
+	byEvaluator bool
 	// Unfinished, set by a check that judges the finish (a recorded
 	// run's -require-finish, validate/cli), is why a result that
 	// passes is no finished run ("incomplete (no settle)", "no verdict
@@ -244,29 +247,24 @@ func (r *Result) OK() bool {
 	return true
 }
 
-// validateTrace checks one actor's trace.
-func validateTrace(ctx context.Context, b *binding.Binding, m *binding.Model, t *qtrace.Trace, opt Options) (*Result, error) {
-	opt, err := opt.resolve()
-	if err != nil {
-		return nil, err
-	}
-	p, err := b.Plan(m, t)
-	if err != nil {
-		return nil, err
-	}
-	return validatePlan(ctx, b, t, p, opt)
-}
-
 // validatePlan checks one actor's trace as p plans it.
 func validatePlan(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *binding.Plan, opt Options) (*Result, error) {
+	return validatePlanIn(ctx, b, t, p, opt, newResult(b, t, p), false)
+}
+
+// validatePlanIn is validatePlan into res, newResult's, with only the
+// detail replay when detail is set (the Go evaluator rejected the plan:
+// the fused replay would fail too).
+func validatePlanIn(ctx context.Context, b *binding.Binding, t *qtrace.Trace, p *binding.Plan, opt Options, res *Result, detail bool) (*Result, error) {
 	opt, err := opt.resolve()
 	if err != nil {
 		return nil, err
 	}
-	base := "observed_" + sanitize(t.Actor)
-	res := newResult(b, t, p)
-	return res, evaluate(ctx, replay.Spec(b, p), [][]binding.Call{p.Calls}, []*binding.Call{p.Start}, base, opt, []*Result{res})[0]
+	return res, evaluate(ctx, replay.Spec(b, p), [][]binding.Call{p.Calls}, []*binding.Call{p.Start}, observedBase(t), opt, []*Result{res}, []bool{detail})[0]
 }
+
+// observedBase names an actor's replay files: observed_<actor>.
+func observedBase(t *qtrace.Trace) string { return "observed_" + sanitize(t.Actor) }
 
 // newResult is a trace's result before its replay. A binding's eventual
 // vals are judged only in a trace that recorded a settle last: one that
@@ -311,8 +309,10 @@ func (opt Options) resolve() (Options, error) {
 // run that passes. Only the runs that fail it are replayed again, with a
 // conformance run and a run per invariant (replay.DetailTests), which say
 // which check failed and where. Modules go to <Dir>/<base>.qnt and
-// <base>_detail.qnt. starts are where each run starts (nil: init).
-func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, starts []*binding.Call, base string, opt Options, res []*Result) []error {
+// <base>_detail.qnt. starts are where each run starts (nil: init). A run
+// whose detail is set is replayed in the detail module only: the Go
+// evaluator rejected it, so the fused replay would fail it too (nil: none).
+func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, starts []*binding.Call, base string, opt Options, res []*Result, detail []bool) []error {
 	errs := make([]error, len(runs))
 	fail := func(idx []int, err error) {
 		for _, i := range idx {
@@ -359,15 +359,27 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 		return gs, qnt, out, err
 	}
 	detailed := all
-	if len(ms.Invariants) > 0 {
-		gs, qnt, out, err := phase(replay.FastTests, base, all, opt)
+	var fast []int // the runs the fused replay judges first
+	for _, i := range all {
+		if i >= len(detail) || !detail[i] {
+			fast = append(fast, i)
+		}
+	}
+	if len(ms.Invariants) > 0 && len(fast) > 0 {
+		gs, qnt, out, err := phase(replay.FastTests, base, fast, opt)
 		if err != nil {
-			fail(all, err)
+			fail(fast, err)
 			return errs
 		}
 		verdicts, _ := parseQuintTest(out, qnt, gs[0])
 		detailed = nil
-		for i, g := range gs {
+		for _, i := range all {
+			if i < len(detail) && detail[i] {
+				detailed = append(detailed, i)
+			}
+		}
+		for j, g := range gs {
+			i := fast[j]
 			evFailed := false
 			for _, n := range g.Tests.Eventually {
 				evFailed = evFailed || res[i].Settled && verdicts[n] != Pass
@@ -397,6 +409,7 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 		if len(detailed) == 0 {
 			return errs
 		}
+		slices.Sort(detailed)
 	}
 	file := base
 	if len(ms.Invariants) > 0 {
@@ -821,6 +834,9 @@ func (r *Result) Summary() string {
 	// (gotogether validate printed a path that was gone)
 	if r.Module != "" && !r.OK() { // (a search's verdict, with no replay of its own)
 		fmt.Fprintf(&b, "  module: %s\n", r.Module)
+	}
+	if r.byEvaluator {
+		fmt.Fprintf(&b, "  judged by the Go evaluator, with no quint replay (GOTOGETHER_EVAL=quint replays it with quint)\n")
 	}
 	if r.ITF != "" {
 		fmt.Fprintf(&b, "  itf: %s\n", r.ITF)

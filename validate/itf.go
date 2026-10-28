@@ -159,7 +159,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 	}
 	base := "replay_" + sanitize(actor)
 	res := &Result{Actor: actor}
-	return res, evaluate(ctx, ms, [][]binding.Call{calls}, []*binding.Call{start}, base, o, []*Result{res})[0]
+	return res, evaluate(ctx, ms, [][]binding.Call{calls}, []*binding.Call{start}, base, o, []*Result{res}, nil)[0]
 }
 
 // itfInstance is the instance an ITF trace is replayed against: the

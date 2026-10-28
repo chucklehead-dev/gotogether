@@ -48,9 +48,6 @@ type mode struct {
 	// byCheck: an order the Go evaluator found is left to the check of the
 	// search's Steps to confirm (Judge)
 	byCheck bool
-	// shadowed: the checks of a shadow's (GOTOGETHER_EVAL=shadow), not
-	// shadowed again
-	shadowed bool
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the
@@ -241,6 +238,8 @@ func reconstruct(b *binding.Binding, steps []qtrace.Step) ([]*qtrace.Trace, []qt
 func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
 	traces, issues := reconstruct(c.Binding, steps)
 	rep := &Report{Issues: issues}
+	re := c.runEvaluator()
+	var shadowErr error // the first actor the evaluator and quint disagree on
 	for _, t := range traces {
 		if (len(c.Binding.Hidden) > 0 || c.resumes(t)) && c.mode.history == nil {
 			r, err := c.checkHidden(ctx, t)
@@ -256,17 +255,27 @@ func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 		if err != nil {
 			return nil, err
 		}
-		r, err := validateTrace(ctx, c.Binding, c.Model, t, o)
+		if o, err = o.resolve(); err != nil {
+			return nil, err
+		}
+		p, err := c.Binding.Plan(c.Model, t)
 		if err != nil {
 			return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
+		}
+		r, serr, err := c.checkPlan(ctx, re, t, p, newResult(c.Binding, t, p), o)
+		if err != nil {
+			return rep, fmt.Errorf("actor %s: %w", t.Actor, err)
+		}
+		if shadowErr == nil {
+			shadowErr = serr
 		}
 		c.judgeWithin(t, r)
 		judgeLost(c.Binding, r, t.Lost)
 		judgeAbsent(c.Binding, r, t.Lost, t.Gaps, nil, nil)
 		rep.Actors = append(rep.Actors, r)
 	}
-	if err := c.shadowRuns([][]qtrace.Step{steps})[0]; err != nil {
-		return rep, err
+	if shadowErr != nil {
+		return rep, shadowErr
 	}
 	return rep, nil
 }

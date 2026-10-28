@@ -49,15 +49,20 @@ AGENTS.md has the general requirements.
   batch chunk of several traces, which it evaluates in one process where
   rust starts one evaluator per test; quint's own default for connect's
   `quint run`).
-  `GOTOGETHER_EVAL=quint` checks a linearization's candidates with quint
-  alone (by default the Go evaluator judges them, internal/qeval over the
-  binding's evaluation module, compiled once into
-  $TMPDIR/gotogether-eval/, and quint confirms the search's conclusion).
-  `GOTOGETHER_EVAL=shadow` judges with both, every batch the evaluator
-  judges checked by quint too, and each actor of every run checked
-  (Check, CheckBatch) judged by both, and fails on a disagreement,
-  naming the candidate (the nightly's `evaluator-shadow`; as slow as
-  quint alone).
+  By default the Go evaluator (internal/qeval over the binding's
+  evaluation module, compiled once into $TMPDIR/gotogether-eval/) decides
+  every run it passes, with no quint process, and judges a
+  linearization's candidates, quint confirming the search's conclusion;
+  a run it rejects or refuses is quint's to judge and report
+  (DESIGN §56). `GOTOGETHER_EVAL=quint` has quint judge every run and
+  every candidate. `GOTOGETHER_EVAL=shadow` judges with both, every
+  batch the evaluator judges checked by quint too, and each actor of
+  every run checked (Check, CheckBatch) judged by both, its plan as the
+  check plans it, and fails on a disagreement of a verdict, a passing
+  result or an ITF state, naming the run (the nightly's
+  `evaluator-shadow`; as slow as quint alone). `GOTOGETHER_SHADOW_LOG=file`
+  appends a line per run so judged (`agree`, `DISAGREE`) or refused by
+  the evaluator (`refused`, with why).
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's

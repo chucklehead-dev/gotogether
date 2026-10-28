@@ -232,7 +232,8 @@ module observed {
 }
 ```
 
-`quint test --max-samples 1 --out-itf` runs it. Each step is on its own line,
+`quint test --max-samples 1 --out-itf` runs it (since §56, only for a run
+the Go evaluator does not pass: it decides the passes). Each step is on its own line,
 so quint's error position maps back to the observed step (the test-time
 `LineStep` table). Nested `A.expect(P)` inside `.then(...)` pinpoints the step
 precisely. A top-level `.expect` would only point at the whole chain. Verdicts:
@@ -2963,7 +2964,8 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   candidate's processes first appear in (which numbers them for
   `{{.process}}`) and, with inferred restarts, its last process (a review
   found two prefixes of one state numbering their processes otherwise,
-  merged). The caller's check of the order is quint's, as before.
+  merged). The caller's check of the order is quint's, as before (since
+  §56, the evaluator's when it passes the order, quint's otherwise).
 - **Checked against quint.** Every binding's model, in its binding's
   instance, against `quint run`'s traces (each state one of the
   evaluator's successors of the one before), and a table of builtins at
@@ -2972,8 +2974,8 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   confirmation. `GOTOGETHER_EVAL=shadow` checks every batch the
   evaluator judges with quint too, failing the search on any
   disagreement of a failure index, and each actor of every run a
-  Checker checks judged by both too (on one thread, in the order
-  checked): every binding a run is checked against, not only the
+  Checker checks judged by both too (its plan as the check plans it,
+  §56): every binding a run is checked against, not only the
   searches'. The nightly runs every example so, where the histories are
   the ones users' runs make.
 
@@ -3891,3 +3893,69 @@ double quote is refused, naming the field or the path inside a value,
 rather than escaped some way Quint does not read. The replay module's
 comments, which named each step with its arguments, were the one place a
 raw newline then broke: they are one line each.
+
+## 56. The Go evaluator decides passing runs (H1)
+
+After the batch fix (performance.md, item 2) a grist suite's quint CPU
+was mostly the processes that decided runs that passed: counters 231 of
+428 CPU s, wallet-grist 210 of 319. The evaluator of §45 already judged
+whole runs (a search's candidates, a binding with hidden actions, the
+shadow's checks) in milliseconds. The maintainer's decision (the tenth
+review's H1): it decides the runs that pass; quint keeps judging the
+ones that fail.
+
+- **What it decides.** Each actor's plan, as the check plans it
+  (`Check`, `CheckBatch`, and so `Judge`, qtest and the CLI), is replayed
+  by the evaluator as quint's fused replay checks it: the start (init,
+  or the snapshot's action from no state with its expect), each call
+  from the state before it with its expect after, every invariant in
+  every state, and in a settled trace every eventual val in the last
+  one (decide.go, over the walk the searches' `judge` shares). A plan it
+  accepts is a pass: the result quint's fast phase would fill (the
+  steps, every check passed), marked "judged by the Go evaluator" in its
+  summary, with no module, and, unless NoITF, an ITF written from its
+  states (the model's variables, annotated as quint's is), so a passing
+  run's ITF still drives `connect.Replay`.
+- **What stays quint's.** A plan it rejects goes to quint's detail
+  replay alone (the fused one would fail too: one process saved), whose
+  report it is: the position, quint's message, the model's state at the
+  failure. One it refuses (an `Unsupported` or `EvalError`, a model
+  outside the fragment, a binding with no evaluation module) goes to
+  quint's replays as before, as does every run under
+  `GOTOGETHER_EVAL=quint`. A search's candidates and its confirmations
+  (a checker with a history) are §45's: quint confirms what the
+  evaluator concluded there. A binding with bounded responses (`within`)
+  stays quint's: its obligations are judged on quint's states.
+  Hidden actions and resumes are the evaluator's searches, as before.
+- **A choice quint samples.** quint's replay of `nondet x = oneOf(S)`
+  picks one value at random, not one that enables the action
+  (`oneOf(1.to(1000))` with `x == 7` fails `quint test` at almost every
+  seed), where the evaluator takes the step if some value enables it.
+  The spec admits the step, so the evaluator's verdict is the model's,
+  but a pass quint would sample otherwise is not one this change may
+  give: a run's evaluator (`qeval.Model.AsReplayed`) refuses a step some
+  values of a choice disable, and quint judges that run as before. A
+  search's evaluator keeps taking it (its conclusions are confirmed).
+- **The guard.** `GOTOGETHER_EVAL=shadow` has quint judge every run the
+  evaluator judges, plan for plan, and fails the run on a difference: of
+  the verdict (pass, conformance and the call it fails at, the first
+  state an invariant fails in, an eventual val false), of a passing
+  result (its steps, its checks), or of an ITF state. It replaced the
+  shadow's own re-planning of each actor on one thread, which compared
+  the evaluator with quint on plans no check made. Rejected runs take
+  the detail-only path in shadow too, so the shadow runs exactly the
+  path that decides outside it. The nightly's evaluator-shadow jobs run
+  every example so (the grist examples added), and print how many runs
+  the two judged and how many the evaluator refused
+  (`GOTOGETHER_SHADOW_LOG`); a disagreement fails the job by name.
+- **Shown before it decided.** TestAgreesWithQuint over every model of
+  the repository, and the shadow over the examples' -short suites and
+  the core's validate and qtest (performance.md, D1, for the numbers).
+- **Tests that fail without it.** A passing run starts no `quint test`
+  process and a failing one starts exactly the detail replay, whose
+  report is quint's (TestEvaluatorDecidesPasses, counting a wrapper's
+  processes); the evaluator's ITF is quint's states
+  (TestEvaluatorITFIsQuints); an evaluator that passes every run
+  (`TamperEval` 6) is caught by the shadow, by Check and CheckBatch, and
+  is the verdict without it (TestShadowCatchesAWrongPass); a partial
+  choice is refused as replayed (TestAsReplayedRefusesPartialChoices).
