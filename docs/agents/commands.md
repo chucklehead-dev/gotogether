@@ -63,6 +63,12 @@ AGENTS.md has the general requirements.
   `evaluator-shadow`; as slow as quint alone). `GOTOGETHER_SHADOW_LOG=file`
   appends a line per run so judged (`agree`, `DISAGREE`) or refused by
   the evaluator (`refused`, with why).
+  validate keeps quint's typechecks and the evaluation modules' compiles
+  across processes, by content (quint's version, the spec's and its
+  imports' paths and contents, every .qnt beside them, the arguments),
+  under the user's cache directory (`gotogether/quint`; DESIGN §57):
+  `GOTOGETHER_CACHE=off` asks quint every time, `GOTOGETHER_CACHE=<dir>`
+  keeps it there. An entry unused for a week is pruned.
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's

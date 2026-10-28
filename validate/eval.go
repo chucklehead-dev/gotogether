@@ -101,6 +101,23 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 		return &evaluator{err: err}
 	}
 	em = again
+	// quint's IR of the module, kept across processes by its content and
+	// the model's (cache.go)
+	key, cached := cacheKey(c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text)
+	if cached {
+		if data, ok := cacheGet("compile", key); ok {
+			if m, err := qeval.Load(data); err == nil {
+				return &evaluator{em: em, m: m}
+			}
+		}
+		unlock, data, ok := cacheLock("compile", key)
+		defer unlock()
+		if ok {
+			if m, err := qeval.Load(data); err == nil {
+				return &evaluator{em: em, m: m} // another process's, compiled meanwhile
+			}
+		}
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return &evaluator{err: err}
 	}
@@ -146,6 +163,9 @@ func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
 	m, err := qeval.Load(data)
 	if err != nil {
 		return &evaluator{err: err}
+	}
+	if cached {
+		cachePut("compile", key, data)
 	}
 	return &evaluator{em: em, m: m}
 }

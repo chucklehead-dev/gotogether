@@ -3959,3 +3959,41 @@ ones that fail.
   (`TamperEval` 6) is caught by the shadow, by Check and CheckBatch, and
   is the verdict without it (TestShadowCatchesAWrongPass); a partial
   choice is refused as replayed (TestAsReplayedRefusesPartialChoices).
+
+## 57. Typechecks and compiles cached across processes (D3)
+
+§56 left each process that judges runs compiling the binding's
+evaluation module once (`quint compile`, about a typecheck's cost):
+counters' -short suite compiled it nine times where it had compiled it
+once, in its packages' test binaries and its overlay mutants'
+subprocesses, beside six typechecks of the same model. validate now
+keeps quint's output for both under the user's cache directory
+(validate/cache.go), and a process that asks again parses the entry.
+
+- **The key** is everything quint's output depends on, conservatively:
+  quint's version (`quint --version` of the binary used, as manifests
+  record it); the spec's and every imported file's absolute path and
+  content hash (the manifest's import scan, transitive), and every
+  `.qnt` file in each of their directories as well, so an import the
+  scan misses in a sibling file still changes the key; the subcommand
+  and every argument but the file (compile's main, init and step), and
+  the evaluation module's text, which carries the binding's fixed
+  constants and the model's relative import; the cache's own format
+  (`cacheFormat`). An import the scan names and cannot read gives no
+  key: quint runs, uncached. The evaluator's version needs no place in
+  it: an entry is quint's output, which the evaluator reads afresh.
+- **Entries** are whole or absent (written under a temporary name and
+  renamed); one that does not parse is a miss and is written again. An
+  entry no process used for a week is pruned, once a process.
+  `GOTOGETHER_CACHE=off` bypasses the cache; `=<dir>` places it.
+- **The entry point** it needed: `binding.ParseTypecheck`, the model
+  from typecheck JSON (what `LoadModel` parses).
+- **Not across CI runs.** CI's runners start empty, so it saves within a
+  job (a suite's binaries and subprocesses, the CLI's invocations).
+  Carrying it across runs (`actions/cache`) would put a stale entry's
+  risk on every push for the binding and qeval packages' typechecks,
+  which do not go through validate: not done.
+- **Tests that fail without it**: a second ask starts no quint
+  process, and an import's change, a sibling's, another quint version
+  and `GOTOGETHER_CACHE=off` each start one (TestCacheAcrossProcesses);
+  no key without every import (TestCacheNeedsEveryImport).

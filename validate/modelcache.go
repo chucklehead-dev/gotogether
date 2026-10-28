@@ -2,6 +2,9 @@ package validate
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -28,5 +31,51 @@ func loadModel(quint, spec, module string) (*binding.Model, error) {
 	for _, i := range imports {
 		fmt.Fprintf(&key, "|%s=%s", i.Path, i.SHA256)
 	}
-	return models.Do(key.String(), func() (*binding.Model, error) { return binding.LoadModel(quint, spec, module) })
+	return models.Do(key.String(), func() (*binding.Model, error) { return typecheck(quint, spec, module) })
+}
+
+// typecheck is binding.LoadModel through the cache across processes
+// (cache.go): quint's typecheck JSON of spec kept by its content, and
+// parsed. A typecheck that fails is LoadModel's to report.
+func typecheck(quint, spec, module string) (*binding.Model, error) {
+	key, ok := cacheKey(quint, "typecheck", spec)
+	if !ok {
+		return binding.LoadModel(quint, spec, module)
+	}
+	if data, ok := cacheGet("typecheck", key); ok {
+		if m, err := binding.ParseTypecheck(data, module); err == nil {
+			return m, nil
+		}
+	}
+	unlock, data, ok := cacheLock("typecheck", key)
+	defer unlock()
+	if ok {
+		if m, err := binding.ParseTypecheck(data, module); err == nil {
+			return m, nil // another process's, typechecked meanwhile
+		}
+	}
+	if quint == "" {
+		quint = "quint"
+	}
+	tmp, err := os.CreateTemp("", "gotogether-typecheck-*.json")
+	if err != nil {
+		return binding.LoadModel(quint, spec, module)
+	}
+	tmp.Close()
+	defer os.Remove(tmp.Name())
+	cmd := exec.Command(quint, "typecheck", filepath.Base(spec), "--out", tmp.Name())
+	cmd.Dir = filepath.Dir(spec)
+	if err := cmd.Run(); err != nil {
+		return binding.LoadModel(quint, spec, module) // its error says what is wrong
+	}
+	data, err = os.ReadFile(tmp.Name())
+	if err != nil {
+		return binding.LoadModel(quint, spec, module)
+	}
+	m, err := binding.ParseTypecheck(data, module)
+	if err != nil {
+		return nil, err
+	}
+	cachePut("typecheck", key, data)
+	return m, nil
 }

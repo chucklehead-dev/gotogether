@@ -221,6 +221,27 @@ version, a flag); `GOTOGETHER_CACHE=off` would bypass it. It needs a
 API). Recommendation: yes for the in-job case (overlays, the CLI);
 across CI runs only with the key reviewed.
 
+**Done for the in-job case** (docs/DESIGN.md §57): typechecks and the
+evaluation modules' compiles (which item 7 made every judging process
+pay) are kept under the user's cache directory by a key of quint's
+version, every file the spec imports and every `.qnt` beside them
+(paths and contents), and the arguments; a lock file has processes
+starting at once ask quint once between them. Not across CI runs. Same
+machine as item 7, -short, a cold cache at the start of each suite:
+
+| | CPU s, item 7 → this | typechecks | compiles |
+|---|---|---|---|
+| examples/counters | 279 → 217 (warm cache: 178) | 6 → 1 (warm 0) | 9 → 5 (warm 0) |
+| examples/wallet-grist | 240 → 177 | 7 → 1 | 8 → 3 |
+| examples/library | 143 → 89 | 6 → 1 | 6 → 2 |
+| examples/checkout | 62 → 61 | 1 → 1 | 2 → 2 |
+| validate, qtest (full) | 718 → 699, 204 → 207 | its tests' specs are mostly temporary files: no gain | |
+
+From before item 7 to here: counters 443 → 217 CPU s (−51%),
+wallet-grist 342 → 177 (−48%), library 178 → 89 (−50%), the estimate
+D1 made. What is left of a grist suite's quint is its failing runs'
+detail replays.
+
 ### D4. A quint session for many replays
 
 quint's REPL loads a model once and could evaluate many replays: the

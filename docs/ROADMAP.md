@@ -25,7 +25,8 @@ module, a designer's product review, a newcomer's three tasks end to
 end; docs/HISTORY.md), the maintainer's decisions of 2026-10-28, each
 item as recommended:
 
-- **H1. The Go evaluator decides passing runs (M).** After the batch fix
+- **H1. The Go evaluator decides passing runs (M). Done** (8178000,
+  DESIGN §56; D3 too, §57; D2 left: performance.md says why). After the batch fix
   (d6640dc) a grist suite's quint CPU is mostly the processes that
   decide passing runs (counters 231 of 428 CPU s, wallet-grist 210 of
   319); the evaluator judges counters' real-tier run in 27-76 ms after a

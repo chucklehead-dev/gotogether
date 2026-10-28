@@ -229,6 +229,11 @@ type tcOut struct {
 	} `json:"types"`
 }
 
+// ParseTypecheck is module's model from the JSON `quint typecheck --out`
+// wrote, as LoadModel reads it: for a caller that keeps quint's output
+// (validate's cache of typechecks across processes).
+func ParseTypecheck(data []byte, module string) (*Model, error) { return parseTypecheck(data, module) }
+
 func parseTypecheck(b []byte, module string) (*Model, error) {
 	var tc tcOut
 	if err := json.Unmarshal(b, &tc); err != nil {

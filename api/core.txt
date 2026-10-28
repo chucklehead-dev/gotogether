@@ -6,6 +6,7 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 func Load(path string) (*Binding, error)
 func LoadModel(quint, spec, module string) (*Model, error)
 func ObsComparisons(expect string) []ObsComparison
+func ParseTypecheck(data []byte, module string) (*Model, error)
 func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
 func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
 func ScanAnnotations(dir string) ([]Annotation, error)

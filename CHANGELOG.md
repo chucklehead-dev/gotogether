@@ -21,6 +21,15 @@ The first release. What a user meets, by module:
   error. `qnemesis.NewRecorder` returns the recorder alone (closing it
   closes the nemesis's log). qobshttp's package example is a standalone
   program's recording: recorder, sink, handler, shutdown, close.
+- validate keeps quint's typechecks and its evaluation modules' compiles
+  across processes, by content (docs/DESIGN.md §57: quint's version,
+  the spec's and its imports' paths and contents, every .qnt beside
+  them, the arguments), under the user's cache directory
+  (`gotogether/quint`), pruned after a week unused;
+  `GOTOGETHER_CACHE=off` bypasses it, `=<dir>` places it.
+  `binding.ParseTypecheck` is the model from typecheck JSON (new).
+  (counters' -short suite, cold: 279 → 217 CPU s; docs/performance.md,
+  D3.)
 - The Go evaluator decides the runs that pass (docs/DESIGN.md §56): a
   check (`Check`, `CheckBatch`, `Judge`, qtest, the CLI) replays each
   actor's plan in internal/qeval first, and a plan it accepts is a pass
