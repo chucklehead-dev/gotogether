@@ -128,6 +128,50 @@ func TestRetriesAndIdempotence(t *testing.T) {
 	}
 }
 
+// A record produced while the sender is sending its partition's batch
+// (the sender yields before each request) is sent after it, not dropped:
+// the sender once put back the partition's queue as it was when the
+// batch began, losing the record, and then spun at one virtual instant
+// with a record outstanding and none to send, past MaxSteps, so Run
+// never returned (ci/consumer's gRPC handler, retried by its client,
+// produced meanwhile). The sender now panics on that state instead.
+func TestProduceWhileSending(t *testing.T) {
+	// every schedule of the first steps among the runnable tasks: some
+	// run the second Produce between the sender's batch and its end
+	for sched := range 1 << 6 {
+		t.Run(fmt.Sprintf("schedule %06b", sched), func(t *testing.T) {
+			acks := 0
+			l := sim(t, &schedule{bits: sched}, 1, func(ctx context.Context, l *simlog.Log) {
+				p := l.Producer(true)
+				ack := func(err error) {
+					if err == nil {
+						acks++
+					}
+				}
+				p.Produce(ctx, "k", []byte("1"), ack)
+				qenv.Yield(ctx)
+				p.Produce(ctx, "k", []byte("2"), ack)
+				p.Flush(ctx)
+			})
+			if got := values(l, 0); got != "1 2" || acks != 2 {
+				t.Errorf("landed %q with %d acknowledgements, want \"1 2\" with 2", got, acks)
+			}
+		})
+	}
+}
+
+// schedule picks among the runnable tasks by its bits, lowest first, for
+// the first six scheduling steps; every other choice is nominal.
+type schedule struct{ bits, n int }
+
+func (s *schedule) Choose(kind string, n int) int {
+	if kind != "sched.task" || s.n >= 6 {
+		return 0
+	}
+	s.n++
+	return (s.bits >> (s.n - 1) & 1) % n
+}
+
 // A commit that lands calls OnCommit, its acknowledgement lost or not; a
 // lost one does not land. A rewound fetch reads again from the committed
 // offset.

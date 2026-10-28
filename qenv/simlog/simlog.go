@@ -276,6 +276,11 @@ func (p *Producer) send(ctx context.Context) {
 			}
 		}
 		sort.Ints(parts)
+		if len(parts) == 0 {
+			// with nothing to send the loop would spin at one instant,
+			// past MaxSteps (no scheduling point): say so instead
+			panic(fmt.Sprintf("simlog: producer %d of log %s has %d records outstanding and none unsent", p.id, p.log.Name, p.outstanding))
+		}
 		retry := false
 		for _, part := range parts {
 			q := p.unsent[part]
@@ -301,7 +306,11 @@ func (p *Producer) send(ctx context.Context) {
 				p.outstanding--
 				r.done(nil)
 			}
-			p.unsent[part] = append(keep, q[len(batch):]...)
+			// the queue as it is now: a record produced while a request
+			// yielded is behind the batch (once dropped, by putting back
+			// q's tail, which left a record outstanding with none to send
+			// and the sender spinning at one instant)
+			p.unsent[part] = append(keep, p.unsent[part][len(batch):]...)
 			retry = retry || len(keep) > 0
 		}
 		if retry {
