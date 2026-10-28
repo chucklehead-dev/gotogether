@@ -137,7 +137,11 @@ for it. No binding is written by hand.
    site its guard; the read models' folds)
    and its invariants in `model/<app>.qnt`, each marked `// grist:
    invariant|eventually|violable [bindings]` (a binding name other than `default` is a test-only
-   variant, `<app>.<name>.binding.yaml`). **Read
+   variant, `<app>.<name>.binding.yaml`). Every trigger handled
+   (`<processor>EventuallyHandled`) and every answered call of a `Keyed`
+   dependency served (`<call>EventuallyServed`) are generated
+   obligations, judged at the settle: write only eventual vals that say
+   more. **Read
    [`references/model.md`](references/model.md) before writing or
    changing a model**: the holes, the marks, the names Quint refuses,
    exactly-once claims. Check it alone: `gotogether simulate -binding

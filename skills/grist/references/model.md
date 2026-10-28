@@ -155,11 +155,31 @@ clients'), each marked on the line before it:
   allows to fail (`simulate: allows`), such as one ok welcome per counter
   under at least once.
 
+**Obligations are generated, not written** (docs/grist.md §3.3.1): the
+steps module defines, and the store's default binding judges at a settle
+beside your eventual vals, one eventual val per processor,
+`<processor>EventuallyHandled` (its checkpoint passed every trigger; at
+least once also skipped by `<p>Skips`, an ok effect step or the
+trigger's `grist.failed`; at most once the checkpoint alone, since a
+crash after it loses the effect or its outcome by right), and one per
+`Keyed` call a processor uses, `<call>EventuallyServed` (every call its
+caller saw answered, ok or refused, has the dependency's served record
+of its key). Do not write them again (a val of the same name is the
+generator's error): write only what says more, such as every trigger's
+served record ok (library's `everyBorrowReceipted`), a served record
+equal to the caller's field for field (`everyPaymentAnswerServed`), or
+an at-most-once outcome logged (`atMostOnceOutcomesLogged`, test-only:
+a crash after the effect loses it by right). A stalled processor (a
+handler that never returns, a poller that drops its trigger) is
+`Violates(validate.EventuallyName("<p>EventuallyHandled"))`; a run that
+never settles judges none of them (`qtest.Settles()` says so).
+
 Bindings default to `default` (`<app>.binding.yaml`); any other name is
 a test-only variant, `<app>.<name>.binding.yaml`: the same actions,
 judged by its own vals (counters' `once`, `exactly`, `retiring`). A
 variant that judges every invariant of the default binding (`retiring`)
-compares the steps' observations as the default does; one that judges
+compares the steps' observations as the default does, and judges the
+generated obligations too; one that judges
 only its own vals (`once`, `exactly`) leaves them to the default
 binding's claims, and compares none (each expect is evaluated at every
 step of every replay). Each eventual val costs a replay per run: keep

@@ -2713,7 +2713,8 @@ promises, in the per-tenant state above:
   the success event after an ok effect step, `grist.failed` after
   `EFFECT_TRIES` failed ones; a run with both admits either, the
   checkpoint's `ok` saying which), and **eventually** (after a settle)
-  each trigger has an ok effect step or a `grist.failed`; `AtMostOnce` admits zero or one, and **an outcome
+  each trigger has an ok effect step or a `grist.failed` (generated,
+  §3.3.1); `AtMostOnce` admits zero or one, and **an outcome
   event, if present, agrees with the one effect step** (it may be absent:
   a crash between checkpoint and effect loses it, by right). An
   application whose effect must not repeat states it with an invariant
@@ -2733,6 +2734,56 @@ it typechecks, its defs hold on small values under `quint test`, and a
 small machine over them keeps its invariants under `quint run`) and
 against grist's own runtime (examples/counters' explorations), so an
 application's failure is its own or its model's, not the framework's.
+
+### 3.3.1 Obligations, generated from the catalog (P7)
+
+What the catalog declares a block will do eventually is an eventual val
+the generator writes into module `<app>Gen` (`model/<app>_steps.qnt`),
+named from the processor or call, and the store's default binding judges
+at a settle beside the app's own eventual vals (so does a variant that
+judges every invariant of the default binding; one that judges only its
+own vals does not):
+
+| block | obligation | meaning, after a settle |
+| --- | --- | --- |
+| an `Emits` processor | `<p>EventuallyHandled` | its checkpoint passed every trigger: the events it emitted, a Skip's none or a Fail's `grist.failed` committed with it |
+| an `AtLeastOnce` effect | `<p>EventuallyHandled` | its checkpoint passed every trigger, and the trigger was skipped (`<p>Skips`), had an ok effect step, or failed every try (its `grist.failed`) |
+| an `AtMostOnce` effect | `<p>EventuallyHandled` | its checkpoint passed every trigger |
+| a `Keyed` call a processor `Uses` | `<call>EventuallyServed` | every call its caller saw answered (ok or a declared refusal) has the dependency's served record of its key; an unknown answer promises nothing |
+
+**What legitimately prevents progress is no violation.** At most once
+the checkpoint commits first, and a crash after it loses the effect, or
+after the effect its outcome, by right (§0.6): no outcome is promised,
+so the obligation is the checkpoint's, and an outcome logged stays a
+test-only claim (`atMostOnceOutcomesLogged`, counters' `exactly`). A
+call whose answer was lost (unknown) may never have reached its
+dependency: nothing is promised of it, which a lost request, a lost
+answer and a crash during the call all leave. An unkeyed call has no
+obligation: its dependency need keep nothing per key, and a third
+party's records no site (counters' mailer on the real tier). And the
+obligations are a live system's: a settle is judged only when nothing
+but daemons is at work, and a node down for good is no settled system.
+gristsim's supervisor restarts every node (none stays down), the real
+tier's `Settle` waits for every processor to reach its last trigger and
+fails the test instead of recording a settle that did not happen, and a
+run whose settle finds work pending is `Unsettled`, which
+`qtest.Settles()` judges, not a violation. A simulation of one's own
+that leaves a node down for good (one outside `SettleCore`'s core, a
+process not restarted) must not record its settle as one: qenv counts no
+task of a down process as pending, so its triggers would be judged.
+
+A hand-written eventual val that is exactly an obligation is removed (a
+val of a generated name is the generator's error): counters'
+`everyCounterWelcomedOrFailed` and `everyRetirementHandled`,
+wallet-grist's `allPosted`, `grist new`'s `everyAdditionTallied`. One
+that says more stays: library's `everyBorrowReceipted` (the mailer's ok
+record of every borrow), counters' `everyPaymentAnswerServed` (the
+served record equal to the caller's, field for field) and the test-only
+exactly-once vals. A processor whose handler never returns (its poller
+waiting as it waits for appends, a daemon, so the run settles) violates
+its obligation, and a dependency answering a Keyed call it never
+applied violates the call's (gristsim's `TestObligations`); nothing
+else in the model says a trigger must be handled.
 
 ### 3.4 Leases, in plain Quint (slice 3)
 

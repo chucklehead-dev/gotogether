@@ -1870,6 +1870,83 @@ records its settle where today's schedule is killed in the flush"
 cannot happen with the chosen defaults (§0.15 says why); the test shows
 the budget where delay and shutdown outrun the grace.
 
+### P7: grist's obligations generated
+
+ROADMAP's P7 as built (docs/grist.md §3.3.1). The decisions it left:
+- **One val per block, named from it**: `<processor>EventuallyHandled`
+  for every processor, `<call>EventuallyServed` for every Keyed call a
+  processor uses, written into module `<app>Gen` (the generated steps
+  file, never the app's) after the actions. A Generate refuses an app's
+  model defining one of those names (quint would refuse the name defined
+  twice), naming the fix: delete the hand-written val.
+- **Which bindings**: the store's default binding, and a variant that
+  judges every invariant of the default binding (the rule by which a
+  variant compares the observations: one that is a default binding with
+  more vals); a variant judging only its own vals (counters' `exactly`,
+  `once`) does not, nor the clients' binding (no processors). The
+  obligations follow the app's own eventual vals in the list.
+- **At least once**: the checkpoint passed every trigger, and the
+  trigger was skipped (`<p>Skips`), had an ok effect step, or has its
+  `grist.failed` (a Fail is recorded as the skip action with it). The
+  model's checkpoint and skip actions already require the second
+  conjunct; stated anyway, so the val says what the declaration
+  promises whatever the actions admit.
+- **At most once promises the checkpoint only**, not "an outcome event
+  logged" as the item was first written: the checkpoint commits first,
+  and a crash after it loses the effect, or after the effect its
+  outcome, by right (§0.6), at a declared crash point or a nemesis's
+  step, and no step records which. An outcome obligation would fail
+  faithful explorations with crashes; `atMostOnceOutcomesLogged` stays
+  a test-only claim (counters' `exactly`).
+- **A Keyed call**: every call its caller saw answered (ok or a declared
+  refusal) has the dependency's served record of its key. An unknown
+  answer promises nothing: a lost request, a lost answer and a crash
+  during the call leave it, and the caller's step is the only record
+  then (a pending call is no step). An unkeyed call has none: its
+  dependency keeps nothing per key, and a third party's records no site
+  (counters' mailer on the real tier, the reason for its `real` variant).
+- **Faults that prevent progress**: the obligations are a live
+  system's, judged only at a settle, which qenv records only when
+  nothing but daemons is at work. gristsim's supervisor restarts every
+  node, so no node stays down for good; the real tier's Settle waits for
+  every processor's last trigger and fails the test instead of recording
+  a settle; a settle finding work pending is `Unsettled`, which
+  `qtest.Settles()` judges, never a violation. What remains, a
+  simulation of one's own leaving a node down (outside `SettleCore`'s
+  core, not restarted), is the user's settle to withhold: qenv counts no
+  task of a down process as pending. gristsim does not guard it, having
+  no such node.
+- **The ablation**: gristsim's `TestObligations`, a board app with a
+  processor of each shape. A handler that never returns (the poller, a
+  daemon, waits as it waits for appends, so the run settles) violates
+  its processor's obligation, for each of Emits, at least once and at
+  most once; a dependency answering a Keyed call it never applied (a
+  transport recording no site) violates the call's. With the vals not
+  generated each claim names an eventual val the runs did not check, and
+  fails. A Skip where the rules say Effect is caught before, as the skip
+  action's `Rejects` (`TestDeliversSkip`), never reaching the settle.
+
+Removed as exactly generated: counters' `everyCounterWelcomedOrFailed`
+(`welcomeEventuallyHandled`) and `everyRetirementHandled`
+(`payoutEventuallyHandled`, now judged by the default binding too),
+wallet-grist's `allPosted` (`postEventuallyHandled`), `grist new`'s
+`everyAdditionTallied` (`tallyEventuallyHandled`). Kept, as stronger:
+library's `everyBorrowReceipted`, counters' `everyPaymentAnswerServed`
+and `everyMailAnswerServed` (field for field; the mailer unkeyed),
+wallet-grist's `postedApplied`, the scaffold's `everyAdditionShelved`
+and the test-only vals.
+
+The cost, each example's -short suite before and after (user+sys CPU s,
+two rounds interleaved against a checkout of the commit before, warm
+build cache, a 4-core machine shared with other agents' tests): counters
+273.6 and 204.1 → 245.1 and 268.0 (means 239 → 257, +7%), library 134.4
+and 115.3 → 129.0 and 126.0 (125 → 128, +2%), wallet-grist 238.6 and
+193.2 → 228.5 and 209.2 (216 → 219, +1%): within the rounds' own spread
+(up to 30% between two runs of one side). No growth is measurable at this
+noise: an eventual val is judged in a settled trace's last state, and
+every example already had some. gristsim's `TestObligations` adds about 25 s
+wall to grist's -short (three explorations in parallel), 75 s in full.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

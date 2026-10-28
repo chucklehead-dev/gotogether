@@ -80,6 +80,19 @@ The first release. What a user meets, by module:
   `RunRequest.Fold` (`GOTOGETHER_NAV_FOLD=1`, `gotogether nav -fold`)
   advance through a linear stretch to the next decision and say how
   many they folded (`Node.Folded`, `RunNode.Folded`).
+- grist, obligations generated (ROADMAP P7, docs/grist.md §3.3.1): the
+  generator writes an eventual val per processor,
+  `<processor>EventuallyHandled` (its checkpoint passed every trigger; at
+  least once also skipped, an ok effect step or the trigger's
+  `grist.failed`), and per Keyed call a processor uses,
+  `<call>EventuallyServed` (every answered call served by its
+  dependency), into `model/<app>_steps.qnt`; the store's default binding
+  and every variant judging the default's invariants judge them at a
+  settle beside the app's own. An app's model defining one of those
+  names is the generator's error: delete the hand-written val (counters'
+  `everyCounterWelcomedOrFailed` and `everyRetirementHandled`,
+  wallet-grist's `allPosted` and `grist new`'s `everyAdditionTallied`
+  are gone) and regenerate.
 - grist, blocking rules (ROADMAP P1, docs/grist.md §2.4.1; api/grist.txt):
   `grist.NewRule(App, name, Event, func(r *grist.Reads, e E) error,
   grist.Refuses(...))` runs on every event of its type a command's

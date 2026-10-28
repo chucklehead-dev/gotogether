@@ -159,11 +159,12 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   part. In runs (cheap, evidence not proof): an unsettled run whose model
   states repeat with the val false is reported with the cycle's steps
   (retry storms and livelocks made legible).
-- **P7. grist's obligations generated (S).** Every AtLeastOnce effect,
-  declared call and emitting processor implies an eventual val (each
-  trigger eventually followed by its effect's step or outcome); the
-  generator writes them, judged at a settle as today, the user's own
-  eventual vals beside them.
+- **P7. grist's obligations generated (S). Done** (docs/grist.md
+  §3.3.1; HISTORY: "P7: grist's obligations generated"). Every processor
+  and every Keyed call a processor uses implies an eventual val in the
+  generated steps module (`<processor>EventuallyHandled`,
+  `<call>EventuallyServed`), judged at a settle by the store's bindings
+  beside the user's own; the examples' hand-written duplicates removed.
 - **P8. Skills in pavlov's shape (S, with H6).** Each SKILL.md short (at
   most about 80 lines) with a "choose your path" list; a results table
   (one row per verdict and report line, with what to do next);
