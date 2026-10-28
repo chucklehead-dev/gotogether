@@ -14,17 +14,17 @@ FROM golang:${GO_VERSION}-bookworm
 ARG NODE_VERSION=22.22.0
 ARG QUINT_VERSION=0.33.0
 
-# Node from nodejs.org's release, checked against its SHASUMS256
+# Node from nodejs.org's release (gzip: the image has no xz), checked against its SHASUMS256
 RUN set -eux; \
     case "$(dpkg --print-architecture)" in \
       amd64) arch=x64 ;; arm64) arch=arm64 ;; \
       *) echo "no Node build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
     esac; \
     base="https://nodejs.org/dist/v${NODE_VERSION}"; \
-    file="node-v${NODE_VERSION}-linux-${arch}.tar.xz"; \
+    file="node-v${NODE_VERSION}-linux-${arch}.tar.gz"; \
     curl -fsSLO "$base/$file"; \
     curl -fsSL "$base/SHASUMS256.txt" | grep " $file\$" | sha256sum -c -; \
-    tar -xJf "$file" -C /usr/local --strip-components=1 --no-same-owner; \
+    tar -xzf "$file" -C /usr/local --strip-components=1 --no-same-owner; \
     rm "$file"; \
     node --version
 
