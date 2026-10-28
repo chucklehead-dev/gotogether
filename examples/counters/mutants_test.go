@@ -207,7 +207,7 @@ func TestMutant(t *testing.T) {
 		system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 			Expect(t, qtest.Conforms(), qtest.Some(gristtest.ClientErrors()))
 		system(calls, rolling, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
-			Expect(t, qtest.Conforms(), gristtest.NoClientErrors())
+			Expect(t, qtest.Conforms(), qtest.All(gristtest.NoClientErrors()))
 		// the same on the real tier, three pods of the binary behind a
 		// router polling /readyz every 200 ms: a pod's listener closes at
 		// its signal, and the router sends it requests until its next poll.

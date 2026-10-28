@@ -38,6 +38,6 @@ func TestShrunkFailureAsCorpus(t *testing.T) {
 	if got, want := qhegel.Render(x.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the corpus entry runs differently:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}
-	x.Expect(t, qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel")))
+	x.Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))))
 	t.Logf("corpus entry: %d bytes", len(data))
 }

@@ -68,7 +68,7 @@ func TestGeneratedExternalName(t *testing.T) {
 	t.Run("faults", func(t *testing.T) {
 		t.Parallel()
 		explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 50, ShortSeeds: 25}).
-			Expect(t, qtest.Violates("settledCorrectly"))
+			Expect(t, qtest.Some(qtest.Violates("settledCorrectly")))
 	})
 	// crashes alone: an incomplete create, and a resource that never gets
 	// ready, in about two runs in three (26 of 40): the 6 seeds of -short
@@ -77,7 +77,7 @@ func TestGeneratedExternalName(t *testing.T) {
 		t.Parallel()
 		crashesOnly := qenv.Rates{Kinds: map[string]float64{"nemesis": 0.05}}
 		explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName}, crashesOnly, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 6}).
-			Expect(t, qtest.Violates("settledCorrectly"))
+			Expect(t, qtest.Some(qtest.Violates("settledCorrectly")))
 	})
 }
 
@@ -89,7 +89,7 @@ func TestNoClientTokenDuplicates(t *testing.T) {
 	// in about one run in ten (4 of 40, 6 of 70): 70 seeds miss it about
 	// once in a thousand, the 40 of -short 2.7% of the time
 	explore(t, crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 70, ShortSeeds: 40}).
-		Expect(t, qtest.Violates("oneDatabasePerResource"))
+		Expect(t, qtest.Some(qtest.Violates("oneDatabasePerResource")))
 }
 
 // A password generated in Create and published only with the creation's
@@ -102,7 +102,7 @@ func TestPasswordFromCreate(t *testing.T) {
 	// in about one run in six (6 of 40, 9 of 50): 50 seeds, the 18 of
 	// -short miss it 3% of the time
 	explore(t, crossdb.Config{Mutation: provider.PasswordFromCreate, NoCrashes: true}, lossy, qtest.ExploreConfig{Seeds: 50, ShortSeeds: 18}).
-		Expect(t, qtest.Violates("settledCorrectly"))
+		Expect(t, qtest.Some(qtest.Violates("settledCorrectly")))
 }
 
 // Hegel shrinks the duplicate to the fault it needs: one lost response.

@@ -98,7 +98,7 @@ func TestNoDedupeSweep(t *testing.T) {
 		Explore: qtest.ExploreConfig{Seeds: 30},
 		Expect: func(row qsweep.Row) []qtest.Claim {
 			if row.On("rpc.ledger.request") || row.On("rpc.ledger.delay") || row.On("rpc.ledger.response") || row.On("crash") {
-				return []qtest.Claim{reapplied}
+				return []qtest.Claim{qtest.Some(reapplied)}
 			}
 			return []qtest.Claim{qtest.Conforms()}
 		}})
@@ -133,5 +133,5 @@ func TestCrashWindow(t *testing.T) {
 		}}
 	}
 	run(ledger.Faithful).Explore(t, crashes).Expect(t, qtest.Conforms())
-	run(ledger.NoDedupe).Explore(t, crashes).Expect(t, reapplied)
+	run(ledger.NoDedupe).Explore(t, crashes).Expect(t, qtest.Some(reapplied))
 }

@@ -56,10 +56,10 @@ func TestMutantsOnGosim(t *testing.T) {
 	qtest.RequireQuint(t)
 	t.Run("ManifestBeforeTable", func(t *testing.T) {
 		explore(t, config{mutation: publisher.ManifestBeforeTable, noCrashes: true}, 10, qtest.Invariants()).
-			Expect(t, qtest.Rejects("writeManifest"))
+			Expect(t, qtest.Some(qtest.Rejects("writeManifest")))
 	})
 	t.Run("NoRotationLock", func(t *testing.T) {
 		explore(t, config{mutation: publisher.NoRotationLock, noCrashes: true}, 30, qtest.Invariants()).
-			Expect(t, qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Rejects("writeTable"), qtest.Rejects("writeParquet"), qtest.Rejects("writeManifest")))
+			Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Rejects("writeTable"), qtest.Rejects("writeParquet"), qtest.Rejects("writeManifest"))))
 	})
 }

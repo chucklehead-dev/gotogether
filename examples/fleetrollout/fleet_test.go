@@ -40,7 +40,7 @@ func TestIgnoreObservedGenerationOverBudget(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	explore(t, fleetrollout.Config{Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
-		Expect(t, qtest.Violates("withinBudget"))
+		Expect(t, qtest.Some(qtest.Violates("withinBudget")))
 }
 
 // Progress kept in memory: correct while nothing fails. A restart forgets
@@ -54,14 +54,14 @@ func TestInMemoryProgress(t *testing.T) {
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(noKubeFaults).
 		Explore(t, qtest.ExploreConfig{Seeds: 15, ShortSeeds: 2}).Expect(t, qtest.Conforms())
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress}).WithRates(noKubeFaults).
-		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).Expect(t, qtest.Violates("withinBudget"))
+		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).Expect(t, qtest.Some(qtest.Violates("withinBudget")))
 	// a lost patch response alone puts it over budget in 6.5% of runs at
 	// the default rates (20 seeds missed it at fresh seeds a quarter of
 	// the time), 13.5% with the API's faults at 0.15: 40 seeds miss it
 	// with probability 0.3%; 26 (-short) miss it 2.3% of the time at the
 	// 13.6% of seeds 1 to 140, 4.8% at the 11% of seeds 41 to 140 alone
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(qenv.DefaultRates.Set("kube", 0.15)).
-		Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 26}).Expect(t, qtest.Violates("withinBudget"))
+		Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 26}).Expect(t, qtest.Some(qtest.Violates("withinBudget")))
 }
 
 // Hegel shrinks the restart bug to the faults it needs: a crash.

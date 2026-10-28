@@ -45,7 +45,7 @@ func TestRolloutUnderProductionWorkload(t *testing.T) {
 		t.Errorf("%d scale steps over %d runs: the workload did not reach the fleet", scales, len(x.Runs))
 	}
 	explore(t, fleetrollout.Config{Workload: tr, Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}).
-		Expect(t, qtest.Violates("withinBudget"))
+		Expect(t, qtest.Some(qtest.Violates("withinBudget")))
 }
 
 // Pods that take as long as a production trace's: the CronJob trace's
@@ -66,5 +66,5 @@ func TestRolloutWithMeasuredPodTimes(t *testing.T) {
 	}
 	explore(t, fleetrollout.Config{PodTimes: pods}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).Expect(t, qtest.Conforms())
 	explore(t, fleetrollout.Config{PodTimes: pods, Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).
-		Expect(t, qtest.Violates("withinBudget"))
+		Expect(t, qtest.Some(qtest.Violates("withinBudget")))
 }

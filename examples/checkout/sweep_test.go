@@ -82,9 +82,9 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 	sweepSystem(shop.NoIdempotencyKey).WithRates(crashy.Set("rpc.provider", 0.25)).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 50},
 		Expect: func(row qsweep.Row) []qtest.Claim {
 			if row.On("rpc.provider") {
-				return []qtest.Claim{qtest.Violates("chargedAtMostOnce")}
+				return []qtest.Claim{qtest.Some(qtest.Violates("chargedAtMostOnce"))}
 			}
-			return []qtest.Claim{qtest.Violates("settledCorrectly"), qtest.None(qtest.Violates("chargedAtMostOnce"))}
+			return []qtest.Claim{qtest.Some(qtest.Violates("settledCorrectly")), qtest.None(qtest.Violates("chargedAtMostOnce"))}
 		}})
 }
 

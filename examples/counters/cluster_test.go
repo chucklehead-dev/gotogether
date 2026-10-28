@@ -86,7 +86,7 @@ func TestRollingRestart(t *testing.T) {
 	system(retiring, rolling).WithRates(lagging).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("route.api.lag").Faulted(), qtest.Takes("bankPay").Outcome("ok"))
 	system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, n).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), gristtest.NoClientErrors())
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), qtest.All(gristtest.NoClientErrors()))
 	system(terminating, rolling).WithRates(lagging).Explore(t, n).
 		Expect(t, qtest.None(qtest.Violates("noPayoutUnknown")))
 }

@@ -69,7 +69,7 @@ func TestMutantsOnGosim(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
-			explore(t, c.iso, c.m, c.rates, qtest.ExploreConfig{Seeds: c.seeds}).Expect(t, c.want)
+			explore(t, c.iso, c.m, c.rates, qtest.ExploreConfig{Seeds: c.seeds}).Expect(t, qtest.Some(c.want))
 		})
 	}
 }

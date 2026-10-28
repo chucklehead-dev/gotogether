@@ -90,7 +90,7 @@ func TestMutant(t *testing.T) {
 		system().WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms())
 		// the bug needs one fault, which the search of every single fault
 		// finds
-		system().Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"))
+		system().Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Some(qtest.Rejects("apply")))
 		if testing.Short() {
 			return
 		}

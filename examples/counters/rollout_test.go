@@ -39,5 +39,5 @@ func TestRollingUpdate(t *testing.T) {
 	upgrade(t, retiring).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("retireCounter").Outcome("ok"))
 	upgrade(t, calls, qtest.Linearize()).Explore(t, n).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), gristtest.ReadersFirst(), gristtest.NoClientErrors())
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), qtest.All(gristtest.ReadersFirst()), qtest.All(gristtest.NoClientErrors()))
 }

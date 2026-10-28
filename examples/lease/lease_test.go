@@ -84,7 +84,7 @@ func TestNoFencingBrokenByALateWrite(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	x := qtest.ExploreConfig{Seeds: 30, ShortSeeds: 12}
-	system(NoFencing, trueClocks).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
+	system(NoFencing, trueClocks).Explore(t, x).Expect(t, qtest.Some(qtest.Violates("noStaleWrite")), qtest.Some(qtest.Conforms()))
 	system(Faithful, trueClocks).WithRates(qenv.DefaultRates.Set("rpc.store.delay", 0.3)).Explore(t, x).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.store.delay").Faulted().InAtLeast(0.3))
 }
@@ -105,7 +105,7 @@ func TestNoFencingBrokenByAPause(t *testing.T) {
 		}}
 	}
 	x := qtest.ExploreConfig{Seeds: 30, ShortSeeds: 12}
-	paused(NoFencing).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
+	paused(NoFencing).Explore(t, x).Expect(t, qtest.Some(qtest.Violates("noStaleWrite")), qtest.Some(qtest.Conforms()))
 	paused(Faithful).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Reaches("nemesis.pause").Faulted().InAtLeast(0.3))
 }
 
@@ -133,9 +133,9 @@ func TestWallIntervalBrokenByAClockJump(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(WallInterval, jump).WithRates(jumps).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 8}).
-		Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
+		Expect(t, qtest.Some(qtest.Violates("noStaleWrite")), qtest.Some(qtest.Conforms()))
 	one := oneJump()
-	system(WallInterval, jump).Exhaust(t, one).Expect(t, qtest.Violates("noStaleWrite"))
+	system(WallInterval, jump).Exhaust(t, one).Expect(t, qtest.Some(qtest.Violates("noStaleWrite")))
 	system(Faithful, jump).Exhaust(t, one).Expect(t, qtest.Conforms())
 }
 
@@ -148,7 +148,7 @@ func TestAbsoluteExpiryBrokenBySkew(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(AbsoluteExpiry, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Conforms())
-	system(AbsoluteExpiry, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Violates("noStaleWrite"))
+	system(AbsoluteExpiry, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Some(qtest.Violates("noStaleWrite")))
 	system(WallInterval, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Conforms())
 }
 
@@ -163,6 +163,6 @@ func TestNoFencingBrokenByDrift(t *testing.T) {
 	qtest.RequireQuint(t)
 	x := qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}
 	system(NoFencing, qenv.Clocks{Drift: 0.02}).WithRates(drifts).Explore(t, x).Expect(t, qtest.Conforms())
-	system(NoFencing, qenv.Clocks{Drift: 0.25}).WithRates(drifts).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 14}).Expect(t, qtest.Violates("noStaleWrite"))
+	system(NoFencing, qenv.Clocks{Drift: 0.25}).WithRates(drifts).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 14}).Expect(t, qtest.Some(qtest.Violates("noStaleWrite")))
 	system(Faithful, qenv.Clocks{Drift: 0.25}).WithRates(drifts).Explore(t, x).Expect(t, qtest.Conforms())
 }

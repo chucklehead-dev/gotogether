@@ -48,11 +48,11 @@ func TestMutants(t *testing.T) {
 		rates qenv.Rates
 		want  []qtest.Claim
 	}{
-		{"early-commit", tpc.EarlyCommit, none, []qtest.Claim{qtest.Rejects("decideCommit")}},
+		{"early-commit", tpc.EarlyCommit, none, []qtest.Claim{qtest.Some(qtest.Rejects("decideCommit"))}},
 		{"impatient/no-faults", tpc.ImpatientParticipant, none, []qtest.Claim{qtest.Conforms()}},
-		{"impatient", tpc.ImpatientParticipant, crashy, []qtest.Claim{qtest.Rejects("abort")}},
+		{"impatient", tpc.ImpatientParticipant, crashy, []qtest.Claim{qtest.Some(qtest.Rejects("abort"))}},
 		{"volatile/no-faults", tpc.VolatileDecision, none, []qtest.Claim{qtest.Conforms()}},
-		{"volatile", tpc.VolatileDecision, crashy, []qtest.Claim{qtest.Rejects("decideAbort")}},
+		{"volatile", tpc.VolatileDecision, crashy, []qtest.Claim{qtest.Some(qtest.Rejects("decideAbort"))}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

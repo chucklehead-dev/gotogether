@@ -44,8 +44,8 @@ func TestExhaustiveOneFault(t *testing.T) {
 	}
 	one := qtest.Bound{Faults: 1}
 	system(streams.Config{}).Exhaust(t, one).Expect(t, qtest.Conforms(), qtest.NotVacuous())
-	system(streams.Config{Mutation: pipeline.NoDedupe}).Exhaust(t, one).Expect(t, qtest.Violates("appliedAtMostOnce"))
-	system(streams.Config{Mutation: pipeline.NonIdempotentProducer}).Exhaust(t, one).Expect(t, qtest.Violates("perKeyOrder"))
+	system(streams.Config{Mutation: pipeline.NoDedupe}).Exhaust(t, one).Expect(t, qtest.Some(qtest.Violates("appliedAtMostOnce")))
+	system(streams.Config{Mutation: pipeline.NonIdempotentProducer}).Exhaust(t, one).Expect(t, qtest.Some(qtest.Violates("perKeyOrder")))
 }
 
 // Which check catches which bug. Each mutant runs with the faults that

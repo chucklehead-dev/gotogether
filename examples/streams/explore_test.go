@@ -29,7 +29,7 @@ func TestHegelShrinksReorder(t *testing.T) {
 	if got, want := qhegel.Render(replay.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the replayed run differs:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}
-	replay.Expect(t, qtest.Violates("perKeyOrder"))
+	replay.Expect(t, qtest.Some(qtest.Violates("perKeyOrder")))
 }
 
 // The deployment's shape (partitions, consumers) and which fault kinds

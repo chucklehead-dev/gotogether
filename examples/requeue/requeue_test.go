@@ -120,7 +120,7 @@ func TestMutant(t *testing.T) {
 		// storm is the same in every run.
 		qtest.RequireQuint(t)
 		system(false).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3}).
-			Expect(t, qtest.Rejects("create"))
+			Expect(t, qtest.Some(qtest.Rejects("create")))
 		// The storm's model allows the replacement: the runs conform and
 		// never settle, and each report's hot cycle (evidence, no
 		// verdict) is the lasso simulate -graph finds in that model, the

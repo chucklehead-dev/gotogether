@@ -50,7 +50,7 @@ func TestInvariantsHoldWithoutAmbiguousWrites(t *testing.T) {
 // ambiguous-seal scenario reproduced this; here random runs find it.
 func TestExplorationFindsAmbiguousFindings(t *testing.T) {
 	woven(t)
-	explore(t, sim.Config{}, 60).Expect(t, qtest.AnyOf(qtest.Violates("committedNoDuplicatePayload"), qtest.Violates("sealMatchesManifests")))
+	explore(t, sim.Config{}, 60).Expect(t, qtest.Some(qtest.AnyOf(qtest.Violates("committedNoDuplicatePayload"), qtest.Violates("sealMatchesManifests"))))
 }
 
 // The mutants, found by exploration rather than by a scenario built for
@@ -61,11 +61,11 @@ func TestMutants(t *testing.T) {
 	woven(t)
 	t.Run("ManifestBeforeTable", func(t *testing.T) {
 		explore(t, sim.Config{Mutation: publisher.ManifestBeforeTable, NoCrashes: true}, 20, qtest.Invariants()).
-			Expect(t, qtest.Rejects("writeManifest"))
+			Expect(t, qtest.Some(qtest.Rejects("writeManifest")))
 	})
 	t.Run("NoRotationLock", func(t *testing.T) {
 		explore(t, sim.Config{Mutation: publisher.NoRotationLock, NoCrashes: true}, 40, qtest.Invariants()).
-			Expect(t, qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Rejects("writeTable"), qtest.Rejects("writeParquet"), qtest.Rejects("writeManifest")))
+			Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Rejects("writeTable"), qtest.Rejects("writeParquet"), qtest.Rejects("writeManifest"))))
 	})
 	// The stand-in's acquire before it caught up with publish.go's fix:
 	// a push that read the clock, then waited for the exclusive lock past
@@ -81,7 +81,7 @@ func TestMutants(t *testing.T) {
 			t.Skip("150 seeds")
 		}
 		explore(t, sim.Config{Mutation: publisher.BackwardRotation, NoCrashes: true, NoAmbiguous: true, Workers: 3, Requests: 12}, 150, qtest.Invariants()).
-			Expect(t, qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Mismatch("rotateGen")))
+			Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Mismatch("rotateGen"))))
 	})
 }
 

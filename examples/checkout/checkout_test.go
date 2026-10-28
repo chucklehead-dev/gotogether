@@ -82,26 +82,26 @@ func TestMutants(t *testing.T) {
 		// the stale refusal in about one run in fifty (2 of 100, 4 of 350):
 		// 350 seeds miss it about once in a thousand, and the 260 that
 		// would miss it one time in twenty are too many for -short
-		{shop.NoLocks, qenv.SnapshotIsolation, crashy, []qtest.Claim{qtest.Rejects("refuse"), qtest.None(qtest.Rejects("place"))}, 350, 0},
+		{shop.NoLocks, qenv.SnapshotIsolation, crashy, []qtest.Claim{qtest.Some(qtest.Rejects("refuse")), qtest.None(qtest.Rejects("place"))}, 350, 0},
 		// lost updates: the stock oversold, or a shipment and a cancellation
 		// (13 of 100 runs reject one; most others mismatch after place): 25
 		// seeds miss it 3% of the time
-		{shop.NoLocks, qenv.ReadCommitted, qenv.DefaultRates, []qtest.Claim{qtest.AnyOf(qtest.Rejects("place"), shipOrCancel)}, 0, 25},
+		{shop.NoLocks, qenv.ReadCommitted, qenv.DefaultRates, []qtest.Claim{qtest.Some(qtest.AnyOf(qtest.Rejects("place"), shipOrCancel))}, 0, 25},
 		{shop.LockWithoutWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Conforms()}, 0, 0},
 		{shop.LockWithoutWrite, qenv.ReadCommitted, crashy, []qtest.Claim{qtest.Conforms()}, 0, 0},
 		// write skew: a shipment and a cancellation both commit (9 of 100,
 		// though 3 of the first 50): 70 seeds miss it 0.1% to 1.4% of the
 		// time
-		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{shipOrCancel}, 0, 70},
+		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{qtest.Some(shipOrCancel)}, 0, 70},
 		// a retry after a lost response charges again (15 of 100): 25 seeds
 		// miss it 1.7% of the time
-		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Violates("chargedAtMostOnce")}, 0, 25},
+		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Some(qtest.Violates("chargedAtMostOnce"))}, 0, 25},
 		// a crash between commit and publish loses the order's payment: a
 		// one-step window, found with crashes ten times as often, in about
 		// one run in fifty (5 and 6 of 300, measured with and without late
 		// requests): 420 seeds miss it about once in a thousand; too many
 		// for -short
-		{shop.DualWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Violates("settledCorrectly")}, 420, 0},
+		{shop.DualWrite, qenv.Serializable, crashy, []qtest.Claim{qtest.Some(qtest.Violates("settledCorrectly"))}, 420, 0},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestExhaustiveOneFault(t *testing.T) {
 	}
 	system(checkout.Config{}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 	system(checkout.Config{Mutation: shop.DualWrite}).Exhaust(t, qtest.Bound{Faults: 1, MaxRuns: 5000}).
-		Expect(t, qtest.Violates("settledCorrectly"))
+		Expect(t, qtest.Some(qtest.Violates("settledCorrectly")))
 }
 
 // Hegel makes every choice of the environment and shrinks a write skew to
@@ -157,7 +157,7 @@ func TestHegelShrinksWriteSkew(t *testing.T) {
 	if got, want := qhegel.Render(replay.Runs[0].Steps), qhegel.Render(v.Steps); got != want {
 		t.Errorf("the replayed run differs:\n%s\nfrom the shrunk run:\n%s", got, want)
 	}
-	replay.Expect(t, skew)
+	replay.Expect(t, qtest.Some(skew))
 }
 
 // Hegel explores the faithful shop under snapshot isolation, in batches.
