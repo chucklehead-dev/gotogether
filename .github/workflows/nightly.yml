@@ -444,3 +444,44 @@ jobs:
         with:
           name: raftkv-real
           path: ${{ runner.temp }}/real
+
+  benchmarks:
+    # the core's benchmarks (every root-module package with one) at HEAD
+    # against the commit main was at a day before, both measured here,
+    # interleaved (ci/bench.sh): a significant regression (p < 0.05) past
+    # 25% in sec/op, or 10% in B/op or allocs/op, fails the night. The
+    # runs and benchstat's table are the artifact. A night's regression,
+    # if kept, is the next night's base: fix it or say why in its commit.
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@v0.0.0-20261009192801-be2c69fb417e
+      - name: the benchmarks, against a day before
+        run: |
+          base=$(git rev-list -1 --before="24 hours ago" HEAD)
+          if [ -z "$base" ] || [ "$base" = "$(git rev-parse HEAD)" ]; then
+            echo "no commit in the last day: nothing to compare"
+            exit 0
+          fi
+          echo "base $base ($(git log -1 --format=%cd "$base"))"
+          ci/bench.sh run "$base" "$RUNNER_TEMP/bench"
+      - name: regressions
+        run: |
+          [ -f "$RUNNER_TEMP/bench/compare.csv" ] || exit 0
+          ci/bench.sh check "$RUNNER_TEMP/bench/compare.csv"
+      - name: keep the runs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks
+          path: |
+            ${{ runner.temp }}/bench/*.txt
+            ${{ runner.temp }}/bench/compare.csv
+          if-no-files-found: ignore
