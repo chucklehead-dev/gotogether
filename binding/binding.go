@@ -433,6 +433,29 @@ func (b *Binding) relPath() string {
 // is given exactly its parameters, the restart action exists and takes none,
 // invariants are vals, templates parse, and every constant is set. It returns
 // all problems found.
+// LintChoices are warnings about b's bound actions that choose inside
+// (Model.Chooses) and whose expect reads the state after them: quint's
+// replay draws the choice at random, not the one the step took, so a
+// step the model admits fails for every other draw, at a different step
+// on each rerun (review 11, F2). The fix: make the choice a parameter of
+// the action, which the step names, or an observation the binding
+// passes to one.
+func (b *Binding) LintChoices(m *Model) []string {
+	var out []string
+	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
+		a := b.Actions[name]
+		if a.Expect == "" {
+			continue
+		}
+		if cs := m.Chooses(name); len(cs) > 0 {
+			out = append(out, fmt.Sprintf("action %s makes a choice of its own (%s) and its expect reads the state after it: quint's replay draws the choice at random, so a step the model admits fails for other draws "+
+				"(validate gives such a failure no verdict); expose the choice as a parameter of %s (the step's argument), or record it as an observation the binding passes",
+				name, strings.Join(cs, ", "), name))
+		}
+	}
+	return out
+}
+
 func (b *Binding) Lint(m *Model) []string {
 	var errs []string
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {

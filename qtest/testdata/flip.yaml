@@ -1,0 +1,5 @@
+spec: flip.qnt
+module: flip
+actions:
+  flipit:
+    expect: 'x == {{.obs.x}}'

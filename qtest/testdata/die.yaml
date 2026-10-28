@@ -1,0 +1,5 @@
+spec: die.qnt
+module: die
+actions:
+  roll:
+    expect: 'x == {{.obs.x}}'

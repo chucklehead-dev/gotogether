@@ -52,6 +52,7 @@ type Binding struct
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
+    method (*Binding) LintChoices(m *Model) []string
     method (*Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (errs, warns []string)
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
@@ -107,6 +108,7 @@ type Model struct
     field Helpers map[string]bool
     method (*Model) ActionNames() []string
     method (*Model) Assigns(action string) (map[string]bool, bool)
+    method (*Model) Chooses(action string) []string
     method (*Model) Reads(action string) (map[string]bool, bool)
     method (*Model) Signature(action string) string
 type ObsComparison struct

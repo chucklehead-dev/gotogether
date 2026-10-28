@@ -3982,6 +3982,23 @@ ones that fail.
   give: a run's evaluator (`qeval.Model.AsReplayed`) refuses a step some
   values of a choice disable, and quint judges that run as before. A
   search's evaluator keeps taking it (its conclusions are confirmed).
+- **A choice quint samples.** Handing such a run to quint is no
+  verdict either when the step's action chooses inside (a nondet, an
+  `any {}` of several enabled branches) and its expect reads what it
+  chose: quint's replay draws one choice, so a run the model admits
+  failed at one step, another or none on three reruns (review 11, F2).
+  The evaluator's refusal names the choice (`qeval.Unsupported.Choice`)
+  and counts the successors after which the call's expect holds; quint
+  judges the run, and a failure it reports at or after that call is no
+  verdict (`the model's choice, sampled`), unless it is the call's own
+  expect failing after every successor (a Mismatch whatever the draw).
+  A pass stands: quint found a path the model takes. The run's issue
+  names the action, the choice and the fix (expose the choice as a
+  parameter, or record it as an observation), and so does `lint
+  -binding` (`Binding.LintChoices`, from `Model.Chooses`), whose "fits"
+  line counts them. Pinning the evaluator's witness in the replay, so
+  quint confirms a path instead of drawing one, is ROADMAP I4's second
+  half.
 - **The guard.** `GOTOGETHER_EVAL=shadow` has quint judge every run the
   evaluator judges, plan for plan, and fails the run on a difference: of
   the verdict (pass, conformance and the call it fails at, the first

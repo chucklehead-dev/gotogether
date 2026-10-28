@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // Regression tests for review 11's silent wrong answers: each input once
@@ -53,4 +54,39 @@ func TestSoundResolveKeepsInvariants(t *testing.T) {
 		{Action: "inc", Recorder: "c", Seq: 2, Time: at(2), Invocation: true},
 	}
 	Validate(t, "testdata/flag.yaml", late, ResolvePending()).Expect(t, Violates("ok"))
+}
+
+// An action that chooses inside (any {} of four assignments, a die's
+// nondet) whose result the expect reads: quint's replay draws one choice
+// at random, so three validations of one input once failed at different
+// steps, or passed (F2). A failure at or after the choice is no verdict
+// now, its issue naming the action, the choice and the fix; a draw that
+// passes stands (a path the model takes).
+func TestSoundInternalChoiceIsNoVerdict(t *testing.T) {
+	RequireQuint(t)
+	t.Parallel()
+	var flips []qtrace.Step
+	for j := 1; j <= 3; j++ {
+		flips = append(flips, qtrace.Step{Action: "flipit", Recorder: "c", Seq: uint64(j), Time: time.Unix(int64(j), 0), Obs: map[string]any{"x": int64(4)}})
+	}
+	roll := []qtrace.Step{{Action: "roll", Recorder: "c", Seq: 1, Time: time.Unix(1, 0), Obs: map[string]any{"x": int64(3)}}}
+	for _, c := range []struct {
+		binding string
+		steps   []qtrace.Step
+		choice  string
+	}{{"testdata/flip.yaml", flips, "any {} of 4 enabled branches"}, {"testdata/die.yaml", roll, "nondet v"}} {
+		for range 3 {
+			run := Validate(t, c.binding, c.steps)
+			a := run.Report.Actors[0]
+			if a.Conforms == validate.Fail {
+				t.Fatalf("%s: a sampled failure reported as a verdict:\n%s", c.binding, a.Summary())
+			}
+			if s := fmt.Sprint(a.Issues); !strings.Contains(s, c.choice) || !strings.Contains(s, "expose the choice as a parameter") {
+				t.Errorf("%s: issues %s, want the choice (%s) and the fix named", c.binding, s, c.choice)
+			}
+		}
+	}
+	// a value no successor gives is a Mismatch whatever the draw
+	roll[0].Obs["x"] = int64(7)
+	Validate(t, "testdata/die.yaml", roll).Expect(t, Mismatch("roll"))
 }

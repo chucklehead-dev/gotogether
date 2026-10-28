@@ -13,6 +13,10 @@ import (
 // 64 bits, a set too large to build. The caller asks quint instead.
 type Unsupported struct {
 	Op, Why string
+	// Choice names the choice the refusal is about when quint's replay
+	// samples it (a nondet, an any {} of enabled branches): its verdict at
+	// that step is one draw of quint's, not the model's
+	Choice string
 }
 
 func (u *Unsupported) Error() string {
@@ -163,7 +167,28 @@ func (m *Model) Step(consts map[string]Value, s State, name string, args ...Valu
 	case 1:
 		return out[0], true, nil
 	}
-	return nil, false, unsupported(name, "has %d successors (it chooses): quint takes one", len(out))
+	return nil, false, &Unsupported{Op: name, Why: fmt.Sprintf("has %d successors (it chooses): quint takes one", len(out)), Choice: m.choiceOf(consts, s, name, args)}
+}
+
+// choiceOf names what action name chooses in s: its nondets ("nondet v"),
+// else its any {} ("any {} of 3 enabled branches").
+func (m *Model) choiceOf(consts map[string]Value, s State, name string, args []Value) string {
+	ts, err := m.Transitions(consts, s, name, args...)
+	if err != nil {
+		return "a choice"
+	}
+	var picks []string
+	for _, t := range ts {
+		for _, p := range t.Picks() {
+			if !slices.Contains(picks, p.Pick) {
+				picks = append(picks, p.Pick)
+			}
+		}
+	}
+	if len(picks) == 0 {
+		return fmt.Sprintf("any {} of %d enabled branches", len(ts))
+	}
+	return "nondet " + strings.Join(picks, ", nondet ")
 }
 
 func sameState(a, b State) bool {
@@ -360,7 +385,8 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				}
 			}
 			if ev.m.replaying && disabled > 0 && len(out) > 0 {
-				return nil, unsupported("nondet", "%d of the %d values of %s disable the action: quint's replay picks one at random", disabled, len(s.Elems), d.Name)
+				return nil, &Unsupported{Op: "nondet", Why: fmt.Sprintf("%d of the %d values of %s disable the action: quint's replay picks one at random", disabled, len(s.Elems), d.Name),
+					Choice: "nondet " + ev.m.Display(d.Name)}
 			}
 			return out, nil
 		}

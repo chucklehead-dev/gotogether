@@ -47,7 +47,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   fresh store) could not see it. Left: library's upcaster-fix example
   (a `buggyUpcaster` mutant, snapshots taken under it, then the fix:
   the regression as an example); the runtime audit is I24's.
-- **I2. Sound set folds in the Go evaluator (S). In progress.**
+- **I2. Sound set folds in the Go evaluator (S). Done** (4bdec87:
+  operators of a commuting shape, else every order up to 10 elements,
+  else `Unsupported`; left: the example `examples/shards`).
   qeval accepted a set `fold` that gave the same result sorted and
   reversed, which does not make it order-independent: a round-robin
   shard assignment over `Set(1, 33, 2)` made `simulate -graph` "prove"
@@ -63,8 +65,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   samples quint (`simulate.samples`) and requires each state quint
   visits to be a node of a complete graph: a missing one is an evaluator
   bug and an error. It would have caught I2 in milliseconds.
-- **I4. An internal choice the expect observes (S, then M). In
-  progress.** A bound action that chooses inside (`nondet`, `any {}`)
+- **I4. An internal choice the expect observes (S, then M). The S half
+  done** (the lint, a failure after the choice no verdict, its issue
+  naming the fix); **left: pinned replays (M)**. A bound action that chooses inside (`nondet`, `any {}`)
   whose result the binding's expect reads is sampled by quint's replay:
   the same input gave Mismatch at different steps on three reruns, and
   `lint -binding` said "fits". First a lint and a report line ("bind it
@@ -72,14 +75,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   as `-graph`'s replays write literal calls, so quint confirms a path
   instead of sampling one (the M half stays here if the agent's fix is
   the lint alone).
-- **I5. ResolvePending keeps the invariants if a placement can (S). In
-  progress.** It judged invariants on the first placement that conforms,
+- **I5. ResolvePending keeps the invariants if a placement can (S).
+  Done** (fe01988, with a brute-force test). It judged invariants on the first placement that conforms,
   so `Violates` held for a run that a later placement keeps (and the
   verdict differed with `Linearize()`). A second search, as
   `orderIssue` has; Violates only when no conforming placement keeps
   them, naming the one that does otherwise.
-- **I6. qhistory ignores an Unknown transaction's completion (S). In
-  progress.** A timed-out transaction may commit later; its `Completed`
+- **I6. qhistory ignores an Unknown transaction's completion (S).
+  Done** (5cc4785). A timed-out transaction may commit later; its `Completed`
   made a real-time edge and a `G-single-realtime` that did not happen.
   Elle treats `:info` as infinity. Session order and lost writes are
   I45's.

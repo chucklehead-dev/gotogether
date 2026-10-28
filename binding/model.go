@@ -42,6 +42,9 @@ type Model struct {
 	// itself, and calls are the names it applies: an action's
 	// assignments are its own and its calls' (Assigns)
 	assigns, calls map[string]map[string]bool
+	// chooses are the choices each action makes itself: its nondets
+	// ("nondet v") and its any {} of several branches (Chooses)
+	chooses map[string][]string
 	// reads are the names each action reads outside its assignments'
 	// left sides: of the variables among them, the state it reads
 	reads map[string]map[string]bool
@@ -110,6 +113,71 @@ func (m *Model) Assigns(action string) (map[string]bool, bool) {
 	}
 	walk(action)
 	return out, true
+}
+
+// Chooses are the choices action makes inside, itself or through the
+// actions it calls: its nondets ("nondet v") and its any {} of several
+// branches. quint's replay of a step draws each at random, not the one
+// the step took, so an expect that reads what it chose (or a choice that
+// disables the action for some values) is checked against one draw: the
+// lint says so, and validate gives a failure after one no verdict.
+func (m *Model) Chooses(action string) []string {
+	var out []string
+	seen := map[string]bool{}
+	var walk func(a string)
+	walk = func(a string) {
+		if seen[a] {
+			return
+		}
+		seen[a] = true
+		for _, c := range m.chooses[a] {
+			if !slices.Contains(out, c) {
+				out = append(out, c)
+			}
+		}
+		for _, n := range slices.Sorted(maps.Keys(m.calls[a])) {
+			if _, ok := m.assigns[n]; ok {
+				walk(n)
+			}
+		}
+	}
+	walk(action)
+	return out
+}
+
+// choicesIn are the choices an action's IR makes: each nondet's name,
+// and each any {} of two or more branches.
+func choicesIn(raw json.RawMessage) []string {
+	var out []string
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if x["kind"] == "let" {
+				if d, ok := x["opdef"].(map[string]any); ok && d["qualifier"] == "nondet" {
+					n, _ := d["name"].(string)
+					out = append(out, "nondet "+n)
+				}
+			}
+			if x["kind"] == "app" && x["opcode"] == "actionAny" {
+				if args, _ := x["args"].([]any); len(args) > 1 {
+					out = append(out, fmt.Sprintf("any {} of %d branches", len(args)))
+				}
+			}
+			for _, k := range slices.Sorted(maps.Keys(x)) {
+				walk(x[k])
+			}
+		case []any:
+			for _, e := range x {
+				walk(e)
+			}
+		}
+	}
+	var v any
+	if json.Unmarshal(raw, &v) == nil {
+		walk(v)
+	}
+	return out
 }
 
 // Param is an action parameter. Type is its type as Quint writes it
@@ -347,10 +415,12 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 	// every module's actions' assignments and calls, by name: an action
 	// may assign through one it imports
 	assigns, calls, reads := map[string]map[string]bool{}, map[string]map[string]bool{}, map[string]map[string]bool{}
+	chooses := map[string][]string{}
 	for _, mod := range tc.Modules {
 		for _, d := range mod.Declarations {
 			if d.Kind == "def" && d.Qualifier == "action" {
 				assigns[d.Name], calls[d.Name], reads[d.Name] = assigned(d.RawExpr), namesIn(d.RawExpr), readNames(d.RawExpr)
+				chooses[d.Name] = choicesIn(d.RawExpr)
 			}
 		}
 	}
@@ -382,7 +452,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 		}
 		gather(module)
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
-			assigns: assigns, calls: calls, reads: reads, typedefs: typedefs, types: &memo.Map[string, typeResult]{}}
+			assigns: assigns, calls: calls, reads: reads, chooses: chooses, typedefs: typedefs, types: &memo.Map[string, typeResult]{}}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range visible {

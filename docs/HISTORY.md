@@ -2752,6 +2752,18 @@ verdicts quint does not give. Each reproduction is a regression test now
   order; otherwise Unsupported, and quint judges. The repository's folds
   (grist's min, the examples' sums and maxima) are all of the shapes;
   `TestAgreesWithQuint` agrees on every model as before.
+- **F2, a choice inside a bound action** (high). An action that chooses
+  (`any { x' = 1, ..., x' = 4 }`, a die's nondet) whose expect reads the
+  result: quint's replay draws the choice, and three validations of one
+  input failed after step 2, step 1 and step 1; `lint -binding` said the
+  binding fits. A failure at or after such a step is now no verdict
+  (`the model's choice, sampled`), its issue naming the action, the
+  choice and the fix, and the lint warns of it
+  (`TestSoundInternalChoiceIsNoVerdict`, `TestLintInternalChoice`). No
+  example's binding has one. Pinned replays (the evaluator's witness
+  written into the replay, so quint confirms rather than draws) are left
+  for ROADMAP I4: they need a replay of a step that names its choice,
+  which no binding template writes yet.
 - **F3, ResolvePending's first placement** (high). The run's invariants
   were judged on the first placement of its pending calls that conforms;
   one that violates an invariant hid a later one that keeps them, which

@@ -238,6 +238,11 @@ working there:
 - `quint run --mbt` records every `nondet` evaluated in a step, not only
   the action's own: picks of other actions appear as `Some(..)`.
 - `quint test` ITF has no `mbt::` variables.
+- quint's replay of a step draws each choice the action makes inside
+  (a nondet, an `any {}` of enabled branches) at random: an expect that
+  reads it is checked against one draw. validate gives a failure after
+  such a step no verdict, and `lint -binding` warns of it; bind the
+  choice as a parameter.
 - Generated replay modules import the model by relative path from their
   own directory. Moving a generated `.qnt` breaks its import.
 - A model with no constants must be imported as `import M.*`, not `M()`

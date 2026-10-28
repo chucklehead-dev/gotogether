@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/maphash"
 	"os"
@@ -375,7 +376,7 @@ func (e *evaluator) walk(c *Checker, consts map[string]qeval.Value, plan *bindin
 		}
 		next, ok, err := e.m.Step(consts, s, e.em.Actions[call.Action], args...)
 		if err != nil {
-			return w, err
+			return w, e.choiceRefusal(err, consts, s, i, &call, args)
 		}
 		if !ok {
 			w.rejected = i
@@ -549,4 +550,60 @@ func (c *Checker) plan(t, whole *qtrace.Trace) (*binding.Plan, error) {
 		return c.planner.Plan(t)
 	}
 	return c.Binding.Planner(c.Model, whole).Plan(t)
+}
+
+// A choiceRefusal is the evaluator's refusal of a step whose action
+// chooses inside (a nondet, an any {} of enabled branches): quint's replay
+// draws one choice at random, so its verdict from that call on is a
+// sample, the same run failing at one step, another or none on reruns
+// (review 11, F2). Holds of Of successors have the call's expect holding
+// (-1: the choice disables the action for some values, so quint may
+// reject the step by its draw).
+type choiceRefusal struct {
+	*qeval.Unsupported
+	At     int // the call's index in the plan
+	Action string
+	Holds  int
+	Of     int
+}
+
+// Unwrap is the evaluator's refusal.
+func (c *choiceRefusal) Unwrap() error { return c.Unsupported }
+
+// choiceRefusal is err, the evaluator's refusal of call (i in the plan)
+// in s, as a choiceRefusal when it is about a choice quint samples; else
+// err.
+func (e *evaluator) choiceRefusal(err error, consts map[string]qeval.Value, s qeval.State, i int, call *binding.Call, args []qeval.Value) error {
+	var u *qeval.Unsupported
+	if !errors.As(err, &u) || u.Choice == "" {
+		return err
+	}
+	cr := &choiceRefusal{Unsupported: u, At: i, Action: call.Action, Holds: -1}
+	if succ, serr := e.m.Successors(consts, s, e.em.Actions[call.Action], args...); serr == nil && strings.Contains(u.Why, "successors") {
+		cr.Of = len(succ)
+		cr.Holds = 0
+		for _, n := range succ {
+			if ok, herr := e.holds(consts, n, call); herr != nil {
+				cr.Holds = -1
+				break
+			} else if ok {
+				cr.Holds++
+			}
+		}
+	}
+	return cr
+}
+
+// what is the refusal as a report says it, with the fix.
+func (c *choiceRefusal) what() string {
+	held := ""
+	switch {
+	case c.Holds >= 0 && c.Of > 0:
+		held = fmt.Sprintf(", its expect holding after %d of its %d successors", c.Holds, c.Of)
+	case c.Holds < 0:
+		held = ", some of its values disabling it"
+	}
+	return fmt.Sprintf("%s at step %d makes a choice of its own (%s%s), and quint's replay draws one at random, so its verdict from that step on is a sample, not the model's: "+
+		"expose the choice as a parameter of %s (the step's argument), or record it as an observation the binding passes",
+		c.Action, c.At+1, c.Choice, held, c.Action)
 }

@@ -60,3 +60,33 @@ func pay(ctx context.Context) {
 		t.Errorf("deposit is recorded, but warned as emitted by nothing:\n%s", out)
 	}
 }
+
+// lint -binding warns of a bound action that chooses inside (an any {}
+// of assignments) whose expect reads the result: quint's replay draws
+// the choice, and the binding once "fit" (review 11, F2). The warning
+// names the action, the choice and the fix, and the fits line says so.
+func TestLintInternalChoice(t *testing.T) {
+	skip.Quint(t)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = w
+	code, err := lint([]string{"-binding", "../../qtest/testdata/flip.yaml"})
+	os.Stdout = stdout
+	w.Close()
+	out, _ := io.ReadAll(r)
+	if err != nil || code != 0 {
+		t.Fatalf("exit %d, %v:\n%s", code, err, out)
+	}
+	for _, want := range []string{
+		"warning: action flipit makes a choice of its own (any {} of 4 branches)",
+		"expose the choice as a parameter of flipit",
+		"1 choose inside, which quint's replay samples",
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}

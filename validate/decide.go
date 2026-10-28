@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -292,6 +293,10 @@ func (c *Checker) checkPlan(ctx context.Context, re *runEval, t *qtrace.Trace, p
 		return res, nil, nil
 	}
 	r, err := validatePlanIn(ctx, c.Binding, t, p, o, res, verr == nil && !v.pass)
+	var cr *choiceRefusal
+	if err == nil && errors.As(verr, &cr) {
+		judgeChoice(r, cr)
+	}
 	switch {
 	case err != nil || verr != nil:
 		return r, nil, err
@@ -666,4 +671,47 @@ func (s sampling) takes(plan *binding.Plan) bool {
 	sum := h.Sum(nil)
 	x := binary.BigEndian.Uint64(sum[:8])
 	return float64(x)/float64(^uint64(0)) < s.rate
+}
+
+// sampledChoice is the no-verdict cause of a failure at or after a call
+// whose action chooses inside (judgeChoice).
+const sampledChoice = "the model's choice, sampled"
+
+// judgeChoice is r, quint's replay of a plan whose call cr.At makes a
+// choice of its own, as that choice leaves it: a failure at or after the
+// call is one draw of quint's, no verdict, unless it is the call's own
+// expect failing after every successor (a Mismatch whatever the draw); a
+// pass stands (quint found a path the model takes). The issue names the
+// action, the choice and the fix either way.
+func judgeChoice(r *Result, cr *choiceRefusal) {
+	sampled := func(f *Failure) bool {
+		if f == nil || f.Index < cr.At {
+			return false
+		}
+		return !(f.Index == cr.At && f.Kind == "state" && cr.Holds == 0)
+	}
+	changed := false
+	if r.Conforms == Fail && sampled(r.Failure) {
+		r.Conforms, r.noVerdict, changed = NotEvaluated, sampledChoice, true
+		for i := range r.Invariants {
+			if r.Invariants[i].Verdict == Fail {
+				r.Invariants[i].Verdict, r.Invariants[i].Failure = NotEvaluated, nil
+			}
+		}
+	}
+	for i := range r.Invariants {
+		inv := &r.Invariants[i]
+		if inv.Verdict == Fail && sampled(inv.Failure) {
+			inv.Verdict, inv.cause, changed = NotEvaluated, sampledChoice, true
+			if r.noVerdict == "" {
+				r.noVerdict = sampledChoice
+			}
+		}
+	}
+	msg := "judged by quint, the Go evaluator having handed it over: " + cr.what()
+	sev := "info"
+	if changed {
+		sev, msg = "warn", msg+"; the failure quint drew is no verdict"
+	}
+	r.Issues = append(r.Issues, qtrace.Issue{Severity: sev, Kind: "choice", Msg: msg})
 }

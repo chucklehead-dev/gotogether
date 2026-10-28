@@ -326,7 +326,15 @@ func lint(args []string) (int, error) {
 		}
 		bound = append(bound, binding.Bound{Binding: b, Model: m})
 	}
-	var warns []string
+	var warns, choices []string
+	for i, b := range bound {
+		for _, w := range b.Binding.LintChoices(b.Model) {
+			if strings.Contains(*bpath, ",") {
+				w = strings.Split(*bpath, ",")[i] + ": " + w
+			}
+			choices = append(choices, w)
+		}
+	}
 	if *src != "" {
 		anns, err := binding.ScanAnnotations(*src)
 		if err != nil {
@@ -344,7 +352,7 @@ func lint(args []string) (int, error) {
 		e, w := binding.LintSources(bound, anns, recs)
 		errs, warns = append(errs, e...), w
 	}
-	for _, w := range warns {
+	for _, w := range append(choices, warns...) {
 		fmt.Println("warning:", w)
 	}
 	for _, e := range errs {
@@ -354,7 +362,11 @@ func lint(args []string) (int, error) {
 		return 1, nil
 	}
 	for i, b := range bound {
-		fmt.Printf("binding %s fits %s (%d actions bound)\n", strings.Split(*bpath, ",")[i], b.Binding.Module, len(b.Binding.Actions))
+		but := ""
+		if n := len(b.Binding.LintChoices(b.Model)); n > 0 {
+			but = fmt.Sprintf("; %d choose inside, which quint's replay samples: the warnings above", n)
+		}
+		fmt.Printf("binding %s fits %s (%d actions bound%s)\n", strings.Split(*bpath, ",")[i], b.Binding.Module, len(b.Binding.Actions), but)
 	}
 	return 0, nil
 }

@@ -31,6 +31,11 @@ The first release. What a user meets, by module:
   are still every run's. New: `qenv.CoverageWith(runs, sites...)` and
   `Sim.FaultSites()`; qtest's coverage passes its runs' sites itself.
   `TestFaultPoints` passed or failed by test order.
+- A choice a bound action makes inside (review 11, F2):
+  `binding.Model.Chooses` (an action's nondets and `any {}`s, through
+  the actions it calls) and `Binding.LintChoices` (`lint -binding`'s
+  warning when the action's expect reads what it chose); validate gives
+  a failure quint drew after such a step no verdict.
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams
