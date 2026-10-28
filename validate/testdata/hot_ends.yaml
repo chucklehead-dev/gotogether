@@ -1,0 +1,13 @@
+# hot_ends.qnt (simulate -graph's liveness search): giving up is an end
+# the model declares (simulate.terminal), where finished, which the model
+# should drive, is false: a lasso that stutters there, failing it.
+spec: hot_ends.qnt
+module: hot_ends
+actions:
+  inc: {}
+  finish: {}
+  giveUp: {}
+eventually: [finished]
+simulate:
+  holds: [finished]
+  terminal: done or n == 5

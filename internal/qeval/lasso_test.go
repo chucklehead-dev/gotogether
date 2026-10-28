@@ -8,8 +8,8 @@ import (
 )
 
 // randomGraph is a graph of n states with random edges (labels 0 to
-// labels-1, targets a state or -1, a state the search did not add), each
-// state expanded but some; and random hot states.
+// labels-1, targets a state or -1, a state the search did not add, one in
+// four a stutter), each state expanded but some; and random hot states.
 func randomGraph(r *rand.Rand, n, labels int) (*Graph, []bool) {
 	g := &Graph{Out: make([][]Edge, n), Expanded: make([]bool, n)}
 	hot := make([]bool, n)
@@ -22,6 +22,11 @@ func randomGraph(r *rand.Rand, n, labels int) (*Graph, []bool) {
 		g.Out[s] = []Edge{}
 		for range r.IntN(4) {
 			e := Edge{Label: r.IntN(labels), To: r.IntN(n+1) - 1}
+			if r.IntN(4) == 0 {
+				// a stutter, often: a family taken or enabled only by one is
+				// the case fairness must not count
+				e.To = s
+			}
 			if !slices.Contains(g.Out[s], e) {
 				g.Out[s] = append(g.Out[s], e)
 			}
@@ -44,10 +49,12 @@ func randomGraph(r *rand.Rand, n, labels int) (*Graph, []bool) {
 // Missed exactly the families its walks cannot take, and each lasso a
 // closed walk from its nearest state, inside it and fair by the same
 // definition. Under every fairness at random, all weakly fair, and all
-// unfair (no fairness: every hot cycle reported).
+// unfair (no fairness: every hot cycle reported). Ten thousand graphs: a
+// family taken only by a stutter, counted as taken, first shows in the
+// 3964th.
 func TestHotComponentsAgainstBruteForce(t *testing.T) {
 	r := rand.New(rand.NewPCG(6, 6))
-	for iter := range 3000 {
+	for iter := range 10000 {
 		n := 1 + r.IntN(5)
 		labels := 1 + r.IntN(4)
 		g, hot := randomGraph(r, n, labels)
@@ -234,6 +241,20 @@ func checkHot(t *testing.T, name string, g *Graph, hot []bool, fam Families) {
 		if !fairWalk(visited, walkTaken) {
 			t.Fatalf("%s: lasso %v of %v is unfair", name, l.Cycle, c.States)
 		}
+		// its Obliged: the families enabled in every state it visits
+		var obliged []int
+		for f := range fam.Fair {
+			all := true
+			for s := range visited {
+				all = all && enabled(s)[f]
+			}
+			if all {
+				obliged = append(obliged, f)
+			}
+		}
+		if !slices.Equal(obliged, l.Obliged) {
+			t.Fatalf("%s: lasso %v of %v: obliged %v, brute force %v", name, l.Cycle, c.States, l.Obliged, obliged)
+		}
 	}
 	for s := range n {
 		if want[s] != got[s] {
@@ -270,8 +291,10 @@ func TestHotComponentsFairness(t *testing.T) {
 		t.Fatalf("no fairness: %+v", cs)
 	}
 	stops := Families{Of: fair.Of, Fair: []Fairness{Unfair, WeakFair, Stops, WeakFair}}
-	// (and s2, where only retry is enabled, stutters once retries stop)
-	if cs := storm.HotComponents(hot, stops); len(cs) != 1 || !slices.Equal(cs[0].States, []int{2}) || cs[0].Lasso.Cycle != nil {
+	// (and s2, where only retry is enabled, stutters once retries stop;
+	// s1 is a state of its own, process enabled there: unfair)
+	if cs := storm.HotComponents(hot, stops); len(cs) != 2 || !slices.Equal(cs[0].States, []int{1}) || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{process}) ||
+		!slices.Equal(cs[1].States, []int{2}) || cs[1].Lasso.Cycle != nil {
 		t.Fatalf("retry stops: %+v", cs)
 	}
 	// a hot state where only a stutter and an unfair family are enabled
@@ -279,5 +302,31 @@ func TestHotComponentsFairness(t *testing.T) {
 	stuck := &Graph{Out: [][]Edge{{{submit, 1}}, {{read, 1}, {submit, 0}}}, Expanded: []bool{true, true}, Labels: g.Labels}
 	if cs := stuck.HotComponents([]bool{false, true}, fair); len(cs) != 1 || cs[0].Lasso == nil || cs[0].Lasso.Cycle != nil {
 		t.Fatalf("stuck: %+v", cs)
+	}
+}
+
+// Stutters by hand: s1 and s2 go round by turn (a weakly fair family), and
+// done leaves for s0 (not hot). A done enabled in s1 only, a stutter in
+// s2, is not enabled throughout: the cycle is fair. Enabled in both, it
+// is obliged, and its stutter in s2 does not take it: unfair. A family
+// taken in the cycle only by a stutter, enabled throughout, misses too.
+func TestHotComponentsStutters(t *testing.T) {
+	const turn, done = 0, 1
+	fair := Families{Of: []int{0, 1}, Fair: []Fairness{WeakFair, WeakFair}}
+	hot := []bool{false, true, true}
+	labels := make([][]Event, 2)
+	once := &Graph{Out: [][]Edge{{}, {{turn, 2}, {done, 0}}, {{turn, 1}, {done, 2}}}, Expanded: []bool{true, true, true}, Labels: labels}
+	if cs := once.HotComponents(hot, fair); len(cs) != 1 || !cs[0].Fair() || len(cs[0].Lasso.Cycle) != 2 {
+		t.Fatalf("done enabled in s1 only (a stutter in s2): %+v", cs)
+	}
+	both := &Graph{Out: [][]Edge{{}, {{turn, 2}, {done, 0}}, {{turn, 1}, {done, 0}, {done, 2}}}, Expanded: once.Expanded, Labels: labels}
+	if cs := both.HotComponents(hot, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{done}) {
+		t.Fatalf("done enabled in both, a stutter in s2: %+v", cs)
+	}
+	// a single hot state where done is enabled (to s0) and stutters: its
+	// stutter takes nothing, so it is unfair, and reported with its Missed
+	single := &Graph{Out: [][]Edge{{}, {{done, 0}, {done, 1}}}, Expanded: []bool{true, true}, Labels: labels}
+	if cs := single.HotComponents([]bool{false, true}, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{done}) {
+		t.Fatalf("a stutter of an enabled family: %+v", cs)
 	}
 }

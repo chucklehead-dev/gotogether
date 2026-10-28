@@ -130,7 +130,10 @@ may send them forever or never) and the faults and inputs a settle
 stops `simulate.stops` (never in a cycle); a processor left weakly fair
 must run whenever it stays enabled. Weak fairness does not rule out a
 storm in which a retry keeps disabling the progress it waits for (the
-progress is not enabled throughout): that is the cycle to find.
+progress is not enabled throughout): that is the cycle to find
+(examples/requeue: a requeue that resends a changed spec restarts the
+provisioning it waits for, a lasso of its model; the fixed model, whose
+requeue is a stutter, is live).
 
 Where nobody records `settle` (real Maelstrom), the property holds
 vacuously. Say so in the README, and rely on the environment's own final

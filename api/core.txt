@@ -2183,6 +2183,7 @@ type EventualVerdict struct
     field HotStates int
     field Lassos int
     field Unfair int
+    field Stutters int
     field UnfairBy string
     field Unsupported string
     field Unchecked int
@@ -2273,6 +2274,7 @@ type HotLasso struct
     field Prefix *Counterexample
     field Cycle []GraphStep
     field Stutter bool
+    field Ends bool
     field Repeated []NamedValue
     field Takes []string
     field Obliged []string

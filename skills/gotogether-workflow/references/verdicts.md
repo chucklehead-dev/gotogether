@@ -148,13 +148,20 @@ seeds, not by hand.
   `allows` (the same, the val in `simulate.allows`), `FAIL` (the same,
   the val in `simulate.holds`: the model should drive it; fix it, or
   name the actions that stop at a settle, `simulate.stops`, or need not
-  run, `simulate.unfair`). "fairness rules out N hot cycles (the
-  nearest leaves X enabled throughout, never taken)" says which weakly
-  fair action made the difference: if X is an input or a fault, declare
-  it, and look again. A run's `hot cycle (evidence, no verdict ...)` line
-  is a run that did not settle going round a cycle of model states with
-  the val false: read its steps as the storm or livelock that kept it
-  from settling. A
+  run, `simulate.unfair`). "fairness rules out N hot cycles and M hot
+  states stuttering (the nearest leaves X enabled throughout, never
+  taken)" says which weakly fair actions made the difference: if X is
+  an input or a fault, declare it, and look again (a model whose state
+  only grows, a grist model, has only the stuttering states). A lasso
+  that ends ("the step cannot leave that state": a deadlock, or an end
+  `simulate.terminal` declares) is a run that stops with the val false:
+  in `holds`, the model's bug. A run's `hot cycle (evidence, no verdict
+  ...)` line is a run that did not settle going round a cycle of model
+  states with the val false: read its steps as the storm or livelock
+  that kept it from settling, or as progress the model does not see (a
+  counter that wraps repeats a state too); it is not a verdict that the
+  cycle goes on forever (examples/requeue's storm does, and its model's
+  lasso says so). A
   counterexample's replay marked as drawing among successors may not
   reproduce in quint test; the path printed is the evaluator's;
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no

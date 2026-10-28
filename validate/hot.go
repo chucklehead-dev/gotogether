@@ -11,10 +11,14 @@ import (
 
 // Liveness in runs (P6's cheap half): a run that did not settle, whose
 // model states repeat with an eventual val false all the while, went
-// round a cycle that never made it true: a retry storm, a livelock, a
-// requeue loop. That is evidence, not a verdict (the run might have left
-// the cycle had it gone on, and a run cut short has work pending by
-// right), so it is reported beside the run's verdicts and changes none.
+// round a cycle of the model's states that never made it true: a retry
+// storm, a livelock, a requeue loop. That is evidence, not a verdict:
+// the run might have left the cycle had it gone on (nothing checks the
+// cycle's fairness: an action enabled throughout it a longer run would
+// take), a run cut short has work pending by right, and progress the
+// model abstracts away (a counter that wraps, a retry count it does not
+// keep) repeats a state as a storm does. So it is reported beside the
+// run's verdicts, saying what repeated, and changes none.
 
 // A HotCycle is a run's states repeating with eventual vals false: the
 // state after call From (0: the start) is the state after call To, Vals

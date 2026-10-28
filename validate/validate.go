@@ -115,8 +115,10 @@ type Result struct {
 	// Hot is a trace that recorded no settle going round a cycle of the
 	// model's states with an eventual val false all the while (Checker.
 	// MarkHot: qtest marks a run that did not settle, validate every
-	// unsettled trace): evidence of a retry storm or a livelock, no
-	// verdict, so OK ignores it.
+	// unsettled trace): evidence, no verdict, so OK ignores it. It says
+	// what repeated (a retry storm, a livelock), not that it would
+	// forever: progress the model does not keep (a counter that wraps)
+	// repeats a state too, and the cycle's fairness is unchecked.
 	Hot *HotCycle
 
 	// Gaps are the holes in the seqs of the recorders of its steps

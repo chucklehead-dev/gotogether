@@ -43,7 +43,16 @@ The first release. What a user meets, by module:
   trace's model states went round with an eventual val false: qtest
   marks a run whose Settle failed, `gotogether validate` every trace
   without a settle; the report's `hot cycle (evidence, no verdict ...)`
-  line, no verdict changed.
+  line, no verdict changed. Reviewed: `validate.EventualVerdict` gains
+  `Stutters` (single hot states fairness rules out, once uncounted:
+  every hot state of a model whose state only grows) and its `UnfairBy`
+  names every action the nearest leaves untaken; `validate.HotLasso`
+  gains `Ends` (a stutter in a state the step cannot leave: a deadlock
+  or a terminal end with the val false, failing a val in
+  `simulate.holds`), its `Obliged` is the cycle's own (once its
+  component's), and its replay expects the val false after each step of
+  the turn. examples/requeue: a requeue storm as a lasso, and as a run's
+  hot cycle.
 - `<app> sizing` (GR10 slice 6, grist part): grist/gristload
   (`Measure`, `Report`, `Sizing.Write`, `Main`) sizes a grist app from a
   run's steps into deploy/sizing.yaml, every value with its reason,

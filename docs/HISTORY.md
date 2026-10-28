@@ -2193,6 +2193,55 @@ ROADMAP's P6 as built (DESIGN §62). The decisions it left:
   run-only bug (its runs settle; the model's ledgerPostServed stays
   enabled, weakly fair, until every answered call has its record).
 
+### P6's review: liveness as cycles, checked by hand
+
+A skeptical model-checking review of P6 (DESIGN §62), ranked:
+- **The note naming what fairness rules out never counted single hot
+  states.** HotComponents dropped a one-state component with a weakly
+  fair action enabled, so in a model whose state only grows (every grist
+  model: no cycles but stutters) "fairness rules out ..." never
+  appeared, and the input hiding a stuck processor, which §62 promised
+  it would name, was never named. Every component is now returned; the
+  verdict counts `Stutters` apart from cycles and names every action the
+  nearest leaves untaken.
+- **The brute force missed one ablation**: a stutter counted as taking
+  its family survived its 3000 graphs (the first failure is the
+  3964th). One edge in four is now a stutter, there are 10 000 graphs,
+  and `TestHotComponentsStutters` states the cases by hand (enabled only
+  by a stutter: not obliged; taken only by one: missed).
+- **A lasso's Obliged was its component's**, printed as "every weakly
+  fair action enabled throughout it", which the cycle, visiting fewer
+  states, may not have (requeue's storm: none for the component,
+  advance for the cycle). It is the cycle's now, checked by the brute
+  force.
+- **The replay checked the val at the turn's end only**; it now expects
+  it false after each step of the turn too (replayed in quint: hot.qnt's
+  three bindings, requeue's storm, hot_ends).
+- **A terminal end with the val false is a lasso**: a stutter in a state
+  the step cannot leave, which a run settles in with the val false. It
+  was already one; it is now said so (`HotLasso.Ends`, "the step
+  cannot leave that state") and decided in §62: a declared end means the
+  model stops, not that its obligations are met.
+- **What was sound**: fairness per state (enabled by an edge to another
+  state, so an action enabled only by a stutter obliges nothing, and
+  one taken only as a stutter is missed: both now tested by hand); the
+  states cut by the bound (not expanded, or expanded with an edge to -1)
+  are left out of every component, which can miss a lasso (reported
+  `bounded`) and never makes one (a component's states are whole, their
+  enabledness exact); the copy MarkHot writes on (qtest's report shared
+  by runs of the same steps is never written). MarkHot's wording claimed
+  a storm or a livelock; a cycle of model states may be progress the
+  model abstracts away (a counter that wraps) or one fairness rules out,
+  so its docs say what repeated, not that it would forever.
+- **Cost**: the liveness search is 14 to 18 ms of graphs of 2 to 18 s at
+  20 000 states; nothing to optimise.
+- **examples/requeue**, the storm as an application (§62), and **grist's
+  commands as `simulate.unfair`, declined** (grist.md §3.3.1): no verdict
+  changes on counters, library or wallet-grist, and a processor that
+  never runs stays hidden behind the any-number effect, site and
+  dependency actions, which cannot be declared unfair without false
+  lassos.
+
 ### P1: blocking rules (grist)
 
 ROADMAP's P1 as built (docs/grist.md §2.4.1). The decisions it left:

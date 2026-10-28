@@ -24,9 +24,11 @@ import (
 // fair cycle keeps it false forever (Lasso the one nearest init), else
 // none was found (proved absent when the graph is complete and every
 // state evaluated it). HotStates are the expanded states where it is
-// false; Lassos the fair components of them, Unfair those fairness rules
-// out (UnfairBy the weakly fair action the nearest of them leaves
-// enabled throughout and never takes). Unsupported names a construct
+// false; Lassos the fair components of them, Unfair the cycles of two
+// states or more fairness rules out and Stutters the single hot states it
+// rules out (a weakly fair action enabled there: a model whose state only
+// grows has no other hot cycle), UnfairBy the weakly fair actions the
+// nearest of either leaves enabled throughout and never takes. Unsupported names a construct
 // the evaluator does not take, met in Unchecked states, which are then in
 // no cycle (so a lasso found is real, and none found proves nothing);
 // Error is the model's runtime error evaluating it, with the path to the
@@ -37,6 +39,7 @@ type EventualVerdict struct {
 	Lasso          *HotLasso
 	HotStates      int
 	Lassos, Unfair int
+	Stutters       int
 	UnfairBy       string
 	Unsupported    string
 	Unchecked      int
@@ -58,15 +61,20 @@ func (v EventualVerdict) Live() bool {
 // those that stop, or stutters), so the model may stay there. Takes are
 // the actions the cycle takes, Obliged the weakly fair ones enabled in
 // every state of it (each taken: that is what makes it fair), Component
-// the states of its component. Replay is the prefix and one turn of the
-// cycle as a Quint run, ending in an expect that the val is false and
-// the state the repeated one: quint checks that the cycle is a path of
-// the model returning to its start, not that it is fair nor that the val
-// stays false forever, which no quint run can.
+// the states of its component. Ends (a Stutter's) says the step cannot
+// leave that state at all: a deadlock, or an end simulate.terminal
+// declares, where a run stops with the val false (a liveness failure as
+// much as a cycle: nothing will make it true). Replay is the prefix and
+// one turn of the cycle as a Quint run, the val expected false after each
+// of the turn's steps and, at its end, the state the repeated one: quint
+// checks that the cycle is a path of the model returning to its start
+// with the val false throughout, not that it is fair nor that it repeats
+// forever, which no quint run can.
 type HotLasso struct {
 	Prefix    *Counterexample
 	Cycle     []GraphStep
 	Stutter   bool
+	Ends      bool
 	Repeated  []NamedValue
 	Takes     []string
 	Obliged   []string
@@ -148,8 +156,17 @@ func (c *Checker) liveness(ce *cexWriter, evs []string, branch []string, unfair,
 		}
 		for _, comp := range g.HotComponents(hot, fam) {
 			if !comp.Fair() {
-				if v.Unfair++; v.UnfairBy == "" {
-					v.UnfairBy = famName[comp.Missed[0]]
+				if len(comp.States) == 1 {
+					v.Stutters++
+				} else {
+					v.Unfair++
+				}
+				if v.UnfairBy == "" {
+					var by []string
+					for _, f := range comp.Missed {
+						by = append(by, famName[f])
+					}
+					v.UnfairBy = strings.Join(by, ", ")
 				}
 				continue
 			}
@@ -167,26 +184,32 @@ func (w *cexWriter) lasso(ev string, comp qeval.Component, famName []string, fam
 	l := comp.Lasso
 	entry := w.g.States[l.Entry]
 	h := &HotLasso{Prefix: w.path(l.Entry, ""), Stutter: l.Cycle == nil, Repeated: w.named(entry), Component: len(comp.States)}
-	for _, f := range comp.Obliged {
+	for _, f := range l.Obliged {
 		h.Obliged = append(h.Obliged, famName[f])
 	}
-	var ts []qeval.Transition
-	at := l.Entry
-	for _, ed := range l.Cycle {
-		ts = append(ts, qeval.Transition{Events: w.g.Labels[ed.Label], State: w.g.States[ed.To]})
+	h.Ends = h.Stutter && len(w.g.Out[l.Entry]) == 0
+	// the replay: the prefix, one turn with the val false after each of
+	// its steps, then the state the turn returns to
+	h.Sampled = slices.Clone(h.Prefix.Sampled)
+	replay := h.Prefix.Replay
+	at, prev := l.Entry, entry
+	for i, ed := range l.Cycle {
+		t := qeval.Transition{Events: w.g.Labels[ed.Label], State: w.g.States[ed.To]}
 		if a := famName[fam.Of[ed.Label]]; ed.To != at && !slices.Contains(h.Takes, a) {
 			h.Takes = append(h.Takes, a)
 		}
-		at = ed.To
+		steps, call, sampled := w.steps(prev, []qeval.Transition{t}, len(h.Prefix.Steps)+i)
+		h.Cycle, h.Sampled = append(h.Cycle, steps...), append(h.Sampled, sampled...)
+		replay += call
+		if i < len(l.Cycle)-1 {
+			replay += ".expect(not(" + ev + "))"
+		}
+		at, prev = ed.To, t.State
 	}
-	steps, calls, sampled := w.steps(entry, ts, len(h.Prefix.Steps))
-	h.Cycle, h.Sampled = steps, append(slices.Clone(h.Prefix.Sampled), sampled...)
-	// the replay: the prefix, one turn, then the val false in the state
-	// the turn returns to
 	conds := []string{"not(" + ev + ")"}
 	for _, v := range w.e.m.Vars {
 		conds = append(conds, fmt.Sprintf("%s == %s", shortName(v), qeval.String(entry[v])))
 	}
-	h.Replay = h.Prefix.Replay + calls + ".expect(and { " + strings.Join(conds, ", ") + " })"
+	h.Replay = replay + ".expect(and { " + strings.Join(conds, ", ") + " })"
 	return h
 }

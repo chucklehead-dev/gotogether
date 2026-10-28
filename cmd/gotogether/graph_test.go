@@ -235,8 +235,11 @@ func agreeGraph(t *testing.T, path string, states, depth int) int {
 // busy forever (exit 0, the lasso on one line); hot_stops proves it
 // drains once submissions stop, the retry loops unfair; hot_storm's
 // retry storm fails drained, which it holds, with the lasso, whose
-// replay quint passes (-out). An eventual-only binding is judged, not
-// skipped as plain simulate skips it.
+// replay quint passes (-out), the val expected false after each of the
+// cycle's steps; hot_ends' giving up, an end simulate.terminal declares
+// with its val false, fails it as a lasso that stays there. An
+// eventual-only binding is judged, not skipped as plain simulate skips
+// it.
 func TestSimulateGraphEventually(t *testing.T) {
 	skip.Quint(t)
 	out := filepath.Join(t.TempDir(), "hot.qnt")
@@ -246,8 +249,9 @@ func TestSimulateGraphEventually(t *testing.T) {
 		want string
 	}{
 		{[]string{"-binding", "../../validate/testdata/hot.yaml"}, 0, "  allows  drained: a fair cycle keeps it false forever (the code must leave it): init, submit, then (submit, process, retry, retry) forever"},
-		{[]string{"-binding", "../../validate/testdata/hot_stops.yaml"}, 0, "  live    drained: no fair cycle keeps it false (the whole graph, 6 states); fairness rules out 2 hot cycles (the nearest leaves process enabled throughout, never taken)"},
+		{[]string{"-binding", "../../validate/testdata/hot_stops.yaml"}, 0, "  live    drained: no fair cycle keeps it false (the whole graph, 6 states); fairness rules out 2 hot cycles (the nearest leaves process enabled throughout, never taken: if it is an input that may stop, simulate.unfair; a fault, simulate.stops)"},
 		{[]string{"-binding", "../../validate/testdata/hot_storm.yaml", "-out", out}, 1, "    then this cycle, forever, drained false in each of its states (2 steps of a component of 2; taking retry, every weakly fair action enabled throughout it taken: retry):"},
+		{[]string{"-binding", "../../validate/testdata/hot_ends.yaml"}, 1, "    then nothing, forever: the step cannot leave that state (a deadlock, or an end simulate.terminal declares), and finished is false there"},
 	} {
 		code, got := capture(t, func() (int, error) { return simulate(append([]string{"-graph"}, c.args...)) })
 		if code != c.code || !strings.Contains(got, c.want) {
@@ -255,7 +259,7 @@ func TestSimulateGraphEventually(t *testing.T) {
 		}
 	}
 	src, err := os.ReadFile(out)
-	if err != nil || !strings.Contains(string(src), "run gtg_hot_drained = init.then(submit).then(retry).then(retry).expect(") {
+	if err != nil || !strings.Contains(string(src), "run gtg_hot_drained = init.then(submit).then(retry).expect(not(drained)).then(retry).expect(") {
 		t.Fatalf("-out: %v\n%s", err, src)
 	}
 	replayInQuint(t, out)

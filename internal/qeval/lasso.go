@@ -49,9 +49,13 @@ type Families struct {
 // A Lasso is a behaviour that stays in a component forever: the path to
 // Entry (Graph.Path), then Cycle, edges from Entry back to it, forever.
 // A nil Cycle stutters at Entry: no weakly fair family is enabled there.
+// Obliged are the weakly fair families enabled in every state the cycle
+// visits (each taken by it): what makes it fair, fewer than its
+// component's when the cycle leaves out a state where one is not.
 type Lasso struct {
-	Entry int
-	Cycle []Edge
+	Entry   int
+	Cycle   []Edge
+	Obliged []int
 }
 
 // A Component is a strongly connected component of the graph restricted
@@ -74,11 +78,13 @@ func (c Component) Fair() bool { return len(c.Missed) == 0 }
 // HotComponents are the components of the graph restricted to the
 // expanded states where hot holds (a state not expanded has no known
 // edges, and one the state bound cut while expanding, its edge to -1,
-// not all of them, so no cycle goes through either), in order of their nearest state:
-// every component with two states or more, and every single state where
-// no weakly fair family is enabled (a fair stutter). A single state with
-// one enabled is no component of the result (its only cycle, a
-// stutter, is unfair). Each fair one carries its lasso.
+// not all of them, so no cycle goes through either), in order of their
+// nearest state. A single state's only cycle is a stutter: fair where no
+// weakly fair family is enabled (the model may stay there forever: a
+// deadlock, an end simulate.terminal declares, a state only stutters,
+// unfair or stopping families leave), unfair otherwise, its Missed what
+// is enabled there (a state a fair family is stuck behind: an input left
+// fair, and the processor it hides). Each fair one carries its lasso.
 func (g *Graph) HotComponents(hot []bool, fam Families) []Component {
 	n := len(g.Out)
 	in := func(s int) bool { return s >= 0 && s < n && s < len(hot) && hot[s] && g.whole(s) }
@@ -122,9 +128,6 @@ func (g *Graph) HotComponents(hot []bool, fam Families) []Component {
 			if !taken[f] {
 				c.Missed = append(c.Missed, f)
 			}
-		}
-		if len(states) == 1 && len(c.Obliged) > 0 {
-			continue // a state's stutter, unfair: no component
 		}
 		if c.Fair() {
 			c.Lasso = g.fairCycle(states, members, fam, enabled, inner)
@@ -303,7 +306,7 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 			}
 		}
 		if missed < 0 && len(cyc) > 0 {
-			return &Lasso{Entry: entry, Cycle: cyc}
+			return &Lasso{Entry: entry, Cycle: cyc, Obliged: obliged}
 		}
 		// an edge of the missed family inside, else a state where it is not
 		// enabled; with nothing missed (an empty walk), any edge out of the

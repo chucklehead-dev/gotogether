@@ -54,8 +54,8 @@ func reportEventually(r *validate.GraphResult, holds, allows map[string]bool) (c
 			continue
 		}
 		note := ""
-		if v.Unfair > 0 {
-			note = fmt.Sprintf("; fairness rules out %s (the nearest leaves %s enabled throughout, never taken)", plural(v.Unfair, "hot cycle"), v.UnfairBy)
+		if r := ruledOut(v); r != "" {
+			note = "; " + r
 		}
 		switch {
 		case v.Unsupported != "":
@@ -81,9 +81,12 @@ func lassoText(ev string, v validate.EventualVerdict) string {
 	pre := cexText(l.Prefix)
 	pre = pre[:strings.LastIndex(pre, "    replay: ")]
 	b.WriteString(pre)
-	if l.Stutter {
-		fmt.Fprintf(&b, "    then nothing, forever: no weakly fair action is enabled in that state (%s false there)\n", ev)
-	} else {
+	switch {
+	case l.Ends:
+		fmt.Fprintf(&b, "    then nothing, forever: the step cannot leave that state (a deadlock, or an end simulate.terminal declares), and %s is false there: a run that ends there ends with it false\n", ev)
+	case l.Stutter:
+		fmt.Fprintf(&b, "    then nothing, forever: no weakly fair action is enabled in that state (%s false there; only stutters, unfair actions or those that stop leave it)\n", ev)
+	default:
 		fmt.Fprintf(&b, "    then this cycle, forever, %s false in each of its states (%s of a component of %d; taking %s",
 			ev, plural(len(l.Cycle), "step"), l.Component, strings.Join(l.Takes, ", "))
 		if len(l.Obliged) > 0 {
@@ -112,18 +115,45 @@ func lassoText(ev string, v validate.EventualVerdict) string {
 		}
 	}
 	fmt.Fprintf(&b, "    replay: run r = %s\n", l.Replay)
-	b.WriteString("    (quint replays the path and one turn of the cycle back to its state; no quint run can check that it repeats forever, nor its fairness: the Go evaluator's search does)\n")
+	if l.Stutter {
+		b.WriteString("    (quint replays the path to the state; no quint run can check that the model may stay there forever: the Go evaluator's search does)\n")
+	} else {
+		b.WriteString("    (quint replays the path and one turn of the cycle back to its state, the val false throughout; no quint run can check that it repeats forever, nor its fairness: the Go evaluator's search does)\n")
+	}
 	if len(l.Sampled) > 0 {
 		fmt.Fprintf(&b, "    (steps %v have other successors than the path's: quint's replay draws among them, so it may not reproduce the path)\n", l.Sampled)
 	}
-	if v.Unfair > 0 {
-		fmt.Fprintf(&b, "    fairness rules out %s (the nearest leaves %s enabled throughout, never taken)\n", plural(v.Unfair, "hot cycle"), v.UnfairBy)
+	if r := ruledOut(v); r != "" {
+		fmt.Fprintf(&b, "    %s\n", r)
 	}
 	return b.String()
 }
 
+// ruledOut says what fairness rules out of a val's hot components, ""
+// for none: the cycles, and the single states it is false in whose only
+// cycle, a stutter, leaves a weakly fair action enabled (in a model whose
+// state only grows, every hot state: an input left fair hides a processor
+// stuck behind it there, so the actions are named).
+func ruledOut(v validate.EventualVerdict) string {
+	var parts []string
+	if v.Unfair > 0 {
+		parts = append(parts, plural(v.Unfair, "hot cycle"))
+	}
+	if v.Stutters > 0 {
+		parts = append(parts, plural(v.Stutters, "hot state")+" stuttering")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("fairness rules out %s (the nearest leaves %s enabled throughout, never taken: if it is an input that may stop, simulate.unfair; a fault, simulate.stops)",
+		strings.Join(parts, " and "), v.UnfairBy)
+}
+
 // cycleOf is a lasso's cycle as one line.
 func cycleOf(l *validate.HotLasso) string {
+	if l.Ends {
+		return "nothing (the step cannot leave its state)"
+	}
 	if l.Stutter {
 		return "nothing (no weakly fair action enabled)"
 	}

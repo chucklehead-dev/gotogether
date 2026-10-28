@@ -4533,9 +4533,13 @@ not settle has the cycle its model states went round reported with it.
   not the one state the state bound cut while expanding it, whose edges
   are not all known) and to the edges of families that do not stop,
   split into strongly connected components (Tarjan's, iterative: a
-  graph's paths are up to 10^5 long). A component is reported if it has
-  two states or more, or is one state where no weakly fair family is
-  enabled (a stutter). The lasso is the shortest path to the
+  graph's paths are up to 10^5 long). Every component is reported; one
+  of a single state has a stutter for its only cycle, fair where no
+  weakly fair family is enabled there (a deadlock, a terminal end, a
+  state only stutters, unfair or stopping families leave), else ruled
+  out with what is enabled as its missed families (it was once dropped,
+  so the note naming what fairness rules out never counted the states
+  of a model whose state only grows: P6's review). The lasso is the shortest path to the
   component's nearest state (the least id: ids are breadth first) and a
   cycle through it inside the component.
 - **Fairness: weak, per action, with stuttering.** A family is the
@@ -4573,7 +4577,8 @@ not settle has the cycle its model states went round reported with it.
   lasso is fair under any weaker assumption: no lasso is a false alarm
   for want of a declaration. It errs the other way: an input left fair
   is obliged, and a processor stuck while inputs remain enabled is
-  hidden behind them ("fairness rules out N hot cycles (the nearest
+  hidden behind them ("fairness rules out N hot cycles and M hot states
+  stuttering (the nearest
   leaves X enabled throughout, never taken)" says so, naming X: declare
   it if it is an input or a fault). The alternatives considered:
   - no fairness: every hot state stutters forever, every eventual val
@@ -4590,12 +4595,22 @@ not settle has the cycle its model states went round reported with it.
   declaration: their state grows (the log, effects, calls and served
   records are lists that only grow), so their only cycles are stutters,
   and a hot state is a lasso only where no fair action can change the
-  state, a stuck processor with no input left; P7's obligations
-  (`<processor>EventuallyHandled`, `<call>EventuallyServed`) have their
-  enabling actions (the processor's, the dependency's served record)
-  always enabled until they hold, weakly fair, so no lasso. The
-  generator could emit its commands as `unfair:` (a stuck processor then
-  shows behind them); that is grist's to decide.
+  state; P7's obligations (`<processor>EventuallyHandled`,
+  `<call>EventuallyServed`) have their enabling actions (the
+  processor's, the dependency's served record) always enabled until they
+  hold, weakly fair, so no lasso. The generator does not emit its
+  commands as `unfair:` (P6's review, grist.md): tried on counters,
+  library and wallet-grist, it changes no verdict, and it would not show
+  a stuck processor either. With counters' `average` disabled outright
+  (a processor that never runs) and its commands unfair, 250 000 states
+  to depth 9 hold no lasso: the processors' effect tries, the sites'
+  records and the dependencies' served and replayed records are
+  any-number actions, enabled in every state where work is pending,
+  which grow the state and satisfy fairness per action without progress.
+  Declaring those unfair too makes false lassos (an at-least-once
+  processor's handled needs an effect try, a call's served the
+  dependency's record). A stuck processor is the runs' to show: a settle
+  with its obligation false.
 - **Classified as simulate classifies.** An eventual val may be in
   `simulate.holds` (the model drives it: a lasso fails, exit 1) or
   `simulate.allows` (the code's to reach: the lasso is reported, the
@@ -4614,7 +4629,9 @@ not settle has the cycle its model states went round reported with it.
 - **Replay.** The prefix replays as P2's counterexamples do; the cycle
   is printed with each step's state and the repeated state named, and
   `-out`'s module has a run of the prefix and one turn of the cycle,
-  ending in `.expect(and { not(val), <the state's variables, as at the
+  `.expect(not(val))` after each of its steps (P6's review: the val
+  was once checked at the turn's end alone) and ending in
+  `.expect(and { not(val), <the state's variables, as at the
   cycle's start> })`: quint checks that the cycle is a path of the model
   that returns to its state with the val false, not that it repeats
   forever or is fair, which no quint run can (said with the replay).
@@ -4626,14 +4643,20 @@ not settle has the cycle its model states went round reported with it.
   (evidence, no verdict: the run did not settle)` line): the vals, the
   steps of the cycle, and the run's visits to the state with them false.
   Evidence only: a run cut short has work pending by right, and one that
-  went on might have left the cycle; no verdict changes. qtest marks a
+  went on might have left the cycle; no verdict changes. The cycle is
+  the model's states', not the system's: progress the model abstracts
+  away (a counter that wraps, a retry count it does not keep) repeats a
+  state too, and nothing checks the cycle's fairness (an action enabled
+  throughout that a longer run would have taken), so the line says what
+  repeated, not that it would forever; examples/requeue's storm is one
+  that would, the lasso `-graph` finds in its model. qtest marks a
   run whose Settle failed (`Run.Unsettled`), on a copy of its report
   (verdicts are shared by runs of the same steps); `gotogether
   validate` every trace without a settle. A binding with hidden actions
   or a resume, and a Linearize search's orders, get none (their states
   are not one replay's).
 - **Soundness, against brute force and ablated.**
-  `TestHotComponentsAgainstBruteForce`: 3000 random graphs of up to five
+  `TestHotComponentsAgainstBruteForce`: 10 000 random graphs of up to five
   states, under random fairness, all weakly fair and none: every set of
   edges between hot states that is strongly connected is the support of
   a closed walk, fair by the definition above; the states on a fair walk
@@ -4642,7 +4665,13 @@ not settle has the cycle its model states went round reported with it.
   a closed walk inside it from its nearest state, fair. Ablated, it
   fails: fairness ignored (an unfair lasso), the SCCs computed over the
   whole graph and kept only when all hot (cycles missed), a stutter
-  counted as enabling its family (a fair walk missed).
+  counted as enabling its family (a fair walk missed), and (P6's review)
+  a stutter counted as taking it, which survived the 3000 graphs it had:
+  one stutter edge in four now, and ten thousand graphs (the first
+  failure is the 3964th), with `TestHotComponentsStutters` by hand. Each
+  lasso's Obliged, the families enabled throughout the cycle itself (it
+  was once the component's, fewer when the cycle leaves out a state), is
+  checked against the walk.
   `TestHotComponentsFairness` and `TestCheckerGraphEventually` (hot.qnt:
   a client that submits forever, a worker, a read, a retry; with STORM a
   retry blocks processing) by hand: all fair, the queue stays busy under
@@ -4653,6 +4682,16 @@ not settle has the cycle its model states went round reported with it.
   bound short of the graph still finds the lasso. `TestSimulateGraphEventually`
   replays the storm's lasso in quint; `TestMarkHot` and
   `TestUnsettledRunsHotCycle` the runs' side.
+- **Ends with the val false.** A state the step cannot leave (a
+  deadlock, or an end `simulate.terminal` declares) with an eventual val
+  false is a lasso, a stutter there (`HotLasso.Ends`, "the step cannot
+  leave that state"): a run that ends there settles with the val false,
+  which its check fails, so the model's graph fails it too when the val
+  is in `simulate.holds`. A terminal end means the model stops, not that
+  its obligations are met; a model whose end leaves one unmet either
+  allows it (the val in `allows`) or has a bug (validate/testdata's
+  hot_ends). Quiescent states (P2: only stutters leave them) are the
+  same where no fair action is enabled.
 - **The smoke run** (the repository's 23 bindings with eventual vals,
   `-states 20000`; grist's two generator fixtures do not typecheck
   alone): quorumkv's converged is hot, the only lasso under the
@@ -4686,3 +4725,18 @@ not settle has the cycle its model states went round reported with it.
   would rule that out, and oblige every client's every input with it.
   hasLeader is the code's to reach (raft's election), judged `within`
   its bound in runs.
+- **Cost** (P6's review, measured at `-states 20000`): the liveness
+  search, the vals evaluated in every expanded state and
+  HotComponents, is 14 to 18 ms of a graph's 2 to 18 s (counters' six
+  vals 18 ms of 8.1 s, wallet-grist's three 16 ms of 17.6 s, quorumkv's
+  lasso 14 ms of 2.3 s): Explore is all of it.
+- **examples/requeue** is the storm as an application: a controller
+  that applies a cloud resource's spec and requeues until the cloud,
+  which provisions in two steps and starts over on a changed spec,
+  reports it ready. Its model's `RESEND` (an apply after the first
+  replaces the resource) has the lasso, an advance to warming and a
+  replacement back to pending, advance taken and its step to ready
+  never enabled throughout; the faithful model is live, the requeue a
+  stutter. The `stampSpec` mutant (a timestamp in the spec) is rejected
+  by the faithful model and, against RESEND's, conforms, never settles,
+  and has that cycle as its `hot cycle` line.
