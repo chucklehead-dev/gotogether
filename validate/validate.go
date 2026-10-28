@@ -7,6 +7,7 @@ package validate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -459,7 +460,9 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 	}
 	pattern := filepath.Join(opt.Dir, file+"_{test}.itf.json")
 	for j, i := range detailed {
-		errs[i] = fill(gs[j], out, qnt, pattern, ms.Invariants, ms.Eventually, res[i])
+		errs[i] = fill(gs[j], out, qnt, pattern, ms.Invariants, ms.Eventually, res[i], func(path string) (*itf.Trace, error) {
+			return readQuintITF(opt.Quint, ms.Spec, ms.Module, path)
+		})
 		if withITF.Backend == "typescript" { // its failing tests write no ITF: say so where the state would be
 			for _, f := range res[i].failures() {
 				if f.State == nil {
@@ -508,7 +511,7 @@ func quintTest(ctx context.Context, qnt, module, base string, opt Options, tests
 }
 
 // fill turns quint's output into the verdict on one generated run.
-func fill(g *replay.Generated, output, qnt, itfPattern string, invariants, eventually []string, res *Result) error {
+func fill(g *replay.Generated, output, qnt, itfPattern string, invariants, eventually []string, res *Result, read func(string) (*itf.Trace, error)) error {
 	res.Steps, res.Module, res.Calls, res.Output = g.Steps(), qnt, g.Calls, output
 	verdicts, failures := parseQuintTest(res.Output, qnt, g)
 	if _, ok := verdicts[g.Tests.Conforms]; !ok {
@@ -522,8 +525,11 @@ func fill(g *replay.Generated, output, qnt, itfPattern string, invariants, event
 		if verdicts[name] != Fail {
 			continue
 		}
-		tr, err := itf.ReadFile(strings.ReplaceAll(itfPattern, "{test}", name))
+		tr, err := read(strings.ReplaceAll(itfPattern, "{test}", name))
 		if err != nil {
+			if _, ok := errors.AsType[*itf.AmbiguousError](err); ok {
+				f.noState = "not read: " + err.Error()
+			}
 			continue
 		}
 		for i := len(tr.States) - 1; i >= 0; i-- {

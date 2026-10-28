@@ -115,6 +115,7 @@ type Model struct
     method (*Model) Chooses(action string) []string
     method (*Model) NearestAction(name string) string
     method (*Model) Reads(action string) (map[string]bool, bool)
+    method (*Model) Schema() *itf.Schema
     method (*Model) Signature(action string) string
 type ObsComparison struct
     field Var string
@@ -170,6 +171,11 @@ type StepPattern struct
     field Params []string
     field Values []string
     field Text string
+type TraceReader struct
+    field Quint string
+    field Spec string
+    field Module string
+    method (*TraceReader) Read(path string) (*itf.Trace, error)
 type Within struct
     field After string `yaml:"after"`
     field Holds string `yaml:"holds"`
@@ -182,6 +188,7 @@ func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
 func MustPick[T any](s *Step, name string) T
 func OptPick[T any](s *Step, name string) (*T, error)
 func Pick[T any](s *Step, name string) (T, error)
+func ReadTraces(c Config, files []string) ([]*itf.Trace, error)
 func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
 func Run(t testing.TB, c Config, newDriver func() Driver)
 func Skip(*Step) error
@@ -327,16 +334,28 @@ func MustEncode(x any) Value
 func None() Value
 func Parse(b []byte) (*Trace, error)
 func ParseQuint(src string) (Value, error)
+func ParseWith(b []byte, types *Schema) (*Trace, error)
 func ReadFile(path string) (*Trace, error)
+func ReadFileWith(path string, types *Schema) (*Trace, error)
 func RecordOf(kv ...any) Value
 func SetOf(es ...Value) Value
 func Some(v Value) Value
 func StrOf(s string) Value
 func TupleOf(es ...Value) Value
 func VariantOf(tag string, v Value) Value
+type AmbiguousError struct
+    field State int
+    field Var string
+    field Path string
+    field JSON string
+    field Int *big.Int
+    method (*AmbiguousError) Error() string
 type Kind int
 type Marshaler interface
     MarshalITF() (Value, error)
+type Schema struct
+    field Vars map[string]*Type
+    field Picks map[string]*Type
 type State struct
     field Index int
     field Vars map[string]Value
@@ -348,6 +367,12 @@ type Trace struct
     field Meta map[string]any
     field Vars []string
     field States []State
+type Type struct
+    field Kind Kind
+    field Elem *Type
+    field Value *Type
+    field Elems []*Type
+    field Fields map[string]*Type
 type Unmarshaler interface
     UnmarshalITF(v Value) error
 type UnquotableError struct

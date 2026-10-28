@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
-	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -387,8 +386,10 @@ func crossCheck(b *binding.Binding, overrides []string, quint string, r *validat
 		return 0, "", fmt.Errorf("simulate -graph: quint's sampling of the instance wrote no trace to check the graph against: %v\n%s", qerr, out)
 	}
 	slices.Sort(files)
+	// by the module's types where quint's Rust backend's integers need them
+	traces := &binding.TraceReader{Quint: quint, Spec: file, Module: "simulate"}
 	for _, f := range files {
-		tr, err := itf.ReadFile(f)
+		tr, err := traces.Read(f)
 		if err != nil {
 			return 0, "", fmt.Errorf("simulate -graph: %s: %w", f, err)
 		}

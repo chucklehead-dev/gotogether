@@ -363,7 +363,7 @@ func (re *runEval) compare(c *Checker, t *qtrace.Trace, p *binding.Plan, v runVe
 	if err := re.e.writeITF(path, p, v.states); err != nil {
 		return disagreement(t.Actor, "passes, its ITF not written ("+err.Error()+")", "passes, its ITF written", t.Steps)
 	}
-	if err := sameStates(path, q.ITF); err != nil {
+	if err := sameStates(path, q.ITF, c.Model.Schema()); err != nil {
 		return disagreement(t.Actor, "passes through other states ("+err.Error()+")", "passes, its ITF "+q.ITF, t.Steps)
 	}
 	if len(c.Binding.Within) > 0 {
@@ -426,13 +426,13 @@ func resultLine(r *Result) string {
 
 // sameStates is nil when the ITF traces at a and b (the evaluator's and
 // quint's) hold the same states: the same variables with equal values,
-// the same action taken.
-func sameStates(a, b string) error {
-	x, err := itf.ReadFile(a)
+// the same action taken; each read by the model's types.
+func sameStates(a, b string, types *itf.Schema) error {
+	x, err := itf.ReadFileWith(a, types)
 	if err != nil {
 		return err
 	}
-	y, err := itf.ReadFile(b)
+	y, err := itf.ReadFileWith(b, types)
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/input"
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/otelio"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -204,6 +206,9 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 			}
 		}
 		in, err := input.Read(f, chk.Format)
+		if a, ok := errors.AsType[*itf.AmbiguousError](err); ok {
+			in, err = chk.readITFByTypes(f, b, a, err)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -534,4 +539,28 @@ func markComplete(steps []qtrace.Step, specs []string) ([]qtrace.Step, error) {
 		steps = qtrace.MarkComplete(steps, rec, t)
 	}
 	return steps, nil
+}
+
+// readITFByTypes reads the ITF input at path by its model's types, which
+// tell an integer of 16 characters or more as quint's Rust backend writes
+// one (a bignumber.js object) from a record of fields s, e and c: the
+// binding's model, else -spec's -module. Without either, the read's error
+// stands (err, which names the fix).
+func (chk Check) readITFByTypes(path string, b *binding.Binding, a *itf.AmbiguousError, err error) (*input.File, error) {
+	spec, module := chk.Spec, chk.Module
+	if b != nil {
+		spec, module = b.SpecPath(), b.Module
+	}
+	if spec == "" || module == "" {
+		return nil, fmt.Errorf("%s: %w (give -binding, or -spec and -module, to read it by the model's types)", path, err)
+	}
+	m, merr := binding.LoadModel(chk.Options.Quint, spec, module)
+	if merr != nil {
+		return nil, fmt.Errorf("%s: %w (the model's types, which tell: %v)", path, a, merr)
+	}
+	tr, rerr := itf.ReadFileWith(path, m.Schema())
+	if rerr != nil {
+		return nil, fmt.Errorf("%s (itf): %w", path, rerr)
+	}
+	return &input.File{Path: path, Format: input.ITF, ITF: tr}, nil
 }

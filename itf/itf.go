@@ -67,15 +67,33 @@ type State struct {
 	Meta  map[string]any // the state's #meta
 }
 
-func ReadFile(path string) (*Trace, error) {
+// ReadFile reads the ITF trace at path with no types: see Parse.
+func ReadFile(path string) (*Trace, error) { return ReadFileWith(path, nil) }
+
+// ReadFileWith reads the ITF trace at path, its values read by types (see
+// ParseWith).
+func ReadFileWith(path string, types *Schema) (*Trace, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return Parse(b)
+	return ParseWith(b, types)
 }
 
-func Parse(b []byte) (*Trace, error) {
+// Parse decodes an ITF trace with no types. A value it cannot read
+// without one (an *AmbiguousError: an object of fields s, e and c, which
+// is an integer of quint's Rust backend or a record) fails it: read such
+// a trace with ParseWith and the model's types.
+func Parse(b []byte) (*Trace, error) { return ParseWith(b, nil) }
+
+// ParseWith decodes an ITF trace, each variable's and nondet pick's value
+// read by its type in types (nil: none known). quint 0.33's Rust backend
+// writes an integer of 16 characters or more as a bignumber.js object
+// ({"s": 1, "e": 18, "c": [46116, 86018427387904]}) instead of ITF's
+// {"#bigint": "..."}, which only its type tells from a record of fields
+// s, e and c: an object of that form where the type is not known fails
+// with an *AmbiguousError, never read as either.
+func ParseWith(b []byte, types *Schema) (*Trace, error) {
 	var raw struct {
 		Meta   map[string]any               `json:"#meta"`
 		Vars   []string                     `json:"vars"`
@@ -84,25 +102,30 @@ func Parse(b []byte) (*Trace, error) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, err
 	}
+	if types == nil {
+		types = &Schema{}
+	}
 	t := &Trace{Meta: raw.Meta, Vars: raw.Vars}
 	for i, rs := range raw.States {
 		s := State{Index: i, Vars: map[string]Value{}, Picks: map[string]Value{}, Extra: map[string]Value{}}
-		for k, v := range rs {
+		// in key order, so that a trace's first ambiguous value is the one reported
+		for _, k := range slices.Sorted(maps.Keys(rs)) {
+			v := rs[k]
 			switch {
 			case k == "#meta":
 				_ = json.Unmarshal(v, &s.Meta)
 			case strings.HasPrefix(k, "gotogether::") || strings.HasPrefix(k, "obs::"):
-				val, err := decode(v)
+				val, err := decode(v, nil, i, k)
 				if err != nil {
-					return nil, fmt.Errorf("state %d %s: %w", i, k, err)
+					return nil, stateErr(fmt.Sprintf("state %d %s", i, k), err)
 				}
 				s.Extra[k] = val
 			case k == "mbt::actionTaken":
 				_ = json.Unmarshal(v, &s.Action)
 			case k == "mbt::nondetPicks":
-				pv, err := decode(v)
+				pv, err := decode(v, types.picks(), i, k)
 				if err != nil {
-					return nil, fmt.Errorf("state %d picks: %w", i, err)
+					return nil, stateErr(fmt.Sprintf("state %d picks", i), err)
 				}
 				for name, opt := range pv.Fields {
 					if opt.Kind == Variant && opt.Tag == "Some" && opt.Inner != nil {
@@ -110,15 +133,16 @@ func Parse(b []byte) (*Trace, error) {
 					}
 				}
 			default:
-				val, err := decode(v)
-				if err != nil {
-					return nil, fmt.Errorf("state %d var %s: %w", i, k, err)
-				}
 				// Strip module qualifiers (observed::edgePublish::writer -> writer).
+				name := k
 				if j := strings.LastIndex(k, "::"); j >= 0 && !strings.HasPrefix(k, "mbt::") {
-					k = k[j+2:]
+					name = k[j+2:]
 				}
-				s.Vars[k] = val
+				val, err := decode(v, types.Vars[name], i, name)
+				if err != nil {
+					return nil, stateErr(fmt.Sprintf("state %d var %s", i, k), err)
+				}
+				s.Vars[name] = val
 			}
 		}
 		t.States = append(t.States, s)
@@ -126,17 +150,37 @@ func Parse(b []byte) (*Trace, error) {
 	return t, nil
 }
 
-func decode(raw json.RawMessage) (Value, error) {
+// stateErr is err where it is: an *AmbiguousError says so itself.
+func stateErr(at string, err error) error {
+	if _, ok := err.(*AmbiguousError); ok {
+		return err
+	}
+	return fmt.Errorf("%s: %w", at, err)
+}
+
+func decode(raw json.RawMessage, t *Type, state int, name string) (Value, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber() // ITF ints may be plain JSON numbers beyond 2^53
 	var x any
 	if err := dec.Decode(&x); err != nil {
 		return Value{}, err
 	}
-	return fromAny(x)
+	v, err := fromAnyTyped(x, t, "")
+	if a, ok := err.(*AmbiguousError); ok {
+		a.State, a.Var = state, name
+	}
+	return v, err
 }
 
-func fromAny(x any) (Value, error) {
+func fromAny(x any) (Value, error) { return fromAnyTyped(x, nil, "") }
+
+// fromAnyTyped decodes x, of type t where known (nil: not known), at path
+// within its variable. The type decides only what an object of
+// bignumber.js's form is; any other value decodes as its JSON says.
+func fromAnyTyped(x any, t *Type, path string) (Value, error) {
+	if t != nil && t.Kind == Invalid {
+		t = nil
+	}
 	switch v := x.(type) {
 	case bool:
 		return Value{Kind: Bool, B: v}, nil
@@ -152,8 +196,8 @@ func fromAny(x any) (Value, error) {
 		return Value{Kind: Int, I: big.NewInt(int64(v))}, nil
 	case []any:
 		out := Value{Kind: List}
-		for _, e := range v {
-			ev, err := fromAny(e)
+		for i, e := range v {
+			ev, err := fromAnyTyped(e, t.elem(List), fmt.Sprintf("%s[%d]", path, i))
 			if err != nil {
 				return Value{}, err
 			}
@@ -169,27 +213,41 @@ func fromAny(x any) (Value, error) {
 			return Value{Kind: Int, I: n}, nil
 		}
 		if es, ok := v["#set"].([]any); ok {
-			l, err := fromAny(es)
-			l.Kind = Set
-			return l, err
+			out := Value{Kind: Set}
+			for i, e := range es {
+				ev, err := fromAnyTyped(e, t.elem(Set), fmt.Sprintf("%s.#set[%d]", path, i))
+				if err != nil {
+					return Value{}, err
+				}
+				out.Elems = append(out.Elems, ev)
+			}
+			return out, nil
 		}
 		if es, ok := v["#tup"].([]any); ok {
-			l, err := fromAny(es)
-			l.Kind = Tuple
-			return l, err
+			out := Value{Kind: Tuple}
+			for i, e := range es {
+				ev, err := fromAnyTyped(e, t.tupleElem(i), fmt.Sprintf("%s.#tup[%d]", path, i))
+				if err != nil {
+					return Value{}, err
+				}
+				out.Elems = append(out.Elems, ev)
+			}
+			return out, nil
 		}
 		if ps, ok := v["#map"].([]any); ok {
 			out := Value{Kind: Map}
-			for _, p := range ps {
+			kt, vt := t.mapTypes()
+			for i, p := range ps {
 				pair, _ := p.([]any)
 				if len(pair) != 2 {
 					return Value{}, fmt.Errorf("bad #map entry")
 				}
-				k, err := fromAny(pair[0])
+				at := fmt.Sprintf("%s.#map[%d]", path, i)
+				k, err := fromAnyTyped(pair[0], kt, at+"[0]")
 				if err != nil {
 					return Value{}, err
 				}
-				val, err := fromAny(pair[1])
+				val, err := fromAnyTyped(pair[1], vt, at+"[1]")
 				if err != nil {
 					return Value{}, err
 				}
@@ -199,16 +257,25 @@ func fromAny(x any) (Value, error) {
 		}
 		if tag, ok := v["tag"].(string); ok && len(v) == 2 {
 			if inner, ok := v["value"]; ok {
-				iv, err := fromAny(inner)
+				iv, err := fromAnyTyped(inner, t.payload(tag), path+"."+tag)
 				if err != nil {
 					return Value{}, err
 				}
 				return Value{Kind: Variant, Tag: tag, Inner: &iv}, nil
 			}
 		}
+		if n, ok := bigNumber(v); ok {
+			switch {
+			case t != nil && t.Kind == Int:
+				return Value{Kind: Int, I: n}, nil
+			case t == nil:
+				raw, _ := json.Marshal(v)
+				return Value{}, &AmbiguousError{Path: path, JSON: string(raw), Int: n}
+			}
+		}
 		out := Value{Kind: Record, Fields: map[string]Value{}}
-		for k, e := range v {
-			ev, err := fromAny(e)
+		for _, k := range slices.Sorted(maps.Keys(v)) { // the first ambiguous field, reported, is always the same
+			ev, err := fromAnyTyped(v[k], t.field(k), path+"."+k)
 			if err != nil {
 				return Value{}, err
 			}

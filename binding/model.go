@@ -17,6 +17,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/quintnames"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // Model is what gotogether needs to know about a Quint module: its actions with
@@ -52,6 +53,8 @@ type Model struct {
 	// types caches the types its templates name (src -> *qtype or error)
 	typedefs map[string]typedef
 	types    *memo.Map[string, typeResult]
+	// schema is the types of the variables and picks (Schema)
+	schema *itf.Schema
 }
 
 // Reads reports which of the model's variables action reads, itself or
@@ -483,7 +486,8 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 		}
 		gather(module)
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
-			assigns: assigns, calls: calls, reads: reads, chooses: chooses, typedefs: typedefs, types: &memo.Map[string, typeResult]{}}
+			assigns: assigns, calls: calls, reads: reads, chooses: chooses, typedefs: typedefs, types: &memo.Map[string, typeResult]{},
+			schema: schemaOf(&tc, module)}
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range visible {

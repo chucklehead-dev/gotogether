@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
-	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // Config says how to generate traces and how to read them. The zero value
@@ -251,8 +250,9 @@ func Test(t testing.TB, c Config, test string, newDriver func() Driver) {
 func replayAll(t testing.TB, c Config, files []string, newDriver func() Driver, what string) {
 	t.Helper()
 	t.Logf("connect: %s %s: %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+	traces := &traceReader{c: c}
 	for i, f := range files {
-		tr, err := itf.ReadFile(f)
+		tr, err := traces.read(f)
 		if err != nil {
 			t.Fatalf("connect: %s: %v", f, err)
 		}

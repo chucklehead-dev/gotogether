@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"math/big"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -562,17 +561,19 @@ func (b *gbatch) quintTest(ctx context.Context, dir, file, be string, seed uint6
 			continue
 		}
 		path := filepath.Join(out, fmt.Sprintf("t%d.itf.json", i))
-		tr, err := itf.ReadFile(path)
+		// by its type: the Rust backend writes integers of 16 characters or
+		// more as bignumber.js objects, which itf reads by it
+		name := fmt.Sprintf("v%d", i)
+		tr, err := itf.ReadFileWith(path, &itf.Schema{Vars: map[string]*itf.Type{name: b.entries[i].t.itfType()}})
 		if err != nil || len(tr.States) == 0 {
 			res[i].missing = true
 			continue
 		}
-		x, ok := tr.States[len(tr.States)-1].Vars[fmt.Sprintf("v%d", i)]
+		x, ok := tr.States[len(tr.States)-1].Vars[name]
 		if !ok {
 			res[i].missing = true
 			continue
 		}
-		x = unBigNumber(x)
 		res[i].raw = fmt.Sprint(x)
 		if v, err := FromITF(x); err == nil {
 			res[i].val = v
@@ -584,60 +585,38 @@ func (b *gbatch) quintTest(ctx context.Context, dir, file, be string, seed uint6
 	return res, nil
 }
 
-// unBigNumber is v with each integer past 2^53 that quint 0.33's Rust
-// backend writes into ITF as a bignumber.js object ({ s: sign, e:
-// exponent, c: [digits in chunks of 14] }, `quint run` and `quint test`
-// alike) read back as the integer. A record of the generator's has no
-// fields e and s, so the shape is unambiguous here.
-func unBigNumber(v itf.Value) itf.Value {
-	if v.Kind == itf.Record && len(v.Fields) == 3 {
-		s, e, c := v.Fields["s"], v.Fields["e"], v.Fields["c"]
-		if s.Kind == itf.Int && e.Kind == itf.Int && c.Kind == itf.List && len(c.Elems) > 0 {
-			var digits strings.Builder
-			for k, d := range c.Elems {
-				if d.Kind != itf.Int {
-					return v
-				}
-				if k == 0 {
-					digits.WriteString(d.I.String())
-				} else {
-					fmt.Fprintf(&digits, "%014s", d.I.String())
-				}
-			}
-			ds := digits.String()
-			if n := int(e.I.Int64()) + 1; n > len(ds) {
-				ds += strings.Repeat("0", n-len(ds)) // trailing zero chunks are dropped
-			}
-			i, ok := new(big.Int).SetString(ds, 10)
-			if ok {
-				return itf.Value{Kind: itf.Int, I: i.Mul(i, s.I)}
-			}
+// itfType is t as itf reads a trace by it (nil: a regression's, given
+// as text, not known).
+func (t *gtyp) itfType() *itf.Type {
+	switch t.k {
+	case kInt:
+		return &itf.Type{Kind: itf.Int}
+	case kBool:
+		return &itf.Type{Kind: itf.Bool}
+	case kStr:
+		return &itf.Type{Kind: itf.Str}
+	case kVariant:
+		return &itf.Type{Kind: itf.Variant, Fields: map[string]*itf.Type{"VA": {Kind: itf.Int}, "VB": {Kind: itf.Bool}, "VC": {Kind: itf.Tuple}}}
+	case kSet:
+		return &itf.Type{Kind: itf.Set, Elem: t.elem.itfType()}
+	case kList:
+		return &itf.Type{Kind: itf.List, Elem: t.elem.itfType()}
+	case kMap:
+		return &itf.Type{Kind: itf.Map, Elem: t.elem.itfType(), Value: t.val.itfType()}
+	case kTup:
+		out := &itf.Type{Kind: itf.Tuple}
+		for _, x := range t.items {
+			out.Elems = append(out.Elems, x.itfType())
 		}
-	}
-	out := v
-	if v.Elems != nil {
-		out.Elems = make([]itf.Value, len(v.Elems))
-		for k, x := range v.Elems {
-			out.Elems[k] = unBigNumber(x)
+		return out
+	case kRec:
+		out := &itf.Type{Kind: itf.Record, Fields: map[string]*itf.Type{}}
+		for i, x := range t.items {
+			out.Fields[t.names[i]] = x.itfType()
 		}
+		return out
 	}
-	if v.Pairs != nil {
-		out.Pairs = make([][2]itf.Value, len(v.Pairs))
-		for k, p := range v.Pairs {
-			out.Pairs[k] = [2]itf.Value{unBigNumber(p[0]), unBigNumber(p[1])}
-		}
-	}
-	if v.Fields != nil {
-		out.Fields = map[string]itf.Value{}
-		for k, x := range v.Fields {
-			out.Fields[k] = unBigNumber(x)
-		}
-	}
-	if v.Inner != nil {
-		in := unBigNumber(*v.Inner)
-		out.Inner = &in
-	}
-	return out
+	return nil
 }
 
 // ---- judging ------------------------------------------------------------

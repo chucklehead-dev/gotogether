@@ -3015,7 +3015,7 @@ What it found, at its first runs:
   TypeScript writes `#bigint`. The harness reads them back (a record of
   the generator's has no fields e and s). The toolkit's own ITF reader
   does not (ROADMAP I11's note): a state with such an integer from a
-  Rust trace reads as a record.
+  Rust trace reads as a record. (Resolved: the next section.)
 - **Tests that fail without it**: each fix undone fails
   TestDifferentialFindings (and both backends' judgement of its case);
   an evaluator whose `%` is Euclidean fails the push tier's second batch,
@@ -3028,6 +3028,73 @@ What it found, at its first runs:
   write to files; `quint compile` prints nothing for a parse error,
   typecheck does; a let's body starting with `(` applies the value
   before it (`val n = r.c` then `(x)` is `r.c(x)`): lets end in `;`.
+
+### I11's note: quint's Rust integers read by their type
+
+ROADMAP I11's note: quint 0.33's Rust backend writes an integer into ITF
+as a bignumber.js object (`{"s": 1, "e": 18, "c": [46116,
+86018427387904]}` for 2^62), and itf read it as a record of fields c, e
+and s. Reproduced on `validate/testdata/bigint.qnt` (a balance of 2^62,
+beside a record `{ s: 1, e: 15, c: [10] }`):
+- validate, GOTOGETHER_EVAL=shadow: a run both judges pass was "the Go
+  evaluator and quint disagree ... passes through other states (state 1:
+  balance = 4611686018427387904, quint's { c: [46116, 86018427387904],
+  e: 18, s: 1 })", an evaluator bug that was not (and so a sampled pass,
+  GOTOGETHER_EVAL_SAMPLE, warned of one); a failure's model state showed
+  `balance = { c: [46116, 86018427387903], e: 18, s: 1 }`; a binding's
+  `within` vals were evaluated on records.
+- connect: a run that agreed diverged at its first deposit ("decoding
+  the model's state into struct { Balance int64 }: itf: at .balance:
+  want int, have record { c: [10], e: 15, s: 1 }"), and an integer pick
+  was no integer.
+
+The decisions:
+- **Not "past 2^53": 16 characters.** quint reads the Rust evaluator's
+  output with json-bigint, which makes a BigNumber of every number
+  written in more than 15 characters, sign included: 10^15 and -10^14
+  come out as objects (`{"s": -1, "e": 14, "c": [1]}`), 999999999999999
+  and -99999999999999 as `#bigint`. A timestamp in microseconds is one.
+- **bignumber.js's form exactly** (`itf.bigNumber`): s the sign (1 or
+  -1), e the decimal exponent, c the coefficient in limbs of base 1e14,
+  the first holding e%14+1 digits, trailing zero limbs dropped: the
+  value is s × Σ c[i]·10^(14(⌊e/14⌋−i)). Anything else (a fraction, a
+  limb out of range, a leading limb of other length, a trailing zero
+  limb, another field) is not one bignumber.js writes, and reads as the
+  record it is.
+- **The type decides, else the read fails.** `{s, e, c}` of that form is
+  as much a model's record (bigint.qnt's `Digits`) as an integer, so
+  `itf.ParseWith`/`ReadFileWith` take an `itf.Schema` (each variable's
+  and pick's `itf.Type`); `binding.Model.Schema` is the model's, from
+  the typecheck's annotations of its variables and the inferred types
+  of its nondets (two picks of one name and other types: none). Where no
+  type is known (`itf.Parse`, a type variable), such an object fails the
+  read with an `*itf.AmbiguousError` naming the state, the variable,
+  the path in it and both fixes (the model's types, or `--backend
+  typescript`), never a guess. A trace with none reads as before.
+- **Typed where quint's traces are read**, the typecheck paid only by a
+  trace that needs it: validate's failure states (`readQuintITF`, on
+  loadModel's cache), its within vals, the compiled model's states and
+  the shadow's comparison (the checker's model); connect's replays
+  (`connect.ReadTraces`, on `binding.TraceReader`, which typechecks
+  `Main`, else the file's module, at the first ambiguous trace), qtest's FollowTraces, the CLI's
+  `simulate -graph` and possibles, and an ITF input to `gotogether
+  validate` (its binding's or -spec's model). qeval's harness reads by
+  its generator's types; its own decoder (`unBigNumber`) is gone.
+- **What quint writes otherwise**: the TypeScript backend writes
+  `#bigint`, and both backends' traces of `itf/testdata/bignumber.qnt`
+  (integers at and around 10^14, 10^15, 2^53 and 2^63 in a list, a
+  tuple, a map's key, a sum's payload and a pick, beside records of the
+  very fields) read to equal values. itf.Encode and Value's MarshalJSON
+  (qeval's states, validate's writeITF) write `#bigint`.
+- **Not fixed: -2^63 on Rust.** A replay of the Rust trace writes the
+  literal `-9223372036854775808`, which the Rust backend refuses (QNT600:
+  its 9223372036854775808 is past i64); TypeScript replays it.
+- **Tests that fail without it**: itf's round trips at and around 2^53,
+  10^15, 2^63, 2^64, 10^28 and 10^100, and its read of the fixture;
+  binding's Schema of it; validate's and connect's
+  TestRustIntegersReadByType, and the CLI's TestITFInputReadByTypes. The upstream
+  issue is written for the maintainer to file (quint should write
+  `#bigint`).
 
 ### I23: sqlstore reads in one query
 

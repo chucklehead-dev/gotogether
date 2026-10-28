@@ -63,6 +63,16 @@ The first release. What a user meets, by module:
   `setToMap` of two pairs of one key is refused (which value quint keeps
   is its set order's; the evaluator kept the greatest pair's).
 
+- ITF from quint's Rust backend with integers of 16 characters or more
+  (written as bignumber.js objects, `{"s": 1, "e": 18, "c": [...]}`) is
+  read by the model's types (ROADMAP I11's note): `itf.ParseWith`,
+  `itf.ReadFileWith`, `itf.Schema`, `itf.Type`, `binding.Model.Schema`,
+  `binding.TraceReader` (typechecks only for a trace that needs it);
+  validate, connect (`connect.ReadTraces`), qtest and the CLI read
+  quint's traces so. Where no type is known, `itf.Parse` and `ReadFile`
+  refuse such an object (`*itf.AmbiguousError`) instead of reading an
+  integer as a record.
+
 - Store incidents (GR10 slice 3, ROADMAP I25): `qenv.Store.Failovers`
   (`store.<name>.failover`: a commit's primary dies, the commit applied
   and answered `ErrUnknownOutcome`, every open transaction reset, writes

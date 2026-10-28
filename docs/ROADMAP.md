@@ -132,10 +132,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   witness, and setToMap keeping one of a key's two values by the
   evaluator's order, all fixed. Left: actions of more than one variable
   and of a model's own step (TestAgreesWithQuint covers the repository's
-  models), and quint's Rust backend writing integers past 2^53 into ITF as
-  bignumber.js objects, which the toolkit's ITF reader takes for records
-  (the harness reads them back; validate's and connect's readers need the
-  variable's type to do the same, or quint a fix).
+  models). quint's Rust backend writing integers of 16 characters or more
+  into ITF as bignumber.js objects, which the toolkit's ITF reader took
+  for records: resolved (HISTORY "I11's note"): read by the model's types
+  (itf.ParseWith, binding.Model.Schema) in validate, connect and the CLI,
+  refused where no type tells; an upstream issue is written, not filed.
   What it was: Hegel-generated expressions and actions over the builtin
   table, judged by both, nightly: the next I2 found before a user does.
 

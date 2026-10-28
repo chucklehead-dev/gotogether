@@ -178,8 +178,10 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 	}
 	look := func(bdir string) (left int, err error) {
 		files, _ := filepath.Glob(filepath.Join(bdir, "*.itf.json"))
+		// by the module's types where quint's Rust backend's integers need them
+		traces := &binding.TraceReader{Quint: quint, Spec: file, Module: "simulate"}
 		for _, f := range files {
-			tr, err := itf.ReadFile(f)
+			tr, err := traces.Read(f)
 			if err != nil {
 				return 0, fmt.Errorf("simulate: %s: %w", f, err)
 			}

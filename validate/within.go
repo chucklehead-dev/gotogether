@@ -54,7 +54,7 @@ func (c *Checker) judgeWithin(tr *qtrace.Trace, r *Result) {
 		none("the replay wrote no ITF")
 		return
 	}
-	trace, err := itf.ReadFile(r.ITF)
+	trace, err := itf.ReadFileWith(r.ITF, c.Model.Schema())
 	if err != nil {
 		none(err.Error())
 		return

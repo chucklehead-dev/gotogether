@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/connect"
-	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -116,16 +115,16 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap
 	if trace.Dir == "" {
 		trace.Dir = t.TempDir()
 	}
-	files, _, err := connect.GenerateRun(t.Context(), trace)
+	files, rc, err := connect.GenerateRun(t.Context(), trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trs, err := connect.ReadTraces(rc, files)
 	if err != nil {
 		t.Fatal(err)
 	}
 	scripts := make([]*qenv.Script, len(files))
-	for i, f := range files {
-		tr, err := itf.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
+	for i, tr := range trs {
 		if scripts[i], err = FaultScript(tr, faults, connect.ReplayOptions{Trace: i, StatePath: trace.StatePath, NondetPath: trace.NondetPath}); err != nil {
 			t.Fatal(err)
 		}

@@ -551,7 +551,7 @@ func (c *Checker) compiledStates(e *evaluator, p *binding.Plan, states []qeval.S
 	if len(states) == 0 || e.writeITF(path, p, states) != nil {
 		return nil, ""
 	}
-	tr, err := itf.ReadFile(path)
+	tr, err := itf.ReadFileWith(path, c.Model.Schema())
 	if err != nil {
 		return nil, ""
 	}

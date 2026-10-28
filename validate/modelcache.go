@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // models caches typechecked models by content: quint, the module, and
@@ -78,4 +80,22 @@ func typecheck(quint, spec, module string) (*binding.Model, error) {
 	}
 	cachePut("typecheck", key, data)
 	return m, nil
+}
+
+// readQuintITF reads the ITF trace at path that quint wrote replaying
+// spec's module, by the model's types where it needs them: quint 0.33's
+// Rust backend writes an integer of 16 characters or more as a
+// bignumber.js object, which only its type tells from a record of fields
+// s, e and c (itf.AmbiguousError). The model is typechecked only for a
+// trace that holds one, through loadModel's cache.
+func readQuintITF(quint, spec, module, path string) (*itf.Trace, error) {
+	tr, err := itf.ReadFile(path)
+	if _, ok := errors.AsType[*itf.AmbiguousError](err); !ok || spec == "" {
+		return tr, err
+	}
+	m, merr := loadModel(quint, spec, module)
+	if merr != nil {
+		return nil, fmt.Errorf("%w (the model's types, which tell: %v)", err, merr)
+	}
+	return itf.ReadFileWith(path, m.Schema())
 }

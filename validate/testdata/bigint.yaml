@@ -1,0 +1,9 @@
+# bigint.qnt's steps: balances past 15 digits (ROADMAP I11's note)
+spec: bigint.qnt
+module: bigint
+actions:
+  deposit:
+    expect: 'balance == {{.obs.balance}}'
+  withdraw:
+    expect: 'balance == {{.obs.balance}}'
+invariants: [nonNegative]

@@ -129,7 +129,7 @@ func TestEvaluatorITFIsQuints(t *testing.T) {
 		return rep.Actors[0].ITF
 	}
 	steps := accountSteps(3, 7)
-	if err := sameStates(itfOf("go", steps), itfOf("quint", steps)); err != nil {
+	if err := sameStates(itfOf("go", steps), itfOf("quint", steps), nil); err != nil {
 		t.Error(err)
 	}
 }
