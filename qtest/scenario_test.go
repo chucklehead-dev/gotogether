@@ -183,3 +183,62 @@ func TestScenarioOverRuns(t *testing.T) {
 		t.Errorf("two actors: the merge by time")
 	}
 }
+
+// A With naming no parameter of its action never matches: None of a
+// scenario through it would hold for nothing, so the claim fails first,
+// naming the parameter and the action's signature, as a Take's does.
+func TestScenarioUnknownParameter(t *testing.T) {
+	t.Parallel()
+	c := &validate.Checker{Binding: &binding.Binding{}, Model: &binding.Model{Module: "m",
+		Actions: map[string][]binding.Param{"put": {{Name: "item", Type: "str"}}, "submit": nil}}}
+	run := &Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: scenarioCalls("submit.ok", "put.ok(1)")}}}, checker: c}
+	for _, claim := range []Claim{
+		None(Scenario(Takes("submit"), Takes("put").With("itm", `"a"`))),
+		Takes("put").With("itm", `"a"`),
+		TakesEach(Takes("put").With("itm", `"a"`)),
+	} {
+		f := &failTB{TB: t}
+		done := make(chan struct{})
+		go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+			defer close(done)
+			Runs(run).Expect(f, claim)
+		}()
+		<-done
+		if msg := strings.Join(f.errs, "\n"); !strings.Contains(msg, "put has no parameter itm (did you mean item?; signature") {
+			t.Errorf("%s: %q, want the parameter named", claim, msg)
+		}
+	}
+	// a parameter it has: judged as usual (None holds: no put with item "a")
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
+		defer close(done)
+		Runs(run).Expect(f, None(Scenario(Takes("submit"), Takes("put").With("item", `"a"`))))
+	}()
+	<-done
+	if f.failed {
+		t.Errorf("a known parameter: %q", f.errs)
+	}
+}
+
+// A Take's outcome reaches the model's search only through the parameter
+// the binding passes it: with none (or an outcome the binding skips),
+// the search would look for the action with any outcome and call
+// possible what the outcome makes impossible, so it is no search, saying
+// why and what to do.
+func TestScenarioOutcomeWithoutParameter(t *testing.T) {
+	t.Parallel()
+	c := &validate.Checker{Binding: &binding.Binding{Actions: map[string]binding.Action{
+		"buy":    {Args: map[string]string{"coin": "{{.coin}}"}},
+		"refund": {Args: map[string]string{"result": "{{ .outcome }}"}, Outcomes: map[string]string{"lost": "skip"}},
+	}}}
+	for _, k := range []Take{Takes("buy").Outcome("short"), Takes("refund").Outcome("lost")} {
+		_, err := scenarioPossible(c, Scenario(k).scenario)
+		if err == nil || !strings.Contains(err.Error(), "passes "+k.action+"'s outcome to none of its parameters") || !strings.Contains(err.Error(), "drop the Outcome") {
+			t.Errorf("%s: %v, want no search, saying why", k.what(), err)
+		}
+	}
+	if p, v, ok := outcomeParam(c.Binding, "refund", "late"); !ok || p != "result" || v != `"late"` {
+		t.Errorf("an outcome the binding passes: %s = %s (%v)", p, v, ok)
+	}
+}

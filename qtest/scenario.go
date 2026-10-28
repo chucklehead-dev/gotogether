@@ -2,6 +2,8 @@ package qtest
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -222,7 +224,9 @@ func modelVerdict(c *validate.Checker, sc *scenario) string {
 // scenarioPossible searches c's model for sc with the Go evaluator: each
 // step's action, its arguments, and its outcome where the binding passes
 // the step's outcome to a parameter (args: { result: '{{.outcome}}' }),
-// as the binding's outcomes map it.
+// as the binding's outcomes map it. An outcome the binding passes to no
+// parameter is no search: the model's step would be looked for with any
+// outcome, and found where the outcome asked for is impossible.
 func scenarioPossible(c *validate.Checker, sc *scenario) (validate.PossibleResult, error) {
 	var steps []string
 	for _, k := range sc.steps {
@@ -231,9 +235,12 @@ func scenarioPossible(c *validate.Checker, sc *scenario) (validate.PossibleResul
 			args = append(args, a.param+" = "+a.value)
 		}
 		if k.outcome != "" {
-			if p, v, ok := outcomeParam(c.Binding, k.action, k.outcome); ok {
-				args = append(args, p+" = "+v)
+			p, v, ok := outcomeParam(c.Binding, k.action, k.outcome)
+			if !ok {
+				return validate.PossibleResult{}, fmt.Errorf("step %s: the binding passes %s's outcome to none of its parameters (args: { p: '{{.outcome}}' }), so the model's steps do not say it: "+
+					"drop the Outcome to search for the action alone, or claim the scenario of runs only", k.what(), k.action)
 			}
+			args = append(args, p+" = "+v)
 		}
 		s := k.action
 		if len(args) > 0 {
@@ -268,15 +275,20 @@ func constantsOf(cs map[string]string) []string {
 // (the action's own first), else o as a string.
 func outcomeParam(b *binding.Binding, action, o string) (param, value string, ok bool) {
 	ab := b.Actions[action]
-	for p, tpl := range ab.Args {
-		if strings.ReplaceAll(tpl, " ", "") == "{{.outcome}}" {
+	for _, p := range slices.Sorted(maps.Keys(ab.Args)) {
+		if strings.ReplaceAll(ab.Args[p], " ", "") == "{{.outcome}}" {
 			param, ok = p, true
+			break
 		}
 	}
 	if !ok {
 		return "", "", false
 	}
-	if v, found := ab.Outcomes[o]; found && v != "skip" && v != "call" {
+	if v, found := ab.Outcomes[o]; found {
+		if v == "skip" || v == "call" {
+			// a skipped step is no model step; a call's is the ok one's
+			return "", "", false
+		}
 		return param, v, true
 	}
 	if v, found := b.Outcomes[o]; found {
@@ -306,7 +318,8 @@ func Possible(t testing.TB, binding string, scenarios ...Expectation) {
 		r, err := scenarioPossible(c, e.scenario)
 		switch {
 		case err != nil:
-			t.Errorf("%s: not searched: %v", e.scenario, err)
+			t.Errorf("%s: not searched: %v. Without the Go evaluator's search the model is not checked here: claim the scenario of runs (Explore(...).Expect(t, Some(scenario))), "+
+				"and state its actions in turn as a simulate.possible of the binding (steps: [a, b]), which gotogether simulate samples with quint", e.scenario, err)
 		case r.Found:
 			t.Logf("%s: possible in the model, %s", e.scenario, r.Verdict())
 		case r.Complete:

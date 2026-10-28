@@ -817,7 +817,7 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 		if known == nil {
 			known = reportInvariants(r.Report)
 		}
-		if u := unknownNames(es, actions, known, "the run"); len(u) > 0 {
+		if u := append(unknownNames(es, actions, known, "the run"), unknownArgs(es, r.checker)...); len(u) > 0 {
 			t.Fatalf("gotogether: want %s: %s; a misspelled name never matches", describeAll(es), strings.Join(u, "; "))
 		}
 		for _, e := range es {

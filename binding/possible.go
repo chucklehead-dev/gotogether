@@ -14,8 +14,8 @@ import (
 // A model that can do neither is too strict for a conforming run ever to
 // show it: checking the code against the model would then prove nothing
 // of it. In the binding it is a string, a Quint predicate over the
-// model's state or a model action's name (that action is taken), or a
-// mapping of a name and when or steps:
+// model's state or a model action's name or call (that action is taken:
+// `withdraw(result = "ok")`), or a mapping of a name and when or steps:
 //
 //	possible:
 //	  - 'balance > 0'
@@ -36,12 +36,23 @@ type Possible struct {
 }
 
 // UnmarshalYAML reads a string as a predicate (When) or, if it is a
-// name alone, a step; a mapping as Name with When or Steps. Which a name
-// is (an action, or a val the model defines) Resolve decides.
+// name alone or an action's call, a step; a mapping as Name with When or
+// Steps, and no other key (a misspelled one would leave a possible that
+// claims less than it says). Which a name is (an action, or a val the
+// model defines) Resolve decides.
 func (p *Possible) UnmarshalYAML(n *yaml.Node) error {
 	if n.Kind == yaml.ScalarNode {
 		*p = Possible{When: strings.TrimSpace(n.Value), bare: true}
 		return nil
+	}
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			switch k := n.Content[i]; k.Value {
+			case "name", "when", "steps":
+			default:
+				return fmt.Errorf("line %d: a possible's key %q: its keys are name, when (a Quint predicate over the state) and steps (actions some trace takes in turn)", k.Line, k.Value)
+			}
+		}
 	}
 	type plain Possible
 	var q plain
@@ -68,8 +79,10 @@ func (p Possible) Text() string {
 var identifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // Resolve is p against m: a predicate's text when it is a state
-// predicate, else its steps. A string that is a name alone is a step if
-// it names one of m's actions, a predicate otherwise (a val). An error
+// predicate, else its steps. A string that is a name alone, or a call
+// (name(param = literal, ...)), is a step if the name is one of m's
+// actions, a predicate otherwise (a val, a def applied): an action is
+// never a predicate, so the reading is unambiguous. An error
 // says what is wrong: both or neither of when and steps, a step naming
 // no action or a parameter the action lacks.
 func (p Possible) Resolve(m *Model) (when string, steps []StepPattern, err error) {
@@ -77,9 +90,17 @@ func (p Possible) Resolve(m *Model) (when string, steps []StepPattern, err error
 		return "", nil, fmt.Errorf("possible %q: give when (a Quint predicate over the state) or steps (the actions some trace takes in turn), one of them", p.Text())
 	}
 	if p.When != "" {
-		if _, ok := m.Actions[p.When]; ok && p.bare && identifier.MatchString(p.When) {
-			steps = []StepPattern{{Action: p.When, Text: p.When}}
-			return "", steps, nil
+		// an action's name, or its call naming parameters' values, is a
+		// step written alone; as a when, it is no predicate (quint would
+		// refuse an action in a val, naming neither the possible nor the
+		// fix)
+		if sp, err := ParseStepPattern(p.When); err == nil {
+			if _, ok := m.Actions[sp.Action]; ok {
+				if !p.bare {
+					return "", nil, fmt.Errorf("possible %q: when: %s is an action, not a predicate over the state: write steps: [%s] (or the bare string, a step)", p.Text(), p.When, p.When)
+				}
+				return (Possible{Name: p.Name, Steps: []string{p.When}}).Resolve(m)
+			}
 		}
 		return p.When, nil, nil
 	}

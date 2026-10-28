@@ -123,7 +123,11 @@ func (m *Model) reach(start State, steps []func(Transition) bool, holds []func(S
 	out := make([]Reached, n)
 	left := n
 	nodes := []node{{s: start, key: m.Key(start), parent: -1}}
-	seen := map[string]bool{nodes[0].key + "#0": true}
+	// the depth each (state, progress) was reached at: under a depth
+	// bound, one reached again by a shorter path is expanded again, since
+	// best first may reach it first by a longer one (more steps taken
+	// sooner) and the bound would then cut what the shorter one reaches
+	seen := map[string]int{nodes[0].key + "#0": 0}
 	pathTo := func(i int) []Transition {
 		var path []Transition
 		for j := i; nodes[j].parent >= 0; j = nodes[j].parent {
@@ -186,14 +190,14 @@ search:
 			}
 			k := m.Key(t.State)
 			id := k + "#" + strconv.Itoa(p)
-			if seen[id] {
+			if d, ok := seen[id]; ok && (b.Depth == 0 || d <= nd.depth+1) {
 				continue
 			}
 			if b.States > 0 && len(nodes) >= b.States {
 				complete, cut = false, "states"
 				break search
 			}
-			seen[id] = true
+			seen[id] = nd.depth + 1
 			nodes = append(nodes, node{s: t.State, key: k, progress: p, depth: nd.depth + 1, parent: i, via: t})
 			j := len(nodes) - 1
 			if len(steps) > 0 && p == len(steps) {

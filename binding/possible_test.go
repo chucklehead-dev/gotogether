@@ -25,6 +25,12 @@ func TestPossibleResolve(t *testing.T) {
   steps: [rfund]
 - name: bad param
   steps: ['buy(reslt = "ok")']
+- 'buy(result = "ok")'
+- name: an action as a when
+  when: refund
+- name: a call as a when
+  when: 'buy(result = "ok")'
+- 'isFull(2)'
 `
 	if err := yaml.Unmarshal([]byte(src), &ps); err != nil {
 		t.Fatal(err)
@@ -35,7 +41,12 @@ func TestPossibleResolve(t *testing.T) {
 		when, steps, err string
 	}
 	wants := []want{{when: "sold > 2"}, {steps: "refund"}, {when: "soldOut"},
-		{steps: `insert|buy:result="ok",note=Set(1, 2)`}, {err: "one of them"}, {err: "rfund is not an action"}, {err: "no parameter reslt"}}
+		{steps: `insert|buy:result="ok",note=Set(1, 2)`}, {err: "one of them"}, {err: "rfund is not an action"}, {err: "no parameter reslt"},
+		{steps: `buy:result="ok"`}, {err: "refund is an action, not a predicate over the state: write steps: [refund]"},
+		{err: `is an action, not a predicate`}, {when: "isFull(2)"}}
+	if len(ps) != len(wants) {
+		t.Fatalf("%d possibles, %d wants", len(ps), len(wants))
+	}
 	for i, p := range ps {
 		when, steps, err := p.Resolve(m)
 		w := wants[i]
@@ -65,5 +76,16 @@ func TestPossibleResolve(t *testing.T) {
 		if when != w.when || strings.Join(parts, "|") != w.steps {
 			t.Errorf("%s: when %q steps %q, want %q %q", p.Text(), when, strings.Join(parts, "|"), w.when, w.steps)
 		}
+	}
+}
+
+// A possible's mapping takes name, when and steps alone: a misspelled
+// key fails the binding's load, naming the keys, where it would leave a
+// possible claiming less than it says.
+func TestPossibleUnknownKey(t *testing.T) {
+	var ps []Possible
+	err := yaml.Unmarshal([]byte("- name: x\n  when: 'a > 1'\n  stpes: [refund]\n"), &ps)
+	if err == nil || !strings.Contains(err.Error(), `key "stpes"`) || !strings.Contains(err.Error(), "name, when") {
+		t.Errorf("a misspelled key: %v, want it named with the keys", err)
 	}
 }

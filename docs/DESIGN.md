@@ -4206,8 +4206,12 @@ invariant and judges a code that never shows the scenario faithful.
   is a Quint predicate over the state, a model action's name (taken by
   some trace), or `{name, steps}`: actions some trace takes in turn,
   others between, each a name or a call naming some parameters' values
-  (`buy(result = "short")`). A bare string that names an action is a
-  step, any other a predicate (`Possible.Resolve`, against the model).
+  (`buy(result = "short")`). A bare string that names an action, or
+  calls one, is a step, any other a predicate (`Possible.Resolve`,
+  against the model): an action is never a predicate, so the reading is
+  unambiguous, and a `when:` naming one fails with the `steps:` to write
+  (quint refused it as a val, naming neither). A mapping takes name,
+  when and steps alone: a misspelled key fails the load.
 - **The Go evaluator searches first** (`validate.Checker.Possible`,
   `qeval.Model.Reach`): from init by the model's step, distinct states
   by Key, a parent tree for the witness. The predicates and one-step
@@ -4218,7 +4222,12 @@ invariant and judges a code that never shows the scenario faithful.
   shallowest), so a scenario the model can follow directly costs as many
   expansions as it has steps. Greedy matching of a sequence is exact:
   taking each step at its first chance is the longest prefix any path
-  through those transitions takes. Bounded by states (default 2000,
+  through those transitions takes. Under a depth bound a (state, steps
+  taken) reached again by a shorter path is expanded again: best first
+  can reach it by a longer one first, and the bound then cut what the
+  shorter one reaches (two of vending's 125 three-step sequences, each
+  reported "not found" with a path within the bound;
+  `TestReachDepthBoundAgainstBruteForce`). Bounded by states (default 2000,
   `simulate.searchStates`, `-states`) and depth (the trace's steps): a
   search a bound cut says "not found within the bound", with its extent;
   only a search no bound cut says impossible, the whole state graph seen.
@@ -4274,7 +4283,11 @@ invariant and judges a code that never shows the scenario faithful.
   the same sequence: the system is to be driven there, or the scenario
   names what the model forbids). A Take's outcome reaches the model
   through the parameter the binding passes `{{.outcome}}`, mapped by its
-  outcomes. `qtest.Possible(t, binding, scenarios...)` is the model-first
+  outcomes; with none (or an outcome it skips) the scenario is not
+  searched, saying so, where the search once dropped the outcome and
+  called possible a step the outcome made impossible. A `With` naming no
+  parameter of its action fails the claim before any verdict, as a
+  misspelled action does (`None` of it held for nothing). `qtest.Possible(t, binding, scenarios...)` is the model-first
   check, no run needed.
 - **grist's scenario** is written in the catalog's values:
   `Command.With(args)` is a `grist.Invocation` (the command's action,

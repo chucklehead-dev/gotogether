@@ -128,3 +128,84 @@ func TestReachAgainstBruteForce(t *testing.T) {
 		t.Errorf("a search bound to 5 states: %+v, want cut by states", r)
 	}
 }
+
+// A depth bound cuts a sequence's search only where no path within it
+// meets the sequence: for every sequence of three of vending's steps
+// that some path meets, a search bound to the shortest such path's
+// length finds it (brute force: breadth first over states and steps
+// taken). Best first may reach a state with some steps taken by a
+// longer path before a shorter one; without its re-expansion at the
+// shorter depth, the bound cut two of them (insert, insert, then a buy
+// refused empty: a path of 5; insert, a short buy, an empty one: 6).
+func TestReachDepthBoundAgainstBruteForce(t *testing.T) {
+	m, consts, init := vending(t)
+	type sym struct{ action, result string }
+	syms := []sym{{"insert", ""}, {"buy", "ok"}, {"buy", "short"}, {"buy", "empty"}, {"refund", ""}}
+	takes := func(s sym) func(Transition) bool {
+		return func(tr Transition) bool {
+			for _, e := range tr.Actions() {
+				if e.Action == s.action && (s.result == "" || len(e.Args) == 1 && Compare(e.Args[0], Str(s.result)) == 0) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	// shortest is the length of the shortest path meeting steps (-1: none
+	// within 9)
+	shortest := func(steps []func(Transition) bool) int {
+		type nd struct {
+			s State
+			p int
+		}
+		cur := []nd{{init, 0}}
+		seen := map[string]bool{m.Key(init) + "#0": true}
+		for d := 1; d <= 9; d++ {
+			var next []nd
+			for _, n := range cur {
+				ts, err := m.Transitions(consts, n.s, "step")
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, tr := range ts {
+					p := n.p
+					if steps[p](tr) {
+						p++
+					}
+					if p == len(steps) {
+						return d
+					}
+					if k := fmt.Sprintf("%s#%d", m.Key(tr.State), p); !seen[k] {
+						seen[k] = true
+						next = append(next, nd{tr.State, p})
+					}
+				}
+			}
+			cur = next
+		}
+		return -1
+	}
+	checked := 0
+	for _, a := range syms {
+		for _, b := range syms {
+			for _, c := range syms {
+				steps := []func(Transition) bool{takes(a), takes(b), takes(c)}
+				d := shortest(steps)
+				if d < 0 {
+					continue
+				}
+				rs, err := m.Reach(consts, init, "step", []Goal{{Steps: steps}}, Bound{Depth: d})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !rs[0].Found {
+					t.Errorf("%v %v %v: a path of %d meets it, and a search bound to depth %d did not find it (cut by %q)", a, b, c, d, d, rs[0].Cut)
+				}
+				checked++
+			}
+		}
+	}
+	if checked < 50 {
+		t.Fatalf("only %d sequences reachable", checked)
+	}
+}

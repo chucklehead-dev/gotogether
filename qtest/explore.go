@@ -984,7 +984,7 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 			t.Fatalf("gotogether: %s names %s, which no run judged: an eventual val is judged in a trace whose last record is a settle, and no run's was "+
 				"(call Sim.Settle at the end of Run and return its error, or qobs.Settled after a probe; Settles() states that a run settled)", describeClaim(c), strings.Join(u, ", "))
 		}
-		if u := unknownNames(es, x.actions, invariants, "the runs"); len(u) > 0 {
+		if u := append(unknownNames(es, x.actions, invariants, "the runs"), unknownArgs(es, x.checker)...); len(u) > 0 {
 			t.Fatalf("gotogether: %s: %s; a misspelled name never matches, so the claim would hold or fail for nothing", describeClaim(c), strings.Join(u, "; "))
 		}
 	}

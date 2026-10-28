@@ -46,6 +46,7 @@ simulate:
   possible:
     - 'balance > 0'                           # a predicate some trace reaches
     - refund                                  # an action some trace takes
+    - 'withdraw(result = "ok")'               # a call: that action with those values
     - name: overdraft refused
       steps: [deposit, 'withdraw(result = "insufficient")']   # in turn, others between
 ```

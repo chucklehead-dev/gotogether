@@ -209,12 +209,68 @@ func (k Take) String() string {
 
 func (k Take) judge([]*validate.Report) judgment { return judgment{show: -1} }
 
-// unknown says why k names nothing of the model ("": it names an action).
-func (k Take) unknown(actions map[string]bool) string {
+// unknown says why k names nothing of the model ("": it names an
+// action, and a parameter of it for each With; m nil: its parameters
+// unknown).
+func (k Take) unknown(actions map[string]bool, m *binding.Model) string {
 	if actions != nil && !actions[k.action] {
 		return fmt.Sprintf("%s is not an action of the model (%sits actions: %s); a misspelled name never matches", k.action, didYouMean(k.action, actions), strings.Join(slices.Sorted(maps.Keys(actions)), ", "))
 	}
+	return k.unknownWith(m)
+}
+
+// unknownWith says which parameter of k's With its action lacks in m
+// ("": none, or m nil or without the action): a With of no parameter
+// never matches, so a claim of it would hold or fail for nothing
+// (None of it always holds).
+func (k Take) unknownWith(m *binding.Model) string {
+	if m == nil {
+		return ""
+	}
+	ps, ok := m.Actions[k.action]
+	if !ok {
+		return ""
+	}
+	names := map[string]bool{}
+	for _, p := range ps {
+		names[p.Name] = true
+	}
+	for _, a := range k.args {
+		if !names[a.param] {
+			return fmt.Sprintf("%s has no parameter %s (%ssignature %s); a misspelled parameter never matches", k.action, a.param, didYouMean(a.param, names), m.Signature(k.action))
+		}
+	}
 	return ""
+}
+
+// unknownArgs says, for each Take of es's scenarios, which With
+// parameter its action lacks in c's model (c nil: unknown).
+func unknownArgs(es []Expectation, c *validate.Checker) []string {
+	if c == nil || c.Model == nil {
+		return nil
+	}
+	var out []string
+	for _, e := range es {
+		if e.scenario == nil {
+			continue
+		}
+		for _, k := range e.scenario.steps {
+			if u := k.unknownWith(c.Model); u != "" {
+				out = append(out, u)
+			}
+		}
+	}
+	return out
+}
+
+// modelOf is the model the runs were checked against (nil: none known).
+func modelOf(runs []*Run) *binding.Model {
+	for _, r := range runs {
+		if r != nil && r.checker != nil && r.checker.Model != nil {
+			return r.checker.Model
+		}
+	}
+	return nil
 }
 
 // count is how many runs took k, and how many must.
@@ -235,7 +291,7 @@ func (k Take) count(runs []*Run, m *ModelCoverage) (n, need int) {
 }
 
 func (k Take) judgeRuns(runs []*Run, actions map[string]bool) string {
-	if u := k.unknown(actions); u != "" {
+	if u := k.unknown(actions, modelOf(runs)); u != "" {
 		return k.String() + ": " + u
 	}
 	m := modelCoverage(runs, actions)
@@ -275,8 +331,9 @@ func (e TakeEach) judge([]*validate.Report) judgment { return judgment{show: -1}
 func (e TakeEach) judgeRuns(runs []*Run, actions map[string]bool) string {
 	var bad, missed []string
 	m := modelCoverage(runs, actions)
+	model := modelOf(runs)
 	for _, k := range e.takes {
-		if u := k.unknown(actions); u != "" {
+		if u := k.unknown(actions, model); u != "" {
 			bad = append(bad, u)
 			continue
 		}
