@@ -108,7 +108,7 @@ func usageTo(w io.Writer) {
   gotogether scaffold -system -binding m.binding.yaml -out system_test.go
 An event-sourced service can have its model written for it: grist (its own module) generates
 the model's skeleton and both bindings from the app's catalog, the app writing only its rules:
-  go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>    (docs/grist.md)
+  go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>    (docs/grist.md)
 Each command's -h says what it is for, with an example. gotogether version prints the version.
 
 usage:
@@ -218,7 +218,7 @@ func scaffoldTo(w io.Writer, out, spec, module string, system bool, bpath, pkg, 
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\nconstants:\n", module, relativeTo(out, spec), module)
+	fmt.Fprintf(w, "# gotogether binding for %s (generated skeleton: set the constants; override an argument by uncommenting it)\nspec: %s   # relative to this file\nmodule: %s\n\n# each constant a Quint expression, or a template over the run: '{{ set \"key\" }}' (a field's values),\n# '{{ max \"amount\" }}', '{{ count \"write\" }}' (an action's steps), '{{ procs }}', add, atLeast\nconstants:\n", module, relativeTo(out, spec), module)
 	for _, c := range slices.Sorted(maps.Keys(m.Consts)) {
 		fmt.Fprintf(w, "  %s: ''   # %s\n", c, m.Consts[c])
 	}
@@ -384,7 +384,7 @@ func steps(args []string) error {
 	conv := fset.String("convert", "", "convert OTLP/JSON spans with this rule file")
 	out := fset.String("out", "", "write the selected, sanitized steps to this step log instead of listing them")
 	actors := fset.String("actors", "", "keep these actors (comma-separated path.Match patterns)")
-	actions := fset.String("actions", "", "keep these actions (comma-separated patterns)")
+	actions := fset.String("actions", "", "keep these actions (comma-separated patterns); a log missing other actions' steps is no whole history (validate mismatches where they changed the state): for listing, or -actors and -since to sample")
 	since := fset.String("since", "", "keep steps recorded at or after this RFC 3339 time")
 	until := fset.String("until", "", "keep steps recorded before this RFC 3339 time")
 	pseud := fset.String("pseudonymize", "", "fields whose values become salted pseudonyms (arguments, obs.<name>, actor)")

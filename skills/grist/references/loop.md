@@ -15,8 +15,9 @@ examples/counters is the walk-through: read its README's table first.
 
 ## The first hour
 
-`go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new
-<name>` (`-module`, `-dir`; `-replace <checkout>` inside this repository)
+`go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new
+<name>` (`-module`, `-dir`; from a checkout, `cd grist && go run ./cmd/grist new
+-replace <checkout> -dir DIR <name>`; `@latest` lets it run outside any module)
 writes a module green on its first run: an App (two events, a keyed
 read model, a command with declared refusals, a query, a processor), its
 binary, `model/<name>_rules.qnt` with its rules filled and

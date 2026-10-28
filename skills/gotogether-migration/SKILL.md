@@ -32,8 +32,11 @@ code changes. The model is the specification: requirements live in the
    values, the environment as weak as documented; each happy path a
    `possible` scenario covering a whole lifecycle; each "must never" a
    `val` in `holds` or `allows`; each "eventually" an eventual val.
-4. **Simulate it alone**: `gotogether simulate -binding` until every
-   scenario is reached and every property is classified.
+4. **Bind and simulate it alone**: `gotogether scaffold -spec model.qnt
+   -module M -out m.binding.yaml` (constants as templates over a run,
+   the scenarios under `simulate:`), then `gotogether simulate -binding
+   m.binding.yaml` until every scenario is reached and every property
+   is classified.
 5. **Judge the existing runs** before touching code: the legacy tests
    wrapped in `qtest.Record`, the spans converted, production logs
    validated. Triage each disagreement into code bug, model mistake or
@@ -61,6 +64,7 @@ Before changing code:
 | a legacy test's run `Rejects` | the model forbids what a test expects | the test encodes a bug, or the model is wrong: ask the owner, record it |
 | a production log `Rejects` or `Mismatch` | real behaviour the model forbids | as above; a defect found before any change |
 | `Violates` on a legacy run | the system breaks a stated rule | a bug to report, or a rule nobody holds |
+| `lint -src`: `X is not an action of M` | the code records an operation the model leaves out | model it, or record it outside the context |
 | spans that no `convert` rule matches | operations the model does not name | a rule, or out of the context |
 | `issue: error gap`, `lost-prefix` on old logs | logs that cannot be judged whole | a snapshot step, or newer logs |
 | a requirement with one source | weakly grounded | a second source, or `assumed` |

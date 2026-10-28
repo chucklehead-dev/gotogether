@@ -22,6 +22,11 @@ Rules:
   between quotes (Quint has no escapes: a tab, a newline, a backslash
   are themselves); one holding a double quote has no Quint literal and
   is refused, naming the field: record an id or a code instead.
+  A constant is a Quint expression or a template over the whole run:
+  `{{ set "key" }}` (the Quint set of a field's values across its
+  steps; several names union them), `{{ max "amount" }}`, `{{ count
+  "write" }}` (an action's steps), `{{ procs }}` (its processes),
+  `add`, `atLeast` (`{{ atLeast 5 (max "amount") }}`).
   Give a template only to map a field differently, e.g.
   `args: { o: '{{.outcome}}' }`. An action that needs nothing else can
   be `name: {}`.

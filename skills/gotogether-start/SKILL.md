@@ -41,7 +41,8 @@ The first hour in your own module, the glossary and the first commands:
 ## Checklist
 
 - [ ] quint ≥ 0.32 on PATH (`quint --version`); Go ≥ 1.26.1.
-- [ ] `gotogether` runs (`go run github.com/chucklehead-dev/gotogether/cmd/gotogether help`).
+- [ ] `gotogether` runs (`go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest`,
+  or in your module `go get -tool github.com/chucklehead-dev/gotogether/cmd/gotogether` and `go tool gotogether help`).
 - [ ] The skill for the question is loaded before writing code.
 
 ## Results
@@ -49,7 +50,7 @@ The first hour in your own module, the glossary and the first commands:
 | You see | Means | Next |
 |---|---|---|
 | tests `SKIP`: `quint not installed` | `qtest.RequireQuint` skipped them | install quint (`GOTOGETHER_STRICT=1` makes it fail) |
-| hello's `as expected` blocks | the mutant's expected failures, not the test's | read them: they are what a catch looks like |
+| under `TestMutants`: `TestMutant#1: 30 runs, 7 conform, 23 reject apply` | a mutant's build, its runs failing as its claim says (`TestMutant` itself SKIPs in the app's build) | read them: they are what a catch looks like |
 | `gotogether lint` errors | the binding, an annotation or simulated code does not fit | each names the fix |
 | a verdict you cannot place | a claim's report | gotogether-workflow's verdicts reference |
 

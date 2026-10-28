@@ -156,7 +156,7 @@ func TestScaffoldHelpExamples(t *testing.T) {
 func TestUsageNamesGrist(t *testing.T) {
 	var b bytes.Buffer
 	usageTo(&b)
-	if !strings.Contains(b.String(), "grist/cmd/grist new <name>") {
+	if !strings.Contains(b.String(), "grist/cmd/grist@latest new <name>") {
 		t.Errorf("the usage does not say how to start a grist app:\n%s", b.String())
 	}
 }

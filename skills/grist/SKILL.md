@@ -21,11 +21,14 @@ the walk-through: read its README's table first.
 
 ## Steps
 
-1. `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>`.
+1. `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>` (outside any
+   module; from a checkout, `-replace <checkout>`), then `go get -tool
+   github.com/chucklehead-dev/gotogether/cmd/gotogether` in the app for `go tool gotogether`.
 2. One block at a time in Go, `Authorize` or `Internal` on each, its
    shape declared (`Refuses`, `Appends`, `Emits`/`Delivers`, `Uses`).
 3. `go run ./cmd/<name> model`; fill the named holes in
-   `model/<name>_rules.qnt`, the invariants in `model/<name>.qnt`.
+   `model/<name>_rules.qnt`, the invariants in `model/<name>.qnt`;
+   `go tool gotogether simulate -binding <name>.binding.yaml`.
 4. `gristtest.Generated(t, App)`; each scenario `gristtest.Scenario`,
    checked by `qtest.Possible`.
 5. `gristsim.System(commits, App, cfg).WithRates(faulty).Explore(t,
@@ -55,6 +58,8 @@ the walk-through: read its README's table first.
 | `grist.ErrOutcomeUnknown` | an append's outcome is unknown | retry with the same id |
 | `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |
 | `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
+| `NO VERDICT`, `checks the actors */clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
+| `missing go.sum entry` running `gotogether` | the CLI is not a tool of the app | `go get -tool .../cmd/gotogether`, then `go tool gotogether` |
 
 ## Run it, do not infer it
 

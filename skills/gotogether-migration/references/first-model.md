@@ -13,6 +13,19 @@ From the gotogether-migration skill (its SKILL.md says when to read this).
   topic, a store at the isolation level production runs.
 - Each requirement's comment beside what states it (requirements.md).
 
+## The binding
+
+`gotogether scaffold -spec model/payments.qnt -module payments -out
+payments.binding.yaml` writes one entry per action, each parameter the
+step field of its name. Map what the code records otherwise (an outcome
+as `result: '{{.outcome}}'`, an observation as `'{{.obs.found}}'`), the
+outcomes the errors name (`outcomes: { ok: '"ok"', conflict: '"conflict"' }`),
+and size the constants per run with templates: `{{ set "key" }}` (the
+set of a field's values), `{{ max "amount" }}`, `{{ count "refund" }}`
+(an action's steps), `{{ procs }}`, `add`, `atLeast`. `gotogether lint
+-binding payments.binding.yaml -src .` then says which bound actions the
+code records nowhere, and which recorded ones the model lacks.
+
 ## Its scenarios and claims
 
 The binding's `simulate` section is where the requirements are checked

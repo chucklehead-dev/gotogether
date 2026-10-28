@@ -63,7 +63,14 @@ requirement, and the API's status is the binding's business.
   `GOTOGETHER_SALT` keeps pseudonyms stable).
 - `gotogether convert -rules spans.yaml -out steps.jsonl spans.json`
   turns existing spans into steps; once a binding exists, `validate`
-  takes `-convert` directly.
+  takes `-convert` directly. The rule file's format (`span:`, `action:`,
+  `args:` and `obs:` from `attr:K`, `outcome:`, `where:`, `drop:`) is
+  package convert's doc (`go doc github.com/chucklehead-dev/gotogether/convert`);
+  examples/kvstore/kv.convert.yaml is a whole one, its `order:` key
+  putting concurrent requests' spans back in the order they took effect.
+- `gotogether steps -actions` keeps some actions only: a list to read,
+  not a history to validate (the dropped steps changed the state). Sample
+  by `-actors`, `-since` and `-until`.
 - A log is evidence of what the system did, never of what it must do:
   a behaviour seen in production is a scenario the model must allow
   (or a defect), not a requirement.
