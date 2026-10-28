@@ -29,6 +29,9 @@ The design record is `docs/DESIGN.md`. Read §9 before changing `connect`
 or `qhegel`, §10 before changing `qenv`, and §11 before changing
 `qload` or `qmeta`.
 
+Where the work stands (done, half done, next, the maintainer's open
+decisions, how to resume): docs/STATUS.md. Update it when an item lands.
+
 ## Layout
 
 ```
@@ -112,9 +115,9 @@ examples/edgepublish  separate module (Orchestrion); the spike's real-world case
                       sim/: the publisher, unchanged, in qenv by weaving (qweave go test ./sim/, as CI does)
 examples/gosim        separate module; on gosim via qgosim: broadcast/ (Glomers node over TCP), checkout/ (the saga on
                       qenv's native runtime); simulated tests //go:build sim, host tests make the choices (DESIGN §14, §15.1)
-docs/         ARCHITECTURE.md (the structure, explained: modules, layers, the data flow, formats; this layout is its index),
+docs/         STATUS.md (where the work stands, how to resume), ARCHITECTURE.md (the structure, explained: modules, layers, the data flow, formats; this layout is its index),
               DESIGN.md (why), ROADMAP.md (what is open), HISTORY.md (what is done, and the reviews), instrumentation.md,
-              grist-guide.md (grist's user guide); agents/: commands by module, gotchas by area
+              grist-guide.md (grist's user guide); agents/: commands by module, gotchas by area; upstream/: drafted issues
 ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API rate limits)
 ```
 

@@ -4,6 +4,9 @@ Test Go code against [Quint](https://quint-lang.org) specifications: the
 model drives the code, judges what it did, or both, in tests, in a
 simulated environment full of faults, and in production.
 
+Pre-release: nothing is tagged yet. Where the work stands, what is left
+and how to resume it: [docs/STATUS.md](docs/STATUS.md).
+
 ## Quickstart
 
 ```sh
