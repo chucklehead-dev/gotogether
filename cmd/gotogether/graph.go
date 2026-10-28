@@ -30,6 +30,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	if sim == nil {
 		sim = &binding.Simulation{}
 	}
+	given := out // as the command line named it: the replay's command says it so
 	if out != "" {
 		// the module imports the model by a path relative to its own
 		abs, err := filepath.Abs(out)
@@ -226,7 +227,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		if err := writeReplays(b, overrides, out, runs); err != nil {
 			return 2, err
 		}
-		simPrintf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, filepath.Base(out))
+		simPrintf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, given)
 	}
 	if evalBug {
 		return 1, nil

@@ -54,8 +54,16 @@ func TestSimulateGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code, err := simulate([]string{"-graph", "-binding", "../../validate/testdata/graph_wrap.yaml", "-out", rel}); code != 0 || err != nil {
-		t.Errorf("graph_wrap -out %s: exit %d, %v; want 0", rel, code, err)
+	code, got := capture(t, func() (int, error) {
+		return simulate([]string{"-graph", "-binding", "../../validate/testdata/graph_wrap.yaml", "-out", rel})
+	})
+	if code != 0 {
+		t.Errorf("graph_wrap -out %s: exit %d; want 0", rel, code)
+	}
+	// the replay's command names the module as given, which runs from
+	// here (its base name ran only from its directory)
+	if want := "quint test --main simulate --match 'gtg_' " + rel + " replays"; !strings.Contains(got, want) {
+		t.Errorf("want %q in\n%s", want, got)
 	}
 	replayInQuint(t, must(filepath.Abs(rel)))
 	// what the report says beside the verdicts: an invariant of a graph a

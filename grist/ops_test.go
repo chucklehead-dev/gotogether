@@ -117,6 +117,9 @@ func TestMainLifecycleLogs(t *testing.T) {
 			msg += "." + p
 		}
 		msgs = append(msgs, msg)
+		if _, ok := l["error"]; ok && msg == "stopped" {
+			t.Errorf("a clean stop logs an error field: %v", l)
+		}
 		if l["app"] != "names" || l["node"] != "pod-7" || l["incarnation"] == "" || l["incarnation"] == nil {
 			t.Errorf("a lifecycle line without the node's identity: %v", l)
 		}

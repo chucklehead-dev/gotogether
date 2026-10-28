@@ -258,6 +258,12 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 	if j.Dir == "" {
 		return 2, jerr
 	}
+	if jerr != nil && j.Temporary() && emptyDir(j.Dir) {
+		// refused before anything was written there (a stale compiled
+		// model): a directory named and left empty said otherwise
+		j.Close()
+		return 2, jerr
+	}
 	switch {
 	case j.Temporary() && v.withITF:
 		fmt.Fprintf(v.out, "artifacts (generated modules, every run's ITF): %s (kept: -itf)\n", j.Dir)
@@ -430,4 +436,10 @@ func (v *validateRun) navLines(rep *validate.Report) {
 			}
 		}
 	}
+}
+
+// emptyDir reports whether dir holds nothing (or cannot be read).
+func emptyDir(dir string) bool {
+	es, err := os.ReadDir(dir)
+	return err != nil || len(es) == 0
 }

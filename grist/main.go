@@ -518,7 +518,12 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	lg.Info("draining", "grace", drain.Grace.String())
 	err = runDrain(ctx, drain, mainServer{srv: srv, done: done}, st, relay, n, stopNode, true,
 		func(msg string) { fmt.Fprintln(stderr, msg) }, func(phase string, kv ...any) { lg.Info("drain", append([]any{"phase", phase}, kv...)...) })
-	lg.Info("stopped", "error", fmt.Sprint(err), "uptime", time.Since(started).Round(time.Millisecond).String()) //qenv:ok the real tier's uptime
+	// an error only when there is one: a clean stop once logged "error":"<nil>"
+	kv := []any{"uptime", time.Since(started).Round(time.Millisecond).String()} //qenv:ok the real tier's uptime
+	if err != nil {
+		kv = append([]any{"error", err.Error()}, kv...)
+	}
+	lg.Info("stopped", kv...)
 	return err
 }
 

@@ -14,9 +14,9 @@ import (
 // gotogether compile, then validate -compiled: the result line quint's
 // check gives, with no quint (-quint names none there is), a search and a
 // manifest refused (quint confirms or replays them), and a stale artifact
-// refused with the fix.
+// refused with the fix, leaving no empty artifacts directory behind. Not
+// parallel: it sets TMPDIR.
 func TestCompileThenValidate(t *testing.T) {
-	t.Parallel()
 	skip.Quint(t)
 	dir := t.TempDir()
 	for _, f := range []string{"account.yaml", "account.qnt"} {
@@ -71,6 +71,14 @@ func TestCompileThenValidate(t *testing.T) {
 	code, got, err = validated([]string{"-binding", bind, "-compiled", model, "-dir", filepath.Join(dir, "out-stale"), log})
 	if code != 2 || err == nil || !strings.Contains(err.Error(), "is stale") || !strings.Contains(err.Error(), "gotogether compile -binding") {
 		t.Errorf("a stale artifact: exit %d, %v:\n%s", code, err, got)
+	}
+	// without -dir, the refusal names no artifacts and leaves no
+	// directory: nothing was written there
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	code, got, _ = validated([]string{"-binding", bind, "-compiled", model, log})
+	if left, _ := os.ReadDir(tmp); code != 2 || strings.Contains(string(got), "artifacts") || len(left) > 0 {
+		t.Errorf("a stale artifact without -dir: exit %d, %d entries left in TMPDIR:\n%s", code, len(left), got)
 	}
 }
 
