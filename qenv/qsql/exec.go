@@ -1333,6 +1333,10 @@ func sqlError(store string, err error) error {
 		return &Error{Code: "40001", Message: "could not serialize access due to concurrent update: retry the transaction", Err: err}
 	case errors.Is(err, qenv.ErrUnknownOutcome):
 		return &Error{Code: "08006", Message: fmt.Sprintf("connection to store %s lost during COMMIT: the transaction may or may not have committed", store), Err: err}
+	case errors.Is(err, qenv.ErrUnavailable):
+		// a failover's read-only replica, or a connection it or a restore
+		// reset: nothing applied (PostgreSQL's read_only_sql_transaction)
+		return &Error{Code: "25006", Message: fmt.Sprintf("store %s is unavailable (failing over, or the connection was reset): nothing applied; retry", store), Err: err}
 	}
 	return err
 }

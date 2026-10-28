@@ -36,7 +36,8 @@
 // (qenv.ErrConflict), 40P01 for a deadlock, 23505 for a duplicate key
 // (a key another transaction committed, at every level, as PostgreSQL's
 // unique check), 25P02 for a statement after a failed one in a
-// transaction. After the transaction's context is cancelled, statements
+// transaction, 25006 for a store failing over or a connection a failover
+// or a restore reset (qenv.ErrUnavailable: nothing applied). After the transaction's context is cancelled, statements
 // fail with sql.ErrTxDone and Commit with context.Canceled or
 // sql.ErrTxDone (database/sql's own answers, by its goroutine's timing).
 //
@@ -100,8 +101,8 @@ type Error struct {
 	Code    string // PostgreSQL's SQLSTATE: "40001", "23505", ...
 	Message string
 	// Err is the cause: qenv.ErrConflict for 40001 and 40P01,
-	// qenv.ErrUnknownOutcome for 08006, the failed statement's error for
-	// 25P02.
+	// qenv.ErrUnknownOutcome for 08006, qenv.ErrUnavailable for 25006,
+	// the failed statement's error for 25P02.
 	Err error
 }
 

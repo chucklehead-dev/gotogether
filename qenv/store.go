@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv/internal/history"
 )
@@ -114,9 +115,22 @@ type Store struct {
 	open  map[*tx]bool
 	txs   int64
 
-	commit       FaultKind // "store.<name>.commit"
-	changed      Signal    // notified at every commit that wrote, and every Load: Changed
-	noValidation bool      // tests only: a store that keeps no level, for the history check to catch
+	commit  FaultKind // "store.<name>.commit"
+	changed Signal    // notified at every commit that wrote, and every Load: Changed
+	// failovers and restores (failover.go): the commits that wrote, in
+	// order (what a lost tail loses), the failover's options and kind,
+	// the read-only window's end, and the latest backup
+	commits       []int64
+	failover      *Failover
+	failoverKind  FaultKind // "store.<name>.failover"
+	readOnlyUntil time.Time
+	backup        int64
+	hasBackup     bool
+	backupAt      time.Time
+	backupEvery   time.Duration
+	restores      int
+	lost          int
+	noValidation  bool // tests only: a store that keeps no level, for the history check to catch
 }
 
 type version struct {
@@ -129,7 +143,8 @@ type version struct {
 func NewStore(s *Sim, name string, iso Isolation) *Store {
 	s.claim("store."+name, "Store", name)
 	st := &Store{Name: name, Iso: iso, sim: s, rows: map[string][]version{}, locks: map[string]*tx{}, open: map[*tx]bool{},
-		commit: DeclareFaults("store."+name+".commit", "unknownOutcome")} // a commit applied whose outcome the client never learns
+		commit:       DeclareFaults("store."+name+".commit", "unknownOutcome"), // a commit applied whose outcome the client never learns
+		failoverKind: DeclareFaults("store."+name+".failover", "failover", "loseTail")}
 	if s.Check {
 		st.hist = history.New([...]int{history.Serializable, history.SnapshotIsolation, history.ReadCommitted}[iso])
 	}
@@ -168,6 +183,9 @@ type tx struct {
 	// waitKeys are the keys whose locks the transaction waits for (nil:
 	// none): the deadlock check follows the one still locked
 	waitKeys []string
+	// reset: a failover or a restore reset the transaction's connection
+	// (ErrUnavailable from its next lock or commit)
+	reset bool
 }
 
 // Begin starts a transaction.
@@ -228,11 +246,17 @@ func (tx *tx) saw(key string, seq int64) {
 func (tx *tx) GetForUpdate(key string) (any, bool, error) {
 	tx.check()
 	Yield(tx.ctx)
+	if err := tx.unavailable(true); err != nil {
+		return nil, false, err // a lock is a write: a read-only replica refuses SELECT ... FOR UPDATE
+	}
 	if err := tx.lockWait([]string{key}); err != nil {
 		return nil, false, err
 	}
 	if tx.done {
 		return nil, false, ErrConflict
+	}
+	if err := tx.unavailable(true); err != nil {
+		return nil, false, err // reset while it waited
 	}
 	if tx.st.locks[key] == nil {
 		tx.st.locks[key] = tx
@@ -421,11 +445,17 @@ func (tx *tx) Commit() error {
 	// every written key free at once, then validated and applied in that
 	// same step: waiting for each in turn let another transaction lock a
 	// key already waited for, and the commit wrote under its lock
+	if err := tx.unavailable(len(tx.order) > 0); err != nil {
+		return err
+	}
 	if err := tx.lockWait(tx.order); err != nil {
 		return err
 	}
 	if tx.done {
 		return ErrConflict
+	}
+	if err := tx.unavailable(len(tx.order) > 0); err != nil {
+		return err // reset while it waited
 	}
 	if st.Iso != ReadCommitted && !st.noValidation {
 		for _, k := range tx.order {
@@ -453,8 +483,13 @@ func (tx *tx) Commit() error {
 	}
 	var commit int64
 	if len(tx.order) > 0 {
+		if st.backupEvery > 0 && (!st.hasBackup || !st.sim.Now().Before(st.backupAt.Add(st.backupEvery))) {
+			st.Backup() // the store as it was before this commit
+			st.backupAt = st.sim.Now()
+		}
 		st.seq++
 		commit = st.seq
+		st.commits = append(st.commits, commit)
 		for _, k := range tx.order {
 			w := tx.writes[k]
 			st.rows[k] = append(st.rows[k], version{seq: st.seq, val: w.val, deleted: w.deleted})
@@ -471,6 +506,9 @@ func (tx *tx) Commit() error {
 	}
 	if commit > 0 {
 		st.changed.Notify() // applied, whatever the caller is told next
+		if st.failoverAt() {
+			return ErrUnknownOutcome // the primary died at the commit: applied, and perhaps lost with its tail
+		}
 	}
 	if st.CommitFaults && len(tx.order) > 0 && st.sim.FaultOf(st.commit) == "unknownOutcome" {
 		return ErrUnknownOutcome

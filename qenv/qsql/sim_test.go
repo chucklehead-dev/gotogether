@@ -347,6 +347,42 @@ func TestCommitOutcomeUnknown(t *testing.T) {
 	}
 }
 
+// A store failing over (qenv.Store.FailOver): a write in its read-only
+// window is 25006 (qenv.ErrUnavailable, nothing applied), and so is the
+// next statement of a transaction its failover reset; a read is answered,
+// and once the window passed a write commits.
+func TestFailoverReadOnly(t *testing.T) {
+	w := newWorld(t, qenv.NewSeeded(1), qenv.ReadCommitted)
+	var resetErr, readOnlyErr, readErr, afterErr error
+	w.s.Spawn("payer", func(ctx context.Context) {
+		tx, err := w.db.BeginTx(ctx, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		w.st.FailOver(0, 5*time.Second)
+		_, resetErr = tx.ExecContext(ctx, `UPDATE accounts SET balance = balance - 10 WHERE id = 'alice'`)
+		tx.Rollback()
+		_, readOnlyErr = w.db.ExecContext(ctx, `UPDATE accounts SET balance = balance - 10 WHERE id = 'alice'`)
+		var b int64
+		readErr = w.db.QueryRowContext(ctx, `SELECT balance FROM accounts WHERE id = 'alice'`).Scan(&b)
+		qenv.Sleep(ctx, 6*time.Second)
+		_, afterErr = w.db.ExecContext(ctx, `UPDATE accounts SET balance = balance - 10 WHERE id = 'alice'`)
+	})
+	w.run(t)
+	for _, c := range []struct {
+		name string
+		err  error
+	}{{"the reset transaction's update", resetErr}, {"an update in the read-only window", readOnlyErr}} {
+		if code(c.err) != "25006" || !errors.Is(c.err, qenv.ErrUnavailable) {
+			t.Errorf("%s: %v, want 25006 (qenv.ErrUnavailable)", c.name, c.err)
+		}
+	}
+	if readErr != nil || afterErr != nil || w.balance(t, "alice") != 90 {
+		t.Errorf("a read in the window: %v; an update after it: %v; balance %d; want nil, nil, 90 (one update applied)", readErr, afterErr, w.balance(t, "alice"))
+	}
+}
+
 // A broken connection found before anything ran: database/sql retries it
 // (twice on pooled connections, then on a new one), so two faults in a
 // row are invisible and three reach the caller.

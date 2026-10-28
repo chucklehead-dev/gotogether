@@ -679,6 +679,9 @@ type Endpoint struct
     method (Endpoint) String() string
 type Entropy = choice.Entropy
     Entropy(n int) []byte
+type Failover struct
+    field LoseTail int
+    field ReadOnly time.Duration
 type FaultKind struct
     field Name string
     field Options []string
@@ -854,11 +857,18 @@ type Store struct
     field Name string
     field Iso Isolation
     field CommitFaults bool
+    method (*Store) Backup()
     method (*Store) Begin(ctx context.Context) Txn
     method (*Store) Changed() *Signal
+    method (*Store) FailOver(lose int, readOnly time.Duration) int
+    method (*Store) Failovers(f Failover)
     method (*Store) Keys(prefix string) []string
     method (*Store) Load(key string, val any)
+    method (*Store) Lost() int
     method (*Store) Read(key string) (any, bool)
+    method (*Store) Restore() bool
+    method (*Store) Restored() int
+    method (*Store) Restores(every time.Duration, max int)
     method (*Store) Version() int64
 type Table[T any] struct
     method (Table[T]) Delete(tx Txn, k string)
@@ -909,6 +919,7 @@ var ErrNoSpace = errors.New("qenv: no space left on device")
 var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
 var ErrStuck = errors.New("qenv: stuck")
 var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
+var ErrUnavailable = errors.New("qenv: store unavailable (failing over, or the connection was reset by a failover or a restore); nothing applied: retry")
 var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
 var ErrUnsettled = errors.New("qenv: not settled")
 var NoFaults = choice.NoFaults

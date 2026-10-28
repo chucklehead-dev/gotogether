@@ -10,6 +10,16 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Store incidents (GR10 slice 3, ROADMAP I25): `qenv.Store.Failovers`
+  (`store.<name>.failover`: a commit's primary dies, the commit applied
+  and answered `ErrUnknownOutcome`, every open transaction reset, writes
+  refused for `Failover.ReadOnly`; option `loseTail` also loses that
+  commit and the `Failover.LoseTail` acknowledged before it),
+  `Store.FailOver` (one now), `Store.Restores` (`nemesis.restore.<name>`:
+  back to a backup taken every period), `Store.Backup`, `Store.Restore`,
+  `Store.Restored`, `Store.Lost` and `qenv.ErrUnavailable` (qsql's
+  SQLSTATE 25006). The history checker starts afresh after a rewind.
+
 - Packaging (ROADMAP I21): `gotogether compile -binding b.yaml -o
   model.json` writes a compiled model (`gotogether.model/1`: quint's
   typecheck and the evaluation module's IR, with the binding's and the

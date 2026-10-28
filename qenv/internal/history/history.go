@@ -103,6 +103,10 @@ func New(level int) *History {
 		readers: map[string]map[Version][]int64{}, g: depgraph.New()}
 }
 
+// Level is the level h checks (ReadCommitted, SnapshotIsolation or
+// Serializable): a store that starts its history anew (a restore) keeps it.
+func (h *History) Level() int { return h.level }
+
 // Load records a version installed outside any transaction (initial data).
 func (h *History) Load(key string, v Version) {
 	h.versions[key] = append(h.versions[key], v)

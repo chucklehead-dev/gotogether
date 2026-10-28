@@ -11,6 +11,9 @@ debits from `OnCommit`, and probes the balances after the settle.
 ```go
 st := qenv.NewStore(sim, "paydb", qenv.ReadCommitted) // the level is the Store's, store-wide
 st.CommitFaults = true                                // 08006: applied, the connection lost
+st.Failovers(qenv.Failover{LoseTail: 2, ReadOnly: 5 * time.Second}) // store.paydb.failover: a commit's primary dies (08006),
+                                                      // loseTail loses it and the 2 acknowledged before; 25006 while read-only
+st.Restores(time.Minute, 1)                           // nemesis.restore.paydb: back to a backup taken each minute
 db := qsql.Open(sim, st, qsql.Options{
 	BadConn:  true, // "sql.paydb.conn": driver.ErrBadConn before anything ran; database/sql retries it
 	OnCommit: func(ctx context.Context, ch []qsql.Change) { /* record the step: the commit is its linearization point */ },
