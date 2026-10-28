@@ -38,13 +38,13 @@ the run's next call, which the model rejects
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
-      enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a",
-        id = "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result
-        = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1",
-        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
-        "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
-        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
-── lines 1–28 of 189 (pgup/pgdn scroll)
+      enabled instead (the model's moves from this state, not records): createCounter (8
+        ways), incrementCounter (8 ways), retireCounter (4 ways), showCounter(counter = "a", readPos
+        = 1), showCounter(counter = "b", readPos = 1), welcome(trigger = 1, ok = true), and 3 more
+
+state  (* changed by the last move)
+  answered = Set("t1-c1-1")
+── lines 1–28 of 185 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -79,14 +79,9 @@ the run's next call, which the model rejects
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
-      enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a",
-        id = "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result
-        = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1",
-        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
-        "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
-        caller = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
-        "unknown-counter")), showCounter(counter = "a", readPos = 1), showCounter(counter = "b",
-        readPos = 1), welcome(trigger = 1, ok = true), and 3 more
+      enabled instead (the model's moves from this state, not records): createCounter (8
+        ways), incrementCounter (8 ways), retireCounter (4 ways), showCounter(counter = "a", readPos
+        = 1), showCounter(counter = "b", readPos = 1), welcome(trigger = 1, ok = true), and 3 more
 
 state  (* changed by the last move)
   answered = Set("t1-c1-1")
@@ -95,7 +90,12 @@ state  (* changed by the last move)
   bankPayRecords = []
   checkpoints = Map("average" -> 0, "payout" -> 0, "welcome" -> 0)
   effects = [("welcome", 1, "welcome/t1/1", true)]
-── lines 1–38 of 189 (pgup/pgdn scroll)
+  log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c", "client1"], tags:
+    Set(("counter", "c"), ("name", "c")), typ: "counter-created" }]
+  mailerSendCalls = [{ key: "welcome/t1/1", processor: "welcome", request: { counter: "c", name:
+    "c" }, response: { unit: true }, result: "ok", trigger: 1 }]
+  mailerSendRecords = [{ key: "welcome/t1/1", processor: "welcome", request: { counter: "c",
+── lines 1–38 of 185 (pgup/pgdn scroll)
 
 [37m/[m[37mshowCounter[m 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
