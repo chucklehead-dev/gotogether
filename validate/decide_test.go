@@ -92,7 +92,9 @@ func TestEvaluatorDecidesPasses(t *testing.T) {
 		if n := replays(t, log); eval == "go" && n != 1 || n == 0 {
 			t.Errorf("%s: a failing run started %d quint replays (go: the detail replay alone)", eval, n)
 		}
-		if a.Module == "" || a.Failure == nil || !strings.Contains(a.Failure.Quint, "QNT") || a.Failure.State == nil || a.Failure.Index != 1 ||
+		// (the model's state: Rust's, which TypeScript writes no ITF for)
+		noState := a.Failure != nil && a.Failure.State == nil && os.Getenv("QUINT_BACKEND") != "typescript"
+		if a.Module == "" || a.Failure == nil || !strings.Contains(a.Failure.Quint, "QNT") || noState || a.Failure.Index != 1 ||
 			strings.Contains(rep.Summary(), "judged by the Go evaluator") {
 			t.Errorf("%s: a failing run's report is not quint's:\n%s", eval, rep.Summary())
 		}
