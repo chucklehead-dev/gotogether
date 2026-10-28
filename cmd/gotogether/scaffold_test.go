@@ -347,3 +347,34 @@ func TestScaffoldPackageIn(t *testing.T) {
 		t.Errorf("a stock_test file: %q", got)
 	}
 }
+
+// A step's field quint keeps for a built-in (item): a model naming its
+// parameter item is refused, and the refusal says to rename it and map
+// the field; the scaffold of a model that did writes the mapping, not
+// a commented default reading a field item_ no step records.
+func TestScaffoldReservedName(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	write := func(param string) string {
+		spec := filepath.Join(dir, param+".qnt")
+		src := "module stock {\n  var left: int\n  action init = left' = 3\n  action reserve(" + param + ": str, qty: int): bool = left' = left - qty\n  action step = nondet q = 1.to(2).oneOf() reserve(\"apple\", q)\n}\n"
+		if err := os.WriteFile(spec, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return spec
+	}
+	_, err := binding.LoadModel("quint", write("item"), "stock")
+	if err == nil || !strings.Contains(err.Error(), "item is a Quint built-in's name, which no parameter may take: rename it (item_, say) and map the step's field to it in the binding (args: item_: '{{.item}}')") {
+		t.Fatalf("a parameter named item: %v", err)
+	}
+	var out strings.Builder
+	if err := scaffoldTo(&out, "", write("item_"), "stock", false, "", "", "quint"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "      item_: '{{.item}}'   # str; the step's field item, a name quint keeps for a built-in (QNT101)\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("the scaffold lacks %q:\n%s", want, out.String())
+	}
+	if !strings.Contains(out.String(), "      # qty: '{{.qty}}'   # int\n") {
+		t.Errorf("an ordinary parameter's default is no longer commented:\n%s", out.String())
+	}
+}

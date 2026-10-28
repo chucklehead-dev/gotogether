@@ -140,7 +140,7 @@ gotogether reads `QUINT_BACKEND`.
 | `unknown nondet pick "x"` | the `nondet` is named differently from the parameter, or the action has no `nondet` for it | rename (convention 3) |
 | `the trace has no mbt::actionTaken` | trace from `quint test` (no `--mbt`) | use `connect.Run`, or `NondetPath` for specs that record the action in state |
 | `QNT500 Uninitialized const` | running the parameterised module | `--main` the instance module |
-| `QNT101` on a parameter or action named `to`, `of`, `get`, `put`, `set`, `size` (or another builtin; `QNT008` or a parse error for a keyword: `type`, `val`, `and`, `all`) | quint reserves its builtins' and keywords' names (the grist skill's references/model.md lists them) | rename it (`src`/`dest`, `read`/`write`, `value`), and the binding's keys with it |
+| `QNT101` on a parameter or action named `item`, `to`, `of`, `get`, `put`, `set`, `size` (or another builtin; `QNT008` or a parse error for a keyword: `type`, `val`, `and`, `all`) | quint reserves its builtins' and keywords' names (the whole list: `internal/quintnames`, checked against quint's own) | rename it (`item_`, or `src`/`dest`, `read`/`write`, `value`) and map the step's field in the binding (`item_: '{{.item}}'`): `gotogether scaffold` writes the mapping for a parameter renamed with `_`, and `lint -binding -src` names a missing one |
 | `Cannot continue in "then"` (QNT513) in validation | the recorded step is not enabled in the model | an implementation bug, or a wrong binding; see the gotogether-traces skill |
 
 The spec is ground truth. When the code and the model disagree, decide from

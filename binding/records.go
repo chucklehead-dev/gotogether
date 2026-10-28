@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/nearest"
+	"github.com/chucklehead-dev/gotogether/internal/quintnames"
 )
 
 // qobsPath is the import path of the recording package.
@@ -152,12 +153,62 @@ func LintRecords(m *Model, recs []RecordCall) []string {
 	return errs
 }
 
+// recordedFields are the literal field names a Record (or Invoke) call
+// records, observations (obs.*) left out: its key-value arguments' keys.
+func recordedFields(r RecordCall) []string {
+	if r.Call == nil {
+		return nil
+	}
+	first := 3 // Record(ctx, action, err, kv...)
+	if sel, ok := r.Call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Invoke" {
+		first = 2 // Invoke(ctx, action, kv...)
+	}
+	var out []string
+	for i := first; i < len(r.Call.Args); i += 2 {
+		lit, ok := r.Call.Args[i].(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			continue
+		}
+		if k, err := strconv.Unquote(lit.Value); err == nil && !strings.HasPrefix(k, "obs.") {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// lintReservedFields finds the steps that record a field under a name
+// Quint keeps for itself (item, to) whose model's parameter is renamed
+// (item_) and not mapped: the parameter would read a field item_ no
+// step records. The fix is the mapping.
+func (b *Binding) lintReservedFields(m *Model, recs []RecordCall) []string {
+	var errs []string
+	for _, r := range recs {
+		ps, ok := m.Actions[r.Action]
+		if !ok {
+			continue
+		}
+		for _, f := range recordedFields(r) {
+			if !quintnames.Reserved(f) {
+				continue
+			}
+			p := quintnames.Rename(f)
+			if !slices.ContainsFunc(ps, func(q Param) bool { return q.Name == p }) || b.Actions[r.Action].Args[p] != "" {
+				continue
+			}
+			errs = append(errs, fmt.Sprintf("%s: Record(ctx, %q, ...) records the field %s, a Quint built-in's name, which the model's parameter cannot take: its %s reads a field %s by default, which no step records: map it in the binding (actions: %s: args: %s: '{{.%s}}')",
+				r.Pos, r.Action, f, p, p, r.Action, p, f))
+		}
+	}
+	return errs
+}
+
 // LintSource checks annotations (LintAnnotations) and literal Record
 // actions (LintRecords) together, so a bound action that one of them
 // emits is not reported as emitted by neither.
 func (b *Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (errs, warns []string) {
 	errs, _ = b.lintAnnotations(m, anns)
 	errs = append(errs, LintRecords(m, recs)...)
+	errs = append(errs, b.lintReservedFields(m, recs)...)
 	emitted := map[string]bool{}
 	for _, a := range anns {
 		emitted[a.Action] = true
@@ -224,6 +275,9 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 	}
 	for _, r := range recs {
 		emitted[r.Action] = true
+		for _, o := range owners(r.Action) {
+			errs = append(errs, o.Binding.lintReservedFields(o.Model, []RecordCall{r})...)
+		}
 		if len(owners(r.Action)) == 0 {
 			in := ""
 			if r.Func != "" {

@@ -41,6 +41,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/input"
+	"github.com/chucklehead-dev/gotogether/internal/quintnames"
 	"github.com/chucklehead-dev/gotogether/otelio"
 	"github.com/chucklehead-dev/gotogether/qlint"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -238,6 +239,12 @@ func scaffoldTo(w io.Writer, out, spec, module string, system bool, bpath, pkg, 
 			// the defaults, commented out: uncomment to map a field differently
 			fmt.Fprintf(w, "    args:   # default: the step field of the same name\n")
 			for _, p := range ps {
+				if f, ok := quintnames.Original(p.Name); ok {
+					// renamed for quint, which keeps the field's own name
+					// (item, to): the step records it, so it is mapped
+					fmt.Fprintf(w, "      %s: '{{.%s}}'   # %s; the step's field %s, a name quint keeps for a built-in (QNT101)\n", p.Name, f, p.Type, f)
+					continue
+				}
 				fmt.Fprintf(w, "      # %s: '%s'   # %s\n", p.Name, p.DefaultTemplate(), p.Type)
 			}
 		}

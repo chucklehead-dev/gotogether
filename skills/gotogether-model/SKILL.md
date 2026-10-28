@@ -44,7 +44,7 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 | `an anonymous action was taken` | an inline `all {}` in `step` | name it |
 | `unknown nondet pick "x"` | the pick is named otherwise, or missing | rename it after the parameter |
 | `QNT500 Uninitialized const` | the parameterised module was run | `--main` the instance |
-| `QNT101` (or `QNT008`) on a name | a reserved name | rename it, and the binding's keys |
+| `QNT101` (or `QNT008`) on a name: `item is a Quint built-in's name, which no parameter may take` | a reserved name (`item`, `to`, `int`) | rename it `item_` and map the field: `item_: '{{.item}}'` (scaffold writes it) |
 | `possible ...: FAIL` (the model forbids it) | too strict for a scenario | `gotogether nav -binding` to the guard |
 | a `holds` invariant violated in `simulate` | a design bug, or the property is wrong | the counterexample (`-graph -out cex.qnt`) |
 | an `allows` invariant never violated | its check of the code would be vacuous | the model is too strict, or the property moved |

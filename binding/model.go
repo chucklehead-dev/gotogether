@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/memo"
+	"github.com/chucklehead-dev/gotogether/internal/quintnames"
 )
 
 // Model is what gotogether needs to know about a Quint module: its actions with
@@ -183,13 +185,73 @@ func LoadModel(quint, spec, module string) (*Model, error) {
 	cmd := exec.Command(quint, "typecheck", filepath.Base(spec), "--out", tmp.Name())
 	cmd.Dir = filepath.Dir(spec)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("quint typecheck %s: %w\n%s", spec, err, out)
+		// with --out, quint writes its errors there, not to its output: a
+		// refused model once said only "exit status 1"
+		out = append(out, typecheckErrors(tmp.Name())...)
+		return nil, fmt.Errorf("quint typecheck %s: %w\n%s%s", spec, err, out, reservedHint(string(out)))
 	}
 	b, err := os.ReadFile(tmp.Name())
 	if err != nil {
 		return nil, err
 	}
 	return parseTypecheck(b, module)
+}
+
+// typecheckErrors are the errors quint typecheck --out wrote to path,
+// one per line with where each is (file:line:col, 1-based), or nothing
+// when it wrote none.
+func typecheckErrors(path string) []byte {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var out struct {
+		Errors []struct {
+			Explanation string `json:"explanation"`
+			Locs        []struct {
+				Source string `json:"source"`
+				Start  struct{ Line, Col int }
+			} `json:"locs"`
+		} `json:"errors"`
+	}
+	if json.Unmarshal(data, &out) != nil {
+		return nil
+	}
+	var b []byte
+	for _, e := range out.Errors {
+		if len(e.Locs) > 0 {
+			l := e.Locs[0]
+			b = fmt.Appendf(b, "%s:%d:%d: ", l.Source, l.Start.Line+1, l.Start.Col+1)
+		}
+		b = fmt.Appendf(b, "%s\n", e.Explanation)
+	}
+	return b
+}
+
+// builtinRedefined is quint's refusal of a built-in's name as an
+// identifier (QNT101). Read-only.
+var builtinRedefined = regexp.MustCompile(`Built-in name '([A-Za-z_][A-Za-z0-9_]*)' is redefined`)
+
+// reservedHint is the fix for quint's refusals of reserved names in its
+// output: a model's parameter named after a step's field (item, to) that
+// quint keeps for a built-in, renamed, and the binding mapping the field
+// to it. "" when quint refused none.
+func reservedHint(out string) string {
+	var names []string
+	for _, m := range builtinRedefined.FindAllStringSubmatch(out, -1) {
+		if !slices.Contains(names, m[1]) && quintnames.Reserved(m[1]) {
+			names = append(names, m[1])
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	n, are := names[0], "is a Quint built-in's name"
+	if len(names) > 1 {
+		are = "are Quint built-ins' names"
+	}
+	return fmt.Sprintf("%s %s, which no parameter may take: rename it (%s, say) and map the step's field to it in the binding (args: %s: '{{.%s}}'); gotogether scaffold writes that mapping for a parameter so renamed\n",
+		strings.Join(names, ", "), are, quintnames.Rename(n), quintnames.Rename(n), n)
 }
 
 type tcExpr struct {

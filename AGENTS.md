@@ -275,19 +275,26 @@ working there:
 - A step's observed values may be negative (an overdraft's balance): never
   use -1 as "not observed". Pass the observation or nothing.
 - `quint` refuses its built-in operators' names as identifiers (QNT101:
-  `to`, `of`, `in`, `not`, `then`, `with`, `map`, `filter`, `fold`,
-  `keys`, `get`, `put`, `set`, `size`, `length`, `head`, `tail`, `nth`,
-  `range`, `select`, `union`, `contains`, `exists`, `forall`, `next`,
-  `fail`, `assert`, `reps`, `always`, `eventually`, `enabled`, the type
-  names `Set`, `List`, `Map`, `Int`, `Bool`, `Nat`) and its keywords
-  (QNT008 or a parse error: `and`, `or`, `iff`, `implies`, `match`,
-  `import`, `export`, `type`, `if`, `else`, `all`, `any`, `val`, `def`,
-  `var`, `const`, `action`, `run`, `pure`, `nondet`, `module`,
-  `assume`, `true`, `false`), checked with quint 0.33 on a parameter of
-  each name. A step field becomes a parameter by its name (a grist
-  command's or event's Go field by its JSON name): grpcledger's model
-  says `src`/`dest`; grist's generator renames such a parameter (`of_`,
-  the binding's template naming the field).
+  `item`, `to`, `of`, `in`, `not`, `then`, `with`, `map`, `filter`,
+  `fold`, `keys`, `get`, `put`, `set`, `size`, `length`, `head`, `tail`,
+  `nth`, `range`, `select`, `union`, `contains`, `exists`, `forall`,
+  `next`, `fail`, `assert`, `reps`, `always`, `eventually`, `enabled`,
+  `field`, `fields`, `append`, `concat`, `slice`, the type names `Set`,
+  `List`, `Map`, `Int`, `Bool`, `Nat`, `Tup`, `Rec`, and more) and its
+  keywords (QNT008 or a parse error: `and`, `or`, `iff`, `implies`,
+  `match`, `import`, `export`, `type`, `if`, `else`, `all`, `any`, `val`,
+  `def`, `var`, `const`, `action`, `run`, `temporal`, `pure`, `nondet`,
+  `module`, `assume`, `true`, `false`, `int`, `str`, `bool`). The whole
+  list is `internal/quintnames` (`Builtins`, `Keywords`), checked against
+  quint's own list of built-ins and its lexer's keywords (a quint bump
+  that adds one fails its test): never keep another by hand. A step field
+  becomes a parameter by its name (a grist command's or event's Go field
+  by its JSON name): grpcledger's model says `src`/`dest`; a model renames
+  such a parameter `item_` (`quintnames.Rename`), and the binding maps
+  the field to it (`item_: '{{.item}}'`): `gotogether scaffold` writes
+  that mapping, `lint -binding -src` names a missing one, and LoadModel's
+  QNT101 error says so. grist's generator renames such a parameter itself
+  (`of_`, its `catalog.QuintTaken`, checked against quint too).
 - A crashable process whose restart redoes its whole job (a publisher that
   republishes everything) livelocks a run under per-step crash rates:
   every restart adds work at the same virtual instant. Give it durable

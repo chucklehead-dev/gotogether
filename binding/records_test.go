@@ -116,6 +116,39 @@ func f() {
 	}
 }
 
+// A step recording a field under a name Quint keeps (item) for a model
+// whose parameter is renamed (item_) needs the binding's mapping: the
+// lint names it, and the mapping clears it. A newcomer's first model met
+// QNT101 on item, then a parameter reading a field no step had.
+func TestLintReservedField(t *testing.T) {
+	src := `package app
+
+import "github.com/chucklehead-dev/gotogether/qobs"
+
+func f() {
+	qobs.Record(nil, "reserve", nil, "item", "apple", "qty", 1, "obs.left", 2)
+	qobs.Invoke(nil, "reserve", "item", "pear", "qty", 1)
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "app.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := &Model{Module: "stock", Actions: map[string][]Param{"init": nil, "step": nil,
+		"reserve": {{Name: "item_", Type: "str"}, {Name: "qty", Type: "int"}}}}
+	b := &Binding{Actions: map[string]Action{"reserve": {}}}
+	errs, _ := b.LintSource(m, nil, RecordsOf(fset, f))
+	want := `app.go:6:19: Record(ctx, "reserve", ...) records the field item, a Quint built-in's name, which the model's parameter cannot take: its item_ reads a field item_ by default, which no step records: map it in the binding (actions: reserve: args: item_: '{{.item}}')`
+	if len(errs) != 2 || errs[0] != want || !strings.HasPrefix(errs[1], "app.go:7:19: ") {
+		t.Fatalf("errs:\n%s\nwant first:\n%s", strings.Join(errs, "\n"), want)
+	}
+	b.Actions["reserve"] = Action{Args: map[string]string{"item_": "{{.item}}"}}
+	if errs, _ := b.LintSource(m, nil, RecordsOf(fset, f)); len(errs) != 0 {
+		t.Fatalf("mapped, still: %q", errs)
+	}
+}
+
 // LintSource counts an action a literal Record emits as emitted.
 func TestLintSourceEmitted(t *testing.T) {
 	b := &Binding{Actions: map[string]Action{"deposit": {}, "withdraw": {}}}

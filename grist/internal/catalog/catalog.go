@@ -446,6 +446,7 @@ var QuintTaken = func() map[string]bool {
 	m := map[string]bool{}
 	for _, n := range strings.Fields(`module import export from as const var val def pure action run temporal nondet
 		type assume if else match all any and or not iff implies true false Bool Int Nat Set Map List Tup Rec
+		int str bool
 		exists forall in union contains fold intersect exclude subseteq map applyTo filter powerset flatten
 		allLists allListsUpTo getOnlyElement chooseSome oneOf isFinite size get put keys mapBy setToMap setOfMaps
 		set setBy fields with tuples append concat head tail length nth indices replaceAt slice select foldl foldr
