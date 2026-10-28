@@ -68,8 +68,8 @@ func TestAgreesWithQuint(t *testing.T) {
 // refusal is right, a successor quint's trace does not take is not.
 // rr's round robin folds a set in an order that matters, which folded
 // sorted and reversed agreed both ways, and not in quint's order
-// (review 11, F1).
-var mayRefuse = map[string]bool{"qtest/testdata/rr.yaml": true}
+// (review 11, F1); validate's copy is -compiled's refused model.
+var mayRefuse = map[string]bool{"qtest/testdata/rr.yaml": true, "validate/testdata/rr.yaml": true}
 
 // templated reports whether a binding's constants come from its steps
 // (set, max, count): no instance without a history.
