@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"time"
 
 	"path/filepath"
 	"sync"
@@ -51,6 +52,9 @@ type mode struct {
 	// ctx is the Judge's or MutateSteps' context, which a search's quint
 	// checks run under (cancelling it kills them); nil: Background
 	ctx context.Context
+	// skew is how far apart recorders' clocks may be for a search's real
+	// time (SearchOptions.Skew; 0: qtrace.RealTimeSlack)
+	skew time.Duration
 }
 
 // context is the context of c's search's quint checks.

@@ -73,7 +73,12 @@ searches each key's operations alone, each reported as its own actor
 (`default key=a`): the orders of k keys no longer multiply. A step without
 the argument fails the test. examples/kvstore's model counts one revision
 across keys, so its keys are not independent: it uses `Linearize`.
-Converted spans
+Across recorders with no call records or order keys, real time is their
+clocks' word, taken within 1 ms (`qtrace.RealTimeSlack`): a verdict of
+no order says which orders it took from clocks and the closest gap
+("it assumes the clocks within 1ms"), true only if they are. Give the
+hosts' real bound with `qtest.ClockSkew(5*time.Millisecond)` (CLI
+`-skew 5ms`), or order keys. Converted spans
 carry their start as the invocation.
 In a simulation, steps carry its virtual time, and an exploration takes
 the same options: a simulated client history is linearized run by run.

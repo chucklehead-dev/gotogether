@@ -86,8 +86,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   made a real-time edge and a `G-single-realtime` that did not happen.
   Elle treats `:info` as infinity. Session order and lost writes are
   I45's.
-- **I7. Real time across recorders named in the verdict (S). In
-  progress.** Two recorders with neither `Call` nor order keys are
+- **I7. Real time across recorders named in the verdict (S). Done**
+  (the verdict names the orders by clocks and the skew; one skew for
+  the history, `qtest.ClockSkew`, `validate -skew`; left: the kvstore
+  example, and a skew per pair, G8). Two recorders with neither `Call` nor order keys are
   ordered by wall time within `RealTimeSlack` (1 ms), and a
   `NotLinearizable` proof is then true only under that clock
   assumption, which quint's re-check cannot touch. The verdict names

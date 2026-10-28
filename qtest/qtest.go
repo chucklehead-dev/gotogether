@@ -37,6 +37,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 
@@ -67,6 +68,8 @@ type settings struct {
 	Linearize bool
 	// linearizeBudget is LinearizeBudget's (0: DefaultLinearizeBudget)
 	linearizeBudget int
+	// clockSkew is ClockSkew's (0: qtrace.RealTimeSlack)
+	clockSkew time.Duration
 	// linearizeKey is LinearizeByKey's argument ("": no partition)
 	linearizeKey string
 	// resolvePending is ResolvePending's
@@ -98,6 +101,7 @@ var (
 	optLinearize       = optionID{"Linearize"}
 	optLinearizeBudget = optionID{"LinearizeBudget"}
 	optLinearizeByKey  = optionID{"LinearizeByKey"}
+	optClockSkew       = optionID{"ClockSkew"}
 	optQuint           = optionID{"Quint"}
 	optRecorderOptions = optionID{"RecorderOptions"}
 	optResolvePending  = optionID{"ResolvePending"}
@@ -141,7 +145,7 @@ var (
 	whyStepMutants = "it narrows MutateSteps' observation mutants; pass the steps to qtest.MutateSteps"
 	exploreIgnores = map[optionID]string{optGlobal: whyGlobal, optDriver: whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants}
 	whyCaseOrder   = "a case's steps are checked as it records them, in that order; Linearize and ResolvePending are Record's, Validate's and explorations'"
-	casesIgnore    = map[optionID]string{optLinearize: whyCaseOrder, optLinearizeBudget: whyCaseOrder, optLinearizeByKey: whyCaseOrder, optResolvePending: whyCaseOrder,
+	casesIgnore    = map[optionID]string{optLinearize: whyCaseOrder, optLinearizeBudget: whyCaseOrder, optLinearizeByKey: whyCaseOrder, optClockSkew: whyCaseOrder, optResolvePending: whyCaseOrder,
 		optSkipIfEmpty: "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing",
 		optDriver:      whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants}
 	whyUnchecked    = "no case is checked against the model"
@@ -533,7 +537,7 @@ func checkedNames(ch *validate.Checker) map[string]bool {
 // searchOptions are the searches c asks for (Linearize, LinearizeByKey,
 // ResolvePending): none, the steps as recorded.
 func (c settings) searchOptions() validate.SearchOptions {
-	return validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending}
+	return validate.SearchOptions{Linearize: c.Linearize, Key: c.linearizeKey, Budget: c.linearizeBudget, ResolvePending: c.resolvePending, Skew: c.clockSkew}
 }
 
 // firstOr is the first of msgs, or a placeholder when none was kept.

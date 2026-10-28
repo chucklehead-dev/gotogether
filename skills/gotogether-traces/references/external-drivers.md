@@ -200,9 +200,10 @@ model of "the page shows ready only after the commit" is about, is lost
 conforms).
 
 Across hosts, the driver's and the server's clocks order their steps
-only if in sync to within `qtrace.RealTimeSlack` (1 ms): give the
-records an order key both sides carry (`order`, a request id's
-sequence) instead.
+only if in sync to within `qtrace.RealTimeSlack` (1 ms; `-skew`,
+`qtest.ClockSkew` set the bound a linearization assumes, and its verdict
+names the orders it took from clocks): give the records an order key
+both sides carry (`order`, a request id's sequence) instead.
 
 ## Refs: the way back to the artifact
 

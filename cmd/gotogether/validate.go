@@ -70,6 +70,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	lin := fset.Bool("linearize", false, "check each actor's steps in an order real time allows, searched for one the model accepts (a client history: steps recorded when calls returned)")
 	fset.StringVar(&v.search.Key, "linearize-key", "", "linearize each actor's history partitioned by this argument's value (independent keys), each partition alone")
 	fset.IntVar(&v.search.Budget, "linearize-budget", 0, "orders a linearization checks per actor or partition (default 200)")
+	fset.DurationVar(&v.search.Skew, "skew", 0, "how far apart recorders' clocks may be when real time orders a linearization's steps (default 1ms); implies -linearize")
 	fset.BoolVar(&v.search.ResolvePending, "resolve-pending", false, "search what each call left pending (invoked, never completed) may have done")
 	fset.StringVar(&v.history, "history", "", "write the history drawn as SVG to this file (lanes of calls, the order checked numbered, the failing step red, each call's ref on hover)")
 	fset.StringVar(&v.lostPrefix, "lost-prefix", "", "comma-separated recorders whose logs lost their first steps, which the log cannot show (no seqs): judged as a lost prefix (qtrace.MarkLost)")
@@ -106,7 +107,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 			return 2, fmt.Errorf("validate -mutate-ops: %q is no mutation; the ops are %s", op, strings.Join(qtrace.MutationOps, ", "))
 		}
 	}
-	v.search.Linearize = *lin || v.search.Key != ""
+	v.search.Linearize = *lin || v.search.Key != "" || v.search.Skew > 0
 	if *invs != "" {
 		v.invariants = strings.Split(*invs, ",")
 	}

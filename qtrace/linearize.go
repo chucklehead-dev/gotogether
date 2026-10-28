@@ -34,7 +34,7 @@ func realTime(steps []Step) []Issue {
 		// an invocation time the recorder gave is its own clock's: an error
 		// against another machine's would be the clocks' skew (the user's
 		// "invoked" is a claim about real time, and is checked)
-		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && !s.fromRecord && steps[j].Time.Add(RealTimeSlack).Before(s.Invoked) {
+		if j := earliest[i+1]; j >= 0 && !s.Invoked.IsZero() && !s.fromRecord && steps[j].Time.Add(max(RealTimeSlack, s.slack, steps[j].slack)).Before(s.Invoked) {
 			a := &steps[j]
 			out = append(out, Issue{"error", "realtime", fmt.Sprintf("%s (seq %d) completed before %s (seq %d) was invoked, but the order puts it after: "+
 				"the thread or order keys contradict real time (a step recorded before its effect, an order key from another clock)", a.Action, a.Seq, s.Action, s.Seq)})
@@ -127,8 +127,12 @@ func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Lineari
 	if budget <= 0 {
 		budget = DefaultLinearizeBudget
 	}
-	best, ok, tried, cut, proof := linearizePending(steps, opt.Pending, opt.Settles, budget, inner, opt.First)
-	l = &Linearization{Order: best, Tried: tried, Proof: proof}
+	skew := opt.Skew
+	if skew <= 0 {
+		skew = RealTimeSlack
+	}
+	best, ok, tried, cut, proof := linearizePending(steps, opt.Pending, opt.Settles, budget, inner, opt.First, skew)
+	l = &Linearization{Order: best, Tried: tried, Proof: proof, Clocks: ClockOrders(steps, skew)}
 	switch {
 	case ok:
 		l.Verdict = Linearizable
@@ -158,6 +162,12 @@ type LinearizeOptions struct {
 	// the history starts from (binding's Snapshot), which nothing can
 	// precede.
 	First bool
+	// Skew is how far apart the clocks of two recorders may be (0:
+	// RealTimeSlack, 1 ms): real time orders a step of one before
+	// another's invocation only when it completed more than Skew earlier
+	// by their clocks. A verdict of no order that rests on such orders
+	// holds only if the clocks are within it (Linearization.Clocks).
+	Skew time.Duration
 }
 
 // An OrderCheck judges candidate orders for Linearize: for each, the index of
@@ -180,6 +190,66 @@ type Linearization struct {
 	// Proof is what a verdict of NotLinearizable rests on (nil for any
 	// other): an oracle other than check confirms it.
 	Proof *Proof
+	// Clocks are the orders real time took from different recorders'
+	// clocks: a NotLinearizable verdict assumes those clocks within its
+	// skew, which no oracle's re-check of the Proof touches (it is given
+	// the same orders). Zero when every order is one recorder's.
+	Clocks ClockAssumption
+}
+
+// A ClockAssumption is what a search took from clocks of different
+// recorders: Orders pairs of steps ordered by them (a step of one
+// completed more than Skew before another's invocation, neither paired
+// by a call record nor ordering itself by domain clocks), between
+// Recorders, the closest Closest apart. With clocks Closest apart or
+// more, the nearest of those orders may not hold.
+type ClockAssumption struct {
+	Skew      time.Duration
+	Orders    int
+	Closest   time.Duration
+	Recorders []string
+}
+
+// String is the assumption as a verdict says it ("" for none).
+func (c ClockAssumption) String() string {
+	if c.Orders == 0 {
+		return ""
+	}
+	pairs := fmt.Sprintf("%d pairs of steps", c.Orders)
+	if c.Orders == 1 {
+		pairs = "a pair of steps"
+	}
+	return fmt.Sprintf("real time across recorders %s orders %s by their clocks, the closest %s apart: it assumes the clocks within %s (a skew they may exceed: qtest.ClockSkew, validate -skew)",
+		strings.Join(c.Recorders, ", "), pairs, c.Closest, c.Skew)
+}
+
+// ClockOrders are the orders real time takes from different recorders'
+// clocks among steps, with clocks up to skew apart (0: RealTimeSlack), as
+// Linearize takes them (Linearization.Clocks).
+func ClockOrders(steps []Step, skew time.Duration) ClockAssumption {
+	if skew <= 0 {
+		skew = RealTimeSlack
+	}
+	c := ClockAssumption{Skew: skew}
+	for _, a := range steps {
+		for _, b := range steps {
+			if a.Recorder == b.Recorder || b.Invoked.IsZero() || (a.fromRecord || b.fromRecord) && (len(a.Order) > 0 || len(b.Order) > 0) {
+				continue
+			}
+			if gap := b.Invoked.Sub(a.Time); gap > skew {
+				if c.Orders++; c.Orders == 1 || gap < c.Closest {
+					c.Closest = gap
+				}
+				for _, r := range []string{a.Recorder, b.Recorder} {
+					if !slices.Contains(c.Recorders, r) {
+						c.Recorders = append(c.Recorders, r)
+					}
+				}
+			}
+		}
+	}
+	slices.Sort(c.Recorders)
+	return c
 }
 
 // A LinearizeVerdict is a Linearize search's conclusion.
@@ -225,13 +295,13 @@ type Proof struct {
 // linearizeProof is linearizeStates with the proof of a verdict of no
 // order (nil for any other).
 func linearizeProof(steps []Step, budget int, check func(orders [][]Step) (failed []int, states []string)) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
-	return linearizePending(steps, nil, nil, budget, check, false)
+	return linearizePending(steps, nil, nil, budget, check, false, RealTimeSlack)
 }
 
 // linearizePending is Linearize's search, its check's errors panics.
-func linearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string), first bool) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
+func linearizePending(steps, pending, settles []Step, budget int, check func(orders [][]Step) (failed []int, states []string), first bool, skew time.Duration) (best []Step, ok bool, tried int, cut bool, proof *Proof) {
 	proof = &Proof{}
-	best, ok, tried, cut = linearizeWith(steps, pending, settles, budget, check, !hooks.CompleteSearchOnly.Load(), proof, first)
+	best, ok, tried, cut = linearizeWith(steps, pending, settles, budget, check, !hooks.CompleteSearchOnly.Load(), proof, first, skew)
 	if ok || cut {
 		proof = nil
 	}
@@ -242,7 +312,7 @@ func linearizePending(steps, pending, settles []Step, budget int, check func(ord
 // indices into ns), the relation every order must keep, how an order of
 // indices becomes steps on one recorder, and a cycle of the hard edges,
 // broken.
-func constraints(steps []Step) (ns []*node, at []int, mustPrecede func(a, b int) bool, render func([]int) []Step, issues []Issue) {
+func constraints(steps []Step, skew time.Duration) (ns []*node, at []int, mustPrecede func(a, b int) bool, render func([]int) []Step, issues []Issue) {
 	ns = build(steps)
 	at = kahn(ns, &issues)
 	hard := map[[2]int]bool{}
@@ -264,7 +334,7 @@ func constraints(steps []Step) (ns []*node, at []int, mustPrecede func(a, b int)
 			return false // machines that order themselves by domain clocks: their own clocks compare with no other's
 		}
 		inv := sb.Invoked
-		return !inv.IsZero() && sa.Time.Add(RealTimeSlack).Before(inv)
+		return !inv.IsZero() && sa.Time.Add(skew).Before(inv)
 	}
 	mustPrecede = func(a, b int) bool { return hard[[2]int{a, b}] || after(a, b) }
 	actor := steps[0].Actor
@@ -274,6 +344,7 @@ func constraints(steps []Step) (ns []*node, at []int, mustPrecede func(a, b int)
 			s := ns[k].s
 			s.Recorder, s.Thread, s.Seq = "linearized:"+actor, "linearized", uint64(i+1)
 			s.Call = 0 // paired already: on the new recorder its invocation's seq means another record
+			s.slack = skew
 			out[i] = s
 		}
 		return out
@@ -285,11 +356,15 @@ func constraints(steps []Step) (ns []*node, at []int, mustPrecede func(a, b int)
 // allow, when there is one (each step must precede the next): a search
 // would try it alone, so a caller that checks the order it returns needs
 // no search. Its steps are on one recorder, as Linearize's.
-func ForcedOrder(steps []Step) ([]Step, bool) {
+func ForcedOrder(steps []Step) ([]Step, bool) { return ForcedOrderWithin(steps, RealTimeSlack) }
+
+// ForcedOrderWithin is ForcedOrder with recorders' clocks up to skew apart
+// (LinearizeOptions.Skew).
+func ForcedOrderWithin(steps []Step, skew time.Duration) ([]Step, bool) {
 	if len(steps) == 0 {
 		return nil, true
 	}
-	_, at, mustPrecede, render, issues := constraints(steps)
+	_, at, mustPrecede, render, issues := constraints(steps, skew)
 	if len(issues) > 0 {
 		return nil, false // a cycle, broken: the search reports it
 	}
@@ -304,17 +379,17 @@ func ForcedOrder(steps []Step) ([]Step, bool) {
 // linearize is linearizeStates; without guided, the complete search alone
 // (for tests of it).
 func linearize(steps []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
-	return linearizeWith(steps, nil, nil, budget, check, guided, proof, false)
+	return linearizeWith(steps, nil, nil, budget, check, guided, proof, false, RealTimeSlack)
 }
 
 // before reports whether a step was recorded before another took effect
 // or was invoked: on one recorder by seq, else by time beyond the slack
-// (ResolvePending's bounds on a pending call).
-func before(a, b Step) bool {
+// (ResolvePending's bounds on a pending call), skew the clocks' slack.
+func before(a, b Step, skew time.Duration) bool {
 	if a.Recorder == b.Recorder {
 		return a.Seq < b.Seq
 	}
-	return a.Time.Add(RealTimeSlack).Before(b.Time)
+	return a.Time.Add(skew).Before(b.Time)
 }
 
 // orderKey is an order of indices as a memo's key: one key per order
@@ -331,11 +406,11 @@ func orderKey(order []int) string {
 // linearizeWith is linearizePending: steps are nodes 0..n-1, pending calls
 // n..n+m-1, which no order needs. With first, node 0 precedes every other
 // (LinearizeOptions.First).
-func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof, first bool) (best []Step, ok bool, tried int, cut bool) {
+func linearizeWith(steps, pending, settles []Step, budget int, check func(orders [][]Step) ([]int, []string), guided bool, proof *Proof, first bool, skew time.Duration) (best []Step, ok bool, tried int, cut bool) {
 	if len(steps) == 0 {
 		return nil, true, 0, false // nothing observed: no call need have taken effect
 	}
-	ns, at, required, renderSteps, _ := constraints(steps)
+	ns, at, required, renderSteps, _ := constraints(steps, skew)
 	n := len(ns)
 	// a pending call's bounds: the steps recorded before its invocation
 	// precede it; it precedes the steps, and the pending calls, recorded
@@ -345,21 +420,21 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 	for pi, p := range pending {
 		i := n + pi
 		for j := range n {
-			if before(ns[j].s, p) {
+			if before(ns[j].s, p, skew) {
 				bound[[2]int{j, i}] = true
 			}
 		}
 		for _, st := range settles {
-			if !before(p, st) {
+			if !before(p, st, skew) {
 				continue
 			}
 			for j := range n {
-				if before(st, ns[j].s) {
+				if before(st, ns[j].s, skew) {
 					bound[[2]int{i, j}] = true
 				}
 			}
 			for qi, q := range pending {
-				if qi != pi && before(st, q) {
+				if qi != pi && before(st, q, skew) {
 					bound[[2]int{i, n + qi}] = true
 				}
 			}

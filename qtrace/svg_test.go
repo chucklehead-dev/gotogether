@@ -27,7 +27,7 @@ func TestHistorySVG(t *testing.T) {
 	recorded = append(recorded, call("late", 11, 12, "read", map[string]any{}, map[string]any{"v": int64(7)})...)
 	traces, _ := Reconstruct(recorded)
 	tr := traces[0]
-	order, ok, _, _, _ := linearizePending(tr.Steps, tr.Pending, nil, 1000, registerFinal(len(tr.Steps), -1), false)
+	order, ok, _, _, _ := linearizePending(tr.Steps, tr.Pending, nil, 1000, registerFinal(len(tr.Steps), -1), false, RealTimeSlack)
 	if ok {
 		t.Fatalf("a read of 7 conforms")
 	}

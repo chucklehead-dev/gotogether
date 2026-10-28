@@ -31,6 +31,13 @@ The first release. What a user meets, by module:
   are still every run's. New: `qenv.CoverageWith(runs, sites...)` and
   `Sim.FaultSites()`; qtest's coverage passes its runs' sites itself.
   `TestFaultPoints` passed or failed by test order.
+- Clocks across recorders (review 11, F5): `qtest.ClockSkew`,
+  `validate -skew`, `validate.SearchOptions.Skew` and
+  `qtrace.LinearizeOptions.Skew` set how far apart recorders' clocks may
+  be (default 1 ms); `qtrace.Linearization.Clocks` and
+  `qtrace.ClockOrders` (a `ClockAssumption`) name the orders real time
+  took from clocks, which a linearization's verdict now states;
+  `qtrace.ForcedOrderWithin`.
 - A choice a bound action makes inside (review 11, F2):
   `binding.Model.Chooses` (an action's nondets and `any {}`s, through
   the actions it calls) and `Binding.LintChoices` (`lint -binding`'s

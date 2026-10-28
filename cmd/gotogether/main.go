@@ -126,7 +126,7 @@ usage:
   gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
                    [-spec M.qnt -module M -instance I] [-novars]
                    [-convert rules.yaml] [-invariants a,b] [-itf] [-require-finish]
-                   [-linearize] [-linearize-key arg] [-linearize-budget n] [-resolve-pending] [-history h.svg]
+                   [-linearize] [-linearize-key arg] [-linearize-budget n] [-skew d] [-resolve-pending] [-history h.svg]
                    [-lost-prefix r,s] [-lost-suffix r,s] [-complete-through recorder=T]
                    [-mutate-steps [-mutate-ops o,p] [-mutate-limit n]] [-quint q] [-v]
                    [-manifest run.json [-run-info info.json]] FILE...   (validate -h says what each does)

@@ -2773,6 +2773,16 @@ verdicts quint does not give. Each reproduction is a regression test now
   with every invariant holding, and a cut search is no verdict
   (`TestSoundResolveKeepsInvariants`,
   `TestResolvePendingInvariantsAgainstBruteForce`).
+- **F5, clocks across recorders** (medium). Linearize ordered two
+  recorders' steps by their clocks within a fixed 1 ms and said nothing
+  of it: a `NotLinearizable` proof was true only under that clock
+  assumption, which quint's re-check cannot touch. The verdict now names
+  the orders it took from clocks, their recorders, the closest gap and
+  the skew assumed; the skew is a setting (`qtest.ClockSkew`,
+  `validate -skew`, `SearchOptions.Skew`, `LinearizeOptions.Skew`): a
+  stale read 2 ms after a write on another host is a Mismatch "assuming
+  the clocks within 1ms", and linearizable with a skew of 5 ms
+  (`TestSoundClockSkewNamed`).
 - **F4, an unknown outcome's timeout as its completion** (medium).
   qhistory's real-time edges used `Completed` of every committed or seen
   transaction, an Unknown one's too: a timeout at 1 of an append a later

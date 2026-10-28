@@ -124,6 +124,9 @@ type Step struct {
 	// fromRecord: Invoked is the invocation record's time (Reconstruct),
 	// the recorder's own clock, which no other machine's compares with
 	fromRecord bool
+	// slack: the clocks' skew a search ordered the step with
+	// (LinearizeOptions.Skew), which the check of its order keeps
+	slack time.Duration
 	// carried: a watermark record a search's order carries
 	// (CarryWatermark), taken as it is; carriedWhole: some recorder of
 	// the actor stated none

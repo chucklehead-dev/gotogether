@@ -90,3 +90,26 @@ func TestSoundInternalChoiceIsNoVerdict(t *testing.T) {
 	roll[0].Obs["x"] = int64(7)
 	Validate(t, "testdata/die.yaml", roll).Expect(t, Mismatch("roll"))
 }
+
+// Two hosts: a write recorded by one completes at 1 ms, a read recorded
+// by the other is invoked at 3 ms (2 ms after) and misses it. Real time across them
+// is their clocks' word: with clocks within 1 ms the read is stale, and
+// the verdict now says it rests on that (it once said nothing of it);
+// with a skew of 5 ms (two hosts under NTP) the read may precede the
+// write, and the history is linearizable (F5).
+func TestSoundClockSkewNamed(t *testing.T) {
+	RequireQuint(t)
+	t.Parallel()
+	at := func(ms int) time.Time { return time.Unix(100, 0).Add(time.Duration(ms) * time.Millisecond) }
+	steps := []qtrace.Step{
+		{Action: "write", Recorder: "host-a", Seq: 1, Invoked: at(0), Time: at(1), Args: map[string]any{"key": "a", "value": int64(1)}},
+		{Action: "read", Recorder: "host-b", Seq: 1, Invoked: at(3), Time: at(4), Args: map[string]any{"key": "a"}, Obs: map[string]any{"value": int64(0)}},
+	}
+	stale := Validate(t, "testdata/registers.yaml", steps, Linearize())
+	stale.Expect(t, Mismatch("read"))
+	if s := fmt.Sprint(stale.Report.Issues); !strings.Contains(s, "host-a, host-b orders a pair of steps by their clocks, the closest 2ms apart: it assumes the clocks within 1ms") ||
+		!strings.Contains(s, "rests on") {
+		t.Errorf("the clock assumption unnamed: %s", s)
+	}
+	Validate(t, "testdata/registers.yaml", steps, ClockSkew(5*time.Millisecond)).Expect(t, Conforms())
+}

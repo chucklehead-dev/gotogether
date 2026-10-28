@@ -840,7 +840,7 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 		check := registerFinal(len(steps), final, need...)
 		first := rng.IntN(3) == 0
 		want := brutePending(steps, pending, settles, check, first)
-		got, ok, _, cut, proof := linearizePending(steps, pending, settles, 1000000, check, first)
+		got, ok, _, cut, proof := linearizePending(steps, pending, settles, 1000000, check, first, RealTimeSlack)
 		if g, w := got[0], steps[0]; ok && first && (g.Action != w.Action || !g.Time.Equal(w.Time) || !g.Invoked.Equal(w.Invoked) || fmt.Sprint(g.Args, g.Obs) != fmt.Sprint(w.Args, w.Obs)) {
 			t.Fatalf("trial %d: the first step is not first: %v", trial, got)
 		}
@@ -886,11 +886,11 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 		}
 		// the complete search alone decides the same; a small budget may cut
 		// the search, but a verdict it gives must be right
-		if _, cok, _, ccut := linearizeWith(steps, pending, settles, 1000000, check, false, &Proof{}, first); ccut || cok != want {
+		if _, cok, _, ccut := linearizeWith(steps, pending, settles, 1000000, check, false, &Proof{}, first, RealTimeSlack); ccut || cok != want {
 			t.Fatalf("trial %d: the complete search alone: ok %v (cut %v), brute force %v", trial, cok, ccut, want)
 		}
 		for _, budget := range []int{1, 3, 10} {
-			if _, bok, _, bcut, _ := linearizePending(steps, pending, settles, budget, check, first); !bcut && bok != want {
+			if _, bok, _, bcut, _ := linearizePending(steps, pending, settles, budget, check, first, RealTimeSlack); !bcut && bok != want {
 				t.Fatalf("trial %d, budget %d: a verdict of ok %v, brute force %v", trial, budget, bok, want)
 			}
 		}
@@ -1019,14 +1019,14 @@ func TestLinearizePendingAcrossASettle(t *testing.T) {
 	p1, p2 := pending("p1", 1, 2), pending("p2", 2, 6)
 	settles := []Step{{Action: "settled", Settled: true, Recorder: "s", Seq: 1, Time: at(4)}, {Action: "settled", Settled: true, Recorder: "s", Seq: 2, Time: at(20)}}
 	check := registerFinal(1, 1, 1, 2) // ends at 1, both written: 2 before 1
-	if _, ok, _, cut, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, check, false); ok || cut {
+	if _, ok, _, cut, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, check, false, RealTimeSlack); ok || cut {
 		t.Errorf("ok %v, cut %v: the write invoked after the settle placed before the one invoked before it", ok, cut)
 	}
 	if brutePending([]Step{s0}, []Step{p1, p2}, settles, check, false) {
 		t.Errorf("the brute force places them so too")
 	}
 	// the other way round it conforms: 1 then 2, ending at 2
-	if _, ok, _, _, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, registerFinal(1, 2, 1, 2), false); !ok {
+	if _, ok, _, _, _ := linearizePending([]Step{s0}, []Step{p1, p2}, settles, 10000, registerFinal(1, 2, 1, 2), false, RealTimeSlack); !ok {
 		t.Errorf("the order real time allows does not conform")
 	}
 }

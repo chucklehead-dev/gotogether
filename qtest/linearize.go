@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"fmt"
+	"time"
 )
 
 // Linearize makes Validate and Record check steps in an order their
@@ -59,4 +60,18 @@ func LinearizeBudget(n int) Option {
 		panic(fmt.Sprintf("qtest: LinearizeBudget(%d): the budget is a number of orders to check, at least 1", n))
 	}
 	return option(optLinearizeBudget, func(c *settings) { c.Linearize, c.linearizeBudget = true, n })
+}
+
+// ClockSkew is Linearize with recorders' clocks up to d apart (at least
+// 0; the default is qtrace.RealTimeSlack, 1 ms): real time orders a step
+// of one recorder before another's invocation only when it completed
+// more than d earlier by their clocks. A verdict of no order that rests
+// on such orders names them and the skew it assumed ("the closest 2ms
+// apart: it assumes the clocks within 1ms"); give the hosts' real bound
+// (NTP's, often well over 1 ms), or order keys.
+func ClockSkew(d time.Duration) Option {
+	if d < 0 {
+		panic(fmt.Sprintf("qtest: ClockSkew(%s): a skew is how far apart clocks may be, at least 0", d))
+	}
+	return option(optClockSkew, func(c *settings) { c.Linearize, c.clockSkew = true, d })
 }

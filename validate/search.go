@@ -37,6 +37,10 @@ type SearchOptions struct {
 	// ResolvePending searches the pending calls' effects, in recorded order.
 	ResolvePending bool
 	ResolveBudget  int // 0: DefaultResolveBudget
+	// Skew is how far apart two recorders' clocks may be when real time
+	// orders their steps (0: qtrace.RealTimeSlack, 1 ms): a verdict that
+	// rests on such an order says so, and holds only within it.
+	Skew time.Duration
 }
 
 // A search is a run's steps as a search ordered them, for Check, and what
@@ -223,7 +227,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 	if err != nil {
 		return nil, err
 	}
-	lc.mode.byCheck = byCheck
+	lc.mode.byCheck, lc.mode.skew = byCheck, opt.Skew
 	s = &search{again: func() (*search, error) {
 		q := *c
 		q.mode.quintOnly = true
@@ -234,7 +238,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		// search merge prefixes of one state (qtrace.Linearize)
 		lc.Options.Dir, lc.Options.NoITF, lc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize"), false, true
 		fc := *c // the invariants' search (an order that violates one): verdicts only too
-		fc.mode.byCheck = byCheck
+		fc.mode.byCheck, fc.mode.skew = byCheck, opt.Skew
 		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "linearize-invariants"), true, true
 		budget := opt.Budget
 		if budget == 0 {
@@ -698,7 +702,7 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 		// a candidate quint could not check ends the search with its error
 		// (fail's searchError), which qtrace returns: raised again here, for
 		// search's recover
-		l, err := qtrace.Linearize(tr.Steps, qtrace.LinearizeOptions{Budget: budget, Pending: pending, Settles: settles, First: snapshotFirst(ch.Binding, tr)},
+		l, err := qtrace.Linearize(tr.Steps, qtrace.LinearizeOptions{Budget: budget, Pending: pending, Settles: settles, First: snapshotFirst(ch.Binding, tr), Skew: ch.mode.skew},
 			func(orders [][]qtrace.Step) (fs []int, states []string, err error) {
 				defer func() {
 					if r := recover(); r != nil {
@@ -715,7 +719,7 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 		if err != nil {
 			panic(err.(searchError))
 		}
-		return found{l.Order, l.Verdict == qtrace.Linearizable, l.Tried, l.Verdict == qtrace.Undecided}, l.Proof
+		return found{l.Order, l.Verdict == qtrace.Linearizable, l.Tried, l.Verdict == qtrace.Undecided, l.Clocks}, l.Proof
 	}
 	again := func(check func([][]qtrace.Step) ([]int, []string)) func() found {
 		return func() found {
@@ -723,12 +727,17 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 			return f
 		}
 	}
-	if o, ok := qtrace.ForcedOrder(tr.Steps); ok && len(pending) == 0 && (!snapshotFirst(ch.Binding, tr) || o[0].Action == ch.Binding.Snapshot) {
+	skew := ch.mode.skew
+	if skew <= 0 {
+		skew = qtrace.RealTimeSlack
+	}
+	if o, ok := qtrace.ForcedOrderWithin(tr.Steps, skew); ok && len(pending) == 0 && (!snapshotFirst(ch.Binding, tr) || o[0].Action == ch.Binding.Snapshot) {
 		// one order: a search would check it alone, and the caller checks
 		// the order it gets (Checker.Check of search.Steps), which judges it
 		// as this search would have; two quint processes saved (the probe
 		// of every account makes many such partitions)
-		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o))}, false, nil
+		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: real time allows one order of its %d steps, checked as the history's", a, len(o)) +
+			forcedClockNote(qtrace.ClockOrders(tr.Steps, skew))}, false, nil
 	}
 	f, proof := lin(check)
 	f = ev.decide(f, proof, quintChecker(inHistory(ch, tr), tr, a, false), a, again(check))
@@ -780,10 +789,11 @@ func inHistory(ch *Checker, tr *qtrace.Trace) *Checker {
 // it conforms, how many orders were tried, and whether the budget cut
 // the search short.
 type found struct {
-	order []qtrace.Step
-	ok    bool
-	tried int
-	cut   bool
+	order  []qtrace.Step
+	ok     bool
+	tried  int
+	cut    bool
+	clocks qtrace.ClockAssumption // the orders real time took from different recorders' clocks
 }
 
 // decide is a search's conclusion as quint confirms it, when the Go
@@ -1011,16 +1021,41 @@ func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, parti
 			return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried), and the search for one in which every invariant holds ran out of its budget (%d orders): "+
 				"no verdict for the invariants. Raise the budget (qtest.LinearizeBudget(%d))", a, len(o), tried, tried2, 4*budget)}, true, cl
 		}
-		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried); none of the orders real time allows keeps every invariant (%d searched)", a, len(o), tried, tried2)}, false, cl
+		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried); none of the orders real time allows keeps every invariant (%d searched)", a, len(o), tried, tried2) + clockNote(f2.clocks, true)}, false, cl
 	case ok:
-		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried)}, false, cl
+		return o, qtrace.Issue{Severity: "info", Kind: "linearize", Msg: fmt.Sprintf("actor %s: an order of its %d steps conforms (%d orders tried)", a, len(o), tried) + clockNote(f.clocks, false)}, false, cl
 	case cut:
 		return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no order of its %d steps conformed in the %d orders of the budget, and the search had moves left: "+
 			"no verdict (conformance n/a). Raise the budget (qtest.LinearizeBudget(%d)), %sor record its steps where they take effect", a, len(o), tried, 4*budget, partitionHint(partitioned))}, true, nil
 	default:
 		return o, qtrace.Issue{Severity: "warn", Kind: "linearize", Msg: fmt.Sprintf("actor %s: no order of its %d steps that real time allows conformed in %d orders tried; "+
-			"the order shown got furthest. A step the model rejects in every order is a bug (a stale read, a lost write), unless the invocation times are wrong", a, len(o), tried)}, false, nil
+			"the order shown got furthest. A step the model rejects in every order is a bug (a stale read, a lost write), unless the invocation times are wrong", a, len(o), tried) + clockNote(f.clocks, true)}, false, nil
 	}
+}
+
+// clockNote is what a search's verdict says of the orders real time took
+// from different recorders' clocks (review 11, F5): none, nothing; a
+// verdict of no order (negative) rests on them, true only if the clocks
+// are within the skew; a conforming order stands under any skew (a larger
+// one only allows more orders).
+func clockNote(c qtrace.ClockAssumption, negative bool) string {
+	switch {
+	case c.Orders == 0:
+		return ""
+	case negative:
+		return fmt.Sprintf("; the verdict rests on %s, and holds only if they are: with clocks %s apart or more, the nearest of those orders may not hold", c, c.Closest)
+	}
+	return fmt.Sprintf("; %s (the order found conforms under any skew)", c)
+}
+
+// forcedClockNote is clockNote for the one order real time allows: the
+// check's verdict on it, whatever it is, rests on the orders by clocks
+// that left no other.
+func forcedClockNote(c qtrace.ClockAssumption) string {
+	if c.Orders == 0 {
+		return ""
+	}
+	return fmt.Sprintf("; that one order rests on %s: a failure holds only if they are, with clocks %s apart or more another order may conform", c, c.Closest)
 }
 
 // first is a check's verdict of its one order.

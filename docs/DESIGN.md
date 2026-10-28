@@ -3074,6 +3074,25 @@ vals). Two rules keep the memo and the proof sound:
   proof.
 The guided search orders the recorded steps alone (no pending call took
 effect), the cheapest explanation; the complete search places them.
+Real time across recorders is their clocks' word: a step of one
+precedes another's invocation when it completed more than the skew
+earlier (`LinearizeOptions.Skew`, `SearchOptions.Skew`,
+`qtest.ClockSkew`, `validate -skew`; default `RealTimeSlack`, 1 ms),
+unless a call record pairs them on one recorder or domain clocks order
+them. A verdict of no order resting on such orders is true only under
+that assumption, which quint's re-check of the Proof cannot touch (it is
+given the same orders), so the verdict names it: `Linearization.Clocks`
+(`qtrace.ClockOrders`) counts those orders, their recorders and the
+closest gap, and the issue says "it assumes the clocks within 1ms ...
+with clocks 2ms apart or more, the nearest of those orders may not
+hold". The one order real time allows (`ForcedOrderWithin`) says so too,
+and a conforming order says the assumption and that it stands under any
+skew (a larger one only allows more orders). The check of the order
+found keeps its skew (a step's `slack`), or its real-time issue would
+judge it by 1 ms again. Production hosts under NTP differ by more than
+1 ms; a skew per pair of recorders is ROADMAP G8's (review 11, F5;
+`TestSoundClockSkewNamed`).
+
 A review found two pending calls on either side of a quiet settle
 unordered (the first, if it took effect, did so before the settle, and
 so before the second): a forbidden order passed a ghost history; and an

@@ -1647,6 +1647,7 @@ func AnyOf(es ...Expectation) Expectation
 func Artifacts(a ...validate.Artifact) Option
 func AtMostActions(n int) ShrinkClaim
 func CheckCases(t testing.TB, workflow, bindingPath string, opts ...Option) CaseCheck
+func ClockSkew(d time.Duration) Option
 func Completes() Expectation
 func Conforms() Expectation
 func Constants(m map[string]string) Option
@@ -1946,8 +1947,10 @@ const RealTimeSlack = time.Millisecond
 const SpanName = "quint "
 const Undecided LinearizeVerdict = iota (spec 2 of its group)
 func CarryWatermark(recorder, actor string, through time.Time, whole bool) Step
+func ClockOrders(steps []Step, skew time.Duration) ClockAssumption
 func CollectedThrough(steps []Step) map[string]time.Time
 func ForcedOrder(steps []Step) ([]Step, bool)
+func ForcedOrderWithin(steps []Step, skew time.Duration) ([]Step, bool)
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
@@ -1961,6 +1964,12 @@ func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
 func UncorruptedFields(steps []Step) []string
 func WriteJSONL(w io.Writer, steps []Step) error
+type ClockAssumption struct
+    field Skew time.Duration
+    field Orders int
+    field Closest time.Duration
+    field Recorders []string
+    method (ClockAssumption) String() string
 type Filter struct
     field Actors []string
     field Actions []string
@@ -1991,11 +2000,13 @@ type Linearization struct
     field Verdict LinearizeVerdict
     field Tried int
     field Proof *Proof
+    field Clocks ClockAssumption
 type LinearizeOptions struct
     field Budget int
     field Pending []Step
     field Settles []Step
     field First bool
+    field Skew time.Duration
 type LinearizeVerdict int
     method (LinearizeVerdict) String() string
 type Lost struct
@@ -2504,6 +2515,7 @@ type SearchOptions struct
     field Budget int
     field ResolvePending bool
     field ResolveBudget int
+    field Skew time.Duration
 type StepMutants struct
     field Original *Judgment
     field Mutants []StepMutation
