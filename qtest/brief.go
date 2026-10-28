@@ -23,7 +23,30 @@ func (r *Run) Brief() string {
 	if r == nil || r.Report == nil || r.Report.OK() {
 		return ""
 	}
+	if len(r.Steps) == 0 {
+		return r.noSteps()
+	}
 	return briefOf(r.Report)
+}
+
+// noSteps says why a run recorded no step: what its doubles saw (every
+// request refused, its server not yet listening), else the usual causes.
+// A refused client's run once read "a reconstruction issue", "faults []"
+// and "a deadlock", three wrong leads.
+func (r *Run) noSteps() string {
+	if len(r.notes) > 0 {
+		return "no step was recorded; the run's doubles saw " + strings.Join(r.notes, "; ")
+	}
+	return "the run recorded no steps: its tasks never reached a step (a deadlock, a wait no one ends: print Sim.Tasks() before Close), or it records into another recorder"
+}
+
+// faultsSaid is the run's faults for a report's first line: "faults
+// [...]", or "no faults".
+func (r *Run) faultsSaid() string {
+	if fs := r.Faults(); len(fs) > 0 {
+		return fmt.Sprintf("faults %v", fs)
+	}
+	return "no faults"
 }
 
 // briefOf is Brief of a report.

@@ -178,6 +178,14 @@ func reason(rep *validate.Report) string {
 	if rep.Unsettled != "" {
 		return "does not settle"
 	}
+	if len(rep.Actors) == 0 {
+		for _, i := range rep.Issues {
+			if i.Severity == "error" {
+				return "issue"
+			}
+		}
+		return "no steps" // nothing to reconstruct: no "reconstruction issue"
+	}
 	return "issue"
 }
 

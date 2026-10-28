@@ -324,16 +324,32 @@ func keepCopy(dir, name string, kept *string, once *sync.Once, out string) strin
 	if !strings.Contains(out, dir) {
 		return out
 	}
-	once.Do(func() {
-		*kept, _ = os.MkdirTemp("", "gotogether-"+strings.NewReplacer("/", "_", " ", "_", "#", "_").Replace(name)+"-")
-	})
+	once.Do(func() { *kept = keptDir(name) })
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
 	if *kept == "" || copyTree(dir, *kept) != nil {
 		return out + "  (these files are in the test's temporary directory, removed when the test ends, and could not be copied out: GOTOGETHER_KEEP=dir keeps them)\n"
 	}
-	return strings.ReplaceAll(out, dir, *kept) + "  (these files were copied out of the test's temporary directory, removed when the test ends; GOTOGETHER_KEEP=dir keeps every run's)\n"
+	return strings.ReplaceAll(out, dir, *kept) + fmt.Sprintf("  (these files were copied out of the test's temporary directory, which the test's end removes, into %s, which stays: rm -r %s removes every run kept so; GOTOGETHER_KEEP=dir keeps every run's)\n",
+		filepath.Dir(*kept), filepath.Dir(*kept))
+}
+
+// keptDir makes a directory for a failing run's files named after its
+// test, under one directory, $TMPDIR/gotogether: the copies outlive the
+// test, which is their point, and 173 of them once sat in /tmp, each
+// directory of its own, the report saying they were "removed when the
+// test ends". "" if it cannot.
+func keptDir(name string) string {
+	root := filepath.Join(os.TempDir(), "gotogether")
+	if os.MkdirAll(root, 0o755) != nil {
+		return ""
+	}
+	d, err := os.MkdirTemp(root, strings.NewReplacer("/", "_", " ", "_", "#", "_").Replace(name)+"-")
+	if err != nil {
+		return ""
+	}
+	return d
 }
 
 // copyTree copies the files under src to dst.

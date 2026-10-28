@@ -447,6 +447,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	ctx = hooks.WithEscapes(hooks.WithPanicStack(ctx, &task), &esc)
 	faults := &hooks.FaultNames{} // what the run declares and chooses, for the names users give
 	ctx = hooks.WithFaultNames(ctx, faults)
+	notes := &hooks.Notes{} // what its doubles saw that no step says (requests refused before a server listened)
+	ctx = hooks.WithNotes(ctx, notes)
 	err := func() (err error) {
 		defer func() {
 			// a task's panic, re-raised by Sim.Run: the store's, the
@@ -486,7 +488,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		faults.Add("nemesis." + n)
 	}
 	recorded := mem.Steps()
-	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults}
+	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines()}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -607,7 +609,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	x.constants, x.checker = constants, cc
 	x.model = cc.Binding.SpecPath() + ":" + cc.Binding.Module
 	if cc.Model != nil {
-		x.actions, x.steps = map[string]bool{}, stepActions(cc.Model)
+		x.actions, x.steps = map[string]bool{}, stepActions(cc.Model, cc.Binding)
 		for a := range cc.Model.Actions {
 			x.actions[a] = true
 		}
@@ -1064,7 +1066,33 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 // which runs quint, only if a claim asked for it).
 func (x *Exploration) summary() string {
 	e := evidenceOf(x.Runs)
-	line := fmt.Sprintf("%s: %d runs, %d conform", x.ref(), e.Runs, e.Conform)
+	// who judged the passes: the Go evaluator, a sample of them quint too
+	// (GOTOGETHER_EVAL_SAMPLE; a disagreement fails its run). Said in a
+	// word, the breakdown under GOTOGETHER_VERBOSE: "passes judged by the
+	// Go evaluator 30, 2 of them also by quint" was the implementer's
+	// sentence on every line a newcomer read
+	byEval, both := 0, 0
+	for _, r := range x.Runs {
+		if r == nil || r.Report == nil {
+			continue
+		}
+		for _, a := range r.Report.Actors {
+			switch a.JudgedBy() {
+			case "evaluator":
+				byEval++
+			case "both":
+				both++
+			}
+		}
+	}
+	conform := fmt.Sprintf("%d conform", e.Conform)
+	if e.Conform == e.Runs && e.Runs > 1 {
+		conform = "all conform"
+	}
+	if both > 0 && !verbose() {
+		conform += fmt.Sprintf(" (quint confirmed %d)", both)
+	}
+	line := fmt.Sprintf("%s: %d runs, %s", x.ref(), e.Runs, conform)
 	for _, r := range slices.Sorted(maps.Keys(e.FailingBy)) {
 		line += fmt.Sprintf(", %d %s", e.FailingBy[r], runsDo(r))
 	}
@@ -1092,23 +1120,7 @@ func (x *Exploration) summary() string {
 	if pending > 0 {
 		line += fmt.Sprintf("; %d left calls pending", pending)
 	}
-	// who judged the passes: the Go evaluator, a sample of them quint too
-	// (GOTOGETHER_EVAL_SAMPLE; a disagreement fails its run)
-	byEval, both := 0, 0
-	for _, r := range x.Runs {
-		if r == nil || r.Report == nil {
-			continue
-		}
-		for _, a := range r.Report.Actors {
-			switch a.JudgedBy() {
-			case "evaluator":
-				byEval++
-			case "both":
-				both++
-			}
-		}
-	}
-	if byEval+both > 0 {
+	if byEval+both > 0 && verbose() {
 		line += fmt.Sprintf("; passes judged by the Go evaluator %d, %d of them also by quint", byEval+both, both)
 	}
 	if x.steps != nil {
@@ -1117,7 +1129,6 @@ func (x *Exploration) summary() string {
 		// the untaken are named
 		m := modelCoverage(x.Runs, x.steps)
 		all := len(x.steps)
-		line += fmt.Sprintf("; model actions taken %d of %d", all-len(m.Never), all)
 		var bound map[string]bool
 		if x.checker != nil && x.checker.Binding != nil {
 			bound = map[string]bool{}
@@ -1125,7 +1136,13 @@ func (x *Exploration) summary() string {
 				bound[a] = true
 			}
 		}
-		line += neverList(m.Never, bound)
+		if first := x.rejectedFirst(); first != "" && len(m.Never) == all {
+			// "3 reject addItem; model actions taken 0 of 15" read as a
+			// contradiction: every run failed at its first step
+			line += "; every run rejected at its first step, " + first + ", so no model action taken"
+		} else {
+			line += fmt.Sprintf("; model actions taken %d of %d", all-len(m.Never), all) + neverList(m.Never, bound)
+		}
 	}
 	cov := x.faultCoverage()
 	faulted, reached := 0, 0
@@ -1148,6 +1165,28 @@ func (x *Exploration) summary() string {
 		}
 	}
 	return line
+}
+
+// rejectedFirst is the action every run's first step was rejected at,
+// when every run failed there with one action ("" otherwise).
+func (x *Exploration) rejectedFirst() string {
+	first := ""
+	for _, r := range x.Runs {
+		if r == nil || r.Report == nil || r.Report.OK() {
+			return ""
+		}
+		for _, a := range r.Report.Actors {
+			f := a.Failure
+			if a.OK() {
+				continue
+			}
+			if f == nil || a.Conforms != validate.Fail || f.Kind != "disabled" || f.Index != 0 || f.Step == nil || first != "" && f.Step.Action != first {
+				return ""
+			}
+			first = f.Step.Action
+		}
+	}
+	return first
 }
 
 // power says, for a claim some runs meet, how likely as many seeds are
@@ -1313,6 +1352,8 @@ func runsDo(r string) string {
 		return "hit an " + r
 	case r == "does not settle":
 		return "do not settle"
+	case r == "no steps":
+		return "record no step"
 	}
 	return "have " + r
 }
@@ -1328,6 +1369,8 @@ func runDoes(r string) string {
 		return "has a reconstruction issue (a gap, a cycle, an overlap)"
 	case strings.HasPrefix(r, "evaluation error"):
 		return "hits an " + r
+	case r == "no steps":
+		return "records no step"
 	}
 	return "has " + r
 }
@@ -1487,10 +1530,10 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	case x.search != nil:
 		fmt.Fprintf(&b, "%s, made otherwise %v\n%s", x.nameOf(r), r.deviations(), r.Report.Summary())
 	default:
-		fmt.Fprintf(&b, "%s, faults %v\n%s", x.nameOf(r), r.Faults(), r.Report.Summary())
+		fmt.Fprintf(&b, "%s, %s\n%s", x.nameOf(r), r.faultsSaid(), r.Report.Summary())
 	}
 	if len(r.Steps) == 0 {
-		fmt.Fprintf(&b, "  the run recorded no steps: its tasks never reached a step (a deadlock, a wait no one ends: print Sim.Tasks() before Close), or it records into another recorder\n")
+		fmt.Fprintf(&b, "  %s\n", r.noSteps())
 	}
 	if len(r.Unscripted) > 0 {
 		fmt.Fprintf(&b, "  scripted faults that never happened: %v\n", r.Unscripted)
@@ -1515,7 +1558,7 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	if dir == "" {
 		// runs gathered (Runs) have no directory of their own: the report's
 		// files go where they outlive the test (a t.TempDir() would not)
-		x.keptOnce.Do(func() { x.kept, _ = os.MkdirTemp("", "gotogether-runs-") })
+		x.keptOnce.Do(func() { x.kept = keptDir("runs") })
 		dir = x.kept
 	}
 	base := filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
@@ -1551,7 +1594,7 @@ func (x *Exploration) runHead(r *Run) string {
 	case x.search != nil:
 		return fmt.Sprintf("%s, made otherwise %v", x.nameOf(r), r.deviations())
 	}
-	return fmt.Sprintf("%s, faults %v", x.nameOf(r), r.Faults())
+	return fmt.Sprintf("%s, %s", x.nameOf(r), r.faultsSaid())
 }
 
 // whereToLook is a brief's last line: the navigator's command for run r

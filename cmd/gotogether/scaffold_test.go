@@ -364,7 +364,7 @@ func TestScaffoldReservedName(t *testing.T) {
 		return spec
 	}
 	_, err := binding.LoadModel("quint", write("item"), "stock")
-	if err == nil || !strings.Contains(err.Error(), "item is a Quint built-in's name, which no parameter may take: rename it (item_, say) and map the step's field to it in the binding (args: item_: '{{.item}}')") {
+	if err == nil || !strings.Contains(err.Error(), "item is a Quint built-in's name, which no identifier may take: rename it (item_, say); a parameter named after a step's field takes the field through the binding (args: item_: '{{.item}}')") {
 		t.Fatalf("a parameter named item: %v", err)
 	}
 	var out strings.Builder

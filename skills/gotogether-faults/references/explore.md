@@ -95,8 +95,9 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
   rest are listed as not judged. The numbers restart in every run of the
   test (`-count`); a line that names no exploration of the test fails
   it. A fuzz input's report points at Go's saved input instead. A failure's files (step log, module) are
-  copied out of the test's temporary directory, so its report's paths
-  are there after the test. A run whose Script never made
+  copied out of the test's temporary directory into
+  `$TMPDIR/gotogether/`, so its report's paths are there after the test
+  (`rm -r $TMPDIR/gotogether` clears them). A run whose Script never made
   all its faults lists them ("scripted faults that never happened").
 - **Rates:**
   - A nemesis is considered at every scheduling step, so its rate is per

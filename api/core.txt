@@ -110,6 +110,7 @@ type Model struct
     field Helpers map[string]bool
     method (*Model) ActionNames() []string
     method (*Model) Assigns(action string) (map[string]bool, bool)
+    method (*Model) CalledBy(action string, callers map[string]bool) bool
     method (*Model) Chooses(action string) []string
     method (*Model) Reads(action string) (map[string]bool, bool)
     method (*Model) Signature(action string) string

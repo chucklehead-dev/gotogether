@@ -87,7 +87,7 @@ func TestFailureFilesKept(t *testing.T) {
 		<-done
 		errs = f.errs
 	})
-	if x == nil || x.kept == "" || !strings.HasPrefix(filepath.Base(x.kept), "gotogether-") {
+	if x == nil || x.kept == "" || filepath.Dir(x.kept) != filepath.Join(os.TempDir(), "gotogether") { // keptDir's
 		t.Fatalf("no kept directory: %+v", x)
 	}
 	t.Cleanup(func() { os.RemoveAll(x.kept) })

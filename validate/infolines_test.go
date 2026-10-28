@@ -91,3 +91,16 @@ func TestActorsLeftOutNotInSummary(t *testing.T) {
 		t.Errorf("the report names the actors left out:\n%s", sum)
 	}
 }
+
+// A report of one unnamed actor says "the run", not "actor default",
+// which read as a setting to change; named actors keep their names.
+func TestReportSummaryOneActor(t *testing.T) {
+	one := &Report{Actors: []*Result{{Actor: "default", Steps: 3, Conforms: Pass}}}
+	if s := one.Summary(); !strings.HasPrefix(s, "the run: 3 steps\n") {
+		t.Errorf("one actor: %q", s)
+	}
+	two := &Report{Actors: []*Result{{Actor: "default", Steps: 3, Conforms: Pass}, {Actor: "n2", Steps: 1, Conforms: Pass}}}
+	if s := two.Summary(); !strings.HasPrefix(s, "actor default: 3 steps\n") || !strings.Contains(s, "actor n2: 1 steps\n") {
+		t.Errorf("two actors: %q", s)
+	}
+}

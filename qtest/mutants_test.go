@@ -170,3 +170,35 @@ func TestMutant(t *testing.T) {
 	t.Setenv("GOWORK", "off")
 	Mutants{Package: "lib"}.Run(t)
 }
+
+// Run passes on a mutant's summaries and its catches with their own
+// lines, under the binary's file:line alone: it once dropped the catches
+// (no "runs, " in their first line), so hello's README promised what its
+// output never showed, and wrote mutants.go:207: before every line.
+func TestMutantsShown(t *testing.T) {
+	out := `=== RUN   TestMutant
+    hello_test.go:87: gotogether: as expected, some run rejecting apply: 23 of 30 runs (failing: 23 reject apply); the first, seed 1, faults []:
+            step 2, apply(id=1): the model's apply(id = 1) is disabled
+            navigate: gotogether nav -run 'TestMutant#1:seed=1' -at fail
+    hello_test.go:87: gotogether: TestMutant#1: 30 runs, 7 conform, 23 reject apply
+    hello_test.go:90: a note of the test's own
+            and its second line
+    hello_test.go:104: qhegel: shrunk to 5 steps, faults: rpc.counter.request=duplicate:
+            step 5, apply(id=3): the model's apply(id = 3) is disabled
+--- PASS: TestMutant (9.60s)
+PASS
+`
+	lines, ran := Mutants{}.shown(out, "TestMutant")
+	want := []string{
+		"hello_test.go:87: gotogether: as expected, some run rejecting apply: 23 of 30 runs (failing: 23 reject apply); the first, seed 1, faults []:",
+		"    step 2, apply(id=1): the model's apply(id = 1) is disabled",
+		"    navigate: gotogether nav -run 'TestMutant#1:seed=1' -at fail",
+		"hello_test.go:87: gotogether: TestMutant#1: 30 runs, 7 conform, 23 reject apply",
+		"hello_test.go:104: qhegel: shrunk to 5 steps, faults: rpc.counter.request=duplicate:",
+		"    step 5, apply(id=3): the model's apply(id = 3) is disabled",
+		"--- PASS: TestMutant (9.60s)",
+	}
+	if !ran || strings.Join(lines, "\n") != strings.Join(want, "\n") {
+		t.Errorf("ran %v, lines:\n%s\nwant:\n%s", ran, strings.Join(lines, "\n"), strings.Join(want, "\n"))
+	}
+}

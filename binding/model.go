@@ -180,6 +180,37 @@ func choicesIn(raw json.RawMessage) []string {
 	return out
 }
 
+// CalledBy reports whether one of callers (other than action itself)
+// calls action, directly or through the actions it calls: action is a
+// part of their steps (a grist model's appends, which every command's
+// action calls), never a step of its own when it is not bound. A Model
+// made by hand says false.
+func (m *Model) CalledBy(action string, callers map[string]bool) bool {
+	seen := map[string]bool{}
+	var reaches func(a string) bool
+	reaches = func(a string) bool {
+		if seen[a] {
+			return false
+		}
+		seen[a] = true
+		for n := range m.calls[a] {
+			if n == action {
+				return true
+			}
+			if _, ok := m.Actions[n]; ok && reaches(n) {
+				return true
+			}
+		}
+		return false
+	}
+	for c := range callers {
+		if c != action && c != "step" && reaches(c) {
+			return true
+		}
+	}
+	return false
+}
+
 // Param is an action parameter. Type is its type as Quint writes it
 // (aliases by name). Shape is the kind of its resolved type (type aliases
 // expanded): "set", "list", "map", or "" for anything else.
@@ -318,7 +349,7 @@ func reservedHint(out string) string {
 	if len(names) > 1 {
 		are = "are Quint built-ins' names"
 	}
-	return fmt.Sprintf("%s %s, which no parameter may take: rename it (%s, say) and map the step's field to it in the binding (args: %s: '{{.%s}}'); gotogether scaffold writes that mapping for a parameter so renamed\n",
+	return fmt.Sprintf("%s %s, which no identifier may take: rename it (%s, say); a parameter named after a step's field takes the field through the binding (args: %s: '{{.%s}}'), which gotogether scaffold writes for a parameter so renamed\n",
 		strings.Join(names, ", "), are, quintnames.Rename(n), quintnames.Rename(n), n)
 }
 

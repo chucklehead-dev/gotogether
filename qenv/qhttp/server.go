@@ -123,6 +123,17 @@ func (srv *Server) Handle(ctx context.Context, h http.Handler) {
 // URL is the server's base URL, "http://<name>".
 func (srv *Server) URL() string { return "http://" + srv.Name }
 
+// notListening says why the server does not listen now.
+func (srv *Server) notListening() string {
+	switch {
+	case srv.Proc.Down():
+		return "its process " + srv.Proc.Name + " was down"
+	case srv.handler == nil:
+		return "its process had not called Handle yet: start the server's process before its clients, or have them retry a refused connection"
+	}
+	return "its process restarted and had not called Handle again"
+}
+
 // listening reports whether a connection to the server is accepted now.
 func (srv *Server) listening() bool {
 	return srv.handler != nil && !srv.Proc.Down() && srv.inc == srv.Proc.Incarnation

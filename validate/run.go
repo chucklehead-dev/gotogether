@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -247,7 +248,13 @@ func (r *Report) Summary() string {
 		s += fmt.Sprintf("issue: %s\n", i)
 	}
 	for _, a := range r.Actors {
-		s += a.Summary()
+		sum := a.Summary()
+		if len(r.Actors) == 1 && a.Actor == "default" {
+			// one actor, unnamed: "actor default" on every report read as
+			// a setting to change
+			sum = "the run" + strings.TrimPrefix(sum, "actor default")
+		}
+		s += sum
 	}
 	return s
 }

@@ -432,7 +432,13 @@ func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode
 	node.Model = actorStates(b.cc, nc.before)
 	judge(t, b.cc, b.inst, e.c.searchOptions(), []*Run{r}, func(*Run) string { return "the node's run " + node.ID })
 	node.Verdict = "pass"
-	if !r.Report.OK() {
+	switch {
+	case len(r.Steps) == 0:
+		// no step to fail at: what its doubles saw is the lead (a client
+		// refused before its server listened), not a node that reads pass
+		node.Verdict = "no step recorded"
+		node.Notes = append(node.Notes, r.noSteps())
+	case !r.Report.OK():
 		node.Verdict = r.Report.Reason()
 	}
 	if req.Save {
@@ -464,7 +470,7 @@ func (e *engine) failingChoice(b *navBase) (int, error) {
 	if r.Report.OK() {
 		return 0, fmt.Errorf("%s passes: there is no failing step to open (GOTOGETHER_NAV=start opens its first choice)", e.x.nameOf(r0))
 	}
-	pos := len(r0.Steps)
+	pos := len(r0.Steps) // a run with no step: its last choice, where the node says what its doubles saw
 	for _, a := range r.Report.Actors {
 		if f := a.Failure; f != nil && f.Step != nil {
 			for i, s := range r0.Steps {

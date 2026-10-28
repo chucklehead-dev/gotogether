@@ -79,12 +79,21 @@ func takenBy(r *Run, k Take) bool {
 }
 
 // stepActions are the actions of m a run's step can be: all but init,
-// step (the state machine's own) and the frame helpers other actions
-// call (binding.Model.Helpers, never a step).
-func stepActions(m *binding.Model) map[string]bool {
+// step (the state machine's own), the frame helpers other actions call
+// (binding.Model.Helpers, never a step), and, with the binding b, the
+// actions its bound ones call that it does not bind itself (a grist
+// model's appends, readsThrough: parts of every command's step, which no
+// run takes alone, once listed as never taken in every summary).
+func stepActions(m *binding.Model, b *binding.Binding) map[string]bool {
+	bound := map[string]bool{}
+	if b != nil {
+		for a := range b.Actions {
+			bound[a] = true
+		}
+	}
 	out := map[string]bool{}
 	for a := range m.Actions {
-		if a != "init" && a != "step" && !m.Helpers[a] {
+		if a != "init" && a != "step" && !m.Helpers[a] && (bound[a] || !m.CalledBy(a, bound)) {
 			out[a] = true
 		}
 	}

@@ -9,6 +9,7 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"runtime"
 	"slices"
@@ -302,6 +303,75 @@ func FaultNamesOf(ctx context.Context) *FaultNames {
 	}
 	f, _ := ctx.Value(faultNamesKey{}).(*FaultNames)
 	return f
+}
+
+// Notes are what a run's doubles saw that its report cannot (a request
+// refused because no server listened yet), counted by what, with the
+// first of each: a run that recorded no step is then said in its own
+// terms, not as a deadlock.
+type Notes struct {
+	mu     sync.Mutex
+	counts map[string]int
+	first  map[string]string
+	order  []string
+}
+
+// Note counts one of what (a sentence: "a request to stock refused"),
+// keeping the first's detail.
+func (n *Notes) Note(what, detail string) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.counts == nil {
+		n.counts, n.first = map[string]int{}, map[string]string{}
+	}
+	if n.counts[what] == 0 {
+		n.order = append(n.order, what)
+		n.first[what] = detail
+	}
+	n.counts[what]++
+}
+
+// Lines are the notes, in the order first noted: "a request to stock
+// refused (4 times; the first: ...)".
+func (n *Notes) Lines() []string {
+	if n == nil {
+		return nil
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := make([]string, len(n.order))
+	for i, w := range n.order {
+		times := "once"
+		if c := n.counts[w]; c > 1 {
+			times = fmt.Sprintf("%d times", c)
+		}
+		out[i] = fmt.Sprintf("%s (%s", w, times)
+		if d := n.first[w]; d != "" {
+			out[i] += "; the first: " + d
+		}
+		out[i] += ")"
+	}
+	return out
+}
+
+type notesKey struct{}
+
+// WithNotes returns ctx carrying a run's Notes, where its doubles add
+// to them.
+func WithNotes(ctx context.Context, n *Notes) context.Context {
+	return context.WithValue(ctx, notesKey{}, n)
+}
+
+// NotesOf is ctx's run's Notes, or nil (whose Note does nothing).
+func NotesOf(ctx context.Context) *Notes {
+	if ctx == nil {
+		return nil
+	}
+	n, _ := ctx.Value(notesKey{}).(*Notes)
+	return n
 }
 
 // Process-wide: installed by qenv.

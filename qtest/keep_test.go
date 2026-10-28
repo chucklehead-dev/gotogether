@@ -3,6 +3,7 @@ package qtest
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -57,7 +58,7 @@ func TestFailureReportsNameFilesThatOutliveTheTest(t *testing.T) {
 	} {
 		msg := failureIn(t, f)
 		paths := reportedPaths(msg)
-		if len(paths) < 2 || !strings.Contains(msg, "copied out of the test's temporary directory") {
+		if len(paths) < 2 || !strings.Contains(msg, "copied out of the test's temporary directory, which the test's end removes, into "+filepath.Join(os.TempDir(), "gotogether")+", which stays") {
 			t.Fatalf("%s: want a report naming its files and where they were copied, got:\n%s", name, msg)
 		}
 		for _, p := range paths {
@@ -76,6 +77,10 @@ func keptRoot(p string) string {
 	rest, ok := strings.CutPrefix(p, os.TempDir()+string(os.PathSeparator))
 	if !ok {
 		return p
+	}
+	root := filepath.Join(os.TempDir(), "gotogether")
+	if rest, ok := strings.CutPrefix(p, root+string(os.PathSeparator)); ok { // keptDir's
+		return filepath.Join(root, strings.SplitN(rest, string(os.PathSeparator), 2)[0])
 	}
 	return os.TempDir() + string(os.PathSeparator) + strings.SplitN(rest, string(os.PathSeparator), 2)[0]
 }

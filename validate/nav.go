@@ -157,7 +157,7 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 		n.path = append(n.path, call.Quint)
 	}
 	n.start = s
-	n.from = fmt.Sprintf("actor %s's state after %d of its %d calls", nameOf(tr.Actor), at, len(plan.Calls))
+	n.from = fmt.Sprintf("actor %s's state after %d of its %d steps", nameOf(tr.Actor), at, len(plan.Calls))
 	return n, nil
 }
 

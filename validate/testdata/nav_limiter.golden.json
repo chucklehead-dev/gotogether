@@ -282,7 +282,7 @@
   },
   {
     "id": "",
-    "start": "actor limiter's state after 1 of its 3 calls",
+    "start": "actor limiter's state after 1 of its 3 steps",
     "path": [
       "admit(\"a\")"
     ],

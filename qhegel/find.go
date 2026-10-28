@@ -76,7 +76,11 @@ type ViolationConfig struct {
 // logged.
 func FindViolation(t testing.TB, cfg ViolationConfig, body func(tc hegel.TestCase, c *Case), opts ...hegel.Option) *Violation {
 	t.Helper()
-	return findViolation(t, cfg, qtest.CheckCases(t, "qhegel.FindViolation", cfg.Binding, cfg.Opts...), body, opts...)
+	v := findViolation(t, cfg, qtest.CheckCases(t, "qhegel.FindViolation", cfg.Binding, cfg.Opts...), body, opts...)
+	if v.found {
+		v.log(t)
+	}
+	return v
 }
 
 // findViolation is FindViolation with its cases' checker and recording
@@ -159,21 +163,57 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 		t.Fatalf("qhegel: checking the shrunk run: %v", err)
 	}
 	found.Report.Unsettled = found.Unsettled
+	return found
+}
+
+// log logs the shrunk run: its size, its faults, and its failure in a
+// line (qtest.Run.Brief), as a passing test shows its catch; the run's
+// steps and whole report, and the counts of quint's runs, under
+// GOTOGETHER_VERBOSE=1. The whole report on every expected shrink once
+// buried what a newcomer was to read.
+func (v *Violation) log(t testing.TB) {
+	t.Helper()
 	faults := ""
-	if len(found.Choices) > 0 {
+	if len(v.Choices) > 0 {
 		var fs []string
-		for _, c := range found.Faults() {
+		for _, c := range v.Faults() {
 			fs = append(fs, c.String())
 		}
-		faults = "faults: none\n"
+		faults = "none"
 		if len(fs) > 0 {
-			faults = "faults: " + strings.Join(fs, ", ") + "\n"
+			faults = strings.Join(fs, ", ")
 		}
-		faults += "replay it outside Hegel: qenv.Replay(v.Choices)\n"
 	}
-	t.Logf("qhegel: %d runs checked with quint, %d decided from earlier verdicts; shrunk run:\n%s%s%s",
-		q, hits, Render(found.Steps), faults, found.Summary)
-	return found
+	if os.Getenv("GOTOGETHER_VERBOSE") == "1" {
+		f := ""
+		if faults != "" {
+			f = "faults: " + faults + "\nreplay it outside Hegel: qenv.Replay(v.Choices)\n"
+		}
+		t.Logf("qhegel: %d runs checked with quint, %d decided from earlier verdicts; shrunk run:\n%s%s%s",
+			v.QuintRuns, v.CacheHits, Render(v.Steps), f, v.Summary)
+		return
+	}
+	n := 0
+	for _, s := range v.Steps {
+		if s.Model() {
+			n++
+		}
+	}
+	head := fmt.Sprintf("qhegel: shrunk to %s", plural(n, "step"))
+	replay := ""
+	if faults != "" {
+		head += ", faults: " + faults
+		replay = "replay it outside Hegel: qenv.Replay(v.Choices); "
+	}
+	t.Logf("%s:\n    %s\n    %sGOTOGETHER_VERBOSE=1 prints the run and its report", head, v.Run.Brief(), replay)
+}
+
+// plural is n what, with an s unless n is 1.
+func plural(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }
 
 // Expect fails t unless the shrunk run's verdict meets every expectation
@@ -239,6 +279,7 @@ func Shrink(t testing.TB, sys qtest.System, opts ...hegel.Option) *Violation {
 	}, opts...)
 	if v.found {
 		minimize(t, sys, v)
+		v.log(t) // the faults the failure needs
 	}
 	return v
 }

@@ -909,6 +909,39 @@ func (r *Run) Expect(t testing.TB, cs ...RunClaim) {
 			t.Fatalf("gotogether: want %s, got %d faults: %v", c, len(r.Faults()), r.Faults())
 		}
 	}
+	if r.Report != nil && r.StepLog != "" {
+		// Record's and Validate's run, as an exploration's summary says
+		// its own: a passing Record was silent, and a newcomer suspected
+		// nothing had been checked
+		t.Logf("gotogether: %s", r.summary(es))
+	}
+}
+
+// summary is a run's verdict in a line, once its claims held: what it
+// recorded and what was checked, or its catch.
+func (r *Run) summary(es []Expectation) string {
+	steps := 0
+	for _, s := range r.Steps {
+		if s.Model() {
+			steps++
+		}
+	}
+	of := ""
+	if n := len(r.Report.Actors); n > 1 {
+		of = fmt.Sprintf(" of %d actors", n)
+	}
+	if !r.Report.OK() {
+		return fmt.Sprintf("as expected, %s: %s", describeAll(es), r.Brief())
+	}
+	n := fmt.Sprintf("%d steps", steps)
+	if steps == 1 {
+		n = "1 step"
+	}
+	line := fmt.Sprintf("the run conforms: %s%s", n, of)
+	if invs := slices.Sorted(maps.Keys(reportInvariants(r.Report))); len(invs) > 0 {
+		line += "; invariants held: " + strings.Join(invs, ", ")
+	}
+	return line
 }
 
 // Runs gathers runs made one by one (Validate's, Record's: a real
@@ -935,7 +968,7 @@ func Runs(runs ...*Run) *Exploration {
 		}
 	}
 	if x.checker != nil && x.checker.Model != nil {
-		x.actions, x.steps = map[string]bool{}, stepActions(x.checker.Model)
+		x.actions, x.steps = map[string]bool{}, stepActions(x.checker.Model, x.checker.Binding)
 		for a := range x.checker.Model.Actions {
 			x.actions[a] = true
 		}

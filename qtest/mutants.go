@@ -201,34 +201,44 @@ func (m Mutants) Run(t *testing.T) {
 			if err != nil {
 				t.Fatalf("mutant %s: %v\n%s", name, err, out)
 			}
-			ran := false
 			// the binary's summaries and catches as it logged them, under
 			// its own file:line (a t.Log here added mutants.go's to each)
-			w := t.Output()
-			block := -1 // the indentation of a catch whose lines follow
-			for _, raw := range strings.Split(string(out), "\n") {
-				l := strings.TrimSpace(raw)
-				depth := len(raw) - len(strings.TrimLeft(raw, " \t"))
-				switch {
-				case l == "":
-					continue
-				case block >= 0 && depth > block:
-					fmt.Fprintln(w, "    "+l) // a catch's own lines
-					continue
-				}
-				block = -1
-				if catch := strings.Contains(l, ": as expected, ") || strings.Contains(l, "qhegel: as expected"); catch || strings.Contains(l, "runs, ") ||
-					strings.HasPrefix(l, "---") || slices.ContainsFunc(m.Show, func(s string) bool { return strings.Contains(l, s) }) {
-					fmt.Fprintln(w, l)
-					if catch {
-						block = depth
-					}
-				}
-				ran = ran || strings.HasPrefix(l, "--- PASS: "+test)
+			lines, ran := m.shown(string(out), test)
+			for _, l := range lines {
+				fmt.Fprintln(t.Output(), l)
 			}
 			if !ran {
 				t.Fatalf("mutant %s: %s did not run (no --- PASS line): its binary ran nothing\n%s", name, test, out)
 			}
 		})
 	}
+}
+
+// shown are the lines of a mutant's binary's output Run passes on: its
+// summaries ("N runs, ..."), its catches with their own lines (an
+// expected failure's "as expected", a Hegel shrink's "qhegel: shrunk
+// to"), its tests' verdicts and Show's lines; and whether Test passed.
+func (m Mutants) shown(out, test string) (lines []string, ran bool) {
+	block := -1 // the indentation of a catch whose lines follow
+	for _, raw := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(raw)
+		depth := len(raw) - len(strings.TrimLeft(raw, " \t"))
+		switch {
+		case l == "":
+			continue
+		case block >= 0 && depth > block:
+			lines = append(lines, "    "+l) // a catch's own lines
+			continue
+		}
+		block = -1
+		catch := strings.Contains(l, ": as expected, ") || strings.Contains(l, "qhegel: shrunk to ")
+		if catch || strings.Contains(l, "runs, ") || strings.HasPrefix(l, "---") || slices.ContainsFunc(m.Show, func(s string) bool { return strings.Contains(l, s) }) {
+			lines = append(lines, l)
+			if catch {
+				block = depth
+			}
+		}
+		ran = ran || strings.HasPrefix(l, "--- PASS: "+test)
+	}
+	return lines, ran
 }

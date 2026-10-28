@@ -307,6 +307,10 @@ type Run struct {
 	// faults are the fault kinds, options and nemeses the run declared
 	// or chose, for the names users give (Rates keys, exceptions)
 	faults *hooks.FaultNames
+	// notes are what its doubles saw that no step says (hooks.Notes:
+	// requests refused before their server listened), for a run that
+	// recorded nothing
+	notes []string
 	// diverged is why the run's replay stopped repeating its choices (a
 	// corpus entry the code no longer follows), apart from Err
 	diverged error

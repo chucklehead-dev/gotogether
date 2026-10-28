@@ -44,7 +44,7 @@ func TestSummaryNamesUntakenActions(t *testing.T) {
 	m := &binding.Model{Actions: map[string][]binding.Param{"init": nil, "step": nil, "put": nil, "get": nil, "appends": nil, "same": nil},
 		Helpers: map[string]bool{"same": true}}
 	ok := &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass, Calls: []binding.Call{{Action: "put"}}}}}
-	x := &Exploration{Runs: []*Run{{Report: ok}}, steps: stepActions(m), given: true}
+	x := &Exploration{Runs: []*Run{{Report: ok}}, steps: stepActions(m, nil), given: true}
 	if s, want := x.summary(), "model actions taken 1 of 3 (never: appends, get)"; !strings.Contains(s, want) {
 		t.Errorf("summary %q: want %q", s, want)
 	}
@@ -91,7 +91,7 @@ func TestExercisedSkipsFrameConditions(t *testing.T) {
 	for a := range m.Actions {
 		all[a] = true
 	}
-	x := &Exploration{Runs: []*Run{run("put"), run("get")}, actions: all, steps: stepActions(m), given: true}
+	x := &Exploration{Runs: []*Run{run("put"), run("get")}, actions: all, steps: stepActions(m, nil), given: true}
 	if v := x.verdict(Exercised(), nil); !v.ok {
 		t.Errorf("Exercised over runs taking put and get: %s; want it to hold (same is a frame condition)", v.say(t))
 	}

@@ -415,9 +415,9 @@ func (x *explainer) act(w *Why, e *Expr, en *env, c ctxt, whole bool) bool {
 			return true
 		case "ite":
 			if x.ev.boolOf(e.Args[0], en) {
-				return x.act(w, e.Args[1], en, c.with("then of if ("+m.Text(e.Args[0])+")"), whole)
+				return x.act(w, e.Args[1], en, c.with("the then branch of if ("+m.Text(e.Args[0])+")"), whole)
 			}
-			return x.act(w, e.Args[2], en, c.with("else of if ("+m.Text(e.Args[0])+")"), whole)
+			return x.act(w, e.Args[2], en, c.with("the else branch of if ("+m.Text(e.Args[0])+")"), whole)
 		}
 		if d, args, ok := x.ev.calledAction(e, en); ok {
 			return x.call(w, e, en, c, whole, d, args)
@@ -507,9 +507,9 @@ func (x *explainer) bool(w *Why, e *Expr, en *env, c ctxt, whole bool) {
 			}
 		case "ite":
 			if ev.boolOf(e.Args[0], en) {
-				x.bool(w, e.Args[1], en, c.with("then of if ("+m.Text(e.Args[0])+")"), whole)
+				x.bool(w, e.Args[1], en, c.with("the then branch of if ("+m.Text(e.Args[0])+")"), whole)
 			} else {
-				x.bool(w, e.Args[2], en, c.with("else of if ("+m.Text(e.Args[0])+")"), whole)
+				x.bool(w, e.Args[2], en, c.with("the else branch of if ("+m.Text(e.Args[0])+")"), whole)
 			}
 			return
 		case "implies":

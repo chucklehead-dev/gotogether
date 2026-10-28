@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -148,7 +149,13 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	qenv.Yield(ctx) // the dial: a scheduling point, where the server may crash
-	if !srv.listening() || t.Refuse && s.FaultOf(srv.conn) == "refused" {
+	if !srv.listening() {
+		// said to the run (hooks.Notes), whose report would otherwise show
+		// a client that never got a step recorded as a deadlock
+		hooks.NotesOf(ctx).Note("a request to "+srv.Name+" refused, nothing listening", fmt.Sprintf("%s %s at %v: %s", req.Method, req.URL.Path, s.Now().Sub(qenv.Epoch), srv.notListening()))
+		return nil, refused(host)
+	}
+	if t.Refuse && s.FaultOf(srv.conn) == "refused" {
 		return nil, refused(host)
 	}
 	from := "client:0"
