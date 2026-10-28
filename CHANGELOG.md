@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist/storetest (ROADMAP H5): the per-check functions
+  (`DensePositions`, `ConditionsAgainstBruteForce`, ... `UnknownTenant`)
+  are unexported; `Checks()` lists them by name and `Run` runs them all.
+  `TwoStores`, a check of two stores over one database, stays exported.
 - `qtest.Mutants`, `qtest.Mutant()`, `qtest.MutantEnv`
   (`GOTOGETHER_MUTANT`), ROADMAP H4: the overlay mutant harness, moved
   from grist's gristtest into the core, so a hand-planted mutant is one

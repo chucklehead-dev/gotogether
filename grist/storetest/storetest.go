@@ -10,12 +10,13 @@
 // wait for a new tenant, and tenant isolation: a read of one tenant never
 // returns another's events, an append to one never moves another's head.
 //
-// Each check is a function of a context and a fresh store returning an
-// error, so a harness can run it where the store needs (inside a qenv
+// Each check (Checks lists them, by name) is a function of a context and
+// a fresh store returning an error, so a harness can run it where the store needs (inside a qenv
 // task for grist/simstore: its concurrent checks start qenv tasks, and
 // outside a simulation goroutines), and a test can show that a check sees
-// a broken store (a mutant that ignores the tenant in Read fails
-// TenantIsolation).
+// a broken store (a mutant that ignores the tenant in Read fails the
+// TenantIsolation check). TwoStores, a check of two stores over one
+// database, is the one Checks cannot list.
 package storetest
 
 import (
@@ -39,21 +40,22 @@ type Check struct {
 }
 
 // Checks are the contract's properties, in order: a fresh list on each
-// call.
+// call. Each is a Check, its Name the property's (a harness runs one
+// alone by its Name); Run runs them all.
 func Checks() []Check {
 	return []Check{
-		{"DensePositions", DensePositions},
-		{"ConditionsAgainstBruteForce", ConditionsAgainstBruteForce},
-		{"ReadsAgainstBruteForce", ReadsAgainstBruteForce},
-		{"Checkpoints", Checkpoints},
-		{"Markers", Markers},
-		{"ConcurrentAgainstBruteForce", ConcurrentAgainstBruteForce},
-		{"WaitWakes", WaitWakes},
-		{"NoSharedSlices", NoSharedSlices},
-		{"StepLog", StepLog},
-		{"TenantFeed", TenantFeed},
-		{"TenantIsolation", TenantIsolation},
-		{"UnknownTenant", UnknownTenant},
+		{"DensePositions", densePositions},
+		{"ConditionsAgainstBruteForce", conditionsAgainstBruteForce},
+		{"ReadsAgainstBruteForce", readsAgainstBruteForce},
+		{"Checkpoints", checkpoints},
+		{"Markers", markers},
+		{"ConcurrentAgainstBruteForce", concurrentAgainstBruteForce},
+		{"WaitWakes", waitWakes},
+		{"NoSharedSlices", noSharedSlices},
+		{"StepLog", stepLog},
+		{"TenantFeed", tenantFeed},
+		{"TenantIsolation", tenantIsolation},
+		{"UnknownTenant", unknownTenant},
 	}
 }
 
@@ -151,10 +153,10 @@ func positions(evs []store.Stored) []store.Position {
 	return out
 }
 
-// DensePositions: batches are appended at the next positions, 1, 2, ...;
+// densePositions: batches are appended at the next positions, 1, 2, ...;
 // Append returns the head after each, and a read through the head returns
 // every event in order with its envelope.
-func DensePositions(ctx context.Context, s store.Store) error {
+func densePositions(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -191,11 +193,11 @@ func DensePositions(ctx context.Context, s store.Store) error {
 	return s.Wait(ctx, "t1", heads["t1"]-1) // past it already: returns at once
 }
 
-// ConditionsAgainstBruteForce: on random histories, an append with a
+// conditionsAgainstBruteForce: on random histories, an append with a
 // random condition (selectors of one or two types and none, one or two
 // tags) commits exactly when store.CheckCondition over the whole log
 // says it holds, and a failed one names the event that broke it.
-func ConditionsAgainstBruteForce(ctx context.Context, s store.Store) error {
+func conditionsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -262,10 +264,10 @@ func twoTags(sels []store.Selector) bool {
 	return false
 }
 
-// ReadsAgainstBruteForce: on a random history, every random query (one or
+// readsAgainstBruteForce: on a random history, every random query (one or
 // two types; none, one or two tags; after, reverse, limit) through a
 // random position returns what store.Select over the whole log returns.
-func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error {
+func readsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -302,9 +304,9 @@ func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// Checkpoints: a checkpoint moves only from where it is (a
+// checkpoints: a checkpoint moves only from where it is (a
 // compare-and-set), alone or with events, and Checkpoint reads it.
-func Checkpoints(ctx context.Context, s store.Store) error {
+func checkpoints(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -333,9 +335,9 @@ func Checkpoints(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// Markers: a batch's marker is written with its receipt, and a second
+// markers: a batch's marker is written with its receipt, and a second
 // batch with the same id fails, naming it, and appends nothing.
-func Markers(ctx context.Context, s store.Store) error {
+func markers(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -375,7 +377,7 @@ func Markers(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// ConcurrentAgainstBruteForce: tasks append at once (qenv.Go: a
+// concurrentAgainstBruteForce: tasks append at once (qenv.Go: a
 // simulation's tasks, goroutines outside one), each read of the head
 // followed by a pause, then an append conditioned after it, half of them
 // moving a checkpoint from where the task read it, every one under its
@@ -386,7 +388,7 @@ func Markers(ctx context.Context, s store.Store) error {
 // checkpoint that moved, and an append whose answer was transient is
 // committed exactly when its marker exists. An append not committed
 // before its commit is retried, up to eight times.
-func ConcurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
+func concurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -529,9 +531,9 @@ func ConcurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// WaitWakes: Wait returns at once for a head already past, and a waiter
+// waitWakes: Wait returns at once for a head already past, and a waiter
 // on the head returns once an append moves it, not before.
-func WaitWakes(ctx context.Context, s store.Store) error {
+func waitWakes(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -558,10 +560,10 @@ func WaitWakes(ctx context.Context, s store.Store) error {
 	return s.Wait(ctx, "t1", 0) // past already: returns at once
 }
 
-// NoSharedSlices: a reader that mutates an event's tags or body in place
+// noSharedSlices: a reader that mutates an event's tags or body in place
 // (a fold reusing its input), or a writer that reuses its batch's slices
 // after the append, changes nothing the store holds.
-func NoSharedSlices(ctx context.Context, s store.Store) error {
+func noSharedSlices(ctx context.Context, s store.Store) error {
 	if err := s.CreateTenant(ctx, "t1"); err != nil {
 		return err
 	}
@@ -585,12 +587,12 @@ func NoSharedSlices(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// StepLog: the store is a store.StepLog (grist records every commit's
+// stepLog: the store is a store.StepLog (grist records every commit's
 // step from it), keeping each committed batch's step, in commit order
 // with the head after it, and none of a refused batch; and WaitSteps
 // wakes for a refusal's step, which commits its marker without moving
 // the head (a WaitSteps that waits on the head sleeps through it).
-func StepLog(ctx context.Context, s store.Store) error {
+func stepLog(ctx context.Context, s store.Store) error {
 	sl, ok := s.(store.StepLog)
 	if !ok {
 		return fmt.Errorf("step log: %T is no store.StepLog: grist records every commit's step from the step rows it keeps in the commit's transaction (Steps, WaitSteps)", s)
@@ -670,11 +672,11 @@ func StepLog(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// TenantFeed: the store is a store.TenantFeed (a node relays and handles
+// tenantFeed: the store is a store.TenantFeed (a node relays and handles
 // a tenant created after it started), whose WaitTenants returns at once
 // when the store has more tenants than it was told, and otherwise once a
 // tenant is created, not before.
-func TenantFeed(ctx context.Context, s store.Store) error {
+func tenantFeed(ctx context.Context, s store.Store) error {
 	tf, ok := s.(store.TenantFeed)
 	if !ok {
 		return fmt.Errorf("tenant feed: %T is no store.TenantFeed: a node waits on WaitTenants for tenants created after it started", s)
@@ -715,10 +717,10 @@ func TenantFeed(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// TenantIsolation: a read of one tenant never returns another's events,
+// tenantIsolation: a read of one tenant never returns another's events,
 // and an append to one never moves another's head, checkpoints or
 // markers.
-func TenantIsolation(ctx context.Context, s store.Store) error {
+func tenantIsolation(ctx context.Context, s store.Store) error {
 	for _, t := range []string{"t1", "t2"} {
 		if err := s.CreateTenant(ctx, t); err != nil {
 			return err
@@ -769,9 +771,9 @@ func TenantIsolation(ctx context.Context, s store.Store) error {
 	return nil
 }
 
-// UnknownTenant: a tenant never created is refused with
+// unknownTenant: a tenant never created is refused with
 // store.ErrUnknownTenant, by reads and appends alike.
-func UnknownTenant(ctx context.Context, s store.Store) error {
+func unknownTenant(ctx context.Context, s store.Store) error {
 	if _, _, err := s.Read(ctx, "nobody", store.Selector{Types: types}, 0); !errors.Is(err, store.ErrUnknownTenant) {
 		return fmt.Errorf("unknown tenant: a read: %v, want store.ErrUnknownTenant", err)
 	}

@@ -583,21 +583,9 @@ type TenantFeed interface
 var ErrUnknownTenant = errors.New("grist: unknown tenant: create it first (Store.CreateTenant)")
 
 == github.com/chucklehead-dev/gotogether/grist/storetest
-func Checkpoints(ctx context.Context, s store.Store) error
 func Checks() []Check
-func ConcurrentAgainstBruteForce(ctx context.Context, s store.Store) error
-func ConditionsAgainstBruteForce(ctx context.Context, s store.Store) error
-func DensePositions(ctx context.Context, s store.Store) error
-func Markers(ctx context.Context, s store.Store) error
-func NoSharedSlices(ctx context.Context, s store.Store) error
-func ReadsAgainstBruteForce(ctx context.Context, s store.Store) error
 func Run(t *testing.T, h Harness)
-func StepLog(ctx context.Context, s store.Store) error
-func TenantFeed(ctx context.Context, s store.Store) error
-func TenantIsolation(ctx context.Context, s store.Store) error
 func TwoStores(ctx context.Context, a, b store.Store) error
-func UnknownTenant(ctx context.Context, s store.Store) error
-func WaitWakes(ctx context.Context, s store.Store) error
 type Check struct
     field Name string
     field Run func(ctx context.Context, s store.Store) error
