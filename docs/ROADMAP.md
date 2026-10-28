@@ -465,20 +465,37 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   checking every example's README test table, track row, model, demo
   and mutant (sktrace exempt as a library, gosim's model). Left: G11's
   rest.
-- **I35. Examples and tutorials for the newest features (M).** Each a
-  page of the Learn track, its commands run by CI:
-  - P2, "From sampling to proof" on hello and twophase (I17's), with
-    `-depth` on quorumkv to show the bound;
-  - P6: examples/requeue landed (f21ca9f); a run-side counterpart waits
-    for `NoHotCycle` (I51), a strong-fairness one for I43;
-  - scenarios as acceptance criteria: wallet-grist's three, each
-    `qtest.Possible` in the model and `Some(...)` of runs, with a
-    too-strict model mutant;
-  - GR10, "Your grist app on a cluster" (counters' rolling restart, a
-    30 s drain in a 30 s grace shown failing), then kind;
-  - a front page for migrate-payments with each stage's time, linked
-    from the quickstart as "I have code and no model"; wallet to
-    wallet-grist as the migration skill's second walk-through.
+- **I35. Examples and tutorials for the newest features (M). Mostly
+  done** (HISTORY "I35: tutorials"). docs/tutorials/, five pages on the
+  existing examples, every command's output quoted from a run after
+  I20: prove-it.md (`simulate -graph` on hello, twophase's `terminal:`
+  and early-decision refutation replayed by quint, quorumkv's bound),
+  liveness.md (requeue: live, the storm's lasso, `-unfair` vs `-stops`
+  with `replace` split out, the runs' hot cycle, `giveUp`),
+  scenarios.md (hello's possibles and `NamedScenario`, a too-strict
+  model, nav's why; library's `gristtest.Scenario` and generated
+  possibles), grist-on-kubernetes.md (counters: identity, probes, the
+  drain in `-grace`, `TestRollingRestart` and `noDrainDelay`,
+  `TestRewindFailsClosed` and `resume`, `catalog -diff` against the new
+  `release1/catalog.json`, sizing), production-at-volume.md
+  (migrate-payments: the day, a 10⁴-step day whole vs `partition: id`
+  vs `-compiled`). Rows in README's and examples/README.md's tracks.
+  docsnippets' go blocks and TestProseNames already walk docs/tutorials.
+  Fixes found on the way: `-out` makes its directory and its replay
+  command names the path given; "1 in 1 state"; no empty artifacts dir
+  on a refused `-compiled`; grist's clean stop logs no error.
+  Left: (1) a test that every `gotogether` line of a tutorial's
+  console/sh blocks names a real command and flags (re-exec the test
+  binary with `GOTOGETHER_MAIN=1` and `<cmd> -h`, parse `^  -name`, as
+  cmd/gotogether's TestCommandNeeds does); (2) the commands run by CI
+  (the outputs drift with report wording: a ci/tutorials.sh running
+  each `$` line in its example and diffing the quoted lines, `[...]`
+  matching anything);
+  (3) the designer's remaining pages: wallet-grist's three scenarios
+  with a too-strict model mutant, a migrate-payments front page with
+  each stage's time, wallet to wallet-grist as the migration skill's
+  second walk-through, kind for grist (GR10 slice 9); run-side
+  `NoHotCycle` (I51) and strong fairness (I43) when built.
 - **I36. Analyzers that fix (S-M). Done** (quintsim and quintctx in
   79c034c; the rest with I33, HISTORY "I33 and I36"). quintweave fixes
   (`//qenv:go` above a function literal's go statement, a nullary sync

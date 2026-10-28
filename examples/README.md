@@ -10,6 +10,8 @@ The examples are grouped in tracks, each read in order. Each row says
 what the example is and what it shows; the README of each has its table
 of tests.
 
+Tutorials, step by step on these examples: [docs/tutorials](../docs/tutorials/README.md) (proofs over the state graph, liveness, scenarios, a grist app on Kubernetes, production at volume).
+
 Tracks: [First steps](#first-steps), [Services](#services), [Distributed systems](#distributed-systems), [Kubernetes](#kubernetes), [grist](#grist), [Migration](#migration), [Metastability](#metastability), [run-demo.sh](#run-demosh).
 
 ## First steps

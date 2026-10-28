@@ -2464,6 +2464,29 @@ capacity. The two findings are rows: replicas never speed up a hot
 tenant (a rate limit instead), and a slow dependency's lag is no pod's
 to clear. What the design got wrong is §8.4's list.
 
+### I35: tutorials
+
+ROADMAP I35, the designer's §4 (review 11). docs/tutorials/: five
+guided pages on existing examples, each command run and its output
+pasted (paths shortened, long lines cut), after I20's report wording:
+prove-it, liveness, scenarios, grist-on-kubernetes, production-at-volume,
+and an index. counters keeps release 1's catalog
+(`release1/catalog.json`, `TestRelease1Catalog`) so `catalog -diff` can
+be run. Rough edges fixed: `simulate -graph -out` into a new directory
+failed after printing the report, and its replay command named the
+base name (ran only from that directory); the coverage line's "1 in 1
+states"; `validate -compiled` with a stale model named and left an empty
+artifacts directory; grist's lifecycle log ended a clean stop with
+`"error":"<nil>"`. Each with a test that fails without it. Rough edges
+reported, not fixed: a partitioned report's RESULT counts partitions as
+"actors" and its instance line shows the first partition's constants;
+a grist command-outcome possible reads "reached in the initial state"
+for "would answer so from the start"; `qtest.Possible`'s witnesses of a
+grist app carry every internal argument (`readPos`, `reads`); a passing
+claim such as `Some(Not(NoClientErrors()))` is not shown in the test's
+summary line; hello's mutant report says "schedule 3" where its nav
+command says `schedule=1:2`; the quint cache had grown to 3.2 GB here; `serve -steps DIR/` fails ("is a directory") when DIR does not exist, where it could make it.
+
 ### I25 and GR10 slice 3: grist's operations basics, store failover and restore
 
 ROADMAP I25 (the adopter's review's AD5 and AD6), docs/grist.md §2.11,

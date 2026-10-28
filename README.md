@@ -746,6 +746,7 @@ every one's row; they are grouped in tracks, each read in order:
 | grist | [`examples/counters`](examples/counters) → [`examples/library`](examples/library) → [`examples/wallet-grist`](examples/wallet-grist) | you build on grist ([the user guide](docs/grist-guide.md)) |
 | Migration | [`examples/migrate-payments`](examples/migrate-payments) → [`examples/edgepublish`](examples/edgepublish) | you have code, tests and logs but no model |
 | Metastability | [`examples/retrystorm`](examples/retrystorm), then checkout's and crossdb's load tests; [`examples/sktrace`](examples/sktrace) turns production traces into load | you choose retry, timeout or requeue policies |
+| Tutorials | [`docs/tutorials`](docs/tutorials): proofs over the state graph → liveness → scenarios → a grist app on Kubernetes → production at volume | you want a guided, step-by-step page with each command's real output |
 
 ```sh
 examples/hello/run-demo.sh                       # simulated runs, then gotogether on their step logs

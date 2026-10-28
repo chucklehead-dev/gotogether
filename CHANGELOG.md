@@ -10,6 +10,12 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Tutorials (ROADMAP I35): docs/tutorials/, five guided pages with real
+  output. `simulate -graph -out` makes its directory and prints a replay
+  command that runs from where you are; `validate -compiled` refused for
+  a stale model leaves no empty artifacts directory; grist's `serve`
+  logs a clean stop without an error field.
+
 - Explicit quantifiers, one place for claims (ROADMAP I16; breaking): a
   claim over runs says its quantifier. `Conforms()`, `Settles()`,
   `Completes()` and `Finishes()` alone are `All` of themselves, as their
