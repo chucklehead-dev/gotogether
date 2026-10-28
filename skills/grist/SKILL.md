@@ -20,11 +20,12 @@ examples/counters is the walk-through: read its README's table first.
 <name>` (`-module`, `-dir`; `-replace <checkout>` inside this repository)
 writes a module green on its first run: an App (two events, a keyed
 read model, a command with declared refusals, a query, a processor), its
-binary, `model/<name>.qnt` with its rules filled, the generated skeleton
+binary, `model/<name>_rules.qnt` with its rules filled and
+`model/<name>.qnt` with its invariants, the generated skeleton
 and bindings, a gristsim test with `Expect` claims, a mutant, a
 real-tier test, `run-demo.sh` and a README. Then change it one block at
 a time: the block in Go, `go run ./cmd/<name> model` (it names each new
-hole with a stub), the hole in `model/<name>.qnt`, a claim and a mutant
+hole with a stub), the hole in `model/<name>_rules.qnt`, a claim and a mutant
 for it. No binding is written by hand.
 
 ## The loop
@@ -118,15 +119,16 @@ for it. No binding is written by hand.
    (`Site.Record(ctx, tenant, v)`): an escape hatch no example needs
    (its records are ordered with no commit; a call's are). Then
    `go run ./cmd/<app> model` (`grist.Main`; `-init` the first time)
-   writes `model/<app>_gen.qnt` (events, reads, an action per block with
-   its outcome branches and frame conditions, `step`), the vendored
-   `grist.qnt` and the bindings; you write `model/<app>.qnt`'s rules
+   writes `model/<app>_gen.qnt` (events, reads), `model/<app>_steps.qnt`
+   (an action per block with its outcome branches and frame conditions,
+   `step`), the vendored `grist.qnt` and the bindings; you write the rules
+   in `model/<app>_rules.qnt`
    (per command its outcome, events and needs; per query its answer;
    per processor its events, and a Delivers one which triggers it skips;
    per processor and call it uses the request it makes, `<p><Call>`; per
    site its guard; the read models' folds)
-   and its invariants, each marked `// grist: invariant|eventually|violable
-   [bindings]` (a binding name other than `default` is a test-only
+   and its invariants in `model/<app>.qnt`, each marked `// grist:
+   invariant|eventually|violable [bindings]` (a binding name other than `default` is a test-only
    variant, `<app>.<name>.binding.yaml`). **Read
    [`references/model.md`](references/model.md) before writing or
    changing a model**: the holes, the marks, the names Quint refuses,

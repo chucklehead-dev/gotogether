@@ -2521,6 +2521,17 @@ binary's `model` command, it writes no stubs of actions but leaves the
 rules as holes of the app's own module, and the event encoding stays
 slice 1's record, `batchIs` comparing it.)
 
+**The model's files** import each other one way only, each the ones
+below it, since quint's REPL refuses a file that a file it imports
+imports back (QNT101; `quint typecheck` and `run` accept it):
+`model/<app>.qnt` (the app's invariants, modules `<app>` and
+`<app>Calls`, which the bindings name), `model/<app>_steps.qnt`
+(generated: `<app>Gen`, `<app>CallsGen`), `model/<app>_rules.qnt` (the
+app's holes, `<app>Rules`), `model/<app>_gen.qnt` (generated:
+`<app>Events`), `model/grist.qnt`. Generate refuses a cycle, and names
+the move out of the layout before this one, which had the rules in
+`model/<app>.qnt` (docs/HISTORY.md, the acyclic model layout).
+
 ### 3.3 grist's guarantees as a Quint module
 
 `grist/model/grist.qnt`, vendored into an application's `model/` (as

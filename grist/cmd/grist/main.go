@@ -148,7 +148,7 @@ func write(dir string, data any) error {
 		rel := strings.TrimSuffix(strings.TrimPrefix(path, "scaffold/"), ".tmpl")
 		name := data.(struct{ Name, Pkg, Q, Module string }).Name
 		rel = strings.Replace(rel, "cmd/app/", "cmd/"+name+"/", 1)
-		rel = strings.Replace(rel, "model/app.qnt", "model/"+name+".qnt", 1)
+		rel = strings.Replace(rel, "model/app", "model/"+name, 1) // app.qnt, app_rules.qnt
 		out := filepath.Join(dir, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 			return err

@@ -1668,6 +1668,55 @@ Three reviews, their findings ROADMAP's H track:
   fold silently changed by a new event type, Recorder.Close not closing
   its sink, and grist outside the CLI and the front page.
 
+### The acyclic model layout (grist)
+
+quint 0.33's REPL refuses a file that a file it imports imports back
+(QNT101, "Multiple modules conflict on the same name"), though
+typecheck and run accept it; docs/performance.md's D4 has the minimal
+reproduction. grist's generator wrote exactly that: the app's
+`model/<app>.qnt` held the rules (`<app>Rules`) and the invariants (the
+bindings' modules `<app>` and `<app>Calls`, importing the skeleton),
+and `model/<app>_gen.qnt` held the events, `<app>Gen` and
+`<app>CallsGen`, the latter two importing the rules back. A session
+that loads a model once (D4) needs the REPL, so the layout changed
+(there were no grist apps outside the examples):
+
+- `model/<app>_gen.qnt`, generated: `<app>Events` (imports grist);
+- `model/<app>_rules.qnt`, the app's: `<app>Rules` (grist, the events);
+- `model/<app>_steps.qnt`, generated: `<app>Gen`, `<app>CallsGen`
+  (grist, the events, the rules);
+- `model/<app>.qnt`, the app's: `<app>`, `<app>Calls` with the
+  invariants (grist, the events, the rules, the steps).
+
+Two hand-written files, not one: the invariants read the generated
+state (`log`, `checkpoints`, a call's records), which lives with the
+actions that call the rules, so the rules and the invariants cannot
+share a file without a cycle. A state module of its own, imported by
+both the invariants and the actions, would have kept one file at the
+cost of a module reached by two paths, which quint's flattener has lost
+names through before (the "imports the events and rules directly"
+witness). The bindings' spec and modules are unchanged.
+
+What holds as before: regeneration writes only `_gen` and `_steps`
+(`model -init` writes each of the app's files that is missing, never one
+beside an old layout); missing holes are read from `_rules` and
+reported with stubs; `gristtest.Generated` diffs both generated files,
+and its witness that the bindings' modules import the events and the
+rules themselves still holds, the rules now `from "./<app>_rules"`
+(the validator's Go evaluator compiles all three examples:
+TestAgreesWithQuint, TestEvalModuleCompiles). New: `grist.Generate`
+refuses a cycle of the model's imports, naming it, and the old layout
+with the move (module `<app>Rules` as it is to `model/<app>_rules.qnt`;
+in `<app>` and `<app>Calls`, `import <app>Rules.* from "./<app>_rules"`
+and the skeleton's modules from `"./<app>_steps"`); `TestLayoutAcyclic`
+(the starter's and the golden shop's import graphs, the old layout
+refused) and `TestModelsLoadInREPL` (`quint -r <app>.qnt::<module>` for
+each binding's module of the shop and the three examples, evaluating
+init; red on the old layout). `grist.Starter` returns both files by
+path. counters, wallet-grist, library and `grist new`'s scaffold moved
+their rules by that one cut. D4, measured with the REPL working: no
+gain on quint 0.33 (docs/performance.md).
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

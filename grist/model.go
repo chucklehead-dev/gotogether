@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -24,22 +25,35 @@ var gristQnt []byte
 
 // Generated is what Generate writes for an App: its model's skeleton and
 // its bindings, from the App's Catalog, beside the application's own
-// model file, which it never writes (Starter writes a first one).
+// model files, which it never writes (Starter writes first ones).
+//
+// The model's files import each other in one direction only, since
+// quint's REPL refuses a file that a file it imports imports back
+// (QNT101, "Multiple modules conflict on the same name"):
+//
+//	model/<app>.qnt        the app's: modules <app> and <app>Calls, the invariants (the bindings' modules)
+//	model/<app>_steps.qnt  generated: modules <app>Gen and <app>CallsGen, the store's and the clients' actions
+//	model/<app>_rules.qnt  the app's: module <app>Rules, the holes the actions call
+//	model/<app>_gen.qnt    generated: module <app>Events, the events, reads and records
+//	model/grist.qnt        grist's library, vendored
+//
+// each importing only files below it.
 type Generated struct {
 	// Files are the generated files by path, relative to the directory
 	// given to Generate: model/grist.qnt (grist's library, vendored),
-	// model/<app>_gen.qnt (the skeleton), <app>.binding.yaml (the store's
+	// model/<app>_gen.qnt (the events), model/<app>_steps.qnt (the
+	// store's and the clients' actions), <app>.binding.yaml (the store's
 	// side), <app>.calls.binding.yaml (the clients') and one
 	// <app>.<variant>.binding.yaml per test-only variant the app's model
 	// names.
 	Files map[string][]byte
 	// Holes are the definitions the skeleton calls and the application's
-	// model (model/<app>.qnt, module <app>Rules) must define, each with a
-	// stub to start from, in the skeleton's order.
+	// rules (model/<app>_rules.qnt, module <app>Rules) must define, each
+	// with a stub to start from, in the skeleton's order.
 	Holes []Hole
-	// Missing are the holes model/<app>.qnt does not define (all of them
-	// when there is no such file): the skeleton does not typecheck until
-	// they are written.
+	// Missing are the holes model/<app>_rules.qnt does not define (all of
+	// them when there is no such file): the skeleton does not typecheck
+	// until they are written.
 	Missing []string
 }
 
@@ -54,14 +68,17 @@ type Hole struct {
 	Doc, Stub string
 }
 
-// The names of the generated files, by the App's name.
+// The names of the model's files, by the App's name: the generated
+// events and steps, the app's rules and invariants.
 func genFile(app string) string   { return "model/" + app + "_gen.qnt" }
+func stepsFile(app string) string { return "model/" + app + "_steps.qnt" }
+func rulesFile(app string) string { return "model/" + app + "_rules.qnt" }
 func modelFile(app string) string { return "model/" + app + ".qnt" }
 
 // Generate writes the model skeleton and the bindings of app from its
-// Catalog (docs/grist.md §3.2), reading the application's model at
-// dir/model/<app>.qnt for the holes it fills and the vals it marks as
-// invariants (`// grist: invariant [bindings]`, `// grist: eventually
+// Catalog (docs/grist.md §3.2), reading the application's rules at
+// dir/model/<app>_rules.qnt for the holes they fill and its model at
+// dir/model/<app>.qnt for the vals it marks as invariants (`// grist: invariant [bindings]`, `// grist: eventually
 // [bindings]`, `// grist: violable [bindings]` on the line before a val;
 // bindings default to the store's default binding, `default`; any other
 // name is a test-only variant, <app>.<name>.binding.yaml; in module
@@ -89,12 +106,15 @@ func modelFile(app string) string { return "model/" + app + ".qnt" }
 //     invariant of the default binding: one that judges only its own vals
 //     leaves the observations to the default binding's claims).
 //
-// What the application writes (model/<app>.qnt): module <app>Rules with
-// the holes (Hole), each read model's fold over its generated selection,
-// and its own helpers; module <app> importing <app>Gen with its
-// invariants and eventual vals; module <app>Calls importing <app>CallsGen.
-// Regenerating never touches that file, so the holes survive it; a new
-// block's hole is reported in Missing.
+// What the application writes: module <app>Rules in model/<app>_rules.qnt
+// with the holes (Hole), each read model's fold over its generated
+// selection, and its own helpers; module <app> in model/<app>.qnt
+// importing <app>Gen with its invariants and eventual vals, and module
+// <app>Calls importing <app>CallsGen. Regenerating never touches those
+// files, so the holes survive it; a new block's hole is reported in
+// Missing. A model whose files import each other in a cycle is an error
+// naming it (the layout before the rules had a file of their own was
+// one: Generate says how to move them).
 func Generate(app *App, dir string) (Generated, error) {
 	if err := app.Verify(); err != nil {
 		return Generated{}, err
@@ -103,12 +123,19 @@ func Generate(app *App, dir string) (Generated, error) {
 	if err != nil {
 		return Generated{}, err
 	}
-	own, err := os.ReadFile(filepath.Join(dir, modelFile(app.Name)))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	own, err := readOwn(dir, modelFile(app.Name))
+	if err != nil {
 		return Generated{}, err
 	}
-	g.defined = definedIn(own, g.aq+"Rules")
-	skeleton := g.skeleton()
+	if err := oldLayout(app.Name, g.aq, own); err != nil {
+		return Generated{}, err
+	}
+	rules, err := readOwn(dir, rulesFile(app.Name))
+	if err != nil {
+		return Generated{}, err
+	}
+	g.defined = definedIn(rules, g.aq+"Rules")
+	events, steps := g.eventsFile(), g.stepsFile()
 	if len(g.clashes) > 0 {
 		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", app.Name, strings.Join(g.clashes, "\n  "))
 	}
@@ -116,22 +143,135 @@ func Generate(app *App, dir string) (Generated, error) {
 	if err != nil {
 		return Generated{}, fmt.Errorf("grist model: %s: %w", modelFile(app.Name), err)
 	}
+	if _, err := parseMarks(rules, g.aq); err != nil {
+		return Generated{}, fmt.Errorf("grist model: %s: %w", rulesFile(app.Name), err)
+	}
 	out := Generated{Files: map[string][]byte{
 		"model/grist.qnt":                gristQnt,
-		genFile(app.Name):                skeleton,
+		genFile(app.Name):                events,
+		stepsFile(app.Name):              steps,
 		app.Name + ".binding.yaml":       g.binding("default", marks),
 		app.Name + ".calls.binding.yaml": g.binding("calls", marks),
 	}, Holes: g.holes}
 	for _, v := range marks.variants() {
 		out.Files[app.Name+"."+v+".binding.yaml"] = g.binding(v, marks)
 	}
-	defined := definedIn(own, g.aq+"Rules")
 	for _, h := range g.holes {
-		if !defined[h.Name] {
+		if !g.defined[h.Name] {
 			out.Missing = append(out.Missing, h.Name)
 		}
 	}
+	if cycle, err := importCycle(dir, out.Files); err != nil {
+		return Generated{}, err
+	} else if cycle != nil {
+		return Generated{}, fmt.Errorf("grist model: %s import each other in a cycle (%s), which quint's REPL refuses (QNT101: Multiple modules conflict on the same name): each file imports only the ones below it in grist.Generated's layout (the app's rules import grist and the events, never the steps or the invariants)",
+			strings.Join(sortedUnique(cycle), ", "), strings.Join(cycle, " -> "))
+	}
 	return out, nil
+}
+
+// readOwn reads one of the application's model files under dir: nil if
+// there is none.
+func readOwn(dir, rel string) ([]byte, error) {
+	b, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	return b, nil
+}
+
+// oldLayout is the error, with the move that fixes it, for an app's
+// model in the layout before its rules had a file of their own: module
+// <app>Rules in model/<app>.qnt, which imported the skeleton that
+// imported it back.
+func oldLayout(app, aq string, own []byte) error {
+	for _, line := range strings.Split(string(own), "\n") {
+		if mm := moduleLine.FindStringSubmatch(line); mm != nil && mm[1] == aq+"Rules" {
+			return fmt.Errorf("grist model: %s holds module %sRules, in the layout where it and the generated %s imported each other, which quint's REPL refuses: "+
+				"move module %sRules, as it is, to %s; in modules %s and %sCalls of %s, import %sRules.* from \"./%s_rules\" and %sGen.* and %sCallsGen.* from \"./%s_steps\" (the events stay in \"./%s_gen\"); then regenerate (`%s model`)",
+				modelFile(app), aq, genFile(app), aq, rulesFile(app), aq, aq, modelFile(app), aq, app, aq, aq, app, app, app)
+		}
+	}
+	return nil
+}
+
+// importLine is a Quint import from a file (read-only).
+var importLine = regexp.MustCompile(`^\s*import\s+.*\bfrom\s+"([^"]+)"`)
+
+// importCycle is a cycle of the model's files' imports, as paths
+// relative to dir from a file back to itself, or nil: over files (the
+// generated ones, by their path relative to dir) and every other file an
+// import reaches under dir.
+func importCycle(dir string, files map[string][]byte) ([]string, error) {
+	src := func(p string) ([]byte, bool, error) {
+		if b, ok := files[p]; ok {
+			return b, true, nil
+		}
+		b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
+		return b, err == nil, err
+	}
+	const (
+		visiting = 1
+		done     = 2
+	)
+	state := map[string]int{}
+	var stack []string
+	var visit func(p string) ([]string, error)
+	visit = func(p string) ([]string, error) {
+		switch state[p] {
+		case visiting:
+			i := slices.Index(stack, p)
+			return append(append([]string(nil), stack[i:]...), p), nil
+		case done:
+			return nil, nil
+		}
+		b, ok, err := src(p)
+		if err != nil || !ok {
+			state[p] = done
+			return nil, err
+		}
+		state[p] = visiting
+		stack = append(stack, p)
+		for _, line := range strings.Split(string(b), "\n") {
+			if m := importLine.FindStringSubmatch(line); m != nil {
+				to := path.Join(path.Dir(p), m[1]) + ".qnt"
+				if c, err := visit(to); c != nil || err != nil {
+					return c, err
+				}
+			}
+		}
+		stack = stack[:len(stack)-1]
+		state[p] = done
+		return nil, nil
+	}
+	var roots []string
+	for p := range files {
+		if strings.HasSuffix(p, ".qnt") {
+			roots = append(roots, p)
+		}
+	}
+	others, _ := filepath.Glob(filepath.Join(dir, "model", "*.qnt"))
+	for _, o := range others {
+		roots = append(roots, "model/"+filepath.Base(o))
+	}
+	sort.Strings(roots)
+	for _, r := range roots {
+		if c, err := visit(r); c != nil || err != nil {
+			return c, err
+		}
+	}
+	return nil, nil
+}
+
+func sortedUnique(s []string) []string {
+	set := map[string]bool{}
+	for _, x := range s {
+		set[x] = true
+	}
+	return sortedKeys(set)
 }
 
 // Write writes the files under dir.
@@ -192,12 +332,13 @@ func (g Generated) paths() []string {
 	return out
 }
 
-// Starter is a first model/<app>.qnt for app: every hole of its skeleton
-// stubbed (the stubs typecheck and decide nothing: an ok for every
-// command, no events, no reads), the module the store's binding names
-// and the clients' one, with no invariant yet. Main's `model -init`
-// writes it when the file does not exist.
-func Starter(app *App) ([]byte, error) {
+// Starter is the application's first model files for app, by path
+// relative to the app's directory: model/<app>_rules.qnt, every hole of
+// its skeleton stubbed (the stubs typecheck and decide nothing: an ok
+// for every command, no events, no reads), and model/<app>.qnt, the
+// module the store's binding names and the clients' one, with no
+// invariant yet. Main's `model -init` writes each that does not exist.
+func Starter(app *App) (map[string][]byte, error) {
 	if err := app.Verify(); err != nil {
 		return nil, err
 	}
@@ -205,15 +346,16 @@ func Starter(app *App) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "// The %s app's model: the rules grist's generated skeleton (%s,\n// grist model)", app.Name, genFile(app.Name))
-	b.WriteString(" calls, and the invariants the bindings judge. Regenerating\n// the skeleton never touches this file.\n\n")
-	fmt.Fprintf(&b, "// The rules: every hole of the skeleton, and the read models' folds.\nmodule %sRules {\n", g.aq)
-	fmt.Fprintf(&b, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n", g.aq, app.Name)
+	var r strings.Builder
+	fmt.Fprintf(&r, "// The %s app's rules: every hole grist's generated skeleton (%s,\n// grist model) calls, and the read models' folds. Regenerating the\n// skeleton never touches this file.\n\n", app.Name, stepsFile(app.Name))
+	fmt.Fprintf(&r, "module %sRules {\n", g.aq)
+	fmt.Fprintf(&r, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n", g.aq, app.Name)
 	for _, h := range g.holes {
-		fmt.Fprintf(&b, "\n%s  %s\n", comment("  ", h.Doc), h.Stub)
+		fmt.Fprintf(&r, "\n%s  %s\n", comment("  ", h.Doc), h.Stub)
 	}
-	b.WriteString("}\n\n")
+	r.WriteString("}\n")
+	var b strings.Builder
+	fmt.Fprintf(&b, "// The %s app's invariants: what its bindings judge, over the generated\n// store's and clients' actions (%s) and the app's rules (%s).\n// Regenerating the skeleton never touches this file.\n\n", app.Name, stepsFile(app.Name), rulesFile(app.Name))
 	fmt.Fprintf(&b, "// The store's side (%s.binding.yaml): mark a val `// grist: invariant`\n", app.Name)
 	b.WriteString("// or `// grist: eventually` (after a settle) on the line before it, and\n")
 	b.WriteString("// regenerate; a binding name after the kind puts it in a test-only variant.\n")
@@ -221,11 +363,11 @@ func Starter(app *App) ([]byte, error) {
 	// the skeleton's exports: quint's flattener (quint compile, which the
 	// validator's Go evaluator runs on a module importing this one from
 	// another directory) loses names re-exported twice
-	imports := fmt.Sprintf("  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.*\n", g.aq, app.Name, g.aq)
-	fmt.Fprintf(&b, "module %s {\n%s  import %sGen.* from \"./%s_gen\"\n  export %sGen.*\n}\n\n", g.aq, imports, g.aq, app.Name, g.aq)
+	imports := fmt.Sprintf("  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, app.Name, g.aq, app.Name)
+	fmt.Fprintf(&b, "module %s {\n%s  import %sGen.* from \"./%s_steps\"\n  export %sGen.*\n}\n\n", g.aq, imports, g.aq, app.Name, g.aq)
 	fmt.Fprintf(&b, "// The clients' side (%s.calls.binding.yaml), linearized.\n", app.Name)
-	fmt.Fprintf(&b, "module %sCalls {\n%s  import %sCallsGen.* from \"./%s_gen\"\n  export %sCallsGen.*\n}\n", g.aq, imports, g.aq, app.Name, g.aq)
-	return []byte(b.String()), nil
+	fmt.Fprintf(&b, "module %sCalls {\n%s  import %sCallsGen.* from \"./%s_steps\"\n  export %sCallsGen.*\n}\n", g.aq, imports, g.aq, app.Name, g.aq)
+	return map[string][]byte{rulesFile(app.Name): []byte(r.String()), modelFile(app.Name): []byte(b.String())}, nil
 }
 
 // gen is one App's generation.
@@ -582,13 +724,24 @@ func paramNames(fs []field, extra ...string) string {
 
 const genHeader = "// Generated by grist model from the %s App's catalog (docs/grist.md §3.2):\n" +
 	"// do not edit. Regenerate with the app's binary (`<app> model`, grist.Main)\n" +
-	"// after changing a block; the application's rules are model/%s.qnt's.\n"
+	"// after changing a block; the application's rules are model/%s_rules.qnt's,\n" +
+	"// its invariants model/%s.qnt's.\n"
 
-// skeleton is model/<app>_gen.qnt.
-func (g *gen) skeleton() []byte {
+// eventsFile is model/<app>_gen.qnt: the events, which the app's rules
+// import.
+func (g *gen) eventsFile() []byte {
 	var b strings.Builder
-	fmt.Fprintf(&b, genHeader, g.c.Name, g.c.Name)
+	fmt.Fprintf(&b, genHeader, g.c.Name, g.c.Name, g.c.Name)
 	g.eventsModule(&b)
+	return []byte(b.String())
+}
+
+// stepsFile is model/<app>_steps.qnt: the store's and the clients'
+// actions, which import the app's rules (and the app's invariants
+// import them).
+func (g *gen) stepsFile() []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, genHeader, g.c.Name, g.c.Name, g.c.Name)
 	b.WriteString("\n")
 	g.storeModule(&b)
 	b.WriteString("\n")
@@ -741,7 +894,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 	fmt.Fprintf(b, "// The store's side (%s.binding.yaml): every step where it took effect, one\n", g.c.Name)
 	b.WriteString("// tenant's log. Commits are relayed from the store's step log, refusals\n// recorded at their commit, queries on return, effects by their processors,\n// sites by the dependencies that make them.\n")
 	fmt.Fprintf(b, "module %sGen {\n", g.aq)
-	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.*\n  import %sRules.* from \"./%s\"\n", g.aq, g.aq, g.c.Name)
+	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, g.c.Name, g.aq, g.c.Name)
 	fmt.Fprintf(b, "  export grist.*\n  export %sEvents.*\n  export %sRules.*\n\n", g.aq, g.aq)
 	b.WriteString("  // one tenant's log\n  var log: List[Event]\n  // each processor's checkpoint: the last trigger it handled\n  var checkpoints: str -> int\n")
 	b.WriteString("  // the batch the last step appended (what its observations are checked against)\n  var appended: List[Event]\n")
@@ -1014,7 +1167,7 @@ func (g *gen) callsModule(b *strings.Builder) {
 	fmt.Fprintf(b, "// The clients' side (%s.calls.binding.yaml): every call where a client\n", g.c.Name)
 	b.WriteString("// saw it (actor <tenant>/clients), linearized by qtest.Linearize: no\n// positions, no processors, the log the commands' events alone. A key's first\n// answer is final here too; a call the API denied (403) answers nothing.\n")
 	fmt.Fprintf(b, "module %sCallsGen {\n", g.aq)
-	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.*\n  import %sRules.* from \"./%s\"\n", g.aq, g.aq, g.c.Name)
+	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, g.c.Name, g.aq, g.c.Name)
 	fmt.Fprintf(b, "  export grist.*\n  export %sEvents.*\n  export %sRules.*\n\n", g.aq, g.aq)
 	b.WriteString("  var log: List[Event]\n  var answered: Set[str]\n\n  action init = all { log' = [], answered' = Set() }\n\n")
 	b.WriteString("  pure val IDS = Set(\"i1\", \"i2\", \"i3\")\n\n")

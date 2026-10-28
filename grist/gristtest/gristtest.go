@@ -18,13 +18,15 @@ import (
 // Generated fails t when the checked-in generated files of app (its
 // model's skeleton, the vendored grist.qnt, its bindings: grist.Generate)
 // under the test's package directory differ from what its catalog
-// generates now, naming each and the fix, or when its model lacks a hole
-// the skeleton calls, or when a binding's module does not import the
-// events and the rules itself (without which the validator's Go evaluator
-// cannot compile it, and falls back to quint processes). It runs no
-// quint: every validation typechecks the model. A block added,
-// renamed or redeclared without regenerating fails here, in CI, rather
-// than as a binding that silently judges an older catalog.
+// generates now, naming each and the fix, or when its rules lack a hole
+// the skeleton calls, or when the model's files import each other in a
+// cycle (quint's REPL refuses one; grist.Generate names it, and the move
+// out of the old layout, which had one), or when a binding's module does
+// not import the events and the rules itself (without which the
+// validator's Go evaluator cannot compile it, and falls back to quint
+// processes). It runs no quint: every validation typechecks the model. A
+// block added, renamed or redeclared without regenerating fails here, in
+// CI, rather than as a binding that silently judges an older catalog.
 // GRIST_UPDATE=1 writes the files instead (the app's `model` command
 // does the same).
 func Generated(t testing.TB, app *grist.App) {
@@ -50,7 +52,7 @@ func Generated(t testing.TB, app *grist.App) {
 				}
 			}
 		}
-		t.Fatalf("model/%s.qnt lacks %s, which the generated skeleton calls: define them in its Rules module, for instance\n  %s",
+		t.Fatalf("model/%s_rules.qnt lacks %s, which the generated skeleton calls: define them in its Rules module, for instance\n  %s",
 			app.Name, strings.Join(g.Missing, ", "), strings.Join(stubs, "\n  "))
 	}
 	// each binding's module imports the events and the rules itself,
@@ -67,7 +69,7 @@ func Generated(t testing.TB, app *grist.App) {
 	for _, module := range []string{q, q + "Calls"} {
 		for _, want := range []string{q + "Events", q + "Rules"} {
 			if !imports(string(src), module, want) {
-				t.Fatalf("module %s of model/%s.qnt does not import %s itself: add `import %s.*` (from \"./%s_gen\" for the events) beside the skeleton's import, as grist.Starter writes it, or the validator's evaluator cannot compile it", module, app.Name, want, want, app.Name)
+				t.Fatalf("module %s of model/%s.qnt does not import %s itself: add `import %s.*` (from \"./%s_gen\" for the events, \"./%s_rules\" for the rules) beside the skeleton's import, as grist.Starter writes it, or the validator's evaluator cannot compile it", module, app.Name, want, want, app.Name, app.Name)
 			}
 		}
 	}

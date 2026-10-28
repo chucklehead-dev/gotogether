@@ -2,17 +2,37 @@
 
 The model is one tenant's log. Its skeleton and both bindings are
 generated from the App's catalog by the app's binary (`go run ./cmd/<app>
-model`, `grist.Main`; `-init` also writes a first `model/<app>.qnt` with
-every hole stubbed); the application writes the rules and invariants in
+model`, `grist.Main`; `-init` also writes a first `model/<app>_rules.qnt`
+with every hole stubbed and a first `model/<app>.qnt`); the application
+writes the rules in `model/<app>_rules.qnt` and the invariants in
 `model/<app>.qnt`, which regenerating never touches. examples/counters'
-and examples/wallet-grist's `model/<app>.qnt` are complete ones: read
-one beside this page.
+and examples/wallet-grist's are complete ones: read them beside this
+page.
+
+The files import each other one way only, each the ones below it
+(quint's REPL refuses a file that a file it imports imports back, and
+the generator refuses such a cycle, naming it):
+
+| file | who writes it | modules |
+|---|---|---|
+| `model/<app>.qnt` | you: the invariants | `<app>`, `<app>Calls` (the bindings') |
+| `model/<app>_steps.qnt` | the generator | `<app>Gen`, `<app>CallsGen` |
+| `model/<app>_rules.qnt` | you: the holes | `<app>Rules` |
+| `model/<app>_gen.qnt` | the generator | `<app>Events` |
+| `model/grist.qnt` | vendored | `grist` |
+
+An app whose `model/<app>.qnt` still holds module `<app>Rules` (the
+layout before the rules had their own file) is the model command's
+error, with the move: module `<app>Rules` as it is to
+`model/<app>_rules.qnt`; in `<app>` and `<app>Calls`, `import
+<app>Rules.* from "./<app>_rules"` and the skeleton's modules from
+`"./<app>_steps"`.
 
 ## What is generated
 
-`model/<app>_gen.qnt` (never edit it):
+`model/<app>_gen.qnt` and `model/<app>_steps.qnt` (never edit them):
 
-- module `<app>Events`: an `Event` constructor per event type, its
+- module `<app>Events` (`_gen`): an `Event` constructor per event type, its
   scalar fields in Go order (`counterCreated(counter, name, creator)`;
   its cause is stamped by the action that appends it); accessors
   (`counterCreatedName(e)`); reads (`counterCreatedRead`,
@@ -23,7 +43,7 @@ one beside this page.
   per site's record, per declared call its request, response and step
   record (`BankPayRequest`, `BankPayResponse`, `BankPayRecord`: processor,
   trigger, key, request, result, response).
-- module `<app>Gen`, the store's side: `log`, `checkpoints`, `appended`,
+- module `<app>Gen` (`_steps`), the store's side: `log`, `checkpoints`, `appended`,
   `effects`, `answered`, one list per site, and per call the caller's
   steps and the site's (`bankPayCalls`, `bankPayRecords`); per
   command an action (a reused key; a `conflict` if it is conditioned;
@@ -34,7 +54,7 @@ one beside this page.
   that never happens; `Delivers(AtMostOnce)`: checkpoint, effect,
   outcome), per site one, per call two (below); every frame condition;
   `step`.
-- module `<app>CallsGen`, the clients' side: no positions, no
+- module `<app>CallsGen` (`_steps`), the clients' side: no positions, no
   processors, a key's first answer final, `denied` answering nothing.
 - `<app>.binding.yaml`, `<app>.calls.binding.yaml` and one
   `<app>.<variant>.binding.yaml` per test-only variant (below), and
@@ -58,7 +78,7 @@ handler skips; a handler's Fail is recorded so too, with its
 `grist.failed`, which a skip's empty batch does not match (a Mismatch,
 as an Emits processor's Fail is).
 
-## The holes (module `<app>Rules`)
+## The holes (module `<app>Rules`, `model/<app>_rules.qnt`)
 
 Per command `c` (its arguments a record: `c.counter`, `c.principal`):
 
@@ -140,7 +160,7 @@ so `everyPaymentAnswerServed` (every answer the payout got is the bank's
 served record, or unknown) is marked `default retiring real` and
 `everyMailAnswerServed` `default retiring`; judged by the default
 binding, its real tier violates the second.
-Both modules import `grist`, `<app>Events` and `<app>Rules` themselves
+Both modules (in `model/<app>.qnt`) import `grist`, `<app>Events` and `<app>Rules` themselves
 beside the skeleton (the starter does): quint's flattener loses names
 re-exported twice, and the validator's Go evaluator, which compiles the
 module from another directory, falls back to quint processes, several

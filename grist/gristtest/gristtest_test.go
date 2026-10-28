@@ -64,14 +64,17 @@ func TestGeneratedWitness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	a := app()
-	b, err := grist.Starter(a)
+	files, err := grist.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	os.MkdirAll("model", 0o755)
-	if err := os.WriteFile(filepath.Join("model", "notes.qnt"), b, 0o644); err != nil {
-		t.Fatal(err)
+	for p, b := range files {
+		if err := os.WriteFile(p, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
+	b := files["model/notes_rules.qnt"]
 	g, err := grist.Generate(a, ".")
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +88,7 @@ func TestGeneratedWitness(t *testing.T) {
 		t.Errorf("an edited binding: %v, want one failure naming it and the fix", msgs)
 	}
 	g.Write(".")
-	os.WriteFile(filepath.Join("model", "notes.qnt"), []byte(strings.Replace(string(b), "pure def noteNeeds", "pure def noteNeedz", 1)), 0o644)
+	os.WriteFile(filepath.Join("model", "notes_rules.qnt"), []byte(strings.Replace(string(b), "pure def noteNeeds", "pure def noteNeedz", 1)), 0o644)
 	if msgs := run(t, func(tb testing.TB) { gristtest.Generated(tb, a) }); len(msgs) != 1 || !strings.Contains(msgs[0], "lacks noteNeeds") {
 		t.Errorf("a missing hole: %v, want one failure naming it", msgs)
 	}

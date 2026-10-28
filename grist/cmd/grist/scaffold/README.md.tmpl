@@ -12,8 +12,9 @@ and both bindings are generated from the App's catalog.
 | file | what it is |
 |---|---|
 | [app.go](app.go), [commands.go](commands.go), [queries.go](queries.go), [processors.go](processors.go), [deps.go](deps.go) | the events, the read model (`stock`, keyed by item), the command, the query, the processors, the warehouse (a dependency and its call) |
-| [model/{{.Name}}.qnt](model/{{.Name}}.qnt) | written by hand: the rules the skeleton calls (each command's outcome, events and the reads it needs, the query's answer, the processors' events, the warehouse's request) and the invariants, each marked for its binding (`// grist: invariant`) |
-| [model/{{.Name}}_gen.qnt](model/{{.Name}}_gen.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/{{.Name}} model` (never edit them; `TestGenerated` fails when they are stale) |
+| [model/{{.Name}}_rules.qnt](model/{{.Name}}_rules.qnt) | written by hand: the rules the skeleton calls (each command's outcome, events and the reads it needs, the query's answer, the processors' events, the warehouse's request) |
+| [model/{{.Name}}.qnt](model/{{.Name}}.qnt) | written by hand: the invariants, each marked for its binding (`// grist: invariant`); the modules the bindings name |
+| [model/{{.Name}}_gen.qnt](model/{{.Name}}_gen.qnt) (the events), [model/{{.Name}}_steps.qnt](model/{{.Name}}_steps.qnt) (the actions), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/{{.Name}} model` (never edit them; `TestGenerated` fails when they are stale) |
 | [cmd/{{.Name}}](cmd/{{.Name}}/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
 | [testdata/mutants](testdata/mutants) | `noCapacity`: the capacity check left out |
 
@@ -32,7 +33,8 @@ and both bindings are generated from the App's catalog.
 
 Add a block (an event, a command, a processor, a dependency's call) in Go, regenerate (`go
 run ./cmd/{{.Name}} model`: it names each new hole and a stub for it),
-fill the holes in `model/{{.Name}}.qnt`, mark the invariants, and write a
+fill the holes in `model/{{.Name}}_rules.qnt`, mark the invariants in
+`model/{{.Name}}.qnt`, and write a
 mutant per claim. skills/grist says how.
 
 ```sh

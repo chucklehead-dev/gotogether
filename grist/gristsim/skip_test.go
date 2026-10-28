@@ -40,7 +40,8 @@ func mailer() *grist.App {
 	return a
 }
 
-// mailerRules are the mailer's rules, skips the mailSkips hole.
+// mailerRules are the mailer's rules (model/mailer_rules.qnt), skips the
+// mailSkips hole.
 func mailerRules(skips string) string {
 	return `module mailerRules {
   import grist.* from "./grist"
@@ -52,24 +53,26 @@ func mailerRules(skips string) string {
   pure def noteNeeds(c: NoteArgs, result: str): Set[Read] = Set()
   pure def mailSkips(prefix: List[Event], trigger: int): bool = ` + skips + `
 }
+`
+}
 
-module mailer {
+// mailerModel is the mailer's model/mailer.qnt, the bindings' modules.
+const mailerModel = `module mailer {
   import grist.* from "./grist"
   import mailerEvents.* from "./mailer_gen"
-  import mailerRules.*
-  import mailerGen.* from "./mailer_gen"
+  import mailerRules.* from "./mailer_rules"
+  import mailerGen.* from "./mailer_steps"
   export mailerGen.*
 }
 
 module mailerCalls {
   import grist.* from "./grist"
   import mailerEvents.* from "./mailer_gen"
-  import mailerRules.*
-  import mailerCallsGen.* from "./mailer_gen"
+  import mailerRules.* from "./mailer_rules"
+  import mailerCallsGen.* from "./mailer_steps"
   export mailerCallsGen.*
 }
 `
-}
 
 // A Delivers processor's Skip is its skip step (mailSkip), which the
 // generated model takes where the app's rule mailSkips says so: the
@@ -91,7 +94,10 @@ func TestDeliversSkip(t *testing.T) {
 		}
 		dir := t.TempDir()
 		os.MkdirAll(filepath.Join(dir, "model"), 0o755)
-		if err := os.WriteFile(filepath.Join(dir, "model", "mailer.qnt"), []byte(mailerRules(c.skips)), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "model", "mailer_rules.qnt"), []byte(mailerRules(c.skips)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "model", "mailer.qnt"), []byte(mailerModel), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		g, err := grist.Generate(a, dir)
@@ -104,7 +110,7 @@ func TestDeliversSkip(t *testing.T) {
 		if err := g.Write(dir); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(g.Files["model/mailer_gen.qnt"]), "action mailSkip(trigger: int)") {
+		if !strings.Contains(string(g.Files["model/mailer_steps.qnt"]), "action mailSkip(trigger: int)") {
 			t.Fatalf("no skip action in the skeleton")
 		}
 		cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 3}

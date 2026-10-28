@@ -6,7 +6,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 )
 
-// The generated model (model/wallet_gen.qnt, the vendored grist.qnt) and
+// The generated model (model/wallet_gen.qnt and _steps.qnt, the vendored grist.qnt) and
 // the bindings are what the App's catalog generates now (`go run
 // ./cmd/wallet model`), and the model typechecks.
 func TestGenerated(t *testing.T) {

@@ -56,7 +56,7 @@ const mainUsage = `commands:
   verify                      check the registry (App.Verify), as the node does at boot
   model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings (Generate) under DIR (default .)
       -check                           write nothing: fail if a generated file differs (CI's diff)
-      -init                            also write a first model/<app>.qnt (Starter) if there is none
+      -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt (Starter) where there are none
   serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
       -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
       -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port)
@@ -73,7 +73,8 @@ const mainUsage = `commands:
 //	verify     App.Verify
 //	model      Generate's files written under -dir (default .), or with -check
 //	           compared with those there (an error naming each that differs);
-//	           -init writes a Starter model/<app>.qnt where there is none.
+//	           -init writes Starter's model/<app>_rules.qnt and model/<app>.qnt
+//	           where there are none.
 //	           It lists the holes the app's model has not filled
 //	serve      the HTTP API (NewHandler, opts applied) on grist/sqlstore over -db
 //	           (sqlite:PATH, postgres:DSN), the node (App.Start: relay, pollers,
@@ -130,19 +131,34 @@ func modelMain(app *App, args []string, stdout io.Writer) error {
 		return &UsageError{Msg: fmt.Sprintf("usage: %s model [-dir DIR] [-check] [-init]", app.Name)}
 	}
 	own := filepath.Join(*dir, modelFile(app.Name))
+	rules := filepath.Join(*dir, rulesFile(app.Name))
 	if *starter && !*check {
-		if _, err := os.Stat(own); errors.Is(err, os.ErrNotExist) {
-			b, err := Starter(app)
-			if err != nil {
+		// an old layout's model is moved by hand, never stubbed beside
+		if b, err := readOwn(*dir, modelFile(app.Name)); err != nil {
+			return err
+		} else if err := oldLayout(app.Name, mustQuint(app.Name), b); err != nil {
+			return err
+		}
+		files, err := Starter(app)
+		if err != nil {
+			return err
+		}
+		for _, rel := range []string{rulesFile(app.Name), modelFile(app.Name)} {
+			path := filepath.Join(*dir, rel)
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return err
 			}
-			if err := os.MkdirAll(filepath.Dir(own), 0o755); err != nil {
+			if err := os.WriteFile(path, files[rel], 0o644); err != nil {
 				return err
 			}
-			if err := os.WriteFile(own, b, 0o644); err != nil {
-				return err
+			if rel == rulesFile(app.Name) {
+				fmt.Fprintf(stdout, "wrote %s (every hole stubbed: write the rules)\n", path)
+			} else {
+				fmt.Fprintf(stdout, "wrote %s (no invariant yet: write them)\n", path)
 			}
-			fmt.Fprintf(stdout, "wrote %s (every hole stubbed: write the rules)\n", own)
 		}
 	}
 	g, err := Generate(app, *dir)
@@ -156,8 +172,11 @@ func modelMain(app *App, args []string, stdout io.Writer) error {
 	} else if err := g.Write(*dir); err != nil {
 		return err
 	}
+	if _, err := os.Stat(rules); errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%s model: there is no %s, the app's rules (every hole of the skeleton): `%s model -init` writes one with every hole stubbed", app.Name, rules, app.Name)
+	}
 	if _, err := os.Stat(own); errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s model: there is no %s, the app's rules (every hole of the skeleton) and invariants: `%s model -init` writes one with every hole stubbed", app.Name, own, app.Name)
+		return fmt.Errorf("%s model: there is no %s, the app's invariants (the modules its bindings name): `%s model -init` writes one with none yet", app.Name, own, app.Name)
 	}
 	if len(g.Missing) > 0 {
 		var b strings.Builder
@@ -167,7 +186,7 @@ func modelMain(app *App, args []string, stdout io.Writer) error {
 			}
 		}
 		return fmt.Errorf("%s model: %s does not define %s, which the skeleton calls; in module %sRules, for instance:%s",
-			app.Name, own, strings.Join(g.Missing, ", "), mustQuint(app.Name), b.String())
+			app.Name, rules, strings.Join(g.Missing, ", "), mustQuint(app.Name), b.String())
 	}
 	if !*check {
 		fmt.Fprintf(stdout, "wrote %s under %s\n", strings.Join(g.paths(), ", "), *dir)

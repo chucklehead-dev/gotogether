@@ -56,6 +56,22 @@ The first release. What a user meets, by module:
   wrappers see the raw call; a value of another type under its key
   panics naming the key and both types. examples/wallet's accounts and
   examples/checkout's orders and stock use it.
+- grist, the model's files import each other one way only (breaking:
+  api/grist.txt). quint's REPL refuses a file that a file it imports
+  imports back (QNT101), and the app's `model/<app>.qnt` (rules and
+  invariants) and the generated `model/<app>_gen.qnt` did. The rules
+  (module `<app>Rules`) move to the app's `model/<app>_rules.qnt`,
+  the generated store's and clients' modules to `model/<app>_steps.qnt`
+  (`_gen.qnt` keeps the events); `model/<app>.qnt` keeps the invariants
+  and the bindings' modules, so bindings are unchanged. `grist.Starter`
+  returns both of the app's files by path (`map[string][]byte`);
+  `model -init` writes each that is missing. `grist.Generate` refuses a
+  cycle of the model's imports, naming it, and the old layout with the
+  move that fixes it (module `<app>Rules` as it is to
+  `model/<app>_rules.qnt`; in `<app>` and `<app>Calls`, `import
+  <app>Rules.* from "./<app>_rules"` and the skeleton's modules from
+  `"./<app>_steps"`). counters, wallet-grist, library and `grist new`'s
+  scaffold moved.
 - grist, declared calls on the real tier over HTTP (GR3's slice 3,
   docs/grist.md §0.14; api/grist.txt): `grist.OverHTTP(base, client)`
   (`POST base/<call>`, `Idempotency-Key`, `grist.CauseHeader`

@@ -20,9 +20,10 @@ of building it as a newcomer to grist.
 | file | what it is |
 |---|---|
 | [app.go](app.go), [commands.go](commands.go), [queries.go](queries.go), [processors.go](processors.go), [mailer.go](mailer.go) | the events, the read models (`books` keyed by book, `loans` keyed by member), the commands, the query, the processor, the mailer's declaration (no double: gristsim serves its default) |
-| [model/library.qnt](model/library.qnt) | written by hand: the rules the skeleton calls (the receipt a borrow asks the mailer for, `receiptsMailerSend`) and the invariants (copies on loan within the book's copies, at most three loans, at every step; every borrow receipted, after a settle). That every receipt is for a borrow that happened is the generated `mailerSendServed`'s own guard, not an invariant |
+| [model/library_rules.qnt](model/library_rules.qnt) | written by hand: the rules the skeleton calls (the receipt a borrow asks the mailer for, `receiptsMailerSend`) |
+| [model/library.qnt](model/library.qnt) | written by hand: the invariants (copies on loan within the book's copies, at most three loans, at every step; every borrow receipted, after a settle). That every receipt is for a borrow that happened is the generated `mailerSendServed`'s own guard, not an invariant |
 | [doubles_test.go](doubles_test.go) | the runs' doubles: none (the `noDedupe` mutant replaces it) |
-| [model/library_gen.qnt](model/library_gen.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale) |
+| [model/library_gen.qnt](model/library_gen.qnt), [model/library_steps.qnt](model/library_steps.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale) |
 | [cmd/library](cmd/library/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
 | [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt` |
 

@@ -1,55 +1,15 @@
-// The {{.Name}} app's model: the rules and invariants grist's generated
-// skeleton ({{.Name}}_gen.qnt, `go run ./cmd/{{.Name}} model`: the events, an
+// The {{.Name}} app's invariants: what its bindings judge, over grist's
+// generated actions ({{.Name}}_steps.qnt, `go run ./cmd/{{.Name}} model`: an
 // action per block with its outcome branches and frame conditions, step)
-// calls. Regenerating the skeleton never touches this file.
-
-// The rules: each hole of the skeleton, and the read model's fold.
-module {{.Q}}Rules {
-  import grist.* from "./grist"
-  import {{.Q}}Events.* from "./{{.Name}}_gen"
-
-  // what the model on its own (gotogether simulate) draws arguments from
-  pure val STRS: Set[str] = Set("a", "b")
-  pure val INTS: Set[int] = (-1).to(3)
-
-  // how many of an item the store holds (the app's Capacity)
-  pure val CAPACITY = 5
-
-  // stock, keyed by item: the sum of its additions
-  pure def stock(log: List[Event], i: str): int = stockEvents(log, i).foldl(0, (s, e) => s + itemAddedQty(e))
-
-  // add-item: an invalid quantity refused before any read, one past the
-  // capacity refused on the item's stock, which its read set must cover
-  pure def addItemOutcome(log: List[Event], c: AddItemArgs): str =
-    if (c.qty <= 0) "invalid" else if (stock(log, c.item) + c.qty > CAPACITY) "full" else "ok"
-  pure def addItemEvents(log: List[Event], c: AddItemArgs): List[Event] = [itemAdded(c.item, c.qty)]
-  pure def addItemNeeds(c: AddItemArgs, result: str): Set[Read] = if (result == "invalid") Set() else stockReads(c.item)
-
-  pure def showItemAnswer(log: List[Event], q: ShowItemArgs): ShowItemResult = { stock: stock(log, q.item) }
-
-  // tally: the item's stock as of the trigger
-  pure def tallyEmits(prefix: List[Event], trigger: int): List[Event] =
-    val i = itemAddedItem(prefix[trigger - 1])
-    List(itemTallied(i, stock(prefix, i), trigger))
-
-  // shelve: the warehouse is told of the addition at the trigger (it
-  // applies each key once: Receive is Keyed, and the generated
-  // warehouseReceiveAdmits says so); shelve skips no addition
-  pure def shelveWarehouseReceive(prefix: List[Event], trigger: int): WarehouseReceiveRequest =
-    { item: itemAddedItem(prefix[trigger - 1]), qty: itemAddedQty(prefix[trigger - 1]) }
-  pure def shelveSkips(prefix: List[Event], trigger: int): bool = false
-
-  // no item holds more than its capacity
-  pure def withinCapacityIn(log: List[Event]): bool =
-    log.foldl(true, (b, e) => b and (e.typ != "item-added" or stock(log, itemAddedItem(e)) <= CAPACITY))
-}
+// and the app's rules ({{.Name}}_rules.qnt). Regenerating the skeleton never
+// touches this file.
 
 // The store's side ({{.Name}}.binding.yaml).
 module {{.Q}} {
   import grist.* from "./grist"
   import {{.Q}}Events.* from "./{{.Name}}_gen"
-  import {{.Q}}Rules.*
-  import {{.Q}}Gen.* from "./{{.Name}}_gen"
+  import {{.Q}}Rules.* from "./{{.Name}}_rules"
+  import {{.Q}}Gen.* from "./{{.Name}}_steps"
   export {{.Q}}Gen.*
 
   // the design's: no item past its capacity, in any state
@@ -73,8 +33,8 @@ module {{.Q}} {
 module {{.Q}}Calls {
   import grist.* from "./grist"
   import {{.Q}}Events.* from "./{{.Name}}_gen"
-  import {{.Q}}Rules.*
-  import {{.Q}}CallsGen.* from "./{{.Name}}_gen"
+  import {{.Q}}Rules.* from "./{{.Name}}_rules"
+  import {{.Q}}CallsGen.* from "./{{.Name}}_steps"
   export {{.Q}}CallsGen.*
 
   // grist: invariant

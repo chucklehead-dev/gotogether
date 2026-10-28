@@ -142,7 +142,7 @@ func TestGenerateGolden(t *testing.T) {
 			t.Errorf("%s differs from what grist model writes (GRIST_UPDATE=1 go test -run TestGenerateGolden rewrites it)", path)
 		}
 	}
-	for _, want := range []string{"shop.binding.yaml", "shop.calls.binding.yaml", "shop.audit.binding.yaml", "model/shop_gen.qnt", "model/grist.qnt"} {
+	for _, want := range []string{"shop.binding.yaml", "shop.calls.binding.yaml", "shop.audit.binding.yaml", "model/shop_gen.qnt", "model/shop_steps.qnt", "model/grist.qnt"} {
 		if g.Files[want] == nil {
 			t.Errorf("no %s generated", want)
 		}
@@ -152,12 +152,14 @@ func TestGenerateGolden(t *testing.T) {
 	if err := g.Write(tmp); err != nil {
 		t.Fatal(err)
 	}
-	own, err := os.ReadFile(filepath.Join(dir, "model", "shop.qnt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(tmp, "model", "shop.qnt"), own, 0o644); err != nil {
-		t.Fatal(err)
+	for _, f := range []string{"shop.qnt", "shop_rules.qnt"} {
+		own, err := os.ReadFile(filepath.Join(dir, "model", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, "model", f), own, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	quint(t, filepath.Join(tmp, "model"), "typecheck", "shop.qnt")
 	quint(t, filepath.Join(tmp, "model"), "run", "--main=shop", "--max-samples=100", "--max-steps=15", "--seed=3", "--invariant=stockBounded", "shop.qnt")
@@ -169,17 +171,13 @@ func TestGenerateGolden(t *testing.T) {
 // hole missing from it; a hole taken out of it is reported by name.
 func TestStarterTypechecks(t *testing.T) {
 	a := shopApp()
-	b, err := grist.Starter(a)
+	files, err := grist.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "model"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), b, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFiles(t, dir, files)
+	b := files["model/shop_rules.qnt"]
 	g, err := grist.Generate(a, dir)
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +193,7 @@ func TestStarterTypechecks(t *testing.T) {
 	}
 	// a hole taken out is missing, by name
 	cut := strings.Replace(string(b), "pure def addItemNeeds", "pure def addItemNeedsNot", 1)
-	if err := os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte(cut), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte(cut), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if g2, err := grist.Generate(a, dir); err != nil || len(g2.Missing) != 1 || g2.Missing[0] != "addItemNeeds" {
@@ -209,10 +207,23 @@ func TestStarterTypechecks(t *testing.T) {
 		t.Errorf("Diff %v: want [shop.binding.yaml]", d)
 	}
 	requireQuint(t)
-	if err := os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), b, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), b, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	quint(t, filepath.Join(dir, "model"), "typecheck", "shop.qnt")
+}
+
+// writeFiles writes files (paths relative to dir) under dir.
+func writeFiles(t *testing.T, dir string, files map[string][]byte) {
+	t.Helper()
+	for p, b := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, p), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // What the generator cannot model yet is its error, naming the fix: a
@@ -246,13 +257,18 @@ func TestGenerateRefuses(t *testing.T) {
 	for src, want := range map[string]string{
 		"module shop {\n  // grist: invariants\n  val x = true\n}\n":      "the kinds are",
 		"module shop {\n  // grist: invariant\n  action a = true\n}\n":    "not followed by a val",
-		"module shopRules {\n  // grist: invariant\n  val x = true\n}\n":  "mark vals in shop or shopCalls",
 		"module shop {\n  // grist: invariant calls\n  val x = true\n}\n": "the clients' binding's",
 	} {
 		os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte(src), 0o644)
 		if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("marks %q: %v, want %q", src, err, want)
 		}
+	}
+	// a mark in the rules' file, which no binding reads
+	os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte("module shop {}\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte("module shopRules {\n  // grist: invariant\n  val x = true\n}\n"), 0o644)
+	if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt") || !strings.Contains(err.Error(), "mark vals in shop or shopCalls") {
+		t.Errorf("a mark in the rules: %v, want refused", err)
 	}
 }
 
@@ -312,19 +328,16 @@ func TestStarterEmptyResult(t *testing.T) {
 	a := grist.New("tagger")
 	grist.NewEvent[itemNoted](a, "noted")
 	grist.NewQuery(a, "tags", func(r *grist.Reads, q struct{}) (tags, error) { return tags{}, nil }, grist.Authorize(grist.Authenticated))
-	b, err := grist.Starter(a)
+	files, err := grist.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), "TagsResult = { unit: true }") {
+	if b := files["model/tagger_rules.qnt"]; !strings.Contains(string(b), "TagsResult = { unit: true }") {
 		t.Errorf("the empty result's stub:\n%s", b)
 	}
 	requireQuint(t)
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "model"), 0o755)
-	if err := os.WriteFile(filepath.Join(dir, "model", "tagger.qnt"), b, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFiles(t, dir, files)
 	g, err := grist.Generate(a, dir)
 	if err != nil {
 		t.Fatal(err)
@@ -352,7 +365,7 @@ func TestMainModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"wrote " + filepath.Join(dir, "model", "shop.qnt"), "model/shop_gen.qnt", "shop.binding.yaml", "shop.calls.binding.yaml"} {
+	for _, want := range []string{"wrote " + filepath.Join(dir, "model", "shop.qnt"), "wrote " + filepath.Join(dir, "model", "shop_rules.qnt"), "model/shop_gen.qnt", "model/shop_steps.qnt", "shop.binding.yaml", "shop.calls.binding.yaml"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("model -init's output %q lacks %q", out, want)
 		}

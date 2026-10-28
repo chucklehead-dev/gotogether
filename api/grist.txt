@@ -67,7 +67,7 @@ func Schema(typ reflect.Type) map[string]any
 func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
-func Starter(app *App) ([]byte, error)
+func Starter(app *App) (map[string][]byte, error)
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option

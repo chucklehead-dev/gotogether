@@ -3,8 +3,9 @@
 // (add-item) and read by a query (show-item), with a processor (tally)
 // that records each item's stock as of every addition and one (shelve)
 // that tells a warehouse, a declared dependency, of each. Its model is
-// model/{{.Name}}.qnt (the rules) beside the skeleton grist writes from
-// the App's catalog (model/{{.Name}}_gen.qnt: `go run ./cmd/{{.Name}} model`);
+// model/{{.Name}}_rules.qnt (the rules) and model/{{.Name}}.qnt (the
+// invariants) beside the skeleton grist writes from the App's catalog
+// (model/{{.Name}}_gen.qnt and _steps.qnt: `go run ./cmd/{{.Name}} model`);
 // its tests explore it in a simulation (sim_test.go), catch a mutant
 // (mutants_test.go) and judge its real tier on SQLite (real_test.go), all
 // with the same generated bindings.
