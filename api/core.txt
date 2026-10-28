@@ -547,6 +547,7 @@ type State struct
 
 == github.com/chucklehead-dev/gotogether/qenv
 const BytesVersion = choice.BytesVersion
+const DefaultGrace = 30 * time.Second
 const DefaultPartitionLength = time.Second
 const ReadCommitted Isolation = iota (spec 2 of its group)
 const Serializable Isolation = iota
@@ -570,6 +571,7 @@ func NewDisk(s *Sim, name string, p *Process) *Disk
 func NewNative(c Chooser, p Platform) *Sim
 func NewPCT(base Chooser, seed uint64, depth, steps int) *PCT
 func NewQueue(s *Sim, name string, p *Process) *Queue
+func NewRouter(s *Sim, name string, lag time.Duration, backends ...*Process) *Router
 func NewSeeded(seed uint64) *Seeded
 func NewService[Req, Resp any](s *Sim, name string, p *Process, handler func(ctx context.Context, req Req) (Resp, error)) *Service[Req, Resp]
 func NewStore(s *Sim, name string, iso Isolation) *Store
@@ -583,6 +585,7 @@ func ScanPrefix(t Txn, r KeyRange) []KV
 func Since(ctx context.Context, m time.Duration) time.Duration
 func Sleep(ctx context.Context, d time.Duration)
 func Swarm(c Chooser, kinds ...string) Chooser
+func Terminating(ctx context.Context) context.Context
 func Unwinding(r any) bool
 func Wait(ctx context.Context, ready func() bool)
 func WaitFor(ctx context.Context, ready func() bool, d time.Duration) bool
@@ -652,6 +655,11 @@ type Disk struct
     method (*Disk) Create(name string) *File
     method (*Disk) Durable(name string) []byte
     method (*Disk) ReadFile(name string) ([]byte, bool)
+type Endpoint struct
+    field Process *Process
+    field Incarnation int
+    method (Endpoint) Gone() bool
+    method (Endpoint) String() string
 type Entropy = choice.Entropy
     Entropy(n int) []byte
 type FaultKind struct
@@ -720,10 +728,13 @@ type Process struct
     method (*Process) ClockOffset() time.Duration
     method (*Process) Crash()
     method (*Process) Down() bool
+    method (*Process) Exit()
     method (*Process) ID() string
     method (*Process) Restart()
     method (*Process) RestartAs(version string, start func(ctx context.Context))
     method (*Process) Spawn(name string, fn func(ctx context.Context))
+    method (*Process) Terminate()
+    method (*Process) Terminating() bool
     method (*Process) ToReal(virtual time.Time) time.Time
     method (*Process) ToVirtual(real time.Time) time.Time
     method (*Process) Upgrade(version string, start func(ctx context.Context))
@@ -745,6 +756,10 @@ type Replayer = choice.Replayer
     method (*Replayer) Choose(kind string, n int) int
     method (*Replayer) Err() error
     method (*Replayer) Left() int
+type Router struct
+    field Name string
+    method (*Router) Pick(ctx context.Context) (Endpoint, error)
+    method (*Router) View() []Endpoint
 type Row[T any] struct
     field Key string
     field Val T
@@ -809,6 +824,7 @@ type Sim struct
     method (*Sim) SettleCore(d time.Duration, core ...*Process) error
     method (*Sim) Spawn(name string, fn func(ctx context.Context))
     method (*Sim) Tasks() string
+    method (*Sim) Terminations(t Termination, procs ...*Process)
     method (*Sim) ToReal(virtual time.Time) time.Time
     method (*Sim) ToVirtual(real time.Time) time.Time
     method (*Sim) Upgrades(version string, start func(ctx context.Context), procs ...*Process)
@@ -836,6 +852,10 @@ type Table[T any] struct
     method (Table[T]) Range() KeyRange
     method (Table[T]) Scan(tx Txn) []Row[T]
     method (Table[T]) ScanRange(tx Txn, r KeyRange) []Row[T]
+type Termination struct
+    field Grace time.Duration
+    field Short time.Duration
+    field Budget int
 type TimeProfile = profile.Profile
     method (*Profile) Total() time.Duration
     method (*Profile) Waited(task string, start time.Time, now func() time.Time) func()
@@ -866,6 +886,7 @@ var ErrConflict = errors.New("qenv: transaction conflict (serialization failure)
 var ErrDeadlock = fmt.Errorf("%w: deadlock (lock waits form a cycle); lock rows in one order", ErrConflict)
 var ErrIO = errors.New("qenv: input/output error")
 var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
+var ErrNoEndpoint = errors.New("qenv: the router has no ready endpoint in its view")
 var ErrNoSpace = errors.New("qenv: no space left on device")
 var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
 var ErrStuck = errors.New("qenv: stuck")
@@ -1593,6 +1614,7 @@ func ResolvePending() Option
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 func Runs(runs ...*Run) *Exploration
 func SameFailure(r *Run) Expectation
+func Satisfies(desc string, f func(r *validate.Report) error) Expectation
 func Scenario(steps ...Take) Expectation
 func Settles() Expectation
 func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *ShrunkActions[A]

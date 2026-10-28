@@ -432,6 +432,22 @@ func HasIssue(kind string) Expectation {
 	}}
 }
 
+// Satisfies: f finds nothing wrong with the run's report (nil), where f
+// judges what no other expectation names: a framework's claim over its
+// steps (grist's gristtest.NoClientErrors over its clients' calls). Its
+// error says why a run misses it, and a failure prints it. As a claim
+// alone it is about every run, as Conforms is; Some, All and None
+// quantify it as any other.
+func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
+	return Expectation{desc: desc, check: func(r *validate.Report) bool { return f(r) == nil }, every: true,
+		why: func(r *validate.Report) string {
+			if err := f(r); err != nil {
+				return err.Error()
+			}
+			return ""
+		}}
+}
+
 // AnyOf: the report meets at least one of es.
 func AnyOf(es ...Expectation) Expectation {
 	// three-valued: met if any part is, unknown if none is and some part

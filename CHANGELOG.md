@@ -8,6 +8,26 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- qenv: graceful termination and a router (ROADMAP GR10, slice 2;
+  docs/grist-platform.md §4). `Sim.Terminations(Termination{Grace,
+  Short, Budget}, procs...)` registers `nemesis.terminate.<name>`
+  (family terminate): the signal (`Process.Terminate`, also a test's to
+  send) cancels every context `qenv.Terminating(ctx)` gave the
+  process's tasks, `Process.Terminating` reports it, the process drains
+  and `Process.Exit`s within its grace, or is killed at the deadline,
+  and is restarted after either; option `short` of
+  `terminate.<name>.grace` is a reduced grace; `Budget` is a
+  PodDisruptionBudget's maxUnavailable; `DefaultGrace` 30 s.
+  `NewRouter(s, name, lag, backends...)` is a load balancer whose
+  `Pick` chooses an `Endpoint` (a backend's incarnation) of its `View`
+  by the schedule choice `route.<name>` (`ErrNoEndpoint` when it has
+  none), its view lagging the backends' readiness under
+  `route.<name>.lag` (option `stale`). `Service.Call` now stops waiting
+  when its context is cancelled (context.Canceled, not a deadline),
+  returning the context's error, as a real client does: a call
+  cancelled in flight has an unknown outcome.
+- `qtest.Satisfies(desc, f)`: an expectation judged by a function of the
+  report, for a framework's own claims (gristtest.NoClientErrors).
 - `woven` (ROADMAP H5, DESIGN §60): the woven builds' ABI, what code
   woven by qenv/weave's aspects, `qweave -cover` and `qweave -mutate`
   calls (`MutexLock`, `RLock`, `Add`, `Go`, ...; `Hit`,

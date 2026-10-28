@@ -51,7 +51,11 @@ type Capacity struct {
 //     was processed, the ambiguous failure that makes retries dangerous.
 //
 // A request to a crashed process is lost, and so is a request or a
-// response across a partition (Sim.Net).
+// response across a partition (Sim.Net). A caller whose context is
+// cancelled (context.Canceled: a node stopping its work, Terminating's
+// context at a termination) stops waiting, as a real client does: Call
+// returns the context's error, the request maybe processed (an unknown
+// outcome); one cancelled before the call sends nothing.
 type Service[Req, Resp any] struct {
 	Name    string
 	Proc    *Process
@@ -156,6 +160,10 @@ type result[Resp any] struct {
 // Call sends req and waits up to timeout of virtual time for the response.
 func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.Duration) (Resp, error) {
 	Yield(ctx)
+	var zero Resp
+	if cancelled(ctx) {
+		return zero, ctx.Err()
+	}
 	s := svc.sim
 	res := &result[Resp]{}
 	deliveries := 1
@@ -237,9 +245,17 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 			}
 		})
 	}
-	var zero Resp
-	if !waitUntil(ctx, func() bool { return res.done }, deadline) {
+	if !waitUntil(ctx, func() bool { return res.done || cancelled(ctx) }, deadline) {
 		return zero, ErrTimeout
+	}
+	if !res.done {
+		return zero, ctx.Err() // the caller gave up: the request may have been processed
 	}
 	return res.resp, res.err
 }
+
+// cancelled reports whether ctx was cancelled. A deadline is not: a real
+// deadline passes in wall time, which a simulation's run does not follow
+// (qhttp.WithTimeout maps one onto virtual time); a cancellation is a
+// call some task made, at a step of the run.
+func cancelled(ctx context.Context) bool { return errors.Is(ctx.Err(), context.Canceled) }

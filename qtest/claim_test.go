@@ -83,6 +83,28 @@ func TestHasIssue(t *testing.T) {
 	HasIssue("duplicat")
 }
 
+// Satisfies is its function's verdict on each run, about every run as a
+// claim alone, its error the failure's explanation.
+func TestSatisfies(t *testing.T) {
+	t.Parallel()
+	few := Satisfies("few issues", func(r *validate.Report) error {
+		if len(r.Issues) > 2 {
+			return fmt.Errorf("%d issues", len(r.Issues))
+		}
+		return nil
+	})
+	runs := []*validate.Report{{Issues: make([]qtrace.Issue, 1)}, {Issues: make([]qtrace.Issue, 3)}}
+	if j := few.judge(runs); j.ok || j.show != 1 {
+		t.Errorf("alone: ok %v show %d, want a failure showing run 1 (about every run)", j.ok, j.show)
+	}
+	if !Some(few).judge(runs).ok || None(few).judge(runs).ok {
+		t.Error("Some and None do not quantify it")
+	}
+	if w := few.explain(runs[1]); w != " (3 issues)" {
+		t.Errorf("explanation %q, want its error's", w)
+	}
+}
+
 // A Reach is judged over the runs' choices: how many runs reached (or
 // faulted) the kind, against the share wanted.
 func TestReach(t *testing.T) {

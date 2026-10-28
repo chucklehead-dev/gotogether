@@ -111,7 +111,8 @@ type Sim struct {
 	stallsSet *Stalls // Stalls when the first process was made: a change after panics
 	allFaults bool    // GOTOGETHER_ALL_FAULTS: every process partitionable from every other
 	onCrash   []func(*Process)
-	keyed     map[any]any // keyed locks and wait groups (keyed.go)
+	onLife    []func(*Process) // after a process's termination, crash or restart (Router)
+	keyed     map[any]any      // keyed locks and wait groups (keyed.go)
 	faultsOff bool
 	settling  bool
 	ran       int               // the id of the task that ran last (a settle's turn)
@@ -810,6 +811,13 @@ type Process struct {
 	clock   time.Duration // its wall clock's skew and jumps (Clocks)
 	rate    float64       // its clocks' drift: + fast, - slow (Clocks.Drift)
 	born    time.Time     // when its clock started drifting
+	// its termination (terminate.go): its registration, whether it was
+	// sent the signal, the contexts Terminating gave its tasks, and
+	// whether its next crash is its own exit
+	term        *termination
+	terminating bool
+	termCancels []context.CancelFunc
+	exiting     bool
 }
 
 // ID is the process name and incarnation, e.g. "payments#2".
@@ -871,15 +879,21 @@ func (p *Process) Crash() {
 			}
 		}
 	}
-	if p.sim.Log != nil {
-		p.sim.Log(fmt.Sprintf("%v crash %s", p.sim.Elapsed(), p.ID()))
+	what := "crash"
+	if p.exiting {
+		what, p.exiting = "exit", false
 	}
+	if p.sim.Log != nil {
+		p.sim.Log(fmt.Sprintf("%v %s %s", p.sim.Elapsed(), what, p.ID()))
+	}
+	p.termCancels = nil // its incarnation's, which no task of it reads again
 	if p.sim.nat != nil {
 		t := taskOf(nil)
 		self := t != nil && t.proc == p && t.sim == p.sim
 		if p.machine != nil {
 			p.machine.Crash() // before the hooks, which may restart it
 		}
+		p.sim.changed(p)
 		for _, h := range p.sim.onCrash {
 			h(p)
 		}
@@ -888,6 +902,7 @@ func (p *Process) Crash() {
 		}
 		return
 	}
+	p.sim.changed(p) // before the hooks, which may restart it
 	for _, h := range p.sim.onCrash {
 		h(p)
 	}
@@ -910,11 +925,13 @@ func (p *Process) Restart() {
 		return
 	}
 	p.down = false
+	p.terminating = false // a new incarnation, never signalled
 	p.Incarnation++
 	if p.sim.nat != nil {
 		p.restartNative()
 	}
 	p.sim.spawn(p.sim.base, p.Name+".main", p, p.start)
+	p.sim.changed(p)
 }
 
 // RestartAs boots a crashed process as a new incarnation running start,
