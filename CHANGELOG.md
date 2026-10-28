@@ -103,7 +103,12 @@ The first release. What a user meets, by module:
   names is the generator's error: delete the hand-written val (counters'
   `everyCounterWelcomedOrFailed` and `everyRetirementHandled`,
   wallet-grist's `allPosted` and `grist new`'s `everyAdditionTallied`
-  are gone) and regenerate.
+  are gone) and regenerate. So are the app's rules defining one
+  (`model/<app>_rules.qnt`, imported by the steps module, where quint
+  would refuse the name with QNT101): rename the rules' def. A `real`
+  variant judging every default invariant judges the call obligations
+  too: a `Keyed` third party recording no site fails them on that tier
+  (docs/grist.md §3.3.1's limits).
 - grist, blocking rules (ROADMAP P1, docs/grist.md §2.4.1; api/grist.txt):
   `grist.NewRule(App, name, Event, func(r *grist.Reads, e E) error,
   grist.Refuses(...))` runs on every event of its type a command's

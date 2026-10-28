@@ -2803,7 +2803,30 @@ exactly-once vals. A processor whose handler never returns (its poller
 waiting as it waits for appends, a daemon, so the run settles) violates
 its obligation, and a dependency answering a Keyed call it never
 applied violates the call's (gristsim's `TestObligations`); nothing
-else in the model says a trigger must be handled.
+else in the model says a trigger must be handled. A name of an
+obligation defined by the rules (`model/<app>_rules.qnt`, which the steps
+module imports) is the generator's error too: quint would refuse it in
+the generated file. examples/wallet-grist's `ledgerAcksUnposted` is the
+walkthrough: a proxy acknowledging every post and forwarding none takes
+only steps the actions admit, and only `ledgerPostEventuallyServed`
+catches it.
+
+**Limits, as reviewed.** The processor obligations reduce to the
+checkpoint over the model's reachable states (its checkpoint and skip
+actions already require the outcome), so what they add is liveness: a
+processor that stops short of a trigger. A handler's `Fail` in a
+`Delivers` processor is a Mismatch of its skip (above), so the
+at-least-once `grist.failed` is an effect's that failed every try. A
+poller is a daemon whether it waits for appends or holds a trigger, so
+a settle does not wait for work in hand: its duration must cover it
+(gristsim's minute, against the backoff's 320 ms cap and
+`DependencyTimeout`'s second; an effect whose tries outlast it would be
+judged mid-retry). A variant that judges every invariant of the default
+binding judges the call obligations too, a `real` one included
+(docs/grist-instrumentation.md §5, decision 4): a `Keyed` dependency
+recording no site there (a third party's, behind `OverHTTP`) violates
+its `<call>EventuallyServed` on that tier, and no mark yet leaves an
+obligation out of a variant.
 
 ### 3.4 Leases, in plain Quint (slice 3)
 

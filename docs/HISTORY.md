@@ -1963,6 +1963,46 @@ noise: an eventual val is judged in a settled trace's last state, and
 every example already had some. gristsim's `TestObligations` adds about 25 s
 wall to grist's -short (three explorations in parallel), 75 s in full.
 
+**The review.** Soundness under faults: the board app, faithful, with a
+Skip, an Emits Fail, an at-least-once effect whose Keyed call is refused
+(its key's answer replayed on every try, so `grist.failed`) and an
+at-most-once one, over one and two nodes and tenants, commit faults,
+every fault kind and crashes at 5 in 100 steps: 144 runs, every one
+conforming, no obligation violated (two nodes and two tenants with the
+refusals at that crash rate ran out of scheduling steps, the per-step
+crash rate's livelock, and were not judged). A correct app can still
+violate one where the settle cannot see the work: a poller is a daemon
+holding a trigger as it is waiting for appends, so a settle shorter than
+the work in hand (gristsim's is a minute; the backoff caps at 320 ms, a
+call's timeout is a second) judges it mid-retry, and a node left down
+for good (a simulation of one's own) has no pending task. Both left,
+each needing qenv to tell a busy daemon or a down process from a quiet
+one (a daemon mark held only while idle, or Settle naming down
+processes), which Settle's other users (quorumkv's node down for good
+under SettleCore) would meet too. The `real` variant: it judges every
+default invariant, so it judges the call obligations, which a `Keyed`
+third party with no site fails on that tier (decision 4's case); no app
+here has one (counters' mailer is unkeyed, library's mailer is in
+process on its real tier), and no mark leaves an obligation out of a
+variant: left, documented in §3.3.1's limits. At most once: the
+checkpoint is all a trace can promise, an effect step's uniqueness is
+already the actions' (`atMostOnceEffect`), and an outcome needs to know
+no crash fell after the effect, which no step records. The processor
+obligations are equivalent to their checkpoint over reachable states:
+what they catch is a processor stopping short, never a wrong outcome.
+Fixed: an obligation's name defined by the app's rules was quint's
+QNT101 in the generated file, now the generator's error naming the
+rules' file; `TestObligations` judges every case with one generated
+model (one catalog: the stall is in a handler), so quint compiles it
+once, the -short run 16.6 → 11.0 s wall (39 → 20 CPU s), full 37 → 17.
+The example: wallet-grist's `ledgerAcksUnposted`, a proxy acknowledging
+every post and forwarding none, takes only steps the actions admit and
+is caught by `ledgerPostEventuallyServed` alone; with the obligations
+out of the binding every run conforms. Pre-existing, not P7's: a
+`Delivers` handler's Fail is a Mismatch of its skip (no rule says a
+trigger fails), so the at-least-once obligation's `grist.failed` is
+only an effect's that failed every try.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

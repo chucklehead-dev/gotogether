@@ -171,8 +171,14 @@ equal to the caller's field for field (`everyPaymentAnswerServed`), or
 an at-most-once outcome logged (`atMostOnceOutcomesLogged`, test-only:
 a crash after the effect loses it by right). A stalled processor (a
 handler that never returns, a poller that drops its trigger) is
-`Violates(validate.EventuallyName("<p>EventuallyHandled"))`; a run that
-never settles judges none of them (`qtest.Settles()` says so).
+`Violates(validate.EventuallyName("<p>EventuallyHandled"))`, and a
+dependency answering a `Keyed` call it never applied (a proxy that
+acknowledges and forwards nothing: examples/wallet-grist's
+`ledgerAcksUnposted`) `Violates(validate.EventuallyName("<call>EventuallyServed"))`;
+a run that never settles judges none of them (`qtest.Settles()` says
+so). A `real` variant judging every default invariant judges the call
+obligations too: a `Keyed` third party recording no site fails them
+there (docs/grist.md §3.3.1's limits).
 
 Bindings default to `default` (`<app>.binding.yaml`); any other name is
 a test-only variant, `<app>.<name>.binding.yaml`: the same actions,
