@@ -16,7 +16,7 @@ text). It takes the same arguments:
 
 ```sh
 gotogether-nav -binding limiter.yaml                                   # a model, from init
-gotogether-nav -binding b.yaml -run steps.jsonl [-actor a] [-at k]     # a recorded run's state after k calls (a run the model rejects opens at its failing step)
+gotogether-nav -binding b.yaml -run steps.jsonl [-actor a] [-at k]     # a recorded run's state after k steps (a run the model rejects opens at its failing step)
 gotogether-nav -run 'TestX#2:seed=17' [-pkg DIR] [-at fail|start|<schedule>@<k>]   # an exploration's run (a failing report's navigate: line)
 ```
 
