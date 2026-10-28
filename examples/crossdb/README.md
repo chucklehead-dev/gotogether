@@ -68,6 +68,18 @@ the ID. The faithful provider's answer:
 
 ## Findings along the way
 
+- **The model's ends are its id pool's.** `gotogether simulate -graph`
+  explores the model's whole graph (10377 states, `TestGraphEndsWhenIdsSpent`)
+  and found 128 states the step cannot leave: a resource stuck
+  deleting, every one of the step's three database ids spent. No
+  resource is gone within the step (only the audit records that), so
+  the cloud can always create another database while an id is left;
+  the real cloud's ids are unbounded, and more ids would only move the
+  ends. The binding declares them (`simulate.terminal`: every id
+  spent). The graph also shows `settledCorrectly` holding vacuously: the
+  step never settles, so the property is judged on recorded runs, after
+  their settle.
+
 - **A late create, after the delete.** A request can arrive after its
   caller gave up (`rpc.dbaas.delay`). If the user deletes the resource
   while its create is delayed, the provider times out and finds nothing

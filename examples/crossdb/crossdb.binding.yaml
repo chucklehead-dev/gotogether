@@ -18,6 +18,17 @@ invariants: [oneDatabasePerResource, settledCorrectly]
 
 # The model on its own (gotogether simulate): which invariants the design
 # guarantees, which it allows to fail and the code must not.
+#
+# Its state graph (simulate -graph) is complete at 10377 states. The step
+# cannot leave 128 of them, each with the step's three database ids
+# spent: no resource is gone within the step (only the audit records
+# that), so the cloud can create another database while an id is left,
+# and does in every other state. The cloud's ids are unbounded; the
+# three are the abstraction's, and more would only move these ends
+# further out. terminal says so. settledCorrectly holds in the graph
+# vacuously (the step never settles): it is a property of recorded runs,
+# judged after their settle.
 simulate:
   holds: [settledCorrectly]
   allows: [oneDatabasePerResource]
+  terminal: 'Set("db-1", "db-2", "db-3").forall(id => dbs.keys().contains(id))'
