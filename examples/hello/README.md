@@ -40,7 +40,8 @@ thought of.
 ## Run it
 
 ```sh
-go test .                       # needs quint on PATH
+go test -v .                    # needs quint on PATH: each test's summary, the mutant's catch in three lines
+GOTOGETHER_VERBOSE=1 go test -v .   # each catch's whole report
 ./run-demo.sh                   # simulate 20 seeds, check the step logs with gotogether
 MUTANT=noDedupe ./run-demo.sh   # the same, built with the mutant's overlay
 ```

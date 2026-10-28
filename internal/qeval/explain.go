@@ -443,15 +443,29 @@ func (x *explainer) act(w *Why, e *Expr, en *env, c ctxt, whole bool) bool {
 			// yet admitted, not the first client's already admitted), the
 			// first of those
 			v, best, which := s.Elems[0], -1, "the first"
+			// same: every value explains it alike, the pick no part of why
+			// (step's nondet for another action, which this one never reads)
+			same, first := true, ""
 			if len(s.Elems) <= 64 {
-				for _, x2v := range s.Elems {
+				for i, x2v := range s.Elems {
 					sub, x2 := &Why{}, *x
 					x2.act(sub, e.Expr, en.bind(d.Name, x2v), c, whole)
+					if k := whyKey(sub); i == 0 {
+						first = k
+					} else if k != first {
+						same = false
+					}
 					if sub.passed > best {
 						v, best = x2v, sub.passed
 					}
 				}
 				which = "the one closest to enabled"
+			}
+			if same && len(s.Elems) > 1 && len(s.Elems) <= 64 {
+				// done takes no id, yet was explained "(id = 1, the one
+				// closest to enabled of the 3 values of REQUESTS)", step's
+				// nondet for apply
+				return x.act(w, e.Expr, en.bind(d.Name, v), c, whole)
 			}
 			pick := fmt.Sprintf("%s = %s, %s of the %d values of %s, each disabling it", m.Display(d.Name), short(String(v)), which, len(s.Elems), m.Text(d.Expr.Args[0]))
 			c = c.with("for " + pick)
@@ -468,6 +482,27 @@ func (x *explainer) act(w *Why, e *Expr, en *env, c ctxt, whole bool) bool {
 	}
 	x.bool(w, e, en, c, whole)
 	return true
+}
+
+// whyKey is w's conditions as text, values included: two values of a
+// choice whose whys have one key are explained alike.
+func whyKey(w *Why) string {
+	var b strings.Builder
+	var walk func(w *Why)
+	walk = func(w *Why) {
+		fmt.Fprintf(&b, "%d|%s|", w.passed, w.Branch)
+		for _, c := range w.Chain {
+			fmt.Fprintf(&b, "%s|%s|", c.In, c.Expr)
+			for _, v := range c.Values {
+				fmt.Fprintf(&b, "%s=%s|", v.Name, String(v.Value))
+			}
+		}
+		for _, br := range w.Branches {
+			walk(br)
+		}
+	}
+	walk(w)
+	return b.String()
 }
 
 // call explains the application e of action d to args, disabled.

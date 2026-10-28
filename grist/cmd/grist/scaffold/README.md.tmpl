@@ -40,7 +40,8 @@ fill the holes in `model/{{.Name}}_rules.qnt`, mark the invariants in
 mutant per claim. skills/grist says how.
 
 ```sh
-go test -short ./...           # every claim (needs quint on PATH)
+go test -short -v ./...        # every claim, each test's summary (needs quint on PATH; about a minute)
+go test ./...                  # and Hegel's shrinks (about 6 minutes)
 ./run-demo.sh
 MUTANT=noInvalid ./run-demo.sh
 MUTANT=drop-capacity ./run-demo.sh

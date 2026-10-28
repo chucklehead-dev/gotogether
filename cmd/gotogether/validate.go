@@ -113,7 +113,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	}
 	v.files = fset.Args()
 	if len(v.files) == 0 {
-		usage()
+		return 2, needs("validate", "a binding and the FILEs to check (step logs, OTLP/JSON, ITF)")
 	}
 	return v.run()
 }

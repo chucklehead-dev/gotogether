@@ -189,3 +189,17 @@ func TestNavRefused(t *testing.T) {
 		t.Errorf("the node: verdict %q, notes %q", n.Verdict, n.Notes)
 	}
 }
+
+// A run node's title says its choices in words before its schedule id:
+// "node 0:1,1:1,2:1,3:1@4" meant nothing to a newcomer.
+func TestPathWords(t *testing.T) {
+	path := []pathChoice{{kind: "sched.task", name: "client", value: 1}, {kind: "sched.task", name: "client", value: 1},
+		{kind: "fault.rpc.counter.request", name: "duplicate", value: 2}, {kind: "fault.rpc.counter.response", name: "nominal"},
+		{kind: "sched.task", name: "counter.main"}, {kind: "sched.task", name: "client", value: 1}}
+	if got, want := pathWords(path), "after 6 choices: client ran 3 times, counter.main ran once, rpc.counter.request: duplicate"; got != want {
+		t.Errorf("pathWords = %q, want %q", got, want)
+	}
+	if got := pathWords(nil); got != "at the start" {
+		t.Errorf("no choices: %q", got)
+	}
+}

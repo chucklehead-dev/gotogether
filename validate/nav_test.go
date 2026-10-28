@@ -235,3 +235,56 @@ func TestNavFold(t *testing.T) {
 		t.Errorf("a cycle of single branches: %+v", end)
 	}
 }
+
+// A path step no branch takes says how to name one: by #n (the text
+// view's numbers) or as written; a bare number, a run's option, says so.
+// A newcomer tried -follow 0,1 and 1,1 before finding #1.
+func TestNavFollowError(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("testdata/limiter.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := c.Nav(NavStart{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = n.Node("1")
+	if err == nil || !strings.Contains(err.Error(), "no branch takes 1 here: name one as #n or as written (#1 ") || !strings.HasSuffix(err.Error(), "; bare numbers are a run's options (nav -run)") {
+		t.Errorf("-follow 1: %v", err)
+	}
+	if _, err := n.Node("#1"); err != nil {
+		t.Errorf("-follow #1: %v", err)
+	}
+}
+
+// A disabled action explained under step's nondet that it never reads
+// names no pick: hello's done (no id) was "(id = 1, the one closest to
+// enabled of the 3 values of REQUESTS)", step's choice for apply; replay,
+// which reads id, keeps its pick.
+func TestNavWhyNoForeignPick(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("../examples/hello/hello.binding.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := c.Nav(NavStart{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nd, err := n.Node()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ins := map[string]string{}
+	for _, d := range nd.Disabled {
+		if d.Why != nil && len(d.Why.Conditions) > 0 {
+			ins[d.Action] = d.Why.Conditions[0].In
+		}
+	}
+	if ins["done"] != "done" || !strings.Contains(ins["replay"], "the one closest to enabled") {
+		t.Errorf("why's places: %q", ins)
+	}
+}

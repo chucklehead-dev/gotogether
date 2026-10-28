@@ -108,7 +108,11 @@ type ExploreConfig struct {
 	// from k+1, unless Chooser makes the runs (a script per trace).
 	Seeds int
 	// ShortSeeds is Seeds under go test -short (testing.Short()), for a
-	// quick pass beside the full one; 0 runs Seeds in either mode.
+	// quick pass beside the full one; 0 runs Seeds in either mode. While a
+	// fault kind the System's Rates set (apart from DefaultRates') was
+	// reached and faulted by no run, more seeds run, a batch at a time, up
+	// to Seeds: a claim that the faults happened fails under -short only
+	// where it would in full, not by a few seeds' chance.
 	ShortSeeds int
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
@@ -274,8 +278,11 @@ func empty(runs []*Run) bool {
 // a run that fails to run (rather than to conform) fails t, naming its seed.
 func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c qenv.Chooser) error) *Exploration {
 	t.Helper()
+	full := cfg.Seeds // the seeds a short exploration may top up to (topUpSource)
 	if cfg.ShortSeeds > 0 && testing.Short() {
 		cfg.Seeds = cfg.ShortSeeds
+	} else {
+		full = 0
 	}
 	if cfg.Seeds == 0 {
 		cfg.Seeds = 50
@@ -329,6 +336,11 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 		chooser = cfg.Chooser
 	}
 	sources := []source{&seedSource{seeds: seeds, chooser: chooser, replayed: cfg.Chooser != nil, once: cfg.fuzz}}
+	if _, set := os.LookupEnv("GOTOGETHER_SEEDS"); full > n && !set && !alone && cfg.Chooser == nil && !cfg.fuzz {
+		if kinds := setKinds(cfg.rates); len(kinds) > 0 {
+			sources = append(sources, &topUpSource{from: offset + uint64(n) + 1, to: offset + uint64(full), batch: cfg.Parallel, kinds: kinds, chooser: seeded})
+		}
+	}
 	// the corpus's runs, after the seeds' (their numbers stay the same);
 	// a seed run alone runs no corpus entry
 	if x.corpus != "" && (!alone || spec.kind == "corpus") {

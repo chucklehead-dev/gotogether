@@ -2481,6 +2481,7 @@ type RunNode struct
     field ID string `json:"id"`
     field Schedule string `json:"schedule"`
     field At int `json:"at"`
+    field Path string `json:"path,omitempty"`
     field Choice *RunChoice `json:"choice,omitempty"`
     field Branches []RunBranch `json:"branches"`
     field Steps []string `json:"steps"`

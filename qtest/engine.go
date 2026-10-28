@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
@@ -89,6 +91,9 @@ func (e *engine) run(sources ...source) {
 	}
 	mark, _ := hooks.Escaped(0)
 	var plans []planned
+	var planned atomic.Int64
+	prog := startProgress(x.ref(), func() int { return int(planned.Load()) })
+	defer prog.end()
 	stopped := false
 	for _, s := range sources {
 		for !stopped {
@@ -97,6 +102,7 @@ func (e *engine) run(sources ...source) {
 				break
 			}
 			runs := make([]*Run, len(batch))
+			planned.Add(int64(len(batch)))
 			var wg sync.WaitGroup
 			sem := make(chan struct{}, e.parallel)
 			for i, p := range batch {
@@ -110,6 +116,7 @@ func (e *engine) run(sources ...source) {
 						p.after(r)
 					}
 					runs[i] = r
+					prog.done.Add(1)
 				}()
 			}
 			wg.Wait()
@@ -126,6 +133,7 @@ func (e *engine) run(sources ...source) {
 			unknownKinds(t, k.what, k.names, x.Runs)
 		}
 	}
+	prog.judging.Store(true)
 	origins := make([]origin, len(plans))
 	for i, p := range plans {
 		origins[i] = p.origin
@@ -173,6 +181,70 @@ func (s *seedSource) next([]*Run) []planned {
 			out[i].again = func(*Run) qenv.Chooser { return s.chooser(seed) }
 		}
 	}
+	return out
+}
+
+// topUpSource runs a short exploration's (ShortSeeds under -short) next
+// seeds, a batch at a time, while a fault kind its Rates set was reached
+// by some run and faulted by none, up to its full Seeds: a claim that the
+// faults happened (Reaches(k).Faulted()) then fails under -short only
+// where it would in full, not by three seeds' chance (a grist app's
+// commit faults, missed by 3 seeds after an unrelated change).
+type topUpSource struct {
+	from, to uint64 // the seeds left, from..to
+	batch    int
+	kinds    []string // the Rates' keys set apart from DefaultRates
+	chooser  func(seed uint64) qenv.Chooser
+}
+
+func (s *topUpSource) next(runs []*Run) []planned {
+	if s.from > s.to || !unfaultedKind(runs, s.kinds) {
+		return nil
+	}
+	var out []planned
+	for ; s.from <= s.to && len(out) < max(s.batch, 1); s.from++ {
+		seed := s.from
+		out = append(out, planned{origin: origin{kind: "seed", seed: seed}, chooser: func() qenv.Chooser { return s.chooser(seed) },
+			again: func(*Run) qenv.Chooser { return s.chooser(seed) }})
+	}
+	return out
+}
+
+// unfaultedKind reports whether one of kinds (or a kind below one, at a
+// dot) was reached by a run of runs and faulted by none.
+func unfaultedKind(runs []*Run, kinds []string) bool {
+	var cs [][]qenv.Choice
+	for _, r := range runs {
+		if r != nil {
+			cs = append(cs, r.Choices)
+		}
+	}
+	cov := qenv.CoverageOf(cs)
+	for _, k := range kinds {
+		reached, faulted := false, false
+		for _, p := range cov.Points {
+			if p.Kind == k || strings.HasPrefix(p.Kind, k+".") {
+				reached = reached || p.Runs > 0
+				faulted = faulted || p.Faulted() > 0
+			}
+		}
+		if reached && !faulted {
+			return true
+		}
+	}
+	return false
+}
+
+// setKinds are the fault kinds r sets a rate above 0 for, apart from
+// DefaultRates' own (its nemesis rate, which every exploration has).
+func setKinds(r qenv.Rates) []string {
+	var out []string
+	for k, p := range r.Kinds {
+		if d, ok := qenv.DefaultRates.Kinds[k]; p > 0 && (!ok || d != p) {
+			out = append(out, k)
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

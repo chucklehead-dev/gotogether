@@ -231,7 +231,11 @@ func names(paths []string) []string {
 // runNodeText is a run node as a person reads it.
 func runNodeText(n *validate.RunNode) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "node %s of %s: %s\n", n.ID, n.Run, n.Verdict)
+	if n.Path != "" { // in words first, the id after
+		fmt.Fprintf(&b, "node %s (%s) of %s: %s\n", n.Path, n.ID, n.Run, n.Verdict)
+	} else {
+		fmt.Fprintf(&b, "node %s of %s: %s\n", n.ID, n.Run, n.Verdict)
+	}
 	if n.Folded > 0 {
 		fmt.Fprintf(&b, "  folded %d choices that were no decision\n", n.Folded)
 	}

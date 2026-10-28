@@ -115,26 +115,50 @@ func TestUnknownCommandExits(t *testing.T) {
 	}
 }
 
-// The top-level usage lists every flag of validate (but removed ones,
-// whose usage starts "gone:", and old names, "deprecated:"): it once
-// omitted half of them.
-func TestUsageListsValidateFlags(t *testing.T) {
+// gotogether help is one line per command, the question it answers,
+// and its example, every command main runs among them, the flags left to
+// each command's -h: validate's 30 flags once filled eight lines of it,
+// and simulate's line hid -graph.
+func TestUsageOneLinePerCommand(t *testing.T) {
 	var b bytes.Buffer
 	usageTo(&b)
 	usage := b.String()
-	usage = usage[strings.Index(usage, "  gotogether validate"):strings.Index(usage, "  gotogether itf")] // validate's lines
-	src, err := os.ReadFile("validate.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	flags := regexp.MustCompile(`fset\.[A-Za-z]+\((?:&[^,]+, )?"([a-z-]+)", [^,]+, "(gone:|deprecated:)?`).FindAllStringSubmatch(string(src), -1)
-	if len(flags) < 20 {
-		t.Fatalf("found %d of validate's flags: the pattern no longer matches their definitions", len(flags))
-	}
-	for _, f := range flags {
-		if f[2] == "" && !regexp.MustCompile(`[\[ ]-`+regexp.QuoteMeta(f[1])+`[ \]]`).MatchString(usage) {
-			t.Errorf("the usage does not list validate's -%s", f[1])
+	for _, name := range commandNames {
+		if name == "help" {
+			continue
 		}
+		if !regexp.MustCompile(`(?m)^  ` + name + ` +\S`).MatchString(usage) {
+			t.Errorf("help has no line for %s:\n%s", name, usage)
+		}
+	}
+	for _, name := range helpOrder {
+		if c := commands[name]; c.short == "" || !strings.Contains(usage, c.short) {
+			t.Errorf("%s's line is not its short help %q", name, c.short)
+		}
+	}
+	if !strings.Contains(usage, "-graph") || !strings.Contains(usage, "gotogether simulate -binding stock.binding.yaml -graph") {
+		t.Errorf("help does not show simulate -graph:\n%s", usage)
+	}
+	if strings.Contains(usage, "-linearize-budget") || strings.Count(usage, "\n") > 40 {
+		t.Errorf("help lists flags (or runs past 40 lines):\n%s", usage)
+	}
+}
+
+// A command run without what it needs says what, with its example: the
+// whole usage printed alone did not.
+func TestCommandNeeds(t *testing.T) {
+	if os.Getenv("GOTOGETHER_MAIN") == "1" {
+		os.Args = []string{"gotogether", "validate"}
+		main()
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestCommandNeeds$")
+	cmd.Env = append(os.Environ(), "GOTOGETHER_MAIN=1")
+	out, err := cmd.CombinedOutput()
+	var ee *exec.ExitError
+	want := "gotogether: validate needs a binding and the FILEs to check (step logs, OTLP/JSON, ITF): gotogether validate -binding stock.binding.yaml runs/*.jsonl (gotogether validate -h lists its flags)\n"
+	if !errors.As(err, &ee) || ee.ExitCode() != 2 || string(out) != want {
+		t.Errorf("exit %v:\n%s\nwant:\n%s", err, out, want)
 	}
 }
 

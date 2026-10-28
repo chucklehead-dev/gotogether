@@ -5,8 +5,9 @@
 // gristsim test with Expect claims, a mutant and the rule's generated
 // one, a real-tier test, run-demo.sh and a README), then runs `go mod tidy`
 // and the app's own `model` command, which generates the model's skeleton
-// and both bindings from the App's catalog. `go test ./...` in the new
-// module passes on its first run (quint on PATH).
+// and both bindings from the App's catalog. `go test -short -v ./...` in
+// the new module passes on its first run (quint on PATH), in about a
+// minute.
 //
 // The generator itself is the application's binary's (`<app> model`,
 // grist.Main): it reads the App's catalog, which no other process can.
@@ -111,11 +112,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "wrote %s (module %s)\n", *dir, *module)
 	if *noGenerate {
-		fmt.Fprintf(stdout, "next: cd %s && go mod tidy && go run ./cmd/%s model && go test ./...\n", *dir, name)
+		fmt.Fprintf(stdout, "next: cd %s && go mod tidy && go run ./cmd/%s model && go test -short -v ./...\n%s", *dir, name, firstRun)
 		return nil
 	}
 	if *replace == "" {
-		// grist and the core at the version this grist was built from
+		// grist and the core at the version this grist was built from: a
+		// first run downloads them, two minutes with no word of its own
+		fmt.Fprintf(stdout, "downloading the toolkit (grist and gotogether at %s; the first run takes about 2 minutes)\n", selfVersion())
 		if err := goCmd(*dir, stderr, "get", "github.com/chucklehead-dev/gotogether/grist@"+selfVersion()); err != nil {
 			return err
 		}
@@ -125,9 +128,15 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
-	fmt.Fprintf(stdout, "generated the model's skeleton and bindings (go run ./cmd/%s model)\nnext: cd %s && go test ./...\n", name, *dir)
+	fmt.Fprintf(stdout, "generated the model's skeleton and bindings (go run ./cmd/%s model)\nnext: cd %s && go test -short -v ./...\n%s", name, *dir, firstRun)
 	return nil
 }
+
+// firstRun is what the first test run costs, said where it is suggested:
+// the whole suite (Hegel's shrinks among it) ran 343 s with no output,
+// where -short runs every claim in about a minute and -v shows each
+// exploration's summary as it ends.
+const firstRun = "  (about a minute with quint on PATH, each test's summary shown; without -short, Hegel's shrinks too: about 6 minutes)\n"
 
 var appName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 

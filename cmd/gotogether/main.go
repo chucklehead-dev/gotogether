@@ -105,52 +105,23 @@ func usage() {
 }
 
 func usageTo(w io.Writer) {
-	fmt.Fprintln(w, `gotogether checks Go code against a Quint model. Start with a binding, then a test:
+	fmt.Fprint(w, `gotogether checks Go code against a Quint model. Start with a binding, then a test:
   gotogether scaffold -spec model.qnt -module M -out m.binding.yaml    (set its constants)
   gotogether lint -binding m.binding.yaml && gotogether simulate -binding m.binding.yaml
   gotogether scaffold -system -binding m.binding.yaml -out system_test.go
 An event-sourced service can have its model written for it: grist (its own module) generates
 the model's skeleton and both bindings from the app's catalog, the app writing only its rules:
   go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>    (docs/grist.md)
-Each command's -h says what it is for, with an example. gotogether version prints the version,
-gotogether doctor every installed piece's and any skew between them.
 
-usage:
-  gotogether scaffold -spec model.qnt -module M [-out m.binding.yaml]
-  gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
-  gotogether simulate -binding b.yaml [-steps n] [-samples n] [-states n] [-const N=e] [-seed s] [-verify n]
-                   the model alone, with the binding's invariants (-verify: every trace of up to n steps, by Apalache)
-  gotogether evidence [-strict] [-expect checks.txt] [DIR|FILE ...]  a suite's explorations (their evidence under GOTOGETHER_EVIDENCE):
-                   each test's verdicts, and the model actions and fault kinds no test tried
-  gotogether lint     -binding b.yaml [-src DIR] [-sim DIR]
-  gotogether lint     -sim DIR | -weave DIR
-  gotogether steps    [-actors a,b] [-actions a,b] [-since T] [-until T] [-pseudonymize f,g] [-binding b.yaml]
-                   [-keep-refs] [-out steps.jsonl] FILE...   list, or select and sanitize (GOTOGETHER_SALT) into a step log
-  gotogether validate [-binding b.yaml] [-dir OUT] [-backend rust|typescript] [-format auto|otlp|steps|itf]
-                   [-spec M.qnt -module M -instance I] [-novars]
-                   [-convert rules.yaml] [-invariants a,b] [-itf] [-require-finish]
-                   [-linearize] [-linearize-key arg] [-linearize-budget n] [-skew d] [-resolve-pending] [-history h.svg]
-                   [-lost-prefix r,s] [-lost-suffix r,s] [-complete-through recorder=T]
-                   [-mutate-steps [-mutate-ops o,p] [-mutate-limit n]] [-quint q] [-v]
-                   [-manifest run.json [-run-info info.json]] FILE...   (validate -h says what each does)
-  gotogether validate -replay run.json [-dir OUT]   judge a manifest's run again (its hashed inputs unchanged): the same verdict
-  gotogether shrink   -binding b.yaml -actions journey.json [-out DIR] [-reset PROG] [-diverged-exit n] [-baseline n] [-reruns n]
-                   [-budget n] [-time d] -- DRIVER ARGS... ({actions}, {steps})
-                   shrink an external driver's failing actions, rerunning it per candidate: the shrunk actions, shrink.json, a manifest
-  gotogether nav      -binding b.yaml [-run steps.jsonl [-at k] [-actor a]] [-follow path] [-take t] [-fold] [-json|-text]
-                   a model's states, one node at a time: its branches (the step's transitions), its disabled actions with why
-  gotogether nav      -run 'TestX#2:seed=17' [-pkg DIR] [-at fail|start|<schedule>@<k>] [-follow 1,0] [-take o] [-fold] [-save] [-json|-text]
-                   an exploration's run by its choices: the next choice's options, the steps so far, the tasks, the model's state
-                   on a terminal, both open in gotogether-nav (the interactive navigator) when it is installed
-  gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
-  gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
-                   against a simulation's (an exploration's evidence, or qcover.Summary JSON): what ran only for real, only simulated
-  gotogether convert  -rules r.yaml [-out steps.jsonl] FILE...   an app's OTLP/JSON spans -> step log (see package convert)
-
-  gotogether skills   [list | install [-target agents,claude,github,cursor|all] [-user] [-dir DIR] [-force]]
-                   agent skills for this toolkit (default: .agents/skills and .claude/skills)
-
-validate, steps and itf also take -convert r.yaml to convert OTLP/JSON spans on the way in.`)
+commands (gotogether <command> -h: what it does, an example, every flag):
+`)
+	for _, name := range helpOrder {
+		c := commands[name]
+		ex, _, _ := strings.Cut(c.example, "\n")
+		fmt.Fprintf(w, "  %-9s %s\n            %s\n", name, c.short, ex)
+	}
+	fmt.Fprintln(w, "  version   the toolkit's version")
+	fmt.Fprintln(w, "\nvalidate, steps and itf also take -convert r.yaml to convert OTLP/JSON spans on the way in.")
 }
 
 // packageIn is the package of the Go files in dir, a test's package
@@ -556,7 +527,7 @@ func itfTo(w io.Writer, args []string) error {
 		return err
 	}
 	if *bpath == "" || fset.NArg() == 0 {
-		usage()
+		return needs("itf", "-binding and the FILEs of recorded steps")
 	}
 	b, err := binding.Load(*bpath)
 	if err != nil {
@@ -648,7 +619,7 @@ func runConvert(args []string) error {
 	out := fset.String("out", "-", "native step log to write (- for stdout)")
 	fset.Parse(args)
 	if *rpath == "" || fset.NArg() == 0 {
-		usage()
+		return needs("convert", "-rules and the FILEs of OTLP/JSON spans")
 	}
 	rules, err := convert.Load(*rpath)
 	if err != nil {
@@ -701,7 +672,7 @@ func runSkills(args []string) error {
 		return nil
 	}
 	if args[0] != "install" {
-		usage()
+		return fmt.Errorf("skills: %q is no subcommand: gotogether skills list, or gotogether skills install (its -h lists its flags)", args[0])
 	}
 	fset := commandFlags("skills install")
 	target := fset.String("target", "", "comma-separated: agents (.agents/skills), claude (.claude/skills), github, cursor, or all (default agents,claude)")

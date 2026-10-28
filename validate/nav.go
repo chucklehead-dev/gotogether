@@ -311,14 +311,20 @@ func pick(edges []Edge, p string) (int, error) {
 	if len(byName) == 1 {
 		return byName[0], nil
 	}
-	var takes []string
-	for _, e := range edges {
+	var takes, numbered []string
+	for i, e := range edges {
 		takes = append(takes, e.Take)
+		numbered = append(numbered, fmt.Sprintf("#%d %s", i+1, e.Take))
 	}
 	if len(byName) > 1 {
 		return 0, fmt.Errorf("%d branches apply %s: name one with its arguments (%s)", len(byName), p, strings.Join(takes, ", "))
 	}
-	return 0, fmt.Errorf("no branch takes %s here; the branches: %s", p, strings.Join(takes, ", "))
+	hint := ""
+	if _, err := strconv.Atoi(p); err == nil {
+		// -follow 0,1 named a run's options, which a model's node has not
+		hint = "; bare numbers are a run's options (nav -run)"
+	}
+	return 0, fmt.Errorf("no branch takes %s here: name one as #n or as written (%s)%s", p, strings.Join(numbered, ", "), hint)
 }
 
 // edges are the branches of the model's step in s, and the transitions
@@ -457,6 +463,9 @@ type RunNode struct {
 	ID       string `json:"id"`
 	Schedule string `json:"schedule"`
 	At       int    `json:"at"`
+	// Path is the choices before the node in words: "after 4 choices:
+	// client ran 4 times", with the faults made
+	Path string `json:"path,omitempty"`
 	// Choice is the choice the node is before; nil when the run made
 	// none there (it ended after At choices)
 	Choice   *RunChoice  `json:"choice,omitempty"`

@@ -23,7 +23,10 @@ read model, a command with declared refusals, a query, a processor), its
 binary, `model/<name>_rules.qnt` with its rules filled and
 `model/<name>.qnt` with its invariants, the generated skeleton
 and bindings, a gristsim test with `Expect` claims, a mutant, a
-real-tier test, `run-demo.sh` and a README. Then change it one block at
+real-tier test, `run-demo.sh` and a README (the first run downloads the
+toolkit, about 2 minutes). `go test -short -v ./...` runs every claim in
+about a minute, each summary shown; without `-short` Hegel's shrinks add
+about 5 minutes. Then change it one block at
 a time: the block in Go, `go run ./cmd/<name> model` (it names each new
 hole with a stub), the hole in `model/<name>_rules.qnt`, a claim and a mutant
 for it. No binding is written by hand.

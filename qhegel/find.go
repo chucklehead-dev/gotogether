@@ -151,7 +151,11 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 					"or say none is wanted with Expect(t, qtest.Conforms())", q)
 			}
 		})
-		t.Logf("qhegel: no case violated the model (%d checked with quint, %d decided from earlier verdicts)", q, hits)
+		if os.Getenv("GOTOGETHER_VERBOSE") == "1" {
+			t.Logf("qhegel: no case violated the model (%d checked with quint, %d decided from earlier verdicts)", q, hits)
+		} else {
+			t.Logf("qhegel: no case violated the model (%d cases)", q+hits)
+		}
 		return v
 	case found == nil:
 		t.Fatalf("qhegel: no case violated the model, but the test failed: %v", err)

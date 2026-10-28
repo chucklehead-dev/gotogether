@@ -92,6 +92,16 @@ type navChooser struct {
 	before  []qtrace.Step
 	tasks   string
 	elapsed string
+	// path are the choices before the node, each its kind and the option
+	// taken by name where the simulation names it, for the node's title
+	path []pathChoice
+}
+
+// a pathChoice is a choice before a run node: its kind, and the option
+// taken (its name, when the simulation gave one)
+type pathChoice struct {
+	kind, name string
+	value      int
 }
 
 // Choose implements qenv.Chooser.
@@ -108,7 +118,63 @@ func (c *navChooser) Choose(kind string, n int) int {
 			c.before = c.steps()
 		}
 	}
+	if c.f.i < c.at && !c.reached { // a choice before the node: named for its title
+		var opts []string
+		if c.sim != nil {
+			opts = c.sim.ChoiceOptions(kind)
+		}
+		v := c.f.Choose(kind, n)
+		pc := pathChoice{kind: kind, value: v}
+		if v < len(opts) {
+			pc.name = opts[v]
+		}
+		c.path = append(c.path, pc)
+		return v
+	}
 	return c.f.Choose(kind, n)
+}
+
+// pathWords are a node's choices in words: "after 4 choices: client ran
+// 4 times", with the faults made ("rpc.counter.request: duplicate"); its
+// schedule id (0:1,1:1,2:1,3:1@4) meant nothing to a newcomer.
+func pathWords(path []pathChoice) string {
+	if len(path) == 0 {
+		return "at the start"
+	}
+	ran, order := map[string]int{}, []string(nil)
+	var faults []string
+	for _, c := range path {
+		switch {
+		case c.kind == "sched.task" && c.name != "":
+			if ran[c.name] == 0 {
+				order = append(order, c.name)
+			}
+			ran[c.name]++
+		case qenv.IsFault(c.kind) && c.value != 0:
+			o := c.name
+			if o == "" {
+				o = fmt.Sprintf("option %d", c.value)
+			}
+			faults = append(faults, strings.TrimPrefix(c.kind, "fault.")+": "+o)
+		}
+	}
+	var parts []string
+	for _, t := range order {
+		times := "once"
+		if n := ran[t]; n > 1 {
+			times = fmt.Sprintf("%d times", n)
+		}
+		parts = append(parts, t+" ran "+times)
+	}
+	parts = append(parts, faults...)
+	words := fmt.Sprintf("after %d choices", len(path))
+	if len(path) == 1 {
+		words = "after 1 choice"
+	}
+	if len(parts) > 0 {
+		words += ": " + strings.Join(parts, ", ")
+	}
+	return words
 }
 
 // foldable reports whether choice i, of n options, is no decision: one
@@ -388,7 +454,8 @@ func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode
 	}
 	spec.at = nc.at // past the choices it folded
 	r.origin = origin{kind: "schedule", value: schedule(spec.ds)}
-	node := &validate.RunNode{Protocol: validate.NavProtocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []validate.RunBranch{}, Steps: []string{}}
+	node := &validate.RunNode{Protocol: validate.NavProtocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []validate.RunBranch{}, Steps: []string{},
+		Path: pathWords(nc.path)}
 	if b.entropy {
 		node.Notes = append(node.Notes, entropyNote)
 	}

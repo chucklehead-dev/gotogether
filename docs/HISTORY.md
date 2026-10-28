@@ -2935,6 +2935,54 @@ in a tenant serializing on its head row is by design (dense positions,
 conditions under the lock), and is in I25 with LISTEN/NOTIFY; steps and
 markers growing forever was in I25 already (retention).
 
+### Eleventh review: the first hour (I28–I32)
+
+The usability designer's two newcomers (a REST developer, a team lead
+trying grist) lost most of their first hour to output that did not
+say what happened. What changed, each with a test that fails without it:
+- **A catch, shown** (I28). hello's `go test -v` printed no catch: a
+  passing expected-failure claim logged its whole report, and
+  `qtest.Mutants` dropped it (its first line has no "runs, "). The claim
+  now logs three lines (the run and its faults, the step and why the
+  model refuses it, `navigate:`; `Run.Brief`), the report under
+  `GOTOGETHER_VERBOSE=1`; Mutants passes catches on through `t.Output`,
+  under the binary's own file:line; qhegel's shrink is three lines too.
+  The README quotes hello's real output.
+- **First runs** (I29). `grist new` said `go test ./...` (343 s, silent);
+  it says `go test -short -v ./...` with its time, and that the first
+  run downloads the toolkit. An exploration writes a progress line every
+  10 s to the terminal (`/dev/tty`: go test holds back a package's
+  stderr until it ends when it tests several; none without a terminal,
+  `GOTOGETHER_PROGRESS=0` none at all). A short exploration
+  (`ShortSeeds`) tops up its seeds, a batch at a time up to `Seeds`,
+  while a kind its Rates set was reached and faulted by no run: a
+  `Reaches(k).Faulted()` claim fails under -short only where it would in
+  full (a grist app's commit faults, missed by 3 seeds).
+- **Reserved names** (I30). AGENTS.md's hand-kept list missed `item`,
+  `int`, `str`, `bool` and `temporal`. internal/quintnames is the table,
+  checked against quint's `builtinNames` and its lexer's keywords;
+  LoadModel's error carries quint's own errors (with `--out`, quint
+  writes them there, and the error said "exit status 1") and names the
+  rename; scaffold writes `item_: '{{.item}}'`; `lint -binding -src`
+  names a missing mapping; grist's `QuintTaken` gained int, str, bool.
+- **Reports** (I31). "30 runs, all conform (quint confirmed 2)", the
+  evaluator's breakdown verbose; actions only bound actions call (a
+  grist model's appends: `Model.CalledBy`) are no steps; "every run
+  rejected at its first step, addItem"; Record's passing Expect logs a
+  line; "the run" for one unnamed actor; "steps", not "calls"; "the then
+  branch of if". A zero-step run is "record no step", with "no faults",
+  and qhttp's refusals before a server listened reach its report
+  (`hooks.Notes`) and the navigator's node (it read pass). Failure
+  copies go to `$TMPDIR/gotogether/`, said to stay.
+- **help and nav** (I32). `gotogether help` is one line per command (the
+  question it answers, an example; `-graph` on simulate's), flags in each
+  `-h`; `validate`, `itf` and `convert` without their inputs say what
+  they need; nav's path error numbers the branches (`#1 apply(1)`) and
+  says bare numbers are a run's options; a disabled action explained
+  under a nondet it never reads names no pick (hello's `done` was "id =
+  1, the one closest to enabled"); a run node's title is in words first
+  ("after 4 choices: client ran 4 times").
+
 ### H4: one vocabulary
 
 ROADMAP's H4 as built, with two leftovers of P7's review. The decisions

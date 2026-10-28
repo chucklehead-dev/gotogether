@@ -16,12 +16,30 @@ That ran [examples/hello](examples/hello): a counter behind a simulated
 network that loses and duplicates messages, and a client that retries.
 Each test runs the system many times under different faults (a *seed*
 picks them) and checks every run against a Quint model
-(`model/hello.qnt`). One test plants a bug (a *mutant*: a copy of
-`hello.go` in `testdata/mutants/noDedupe` whose counter forgets to
-dedupe, built in its place with `go test -overlay`) and expects the
-model to reject a step: its output's `as expected` blocks are those
-failures, not the test's. [Hegel](https://hegel.dev), a property-based
-tester, then shrinks that failure to the single fault it needs.
+(`model/hello.qnt`), one line each:
+
+```
+hello_test.go:40: gotogether: TestFaithfulConforms#1: 30 runs, all conform (quint confirmed 2); model actions taken 3 of 3; fault kinds faulted 3 of 3 reached
+```
+
+One test plants a bug (a *mutant*: a copy of `hello.go` in
+`testdata/mutants/noDedupe` whose counter forgets to dedupe, built in its
+place with `go test -overlay`) and expects the model to reject a step.
+Under `TestMutants`, this is what a catch looks like: the run, the step
+the model refuses and why, and the command that opens it in the
+navigator; then [Hegel](https://hegel.dev), a property-based tester,
+shrinks the failure to the single fault it needs:
+
+```
+hello_test.go:87: gotogether: as expected, some run showing an apply step the model cannot take: 23 of 30 runs (failing: 23 reject apply); the first, seed 1, faults [rpc.counter.request=duplicate rpc.counter.response=lost rpc.counter.delay=slow rpc.counter.response=lost]:
+    step 2, apply(id=1): the model's apply(id = 1) is disabled: in apply: not(applied.contains(id)) is false (where applied = Set(1), id = 1)
+    navigate: GOTOGETHER_MUTANT=noDedupe gotogether nav -run 'TestMutant#1:seed=1' -at fail (in the test's package directory; -json for agents); GOTOGETHER_VERBOSE=1 prints the whole report
+hello_test.go:104: qhegel: shrunk to 5 steps, faults: rpc.counter.request=duplicate:
+    step 5, apply(id=3): the model's apply(id = 3) is disabled: in apply: not(applied.contains(id)) is false (where applied = Set(1, 2, 3), id = 3)
+```
+
+Those failures are the mutant's, expected: the test passes.
+`GOTOGETHER_VERBOSE=1 go test -v .` prints each catch's whole report.
 
 Read `hello.go` and `hello_test.go` (189 lines together), then pick a
 workflow from the table below. Agents start from the `gotogether-start`
@@ -35,7 +53,8 @@ skill (`gotogether skills install`).
   and what the code observed (`qobs.Record(ctx, "deposit", err, "amount",
   5, "obs.balance", 35)`).
 - **Actor**: one sequence of steps checked as one run of the model (a
-  process, a node; `qobs.WithActor`). Reports begin `actor <name>:`.
+  process, a node; `qobs.WithActor`). Reports begin `actor <name>:`
+  (`the run:` when there is one, unnamed).
   Not grist's **caller**, the authenticated principal of a command or
   query (`grist.WithCaller`, recorded as the step's `caller` field).
 - **Binding**: a YAML file mapping recorded steps to the model's

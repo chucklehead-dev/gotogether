@@ -25,7 +25,16 @@ The first release. What a user meets, by module:
   checked against quint (`item`, `int`, `str`, `bool` were missing from
   the docs): LoadModel's error names the rename (`item_`) and the
   binding's mapping, which `scaffold` writes and `lint -binding -src`
-  asks for.
+  asks for. Summaries in a user's words ("30 runs, all conform (quint
+  confirmed 2)", the breakdown verbose), a passing Record's verdict
+  logged, a run with no step said as such with what its doubles saw
+  (qhttp's refusals before a server listened), `Model.CalledBy`'s parts
+  of steps left out of model coverage, failure copies under
+  `$TMPDIR/gotogether/`; exploration progress on the terminal, and
+  short explorations topped up while a kind their Rates set went
+  unfaulted; `gotogether help` one line per command, `validate` without
+  files saying what it needs, a run node's path in words
+  (`RunNode.Path`).
 - A cancelled check kills all of quint (eleventh review, H1): every
   quint invocation runs in a process group of its own, killed whole on
   cancel, where only node was killed and its Rust evaluator kept running

@@ -335,26 +335,31 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Usability: the first hour
 
-- **I28. The quickstart shows a catch (S).** README promises hello's
+- **I28. The quickstart shows a catch (S). Done** (15cf741 and
+  the I29/I32 commits; HISTORY: "Eleventh review: the first hour"). README promised hello's
   `as expected` blocks and a shrink line; `go test -v` prints neither,
   so a newcomer never sees what a catch looks like. A passing
   expected-failure claim logs its first counterexample in three lines
   (the step, why, the faults Hegel shrank it to); the README quotes the
   real lines; hello's stale numbers fixed (2508 for 4430, 80 lines for
   73).
-- **I29. First runs fast and visible (S).** `grist new` says to run
+- **I29. First runs fast and visible (S). Done** (progress on the
+  terminal, since go test holds stderr back; a short exploration tops up
+  its seeds while a kind its Rates set went unfaulted). `grist new` said to run
   `go test ./...`: 343 s, silent (the README says `-short`, 73 s). It
   prints `go test -short -v ./...` with its time, and "downloading the
   toolkit (first run: about 2 minutes)"; long explorations print a
   progress line on stderr every 10 s when not `-v`; fault-rate claims
   under -short that three seeds cannot fail by chance (S10's stated
   power: a `Reaches` with 3 seeds failed after an unrelated change).
-- **I30. Reserved names caught by the toolkit (S).** `item` is a quint
+- **I30. Reserved names caught by the toolkit (S). Done** (eb1520b:
+  internal/quintnames, checked against quint's own lists). `item` is a quint
   built-in (QNT101 on a REST developer's first model) and AGENTS.md's
   list omits it. The list generated from quint 0.33's built-ins, not by
   hand; `scaffold` and `lint -binding` checking step fields against it
   and suggesting `item_`, as grist's generator does.
-- **I31. Reports in the user's words (S-M).** Decided against hiding the
+- **I31. Reports in the user's words (S-M). Done** (acd5fb1).
+  Decided against hiding the
   evaluator's share (I9 wants it): written for a user ("30 runs, all
   conform (quint confirmed 2)"), the breakdown behind
   `GOTOGETHER_VERBOSE`; grist's skeleton helpers out of "never taken";
@@ -366,7 +371,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   issue" nor "a deadlock", and `nav -at fail` on it names the last
   client error. Failure copies under `$TMPDIR/gotogether/`, removed as
   said (173 were left in /tmp).
-- **I32. help, nav and the CLI's errors (S).** One line per command in
+- **I32. help, nav and the CLI's errors (S). Done.** One line per command in
   `gotogether help` (what it answers, one example), flags under `-h`,
   `-graph` on simulate's line; `validate` with no arguments says what it
   needs; nav's `-follow` error shows `#1` and the take form ("bare
