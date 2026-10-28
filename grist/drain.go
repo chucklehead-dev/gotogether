@@ -18,7 +18,7 @@ import (
 // requests (Shutdown), the node quiets and a settle is recorded
 // (Settle), and the relay records every committed step (Flush). A phase
 // that ends early leaves its time to the next. A zero field is its
-// default (a delay of 5 s on an orchestrator, else none; 10 s for each
+// default (a delay of DefaultDrainDelay on an orchestrator, else none; 10 s for each
 // other phase), a negative one none.
 //
 // Grace is the orchestrator's kill deadline (-grace;
@@ -31,7 +31,7 @@ import (
 // ends in time to leave the later ones their shares.
 type Drain struct {
 	// Delay is how long the server keeps serving, not ready, before it
-	// drains (default 5 s on an orchestrator, else none).
+	// drains (default DefaultDrainDelay on an orchestrator, else none).
 	Delay time.Duration
 	// Shutdown bounds the server's drain of its requests (default 10 s).
 	Shutdown time.Duration
@@ -46,9 +46,12 @@ type Drain struct {
 	Grace time.Duration
 }
 
-// drainDelay is the drain's default Delay on an orchestrator: endpoints
-// take a few seconds to stop sending a terminating pod requests.
-const drainDelay = 5 * time.Second
+// DefaultDrainDelay is the drain's default Delay on an orchestrator:
+// endpoints take a few seconds to stop sending a terminating pod
+// requests. An app that wants the delay wherever it runs (a simulated
+// cluster's nodes, gristsim.Cluster.Drain, are on no orchestrator) sets
+// Drain{Delay: grist.DefaultDrainDelay}.
+const DefaultDrainDelay = 5 * time.Second
 
 // WithDrain sets Main's drain schedule (Drain's zero fields keep their
 // defaults); -grace, when given, overrides its Grace.
@@ -70,7 +73,7 @@ func (d Drain) withDefaults(orchestrator bool) Drain {
 	}
 	delay := time.Duration(0)
 	if orchestrator {
-		delay = drainDelay
+		delay = DefaultDrainDelay
 	}
 	return Drain{Delay: def(d.Delay, delay), Shutdown: def(d.Shutdown, shutdownTimeout),
 		Settle: def(d.Settle, settleTimeout), Flush: def(d.Flush, flushTimeout), Grace: max(d.Grace, 0)}

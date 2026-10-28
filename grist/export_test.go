@@ -35,5 +35,5 @@ var QueryArgs = queryArgs
 const (
 	MaxIDBytes      = maxIDBytes
 	ShutdownTimeout = shutdownTimeout
-	DrainDelay      = drainDelay
+	DrainDelay      = DefaultDrainDelay
 )

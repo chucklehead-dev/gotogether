@@ -2,6 +2,7 @@
 const AtLeastOnce = catalog.AtLeastOnce
 const AtMostOnce = catalog.AtMostOnce
 const CauseHeader = "Grist-Cause"
+const DefaultDrainDelay = 5 * time.Second
 const ReplayedHeader = "Idempotent-Replayed"
 func Appends(types ...EventName) Option
 func Authenticated(caller, tenant string) bool

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
 )
@@ -31,11 +30,11 @@ func Serve() []grist.ServeOption {
 
 // Drain is the app's drain at SIGTERM (Serve's, and the simulated
 // cluster's: gristsim.Cluster.Drain): it keeps serving, not ready, for
-// 5 s (grist's default on an orchestrator) wherever it runs, so the endpoints routing to it
+// grist.DefaultDrainDelay (its default on an orchestrator) wherever it runs, so the endpoints routing to it
 // (a Kubernetes Service's, a Gateway's, the real rolling restart's
 // router polling /readyz every 200 ms) stop before its listener closes;
 // grist's other phases keep their defaults.
-var Drain = grist.Drain{Delay: 5 * time.Second}
+var Drain = grist.Drain{Delay: grist.DefaultDrainDelay}
 
 // NodeContext is the context the node's work and requests run with, the
 // node's own as grist gives it (Serve's dependencies, the simulations'

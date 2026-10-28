@@ -8,6 +8,10 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `grist.DefaultDrainDelay` (5 s), the drain's default delay on an
+  orchestrator, exported again after H5: an app that wants it wherever it
+  runs (a `gristsim.Cluster`'s nodes) sets `Drain{Delay:
+  grist.DefaultDrainDelay}` (examples/counters).
 - The grist path shorter (ROADMAP H6): `gristsim.System(binding, app,
   cfg)` is a grist app's `qtest.System` (its `Run` and the binary's
   mutant, `qtest.Mutant`), replacing the closure every grist example
