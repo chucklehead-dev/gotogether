@@ -1585,6 +1585,7 @@ func Exercised(except ...string) Exercise
 func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qenv.Script, error)
 func Finishes() Expectation
 func Global() Option
+func HasIssue(kind string) Expectation
 func Invariants(names ...string) Option
 func IsEvidence(path string) bool
 func Killed(sel StepSelector) StepClaim

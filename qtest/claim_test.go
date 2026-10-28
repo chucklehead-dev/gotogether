@@ -48,6 +48,41 @@ func TestClaims(t *testing.T) {
 	}
 }
 
+// HasIssue holds of a run whose report fails on a reconstruction error
+// of its kind alone: not of a run without one, of one whose error is of
+// another kind or only a warning, nor of one with an actor failing
+// without it; a run-wide error covers every actor. An unknown kind panics.
+func TestHasIssue(t *testing.T) {
+	t.Parallel()
+	dup := qtrace.Issue{Severity: "error", Kind: "duplicate", Msg: "recorder n seq 1 is two different records"}
+	conforming := func(is ...qtrace.Issue) *validate.Result {
+		return &validate.Result{Actor: "a", Conforms: validate.Pass, Issues: is}
+	}
+	rejecting := &validate.Result{Actor: "b", Conforms: validate.Fail, Failure: &validate.Failure{Kind: "disabled"}}
+	for name, c := range map[string]struct {
+		r    *validate.Report
+		want bool
+	}{
+		"the duplicate":                  {&validate.Report{Actors: []*validate.Result{conforming(dup), conforming()}}, true},
+		"the duplicate on every failing": {&validate.Report{Actors: []*validate.Result{conforming(dup), {Actor: "b", Conforms: validate.Fail, Issues: []qtrace.Issue{dup}}}}, true},
+		"run-wide":                       {&validate.Report{Issues: []qtrace.Issue{dup}, Actors: []*validate.Result{rejecting}}, true},
+		"none":                           {&validate.Report{Actors: []*validate.Result{conforming()}}, false},
+		"a copy (info)":                  {&validate.Report{Actors: []*validate.Result{conforming(qtrace.Issue{Severity: "info", Kind: "duplicate"})}}, false},
+		"another kind":                   {&validate.Report{Actors: []*validate.Result{conforming(qtrace.Issue{Severity: "error", Kind: "cycle"})}}, false},
+		"a failure without it":           {&validate.Report{Actors: []*validate.Result{conforming(dup), rejecting}}, false},
+	} {
+		if got := HasIssue("duplicate").value(c.r) == yes; got != c.want {
+			t.Errorf("%s: HasIssue(duplicate) %v, want %v", name, got, c.want)
+		}
+	}
+	defer func() {
+		if p := fmt.Sprint(recover()); !strings.Contains(p, "the kinds are cycle, duplicate") {
+			t.Errorf("HasIssue(duplicat): panic %q, want the kinds named", p)
+		}
+	}()
+	HasIssue("duplicat")
+}
+
 // A Reach is judged over the runs' choices: how many runs reached (or
 // faulted) the kind, against the share wanted.
 func TestReach(t *testing.T) {

@@ -188,19 +188,7 @@ func TestMutant(t *testing.T) {
 			t.Fatal("two pods as one node: no duplicate error in the merged files")
 		}
 		t.Logf("%d duplicate errors, the first: %s", len(d), d[0])
-		run := qtest.Validate(t, commits, steps)
-		if run.OK() {
-			t.Fatal("two pods as one node conform: the duplicates were not reported")
-		}
-		for _, a := range run.Report.Actors {
-			dup := false
-			for _, is := range a.Issues {
-				dup = dup || is.Severity == "error" && strings.Contains(is.Msg, "two different records")
-			}
-			if !a.OK() && !dup {
-				t.Errorf("actor %s fails without the duplicate error: a verdict where the run has none", a.Actor)
-			}
-		}
+		qtest.Validate(t, commits, steps).Expect(t, qtest.HasIssue("duplicate"))
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

@@ -398,6 +398,40 @@ func (e Expectation) At(action string) Expectation {
 	return violatesAt(e.violates, action)
 }
 
+// issueKinds are the kinds of error qtrace.Reconstruct (and Linearize)
+// report, which HasIssue names.
+var issueKinds = []string{"cycle", "duplicate", "gap", "invocation", "lost-prefix", "overlap", "realtime"} // read-only
+
+// HasIssue: the run's steps carry a reconstruction error of this kind
+// (qtrace.Issue.Kind: "duplicate" for one recorder numbering two
+// different records, "cycle", "overlap", "gap", "invocation",
+// "lost-prefix", "realtime"), and the report fails on it alone: every
+// actor that is not OK has such an error, so the run has no verdict of
+// the model's to read. It states a defect of the input, not of the code
+// (two pods recording as one node: grist's pidIdentity mutant). A kind
+// no reconstruction reports panics, naming the kinds: a misspelled one
+// would make None(HasIssue(...)) hold of every run.
+func HasIssue(kind string) Expectation {
+	if !slices.Contains(issueKinds, kind) {
+		panic(fmt.Sprintf("qtest: HasIssue(%q): no reconstruction error of that kind; the kinds are %s", kind, strings.Join(issueKinds, ", ")))
+	}
+	has := func(is []qtrace.Issue) bool {
+		return slices.ContainsFunc(is, func(i qtrace.Issue) bool { return i.Severity == "error" && i.Kind == kind })
+	}
+	return Expectation{desc: fmt.Sprintf("a %s error of the steps' reconstruction, and no failure without one", kind), check: func(r *validate.Report) bool {
+		runWide := has(r.Issues)
+		found := runWide
+		for _, a := range r.Actors {
+			mine := has(a.Issues)
+			if !a.OK() && !mine && !runWide {
+				return false // a verdict where the run has none
+			}
+			found = found || mine
+		}
+		return found
+	}}
+}
+
 // AnyOf: the report meets at least one of es.
 func AnyOf(es ...Expectation) Expectation {
 	// three-valued: met if any part is, unknown if none is and some part

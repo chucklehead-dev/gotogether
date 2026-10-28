@@ -27,6 +27,11 @@ The first release. What a user meets, by module:
   shutdown cut by its bound returns an error saying so. A second
   SIGINT or SIGTERM in the drain ends the process at once.
 
+- `qtest.HasIssue(kind)`: a run whose report fails on a reconstruction
+  error of that kind alone (`"duplicate"`: one recorder numbering two
+  different records; `"cycle"`, `"overlap"`, ...), every failing actor
+  carrying it: a defect of the input stated as a claim, where a test
+  matched the issue's text (counters' `pidIdentity` mutant).
 - Breaking: `qobs.Recorder.Close` returns an error and closes the
   recorder's sink (ROADMAP H3): a standalone program ends with `if err
   := rec.Close(); err != nil { ... }`, where it closed the sink itself

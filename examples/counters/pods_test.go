@@ -181,7 +181,7 @@ func duplicates(steps []qtrace.Step) []string {
 	}
 	var out []string
 	for _, is := range issues {
-		if is.Severity == "error" && strings.Contains(is.Msg, "two different records") {
+		if is.Severity == "error" && is.Kind == "duplicate" { // a copy is info
 			out = append(out, is.Msg)
 		}
 	}
