@@ -1,6 +1,7 @@
 package qeval
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -540,6 +541,20 @@ func (ev *evaluation) bindLet(d *Decl, en *env) *env {
 	return en.bind(d.Name, v)
 }
 
+// callOrErr is f applied to args, or what the application threw.
+func (ev *evaluation) callOrErr(f Value, args ...Value) (v Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			t, ok := r.(thrown)
+			if !ok {
+				panic(r)
+			}
+			v, err = nil, t.err
+		}
+	}()
+	return ev.call(f, args...), nil
+}
+
 // evalOrErr is e's value, or what its evaluation threw (the model's
 // runtime error, a refusal).
 func (ev *evaluation) evalOrErr(e *Expr, en *env) (v Value, err error) {
@@ -958,22 +973,39 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			out[i] = ev.call(f, x)
 		}
 		return NewSet(out)
-	case "exists":
+	case "exists", "forall":
+		// every element, not to the first witness: quint's TypeScript
+		// backend evaluates each (Set(5, 33).forall(x => x == 33 implies
+		// 1 / 0 > 0) is a division by zero), its Rust backend stops at a
+		// witness in an order of its own (and gives false); the evaluator
+		// gave false. An element's failure is the model's runtime error
+		// only when no element decides (both backends fail); otherwise
+		// the backends disagree, and the evaluator refuses.
 		s, f := ev.setOf(arg(0), op), arg(1)
+		witness := op == "exists" // the value that decides
+		decided := false
+		var failure *EvalError
 		for _, x := range s.Elems {
-			if ev.truth(ev.call(f, x)) {
-				return Bool(true)
+			v, err := ev.callOrErr(f, x)
+			var ee *EvalError
+			switch {
+			case errors.As(err, &ee):
+				if failure == nil {
+					failure = ee
+				}
+			case err != nil:
+				throw(err)
+			case ev.truth(v) == witness:
+				decided = true
 			}
 		}
-		return Bool(false)
-	case "forall":
-		s, f := ev.setOf(arg(0), op), arg(1)
-		for _, x := range s.Elems {
-			if !ev.truth(ev.call(f, x)) {
-				return Bool(false)
+		if failure != nil {
+			if decided {
+				throw(unsupported(op, "an element fails (%s) where another decides it: quint's TypeScript backend evaluates every element, its Rust backend stops at a witness in an order of its own", failure.Msg))
 			}
+			throw(failure)
 		}
-		return Bool(true)
+		return Bool(decided == witness)
 	case "fold":
 		return ev.foldSet(ev.setOf(arg(0), op), arg(1), arg(2), op)
 	case "flatten":

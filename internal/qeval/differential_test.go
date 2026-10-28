@@ -79,6 +79,14 @@ var differentialFindings = []struct{ typ, expr, want string }{
 	{"bool", "{ val n = Map().get(1); 1 > 0 }", "value true"},
 	{"int", "{ val n = List().head(); if (false) n else 3 }", "value 3"},
 	{"int", "{ val n = 1 / 0; n + 1 }", "error"},
+	// exists and forall evaluate every element: TypeScript fails on any,
+	// Rust stops at a witness in its own order; the evaluator stopped at
+	// the first in its order, giving false where TypeScript fails
+	{"bool", "Set(5, 9, 33).forall(x => if (x == 33) 1 / 0 > 0 else false)", "refused"},
+	{"bool", "Set(5, 9, 33).exists(x => if (x == 5) 1 / 0 > 0 else true)", "refused"},
+	{"bool", "Set(0, 1).exists(x => 1 / x > 5)", "error"},
+	{"bool", "Set(0, 1).exists(x => 1 / x > 0)", "refused"}, // both backends fail, Rust by its order
+	{"bool", "Set(1, 2).forall(x => x > 0)", "value true"},
 }
 
 func TestDifferentialFindings(t *testing.T) {
