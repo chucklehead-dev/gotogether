@@ -1,8 +1,12 @@
-package grist
+// Package gen is grist's generator: an App's model skeleton and its
+// bindings from its catalog (docs/grist.md §3.2), the app's first model
+// files, and the app's binary's model command (grist.Main's). No user
+// calls it: an app runs it through its binary (`<app> model`), and
+// gristtest.Generated diffs what it writes.
+package gen
 
 import (
 	"bytes"
-	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -14,14 +18,48 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 )
 
-// gristQnt is grist/model/grist.qnt, which Generate vendors into an
-// application's model/ (read-only).
-//
-//go:embed model/grist.qnt
-var gristQnt []byte
+// Library is grist/model/grist.qnt, which Generate vendors into an
+// application's model/: package grist embeds it and sets it at init
+// (read-only after; an embed cannot reach a parent directory, and every
+// caller holding an App has imported grist).
+var Library []byte
+
+// An App is what the generator reads of a grist.App: its registry's
+// check and its catalog.
+type App interface {
+	Verify() error
+	Catalog() Catalog
+}
+
+// The catalog's types, by their grist names.
+type (
+	Catalog          = catalog.Catalog
+	CatalogBlock     = catalog.CatalogBlock
+	CatalogCall      = catalog.CatalogCall
+	CatalogEvent     = catalog.CatalogEvent
+	CatalogProcessor = catalog.CatalogProcessor
+)
+
+const (
+	unknownOutcome = catalog.UnknownOutcome
+	AtLeastOnce    = catalog.AtLeastOnce
+	AtMostOnce     = catalog.AtMostOnce
+)
+
+// QuintName is catalog.QuintName.
+func QuintName(name string) (string, error) { return catalog.QuintName(name) }
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // Generated is what Generate writes for an App: its model's skeleton and
 // its bindings, from the App's Catalog, beside the application's own
@@ -128,22 +166,23 @@ func modelFile(app string) string { return "model/" + app + ".qnt" }
 // Missing. A model whose files import each other in a cycle is an error
 // naming it (the layout before the rules had a file of their own was
 // one: Generate says how to move them).
-func Generate(app *App, dir string) (Generated, error) {
+func Generate(app App, dir string) (Generated, error) {
 	if err := app.Verify(); err != nil {
 		return Generated{}, err
 	}
-	g, err := newGen(app.Catalog())
+	c := app.Catalog()
+	g, err := newGen(c)
 	if err != nil {
 		return Generated{}, err
 	}
-	own, err := readOwn(dir, modelFile(app.Name))
+	own, err := readOwn(dir, modelFile(c.Name))
 	if err != nil {
 		return Generated{}, err
 	}
-	if err := oldLayout(app.Name, g.aq, own); err != nil {
+	if err := oldLayout(c.Name, g.aq, own); err != nil {
 		return Generated{}, err
 	}
-	rules, err := readOwn(dir, rulesFile(app.Name))
+	rules, err := readOwn(dir, rulesFile(c.Name))
 	if err != nil {
 		return Generated{}, err
 	}
@@ -154,31 +193,31 @@ func Generate(app *App, dir string) (Generated, error) {
 	}
 	events, steps := g.eventsFile(), g.stepsFile()
 	if len(g.clashes) > 0 {
-		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", app.Name, strings.Join(g.clashes, "\n  "))
+		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", c.Name, strings.Join(g.clashes, "\n  "))
 	}
 	marks, err := parseMarks(own, g.aq)
 	if err != nil {
-		return Generated{}, fmt.Errorf("grist model: %s: %w", modelFile(app.Name), err)
+		return Generated{}, fmt.Errorf("grist model: %s: %w", modelFile(c.Name), err)
 	}
 	if _, err := parseMarks(rules, g.aq); err != nil {
-		return Generated{}, fmt.Errorf("grist model: %s: %w", rulesFile(app.Name), err)
+		return Generated{}, fmt.Errorf("grist model: %s: %w", rulesFile(c.Name), err)
 	}
-	if c, r := g.ownClashes(own); len(c) > 0 {
+	if m, r := g.ownClashes(own); len(m) > 0 {
 		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines now (an obligation the catalog implies, judged by the bindings): delete the app's own, or rename it if it says more",
-			modelFile(app.Name), strings.Join(c, ", "), stepsFile(app.Name))
+			modelFile(c.Name), strings.Join(m, ", "), stepsFile(c.Name))
 	} else if len(r) > 0 {
 		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines (an obligation the catalog implies) and imports the rules beside: rename the rules' def",
-			rulesFile(app.Name), strings.Join(r, ", "), stepsFile(app.Name))
+			rulesFile(c.Name), strings.Join(r, ", "), stepsFile(c.Name))
 	}
 	out := Generated{Files: map[string][]byte{
-		"model/grist.qnt":                gristQnt,
-		genFile(app.Name):                events,
-		stepsFile(app.Name):              steps,
-		app.Name + ".binding.yaml":       g.binding("default", marks),
-		app.Name + ".calls.binding.yaml": g.binding("calls", marks),
+		"model/grist.qnt":              Library,
+		genFile(c.Name):                events,
+		stepsFile(c.Name):              steps,
+		c.Name + ".binding.yaml":       g.binding("default", marks),
+		c.Name + ".calls.binding.yaml": g.binding("calls", marks),
 	}, Holes: g.holes}
 	for _, v := range marks.variants() {
-		out.Files[app.Name+"."+v+".binding.yaml"] = g.binding(v, marks)
+		out.Files[c.Name+"."+v+".binding.yaml"] = g.binding(v, marks)
 	}
 	for _, h := range g.holes {
 		if !g.defined[h.Name] {
@@ -188,7 +227,7 @@ func Generate(app *App, dir string) (Generated, error) {
 	if cycle, err := importCycle(dir, out.Files); err != nil {
 		return Generated{}, err
 	} else if cycle != nil {
-		return Generated{}, fmt.Errorf("grist model: %s import each other in a cycle (%s), which quint's REPL refuses (QNT101: Multiple modules conflict on the same name): each file imports only the ones below it in grist.Generated's layout (the app's rules import grist and the events, never the steps or the invariants)",
+		return Generated{}, fmt.Errorf("grist model: %s import each other in a cycle (%s), which quint's REPL refuses (QNT101: Multiple modules conflict on the same name): each file imports only the ones below it in the model's layout, docs/grist.md §3.2 (the app's rules import grist and the events, never the steps or the invariants)",
 			strings.Join(sortedUnique(cycle), ", "), strings.Join(cycle, " -> "))
 	}
 	return out, nil
@@ -362,36 +401,37 @@ func (g Generated) paths() []string {
 // for every command, no events, no reads), and model/<app>.qnt, the
 // module the store's binding names and the clients' one, with no
 // invariant yet. Main's `model -init` writes each that does not exist.
-func Starter(app *App) (map[string][]byte, error) {
+func Starter(app App) (map[string][]byte, error) {
 	if err := app.Verify(); err != nil {
 		return nil, err
 	}
-	g, err := newGen(app.Catalog())
+	c := app.Catalog()
+	g, err := newGen(c)
 	if err != nil {
 		return nil, err
 	}
 	var r strings.Builder
-	fmt.Fprintf(&r, "// The %s app's rules: every hole grist's generated skeleton (%s,\n// grist model) calls, and the read models' folds. Regenerating the\n// skeleton never touches this file.\n\n", app.Name, stepsFile(app.Name))
+	fmt.Fprintf(&r, "// The %s app's rules: every hole grist's generated skeleton (%s,\n// grist model) calls, and the read models' folds. Regenerating the\n// skeleton never touches this file.\n\n", c.Name, stepsFile(c.Name))
 	fmt.Fprintf(&r, "module %sRules {\n", g.aq)
-	fmt.Fprintf(&r, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n", g.aq, app.Name)
+	fmt.Fprintf(&r, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n", g.aq, c.Name)
 	for _, h := range g.holes {
 		fmt.Fprintf(&r, "\n%s  %s\n", comment("  ", h.Doc), h.Stub)
 	}
 	r.WriteString("}\n")
 	var b strings.Builder
-	fmt.Fprintf(&b, "// The %s app's invariants: what its bindings judge, over the generated\n// store's and clients' actions (%s) and the app's rules (%s).\n// Regenerating the skeleton never touches this file.\n\n", app.Name, stepsFile(app.Name), rulesFile(app.Name))
-	fmt.Fprintf(&b, "// The store's side (%s.binding.yaml): mark a val `// grist: invariant`\n", app.Name)
+	fmt.Fprintf(&b, "// The %s app's invariants: what its bindings judge, over the generated\n// store's and clients' actions (%s) and the app's rules (%s).\n// Regenerating the skeleton never touches this file.\n\n", c.Name, stepsFile(c.Name), rulesFile(c.Name))
+	fmt.Fprintf(&b, "// The store's side (%s.binding.yaml): mark a val `// grist: invariant`\n", c.Name)
 	b.WriteString("// or `// grist: eventually` (after a settle) on the line before it, and\n")
 	b.WriteString("// regenerate; a binding name after the kind puts it in a test-only variant.\n")
 	// the module imports the events and the rules itself, not only through
 	// the skeleton's exports: quint's flattener (quint compile, which the
 	// validator's Go evaluator runs on a module importing this one from
 	// another directory) loses names re-exported twice
-	imports := fmt.Sprintf("  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, app.Name, g.aq, app.Name)
-	fmt.Fprintf(&b, "module %s {\n%s  import %sGen.* from \"./%s_steps\"\n  export %sGen.*\n}\n\n", g.aq, imports, g.aq, app.Name, g.aq)
-	fmt.Fprintf(&b, "// The clients' side (%s.calls.binding.yaml), linearized.\n", app.Name)
-	fmt.Fprintf(&b, "module %sCalls {\n%s  import %sCallsGen.* from \"./%s_steps\"\n  export %sCallsGen.*\n}\n", g.aq, imports, g.aq, app.Name, g.aq)
-	return map[string][]byte{rulesFile(app.Name): []byte(r.String()), modelFile(app.Name): []byte(b.String())}, nil
+	imports := fmt.Sprintf("  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, c.Name, g.aq, c.Name)
+	fmt.Fprintf(&b, "module %s {\n%s  import %sGen.* from \"./%s_steps\"\n  export %sGen.*\n}\n\n", g.aq, imports, g.aq, c.Name, g.aq)
+	fmt.Fprintf(&b, "// The clients' side (%s.calls.binding.yaml), linearized.\n", c.Name)
+	fmt.Fprintf(&b, "module %sCalls {\n%s  import %sCallsGen.* from \"./%s_steps\"\n  export %sCallsGen.*\n}\n", g.aq, imports, g.aq, c.Name, g.aq)
+	return map[string][]byte{rulesFile(c.Name): []byte(r.String()), modelFile(c.Name): []byte(b.String())}, nil
 }
 
 // gen is one App's generation.
@@ -408,14 +448,6 @@ type gen struct {
 	// bodies are the definitions of the application's model (module <app>)
 	// and rules, by name: which state each reads (readsRecords)
 	bodies map[string]string
-}
-
-// a field is one scalar field of a struct, as a step records it.
-type field struct {
-	json  string // its JSON name: the step's field
-	param string // its Quint parameter's name (json, or json_ where Quint reserves it)
-	typ   string // str, int or bool
-	tag   bool
 }
 
 func newGen(c Catalog) (*gen, error) {
@@ -476,84 +508,6 @@ func newGen(c Catalog) (*gen, error) {
 	g.claimBlocks()
 	return g, nil
 }
-
-// quintScalar is t's Quint type when t is a scalar a step records: str,
-// int (booleans as themselves), or "".
-func quintScalar(t reflect.Type) string {
-	switch t.Kind() {
-	case reflect.String:
-		return "str"
-	case reflect.Bool:
-		return "bool"
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "int"
-	}
-	return ""
-}
-
-// quintIdent is a Quint identifier (read-only).
-var quintIdent = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
-
-// scalarFields are t's top-level scalar fields, as a step records them
-// (rec.StepFields): non-scalar fields are not recorded, and so not
-// modelled, and each must say so (`grist:"-"`), or it is refused. A
-// pointer field is refused (recorded only when set, so a step may lack
-// its parameter), as is a JSON name that is no Quint identifier.
-func scalarFields(t reflect.Type) ([]field, error) {
-	if t == nil || t.Kind() != reflect.Struct {
-		return nil, nil
-	}
-	var out []field
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() {
-			continue
-		}
-		n := rec.JSONName(f)
-		if f.Type.Kind() == reflect.Pointer && quintScalar(f.Type.Elem()) != "" {
-			return nil, fmt.Errorf("field %s is a pointer, recorded only when set: make it a value", f.Name)
-		}
-		q := quintScalar(f.Type)
-		if q == "" {
-			// a step records scalars only: a list or a struct dropped
-			// without a word once left a query's answer uncompared
-			if f.Tag.Get("grist") == "-" {
-				continue
-			}
-			return nil, fmt.Errorf("field %s is a %v, which no step records and so no model compares: give the model scalar fields (a count, a joined string), or tag it `grist:\"-\"` to say the model leaves it out", f.Name, f.Type)
-		}
-		if !quintIdent.MatchString(n) {
-			return nil, fmt.Errorf("field %s's JSON name %q is no Quint identifier: rename it (letters, digits and _)", f.Name, n)
-		}
-		p := n
-		if quintTaken[n] {
-			p = n + "_"
-		}
-		out = append(out, field{json: n, param: p, typ: q, tag: f.Tag.Get("grist") == "tag"})
-	}
-	return out, nil
-}
-
-// quintTaken are the names a generated parameter may not take: Quint's
-// keywords and built-in operators (a parameter named `of` or `size` does
-// not parse: QNT101), and the generated modules' own names. Read-only.
-var quintTaken = func() map[string]bool {
-	m := map[string]bool{}
-	for _, n := range strings.Fields(`module import export from as const var val def pure action run temporal nondet
-		type assume if else match all any and or not iff implies true false Bool Int Nat Set Map List Tup Rec
-		exists forall in union contains fold intersect exclude subseteq map applyTo filter powerset flatten
-		allLists allListsUpTo getOnlyElement chooseSome oneOf isFinite size get put keys mapBy setToMap setOfMaps
-		set setBy fields with tuples append concat head tail length nth indices replaceAt slice select foldl foldr
-		to always eventually next then expect reps fail assert orKeep mustChange enabled weakFair strongFair leadsTo
-		range igt ilt igte ilte iadd isub iuminus imul idiv imod ipow actionAll actionAny field fieldNames item
-		assign of eq neq ite cross difference matchVariant variant
-		log checkpoints appended effects answered init step args_ result_ reads_ rec_ id caller readPos reads
-		result`) {
-		m[n] = true
-	}
-	return m
-}()
 
 // upper is s with its first letter upper-cased (a Quint type's name).
 func upper(s string) string { return strings.ToUpper(s[:1]) + s[1:] }
@@ -871,7 +825,7 @@ func (g *gen) eventsModule(b *strings.Builder) {
 		var ps, tags []string
 		for _, k := range rm.Keys {
 			p := k
-			if quintTaken[k] || !quintIdent.MatchString(k) {
+			if catalog.QuintTaken[k] || !catalog.QuintIdent.MatchString(k) {
 				p = "k" + fmt.Sprint(len(ps)+1)
 			}
 			ps = append(ps, p+": str")
@@ -1775,3 +1729,26 @@ func definedIn(src []byte, module string) map[string]bool {
 	}
 	return out
 }
+
+// field is a block's scalar field (catalog.Field).
+type field struct {
+	json  string // its JSON name: the step's field
+	param string // its Quint parameter's name (json, or json_ where Quint reserves it)
+	typ   string // str, int or bool
+	tag   bool
+}
+
+// scalarFields are t's scalar fields (catalog.ScalarFields).
+func scalarFields(t reflect.Type) ([]field, error) {
+	fs, err := catalog.ScalarFields(t)
+	out := make([]field, len(fs))
+	for i, f := range fs {
+		out[i] = field{json: f.JSON, param: f.Param, typ: f.Type, tag: f.Tag}
+	}
+	if fs == nil {
+		out = nil
+	}
+	return out, err
+}
+
+func quintScalar(t reflect.Type) string { return catalog.QuintScalar(t) }

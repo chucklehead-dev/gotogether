@@ -15,18 +15,16 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
 
-// LiveBound is how long a poller may work on one trigger of its batch
+// liveBound is how long a poller may work on one trigger of its batch
 // before /livez fails: far longer than any handler or effect takes (an
-// effect's calls time out in CallTimeout, and are tried EffectTries
+// effect's calls time out in callTimeout, and are tried EffectTries
 // times), so only a deadlock or a stuck goroutine reaches it. The clock
 // restarts at each trigger and after each backoff from a store error: a
 // batch of slow effects, or a commit retried through a database outage,
 // is not stuck.
-const LiveBound = 5 * time.Minute
-
-// liveBound is LiveBound, shortened by tests (export_test.go); read-only
-// otherwise.
-var liveBound = LiveBound
+//
+// Shortened by tests (export_test.go); read-only otherwise.
+var liveBound = 5 * time.Minute
 
 // health is Main's side port: /livez, /readyz and /metrics.
 type health struct {

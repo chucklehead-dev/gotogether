@@ -15,11 +15,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qobs/qobshttp"
@@ -28,61 +28,18 @@ import (
 // Main is an application binary's entry point: func main() {
 // grist.Main(app, opts...) }, the binary importing its database's driver
 // (modernc.org/sqlite, github.com/jackc/pgx/v5/stdlib: grist imports
-// none). It runs MainArgs on the process's arguments, stopping on SIGINT
-// or SIGTERM, and exits 2 on a usage error, 1 on any other. A second
+// none). It runs the command its arguments name, stopping on SIGINT or
+// SIGTERM, and exits 2 on a usage error, 1 on any other. A second
 // signal, in the drain, ends the process at once (the signals' default).
-func Main(app *App, opts ...ServeOption) {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	// the first signal starts the drain; the next is the signals' own
-	// again: an operator's second Ctrl-C ends a 35 s drain, where it was
-	// swallowed (relayed to a context already cancelled)
-	context.AfterFunc(ctx, stop)
-	err := MainArgs(ctx, app, os.Args[1:], os.Stdout, os.Stderr, opts...)
-	stop()
-	var usage *UsageError
-	switch {
-	case errors.As(err, &usage):
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	case err != nil:
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-// A UsageError is a command line MainArgs cannot run.
-type UsageError struct{ Msg string }
-
-func (e *UsageError) Error() string { return e.Msg }
-
-// mainUsage is the commands' summary.
-const mainUsage = `commands:
-  catalog                     print the App's registry as JSON (App.Catalog)
-  verify                      check the registry (App.Verify), as the node does at boot
-  model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings (Generate) under DIR (default .)
-      -check                           write nothing: fail if a generated file differs (CI's diff)
-      -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt (Starter) where there are none
-  serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
-      -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
-      -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port; on loopback in a pod, refused)
-      -health-addr HOST:PORT           /livez, /readyz and /metrics on a side port (default :8081 in a pod, else off)
-      -grace DURATION                  the orchestrator's kill deadline after SIGTERM: the drain is budgeted into it
-      -tenant NAME                     create the tenant if it does not exist (repeatable)
-      -steps PATH                      record every step to PATH (qobs.FileSink, PerStep), for validation;
-                                       a directory: a file of its own per node and start, <app>.<node>.<incarnation>.jsonl
-                                       (in a pod give a directory: a restart truncates a file, losing the earlier start's steps)
-      -caller-header NAME              take the request's caller from header NAME (behind an authenticating proxy only)
-      -poll DURATION                   how often the store reads other processes' appends (default 250ms)
-      -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)`
-
-// MainArgs runs one of Main's commands, args the binary's arguments
-// after its name:
+// The commands:
 //
 //	catalog    App.Catalog as JSON on stdout
 //	verify     App.Verify
-//	model      Generate's files written under -dir (default .), or with -check
+//	model      the model's skeleton and bindings, generated from the App's catalog
+//	           (docs/grist.md §3.2), written under -dir (default .), or with -check
 //	           compared with those there (an error naming each that differs);
-//	           -init writes Starter's model/<app>_rules.qnt and model/<app>.qnt
+//	           -init writes the app's first model/<app>_rules.qnt (every hole
+//	           stubbed) and model/<app>.qnt (no invariant yet)
 //	           where there are none.
 //	           It lists the holes the app's model has not filled
 //	serve      the HTTP API (NewHandler, opts applied) on grist/sqlstore over -db
@@ -92,7 +49,7 @@ const mainUsage = `commands:
 //	           file per node and start) for validation with the app's bindings,
 //	           under the recorder <app>/<node>/<incarnation> (Identity, from the
 //	           environment or WithIdentity); /livez, /readyz and /metrics on
-//	           -health-addr; until ctx ends, then the drain (Drain, WithDrain):
+//	           -health-addr; until SIGINT or SIGTERM, then the drain (Drain, WithDrain):
 //	           /readyz fails and the server keeps serving for its Delay, then
 //	           drains its requests (Shutdown) while the node keeps running,
 //	           then, once its processors are idle and its relay caught up
@@ -109,9 +66,55 @@ const mainUsage = `commands:
 // drain needs a grace of ...; GOMEMLIMIT ..."), then "<app> health on
 // http://ADDR" when the side port is on, and "<app> serving on
 // http://ADDR" once it listens.
-func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error {
+func Main(app *App, opts ...ServeOption) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// the first signal starts the drain; the next is the signals' own
+	// again: an operator's second Ctrl-C ends a 35 s drain, where it was
+	// swallowed (relayed to a context already cancelled)
+	context.AfterFunc(ctx, stop)
+	err := mainArgs(ctx, app, os.Args[1:], os.Stdout, os.Stderr, opts...)
+	stop()
+	var usage *usageError
+	switch {
+	case errors.As(err, &usage):
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	case err != nil:
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// A usageError is a command line Main cannot run.
+type usageError struct{ Msg string }
+
+func (e *usageError) Error() string { return e.Msg }
+
+// mainUsage is the commands' summary.
+const mainUsage = `commands:
+  catalog                     print the App's registry as JSON (App.Catalog)
+  verify                      check the registry (App.Verify), as the node does at boot
+  model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings under DIR (default .)
+      -check                           write nothing: fail if a generated file differs (CI's diff)
+      -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt where there are none
+  serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
+      -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
+      -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port; on loopback in a pod, refused)
+      -health-addr HOST:PORT           /livez, /readyz and /metrics on a side port (default :8081 in a pod, else off)
+      -grace DURATION                  the orchestrator's kill deadline after SIGTERM: the drain is budgeted into it
+      -tenant NAME                     create the tenant if it does not exist (repeatable)
+      -steps PATH                      record every step to PATH (qobs.FileSink, PerStep), for validation;
+                                       a directory: a file of its own per node and start, <app>.<node>.<incarnation>.jsonl
+                                       (in a pod give a directory: a restart truncates a file, losing the earlier start's steps)
+      -caller-header NAME              take the request's caller from header NAME (behind an authenticating proxy only)
+      -poll DURATION                   how often the store reads other processes' appends (default 250ms)
+      -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)`
+
+// mainArgs runs one of Main's commands, args the binary's arguments
+// after its name (Main says what each does).
+func mainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error {
 	if len(args) == 0 {
-		return &UsageError{Msg: fmt.Sprintf("usage: %s <command>\n%s", app.Name, mainUsage)}
+		return &usageError{Msg: fmt.Sprintf("usage: %s <command>\n%s", app.Name, mainUsage)}
 	}
 	switch args[0] {
 	case "catalog":
@@ -135,84 +138,13 @@ func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 		fmt.Fprintf(stdout, "usage: %s <command>\n%s\n", app.Name, mainUsage)
 		return nil
 	}
-	return &UsageError{Msg: fmt.Sprintf("%s: unknown command %q\n%s", app.Name, args[0], mainUsage)}
+	return &usageError{Msg: fmt.Sprintf("%s: unknown command %q\n%s", app.Name, args[0], mainUsage)}
 }
 
-// modelMain is the model command.
+// modelMain is the model command (the generator's, grist/internal/gen).
 func modelMain(app *App, args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet(app.Name+" model", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	dir := fs.String("dir", ".", "")
-	check := fs.Bool("check", false, "")
-	starter := fs.Bool("init", false, "")
-	if err := fs.Parse(args); err != nil || fs.NArg() > 0 {
-		return &UsageError{Msg: fmt.Sprintf("usage: %s model [-dir DIR] [-check] [-init]", app.Name)}
-	}
-	own := filepath.Join(*dir, modelFile(app.Name))
-	rules := filepath.Join(*dir, rulesFile(app.Name))
-	if *starter && !*check {
-		// an old layout's model is moved by hand, never stubbed beside
-		if b, err := readOwn(*dir, modelFile(app.Name)); err != nil {
-			return err
-		} else if err := oldLayout(app.Name, mustQuint(app.Name), b); err != nil {
-			return err
-		}
-		files, err := Starter(app)
-		if err != nil {
-			return err
-		}
-		for _, rel := range []string{rulesFile(app.Name), modelFile(app.Name)} {
-			path := filepath.Join(*dir, rel)
-			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(path, files[rel], 0o644); err != nil {
-				return err
-			}
-			if rel == rulesFile(app.Name) {
-				fmt.Fprintf(stdout, "wrote %s (every hole stubbed: write the rules)\n", path)
-			} else {
-				fmt.Fprintf(stdout, "wrote %s (no invariant yet: write them)\n", path)
-			}
-		}
-	}
-	g, err := Generate(app, *dir)
-	if err != nil {
-		return err
-	}
-	if *check {
-		if d := g.Diff(*dir); len(d) > 0 {
-			return fmt.Errorf("%s model: %s differ from what the catalog generates: regenerate with `%s model` and commit them", app.Name, strings.Join(d, ", "), app.Name)
-		}
-	} else if err := g.Write(*dir); err != nil {
-		return err
-	}
-	if _, err := os.Stat(rules); errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s model: there is no %s, the app's rules (every hole of the skeleton): `%s model -init` writes one with every hole stubbed", app.Name, rules, app.Name)
-	}
-	if _, err := os.Stat(own); errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s model: there is no %s, the app's invariants (the modules its bindings name): `%s model -init` writes one with none yet", app.Name, own, app.Name)
-	}
-	if len(g.Missing) > 0 {
-		var b strings.Builder
-		for _, h := range g.Holes {
-			if slices.Contains(g.Missing, h.Name) {
-				fmt.Fprintf(&b, "\n%s  %s", comment("  ", h.Doc), h.Stub)
-			}
-		}
-		return fmt.Errorf("%s model: %s does not define %s, which the skeleton calls; in module %sRules, for instance:%s",
-			app.Name, rules, strings.Join(g.Missing, ", "), mustQuint(app.Name), b.String())
-	}
-	if !*check {
-		fmt.Fprintf(stdout, "wrote %s under %s\n", strings.Join(g.paths(), ", "), *dir)
-	}
-	return nil
+	return gen.Command(app, args, stdout, func(msg string) error { return &usageError{Msg: msg} })
 }
-
-func mustQuint(name string) string { q, _ := QuintName(name); return q }
 
 // names is a repeatable flag.
 type names []string
@@ -224,7 +156,7 @@ func (n *names) Set(v string) error { *n = append(*n, v); return nil }
 func openDB(spec string) (*sql.DB, sqlstore.Dialect, error) {
 	kind, dsn, ok := strings.Cut(spec, ":")
 	if !ok || dsn == "" {
-		return nil, sqlstore.Dialect{}, &UsageError{Msg: fmt.Sprintf("-db %q: give sqlite:PATH or postgres:DSN", spec)}
+		return nil, sqlstore.Dialect{}, &usageError{Msg: fmt.Sprintf("-db %q: give sqlite:PATH or postgres:DSN", spec)}
 	}
 	var driver, imp string
 	var dialect sqlstore.Dialect
@@ -238,7 +170,7 @@ func openDB(spec string) (*sql.DB, sqlstore.Dialect, error) {
 			dsn = kind + ":" + dsn // a URL: postgres://...
 		}
 	default:
-		return nil, sqlstore.Dialect{}, &UsageError{Msg: fmt.Sprintf("-db %q: unknown database %q: give sqlite:PATH or postgres:DSN", spec, kind)}
+		return nil, sqlstore.Dialect{}, &usageError{Msg: fmt.Sprintf("-db %q: unknown database %q: give sqlite:PATH or postgres:DSN", spec, kind)}
 	}
 	registered := false
 	for _, d := range sql.Drivers() {
@@ -265,10 +197,10 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	fs.Var(&tenants, "tenant", "")
 	fs.Var(&depURLs, "dependency", "")
 	if err := fs.Parse(args); err != nil {
-		return &UsageError{Msg: fmt.Sprintf("%s serve: %v\n%s", app.Name, err, mainUsage)}
+		return &usageError{Msg: fmt.Sprintf("%s serve: %v\n%s", app.Name, err, mainUsage)}
 	}
 	if *dbSpec == "" || fs.NArg() > 0 {
-		return &UsageError{Msg: fmt.Sprintf("%s serve: give -db (and only flags)\n%s", app.Name, mainUsage)}
+		return &usageError{Msg: fmt.Sprintf("%s serve: give -db (and only flags)\n%s", app.Name, mainUsage)}
 	}
 	set := map[string]bool{}
 	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
@@ -276,10 +208,10 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if orchestrator && loopback(*addr) {
 		// a Service's endpoints are the pod's IP: a server on loopback has
 		// none, and every request to it is refused
-		return &UsageError{Msg: fmt.Sprintf("%s serve: -addr %s listens on loopback, which no Service reaches (KUBERNETES_SERVICE_HOST is set: this is a pod): give -addr :8080", app.Name, *addr)}
+		return &usageError{Msg: fmt.Sprintf("%s serve: -addr %s listens on loopback, which no Service reaches (KUBERNETES_SERVICE_HOST is set: this is a pod): give -addr :8080", app.Name, *addr)}
 	}
 	if *grace < 0 {
-		return &UsageError{Msg: fmt.Sprintf("%s serve: -grace %v: give the orchestrator's kill deadline (terminationGracePeriodSeconds), as -grace 30s", app.Name, *grace)}
+		return &usageError{Msg: fmt.Sprintf("%s serve: -grace %v: give the orchestrator's kill deadline (terminationGracePeriodSeconds), as -grace 30s", app.Name, *grace)}
 	}
 	if !set["health-addr"] && orchestrator {
 		*healthAddr = ":8081"
@@ -293,14 +225,14 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		d := app.deps[name]
 		switch {
 		case !ok || u == "":
-			return &UsageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL", v)}
+			return &usageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL", v)}
 		case d == nil:
-			return &UsageError{Msg: fmt.Sprintf("-dependency %q: %s has no dependency %q (it has %v)", v, app.Name, name, depNames(app))}
+			return &usageError{Msg: fmt.Sprintf("-dependency %q: %s has no dependency %q (it has %v)", v, app.Name, name, depNames(app))}
 		}
 		// checked here: a URL no request can be made to would leave every
 		// call's outcome unknown (an at-most-once effect's grist.unknown)
 		if pu, err := url.Parse(u); err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
-			return &UsageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL, the URL http:// or https:// with a host (as http://bank.internal:8080)", v)}
+			return &usageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL, the URL http:// or https:// with a host (as http://bank.internal:8080)", v)}
 		}
 		overHTTP[d] = OverHTTP(u, nil)
 	}
@@ -348,7 +280,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	}
 	for _, t := range tenants {
 		if err := CheckTenant(t); err != nil {
-			return &UsageError{Msg: fmt.Sprintf("-tenant: %v", err)}
+			return &usageError{Msg: fmt.Sprintf("-tenant: %v", err)}
 		}
 		if err := st.CreateTenant(ctx, t); err != nil {
 			return err
@@ -512,7 +444,7 @@ func serveLoopback(sd servedDep, sink qobs.Sink, recorderID string) (string, fun
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(ln) //qenv:ok the real tier's dependency, outside any simulation
 	return "http://" + ln.Addr().String(), func() {
-		ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		srv.Shutdown(ctx)
 	}, nil
@@ -530,13 +462,13 @@ func depNames(app *App) []string {
 // Main's drain's default bounds (Drain): how long a graceful shutdown
 // waits for the requests in flight, then how long for the node to quiet
 // before it records a settle, and then how long the relay's flush may
-// take. With DrainDelay on an orchestrator they need 35 s, more than
+// take. With the drain's delay (5 s) on an orchestrator they need 35 s, more than
 // Kubernetes' default grace of 30 s: give the pod 45 s
 // (terminationGracePeriodSeconds), or -grace to budget them into less.
 const (
-	ShutdownTimeout = 10 * time.Second
-	SettleTimeout   = 10 * time.Second
-	FlushTimeout    = 10 * time.Second
+	shutdownTimeout = 10 * time.Second
+	settleTimeout   = 10 * time.Second
+	flushTimeout    = 10 * time.Second
 )
 
 // settle waits for n to quiet and records a settle into ctx's recorder:

@@ -484,7 +484,7 @@ stated where it stands below.
 - **Routes and codes** (§5): `POST /t/{tenant}/commands/{name}`, the
   `Idempotency-Key` header the command id (required: 400 without it);
   `GET /t/{tenant}/queries/{name}`, the arguments as URL parameters by
-  JSON name (a string as it is, anything else as JSON: `QueryArgs`, and
+  JSON name (a string as it is, anything else as JSON: `queryArgs`, and
   `client.Params` its inverse). A command's receipt is **200** on its
   first answer and on every retry: the key's answer is the same
   response, which a 201 for the first and a 200 for a replay would not
@@ -547,14 +547,14 @@ stated where it stands below.
   is killed the second takes the server's traffic at once, and both
   bindings judge the file.
 - **`grist.Main(app, opts...)`**: `catalog` (the registry as JSON, each
-  type a JSON Schema derived by reflection: `grist.Schema`, the
+  type a JSON Schema derived by reflection: `catalog.Schema` (grist/internal/catalog), the
   catalog's `MarshalJSON`), `verify`, and `serve -db sqlite:PATH |
   postgres:DSN -addr -tenant -steps -caller-header -poll`: the API and the
   node on sqlstore, every step to a `PerStep` file (a new one each
   start), the application's dependencies attached by `Dependencies`;
   SIGINT or SIGTERM shut it down, the relay flushed into the file first
   (`Relay.Flush`: a row the relay had not reached would otherwise be
-  only the next node's, in its own file). `MainArgs` is the testable
+  only the next node's, in its own file). `mainArgs` is the testable
   form. examples/counters' `cmd/counters` is one, and `SERVE=1
   ./run-demo.sh` serves it, drives it with curl and validates its file.
 - **Ids starting with `grist:` are grist's** (an at-most-once outcome's
@@ -648,8 +648,8 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   context cancelled and its outcome never appended (a payment taken,
   recorded nowhere). The node now runs on `context.WithoutCancel` of the
   signal's context and is cancelled after `Shutdown` returns
-  (`ShutdownTimeout`, 10 s), and the relay's flush has its own
-  `FlushTimeout` (it shared the shutdown's 5 s, which slow requests
+  (`shutdownTimeout`, 10 s), and the relay's flush has its own
+  `flushTimeout` (it shared the shutdown's 5 s, which slow requests
   could use up). `TestMainShutdownDrains`: an effect in flight at the
   signal while a client trickles a body across it runs to its end with
   its context live, its outcome is in the steps file, the trickled
@@ -658,7 +658,7 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
 - **Main's server bounds every phase** (`ReadHeaderTimeout` 10 s,
   `ReadTimeout` 1 m, `WriteTimeout` 2 m, `IdleTimeout` 2 m,
   `MaxHeaderBytes` 64 KiB; it set only the first), and a command's body
-  bound is a `ServeOption`, `MaxBody(n)` (`DefaultMaxBody`, 1 MiB; was
+  bound is a `ServeOption`, `MaxBody(n)` (`defaultMaxBody`, 1 MiB; was
   the constant `MaxBody`): a larger body is **413**, was 400.
 - **Arguments are decoded exactly, and refused as the client's error.**
   A step's fields were decoded through `float64`: an integer past 2^53
@@ -693,7 +693,7 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   version's to state (`TestRetryAcrossDeploy`). Markers written before
   this change hash otherwise: a retry in flight across the upgrade is a
   reused key (pre-release, no store to migrate).
-- **Query parameters**: `QueryArgs` takes a pointer to a string as a
+- **Query parameters**: `queryArgs` takes a pointer to a string as a
   string (`?name=a` for a `*string` was "no JSON value", 400), leaves an
   absent pointer nil, and refuses a parameter that is not UTF-8;
   `client.Params` leaves a null (nil pointer) out, and the two are each
@@ -702,7 +702,7 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   the blocks the API serves: a 403 for an internal block, and the
   unknown block's list of every command, told a client the internal
   names.
-- **Ids are bounded**: `MaxIDBytes` (255) in `checkID`, so an
+- **Ids are bounded**: `maxIDBytes` (255) in `checkID`, so an
   `Idempotency-Key` past it is a 400; a longer one reached PostgreSQL's
   btree limit (54000), which sqlstore classed transient (retried for
   ever): class 54 is now permanent.
@@ -868,7 +868,7 @@ What it found, each fixed where it stands:
 - **`grist.Main serve` records a settle** on shutdown, once the server
   drained, every poller of the node waits with nothing after its
   checkpoint (an effect in flight is work: an at-most-once one's
-  outcome is waited for) and the relay caught up (`SettleTimeout`; none,
+  outcome is waited for) and the relay caught up (`settleTimeout`; none,
   said on stderr, if the node does not quiet): a served run's eventual
   vals are judged (`TestMainServeSettles`; counters' `SERVE=1` demo).
 - **An exploration's summary names the untaken actions**: "model
@@ -897,7 +897,7 @@ mutant harness and a 120-line real-tier harness by hand. Built, each
 with a test that fails without it:
 
 - **The generator is the app's binary's** (`<app> model`, `grist.Main`;
-  `grist.Generate`, `grist.Starter`), not a `cmd/grist` that would have
+  grist/internal/gen's `Generate`, `Starter`), not a `cmd/grist` that would have
   to load an application's catalog it cannot import: only the app's own
   process has its `App`. It needs no binding or validate (text from the
   `Catalog`), so a production binary links nothing more.
@@ -1556,7 +1556,7 @@ Built, each with a test that fails with it taken out:
   base/<call>`, the request's JSON, the key as `Idempotency-Key`, the
   cause as `Grist-Cause` (`grist.CauseHeader`:
   `<app>/<tenant>/<processor>/<trigger>/<head>`, each part
-  path-escaped); nil client: one bounded by `grist.CallTimeout` (10 s).
+  path-escaped); nil client: one bounded by `callTimeout` (10 s).
   2xx the response, 422 `{"rejected": name}` the refusal, another 4xx
   `NotApplied`, a 5xx, a reset or a timeout `ErrOutcomeUnknown`; one
   attempt (`TestOverHTTPAnswers`, against a server that is not grist's).
@@ -1736,7 +1736,7 @@ is unchanged: twice it is 1280.
   loopback port, or behind the service's own authentication). Header
   injection is not open: `Grist-Cause`'s text parts are path-escaped,
   and the key is the effect key, of checked tenant and processor names.
-  The body is bounded (`DefaultMaxBody`, both ways). It dedupes nothing
+  The body is bounded (`defaultMaxBody`, both ways). It dedupes nothing
   itself: the handlers do, per call (`DefaultHandlers`, counters'
   `NewBank`), its site clock ordering each key's records.
 - **`serve -dependency NAME=URL` took any URL**: one with no scheme
@@ -1836,7 +1836,7 @@ each with a test that fails with it taken out:
   duplicate error and a report failing on it alone.
 - **The drain is a schedule** (`grist.Drain`, `WithDrain`, `-grace`;
   grist/drain.go). At SIGTERM `/readyz` fails at once and the server
-  keeps serving for `Delay` (`DrainDelay`, 5 s, on an orchestrator,
+  keeps serving for `Delay` (`drainDelay`, 5 s, on an orchestrator,
   `KUBERNETES_SERVICE_HOST` set; none elsewhere), then Shutdown, Settle
   and Flush, 10 s each as before: 35 s on an orchestrator, more than the
   default grace of 30 s, so a pod is given 45 s (the maintainer's
@@ -1855,7 +1855,7 @@ each with a test that fails with it taken out:
   `-grace` the drain is still in its shutdown at the kill, no settle.
 - **The side port** (`-health-addr`, default `:8081` on an
   orchestrator, else off; grist/health.go): `/livez` fails only when a
-  poller has worked on one trigger past `LiveBound` (5 m: a deadlock or
+  poller has worked on one trigger past `liveBound` (5 m: a deadlock or
   a stuck handler; the clock restarts at each trigger of a batch and
   after each backoff from a store error, so neither a batch of slow
   effects nor a commit retried through a database outage fails it:
@@ -3064,7 +3064,7 @@ grist/                 module github.com/chucklehead-dev/gotogether/grist (go.mo
   gristsim/            Run(chooser, app, cfg): nodes, store, workload, settles, probes
   gristtest/           Generated (the generated files' CI diff), Mutants (overlay builds), Tier (the real
                        tier), Answered; later ShrinkCommands (imports qtest)
-  model/               grist.qnt (vendored by the generator, which is package grist's: Generate, Main's model)
+  model/               grist.qnt (vendored by the generator, grist/internal/gen's, run by Main's model command)
   cmd/grist/           grist new (the scaffold); later the CLI below
 grist/gristhegel/      module of its own: registry-driven Hegel machines (requires grist, qhegel)
 qanalysis/             + gristflow, gristpure (recognize grist by import path; no dependency on grist)

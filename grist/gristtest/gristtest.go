@@ -12,15 +12,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 )
 
 // Generated fails t when the checked-in generated files of app (its
-// model's skeleton, the vendored grist.qnt, its bindings: grist.Generate)
+// model's skeleton, the vendored grist.qnt, its bindings: the generator, the app's binary's model command)
 // under the test's package directory differ from what its catalog
 // generates now, naming each and the fix, or when its rules lack a hole
 // the skeleton calls, or when the model's files import each other in a
-// cycle (quint's REPL refuses one; grist.Generate names it, and the move
+// cycle (quint's REPL refuses one; the generator names it, and the move
 // out of the old layout, which had one), or when a binding's module does
 // not import the events and the rules itself (without which the
 // validator's Go evaluator cannot compile it, and falls back to quint
@@ -31,7 +34,7 @@ import (
 // does the same).
 func Generated(t testing.TB, app *grist.App) {
 	t.Helper()
-	g, err := grist.Generate(app, ".")
+	g, err := gen.Generate(app, ".")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +43,7 @@ func Generated(t testing.TB, app *grist.App) {
 			t.Fatal(err)
 		}
 	} else if d := g.Diff("."); len(d) > 0 {
-		t.Fatalf("generated files differ from what the %s App's catalog generates (grist.Generate): %s; regenerate them with the app's binary's model command (grist.Main: go run ./cmd/<app> model) or GRIST_UPDATE=1 go test -run '^%s$', and commit them",
+		t.Fatalf("generated files differ from what the %s App's catalog generates (the generator): %s; regenerate them with the app's binary's model command (grist.Main: go run ./cmd/<app> model) or GRIST_UPDATE=1 go test -run '^%s$', and commit them",
 			app.Name, strings.Join(d, ", "), t.Name())
 	}
 	if len(g.Missing) > 0 {
@@ -61,7 +64,7 @@ func Generated(t testing.TB, app *grist.App) {
 	// another directory) loses names re-exported twice, and without the
 	// evaluator every linearization's candidates are checked by quint
 	// processes, several times slower, with nothing failing
-	q, _ := grist.QuintName(app.Name)
+	q, _ := catalog.QuintName(app.Name)
 	src, err := os.ReadFile(filepath.Join("model", app.Name+".qnt"))
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +72,7 @@ func Generated(t testing.TB, app *grist.App) {
 	for _, module := range []string{q, q + "Calls"} {
 		for _, want := range []string{q + "Events", q + "Rules"} {
 			if !imports(string(src), module, want) {
-				t.Fatalf("module %s of model/%s.qnt does not import %s itself: add `import %s.*` (from \"./%s_gen\" for the events, \"./%s_rules\" for the rules) beside the skeleton's import, as grist.Starter writes it, or the validator's evaluator cannot compile it", module, app.Name, want, want, app.Name, app.Name)
+				t.Fatalf("module %s of model/%s.qnt does not import %s itself: add `import %s.*` (from \"./%s_gen\" for the events, \"./%s_rules\" for the rules) beside the skeleton's import, as `<app> model -init` writes it, or the validator's evaluator cannot compile it", module, app.Name, want, want, app.Name, app.Name)
 			}
 		}
 	}

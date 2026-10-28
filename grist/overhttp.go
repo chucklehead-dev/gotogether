@@ -22,17 +22,17 @@ import (
 // trace, after the commit holding its trigger.
 const CauseHeader = "Grist-Cause"
 
-// CallTimeout bounds a call over HTTP when OverHTTP is given no client: an
+// callTimeout bounds a call over HTTP when OverHTTP is given no client: an
 // answer that does not come within it is an unknown outcome, as a lost one
 // is (a call may have happened).
-const CallTimeout = 10 * time.Second
+const callTimeout = 10 * time.Second
 
 // OverHTTP is a transport calling a dependency over HTTP: POST
 // base/<call>, the request's JSON as the body, the call's key as its
 // Idempotency-Key and its cause as Grist-Cause (CauseHeader), so a
 // dependency the team owns serves it with ServeCalls and a third party
 // deduplicates by the key. c is the client (nil: one bounded by
-// CallTimeout); OverHTTP uses a copy of it that follows no redirect. Its
+// callTimeout); OverHTTP uses a copy of it that follows no redirect. Its
 // answers: a 2xx is the response (its body); a 422 with {"rejected":
 // name} the dependency's refusal (a *Rejected: Do's declared refusal, if
 // the call declares it); anything else an unknown outcome
@@ -50,7 +50,7 @@ const CallTimeout = 10 * time.Second
 // at-most-once effect's one call would become several).
 func OverHTTP(base string, c *http.Client) Transport {
 	if c == nil {
-		c = &http.Client{Timeout: CallTimeout}
+		c = &http.Client{Timeout: callTimeout}
 	}
 	cc := *c
 	cc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -78,12 +78,12 @@ func (o *overHTTP) Call(ctx context.Context, ci CallInfo, call string, req json.
 		return nil, unknownCall("call %s to %s: %v", call, o.base, err)
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxBody+1))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, defaultMaxBody+1))
 	switch {
 	case err != nil:
 		return nil, unknownCall("call %s to %s: its answer was cut: %v", call, o.base, err)
-	case len(b) > DefaultMaxBody:
-		return nil, unknownCall("call %s to %s: an answer past %d bytes", call, o.base, DefaultMaxBody)
+	case len(b) > defaultMaxBody:
+		return nil, unknownCall("call %s to %s: an answer past %d bytes", call, o.base, defaultMaxBody)
 	}
 	var e apiError
 	_ = json.Unmarshal(b, &e)
@@ -239,7 +239,7 @@ func (s *callServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "grist: dependency %s: %v", s.d.name, err)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, DefaultMaxBody))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, defaultMaxBody))
 	if err != nil {
 		fail(w, http.StatusBadRequest, "grist: dependency %s: the request's body: %v", s.d.name, err)
 		return

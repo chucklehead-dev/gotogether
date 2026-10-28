@@ -11,8 +11,8 @@ import (
 // requests (Shutdown), the node quiets and a settle is recorded
 // (Settle), and the relay records every committed step (Flush). A phase
 // that ends early leaves its time to the next. A zero field is its
-// default (DrainDelay on an orchestrator, else none; ShutdownTimeout,
-// SettleTimeout, FlushTimeout), a negative one none.
+// default (a delay of 5 s on an orchestrator, else none; 10 s for each
+// other phase), a negative one none.
 //
 // Grace is the orchestrator's kill deadline (-grace;
 // terminationGracePeriodSeconds), 0 for none. When the phases need more,
@@ -24,24 +24,24 @@ import (
 // ends in time to leave the later ones their shares.
 type Drain struct {
 	// Delay is how long the server keeps serving, not ready, before it
-	// drains (default DrainDelay on an orchestrator, else none).
+	// drains (default 5 s on an orchestrator, else none).
 	Delay time.Duration
-	// Shutdown bounds the server's drain of its requests (ShutdownTimeout).
+	// Shutdown bounds the server's drain of its requests (default 10 s).
 	Shutdown time.Duration
 	// Settle bounds the wait for the node to quiet before a settle is
-	// recorded (SettleTimeout).
+	// recorded (default 10 s).
 	Settle time.Duration
 	// Flush bounds the relay's recording of every committed step
-	// (FlushTimeout).
+	// (default 10 s).
 	Flush time.Duration
 	// Grace is the orchestrator's kill deadline after SIGTERM (-grace), 0
 	// for none: the phases are budgeted into it.
 	Grace time.Duration
 }
 
-// DrainDelay is the drain's default Delay on an orchestrator: endpoints
+// drainDelay is the drain's default Delay on an orchestrator: endpoints
 // take a few seconds to stop sending a terminating pod requests.
-const DrainDelay = 5 * time.Second
+const drainDelay = 5 * time.Second
 
 // WithDrain sets Main's drain schedule (Drain's zero fields keep their
 // defaults); -grace, when given, overrides its Grace.
@@ -63,10 +63,10 @@ func (d Drain) withDefaults(orchestrator bool) Drain {
 	}
 	delay := time.Duration(0)
 	if orchestrator {
-		delay = DrainDelay
+		delay = drainDelay
 	}
-	return Drain{Delay: def(d.Delay, delay), Shutdown: def(d.Shutdown, ShutdownTimeout),
-		Settle: def(d.Settle, SettleTimeout), Flush: def(d.Flush, FlushTimeout), Grace: max(d.Grace, 0)}
+	return Drain{Delay: def(d.Delay, delay), Shutdown: def(d.Shutdown, shutdownTimeout),
+		Settle: def(d.Settle, settleTimeout), Flush: def(d.Flush, flushTimeout), Grace: max(d.Grace, 0)}
 }
 
 // needs is the grace the phases need: their sum.

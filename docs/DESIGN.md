@@ -4358,8 +4358,22 @@ api/core.txt (qenv/weave's fourteen, qcover's two, qmut's four);
 woven's own section records the ABI (those twenty functions and the two
 registration types), so a change to it still shows in review.
 storetest's twelve per-check functions left api/grist.txt (their names
-stay the Checks' names). grist's generator, CLI plumbing and limit
-constants under grist/internal are H5's other half (ROADMAP).
+stay the Checks' names).
+
+grist's half: the generator is grist/internal/gen (Generate, Starter,
+the model command's flags), reading an App through an interface of its
+`Verify` and `Catalog`, so it imports nothing of grist; grist's model
+command and gristtest call it. The catalog's types moved beneath both,
+to grist/internal/catalog (with `QuintName`, the scalar-field rule and
+the JSON Schema both the generator and the runtime use), and grist
+aliases them, so a user's `grist.Catalog` is unchanged. grist embeds
+grist.qnt and hands it to the generator at init (an embed cannot reach
+a parent directory, and whoever holds an App has imported grist).
+`MainArgs`, `UsageError` and `QueryArgs` went unexported (the tests
+reach them through export_test.go) and so did nine limits, their values
+documented on the options they bound. 18 identifiers, 40 lines with
+their fields and methods, left api/grist.txt; gristsim's timeouts stay,
+being what a simulated client's retries are reasoned about by.
 
 ## 61. The state-graph explorer (P2)
 

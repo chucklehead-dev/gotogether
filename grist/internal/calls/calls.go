@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -50,7 +52,7 @@ func IsQuery(app *grist.App, name string) bool {
 // result's fields as observations), nothing more for a pending one. It
 // returns do's answer.
 func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string, args json.RawMessage, do func() Answer) Answer {
-	q, _ := grist.QuintName(name)
+	q, _ := catalog.QuintName(name)
 	query := IsQuery(app, name)
 	// the arguments as the block decodes them (rec.StepFields decodes into
 	// its type): a field the body names in another case is the field's,

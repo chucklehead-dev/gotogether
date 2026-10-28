@@ -9,20 +9,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Guarantee is an effect's declared delivery guarantee: at least or
-// at most once.
-type Guarantee int
+// at most once (AtLeastOnce, AtMostOnce).
+type Guarantee = catalog.Guarantee
 
 const (
 	// AtLeastOnce runs the effect, then commits the checkpoint (and the
 	// outcome event): a crash between them runs it again, under the same
 	// EffectKey. An error is tried EffectTries times.
-	AtLeastOnce Guarantee = iota + 1
+	AtLeastOnce = catalog.AtLeastOnce
 	// AtMostOnce commits the checkpoint first, then runs the effect once,
 	// then commits its outcome event (idempotent, under a marker of the
 	// effect key): OnSuccess's after a success, grist.failed after an
@@ -32,19 +34,8 @@ const (
 	// the effect loses the effect, one after it the outcome, and no restart
 	// runs it again. It is tried once (EffectTries does not apply: a failed
 	// try may have taken effect).
-	AtMostOnce
+	AtMostOnce = catalog.AtMostOnce
 )
-
-// String is the guarantee's name (AtLeastOnce, AtMostOnce).
-func (d Guarantee) String() string {
-	switch d {
-	case AtLeastOnce:
-		return "AtLeastOnce"
-	case AtMostOnce:
-		return "AtMostOnce"
-	}
-	return fmt.Sprintf("Guarantee(%d)", int(d))
-}
 
 // notApplied is an effect's error that says it did not happen.
 type notApplied struct{ err error }
@@ -165,7 +156,7 @@ type Processor struct{ info *processorInfo }
 // are EffectTries and BatchSize.
 func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result, opts ...Option) *Processor {
 	app.register("processor", name)
-	q, _ := QuintName(name)
+	q, _ := catalog.QuintName(name)
 	p := &processorInfo{name: name, quint: q, on: on.Name(), opts: app.options("processor", name, opts), handle: func(ctx context.Context, r *Reads, s Stored) Result {
 		e, err := on.Decode(s)
 		if err != nil {

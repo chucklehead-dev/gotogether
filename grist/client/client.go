@@ -326,7 +326,7 @@ func (c *Client) Command(ctx context.Context, env grist.Envelope, name string, a
 }
 
 // Query sends query name with JSON arguments args once (as URL
-// parameters: grist.QueryArgs's inverse), returning its result and the
+// parameters: the API's reading of query parameters, inverted), returning its result and the
 // position it read through, or a refusal as Command's (a lost answer is
 // grist.ErrUnavailable: a query commits nothing).
 func (c *Client) Query(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (json.RawMessage, grist.Position, error) {
@@ -361,7 +361,7 @@ func (c *Client) Query(ctx context.Context, env grist.Envelope, name string, arg
 
 // Params are a query's JSON arguments (an object) as URL parameters: a
 // string field as it is, any other as its JSON text, a null one (a nil
-// pointer) left out. grist.QueryArgs is its inverse.
+// pointer) left out. The API's reading of query parameters is its inverse.
 func Params(args json.RawMessage) (url.Values, error) {
 	v := url.Values{}
 	if len(bytes.TrimSpace(args)) == 0 {
@@ -379,7 +379,7 @@ func Params(args json.RawMessage) (url.Values, error) {
 	for _, k := range keys {
 		raw := bytes.TrimSpace(obj[k])
 		if string(raw) == "null" {
-			continue // QueryArgs leaves an absent pointer nil
+			continue // the API leaves an absent pointer nil
 		}
 		var s string
 		if len(raw) > 0 && raw[0] == '"' && json.Unmarshal(raw, &s) == nil {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
@@ -19,7 +21,7 @@ import (
 // §3.1). Its step's action is the site's Quint name, its actor the
 // tenant and its process the App's (the store's), so it joins the
 // tenant's trace beside the commits; its fields are T's scalar fields by
-// JSON name. The model generator (Generate) writes its variable (a list
+// JSON name. The model generator (Main's model command) writes its variable (a list
 // of T's records) and its action, guarded by the app's <site>Admits.
 type Site[T any] struct {
 	app  *App
@@ -37,7 +39,7 @@ type siteInfo struct {
 // record's actor, not one of them.
 func NewSite[T any](app *App, name string) *Site[T] {
 	app.register("site", name)
-	q, _ := QuintName(name)
+	q, _ := catalog.QuintName(name)
 	info := &siteInfo{name: name, quint: q, typ: reflect.TypeFor[T]()}
 	if info.typ.Kind() != reflect.Struct {
 		app.problems = append(app.problems, fmt.Sprintf("site %q: %v is no struct: a site record is a struct of named fields", name, info.typ))

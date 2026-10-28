@@ -1687,6 +1687,28 @@ storetest's twelve per-check functions went unexported in the same
 item (`Checks` and `Run` were how every harness ran them). grist's
 generator, CLI plumbing and limits wait for H4's renames across grist.
 
+### H5's second half: grist's generator
+
+What the designer's review counted in grist and no user calls, after
+H4's renames. The generator (`Generate`, `Generated` with `Write` and
+`Diff`, `Hole`, `Starter`) became grist/internal/gen: an app runs it
+through its binary's `model` command and its tests diff it with
+`gristtest.Generated`, and nobody called it by hand. It needed the
+catalog's types without importing grist (whose model command calls it),
+so they moved below both, to grist/internal/catalog, aliased by grist:
+a user's `grist.Catalog`, `CatalogBlock` and `Guarantee` read as before
+(api/grist.txt shows them as aliases, with their fields). `QuintName`
+and `Schema` went with them. `MainArgs` and `UsageError` were the
+command line's plumbing (`Main` now documents every command),
+`QueryArgs` the API's, and nine constants (`CallTimeout`,
+`DefaultMaxBody`, `DrainDelay`, `FlushTimeout`, `LiveBound`,
+`MaxIDBytes`, `RetryAfter`, `SettleTimeout`, `ShutdownTimeout`) the
+defaults of options a user sets by value: unexported, the values said
+on the options. 18 identifiers (40 lines with their fields and
+methods) left api/grist.txt; no example, the scaffold (`grist new`) or
+gristtest's harnesses changed beyond an import. gristsim's timeouts
+stayed: a simulated client's retries are reasoned about by them.
+
 ### The acyclic model layout (grist)
 
 quint 0.33's REPL refuses a file that a file it imports imports back

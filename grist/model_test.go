@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 )
 
@@ -128,7 +130,7 @@ var update = os.Getenv("GRIST_UPDATE") == "1"
 // (step) keeps the invariants the rules state over a sampled run.
 func TestGenerateGolden(t *testing.T) {
 	dir := filepath.Join("testdata", "gen")
-	g, err := grist.Generate(shopApp(), dir)
+	g, err := gen.Generate(shopApp(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +208,7 @@ func TestCallObligationsFollowSiteClaims(t *testing.T) {
 }
 `
 	os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte(own), 0o644)
-	g, err := grist.Generate(shopApp(), dir)
+	g, err := gen.Generate(shopApp(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,14 +228,14 @@ func TestCallObligationsFollowSiteClaims(t *testing.T) {
 // hole missing from it; a hole taken out of it is reported by name.
 func TestStarterTypechecks(t *testing.T) {
 	a := shopApp()
-	files, err := grist.Starter(a)
+	files, err := gen.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
 	b := files["model/shop_rules.qnt"]
-	g, err := grist.Generate(a, dir)
+	g, err := gen.Generate(a, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +253,7 @@ func TestStarterTypechecks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte(cut), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if g2, err := grist.Generate(a, dir); err != nil || len(g2.Missing) != 1 || g2.Missing[0] != "addItemNeeds" {
+	if g2, err := gen.Generate(a, dir); err != nil || len(g2.Missing) != 1 || g2.Missing[0] != "addItemNeeds" {
 		t.Errorf("Missing %v (%v): want [addItemNeeds]", g2.Missing, err)
 	}
 	// a generated file changed by hand is a difference
@@ -299,7 +301,7 @@ func TestGenerateRefuses(t *testing.T) {
 		Books []string `json:"books"`
 	}
 	grist.NewQuery(a, "q", func(r *grist.Reads, q struct{}) (listed, error) { return listed{}, nil }, grist.Internal())
-	_, err := grist.Generate(a, t.TempDir())
+	_, err := gen.Generate(a, t.TempDir())
 	// a list in a query's answer, which no step records: once dropped
 	// without a word, the answer then compared on nothing
 	for _, want := range []string{"declares no result shape", "tag n is an integer", "is a pointer", "field Books is a []string", "grist:\"-\""} {
@@ -318,7 +320,7 @@ func TestGenerateRefuses(t *testing.T) {
 		"module shop {\n  // grist: eventually\n  val shipEventuallyHandled = true\n}\n": "delete the app's own",
 	} {
 		os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte(src), 0o644)
-		if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := gen.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("marks %q: %v, want %q", src, err, want)
 		}
 	}
@@ -327,12 +329,12 @@ func TestGenerateRefuses(t *testing.T) {
 	// app never edits
 	os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte("module shop {}\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte("module shopRules {\n  pure val notifyEventuallyHandled = true\n}\n"), 0o644)
-	if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt defines notifyEventuallyHandled") {
+	if _, err := gen.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt defines notifyEventuallyHandled") {
 		t.Errorf("an obligation's name in the rules: %v, want refused", err)
 	}
 	// a mark in the rules' file, which no binding reads
 	os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), []byte("module shopRules {\n  // grist: invariant\n  val x = true\n}\n"), 0o644)
-	if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt") || !strings.Contains(err.Error(), "mark vals in shop or shopCalls") {
+	if _, err := gen.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), "shop_rules.qnt") || !strings.Contains(err.Error(), "mark vals in shop or shopCalls") {
 		t.Errorf("a mark in the rules: %v, want refused", err)
 	}
 }
@@ -366,16 +368,16 @@ func TestGenerateRefusesGristsName(t *testing.T) {
 	own := filepath.Join(dir, "model", "grist.qnt")
 	os.MkdirAll(filepath.Dir(own), 0o755)
 	os.WriteFile(own, []byte("// the app's rules\n"), 0o644)
-	if _, err := grist.Generate(a, dir); err == nil || !strings.Contains(err.Error(), "rename the app") {
+	if _, err := gen.Generate(a, dir); err == nil || !strings.Contains(err.Error(), "rename the app") {
 		t.Errorf("Generate of an app named grist: %v, want refused", err)
 	}
-	if _, err := grist.Starter(a); err == nil {
+	if _, err := gen.Starter(a); err == nil {
 		t.Error("Starter of an app named grist: no error")
 	}
 	if err := grist.MainArgs(context.Background(), a, []string{"model", "-dir", dir}, io.Discard, io.Discard); err == nil {
 		t.Error("the model command of an app named grist: no error")
 	}
-	if _, err := grist.Generate(grist.New("Grist"), dir); err == nil {
+	if _, err := gen.Generate(grist.New("Grist"), dir); err == nil {
 		t.Error("Generate of an app named Grist (model/Grist.qnt, grist.qnt on a case-insensitive file system): no error")
 	}
 	if b, _ := os.ReadFile(own); string(b) != "// the app's rules\n" {
@@ -393,7 +395,7 @@ func TestStarterEmptyResult(t *testing.T) {
 	a := grist.New("tagger")
 	grist.NewEvent[itemNoted](a, "noted")
 	grist.NewQuery(a, "tags", func(r *grist.Reads, q struct{}) (tags, error) { return tags{}, nil }, grist.Authorize(grist.Authenticated))
-	files, err := grist.Starter(a)
+	files, err := gen.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +405,7 @@ func TestStarterEmptyResult(t *testing.T) {
 	requireQuint(t)
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
-	g, err := grist.Generate(a, dir)
+	g, err := gen.Generate(a, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

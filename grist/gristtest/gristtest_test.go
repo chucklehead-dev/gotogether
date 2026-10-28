@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -63,7 +65,7 @@ func TestGeneratedWitness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	a := app()
-	files, err := grist.Starter(a)
+	files, err := gen.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func TestGeneratedWitness(t *testing.T) {
 		}
 	}
 	b := files["model/notes_rules.qnt"]
-	g, err := grist.Generate(a, ".")
+	g, err := gen.Generate(a, ".")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -115,7 +117,7 @@ func boardBinding(t *testing.T, app *grist.App) string {
 			t.Fatal(err)
 		}
 	}
-	g, err := grist.Generate(app, dir)
+	g, err := gen.Generate(app, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

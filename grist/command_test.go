@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/memstore"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
@@ -418,12 +420,12 @@ func TestVerify(t *testing.T) {
 
 func TestQuintName(t *testing.T) {
 	for in, want := range map[string]string{"create-counter": "createCounter", "average": "average", "show-counter-2": "showCounter2"} {
-		if got, err := grist.QuintName(in); err != nil || got != want {
+		if got, err := catalog.QuintName(in); err != nil || got != want {
 			t.Errorf("QuintName(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
 	for _, bad := range []string{"to", "", "-a", "a_b", "1st"} {
-		if _, err := grist.QuintName(bad); err == nil {
+		if _, err := catalog.QuintName(bad); err == nil {
 			t.Errorf("QuintName(%q) maps it", bad)
 		}
 	}

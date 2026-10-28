@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/internal/ruledrop"
 	"github.com/chucklehead-dev/gotogether/qtest"
@@ -47,7 +49,7 @@ func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool) {
 		}
 		var es []qtest.Expectation
 		for _, g := range r.Guards {
-			q, _ := grist.QuintName(g)
+			q, _ := catalog.QuintName(g)
 			es = append(es, qtest.Rejects(q))
 		}
 		switch len(es) {

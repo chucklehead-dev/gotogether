@@ -8,6 +8,17 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist hides what no user calls (ROADMAP H5, DESIGN §60): the
+  generator (`Generate`, `Generated`, `Hole`, `Starter`) is
+  grist/internal/gen, run by an app's binary's `model` command
+  (`grist.Main`) and diffed by `gristtest.Generated`; `QuintName` and
+  `Schema` are grist/internal/catalog's (the Catalog types are aliases
+  of its, unchanged); `MainArgs`, `UsageError` and `QueryArgs` are
+  unexported (`Main` documents the commands); the limits `CallTimeout`,
+  `DefaultMaxBody`, `DrainDelay`, `FlushTimeout`, `LiveBound`,
+  `MaxIDBytes`, `RetryAfter`, `SettleTimeout` and `ShutdownTimeout` are
+  unexported, their values documented where they apply (`Drain`,
+  `MaxBody`, `OverHTTP`).
 - qenv: graceful termination and a router (ROADMAP GR10, slice 2;
   docs/grist-platform.md §4). `Sim.Terminations(Termination{Grace,
   Short, Budget}, procs...)` registers `nemesis.terminate.<name>`

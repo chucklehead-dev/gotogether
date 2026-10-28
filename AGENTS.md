@@ -55,7 +55,7 @@ qhistory/     a real database's isolation level from a list-append workload's hi
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
 grist/        separate module (published): an event-sourced framework checked by its model (docs/grist.md, slice 1);
               store/ (the store contract) memstore/ simstore/ storetest/ (its suite) gristsim/ (an app as a
-              qtest.System's run), model/grist.qnt (checked by model/model_test.go), the generator (model.go:
+              qtest.System's run), model/grist.qnt (checked by model/model_test.go), the generator (internal/gen:
               an app's binary's `model`), gristtest/ (Generated, Catalog, RuleMutants, Tier), cmd/grist (grist new)
 qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspects in orchestrion.yml): u and v as gauges
 cmd/gotogether/  CLI

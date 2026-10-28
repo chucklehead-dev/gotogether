@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -107,7 +109,7 @@ func TestRuleGuardsActions(t *testing.T) {
 			os.MkdirAll(filepath.Join(dir, "model"), 0o755)
 			os.WriteFile(filepath.Join(dir, "model", "lending_rules.qnt"), []byte(lendingRules(c.needs)), 0o644)
 			os.WriteFile(filepath.Join(dir, "model", "lending.qnt"), []byte(lendingModel), 0o644)
-			g, err := grist.Generate(lending(true), dir)
+			g, err := gen.Generate(lending(true), dir)
 			if err != nil {
 				t.Fatal(err)
 			}

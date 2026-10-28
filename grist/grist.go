@@ -27,7 +27,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode"
+
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 )
 
 // An App is a registry of blocks: the application's topology. Blocks are
@@ -79,7 +80,7 @@ func (a *App) register(kind, name string) {
 	if kind == "event" || kind == "read model" {
 		return // not actions of the model
 	}
-	q, err := QuintName(name)
+	q, err := catalog.QuintName(name)
 	if err != nil {
 		a.problems = append(a.problems, fmt.Sprintf("%s %q: %v", kind, name, err))
 		return
@@ -141,46 +142,6 @@ func (a *App) Processors() []string {
 		out[i] = p.name
 	}
 	return out
-}
-
-// quintReserved are names Quint will not take as an action's (its
-// keywords and the built-ins a model most often meets): `to` fails to
-// parse (QNT101). Read-only.
-var quintReserved = map[string]bool{
-	"to": true, "and": true, "or": true, "not": true, "all": true, "any": true, "if": true, "else": true, "iff": true,
-	"implies": true, "val": true, "def": true, "var": true, "const": true, "action": true, "run": true, "temporal": true,
-	"nondet": true, "pure": true, "import": true, "export": true, "module": true, "type": true, "assume": true,
-	"init": true, "step": true, "match": true, "true": true, "false": true, "Set": true, "List": true, "Map": true,
-	"Rec": true, "Tup": true, "Bool": true, "Int": true, "Nat": true, "exists": true, "forall": true,
-}
-
-// QuintName maps a block's name to its Quint action's: kebab case to
-// camel case ("create-counter" is createCounter). A name that does not
-// map to an identifier, or maps to a reserved one, is an error with the
-// fix.
-func QuintName(name string) (string, error) {
-	parts := strings.Split(name, "-")
-	var b strings.Builder
-	for i, p := range parts {
-		if p == "" {
-			return "", fmt.Errorf("empty segment: write names as lower-case words joined by single dashes (create-counter)")
-		}
-		for j, r := range p {
-			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z') || i == 0 && j == 0 && !unicode.IsLetter(r) {
-				return "", fmt.Errorf("%q is no Quint identifier once mapped: letters and digits joined by dashes, a letter first (create-counter)", name)
-			}
-		}
-		if i == 0 {
-			b.WriteString(p)
-		} else {
-			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
-		}
-	}
-	q := b.String()
-	if quintReserved[q] {
-		return "", fmt.Errorf("maps to %s, which Quint reserves: rename it", q)
-	}
-	return q, nil
 }
 
 func sortedKeys[V any](m map[string]V) []string {

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 )
 
@@ -39,7 +40,7 @@ func (c *Command[C]) With(args C) Invocation {
 			inv.refuses = b.Refuses
 		}
 	}
-	fs, err := scalarFields(c.info.args)
+	fs, err := catalog.ScalarFields(c.info.args)
 	if err != nil {
 		panic(fmt.Sprintf("grist: %s.With: %v", c.info.name, err))
 	}
@@ -52,8 +53,8 @@ func (c *Command[C]) With(args C) Invocation {
 		}
 	}
 	for _, f := range fs {
-		inv.Params = append(inv.Params, f.param)
-		inv.Values = append(inv.Values, quintLiteral(byJSON[f.json]))
+		inv.Params = append(inv.Params, f.Param)
+		inv.Values = append(inv.Values, quintLiteral(byJSON[f.JSON]))
 	}
 	return inv
 }

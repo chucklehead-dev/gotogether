@@ -45,7 +45,7 @@ gristsim, gristtest) at 0da5013.
 | identity | the node's recorder is `<app>-<pid>` (main.go); store-side steps' process is the App's name | every container is pid 1: two pods, or two incarnations of one, share the id | **a real bug on Kubernetes** (below) |
 | listen | `-addr` defaults to `127.0.0.1:8080` | a Service's endpoints reach the pod IP | a pod serving on loopback has no endpoints |
 | health | none: no `/livez`, `/readyz` | probes decide routing and restarts | teams write probes that hit the database (a DB blip restarts every pod) |
-| termination | `Main` stops on SIGTERM: server drain (`ShutdownTimeout` 10 s), settle (`SettleTimeout` 10 s), relay flush (`FlushTimeout` 10 s), the node outliving the signal so an effect in flight keeps its ctx | SIGTERM while endpoints still route for 1-10 s; SIGKILL at `terminationGracePeriodSeconds`, default 30 s | stops accepting at once (refused connections in the lag); worst case 30 s = the default grace: SIGKILL lands in the flush, committed steps unrecorded in this file, the settle lost |
+| termination | `Main` stops on SIGTERM: server drain (`shutdownTimeout` 10 s), settle (`settleTimeout` 10 s), relay flush (`flushTimeout` 10 s), the node outliving the signal so an effect in flight keeps its ctx | SIGTERM while endpoints still route for 1-10 s; SIGKILL at `terminationGracePeriodSeconds`, default 30 s | stops accepting at once (refused connections in the lag); worst case 30 s = the default grace: SIGKILL lands in the flush, committed steps unrecorded in this file, the settle lost |
 | replicas | `gristsim.Config.Nodes` and two real nodes are safe: every node polls every processor of every tenant, the checkpoint CAS picks one commit (`TestPayoutTwoNodes`) | N replicas | at-least-once effects run on several nodes (harmless only for `Keyed` calls); condition retries grow with N; every node's relay records the whole step log from its first row at every start (the durable relay cursor is grist §8's left item) |
 | leadership | none needed; grist §3.4 designs leases **in the tenant's log**, fenced in the commit (slice 3, not built) | client-go's leader election is not a fence: a paused leader acts after its Lease expired | the tempting wrong tool is one import away |
 | config, secrets | flags: `-db postgres:DSN` (in the pod spec, in `ps`); `OverHTTP`'s `http.Client` built once | Secrets and ConfigMaps as files, swapped atomically (`..data`), 30-90 s apart per pod; cert-manager rotating certificates | credentials in args; an open `*sql.DB` keeps old credentials; certificates cached until restart |
@@ -53,7 +53,7 @@ gristsim, gristtest) at 0da5013.
 | resources | nothing: `GOMEMLIMIT` unset; `GOMAXPROCS` is container-aware since Go 1.25 (the cgroup's CPU limit, rounded up, updated as it changes; grist needs Go 1.26.1) | memory limits (OOMKill: SIGKILL, no grace); CPU limits (CFS throttling: stalls of up to the 100 ms period) | read models fold from the log on every read (grist §2.2, slice 1), so memory and CPU per query grow with the log: a limit sized in week one OOMs in week four |
 | metrics | none in grist; qrole exists (gauges u, v), unused by grist | HPA, KEDA, alerts | processor lag, relay backlog, oldest pending effect are not exposed |
 | inbound HTTP | every command requires `Idempotency-Key` (400 without, http.go); 503 + `Retry-After` for an unknown outcome; `WriteTimeout` 2 m | Gateway/HTTPRoute and mesh timeouts and retries | a retried command is safe; the timeout chain is not ordered (a gateway timing out at 15 s turns a slow commit into a 504 and a retry); `-caller-header` trusts a header the Gateway forwards unless a filter strips it |
-| outbound calls | `OverHTTP` (`CallTimeout` 10 s), declared calls (GR3) | DNS, endpoint lag, NetworkPolicy, conntrack-pinned connections | already modelled: a reset is an unknown outcome, never a refusal |
+| outbound calls | `OverHTTP` (`callTimeout` 10 s), declared calls (GR3) | DNS, endpoint lag, NetworkPolicy, conntrack-pinned connections | already modelled: a reset is an unknown outcome, never a refusal |
 | store | sqlstore on PostgreSQL or SQLite, `-poll` 250 ms | managed PostgreSQL failover (async replication loses a committed tail), CSI snapshot restore (the log rewinds), `max_connections` against replicas × pool; SQLite on a PVC (RWO with a surge deadlocks a rollout, RWX corrupts) | none of these is a fault grist or qenv can make |
 | steps | `-steps FILE` (`qobs.PerStep`), on the container's filesystem | lost with the pod (emptyDir) or interleaved (a shared PV) | commit steps survive in the store's step log (grist §2.10), but only a relay records them, and no command exports them |
 | simulation | gristsim: n crashable nodes, the first serving the API; crashes, commit faults, `rpc.*` faults; Clocks and Stalls available but unused | graceful kills, routing lag, mixed versions, zones, autoscaling | no graceful termination, no router, no hosts or zones, no rollout in gristsim |
@@ -194,7 +194,7 @@ the variables from the downward API (`fieldRef: metadata.name`,
 orchestrator is detected, else off):
 
 - `/livez`: the node's loop is ticking (no poller has worked on one
-  trigger past `LiveBound`, 5 m, its clock restarted at each trigger and
+  trigger past `liveBound`, 5 m, its clock restarted at each trigger and
   after each backoff from a store error: a deadlock or a stuck
   goroutine). **Never the store**: a database blip must not restart
   every pod.
@@ -221,9 +221,9 @@ budget:
 // package grist (core)
 type Drain struct {
 	Delay    time.Duration // not ready at once, keep serving: the router's lag (default 5 s on an orchestrator, 0 otherwise)
-	Shutdown time.Duration // the server drains its requests (ShutdownTimeout, 10 s)
-	Settle   time.Duration // the node quiets, a settle recorded (SettleTimeout, 10 s)
-	Flush    time.Duration // the relay records every committed step (FlushTimeout, 10 s)
+	Shutdown time.Duration // the server drains its requests (default 10 s)
+	Settle   time.Duration // the node quiets, a settle recorded (default 10 s)
+	Flush    time.Duration // the relay records every committed step (default 10 s)
 	Grace    time.Duration // -grace: the orchestrator's kill deadline; the phases shrink to fit, the flush's share first
 }
 func WithDrain(d Drain) ServeOption
@@ -370,7 +370,7 @@ outer timeout shorter than the server's handling turns a commit into a
   is used (the authenticating proxy sets it after).
 - The lint checks the chain: client per-attempt timeout > Gateway
   request timeout > grist's request deadline > the longest declared
-  call's `CallTimeout` × tries it may spend inline (none: effects are
+  call's `callTimeout` × tries it may spend inline (none: effects are
   asynchronous, so a command never waits on a dependency).
 
 Tenant routing to an owner (grain's 503 + `Retry-After`) is not needed

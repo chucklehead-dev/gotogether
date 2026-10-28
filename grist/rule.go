@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/ruledrop"
 )
 
@@ -50,7 +52,7 @@ type Rule[E any] struct {
 // are not guarded yet.
 func NewRule[E any](app *App, name string, on *EventType[E], check func(r *Reads, e E) error, opts ...Option) *Rule[E] {
 	app.register("rule", name)
-	q, _ := QuintName(name)
+	q, _ := catalog.QuintName(name)
 	info := &ruleInfo{name: name, quint: q, on: on.info, opts: app.options("rule", name, opts)}
 	if len(info.opts.refuses) == 0 {
 		app.problems = append(app.problems, fmt.Sprintf("rule %q declares no refusal: give the rejections it returns (grist.Refuses), so its commands' models have the outcome", name))

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -247,7 +249,7 @@ func TestUndeclaredRefusalNamesRefuses(t *testing.T) {
 	}
 	// the generated binding has no outcome for it, and its error says why
 	dir := t.TempDir()
-	g, err := grist.Generate(a, dir)
+	g, err := gen.Generate(a, dir)
 	if err != nil {
 		t.Fatal(err)
 	}

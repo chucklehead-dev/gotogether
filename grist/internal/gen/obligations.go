@@ -1,4 +1,4 @@
-package grist
+package gen
 
 import (
 	"fmt"

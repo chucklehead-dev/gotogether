@@ -222,7 +222,7 @@ func BatchSize(n int) Option {
 }
 
 // Refuses declares the rejections a command's decision may return (each
-// a Rejection's value), so the model generator (Generate) writes an
+// a Rejection's value), so the model generator (Main's model command) writes an
 // outcome branch for each and the binding an outcome. On a rule
 // (NewRule), the rejections its check may return, which every command it
 // guards may then refuse with (required). On a call

@@ -1,17 +1,8 @@
 == github.com/chucklehead-dev/gotogether/grist
-const AtLeastOnce Guarantee = iota + 1
-const AtMostOnce Guarantee = iota + 1 (spec 1 of its group)
-const CallTimeout = 10 * time.Second
+const AtLeastOnce = catalog.AtLeastOnce
+const AtMostOnce = catalog.AtMostOnce
 const CauseHeader = "Grist-Cause"
-const DefaultMaxBody = 1 << 20
-const DrainDelay = 5 * time.Second
-const FlushTimeout = 10 * time.Second
-const LiveBound = 5 * time.Minute
-const MaxIDBytes = 255
 const ReplayedHeader = "Idempotent-Replayed"
-const RetryAfter = 1
-const SettleTimeout = 10 * time.Second
-const ShutdownTimeout = 10 * time.Second
 func Appends(types ...EventName) Option
 func Authenticated(caller, tenant string) bool
 func Authorize(p Policy) Option
@@ -34,13 +25,11 @@ func Emit(events ...Event) Result
 func Emits(types ...EventName) Option
 func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
-func Generate(app *App, dir string) (Generated, error)
 func Internal() Option
 func Keyed() Option
 func Keys(names ...string) KeyNames
 func Local(h Handlers) Transport
 func Main(app *App, opts ...ServeOption)
-func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error
 func MaxBody(n int64) ServeOption
 func Middleware(m func(http.Handler) http.Handler) ServeOption
 func New(name string) *App
@@ -62,17 +51,13 @@ func NotApplied(err error) error
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
 func OverHTTP(base string, c *http.Client) Transport
-func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error)
-func QuintName(name string) (string, error)
 func RecorderID(storeName, tenant string) string
 func Refuses(rejections ...error) Option
 func Rejection(name string) error
 func Replayed(ctx context.Context)
-func Schema(typ reflect.Type) map[string]any
 func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
-func Starter(app *App) (map[string][]byte, error)
 func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
@@ -109,7 +94,7 @@ type Call[Req, Resp any] struct
     method (*Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error)
     method (*Call[Req, Resp]) Handler(f func(ctx context.Context, req Req) (Resp, error)) CallHandler
     method (*Call[Req, Resp]) Name() string
-type Catalog struct
+type Catalog = catalog.Catalog
     field Name string `json:"name"`
     field Events []CatalogEvent `json:"events"`
     field ReadModels []CatalogReadModel `json:"readModels"`
@@ -119,7 +104,7 @@ type Catalog struct
     field Rules []CatalogRule `json:"rules"`
     field Sites []CatalogSite `json:"sites"`
     field Dependencies []CatalogDependency `json:"dependencies"`
-type CatalogBlock struct
+type CatalogBlock = catalog.CatalogBlock
     field Name string
     field Quint string
     field Args reflect.Type
@@ -132,7 +117,7 @@ type CatalogBlock struct
     field Rules []string
     field RuleRefuses []string
     method (CatalogBlock) MarshalJSON() ([]byte, error)
-type CatalogCall struct
+type CatalogCall = catalog.CatalogCall
     field Name string
     field Quint string
     field Request reflect.Type
@@ -141,17 +126,17 @@ type CatalogCall struct
     field Refuses []string
     field Users []string
     method (CatalogCall) MarshalJSON() ([]byte, error)
-type CatalogDependency struct
+type CatalogDependency = catalog.CatalogDependency
     field Name string `json:"name"`
     field Quint string `json:"quint"`
     field Calls []CatalogCall `json:"calls"`
-type CatalogEvent struct
+type CatalogEvent = catalog.CatalogEvent
     field Name string
     field Version int
     field Body reflect.Type
     field Tags []string
     method (CatalogEvent) MarshalJSON() ([]byte, error)
-type CatalogProcessor struct
+type CatalogProcessor = catalog.CatalogProcessor
     field Name string `json:"name"`
     field Quint string `json:"quint"`
     field On string `json:"on"`
@@ -161,18 +146,18 @@ type CatalogProcessor struct
     field Guarantee Guarantee `json:"guarantee,omitempty"`
     field Success string `json:"success,omitempty"`
     field Uses []string `json:"uses,omitempty"`
-type CatalogReadModel struct
+type CatalogReadModel = catalog.CatalogReadModel
     field Name string `json:"name"`
     field Version int `json:"version"`
     field Types []string `json:"types"`
     field Keys []string `json:"keys"`
-type CatalogRule struct
+type CatalogRule = catalog.CatalogRule
     field Name string `json:"name"`
     field Quint string `json:"quint"`
     field On string `json:"on"`
     field Refuses []string `json:"refuses"`
     field Guards []string `json:"guards"`
-type CatalogSite struct
+type CatalogSite = catalog.CatalogSite
     field Name string
     field Quint string
     field Fields reflect.Type
@@ -214,22 +199,12 @@ type EventType[E any] struct
 type Failed struct
     field Processor string `json:"processor" grist:"tag"`
     field Trigger int64 `json:"trigger"`
-type Generated struct
-    field Files map[string][]byte
-    field Holes []Hole
-    field Missing []string
-    method (Generated) Diff(dir string) []string
-    method (Generated) Write(dir string) error
-type Guarantee int
+type Guarantee = catalog.Guarantee
     method (Guarantee) MarshalText() ([]byte, error)
     method (Guarantee) String() string
 type Handler[S any] struct
 type Handlers []CallHandler
     method (Handlers) Serves(d *Dependency) error
-type Hole struct
-    field Name string
-    field Doc string
-    field Stub string
 type Identity struct
     field Node string
     field Incarnation string
@@ -296,9 +271,6 @@ type Unknown struct
     field Processor string `json:"processor" grist:"tag"`
     field Error string `json:"error"`
     field Trigger int64 `json:"trigger"`
-type UsageError struct
-    field Msg string
-    method (*UsageError) Error() string
 var ErrBadArgs = errors.New("grist: arguments refused")
 var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later under a new id")
 var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the caller")

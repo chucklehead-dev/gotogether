@@ -21,3 +21,19 @@ func DrainShares(d Drain, orchestrator bool) (Drain, string) {
 	d = d.withDefaults(orchestrator)
 	return d.budget(), d.line()
 }
+
+// MainArgs is Main's commands on args, for the commands' tests.
+var MainArgs = mainArgs
+
+// UsageError is a command line Main cannot run.
+type UsageError = usageError
+
+// QueryArgs is the API's reading of a query's URL parameters.
+var QueryArgs = queryArgs
+
+// The bounds the tests check.
+const (
+	MaxIDBytes      = maxIDBytes
+	ShutdownTimeout = shutdownTimeout
+	DrainDelay      = drainDelay
+)

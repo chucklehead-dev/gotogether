@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
@@ -58,7 +60,7 @@ type servedDep struct {
 	h Handlers
 }
 
-// MaxBody bounds a command's body at n bytes (DefaultMaxBody if not
+// MaxBody bounds a command's body at n bytes (1 MiB if not
 // given): a larger one is answered 413 before anything runs.
 func MaxBody(n int64) ServeOption {
 	return ServeOption{apply: func(c *serveConfig) { c.maxBody = n }}
@@ -110,13 +112,13 @@ func DevEndpoints() ServeOption {
 
 // The API's codes, by outcome (docs/grist.md §5).
 const (
-	// RetryAfter is the Retry-After (seconds) of a 503: the outcome is
+	// retryAfter is the Retry-After (seconds) of a 503: the outcome is
 	// unknown (grist.ErrOutcomeUnknown) or nothing committed
 	// (ErrUnavailable); retry under the same Idempotency-Key.
-	RetryAfter = 1
-	// DefaultMaxBody is the largest command body the API reads unless
+	retryAfter = 1
+	// defaultMaxBody is the largest command body the API reads unless
 	// MaxBody says otherwise: a larger one is answered 413.
-	DefaultMaxBody = 1 << 20
+	defaultMaxBody = 1 << 20
 	// ReplayedHeader is the header ("true") of a command's answer taken
 	// from its key's marker before deciding: an earlier request under the
 	// key was answered, and this one only repeats its answer.
@@ -184,7 +186,7 @@ func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error) {
 	}
 	api := &api{app: app, s: s, maxBody: cfg.maxBody}
 	if api.maxBody <= 0 {
-		api.maxBody = DefaultMaxBody
+		api.maxBody = defaultMaxBody
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /t/{tenant}/commands/{name}", api.command)
@@ -299,10 +301,10 @@ func answer(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrConflict):
 		writeJSON(w, http.StatusConflict, apiError{Error: err.Error(), Rejected: conflictOutcome})
 	case errors.Is(err, ErrOutcomeUnknown):
-		w.Header().Set("Retry-After", strconv.Itoa(RetryAfter))
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error(), Retry: retryUnknown})
 	case errors.Is(err, ErrUnavailable):
-		w.Header().Set("Retry-After", strconv.Itoa(RetryAfter))
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: err.Error(), Retry: retryUnavailable})
 	case errors.Is(err, store.ErrUnknownTenant):
 		writeJSON(w, http.StatusNotFound, apiError{Error: err.Error()})
@@ -375,7 +377,7 @@ func (a *api) query(w http.ResponseWriter, r *http.Request) {
 	if !allowed(w, r, q.opts, tenant) {
 		return
 	}
-	args, err := QueryArgs(q.args, r.URL.Query())
+	args, err := queryArgs(q.args, r.URL.Query())
 	if err != nil {
 		fail(w, http.StatusBadRequest, "grist: query %s: %v", name, err)
 		return
@@ -391,14 +393,14 @@ func (a *api) query(w http.ResponseWriter, r *http.Request) {
 	}{res, pos})
 }
 
-// QueryArgs are a query's URL parameters as its JSON arguments of type
+// queryArgs are a query's URL parameters as its JSON arguments of type
 // typ: each parameter a field by its JSON name, a string field's value
 // (or a pointer to a string's) as it is, any other's parsed as JSON
 // (by=3, open=true, tags=["a","b"]). A parameter typ has no field of, or
 // one given twice, is an error, and so are arguments decodeArgs refuses:
 // every field is required but a pointer's, which a parameter left out
 // leaves nil. client.Params is its inverse.
-func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error) {
+func queryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, error) {
 	obj := map[string]json.RawMessage{}
 	fields := map[string]reflect.Type{}
 	if typ != nil && typ.Kind() == reflect.Struct {
@@ -444,6 +446,6 @@ func QueryArgs(typ reflect.Type, params map[string][]string) (json.RawMessage, e
 
 // schemaText is typ's JSON Schema, for an error's fix.
 func schemaText(typ reflect.Type) string {
-	b, _ := json.Marshal(Schema(typ))
+	b, _ := json.Marshal(catalog.Schema(typ))
 	return string(b)
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
@@ -49,7 +51,7 @@ func NewDependency(app *App, name string) *Dependency {
 	if app.deps == nil {
 		app.deps = map[string]*Dependency{}
 	}
-	switch q, err := QuintName(name); {
+	switch q, err := catalog.QuintName(name); {
 	case app.deps[name] != nil:
 		app.problems = append(app.problems, fmt.Sprintf("dependency %q: declared twice: declare each dependency once", name))
 	case err != nil:
@@ -114,14 +116,14 @@ func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Re
 	a := d.app
 	c := &callInfo{dep: d, name: name, req: reflect.TypeFor[Req](), resp: reflect.TypeFor[Resp](), opts: a.options("call", d.name+"/"+name, opts)}
 	what := fmt.Sprintf("call %s", c.label())
-	q, err := QuintName(name)
+	q, err := catalog.QuintName(name)
 	switch {
 	case err != nil:
 		a.problems = append(a.problems, fmt.Sprintf("%s: %v", what, err))
 	case slices.ContainsFunc(d.calls, func(o *callInfo) bool { return o.name == name }):
 		a.problems = append(a.problems, fmt.Sprintf("%s: declared twice: declare each call of a dependency once", what))
 	case d.quint != "":
-		c.quint = d.quint + upper(q)
+		c.quint = d.quint + strings.ToUpper(q[:1]) + q[1:]
 		for _, n := range []string{c.quint, c.quint + "Served", c.quint + "Replayed"} {
 			if prev, ok := a.quintNames[n]; ok {
 				a.problems = append(a.problems, fmt.Sprintf("%s maps to the Quint action %s, as %q does: rename one", what, n, prev))
@@ -167,7 +169,7 @@ func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Re
 
 // unknownOutcome is a caller's outcome when the answer does not say
 // whether the call happened (a timeout, a lost answer).
-const unknownOutcome = "unknown"
+const unknownOutcome = catalog.UnknownOutcome
 
 // Keyed declares a call the dependency applies once per key (the
 // effect's key, CallKey, sent with every try): its generated model
@@ -500,10 +502,10 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 // answer as it would (Call.Handler).
 func DefaultHandlers(d *Dependency) Handlers {
 	for _, ci := range d.calls {
-		if fs, _ := scalarFields(ci.resp); len(fs) > 0 {
+		if fs, _ := catalog.ScalarFields(ci.resp); len(fs) > 0 {
 			names := make([]string, len(fs))
 			for i, f := range fs {
-				names[i] = f.json
+				names[i] = f.JSON
 			}
 			panic(fmt.Sprintf("grist.DefaultHandlers: call %s answers a response with fields (%s), which a default double cannot know: give dependency %s handlers that answer as it would (Call.Handler; in a simulation gristsim.Config.Doubles)",
 				ci.label(), strings.Join(names, ", "), d.name))

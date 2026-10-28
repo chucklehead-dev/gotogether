@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 )
 
@@ -65,13 +67,13 @@ func importsCycle(t *testing.T, dir string) bool {
 // it with the move that fixes it, and refuses any other cycle, naming it.
 func TestLayoutAcyclic(t *testing.T) {
 	a := shopApp()
-	files, err := grist.Starter(a)
+	files, err := gen.Starter(a)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
 	writeFiles(t, dir, files)
-	g, err := grist.Generate(a, dir)
+	g, err := gen.Generate(a, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +95,7 @@ func TestLayoutAcyclic(t *testing.T) {
 	if !importsCycle(t, filepath.Join(old, "model")) {
 		t.Error("the old layout: no cycle found")
 	}
-	if _, err := grist.Generate(a, old); err == nil || !strings.Contains(err.Error(), "move module shopRules, as it is, to model/shop_rules.qnt") {
+	if _, err := gen.Generate(a, old); err == nil || !strings.Contains(err.Error(), "move module shopRules, as it is, to model/shop_rules.qnt") {
 		t.Errorf("Generate of the old layout: %v, want the move", err)
 	}
 	if err := grist.MainArgs(t.Context(), a, []string{"model", "-init", "-dir", old}, os.Stdout, os.Stderr); err == nil || !strings.Contains(err.Error(), "move module shopRules") {
@@ -105,7 +107,7 @@ func TestLayoutAcyclic(t *testing.T) {
 	// rules that import the steps back
 	rules := strings.Replace(string(files["model/shop_rules.qnt"]), "  import grist.*", "  import shopGen.* from \"./shop_steps\"\n  import grist.*", 1)
 	writeFiles(t, dir, map[string][]byte{"model/shop_rules.qnt": []byte(rules)})
-	if _, err := grist.Generate(a, dir); err == nil || !strings.Contains(err.Error(), "model/shop_rules.qnt -> model/shop_steps.qnt -> model/shop_rules.qnt") {
+	if _, err := gen.Generate(a, dir); err == nil || !strings.Contains(err.Error(), "model/shop_rules.qnt -> model/shop_steps.qnt -> model/shop_rules.qnt") {
 		t.Errorf("Generate of rules importing the steps: %v, want the cycle named", err)
 	}
 }
@@ -119,7 +121,7 @@ func TestLayoutAcyclic(t *testing.T) {
 func TestModelsLoadInREPL(t *testing.T) {
 	requireQuint(t)
 	shop := t.TempDir()
-	g, err := grist.Generate(shopApp(), filepath.Join("testdata", "gen"))
+	g, err := gen.Generate(shopApp(), filepath.Join("testdata", "gen"))
 	if err != nil {
 		t.Fatal(err)
 	}

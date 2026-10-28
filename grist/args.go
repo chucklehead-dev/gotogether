@@ -16,7 +16,7 @@ import (
 // ErrBadArgs is a command's or query's arguments grist refuses before
 // anything runs (a 400 at the API): a body that is not valid UTF-8 or
 // does not decode as the block's type, a field the type does not have,
-// a required field missing or null (Schema says which are required),
+// a required field missing or null (the catalog's JSON Schema says which are required),
 // text no store holds alike (a NUL byte, invalid UTF-8), or an integer
 // past the model's (int64). The error wrapping it names the field and
 // the fix.

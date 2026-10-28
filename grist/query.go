@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
@@ -34,7 +36,7 @@ type QueryBlock[Q, R any] struct {
 // fold of the log through that position. Its option is TransientTries.
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R] {
 	app.register("query", name)
-	qn, _ := QuintName(name)
+	qn, _ := catalog.QuintName(name)
 	b := &QueryBlock[Q, R]{app: app, info: &queryInfo{name: name, quint: qn, args: reflect.TypeFor[Q](), result: reflect.TypeFor[R](),
 		opts: app.options("query", name, opts)}, f: f}
 	app.checkArgs("query", name, b.info.args)

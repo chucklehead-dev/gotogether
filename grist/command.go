@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -108,7 +110,7 @@ var reservedArgs = map[string]bool{"id": true, "caller": true, "readPos": true, 
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C] {
 	app.register("command", name)
 	c := &Command[C]{app: app, decide: decide}
-	q, _ := QuintName(name)
+	q, _ := catalog.QuintName(name)
 	c.info = &commandInfo{name: name, quint: q, version: 1, args: reflect.TypeFor[C](), opts: app.options("command", name, opts)}
 	app.checkArgs("command", name, c.info.args)
 	c.info.run = func(ctx context.Context, s Store, env Envelope, raw json.RawMessage) (Receipt, bool, error) {

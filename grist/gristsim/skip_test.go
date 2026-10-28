@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -100,7 +102,7 @@ func TestDeliversSkip(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "model", "mailer.qnt"), []byte(mailerModel), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		g, err := grist.Generate(a, dir)
+		g, err := gen.Generate(a, dir)
 		if err != nil {
 			t.Fatal(err)
 		}

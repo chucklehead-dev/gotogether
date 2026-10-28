@@ -27,7 +27,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 )
 
 //go:embed all:scaffold
@@ -76,7 +76,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if !appName.MatchString(name) {
 		return usage(fmt.Sprintf("grist new: %q: name the app with lower-case words joined by dashes (inventory, item-store)\n%s", name, help))
 	}
-	q, err := grist.QuintName(name)
+	q, err := catalog.QuintName(name)
 	if err != nil {
 		return usage(fmt.Sprintf("grist new: %q: %v", name, err))
 	}

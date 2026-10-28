@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+
 	"github.com/chucklehead-dev/gotogether/binding"
-	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -24,7 +25,7 @@ func TestGeneratedPossibles(t *testing.T) {
 	// the shop's generated files with its own model and rules, the
 	// vendored grist.qnt among them (testdata keeps no copy)
 	shop := func(t *testing.T, rules func(string) string) string {
-		g, err := grist.Generate(shopApp(), filepath.Join("testdata", "gen"))
+		g, err := gen.Generate(shopApp(), filepath.Join("testdata", "gen"))
 		if err != nil {
 			t.Fatal(err)
 		}
