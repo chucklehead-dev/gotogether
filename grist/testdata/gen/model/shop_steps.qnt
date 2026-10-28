@@ -415,6 +415,45 @@ module shopGen {
     }
   }
 
+  // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
+  // vals, judged by the store's bindings at a settle beside the app's own
+  // (the default binding's, and a variant's that judges every invariant of
+  // the default binding)
+
+  // after a settle, ship (Emits) has handled every item-added: its checkpoint
+  // passed it, with the events it emitted, a Skip's none or a Fail's
+  // grist.failed
+  val shipEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "item-added" implies checkpoints.get("ship") >= i + 1)
+
+  // after a settle, notify (at least once) has handled every item-added: its
+  // checkpoint passed it, and it was skipped (notifySkips), had an ok effect
+  // step, or failed every try (its grist.failed)
+  val notifyEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "item-added" implies and {
+      checkpoints.get("notify") >= i + 1,
+      or {
+        notifySkips(log.slice(0, i + 1), i + 1),
+        effectsOf(effects, "notify", i + 1, true) > 0,
+        holds(log, failed("notify", i + 1)),
+      },
+    })
+
+  // after a settle, charge (at most once) has handled every item-shipped: its
+  // checkpoint passed it. The checkpoint commits first, and a crash after it
+  // loses the effect or its outcome by right, so no outcome is promised (an
+  // application states one test-only: atMostOnceOutcomesLogged)
+  val chargeEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "item-shipped" implies checkpoints.get("charge") >= i + 1)
+
+  // after a settle, every call of warehouse/hold (Keyed, used by notify,
+  // charge) its caller saw answered, ok or refused, has the dependency's
+  // served record of its key; an unknown answer promises nothing (the request
+  // may have been lost)
+  val warehouseHoldEventuallyServed =
+    warehouseHoldCalls.indices().forall(i => warehouseHoldCalls[i].result != "unknown" implies
+      warehouseHoldRecords.indices().exists(j => warehouseHoldRecords[j].key == warehouseHoldCalls[i].key))
+
   // the model on its own (gotogether simulate): every command as its rule
   // decides, reading what it needs, every query, processor and site, each
   // drawing its own arguments (one draw shared by every block would make

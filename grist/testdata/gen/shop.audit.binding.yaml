@@ -55,6 +55,7 @@ actions:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
 
 invariants: [stockBounded, picksAdded]
+eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, warehouseHoldEventuallyServed]
 
 # The model on its own (gotogether simulate)
 simulate:

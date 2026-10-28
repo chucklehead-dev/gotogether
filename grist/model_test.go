@@ -267,6 +267,9 @@ func TestGenerateRefuses(t *testing.T) {
 		"module shop {\n  // grist: invariants\n  val x = true\n}\n":      "the kinds are",
 		"module shop {\n  // grist: invariant\n  action a = true\n}\n":    "not followed by a val",
 		"module shop {\n  // grist: invariant calls\n  val x = true\n}\n": "the clients' binding's",
+		// an obligation the catalog implies, defined by the app too (its
+		// eventual val before P7), which quint would refuse as defined twice
+		"module shop {\n  // grist: eventually\n  val shipEventuallyHandled = true\n}\n": "delete the app's own",
 	} {
 		os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte(src), 0o644)
 		if _, err := grist.Generate(shopApp(), dir); err == nil || !strings.Contains(err.Error(), want) {

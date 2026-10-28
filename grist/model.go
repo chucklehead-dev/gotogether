@@ -102,6 +102,13 @@ func modelFile(app string) string { return "model/" + app + ".qnt" }
 //     per query, per processor by its declared shape (Emits, or Delivers'
 //     effect, checkpoint and outcome actions over grist.qnt's at-least-once
 //     or at-most-once defs) and per site, every frame condition, and step;
+//     and the obligations the catalog implies, eventual vals named from
+//     the processor or call (<processor>EventuallyHandled: every trigger
+//     handled; <call>EventuallyServed: every answered call of a Keyed
+//     dependency served), which the store's default binding judges at a
+//     settle beside the app's own, as does a variant that judges every
+//     invariant of the default binding (an app defining one of those
+//     names itself is an error naming it);
 //   - module <app>CallsGen, the clients' side: no positions, no
 //     processors, a key's first answer final, denied answering nothing;
 //   - the bindings: every parameter the step's field, the outcome as
@@ -149,6 +156,10 @@ func Generate(app *App, dir string) (Generated, error) {
 	}
 	if _, err := parseMarks(rules, g.aq); err != nil {
 		return Generated{}, fmt.Errorf("grist model: %s: %w", rulesFile(app.Name), err)
+	}
+	if c := g.ownClashes(own); len(c) > 0 {
+		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines now (an obligation the catalog implies, judged by the bindings): delete the app's own, or rename it if it says more",
+			modelFile(app.Name), strings.Join(c, ", "), stepsFile(app.Name))
 	}
 	out := Generated{Files: map[string][]byte{
 		"model/grist.qnt":                gristQnt,
@@ -581,6 +592,7 @@ func (g *gen) claimBlocks() {
 		}
 	}
 	g.claimCalls()
+	g.claimObligations()
 	for _, h := range g.holes {
 		g.claim(h.Name, "the hole "+h.Name)
 	}
@@ -978,6 +990,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 		b.WriteString("    }\n  }\n")
 	}
 	g.callActions(b)
+	g.obligationVals(b)
 	g.storeStep(b)
 	b.WriteString("}\n")
 }
@@ -1487,6 +1500,11 @@ func (g *gen) binding(name string, m marks) []byte {
 		g.callBindings(entry)
 	}
 	inv, ev, viol := m.of(name)
+	if !calls && observe {
+		// the obligations the catalog implies, beside the app's own: judged
+		// where the default binding's invariants are
+		ev = append(append([]string(nil), ev...), g.obligationNames()...)
+	}
 	fmt.Fprintf(&b, "\ninvariants: [%s]\n", strings.Join(append(append([]string(nil), inv...), viol...), ", "))
 	if len(ev) > 0 {
 		fmt.Fprintf(&b, "eventually: [%s]\n", strings.Join(ev, ", "))

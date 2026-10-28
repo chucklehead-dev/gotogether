@@ -16,12 +16,11 @@ module {{.Q}} {
   // grist: invariant
   val withinCapacity = withinCapacityIn(log)
 
-  // after a settle: every addition tallied
-  // grist: eventually
-  val everyAdditionTallied = log.indices().forall(i => log[i].typ == "item-added" implies checkpoints.get("tally") >= i + 1)
-
-  // after a settle: the warehouse received every addition, or its every
-  // try failed and the log says so
+  // after a settle: the warehouse received every addition (its served
+  // record, ok), or its every try failed and the log says so. Stronger
+  // than the generated shelveEventuallyHandled (an ok effect step), one of
+  // the obligations the catalog implies ({{.Name}}_steps.qnt, beside
+  // tallyEventuallyHandled and warehouseReceiveEventuallyServed)
   // grist: eventually
   val everyAdditionShelved = log.indices().forall(i => log[i].typ == "item-added" implies and {
     checkpoints.get("shelve") >= i + 1,
