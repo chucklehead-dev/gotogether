@@ -8,7 +8,7 @@
   ordered by span end time, which is not the order their effects took.
   A history recorded by clients instead (`kv.LoadRecorded`, with
   invocation times) is checked with `qtest.Linearize()`, which also
-  catches what only real time can: `StaleRead`'s reads of a lagging
+  catches what only real time can: the `staleRead` mutant's reads of a lagging
   snapshot.
 - **Restarts** (`examples/jobqueue`). Give every incarnation its own
   `process`, and let the binding's `restart:` insert the model's restart.

@@ -59,7 +59,8 @@ type Mutants struct {
 	Test string
 	// FullOnly are those built and run in full mode only (not under
 	// -short): a mutant whose claim repeats a mechanism a per-push test
-	// checks, building its binary being most of its cost.
+	// checks, building its binary being most of its cost, or whose claim
+	// is slow (a search).
 	FullOnly []string
 	// Generated are mutants with no overlay: the binary, built as it is,
 	// makes itself the mutant from Mutant() (grist's rules dropped,
@@ -167,7 +168,7 @@ func (m Mutants) Run(t *testing.T) {
 	for _, name := range m.Names(t) {
 		t.Run(name, func(t *testing.T) {
 			if testing.Short() && slices.Contains(m.FullOnly, name) {
-				t.Skip("full mode: its claim repeats a per-push test's mechanism")
+				t.Skip("full mode only (Mutants.FullOnly)")
 			}
 			t.Parallel()
 			args := []string{"test", "-count=1"}

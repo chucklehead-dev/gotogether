@@ -237,6 +237,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"TestMutantIsCaught", "TestMutant and TestMutants (gotogether scaffold -system: qtest.Mutants)"},
 		{".principal", ".caller (the step field a command records its caller as)"},
 		{"X-Actor", "X-Caller (the header a demo names its caller in, -caller-header)"},
+		{"kv.Mutation", "examples/kvstore/testdata/mutants (qtest.Mutants{Package: \"kv\"}; kvstore's Mutation enum is gone)"},
+		{"MUTATION=stale-cas", "MUTANT=staleCAS (kvstore's mutants are overlays)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

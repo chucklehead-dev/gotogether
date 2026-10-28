@@ -17,6 +17,9 @@
 //
 //	kvserver -steps steps.jsonl -rotate 100
 //	gotogether validate -binding kv.binding.yaml steps.3.jsonl
+//
+// A mutant of the store is built with its overlay (testdata/mutants/<name>:
+// files replacing kv/'s of the same names): run-demo.sh's MUTANT=<name>.
 package main
 
 import (
@@ -43,28 +46,10 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address")
 	steps := flag.String("steps", "", "write model steps (native step log) here")
 	spans := flag.String("spans", "", "write OTel spans (OTLP/JSON) here")
-	mutation := flag.String("mutation", "", "inject a bug: stale-cas | revision-on-conflict | stale-read | late-revision-on-conflict | stale-snapshot")
 	rotate := flag.Int("rotate", 0, "with -steps: start a new step log (steps.1.jsonl, steps.2.jsonl, ...) every N operations, each headed by a snapshot")
 	flag.Parse()
 
-	m := kv.Faithful
-	switch *mutation {
-	case "":
-	case "stale-cas":
-		m = kv.StaleCAS
-	case "revision-on-conflict":
-		m = kv.RevisionOnConflict
-	case "stale-read":
-		m = kv.StaleRead
-	case "late-revision-on-conflict":
-		m = kv.LateRevisionOnConflict
-	case "stale-snapshot":
-		m = kv.StaleSnapshot
-	default:
-		log.Fatalf("unknown mutation %q", *mutation)
-	}
-
-	store := kv.NewStore(m)
+	store := kv.NewStore()
 	switch {
 	case *steps != "" && *rotate > 0:
 		rl, err := kv.NewRotatingLog(*steps)
@@ -110,7 +95,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("kvserver listening on %s (mutation %q)", ln.Addr(), *mutation)
+	log.Printf("kvserver listening on %s", ln.Addr())
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {

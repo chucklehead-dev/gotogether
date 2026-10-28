@@ -2091,6 +2091,25 @@ it left:
   at the settle, so a node left down for good does not have its triggers
   judged as a live one's. Both are qenv's: Settle's other users
   (quorumkv's node down for good) would meet them too.
+- **H4's review.** A Package harness's mutants (payd's, webjobs') did
+  not navigate: the navigators overlaid the harness's own directory and
+  failed; `GOTOGETHER_MUTANT_PACKAGE`, set by `Mutants.Run` and passed
+  on by the navigate line, names the package. An overlay that changes
+  nothing (the package's files but for comments and layout, compared
+  token by token with directives kept) fails, as do a `Dir` given that
+  does not exist and a name a shell or `-run` would not keep;
+  `Catalog.Exercised` with nothing left to want panics. One variable,
+  `GOTOGETHER_MUTANT`, stays for both kinds of mutant: a woven mutant is
+  on per run (`qmut.WithMutant`) or per process by number, an overlay
+  mutant per binary by name, the two value spaces kept apart by the
+  refusal of a number or `list` as a name, and no binary is both (an
+  overlay's binary is built by the plain go command, which weaves
+  nothing). Two variables would buy nothing a refusal does not, and cost
+  a second name in every reproduce and navigate line. The cost that
+  remains: a package whose tests need weaving cannot use `qtest.Mutants`.
+  examples/kvstore's `Mutation` enum became five overlays of `kv/`
+  (`qtest.Mutants{Package: "kv"}`), and its faithful load claims a
+  hand-built `qtest.Catalog`, the catalog's shape outside grist.
 
 ### E: a run gotogether did not drive
 

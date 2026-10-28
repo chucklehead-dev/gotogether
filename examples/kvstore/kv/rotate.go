@@ -61,14 +61,6 @@ func (s *Store) rotate(ctx context.Context) {
 	for k, e := range s.data {
 		head.values[k], head.versions[k] = e.Value, e.Version
 	}
-	if s.mutation == StaleSnapshot {
-		// the head written at the previous rotation; this one's is kept
-		// for the next
-		if s.stale.values == nil {
-			s.stale = restore{values: map[string]string{}, versions: map[string]int64{}}
-		}
-		head, s.stale = s.stale, head
-	}
 	qobs.Record(ctx, "restore", nil, "values", head.values, "versions", head.versions, "rev", head.rev)
 }
 

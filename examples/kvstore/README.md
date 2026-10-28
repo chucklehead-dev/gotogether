@@ -3,7 +3,11 @@
 A key-value service with versioned compare-and-swap:
 - `kv/`: the store, the HTTP server and a client;
 - `cmd/kvserver`: the service;
-- `cmd/kvload`: a concurrent load generator.
+- `cmd/kvload`: a concurrent load generator;
+- `testdata/mutants/`: the store's planted bugs, each a directory whose
+  files replace `kv/`'s of the same names (a `go build` overlay): the
+  store's own files carry no bug, and each mutant is a whole file to
+  diff against them.
 
 `model/kv.qnt` is the service's Quint model.
 
@@ -17,16 +21,16 @@ uses no Orchestrion and no build changes:
 Run it, put load on it, then check what it recorded:
 
 ```sh
-./run-demo.sh                          # faithful: both checks pass
-MUTATION=stale-cas ./run-demo.sh       # a race: two CAS with the same expected version both win
-MUTATION=revision-on-conflict ./run-demo.sh
-MUTATION=stale-read ./run-demo.sh      # reads from a lagging snapshot
-MUTATION=late-revision-on-conflict ./run-demo.sh   # the revision bug after the first rotation: the last log alone shows it
-MUTATION=stale-snapshot ./run-demo.sh  # a rotated log headed by an old state
+./run-demo.sh                               # faithful: both checks pass
+MUTANT=staleCAS ./run-demo.sh               # a race: two CAS with the same expected version both win
+MUTANT=revisionOnConflict ./run-demo.sh     # a failed CAS advances the revision
+MUTANT=staleRead ./run-demo.sh              # reads from a lagging snapshot
+MUTANT=lateRevisionOnConflict ./run-demo.sh # the revision bug after the first rotation: the last log alone shows it
+MUTANT=staleSnapshot ./run-demo.sh          # a rotated log headed by an old state
 ```
 
 ```
-$ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl      (MUTATION=stale-cas)
+$ gotogether validate -binding kv.binding.yaml -convert kv.convert.yaml spans.jsonl      (MUTANT=staleCAS)
   conformance: FAIL
     step 112 is not a transition of the model from the state reached
       quint:    cas("a", 39, "y", Ok)
@@ -86,24 +90,38 @@ checked alone*); the two rotation mutants show only there.
   values and versions, and `restore` zips them. A snapshot inside a
   longer trace (all the files together) is skipped: only a log's head is
   trusted as its start. So the head itself is checked only by what
-  follows it: a stale one (`StaleSnapshot`) shows in the next operation,
-  and not at all in the files read together.
+  follows it: a stale one (the `staleSnapshot` mutant) shows in the next
+  operation, and not at all in the files read together.
+- **What the load must reach.** A load that never conflicted would
+  conform and say nothing of the CAS. The test lists the service's
+  blocks by outcome, each with how a load reaches it (a hand-built
+  `qtest.Catalog`, as grist builds an App's), and claims the run took
+  every one (`catalog.Exercised()`): one missed is named with its hint.
+- **Mutants as overlays.** `TestMutants` (`qtest.Mutants{Package: "kv"}`)
+  builds the tests once per directory of `testdata/mutants`, each with
+  its files in place of `kv/`'s, and runs `TestMutant`, which says what
+  catches the mutant it was built with. A failing run's reproduce and
+  navigate lines name the mutant.
 
 ## Tests (`kvstore_test.go`)
 
 | Test | Direction | Shows |
 |---|---|---|
-| `TestServiceUnderLoadConforms` | 8 concurrent clients; the handlers' steps recorded into the run (`qobshttp.Handler`, in parallel) and checked (`qtest`) | a concurrent run is a serial behaviour of the model |
+| `TestServiceUnderLoadConforms` | 8 concurrent clients; the handlers' steps recorded into the run (`qobshttp.Handler`, in parallel) and checked (`qtest`) | a concurrent run is a serial behaviour of the model, which took every block of the service's catalog (`catalog.Exercised()`: each CAS and delete by outcome) |
 | `TestServiceSpansConform` | the same load; plain spans converted and checked | spans plus `kv.op` give the same verdict |
-| `TestStaleCASCaughtUnderLoad` | the race mutant under load | caught as a CAS the model cannot take |
 | `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |
-| `TestStaleReadNotLinearizable` | `StaleRead`: reads from a snapshot refreshed every fourth read, client-recorded | a read no order real time allows explains (`Mismatch("read")`) |
 | `TestRotatedLogConformsAlone` | 4 clients, the log rotated every 40 operations; the last file alone | judged from its head's snapshot it conforms; without the head, the lost prefix's error |
-| `TestLateMutantCaughtInLastLog` | `LateRevisionOnConflict`: the revision bug from the first rotation on | the last file alone shows the failed CAS (`Mismatch("cas")`), judged from its head |
-| `TestStaleSnapshotCaught` | `StaleSnapshot`: each head is the previous rotation's state | the last file's first operation disagrees with its head (`Mismatch` or `Rejects`) |
 | `TestModelDrivesService` | model traces drive the HTTP API (`connect.Run`) | store and revision match the model after every request |
 | `TestHegelDrivesService` | a Hegel state machine over HTTP; runs checked after the test | |
-| `TestHegelShrinksRevisionOnConflict` | the same machine against a mutant, checked per case | Hegel shrinks to one failed CAS |
+| `TestMutants` | each mutant of `testdata/mutants`, built with its overlay, runs `TestMutant` | each caught, as below |
+
+| Mutant (`TestMutant`) | The bug | Caught by |
+|---|---|---|
+| `staleCAS` | the version checked under a read lock, written under the write lock | the converted spans of a concurrent load: a CAS the model cannot take (`Rejects("cas")`) |
+| `revisionOnConflict` | a failed CAS advances the revision | a put and a stale CAS, recorded: `Mismatch("cas")`; in full mode Hegel's machine, every case checked, shrinks to the failed CAS alone |
+| `staleRead` (full mode) | reads from a snapshot refreshed every fourth read, client-recorded | a read no order real time allows explains (`Mismatch("read")`) |
+| `lateRevisionOnConflict` | the revision bug from the first rotation on | the last file alone shows the failed CAS (`Mismatch("cas")`), judged from its head |
+| `staleSnapshot` | each head is the previous rotation's state | the last file's first operation disagrees with its head (`Mismatch` or `Rejects`) |
 
 ```sh
 go test ./examples/kvstore/ -v
