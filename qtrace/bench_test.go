@@ -60,7 +60,7 @@ func reconstructInput(n int, lamport bool) []Step {
 		rec := i % 8
 		s := benchStep(i)
 		s.Recorder, s.Seq = fmt.Sprintf("rec%d", rec), uint64(i/8+1)
-		s.Actor, s.Process, s.Thread = fmt.Sprintf("actor%d", rec%4), fmt.Sprintf("p%d", rec), "t"
+		s.Actor, s.Process, s.Thread = fmt.Sprintf("actor%d", rec%4), fmt.Sprintf("p%d", rec%4), "t"
 		if lamport {
 			s.Order = map[string]int64{"lamport": int64(i)}
 		}

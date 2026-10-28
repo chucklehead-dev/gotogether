@@ -326,7 +326,7 @@ func constraints(steps []Step, skew time.Duration) (ns []*node, at []int, mustPr
 	// (b.Call); else by time, give or take the slack (a step whose
 	// invocation is unknown has no real-time bound)
 	after := func(a, b int) bool {
-		sa, sb := &ns[a].s, &ns[b].s
+		sa, sb := ns[a].s, ns[b].s
 		if sa.Recorder == sb.Recorder && sb.Call != 0 && sa.Seq != 0 {
 			return sa.Seq < sb.Call
 		}
@@ -341,7 +341,7 @@ func constraints(steps []Step, skew time.Duration) (ns []*node, at []int, mustPr
 	render = func(order []int) []Step {
 		out := make([]Step, len(order))
 		for i, k := range order {
-			s := ns[k].s
+			s := *ns[k].s
 			s.Recorder, s.Thread, s.Seq = "linearized:"+actor, "linearized", uint64(i+1)
 			s.Call = 0 // paired already: on the new recorder its invocation's seq means another record
 			s.slack = skew
@@ -420,7 +420,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 	for pi, p := range pending {
 		i := n + pi
 		for j := range n {
-			if before(ns[j].s, p, skew) {
+			if before(*ns[j].s, p, skew) {
 				bound[[2]int{j, i}] = true
 			}
 		}
@@ -429,7 +429,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 				continue
 			}
 			for j := range n {
-				if before(st, ns[j].s, skew) {
+				if before(st, *ns[j].s, skew) {
 					bound[[2]int{i, j}] = true
 				}
 			}
@@ -474,7 +474,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 		for i, k := range order {
 			var s Step
 			if k < n {
-				s = ns[k].s
+				s = *ns[k].s
 			} else {
 				s = pending[k-n]
 				// in its own process ({{.process}} is its caller's): the

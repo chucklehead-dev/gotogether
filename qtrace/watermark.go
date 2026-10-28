@@ -1,6 +1,7 @@
 package qtrace
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"time"
@@ -81,31 +82,52 @@ func CarryWatermark(recorder, actor string, through time.Time, whole bool) Step 
 // alone. A recorder with no step is in no trace, and not here; one that
 // stated no watermark is not here either: its log is taken whole.
 // Reconstruct and a search's settles read watermarks so.
-func CollectedThrough(steps []Step) map[string]time.Time {
+func CollectedThrough(steps []Step) map[string]time.Time { return collectedThrough(steps, nil) }
+
+// collectedThrough is CollectedThrough of the steps at idx (every step if
+// idx is nil): Reconstruct's, of the records it kept.
+func collectedThrough(steps []Step, idx []int) map[string]time.Time {
+	n := len(steps)
+	if idx != nil {
+		n = len(idx)
+	}
+	at := func(i int) *Step {
+		if idx != nil {
+			return &steps[idx[i]]
+		}
+		return &steps[i]
+	}
+	out := map[string]time.Time{}
 	marks := map[string]time.Time{}
 	carried := map[string]bool{}
-	seqs := map[string][]uint64{}
-	at := map[string]map[uint64]time.Time{}
-	for _, s := range steps {
-		switch {
-		case !s.CompleteThrough.IsZero():
+	for i := range n {
+		if s := at(i); !s.CompleteThrough.IsZero() {
 			if s.CompleteThrough.After(marks[s.Recorder]) { // a watermark only rises
 				marks[s.Recorder] = s.CompleteThrough
 			}
 			carried[s.Recorder] = carried[s.Recorder] || s.carried
-		case s.Lost != "":
-		default:
-			if at[s.Recorder] == nil {
-				at[s.Recorder] = map[uint64]time.Time{}
-			}
-			if s.Seq != 0 {
-				seqs[s.Recorder] = append(seqs[s.Recorder], s.Seq)
-				at[s.Recorder][s.Seq] = s.Time
-			}
 		}
 	}
-	out := map[string]time.Time{}
-	for rec := range at {
+	if len(marks) == 0 {
+		return out // no watermark stated: every log whole, no recorder here
+	}
+	type seqAt struct {
+		seq uint64
+		t   time.Time
+	}
+	seqs := map[string][]seqAt{} // each recorder's steps' seqs (and one with none: the recorder is here)
+	for i := range n {
+		s := at(i)
+		if !s.CompleteThrough.IsZero() || s.Lost != "" {
+			continue
+		}
+		q := seqs[s.Recorder]
+		if s.Seq != 0 {
+			q = append(q, seqAt{s.Seq, s.Time})
+		}
+		seqs[s.Recorder] = q
+	}
+	for rec, q := range seqs {
 		w := marks[rec]
 		if all := marks[AllRecorders]; all.After(w) && !carried[rec] {
 			w = all
@@ -113,16 +135,17 @@ func CollectedThrough(steps []Step) map[string]time.Time {
 		if w.IsZero() {
 			continue
 		}
-		if q := seqs[rec]; len(q) > 0 && !carried[rec] {
-			slices.Sort(q)
-			last := q[0]
-			for _, n := range q[1:] {
-				if n > last+1 {
+		if len(q) > 0 && !carried[rec] {
+			// stable: of a seq twice, the time of the one read last
+			slices.SortStableFunc(q, func(a, b seqAt) int { return cmp.Compare(a.seq, b.seq) })
+			last, t := q[0].seq, q[0].t
+			for _, p := range q[1:] {
+				if p.seq > last+1 {
 					break // a hole: what comes after it is not known complete
 				}
-				last = n
+				last, t = p.seq, p.t
 			}
-			if t := at[rec][last]; t.After(w) {
+			if t.After(w) {
 				w = t
 			}
 		}

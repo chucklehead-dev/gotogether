@@ -202,17 +202,18 @@ func TestAppendLineAgainstMarshal(t *testing.T) {
 
 // Every step of the repository's step logs encodes as json.Marshal does.
 func TestAppendLineOnRepositoryLogs(t *testing.T) {
-	steps := repositorySteps(t)
-	for i := range steps {
-		sameLine(t, &steps[i])
+	for _, steps := range repositoryLogs(t) {
+		for i := range steps {
+			sameLine(t, &steps[i])
+		}
 	}
 }
 
-// repositorySteps are the steps of the repository's step logs (its
-// testdata's, examples' too): none in a module's copy outside it.
-func repositorySteps(t *testing.T) []Step {
+// repositoryLogs are the repository's step logs (its testdata's,
+// examples' too): none in a module's copy outside it.
+func repositoryLogs(t *testing.T) [][]Step {
 	t.Helper()
-	var out []Step
+	var out [][]Step
 	logs := 0
 	_ = filepath.WalkDir("..", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -234,12 +235,12 @@ func repositorySteps(t *testing.T) []Step {
 			return nil // a request log, a driver's trace: no step log
 		}
 		logs++
-		out = append(out, steps...)
+		out = append(out, steps)
 		return nil
 	})
 	if logs == 0 {
 		t.Skip("no step logs in the tree (a module's copy)")
 	}
-	t.Logf("%d steps of %d step logs", len(out), logs)
+	t.Logf("%d step logs", logs)
 	return out
 }

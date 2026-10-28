@@ -1,6 +1,7 @@
 package qtrace
 
 import (
+	"cmp"
 	"container/heap"
 	"fmt"
 	"maps"
@@ -91,31 +92,33 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		rec string
 		seq uint64
 	}
-	// presized: grown by doubling, a 100,000-step log copied its steps
-	// about 17 times (I19)
-	seen := make(map[rk]int, len(steps)) // the index in uniq of the record kept
+	// The passes work on indices into steps, which they never copy: a
+	// step is copied once, into its trace (a Step is over 300 bytes, and
+	// 100k steps copied through five growing slices took 0.9 GB).
+	seen := make(map[rk]int, len(steps)) // the index in steps of the record kept
 	dupIssues := map[string][]Issue{}
-	uniq := make([]Step, 0, len(steps))
-	for _, s := range steps {
+	uniq := make([]int, 0, len(steps)) // the records kept, by index
+	for i := range steps {
+		s := &steps[i]
 		if s.Seq != 0 {
 			k := rk{s.Recorder, s.Seq}
-			if i, ok := seen[k]; ok {
-				first := &uniq[i]
-				if sameRecord(first, &s) {
+			if j, ok := seen[k]; ok {
+				first := &steps[j]
+				if sameRecord(first, s) {
 					issues = append(issues, Issue{"info", "duplicate", fmt.Sprintf("recorder %s seq %d seen twice; kept the first", s.Recorder, s.Seq)})
 					continue
 				}
 				is := Issue{"error", "duplicate", fmt.Sprintf("recorder %s seq %d is two different records (%s, then %s): two logs or exporters number their steps in one recorder; "+
-					"give each log its own recorder (a request log's header names it), or drop the log that is not this run's", s.Recorder, s.Seq, describe(first), describe(&s))}
+					"give each log its own recorder (a request log's header names it), or drop the log that is not this run's", s.Recorder, s.Seq, describe(first), describe(s))}
 				dupIssues[first.Actor] = append(dupIssues[first.Actor], is)
 				if s.Actor != first.Actor {
 					dupIssues[s.Actor] = append(dupIssues[s.Actor], is)
 				}
 				continue
 			}
-			seen[k] = len(uniq)
+			seen[k] = i
 		}
-		uniq = append(uniq, s)
+		uniq = append(uniq, i)
 	}
 
 	// 2. Gaps: seq is dense per recorder, so a hole is a lost step (sampling,
@@ -124,15 +127,19 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	// starts after seq 1 lost a prefix, not a step: its first state is not
 	// init (Lost.Issue), which a snapshot step at its head can say. Loss
 	// records (MarkLost, a torn tail) declare what a log cannot show.
-	byRec := map[string][]uint64{}
+	type seqAt struct {
+		seq uint64
+		t   time.Time
+	}
+	byRec := map[string][]seqAt{} // each recorder's steps' seqs, with when each was recorded
 	recActors := map[string]map[string]bool{}
 	firstAt := map[string]time.Time{} // each recorder's first step's time
 	firstSeq := map[string]uint64{}
-	declared := map[string][]Step{}            // loss records, by recorder
-	marks := map[string]time.Time{}            // watermarks, by recorder (AllRecorders: every one's)
-	whole := map[string]bool{}                 // recorders whose carried watermark says a log of the actor was whole
-	seqAt := make(map[rk]time.Time, len(uniq)) // each record's time, by its seq: when a gap's steps were lost
-	for _, s := range uniq {
+	declared := map[string][]Step{} // loss records, by recorder
+	marks := map[string]time.Time{} // watermarks, by recorder (AllRecorders: every one's)
+	whole := map[string]bool{}      // recorders whose carried watermark says a log of the actor was whole
+	for _, i := range uniq {
+		s := &steps[i]
 		if !s.CompleteThrough.IsZero() {
 			if s.CompleteThrough.After(marks[s.Recorder]) { // a watermark only rises
 				marks[s.Recorder] = s.CompleteThrough
@@ -140,14 +147,11 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			whole[s.Recorder] = whole[s.Recorder] || s.carriedWhole
 			continue
 		}
-		if s.Seq != 0 {
-			seqAt[rk{s.Recorder, s.Seq}] = s.Time
-		}
 		if s.Lost != "" {
-			declared[s.Recorder] = append(declared[s.Recorder], s)
+			declared[s.Recorder] = append(declared[s.Recorder], *s)
 			continue
 		}
-		byRec[s.Recorder] = append(byRec[s.Recorder], s.Seq)
+		byRec[s.Recorder] = append(byRec[s.Recorder], seqAt{s.Seq, s.Time})
 		if recActors[s.Recorder] == nil {
 			recActors[s.Recorder] = map[string]bool{}
 		}
@@ -164,7 +168,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	collected := map[string][]Watermark{} // each actor's recorders' watermarks
 	// markOf is how far rec is known collected (CollectedThrough: its
 	// watermark, raised by its own dense seqs), zero if it stated none
-	through := CollectedThrough(uniq)
+	through := collectedThrough(steps, uniq)
 	markOf := func(rec string) time.Time { return through[rec] }
 	carriedWhole := map[string]bool{} // actors a carried watermark says had a whole log
 	// some recorder lost its tail: no settle settles the run, but one
@@ -184,27 +188,29 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	sort.Strings(recs)
 	for _, rec := range recs {
 		seqs := byRec[rec]
-		slices.Sort(seqs)
+		// (seqs are unique but for steps without one, which come first)
+		slices.SortFunc(seqs, func(a, b seqAt) int { return cmp.Compare(a.seq, b.seq) })
 		var missing []uint64
 		var holes []Gap
-		var first, next, prev uint64 // the first seq, the one expected next, the last seen
+		var first, next uint64 // the first seq, the one expected next
+		var prevAt time.Time   // when the last seen was recorded
 		for _, q := range seqs {
-			if q == 0 {
+			if q.seq == 0 {
 				continue // a step without a seq: nothing to count
 			}
 			if first == 0 {
-				first, next = q, q
+				first, next = q.seq, q.seq
 			}
-			if q > next {
-				holes = append(holes, Gap{Recorder: rec, First: next, Last: q - 1, After: seqAt[rk{rec, prev}], Before: seqAt[rk{rec, q}]})
+			if q.seq > next {
+				holes = append(holes, Gap{Recorder: rec, First: next, Last: q.seq - 1, After: prevAt, Before: q.t})
 			}
-			for ; next < q && len(missing) < 20; next++ {
+			for ; next < q.seq && len(missing) < 20; next++ {
 				missing = append(missing, next)
 			}
-			next, prev = q+1, q
+			next, prevAt = q.seq+1, q.t
 		}
 		if len(missing) > 0 {
-			msg := fmt.Sprintf("recorder %s is missing seq %v (of %d..%d): steps were lost or sampled out", rec, missing, first, seqs[len(seqs)-1])
+			msg := fmt.Sprintf("recorder %s is missing seq %v (of %d..%d): steps were lost or sampled out", rec, missing, first, seqs[len(seqs)-1].seq)
 			for a := range recActors[rec] {
 				gapActors[a] = append(gapActors[a], msg)
 				holesOf[a] = append(holesOf[a], holes...)
@@ -290,7 +296,8 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	invokedAt := map[rk]time.Time{}
 	invokedRef := map[rk]string{}
 	lastSettle, last := map[string]uint64{}, map[string]uint64{}
-	for _, s := range uniq {
+	for _, i := range uniq {
+		s := &steps[i]
 		if s.Call != 0 {
 			completed[rk{s.Recorder, s.Call}] = true
 		}
@@ -309,8 +316,8 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	// and no other recorder recorded a step later in time: a harness's
 	// settle says nothing of servers still at work
 	settleAt := map[string]time.Time{}
-	for _, s := range uniq {
-		if s.Settled && s.Seq == lastSettle[s.Recorder] {
+	for _, i := range uniq {
+		if s := &steps[i]; s.Settled && s.Seq == lastSettle[s.Recorder] {
 			settleAt[s.Recorder] = s.Time
 		}
 	}
@@ -327,13 +334,14 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	}
 	settled, voided := false, false
 	uncollected := "" // why a settle a watermark does not reach settles nothing
-	for rec, seq := range lastSettle {
-		if seq <= last[rec] {
+	// (in sorted order: a run's settle issues come in one order)
+	for _, rec := range slices.Sorted(maps.Keys(lastSettle)) {
+		if lastSettle[rec] <= last[rec] {
 			continue
 		}
 		var later *Step
-		for i := range uniq {
-			o := &uniq[i]
+		for _, i := range uniq {
+			o := &steps[i]
 			if o.Recorder != rec && !o.Settled && o.Lost == "" && o.CompleteThrough.IsZero() && o.Time.After(settleAt[rec].Add(RealTimeSlack)) {
 				later = o
 				break
@@ -368,16 +376,18 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	}
 	pending := map[string][]Step{}
 	callIssues := map[string][]Issue{}
-	steps = uniq[:0:0]
-	for _, s := range uniq {
+	byActor := map[string][]kept{} // 4. the steps, by actor
+	for _, i := range uniq {
+		s := &steps[i]
 		switch {
 		case s.Settled, s.Lost != "", !s.CompleteThrough.IsZero():
 		case !s.Invocation:
 			// a completion was invoked when its invocation record was
 			// written: the recorder's own clock, the one its Time is on (a
 			// simulation's true time), whatever "invoked" said
+			k := kept{i: i, ref: s.Ref}
 			if t, ok := invokedAt[rk{s.Recorder, s.Call}]; ok && s.Call != 0 {
-				s.Invoked, s.fromRecord = t, true
+				k.invoked, k.fromRecord = t, true
 				// the record's time is trusted as the call's start: one
 				// after its completion, or a completion numbered before
 				// its invocation, is an adapter's or a recorder's error
@@ -389,33 +399,29 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 				}
 			}
 			if s.Ref == "" && s.Call != 0 { // a driver may link only the call's start to its artifact
-				s.Ref = invokedRef[rk{s.Recorder, s.Call}]
+				k.ref = invokedRef[rk{s.Recorder, s.Call}]
 			}
-			steps = append(steps, s)
+			byActor[s.Actor] = append(byActor[s.Actor], k)
 		case !completed[rk{s.Recorder, s.Seq}]:
-			pending[s.Actor] = append(pending[s.Actor], s)
+			pending[s.Actor] = append(pending[s.Actor], *s)
 		}
 	}
 
-	// 4. Partition by actor, then order each.
-	byActor := map[string][]Step{}
-	for _, s := range steps {
-		byActor[s.Actor] = append(byActor[s.Actor], s)
-	}
+	// 4. Order each actor's steps.
 	for a := range pending {
 		if byActor[a] == nil {
-			byActor[a] = []Step{} // an actor whose every operation is pending
+			byActor[a] = []kept{} // an actor whose every operation is pending
 		}
 	}
 	for a := range dupIssues {
 		if byActor[a] == nil {
-			byActor[a] = []Step{} // an actor whose every record was dropped as a conflicting duplicate: its issue says so
+			byActor[a] = []kept{} // an actor whose every record was dropped as a conflicting duplicate: its issue says so
 		}
 	}
 	actors := slices.Sorted(maps.Keys(byActor))
-	var out []*Trace
+	out := make([]*Trace, 0, len(actors))
 	for _, a := range actors {
-		t := order(a, byActor[a])
+		t := order(a, steps, byActor[a])
 		t.Pending = pending[a]
 		t.Settled = settled && len(t.Steps) > 0
 		sort.SliceStable(t.Pending, func(i, j int) bool { return t.Pending[i].Time.Before(t.Pending[j].Time) })
@@ -478,8 +484,17 @@ func describe(s *Step) string {
 	return d
 }
 
+// kept is a step Reconstruct keeps, by its index in its input, with what
+// its trace's copy takes from its invocation record.
+type kept struct {
+	i          int
+	invoked    time.Time // if fromRecord: the record's time
+	fromRecord bool
+	ref        string // its Ref, else its invocation record's
+}
+
 type node struct {
-	s     Step
+	s     *Step     // in the steps the graph was built of, which it never changes
 	key   time.Time // recording time, made monotone per recorder
 	idx   int
 	succ  []int
@@ -504,11 +519,24 @@ func (q *pq) Push(x any)            { *q = append(*q, x.(*node)) }
 func (q *pq) Pop() any              { o := *q; n := o[len(o)-1]; *q = o[:len(o)-1]; return n }
 func edge(ns []*node, from, to int) { ns[from].succ = append(ns[from].succ, to); ns[to].npred++ }
 
-func order(actor string, steps []Step) *Trace {
+// order is the trace of an actor's steps: ks, in src.
+func order(actor string, src []Step, ks []kept) *Trace {
 	t := &Trace{Actor: actor}
-	ns := build(steps)
+	ps := make([]*Step, len(ks))
+	for i, k := range ks {
+		ps[i] = &src[k.i]
+	}
+	ns := buildOf(ps)
+	if len(ks) > 0 {
+		t.Steps = make([]Step, 0, len(ks))
+	}
 	for _, i := range kahn(ns, &t.Issues) {
-		t.Steps = append(t.Steps, ns[i].s)
+		s, k := *ns[i].s, ks[i]
+		if k.fromRecord {
+			s.Invoked, s.fromRecord = k.invoked, true
+		}
+		s.Ref = k.ref
+		t.Steps = append(t.Steps, s)
 	}
 	t.Issues = append(t.Issues, realTime(t.Steps)...)
 	// Incarnations: in order of first appearance; interleaving means two
@@ -550,9 +578,20 @@ func order(actor string, steps []Step) *Trace {
 // step, keyed by its recording time made monotone per recorder, with the
 // hard edges of program order and domain clocks.
 func build(steps []Step) []*node {
+	ps := make([]*Step, len(steps))
+	for i := range steps {
+		ps[i] = &steps[i]
+	}
+	return buildOf(ps)
+}
+
+// buildOf is build of the steps ps point to.
+func buildOf(steps []*Step) []*node {
 	ns := make([]*node, len(steps))
+	slab := make([]node, len(steps)) // one allocation, not one a node
 	for i, s := range steps {
-		ns[i] = &node{s: s, key: s.Time, idx: i}
+		slab[i] = node{s: s, key: s.Time, idx: i}
+		ns[i] = &slab[i]
 	}
 	// Monotone keys per recorder, in seq order: wall clocks step backwards.
 	byRec := map[string][]*node{}
@@ -568,10 +607,11 @@ func build(steps []Step) []*node {
 		}
 	}
 	// Program order per thread.
-	threads := map[string][]*node{}
+	type thread struct{ rec, thread string }
+	threads := map[thread][]*node{}
 	for _, n := range ns {
 		if n.s.Thread != "" {
-			k := n.s.Recorder + "\x00" + n.s.Thread
+			k := thread{n.s.Recorder, n.s.Thread}
 			threads[k] = append(threads[k], n)
 		}
 	}
@@ -582,15 +622,16 @@ func build(steps []Step) []*node {
 		}
 	}
 	// Domain clocks per (process, domain).
-	domains := map[string][]*node{}
+	type domain struct{ process, domain string }
+	domains := map[domain][]*node{}
 	for _, n := range ns {
 		for d := range n.s.Order {
-			k := n.s.Process + "\x00" + d
+			k := domain{n.s.Process, d}
 			domains[k] = append(domains[k], n)
 		}
 	}
 	for k, l := range domains {
-		d := k[indexNul(k)+1:]
+		d := k.domain
 		sort.SliceStable(l, func(i, j int) bool { return l[i].s.Order[d] < l[j].s.Order[d] })
 		// Steps with equal clock values are unordered with each other; every
 		// step of one value comes before every step of the next. (Linking
@@ -613,7 +654,7 @@ func build(steps []Step) []*node {
 // breaks a cycle (reported in issues) at its earliest step. It returns the
 // nodes' indices in order.
 func kahn(ns []*node, issues *[]Issue) []int {
-	var out []int
+	out := make([]int, 0, len(ns))
 	q := &pq{}
 	for _, n := range ns {
 		if n.npred == 0 {
@@ -651,13 +692,4 @@ func kahn(ns []*node, issues *[]Issue) []int {
 		}
 	}
 	return out
-}
-
-func indexNul(s string) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == 0 {
-			return i
-		}
-	}
-	return -1
 }
