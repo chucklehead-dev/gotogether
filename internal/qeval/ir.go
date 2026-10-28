@@ -84,6 +84,22 @@ type Model struct {
 	// Consts are the constants' names (an instance's are pass-through
 	// constants of the module that imports the model)
 	Consts []string
+	// replaying: a choice some of whose values disable the action is
+	// Unsupported (AsReplayed)
+	replaying bool
+}
+
+// AsReplayed is m judging steps as a quint replay of them takes each:
+// quint's replay picks one value of a choice (nondet x = oneOf(S)) at
+// random, not one that enables the action, so a step that some of the
+// choice's values disable is a sample of quint's, not a verdict
+// (`nondet x = oneOf(1.to(1000)); all { x == 7, v' = x }` passes the
+// evaluator and fails quint test); AsReplayed refuses it, as Unsupported,
+// where m takes it. A shallow copy: m's declarations are shared, read-only.
+func (m *Model) AsReplayed() *Model {
+	c := *m
+	c.replaying = true
+	return &c
 }
 
 type ref struct {

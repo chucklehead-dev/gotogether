@@ -314,15 +314,22 @@ func (ev *evaluation) action(e *Expr, en *env) ([]assignment, error) {
 			}
 			s := ev.setOf(ev.eval(d.Expr.Args[0], en), "oneOf")
 			var out []assignment
+			disabled := 0 // values with no successor
 			for _, x := range s.Elems {
 				succ, err := ev.action(e.Expr, en.bind(d.Name, x))
 				if err != nil {
 					return nil, err
 				}
+				if len(succ) == 0 {
+					disabled++
+				}
 				out = append(out, succ...)
 				if len(out) > maxSet {
 					return nil, unsupported("nondet", "more than %d successors", maxSet)
 				}
+			}
+			if ev.m.replaying && disabled > 0 && len(out) > 0 {
+				return nil, unsupported("nondet", "%d of the %d values of %s disable the action: quint's replay picks one at random", disabled, len(s.Elems), d.Name)
 			}
 			return out, nil
 		}

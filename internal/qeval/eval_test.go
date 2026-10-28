@@ -1,6 +1,7 @@
 package qeval
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -162,5 +163,30 @@ func TestRangeDownRefused(t *testing.T) {
 		t.Errorf("range(5, 2): no error, want Unsupported")
 	} else if _, ok := err.(*Unsupported); !ok {
 		t.Errorf("range(5, 2): %v, want Unsupported", err)
+	}
+}
+
+// AsReplayed refuses a step some of its choice's values disable, which a
+// quint replay takes or not at random; the model as compiled takes it.
+// A choice every value of which enables the step is taken either way.
+func TestAsReplayedRefusesPartialChoices(t *testing.T) {
+	m := compile(t, "choice.qnt", "choice", "init", "step")
+	s, err := m.Init(nil, "init")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next, ok, err := m.Step(nil, s, "pickSeven"); err != nil || !ok || next["choice::v"] != Int(7) && next["v"] != Int(7) {
+		t.Errorf("pickSeven as compiled: %v %v %v", next, ok, err)
+	}
+	r := m.AsReplayed()
+	var u *Unsupported
+	if _, _, err := r.Step(nil, s, "pickSeven"); !errors.As(err, &u) || !strings.Contains(err.Error(), "at random") {
+		t.Errorf("pickSeven as replayed: %v, want Unsupported", err)
+	}
+	if _, ok, err := r.Step(nil, s, "pickAny"); err != nil || !ok {
+		t.Errorf("pickAny as replayed: %v %v", ok, err)
+	}
+	if _, ok, err := m.Step(nil, s, "pickAny"); err != nil || !ok {
+		t.Errorf("pickAny as compiled: %v %v", ok, err)
 	}
 }
