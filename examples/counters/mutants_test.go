@@ -188,6 +188,38 @@ func TestMutant(t *testing.T) {
 		}
 		t.Logf("%d duplicate errors, the first: %s", len(d), d[0])
 		qtest.Validate(t, commits, steps).Expect(t, qtest.HasIssue("duplicate"))
+	case "stopNodeAtSignal":
+		// GR10 slice 2: the node's work cancelled at SIGTERM (as grist's
+		// Main once cancelled it): a payout whose bank call is in flight at
+		// a node's signal is cancelled, its outcome unknown though the bank
+		// was asked, in some run of the rolling restart, where the faithful
+		// app's are none (TestRollingRestart): 12 of 40 runs (10 seeds miss
+		// with chance 3%)
+		system(terminating, rolling).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 10)}).
+			Expect(t, qtest.Some(qtest.Violates("noPayoutUnknown")))
+	case "noDrainDelay":
+		// GR10 slice 2: no delay before the listener closes, while the
+		// router still sends the node requests for its lag: their tries are
+		// refused (each retried under its key, so the answers conform), in
+		// some run of the rolling restart, where the faithful app's are
+		// none. With the router's lag off nothing needs the delay: every
+		// run is free of refusals, the mutant's too
+		system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+			Expect(t, qtest.Conforms(), qtest.Some(gristtest.ClientErrors()))
+		system(calls, rolling, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+			Expect(t, qtest.Conforms(), gristtest.NoClientErrors())
+		// the same on the real tier, three pods of the binary behind a
+		// router polling /readyz every 200 ms: a pod's listener closes at
+		// its signal, and the router sends it requests until its next poll.
+		// Three rounds of the rolling restart (nine drains, each without
+		// the delay a second or two): TestRealRollingRestart's one round
+		// of the faithful app has no refused try. Full mode, as that is
+		if testing.Short() {
+			return
+		}
+		steps, _ := rollingRestart(t, 3)
+		t.Logf("nine drains without the delay: %d calls refused a try", refusedCalls(steps))
+		qtest.Validate(t, calls, steps, qtest.Linearize()).Expect(t, qtest.Conforms(), gristtest.ClientErrors())
 	default:
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}
@@ -196,7 +228,7 @@ func TestMutant(t *testing.T) {
 // Each mutant, built with its overlay, is caught as TestMutant says.
 func TestMutants(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	qtest.Mutants{FullOnly: fullOnly}.Run(t)
+	qtest.Mutants{FullOnly: fullOnly, Show: []string{"calls refused a try"}}.Run(t)
 }
 
 // explained fails t unless a run of x rejects action with an explanation

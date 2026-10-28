@@ -14,9 +14,10 @@ import (
 )
 
 // setup gives every run the store (for the dispatchDirect mutant's raw
-// append). The mailer is gristsim's: its default double.
+// append), on the node's context as the app's binary runs it
+// (NodeContext). The mailer is gristsim's: its default double.
 func setup(s *qenv.Sim, st grist.Store) func(context.Context) context.Context {
-	return func(ctx context.Context) context.Context { return StoreDep.With(ctx, st) }
+	return func(ctx context.Context) context.Context { return StoreDep.With(NodeContext(ctx), st) }
 }
 
 // doubles are a run's bank, which gristsim serves as the qenv.Service

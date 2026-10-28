@@ -1965,6 +1965,34 @@ records its settle where today's schedule is killed in the flush"
 cannot happen with the chosen defaults (§0.15 says why); the test shows
 the budget where delay and shutdown outrun the grace.
 
+### GR10 slice 2: graceful termination and the lagging router
+
+docs/grist-platform.md §9's slice 2, docs/grist.md §0.16. qenv makes a
+cluster's two behaviours named choices: `nemesis.terminate.<proc>`
+(`Sim.Terminations`: the signal cancels `qenv.Terminating`'s contexts,
+the process drains and `Exit`s or is killed at its grace, then restarts;
+option `short`; a budget as a PDB) and a router (`qenv.NewRouter`: an
+endpoint per incarnation chosen by `route.<name>`, its view stale by
+`route.<name>.lag`); `Service.Call` now stops at a cancelled context, as
+a real client does. grist's drain is one schedule for Main and
+gristsim's `Cluster` (every node serving the API behind the router,
+each drained and restarted, a rolling restart), a refused try counted
+on its call's step, `gristtest.NoClientErrors` judging them. counters'
+`TestRollingRestart` (simulated) and `TestRealRollingRestart` (three
+pods of its binary behind a router polling `/readyz`) conform, settle
+and linearize with no try refused; `noDrainDelay` gets refused tries in
+the router's lag, `stopNodeAtSignal` an unknown payout. What the
+acceptance got wrong: no call of `noDrainDelay`'s fails (its tries are
+retried under their keys: the claim counts tries), and the lag's
+ablation and `stopNodeAtSignal` each needed the simulation made truer
+(a try sent before the shutdown served; a call stopping at a cancelled
+context). Two slice-1 defects fixed: the processor lag gauge never 0
+for a caught-up processor while other events came, and a stopped poller
+counted as running. Its cost: counters' `-short` gains about 25 s of
+CPU (the rolling restart's three bindings and two mutants' builds and
+runs); the real half, about 35 s of wall time and the mutant's three
+rounds 50 s, is full mode.
+
 ### P7: grist's obligations generated
 
 ROADMAP's P7 as built (docs/grist.md §3.3.1). The decisions it left:

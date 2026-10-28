@@ -38,18 +38,20 @@ func TestMain(m *testing.M) {
 
 // A pod is one process serving the app (the test binary as cmd/counters).
 type pod struct {
-	cmd *exec.Cmd
-	url string
-	out chan error // the process's end
+	cmd    *exec.Cmd
+	url    string
+	health string     // its side port's URL, with -health-addr
+	out    chan error // the process's end
 }
 
 // startPod starts the pod named name (POD_NAME, as the downward API
-// sets it) on the SQLite file db, its steps into steps, and waits until
-// it serves.
-func startPod(t *testing.T, name, db, steps string) *pod {
+// sets it) on the SQLite file db, its steps into steps (a file, or a
+// directory: a file per start), with serve's extra flags, and waits
+// until it serves.
+func startPod(t *testing.T, name, db, steps string, extra ...string) *pod {
 	t.Helper()
-	cmd := exec.Command(os.Args[0], "serve", "-db", "sqlite:"+db, "-addr", "127.0.0.1:0", "-tenant", "t1",
-		"-steps", steps, "-caller-header", "X-Caller", "-poll", "20ms")
+	cmd := exec.Command(os.Args[0], append([]string{"serve", "-db", "sqlite:" + db, "-addr", "127.0.0.1:0", "-tenant", "t1",
+		"-steps", steps, "-caller-header", "X-Caller", "-poll", "20ms"}, extra...)...)
 	cmd.Env = append(os.Environ(), podEnv+"=1", "POD_NAME="+name, "GRIST_NODE=", "KUBERNETES_SERVICE_HOST=")
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -60,11 +62,16 @@ func startPod(t *testing.T, name, db, steps string) *pod {
 	}
 	p := &pod{cmd: cmd, out: make(chan error, 1)}
 	urls := make(chan string, 1)
+	health := make(chan string, 1)
 	go func() {
 		sc := bufio.NewScanner(stderr)
 		for sc.Scan() {
 			if _, after, ok := strings.Cut(sc.Text(), "serving on "); ok {
 				urls <- strings.TrimSpace(after)
+			}
+			if _, after, ok := strings.Cut(sc.Text(), " health on "); ok {
+				h, _, _ := strings.Cut(after, " ")
+				health <- h
 			}
 		}
 		io.Copy(io.Discard, stderr)
@@ -72,6 +79,10 @@ func startPod(t *testing.T, name, db, steps string) *pod {
 	}()
 	select {
 	case p.url = <-urls:
+		select {
+		case p.health = <-health: // printed before the API's line, if at all
+		default:
+		}
 	case err := <-p.out:
 		t.Fatalf("pod %s ended before it served: %v", name, err)
 	case <-time.After(30 * time.Second):

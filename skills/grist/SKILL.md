@@ -369,11 +369,29 @@ for it. No binding is written by hand.
   `-health-addr` (on by default in a pod) serves `/livez` (a poller stuck on
   one trigger past 5 minutes; never the store), `/readyz` (started, not draining;
   never a dependency or processor lag: point no probe at the database)
-  and `/metrics` (processor lag and oldest trigger, relay backlog,
+  and `/metrics` (processor lag, 0 when no trigger waits, and oldest trigger, relay backlog,
   effects and requests in flight). In a pod `-addr` on loopback is
   refused (give `-addr :8080`); `GOMEMLIMIT` unset is 90% of the
   cgroup's `memory.max`.
   examples/counters' `cmd/counters` and `SERVE=1 ./run-demo.sh`.
+- **A cluster, simulated**: `gristsim.Config{Cluster: &gristsim.Cluster{
+  Grace: 45 * time.Second, EndpointLag: 3 * time.Second, Disruptions: 1,
+  Drain: app's drain, Rolling: true}}` runs the nodes (3 by default) as an
+  orchestrator does: every node serves the API behind a router whose view
+  lags (`route.api.lag`, option `stale`), each node may be sent SIGTERM
+  (`nemesis.terminate.<node>`; `Rolling` restarts each in turn under
+  load) and drains as `Main` does (the same `grist.Drain` schedule: serve
+  on for the delay, shut down, quiet, stop, flush, exit), then restarts.
+  A client's try no server took (an endpoint gone, a listener closed) is
+  retried and counted on its call's step (`refused`); judge the clients'
+  binding with `gristtest.NoClientErrors()` (and `ClientErrors()` for a
+  mutant that causes them). Give the drain's delay more than the
+  router's lag, and never cancel an effect's context at the signal
+  (`grist.Terminating` is for work that may stop at once): an
+  at-most-once call cancelled in flight is `grist.unknown`. Not on the
+  HTTP tier yet. examples/counters' `TestRollingRestart` and, on real
+  pods behind a router polling `/readyz`, `TestRealRollingRestart`
+  (`ROLLING=1 ./run-demo.sh`).
 - **PostgreSQL**: `sqlstore.Postgres` states read committed and sets
   `lock_timeout` and `idle_in_transaction_session_timeout` per
   transaction; grist/sqlstore's contract test runs against one with

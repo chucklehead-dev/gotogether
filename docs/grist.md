@@ -8,7 +8,9 @@ on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
 fixes (§0.7), a newcomer's trial's fixes (§0.8), the generator, `grist
 new` and the test harnesses built (§0.9), GR3's declared calls built
 (§0.12, §0.13, §0.14: on the real tier over HTTP), GR10's slice 1
-(identity, probes and the drain: §0.15); gristflow is design, as is
+(identity, probes and the drain: §0.15) and slice 2 (graceful
+termination, the lagging router, `gristsim.Cluster`: §0.16); gristflow
+is design, as is
 slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -1911,6 +1913,134 @@ found by `-race` on `TestMainGraceBudgetsTheDrain`;
 `TestSignalNotifyFromRealGoroutines`). And `/readyz` is ok only once
 the API listens (a window of microseconds, no test). The platform
 note's three errors are corrected there (§3.2, §3.3, §9's slice 1).
+
+## 0.16 What building GR10's slice 2 changed (termination and the router)
+
+docs/grist-platform.md §9's slice 2. Built, each with a test that fails
+with it taken out:
+
+- **Graceful termination in qenv** (qenv/terminate.go).
+  `Sim.Terminations(qenv.Termination{Grace, Short, Budget}, procs...)`
+  registers `nemesis.terminate.<proc>` (family terminate); the signal
+  (`Process.Terminate`, a test's to send too) cancels every context
+  `qenv.Terminating(ctx)` gave the process's tasks, the process drains
+  and `Process.Exit`s, or is killed at its grace, and either way is
+  restarted (a StatefulSet's pod back under its name). Option `short` of
+  `terminate.<proc>.grace` is a reduced grace; `Budget` is a
+  PodDisruptionBudget, counting the group's terminating processes.
+  `TestTerminateDrainsOrKills`, `TestTerminateShortGrace`,
+  `TestTerminationsBudget` (two terminating at once in some run without
+  the budget, never with it).
+- **The router** (qenv/router.go). `qenv.NewRouter(s, name, lag,
+  procs...)`: `Pick` chooses an `Endpoint` of its view (a process's
+  incarnation: a pod's address, which a restart replaces) by the
+  schedule choice `route.<name>`, `ErrNoEndpoint` on an empty view. Each
+  change of a backend's readiness (terminating, down, restarted) reaches
+  the view at once or, under `route.<name>.lag`'s option `stale`, `lag`
+  later, each backend's in order: a terminating backend still chosen, a
+  restarted one not yet (`TestRouterLag`). An endpoint that is `Gone`
+  refuses the request sent to it.
+- **`Service.Call` stops at a cancelled context** (context.Canceled, not
+  a deadline, which passes in wall time), returning the context's error,
+  the request maybe processed (`TestCallCancelled`). It did not: a
+  simulated call ran to its answer whatever its caller's context, so a
+  node cancelling its work at SIGTERM lost no outcome in a simulation
+  where it does on the real tier. With it taken out, the
+  `stopNodeAtSignal` mutant's runs all conform.
+- **The drain shared** (grist/drain.go's `runDrain`). Main and
+  gristsim's `Cluster` run one schedule: the server's delay and
+  shutdown (each tier's: Main's `http.Server`, a simulated node's API),
+  the node's settle (on `qenv.Now` and `qenv.Sleep`: real time under
+  Main, virtual in a simulation), the node's stop and the relay's flush,
+  each within its share of the grace. A simulation's drain records no
+  settle (the run's `Sim.Settle` does). `grist.Terminating(ctx)` is
+  `qenv.Terminating` in a simulation and, under Main, a context ended by
+  the first signal (Main puts it in the node's and the requests'
+  contexts): for work that may stop at once, never an effect's.
+- **`gristsim.Cluster`** (`Config.Cluster`): every node (3 by default)
+  serves the API as a `qenv.Service` of its own (`api.<node>`) behind
+  the router `api` (`EndpointLag`); each node is terminable
+  (`nemesis.terminate.<node>`, `Grace` default 45 s, `Disruptions` the
+  budget) and drains with the app's `Drain`, then exits and restarts;
+  `Rolling` restarts each node in turn under load from a point
+  `gristsim.rollout` chooses, and `Pace` spaces each client's calls (1 s)
+  so a run's calls span its drains. A try no server takes (the endpoint
+  gone or none, its API shut down when the try was sent) is refused,
+  retried, and counted on the call's step (`refused`, as grist/client
+  counts a refused connection and a router's 502 or bare 503); a try
+  sent before the shutdown is served (the shutdown waits for it, as an
+  `http.Server`'s waits for its connections). Not with `Config.HTTP` yet
+  (an error says so). `TestClusterRollingRestart` (refusals without the
+  delay, none with it, none without the lag), `TestClusterDisruptions`.
+- **`gristtest.NoClientErrors()`** and its negation `ClientErrors()`,
+  over the clients' binding (a report with no client actor misses
+  either, naming the fix), built on the core's new `qtest.Satisfies`: no
+  client call refused a try, answered an error, or left pending.
+- **counters**: `Drain` (5 s of serving, everywhere) and `NodeContext`
+  in serve.go, used by the binary and the simulations; the test-only
+  `noPayoutUnknown` (`counters.terminating.binding.yaml`); the mutants
+  `stopNodeAtSignal` (`NodeContext` is `grist.Terminating`'s) and
+  `noDrainDelay` (`Drain.Delay` none). `TestRollingRestart`: two nodes
+  rolled under load, the router stale at half its changes, a slow bank;
+  `Conforms`, `All(Settles)`, at the clients `All(Completes)` and
+  `NoClientErrors`, `None(Violates("noPayoutUnknown"))`; the mutants
+  `Some(Violates("noPayoutUnknown"))` (12 of 40 runs) and
+  `Some(ClientErrors())`, and with the lag off `NoClientErrors` holds of
+  the mutant too. `TestRealRollingRestart` (full mode, about 35 s): three
+  pods of the binary on one SQLite file, `-steps DIR` and
+  `-health-addr` each, behind the test's router polling `/readyz` every
+  200 ms, three clients through it, each pod in turn sent SIGTERM and
+  started again under its `POD_NAME`: no duplicate, `Conforms` and
+  `Settles` at the store, `Conforms` linearized and `NoClientErrors` at
+  the clients, and each drain's `/metrics` shows every processor's lag
+  at 0 before its settle; `noDrainDelay`, three rounds of it, has tries
+  refused in the router's lag (14 calls in 9 drains).
+
+Two slice-1 defects found on the way, fixed:
+
+- `grist_processor_lag` was the head minus the checkpoint, and a
+  processor's checkpoint stays at the last trigger it handled while the
+  head moves on with every other event, so a processor that had caught
+  up never showed 0 while other events came: the real rolling restart
+  saw no 0 in any drain. It is now that difference only while a trigger
+  waits, else 0 (`TestProcessorLag`).
+- A poller stopped by its context's end still counted as running, so a
+  node whose work was cancelled was never idle, and its drain waited out
+  the settle's bound (10 s), keeping every other termination (a budget
+  of one) out of the run's clients' phase; the poller now leaves the
+  count when its loop ends (`TestStoppedPollersAreIdle`).
+
+What the platform note's acceptance got wrong:
+
+- "`noDrainDelay`, which with lag fails `NoClientErrors`": no client
+  call fails. grist/client and gristsim's clients retry a refused try
+  under its key, so every answer is right and every call completes; what
+  the router's lag costs is the tries, so `NoClientErrors` is defined
+  over them (the step's `refused` count), and the mutant's claim is
+  `Some(ClientErrors())`, qtest having no negation of an expectation.
+- "a router without lag (ablation) makes the endpoint-lag test pass the
+  mutant": only once a try sent before the shutdown is served. As first
+  built a simulated server refused what reached it after its close, and
+  2 of 6 runs without any lag refused tries in flight at the signal;
+  a real `http.Server`'s shutdown serves the connections it has.
+- "`stopNodeAtSignal` leaves an at-most-once outcome `grist.unknown` in
+  some run": only once the simulated transport stops at a cancelled
+  context (above), and only when a signal lands while a payment is in
+  flight on that node: with three nodes 5 runs in 40, with two 12, so
+  the claim's cluster has two nodes and a bank taking 900 ms.
+- `gristsim.Cluster`'s slice-2 fields are `Grace`, `EndpointLag` and
+  `Disruptions`, as listed, and three the note did not name: `Drain`
+  (the app's schedule, which the binary passes `grist.WithDrain`),
+  `Rolling` and `Pace`. A simulated node is never killed at its grace:
+  its drain is budgeted into it and each phase ends in time; the kill is
+  qenv's, tested there. Option `short` is qenv's, not the Cluster's.
+  "Down by them" in the budget is moot: a terminated process restarts at
+  once.
+- A rolling restart that terminates the next node as soon as the last
+  is back up (as a Deployment does without `minReadySeconds`) empties a
+  two-node router's view when the next one's removal reaches it before
+  the last one's addition: 3 runs in 10 refused 26 tries of a call, the
+  app blameless. `Rolling` waits for the restarted node in the view.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

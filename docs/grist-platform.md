@@ -2,8 +2,11 @@
 
 Status: design, 2026-10-28, for docs/ROADMAP.md's GR10; slice 1
 (identity, probes, the drain) built 2026-10-28 (docs/grist.md §0.15
-says what building it changed, and what its acceptance got wrong).
-Nothing else below is built; every proposed API is in ```text blocks, and every name it
+says what building it changed, and what its acceptance got wrong), and
+slice 2 (graceful termination, the router, `gristsim.Cluster`) the same
+day (docs/grist.md §0.16, likewise). Nothing else below is built; every
+proposed API is in ```text blocks (slice 2's are as built: §4 says
+where it differs), and every name it
 takes from an existing package (`qenv.Stalls`, `qmeta.CalibrateTimeout`,
 `qnemesis.Target`, ...) exists today. Read docs/grist.md (§2.6
 processors, §3.4 leases, §3.5 seams, §3.8 the real tier) and
@@ -403,9 +406,9 @@ met it, and a Script or a qnemesis journal names it.
 | cluster behaviour | in qenv today | new | claim it serves |
 | --- | --- | --- | --- |
 | OOMKill, SIGKILL, node loss, spot reclaim | crash nemesis `nemesis.crash.<proc>` | hosts: processes sharing a failure domain, `nemesis.host.<h>` crashing all of them | at-least-once repeats, at-most-once losses: admitted, and named |
-| eviction, preemption, rolling restart, scale-down | none (a crash has no grace) | `nemesis.terminate.<proc>`: a context the process's tasks read (`qenv.Terminating(ctx)`), then a crash at the grace; option `short` (node-pressure eviction's reduced grace) | drain within grace (one at least the longest call's timeout): no at-most-once outcome unknown, the settle recorded |
-| endpoints lag (kube-proxy, Gateway, mesh) | none | a router double `qenv.NewRouter(s, name, procs...)`: which ready backend is a schedule choice `route.<name>`; its view lags by `route.<name>.lag` (`stale`: a terminating backend still chosen, a ready one not yet) | no client sees an error the app could have avoided; `Completes()` |
-| PodDisruptionBudget | none | `Cluster.Disruptions`: terminate nemeses enabled only while fewer than that many nodes are terminating or down by them (crashes are involuntary: not budgeted, as a PDB does not cover them) | availability through a drain |
+| eviction, preemption, rolling restart, scale-down | built (slice 2): `Sim.Terminations`, `nemesis.terminate.<proc>`, `Process.Terminate`, `Exit` | `nemesis.terminate.<proc>`: a context the process's tasks read (`qenv.Terminating(ctx)`), then a crash at the grace, then the restart; option `short` of `terminate.<proc>.grace` (node-pressure eviction's reduced grace) | drain within grace (one at least the longest call's timeout): no at-most-once outcome unknown, the settle recorded |
+| endpoints lag (kube-proxy, Gateway, mesh) | built (slice 2): `qenv.NewRouter(s, name, lag, procs...)` | a router double: which endpoint of its view (a backend's incarnation) is a schedule choice `route.<name>`; its view lags by `lag` under `route.<name>.lag` (`stale`: a terminating backend still chosen, a ready one not yet); a request to an endpoint gone, or to a listener closed when it was sent, is refused | no client sees an error the app could have avoided: `gristtest.NoClientErrors()`, over the tries (a refused try is retried under its key, so no call errs); `Completes()` |
+| PodDisruptionBudget | built (slice 2): `Termination.Budget`, `Cluster.Disruptions` | terminate nemeses enabled only while fewer than that many nodes are terminating (a terminated node restarts at once; crashes are involuntary: not budgeted, as a PDB does not cover them) | availability through a drain |
 | CFS throttling, GC, node pressure | `Sim.Stalls` (`Pause`, `Slow`) | presets: `gristsim.Throttled(cpuLimit)` | leases and timeouts survive stalls |
 | NTP skew, drift, VM pause | `Sim.Clocks` | none | §3.5's lease, as examples/lease |
 | NetworkPolicy, zone partition | `Network.Partition`, `PartitionNemesis` | zones: a group of hosts, `nemesis.zone.<z>` cutting it off (and, as an option, the store with it) | `Completes()` and `Settles()` after the heal |
@@ -423,7 +426,10 @@ met it, and a Script or a qnemesis journal names it.
 | CSI attach and detach, RWO multi-attach while a pod moves | none | a restart delay on the moved process (`Process.RestartAfter`) | `within` bounds on recovery; the lint's StatefulSet rule |
 | API server: watches, 410 relists, conflicts, informer lag, throttling, outages | kubesim (fleetrollout; published by H7): conflicts, lost responses, status lag | an unstructured kubesim: watches with resourceVersion and bookmarks, `kube.watch.gone` (410 after compaction), `kube.watch.lag` (informer staleness: a read of one's own write fails), `kube.request.throttled` (429 + `Retry-After`), finalizers and owner-reference GC, `nemesis.apiserver` (an outage, then a relist storm: a qload case) | only for apps using the API (§5.6, GR7): grist itself never calls it |
 
-What gristsim gains is one optional field:
+What gristsim gains is one optional field (slice 2 built `Grace`,
+`EndpointLag`, `Disruptions`, and `Drain`, `Rolling` and `Pace`, which
+this sketch did not name: docs/grist.md §0.16; the rest come in later
+slices):
 
 ```text
 gristsim.Config{Nodes: 3, Cluster: &gristsim.Cluster{
@@ -437,9 +443,12 @@ gristsim.Config{Nodes: 3, Cluster: &gristsim.Cluster{
 ```
 
 With `Cluster` set, every node serves the API (not only the first), the
-node runs `Main`'s drain schedule (the same code: `grist.Drain` is a
-function of `qenv.Sleep` and the node's state), and the claims a
-deployment needs are ready-made:
+node runs `Main`'s drain schedule (the same code: grist's `runDrain`,
+the schedule, the settle on `qenv.Now` and `qenv.Sleep`, the stop and
+the flush, each tier giving its server's delay and shutdown), and the
+claims a deployment needs are ready-made (slice 2 built
+`NoClientErrors` and its negation `ClientErrors`; `Deploy` waits for
+the later slices' faults):
 
 ```text
 // package gristtest
@@ -823,17 +832,30 @@ ablated.
    alone outrun the grace. The recorder's metadata (namespace, host,
    zone) waits for G8 and the generated 45 s grace for slice 8: slice 1
    prints the fields and the grace the drain needs on the startup line.
-2. **Graceful termination and the router in qenv and gristsim (core,
-   M).** `nemesis.terminate.<proc>`, `qenv.Terminating`, the router
-   double (`route.<name>`, `route.<name>.lag`), `gristsim.Cluster`'s
-   `Grace`, `EndpointLag`, `Disruptions`, every node serving the API.
-   **Example: counters** (the at-most-once payout). **Acceptance**: the
-   mutant `stopNodeAtSignal` (the node's ctx cancelled at SIGTERM, the
-   bug main.go's comment records) leaves an at-most-once outcome
-   `grist.unknown` in some run under terminations within grace, where
-   the faithful app records none and is `All(Completes())`; a router
-   without lag (ablation) makes the endpoint-lag test pass the mutant
-   `noDrainDelay`, which with lag fails `NoClientErrors`.
+2. **Done** (docs/grist.md §0.16). **Graceful termination and the
+   router in qenv and gristsim (core, M).** `nemesis.terminate.<proc>`,
+   `qenv.Terminating`, the router double (`route.<name>`,
+   `route.<name>.lag`), `gristsim.Cluster`'s `Grace`, `EndpointLag`,
+   `Disruptions`, every node serving the API. **Example: counters** (the
+   at-most-once payout), simulated (`TestRollingRestart`) and on three
+   real pods behind a router polling `/readyz` (`TestRealRollingRestart`).
+   **Acceptance**: the mutant `stopNodeAtSignal` (the node's ctx
+   cancelled at SIGTERM, the bug main.go's comment records) leaves an
+   at-most-once outcome `grist.unknown` in some run under terminations
+   within grace, where the faithful app records none and is
+   `All(Completes())`; a router without lag (ablation) makes the
+   endpoint-lag test pass the mutant `noDrainDelay`, which with lag
+   fails `NoClientErrors`. As built (docs/grist.md §0.16): no call of
+   the mutant's fails, its refused tries being retried under their
+   keys, so `NoClientErrors` counts the tries and the mutant's claim is
+   `Some(ClientErrors())`; the lag's ablation holds once a try sent
+   before the shutdown is served, as an `http.Server`'s shutdown serves
+   its connections; `stopNodeAtSignal` needed `qenv.Service.Call` to
+   stop at a cancelled context (it ran to its answer), and a payment in
+   flight at a signal on its node: two nodes and a slow bank, 12 runs
+   in 40. Two slice-1 defects found: `grist_processor_lag` never 0 for
+   a caught-up processor while other events came, and a stopped poller
+   counted as running (a cancelled node never idle).
 3. **Store failover and restore (core, M).** `store.<name>.failover`
    with `loseTail`, `nemesis.restore.<store>`, `Store.Connections`;
    grist's `ErrRewound` and `<app> resume`. **Example: wallet-grist**

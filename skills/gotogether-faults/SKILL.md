@@ -169,6 +169,25 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   on the new code, whose replay can repair what the old code got wrong
   (examples/raftkv: a log format the v1 node skipped, caught in 8 of 20
   paused rollouts and almost never in full ones).
+- **Graceful termination and a lagging router:**
+  `s.Terminations(qenv.Termination{Grace: 30 * time.Second, Budget: 1},
+  procs...)` makes SIGTERM a nemesis per process
+  (`nemesis.terminate.<name>`; `p.Terminate()` sends one where a test
+  wants it): every context `qenv.Terminating(ctx)` gave its tasks is
+  cancelled, the process drains and calls `p.Exit()`, or is killed at
+  the grace (a crash); either way it restarts. `Short` adds option
+  `short` of `terminate.<name>.grace` (an eviction's reduced grace);
+  `Budget` is a PodDisruptionBudget. `qenv.NewRouter(s, name, lag,
+  procs...)` is a load balancer: `Pick` returns an `Endpoint` (a
+  process's incarnation) of its view, by the schedule choice
+  `route.<name>`, and the view learns of each backend's change of
+  readiness (terminating, down, restarted) `lag` late under
+  `route.<name>.lag`'s option `stale`: a request to an endpoint that is
+  `Gone`, or to a server that shut its listener, is refused. A drain must
+  keep serving longer than the lag. `Service.Call` stops at a cancelled
+  context (the outcome unknown), as a real client does: code that cancels
+  its work at SIGTERM loses at-most-once outcomes (grist's
+  `gristsim.Cluster` runs all of it for an app).
 - **Clock drift and leaders:** a lease is timed on each node's own
   clock, and under drift an election is won by the fastest clock, the
   one whose lease ends first. The unsafe case (a slow leader) needs the

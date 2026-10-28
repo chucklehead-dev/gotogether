@@ -68,6 +68,15 @@ module counters {
   val everyPayoutOutcomeLogged =
     atMostOnceOutcomesLogged(log, effects, "payout", t => if (t > 0 and t <= log.length()) payoutSucceeded(log, t) else [])
 
+  // test-only: no payout's outcome is unknown (grist.unknown). At most
+  // once admits one (a lost answer, a timeout: the bank may have paid);
+  // a node that lets its effects in flight finish before it stops
+  // (grist's drain) records none under graceful terminations alone,
+  // where a node whose work is cancelled at the signal does
+  // (stopNodeAtSignal)
+  // grist: violable terminating
+  val noPayoutUnknown = log.indices().forall(i => not(log[i].typ == "grist.unknown" and log[i].strs[0] == "payout"))
+
   // test-only: one ok welcome per counter. At least once allows more, by
   // right; an application whose effect must not repeat states it so
   // grist: violable once

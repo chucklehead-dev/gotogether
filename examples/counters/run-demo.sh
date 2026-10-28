@@ -16,6 +16,13 @@
 # eventual vals judged on the settle; a retirement's payout goes to the
 # bank, served beside the node behind grist.ServeCalls (its payments
 # recorded into the same file under a recorder of their own).
+#
+# ROLLING=1 runs GR10 slice 2's rolling restart under load: simulated
+# (gristsim.Cluster: nodes drained in turn behind a router whose view
+# lags) and on three real pods of the binary behind a router polling
+# /readyz; no client's try refused, no payout unknown, /metrics' lag at 0
+# before each settle. MUTATION=no-drain-delay or stop-node-at-signal
+# shows what catches its mutants.
 set -euo pipefail
 cd "$(dirname "$0")"
 if [ -n "${SERVE:-}" ]; then
@@ -48,10 +55,17 @@ if [ -n "${SERVE:-}" ]; then
   (cd ../.. && go run ./cmd/gotogether validate -binding examples/counters/counters.binding.yaml "$dir/steps.jsonl")
   exit
 fi
+if [ -n "${ROLLING:-}" ]; then
+  echo "== counters: a rolling restart under load (simulated, then three real pods)"
+  go test -count=1 -timeout 30m -run 'TestRollingRestart$|TestRealRollingRestart$' -v . | grep -E '^(--- |ok|FAIL)|runs, |restarted in turn'
+  exit
+fi
 case "${MUTATION:-}" in
   "") run='TestFaithful$|TestFaithfulAtClaim1$|TestDuplicateRequests$|TestWelcomeDuplicate$' ;;
   blind) run='TestMutants$/^blind$' ;;
   dispatch-direct) run='TestMutants$/^dispatchDirect$' ;;
+  no-drain-delay) run='TestMutants$/^noDrainDelay$' ;;
+  stop-node-at-signal) run='TestMutants$/^stopNodeAtSignal$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 echo "== counters ${MUTATION:+(mutation $MUTATION)}"

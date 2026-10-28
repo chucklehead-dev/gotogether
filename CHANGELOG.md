@@ -49,6 +49,19 @@ The first release. What a user meets, by module:
   `GraphStates` and `GraphDepth` (`simulate.terminal`, `graphStates`,
   `graphDepth`). New flags `-graph`, `-depth`, `-out`; `-states` bounds
   the graph under `-graph`.
+- grist: a simulated cluster (GR10 slice 2, docs/grist.md §0.16).
+  `gristsim.Config.Cluster` (`gristsim.Cluster{Grace, Drain,
+  EndpointLag, Disruptions, Rolling, Pace}`, `gristsim.DefaultGrace`
+  45 s): every node serves the API behind a lagging router and drains at
+  its termination as `grist.Main` does (one schedule), then restarts.
+  `grist.Terminating(ctx)`: a context ended at the signal (Main's first
+  SIGTERM, a simulated process's termination). A client call's step
+  counts its refused tries (field `refused`: grist/client counts a
+  refused connection and a 502 or 503 without grist's answer);
+  `gristtest.NoClientErrors()` and `ClientErrors()` judge them.
+  `grist_processor_lag` is 0 while no trigger waits (it was head minus
+  checkpoint, never 0 for a caught-up processor while other events
+  came).
 - `woven` (ROADMAP H5, DESIGN §60): the woven builds' ABI, what code
   woven by qenv/weave's aspects, `qweave -cover` and `qweave -mutate`
   calls (`MutexLock`, `RLock`, `Add`, `Go`, ...; `Hit`,

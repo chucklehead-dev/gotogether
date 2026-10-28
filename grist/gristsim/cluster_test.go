@@ -43,7 +43,7 @@ func count(log []string, s string) int {
 
 // A rolling restart of three nodes behind a router that learns of each
 // change late (route.api.lag stale at every change): with the drain's
-// delay (grist.DrainDelay, 5 s) longer than the router's lag (3 s), every
+// delay (5 s on an orchestrator) longer than the router's lag (3 s), every
 // node drains and exits within its grace, is restarted, and no client's
 // try is refused; with no delay (the server shut at the signal) the
 // router sends tries to a node that no longer takes them, in some run;

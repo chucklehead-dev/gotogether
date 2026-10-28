@@ -39,7 +39,7 @@ type Cluster struct {
 	Grace time.Duration
 	// Drain is the node's drain schedule, the app's own (what its binary
 	// gives grist.WithDrain): its zero fields are grist's defaults on an
-	// orchestrator (grist.DrainDelay, then 10 s each), its Grace Grace
+	// orchestrator (a 5 s delay, then 10 s each), its Grace Grace
 	// unless set.
 	Drain grist.Drain
 	// EndpointLag is how late the router may learn of a node's change of
