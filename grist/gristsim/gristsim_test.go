@@ -113,7 +113,7 @@ func bothSides(t *testing.T, steps []qtrace.Step) {
 	}
 }
 
-// Gen draws every field from the alphabet and 1 to 3.
+// Gen draws every field from the alphabet and the integers.
 func TestGen(t *testing.T) {
 	type Args struct {
 		S string
@@ -121,7 +121,7 @@ func TestGen(t *testing.T) {
 		B bool
 	}
 	picks := 0
-	v := gristsim.Gen(qreflect[Args](), []string{"x", "y"}, func(n int) int { picks++; return n - 1 }).(Args)
+	v := gristsim.Gen(qreflect[Args](), []string{"x", "y"}, []int{-1, 0, 3}, func(n int) int { picks++; return n - 1 }).(Args)
 	if v != (Args{S: "y", N: 3, B: true}) || picks != 3 {
 		t.Errorf("Gen = %+v in %d picks, want the last of each", v, picks)
 	}

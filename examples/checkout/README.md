@@ -36,7 +36,7 @@ A line-of-business app checked against its model under fault injection.
 ```sh
 go test ./examples/checkout/...                 # explorations of every case below, Hegel shrinking (~2 min; -short: fewer seeds)
 examples/checkout/run-demo.sh                   # simulate, write step logs, gotogether validate them
-MUTATION=lock-without-write ISOLATIONS=snapshot examples/checkout/run-demo.sh
+MUTANT=lockWithoutWrite ISOLATIONS=snapshot examples/checkout/run-demo.sh
 ```
 
 ## What each bug looks like, at each isolation level

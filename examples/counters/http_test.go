@@ -30,7 +30,7 @@ func TestHTTPTier(t *testing.T) {
 	// same-key retry is the HTTP tier's point, and at the default a run's
 	// few dozen responses lost none in 3 of 3 runs once its choices moved
 	sys := system(commits, cfg).WithRates(faulty.Set("rpc.api.response", 0.15))
-	n := qtest.ExploreConfig{Seeds: seeds(20, 3)}
+	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}
 	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
 			qtest.Reaches("rpc.api.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
@@ -56,7 +56,7 @@ func TestHTTPDuplicateRequests(t *testing.T) {
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"}, HTTP: true,
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
 	sys := system(commits, cfg).WithRates(rates)
-	n := qtest.ExploreConfig{Seeds: seeds(20, 3)}
+	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}
 	sys.Explore(t, n).Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
 	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).Expect(t, qtest.Conforms())
 }

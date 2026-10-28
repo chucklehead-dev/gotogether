@@ -73,6 +73,6 @@ resends its decision until each participant answers.
 | `TestModelDrivenMutants` | `connect.Replay` | the model's traces catch `EarlyCommit` at its first prepare, and never ask for the impatient abort |
 
 `./run-demo.sh` explores the model's graph, then simulates 30 seeds and
-validates their step logs with `gotogether validate`; `MUTATION=early-commit
-| impatient | volatile-decision` injects a bug into the code,
+validates their step logs with `gotogether validate`; `MUTANT=earlyCommit
+| impatient | volatileDecision` injects a bug into the code,
 `MODEL=early-decision` into the model.

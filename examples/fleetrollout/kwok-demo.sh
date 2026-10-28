@@ -2,7 +2,7 @@
 # Roll web:v2 out across three kwok clusters with the real controller
 # (multicluster-runtime), then check its step logs against the model.
 #
-#   MUTATION=ignore-observed-generation | in-memory-progress   inject a bug
+#   MUTANT=ignoreObservedGeneration | inMemoryProgress   inject a bug
 #   KILL=1     kill -9 the controller after its first patch, then start it again
 #   KEEP=1     leave the clusters running (they are reused next time)
 #   TRACE=f    time pods by a SimKube trace's lifetimes (f relative to this
@@ -13,6 +13,8 @@
 # the binary runtime downloads etcd and the Kubernetes binaries, no Docker.
 set -euo pipefail
 cd "$(dirname "$0")"
+# the binary takes the mutation kebab-cased (noLocks: no-locks)
+mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 members=(m1 m2 m3)
 out=$(mktemp -d)
 go build -o "$out/fleet-controller" ./cmd/fleet-controller
@@ -43,7 +45,7 @@ for m in "${members[@]}"; do
 done
 echo "fleet ready at web:v1: ${members[*]}"
 
-start() { "$out/fleet-controller" "${args[@]}" -mutation "${MUTATION:-}" -steps "$out/steps-$1.jsonl" >"$out/controller-$1.log" 2>&1 & pid=$!; }
+start() { "$out/fleet-controller" "${args[@]}" -mutation "$mutation" -steps "$out/steps-$1.jsonl" >"$out/controller-$1.log" 2>&1 & pid=$!; }
 start 1
 if [[ -n "${KILL:-}" ]]; then
   until grep -q '"patch"' "$out/steps-1.jsonl" 2>/dev/null; do sleep 0.1; done

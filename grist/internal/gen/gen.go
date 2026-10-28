@@ -93,6 +93,12 @@ type Generated struct {
 	// them when there is no such file): the skeleton does not typecheck
 	// until they are written.
 	Missing []string
+	// Warnings are inputs of the app's own rules that changed since the
+	// generated events file under dir was written: a read model that
+	// folds an event type it did not, an event type whose fields changed.
+	// The app's folds and rules still typecheck, so nothing else would
+	// say so: a fold's else branch skips a new type silently.
+	Warnings []string
 }
 
 // A Hole is one definition the generated skeleton leaves to the
@@ -223,6 +229,11 @@ func Generate(app App, dir string) (Generated, error) {
 		if !g.defined[h.Name] {
 			out.Missing = append(out.Missing, h.Name)
 		}
+	}
+	if prev, err := readOwn(dir, genFile(c.Name)); err != nil {
+		return Generated{}, err
+	} else if prev != nil {
+		out.Warnings = inputsChanged(c.Name, prev, events)
 	}
 	if cycle, err := importCycle(dir, out.Files); err != nil {
 		return Generated{}, err
@@ -1752,3 +1763,90 @@ func scalarFields(t reflect.Type) ([]field, error) {
 }
 
 func quintScalar(t reflect.Type) string { return catalog.QuintScalar(t) }
+
+// The generated events file's read model selections and event
+// constructors, as eventsModule writes them: what inputsChanged compares.
+var (
+	selectionDef   = regexp.MustCompile(`(?m)^  pure def (\w+)Events\(log: List\[Event\][^)]*\): List\[Event\] = log\.select\(e => Set\(([^)]*)\)\.contains`)
+	constructorDef = regexp.MustCompile(`(?m)^  pure def \w+\(([^)]*)\): Event =\n    \{ typ: "([^"]+)"`)
+)
+
+// inputsChanged compares the events file generated before (prev) with
+// the one generated now (next): a read model selecting an event type it
+// did not, or no longer selecting one, and an event type whose fields
+// changed, each with the read models folding it. Blocks added or removed
+// are not warned of: a new one's holes are Missing, a removed one's
+// defs fail the typecheck.
+func inputsChanged(app string, prev, next []byte) []string {
+	selections := func(b []byte) (map[string][]string, []string) {
+		m, order := map[string][]string{}, []string{}
+		for _, x := range selectionDef.FindAllSubmatch(b, -1) {
+			var types []string
+			for _, t := range strings.Split(string(x[2]), ",") {
+				types = append(types, strings.Trim(strings.TrimSpace(t), `"`))
+			}
+			m[string(x[1])] = types
+			order = append(order, string(x[1]))
+		}
+		return m, order
+	}
+	constructors := func(b []byte) (map[string]string, []string) {
+		m, order := map[string]string{}, []string{}
+		for _, x := range constructorDef.FindAllSubmatch(b, -1) {
+			m[string(x[2])] = string(x[1])
+			order = append(order, string(x[2]))
+		}
+		return m, order
+	}
+	oldSel, _ := selections(prev)
+	newSel, selOrder := selections(next)
+	oldCons, _ := constructors(prev)
+	newCons, consOrder := constructors(next)
+	rules := rulesFile(app)
+	var out []string
+	for _, rm := range selOrder {
+		was, ok := oldSel[rm]
+		if !ok {
+			continue
+		}
+		now := newSel[rm]
+		var gained, lost []string
+		for _, t := range now {
+			if !slices.Contains(was, t) {
+				gained = append(gained, t)
+			}
+		}
+		for _, t := range was {
+			if !slices.Contains(now, t) {
+				lost = append(lost, t)
+			}
+		}
+		if len(gained) > 0 {
+			out = append(out, fmt.Sprintf("%sEvents folds %s now, which it did not when %s was generated: every fold over it in %s must handle the new type (a foldl's else branch skips it silently)",
+				rm, strings.Join(gained, ", "), genFile(app), rules))
+		}
+		if len(lost) > 0 {
+			out = append(out, fmt.Sprintf("%sEvents no longer folds %s: a fold in %s that handles it is dead code, and its read model's state may now mean less",
+				rm, strings.Join(lost, ", "), rules))
+		}
+	}
+	for _, typ := range consOrder {
+		was, ok := oldCons[typ]
+		if !ok || was == newCons[typ] {
+			continue
+		}
+		var folding []string
+		for _, rm := range selOrder {
+			if slices.Contains(newSel[rm], typ) {
+				folding = append(folding, rm+"Events")
+			}
+		}
+		where := ""
+		if len(folding) > 0 {
+			where = " (folded by " + strings.Join(folding, ", ") + ")"
+		}
+		out = append(out, fmt.Sprintf("event %s has fields (%s) now, (%s) when %s was generated: the folds and rules in %s reading it%s may need what changed",
+			typ, newCons[typ], was, genFile(app), rules, where))
+	}
+	return out
+}

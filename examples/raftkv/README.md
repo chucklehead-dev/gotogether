@@ -222,5 +222,5 @@ replays its schedule.
 ```sh
 go test ./...            # about 7 minutes; -short skips the slow searches
 ./run-demo.sh            # the faithful explorations
-MUTATION=lease-read ./run-demo.sh   # or no-request-id, slow-election, no-persist-vote, eager-v2, no-snapshot-report
+MUTANT=leaseRead ./run-demo.sh   # or noRequestId, slowElection, noPersistVote, eagerV2, noSnapshotReport
 ```

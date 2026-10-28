@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Prove the Choreo model's invariants over its whole state graph, then
 # simulate two-phase commit and check the step logs against the model
-# with gotogether. MUTATION=early-commit | impatient | volatile-decision
+# with gotogether. MUTANT=earlyCommit | impatient | volatileDecision
 # injects a bug into the code; MODEL=early-decision into the model (the
 # coordinator commits once any participant has prepared), which the
 # graph refutes with a counterexample quint replays.
 set -euo pipefail
 cd "$(dirname "$0")"
+# the binary takes the mutation kebab-cased (noLocks: no-locks)
+mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 out=$(mktemp -d)
 go build -o "$out/twophase-sim" ./cmd/twophase-sim
 (cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
@@ -25,8 +27,8 @@ early-decision)
   exit 0 ;;
 *) echo "MODEL=$MODEL: early-decision or nothing"; exit 2 ;;
 esac
-echo "== two-phase commit ${MUTATION:+(mutation $MUTATION)}"
-"$out/twophase-sim" -seeds "${SEEDS:-30}" -mutation "${MUTATION:-}" -out "$out/runs"
+echo "== two-phase commit ${MUTANT:+(mutant $MUTANT)}"
+"$out/twophase-sim" -seeds "${SEEDS:-30}" -mutation "$mutation" -out "$out/runs"
 if "$out/gotogether" validate -binding twophase.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then
   echo "all runs conform"
 else

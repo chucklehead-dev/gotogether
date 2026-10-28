@@ -62,6 +62,9 @@ func Command(app App, args []string, stdout io.Writer, usage func(msg string) er
 	if err != nil {
 		return err
 	}
+	for _, w := range g.Warnings {
+		fmt.Fprintf(stdout, "%s model: warning: %s\n", c.Name, w)
+	}
 	if *check {
 		if d := g.Diff(*dir); len(d) > 0 {
 			return fmt.Errorf("%s model: %s differ from what the catalog generates: regenerate with `%s model` and commit them", c.Name, strings.Join(d, ", "), c.Name)

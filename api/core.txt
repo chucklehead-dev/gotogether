@@ -1695,6 +1695,7 @@ type Exploration struct
     method (*Exploration) Vacuous() []Vacuity
 type ExploreConfig struct
     field Seeds int
+    field ShortSeeds int
     field Parallel int
     field Steer int
     field Chooser func(seed uint64) qenv.Chooser

@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Serve the ledger for real over gRPC with injected network faults, export
 # the server's otelgrpc spans, and check them against the model with
-# gotogether (converted by ledger.convert.yaml). MUTATION=no-dedupe |
-# no-funds-check | split-txn injects a bug; SEEDS picks how many loads.
+# gotogether (converted by ledger.convert.yaml). MUTANT=noDedupe |
+# noFundsCheck | splitTxn injects a bug; SEEDS picks how many loads.
 # The simulated tier (every fault, crash and interleaving a qenv choice) is
 # in the tests: go test ./... (DESIGN: examples/grpcledger/README.md).
 set -euo pipefail
 cd "$(dirname "$0")"
+# the binary takes the mutation kebab-cased (noLocks: no-locks)
+mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 out=$(mktemp -d)
 go build -o "$out/ledger-real" ./cmd/ledger-real
 go build -C ../.. -o "$out/gotogether" ./cmd/gotogether
 status=0
 for seed in $(seq 1 "${SEEDS:-3}"); do
-  echo "== load $seed ${MUTATION:+(mutation $MUTATION)}"
-  "$out/ledger-real" -seed "$seed" -mutation "${MUTATION:-}" -out "$out/spans$seed.json"
+  echo "== load $seed ${MUTANT:+(mutant $MUTANT)}"
+  "$out/ledger-real" -seed "$seed" -mutation "$mutation" -out "$out/spans$seed.json"
   if "$out/gotogether" validate -binding ledger.binding.yaml -convert ledger.convert.yaml "$out/spans$seed.json" > "$out/report$seed"; then
     echo "conforms"
   else

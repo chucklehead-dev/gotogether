@@ -35,8 +35,8 @@ semantics:
 go test ./...                                                        # in this module: explorations, Hegel (~4 min)
 go test -short ./...                                                 # the per-push tier: 2 to 26 seeds an exploration, no Hegel
 ./kwok-demo.sh                                                       # the real controller on three kwok clusters
-MUTATION=ignore-observed-generation ./kwok-demo.sh
-KILL=1 MUTATION=in-memory-progress ./kwok-demo.sh
+MUTANT=ignoreObservedGeneration ./kwok-demo.sh
+KILL=1 MUTANT=inMemoryProgress ./kwok-demo.sh
 TRACE=../sktrace/testdata/cronjob.sktrace ./kwok-demo.sh          # pods timed by a production trace
 ```
 

@@ -99,7 +99,7 @@ build a binary each), so the example is
    the append are separate transactions, so a loser whose append began
    after the winner's commit sees no conflict. Either the docs overstate
    it or grist has a bug; I dropped the assertion and wrote it down.
-   *Resolved (docs/grist.md §0.8): the guess is right, by design. The
+   *Resolved (docs/HISTORY.md (grist §0.8)): the guess is right, by design. The
    reads are store reads pinned before the append, whose transaction
    begins after them, so no level protects an `Unconditioned` decision;
    the docs were wrong (counters' 0 of 120 was its shape's luck: 2 of 60
@@ -219,7 +219,7 @@ build a binary each), so the example is
 
 ## Follow-up
 
-What the trial's findings changed (docs/grist.md §0.8): `Unconditioned`
+What the trial's findings changed (docs/HISTORY.md (grist §0.8)): `Unconditioned`
 is documented as unprotected at every isolation level, and
 `readThenWrite` is claimed at Serializable (`Some(Rejects("transfer"))`,
 80 seeds, full mode); `grist.Main serve` records a settle on shutdown,
@@ -234,7 +234,7 @@ unaffected; Quint's reserved names are listed in AGENTS.md and the
 skill. The generator, the harness helpers and typed dependencies are
 ROADMAP's grist track.
 
-## After GR2 (docs/grist.md §0.9)
+## After GR2 (docs/HISTORY.md (grist §0.9))
 
 What this log asked for first is built, and this example moved onto it:
 the model's skeleton and all three bindings are generated from the

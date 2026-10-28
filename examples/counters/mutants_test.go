@@ -56,7 +56,7 @@ func TestMutant(t *testing.T) {
 		// TestFaithfulAtClaim1 is its contrast
 		claim1 := gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}
 		x := system(commits, claim1).
-			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)})
+			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4})
 		x.Expect(t, qtest.Some(qtest.Rejects("createCounter")))
 		// the rejection says why (H2), in grist's terms: the blind commit's
 		// condition, which an append after its reads broke
@@ -70,7 +70,7 @@ func TestMutant(t *testing.T) {
 		}
 		claim1.SQL = true
 		system(commits, claim1).
-			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
+			WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4}).
 			Expect(t, qtest.Some(qtest.Rejects("createCounter")))
 	case "dispatchDirect":
 		// Claim 4: grain's processor duplicate is caught. One tenant, creates
@@ -79,10 +79,10 @@ func TestMutant(t *testing.T) {
 		// head. Without faults in 15 of 30 runs (5 seeds miss with chance
 		// 3%), with commit faults and crashes in 22 of 30 (4 seeds: 0.5%)
 		cfg := gristsim.Config{Tenants: []string{"t1"}, Send: []string{"create-counter", "increment-counter"}}
-		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 5)}).
+		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 5}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
 		cfg.CommitFaults = true
-		system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
+		system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
 		// the same on the SQL tier, without faults: 18 of 30 runs (4 seeds
 		// miss with chance 3%). Full mode: the raw append is the mutant's,
@@ -91,7 +91,7 @@ func TestMutant(t *testing.T) {
 			return
 		}
 		cfg.CommitFaults, cfg.SQL = false, true
-		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(8, 4)}).
+		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4}).
 			Expect(t, qtest.Some(qtest.Mismatch("average")))
 	case "checkpointFirst":
 		// The welcome declared at most once while the model says at least
@@ -103,7 +103,7 @@ func TestMutant(t *testing.T) {
 		// without faults), not a lost mail: the at-most-once loss is the
 		// payout's claim (TestPayoutAtMostOnce)
 		cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Send: []string{"create-counter"}}
-		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 2)}).
+		system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 2}).
 			Expect(t, qtest.Some(qtest.Rejects("welcome")))
 	case "silentPayout":
 		// The payout without its success event: a payment made leaves no
@@ -111,16 +111,16 @@ func TestMutant(t *testing.T) {
 		// payment loses it, by right), so the retiring binding admits every
 		// run; the test-only everyPayoutOutcomeLogged rejects every run that
 		// paid, without faults 6 of 6
-		system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+		system(retiring, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2}).
 			Expect(t, qtest.Conforms())
-		system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+		system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2}).
 			Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("everyPayoutOutcomeLogged"))))
 	case "anyoneRetires":
 		// retire-counter without its creator check: a client retires the
 		// other's counter, which the model's ok requires createdBy of
 		// (the step's caller): Some(Rejects("retireCounter")), without
 		// faults 6 of 6
-		system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+		system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2}).
 			Expect(t, qtest.Some(qtest.Rejects("retireCounter")))
 	case "wrongAmount":
 		// the payout paying one more than the retired total: a request the
@@ -128,20 +128,20 @@ func TestMutant(t *testing.T) {
 		// recorded. Without faults at paying's shape (every run retires) the
 		// bank's served record comes first (it is recorded inside the call,
 		// before the payout's completion): every run rejects bankPayServed.
-		system(retiring, paying).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1)}).
+		system(retiring, paying).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 4, ShortSeeds: 1}).
 			Expect(t, qtest.All(qtest.Rejects("bankPayServed")))
 		// the bank's answer lost and the node crashed while the payout
 		// waits: the payout's call stays pending (at most once: never made
 		// again), so the bank's record is the only one of the wrong payment.
 		// Every run rejects bankPayServed; with the site judging no request
 		// (as slice 2 built it) every run conformed
-		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1), Chooser: lostThenCrash}).
+		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: 4, ShortSeeds: 1, Chooser: lostThenCrash}).
 			Expect(t, qtest.All(qtest.Rejects("bankPayServed")))
 		// the request lost: the bank applies nothing, and the payout's own
 		// step (outcome unknown) is the only record of what it asked, as on
 		// a tier where the dependency is a third party's (no site): every
 		// run rejects bankPay
-		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: seeds(4, 1), Chooser: scripted(
+		system(retiring, payOnce).Explore(t, qtest.ExploreConfig{Seeds: 4, ShortSeeds: 1, Chooser: scripted(
 			qenv.Scripted{Kind: "rpc.bank.request", Name: "drop"})}).
 			Expect(t, qtest.All(qtest.Rejects("bankPay")))
 		// the same shape over HTTP on the real tier (lostThenKilled): the
@@ -195,7 +195,7 @@ func TestMutant(t *testing.T) {
 		// was asked, in some run of the rolling restart, where the faithful
 		// app's are none (TestRollingRestart): 12 of 40 runs (10 seeds miss
 		// with chance 3%)
-		system(terminating, rolling).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 10)}).
+		system(terminating, rolling).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 10}).
 			Expect(t, qtest.Some(qtest.Violates("noPayoutUnknown")))
 	case "noDrainDelay":
 		// GR10 slice 2: no delay before the listener closes, while the
@@ -204,9 +204,9 @@ func TestMutant(t *testing.T) {
 		// some run of the rolling restart, where the faithful app's are
 		// none. With the router's lag off nothing needs the delay: every
 		// run is free of refusals, the mutant's too
-		system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+		system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 			Expect(t, qtest.Conforms(), qtest.Some(gristtest.ClientErrors()))
-		system(calls, rolling, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+		system(calls, rolling, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 			Expect(t, qtest.Conforms(), gristtest.NoClientErrors())
 		// the same on the real tier, three pods of the binary behind a
 		// router polling /readyz every 200 ms: a pod's listener closes at

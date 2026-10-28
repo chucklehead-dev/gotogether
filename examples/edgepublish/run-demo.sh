@@ -8,6 +8,9 @@
 #   OUT=dir            where binaries, traces and generated modules go (default: a temp dir)
 #   QUINT_BACKEND      quint test backend: rust (default) or typescript
 #   VERBOSE=1          print the full reports, not just the verdicts
+# happy and rotation-race must conform; ambiguous-seal (the model's known
+# findings F1/F3), manifest-first and no-lock must not (README's table): the
+# exit status is 1 when any scenario's verdict is not the expected one.
 set -uo pipefail
 cd "$(dirname "$0")"
 OUT=${OUT:-$(mktemp -d)}
@@ -19,9 +22,14 @@ go run github.com/DataDog/orchestrion go build -o "$OUT/demo" ./cmd/demo || exit
 echo; echo "\$ gotogether lint -binding binding.yaml -src publisher"
 "$OUT/gotogether" lint -binding binding.yaml -src publisher || exit 2
 
+status=0
 verdict() { # file -> one line: conformance, failing step, invariants, exit status
   local name=$1; shift
   local out; out=$("$OUT/gotogether" validate "$@" 2>&1); local rc=$?
+  case "$sc" in
+    happy | rotation-race) [ $rc -eq 0 ] || status=1 ;;
+    *) [ $rc -ne 0 ] || status=1 ;;
+  esac
   [ -n "${VERBOSE:-}" ] && echo "$out"
   printf '  %-9s %-28s exit %d  %s\n' "$name" "$(grep -m1 -o 'input .*: [a-zA-Z/ -]*$' <<<"$out" | sed 's/^input [^:]*: //')" "$rc" \
     "$(grep -E 'conformance:|invariant .*: (FAIL|PASS)|step [0-9]+ |violated after' <<<"$out" | sed -E 's/^ +//; s/ is not a transition.*/ disabled/; s/the model.s state does not match.*/state mismatch/' | paste -sd ';' -)"
@@ -35,3 +43,4 @@ for sc in ${SCENARIOS:-happy rotation-race ambiguous-seal manifest-first no-lock
   verdict "steps" -binding binding.yaml -dir "$d/v-steps" "$d/steps.jsonl"
   verdict "itf"                         -dir "$d/v-itf"   "$d"/itf/*.itf.json
 done
+exit $status

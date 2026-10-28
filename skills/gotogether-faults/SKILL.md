@@ -1,489 +1,57 @@
 ---
 name: gotogether-faults
-description: Test Go services against a Quint model under deterministic fault injection with gotogether's qenv package - write the app against seams (qenv.DB/Txn, broker and service interfaces, qenv.Go/Now/Sleep), deploy it into a simulated environment (crashable processes, a store at Serializable/SnapshotIsolation/ReadCommitted, an at-least-once queue, lossy RPC, fake Kubernetes API servers), explore seeds with System.Explore or shrink with Hegel (qhegel.Choices + qhegel.FindViolation), and carry the same model to a real environment (kwok, Maelstrom-style). Use when a system's correctness depends on retries, idempotency, outboxes, isolation levels, crashes, status lag or lost responses, or when a bug only shows up in a real environment.
+description: Test Go services against a Quint model under deterministic fault injection with gotogether's qenv - the app written against seams (qenv.DB/Txn, services, qenv.Go/Now/Sleep), deployed into a simulation (crashes, a store at three isolation levels, an at-least-once queue, lossy RPC, fake Kubernetes API servers), explored by seeds (System.Explore, Exhaust, Sweep, Fuzz) or shrunk by Hegel, then carried to a real environment. Use when correctness depends on retries, idempotency, outboxes, isolation levels, crashes, status lag or lost responses, or a bug shows only in a real environment.
 ---
 
 # Fault injection with qenv
 
-A fault is a choice the environment's contract allows:
-- a response lost after the request took effect;
-- a message redelivered;
-- a read from a snapshot;
-- a crash between two statements.
+A fault is a choice the environment's contract allows (a response lost
+after the request took effect, a redelivery, a snapshot read, a crash
+between two statements). qenv makes every such choice through one
+`Chooser`, option 0 always nominal, so a run replays from its choices and
+Hegel's shrinking removes faults.
 
-`qenv` runs the system deterministically and makes every such choice
-through one `Chooser`. Option 0 of every choice is nominal, so Hegel's
-shrinking removes faults.
+## Steps
 
-## 1. Write the app against seams
+1. Write the app against seams: `qenv.DB`/`Txn` (`GetForUpdate` for a
+   row read then written), `qenv.Table[T]` for typed records, small
+   interfaces over `qenv.Queue` and `qenv.Service`, `qenv.Go`/`Now`/`Sleep`,
+   maps iterated in sorted order. `gotogether lint -sim .` flags escapes.
+2. Record each step where its effect happens: `tx.OnCommit` for a
+   commit, the service for its own operations, `s.Context()` from hooks.
+3. Write one `Run(chooser, Config)` deploying the whole system:
+   `qenv.New`, the doubles, `s.Process` (crashable, rebuilt from durable
+   doubles on restart), `s.Run(d)`, then `return s.Settle(d)`.
+4. Make it a `qtest.System` (`gotogether scaffold -system`) and explore:
+   `sys.WithRates(r).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 5}).Expect(t, qtest.Conforms(), qtest.Reaches("rpc.x.request").Faulted())`.
+5. Plant a mutant per claim (`testdata/mutants/<name>`, `qtest.Mutants`)
+   and state how it shows (`Some(Rejects(...))`, `Violates`, `Mismatch`).
+6. Shrink a failure to the faults it needs: `qhegel.Shrink(t, sys)`;
+   reproduce one run with its report's `reproduce:` line.
+7. Carry the model to the real environment: the same binding judges
+   step logs from kwok, kind, Maelstrom or `qnemesis`'s faults.
 
-- **Data:** `qenv.DB` and `qenv.Txn` (Get, GetForUpdate, Put, Delete,
-  Scan, Commit, Rollback, OnCommit). In production, an adapter over
-  `database/sql` implements them. `qenv.Retry(ctx, db, n, fn)` begins,
-  runs fn and commits, again on a conflict: fn returns nil to commit and
-  never calls Commit itself.
-- **GetForUpdate or Get:** a row a transaction reads and then writes
-  from what it read (a balance debited, a stock decremented, a "done"
-  record checked before acting) is read with `GetForUpdate`, as SELECT
-  ... FOR UPDATE: under `SnapshotIsolation` two such transactions that
-  each `Get` the row both read the old value and the second's commit
-  aborts only if they write the same key (two rows checked together, a
-  joint balance, still skew), and under `ReadCommitted` the last writer
-  wins, a lost update. `Get` is for rows only read (a probe, a lookup
-  that decides no write). `Serializable` aborts what `Get` lets through,
-  but the code should not rely on the level it is tested at:
-  examples/wallet's `ReadThenWrite` and `WriteSkew` mutants are the two
-  mistakes, each caught.
-- **Typed records:** declare an app's own records once as a
-  `qenv.Table[T]` and read them without assertions:
+## References (when to read each)
 
-  ```go
-  var accounts = qenv.NewTable[[]Entry]("acct/") // keys "acct/<account>", values []Entry
-
-  es, _, err := accounts.GetForUpdate(tx, a) // a is the key after the prefix
-  accounts.Put(tx, a, append(slices.Clip(es), e))
-  for _, r := range accounts.Scan(tx) { /* r.Key is "<account>", r.Val a []Entry */ }
-  ```
-
-  Each method is the one Txn call on `prefix+k`, so isolation, commit
-  faults, the history check and any Txn wrapper see what they would of
-  the raw call. Values are shared and immutable: clip a slice before
-  appending (`slices.Clip`), copy a map before changing it. A key
-  holding another type (written raw) panics naming the key and both
-  types. Use a Table for an app's own records (examples/wallet's
-  accounts, examples/checkout's orders and stock); raw `Txn.Get`/`Put`
-  for an untyped flag or marker row, in code that implements or wraps
-  `Txn` (a recording DB, an adapter), and in tests through
-  `Store.Read`/`Store.Load` (whole store keys: `Table.Key(k)`); `qenv/qsql`
-  for relational data ([`references/sql.md`](references/sql.md)).
-- **Other services:** small interfaces of your own (a broker, a payment
-  client), implemented in the deployment over `qenv.Queue` and
-  `qenv.Service`.
-- **Concurrency and time:** `qenv.Go`, `qenv.Now` and `qenv.Sleep`, not
-  `go`, `time.Now` or `time.Sleep`. Outside a simulation they fall through
-  to the real thing.
-- **Iteration:** iterate maps in sorted order wherever the order affects
-  behaviour.
-- **Kubernetes controllers:** take readers and writers per cluster
-  through an interface (`Clusters`). In simulation, give them
-  controller-runtime fake clients behind `interceptor.Funcs`; that's the
-  seam where generation, conflicts, lag and lost responses happen
-  (examples/fleetrollout `kubesim`).
-
-## 2. Record steps where effects happen
-
-- **A commit:** `tx.OnCommit(func() { qobs.Record(ctx, "place", nil, "order", id, "qty", n) })`.
-  The hook runs when the commit is applied, even if the caller is told
-  the outcome is unknown.
-- **A remote service** records its own operations (a payment provider's
-  charges and refunds).
-- **A fake API server** records patches as it applies them. With real
-  clusters the controller records them when the update succeeds.
-- **Evidence:** record every read the code decides on, with its version
-  (`resourceVersion`), and let the model order evidence by it.
-- **On return, from the caller** (`//quint:action`): the step is what
-  the caller saw, and a crash before the return means no step. A crashed
-  task's deferred recording at `Close` goes to `Recorder.Interrupted`,
-  reported with a failing run but not checked. If the model must see an
-  effect whether or not its caller survives (a write that landed, then a
-  crash), record it at the effect's site instead.
-- **The actor:** a step's actor is its recorder's (`qobs.WithActor`),
-  and in a simulation every process records into the run's one recorder,
-  so the whole system is one actor, `default`: what a cluster's model
-  needs. Give actors only to independent histories (one account each).
-- **From a hook:** a crash or network hook runs outside any task; record
-  with the simulation's context, `s.Context()`, which carries the run's
-  recorder (`OnCrash`'s `stop`, `OnHeal`'s `heal`).
-- **Crash tests in a real environment** need a durable step log:
-  `qobs.FileSink(path, qobs.PerStep)` is (one write per step).
-  `qobs.Buffered` loses the last steps of a killed process, undetectably.
-
-## 3. Deploy into a simulation
-
-```go
-s := qenv.New(chooser)
-defer s.Close()
-db := qenv.NewStore(s, "shop", cfg.Isolation)
-q := qenv.NewQueue(s, "payments", nil)                           // its broker of no process: no partition reaches it
-provider := qenv.NewService(s, "provider", nil, p.Handle)          // its own process, never crashes
-api := s.Process("api", true, func(context.Context) {})              // crashable; handlers run in it
-s.Process("payments", true, func(ctx context.Context) { app.RunPayments(ctx, inbox{q}) })
-s.Spawn("client", func(ctx context.Context) { /* calls that retry on qenv.ErrTimeout */ })
-s.Run(20 * time.Second)       // with faults for 20s of virtual time; Run(0) lets no time pass
-return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; records the settle
-```
-
-- **Restarts:** a process's start function runs on boot and after every
-  restart. It must rebuild from durable doubles only. State the start
-  function makes is lost, which is the point; state a handler reaches
-  that was bound at construction (a `Service`'s handler, a struct the
-  test holds) is not. A crash runs `s.OnCrash` hooks, then kills the
-  process's tasks, and the restart's start function runs later, so a
-  request can reach the handler before the rebuild: clear such state in
-  an `s.OnCrash(func(p *qenv.Process) { ... })` hook for its process
-  (a node that served as leader after its crash, in a newcomer's
-  counter).
-- **Settles:** `Settle` records a settle in the trace when it finds the
-  system quiet, and only then are the binding's `eventually:` vals judged
-  (a step recorded after it, by a probe, needs `qobs.Settled` again).
-  Faults stay off after it, so a probe runs on the settled system; a run
-  of phases calls `s.ResumeFaults()` to fault again.
-- **Stuck runs:** `Run` returns `qenv.ErrStuck`, naming the tasks, and
-  `Settle` a `*qenv.Unsettled` (its `Stuck`), when a task waits with
-  nothing left to wake it (a lost message, a
-  missed Notify). Return the error from your `Run`; a task that may wait
-  forever by design (a server loop, a controller's or a relay's polling
-  loop) calls `qenv.Daemon(ctx)`, and a double's own receive waits with
-  `qenv.WaitIdle`. `Settle` also returns a `*qenv.Unsettled` when its
-  time runs out with a task that is no daemon still at work or waiting (a
-  retry loop that never ends, a wait a daemon's timer hid); in an
-  exploration that is no error but an outcome: such a run does not
-  conform, and `qtest.Settles()` states it alone.
-- **Quorum liveness:** `s.SettleCore(d, a, b)` heals the network and
-  leaves processes a and b alone while every other process goes on
-  crashing, pausing and losing requests (VOPR's liveness mode): a system
-  that needs only a quorum must still finish its work. Name every process
-  the core needs, a service's own included; the work of the others is no
-  pending work.
-- **Disks:** `qenv.NewDisk(s, p.Name, p)` is process p's machine's disk
-  (name each double uniquely: a second of one name panics):
-  writes reach the OS at once and the disk on `File.Sync`. When p crashes
-  the fault kind "disk.<name>.crash" decides: nominal (the process died,
-  the OS kept every write), "powerLoss" (only synced writes) or
-  "tornWrite" (power loss mid-write: part of the last one). Its I/O
-  faults: "disk.<name>.write" (`ErrNoSpace`, nothing written),
-  "disk.<name>.sync" (`ErrIO`: the writes are dropped, and a later
-  successful fsync does not bring them back, as on Linux) and
-  "disk.<name>.read" (a byte flipped: checksum what you read back).
-  Write a journal or a step log through it to see what an fsync buys.
-- **Upgrades:** `s.Upgrades("v2", startV2, procs...)` makes a rolling
-  upgrade a nemesis per process (`nemesis.upgrade.<name>`): each crashes
-  its process and restarts it running startV2, with `Process.Version`
-  "v2", at any step, so runs pass through every mix of versions (a v2
-  writer and a v1 reader, say); `Exhaust(t, qtest.Bound{Faults: 1})`
-  tries one upgrade at every point. Code that differs by version reads
-  `qenv.ProcessOf(ctx).Version`. `p.Upgrade(v, start)` makes one where a
-  test wants it, and `p.RestartAs` restarts a crashed process as another
-  version. The same model judges every version: never give one slack.
-  Test a rollout paused partway too: a finished one restarts every node
-  on the new code, whose replay can repair what the old code got wrong
-  (examples/raftkv: a log format the v1 node skipped, caught in 8 of 20
-  paused rollouts and almost never in full ones).
-- **Graceful termination and a lagging router:**
-  `s.Terminations(qenv.Termination{Grace: 30 * time.Second, Budget: 1},
-  procs...)` makes SIGTERM a nemesis per process
-  (`nemesis.terminate.<name>`; `p.Terminate()` sends one where a test
-  wants it): every context `qenv.Terminating(ctx)` gave its tasks is
-  cancelled, the process drains and calls `p.Exit()`, or is killed at
-  the grace (a crash); either way it restarts. `Short` adds option
-  `short` of `terminate.<name>.grace` (an eviction's reduced grace);
-  `Budget` is a PodDisruptionBudget. `qenv.NewRouter(s, name, lag,
-  procs...)` is a load balancer: `Pick` returns an `Endpoint` (a
-  process's incarnation) of its view, by the schedule choice
-  `route.<name>`, and the view learns of each backend's change of
-  readiness (terminating, down, restarted) `lag` late under
-  `route.<name>.lag`'s option `stale`: a request to an endpoint that is
-  `Gone`, or to a server that shut its listener, is refused. A drain must
-  keep serving longer than the lag. `Service.Call` stops at a cancelled
-  context (the outcome unknown), as a real client does: code that cancels
-  its work at SIGTERM loses at-most-once outcomes (grist's
-  `gristsim.Cluster` runs all of it for an app).
-- **Clock drift and leaders:** a lease is timed on each node's own
-  clock, and under drift an election is won by the fastest clock, the
-  one whose lease ends first. The unsafe case (a slow leader) needs the
-  leadership moved to it (raftkv's `TransferLeader`): enumerate drifts
-  with `Exhaust` over "clock.drift" after a transfer, not after an
-  election.
-- **Partitions:** `s.Net().PartitionNemesis(a, b, ...)` makes every link
-  between those processes a nemesis (cut, later healed): a `Service` call
-  across a cut loses its request and its response, for as long as it
-  lasts. A `Queue` whose broker runs in a process (`qenv.NewQueue(s, name,
-  broker)`) is partitioned too: a client cut off waits, and a consumer's
-  cut redelivers what it holds. A nemesis's cut heals by itself after
-  `s.Net().CutLength` (default 1 s): a run whose every task waits on a cut
-  would otherwise be stuck. `s.Net().Partition(a, b)` and `Heal` script
-  one, `OnCut` hooks a double's dropped connections; `Settle` heals them
-  all. `p.Spawn(name, fn)` starts a task in process p from outside it.
-- **Fault kinds per instance:** a double's kinds carry its name, as
-  `rpc.<name>.request` does: `queue.<name>.ack`, `store.<name>.commit`,
-  `disk.<name>.crash`. `"queue"` (in Rates, Without, a sweep) still covers
-  every queue's.
-- **Pauses and gray failures:** `s.Stalls = qenv.Stalls{Pause: 3 *
-  time.Second, Slow: time.Second, SlowFor: 10 * time.Second}`, before
-  creating processes, adds nemeses to every process: `pause.<p>` freezes
-  it for Pause at its tasks' next scheduling point (a GC, a SIGSTOP: a
-  lease holder wakes still trusting its lease), and `slow.<p>` keeps it
-  alive but makes each scheduling point cost Slow more for SlowFor (its
-  health checks pass while its work times out). Families
-  `nemesis.pause` and `nemesis.slow`; raise one alone with
-  `Rates.Set("nemesis.pause", 0.02)`. Not on the native runtime.
-  A request can also be late (`rpc.<name>.delay`), on by default: a
-  lock without fencing breaks on either, whatever the clocks do. Its
-  options: `late` (delivered just after the caller's timeout: processed
-  after it gave up), `lateDuplicate` (delivered, and a copy a timeout
-  after that, as a retransmission), `veryLate` (a timeout after the
-  caller's, past its retry, even one that backed off) and `slow` (at half
-  the timeout: late, but in time). `rpc.<name>.request` also
-  `duplicate`s a request: a handler that is not idempotent applies it
-  twice, so faithful code dedupes by a request id.
-- **Clocks:** a process has two, as a Go program does. `qenv.Now(ctx)`
-  is its wall clock; `qenv.Mono(ctx)` and `qenv.Since(ctx, m)` its
-  monotonic clock, what `time.Since` measures (a `time.Time` from Now
-  carries no monotonic reading, so `Now().Sub` is wall arithmetic). Set
-  `s.Clocks = qenv.Clocks{Skew: time.Second, Jump: 5 * time.Second,
-  Drift: 0.05}` before creating processes; a zero field leaves its fault
-  out. A skew ("clock.skew") and a drift ("clock.drift") are chosen per
-  process at their rates (raise them: `Rates.Set("clock.drift", 1)`); a
-  jump is a nemesis (`jump.forward.<p>`, `jump.back.<p>`) of its own
-  family, at its own rate: raise it alone with `Rates.Set("nemesis.jump",
-  0.05)` (at DefaultRates a lease's wall-clock bug showed in 7 runs of
-  100), and crashes come as often as before. Skew and jumps
-  move only the wall clock; a drift moves both, with the process's sleeps,
-  call timeouts and `qenv.WaitFor`. A `Signal.Wait`'s limit is
-  true time. examples/lease shows each fault breaking
-  the code that trusts it: a cross-machine comparison by a skew, a
-  wall-clock interval by a jump, a monotonic one by a drift past its
-  margin.
-- **Workload choices** (cancel or not, when) are schedule choices:
-  `s.Choose("sched.client.cancel", 10)`.
-- **Start from a scaffold:** `gotogether scaffold -system -binding
-  app.binding.yaml -pkg app -out system_test.go` writes a System test whose Run deploys
-  nothing yet, a commented `qobs.Record` per action with the fields the
-  binding reads, a conformance test that fails until steps are recorded,
-  and the overlay mutants' harness (`qtest.Mutants`) with a claim to fill in. `examples/hello` is the smallest one
-  filled in.
-- **Write a `Run(chooser, Config)`** for the whole deployment, so tests,
-  Hegel and a CLI that writes step logs all share it.
-- **Two models of one system** (leadership, and the clients' history):
-  a System has one binding, so give the deployment a recording switch
-  (examples/raftkv's `Config.Record`, KV or Cluster) and a System per
-  model, or one model holding both. Lint each binding's sources with all
-  the bindings at once: `gotogether lint -binding a.yaml,b.yaml -src .`
-  checks each recorded action against their union.
-
-## 4. Explore, then shrink
-
-```go
-sys := qtest.System{Binding: "app.binding.yaml", Run: func(c qenv.Chooser) error { return app.Run(c, cfg) }}
-sys.Rates = rates // the environment's fault rates, for every workflow (sys.WithRates(r): a copy at others)
-sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, qtest.Violates("chargedAtMostOnce")) // or Conforms(), Some/All/None(...)
-qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("chargedAtMostOnce"))
-```
-
-- **One System, every workflow:** `sys.Explore` (seeds), `sys.Exhaust` (every run within a bound), `sys.Sweep`
-  (covering rows), `sys.FollowTraces` (a model's traces' faults),
-  `qhegel.Shrink` (Hegel), all from the same `Run`. `Run` returns an
-  error when the system could not run, which fails the test and names
-  the seed: never `t.Fatal` inside it, since a seed's goroutine is not
-  the test's. `ExploreConfig.Chooser` gives each seed its own chooser (a
-  Script, `qenv.Replay(v.Choices)` of a shrunk failure). A run that
-  panics (a `GOTOGETHER_CHECK` self-check, a bug) fails as that run,
-  with the panicking task's stack, kept in the corpus if there is one.
-
-- **This fault, at this point:** a `qenv.Script` makes exactly the faults
-  it names, once the run has taken `After` steps, and no others: crash
-  process payments after its third step, or lose the provider's response
-  to the second charge.
-
-  ```go
-  sys.Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser {
-      return &qenv.Script{Faults: []qenv.Scripted{
-          {Kind: "nemesis.crash.payments", After: 3},
-          {Kind: "rpc.provider.response", Name: "lost", After: 5},
-      }}
-  }}).Expect(t, qtest.Conforms())
-  ```
-
-  Kinds are as fault coverage prints them, matched exactly; a crash is
-  `nemesis.crash.<process>`. A misnamed one fails the exploration with
-  the fix (`Script.Misnamed`). A fault a run never made fails it too,
-  whatever the claims ("scripted faults never happened"; `Run.Unscripted`
-  lists them): the run never reached a choice of its kind after `After`
-  steps. For random faults, a kind never faulted is listed as "never
-  faulted" when a claim fails; `x.Evidence().Faults` and its `Unreached`
-  say which kinds the runs reached.
-- **Batching:** every seeded run is checked in one quint batch. On a
-  miss, the report names the seed, its faults and its step log.
-- **Parallel seeds:** seeds run in parallel (`ExploreConfig.Parallel`,
-  default GOMAXPROCS), each with its own recorder in the chooser's
-  context (`qenv.WithContext`). So:
-  - build the simulation from the chooser you are given;
-  - keep no state across runs;
-  - start goroutines with `qenv.Go`, never `go`. A step lands in its run
-    from any of the simulation's goroutines (its tasks, the one that
-    created it), whatever context it was recorded with. From a `go`
-    goroutine it has no run, and the exploration fails with the fix.
-  - Run `gotogether lint -sim .` to find `go` statements, wall-clock calls
-    (`time.Now`, `time.Sleep`), `math/rand`'s package functions (draw from
-    `Sim.Choose` instead), either as a value too (`now := time.Now`,
-    called later), and selects of two or more cases (Go picks among
-    ready ones at random) in files that import qenv, tests included
-    (a System's `Run` closure lives there). Mark a deliberate one
-    `//qenv:ok <why>`.
-- **Other instances:** `qtest.Constants(map[string]string{"STOCK":
-  "1000"})` checks against the model with other constants, so one
-  binding serves runs of every size.
-- **Every run, not a sample:** `sys.Exhaust(t, qtest.Bound{Delays: 2,
-  Faults: 1})` runs every run that strays from the nominal one in at most
-  that many choices (a delay: a task other than the oldest; a fault, a
-  crash among them), fewest first, checked as an exploration's runs are.
-  A search `MaxRuns` (default 1000) cuts short fails the test, naming
-  how many runs it left; `Bound.Partial` accepts a sample instead. One fault is often enough: checkout's DualWrite window, which
-  seeds find only at ten times the crash rate, and streams' reorder show
-  in a complete one-fault search. Runs with the same steps are checked
-  once, so thousands of runs cost a few quint checks; a failing run's
-  report gives `GOTOGETHER_RUN='TestX#1:schedule=17:1'`, which runs it alone. No
-  partial-order reduction: two delays on a system with many tasks is
-  tens of thousands of runs, so start at one fault.
-- **A corpus of failures:** `ExploreConfig{Corpus: "testdata/corpus/TestX"}`
-  replays the saved runs there before the seeds, and a failed claim saves
-  the run it shows there (its choices, as JSON): commit it, and the bug
-  stays found whatever the seeds become. An entry names the exploration
-  that saved it (`TestX#2`), which alone replays it, so a test's
-  explorations can share the directory. An entry that no longer replays
-  (the code or its faults changed) fails as stale, with the seed that
-  finds its run again: delete it once the bug is fixed.
-  `GOTOGETHER_CORPUS=dir` gives every exploration `dir/<test>` (the
-  nightly run uploads it).
-- **Reproducing a run:** a failing run's report ends with
-  `reproduce: GOTOGETHER_RUN='TestX#2:seed=17' go test -run '^TestX$'`:
-  that run alone in the test's second exploration (its others run as
-  usual), or `:schedule=...` (Exhaust), `:corpus=<file>`, `:choices=<file>`
-  (a steered run, `ExploreConfig.Steer`). A run alone is
-  judged only by the claims about every run (Conforms, All, None); the
-  rest are listed as not judged. The numbers restart in every run of the
-  test (`-count`); a line that names no exploration of the test fails
-  it. A fuzz input's report points at Go's saved input instead. A failure's files (step log, module) are
-  copied out of the test's temporary directory, so its report's paths
-  are there after the test. A run whose Script never made
-  all its faults lists them ("scripted faults that never happened").
-- **Rates:**
-  - A nemesis is considered at every scheduling step, so its rate is per
-    step (default 1 in 200). Each family is a choice of its own at its
-    own rate (`nemesis.crash`, `nemesis.partition` with its heals,
-    `nemesis.jump`, a double's own such as simlog's `nemesis.rebalance`):
-    `"nemesis"` sets them all, a family's key one alone, and adding
-    partitions no longer makes crashes rarer. Under load, steps per second grow a
-    hundredfold, and so would crashes. Set `s.NemesisEvery = time.Second`
-    to make the rate per virtual second (`qload.Experiment` does this
-    when it injects faults).
-  - A bug with a one-step window needs a higher rate:
-    `qenv.DefaultRates.Set("nemesis", 0.05)` (a kind as reports print
-    it; `Set` returns a copy). `qenv.NoFaults` runs the schedule's
-    choices only (a zero `Rates` is the default rates).
-  - Turn whole kinds off with `qenv.DefaultRates.Set("kube", 0)`, or per
-    run with `qenv.Swarm`.
-  - A path behind several rare faults in a row (three failed writes, then
-    a restart) is one run in hundreds. `ExploreConfig{Seeds: 20, Steer:
-    180}` runs 180 more, each replaying a run that found something new (a
-    step's action, outcome or observed state, a fault, a code block) up to
-    a random choice: runs one fault deep breed runs that start there
-    (journal's restart: 1 run in 200 seeds, 8 steered). Record the depth
-    as an observation (`obs.fails`) and steering can climb it.
-  - A bug that needs one task to run far ahead of another (a reader that
-    must finish before a writer's single step) is out of reach of
-    uniform random schedules. Schedule by priorities instead:
-    `ExploreConfig{Chooser: func(seed uint64) qenv.Chooser { return
-    qenv.NewPCT(base, seed, 3, 500) }}` with `base` a `qenv.NewSeeded(seed)`
-    (seeds are `uint64`: `qenv.NewSeeded(uint64(i))` for an `int` or
-    `int64` one)
-    at `sys.FaultRates()` (PCT: depth 3 finds bugs needing three
-    orderings; 500, about a run's scheduling steps: set it to your run's
-    length, since change points past the run's end are lost and too large
-    a value makes depth 2 act as depth 1). Not on the native runtime
-    (gosim), which refuses it; over Hegel, only faults shrink.
-- **Shrinking:**
-  `qhegel.FindViolation(t, cfg, func(tc, rec) { app.Run(rec.Env(qhegel.Choices(tc)), cfg) })`
-  shrinks a failure to the interleaving and faults it needs; faults
-  appear as notes. Skip it under `testing.Short()`.
-  `rec.Env` records the run's choices too: `qenv.Replay(v.Choices)`
-  repeats the shrunk failure outside Hegel, a regression test with no
-  Hegel in it. State the failure with `v.Expect(t, qtest.Rejects(...))`.
-- **A new double's faults:** declare the kind's options by name,
-  `var request = qenv.DeclareFaults("db.request", "unavailable", "lostResponse")`,
-  and choose with `s.FaultOf(request)` (it returns "" or the option's
-  name). A read that cannot lose a response takes
-  `request.Only("unavailable")`, a prefix. Scripts name the option
-  (`qenv.Scripted{Kind: "db.request", Name: "lostResponse"}`), which
-  waits for a choice that offers it, and coverage lists options by name,
-  as do recorded runs (`db.request=lostResponse`). A kind has
-  one option list: `qenv.DeclareFaults` panics if a second declaration differs.
-  `qenv.FaultPoint` declares its own (its errors' names, `crash`).
-- **Extending qenv** (a new double, a scheduler change): run its tests
-  with `GOTOGETHER_CHECK=1` (or `s.Check = true`). The scheduler then verifies
-  its own invariants at every step, and each `Store` checks every commit
-  against its isolation level (a cycle of dependencies the level forbids
-  panics, naming it). `TestSchedulerSemantics` states its
-  semantics as a Hegel property over random programs.
-- **Families added after the suite:** clock faults, stalls and
-  partitions are opt-in, so a suite written before them never meets
-  them. `GOTOGETHER_ALL_FAULTS=1` turns them all on in every simulation
-  (Clocks, Stalls, a partition nemesis between every two processes): run
-  a suite so now and then, and a verdict that changes is a fix, or a
-  `qenv.Without` with its reason. A failure's reproduce line carries the
-  variable.
-- **Profiles:** run each property under every contract you might run
-  on. For each mutant, a row per isolation level (or store, or broker
-  mode) says where the bug is real (see examples/checkout's table).
-
-## More, when the task needs it
-
-Read the reference before using what it covers:
-- [`references/services.md`](references/services.md): HTTP servers and clients (`qenv/qhttp`: an unmodified `http.Handler` and `http.Client` in a simulation), gRPC services (`simgrpc`, otelgrpc spans) and Kafka/Kinesis consumers and publishers (a simulated partitioned log, kfake, a fake Kinesis): the seams and examples.
-- [`references/sql.md`](references/sql.md): a database/sql service over a Store (`qenv/qsql`): the SQL subset, the anomalies of each level, SQLSTATE errors for retry loops, connection faults, database/sql's goroutines.
-- [`references/fuzzing.md`](references/fuzzing.md): coverage-guided exploration over the chooser's bytes (`System.Fuzz`), a shrunk failure as a corpus entry.
-- [`references/fault-points.md`](references/fault-points.md): your own functions as fault points (`//quint:fault`, `qenv.FaultPoint`), and which faults runs reached.
-- [`references/coverage-and-mutants.md`](references/coverage-and-mutants.md): which code each step ran (`qweave -cover`), the one-report `Evidence`, and mutants (`qweave -mutate`, `System.Mutate`).
-- [`references/sweeps.md`](references/sweeps.md): isolation levels, sizes and fault kinds swept by pairwise rows (`qsweep`, `System.Sweep`), factors as model constants.
-- [`references/weaving.md`](references/weaving.md): third-party or legacy code with sync locks and goroutines, simulated by weaving (qweave, Orchestrion).
-- [`references/gosim.md`](references/gosim.md): a whole program, its network and channels, simulated by gosim (qgosim).
-- [`references/workloads.md`](references/workloads.md): a production workload (SimKube traces, `qload.Piecewise`) replayed against the simulation.
-- [`references/real.md`](references/real.md): faults in a real deployment (`qnemesis`: kill, pause and restart processes and containers, toxiproxy partitions, latency and loss, a Random or a trace's schedule), recorded as steps the same binding judges; claims over real runs (`qtest.Runs`); a failed run's faults re-made in a simulation (its journal's `Script`).
-- [`../gotogether-workflow/references/verdicts.md`](../gotogether-workflow/references/verdicts.md): every verdict and expectation (`Rejects`, `Mismatch`, `Violates`, `Some`/`All`/`None`) and what each means.
-
-## 5. Take the same model to the real environment
-
-Run the real binary against real dependencies, and inject the faults you
-can. For Kubernetes: kwok clusters with the binary runtime (no Docker),
-`kill -9` the controller, `kubectl` to reset. To give a kwok cluster the
-timing of production, generate pod Stages from a SimKube trace (`go run
-./cmd/kwok-stages -trace f.sktrace -speed 10 > stages.yaml`, then
-`kwokctl create cluster --config stages.yaml`; fleetrollout's `TRACE=`),
-from the same quantiles as the simulated `PodTimes`. Write step logs and
-check them:
-`gotogether validate -binding app.binding.yaml logs/*.jsonl`.
-- A new process is a restart (`restart:` in the binding).
-- Faults on real processes, containers and links, recorded as steps:
-  `qnemesis` ([`references/real.md`](references/real.md)).
-- A final fresh read of every component, then `settle`, makes eventual
-  properties meaningful there too.
-
-## Third-party controller logic (Crossplane, controller-runtime)
-
-Run the library's real reconciler in the simulation. Don't copy its
-logic.
-- Give it a manager stub (`GetClient`, `GetScheme`) whose client is a
-  fake behind `interceptor.Funcs`.
-- Libraries that read the real clock need their timestamps translated at
-  that seam: `Sim.ToVirtual` on writes, `Sim.ToReal` on reads and
-  responses, for Get, List, Create, Update and Patch. Otherwise their
-  timeouts and grace periods never expire.
-- Record cluster state with an audit after quiescence (phase, Secrets).
-  The same audit works against a real cluster (examples/crossdb).
-
-## What the examples found
-
-- **Locking.** A lock on a parent row doesn't stop write skew under
-  snapshot isolation, if the conflicting writes go to other tables. Make
-  the conflict a write.
-- **Retries.** A client's retry can mask a dual-write bug. The realistic
-  form is "commit, respond, publish in the background".
-- **In-memory tracking.** It breaks under lost responses, not just
-  restarts: an update applied with its response lost is never tracked.
-- **External names.** A Crossplane provider whose external name is the
-  cloud's generated ID leaks a database after one lost response and a
-  delete, with no crash. Make the name deterministic (a client token) and
-  the create idempotent; keep the creation grace period for eventually
-  consistent clouds.
-- **Status.** Trusting a status without `observedGeneration >=
-  generation` overruns a rollout budget, both simulated and on real kwok.
+- [references/seams.md](references/seams.md): before writing the app,
+  or when a step lands in the wrong place.
+- [references/simulation.md](references/simulation.md): deploying,
+  restarts, settles, stuck runs, quorums, disks, upgrades, clocks,
+  partitions, pauses, rates per instance.
+- [references/explore.md](references/explore.md): Explore, Exhaust,
+  Scripts, corpora, reproducing, rates, shrinking, profiles.
+- [references/beyond.md](references/beyond.md): the real environment,
+  third-party controllers, what the examples found.
+- [references/services.md](references/services.md) (HTTP, gRPC,
+  Kafka/Kinesis), [references/sql.md](references/sql.md) (database/sql
+  over a Store), [references/fault-points.md](references/fault-points.md)
+  (your own functions as fault points),
+  [references/sweeps.md](references/sweeps.md),
+  [references/fuzzing.md](references/fuzzing.md),
+  [references/coverage-and-mutants.md](references/coverage-and-mutants.md),
+  [references/weaving.md](references/weaving.md) (code you cannot
+  change), [references/gosim.md](references/gosim.md) (a whole
+  program), [references/workloads.md](references/workloads.md),
+  [references/real.md](references/real.md) (`qnemesis`).
+- [../gotogether-workflow/references/verdicts.md](../gotogether-workflow/references/verdicts.md):
+  every verdict and claim.

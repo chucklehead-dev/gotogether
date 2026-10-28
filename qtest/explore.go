@@ -104,6 +104,9 @@ type ExploreConfig struct {
 	// GOTOGETHER_SEED_OFFSET=k widen the sample (a nightly run): n seeds
 	// from k+1, unless Chooser makes the runs (a script per trace).
 	Seeds int
+	// ShortSeeds is Seeds under go test -short (testing.Short()), for a
+	// quick pass beside the full one; 0 runs Seeds in either mode.
+	ShortSeeds int
 	// Parallel runs this many seeds at once (default GOMAXPROCS; 1: one
 	// after another). Each run records into its own recorder, carried by
 	// the chooser's context (qenv.WithContext), so the scenario must build
@@ -263,6 +266,9 @@ func empty(runs []*Run) bool {
 // a run that fails to run (rather than to conform) fails t, naming its seed.
 func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c qenv.Chooser) error) *Exploration {
 	t.Helper()
+	if cfg.ShortSeeds > 0 && testing.Short() {
+		cfg.Seeds = cfg.ShortSeeds
+	}
 	if cfg.Seeds == 0 {
 		cfg.Seeds = 50
 	}

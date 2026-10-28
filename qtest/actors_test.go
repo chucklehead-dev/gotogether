@@ -112,3 +112,20 @@ func TestTwoBindingsOneRun(t *testing.T) {
 		t.Errorf("without actors, the commits' binding: %q", f.errs)
 	}
 }
+
+// ShortSeeds is the number of runs under -short, Seeds otherwise.
+func TestShortSeeds(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	sys := System{Binding: "testdata/account-commits.yaml", Run: accountRun(false)}
+	want := 3
+	if testing.Short() {
+		want = 2
+	}
+	if x := sys.Explore(t, ExploreConfig{Seeds: 3, ShortSeeds: 2}); len(x.Runs) != want {
+		t.Errorf("%d runs, want %d (short %v)", len(x.Runs), want, testing.Short())
+	}
+	if x := sys.Explore(t, ExploreConfig{Seeds: 3}); len(x.Runs) != 3 {
+		t.Errorf("without ShortSeeds: %d runs, want Seeds' 3", len(x.Runs))
+	}
+}

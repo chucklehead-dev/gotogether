@@ -127,7 +127,7 @@ user has: README.md, skills/grist (SKILL.md and references), docs/grist.md,
   **Guess**: a site's `Record` may be a scheduling point, so I record outside
   the lock; nothing says whether a double may hold a real lock across
   `Site.Record` in a simulation.
-- **16** README, run-demo.sh (one MUTATION per mutant), the root README's
+- **16** README, run-demo.sh (one MUTANT per mutant), the root README's
   row. gofmt flagged a mutant file I wrote by script; vet, `go mod tidy
   -diff` (GOWORK=off) and the docs tests clean.
 - **22** Final `GOWORK=off go test -short ./...`: green, 240 s wall on 4

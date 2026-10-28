@@ -65,14 +65,17 @@ item as recommended:
   checks (32 identifiers), then grist's generator, CLI plumbing and
   limits (18 more, under grist/internal/gen and grist/internal/catalog
   or unexported).
-- **H6. The grist path, shorter and at the front (S).** `gristsim.System`
-  and `ExploreConfig.ShortSeeds` (the closure and `seeds()` 14 and 12
-  examples define); Config.Gen derived from the command types by default;
-  the generator warns when an existing rule's inputs changed (a fold
-  whose events gained a type); grist a capability in README's front
-  section and AGENTS.md, an Install line and `gotogether help` naming it;
-  docs/grist.md's §0 notes moved to HISTORY; the skills trimmed to
-  triggers and steps (about 18,600 words across ten SKILL.md files).
+- **H6. The grist path, shorter and at the front (S). Done** (HISTORY:
+  "H6: the grist path at the front"): `gristsim.System`,
+  `ExploreConfig.ShortSeeds` (the three grist examples' closures and
+  twelve examples' `seeds()` gone), `gristsim.Config.Ints` (arguments
+  drawn by type, zero and a negative among them: the scaffold's `gen`
+  gone), the generator's warnings when a rule's inputs changed, grist in
+  README's front section, AGENTS.md, an Install line and `gotogether
+  help`, docs/grist.md's §0 notes in HISTORY, the skills trimmed to
+  triggers and steps (SKILL.md 20,300 words to 3,400, nothing lost: their
+  bodies are references), every demo on `MUTANT=<name>` and failing
+  loudly.
 - **H7. Upcasting and snapshots before GR4, the doubles published
   before GR5-GR7 (L).** A team's first change to an event struct breaks
   replay of every stored log, and read models refold from 0 on every
@@ -201,12 +204,12 @@ systems simulated together, and all of it onboarded with minimal work
 by the user.
 
 - **Slice 1, the thesis: done** (grist/, examples/counters, skills/grist;
-  docs/grist.md §0.1-§0.2).
+  docs/HISTORY.md (grist §0.1)-§0.2).
 - **Slice 2, the real tier: mostly done.** qsql's composite keys, ranges
   and RETURNING, the typed template function and `actors:` (core);
   sqlstore on PostgreSQL, SQLite and qsql, commits recorded from the
   step log (Relay), PostgreSQL in CI; the HTTP API, grist/client,
-  grist.Main; AtMostOnce (docs/grist.md §0.3-§0.6); the generator (§0.9,
+  grist.Main; AtMostOnce (docs/HISTORY.md (grist §0.3)-§0.6); the generator (§0.9,
   GR2). Left: gristflow, `blind` measured on the real tier, a durable relay cursor
   (with a lost-prefix record in qtrace), and the core item below.
 - **A core item grist's measurements ask for** (validate,
@@ -250,7 +253,7 @@ Then, in order, each item reviewed before the next:
   app that adds a dependency gets its steps without writing code;
   OTel spans of the same seams converted, for apps already traced.
   Designed in docs/grist-instrumentation.md (declared calls, both ends
-  recorded, six slices). Slice 1 built (docs/grist.md §0.12): declared
+  recorded, six slices). Slice 1 built (docs/HISTORY.md (grist §0.12)): declared
   calls on the simulated tier (`NewDependency`, `NewCall`, `Keyed`,
   `Uses`, `Call.Do`, `Handlers`, the site placed at its cause), gristsim
   serving each dependency, the generator writing both actions and a rule
@@ -341,9 +344,9 @@ Then, in order, each item reviewed before the next:
   Kubernetes Lease, ownership fenced in the log. Eleven slices; the
   first two fix today's recorder ids shared by every pod (pid 1) and
   30 s of drain inside the default 30 s grace. Slice 1 done (identity,
-  probes, the drain: docs/grist.md §0.15; HISTORY), and slice 2
+  probes, the drain: docs/HISTORY.md, grist §0.15), and slice 2
   (graceful termination, the lagging router, `gristsim.Cluster`,
-  `gristtest.NoClientErrors`: §0.16). After H7 (slice 4 needs
+  `gristtest.NoClientErrors`: grist §0.16). After H7 (slice 4 needs
   its upcasting; slice 11 grist slice 3's leases). The maintainer's
   decisions (2026-10-28, §10): no Kubernetes Lease, not even a hint; a
   45 s grace generated; a rewind fails closed until `<app> resume`; no

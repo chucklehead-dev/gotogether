@@ -24,16 +24,9 @@ var faulty = qenv.DefaultRates.Set("nemesis", 0.02).Set("store.library.commit", 
 // system is the app under cfg, judged by binding, at faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
 	cfg.Doubles = doubles
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
-		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
-}
-
-// seeds is n, or short under -short.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
+	s := gristsim.System(binding, App, cfg).WithRates(faulty)
+	s.Opts = opts
+	return s
 }
 
 // of picks one of xs.
@@ -80,7 +73,7 @@ var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, Com
 func TestFaithful(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 8)}).
+	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 8}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(),
 			qtest.Reaches("rpc.mailer.response").Faulted(), qtest.Takes("mailerSend").Outcome("unknown"), qtest.Takes("mailerSendReplayed"),
 			gristtest.Catalog(App).Exercised("borrow.limit"))
@@ -92,7 +85,7 @@ func TestFaithful(t *testing.T) {
 func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(calls, contended, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+	system(calls, contended, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms())
 }
 
@@ -110,7 +103,7 @@ var scarce = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Send: 
 func TestScarce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, scarce).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(commits, scarce).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("unavailable"))
 }
 
@@ -134,7 +127,7 @@ var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Isolat
 func TestGreedy(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("limit"))
 }
 
@@ -169,7 +162,7 @@ var limit = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: [
 func TestAtTheLimit(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, limit).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
+	system(commits, limit).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}).
 		Expect(t, qtest.Conforms(), qtest.All(atTheLimit))
 }
 
@@ -200,7 +193,7 @@ var lending = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Send:
 func TestReceiptOnce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3), Chooser: crashAfterMail}).
+	system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3, Chooser: crashAfterMail}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("grist.receipts.effect").Faulted())
 }
 

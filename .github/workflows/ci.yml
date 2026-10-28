@@ -149,11 +149,11 @@ jobs:
           examples/twophase/run-demo.sh
           examples/hello/run-demo.sh
           examples/lease/run-demo.sh
-          MUTATION=wall-interval CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
-          MUTATION=no-fencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
+          MUTANT=wallInterval CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
+          MUTANT=noFencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
           MUTANT=noDedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
-          examples/counters/run-demo.sh && MUTATION=blind examples/counters/run-demo.sh
+          examples/counters/run-demo.sh && MUTANT=blind examples/counters/run-demo.sh
 
       - name: every model on its own (gotogether simulate)
         if: matrix.part == 'tools'
@@ -478,7 +478,7 @@ jobs:
           sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
           ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
       - name: demos
-        run: ./run-demo.sh && MUTATION=write-skew ./run-demo.sh
+        run: ./run-demo.sh && MUTANT=writeSkew ./run-demo.sh
 
   grist:
     # its own module (published like qhegel): the framework's stores
@@ -545,7 +545,7 @@ jobs:
           sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
           ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
       - name: demos
-        run: ./run-demo.sh && MUTATION=precheck ./run-demo.sh
+        run: ./run-demo.sh && MUTANT=precheck ./run-demo.sh
 
   maelstrom:
     runs-on: ubuntu-latest
@@ -602,11 +602,11 @@ jobs:
           # each run's exit status is its verdict: 0 conforms, 1 violation
           KEEP=1 ./kwok-demo.sh
           KEEP=1 KILL=1 ./kwok-demo.sh
-          if KEEP=1 MUTATION=ignore-observed-generation ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
-          if KILL=1 MUTATION=in-memory-progress ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
+          if KEEP=1 MUTANT=ignoreObservedGeneration ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
+          if KILL=1 MUTANT=inMemoryProgress ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
           # pods timed by a production trace (kwok Stages from its lifetimes), on clusters of their own
           TRACE=../sktrace/testdata/cronjob.sktrace KEEP=1 ./kwok-demo.sh
-          if TRACE=../sktrace/testdata/cronjob.sktrace MUTATION=ignore-observed-generation ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
+          if TRACE=../sktrace/testdata/cronjob.sktrace MUTANT=ignoreObservedGeneration ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
 
   crossdb:
     runs-on: ubuntu-latest
@@ -636,7 +636,7 @@ jobs:
           # each run's exit status is its verdict: 0 conforms, 1 violation
           DROP=0.1 kind/demo.sh
           KILL=1 kind/demo.sh
-          if MUTATION=no-client-token DROP=0.3 N=6 kind/demo.sh; then echo "mutant passed"; exit 1; fi
+          if MUTANT=noClientToken DROP=0.3 N=6 kind/demo.sh; then echo "mutant passed"; exit 1; fi
 
   grpcledger:
     runs-on: ubuntu-latest
@@ -667,7 +667,7 @@ jobs:
       - name: demo (real server, otelgrpc spans converted and validated)
         run: |
           ./run-demo.sh
-          if MUTATION=no-dedupe ./run-demo.sh; then echo "mutant passed"; exit 1; fi
+          if MUTANT=noDedupe ./run-demo.sh; then echo "mutant passed"; exit 1; fi
 
   streams:
     runs-on: ubuntu-latest

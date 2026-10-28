@@ -45,9 +45,9 @@ apart.
 go test .                                      # needs quint on PATH
 go test -short .                               # the per-push tier: 8 to 15 seeds an exploration, the first 100 runs with one jump
 ./run-demo.sh                                  # 20 seeds, every run conforms
-MUTATION=no-fencing ./run-demo.sh              # still conforms: the clocks are true
-MUTATION=no-fencing CLOCKS=1 ./run-demo.sh     # still conforms: skews and jumps do not move a monotonic clock
-MUTATION=wall-interval CLOCKS=1 ./run-demo.sh  # a stale write after a jump
-MUTATION=absolute-expiry CLOCKS=1 ./run-demo.sh
-MUTATION=no-fencing DRIFT=0.25 ./run-demo.sh   # drift: the slow holder overstays
+MUTANT=noFencing ./run-demo.sh              # still conforms: the clocks are true
+MUTANT=noFencing CLOCKS=1 ./run-demo.sh     # still conforms: skews and jumps do not move a monotonic clock
+MUTANT=wallInterval CLOCKS=1 ./run-demo.sh  # a stale write after a jump
+MUTANT=absoluteExpiry CLOCKS=1 ./run-demo.sh
+MUTANT=noFencing DRIFT=0.25 ./run-demo.sh   # drift: the slow holder overstays
 ```

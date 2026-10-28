@@ -110,5 +110,5 @@ that reached something new and varies their tails.
 ```sh
 go test -short .           # needs quint on PATH; -short skips the contended-key tests
 ./run-demo.sh               # the faithful store
-MUTATION=no-handoff ./run-demo.sh
+MUTANT=noHandoff ./run-demo.sh
 ```

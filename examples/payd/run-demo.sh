@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
 # payd, unmodified, explored in a simulation and run for real on SQLite,
-# every run checked against the model. MUTATION= one of precheck,
-# no-forward-key, pending-conflict, debit-first, lost-race, cents-in-body
+# every run checked against the model. MUTANT= one of precheck,
+# noForwardKey, pendingConflict, debitFirst, lostRace, centsInBody
 # builds payd with that mutant's overlay (testdata/mutants/) and shows
 # what catches it; without one, the faithful
 # service under every fault at three isolation levels, then for real, then
 # cmd/payd answering one key twice with one charge.
 set -euo pipefail
 cd "$(dirname "$0")"
-case "${MUTATION:-}" in
-  "") run='TestFaithful$|TestOneFault$|TestReal$' ;;
-  precheck) run='TestMutants$/^precheck$' ;;
-  no-forward-key) run='TestMutants$/^noForwardKey$' ;;
-  pending-conflict) run='TestMutants$/^pendingConflict$' ;;
-  debit-first) run='TestMutants$/^debitFirst$' ;;
-  lost-race) run='TestMutants$/^lostRace$' ;;
-  cents-in-body) run='TestMutants$/^centsInBody$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
-esac
-echo "== payd ${MUTATION:+(mutation $MUTATION)}"
+if [ -n "${MUTANT:-}" ]; then
+  # a directory of testdata/mutants (its overlay): TestMutants builds it and states what catches it
+  [ -d "testdata/mutants/$MUTANT" ] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestFaithful$|TestOneFault$|TestReal$'
+fi
+echo "== payd ${MUTANT:+(mutant $MUTANT)}"
 GOTOGETHER_CHECK=1 go test -count=1 -timeout 30m -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, |charges for|violat'
-[ -z "${MUTATION:-}" ] || exit 0
+[ -z "${MUTANT:-}" ] || exit 0
 
 echo "== cmd/payd: one key, twice"
 dir=$(mktemp -d)

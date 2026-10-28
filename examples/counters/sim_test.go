@@ -70,8 +70,9 @@ func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.Sys
 		cfg.Doubles = doubles
 	}
 	cfg.Setup = setup
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
-		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
+	s := gristsim.System(binding, App, cfg).WithRates(faulty)
+	s.Opts = opts
+	return s
 }
 
 // faulty crashes the node (2 in 100 scheduling steps) and makes every
@@ -79,14 +80,6 @@ func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.Sys
 // and late, commits whose answer is lost (with CommitFaults), the
 // welcome's crash points.
 var faulty = qenv.DefaultRates.Set("nemesis", 0.02)
-
-// seeds is n, or short under -short.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
 
 // contended is claim 2's shape: one tenant and names from two letters,
 // so that creates and increments collide; no retirements (the payout's
@@ -109,7 +102,7 @@ func TestFaithful(t *testing.T) {
 			cfg := contended
 			cfg.Isolation = iso
 			system(commits, cfg).
-				Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+				Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
 				Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
 					qtest.Reaches("store.counters.commit").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 		})
@@ -142,7 +135,7 @@ func TestFaithfulAtClaim1(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(commits, gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}).
-		WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 6)}).
+		WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 6}).
 		Expect(t, qtest.None(qtest.Rejects("createCounter")), qtest.Conforms())
 }
 
@@ -160,9 +153,9 @@ func TestDuplicateRequests(t *testing.T) {
 	rates := qenv.NoFaults.Set("rpc.api.delay", 0.3).Set("rpc.api.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"},
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
-	system(commits, cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+	system(commits, cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
-	system(calls, cfg, qtest.Linearize()).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 4)}).
+	system(calls, cfg, qtest.Linearize()).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
 }
 
@@ -178,7 +171,7 @@ func TestFaithfulAtClients(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := contended
 	system(calls, cfg, qtest.Linearize()).
-		Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted(),
 			qtest.Reaches("rpc.bank.request").Faulted(), qtest.Reaches("rpc.bank.response").Faulted(),
 			qtest.Takes("bankPay").Outcome("unknown"), qtest.Takes("bankPayReplayed"))
@@ -214,18 +207,22 @@ func TestWelcomeDuplicate(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Send: []string{"create-counter"}}
-	n := seeds(10, 3)
-	system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: n, Chooser: crashAfterWelcome}).
+	runs := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
+	crashed := runs
+	crashed.Chooser = crashAfterWelcome
+	system(commits, cfg).Explore(t, crashed).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	system(once, cfg).Explore(t, qtest.ExploreConfig{Seeds: n, Chooser: crashAfterWelcome}).
+	system(once, cfg).Explore(t, crashed).
 		Expect(t, qtest.All(qtest.Violates("welcomedOnce")))
 	// without the crash, no duplicate
-	system(once, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: n}).
+	system(once, cfg).WithRates(qenv.NoFaults).Explore(t, runs).
 		Expect(t, qtest.None(qtest.Violates("welcomedOnce")))
 	// an ok send, a crash before the checkpoint, then every try of the
 	// restarted node's send lost: the committed run checkpoints
 	// grist.failed, which at least once admits (atLeastOnceDone)
-	system(commits, cfg).Explore(t, qtest.ExploreConfig{Seeds: n, Chooser: okThenFailed}).
+	okThen := runs
+	okThen.Chooser = okThenFailed
+	system(commits, cfg).Explore(t, okThen).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.mailer.request").Faulted())
 	if testing.Short() {
 		return
@@ -312,10 +309,10 @@ func TestPayoutAmount(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	bank := qenv.NoFaults.Set("rpc.bank.request", 0.3).Set("rpc.bank.delay", 0.3).Set("rpc.bank.response", 0.3)
-	system(retiring, retirements).WithRates(bank).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(retiring, retirements).WithRates(bank).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.request").Faulted(),
 			qtest.Reaches("rpc.bank.delay").Faulted(), qtest.Takes("bankPay").Outcome("unknown"))
-	dup := qtest.ExploreConfig{Seeds: seeds(6, 1), Chooser: scripted(qenv.Scripted{Kind: "rpc.bank.request", Name: "duplicate"})}
+	dup := qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1, Chooser: scripted(qenv.Scripted{Kind: "rpc.bank.request", Name: "duplicate"})}
 	fresh := paying
 	fresh.Doubles = freshBank
 	system(retiring, fresh).Explore(t, dup).Expect(t, qtest.All(qtest.Rejects("bankPayReplayed")))
@@ -352,8 +349,9 @@ func TestPayoutAmount(t *testing.T) {
 func TestPayoutAtMostOnce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	n := qtest.ExploreConfig{Seeds: seeds(10, 2)}
-	lose := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashBefore"})}
+	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 2}
+	lose := n
+	lose.Chooser = scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashBefore"})
 	system(retiring, retirements).Explore(t, lose).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	if testing.Short() {
@@ -362,7 +360,8 @@ func TestPayoutAtMostOnce(t *testing.T) {
 	paidOnce, logged := validate.EventuallyName("everyRetirementPaidOnce"), validate.EventuallyName("everyPayoutOutcomeLogged")
 	system(exactly, retirements).Explore(t, lose).
 		Expect(t, qtest.All(qtest.Violates(paidOnce)), qtest.None(qtest.Violates(logged)))
-	after := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashAfter"})}
+	after := n
+	after.Chooser = scripted(qenv.Scripted{Kind: "grist.payout.effect", Name: "crashAfter"})
 	system(exactly, retirements).Explore(t, after).
 		Expect(t, qtest.All(qtest.Violates(logged)), qtest.None(qtest.Violates(paidOnce)))
 	system(exactly, retirements).WithRates(qenv.NoFaults).Explore(t, n).
@@ -370,7 +369,8 @@ func TestPayoutAtMostOnce(t *testing.T) {
 	// the bank's answer lost after it paid: the payment's outcome is
 	// unknown (grist.unknown, with the error), not "failed"; the bank's own
 	// record shows it paid once, so both vals hold
-	lostAnswer := qtest.ExploreConfig{Seeds: n.Seeds, Chooser: scripted(qenv.Scripted{Kind: "rpc.bank.response", Name: "lost"})}
+	lostAnswer := n
+	lostAnswer.Chooser = scripted(qenv.Scripted{Kind: "rpc.bank.response", Name: "lost"})
 	system(exactly, retirements).Explore(t, lostAnswer).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted())
 }
@@ -409,7 +409,7 @@ func TestPayoutTwoNodes(t *testing.T) {
 			left.Add(1)
 		}
 	}
-	system(retiring, race).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+	system(retiring, race).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("bankPay").Outcome("ok"), qtest.Takes("bankPayServed"))
 	if left.Load() == 0 {
 		t.Error("no payout checkpoint was left to another poller after a failed append: the race the claim is about never happened")
@@ -420,7 +420,7 @@ func TestPayoutTwoNodes(t *testing.T) {
 	}
 	faults := twoNodes
 	faults.CommitFaults = true
-	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(retiring, faults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.counters.commit").Faulted(),
 			qtest.Reaches("rpc.bank.request").Faulted(), qtest.Reaches("rpc.bank.response").Faulted(),
 			qtest.Takes("bankPay").Outcome("unknown"), qtest.Takes("bankPayReplayed"))
@@ -437,7 +437,7 @@ func TestPayoutTwoNodes(t *testing.T) {
 func TestRetireByCreatorOnly(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	x := system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)})
+	x := system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2})
 	x.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	refused := 0
 	for _, run := range x.Runs {

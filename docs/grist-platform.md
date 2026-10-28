@@ -1,10 +1,10 @@
 # grist on a platform (GR10): Kubernetes-aware, never Kubernetes-bound
 
 Status: design, 2026-10-28, for docs/ROADMAP.md's GR10; slice 1
-(identity, probes, the drain) built 2026-10-28 (docs/grist.md §0.15
+(identity, probes, the drain) built 2026-10-28 (docs/HISTORY.md (grist §0.15)
 says what building it changed, and what its acceptance got wrong), and
 slice 2 (graceful termination, the router, `gristsim.Cluster`) the same
-day (docs/grist.md §0.16, likewise). Nothing else below is built; every
+day (docs/HISTORY.md (grist §0.16), likewise). Nothing else below is built; every
 proposed API is in ```text blocks (slice 2's are as built: §4 says
 where it differs), and every name it
 takes from an existing package (`qenv.Stalls`, `qmeta.CalibrateTimeout`,
@@ -428,7 +428,7 @@ met it, and a Script or a qnemesis journal names it.
 
 What gristsim gains is one optional field (slice 2 built `Grace`,
 `EndpointLag`, `Disruptions`, and `Drain`, `Rolling` and `Pace`, which
-this sketch did not name: docs/grist.md §0.16; the rest come in later
+this sketch did not name: docs/HISTORY.md (grist §0.16); the rest come in later
 slices):
 
 ```text
@@ -815,7 +815,7 @@ names the mutant it must catch (an overlay, `qtest.Mutants`), with
 the faithful app's claim beside it, and its test fails with the feature
 ablated.
 
-1. **Done** (docs/grist.md §0.15). **Identity, probes, the drain schedule (core, S-M).** `Identity`,
+1. **Done** (docs/HISTORY.md (grist §0.15)). **Identity, probes, the drain schedule (core, S-M).** `Identity`,
    recorder ids `<app>/<node>/<incarnation>`, `/livez` `/readyz`
    `/metrics` on a side port, `Drain` with `-grace`, the loopback
    refusal, `GOMEMLIMIT`, the startup line. **Example: counters**, two
@@ -823,7 +823,7 @@ ablated.
    **Acceptance**: the mutant `pidIdentity` (both `counters-1`) gets
    Reconstruct's duplicate error, no verdict; the faithful run conforms;
    a budgeted run records its settle and flush where the unbudgeted one
-   is still draining at the kill. As built (docs/grist.md §0.15) that
+   is still draining at the kill. As built (docs/HISTORY.md (grist §0.15)) that
    needs the phases scaled down (delay 0.5 s, shutdown 3 s, settle 2 s,
    flush 2 s, `-grace 2s`, a request trickling across the signal): with
    the defaults a `-grace 20s` run is never killed after a settle a
@@ -832,7 +832,7 @@ ablated.
    alone outrun the grace. The recorder's metadata (namespace, host,
    zone) waits for G8 and the generated 45 s grace for slice 8: slice 1
    prints the fields and the grace the drain needs on the startup line.
-2. **Done** (docs/grist.md §0.16). **Graceful termination and the
+2. **Done** (docs/HISTORY.md (grist §0.16)). **Graceful termination and the
    router in qenv and gristsim (core, M).** `nemesis.terminate.<proc>`,
    `qenv.Terminating`, the router double (`route.<name>`,
    `route.<name>.lag`), `gristsim.Cluster`'s `Grace`, `EndpointLag`,
@@ -845,7 +845,7 @@ ablated.
    within grace, where the faithful app records none and is
    `All(Completes())`; a router without lag (ablation) makes the
    endpoint-lag test pass the mutant `noDrainDelay`, which with lag
-   fails `NoClientErrors`. As built (docs/grist.md §0.16): no call of
+   fails `NoClientErrors`. As built (docs/HISTORY.md (grist §0.16)): no call of
    the mutant's fails, its refused tries being retried under their
    keys, so `NoClientErrors` counts the tries and the mutant's claim is
    `Some(ClientErrors())`; the lag's ablation holds once a try sent

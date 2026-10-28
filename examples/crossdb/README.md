@@ -35,7 +35,7 @@ The model (`model/crossdb.qnt`) has two properties:
 go test ./...                                        # explorations and Hegel (~4 min)
 kind/demo.sh                                         # kind + Crossplane; exit status is the verdict
 KILL=1 kind/demo.sh                                  # kill -9 the provider every few seconds
-MUTATION=no-client-token DROP=0.3 N=6 kind/demo.sh
+MUTANT=noClientToken DROP=0.3 N=6 kind/demo.sh
 ```
 
 `kind/setup.sh` creates the cluster and installs everything. It needs

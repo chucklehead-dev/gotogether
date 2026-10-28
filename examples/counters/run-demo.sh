@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # examples/counters: grain's counter example on grist, explored in a
-# simulation, every run checked against model/counters.qnt. MUTATION=
-# blind or dispatch-direct builds the app with that mutant's overlay
+# simulation, every run checked against model/counters.qnt. MUTANT=
+# blind or dispatchDirect builds the app with that mutant's overlay
 # (testdata/mutants/) and shows what catches it; without one, the
 # faithful app through commit faults and crashes at two isolation
 # levels, at claim 1's configuration, through duplicated and late
 # requests, and the welcome's duplicate after a crash (claims 2 and 3 of
-# docs/grist.md §8.1, and claim 1's contrast; MUTATION=blind is claim 1).
+# docs/grist.md §8.1, and claim 1's contrast; MUTANT=blind is claim 1).
 #
 # SERVE=1 instead builds cmd/counters (grist.Main), serves the app's HTTP
 # API on a SQLite file, drives it with curl (a command, its retry under
@@ -21,7 +21,7 @@
 # (gristsim.Cluster: nodes drained in turn behind a router whose view
 # lags) and on three real pods of the binary behind a router polling
 # /readyz; no client's try refused, no payout unknown, /metrics' lag at 0
-# before each settle. MUTATION=no-drain-delay or stop-node-at-signal
+# before each settle. MUTANT=noDrainDelay or stopNodeAtSignal
 # shows what catches its mutants.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -60,13 +60,12 @@ if [ -n "${ROLLING:-}" ]; then
   go test -count=1 -timeout 30m -run 'TestRollingRestart$|TestRealRollingRestart$' -v . | grep -E '^(--- |ok|FAIL)|runs, |restarted in turn'
   exit
 fi
-case "${MUTATION:-}" in
-  "") run='TestFaithful$|TestFaithfulAtClaim1$|TestDuplicateRequests$|TestWelcomeDuplicate$' ;;
-  blind) run='TestMutants$/^blind$' ;;
-  dispatch-direct) run='TestMutants$/^dispatchDirect$' ;;
-  no-drain-delay) run='TestMutants$/^noDrainDelay$' ;;
-  stop-node-at-signal) run='TestMutants$/^stopNodeAtSignal$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
-esac
-echo "== counters ${MUTATION:+(mutation $MUTATION)}"
+if [ -n "${MUTANT:-}" ]; then
+  # a directory of testdata/mutants (its overlay), or a rule dropped (drop-<rule>, generated): TestMutants builds it and states what catches it
+  [ -d "testdata/mutants/$MUTANT" ] || [[ $MUTANT == drop-* ]] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestFaithful$|TestFaithfulAtClaim1$|TestDuplicateRequests$|TestWelcomeDuplicate$'
+fi
+echo "== counters ${MUTANT:+(mutant $MUTANT)}"
 GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 30m -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, |as expected'

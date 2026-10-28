@@ -33,18 +33,6 @@ var (
 	drifts = punctual(qenv.DefaultRates.Set("clock.drift", 1))
 )
 
-// seeds is n, or short under -short: the per-push tier runs as few seeds
-// as keep each claim (a claim some runs meet, missed at most 5% of the
-// time at its measured rate); the full tests, nightly, run n. The tests
-// run in parallel: a few seeds leave CPUs idle while the slowest run is
-// checked.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
-
 // oneJump is every run with one jump (3209 runs). Under -short it is the
 // first 100 of them (a search cut short, breadth first: the nominal run,
 // then each jump at the first dozen of the 401 scheduling steps), which
@@ -72,7 +60,7 @@ func TestFencedConformsUnderClockFaults(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	rates := qenv.DefaultRates.Set("clock.skew", 0.5).Set("clock.drift", 0.5).Set("nemesis", 0.05)
-	system(Faithful, all).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 15)}).Expect(t, qtest.Conforms(), qtest.Exercised())
+	system(Faithful, all).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 15}).Expect(t, qtest.Conforms(), qtest.Exercised())
 }
 
 // Without fencing, the holders' margin is enough while clocks are true
@@ -81,7 +69,7 @@ func TestFencedConformsUnderClockFaults(t *testing.T) {
 func TestNoFencingSafeWithTrueClocks(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(NoFencing, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 10)}).Expect(t, qtest.Conforms())
+	system(NoFencing, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Conforms())
 }
 
 // A write delivered late (a delayed packet, after its writer's timeout)
@@ -95,7 +83,7 @@ func TestNoFencingSafeWithTrueClocks(t *testing.T) {
 func TestNoFencingBrokenByALateWrite(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	x := qtest.ExploreConfig{Seeds: seeds(30, 12)}
+	x := qtest.ExploreConfig{Seeds: 30, ShortSeeds: 12}
 	system(NoFencing, trueClocks).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
 	system(Faithful, trueClocks).WithRates(qenv.DefaultRates.Set("rpc.store.delay", 0.3)).Explore(t, x).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.store.delay").Faulted().InAtLeast(0.3))
@@ -116,7 +104,7 @@ func TestNoFencingBrokenByAPause(t *testing.T) {
 			return err
 		}}
 	}
-	x := qtest.ExploreConfig{Seeds: seeds(30, 12)}
+	x := qtest.ExploreConfig{Seeds: 30, ShortSeeds: 12}
 	paused(NoFencing).Explore(t, x).Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
 	paused(Faithful).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Reaches("nemesis.pause").Faulted().InAtLeast(0.3))
 }
@@ -130,7 +118,7 @@ func TestNoFencingImmuneToSkewAndJumps(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	both := qenv.Clocks{Skew: time.Second, Jump: 5 * time.Second}
-	system(NoFencing, both).WithRates(skews.Set("nemesis", 0.05)).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 10)}).Expect(t, qtest.Conforms())
+	system(NoFencing, both).WithRates(skews.Set("nemesis", 0.05)).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Conforms())
 	system(NoFencing, jump).Exhaust(t, oneJump()).Expect(t, qtest.Conforms())
 }
 
@@ -144,7 +132,7 @@ func TestNoFencingImmuneToSkewAndJumps(t *testing.T) {
 func TestWallIntervalBrokenByAClockJump(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(WallInterval, jump).WithRates(jumps).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 8)}).
+	system(WallInterval, jump).WithRates(jumps).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 8}).
 		Expect(t, qtest.Violates("noStaleWrite"), qtest.Some(qtest.Conforms()))
 	one := oneJump()
 	system(WallInterval, jump).Exhaust(t, one).Expect(t, qtest.Violates("noStaleWrite"))
@@ -159,9 +147,9 @@ func TestWallIntervalBrokenByAClockJump(t *testing.T) {
 func TestAbsoluteExpiryBrokenBySkew(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(AbsoluteExpiry, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 10)}).Expect(t, qtest.Conforms())
-	system(AbsoluteExpiry, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 10)}).Expect(t, qtest.Violates("noStaleWrite"))
-	system(WallInterval, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 10)}).Expect(t, qtest.Conforms())
+	system(AbsoluteExpiry, trueClocks).WithRates(punctual(qenv.DefaultRates)).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Conforms())
+	system(AbsoluteExpiry, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Violates("noStaleWrite"))
+	system(WallInterval, skew).WithRates(skews).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}).Expect(t, qtest.Conforms())
 }
 
 // Drift breaks what skew and jumps cannot: a lease timed on a monotonic
@@ -173,8 +161,8 @@ func TestAbsoluteExpiryBrokenBySkew(t *testing.T) {
 func TestNoFencingBrokenByDrift(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	x := qtest.ExploreConfig{Seeds: seeds(30, 10)}
+	x := qtest.ExploreConfig{Seeds: 30, ShortSeeds: 10}
 	system(NoFencing, qenv.Clocks{Drift: 0.02}).WithRates(drifts).Explore(t, x).Expect(t, qtest.Conforms())
-	system(NoFencing, qenv.Clocks{Drift: 0.25}).WithRates(drifts).Explore(t, qtest.ExploreConfig{Seeds: seeds(30, 14)}).Expect(t, qtest.Violates("noStaleWrite"))
+	system(NoFencing, qenv.Clocks{Drift: 0.25}).WithRates(drifts).Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 14}).Expect(t, qtest.Violates("noStaleWrite"))
 	system(Faithful, qenv.Clocks{Drift: 0.25}).WithRates(drifts).Explore(t, x).Expect(t, qtest.Conforms())
 }

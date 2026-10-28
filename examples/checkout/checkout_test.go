@@ -35,16 +35,6 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.05
 
 var levels = []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted}
 
-// seeds is full, or short under -short (the per-push tier): short is
-// chosen so that every claim a test makes keeps a miss chance of at most
-// 5% at the rate measured with full seeds; the nightly runs full.
-func seeds(full, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return full
-}
-
 // The faithful shop is correct at every isolation level, through crashes,
 // lost responses, duplicate requests and redeliveries: 60 seeds a level,
 // which take every fault option. Under -short, 6 seeds a level conform,
@@ -60,7 +50,7 @@ func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 	for _, iso := range levels {
 		t.Run(iso.String(), func(t *testing.T) {
 			t.Parallel()
-			explore(t, checkout.Config{Isolation: iso}, crashy, qtest.ExploreConfig{Seeds: seeds(60, 6)}).Expect(t, claims...)
+			explore(t, checkout.Config{Isolation: iso}, crashy, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 6}).Expect(t, claims...)
 		})
 	}
 }

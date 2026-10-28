@@ -8,11 +8,10 @@
 // qenv.Service named after it, from the run's Config.Doubles (else its
 // default double, grist.DefaultHandlers), its requests and answers lost,
 // duplicated and late. Run's signature
-// is a qtest.System's Run, so an application is explored, exhausted and
-// shrunk with every claim of qtest:
+// is a qtest.System's Run, and System is that System, so an application
+// is explored, exhausted and shrunk with every claim of qtest:
 //
-//	qtest.System{Binding: "counters.binding.yaml", Rates: qenv.DefaultRates.Set("nemesis", 0.02),
-//		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, gristsim.Config{}) }}
+//	gristsim.System("counters.binding.yaml", App, gristsim.Config{}).WithRates(qenv.DefaultRates.Set("nemesis", 0.02))
 //
 // Its end is ordered so the binding's eventual vals are judged: the
 // clients finish, Sim.Settle drains the processors (faults off from
@@ -39,6 +38,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv/qhttp"
 	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // ClientsActor is the actor of tenant's client-side steps: a run records
@@ -110,8 +110,15 @@ type Config struct {
 	// Alphabet is the strings a generated argument takes (default a, b,
 	// c): few, so that names collide, which is what finds races.
 	Alphabet []string
+	// Ints are the integers a generated argument takes (default -1 to 3):
+	// zero and a negative among them, the values a command's validation
+	// is about, as the starter model's INTS; an unsigned field takes the
+	// non-negative ones.
+	Ints []int
 	// Gen overrides a command's or query's generated arguments, by name:
-	// pick(n) chooses one of n through the run's Chooser.
+	// pick(n) chooses one of n through the run's Chooser. A block it does
+	// not name has its arguments drawn from their type (Gen, over Alphabet
+	// and Ints), so most apps need none.
 	Gen map[string]func(pick func(n int) int) any
 	// Doubles builds, once per run, the handlers that serve each of the
 	// App's dependencies (grist.NewDependency): each is served as a
@@ -294,7 +301,19 @@ const (
 	MaxAttempts = 50
 )
 
-// Run runs app on c under cfg: a qtest.System's Run. A run that does not
+// System is app under cfg, its runs judged by binding: a qtest.System
+// whose Run is Run's, carrying the mutant the test binary was built with
+// (qtest.Mutant: an overlay of testdata/mutants, as qtest.Mutants and
+// run-demo.sh plant it). Set its Rates and Opts on the result:
+//
+//	gristsim.System("shop.binding.yaml", App, cfg).WithRates(faulty).
+//		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).Expect(t, qtest.Conforms())
+func System(binding string, app *grist.App, cfg Config) qtest.System {
+	return qtest.System{Binding: binding, Mutant: qtest.Mutant(),
+		Run: func(c qenv.Chooser) error { return Run(c, app, cfg) }}
+}
+
+// Run runs app on c under cfg: a qtest.System's Run (System's). A run that does not
 // settle returns its *qenv.Unsettled, which qtest judges.
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	if err := app.Verify(); err != nil {
@@ -494,6 +513,9 @@ func defaults(cfg Config) Config {
 	if len(cfg.Alphabet) == 0 {
 		cfg.Alphabet = []string{"a", "b", "c"}
 	}
+	if len(cfg.Ints) == 0 {
+		cfg.Ints = []int{-1, 0, 1, 2, 3}
+	}
 	if cfg.Horizon == 0 {
 		cfg.Horizon = 2 * time.Minute
 	}
@@ -597,7 +619,7 @@ func (w *workload) gen(name string) json.RawMessage {
 	if g := w.cfg.Gen[name]; g != nil {
 		v = g(pick)
 	} else {
-		v = Gen(w.app.ArgsType(name), w.cfg.Alphabet, pick)
+		v = Gen(w.app.ArgsType(name), w.cfg.Alphabet, w.cfg.Ints, pick)
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -606,17 +628,27 @@ func (w *workload) gen(name string) json.RawMessage {
 	return b
 }
 
-// Gen is a value of typ drawn by pick: strings from alphabet, integers 1
-// to 3, booleans, structs field by field (unexported fields left zero),
-// slices of zero to two elements; anything else its zero value.
-func Gen(typ reflect.Type, alphabet []string, pick func(n int) int) any {
+// Gen is a value of typ drawn by pick: strings from alphabet, integers
+// from ints (an unsigned one from its non-negative values), booleans,
+// structs field by field (unexported fields left zero), slices of zero to
+// two elements; anything else its zero value.
+func Gen(typ reflect.Type, alphabet []string, ints []int, pick func(n int) int) any {
 	if typ == nil {
 		return struct{}{}
 	}
-	return genValue(typ, alphabet, pick).Interface()
+	var uints []int
+	for _, n := range ints {
+		if n >= 0 {
+			uints = append(uints, n)
+		}
+	}
+	if len(uints) == 0 {
+		uints = []int{0}
+	}
+	return genValue(typ, alphabet, ints, uints, pick).Interface()
 }
 
-func genValue(typ reflect.Type, alphabet []string, pick func(n int) int) reflect.Value {
+func genValue(typ reflect.Type, alphabet []string, ints, uints []int, pick func(n int) int) reflect.Value {
 	v := reflect.New(typ).Elem()
 	switch typ.Kind() {
 	case reflect.String:
@@ -624,20 +656,20 @@ func genValue(typ reflect.Type, alphabet []string, pick func(n int) int) reflect
 	case reflect.Bool:
 		v.SetBool(pick(2) == 1)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v.SetInt(int64(1 + pick(3)))
+		v.SetInt(int64(ints[pick(len(ints))]))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v.SetUint(uint64(1 + pick(3)))
+		v.SetUint(uint64(uints[pick(len(uints))]))
 	case reflect.Struct:
 		for i := 0; i < typ.NumField(); i++ {
 			if typ.Field(i).IsExported() {
-				v.Field(i).Set(genValue(typ.Field(i).Type, alphabet, pick))
+				v.Field(i).Set(genValue(typ.Field(i).Type, alphabet, ints, uints, pick))
 			}
 		}
 	case reflect.Slice:
 		n := pick(3)
 		s := reflect.MakeSlice(typ, n, n)
 		for i := 0; i < n; i++ {
-			s.Index(i).Set(genValue(typ.Elem(), alphabet, pick))
+			s.Index(i).Set(genValue(typ.Elem(), alphabet, ints, uints, pick))
 		}
 		v.Set(s)
 	}
@@ -645,10 +677,10 @@ func genValue(typ reflect.Type, alphabet []string, pick func(n int) int) reflect
 }
 
 // all are the values of typ a probe takes: every combination of its
-// picks (strings over the alphabet, integers 1 to 3), at most 27.
+// picks (strings over the alphabet, integers from Ints), at most 27.
 func (w *workload) all(typ reflect.Type) []json.RawMessage {
 	var radix []int
-	Gen(typ, w.cfg.Alphabet, func(n int) int { radix = append(radix, n); return 0 })
+	Gen(typ, w.cfg.Alphabet, w.cfg.Ints, func(n int) int { radix = append(radix, n); return 0 })
 	total := 1
 	for _, r := range radix {
 		total = min(total*r, 27)
@@ -656,7 +688,7 @@ func (w *workload) all(typ reflect.Type) []json.RawMessage {
 	out := make([]json.RawMessage, 0, total)
 	for k := 0; k < total; k++ {
 		n := k
-		b, _ := json.Marshal(Gen(typ, w.cfg.Alphabet, func(m int) int { c := n % m; n /= m; return c }))
+		b, _ := json.Marshal(Gen(typ, w.cfg.Alphabet, w.cfg.Ints, func(m int) int { c := n % m; n /= m; return c }))
 		out = append(out, b)
 	}
 	return out

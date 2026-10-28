@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # examples/wallet-grist: examples/wallet's bank on grist, explored in a
-# simulation, every run checked against model/wallet.qnt. MUTATION= one of
-# no-validation, read-then-write, no-outbox, ledger-no-dedupe or
-# replica-read builds the app with that mutant's overlay
+# simulation, every run checked against model/wallet.qnt. MUTANT= one of
+# noValidation, readThenWrite, noOutbox, ledgerNoDedupe or
+# replicaRead builds the app with that mutant's overlay
 # (testdata/mutants/) and shows what catches it; without one, the faithful
 # bank through commit faults, crashes and a lossy API and ledger, at its
 # races' shapes, through duplicated requests and invalid ones.
@@ -40,14 +40,12 @@ if [ -n "${SERVE:-}" ]; then
   (cd ../.. && go run ./cmd/gotogether validate -binding examples/wallet-grist/wallet.binding.yaml "$dir/steps.jsonl")
   exit
 fi
-case "${MUTATION:-}" in
-  "") run='TestFaithful$|TestRaces$|TestDuplicateRequests$|TestInvalidRequests$|TestPostedOnce$' ;;
-  no-validation) run='TestMutants$/^noValidation$' ;;
-  read-then-write) run='TestMutants$/^readThenWrite$' ;;
-  no-outbox) run='TestMutants$/^noOutbox$' ;;
-  ledger-no-dedupe) run='TestMutants$/^ledgerNoDedupe$' ;;
-  replica-read) run='TestMutants$/^replicaRead$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
-esac
-echo "== wallet-grist ${MUTATION:+(mutation $MUTATION)}"
+if [ -n "${MUTANT:-}" ]; then
+  # a directory of testdata/mutants (its overlay), or a rule dropped (drop-<rule>, generated): TestMutants builds it and states what catches it
+  [ -d "testdata/mutants/$MUTANT" ] || [[ $MUTANT == drop-* ]] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestFaithful$|TestRaces$|TestDuplicateRequests$|TestInvalidRequests$|TestPostedOnce$'
+fi
+echo "== wallet-grist ${MUTANT:+(mutant $MUTANT)}"
 GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 30m -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, |as expected'

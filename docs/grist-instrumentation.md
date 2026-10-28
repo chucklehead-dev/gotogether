@@ -1,7 +1,7 @@
 # grist instrumentation (GR3): every seam recorded and simulated by construction
 
 Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slices 1 to
-3 are built** (§4; docs/grist.md §0.12, §0.13 and §0.14 say what
+3 are built** (§4; docs/HISTORY.md (grist §0.12), §0.13 and §0.14 say what
 building them changed, and the text below is corrected where they did):
 `grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
 `Handlers`, `Local`, `Transport`, `gristsim.Config.Doubles`,
@@ -347,7 +347,7 @@ skeleton):
   applied the call, before the caller's completion, leaves the caller's
   step pending, and an at-most-once effect never calls again, so the
   served record is the request's only one; counters' `wrongAmount` then
-  conformed in every run of its script, docs/grist.md §0.13.) A wrong
+  conformed in every run of its script, docs/HISTORY.md (grist §0.13).) A wrong
   request is therefore named at the site where the dependency applied it
   (`Rejects("bankPayServed")`) and at the caller where nothing did (a
   lost request; a third party's dependency on the real tier, which
@@ -455,7 +455,7 @@ func ServeCalls(d *Dependency, h Handlers) http.Handler // a dependency the team
 func ServeDependency(d *Dependency, h Handlers) ServeOption // Main: ServeCalls beside the node, over HTTP
 ```
 
-(Built so in slice 3, docs/grist.md §0.14. `ServeCalls` takes no
+(Built so in slice 3, docs/HISTORY.md (grist §0.14). `ServeCalls` takes no
 recorder: it records into the request context's, so a service wraps it
 in `qobshttp.Handler(h, rec)` with its own (gristtest's tier does, with
 a step file of its own; `ServeDependency` does, into Main's steps file
@@ -606,7 +606,7 @@ names the mutant it must catch, built as an overlay
    `Do` outside an effect or without `Uses` is an error naming the fix
    (each fails with its check removed).
 2. **The default double, and every example's dependencies declared**
-   (built, 2026-10-27: docs/grist.md §0.13, with what it changed here).
+   (built, 2026-10-27: docs/HISTORY.md (grist §0.13), with what it changed here).
    gristsim's default double (§3.5); counters' mailer, wallet-grist's
    ledger and library's mailer ported (their `NewSite`s and hand-written
    `Admits` deleted); the site placed at its cause, so library's

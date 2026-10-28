@@ -315,8 +315,9 @@ const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
 func ClientsActor(tenant string) string
 func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope, name string, args json.RawMessage) error
-func Gen(typ reflect.Type, alphabet []string, pick func(n int) int) any
+func Gen(typ reflect.Type, alphabet []string, ints []int, pick func(n int) int) any
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error
+func System(binding string, app *grist.App, cfg Config) qtest.System
 type Call struct
     field Tenant string
     field Name string
@@ -341,6 +342,7 @@ type Config struct
     field CommitFaults bool
     field Check bool
     field Alphabet []string
+    field Ints []int
     field Gen map[string]func(pick func(n int) int) any
     field Doubles func() Doubles
     field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context

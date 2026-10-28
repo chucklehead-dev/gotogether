@@ -6,8 +6,8 @@ for you (`gotogether skills install`).
 
 ## What this is
 
-A Go toolkit for checking Go code against Quint models in four ways, and
-its load behaviour in a fifth:
+A Go toolkit for checking Go code against Quint models in four ways, its
+load behaviour in a fifth, and a framework whose model is generated:
 - **MBT** (`connect`): Quint traces drive the code.
 - **Hegel integration** (`qhegel`): Hegel drives and the model
   judges, or the model drives and Hegel varies.
@@ -19,6 +19,11 @@ its load behaviour in a fifth:
 - **Metastability** (`qload`, `qmeta`): whether a system recovers after a
   load spike or capacity dip. A CTMC predicts it, a load simulation on qenv
   confirms it, and Hegel shrinks the smallest trigger.
+- **grist** (its own module): an event-sourced framework built on the
+  others, its model's skeleton and both bindings generated from the
+  app's catalog (`<app> model`, internal/gen), the app writing its rules
+  and invariants; `gristsim.System` explores it, `grist new` starts one.
+  docs/grist.md is its design record.
 
 The design record is `docs/DESIGN.md`. Read §9 before changing `connect`
 or `qhegel`, §10 before changing `qenv`, and §11 before changing

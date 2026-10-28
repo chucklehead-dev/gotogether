@@ -2,32 +2,28 @@
 # webjobs: the recorded Bombadil journeys checked against the model (no
 # browser needed: a Go client drives the real server too), or with LIVE=1
 # Bombadil exploring the app for 45s (bombadil and a Chrome on PATH).
-# MUTATION= one of ready-early, double-job, cancel-ignored, cancel-broken,
-# status-stale, commit-after-cancel, rerun-finished builds the server with that mutant's overlay
+# MUTANT= one of readyEarly, doubleJob, cancelIgnored, cancelBroken,
+# statusStale, commitAfterCancel, rerunFinished builds the server with that mutant's overlay
 # (testdata/mutants/) and shows what catches it; without one, the
 # faithful app, then cmd/webjobs answering a submission twice with one
 # job.
 set -euo pipefail
 cd "$(dirname "$0")"
-case "${MUTATION:-}" in
-  "") run='TestClient$|TestRecorded$|TestProbes$|TestClickWithNoOutcome$|TestTornTrace$|TestTimesKept$' ;;
-  ready-early) run='TestMutants$/^readyEarly$' ;;
-  double-job) run='TestMutants$/^doubleJob$' ;;
-  cancel-ignored) run='TestMutants$/^cancelIgnored$' ;;
-  cancel-broken) run='TestMutants$/^cancelBroken$' ;;
-  status-stale) run='TestMutants$/^statusStale$' ;;
-  commit-after-cancel) run='TestMutants$/^commitAfterCancel$' ;;
-  rerun-finished) run='TestMutants$/^rerunFinished$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
-esac
+if [ -n "${MUTANT:-}" ]; then
+  # a directory of testdata/mutants (its overlay): TestMutants builds it and states what catches it
+  [ -d "testdata/mutants/$MUTANT" ] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestClient$|TestRecorded$|TestProbes$|TestClickWithNoOutcome$|TestTornTrace$|TestTimesKept$'
+fi
 short=-short
 if [ -n "${LIVE:-}" ]; then
   short=
-  [ -n "${MUTATION:-}" ] || run='TestLive$'
+  [ -n "${MUTANT:-}" ] || run='TestLive$'
 fi
-echo "== webjobs ${MUTATION:+(mutation $MUTATION)}${LIVE:+, live}"
+echo "== webjobs ${MUTANT:+(mutant $MUTANT)}${LIVE:+, live}"
 go test $short -count=1 -timeout 20m -run "$run" -v . | grep -E '^(\s*--- |ok|FAIL)|journey:|violat|pending'
-[ -z "${MUTATION:-}" ] || exit 0
+[ -z "${MUTANT:-}" ] || exit 0
 
 echo "== cmd/webjobs: one submission, sent twice"
 dir=$(mktemp -d)

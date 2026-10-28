@@ -30,16 +30,16 @@ func TestMutant(t *testing.T) {
 	case "noValidation":
 		// requests the bank must refuse, applied: an ok where the model's
 		// precondition says invalid (TestInvalidRequests is the contrast)
-		system(commits, invalid).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).
+		system(commits, invalid).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).
 			Expect(t, qtest.Some(qtest.Rejects("transfer")))
 	case "readThenWrite":
 		// at read committed both of a race's transfers spend what one saw:
 		// a commit the funds do not cover (a lost update), and a credit
 		// line overdrawn by one transfer from each of its accounts (the
 		// write skew's effect); TestRaces is the contrast
-		system(commits, race).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 8)}).
+		system(commits, race).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 8}).
 			Expect(t, qtest.Some(qtest.Rejects("transfer")))
-		system(commits, skew).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 8)}).
+		system(commits, skew).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 8}).
 			Expect(t, qtest.Some(qtest.Rejects("transfer")))
 		// Under Serializable the race is narrower but open: a decision's
 		// reads come before its append's transaction, so no isolation
@@ -60,7 +60,7 @@ func TestMutant(t *testing.T) {
 	case "noOutbox":
 		// the post at most once: its checkpoint commits before any effect
 		// step, which the at-least-once model refuses (atLeastOnceDone)
-		system(commits, deposits).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+		system(commits, deposits).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2}).
 			Expect(t, qtest.Some(qtest.Rejects("post")))
 	case "ledgerNoDedupe":
 		// a ledger double posting every try: after a crash between the post
@@ -69,7 +69,7 @@ func TestMutant(t *testing.T) {
 		// key, which the generated ledgerPostAdmits refuses (PostEntry is
 		// Keyed; no rule of the app's says so). Every run deposits and
 		// crashes so: every run rejects, at one seed per push
-		system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1), Chooser: crashAfterPost}).
+		system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1, Chooser: crashAfterPost}).
 			Expect(t, qtest.All(qtest.Rejects("ledgerPostServed")))
 	case "ledgerAcksUnposted":
 		// a proxy answering every post booked without posting: every step
@@ -81,13 +81,13 @@ func TestMutant(t *testing.T) {
 		// have posted what it answered: no val of the default binding written
 		// by hand catches it (the test-only everyMovePostedOnce would, in
 		// runs without the ledger's faults)
-		system(commits, deposits).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
+		system(commits, deposits).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}).
 			Expect(t, qtest.All(qtest.Settles()), qtest.All(qtest.Violates(validate.EventuallyName("ledgerPostEventuallyServed"))),
 				qtest.None(qtest.Violates(validate.EventuallyName("postEventuallyHandled"))), qtest.None(qtest.Violates(validate.EventuallyName("postedApplied"))))
 	case "replicaRead":
 		// a balance read from the ledger's postings misses a deposit not
 		// posted yet
-		system(commits, depositsAndReads).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+		system(commits, depositsAndReads).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 			Expect(t, qtest.Some(qtest.Mismatch("read")))
 	default:
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)

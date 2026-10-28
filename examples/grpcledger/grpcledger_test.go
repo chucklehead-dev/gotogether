@@ -23,15 +23,6 @@ func system(cfg grpcledger.Config) qtest.System {
 	}}
 }
 
-// seeds is n, or a fifth of it with -short: the same verdicts on fewer
-// runs (the seeds are fixed, so the short run is a deterministic subset).
-func seeds(n int) int {
-	if testing.Short() {
-		return n / 5
-	}
-	return n
-}
-
 // noFaults schedules at random but injects nothing.
 var noFaults = qenv.Rates{Kinds: map[string]float64{}}
 
@@ -44,7 +35,7 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02
 // answered once.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(grpcledger.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: seeds(60)})
+	x := system(grpcledger.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 12})
 	x.Expect(t, qtest.Conforms())
 	t.Log(x.Evidence())
 }
@@ -81,7 +72,7 @@ func TestMutants(t *testing.T) {
 			name = c.m.String() + "/nofaults"
 		}
 		t.Run(name, func(t *testing.T) {
-			system(grpcledger.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(40)}).Expect(t, c.want)
+			system(grpcledger.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 8}).Expect(t, c.want)
 		})
 	}
 }

@@ -445,3 +445,97 @@ func TestMainModel(t *testing.T) {
 		t.Errorf("model -check of an edited binding: %v, want it named", err)
 	}
 }
+
+// tally is a small App for the generator's warnings: a read model of
+// counted items, folding the removals too when removals is set, the
+// added event with a note when noted is.
+func tally(removals, noted bool) *grist.App {
+	a := grist.New("tally")
+	var added grist.EventName
+	if noted {
+		added = grist.NewEvent[struct {
+			Item string `json:"item"`
+			Note string `json:"note"`
+		}](a, "added")
+	} else {
+		added = grist.NewEvent[struct {
+			Item string `json:"item"`
+		}](a, "added")
+	}
+	removed := grist.NewEvent[struct {
+		Item string `json:"item"`
+	}](a, "removed")
+	hs := []grist.Handler[int]{onAny(added)}
+	if removals {
+		hs = append(hs, onAny(removed))
+	}
+	grist.NewReadModel(a, "count", 1, func() int { return 0 }, hs...)
+	return a
+}
+
+// onAny counts an event of t, whatever its body.
+func onAny(t grist.EventName) grist.Handler[int] {
+	switch t := t.(type) {
+	case *grist.EventType[struct {
+		Item string `json:"item"`
+	}]:
+		return grist.On(t, func(s int, _ struct {
+			Item string `json:"item"`
+		}, _ grist.Meta) int {
+			return s + 1
+		})
+	case *grist.EventType[struct {
+		Item string `json:"item"`
+		Note string `json:"note"`
+	}]:
+		return grist.On(t, func(s int, _ struct {
+			Item string `json:"item"`
+			Note string `json:"note"`
+		}, _ grist.Meta) int {
+			return s + 1
+		})
+	}
+	panic("onAny: an event type of another body")
+}
+
+// The generator warns when an input of the app's own rules changed since
+// the events file was generated: a read model folding a new event type
+// (its fold would skip it silently), an event type whose fields changed.
+func TestGenerateWarnsOfChangedInputs(t *testing.T) {
+	dir := t.TempDir()
+	g, err := gen.Generate(tally(false, false), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g.Warnings) != 0 {
+		t.Fatalf("first generation warned: %v", g.Warnings)
+	}
+	if err := g.Write(dir); err != nil {
+		t.Fatal(err)
+	}
+	if g, err = gen.Generate(tally(false, false), dir); err != nil || len(g.Warnings) != 0 {
+		t.Fatalf("regenerating the same catalog: %v %v", g.Warnings, err)
+	}
+	g, err = gen.Generate(tally(true, true), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := strings.Join(g.Warnings, "\n")
+	for _, want := range []string{"countEvents folds removed now", "event added has fields (item_: str, note: str) now, (item_: str)", "folded by countEvents"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("warnings %q lack %q", all, want)
+		}
+	}
+	if err := g.Write(dir); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ = gen.Generate(tally(false, true), dir); !strings.Contains(strings.Join(g.Warnings, "\n"), "countEvents no longer folds removed") {
+		t.Errorf("a type dropped: warnings %v", g.Warnings)
+	}
+	var out bytes.Buffer
+	// the command prints them before it fails on the missing rules
+	_ = grist.MainArgs(context.Background(), tally(false, true), []string{"model", "-dir", dir}, &out, io.Discard)
+	if !strings.Contains(out.String(), "tally model: warning: countEvents no longer folds removed") {
+		t.Errorf("the model command's output %q names no warning", out.String())
+	}
+}

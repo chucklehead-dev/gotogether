@@ -42,6 +42,6 @@ mutant per claim. skills/grist says how.
 ```sh
 go test -short ./...           # every claim (needs quint on PATH)
 ./run-demo.sh
-MUTATION=no-invalid ./run-demo.sh
-MUTATION=drop-capacity ./run-demo.sh
+MUTANT=noInvalid ./run-demo.sh
+MUTANT=drop-capacity ./run-demo.sh
 ```

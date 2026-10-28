@@ -14,14 +14,6 @@ func system(cfg Config, opts ...qtest.Option) qtest.System {
 		Run: func(c qenv.Chooser) error { return Run(c, cfg) }}
 }
 
-// seeds is n, or short under -short.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
-
 // faulty loses, duplicates and delays one request or response in ten (to
 // payd and to the processor), refuses connections, breaks database
 // connections, loses commits' answers, and crashes payd.
@@ -40,12 +32,12 @@ func TestFaithful(t *testing.T) {
 	qtest.RequireQuint(t)
 	for _, iso := range []qenv.Isolation{qenv.ReadCommitted, qenv.SnapshotIsolation, qenv.Serializable} {
 		t.Run(iso.String(), func(t *testing.T) {
-			system(Config{Isolation: iso, Check: true}).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 2)}).
+			system(Config{Isolation: iso, Check: true}).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).
 				Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 		})
 	}
 	// duplicated and late requests, the faults payd's dedupe is for
-	system(Config{Check: true}).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+	system(Config{Check: true}).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
 			qtest.Reaches("rpc.payd.request").Faulted().InAtLeast(0.5),
 			qtest.Reaches("nemesis.crash").Faulted().InAtLeast(0.5))
@@ -93,7 +85,7 @@ func TestMutant(t *testing.T) {
 		// two tabs sending one key at once, no faults at all: both find no
 		// charge and both charge (40 of 40 runs); the processor, given the
 		// key, captures once
-		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 1)}).
+		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).
 			Expect(t, qtest.Some(qtest.Violates("noDoubleCharge")), qtest.None(qtest.Violates("noDoubleCapture")))
 		// one client, half its requests duplicated: the two copies overlap
 		// (22 of 60 runs; 20 seeds miss with chance 0.01%)
@@ -127,14 +119,14 @@ func TestMutant(t *testing.T) {
 					qtest.None(qtest.Violates("noDoubleCharge")), qtest.None(qtest.Violates("noDoubleCapture")))
 		}
 		// two tabs: the second is told no while the first charges (40 of 40)
-		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 1)}).Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")))
+		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")))
 		if !testing.Short() {
 			realMutant(t, 16, "noRefusalOfCharged") // 15 of 15
 		}
 	case "debitFirst":
 		// two tabs: the attempt that loses the compare-and-set has debited
 		// already (40 of 40); the balance shows it after the settle
-		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 1)}).
+		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).
 			Expect(t, qtest.Some(qtest.Violates("noDebitWithoutCharge")), qtest.Some(qtest.Violates("balanceMatchesCharges")),
 				qtest.None(qtest.Violates("noDoubleCharge")))
 		// for real, where no debit is seen, the balances read after the
@@ -145,7 +137,7 @@ func TestMutant(t *testing.T) {
 	case "lostRace":
 		// two tabs: the attempt that loses the compare-and-set answers 409
 		// while its key is charged (40 of 40)
-		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 1)}).
+		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).
 			Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")), qtest.None(qtest.Violates("noDoubleCharge")))
 		if !testing.Short() {
 			realMutant(t, 16, "noRefusalOfCharged") // 15 of 15

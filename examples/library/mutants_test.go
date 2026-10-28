@@ -22,21 +22,21 @@ func TestMutant(t *testing.T) {
 		// a rule dropped (Mutants.App's generated mutant: drop-loan-limit):
 		// a fourth loan commits where the model's guard, loanLimitRefusal,
 		// says limit (TestGreedy is the contrast)
-		system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).Expect(t, caught)
+		system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).Expect(t, caught)
 		return
 	}
 	switch mutant {
 	case "noCopyCheck":
 		// the shelf never read: a borrow with no copy free commits where the
 		// model's rule refuses it (TestScarce is the contrast)
-		system(commits, scarce).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).
+		system(commits, scarce).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).
 			Expect(t, qtest.Some(qtest.Rejects("borrow")))
 	case "staleLimit":
 		// the borrow Unconditioned (its rule's reads advisory with it): two
 		// borrows of the member's last loan both commit, the second where the
 		// model's rule says limit (TestGreedy is
 		// the contrast)
-		system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 6)}).
+		system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 6}).
 			Expect(t, qtest.Some(qtest.Rejects("borrow")))
 	case "noDedupe":
 		// the mailer without its dedupe (a double sending every try): the
@@ -45,7 +45,7 @@ func TestMutant(t *testing.T) {
 		// (Send is Keyed; no rule of the app's says so; TestReceiptOnce is
 		// the contrast). Every run crashes so (lending's every run borrows):
 		// every run rejects, at one seed per push
-		system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1), Chooser: crashAfterMail}).
+		system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1, Chooser: crashAfterMail}).
 			Expect(t, qtest.All(qtest.Rejects("mailerSendServed")))
 	case "wrongReceipt":
 		// the receipt's member and book swapped: a receipt for no borrow.
@@ -54,7 +54,7 @@ func TestMutant(t *testing.T) {
 		// mailerSendServed takes only the request receiptsMailerSend makes
 		// for its trigger: lending's every run borrows, so every run rejects
 		// it, at one seed per push (TestFaithful is the contrast)
-		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
+		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}).
 			Expect(t, qtest.All(qtest.Rejects("mailerSendServed")))
 	default:
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)

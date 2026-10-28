@@ -21,32 +21,17 @@ const (
 // the default rate (requests and answers lost, duplicated and late).
 var faulty = qenv.DefaultRates.Set("nemesis", 0.02).Set("store.{{.Name}}.commit", 0.15)
 
-// system is the app under cfg, judged by binding, at faulty rates.
-func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
-		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
+// system is the app under cfg, its runs judged by binding, at faulty
+// rates (a gristsim.System: the mutant this binary was built with, if
+// any, planted).
+func system(binding string, cfg gristsim.Config) qtest.System {
+	return gristsim.System(binding, App, cfg).WithRates(faulty)
 }
 
-// seeds is n, or short under -short.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
-
-// of picks one of xs.
-func of[T any](pick func(int) int, xs ...T) T { return xs[pick(len(xs))] }
-
-// gen are the workload's arguments: additions of -1 to 3 of two items (a
-// quantity that is not positive among them, refused), shows of both.
-var gen = map[string]func(pick func(int) int) any{
-	"add-item":  func(p func(int) int) any { return AddItem{Item: of(p, "a", "b"), Qty: p(5) - 1} },
-	"show-item": func(p func(int) int) any { return ShowItem{Item: of(p, "a", "b")} },
-}
-
-// contended is one tenant, three clients of four operations each.
-var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, CommitFaults: true, Gen: gen}
+// contended is one tenant, three clients of four operations each, the
+// arguments drawn from their types: items a and b, quantities -1 to 3
+// (gristsim's default Ints: none or fewer among them, refused).
+var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, CommitFaults: true, Alphabet: []string{"a", "b"}}
 
 // TestFaithful: through commit faults, node crashes and a lossy API, every
 // run conforms at the store and settles (every addition tallied), the
@@ -56,7 +41,7 @@ var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Com
 func TestFaithful(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.{{.Name}}.commit").Faulted(), gristtest.Catalog(App).Exercised())
 }
 
@@ -66,14 +51,13 @@ func TestFaithful(t *testing.T) {
 func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(calls, contended, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+	system(commits, contended).WithBinding(calls, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms())
 }
 
-// fill is two clients adding to one item, no faults: the capacity is
-// reached. The drop-capacity mutant's shape (the rule dropped).
-var fill = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Send: []string{"add-item"},
-	Gen: map[string]func(pick func(int) int) any{"add-item": func(p func(int) int) any { return AddItem{Item: "a", Qty: 1 + p(3)} }}}
+// fill is two clients adding 1 to 3 to one item, no faults: the capacity
+// is reached. The drop-capacity mutant's shape (the rule dropped).
+var fill = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Send: []string{"add-item"}, Alphabet: []string{"a"}, Ints: []int{1, 2, 3}}
 
 // fillUp is an acceptance scenario, in the catalog's own values: an
 // item filled, then an addition past its capacity refused by the
@@ -97,7 +81,7 @@ func TestScenariosPossible(t *testing.T) {
 func TestFull(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("addItem")), fillUp)
 }
 

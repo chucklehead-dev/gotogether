@@ -20,15 +20,6 @@ func system(cfg Config, opts ...qtest.Option) qtest.System {
 	return s
 }
 
-// seeds is n, or short under -short (the per-push tier): short is sized
-// so that a claim some runs meet is missed at most one time in twenty.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
-
 // faulty loses, duplicates and delays one request or response in ten,
 // and crashes the bank and the ledger.
 var faulty = qenv.DefaultRates.Set("rpc", 0.1)
@@ -39,7 +30,7 @@ var faulty = qenv.DefaultRates.Set("rpc", 0.1)
 // seeds, 4 under -short).
 func TestFaithful(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Config{}, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
+	system(Config{}, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 }
 
@@ -61,15 +52,15 @@ func TestNoDedupeWithinOneFault(t *testing.T) {
 // (the lost update shows in most runs).
 func TestReadThenWrite(t *testing.T) {
 	qtest.RequireQuint(t)
-	n := seeds(20, 6)
+	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}
 	rc := Config{Mutation: ReadThenWrite, Isolation: qenv.ReadCommitted, Workload: Contended}
-	system(rc).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Some(qtest.Rejects("observe")))
+	system(rc).Explore(t, n).Expect(t, qtest.Some(qtest.Rejects("observe")))
 	si := rc
 	si.Isolation = qenv.SnapshotIsolation
-	system(si).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
+	system(si).Explore(t, n).Expect(t, qtest.Conforms())
 	faithful := rc
 	faithful.Mutation = Faithful
-	system(faithful).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
+	system(faithful).Explore(t, n).Expect(t, qtest.Conforms())
 }
 
 // quiet is no faults: two transfers that interleave, nothing else.
@@ -86,11 +77,11 @@ var quiet = qenv.DefaultRates.Set("rpc", 0).Set("nemesis", 0).Set("queue", 0).Se
 // under -short: each linearized run is costly, and the window is that wide.
 func TestWriteSkew(t *testing.T) {
 	qtest.RequireQuint(t)
-	n := seeds(10, 2)
+	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 2}
 	skew := Config{Mutation: WriteSkew, Workload: Skew}
-	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Some(qtest.Mismatch("transfer")))
+	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, n).Expect(t, qtest.Some(qtest.Mismatch("transfer")))
 	skew.Mutation = Faithful
-	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
+	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, n).Expect(t, qtest.Conforms())
 }
 
 // The bank's store's history, read as Elle reads a database's: at
@@ -174,9 +165,9 @@ func TestNoOutbox(t *testing.T) {
 // destroys money (in every run: 10 seeds, 3 under -short).
 func TestInvalidRequests(t *testing.T) {
 	qtest.RequireQuint(t)
-	n := seeds(10, 3)
-	system(Config{Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
-	system(Config{Mutation: NoValidation, Workload: Invalid}).Explore(t, qtest.ExploreConfig{Seeds: n}).
+	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
+	system(Config{Workload: Invalid}).Explore(t, n).Expect(t, qtest.Conforms())
+	system(Config{Mutation: NoValidation, Workload: Invalid}).Explore(t, n).
 		Expect(t, qtest.All(qtest.Mismatch("transfer")))
 }
 
@@ -188,14 +179,14 @@ func TestInvalidRequests(t *testing.T) {
 // each (6 of them apply it twice).
 func TestUnlockedRecord(t *testing.T) {
 	qtest.RequireQuint(t)
-	n := seeds(20, 10)
+	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 10}
 	dups := qenv.DefaultRates.Set("rpc.wallet.request", 0.5)
 	rc := Config{Isolation: qenv.ReadCommitted, Workload: Contended}
-	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: n}).Expect(t, qtest.Conforms())
+	system(rc).WithRates(dups).Explore(t, n).Expect(t, qtest.Conforms())
 	rc.Mutation = UnlockedRecord
 	// the request applied twice: its answer is the second's (ok false, the
 	// funds spent by the first) or the balances show it
-	system(rc).WithRates(dups).Explore(t, qtest.ExploreConfig{Seeds: n}).
+	system(rc).WithRates(dups).Explore(t, n).
 		Expect(t, qtest.Some(qtest.AnyOf(qtest.Mismatch("transfer"), qtest.Rejects("observe"))))
 }
 

@@ -8,6 +8,24 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- The grist path shorter (ROADMAP H6): `gristsim.System(binding, app,
+  cfg)` is a grist app's `qtest.System` (its `Run` and the binary's
+  mutant, `qtest.Mutant`), replacing the closure every grist example
+  wrote; `qtest.ExploreConfig.ShortSeeds` is Seeds under `-short`,
+  replacing the `seeds(n, short)` helper twelve examples defined;
+  `gristsim.Config.Ints` (default -1 to 3) are the integers a generated
+  argument takes, so zero and a negative are drawn without a `Gen`
+  (`gristsim.Gen` takes them: `Gen(typ, alphabet, ints, pick)`); the
+  generator warns when an input of the app's rules changed (a read model
+  folding a new event type, an event whose fields changed: `<app> model:
+  warning: ...`, and in `gristtest.Generated`'s failure). The demo
+  scripts take `MUTANT=<name>` (a testdata/mutants directory, or the
+  mutation's Go name: `MUTANT=noLocks`), never `MUTATION=<kebab-name>`,
+  and exit non-zero when a check fails (kvstore's validations,
+  edgepublish's scenarios against their expected verdicts).
+  `gotogether help` names grist. The skills are triggers and steps
+  (3,400 words of SKILL.md, from 20,300), their mechanics moved whole
+  into references.
 - grist hides what no user calls (ROADMAP H5, DESIGN §60): the
   generator (`Generate`, `Generated`, `Hole`, `Starter`) is
   grist/internal/gen, run by an app's binary's `model` command
@@ -53,7 +71,7 @@ The first release. What a user meets, by module:
   still checked in the others), `GraphResult.Quiescent` the states only
   a stutter leaves; a counterexample's replay takes step where its
   branch's call alone does not reach the path's state.
-- grist: a simulated cluster (GR10 slice 2, docs/grist.md §0.16).
+- grist: a simulated cluster (GR10 slice 2, docs/HISTORY.md, grist §0.16).
   `gristsim.Config.Cluster` (`gristsim.Cluster{Grace, Drain,
   EndpointLag, Disruptions, Rolling, Pace}`, `gristsim.DefaultGrace`
   45 s): every node serves the API behind a lagging router and drains at
@@ -387,7 +405,7 @@ The first release. What a user meets, by module:
   `"./<app>_steps"`). counters, wallet-grist, library and `grist new`'s
   scaffold moved.
 - grist, declared calls on the real tier over HTTP (GR3's slice 3,
-  docs/grist.md §0.14; api/grist.txt): `grist.OverHTTP(base, client)`
+  docs/HISTORY.md (grist §0.14); api/grist.txt): `grist.OverHTTP(base, client)`
   (`POST base/<call>`, `Idempotency-Key`, `grist.CauseHeader`
   `Grist-Cause`; `grist.CallTimeout`), `grist.ServeCalls(dep, handlers)`
   for a dependency the team owns (its site recorded into the request
@@ -399,7 +417,7 @@ The first release. What a user meets, by module:
   nothing after its kill. An at-most-once effect's unknown error is
   recorded and stored with its double quotes made single (a Quint
   string holds none: net/http's errors quote the URL).
-  After its review (docs/grist.md §0.14, its review): `grist.OverHTTP`
+  After its review (docs/HISTORY.md (grist §0.14), its review): `grist.OverHTTP`
   takes a 4xx of no declared refusal, and a 3xx, for an unknown outcome
   (a 4xx was `NotApplied`: an at-most-once outcome grist.failed beside
   a call recorded unknown), follows no redirect (a 307 re-sent the
@@ -412,7 +430,7 @@ The first release. What a user meets, by module:
   `grist.ServeCalls` refuses (400) a cause naming a processor that does
   not use the call, or a key that is not its effect's; `serve
   -dependency` refuses a URL that is not http(s) with a host.
-- grist, the default double (GR3's slice 2, docs/grist.md §0.13;
+- grist, the default double (GR3's slice 2, docs/HISTORY.md (grist §0.13);
   api/grist.txt): `grist.DefaultHandlers(dep)`, a dependency's handlers
   applying a `Keyed` call once per key (a later try replayed from the
   first answer) and an unkeyed one every time, each acknowledged; gristsim serves it to a dependency `Config.Doubles`
@@ -420,14 +438,14 @@ The first release. What a user meets, by module:
   a dependency. examples/library's and examples/counters' mailers and
   examples/wallet-grist's ledger are declared calls served by it (their
   hand-written doubles, sites and dedupe rules gone).
-  After its review (docs/grist.md §0.13): the generated `<c>Served`
+  After its review (docs/HISTORY.md (grist §0.13)): the generated `<c>Served`
   judges its request against the processor's rule, as the caller's
   action does (a caller crashed during the call left the served record
   the request's only one, unjudged); `grist.DefaultHandlers` panics, and
   gristsim's run is an error, for a call whose response has fields,
   which a default double cannot know (it answered the zero response).
 - grist, declared calls on the simulated tier (GR3's slice 1,
-  docs/grist.md §0.12; api/grist.txt): `grist.NewDependency`,
+  docs/HISTORY.md (grist §0.12); api/grist.txt): `grist.NewDependency`,
   `grist.NewCall[Req, Resp]` (`Keyed`, `Refuses`), `grist.Uses` on a
   processor (enforced), `Call.Do` in an effect (the caller's view
   recorded as an invocation and its completion), `Call.Handler`,
@@ -442,12 +460,12 @@ The first release. What a user meets, by module:
   `callKeyStable`, `keyCalled`; `gristtest.Exercised` taking each call.
   examples/counters' bank is a declared call (its `BankDep`, `SimBank`,
   `BankPays` gone).
-  After its review (docs/grist.md §0.12): an answer a handler gives with
+  After its review (docs/HISTORY.md (grist §0.12)): an answer a handler gives with
   `grist.Replayed` is recorded as `<c>Replayed` and judged by the
   generated action of that name (an earlier served record, answer alike);
   `grist.Local` never places a key's site record before an earlier one
   of the key; `Dependency.Calls` and `Call.Dependency` removed.
-- grist, the library trial's left items (docs/grist.md §0.11;
+- grist, the library trial's left items (docs/HISTORY.md (grist §0.11);
   api/grist.txt): `gristtest.Exercised(app, except...)` and
   `gristtest.Takes(app)` (every block of the catalog taken, each command
   by `ok` and each declared refusal, each missed named with how to reach
@@ -463,7 +481,7 @@ The first release. What a user meets, by module:
   named with its hint). An exploration's summary lists the untaken
   actions the binding names apart from the model's others, the first
   never cut short.
-- grist's generator and onboarding (docs/grist.md §0.9; api/grist.txt):
+- grist's generator and onboarding (docs/HISTORY.md (grist §0.9); api/grist.txt):
   `grist.Generate` and `grist.Starter`, an app's binary's `model` command
   (`grist.Main`: `-check`, `-init`), writing the model's skeleton
   (`model/<app>_gen.qnt`), the vendored grist.qnt and the bindings of
@@ -480,7 +498,7 @@ The first release. What a user meets, by module:
   `Check`), `Answered`. `grist/cmd/grist`: `grist new <name>`, an app
   module green on its first run. examples/counters and
   examples/wallet-grist are generated and use the harnesses. Its review
-  (docs/grist.md §0.10): an app named `grist` is refused (its model was
+  (docs/HISTORY.md (grist §0.10)): an app named `grist` is refused (its model was
   the vendored library's file, overwritten by every `model`); `Refuses`
   refuses a rejection named `ok`, `conflict`, `denied` or `error`;
   `gristtest.Answered` matches commands by tenant and id, skips denied
@@ -519,7 +537,7 @@ The first release. What a user meets, by module:
   the stores `memstore` and `simstore` with the contract suite
   `storetest`, and `gristsim.Run` for a `qtest.System`;
   examples/counters is its first application.
-- grist, after slice 1's review (docs/grist.md §0.2; api/grist.txt): a
+- grist, after slice 1's review (docs/HISTORY.md (grist §0.2); api/grist.txt): a
   key's first answer is final (a rejection commits its marker,
   `store.Marker.Outcome`, and a conflict too; a late duplicate gets the
   same refusal), the marker's hash covers the command's name and
@@ -581,7 +599,7 @@ The first release. What a user meets, by module:
   on sqlstore over qsql, and `TestRealSQLite` (a SQLite file, steps to a
   `PerStep` file sink, validated by `counters.binding.yaml`); its
   bindings name their side (`actors: ['!*.clients']`, `['*.clients']`).
-- grist, after the review of slice 2's first part (docs/grist.md §0.4;
+- grist, after the review of slice 2's first part (docs/HISTORY.md (grist §0.4);
   api/grist.txt): a node starts the relay and pollers of tenants created
   after it (`store.TenantFeed`, `WaitTenants`, required by `App.Start`);
   `App.Start(ctx, s, grist.WithRelay(r))` takes a `StartOption` (was
@@ -606,7 +624,7 @@ The first release. What a user meets, by module:
   `_txlock=immediate`. storetest draws selectors of two tags and checks
   `TenantFeed`. `gristsim.Do` runs and records a client's call in
   process, and `gristsim.Run` returns a relay's error.
-- grist's HTTP API and binary entry (docs/grist.md §0.5, §5;
+- grist's HTTP API and binary entry (docs/HISTORY.md (grist §0.5), §5;
   api/grist.txt): `grist.NewHandler(app, store, opts...)`, a plain
   `http.Handler` (`POST /t/{tenant}/commands/{name}` under an
   `Idempotency-Key`, the command id; `GET /t/{tenant}/queries/{name}`
@@ -630,7 +648,7 @@ The first release. What a user meets, by module:
   grist/sqlstore, every step to a `-steps` file). The catalog's types
   carry JSON tags, and its blocks `Authorized` and `Internal`. Command
   ids starting with `grist:` are refused (grist's own markers).
-- grist's `Effect(f, AtMostOnce)` (docs/grist.md §0.6; api/grist.txt):
+- grist's `Effect(f, AtMostOnce)` (docs/HISTORY.md (grist §0.6); api/grist.txt):
   the checkpoint first (its step's `ok` false), f once, then its outcome
   event in a commit of its own under a marker of the effect key (the
   step `<processor>Outcome`); a crash between the checkpoint and f loses
@@ -641,7 +659,7 @@ The first release. What a user meets, by module:
   `atMostOnceOutcome`. examples/counters gains `retire-counter` and the
   at-most-once `payout` processor, with its claims, and the
   `checkpointFirst` mutant.
-- grist's API after its review (docs/grist.md §0.7; api/grist.txt):
+- grist's API after its review (docs/HISTORY.md (grist §0.7); api/grist.txt):
   `ActorFromHeader` names only an actor the application's middleware
   left unset; `ErrBadArgs` (400) for arguments grist refuses (not UTF-8,
   a required field missing or null: `Schema` makes pointer fields
@@ -660,7 +678,7 @@ The first release. What a user meets, by module:
   `Client.MaxRetryDelay`, `Client.Budget`, `DefaultMaxRetryDelay`), and a
   5xx that is not grist's is an unknown outcome. sqlstore: PostgreSQL's
   class 54 is permanent.
-- grist's at-most-once outcomes after the review (docs/grist.md §0.7;
+- grist's at-most-once outcomes after the review (docs/HISTORY.md (grist §0.7);
   api/grist.txt): `grist.NotApplied(err)` marks an effect's error as
   known (`grist.failed`); any other error's outcome is `grist.unknown`
   (`Unknown`: processor, error, trigger), and the outcome step records
@@ -672,14 +690,14 @@ The first release. What a user meets, by module:
   examples/counters: the bank records its payments (`bankPays`;
   `Bank.Pay` takes the tenant), `everyPayoutOutcomeLogged`,
   `TestPayoutTwoNodes`, the `silentPayout` mutant.
-- grist's actor in decisions (docs/grist.md §0.7; api/grist.txt):
+- grist's actor in decisions (docs/HISTORY.md (grist §0.7); api/grist.txt):
   `Reads.Actor()`, and every command's and query's step records the
   actor as `principal` (a reserved argument name), client-side steps
   too. examples/counters: `counter-created` records its `creator`,
   `retire-counter` refuses another actor (`not-creator`), the model judges
   both, the calls model knows `denied`; `TestRetireByCreatorOnly` and the
   `anyoneRetires` mutant.
-- grist after wallet-grist's trial (docs/grist.md §0.8; api/grist.txt):
+- grist after wallet-grist's trial (docs/HISTORY.md (grist §0.8); api/grist.txt):
   `Unconditioned` is documented as unprotected at every isolation level
   (its reads precede its append's transaction; Serializable only makes
   a loser whose append overlapped decide again), pinned by

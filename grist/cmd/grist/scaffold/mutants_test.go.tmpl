@@ -23,14 +23,14 @@ func TestMutant(t *testing.T) {
 		// a rule dropped (drop-capacity, generated): an addition past the
 		// capacity commits where the model's guard (capacityRefusal) refuses
 		// it, a Rejects of the command it guards (TestFull is the contrast)
-		system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).Expect(t, caught)
+		system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).Expect(t, caught)
 		return
 	}
 	switch mutant {
 	case "noInvalid":
 		// the quantity check left out: an addition of none or fewer commits
 		// where the model's rule refuses it (TestFaithful is the contrast)
-		system(commits, contended).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 3)}).
+		system(commits, contended).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).
 			Expect(t, qtest.Some(qtest.Rejects("addItem")))
 	default:
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # {{.Name}}: a grist application, explored in a simulation, every run
 # checked against model/{{.Name}}.qnt through the generated bindings.
-# MUTATION=no-invalid builds the app with that mutant's overlay
-# (testdata/mutants/) and shows what catches it; MUTATION=drop-capacity
+# MUTANT=noInvalid builds the app with that mutant's overlay
+# (testdata/mutants/) and shows what catches it; MUTANT=drop-capacity
 # runs the generated mutant that drops the capacity rule.
 set -euo pipefail
 cd "$(dirname "$0")"
-case "${MUTATION:-}" in
-  "") run='TestFaithful$|TestFaithfulAtClients$|TestFull$|TestGenerated$' ;;
-  no-invalid) run='TestMutants$/^noInvalid$' ;;
-  drop-capacity) run='TestMutants$/^drop-capacity$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
-esac
+if [ -n "${MUTANT:-}" ]; then
+  # a directory of testdata/mutants (its overlay), or a rule dropped (drop-<rule>, generated): TestMutants builds it and states what catches it
+  [ -d "testdata/mutants/$MUTANT" ] || [[ $MUTANT == drop-* ]] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestFaithful$|TestFaithfulAtClients$|TestFull$|TestGenerated$'
+fi
 go run ./cmd/{{.Name}} model -check
 GOTOGETHER_CHECK=1 go test -short -count=1 -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, '

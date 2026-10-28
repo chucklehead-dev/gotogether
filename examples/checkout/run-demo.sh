@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # Simulate the shop under each isolation level, then check the step logs
-# against the model with gotogether. MUTATION=no-locks | lock-without-write |
-# no-idempotency-key | dual-write injects a bug; ISOLATIONS picks levels.
+# against the model with gotogether. MUTANT=noLocks | lockWithoutWrite |
+# noIdempotencyKey | dualWrite injects a bug; ISOLATIONS picks levels.
 set -euo pipefail
 cd "$(dirname "$0")"
+# the binary takes the mutation kebab-cased (noLocks: no-locks)
+mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 out=$(mktemp -d)
 go build -o "$out/checkout-sim" ./cmd/checkout-sim
 (cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
 status=0
 for iso in ${ISOLATIONS:-serializable snapshot read-committed}; do
-  echo "== $iso ${MUTATION:+(mutation $MUTATION)}"
-  "$out/checkout-sim" -seeds "${SEEDS:-30}" -isolation "$iso" -mutation "${MUTATION:-}" -crash-rate "${CRASH_RATE:-0.05}" -out "$out/$iso"
+  echo "== $iso ${MUTANT:+(mutant $MUTANT)}"
+  "$out/checkout-sim" -seeds "${SEEDS:-30}" -isolation "$iso" -mutation "$mutation" -crash-rate "${CRASH_RATE:-0.05}" -out "$out/$iso"
   # one actor per seed: the report lists each run's verdict
   if "$out/gotogether" validate -binding checkout.binding.yaml "$out/$iso"/*.jsonl > "$out/$iso.report"; then
     echo "all runs conform"

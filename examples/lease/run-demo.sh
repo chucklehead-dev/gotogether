@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Simulate the lock, the store and its holders, then check the step logs
 # against the model with gotogether.
-#   MUTATION=no-fencing | wall-interval | absolute-expiry   the store without fencing
+#   MUTANT=noFencing | wallInterval | absoluteExpiry   the store without fencing
 #   CLOCKS=1                                clock faults (skews, jumps)
 #   DRIFT=0.25                              clocks run fast or slow by this fraction
 # With true clocks every variant conforms: only a clock fault shows the bug,
-# and only the one each variant trusts (NoFencing: drift; wall-interval: a
-# jump; absolute-expiry: a skew).
+# and only the one each variant trusts (NoFencing: drift; wallInterval: a
+# jump; absoluteExpiry: a skew).
 set -euo pipefail
 cd "$(dirname "$0")"
+# the binary takes the mutation kebab-cased (noLocks: no-locks)
+mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 out=$(mktemp -d)
 go build -o "$out/lease-sim" ./cmd/lease-sim
 (cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
-echo "== lease ${MUTATION:+(mutation $MUTATION)} ${CLOCKS:+(clock faults)}"
-"$out/lease-sim" -seeds "${SEEDS:-20}" -mutation "${MUTATION:-}" ${CLOCKS:+-clocks} -drift "${DRIFT:-0}" -out "$out/runs"
+echo "== lease ${MUTANT:+(mutant $MUTANT)} ${CLOCKS:+(clock faults)}"
+"$out/lease-sim" -seeds "${SEEDS:-20}" -mutation "$mutation" ${CLOCKS:+-clocks} -drift "${DRIFT:-0}" -out "$out/runs"
 if "$out/gotogether" validate -binding lease.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then
   echo "all runs conform"
 else

@@ -19,14 +19,6 @@ func system(cfg twophase.Config) qtest.System {
 	}}
 }
 
-// seeds is n, or a third of it under -short.
-func seeds(n int) int {
-	if testing.Short() {
-		return n / 3
-	}
-	return n
-}
-
 // crashy crashes a process at one scheduling step in twenty, and loses or
 // duplicates one message in five.
 var crashy = qenv.Rates{Default: 0.2, Kinds: map[string]float64{"nemesis": 0.05}}
@@ -36,7 +28,7 @@ var crashy = qenv.Rates{Default: 0.2, Kinds: map[string]float64{"nemesis": 0.05}
 // model, its invariants hold, and runs both commit and abort.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(twophase.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: seeds(60)})
+	x := system(twophase.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 20})
 	x.Expect(t, qtest.Conforms())
 	t.Log(x.Evidence())
 }

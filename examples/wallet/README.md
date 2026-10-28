@@ -123,5 +123,5 @@ checks the model's own design.
 ```sh
 go test -short .                     # needs quint on PATH; -short skips the slowest searches, runs fewer seeds
 ./run-demo.sh                        # the faithful wallet, and under every fault family
-MUTATION=write-skew ./run-demo.sh
+MUTANT=writeSkew ./run-demo.sh
 ```

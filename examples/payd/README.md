@@ -165,6 +165,6 @@ second, cached after), and leaves the binary the service's own.
 ```sh
 go test -short ./...                 # about 50 s
 ./run-demo.sh                        # the faithful service, then cmd/payd answering one key twice
-MUTATION=precheck ./run-demo.sh      # or no-forward-key, pending-conflict, debit-first, lost-race, cents-in-body
+MUTANT=precheck ./run-demo.sh      # or noForwardKey, pendingConflict, debitFirst, lostRace, centsInBody
 go run ./cmd/payd -db /tmp/payd.db   # then: curl -X POST localhost:8080/v1/charges -H 'Idempotency-Key: k1' -d '{"account": "acct_1", "amount": 250}'
 ```

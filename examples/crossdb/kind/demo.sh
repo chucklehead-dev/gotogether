@@ -4,7 +4,7 @@
 # provider makes the dbaas server follow; the server's and the driver's
 # step logs are checked against the model.
 #
-#   MUTATION=generated-external-name | no-client-token | password-from-create
+#   MUTANT=generatedExternalName | noClientToken | passwordFromCreate
 #   DROP=0.2    probability the dbaas server drops a mutating response (after applying it)
 #   KILL=1      kill -9 the provider every 2-6 s while the driver runs, and restart it
 #   N=4 SEED=1  AppDatabases, and the driver's seed
@@ -12,6 +12,8 @@
 # Exit status: 0 conforms, 1 violation (gotogether's).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# the binary takes the mutation kebab-cased (noLocks: no-locks)
+mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 kind/setup.sh
 cluster=${CLUSTER:-crossdb}
 out=$(mktemp -d)
@@ -24,7 +26,7 @@ export KUBECONFIG="$out/kubeconfig"
 "$out/dbaas-server" -listen 127.0.0.1:8085 -steps "$out/cloud.jsonl" -drop-response "${DROP:-0.1}" \
   -visibility-lag 2s -seed "${SEED:-1}" 2>"$out/server.log" &
 server=$!
-run_provider() { "$out/provider" -dbaas http://127.0.0.1:8085 -poll 2s -mutation "${MUTATION:-}" >>"$out/provider.log" 2>&1 & echo $!; }
+run_provider() { "$out/provider" -dbaas http://127.0.0.1:8085 -poll 2s -mutation "$mutation" >>"$out/provider.log" 2>&1 & echo $!; }
 provider=$(run_provider)
 killer=""
 if [[ -n "${KILL:-}" ]]; then

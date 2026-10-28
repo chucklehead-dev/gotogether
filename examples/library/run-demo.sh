@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
 # library: a lending library on grist, explored in a simulation, every run
 # checked against model/library.qnt through the generated bindings.
-# MUTATION=<name> builds the app with that mutant's overlay
-# (testdata/mutants/) and shows what catches it: no-copy-check,
-# stale-limit, no-dedupe, wrong-receipt; drop-loan-limit is the
+# MUTANT=<name> builds the app with that mutant's overlay
+# (testdata/mutants/) and shows what catches it: noCopyCheck,
+# staleLimit, noDedupe, wrongReceipt; drop-loan-limit is the
 # generated mutant that drops the loan-limit rule.
 set -euo pipefail
 cd "$(dirname "$0")"
-case "${MUTATION:-}" in
-  "") run='TestFaithful$|TestFaithfulAtClients$|TestScarce$|TestGreedy$|TestReceiptOnce$|TestGenerated$' ;;
-  no-copy-check) run='TestMutants$/^noCopyCheck$' ;;
-  stale-limit) run='TestMutants$/^staleLimit$' ;;
-  no-dedupe) run='TestMutants$/^noDedupe$' ;;
-  wrong-receipt) run='TestMutants$/^wrongReceipt$' ;;
-  drop-loan-limit) run='TestMutants$/^drop-loan-limit$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
-esac
+if [ -n "${MUTANT:-}" ]; then
+  # a directory of testdata/mutants (its overlay), or a rule dropped (drop-<rule>, generated): TestMutants builds it and states what catches it
+  [ -d "testdata/mutants/$MUTANT" ] || [[ $MUTANT == drop-* ]] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
+  run="TestMutants\$/^$MUTANT\$"
+else
+  run='TestFaithful$|TestFaithfulAtClients$|TestScarce$|TestGreedy$|TestReceiptOnce$|TestGenerated$'
+fi
 go run ./cmd/library model -check
 GOTOGETHER_CHECK=1 go test -short -count=1 -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, '

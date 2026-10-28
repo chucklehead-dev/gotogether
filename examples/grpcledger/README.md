@@ -55,7 +55,7 @@ client on return. A transfer whose response was lost still happened.
 `go test -short ./...` runs a fifth of the seeds and skips the sweep and
 the shrink (about 80 s, most of it quint). `./run-demo.sh` serves the
 ledger for real and validates its spans with `gotogether validate -convert`
-(`MUTATION=no-dedupe` to see a failure).
+(`MUTANT=noDedupe` to see a failure).
 
 ## What the simulation found in this example
 

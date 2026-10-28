@@ -106,6 +106,9 @@ func usageTo(w io.Writer) {
   gotogether scaffold -spec model.qnt -module M -out m.binding.yaml    (set its constants)
   gotogether lint -binding m.binding.yaml && gotogether simulate -binding m.binding.yaml
   gotogether scaffold -system -binding m.binding.yaml -out system_test.go
+An event-sourced service can have its model written for it: grist (its own module) generates
+the model's skeleton and both bindings from the app's catalog, the app writing only its rules:
+  go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>    (docs/grist.md)
 Each command's -h says what it is for, with an example. gotogether version prints the version.
 
 usage:

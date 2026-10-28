@@ -15,8 +15,8 @@ The pieces:
 
 ```sh
 ./run-demo.sh                          # conforms; exactlyOnce, checked explicitly, fails where a job ran twice
-MUTATION=ack-any-lease ./run-demo.sh   # accepts an ack whose lease was lost: rejected at that ack
-MUTATION=forget-done ./run-demo.sh     # acks not journaled: a done job is leased again after the restart
+MUTANT=ackAnyLease ./run-demo.sh   # accepts an ack whose lease was lost: rejected at that ack
+MUTANT=forgetDone ./run-demo.sh     # acks not journaled: a done job is leased again after the restart
 ```
 
 ```

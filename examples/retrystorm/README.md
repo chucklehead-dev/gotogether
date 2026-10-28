@@ -77,7 +77,7 @@ What the tiers taught:
 go test ./examples/retrystorm/ -short -v      # ~40 s
 go test ./examples/retrystorm/ -v             # + trigger search and shrinking, ~3 min
 ./run-demo.sh                                 # report (index.html, SVGs) + validate the budget's steps
-MUTATION=uncapped ./run-demo.sh               # the validator rejects the run
+MUTANT=uncapped ./run-demo.sh               # the validator rejects the run
 ```
 
 The report has, per policy, the chain's field: arrows show the dynamics'

@@ -125,11 +125,11 @@ repeat a mechanism a per-push test covers run in full mode only:
 go test -short ./...                 # every claim, at CI's seeds
 go run ./cmd/counters model             # regenerate the model's skeleton and the bindings after changing a block
 ./run-demo.sh                        # claims 2 and 3
-MUTATION=blind ./run-demo.sh         # claim 1
-MUTATION=dispatch-direct ./run-demo.sh
+MUTANT=blind ./run-demo.sh         # claim 1
+MUTANT=dispatchDirect ./run-demo.sh
 SERVE=1 ./run-demo.sh                # cmd/counters served on SQLite, driven with curl, its steps validated
 ROLLING=1 ./run-demo.sh              # a rolling restart under load, simulated and on three real pods (GR10 slice 2)
-MUTATION=no-drain-delay ./run-demo.sh   # its mutants: refused tries; MUTATION=stop-node-at-signal: an unknown payout
+MUTANT=noDrainDelay ./run-demo.sh   # its mutants: refused tries; MUTANT=stopNodeAtSignal: an unknown payout
 COUNTERS_COST=752 go test -run TestValidationCost -v .   # a run of about 1000 steps, judged
 ```
 

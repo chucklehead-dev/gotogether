@@ -326,7 +326,7 @@ go test -short ./...                       # the client's runs (faithful, each m
 go test ./...                              # adds the live runs: bombadil and a Chrome on PATH; TestPlaywright: node and playwright (npm i -g playwright@1.56.1)
 WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .   # records 6s runs into testdata/runs
 ./run-demo.sh                              # the recorded journeys, then cmd/webjobs answering one key twice
-MUTATION=ready-early ./run-demo.sh         # or double-job, cancel-ignored, cancel-broken, status-stale, commit-after-cancel, rerun-finished; LIVE=1 live
+MUTANT=readyEarly ./run-demo.sh         # or doubleJob, cancelIgnored, cancelBroken, statusStale, commitAfterCancel, rerunFinished; LIVE=1 live
 ```
 
 The live tests skip under `-short`, and out of it skip without

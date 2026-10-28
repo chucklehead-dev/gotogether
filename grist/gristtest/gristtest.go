@@ -31,20 +31,29 @@ import (
 // block added, renamed or redeclared without regenerating fails here, in
 // CI, rather than as a binding that silently judges an older catalog.
 // GRIST_UPDATE=1 writes the files instead (the app's `model` command
-// does the same).
+// does the same). Either way it names the app's rules' inputs that
+// changed (Generated's Warnings: a read model folding a new event type,
+// an event whose fields changed), which no typecheck catches.
 func Generated(t testing.TB, app *grist.App) {
 	t.Helper()
 	g, err := gen.Generate(app, ".")
 	if err != nil {
 		t.Fatal(err)
 	}
+	warnings := ""
+	for _, w := range g.Warnings {
+		warnings += "\n  warning: " + w
+	}
 	if os.Getenv("GRIST_UPDATE") == "1" {
 		if err := g.Write("."); err != nil {
 			t.Fatal(err)
 		}
+		if warnings != "" {
+			t.Logf("regenerated %s's model; check its rules:%s", app.Name, warnings)
+		}
 	} else if d := g.Diff("."); len(d) > 0 {
-		t.Fatalf("generated files differ from what the %s App's catalog generates (the generator): %s; regenerate them with the app's binary's model command (grist.Main: go run ./cmd/<app> model) or GRIST_UPDATE=1 go test -run '^%s$', and commit them",
-			app.Name, strings.Join(d, ", "), t.Name())
+		t.Fatalf("generated files differ from what the %s App's catalog generates (the generator): %s; regenerate them with the app's binary's model command (grist.Main: go run ./cmd/<app> model) or GRIST_UPDATE=1 go test -run '^%s$', and commit them%s",
+			app.Name, strings.Join(d, ", "), t.Name(), warnings)
 	}
 	if len(g.Missing) > 0 {
 		var stubs []string

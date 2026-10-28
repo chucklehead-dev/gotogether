@@ -31,7 +31,7 @@ func TestRolloutUnderProductionWorkload(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	tr := production(t)
-	x := explore(t, fleetrollout.Config{Workload: tr}, seeds(30, 2))
+	x := explore(t, fleetrollout.Config{Workload: tr}, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 2})
 	x.Expect(t, qtest.Conforms())
 	scales := 0
 	for _, r := range x.Runs {
@@ -44,7 +44,7 @@ func TestRolloutUnderProductionWorkload(t *testing.T) {
 	if scales < len(x.Runs) {
 		t.Errorf("%d scale steps over %d runs: the workload did not reach the fleet", scales, len(x.Runs))
 	}
-	explore(t, fleetrollout.Config{Workload: tr, Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, seeds(20, 6)).
+	explore(t, fleetrollout.Config{Workload: tr, Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}).
 		Expect(t, qtest.Violates("withinBudget"))
 }
 
@@ -64,7 +64,7 @@ func TestRolloutWithMeasuredPodTimes(t *testing.T) {
 	for _, d := range sktrace.Quantiles(tr.Lifetimes(""), 3) {
 		pods = append(pods, d/60)
 	}
-	explore(t, fleetrollout.Config{PodTimes: pods}, seeds(20, 2)).Expect(t, qtest.Conforms())
-	explore(t, fleetrollout.Config{PodTimes: pods, Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, seeds(20, 2)).
+	explore(t, fleetrollout.Config{PodTimes: pods}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).Expect(t, qtest.Conforms())
+	explore(t, fleetrollout.Config{PodTimes: pods, Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).
 		Expect(t, qtest.Violates("withinBudget"))
 }

@@ -292,7 +292,7 @@ func Emits(types ...EventName) Option {
 // trigger's checkpoint commits with no effect, recorded as the
 // processor's skip step (<processor>Skip, Fail's with its grist.failed),
 // which the generated model takes where the app's rule <processor>Skips
-// says the handler skips the trigger (docs/grist.md §0.11); a Fail, whose
+// says the handler skips the trigger (docs/HISTORY.md (grist §0.11)); a Fail, whose
 // grist.failed the skip's empty batch does not match, is a mismatch, as
 // an Emits processor's is.
 func Delivers(g Guarantee, success ...EventName) Option {

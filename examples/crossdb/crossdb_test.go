@@ -17,16 +17,6 @@ func explore(t *testing.T, cfg crossdb.Config, rates qenv.Rates, x qtest.Explore
 	return qtest.System{Binding: binding, Rates: rates, Run: func(c qenv.Chooser) error { return crossdb.Run(c, cfg) }}.Explore(t, x)
 }
 
-// seeds is full, or short under -short (the per-push tier): short is
-// chosen so that every claim a test makes keeps a miss chance of at most
-// 5% at the rate measured with full seeds; the nightly runs full.
-func seeds(full, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return full
-}
-
 // crashy crashes the provider at one scheduling step in fifty.
 var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02}}
 
@@ -37,7 +27,7 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	t.Parallel()
-	explore(t, crossdb.Config{}, crashy, qtest.ExploreConfig{Seeds: seeds(60, 6)}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
+	explore(t, crossdb.Config{}, crashy, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 6}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
 // A cloud that applies a request however late it arrives does not leak
@@ -77,7 +67,7 @@ func TestGeneratedExternalName(t *testing.T) {
 	// once in a thousand, the 25 of -short 1.3% of the time
 	t.Run("faults", func(t *testing.T) {
 		t.Parallel()
-		explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: seeds(50, 25)}).
+		explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 50, ShortSeeds: 25}).
 			Expect(t, qtest.Violates("settledCorrectly"))
 	})
 	// crashes alone: an incomplete create, and a resource that never gets
@@ -86,7 +76,7 @@ func TestGeneratedExternalName(t *testing.T) {
 	t.Run("crashes", func(t *testing.T) {
 		t.Parallel()
 		crashesOnly := qenv.Rates{Kinds: map[string]float64{"nemesis": 0.05}}
-		explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName}, crashesOnly, qtest.ExploreConfig{Seeds: seeds(40, 6)}).
+		explore(t, crossdb.Config{Mutation: provider.GeneratedExternalName}, crashesOnly, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 6}).
 			Expect(t, qtest.Violates("settledCorrectly"))
 	})
 }
@@ -98,7 +88,7 @@ func TestNoClientTokenDuplicates(t *testing.T) {
 	t.Parallel()
 	// in about one run in ten (4 of 40, 6 of 70): 70 seeds miss it about
 	// once in a thousand, the 40 of -short 2.7% of the time
-	explore(t, crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: seeds(70, 40)}).
+	explore(t, crossdb.Config{Mutation: provider.NoClientToken, NoCrashes: true}, qenv.DefaultRates, qtest.ExploreConfig{Seeds: 70, ShortSeeds: 40}).
 		Expect(t, qtest.Violates("oneDatabasePerResource"))
 }
 
@@ -111,7 +101,7 @@ func TestPasswordFromCreate(t *testing.T) {
 	lossy := qenv.Rates{Default: 0.05, Kinds: map[string]float64{"rpc.dbaas.response": 0.3}}
 	// in about one run in six (6 of 40, 9 of 50): 50 seeds, the 18 of
 	// -short miss it 3% of the time
-	explore(t, crossdb.Config{Mutation: provider.PasswordFromCreate, NoCrashes: true}, lossy, qtest.ExploreConfig{Seeds: seeds(50, 18)}).
+	explore(t, crossdb.Config{Mutation: provider.PasswordFromCreate, NoCrashes: true}, lossy, qtest.ExploreConfig{Seeds: 50, ShortSeeds: 18}).
 		Expect(t, qtest.Violates("settledCorrectly"))
 }
 

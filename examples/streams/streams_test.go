@@ -19,15 +19,6 @@ func system(cfg streams.Config) qtest.System {
 	}}
 }
 
-// seeds is n, or short under -short (the per-push tier): short is sized
-// so that a claim some runs meet is missed at most one time in twenty.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
-
 // faulty raises every fault kind to one choice in ten, nemeses (crashes,
 // evictions) to one step in twenty.
 var faulty = qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.05}}
@@ -38,7 +29,7 @@ var faulty = qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.05}
 // 12 under -short, which still fault every kind).
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	x := system(streams.Config{}).WithRates(faulty).Explore(t, qtest.ExploreConfig{Seeds: seeds(80, 12)})
+	x := system(streams.Config{}).WithRates(faulty).Explore(t, qtest.ExploreConfig{Seeds: 80, ShortSeeds: 12})
 	x.Expect(t, qtest.Conforms(), qtest.NotVacuous())
 	t.Log(x.Evidence())
 }
@@ -85,7 +76,7 @@ func TestMutants(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.m.String(), func(t *testing.T) {
 			t.Parallel()
-			system(streams.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(c.seeds, c.short)}).Expect(t, c.want)
+			system(streams.Config{Mutation: c.m}).WithRates(c.rates).Explore(t, qtest.ExploreConfig{Seeds: c.seeds, ShortSeeds: c.short}).Expect(t, c.want)
 		})
 	}
 }

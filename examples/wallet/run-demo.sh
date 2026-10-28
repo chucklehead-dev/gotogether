@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Explore the wallet and check every run against the model. MUTATION= one
-# of no-dedupe, unlocked-record, no-validation, read-then-write,
-# write-skew, no-outbox, replica-read shows what catches it, and the first
+# Explore the wallet and check every run against the model. MUTANT= one
+# of noDedupe, unlockedRecord, noValidation, readThenWrite,
+# writeSkew, noOutbox, replicaRead shows what catches it, and the first
 # counterexample; the faithful wallet runs linearized, under every fault
 # family too.
 set -euo pipefail
 cd "$(dirname "$0")"
-case "${MUTATION:-}" in
+case "${MUTANT:-}" in
   "") run='TestFaithful$|TestAllFaults$' ;;
-  no-dedupe) run='TestNoDedupeWithinOneFault$' ;;
-  unlocked-record) run='TestUnlockedRecord$' ;;
-  no-validation) run='TestInvalidRequests$' ;;
-  read-then-write) run='TestReadThenWrite$' ;;
-  write-skew) run='TestWriteSkew' ;;
-  no-outbox) run='TestNoOutbox$' ;;
-  replica-read) run='TestReplicaRead$' ;;
-  *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
+  noDedupe) run='TestNoDedupeWithinOneFault$' ;;
+  unlockedRecord) run='TestUnlockedRecord$' ;;
+  noValidation) run='TestInvalidRequests$' ;;
+  readThenWrite) run='TestReadThenWrite$' ;;
+  writeSkew) run='TestWriteSkew' ;;
+  noOutbox) run='TestNoOutbox$' ;;
+  replicaRead) run='TestReplicaRead$' ;;
+  *) echo "unknown MUTANT=$MUTANT" >&2; exit 2 ;;
 esac
-echo "== wallet ${MUTATION:+(mutation $MUTATION)}"
+echo "== wallet ${MUTANT:+(mutant $MUTANT)}"
 go test -count=1 -timeout 30m -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, |quint: |observed:|expect: |obs: |G2'

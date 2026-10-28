@@ -21,21 +21,8 @@ func system(cfg fleetrollout.Config) qtest.System {
 	}}
 }
 
-// seeds is n, or short under -short: the per-push tier runs as few seeds
-// as keep each claim (a claim some runs meet, missed at most 5% of the
-// time at its measured rate); the full tests, nightly, run n. The
-// explorations' tests run in parallel: a few seeds leave CPUs idle while
-// the slowest run is checked. TestHegelShrinksInMemoryProgress, which
-// installs the global recorder, does not.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
-
-func explore(t *testing.T, cfg fleetrollout.Config, seeds int) *qtest.Exploration {
-	return system(cfg).Explore(t, qtest.ExploreConfig{Seeds: seeds})
+func explore(t *testing.T, cfg fleetrollout.Config, runs qtest.ExploreConfig) *qtest.Exploration {
+	return system(cfg).Explore(t, runs)
 }
 
 // The faithful controller keeps the budget and finishes the rollout,
@@ -43,7 +30,7 @@ func explore(t *testing.T, cfg fleetrollout.Config, seeds int) *qtest.Exploratio
 func TestFaithfulConforms(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	explore(t, fleetrollout.Config{}, seeds(30, 3)).Expect(t, qtest.Conforms(), qtest.NotVacuous())
+	explore(t, fleetrollout.Config{}, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 3}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
 // Trusting a status written for the previous generation: the next
@@ -52,7 +39,7 @@ func TestFaithfulConforms(t *testing.T) {
 func TestIgnoreObservedGenerationOverBudget(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	explore(t, fleetrollout.Config{Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, seeds(20, 3)).
+	explore(t, fleetrollout.Config{Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Violates("withinBudget"))
 }
 
@@ -65,16 +52,16 @@ func TestInMemoryProgress(t *testing.T) {
 	qtest.RequireQuint(t)
 	noKubeFaults := qenv.Rates{Default: 0.05, Kinds: map[string]float64{"kube": 0}}
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(noKubeFaults).
-		Explore(t, qtest.ExploreConfig{Seeds: seeds(15, 2)}).Expect(t, qtest.Conforms())
+		Explore(t, qtest.ExploreConfig{Seeds: 15, ShortSeeds: 2}).Expect(t, qtest.Conforms())
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress}).WithRates(noKubeFaults).
-		Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 2)}).Expect(t, qtest.Violates("withinBudget"))
+		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).Expect(t, qtest.Violates("withinBudget"))
 	// a lost patch response alone puts it over budget in 6.5% of runs at
 	// the default rates (20 seeds missed it at fresh seeds a quarter of
 	// the time), 13.5% with the API's faults at 0.15: 40 seeds miss it
 	// with probability 0.3%; 26 (-short) miss it 2.3% of the time at the
 	// 13.6% of seeds 1 to 140, 4.8% at the 11% of seeds 41 to 140 alone
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(qenv.DefaultRates.Set("kube.request", 0.15)).
-		Explore(t, qtest.ExploreConfig{Seeds: seeds(40, 26)}).Expect(t, qtest.Violates("withinBudget"))
+		Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 26}).Expect(t, qtest.Violates("withinBudget"))
 }
 
 // Hegel shrinks the restart bug to the faults it needs: a crash.

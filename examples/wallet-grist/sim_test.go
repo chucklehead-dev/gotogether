@@ -19,8 +19,9 @@ const (
 // system is the app under cfg, judged by binding, with faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
 	cfg.Doubles, cfg.Setup = doubles, front
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
-		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
+	s := gristsim.System(binding, App, cfg).WithRates(faulty)
+	s.Opts = opts
+	return s
 }
 
 // faulty crashes the node (2 in 100 scheduling steps) and makes every
@@ -28,14 +29,6 @@ func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.Sys
 // and late (the API's and the ledger's), commits whose answer is lost
 // (with CommitFaults), the post's crash points.
 var faulty = qenv.DefaultRates.Set("nemesis", 0.02)
-
-// seeds is n, or short under -short.
-func seeds(n, short int) int {
-	if testing.Short() {
-		return short
-	}
-	return n
-}
 
 // of picks one of xs.
 func of[T any](pick func(int) int, xs ...T) T { return xs[pick(len(xs))] }
@@ -84,7 +77,7 @@ func TestFaithful(t *testing.T) {
 			cfg := contended
 			cfg.Isolation = iso
 			system(commits, cfg).
-				Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+				Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
 				Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
 					qtest.Reaches("store.wallet.commit").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 		})
@@ -100,7 +93,7 @@ func TestFaithfulAtClients(t *testing.T) {
 	cfg := contended
 	cfg.Isolation = qenv.ReadCommitted
 	system(calls, cfg, qtest.Linearize()).
-		Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.wallet.commit").Faulted())
 }
 
@@ -114,9 +107,9 @@ func TestDuplicateRequests(t *testing.T) {
 	rates := qenv.NoFaults.Set("rpc.api.delay", 0.3).Set("rpc.api.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Isolation: qenv.ReadCommitted, Gen: gen,
 		Send: []string{"transfer", "deposit", "read"}}
-	system(commits, cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+	system(commits, cfg).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
-	system(calls, cfg, qtest.Linearize()).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 3)}).
+	system(calls, cfg, qtest.Linearize()).WithRates(rates).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
 }
 
@@ -130,7 +123,7 @@ var invalid = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Gen: 
 func TestInvalidRequests(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, invalid).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(commits, invalid).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }
 
@@ -160,9 +153,9 @@ func TestRaces(t *testing.T) {
 	qtest.RequireQuint(t)
 	for name, cfg := range map[string]gristsim.Config{"race": race, "skew": skew} {
 		t.Run(name, func(t *testing.T) {
-			system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 6)}).
+			system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}).
 				Expect(t, qtest.None(qtest.Rejects("transfer")), qtest.Conforms())
-			system(calls, cfg, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 6)}).
+			system(calls, cfg, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}).
 				Expect(t, qtest.Conforms())
 		})
 	}
@@ -186,7 +179,7 @@ var transfers = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Sen
 func TestPostAfterTransfer(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, transfers).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
+	system(commits, transfers).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("ledgerPostServed"))
 }
 
@@ -211,12 +204,14 @@ var deposits = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Gen:
 func TestPostedOnce(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	n := seeds(10, 3)
-	system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: n, Chooser: crashAfterPost}).
+	runs := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
+	crashed := runs
+	crashed.Chooser = crashAfterPost
+	system(commits, deposits).Explore(t, crashed).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	system(exactly, deposits).Explore(t, qtest.ExploreConfig{Seeds: n, Chooser: crashAfterPost}).
+	system(exactly, deposits).Explore(t, crashed).
 		Expect(t, qtest.Conforms())
-	system(exactly, deposits).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: n}).
+	system(exactly, deposits).WithRates(qenv.NoFaults).Explore(t, runs).
 		Expect(t, qtest.Conforms())
 }
 
@@ -254,7 +249,7 @@ var depositsAndReads = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops:
 func TestReplicaReadShape(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, depositsAndReads).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
+	system(commits, depositsAndReads).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.None(qtest.Mismatch("read")), qtest.Conforms())
 }
 

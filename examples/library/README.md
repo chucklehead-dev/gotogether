@@ -50,5 +50,5 @@ of building it as a newcomer to grist.
 ```sh
 go test -short ./...           # every claim (needs quint on PATH)
 ./run-demo.sh
-MUTATION=stale-limit ./run-demo.sh
+MUTANT=staleLimit ./run-demo.sh
 ```

@@ -29,7 +29,7 @@ import (
 //	/* ... */ Expect(t, cat.Exercised("borrow.limit"), cat.Take("borrow.ok").InAtLeast(0.5))
 //
 // A faithful test claims Exercised; a contrast or a mutant's test, whose
-// workload is narrow by design, does not (docs/grist.md §0.11).
+// workload is narrow by design, does not (docs/HISTORY.md (grist §0.11)).
 func Catalog(app *grist.App) qtest.Catalog {
 	c := app.Catalog()
 	var out []qtest.Take

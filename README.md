@@ -84,6 +84,15 @@ testing, where Quint traces drive the implementation). It adds:
   after a load spike or a capacity dip, or stays stuck in a retry storm.
   A CTMC predicts it, a simulation confirms it, and Hegel finds the
   smallest trigger.
+- **grist, an event-sourced framework checked by its own model**
+  (`grist`, its own module): write commands, read models, rules and
+  processors in Go; the model's skeleton and both bindings are generated
+  from the app's catalog (`<app> model`), so the app writes only its rules
+  and invariants in Quint, and `gristsim.System` explores it under
+  crashes, lost answers and isolation levels like any other system.
+  `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>`
+  writes an app whose tests pass on their first run
+  ([docs/grist.md](docs/grist.md), the `grist` skill).
 
 ```
                     ┌────────────── one Quint model ──────────────┐
@@ -111,6 +120,7 @@ table for agents):
 | Which recorded fields does the check actually read? | `qtest.MutateSteps` (`Killed`, `Survived`), `gotogether validate -mutate-steps`: a conforming log with one step dropped, duplicated, swapped, corrupted, retimed or moved to another actor |
 | Does what a browser explorer or an end-to-end suite did conform (Bombadil, Playwright, your own driver)? | a request log (`gotogether.requests/1`, package `qdriver`): each request an invocation, completed only by its own answer; [adapters/playwright](adapters/playwright) writes it, `qdriver/bombadil` reads Bombadil's trace; `gotogether validate -binding b.yaml server.jsonl requests.jsonl` |
 | Which of a driver's actions does the failure need? | `qtest.ShrinkActions`: a failing journey (Bombadil's, a Go client's) shrunk by reruns on the real system after a `qtest.Resetter`, calibrated for a failure that shows only sometimes, the original's failure kept (`SameFailure`); outside go test, `gotogether shrink -actions journey.json -- DRIVER {actions} {steps}` (any driver, rerun per candidate) |
+| I am starting a service: can the framework write the model for me? | grist: `grist new <name>`, then `gristsim.System(binding, App, cfg).Explore`; the generated model judges every run ([examples/counters](examples/counters)) |
 | Does it recover after a spike or a slow dependency? | `qmeta`, `qload`, `qhegel.FindTrigger`, alert rules from the chain |
 | My model is in Choreo | named transitions over `choreo::step_with`, then any of the above ([examples/twophase](examples/twophase)) |
 
@@ -127,6 +137,7 @@ npm install -g @informalsystems/quint                                  # quint �
 go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills (gotogether help; each command's -h)
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 go install github.com/chucklehead-dev/gotogether/qnav/cmd/gotogether-nav@latest # the interactive navigator (gotogether nav opens it on a terminal)
+go install github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest  # grist: `grist new <name>` writes an app module (its own module: go get …/grist@latest)
 ```
 
 In a module of your own (the examples' `replace` lines are for working
@@ -651,14 +662,14 @@ which bug.
 ```sh
 examples/glomers/maelstrom.sh                   # under real Maelstrom, then gotogether on the nodes' step logs
 examples/kvstore/run-demo.sh                    # MUTANT=staleCAS | revisionOnConflict | staleRead | ...
-examples/jobqueue/run-demo.sh                   # MUTATION=ack-any-lease | forget-done
-examples/grpcledger/run-demo.sh                 # a real grpc.Server, otelgrpc spans converted; MUTATION=no-dedupe | no-funds-check
-examples/streams/run-demo.sh                    # Kafka (kfake), Kinesis (fake endpoint), simulated log; MUTATION=commit-first | no-dedupe | ...
-examples/twophase/run-demo.sh                   # MUTATION=early-commit | impatient | volatile-decision; MODEL=early-decision
-examples/lease/run-demo.sh                      # MUTATION=no-fencing | wall-interval | absolute-expiry, CLOCKS=1 for skews and jumps, DRIFT=0.25
-examples/checkout/run-demo.sh                   # MUTATION=no-locks | lock-without-write | no-idempotency-key | dual-write
-examples/fleetrollout/kwok-demo.sh              # MUTATION=ignore-observed-generation | in-memory-progress, KILL=1
-examples/crossdb/kind/demo.sh                   # kind + Crossplane; MUTATION=no-client-token | generated-external-name | password-from-create, DROP=0.3, KILL=1
+examples/jobqueue/run-demo.sh                   # MUTANT=ackAnyLease | forgetDone
+examples/grpcledger/run-demo.sh                 # a real grpc.Server, otelgrpc spans converted; MUTANT=noDedupe | noFundsCheck
+examples/streams/run-demo.sh                    # Kafka (kfake), Kinesis (fake endpoint), simulated log; MUTANT=commitFirst | noDedupe | ...
+examples/twophase/run-demo.sh                   # MUTANT=earlyCommit | impatient | volatileDecision; MODEL=early-decision
+examples/lease/run-demo.sh                      # MUTANT=noFencing | wallInterval | absoluteExpiry, CLOCKS=1 for skews and jumps, DRIFT=0.25
+examples/checkout/run-demo.sh                   # MUTANT=noLocks | lockWithoutWrite | noIdempotencyKey | dualWrite
+examples/fleetrollout/kwok-demo.sh              # MUTANT=ignoreObservedGeneration | inMemoryProgress, KILL=1
+examples/crossdb/kind/demo.sh                   # kind + Crossplane; MUTANT=noClientToken | generatedExternalName | passwordFromCreate, DROP=0.3, KILL=1
 ```
 
 ## Agent skills and guidance
@@ -680,6 +691,11 @@ The skills in [`skills/`](skills) teach a coding agent this toolkit:
   `System.Explore`, shrinking with `qhegel.Choices`, and the real environment;
 - `gotogether-metastability`: retry storms and other metastable failures: the
   CTMC, the load simulation, trigger search, mitigations.
+- `grist`: an event-sourced app on grist, its model generated from its
+  catalog: blocks, holes, `gristsim.System` explorations, mutants.
+
+Each SKILL.md is short (triggers and steps); its mechanics are in its
+`references/`, each linked with when to read it.
 
 They are in the [Agent Skills](https://agentskills.io) format, one
 `SKILL.md` per directory. In this repository they are exposed where agents

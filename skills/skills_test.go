@@ -239,6 +239,9 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"X-Actor", "X-Caller (the header a demo names its caller in, -caller-header)"},
 		{"kv.Mutation", "examples/kvstore/testdata/mutants (qtest.Mutants{Package: \"kv\"}; kvstore's Mutation enum is gone)"},
 		{"MUTATION=stale-cas", "MUTANT=staleCAS (kvstore's mutants are overlays)"},
+		// H6: one demo variable, named as the mutant is (its
+		// testdata/mutants directory, or its Go constant in camelCase)
+		{"MUTATION=", "MUTANT=<name> (run-demo.sh: noLocks, not no-locks)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

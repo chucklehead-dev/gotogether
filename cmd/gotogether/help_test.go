@@ -150,3 +150,13 @@ func TestScaffoldHelpExamples(t *testing.T) {
 		}
 	}
 }
+
+// The top-level usage names grist, the framework whose model is written
+// for the app: a newcomer starting a service found it nowhere in the CLI.
+func TestUsageNamesGrist(t *testing.T) {
+	var b bytes.Buffer
+	usageTo(&b)
+	if !strings.Contains(b.String(), "grist/cmd/grist new <name>") {
+		t.Errorf("the usage does not say how to start a grist app:\n%s", b.String())
+	}
+}
