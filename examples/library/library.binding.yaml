@@ -49,7 +49,7 @@ actions:
     args: { result: '{{.outcome}}' }
 
 invariants: [copiesHeld, withinLimit]
-eventually: [everyBorrowReceipted]
+eventually: [everyBorrowReceipted, receiptsEventuallyHandled, mailerSendEventuallyServed]
 
 # The model on its own (gotogether simulate)
 simulate:

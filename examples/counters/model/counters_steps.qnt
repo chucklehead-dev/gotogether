@@ -479,6 +479,45 @@ module countersGen {
     }
   }
 
+  // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
+  // vals, judged by the store's bindings at a settle beside the app's own
+  // (the default binding's, and a variant's that judges every invariant of
+  // the default binding)
+
+  // after a settle, average (Emits) has handled every counter-incremented:
+  // its checkpoint passed it, with the events it emitted, a Skip's none or a
+  // Fail's grist.failed
+  val averageEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "counter-incremented" implies checkpoints.get("average") >= i + 1)
+
+  // after a settle, welcome (at least once) has handled every
+  // counter-created: its checkpoint passed it, and it was skipped
+  // (welcomeSkips), had an ok effect step, or failed every try (its
+  // grist.failed)
+  val welcomeEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "counter-created" implies and {
+      checkpoints.get("welcome") >= i + 1,
+      or {
+        welcomeSkips(log.slice(0, i + 1), i + 1),
+        effectsOf(effects, "welcome", i + 1, true) > 0,
+        holds(log, failed("welcome", i + 1)),
+      },
+    })
+
+  // after a settle, payout (at most once) has handled every counter-retired:
+  // its checkpoint passed it. The checkpoint commits first, and a crash after
+  // it loses the effect or its outcome by right, so no outcome is promised
+  // (an application states one test-only: atMostOnceOutcomesLogged)
+  val payoutEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "counter-retired" implies checkpoints.get("payout") >= i + 1)
+
+  // after a settle, every call of bank/pay (Keyed, used by payout) its caller
+  // saw answered, ok or refused, has the dependency's served record of its
+  // key; an unknown answer promises nothing (the request may have been lost)
+  val bankPayEventuallyServed =
+    bankPayCalls.indices().forall(i => bankPayCalls[i].result != "unknown" implies
+      bankPayRecords.indices().exists(j => bankPayRecords[j].key == bankPayCalls[i].key))
+
   // the model on its own (gotogether simulate): every command as its rule
   // decides, reading what it needs, every query, processor and site, each
   // drawing its own arguments (one draw shared by every block would make

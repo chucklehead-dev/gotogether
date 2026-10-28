@@ -23,7 +23,7 @@ import (
 // wallet.calls.binding.yaml. Every fifth command's answer is lost after
 // it was served: its client retries under the same Idempotency-Key and
 // the marker answers. The tier waits for the post processor and the relay
-// before it records the settle, so allPosted and postedApplied are
+// before it records the settle, so postEventuallyHandled and postedApplied are
 // judged; and every answer a client got has its store-side step, with the
 // same outcome.
 func TestRealHTTP(t *testing.T) {

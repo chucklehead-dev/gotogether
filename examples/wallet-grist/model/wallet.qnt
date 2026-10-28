@@ -21,14 +21,9 @@ module wallet {
   // grist: invariant
   val noOverdraft = noOverdraftIn(log)
 
-  // every move was posted (an ok effect step, checkpointed), or its post
-  // failed every try and says so
-  // grist: eventually
-  val allPosted =
-    log.indices().forall(i => log[i].typ == "moved" implies and {
-      checkpoints.get("post") >= i + 1,
-      effectsOf(effects, "post", i + 1, true) > 0 or holds(log, failed("post", i + 1)),
-    })
+  // every move posted (an ok effect step, checkpointed), or its post
+  // failed every try and says so, is the catalog's obligation, generated in
+  // wallet_steps.qnt (postEventuallyHandled, with ledgerPostEventuallyServed)
 
   // every post the ledger made is a move's, under that move's effect key
   // (the ledger records before its answer is the effect's step, so this

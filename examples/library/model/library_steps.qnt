@@ -348,6 +348,32 @@ module libraryGen {
     }
   }
 
+  // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
+  // vals, judged by the store's bindings at a settle beside the app's own
+  // (the default binding's, and a variant's that judges every invariant of
+  // the default binding)
+
+  // after a settle, receipts (at least once) has handled every book-borrowed:
+  // its checkpoint passed it, and it was skipped (receiptsSkips), had an ok
+  // effect step, or failed every try (its grist.failed)
+  val receiptsEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "book-borrowed" implies and {
+      checkpoints.get("receipts") >= i + 1,
+      or {
+        receiptsSkips(log.slice(0, i + 1), i + 1),
+        effectsOf(effects, "receipts", i + 1, true) > 0,
+        holds(log, failed("receipts", i + 1)),
+      },
+    })
+
+  // after a settle, every call of mailer/send (Keyed, used by receipts) its
+  // caller saw answered, ok or refused, has the dependency's served record of
+  // its key; an unknown answer promises nothing (the request may have been
+  // lost)
+  val mailerSendEventuallyServed =
+    mailerSendCalls.indices().forall(i => mailerSendCalls[i].result != "unknown" implies
+      mailerSendRecords.indices().exists(j => mailerSendRecords[j].key == mailerSendCalls[i].key))
+
   // the model on its own (gotogether simulate): every command as its rule
   // decides, reading what it needs, every query, processor and site, each
   // drawing its own arguments (one draw shared by every block would make

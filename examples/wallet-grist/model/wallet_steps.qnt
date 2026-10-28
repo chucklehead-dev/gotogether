@@ -280,6 +280,32 @@ module walletGen {
     }
   }
 
+  // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
+  // vals, judged by the store's bindings at a settle beside the app's own
+  // (the default binding's, and a variant's that judges every invariant of
+  // the default binding)
+
+  // after a settle, post (at least once) has handled every moved: its
+  // checkpoint passed it, and it was skipped (postSkips), had an ok effect
+  // step, or failed every try (its grist.failed)
+  val postEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "moved" implies and {
+      checkpoints.get("post") >= i + 1,
+      or {
+        postSkips(log.slice(0, i + 1), i + 1),
+        effectsOf(effects, "post", i + 1, true) > 0,
+        holds(log, failed("post", i + 1)),
+      },
+    })
+
+  // after a settle, every call of ledger/post (Keyed, used by post) its
+  // caller saw answered, ok or refused, has the dependency's served record of
+  // its key; an unknown answer promises nothing (the request may have been
+  // lost)
+  val ledgerPostEventuallyServed =
+    ledgerPostCalls.indices().forall(i => ledgerPostCalls[i].result != "unknown" implies
+      ledgerPostRecords.indices().exists(j => ledgerPostRecords[j].key == ledgerPostCalls[i].key))
+
   // the model on its own (gotogether simulate): every command as its rule
   // decides, reading what it needs, every query, processor and site, each
   // drawing its own arguments (one draw shared by every block would make

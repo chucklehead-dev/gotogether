@@ -25,20 +25,12 @@ module counters {
     val avgs = log.select(e => e.typ == "average-computed")
     avgs.indices().forall(k => k < sums.length() and avgs[k].ints == [sums[k], k + 1])
 
-  // every created counter was welcomed, or its welcome failed every try
-  // and says so
-  // grist: eventually default retiring real
-  val everyCounterWelcomedOrFailed =
-    log.indices().forall(i => log[i].typ == "counter-created" implies and {
-      checkpoints.get("welcome") >= i + 1,
-      effectsOf(effects, "welcome", i + 1, true) > 0 or holds(log, failed("welcome", i + 1)),
-    })
-
-  // every retirement's payout was checkpointed (at most once: its payment
-  // and its outcome may be lost)
-  // grist: eventually retiring real
-  val everyRetirementHandled =
-    log.indices().forall(i => log[i].typ == "counter-retired" implies checkpoints.get("payout") >= i + 1)
+  // Every created counter welcomed (or its welcome failed every try and
+  // says so) and every retirement's payout checkpointed are the catalog's
+  // obligations, generated in counters_steps.qnt (welcomeEventuallyHandled,
+  // payoutEventuallyHandled, with averageEventuallyHandled and
+  // bankPayEventuallyServed) and judged by the default binding and the
+  // retiring and real variants: what follows says more.
 
   // Site claims: every answer a caller got is one its dependency gave
   // (its served record of the call, request, outcome and response alike,
