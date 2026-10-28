@@ -9,9 +9,9 @@
 # outside load), within 15% of each other. A deliberate change of a
 # package's cost sets its line from the sorted file the job prints, with
 # the reason; packages under ten CPU seconds have none.
-examples/bank 80
-examples/checkout 165
-examples/counters 1040 # 1038 CPU s on CI (run 427, 7bc208e: the poller stopping with its node), 1030 and 1469 before it (runs 418 and 40596878521: GR3 slice 3, a killed node's pollers spinning until the binary ended); here 768 after the fix, 760 with slice 3's review (load 20-27 on 4 cores; docs/grist.md §0.14, its review: the real tier's TestRealHTTP retiring two, its forged receipt, TestRealLostThenKilled the store's side alone, payTwice one retirement, wrongAmount's real probe full mode); before, 392-402 CPU s here after GR3 slice 1 and its review (load 1-5 on 4 cores: the bank as a declared call, TestPayoutAmount, wrongAmount at one seed, a replay judged); 357 CPU s here after GR2b (338.5 user + 18.7 sys, without GOTOGETHER_CHECK, load 14-22 on 4 cores: other agents' tests), its Delivers processors' skip guards and actions no measurable cost; 354 CPU s here (GOTOGETHER_CHECK, load 25-35) after GR2: its generated model costs about 5% more per quint process than the hand-written one (a typecheck 2.9 s against 2.7), validation per step the same; before, 319-320 CPU s here on a loaded machine (load 13-21 on 4 cores; the parent commit measured 274 at load 8-13; CI about twice), up from 255-270: grist's review (docs/grist.md §0.7) adds per push TestPayoutTwoNodes (two nodes without faults, then through commit faults and crashes), TestRetireByCreatorOnly, a poller's checkpoint re-read and TestHTTPTier's answers lost at 0.15, and TestRealHTTP losing every fifth answer; full mode adds the payout's exactly-once and outcome judgments, the silentPayout and anyoneRetires mutants, beside TestHTTPDuplicateRequests, TestFaithfulRetiring, the checkpointFirst mutant, the SQL tier's repeated claims and TestFaithfulAtClients; TestRealHTTP about 20 s of wall, mostly its mailer's 20 ms sends
+examples/bank 45 # 36.5 CPU s on CI (run 431; 91 in run 427, before d6640dc)
+examples/checkout 110 # 95.8 CPU s on CI (run 431; 251 in run 427, before d6640dc batched short traces into one quint process)
+examples/counters 500 # 438 CPU s on CI (run 431, 69ab69c+5d5eaf0: short batches in one quint process, d6640dc; the poller spin gone, 7bc208e); 428 of its 449 CPU s here quint
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51
@@ -19,20 +19,20 @@ examples/glomers/uniqueids 33
 examples/hello 39
 examples/jobqueue 33
 examples/kvstore 61
-examples/lease 156
+examples/lease 85 # 72.2 CPU s on CI (run 431; 188 in run 427, before d6640dc)
 examples/payd 150
 examples/quorumkv 128
 examples/raftkv 145
 examples/retrystorm 51
-examples/twophase 156
+examples/twophase 70 # 60.8 CPU s on CI (run 431; 188 in run 427, before d6640dc)
 examples/wallet 119
 examples/webjobs 156 # 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, its compile counted; TestShrink is full mode): 135-155 CPU s
-binding 310 # 310 CPU s on CI (run 404); TestEvalModuleCompiles compiles every example's binding with quint, and the grist examples (counters, wallet-grist, library) added theirs: 163 to 207 CPU s here, that test 86 to 109 s (165-193 on CI before, runs 334-338)
+binding 250 # 217 CPU s, 130 s wall on CI (run 431; 332 and 439 s in run 427, before b7606ee ran TestEvalModuleCompiles in parallel, a typecheck per spec, and d6640dc)
 cmd/gotogether 200 # 176-195 CPU s: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
 internal/qeval 210 # 180-206 CPU s (wall 194 s alone, 343-361 s in the full run)
 internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
 qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)
 qload 13 # 8-12 CPU s
 qmeta 15
-qtest 440 # 375-435 CPU s (415 with ShrinkActions)
-validate 1370 # 1168-1366 CPU s with S11-S13 tests (partial logs, resume, snapshot): quint processes most of it
+qtest 340 # 295 CPU s on CI (run 431; 473 in run 427, before d6640dc); here 400 against 488
+validate 810 # 706 CPU s on CI (run 431; 1266 in run 427, before d6640dc); here 944 (913 of it quint, 730 processes) against 1311 before
