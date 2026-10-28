@@ -131,7 +131,7 @@ AGENTS.md has the general requirements.
   every two processes): a suite written before a family meets it. A
   failure's reproduce line sets it, and its corpus entries go to an
   `all-faults` subdirectory (their choices replay only so). Exhaust
-  under it searches every family's faults: bound its Faults. `GOTOGETHER_VERBOSE=1` shows
+  under it searches every family's faults: bound its Faults. `GOTOGETHER_VERBOSE=1` shows each expected catch's whole report and the summaries' evaluator counts, and
   Hegel's output for expected failures (FindViolation and Shrink capture
   os.Stdout while Hegel runs, since Hegel writes nowhere else).
 - CI's time budgets (ci/test-times.txt) are CPU seconds: each test binary

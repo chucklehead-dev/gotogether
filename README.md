@@ -791,7 +791,8 @@ More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
 | `GOTOGETHER_KEEP=dir` | keeps generated Quint modules, step logs and ITF there, by test (without it they are in the test's temporary directory, and a failure's report names copies it made under `$TMPDIR/gotogether-*`) |
 | `GOTOGETHER_EVIDENCE=dir` | each exploration's evidence, as `dir/<package>/<test>/x<N>.json` (`gotogether evidence dir`: what no faithful exploration tried; `cover -sim`), and each Validate and Record run's manifest, `run<N>.json`, its files (step log, binding, spec and imports, artifacts) bundled in `run<N>/` so the directory replays elsewhere (`validate -replay`; listed as external). The step logs are whole and unsanitized: mind where the directory is uploaded |
 | `GOTOGETHER_STRICT=1` (or `true`) | every toolkit skip fails instead, with its message (`RequireQuint`, `Mutate` with no mutants woven, `SkipIfEmpty`), as does `qtest.Optional(t, reason)`, a test's own skip: for CI jobs that install what their tests need. `gotogether evidence -expect checks.txt` fails on a listed check that wrote no evidence |
-| `GOTOGETHER_VERBOSE=1` | shows Hegel's own output for failures a test expects |
+| `GOTOGETHER_VERBOSE=1` | shows the whole report of each catch a test expects (three lines otherwise), the evaluator's and quint's counts behind each summary, and Hegel's own output for failures a test expects |
+| `GOTOGETHER_PROGRESS=0` | no progress lines: a long exploration otherwise writes one to the terminal every 10 s (go test holds a package's output back until it ends) |
 | `GOTOGETHER_CHECK=1` | the simulation's scheduler checks its invariants at every step, every `Store` each commit's dependency cycles against its isolation level, every `Queue` its contract after each operation |
 | `GOTOGETHER_SALT` | the salt of `gotogether steps -pseudonymize` |
 | `GOTOGETHER_STEPS_DIR` | where the Glomers nodes write their step logs under Maelstrom |
