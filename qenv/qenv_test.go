@@ -306,6 +306,31 @@ func TestSignalTimeoutIsForgotten(t *testing.T) {
 	}
 }
 
+// Outside a simulation goroutines notify a Signal concurrently (a real
+// store's commits, grist's sqlstore): Notify must not race (run with
+// -race; CI's race job runs the Signal tests).
+func TestSignalNotifyFromRealGoroutines(t *testing.T) {
+	var sig qenv.Signal
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { //qenv:ok real goroutines, outside any simulation: the race under test
+			for range 100 {
+				sig.Notify()
+			}
+		})
+	}
+	woke := make(chan bool, 1)
+	go func() { woke <- sig.Wait(context.Background(), time.Minute) }() //qenv:ok a real waiter
+	for len(woke) == 0 {
+		sig.Notify()
+		time.Sleep(time.Millisecond) //qenv:ok outside any simulation
+	}
+	wg.Wait()
+	if !<-woke {
+		t.Error("a real waiter timed out though Notify was called")
+	}
+}
+
 // A negative wait has passed already: it times out at once, in a
 // simulation and outside one, instead of waiting without limit.
 func TestSignalNegativeWait(t *testing.T) {

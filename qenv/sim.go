@@ -742,6 +742,13 @@ func (g *Signal) Notify() {
 		g.ch = nil
 	}
 	g.mu.Unlock()
+	// tasks wait in a simulation, one task running at a time; outside one
+	// there are none, and goroutines notify concurrently (a real store's
+	// commits): resetting the empty list was a write every one of them
+	// raced on
+	if len(g.waiters) == 0 {
+		return
+	}
 	for _, w := range g.waiters {
 		if t := w.t; t.waiting && t.gen == w.gen && !t.done && !t.killed {
 			t.notified = true

@@ -81,7 +81,7 @@ jobs:
         run: go run ./cmd/gotogether lint -sim .
       - name: the race detector on what runs real goroutines
         if: matrix.part == 'race'
-        run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest' ./qenv/
+        run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest|Signal' ./qenv/
       - name: test (qenv self-checks)
         if: matrix.part == 'core-variants'
         run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
