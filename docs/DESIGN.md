@@ -1,5 +1,10 @@
 # Design: model-based testing and runtime conformance for Go against Quint
 
+The structure as it is now (the modules and their dependency rule, the
+core's layers, the data flow of a check, the formats) is explained in
+[ARCHITECTURE.md](ARCHITECTURE.md), which this record does not restate:
+its sections are the decisions, in the order they were made, and why.
+
 This is the design record of the `quintgo` spike, which started in
 casselc/observability (`quintgo/`, against the otel-chdb models) and moved
 here as quint-connect-go, now gotogether. Sections 1–8 are the spike's research and

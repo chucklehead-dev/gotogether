@@ -33,6 +33,7 @@ The model (`model/crossdb.qnt`) has two properties:
 
 ```sh
 go test ./...                                        # explorations and Hegel (~4 min)
+./run-demo.sh                                        # the simulated tier; MUTANT=noClientToken | generatedExternalName | passwordFromCreate
 kind/demo.sh                                         # kind + Crossplane; exit status is the verdict
 KILL=1 kind/demo.sh                                  # kill -9 the provider every few seconds
 MUTANT=noClientToken DROP=0.3 N=6 kind/demo.sh
@@ -65,6 +66,14 @@ the ID. The faithful provider's answer:
 | `NoClientToken`: the same, without the token | **violates** `oneDatabasePerResource`: a lost response, retried as a failure, makes a second database | **violates** `oneDatabasePerResource` (30% dropped): `app1` got a second database |
 | `PasswordFromCreate`: the password generated in `Create`, published only with its result | **violates** `settledCorrectly`: after a lost response, the retry's new password is ignored by the idempotent cloud, and the Secret doesn't open the database | **violates** `settledCorrectly` (30% dropped) |
 | faithful, on a cloud without request expiry (`Config.NoRequestExpiry`) | conforms (300 seeds): the creation grace outlasts a late create | (over HTTP the closed connection takes the late request with it) |
+
+| Test | Catches |
+|---|---|
+| `TestFaithfulConforms` | nothing: every fault and crashes |
+| `TestGeneratedExternalName` | `GeneratedExternalName`: `settledCorrectly`, with lost responses alone and with crashes alone |
+| `TestNoClientTokenDuplicates` | `NoClientToken`: `oneDatabasePerResource` (Hegel shrinks it: `TestHegelShrinksDuplicate`) |
+| `TestPasswordFromCreate` | `PasswordFromCreate`: `settledCorrectly` |
+| `TestLateCreateCoveredByCreationGrace` | nothing without request expiry: the creation grace outlasts a late create |
 
 ## Findings along the way
 

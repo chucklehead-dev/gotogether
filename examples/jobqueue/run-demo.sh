@@ -4,6 +4,23 @@
 #   MUTANT=...  ackAnyLease | forgetDone (default: none)
 set -uo pipefail
 cd "$(dirname "$0")"
+# finish FAILED: the demo's exit status (examples/README.md, "run-demo.sh"):
+# 0 when it showed what the README says (every run conforms; under
+# MUTANT=, some run fails its check), 1 when it did not
+finish() {
+  if [ -z "${MUTANT:-}" ]; then
+    [ "$1" = 0 ] && exit 0
+    echo "not as expected: a run of the faithful system failed its check" >&2
+    exit 1
+  fi
+  if [ "$1" != 0 ]; then echo "mutant $MUTANT caught, as expected"; exit 0; fi
+  echo "not as expected: no run caught mutant $MUTANT (every run conforms)" >&2
+  exit 1
+}
+case "${MUTANT:-}" in
+"" | ackAnyLease | forgetDone) ;;
+*) echo "unknown MUTANT=$MUTANT (ackAnyLease, forgetDone)" >&2; exit 2 ;;
+esac
 # the binary takes the mutation kebab-cased (noLocks: no-locks)
 mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 OUT=${OUT:-$(mktemp -d)}
@@ -18,5 +35,6 @@ show < "$OUT/verdict.txt"
 echo; echo "\$ gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce steps.jsonl"
 # a violation here is the design's known limit, not a failure of the demo
 "$OUT/gotogether" validate -binding jobqueue.binding.yaml -invariants exactlyOnce -dir "$OUT/v1" "$OUT/steps.jsonl" | show || true
-# exit status: that of the check against the guarantees (0 unless MUTANT found a bug)
-exit $rc
+# the check against the guarantees decides (finish): exactlyOnce's
+# violation above is the design's known limit, not the demo's failure
+finish $rc

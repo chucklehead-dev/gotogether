@@ -57,6 +57,6 @@ was going round when the settle's minute ran out.
 ```sh
 go test .                        # needs quint on PATH
 ./run-demo.sh                    # both models' graphs, then 20 seeds validated
-MUTANT=stampSpec ./run-demo.sh   # rejected by the faithful model; the storm's shows its hot cycle (exit 1)
-MUTANT=giveUp ./run-demo.sh      # reconciled false at the settle (exit 1)
+MUTANT=stampSpec ./run-demo.sh   # rejected by the faithful model; the storm's shows its hot cycle (caught: exit 0)
+MUTANT=giveUp ./run-demo.sh      # reconciled false at the settle (caught: exit 0)
 ```

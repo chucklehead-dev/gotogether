@@ -8,11 +8,19 @@
 #   OUT=dir            where binaries, traces and generated modules go (default: a temp dir)
 #   QUINT_BACKEND      quint test backend: rust (default) or typescript
 #   VERBOSE=1          print the full reports, not just the verdicts
+#   MUTANT=manifestFirst | noLock   that bug's scenario alone (default: every scenario)
 # happy and rotation-race must conform; ambiguous-seal (the model's known
 # findings F1/F3), manifest-first and no-lock must not (README's table): the
-# exit status is 1 when any scenario's verdict is not the expected one.
+# exit status is 1 when any scenario's verdict is not the expected one, 2
+# when the demo could not run.
 set -uo pipefail
 cd "$(dirname "$0")"
+case "${MUTANT:-}" in
+"") ;;
+manifestFirst) SCENARIOS=manifest-first ;;
+noLock) SCENARIOS=no-lock ;;
+*) echo "unknown MUTANT=$MUTANT (manifestFirst, noLock)" >&2; exit 2 ;;
+esac
 OUT=${OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
 export QUINT_BACKEND=${QUINT_BACKEND:-rust}

@@ -58,6 +58,16 @@ only in full. Each test states the verdict it expects with
 | `NoIdempotencyKey` | **violates** `chargedAtMostOnce` (a retry after a lost response) or `settledCorrectly` (the void can't find the charge) | | |
 | `DualWrite` (publish in the background after commit) | **violates** `settledCorrectly`: a crash before the publish loses the order (a one-step window, found at a higher crash rate) | | |
 
+| Test | What it runs | Catches |
+|---|---|---|
+| `TestFaithfulConformsAtEveryLevel` | the faithful shop at each level, every fault and crashes | nothing: conforms |
+| `TestMutants` | each mutant at each level, the table above | each **bold** verdict above |
+| `TestExhaustiveOneFault` | every run with one fault (2828) | nothing in the faithful shop; `DualWrite`'s one-step window |
+| `TestHegelShrinksWriteSkew` | Hegel making every choice, `LockWithoutWrite` at snapshot isolation | the write skew, shrunk, replayed without Hegel |
+| `TestNoIdempotencyKeySweep`, `TestFaultOrders` | covering arrays of fault kinds and their orders | which faults expose `NoIdempotencyKey` |
+| `TestStormChargesTwiceWithoutKeys` | the shop under a retry storm, without idempotency keys | charges twice (`TestStormIsCorrect` is the contrast) |
+| `TestMutationOfTheShop` | qweave's mutant schemata over the shop | the survivors, each an unobserved effect or equivalent |
+
 The faithful shop also conforms with its broker partitioned from the
 relay and the consumers (`Config.Partitions`,
 `TestFaithfulConformsUnderPartitions`, not under `-short`): a publish

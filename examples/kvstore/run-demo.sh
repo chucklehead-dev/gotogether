@@ -8,10 +8,24 @@
 #                 lateRevisionOnConflict | staleSnapshot (default: none)
 # Then a rotation demo: the step log rotated every 120 operations, each new
 # file headed by the store's snapshot, and the last file validated alone.
-# Exit status: 0 when every validation conforms, 1 when one does not (a
-# mutant's run), 2 when the demo could not run.
+# Exit status: 0 when the demo showed what the README says (every
+# validation conforms; under MUTANT=, some does not), 1 when it did not,
+# 2 when the demo could not run.
 set -uo pipefail
 cd "$(dirname "$0")"
+# finish FAILED: the demo's exit status (examples/README.md, "run-demo.sh"):
+# 0 when it showed what the README says (every run conforms; under
+# MUTANT=, some run fails its check), 1 when it did not
+finish() {
+  if [ -z "${MUTANT:-}" ]; then
+    [ "$1" = 0 ] && exit 0
+    echo "not as expected: a run of the faithful system failed its check" >&2
+    exit 1
+  fi
+  if [ "$1" != 0 ]; then echo "mutant $MUTANT caught, as expected"; exit 0; fi
+  echo "not as expected: no run caught mutant $MUTANT (every run conforms)" >&2
+  exit 1
+}
 OUT=${OUT:-$(mktemp -d)}
 mkdir -p "$OUT"
 echo "# output in $OUT"
@@ -59,4 +73,4 @@ kill -INT $srv; wait $srv
 last=$(ls "$OUT"/rotated.*.jsonl | sort -t. -k2 -n | tail -1)
 echo; echo "\$ gotogether validate -binding kv.binding.yaml $(basename "$last")    # the last rotated log alone"
 check -binding kv.binding.yaml -dir "$OUT/v-rotated" "$last"
-exit $status
+finish $status

@@ -5,6 +5,19 @@
 # the package's of the same names), the bug planted by hand.
 set -euo pipefail
 cd "$(dirname "$0")"
+# finish FAILED: the demo's exit status (examples/README.md, "run-demo.sh"):
+# 0 when it showed what the README says (every run conforms; under
+# MUTANT=, some run fails its check), 1 when it did not
+finish() {
+  if [ -z "${MUTANT:-}" ]; then
+    [ "$1" = 0 ] && exit 0
+    echo "not as expected: a run of the faithful system failed its check" >&2
+    exit 1
+  fi
+  if [ "$1" != 0 ]; then echo "mutant $MUTANT caught, as expected"; exit 0; fi
+  echo "not as expected: no run caught mutant $MUTANT (every run conforms)" >&2
+  exit 1
+}
 out=$(mktemp -d)
 overlay=()
 if [ -n "${MUTANT:-}" ]; then
@@ -27,6 +40,7 @@ else
   awk '/^actor/{if(b~/FAIL/){print b; done=1; exit} b=$0; next}{b=b"\n"$0}END{if(!done && b~/FAIL/)print b}' "$out/report" |
     grep -vE "module:|N/A"
   echo "step logs and report in $out"
-  exit 1
+  finish 1
 fi
 echo "step logs and report in $out"
+finish 0

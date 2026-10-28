@@ -3219,6 +3219,54 @@ writes them. Decided:
   the walk-through linked; loop.md and triage.md link the guide (by URL:
   installed skills carry no docs/).
 
+**I34, the structure.** docs/ARCHITECTURE.md explains what AGENTS.md's
+layout indexes: the module graph and the rule that shapes it (the core
+on OTel and yaml.v3 only), the core's layers in import order (checked
+with `go list`: values, recording, input, reconstruction, binding,
+judging, model analysis, exploration, simulation, load, connect, the
+CLI; grist on top), the five types (Step, Binding, Report, Chooser,
+Catalog), a check's path from a recorded step to a claim (and the
+simulated, model-analysis and grist paths), I13's formats, what is
+published, where to start reading, and which guard keeps each part as
+described. DESIGN and the README cite it. Decided:
+- **Tracks, not one table.** The README's 25 rows, unordered by
+  journey, became a track table on the front page (each track's
+  examples in the order to read them, and whom it is for) and
+  examples/README.md with every row under its track: first steps
+  (hello, bank, checkout), services, distributed systems, Kubernetes,
+  grist, migration, metastability. "separate module" dropped from the
+  rows: every example is one. sktrace got a README (a library, used by
+  fleetrollout and retrystorm).
+- **One exit contract for run-demo.sh: whether the demo showed what its
+  README says.** Two kinds of demo had two: the verdict demos (a run,
+  then `validate`) exited 1 when a run failed, which a mutant's run
+  should, so CI wrapped each mutant line in `&& exit 1 || true`; the
+  claim demos (`go test`) exited 0 when the mutant was caught, since
+  their claims say so. Now every demo exits 0 when it showed what its
+  README says (under `MUTANT=`, the mutant caught), 1 when not, naming
+  what, 2 when it could not run; an unknown `MUTANT=` is a 2 naming the
+  known ones (checkout and jobqueue had passed it on, jobqueue's binary
+  running the faithful queue). CI's lines are plain. The cluster
+  scripts (kwok-demo.sh, kind/demo.sh, maelstrom.sh) keep the verdict
+  as their status: a real cluster's run may miss the fault a mutant
+  needs. Every changed demo was run with a mutant and an unknown one,
+  and faithful (gosim's, which needs the fork, and the cluster scripts
+  aside).
+- **Demos for every app.** bank (`MUTANT=LostDeposit | SelfTransfer`:
+  the tests that catch it), glomers (each challenge's mutants),
+  fleetrollout (the simulated tier; kwok-demo.sh for kwok), crossdb's
+  run-demo.sh now its simulated tier (`KIND=1` for kind), gosim and
+  edgepublish taking `MUTANT=`. glomers, checkout, crossdb and
+  fleetrollout's READMEs gained the test tables the rule asks for.
+- **Checked.** internal/exampleapps fails on an example module without a
+  README test table, a row in examples/README.md and the README's
+  tracks, a model, a run-demo.sh in the conventions (shebang, `set -u`
+  and pipefail, the `cd`, `MUTANT=` in the header, an exit 2) or a
+  mutant named; exemptions carry their reasons and fail once the part
+  exists. AGENTS.md's layout gained qnemesis, internal/qeval and the six
+  examples it lacked (library, wallet-grist, payd, webjobs,
+  migrate-payments, requeue).
+
 ### I9: verdicts that state their bounds
 
 Review 11's formal-methods reviewer (O3-O6, G7): claims that held of

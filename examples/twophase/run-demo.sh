@@ -7,6 +7,19 @@
 # graph refutes with a counterexample quint replays.
 set -euo pipefail
 cd "$(dirname "$0")"
+# finish FAILED: the demo's exit status (examples/README.md, "run-demo.sh"):
+# 0 when it showed what the README says (every run conforms; under
+# MUTANT=, some run fails its check), 1 when it did not
+finish() {
+  if [ -z "${MUTANT:-}" ]; then
+    [ "$1" = 0 ] && exit 0
+    echo "not as expected: a run of the faithful system failed its check" >&2
+    exit 1
+  fi
+  if [ "$1" != 0 ]; then echo "mutant $MUTANT caught, as expected"; exit 0; fi
+  echo "not as expected: no run caught mutant $MUTANT (every run conforms)" >&2
+  exit 1
+}
 # the binary takes the mutation kebab-cased (noLocks: no-locks)
 mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')
 out=$(mktemp -d)
@@ -25,7 +38,7 @@ early-decision)
   echo "== quint replays the counterexample"
   (cd "$out" && quint test --main simulate --match gtg_ cex.qnt | grep -E 'ok|failed')
   exit 0 ;;
-*) echo "MODEL=$MODEL: early-decision or nothing"; exit 2 ;;
+*) echo "MODEL=$MODEL: early-decision or nothing" >&2; exit 2 ;;
 esac
 echo "== two-phase commit ${MUTANT:+(mutant $MUTANT)}"
 "$out/twophase-sim" -seeds "${SEEDS:-30}" -mutation "$mutation" -out "$out/runs"
@@ -35,6 +48,7 @@ else
   awk '/^actor/{if(b~/FAIL/)print b; b=$0; next}{b=b"\n"$0}END{if(b~/FAIL/)print b}' "$out/report" |
     grep -E "^actor|FAIL|not a transition|does not match|quint:" | head -24
   echo "step logs and report in $out"
-  exit 1
+  finish 1
 fi
 echo "step logs and report in $out"
+finish 0

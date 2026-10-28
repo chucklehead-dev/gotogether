@@ -417,15 +417,23 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   exact `qtest.Exercised("rpc.stock.delay.late") // why: ...` line;
   `possible:` with the call form (`'reserve(result = "refused")'`). A
   REST developer's 10 minutes of wiring to one.
-- **I34. The structure written down (S-M).** docs/ARCHITECTURE.md (about
-  300 lines, current state only: the module graph and its dependency
-  rule, the five types everything flows through, the judging path, the
-  model-analysis path, the grist pipeline, where each gotcha lives),
-  DESIGN citing it; AGENTS.md's layout with qnemesis and internal/qeval;
-  the README's 24 examples as tracks (Learn: hello, bank, checkout;
-  grist: counters, library, wallet-grist, migrate-payments; Your stack),
-  six rows on the front page and examples/README.md the rest; run-demo.sh
-  for bank, fleetrollout, glomers and sktrace (AGENTS' rule); G11's
+- **I34. The structure written down (S-M). Done** (HISTORY: "I27 and
+  I34: the structure written down"). docs/ARCHITECTURE.md (the module
+  graph and its dependency rule, the core's layers, the five types, a
+  check's data flow with the simulated, model-analysis and grist paths,
+  I13's formats, what is published, where to start reading, where each
+  area's gotchas are), DESIGN and the README citing it; AGENTS.md's
+  layout with qnemesis, internal/qeval and the six examples it lacked;
+  the examples in seven tracks (first steps, services, distributed
+  systems, Kubernetes, grist, migration, metastability), each in an
+  order to read: a track table on the README's front page,
+  examples/README.md every row; run-demo.sh's conventions written there
+  and made one (`MUTANT=`, exit 0 when the demo showed what its README
+  says, a mutant caught included, 1 when not, 2 when it could not run),
+  CI's demo lines plain; run-demo.sh for bank, glomers and fleetrollout,
+  crossdb's on its simulated tier (`KIND=1` for kind); internal/exampleapps
+  checking every example's README test table, track row, model, demo
+  and mutant (sktrace exempt as a library, gosim's model). Left: G11's
   rest.
 - **I35. Examples and tutorials for the newest features (M).** Each a
   page of the Learn track, its commands run by CI:
@@ -1069,9 +1077,8 @@ item reviewed before the next. Sizes as in S.
 - **G11. Skills as installed (S).** Links into the repository rewritten
   on install; `skills install -update`; a test that installs into a
   temporary directory and resolves every link; gotogether-faults split
-  (about 4k words); AGENTS.md's layout and README's example rows
-  complete (payd, webjobs, qnemesis, sktrace) and shorter (with I34,
-  which adds internal/qeval and the examples' tracks).
+  (about 4k words). (AGENTS.md's layout and the examples' rows were
+  completed with I34.)
 - **G12. The cost of a -short verdict (S-M).** validate 1370 CPU s and
   qtest 440, mostly quint: conformance under -short on internal/qeval,
   quint confirming failures and a sample of passes, all of it nightly.

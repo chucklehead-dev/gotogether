@@ -34,6 +34,7 @@ semantics:
 ```sh
 go test ./...                                                        # in this module: explorations, Hegel (~4 min)
 go test -short ./...                                                 # the per-push tier: 2 to 26 seeds an exploration, no Hegel
+./run-demo.sh                                                        # the simulated tier's claims; MUTANT=ignoreObservedGeneration | inMemoryProgress
 ./kwok-demo.sh                                                       # the real controller on three kwok clusters
 MUTANT=ignoreObservedGeneration ./kwok-demo.sh
 KILL=1 MUTANT=inMemoryProgress ./kwok-demo.sh
@@ -78,6 +79,13 @@ Under a production workload (`TestRolloutUnderProductionWorkload`):
 - The faithful controller conforms, and `IgnoreObservedGeneration` still
   violates `withinBudget`, though in fewer runs: the scalings perturb its
   timing.
+
+| Test | Catches |
+|---|---|
+| `TestFaithfulConforms` | nothing: lost responses and crashes |
+| `TestIgnoreObservedGenerationOverBudget` | `IgnoreObservedGeneration`: `withinBudget` |
+| `TestInMemoryProgress` | `InMemoryProgress`: `withinBudget` after a crash or a lost response (Hegel shrinks it: `TestHegelShrinksInMemoryProgress`) |
+| `TestRolloutUnderProductionWorkload`, `TestRolloutWithMeasuredPodTimes` | `IgnoreObservedGeneration` under a SimKube trace's workload and pod times |
 
 ## Findings along the way
 

@@ -36,6 +36,7 @@ connect/      MBT runtime (quint-connect parity); testdata/bank.qnt
 qhegel/       separate module: Hegel integration; testdata/bank.yaml
 internal/hegelprops/  unpublished module (replace => ../..): the core's Hegel-checked properties, on the current core
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
+internal/qeval/  the Go evaluator: a model compiled once (quint compile), passing runs judged in Go, graphs (simulate -graph)
 qobs/ qtrace/ otelio/ convert/ input/  recording, schema/reconstruction, OTLP, span conversion, reading any trace input;
               qobs/qobshttp: an HTTP handler's steps into a given run
 qdriver/      an external driver's request log (gotogether.requests/1): requests as invocations, each completed by its own
@@ -59,6 +60,7 @@ qweave/       separate module: weaves Orchestrion aspects with types into a go -
 qnav/         separate module (published; Charm's v2 libraries): gotogether-nav, the navigators' TUI; tapes/ (VHS scenarios, goldens)
 qload/ qmeta/ load simulation (open/closed-loop clients, servers, triggers, the recovery property); CTMC, alert rules (qmeta imports nothing of the module)
 qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's state found from its context or goroutine
+qnemesis/     a real deployment's nemesis (processes, containers, Toxiproxy links), its faults recorded as steps and re-made in qenv
 qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
 qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin), static action map (cmd/actionmap)
 qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per run; qtest's System.Mutate explores each
@@ -72,7 +74,8 @@ qrole/        load roles (//quint:serve, //quint:operation, //quint:call; aspect
 cmd/gotogether/  CLI
 skills/       agent skills, the source of truth (embedded by package skills;
               symlinked into .agents/skills and .claude/skills, checked by skills_test.go)
-examples/*            each example is a module of its own (unpublished, replace => ../..); the root module is the toolkit
+examples/*            each example is a module of its own (unpublished, replace => ../..); the root module is the toolkit;
+                      examples/README.md: every example's row, in tracks, and run-demo.sh's conventions
 examples/sktrace      unpublished library module: SimKube traces (msgpack v3, own decoder), production workloads
                       as load shapes and replayed writes; fleetrollout and retrystorm use it
 examples/glomers      Gossip Glomers on a Maelstrom runtime + simulator (maelstrom/); per-challenge model, impl, binding, mutants;
@@ -84,6 +87,12 @@ examples/grpcledger   separate module: gRPC ledger simulated through qenv/simgrp
 examples/streams      separate module: outbox publisher + consumers on Kafka (kafkalog, kfake), Kinesis (kinesislog,
                       kinesisfake) and the simulated log (qenv/simlog); one binding
 examples/counters     app: grain's counter example on grist, gristsim; mutants blind (Rejects) and dispatchDirect (Mismatch)
+examples/library      app: a lending library on grist, grown from grist new; book-added versioned (upcaster, the v1 log kept), snapshots
+examples/wallet-grist app: examples/wallet's bank on grist; a ledger at least once, deduplicated by effect key; TRIAL.md
+examples/payd         app: an unmodified net/http + database/sql payments service, simulated through qhttp and qsql adapters only
+examples/webjobs      app: a web app driven by Bombadil and Playwright (qdriver); the page's requests as invocations
+examples/migrate-payments  app: a legacy handler with tests, logs and spans and no model, brought under one in stages
+examples/requeue      app: a controller's requeue loop; liveness as a lasso of the model (simulate -graph), the runs' hot cycle
 examples/hello        app: the smallest simulated system (a counter, a lossy network, a retrying client); start here
 examples/wallet       app: transfers on a Store with request-id dedupe, an outbox, a ledger; Exhaust, isolation levels and qhistory,
                       ResolvePending, Linearize and LinearizeByKey, an eventual val, GOTOGETHER_ALL_FAULTS
@@ -102,8 +111,9 @@ examples/edgepublish  separate module (Orchestrion); the spike's real-world case
                       sim/: the publisher, unchanged, in qenv by weaving (qweave go test ./sim/, as CI does)
 examples/gosim        separate module; on gosim via qgosim: broadcast/ (Glomers node over TCP), checkout/ (the saga on
                       qenv's native runtime); simulated tests //go:build sim, host tests make the choices (DESIGN §14, §15.1)
-docs/         DESIGN.md (why), ROADMAP.md (what is open), HISTORY.md (what is done, and the reviews), instrumentation.md
-              agents/: commands by module, gotchas by area
+docs/         ARCHITECTURE.md (the structure, explained: modules, layers, the data flow, formats; this layout is its index),
+              DESIGN.md (why), ROADMAP.md (what is open), HISTORY.md (what is done, and the reviews), instrumentation.md,
+              grist-guide.md (grist's user guide); agents/: commands by module, gotchas by area
 ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API rate limits)
 ```
 
@@ -225,8 +235,12 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   `name` equals its directory.
 - An example app has a model in `model/`, a binding, at least one
   mutant, a `run-demo.sh`, tests showing which check catches which
-  mutant, and a README with the table of tests. Its row goes in the
-  README's example table. State expected verdicts with `.Expect(t,
+  mutant, and a README with the table of tests. Its row goes in
+  examples/README.md, in its track, and its name in the README's track
+  table; internal/exampleapps checks all of it. A `run-demo.sh` follows
+  examples/README.md's conventions: `MUTANT=<name>` plants a mutant,
+  and it exits 0 when it showed what its README says (a mutant caught),
+  1 when not, 2 when it could not run (an unknown `MUTANT=`). State expected verdicts with `.Expect(t,
   claims...)` (`Rejects`, `Mismatch`, `Violates`; over runs, `Some`,
   `All`, `None`)
   and expected Hegel failures with `qhegel.FindViolation(...).Expect`,

@@ -80,4 +80,5 @@ settle: the coordinator resends its commit forever to a participant
 that voted to abort (and refuses it), which is the bug's consequence,
 not the harness's. twophase-sim says which seeds did not settle and
 writes their logs without a settle record, so validation rejects each
-at its `decideCommit` (the demo exits 1 with the report).
+at its `decideCommit` (the demo prints the report, and exits 0: the
+mutant caught, as expected).

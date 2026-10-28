@@ -19,10 +19,27 @@ and the step logs they write there are checked against the same models.
 | 4 grow-only counter | `gcounter.qnt`: a G-counter CRDT, vectors gossiped and merged by max | `noOvercount`; `countsEveryAdd` | `Overwrite` (merge by overwriting): a read the model **cannot take**; `GossipOnChange`: conforms, **countsEveryAdd FAIL** |
 | 5 kafka-style log (5b, 5c) | `kafka.qnt`: logs in lin-kv appended by CAS; polls, commits, listings | `sentAtItsOffset`, `offsetsUnique`, `commitsInLog` | `BlindAppend`: conforms, **sentAtItsOffset FAIL** (an acknowledged message overwritten); `PollSkips`: **state mismatch** at a poll |
 
+| Test | Catches |
+|---|---|
+| `uniqueids.TestUniqueUnderPartitionAndRestart` | nothing: ids unique through partitions and restarts |
+| `uniqueids.TestMutants` | `CounterOnly`, `NoIncarnation` (spec model), `FixedIncarnation` (both models) |
+| `uniqueids.TestIDEncodingInjective` | the broken encodings, by a Hegel property |
+| `broadcast.TestBroadcastConverges` | nothing: converged when settled |
+| `broadcast.TestReadOwnOnlyRejected` | `ReadOwnOnly`: a state mismatch at a read |
+| `broadcast.TestNoRetryDoesNotConverge`, `TestHegelShrinksNoRetry` | `NoRetry`: convergedWhenSettled fails, shrunk to one lost gossip |
+| `gcounter.TestCounterCountsEveryAdd` | nothing |
+| `gcounter.TestOverwriteRejected` | `Overwrite`: a read the model cannot take |
+| `gcounter.TestGossipOnChangeDoesNotConverge` | `GossipOnChange`: countsEveryAdd fails |
+| `kafka.TestLogKeepsEverySend` | nothing |
+| `kafka.TestBlindAppendLosesSends` | `BlindAppend`: sentAtItsOffset fails |
+| `kafka.TestPollSkipsRejected` | `PollSkips`: a state mismatch at a poll |
+
 ```sh
-go test ./examples/glomers/... -short        # sim, scripted and Hegel-scheduled runs (~2 min)
-go test ./examples/glomers/... -run Shrink   # + Hegel shrinking a mutant against the model
-examples/glomers/maelstrom.sh                # under real Maelstrom (Java 11+, gnuplot), then gotogether on the step logs
+cd examples/glomers
+go test -short ./...         # sim, scripted and Hegel-scheduled runs (~2 min)
+go test -run Shrink ./...    # + Hegel shrinking a mutant against the model
+./run-demo.sh                # every challenge's faithful nodes; MUTANT=ReadOwnOnly | NoRetry | Overwrite | ...: the test that catches it
+./maelstrom.sh               # under real Maelstrom (Java 11+, gnuplot), then gotogether on the step logs
 ```
 
 ## How it fits together

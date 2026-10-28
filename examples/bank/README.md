@@ -22,9 +22,11 @@ Files:
 - `bank.convert.yaml` maps the bank's OTel spans to steps.
 
 ```sh
-go test ./examples/bank/ -short -v     # ~15 s
-go test ./examples/bank/ -v            # + shrinking against the model, ~1-2 min
-QUINT_SEED=0x1234 QUINT_VERBOSE=1 go test ./examples/bank/ -run ModelDrives -v
+cd examples/bank
+go test -short -v .                    # ~15 s
+go test -v .                           # + shrinking against the model, ~1-2 min
+QUINT_SEED=0x1234 QUINT_VERBOSE=1 go test -run ModelDrives -v .
+./run-demo.sh                          # the faithful bank's tests; MUTANT=LostDeposit | SelfTransfer: the tests that catch it
 ```
 
 The same checks from the CLI, on a file of the bank's spans:

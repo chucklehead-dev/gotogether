@@ -9,8 +9,9 @@
 # MUTANT= forgetsPriorRefunds (the legacy bug), replayCreatesCharge or
 # staleLookup builds the handler with that mutant's overlay
 # (testdata/mutants/) and runs the legacy tests, recorded, then the
-# production day replayed on it: the legacy tests pass, the replay
-# catches it, and the demo exits non-zero.
+# production day replayed on it: the legacy tests pass and the replay
+# catches it (the demo then exits 0, as every demo does when it shows
+# what its README says; 1 when not, 2 when it could not run).
 set -euo pipefail
 cd "$(dirname "$0")"
 out=$(mktemp -d)
@@ -41,8 +42,14 @@ if [ -n "${MUTANT:-}" ]; then
   echo "== mutant $MUTANT: the legacy tests, recorded (they pass, and their runs conform)"
   go test -overlay "$out/overlay.json" -count=1 -run '^TestLegacyTestsConform$' -v . | grep -E '^(--- |ok|FAIL)|runs given'
   echo "== mutant $MUTANT: the production day, replayed on it"
-  go test -overlay "$out/overlay.json" -count=1 -run '^TestProductionDayReplayedConforms$' -v . | grep -E '^(--- |ok|FAIL)|RESULT|invariant|after step|not a transition|mismatch|quint:|observed:' | cut -c1-200
-  exit "${PIPESTATUS[0]}"
+  if go test -overlay "$out/overlay.json" -count=1 -run '^TestProductionDayReplayedConforms$' -v . > "$out/replay" 2>&1; then
+    grep -E '^(--- |ok|FAIL)' "$out/replay"
+    echo "not as expected: the replay conforms on mutant $MUTANT" >&2
+    exit 1
+  fi
+  grep -E '^(--- |ok|FAIL)|RESULT|invariant|after step|not a transition|mismatch|quint:|observed:' "$out/replay" | cut -c1-200 || true
+  echo "mutant $MUTANT caught by the replay, as expected"
+  exit 0
 fi
 
 echo "== stage 1-2: the context map and the requirements, in model/payments.qnt"

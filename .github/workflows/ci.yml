@@ -167,16 +167,18 @@ jobs:
           examples/twophase/run-demo.sh
           examples/hello/run-demo.sh
           examples/lease/run-demo.sh
-          MUTANT=wallInterval CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
-          MUTANT=noFencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
-          MUTANT=noDedupe examples/hello/run-demo.sh && exit 1 || true
+          MUTANT=wallInterval CLOCKS=1 examples/lease/run-demo.sh
+          MUTANT=noFencing DRIFT=0.25 examples/lease/run-demo.sh
+          MUTANT=noDedupe examples/hello/run-demo.sh
           examples/requeue/run-demo.sh
-          MUTANT=stampSpec examples/requeue/run-demo.sh && exit 1 || true
-          MUTANT=giveUp examples/requeue/run-demo.sh && exit 1 || true
+          MUTANT=stampSpec examples/requeue/run-demo.sh
+          MUTANT=giveUp examples/requeue/run-demo.sh
           examples/retrystorm/run-demo.sh
           examples/counters/run-demo.sh && MUTANT=blind examples/counters/run-demo.sh
           examples/migrate-payments/run-demo.sh
-          MUTANT=forgetsPriorRefunds examples/migrate-payments/run-demo.sh && exit 1 || true
+          MUTANT=forgetsPriorRefunds examples/migrate-payments/run-demo.sh
+          examples/bank/run-demo.sh && MUTANT=LostDeposit examples/bank/run-demo.sh
+          examples/glomers/run-demo.sh && MUTANT=ReadOwnOnly examples/glomers/run-demo.sh
 
       - name: every model on its own (gotogether simulate)
         if: matrix.part == 'tools'
@@ -762,7 +764,7 @@ jobs:
       - name: demo (real server, otelgrpc spans converted and validated)
         run: |
           ./run-demo.sh
-          if MUTANT=noDedupe ./run-demo.sh; then echo "mutant passed"; exit 1; fi
+          MUTANT=noDedupe ./run-demo.sh
 
   action:
     # the Action (.github/actions/gotogether) as an adopter uses it, on
