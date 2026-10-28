@@ -68,10 +68,12 @@ type Exploration struct {
 // failure path the exploration never tried.
 func (x *Exploration) faultCoverage() *qenv.Coverage {
 	runs := make([][]qenv.Choice, len(x.Runs))
+	var sites []map[string][]string // the points the runs declared themselves
 	for i, r := range x.Runs {
 		runs[i] = r.Choices
+		sites = append(sites, r.faults.Sites())
 	}
-	return qenv.CoverageOf(runs)
+	return qenv.CoverageWith(runs, sites...)
 }
 
 // codeCoverage is the runs' code coverage read against their steps

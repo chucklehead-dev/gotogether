@@ -156,19 +156,31 @@ func OptionName(name string, v int) string {
 	return ""
 }
 
-// DeclareSite registers a site (a function, a position) of a fault kind:
-// what woven code does at init, so a coverage report can name the points
-// no run reached.
+// DeclareSite registers a site (a function, a position) of a fault kind,
+// so a coverage report can name the points no run reached. Outside any
+// run (woven code's, at init) the site is the process's: every run's
+// coverage names it. Inside a run with names (a qtest run's, a
+// simulation's) it is that run's alone (FaultNames.AddSite): a site one
+// test declared once showed as unreached in every later test's coverage.
+// A run without names (qrun.Start's) declares it for the process, as
+// before runs had names.
 func DeclareSite(name, site string) {
+	name = strings.TrimPrefix(name, "fault.")
+	f, _ := runNames()
 	registry.Lock()
 	defer registry.Unlock()
-	k := kindOf(name)
+	k := kindOf(name) // a kind all the same: Exact and Names know it
+	if f != nil {
+		f.AddSite(name, site)
+		return
+	}
 	if !slices.Contains(k.sites, site) {
 		k.sites = append(k.sites, site)
 	}
 }
 
-// Sites are the declared sites: kind -> sites.
+// Sites are the sites declared for the process (DeclareSite outside any
+// run with names): kind -> sites.
 func Sites() map[string][]string {
 	registry.Lock()
 	defer registry.Unlock()

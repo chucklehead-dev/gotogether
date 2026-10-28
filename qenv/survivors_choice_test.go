@@ -350,16 +350,17 @@ func TestCoverageReport(t *testing.T) {
 	if f := (&qenv.PointCoverage{Injected: []int{3, 1, 2}}).Faulted(); f != 3 {
 		t.Errorf("faulted %d, want 3 (nominal not counted)", f)
 	}
-	qenv.DeclareFaultSite("test.surv.cov.unreached", "pkg.Unreached")
-	qenv.DeclareFaultSite("test.surv.cov.a", "pkg.A")
+	// the runs' own sites (Sim.FaultSites): declared for the process, they
+	// were every later test's unreached points
+	sites := map[string][]string{"test.surv.cov.unreached": {"pkg.Unreached"}, "test.surv.cov.a": {"pkg.A"}}
 	fc := func(k string, v int) qenv.Choice {
 		return qenv.Choice{Kind: "fault.test.surv.cov." + k, N: 2, Value: v}
 	}
-	cov := qenv.CoverageOf([][]qenv.Choice{
+	cov := qenv.CoverageWith([][]qenv.Choice{
 		{fc("e", 0), fc("a", 1)},
 		{fc("b", 1), fc("d", 0)},
 		{fc("a", 1), fc("c", 1)},
-	})
+	}, sites)
 	if !sort.SliceIsSorted(cov.Points, func(i, j int) bool { return cov.Points[i].Kind < cov.Points[j].Kind }) {
 		t.Errorf("points not sorted by kind")
 	}

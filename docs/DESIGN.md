@@ -1755,7 +1755,12 @@ from the simulation:
   kind, declared points and doubles' kinds alike, the runs that reached
   it, the times reached and each option taken;
 - `Unreached` lists the declared points no run reached, and `Unfaulted`
-  those reached but never faulted.
+  those reached but never faulted. A point declared outside any run
+  (woven code's, at init) is the process's, every run's; one declared
+  in a run is that run's (`hooks.FaultNames`' sites, `Sim.FaultSites`,
+  `qenv.CoverageWith`): declared for the process, one test's points were
+  every later test's unreached ones, and a test's verdict depended on the
+  order tests ran in.
 
 **A Quint trace as a Chooser.** `qenv.Script` makes exactly the faults it
 is given, in order, and no others. Each waits for the steps before it in

@@ -77,9 +77,18 @@ func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) err
 }
 
 // DeclareFaultSite registers a fault point of kind at site (a function, a
-// position): what woven code does at init, so a coverage report can name
-// the points no run reached.
+// position), so a coverage report can name the points no run reached.
+// Woven code declares its points at init, outside any run: every run's
+// coverage (CoverageOf) names them. Declared inside a run (from one of
+// a simulation's tasks, or the goroutine that created it, or a qtest
+// scenario), a site is that run's alone: Sim.FaultSites and qtest's
+// coverage name it, and another test's coverage does not.
 func DeclareFaultSite(kind, site string) { choice.DeclareSite(kind, site) }
+
+// FaultSites are the fault sites declared in s's run (DeclareFaultSite
+// from its tasks or its creator; with a qtest run's, its other
+// simulations' too): kind -> sites, for CoverageWith.
+func (s *Sim) FaultSites() map[string][]string { return s.names.Sites() }
 
 // The test workflows check that a name users give (a Rates key, a sweep's
 // FaultKind, an exception) covers something declared: a fault kind, an
@@ -130,8 +139,16 @@ type Coverage struct {
 }
 
 // CoverageOf computes the coverage of runs from their choices (a
-// Recorder's, or qtest.Run.Choices) against the declared points.
-func CoverageOf(runs [][]Choice) *Coverage {
+// Recorder's, or qtest.Run.Choices) against the points declared outside
+// any run (woven code's, at init). CoverageWith adds those the runs
+// declared themselves.
+func CoverageOf(runs [][]Choice) *Coverage { return CoverageWith(runs) }
+
+// CoverageWith is CoverageOf with the sites the runs declared (each
+// run's Sim.FaultSites): a point one of them declared and no run reached
+// is unreached, while a point another test's runs declared is not
+// counted at all.
+func CoverageWith(runs [][]Choice, sites ...map[string][]string) *Coverage {
 	byKind := map[string]*PointCoverage{}
 	get := func(kind string) *PointCoverage {
 		p, ok := byKind[kind]
@@ -141,8 +158,19 @@ func CoverageOf(runs [][]Choice) *Coverage {
 		}
 		return p
 	}
-	for kind, sites := range choice.Sites() {
-		get(kind).Sites = sites
+	addSites := func(m map[string][]string) {
+		for kind, ss := range m {
+			p := get(kind)
+			for _, s := range ss {
+				if !slices.Contains(p.Sites, s) {
+					p.Sites = append(p.Sites, s)
+				}
+			}
+		}
+	}
+	addSites(choice.Sites())
+	for _, m := range sites {
+		addSites(m)
 	}
 	cov := &Coverage{Runs: len(runs)}
 	for _, run := range runs {

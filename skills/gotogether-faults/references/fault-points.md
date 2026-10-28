@@ -27,6 +27,10 @@ func (s *Store) Write(ctx context.Context, k, v string) error
   kind, declared or a double's, with the runs that reached it and the
   options taken. A declared point no run reached (`Unreached`) is a
   failure path the exploration never tried, whatever the line coverage
-  says. Raise its rate, or make a scenario reach it. `Pairs`, `Untried`
+  says. Raise its rate, or make a scenario reach it. A point declared at
+  init (woven code's) is every run's; one declared inside a run (a
+  hand-written `qenv.DeclareFaultSite` in a scenario or a task) is that
+  run's alone: pass `sim.FaultSites()` to `qenv.CoverageWith(choices,
+  sites...)` (qtest's coverage does so itself). `Pairs`, `Untried`
   and `OneWay` say which pairs of fault kinds ran together, and in which
   orders: fault-handling bugs are often two faults together.

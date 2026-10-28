@@ -11,6 +11,7 @@ import (
 	"context"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,10 +223,40 @@ var KnownStatic = func(string) bool { return true }
 // options (kind.option) and nemeses (nemesis.<name>), as reports print
 // them. A name another run's double declared is not one of them, so a
 // Rates key that covers nothing of this run's fails its exploration
-// whatever ran in parallel.
+// whatever ran in parallel. Its sites are the fault sites the run
+// declared (qenv.DeclareFaultSite from its tasks), which its coverage
+// names where no run reached them: another test's are not.
 type FaultNames struct {
 	mu    sync.Mutex
 	names map[string]bool
+	sites map[string][]string
+}
+
+// AddSite notes a site of fault kind, and the kind.
+func (f *FaultNames) AddSite(kind, site string) {
+	f.Add(kind)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sites == nil {
+		f.sites = map[string][]string{}
+	}
+	if !slices.Contains(f.sites[kind], site) {
+		f.sites[kind] = append(f.sites[kind], site)
+	}
+}
+
+// Sites are the declared sites: kind -> sites, a copy.
+func (f *FaultNames) Sites() map[string][]string {
+	if f == nil {
+		return nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string][]string, len(f.sites))
+	for k, s := range f.sites {
+		out[k] = slices.Clone(s)
+	}
+	return out
 }
 
 // Add notes names.

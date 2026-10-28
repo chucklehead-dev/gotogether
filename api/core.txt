@@ -564,6 +564,7 @@ const SnapshotIsolation Isolation = iota (spec 1 of its group)
 func As[T any](c Chooser) (T, bool)
 func ContextOf(c Chooser) context.Context
 func CoverageOf(runs [][]Choice) *Coverage
+func CoverageWith(runs [][]Choice, sites ...map[string][]string) *Coverage
 func Daemon(ctx context.Context)
 func DeclareFaultSite(kind, site string)
 func DeclareFaults(name string, options ...string) FaultKind
@@ -821,6 +822,7 @@ type Sim struct
     method (*Sim) Context() context.Context
     method (*Sim) Elapsed() time.Duration
     method (*Sim) FaultOf(k FaultKind) string
+    method (*Sim) FaultSites() map[string][]string
     method (*Sim) Nemesis(name string, enabled func() bool, do func())
     method (*Sim) Net() *Network
     method (*Sim) Now() time.Time

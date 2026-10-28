@@ -24,6 +24,13 @@ The first release. What a user meets, by module:
   cancel, where only node was killed and its Rust evaluator kept running
   under init. qtest's and connect's checks run under the test's context
   (`t.Context()`), and a search's quint checks under its Judge's.
+- A fault site declared inside a run is that run's (eleventh review,
+  M1): `qenv.DeclareFaultSite` from a simulation's task or its creator,
+  or a qtest scenario, no longer adds a point to every later test's
+  `Coverage.Unreached`. Woven points, declared at init outside any run,
+  are still every run's. New: `qenv.CoverageWith(runs, sites...)` and
+  `Sim.FaultSites()`; qtest's coverage passes its runs' sites itself.
+  `TestFaultPoints` passed or failed by test order.
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams

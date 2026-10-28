@@ -233,6 +233,12 @@ func New(c Chooser) *Sim {
 	}
 	s := &Sim{c: c, base: base, names: hooks.FaultNamesOf(base), now: Epoch, start: Epoch, MaxSteps: 100000,
 		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid(), Hang: 30 * time.Second}
+	if s.names == nil {
+		// a simulation is a run, whose declarations are its own
+		// (DeclareFaultSite's sites, FaultSites) even outside qtest
+		s.names = &hooks.FaultNames{}
+		s.base = hooks.WithFaultNames(s.base, s.names)
+	}
 	s.net.sim = s
 	if os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" {
 		s.Clocks, s.Stalls, s.allFaults = allFaultsClocks, allFaultsStalls, true

@@ -40,15 +40,17 @@ type SweepResult struct {
 // faultCoverage is the fault coverage over every row's runs.
 func (s *SweepResult) faultCoverage() *qenv.Coverage {
 	var runs [][]qenv.Choice
+	var sites []map[string][]string
 	for _, x := range s.Runs {
 		if x == nil { // a row that never ran (filtered by -run, or a Fatal before)
 			continue
 		}
 		for _, r := range x.Runs {
 			runs = append(runs, r.Choices)
+			sites = append(sites, r.faults.Sites())
 		}
 	}
-	return qenv.CoverageOf(runs)
+	return qenv.CoverageWith(runs, sites...)
 }
 
 var rowKey = qrun.NewKey[qsweep.Row]("sweep.row")

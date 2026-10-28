@@ -3,6 +3,7 @@ package qenv_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,15 +16,17 @@ var errUnavailable = errors.New("unavailable")
 // which is restarted. Coverage counts them from the recorded choices and
 // names the declared point no run reached.
 func TestFaultPoints(t *testing.T) {
-	qenv.DeclareFaultSite("test.write", "qenv_test.write")
-	qenv.DeclareFaultSite("test.never", "qenv_test.never")
 	var runs [][]qenv.Choice
+	var sites []map[string][]string
 	var failed, crashed int
 	for seed := uint64(1); seed <= 20; seed++ {
 		seeded := qenv.NewSeeded(seed)
 		seeded.Rates = qenv.Rates{Default: 0.5}
 		rec := &qenv.ChoiceLog{C: seeded}
 		s := qenv.New(rec)
+		// declared in the run (by its creator): its coverage's, no other test's
+		qenv.DeclareFaultSite("test.write", "qenv_test.write")
+		qenv.DeclareFaultSite("test.never", "qenv_test.never")
 		var p *qenv.Process
 		p = s.Process("writer", false, func(ctx context.Context) {
 			if p != nil && p.Incarnation > 1 {
@@ -45,19 +48,33 @@ func TestFaultPoints(t *testing.T) {
 		if p.Incarnation > 1 {
 			crashed++
 		}
+		sites = append(sites, s.FaultSites())
 		s.Close()
 		runs = append(runs, rec.Choices)
 	}
 	if failed == 0 || crashed == 0 {
 		t.Fatalf("%d errors, %d crashes injected", failed, crashed)
 	}
-	cov := qenv.CoverageOf(runs)
+	cov := qenv.CoverageWith(runs, sites...)
 	w := cov.Point("test.write")
 	if w == nil || w.Runs != 20 || len(w.Injected) != 3 || w.Injected[1] != failed || w.Injected[2] != crashed {
 		t.Errorf("coverage of test.write %+v (errors %d, crashes %d)", w, failed, crashed)
 	}
-	if u := cov.Unreached(); len(u) != 1 || u[0].Kind != "test.never" {
-		t.Errorf("unreached %v\n%s", u, cov)
+	// the points declared for the process (outside any run: woven code's
+	// at init, another test's) are unreached too; of the runs' own, only
+	// test.never, and its sites are not the process's
+	static := map[string]bool{}
+	for _, p := range qenv.CoverageOf(nil).Unreached() {
+		static[p.Kind] = true
+	}
+	var unreached []string
+	for _, p := range cov.Unreached() {
+		if !static[p.Kind] {
+			unreached = append(unreached, p.Kind)
+		}
+	}
+	if !slices.Equal(unreached, []string{"test.never"}) {
+		t.Errorf("unreached %v\n%s", unreached, cov)
 	}
 	t.Log(cov)
 
@@ -140,5 +157,42 @@ func TestWrappersSeeThrough(t *testing.T) {
 	}
 	if r, ok := qenv.As[*qenv.Seeded](w); !ok || r == nil {
 		t.Error("As does not find the seeded chooser")
+	}
+}
+
+// A site declared in a run is that run's: its coverage names it
+// unreached, and neither the process's coverage nor another run's does.
+// Declared for the process, one test's site was every later test's
+// unreached point (TestFaultPoints failed under -shuffle).
+func TestFaultSitesAreTheRuns(t *testing.T) {
+	declaring := qenv.New(qenv.NewSeeded(1))
+	declaring.Spawn("declare", func(context.Context) { qenv.DeclareFaultSite("test.scope.task", "pkg.Task") })
+	qenv.DeclareFaultSite("test.scope.creator", "pkg.Creator") // its creator's, in the run too
+	if err := declaring.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	own := declaring.FaultSites()
+	declaring.Close()
+	other := qenv.New(qenv.NewSeeded(1))
+	others := other.FaultSites()
+	other.Close()
+
+	unreached := func(cov *qenv.Coverage) map[string]bool {
+		out := map[string]bool{}
+		for _, p := range cov.Unreached() {
+			out[p.Kind] = true
+		}
+		return out
+	}
+	if u := unreached(qenv.CoverageWith([][]qenv.Choice{nil}, own)); !u["test.scope.task"] || !u["test.scope.creator"] {
+		t.Errorf("the declaring run's coverage does not name its sites unreached: %v (sites %v)", u, own)
+	}
+	for name, cov := range map[string]*qenv.Coverage{
+		"the process's": qenv.CoverageOf([][]qenv.Choice{nil}),
+		"another run's": qenv.CoverageWith([][]qenv.Choice{nil}, others),
+	} {
+		if u := unreached(cov); u["test.scope.task"] || u["test.scope.creator"] {
+			t.Errorf("%s coverage names the declaring run's sites: %v", name, u)
+		}
 	}
 }
