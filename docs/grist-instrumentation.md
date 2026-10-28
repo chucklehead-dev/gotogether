@@ -463,16 +463,25 @@ under a recorder of its own). Its records join the caller's tenant's
 trace (actor the tenant, process the App's name, placed at the cause's
 2·H+1, one clock per `ServeCalls` whichever node calls), and it refuses,
 400 and unrecorded, a request without its cause or key, of another App,
-or that does not decode; nil handlers are the default double, which
-refuses a call answering fields. A request a grist caller did not send
-for a trigger is then the model's rejection at `<c>Served`.)
+of a processor that does not use the call, whose key is not its
+effect's (`processor/tenant/trigger`), or that does not decode; nil
+handlers are the default double, which refuses a call answering fields.
+A request a grist caller did not send for a trigger is then the model's
+rejection at `<c>Served`. It authenticates nobody: the cause is the
+caller's word, so it is served where only the App's nodes reach it, or
+behind the service's own authentication. Its review, grist §0.14.)
 
-`OverHTTP` maps answers as grist/client does (grist §0.7): 2xx the
-response, 422 with `{"rejected": name}` a declared refusal, another 4xx
-a refusal of no name (`NotApplied`: the effect's outcome is
-grist.failed, the caller's step's `unknown`, the only outcome `Do`
-records for an answer that is no declared refusal), a 5xx, a reset or a
-timeout an unknown outcome (`ErrOutcomeUnknown`). The caller's steps go
+`OverHTTP` maps answers so: 2xx the response, 422 with `{"rejected":
+name}` a declared refusal, anything else an unknown outcome
+(`ErrOutcomeUnknown`): a 5xx, a reset, a timeout, another 4xx and a
+3xx, which it does not follow (a POST answered 303 may have been
+applied, and a 307 followed sends the call again, its key and cause
+with it). Only a declared refusal is the dependency's word that nothing
+happened, and `Do` records `unknown` for every other answer, so the
+effect's outcome agrees with the caller's step (`Do` turns a transport's
+`NotApplied` into an unknown outcome too); a 4xx of no name was
+`NotApplied` as built in slice 3, an at-most-once outcome grist.failed
+beside a call recorded unknown. The caller's steps go
 to the node's recorder (Main's `PerStep` file) exactly as in a
 simulation, so the same binding judges them.
 

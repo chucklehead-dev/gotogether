@@ -56,6 +56,19 @@ The first release. What a user meets, by module:
   nothing after its kill. An at-most-once effect's unknown error is
   recorded and stored with its double quotes made single (a Quint
   string holds none: net/http's errors quote the URL).
+  After its review (docs/grist.md §0.14, its review): `grist.OverHTTP`
+  takes a 4xx of no declared refusal, and a 3xx, for an unknown outcome
+  (a 4xx was `NotApplied`: an at-most-once outcome grist.failed beside
+  a call recorded unknown), follows no redirect (a 307 re-sent the
+  call, its key and cause, to wherever it pointed) and words its
+  unknown outcomes as a call's (they read as a command's, "retry it
+  with the same id"); `Call.Do` turns a transport's `NotApplied` into
+  an unknown outcome, so the effect's outcome agrees with the step;
+  a poller retrying a transiently failing commit stops with its node
+  (it spun until the process ended);
+  `grist.ServeCalls` refuses (400) a cause naming a processor that does
+  not use the call, or a key that is not its effect's; `serve
+  -dependency` refuses a URL that is not http(s) with a host.
 - grist, the default double (GR3's slice 2, docs/grist.md §0.13;
   api/grist.txt): `grist.DefaultHandlers(dep)`, a dependency's handlers
   applying a `Keyed` call once per key (a later try replayed from the

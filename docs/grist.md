@@ -1556,6 +1556,8 @@ Built, each with a test that fails with it taken out:
   2xx the response, 422 `{"rejected": name}` the refusal, another 4xx
   `NotApplied`, a 5xx, a reset or a timeout `ErrOutcomeUnknown`; one
   attempt (`TestOverHTTPAnswers`, against a server that is not grist's).
+  (Superseded by the review below: anything but a 2xx and a declared
+  refusal is an unknown outcome, a 3xx not followed.)
 - **`grist.ServeCalls(dep, handlers)`**, a dependency the team owns: each
   call by its handler, whose wrapper records `<c>Served` or
   `<c>Replayed` into the request context's recorder (a service wraps it
@@ -1565,7 +1567,9 @@ Built, each with a test that fails with it taken out:
   transports, one server, the delayed first try placed at the retry's
   place). A request without its cause or key, of another App (its
   records join this App's trace), or that does not decode is a 400,
-  recorded nowhere (`OverHTTP`: `NotApplied`); an undeclared call a 404,
+  recorded nowhere (`OverHTTP`: `NotApplied`; the review below: unknown,
+  and a processor not using the call or a key not its effect's refused
+  too); an undeclared call a 404,
   another method a 405, a handler's error that is no declared refusal a
   500 recorded with it (`TestServeCallsRefuses`). nil handlers are the
   default double, which panics for a call answering fields, as
@@ -1644,6 +1648,7 @@ place):
   giving it one. **A 4xx of no name** is `NotApplied` for the effect
   (grist.failed) while the caller's step records `unknown`, the only
   outcome `Do` records for an answer that is no declared refusal.
+  (Superseded by the review below: both unknown.)
 - **The lost answer is a 502** (what a proxy that lost the upstream's
   answer gives), counted per served dependency; the design said only
   "loses every fifth answer".
@@ -1682,6 +1687,121 @@ validations); the two site claims cost every exploration of the default
 and retiring bindings about 8% (`TestFaithful` and `TestPayoutTwoNodes`
 together, measured alone: 65 against 62). ci/test-times.txt's line (640)
 is unchanged: twice it is 1280.
+
+**The slice's review** (2026-10-27), each probed by a counterexample:
+
+- **A 4xx of no declared refusal said "not paid"** (the slice's own
+  note). Over HTTP it was `NotApplied`: an at-most-once payout's outcome
+  grist.failed, beside a caller step recorded `unknown`. Nothing in the
+  model relates the two, so no check caught the contradiction, and a 4xx
+  is no dependency's word that nothing happened (a third party's 409 for
+  a key in use, a gateway's 429 after forwarding). Only a declared
+  refusal is: `OverHTTP` now takes every other answer for an unknown
+  outcome, and `Call.Do` turns any transport's `NotApplied` into one, so
+  the outcome event always agrees with the step (grist's
+  `TestCallAnswerOfNoRefusal`: a transport's own `NotApplied`,
+  grist.failed with `Do`'s rule taken out; `TestOverHTTPAnswers` and
+  `TestServeCallsRefuses`: every such answer unknown, `NotApplied` with
+  `OverHTTP`'s mapping taken out). A 422 naming
+  a refusal the call does not declare was already unknown, the step and
+  the event alike; a 2xx whose body does not decode too.
+- **A redirect was followed.** `OverHTTP` used the client's default
+  policy: a 303 became a GET (`ServeCalls` answers 405, so
+  grist.failed, of a POST a server may have applied, as
+  POST-redirect-GET does), and a 307 re-sent the call, its body, key
+  and `Grist-Cause`, to wherever `Location` pointed: a second send, to
+  another host. It now uses a copy of the client that follows none, a
+  3xx an unknown outcome naming the Location (`TestOverHTTPAnswers`, a
+  caller's own client included).
+- **OverHTTP's unknown outcomes read as a command's**: their text began
+  with `ErrOutcomeUnknown`'s, "retry it with the same id", stored in
+  every grist.unknown, advice an at-most-once payment must not take.
+  They are a call's now, still `errors.Is(err, ErrOutcomeUnknown)`.
+- **`ServeCalls` recorded what no grist caller sends.** It checked the
+  cause's App, not its processor or key: a request naming a processor
+  that does not use the call was recorded (the model rejects it, so a
+  buggy or hostile client failed the caller's validation), and one for a
+  real trigger under another key (`payer/t1/2` for trigger 1, another
+  tenant's) was a second served record the `Keyed` rule admits (it
+  compares keys only). It now refuses both, 400 and unrecorded:
+  the processor must use the call, the key must be the trigger's effect
+  key (`processor/tenant/trigger`, one function with the poller's).
+  The App, tenant, trigger and head remain the caller's word, which no
+  server can check: `ServeCalls` authenticates nobody, and says so (serve
+  it where only the App's nodes reach it, as `ServeDependency`'s
+  loopback port, or behind the service's own authentication). Header
+  injection is not open: `Grist-Cause`'s text parts are path-escaped,
+  and the key is the effect key, of checked tenant and processor names.
+  The body is bounded (`DefaultMaxBody`, both ways). It dedupes nothing
+  itself: the handlers do, per call (`DefaultHandlers`, counters'
+  `NewBank`), its site clock ordering each key's records.
+- **`serve -dependency NAME=URL` took any URL**: one with no scheme
+  (`bank=localhost:8080`) made every call fail, each payout
+  grist.unknown. It is a usage error now (`TestMainServesDependency`).
+- **A stopped node's poller spun** (found by profiling counters'
+  -short, 88% of its Go CPU, CI's examples job at 1469 CPU s against
+  its line of 640): `commitAt` retried a transient append failure
+  without looking at its context, and once the node stopped its backoff
+  returned at once, so a store failing alike (a killed tier node's,
+  which refuses every append; one answering an ended context with a
+  transient error) was retried until the process ended, the killed
+  node's pollers taking cores from every parallel test. The loop now
+  ends with its context (`TestPollerStopsWithItsNode`: 182044 appends
+  in 200 ms after the stop without it, none with it); pushed alone,
+  before the rest of the review.
+- **The killed node's store is faithful, and the harness's**
+  (probed, no change): a killed process begins no append, and one in
+  flight at the kill may commit (the check precedes the append, which
+  then runs to its end), its node's earlier steps already written
+  (`PerStep`). The "effect committed, caller never told" window stays
+  open: `TestRealLostThenKilled` is that window, the bank's payment made
+  and the caller's answer lost with its node. `nodeStore` is gristtest's
+  (`Node.Kill`), never grist's runtime, whose at-most-once outcome
+  append outlives its context by design.
+- **The real variant judges what the real tier can, and only that**
+  (probed, no change): every `default` val but the mailer's site claim,
+  and `everyRetirementHandled`; the `exactly` vals are test-only claims
+  that a crash breaks by right. `everyMailAnswerServed`'s violation
+  under the default binding on the real tier is a verdict on the tier
+  (a third party's mailer records no site, whatever the code does), not
+  on the app; it stays, said so, as the claim's only violation, the
+  evidence that it is not vacuous. **`everyPaymentAnswerServed` had
+  none**: `TestRealHTTP` now validates its run with the ok payment's
+  receipt changed in the caller's step (a transport that decoded the
+  bank's answer wrongly) and claims `Violates` it.
+- **Double quotes** (probed, no change): `modelText` rewrites only the
+  error text grist itself stores in a grist.unknown and its step (the
+  model computes the event from the step, so both alike); no check reads
+  the quote. itf refuses a string with one (`UnquotableError`, whose
+  message advises this very replacement): Quint has no escapes, so
+  there is nothing to escape to, and the one rule is itf's refusal,
+  grist's text being the one place grist makes text of its own. An
+  app's own fields (a counter's name, a bank's reference) holding one
+  still fail validation with itf's error, by design.
+
+What slice 4 (lints for an app's own code) must know besides the
+slice's own note: `Call.Do`'s error is the effect's to return as it is
+(an at-most-once effect's outcome is classified from it: only a
+declared refusal is grist.failed now), so a lint might flag an effect
+that wraps `Do`'s error in a `NotApplied` of its own (it would say
+"not paid" of an unknown outcome; `Do` cannot see that from inside) or
+retries `Do` after an unknown outcome in an at-most-once effect (the
+payTwice mutant's shape: the model catches it only on a tier where the
+unknown outcome happens). A `ServeCalls` reached from outside the App's
+nodes is a deployment matter, not a lint's.
+
+Cost (counters, `go test -short ./...`, CPU s, user + sys, on 4 cores
+shared with other agents' tests): main with slice 3 1106 (load 17-30;
+CI 1030 in run 418, 1469 in run 40596878521, against a line of 640);
+the poller's stop alone (7bc208e) 768 (load 27); this review 760 (load
+20). The spin was most of slice 3's growth. Per test, the review's
+changes against 7bc208e, one after the other at load 5-9:
+`TestRealHTTP` 57 to 81 (two retirements for five, and the new
+forged-receipt validation of the whole run, the payment claim's one
+violation, about 30), `TestRealLostThenKilled` 40 to 23 (the clients'
+validation, `TestRealHTTP`'s claim, dropped), `payTwice` 22 to 18 (one
+retirement), `wrongAmount` 55 to 43 (its real probe in full mode): 173
+to 164. ci/test-times.txt's line is CI's run after the fix: 1038 (run 427), set to 1040.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

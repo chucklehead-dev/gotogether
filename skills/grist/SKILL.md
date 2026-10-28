@@ -86,8 +86,9 @@ for it. No binding is written by hand.
    starts: over HTTP `Bank.With(ctx, grist.OverHTTP(baseURL, nil))`
    (`POST base/<call>`, the key as `Idempotency-Key`, the cause as
    `Grist-Cause`; 2xx the response, 422 `{"rejected": name}` a refusal,
-   another 4xx `NotApplied`, a 5xx, a reset or a timeout an unknown
-   outcome; one attempt, never retried), in process
+   anything else an unknown outcome, another 4xx and a redirect, which
+   it does not follow, included: only a declared refusal says nothing
+   happened; one attempt, never retried), in process
    `Bank.With(ctx, grist.Local(handlers))` (its site records going to the
    node's recorder), in `grist.Dependencies`. A dependency the team owns
    serves its handlers with `grist.ServeCalls(dep, handlers)` (nil: the
@@ -95,7 +96,11 @@ for it. No binding is written by hand.
    `qobshttp.Handler(h, rec)` so its site records go to its own recorder
    (its own step file, validated with the caller's), into the caller's
    tenant's trace, each judged against the processor's rule: serve one
-   per dependency, whichever node calls. `grist.Main` serves one beside
+   per dependency, whichever node calls. It authenticates nobody (the
+   `Grist-Cause` is the caller's word, refused only when it names
+   another App, a processor that does not use the call, or a key that
+   is not the effect's): serve it where only the App's nodes reach it,
+   or behind the service's own authentication. `grist.Main` serves one beside
    the node with `grist.ServeDependency(dep, handlers)` (a loopback port,
    its records in the steps file under a recorder of their own), and
    `serve -dependency NAME=URL` calls another over HTTP. A third party's
