@@ -1124,6 +1124,31 @@ third party's, behind `OverHTTP`) would violate its
 bank's records: the bank runs behind `ServeCalls`); a variant judging no
 site claim of a call has none of its obligation.
 
+**The obligations as cycles, and why the generator declares no
+fairness.** `gotogether simulate -graph` judges every eventual val as
+cycles (DESIGN §62), every action weakly fair unless the binding's
+`simulate.unfair` or `simulate.stops` says otherwise. A generated
+model's state only grows (the log, effects, calls, served records), so
+its hot cycles are stutters, and an obligation is a lasso only in a
+state where no fair action is enabled; every processor's own actions,
+and a call's served record, are enabled until it holds, so none is. The
+generator could write its commands as `simulate.unfair` (a client may
+stop sending them), so that a processor stuck while inputs stay enabled
+would show. It does not (P6's review): tried on counters, library and
+wallet-grist with `-graph`, it changes no verdict, true or false, and it
+would not find a stuck processor. With counters' `average` disabled
+outright (a processor that never runs, STRS, INTS and KEYS cut to one
+value each) and its commands unfair, 250 000 states to depth 9 hold no
+lasso of `averageEventuallyHandled`: the processors' effect tries, the
+sites' records and the dependencies' served and replayed records are
+any-number actions, enabled wherever their work is pending, that grow
+the state and keep fairness per action satisfied without progress
+("fairness rules out N hot states stuttering", naming them). Declaring
+those unfair too would make false lassos: an at-least-once processor is
+handled only after an effect try, a call is served only by the
+dependency's record. A stuck processor is the runs' to show, as a
+settle with its obligation false (gristsim's `TestObligations`).
+
 ### 3.4 Leases, in plain Quint (slice 3)
 
 Several nodes need one tenant's processors run by one node at a time.
