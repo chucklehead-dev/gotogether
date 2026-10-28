@@ -94,9 +94,31 @@ func (s CatalogSite) MarshalJSON() ([]byte, error) {
 // A CatalogEvent is a registered event type.
 type CatalogEvent struct {
 	Name    string
-	Version int
+	Version int // the newest: what an append writes
 	Body    reflect.Type
 	Tags    []string // the tag keys, in field order
+	// Older are its older versions, oldest first, each with the upcaster
+	// to the next (grist.Upcast): what a stored event of each may be.
+	Older []CatalogVersion
+}
+
+// A CatalogVersion is an older version of an event type: the struct its
+// events were stored as, and the fields its upcaster drops on purpose.
+type CatalogVersion struct {
+	Version int
+	Body    reflect.Type
+	Tags    []string
+	Drops   []string
+}
+
+// MarshalJSON writes the version with its body as a JSON Schema.
+func (v CatalogVersion) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Version int            `json:"version"`
+		Body    map[string]any `json:"body"`
+		Tags    []string       `json:"tags"`
+		Drops   []string       `json:"drops,omitempty"`
+	}{v.Version, Schema(v.Body), NonNil(v.Tags), v.Drops})
 }
 
 // A CatalogReadModel is a registered read model.
@@ -105,6 +127,11 @@ type CatalogReadModel struct {
 	Version int      `json:"version"`
 	Types   []string `json:"types"` // the event types it folds
 	Keys    []string `json:"keys"`  // a keyed read model's key tags; none for a plain one
+	// Fingerprint is what its snapshots are keyed by: its name, version,
+	// keys, the shapes of the events it folds, and what its fold makes of
+	// generated events (grist's snapshots, docs/grist.md §2.2). It changes
+	// when any of them does, so no snapshot of another fold is reused.
+	Fingerprint string `json:"fingerprint"`
 }
 
 // A CatalogBlock is a registered command or query.
@@ -145,11 +172,12 @@ type CatalogRule struct {
 // MarshalJSON writes the event with its body as a JSON Schema.
 func (e CatalogEvent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Name    string         `json:"name"`
-		Version int            `json:"version"`
-		Body    map[string]any `json:"body"`
-		Tags    []string       `json:"tags"`
-	}{e.Name, e.Version, Schema(e.Body), NonNil(e.Tags)})
+		Name    string           `json:"name"`
+		Version int              `json:"version"`
+		Body    map[string]any   `json:"body"`
+		Tags    []string         `json:"tags"`
+		Older   []CatalogVersion `json:"older,omitempty"`
+	}{e.Name, e.Version, Schema(e.Body), NonNil(e.Tags), e.Older})
 }
 
 // MarshalJSON writes the block with its arguments and result as JSON

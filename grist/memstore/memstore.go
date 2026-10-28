@@ -1,7 +1,8 @@
 // Package memstore is a grist store in memory: maps and a mutex, for unit
 // tests of a fold or a decision. It is not for simulations (its mutex is
 // a real one, which qenv cannot schedule): use grist/simstore there. It
-// keeps a store.StepLog and is a store.TenantFeed.
+// keeps a store.StepLog and snapshots (store.SnapshotStore), and is a
+// store.TenantFeed.
 package memstore
 
 import (
@@ -26,6 +27,7 @@ type tenant struct {
 	markers     map[string]store.Marker
 	checkpoints map[string]store.Position
 	steps       []store.StepRow
+	snapshots   map[[3]string]store.Snapshot // by name, key, fingerprint
 }
 
 // New returns an empty store named name.
@@ -41,7 +43,7 @@ func (s *Store) CreateTenant(_ context.Context, t string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.tenants[t] == nil {
-		s.tenants[t] = &tenant{markers: map[string]store.Marker{}, checkpoints: map[string]store.Position{}}
+		s.tenants[t] = &tenant{markers: map[string]store.Marker{}, checkpoints: map[string]store.Position{}, snapshots: map[[3]string]store.Snapshot{}}
 		s.wake()
 	}
 	return nil
@@ -226,4 +228,28 @@ func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) err
 			return ctx.Err()
 		}
 	}
+}
+
+// PutSnapshot implements store.SnapshotStore.
+func (s *Store) PutSnapshot(_ context.Context, t string, snap store.Snapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return store.ErrUnknownTenant
+	}
+	tn.snapshots[[3]string{snap.Name, snap.Key, snap.Fingerprint}] = snap.Clone()
+	return nil
+}
+
+// GetSnapshot implements store.SnapshotStore.
+func (s *Store) GetSnapshot(_ context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return store.Snapshot{}, false, store.ErrUnknownTenant
+	}
+	snap, ok := tn.snapshots[[3]string{name, key, fingerprint}]
+	return snap.Clone(), ok, nil
 }

@@ -33,7 +33,7 @@ import (
 // The commands:
 //
 //	catalog    App.Catalog as JSON on stdout
-//	verify     App.Verify
+//	verify     App.Verify and App.CheckUpcasters
 //	model      the model's skeleton and bindings, generated from the App's catalog
 //	           (docs/grist.md §3.2), written under -dir (default .), or with -check
 //	           compared with those there (an error naming each that differs);
@@ -92,7 +92,7 @@ func (e *usageError) Error() string { return e.Msg }
 // mainUsage is the commands' summary.
 const mainUsage = `commands:
   catalog                     print the App's registry as JSON (App.Catalog)
-  verify                      check the registry (App.Verify), as the node does at boot
+  verify                      check the registry (App.Verify), as the node does at boot, and every upcaster (App.CheckUpcasters)
   model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings under DIR (default .)
       -check                           write nothing: fail if a generated file differs (CI's diff)
       -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt where there are none
@@ -125,6 +125,9 @@ func mainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 		return err
 	case "verify":
 		if err := app.Verify(); err != nil {
+			return err
+		}
+		if err := app.CheckUpcasters(); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "%s verifies\n", app.Name)

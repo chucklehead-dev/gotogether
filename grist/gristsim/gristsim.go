@@ -32,6 +32,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/client"
 	"github.com/chucklehead-dev/gotogether/grist/internal/calls"
+	"github.com/chucklehead-dev/gotogether/grist/internal/values"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -104,6 +105,14 @@ type Config struct {
 	// CommitFaults turns on the store's commit faults
 	// (store.<app>.commit: a commit applied whose answer is lost).
 	CommitFaults bool
+	// SnapshotEvery is how many events a read folds before it takes a
+	// read model's snapshot (grist.SnapshotEvery; 0: grist's default,
+	// which a simulation's short logs never reach; negative: none). A
+	// small one makes the runs read from snapshots, through the store's
+	// snapshot faults (store.<app>.snapshot: a put torn or lost) and the
+	// node's crashes, and the model judges every decision made from one
+	// (not the HTTP tier's API, whose handler reads at grist's default).
+	SnapshotEvery int
 	// Check runs the scheduler's and the Store's own checks at every step
 	// and commit, as GOTOGETHER_CHECK=1 does.
 	Check bool
@@ -363,6 +372,10 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		if d := cfg.Setup(s, st); d != nil {
 			deps = func(ctx context.Context) context.Context { return d(served(ctx)) }
 		}
+	}
+	if n := cfg.SnapshotEvery; n != 0 {
+		d := deps
+		deps = func(ctx context.Context) context.Context { return grist.SnapshotEvery(d(ctx), n) }
 	}
 	if cfg.Cluster != nil && cfg.HTTP {
 		return errors.New("gristsim: Config.Cluster with Config.HTTP: a cluster's nodes serve the API as qenv.Services behind its router; the HTTP tier's cluster is not built yet")
@@ -633,47 +646,7 @@ func (w *workload) gen(name string) json.RawMessage {
 // structs field by field (unexported fields left zero), slices of zero to
 // two elements; anything else its zero value.
 func Gen(typ reflect.Type, alphabet []string, ints []int, pick func(n int) int) any {
-	if typ == nil {
-		return struct{}{}
-	}
-	var uints []int
-	for _, n := range ints {
-		if n >= 0 {
-			uints = append(uints, n)
-		}
-	}
-	if len(uints) == 0 {
-		uints = []int{0}
-	}
-	return genValue(typ, alphabet, ints, uints, pick).Interface()
-}
-
-func genValue(typ reflect.Type, alphabet []string, ints, uints []int, pick func(n int) int) reflect.Value {
-	v := reflect.New(typ).Elem()
-	switch typ.Kind() {
-	case reflect.String:
-		v.SetString(alphabet[pick(len(alphabet))])
-	case reflect.Bool:
-		v.SetBool(pick(2) == 1)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v.SetInt(int64(ints[pick(len(ints))]))
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v.SetUint(uint64(uints[pick(len(uints))]))
-	case reflect.Struct:
-		for i := 0; i < typ.NumField(); i++ {
-			if typ.Field(i).IsExported() {
-				v.Field(i).Set(genValue(typ.Field(i).Type, alphabet, ints, uints, pick))
-			}
-		}
-	case reflect.Slice:
-		n := pick(3)
-		s := reflect.MakeSlice(typ, n, n)
-		for i := 0; i < n; i++ {
-			s.Index(i).Set(genValue(typ.Elem(), alphabet, ints, uints, pick))
-		}
-		v.Set(s)
-	}
-	return v
+	return values.Gen(typ, alphabet, ints, pick)
 }
 
 // all are the values of typ a probe takes: every combination of its

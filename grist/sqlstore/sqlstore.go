@@ -12,6 +12,7 @@
 //	grist_markers(tenant, id, hash, outcome, pos, events)
 //	grist_checkpoints(tenant, processor, pos)
 //	grist_steps(tenant, seq, head, at_ns, step)  the step log (store.StepLog), at_ns its commit's time
+//	grist_snapshots(tenant, name, k, fingerprint, pos, state, checksum)  read models' snapshots (store.SnapshotStore)
 //
 // An append's first statement takes the tenant's lock and reads the new
 // head in one round trip, `UPDATE grist_heads SET head = head + $1, steps
@@ -100,6 +101,7 @@ var schema = []string{
 	`CREATE TABLE IF NOT EXISTS grist_markers (tenant TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, outcome TEXT NOT NULL, pos BIGINT NOT NULL, events BIGINT NOT NULL, PRIMARY KEY (tenant, id))`,
 	`CREATE TABLE IF NOT EXISTS grist_checkpoints (tenant TEXT NOT NULL, processor TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, processor))`,
 	`CREATE TABLE IF NOT EXISTS grist_steps (tenant TEXT NOT NULL, seq BIGINT NOT NULL, head BIGINT NOT NULL, at_ns BIGINT NOT NULL, step TEXT NOT NULL, PRIMARY KEY (tenant, seq))`,
+	`CREATE TABLE IF NOT EXISTS grist_snapshots (tenant TEXT NOT NULL, name TEXT NOT NULL, k TEXT NOT NULL, fingerprint TEXT NOT NULL, pos BIGINT NOT NULL, state TEXT NOT NULL, checksum TEXT NOT NULL, PRIMARY KEY (tenant, name, k, fingerprint))`,
 }
 
 // Open returns a store over db in dialect d, creating its tables if they
@@ -713,4 +715,33 @@ func (s *Store) wait(ctx context.Context, done func() (bool, error)) error {
 		}
 		signal.Wait(ctx, poll)
 	}
+}
+
+// PutSnapshot implements store.SnapshotStore: one row per (tenant, read
+// model, key, fingerprint), the last put's.
+func (s *Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error {
+	if _, err := head(ctx, s.db, t); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO grist_snapshots (tenant, name, k, fingerprint, pos, state, checksum) VALUES ($1, $2, $3, $4, $5, $6, $7) `+
+		`ON CONFLICT (tenant, name, k, fingerprint) DO UPDATE SET pos = excluded.pos, state = excluded.state, checksum = excluded.checksum`,
+		t, snap.Name, snap.Key, snap.Fingerprint, int64(snap.Pos), string(snap.State), snap.Sum)
+	return classify(err)
+}
+
+// GetSnapshot implements store.SnapshotStore.
+func (s *Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
+	if _, err := head(ctx, s.db, t); err != nil {
+		return store.Snapshot{}, false, err
+	}
+	var pos int64
+	var state, sum string
+	switch err := s.db.QueryRowContext(ctx, `SELECT pos, state, checksum FROM grist_snapshots WHERE tenant = $1 AND name = $2 AND k = $3 AND fingerprint = $4`,
+		t, name, key, fingerprint).Scan(&pos, &state, &sum); {
+	case errors.Is(err, sql.ErrNoRows):
+		return store.Snapshot{}, false, nil
+	case err != nil:
+		return store.Snapshot{}, false, classify(err)
+	}
+	return store.Snapshot{Name: name, Key: key, Fingerprint: fingerprint, Pos: store.Position(pos), State: json.RawMessage(state), Sum: sum}, true, nil
 }

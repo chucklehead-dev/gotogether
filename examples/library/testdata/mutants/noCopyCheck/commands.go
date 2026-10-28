@@ -49,7 +49,7 @@ func decideAddBook(r *grist.Reads, c AddBook) ([]grist.Event, error) {
 	if c.Copies <= 0 {
 		return nil, ErrInvalid
 	}
-	return []grist.Event{Added.Of(BookAdded{Book: c.Book, Copies: c.Copies})}, nil
+	return []grist.Event{Added.Of(BookAdded{Book: c.Book, Count: c.Copies, Shelf: MainShelf})}, nil
 }
 
 // decideBorrow, the mutant noCopyCheck: the shelf never read, so a borrow

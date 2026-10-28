@@ -105,8 +105,10 @@ func (a *App) register(kind, name string) {
 // event a block consumes or emits registered on this App, no event field
 // a float or a time, every rule on an event some block appends (a
 // command's Appends, a processor's Emits or Delivers), with its refusals
-// declared. It returns every problem found, each naming the
-// block and the fix; nil when the App may start.
+// declared, every old version of an event with its upcaster to the next,
+// each total, pure and keeping the event's tags on generated values (the
+// rest of CheckUpcasters' checks are a test's). It returns every problem
+// found, each naming the block and the fix; nil when the App may start.
 func (a *App) Verify() error {
 	ps := append([]string(nil), a.problems...)
 	for _, rm := range a.readModels {
@@ -122,6 +124,7 @@ func (a *App) Verify() error {
 		}
 	}
 	ps = append(ps, a.verifyRules()...)
+	ps = append(ps, a.upcasterProblems(false)...)
 	if len(ps) == 0 {
 		return nil
 	}

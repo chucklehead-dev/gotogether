@@ -16,9 +16,11 @@ module libraryRules {
   pure def isMember(log: List[Event], m: str): bool =
     log.foldl(false, (b, e) => b or (e.typ == "member-joined" and memberJoinedMember(e) == m))
 
-  // books, keyed by book: its copies, and how many are on loan
+  // books, keyed by book: its copies (each addition's count), and how
+  // many are on loan. The model knows book-added's newest shape only: an
+  // addition stored at version 1 is judged as its upcast (upcast.go)
   pure def copies(log: List[Event], b: str): int =
-    booksEvents(log, b).foldl(0, (s, e) => if (e.typ == "book-added") s + bookAddedCopies(e) else s)
+    booksEvents(log, b).foldl(0, (s, e) => if (e.typ == "book-added") s + bookAddedCount(e) else s)
   pure def onLoan(log: List[Event], b: str): int =
     booksEvents(log, b).foldl(0, (s, e) =>
       if (e.typ == "book-borrowed") s + 1 else if (e.typ == "book-returned") s - 1 else s)
@@ -40,7 +42,7 @@ module libraryRules {
 
   // add-book: copies that are not positive refused before any read
   pure def addBookOutcome(log: List[Event], c: AddBookArgs): str = if (c.copies <= 0) "invalid" else "ok"
-  pure def addBookEvents(log: List[Event], c: AddBookArgs): List[Event] = [bookAdded(c.book, c.copies)]
+  pure def addBookEvents(log: List[Event], c: AddBookArgs): List[Event] = [bookAdded(c.book, c.copies, "main")]
   pure def addBookNeeds(c: AddBookArgs, result: str): Set[Read] = Set()
 
   // borrow: a stranger refused on the member's join, a book with no copy

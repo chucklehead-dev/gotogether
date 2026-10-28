@@ -31,6 +31,13 @@ import (
 type TierConfig struct {
 	// Tenants are created before any node starts (default t1).
 	Tenants []string
+	// Log, if set, is restored into the tier's store before any node
+	// starts (Log.Restore): an older version's history, which the nodes
+	// relay (its steps re-rendered in today's event shapes) and serve
+	// from, so Check judges the old log and today's steps after it by
+	// today's model, at the store (the clients' binding, whose model
+	// starts from an empty log, is not run).
+	Log *Log
 	// Deps attaches the application's dependencies to a context: every
 	// node's, and the clients' (nil: none). It is given the tier's store.
 	// What it attaches wins over Serve's and Local's.
@@ -159,6 +166,11 @@ func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier {
 	}
 	for _, tn := range cfg.Tenants {
 		if err := st.CreateTenant(ctx, tn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cfg.Log != nil {
+		if err := cfg.Log.Restore(ctx, st); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -569,6 +581,12 @@ func (r *Tier) Check(commits, calls string, opts ...qtest.Option) []*qtrace.Trac
 	}
 	r.t.Logf("%d steps written; %d answers lost, %d retries replayed; %d dependency answers lost", len(steps), r.Lost(), r.Replayed(), r.LostCalls())
 	qtest.Validate(r.t, commits, steps).Expect(r.t, qtest.Conforms(), qtest.Settles())
+	if r.cfg.Log != nil {
+		// the clients' model starts from an empty log, and no client of
+		// this run saw the restored one: only the store's side judges it
+		r.t.Logf("the clients' binding (%s) not run: the tier's store began with a restored log its clients never saw", calls)
+		return traces
+	}
 	qtest.Validate(r.t, calls, steps, append([]qtest.Option{qtest.Linearize()}, opts...)...).Expect(r.t, qtest.Conforms())
 	return traces
 }

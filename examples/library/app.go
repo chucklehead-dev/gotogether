@@ -19,10 +19,13 @@ type (
 	MemberJoined struct {
 		Member string `json:"member" grist:"tag"`
 	}
-	// BookAdded: Copies more copies of Book in the catalogue.
+	// BookAdded: Count more copies of Book in the catalogue, on Shelf.
+	// Version 2: version 1 (BookAddedV1, upcast.go) called the count
+	// copies and had no shelf.
 	BookAdded struct {
-		Book   string `json:"book" grist:"tag"`
-		Copies int    `json:"copies"`
+		Book  string `json:"book" grist:"tag"`
+		Count int    `json:"count"`
+		Shelf string `json:"shelf"`
 	}
 	// BookBorrowed: Member took one copy of Book.
 	BookBorrowed struct {
@@ -43,7 +46,7 @@ var App = grist.New("library")
 // The event types.
 var (
 	Joined   = grist.NewEvent[MemberJoined](App, "member-joined")
-	Added    = grist.NewEvent[BookAdded](App, "book-added")
+	Added    = grist.NewEvent[BookAdded](App, "book-added", upcastBookAdded)
 	Borrowed = grist.NewEvent[BookBorrowed](App, "book-borrowed")
 	Returned = grist.NewEvent[BookReturned](App, "book-returned")
 )
@@ -60,7 +63,7 @@ func (s Shelf) Free() int { return s.Copies - s.OnLoan }
 // Books is each book's shelf, keyed by book: a borrow of b reads, and is
 // conditioned on, b's additions, borrows and returns alone.
 var Books = grist.NewKeyedReadModel(App, "books", 1, grist.Keys("book"), func() Shelf { return Shelf{} },
-	grist.On(Added, func(s Shelf, e BookAdded, m grist.Meta) Shelf { s.Copies += e.Copies; return s }),
+	grist.On(Added, func(s Shelf, e BookAdded, m grist.Meta) Shelf { s.Copies += e.Count; return s }),
 	grist.On(Borrowed, func(s Shelf, e BookBorrowed, m grist.Meta) Shelf { s.OnLoan++; return s }),
 	grist.On(Returned, func(s Shelf, e BookReturned, m grist.Meta) Shelf { s.OnLoan--; return s }))
 

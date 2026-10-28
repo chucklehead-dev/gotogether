@@ -58,6 +58,13 @@ func Command(app App, args []string, stdout io.Writer, usage func(msg string) er
 			}
 		}
 	}
+	if u, ok := app.(interface{ CheckUpcasters() error }); ok {
+		// an upcaster dropping a field would leave the model judging old
+		// logs that lost it: said here, where the lock is written
+		if err := u.CheckUpcasters(); err != nil {
+			return err
+		}
+	}
 	g, err := Generate(app, *dir)
 	if err != nil {
 		return err

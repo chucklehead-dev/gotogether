@@ -20,6 +20,9 @@ type eventInfo struct {
 	version int
 	typ     reflect.Type
 	tags    []tagField
+	// ups are the upcasters, ups[k-1] from version k to k+1 (nil when
+	// the chain does not verify: Verify says why)
+	ups []Upcaster
 }
 
 type tagField struct {
@@ -51,13 +54,20 @@ type EventType[E any] struct {
 	info *eventInfo
 }
 
-// NewEvent registers E as the event type name, version 1 (slice 1 has one
-// version per name; upcasting is slice 3's). The name, not the Go type's,
-// is what is stored. Fields marked `grist:"tag"` (strings, integers,
-// booleans) are its tags, keyed by their JSON names. E must be a struct
-// whose fields the model can hold: floats and times are refused, with
-// the fix (integers in a stated unit).
-func NewEvent[E any](app *App, name string) *EventType[E] {
+// NewEvent registers E as the event type name. The name, not the Go
+// type's, is what is stored. Fields marked `grist:"tag"` (strings,
+// integers, booleans) are its tags, keyed by their JSON names. E must be
+// a struct whose fields the model can hold: floats and times are refused,
+// with the fix (integers in a stated unit).
+//
+// Its version is 1, or 1 plus its upcasters: an event whose shape changed
+// keeps its old struct (BookAddedV1) and declares how a stored event of it
+// becomes the next version's, Upcast(1, func(v BookAddedV1) BookAdded {...}),
+// one upcaster per old version, each to the next (docs/grist.md §2.1). A
+// read upcasts before any fold, handler or rule sees the event; an append
+// writes the newest version only; a stored version newer than E's is
+// refused by name (a *NewerVersionError), never decoded.
+func NewEvent[E any](app *App, name string, upcasters ...Upcaster) *EventType[E] {
 	typ := reflect.TypeFor[E]()
 	app.register("event", name)
 	info := &eventInfo{name: name, version: 1, typ: typ}
@@ -67,26 +77,38 @@ func NewEvent[E any](app *App, name string) *EventType[E] {
 		for _, p := range modelable(typ, typ.Name()) {
 			app.problems = append(app.problems, fmt.Sprintf("event %q: %s", name, p))
 		}
-		for i := 0; i < typ.NumField(); i++ {
-			f := typ.Field(i)
-			if f.Tag.Get("grist") != "tag" {
-				continue
-			}
-			switch f.Type.Kind() {
-			case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			default:
-				app.problems = append(app.problems, fmt.Sprintf("event %q: tag field %s is %v: a tag is a string, an integer or a boolean", name, f.Name, f.Type))
-				continue
-			}
-			info.tags = append(info.tags, tagField{index: i, key: rec.JSONName(f)})
+		var ps []string
+		info.tags, ps = tagFieldsOf(typ)
+		for _, p := range ps {
+			app.problems = append(app.problems, fmt.Sprintf("event %q: %s", name, p))
 		}
 	}
+	app.problems = append(app.problems, info.chain(upcasters)...)
 	if app.events[name] == nil {
 		app.events[name] = info
 		app.eventOrder = append(app.eventOrder, name)
 	}
 	return &EventType[E]{info: info}
+}
+
+// tagFieldsOf are a struct's tag fields (marked grist:"tag"), and why a
+// marked field cannot be one.
+func tagFieldsOf(typ reflect.Type) (tags []tagField, problems []string) {
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		if f.Tag.Get("grist") != "tag" {
+			continue
+		}
+		switch f.Type.Kind() {
+		case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		default:
+			problems = append(problems, fmt.Sprintf("tag field %s is %v: a tag is a string, an integer or a boolean", f.Name, f.Type))
+			continue
+		}
+		tags = append(tags, tagField{index: i, key: rec.JSONName(f)})
+	}
+	return tags, problems
 }
 
 // Name is the event type's registered name.
@@ -106,14 +128,27 @@ func (t *EventType[E]) Of(e E) Event {
 	return Event{Type: t.info.name, Version: t.info.version, Tags: tags, Body: body}
 }
 
-// Decode is a stored event's body as E.
+// Version is the event type's newest version: what an append writes.
+func (t *EventType[E]) Version() int { return t.info.version }
+
+// Decode is a stored event's body as E: decoded as the version it was
+// stored at and upcast to the newest (NewEvent's upcasters). A version
+// newer than E's is a *NewerVersionError: a newer version of the app
+// appended it, and this one cannot know what its fields mean.
 func (t *EventType[E]) Decode(s Stored) (E, error) {
 	var e E
 	if s.Type != t.info.name {
 		return e, fmt.Errorf("grist: event at %d is %s, not %s", s.Pos, s.Type, t.info.name)
 	}
-	err := json.Unmarshal(s.Body, &e)
-	return e, err
+	if v := storedVersion(s.Version); v == t.info.version {
+		err := json.Unmarshal(s.Body, &e)
+		return e, err
+	}
+	v, err := t.info.upcast(s.Event)
+	if err != nil {
+		return e, fmt.Errorf("grist: event at %d: %w", s.Pos, err)
+	}
+	return v.Interface().(E), nil
 }
 
 // An EventName is a registered event type (an *EventType, whatever its

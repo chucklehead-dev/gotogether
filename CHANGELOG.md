@@ -63,6 +63,28 @@ The first release. What a user meets, by module:
   `itf` with `-convert`, print them per file: operations the model does
   not name, or outside its context. examples/migrate-payments, the
   gotogether-migration skill's walk-through, shows a draft rule file's.
+- grist's upcasting and snapshots (ROADMAP H7, its first half). An
+  event whose shape changed keeps its old struct and declares the chain:
+  `grist.NewEvent[E](app, name, grist.Upcast(1, func(v EV1) E {...}))`
+  (`Upcaster.Drops` for a field dropped on purpose; `EventType.Version`);
+  reads upcast before any fold sees an event, appends write the newest,
+  and a stored version newer than the app's is a
+  `*grist.NewerVersionError`, never decoded. `App.Verify` (boot) checks the
+  chain and runs every upcaster over generated values (total, pure, tags
+  kept); `App.CheckUpcasters` (`verify`, `model`, `gristtest.Upcasts`) also
+  reports a field an upcaster ignores. The relay records an old log's
+  events in the newest shape, so today's model judges it. `grist model`
+  writes `grist.lock` (every stored version's shape, every read model's
+  fingerprint) and refuses a version whose shape changed. Read models fold
+  from a snapshot: `store.SnapshotStore` (memstore, simstore with its
+  `store.<name>.snapshot` faults, sqlstore's `grist_snapshots`; storetest's
+  `Snapshots`), `grist.SnapshotEvery` (default `DefaultSnapshotEvery`,
+  1000), keyed by a fingerprint (`CatalogReadModel.Fingerprint`);
+  `App.CheckSnapshots` and `gristtest.Snapshots` check a snapshot plus its
+  tail against a fold from the start; `gristsim.Config.SnapshotEvery`;
+  `gristtest.Log`, `Capture`, `WriteLog`, `ReadLog` and
+  `TierConfig.Log` keep a deployed version's log and judge later versions
+  on it. examples/library's book-added is at version 2.
 - Skills in pavlov's shape (ROADMAP P8): each SKILL.md at most about 80
   lines, with a "choose your path" list (each reference and when to read
   it), steps, checklists, a results table (each verdict and report line,

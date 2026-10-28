@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -46,6 +47,10 @@ import (
 type Relay struct {
 	s   Store
 	log store.StepLog
+	// app, once a node started with the relay (App.Start), re-renders a
+	// row's events stored at an older version as the newest (upcast):
+	// the model sees only the newest shapes
+	app atomic.Pointer[App]
 
 	mu      sync.Mutex // tenants and errs only: no seam is reached while it is held
 	tenants map[string]*relayed
@@ -225,7 +230,15 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 			return err
 		}
 		for _, row := range rows {
-			if err := r.record(ctx, t, p, row); err != nil {
+			if row.Seq <= p.done.Load() {
+				continue // recorded already, by another flush
+			}
+			// decoded before the record's lock: upcasting reads the store
+			steps, err := r.decode(ctx, t, row)
+			if err != nil {
+				return err
+			}
+			if err := r.record(ctx, t, p, row, steps); err != nil {
 				return err
 			}
 		}
@@ -235,9 +248,24 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 	}
 }
 
-// record records one row, if it is the next of t's (under p.mu, reaching
-// no seam).
-func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.StepRow) error {
+// decode is a row's steps, its events stored at an older version
+// re-rendered as the newest (upcastRow).
+func (r *Relay) decode(ctx context.Context, t string, row store.StepRow) ([]relayStep, error) {
+	steps, err := decodeRow(row)
+	if err != nil {
+		return nil, &rowError{fmt.Errorf("grist: tenant %s's step row %d: %w", t, row.Seq, err)}
+	}
+	if app := r.app.Load(); app != nil {
+		if err := app.upcastRow(ctx, r.s, t, steps); err != nil {
+			return nil, err
+		}
+	}
+	return steps, nil
+}
+
+// record records one row's steps, if it is the next of t's (under p.mu,
+// reaching no seam).
+func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.StepRow, steps []relayStep) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	switch {
@@ -245,10 +273,6 @@ func (r *Relay) record(ctx context.Context, t string, p *relayed, row store.Step
 		return nil // recorded already, by another flush
 	case row.Seq != p.rows+1:
 		return &rowError{fmt.Errorf("grist: tenant %s's step log has row %d after %d: its rows must be numbered densely from 1 (store.StepRow.Seq)", t, row.Seq, p.rows)}
-	}
-	steps, err := decodeRow(row)
-	if err != nil {
-		return &rowError{fmt.Errorf("grist: tenant %s's step row %d: %w", t, row.Seq, err)}
 	}
 	for _, s := range steps {
 		p.scratch.Record(context.Background(), s.action, s.err, s.kv...) // an error's step keeps its kv's outcome
@@ -343,6 +367,10 @@ type relayStep struct {
 	kv     []any
 	time   time.Time
 	err    error
+	// events and head: how many events of the batch are its, and the
+	// head after them
+	events int
+	head   Position
 }
 
 // decodeRow is a row's steps with the fields the head gives: each step's
@@ -381,7 +409,7 @@ func decodeRow(row store.StepRow) ([]relayStep, error) {
 		if s.Error != "" {
 			err = errors.New(s.Error)
 		}
-		out = append(out, relayStep{action: s.Action, kv: kv, time: time.Unix(0, row.Time), err: err})
+		out = append(out, relayStep{action: s.Action, kv: kv, time: time.Unix(0, row.Time), err: err, events: s.Events, head: head})
 	}
 	return out, nil
 }
@@ -398,4 +426,103 @@ func numbers(v any) any {
 		return f
 	}
 	return v
+}
+
+// upcastRow re-renders the events of steps (one row's) that were stored
+// at an older version than the App's newest: their observations
+// (obs.strs, obs.ints) are recomputed from their upcast bodies, so a log
+// appended by an older version of the app is judged by the model of
+// today's, which knows only the newest shapes (docs/grist.md §2.1). A
+// row with no event of a type that has versions reads nothing; one with
+// such events reads them back (the row holds their observations, not
+// their bodies). An event of a newer version than the App knows is left
+// as it was recorded.
+func (a *App) upcastRow(ctx context.Context, s Store, t string, steps []relayStep) error {
+	for i := range steps {
+		st := &steps[i]
+		types := kvStrings(st.kv, "obs.events")
+		if st.events == 0 || len(types) != st.events || !a.versioned(types) {
+			continue
+		}
+		evs, _, err := s.Read(ctx, t, Selector{Types: uniq(types), After: st.head - Position(st.events)}, st.head)
+		if err != nil {
+			return err // transient: the relay retries the row
+		}
+		if len(evs) != st.events {
+			return &rowError{fmt.Errorf("grist: tenant %s's step at %d has %d events, and the store %d of their types through it", t, st.head, st.events, len(evs))}
+		}
+		older := false
+		for _, e := range evs {
+			if info := a.events[e.Type]; info != nil && storedVersion(e.Version) < info.version {
+				older = true
+			}
+		}
+		if !older {
+			continue
+		}
+		strs, ints := []string{}, []int64{}
+		for _, e := range evs {
+			info := a.events[e.Type]
+			if info == nil {
+				continue
+			}
+			body := e.Body
+			if storedVersion(e.Version) < info.version {
+				if body, err = info.currentBody(e.Event); err != nil {
+					return &rowError{fmt.Errorf("grist: tenant %s's event %d: %w", t, e.Pos, err)}
+				}
+			}
+			ss, n := scalars(info.typ, body)
+			strs, ints = append(strs, ss...), append(ints, n...)
+		}
+		setKV(st.kv, "obs.strs", strs)
+		setKV(st.kv, "obs.ints", ints)
+	}
+	return nil
+}
+
+// versioned reports whether one of types has an older version.
+func (a *App) versioned(types []string) bool {
+	for _, t := range types {
+		if info := a.events[t]; info != nil && info.version > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// kvStrings is the list of strings at key in kv (a decoded row's pairs).
+func kvStrings(kv []any, key string) []string {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i] == key {
+			l, _ := kv[i+1].([]any)
+			out := make([]string, 0, len(l))
+			for _, v := range l {
+				s, _ := v.(string)
+				out = append(out, s)
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+// setKV sets key's value in kv.
+func setKV(kv []any, key string, v any) {
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i] == key {
+			kv[i+1] = v
+			return
+		}
+	}
+}
+
+func uniq(s []string) []string {
+	var out []string
+	for _, x := range s {
+		if !slices.Contains(out, x) {
+			out = append(out, x)
+		}
+	}
+	return out
 }

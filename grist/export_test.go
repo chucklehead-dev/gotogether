@@ -37,3 +37,10 @@ const (
 	ShutdownTimeout = shutdownTimeout
 	DrainDelay      = DefaultDrainDelay
 )
+
+// RelayFor makes r upcast its rows' old events to a's newest, as App.Start
+// does for its relay.
+func RelayFor(r *Relay, a *App) { r.app.Store(a) }
+
+// SnapshotSum is a snapshot's checksum, for a test that writes one.
+var SnapshotSum = snapshotSum

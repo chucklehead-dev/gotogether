@@ -7,7 +7,9 @@
 // replayed against the reference evaluation, Wait woken by an append,
 // readers and writers sharing no slice with the store, the step log of
 // a store.StepLog (its rows timed in commit order), a store.TenantFeed's
-// wait for a new tenant, and tenant isolation: a read of one tenant never
+// wait for a new tenant, a store.SnapshotStore's snapshots (kept as put,
+// the last put winning, one per read model, key and fingerprint), and
+// tenant isolation: a read of one tenant never
 // returns another's events, an append to one never moves another's head.
 //
 // Each check (Checks lists them, by name) is a function of a context and
@@ -56,6 +58,7 @@ func Checks() []Check {
 		{"TenantFeed", tenantFeed},
 		{"TenantIsolation", tenantIsolation},
 		{"UnknownTenant", unknownTenant},
+		{"Snapshots", snapshots},
 	}
 }
 
@@ -850,6 +853,104 @@ func TwoStores(ctx context.Context, a, b store.Store) error {
 	}
 	if !qenv.WaitFor(ctx, func() bool { return tenant.Load() == 1 }, 10*time.Second) {
 		return fmt.Errorf("two stores: a's WaitTenants did not return after b created t2")
+	}
+	return nil
+}
+
+// snapshots checks a store.SnapshotStore: a snapshot reads back as put,
+// field for field (its State byte for byte), sharing no slice with the
+// caller either way; a put replaces the one under its (name, key,
+// fingerprint), whatever its position (the last put wins: grist checks
+// each snapshot it reads, and keeps an earlier one from replacing a later
+// one itself); names, keys, fingerprints and tenants each keep their own;
+// an unknown tenant is ErrUnknownTenant. It runs where faults are off: a
+// simulated store's snapshot faults (a torn or lost put) are grist's to
+// survive, not the contract's.
+func snapshots(ctx context.Context, s store.Store) error {
+	ss, ok := s.(store.SnapshotStore)
+	if !ok {
+		return fmt.Errorf("store %T keeps no snapshots (store.SnapshotStore): every tier keeps them", s)
+	}
+	for _, t := range []string{"t1", "t2"} {
+		if err := s.CreateTenant(ctx, t); err != nil {
+			return err
+		}
+	}
+	if _, found, err := ss.GetSnapshot(ctx, "t1", "rm", "", "f1"); err != nil || found {
+		return fmt.Errorf("GetSnapshot of none: found %v, %v; want none", found, err)
+	}
+	put := func(t string, snap store.Snapshot) error {
+		if err := ss.PutSnapshot(ctx, t, snap); err != nil {
+			return fmt.Errorf("PutSnapshot(%s, %+v): %v", t, snap, err)
+		}
+		return nil
+	}
+	expect := func(t string, want store.Snapshot) error {
+		got, found, err := ss.GetSnapshot(ctx, t, want.Name, want.Key, want.Fingerprint)
+		if err != nil || !found {
+			return fmt.Errorf("GetSnapshot(%s, %s, %s, %s): found %v, %v; want %+v", t, want.Name, want.Key, want.Fingerprint, found, err, want)
+		}
+		if !reflect.DeepEqual(got, want) && string(got.State) == string(want.State) {
+			got.State = want.State // json.RawMessage(nil) and an empty one alike
+		}
+		if !reflect.DeepEqual(got, want) {
+			return fmt.Errorf("GetSnapshot(%s, %s, %s, %s) = %+v (state %s), want %+v (state %s)", t, want.Name, want.Key, want.Fingerprint, got, got.State, want, want.State)
+		}
+		return nil
+	}
+	a := store.Snapshot{Name: "rm", Key: "", Fingerprint: "f1", Pos: 3, State: []byte(`{"n":1,"s":"\u00e9 é <&>"}`), Sum: "sum-a"}
+	state := append([]byte(nil), a.State...)
+	if err := put("t1", a); err != nil {
+		return err
+	}
+	a.State[1] = 'X' // the caller reuses its slice
+	a.State = state
+	if err := expect("t1", a); err != nil {
+		return fmt.Errorf("a snapshot as put: %v", err)
+	}
+	got, _, _ := ss.GetSnapshot(ctx, "t1", "rm", "", "f1")
+	if len(got.State) > 0 {
+		got.State[0] = 'X' // the reader mutates its copy
+	}
+	if err := expect("t1", a); err != nil {
+		return fmt.Errorf("after a reader changed its copy: %v", err)
+	}
+	// the last put wins, an earlier position included
+	b := store.Snapshot{Name: "rm", Key: "", Fingerprint: "f1", Pos: 2, State: []byte(`[]`), Sum: "sum-b"}
+	if err := put("t1", b); err != nil {
+		return err
+	}
+	if err := expect("t1", b); err != nil {
+		return fmt.Errorf("a second put under one (name, key, fingerprint): %v", err)
+	}
+	// every other (tenant, name, key, fingerprint) its own
+	others := []struct {
+		t    string
+		snap store.Snapshot
+	}{
+		{"t1", store.Snapshot{Name: "rm", Key: "account=x", Fingerprint: "f1", Pos: 5, State: []byte(`5`), Sum: "k"}},
+		{"t1", store.Snapshot{Name: "rm", Key: "", Fingerprint: "f2", Pos: 6, State: []byte(`6`), Sum: "f"}},
+		{"t1", store.Snapshot{Name: "other", Key: "", Fingerprint: "f1", Pos: 7, State: []byte(`7`), Sum: "n"}},
+		{"t2", store.Snapshot{Name: "rm", Key: "", Fingerprint: "f1", Pos: 8, State: []byte(`8`), Sum: "t"}},
+	}
+	for _, o := range others {
+		if err := put(o.t, o.snap); err != nil {
+			return err
+		}
+	}
+	if err := expect("t1", b); err != nil {
+		return fmt.Errorf("after puts under other keys, fingerprints, names and tenants: %v", err)
+	}
+	for _, o := range others {
+		if err := expect(o.t, o.snap); err != nil {
+			return err
+		}
+	}
+	if err := ss.PutSnapshot(ctx, "nobody", a); !errors.Is(err, store.ErrUnknownTenant) {
+		return fmt.Errorf("PutSnapshot to an unknown tenant: %v, want ErrUnknownTenant", err)
+	}
+	if _, _, err := ss.GetSnapshot(ctx, "nobody", "rm", "", "f1"); !errors.Is(err, store.ErrUnknownTenant) {
+		return fmt.Errorf("GetSnapshot of an unknown tenant: %v, want ErrUnknownTenant", err)
 	}
 	return nil
 }

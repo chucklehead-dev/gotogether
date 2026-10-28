@@ -26,4 +26,8 @@ type (
 	Receipt = store.Receipt
 	// EventRef names a stored event (store.EventRef).
 	EventRef = store.EventRef
+	// Snapshot is a read model's state at a position (store.Snapshot).
+	Snapshot = store.Snapshot
+	// SnapshotStore is a store that keeps snapshots (store.SnapshotStore).
+	SnapshotStore = store.SnapshotStore
 )

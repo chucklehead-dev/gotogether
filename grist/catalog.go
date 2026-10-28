@@ -27,6 +27,9 @@ type CatalogSite = catalog.CatalogSite
 // A CatalogEvent is a registered event type.
 type CatalogEvent = catalog.CatalogEvent
 
+// A CatalogVersion is an older version of an event type (Upcast).
+type CatalogVersion = catalog.CatalogVersion
+
 // A CatalogReadModel is a registered read model.
 type CatalogReadModel = catalog.CatalogReadModel
 
@@ -50,7 +53,7 @@ func (a *App) Catalog() Catalog {
 	}
 	for _, rm := range a.readModels {
 		c.ReadModels = append(c.ReadModels, CatalogReadModel{Name: rm.name, Version: rm.version,
-			Types: append([]string(nil), rm.types...), Keys: append([]string(nil), rm.keys...)})
+			Types: append([]string(nil), rm.types...), Keys: append([]string(nil), rm.keys...), Fingerprint: rm.fingerprint()})
 	}
 	c.Rules = []CatalogRule{}
 	for _, ri := range a.rules {
@@ -121,5 +124,13 @@ func (a *App) Catalog() Catalog {
 }
 
 func catalogEvent(i *eventInfo) CatalogEvent {
-	return CatalogEvent{Name: i.name, Version: i.version, Body: i.typ, Tags: i.tagKeys()}
+	e := CatalogEvent{Name: i.name, Version: i.version, Body: i.typ, Tags: i.tagKeys()}
+	for _, u := range i.ups {
+		var tags []string
+		for _, t := range u.inTags {
+			tags = append(tags, t.key)
+		}
+		e.Older = append(e.Older, CatalogVersion{Version: u.from, Body: u.in, Tags: nonNil(tags), Drops: slices.Clone(u.drops)})
+	}
+	return e
 }

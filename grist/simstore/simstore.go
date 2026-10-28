@@ -1,14 +1,17 @@
 // Package simstore is a store.Store over a qenv.Store, for simulations:
 // the Store's isolation level, its commit faults (store.<name>.commit, a
 // commit applied whose answer is lost) and its history checker
-// (GOTOGETHER_CHECK=1) apply to every append.
+// (GOTOGETHER_CHECK=1) apply to every append, and its snapshot faults
+// (store.<name>.snapshot: a put torn, its state cut short, or lost) to
+// every snapshot.
 //
 // Keys, per tenant t: t/<t>/head (the head, the tenant's lock),
 // t/<t>/e/<position, 20 digits> (the events), t/<t>/i/<type>/<position>
 // and t/<t>/g/<type>/<key>=<value>/<position> (the index),
 // t/<t>/m/<command id> (markers), t/<t>/c/<processor> (checkpoints),
 // t/<t>/s/<seq, 20 digits> and t/<t>/sseq (the step log, a
-// store.StepLog); and tenants/<t>. Segments are query-escaped, so a
+// store.StepLog), t/<t>/n/<read model>/<key>/<fingerprint> (snapshots,
+// a store.SnapshotStore); and tenants/<t>. Segments are query-escaped, so a
 // value holding a slash or an equals sign names no other key.
 //
 // An append takes the head with GetForUpdate (the tenant's lock),
@@ -42,11 +45,17 @@ import (
 // whoever made it: two Stores over one qenv.Store wake each other's
 // waiters.
 type Store struct {
-	db *qenv.Store
+	db       *qenv.Store
+	snapshot qenv.FaultKind // store.<name>.snapshot
 }
 
 // New returns a grist store over db, named after it.
-func New(db *qenv.Store) *Store { return &Store{db: db} }
+func New(db *qenv.Store) *Store {
+	// a torn put keeps the first half of the state (a write a crash cut
+	// short, which a real store's atomic row never is but a file's may
+	// be); a lost one fails, nothing written
+	return &Store{db: db, snapshot: qenv.DeclareFaults("store."+db.Name+".snapshot", "torn", "lost")}
+}
 
 // Name implements store.Store: the qenv.Store's name.
 func (s *Store) Name() string { return s.db.Name }
@@ -61,6 +70,9 @@ func stepKey(t string, seq int64) string {
 	return "t/" + esc(t) + "/s/" + poskey.Of(store.Position(seq))
 }
 func stepSeqKey(t string) string { return "t/" + esc(t) + "/sseq" }
+func snapshotKey(t, name, key, fp string) string {
+	return "t/" + esc(t) + "/n/" + esc(name) + "/" + esc(key) + "/" + esc(fp)
+}
 
 // indexPrefix is the index prefix a query of typ and tags scans: the
 // tag's index if it has one (a query's other tags are checked on the
@@ -360,4 +372,43 @@ func (s *Store) wait(ctx context.Context, key string, must bool, done func(any) 
 		}
 		s.db.Changed().Wait(ctx, 0) // every commit's, this Store's or another's over the same qenv.Store
 	}
+}
+
+// snapshotTries is PutSnapshot's budget of conflicts: a snapshot is a
+// cache, so a put that loses its races is dropped.
+const snapshotTries = 3
+
+// PutSnapshot implements store.SnapshotStore, with the store's snapshot
+// faults in a simulation.
+func (s *Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error {
+	snap = snap.Clone()
+	if sim := qenv.From(ctx); sim != nil {
+		switch sim.FaultOf(s.snapshot) {
+		case "torn":
+			snap.State = snap.State[:len(snap.State)/2]
+		case "lost":
+			return errors.New("simstore: snapshot lost (fault store." + s.db.Name + ".snapshot)")
+		}
+	}
+	return qenv.Retry(ctx, s.db, snapshotTries, func(tx qenv.Txn) error {
+		if _, ok := head(tx, t); !ok {
+			return store.ErrUnknownTenant
+		}
+		tx.Put(snapshotKey(t, snap.Name, snap.Key, snap.Fingerprint), snap)
+		return nil
+	})
+}
+
+// GetSnapshot implements store.SnapshotStore.
+func (s *Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
+	tx := s.db.Begin(ctx)
+	defer tx.Rollback()
+	if _, ok := head(tx, t); !ok {
+		return store.Snapshot{}, false, store.ErrUnknownTenant
+	}
+	v, ok := tx.Get(snapshotKey(t, name, key, fingerprint))
+	if !ok {
+		return store.Snapshot{}, false, nil
+	}
+	return v.(store.Snapshot).Clone(), true, nil
 }

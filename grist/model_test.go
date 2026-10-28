@@ -516,6 +516,9 @@ func TestGenerateWarnsOfChangedInputs(t *testing.T) {
 	if g, err = gen.Generate(tally(false, false), dir); err != nil || len(g.Warnings) != 0 {
 		t.Fatalf("regenerating the same catalog: %v %v", g.Warnings, err)
 	}
+	// the event's new field is a new shape of version 1: what an app
+	// never deployed may do, its lock's entry deleted (TestLockRefusesAChangedShape)
+	os.Remove(filepath.Join(dir, gen.LockFile))
 	g, err = gen.Generate(tally(true, true), dir)
 	if err != nil {
 		t.Fatal(err)
@@ -537,5 +540,75 @@ func TestGenerateWarnsOfChangedInputs(t *testing.T) {
 	_ = grist.MainArgs(context.Background(), tally(false, true), []string{"model", "-dir", dir}, &out, io.Discard)
 	if !strings.Contains(out.String(), "tally model: warning: countEvents no longer folds removed") {
 		t.Errorf("the model command's output %q names no warning", out.String())
+	}
+}
+
+// shelf is an app of one event, its fold counting copies, as each of its
+// versions shapes it.
+type (
+	shelfV1 struct {
+		Book   string `json:"book" grist:"tag"`
+		Copies int    `json:"copies"`
+	}
+	shelfV2 struct {
+		Book  string `json:"book" grist:"tag"`
+		Count int    `json:"count"`
+	}
+)
+
+func shelfApp(version int, double bool) *grist.App {
+	a := grist.New("shelf")
+	k := 1
+	if double {
+		k = 2
+	}
+	if version == 1 {
+		e := grist.NewEvent[shelfV1](a, "book-added")
+		grist.NewReadModel(a, "copies", 1, func() int { return 0 }, grist.On(e, func(s int, e shelfV1, _ grist.Meta) int { return s + k*e.Copies }))
+		return a
+	}
+	e := grist.NewEvent[shelfV2](a, "book-added", grist.Upcast(1, func(v shelfV1) shelfV2 { return shelfV2{Book: v.Book, Count: v.Copies} }))
+	grist.NewReadModel(a, "copies", 1, func() int { return 0 }, grist.On(e, func(s int, e shelfV2, _ grist.Meta) int { return s + k*e.Count }))
+	return a
+}
+
+// grist.lock is the catalog's record of what has been stored: generating
+// an app whose event's struct changed shape at a version the lock records
+// is the generator's error (its stored events would decode into the new
+// struct silently), naming both shapes and the fix; the same change as
+// version 2, with an upcaster, writes both versions; an app older than
+// the lock (version 1, the lock at 2) is refused too. A read model whose
+// fold changed at the same version is warned of: its snapshots refold.
+func TestLockRefusesAChangedShape(t *testing.T) {
+	dir := t.TempDir()
+	g, err := gen.Generate(shelfApp(1, false), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Write(dir)
+	changed := grist.New("shelf")
+	e := grist.NewEvent[shelfV2](changed, "book-added")
+	grist.NewReadModel(changed, "copies", 1, func() int { return 0 }, grist.On(e, func(s int, e shelfV2, _ grist.Meta) int { return s + e.Count }))
+	_, err = gen.Generate(changed, dir)
+	for _, want := range []string{"event book-added version 1 changed shape since grist.lock was written (fields [book string tag, copies integer], then [book string tag, count integer])",
+		"Keep the old struct (shelfV2V1), and register the new shape as version 2", "delete its entry from grist.lock"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("a changed version 1: %v, want %q", err, want)
+		}
+	}
+	if g, err = gen.Generate(shelfApp(2, false), dir); err != nil {
+		t.Fatalf("version 2 with an upcaster: %v", err)
+	}
+	lock := string(g.Files[gen.LockFile])
+	if !strings.Contains(lock, `"version": 1`) || !strings.Contains(lock, `"version": 2`) || !strings.Contains(lock, `"count integer"`) {
+		t.Errorf("the lock of version 2:\n%s\nwant both versions' shapes", lock)
+	}
+	g.Write(dir)
+	if _, err := gen.Generate(shelfApp(1, false), dir); err == nil || !strings.Contains(err.Error(), "grist.lock records version 2, and the app's newest is 1") {
+		t.Errorf("version 1 after the lock recorded 2: %v, want it refused", err)
+	}
+	g, err = gen.Generate(shelfApp(2, true), dir)
+	if err != nil || !strings.Contains(strings.Join(g.Warnings, "\n"), "read model copies folds otherwise than when grist.lock was written") {
+		t.Errorf("a fold doubled at version 1: %v %v, want its fingerprint's change warned of", g.Warnings, err)
 	}
 }

@@ -3,6 +3,7 @@ const AtLeastOnce = catalog.AtLeastOnce
 const AtMostOnce = catalog.AtMostOnce
 const CauseHeader = "Grist-Cause"
 const DefaultDrainDelay = 5 * time.Second
+const DefaultSnapshotEvery = 1000
 const ReplayedHeader = "Idempotent-Replayed"
 func Appends(types ...EventName) Option
 func Authenticated(caller, tenant string) bool
@@ -38,7 +39,7 @@ func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Re
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewDep[T any](name string, fallback T) *Dep[T]
 func NewDependency(app *App, name string) *Dependency
-func NewEvent[E any](app *App, name string) *EventType[E]
+func NewEvent[E any](app *App, name string, upcasters ...Upcaster) *EventType[E]
 func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
 func NewIdentity() Identity
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
@@ -59,10 +60,12 @@ func Replayed(ctx context.Context)
 func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
+func SnapshotEvery(ctx context.Context, n int) context.Context
 func Tag(key string, value any) TagPair
 func Terminating(ctx context.Context) context.Context
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
+func Upcast[Old, New any](from int, f func(Old) New) Upcaster
 func Uses(calls ...CallName) Option
 func WithCaller(ctx context.Context, caller string) context.Context
 func WithDrain(d Drain) ServeOption
@@ -72,6 +75,8 @@ type App struct
     field Name string
     method (*App) ArgsType(name string) reflect.Type
     method (*App) Catalog() Catalog
+    method (*App) CheckSnapshots(ctx context.Context, st Store) error
+    method (*App) CheckUpcasters() error
     method (*App) Commands() []string
     method (*App) Dependencies() []*Dependency
     method (*App) Execute(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (Receipt, error)
@@ -137,6 +142,7 @@ type CatalogEvent = catalog.CatalogEvent
     field Version int
     field Body reflect.Type
     field Tags []string
+    field Older []CatalogVersion
     method (CatalogEvent) MarshalJSON() ([]byte, error)
 type CatalogProcessor = catalog.CatalogProcessor
     field Name string `json:"name"`
@@ -153,6 +159,7 @@ type CatalogReadModel = catalog.CatalogReadModel
     field Version int `json:"version"`
     field Types []string `json:"types"`
     field Keys []string `json:"keys"`
+    field Fingerprint string `json:"fingerprint"`
 type CatalogRule = catalog.CatalogRule
     field Name string `json:"name"`
     field Quint string `json:"quint"`
@@ -164,6 +171,12 @@ type CatalogSite = catalog.CatalogSite
     field Quint string
     field Fields reflect.Type
     method (CatalogSite) MarshalJSON() ([]byte, error)
+type CatalogVersion = catalog.CatalogVersion
+    field Version int
+    field Body reflect.Type
+    field Tags []string
+    field Drops []string
+    method (CatalogVersion) MarshalJSON() ([]byte, error)
 type Command[C any] struct
     method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
     method (*Command[C]) Name() string
@@ -198,6 +211,7 @@ type EventType[E any] struct
     method (*EventType[E]) Decode(s Stored) (E, error)
     method (*EventType[E]) Name() string
     method (*EventType[E]) Of(e E) Event
+    method (*EventType[E]) Version() int
 type Failed struct
     field Processor string `json:"processor" grist:"tag"`
     field Trigger int64 `json:"trigger"`
@@ -227,6 +241,11 @@ type KeyedReadModel[S any] struct
     embed ReadModel[S]
     method (*KeyedReadModel[S]) For(r *Reads, values ...string) S
 type Meta = store.Meta
+type NewerVersionError struct
+    field Type string
+    field Version int
+    field Newest int
+    method (*NewerVersionError) Error() string
 type Option struct
 type Policy func(caller, tenant string) bool
 type Position = store.Position
@@ -263,6 +282,8 @@ type ServeOption struct
 type Site[T any] struct
     method (*Site[T]) Name() string
     method (*Site[T]) Record(ctx context.Context, tenant string, v T)
+type Snapshot = store.Snapshot
+type SnapshotStore = store.SnapshotStore
 type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
@@ -273,6 +294,8 @@ type Unknown struct
     field Processor string `json:"processor" grist:"tag"`
     field Error string `json:"error"`
     field Trigger int64 `json:"trigger"`
+type Upcaster struct
+    method (Upcaster) Drops(fields ...string) Upcaster
 var ErrBadArgs = errors.New("grist: arguments refused")
 var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later under a new id")
 var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the caller")
@@ -341,6 +364,7 @@ type Config struct
     field HTTP bool
     field Nodes int
     field CommitFaults bool
+    field SnapshotEvery int
     field Check bool
     field Alphabet []string
     field Ints []int
@@ -354,14 +378,36 @@ type Doubles map[*grist.Dependency]grist.Handlers
 
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
+func Capture(st grist.Store) *Capturing
 func Catalog(app *grist.App) qtest.Catalog
 func ClientErrors() qtest.Expectation
 func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
 func Generated(t testing.TB, app *grist.App)
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
 func NoClientErrors() qtest.Expectation
+func ReadLog(t testing.TB, path string) Log
 func RuleMutants(app *grist.App) []string
 func Scenario(name string, steps ...grist.Invocation) qtest.Expectation
+func Snapshots(t testing.TB, app *grist.App, st grist.Store)
+func Upcasts(t testing.TB, app *grist.App)
+func WriteLog(l Log, path string) error
+type Capturing struct
+    embed grist.Store
+    method (*Capturing) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
+    method (*Capturing) GetSnapshot(ctx context.Context, t, name, key, fp string) (store.Snapshot, bool, error)
+    method (*Capturing) Log() Log
+    method (*Capturing) PutSnapshot(ctx context.Context, t string, s store.Snapshot) error
+    method (*Capturing) StepCount(ctx context.Context, t string) (int64, error)
+    method (*Capturing) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
+    method (*Capturing) WaitSteps(ctx context.Context, t string, after int64) error
+    method (*Capturing) WaitTenants(ctx context.Context, n int) error
+type Log struct
+    field Batches []LoggedBatch
+    method (Log) Restore(ctx context.Context, st grist.Store) error
+    method (Log) Tenants() []string
+type LoggedBatch struct
+    field Tenant string `json:"tenant"`
+    field Batch store.Batch `json:"batch"`
 type Node struct
     field Relay *grist.Relay
     method (*Node) Kill()
@@ -381,6 +427,7 @@ type Tier struct
     method (*Tier) Steps() []qtrace.Step
 type TierConfig struct
     field Tenants []string
+    field Log *Log
     field Deps func(ctx context.Context, st grist.Store) context.Context
     field Serve map[*grist.Dependency]grist.Handlers
     field Local map[*grist.Dependency]grist.Handlers
@@ -395,9 +442,11 @@ type Store struct
     method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
     method (*Store) Checkpoint(_ context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(_ context.Context, t string) error
+    method (*Store) GetSnapshot(_ context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error)
     method (*Store) Heads(context.Context) (map[string]store.Position, error)
     method (*Store) Marker(_ context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) PutSnapshot(_ context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) StepCount(_ context.Context, t string) (int64, error)
     method (*Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error)
@@ -412,9 +461,11 @@ type Store struct
     method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
     method (*Store) Checkpoint(ctx context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(ctx context.Context, t string) error
+    method (*Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error)
     method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
@@ -438,9 +489,11 @@ type Store struct
     method (*Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)
     method (*Store) Checkpoint(ctx context.Context, t, processor string) (store.Position, error)
     method (*Store) CreateTenant(ctx context.Context, t string) error
+    method (*Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error)
     method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
@@ -526,6 +579,17 @@ type Selector struct
     field Limit int
     method (Selector) Matches(e Event) bool
     method (Selector) String() string
+type Snapshot struct
+    field Name string
+    field Key string
+    field Fingerprint string
+    field Pos Position
+    field State json.RawMessage
+    field Sum string
+    method (Snapshot) Clone() Snapshot
+type SnapshotStore interface
+    PutSnapshot(ctx context.Context, tenant string, snap Snapshot) error
+    GetSnapshot(ctx context.Context, tenant, name, key, fingerprint string) (Snapshot, bool, error)
 type StepLog interface
     Steps(ctx context.Context, tenant string, after int64, limit int) ([]StepRow, error)
     WaitSteps(ctx context.Context, tenant string, after int64) error

@@ -78,7 +78,8 @@ func sortedKeys[V any](m map[string]V) []string {
 // each importing only files below it.
 type Generated struct {
 	// Files are the generated files by path, relative to the directory
-	// given to Generate: model/grist.qnt (grist's library, vendored),
+	// given to Generate: grist.lock (every stored version's shape, every
+	// read model's fingerprint: LockFile), model/grist.qnt (grist's library, vendored),
 	// model/<app>_gen.qnt (the events), model/<app>_steps.qnt (the
 	// store's and the clients' actions), <app>.binding.yaml (the store's
 	// side), <app>.calls.binding.yaml (the clients') and one
@@ -95,7 +96,10 @@ type Generated struct {
 	Missing []string
 	// Warnings are inputs of the app's own rules that changed since the
 	// generated events file under dir was written: a read model that
-	// folds an event type it did not, an event type whose fields changed.
+	// folds an event type it did not, an event type whose fields changed;
+	// and since grist.lock was: a read model whose fingerprint changed at
+	// the same version (its snapshots refolded), an event no longer
+	// registered.
 	// The app's folds and rules still typecheck, so nothing else would
 	// say so: a fold's else branch skips a new type silently.
 	Warnings []string
@@ -235,6 +239,16 @@ func Generate(app App, dir string) (Generated, error) {
 	} else if prev != nil {
 		out.Warnings = inputsChanged(c.Name, prev, events)
 	}
+	prevLock, err := readOwn(dir, LockFile)
+	if err != nil {
+		return Generated{}, err
+	}
+	lock, errs, warnings := lockOf(c, prevLock)
+	if len(errs) > 0 {
+		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", c.Name, strings.Join(errs, "\n  "))
+	}
+	out.Files[LockFile] = lock
+	out.Warnings = append(out.Warnings, warnings...)
 	if cycle, err := importCycle(dir, out.Files); err != nil {
 		return Generated{}, err
 	} else if cycle != nil {

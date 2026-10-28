@@ -224,6 +224,7 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 	} else if r.s != s {
 		return fmt.Errorf("grist: WithRelay's relay is of store %s (%T), Start's store is %s (%T): a relay records one store's step log; give Start that store, or a relay of this one (NewRelay)", r.s.Name(), r.s, s.Name(), s)
 	}
+	r.app.CompareAndSwap(nil, a) // its rows' old events upcast to this App's newest
 	feed, ok := s.(store.TenantFeed)
 	if !ok {
 		return fmt.Errorf("grist: store %s (%T) is no store.TenantFeed: a node relays and handles every tenant, those created after it started included, waiting on WaitTenants", s.Name(), s)

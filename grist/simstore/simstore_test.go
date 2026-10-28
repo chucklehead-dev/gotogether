@@ -18,7 +18,9 @@ func TestContract(t *testing.T) {
 	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.ReadCommitted} {
 		t.Run(iso.String(), func(t *testing.T) {
 			storetest.Run(t, func(t *testing.T, body func(ctx context.Context, s store.Store) error) {
-				sim := qenv.New(qenv.NewSeeded(1))
+				// the snapshot faults off: a torn or lost put is grist's to
+				// survive (TestSnapshotFaults), not the contract's
+				sim := qenv.New(qenv.Without(qenv.NewSeeded(1), "store.grist.snapshot"))
 				defer sim.Close()
 				sim.Check = true
 				s := simstore.New(qenv.NewStore(sim, "grist", iso))

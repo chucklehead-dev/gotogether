@@ -205,6 +205,45 @@ type TenantFeed interface {
 	WaitTenants(ctx context.Context, n int) error
 }
 
+// A SnapshotStore is a store that keeps read models' snapshots: a read
+// model's state, encoded, at a position of a tenant's log, so a read
+// folds the events after it instead of the whole log (docs/grist.md
+// §2.2). A snapshot is a cache: grist checks each one it reads (its Sum,
+// its Fingerprint, its position within the read's) and folds from 0 when
+// it is missing, torn or another fold's, so a store may lose one, keep an
+// old one or fail a put. Every tier keeps them (memstore, simstore,
+// sqlstore's grist_snapshots rows); grist/storetest's Snapshots checks
+// the contract.
+type SnapshotStore interface {
+	// PutSnapshot stores snap in tenant under its (Name, Key,
+	// Fingerprint), replacing the one there: the last put wins. snap is
+	// the store's own copy once it returns (its State not shared with the
+	// caller).
+	PutSnapshot(ctx context.Context, tenant string, snap Snapshot) error
+	// GetSnapshot is the snapshot tenant holds under (name, key,
+	// fingerprint), the caller's own copy, and whether there is one. A
+	// tenant never created is ErrUnknownTenant.
+	GetSnapshot(ctx context.Context, tenant, name, key, fingerprint string) (Snapshot, bool, error)
+}
+
+// A Snapshot is a read model's state at a position: what folding its
+// events through Pos (those carrying Key's tags, for a keyed one) from
+// its initial value gives, encoded as JSON. Fingerprint names the fold
+// that made it, Sum is grist's checksum over every other field (a torn
+// write fails it). The store keeps each field as given.
+type Snapshot struct {
+	Name, Key, Fingerprint string
+	Pos                    Position
+	State                  json.RawMessage
+	Sum                    string
+}
+
+// Clone is s with its own copy of State.
+func (s Snapshot) Clone() Snapshot {
+	s.State = append(json.RawMessage(nil), s.State...)
+	return s
+}
+
 // A StepRow is one committed batch's step as a StepLog keeps it.
 type StepRow struct {
 	// Seq numbers the tenant's step rows from 1, in commit order.

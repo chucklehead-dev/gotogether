@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // Reads is a decision's only access to state. Its first read pins the
@@ -189,12 +190,24 @@ func uuid5(name string) string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", s[0:4], s[4:6], s[6:8], s[8:10], s[10:16])
 }
 
-// readModelInfo is a read model's registration, for Verify.
+// readModelInfo is a read model's registration, for Verify, the Catalog
+// and CheckSnapshots.
 type readModelInfo struct {
 	name    string
 	version int
 	types   []string
 	keys    []string
+	// fp is its fingerprint and whether its state survives JSON (computed
+	// once, on first use: fingerprint.go); check is CheckSnapshots' work
+	// on one tenant
+	fp    func() (string, bool)
+	check func(ctx context.Context, st Store, tenant string) []string
+}
+
+// fingerprint is the read model's fingerprint (Catalog's).
+func (i *readModelInfo) fingerprint() string {
+	fp, _ := i.fp()
+	return fp
 }
 
 // A Handler is one event type's step of a fold (On).
@@ -217,13 +230,18 @@ func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S] {
 
 // A ReadModel is a fold over a tenant's events of its handlers' types:
 // an initial value and one handler per type. The consumed types are the
-// handlers', so they cannot drift from a declaration. Slice 1 folds from
-// the log on every read (no cache): the version is the cache's, for
-// later.
+// handlers', so they cannot drift from a declaration. A read folds from
+// the read model's latest snapshot (its state, encoded, at a position:
+// snapshot.go), else from the start of the log, and takes a snapshot
+// when it folded more than SnapshotEvery's events: a read's cost is the
+// events since the snapshot, not the log's. The snapshots are keyed by
+// the read model's fingerprint, which its version is part of: bump the
+// version when the fold's meaning changes.
 type ReadModel[S any] struct {
-	info *readModelInfo
-	init func() S
-	on   map[string]func(S, Stored) (S, error)
+	info   *readModelInfo
+	init   func() S
+	on     map[string]func(S, Stored) (S, error)
+	events []*eventInfo // the handlers' types, in order: the fingerprint's
 }
 
 // NewReadModel registers a plain read model: it folds every event of its
@@ -237,6 +255,11 @@ func NewReadModel[S any](app *App, name string, version int, init func() S, hand
 		}
 		m.on[h.typ] = h.fold
 		m.info.types = append(m.info.types, h.typ)
+		m.events = append(m.events, h.info)
+	}
+	m.info.fp = sync.OnceValues(m.fingerprint)
+	m.info.check = func(ctx context.Context, st Store, tenant string) []string {
+		return m.checkSnapshots(ctx, app, st, tenant)
 	}
 	app.readModels = append(app.readModels, m.info)
 	return m
@@ -252,8 +275,10 @@ func (m *ReadModel[S]) selector(tags ...TagPair) Selector {
 
 // Fold folds events (in position order) from the initial value: the
 // read model's state over them, for a unit test of the fold.
-func (m *ReadModel[S]) Fold(events []Stored) (S, error) {
-	s := m.init()
+func (m *ReadModel[S]) Fold(events []Stored) (S, error) { return m.foldOnto(m.init(), events) }
+
+// foldOnto folds events onto s.
+func (m *ReadModel[S]) foldOnto(s S, events []Stored) (S, error) {
 	for _, e := range events {
 		if f := m.on[e.Type]; f != nil {
 			var err error
@@ -268,14 +293,6 @@ func (m *ReadModel[S]) Fold(events []Stored) (S, error) {
 // Get is the read model's state through r's position: a query of its
 // types, in r's read set.
 func (m *ReadModel[S]) Get(r *Reads) S { return m.get(r, nil) }
-
-func (m *ReadModel[S]) get(r *Reads, tags []TagPair) S {
-	s, err := m.Fold(r.read(m.selector(tags...)))
-	if err != nil {
-		r.misuse("%v", err)
-	}
-	return s
-}
 
 // KeyNames are a keyed read model's key tags (Keys).
 type KeyNames []string

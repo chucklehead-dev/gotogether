@@ -16,14 +16,6 @@ module libraryEvents {
   pure val memberJoinedRead: Read = { typ: "member-joined", tags: Set() }
   pure def memberJoinedByMember(v: str): Read = { typ: "member-joined", tags: Set(("member", v)) }
 
-  // book-added (strs: its strings, ints: its integers and booleans, in field order)
-  pure def bookAdded(book: str, copies: int): Event =
-    { typ: "book-added", strs: [book], ints: [copies], tags: Set(("book", book)), cause: UNCAUSED }
-  pure def bookAddedBook(e: Event): str = e.strs[0]
-  pure def bookAddedCopies(e: Event): int = e.ints[0]
-  pure val bookAddedRead: Read = { typ: "book-added", tags: Set() }
-  pure def bookAddedByBook(v: str): Read = { typ: "book-added", tags: Set(("book", v)) }
-
   // book-borrowed (strs: its strings, ints: its integers and booleans, in field order)
   pure def bookBorrowed(member: str, book: str): Event =
     { typ: "book-borrowed", strs: [member, book], ints: [], tags: Set(("member", member), ("book", book)), cause: UNCAUSED }
@@ -42,15 +34,24 @@ module libraryEvents {
   pure def bookReturnedByMember(v: str): Read = { typ: "book-returned", tags: Set(("member", v)) }
   pure def bookReturnedByBook(v: str): Read = { typ: "book-returned", tags: Set(("book", v)) }
 
-  // read model books (keyed by book: the events of its types carrying those
-  // tags): what it folds, and what a read of it records
-  pure def booksEvents(log: List[Event], book: str): List[Event] = log.select(e => Set("book-added", "book-borrowed", "book-returned").contains(e.typ) and e.tags.contains(("book", book)))
-  pure def booksReads(book: str): Set[Read] = Set({ typ: "book-added", tags: Set(("book", book)) }, { typ: "book-borrowed", tags: Set(("book", book)) }, { typ: "book-returned", tags: Set(("book", book)) })
+  // book-added (strs: its strings, ints: its integers and booleans, in field order)
+  pure def bookAdded(book: str, count: int, shelf: str): Event =
+    { typ: "book-added", strs: [book, shelf], ints: [count], tags: Set(("book", book)), cause: UNCAUSED }
+  pure def bookAddedBook(e: Event): str = e.strs[0]
+  pure def bookAddedCount(e: Event): int = e.ints[0]
+  pure def bookAddedShelf(e: Event): str = e.strs[1]
+  pure val bookAddedRead: Read = { typ: "book-added", tags: Set() }
+  pure def bookAddedByBook(v: str): Read = { typ: "book-added", tags: Set(("book", v)) }
 
   // read model loans (keyed by member: the events of its types carrying those
   // tags): what it folds, and what a read of it records
   pure def loansEvents(log: List[Event], member: str): List[Event] = log.select(e => Set("book-borrowed", "book-returned").contains(e.typ) and e.tags.contains(("member", member)))
   pure def loansReads(member: str): Set[Read] = Set({ typ: "book-borrowed", tags: Set(("member", member)) }, { typ: "book-returned", tags: Set(("member", member)) })
+
+  // read model books (keyed by book: the events of its types carrying those
+  // tags): what it folds, and what a read of it records
+  pure def booksEvents(log: List[Event], book: str): List[Event] = log.select(e => Set("book-added", "book-borrowed", "book-returned").contains(e.typ) and e.tags.contains(("book", book)))
+  pure def booksReads(book: str): Set[Read] = Set({ typ: "book-added", tags: Set(("book", book)) }, { typ: "book-borrowed", tags: Set(("book", book)) }, { typ: "book-returned", tags: Set(("book", book)) })
 
   // each command's and query's arguments, with the caller that sent it
   type AddBookArgs = { book: str, copies: int, caller: str }

@@ -1,6 +1,7 @@
 package library
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
@@ -56,8 +57,17 @@ func TestMutant(t *testing.T) {
 		// it, at one seed per push (TestFaithful is the contrast)
 		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}).
 			Expect(t, qtest.All(qtest.Rejects("mailerSendServed")))
-	default:
-		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
+	case "dropsCopies":
+		// book-added's upcaster forgets version 1's copies: every book
+		// catalogued at version 1 has none. The upcasters' check names the
+		// field (gristtest.Upcasts' App.CheckUpcasters; TestUpcasts is the
+		// contrast), and today's model rejects version 1's log at its first
+		// addition: its upcast count is 0 where the command added 2
+		// (TestOldLogConforms is the contrast)
+		if err := App.CheckUpcasters(); err == nil || !strings.Contains(err.Error(), "the upcaster from version 1 ignores copies") {
+			t.Errorf("CheckUpcasters: %v, want the dropped copies named", err)
+		}
+		qtest.Validate(t, commits, oldLog(t).Steps()).Expect(t, qtest.Mismatch("addBook"))
 	}
 }
 
