@@ -19,6 +19,22 @@ The first release. What a user meets, by module:
   are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
   raises the process's GC percent to 400 while it runs, unless it is
   already higher or off, and puts it back.
+- Model claims and one engine for the model alone (ROADMAP I17, its
+  additive half): `validate.Simulate(binding, SimulateOptions)` and
+  `Checker.Simulate` are what `gotogether simulate` ran (quint sampling,
+  `Verify`, `Graph` with liveness, deadlocks and the possibles searched
+  by the evaluator then sampled by quint), returning a `SimulateReport`
+  of `ModelVerdict`s (each with its `ModelBound`: complete, depth,
+  states, stopped, verified, sampled) and `PossibleVerdict`s beside the
+  report's text; the CLI prints it, unchanged. `qtest.Model(t,
+  binding).Expect(t, claims...)` with `qtest.Proves(inv)`,
+  `qtest.Refutes(name)` (an invariant's violation or an eventual val's
+  lasso, replayed by quint test; `.InAtMost(n)`), `qtest.Live(val)`,
+  `qtest.NoDeadlocks()` and `qtest.Follows(scenarios...)`, each
+  three-valued with its bound stated: a graph the state bound cut is no
+  verdict. `qtest.Possible` and the binding's simulate bounds are
+  unchanged; I17's second half folds them in.
+
 - Explicit quantifiers, one place for claims (ROADMAP I16; breaking): a
   claim over runs says its quantifier. `Conforms()`, `Settles()`,
   `Completes()` and `Finishes()` alone are `All` of themselves, as their

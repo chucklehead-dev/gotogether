@@ -3435,6 +3435,30 @@ after:
   catalog's `Exercised` (it panicked on nothing to want already),
   `Satisfies`' `NoVerdict`.
 
+### I17 (first half): one engine for the model alone, model claims
+
+Review 11's architect, F4: "can the model ...?" had three engines and two
+semantics. `gotogether simulate`'s logic moved from cmd/gotogether
+(simulate.go, graph.go, possible.go, live.go) into validate as
+`Simulate` (validate/simulate*.go), the CLI parsing flags and printing
+`SimulateReport.Text`, exiting `Code`: its output and verdicts are
+unchanged, its tests kept as the wrapper's and the engine's
+(validate/simulate_test.go). The report carries each verdict as data:
+`ModelVerdict` (held, violated, or neither, with a `ModelBound` saying
+what it covers, I9's rule), `PossibleVerdict`, the graph. On it,
+`qtest.Model(t, binding).Expect(t, ...)`: `Proves` (held in a complete
+graph, or every state within graphDepth, a bounded proof said so),
+`Refutes` (a violation or a lasso, replayed by quint test with
+`SimulateOptions.Replay`, unknown if quint fails a path the evaluator
+found; a complete graph without one fails it), `Live` (complete graphs
+only: a cycle may close past any bound), `NoDeadlocks`, and `Follows`
+(scenarios as possibles, the evaluator then quint's sampling: where
+`qtest.Possible` failed "not searched", quint now samples). A claim
+naming no invariant or eventual val of the binding fails before
+anything runs. Stopped at the coordinator's call before the breaking
+half (Possible's removal, the examples' walks, binding/2's one bound),
+which ROADMAP I17 lists step by step.
+
 ### I16: explicit quantifiers, one place for claims
 
 Review 11's architect (F5, F15, and the cut of `ClientErrors`): a bare

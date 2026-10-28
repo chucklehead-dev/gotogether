@@ -15,6 +15,7 @@ import (
 //	                                                         Reaches, Takes, Exercised, NotVacuous
 //	Run.Expect, qhegel's Violation.Expect                    RunClaim: an Expectation, ShrunkTo
 //	MutationReport.Expect (Mutate)                           MutationClaim: PerMutant, NoSurvivors
+//	ModelCheck.Expect (Model)                                ModelClaim: Proves, Refutes, Live, NoDeadlocks, Follows
 //	StepMutationReport.Expect (StepMutate)                   StepClaim: Killed, Survived
 //	ShrunkActions.Expect (ShrinkActions)                     ShrinkClaim: an Expectation, AtMostActions
 //

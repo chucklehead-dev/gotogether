@@ -228,6 +228,25 @@ func modelVerdict(c *validate.Checker, sc *scenario) string {
 // parameter is no search: the model's step would be looked for with any
 // outcome, and found where the outcome asked for is impossible.
 func scenarioPossible(c *validate.Checker, sc *scenario) (validate.PossibleResult, error) {
+	p, err := scenarioAsPossible(c.Binding, sc)
+	if err != nil {
+		return validate.PossibleResult{}, err
+	}
+	search := validate.PossibleSearch{}
+	if sim := c.Binding.Simulate; sim != nil {
+		search.States = sim.SearchStates
+		search.Constants = constantsOf(sim.Constants)
+	}
+	rs, err := c.Possible([]binding.Possible{p}, search)
+	if err != nil {
+		return validate.PossibleResult{}, err
+	}
+	return rs[0], nil
+}
+
+// scenarioAsPossible is sc as a possible of b's model, as
+// scenarioPossible searches it.
+func scenarioAsPossible(b *binding.Binding, sc *scenario) (binding.Possible, error) {
 	var steps []string
 	for _, k := range sc.steps {
 		var args []string
@@ -235,9 +254,9 @@ func scenarioPossible(c *validate.Checker, sc *scenario) (validate.PossibleResul
 			args = append(args, a.param+" = "+a.value)
 		}
 		if k.outcome != "" {
-			p, v, ok := outcomeParam(c.Binding, k.action, k.outcome)
+			p, v, ok := outcomeParam(b, k.action, k.outcome)
 			if !ok {
-				return validate.PossibleResult{}, fmt.Errorf("step %s: the binding passes %s's outcome to none of its parameters (args: { p: '{{.outcome}}' }), so the model's steps do not say it: "+
+				return binding.Possible{}, fmt.Errorf("step %s: the binding passes %s's outcome to none of its parameters (args: { p: '{{.outcome}}' }), so the model's steps do not say it: "+
 					"drop the Outcome to search for the action alone, or claim the scenario of runs only", k.what(), k.action)
 			}
 			args = append(args, p+" = "+v)
@@ -248,16 +267,7 @@ func scenarioPossible(c *validate.Checker, sc *scenario) (validate.PossibleResul
 		}
 		steps = append(steps, s)
 	}
-	search := validate.PossibleSearch{}
-	if sim := c.Binding.Simulate; sim != nil {
-		search.States = sim.SearchStates
-		search.Constants = constantsOf(sim.Constants)
-	}
-	rs, err := c.Possible([]binding.Possible{{Name: sc.String(), Steps: steps}}, search)
-	if err != nil {
-		return validate.PossibleResult{}, err
-	}
-	return rs[0], nil
+	return binding.Possible{Name: sc.String(), Steps: steps}, nil
 }
 
 // constantsOf are cs as NAME=expr.

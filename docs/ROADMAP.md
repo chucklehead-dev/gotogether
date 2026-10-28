@@ -209,20 +209,44 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   PerMutant(claims...), NoSurvivors(...))` as Explore's; gristtest's
   `ClientErrors` folded into the negation.
 - **I17. Model claims through one Expect (M, breaking for
-  `qtest.Possible`).** Three engines answer "can the model ...?" with
-  two semantics: the CLI's `simulate` falls back to quint sampling,
-  `qtest.Possible` fails "not searched" where the CLI would sample, and
-  a test of `-graph`'s verdicts walks `GraphResult` by hand (twophase's
-  and crossdb's tests: the walk AGENTS forbids for runs). One library
-  engine, `validate.Simulate` (Left from Y), the CLI calling it;
-  `qtest.Model(t, binding).Expect(t, qtest.Proves("consistency"),
-  qtest.Refutes("x"), qtest.Possible(scenario), qtest.Live("val"),
-  qtest.NoDeadlocks())`; one `search: {states, depth}` bound in the
-  binding for `searchStates`, `graphStates` and `graphDepth`. Example:
-  `simulate -graph` in hello as the step before any code ("the model
-  proved for COUNT=3"), with a model mutant whose invariant fails with
-  the shortest counterexample replayed by quint; a bounded `graphDepth`
-  run in counters.
+  `qtest.Possible`). Half done** (HISTORY "I17"): `validate.Simulate`
+  (and `Checker.Simulate`) is the one engine, `gotogether simulate` a
+  thin wrapper printing its report; `qtest.Model(t, binding).Expect(t,
+  qtest.Proves("consistency"), qtest.Refutes("x").InAtMost(4),
+  qtest.Live("val"), qtest.NoDeadlocks(), qtest.Follows(scenario))`,
+  three-valued with each bound stated (qtest/modelclaims.go). Left, in
+  this order:
+  1. `qtest.Possible(t, b, scenarios...)` removed: `Follows` renamed
+     `Possible` (the claim), the old function's fix in the CHANGELOG and
+     `TestSkillsAvoidDeprecated` ("qtest.Possible(t" → "qtest.Model(t,
+     b).Expect(t, qtest.Possible(...))"); its callers migrated: hello's
+     `TestRetryPossible`, library's (`sim_test.go`), migrate-payments'
+     `TestScenariosPossible`, README's hello snippet, gristtest/scenario.go's
+     doc, the grist guide, skills (gotogether-workflow SKILL.md and
+     workflow.md, grist SKILL.md and loop.md, gotogether-migration's
+     first-model.md); `modelVerdict` (scenario.go) on `Checker.Simulate`.
+  2. The `GraphResult` walks replaced by claims: twophase's
+     graph_test.go (`Proves` both invariants, `NoDeadlocks`; the early
+     decision mutant `Refutes("consistency").InAtMost(4)`, its quint
+     replay now Refutes' own), crossdb's (`Refutes("oneDatabasePerResource").InAtMost(2)`,
+     `NoDeadlocks`), requeue's (`Live("reconciled")`, the storm's
+     `Refutes("reconciled")`); each example README's test table.
+  3. One bound, `gotogether.binding/2`: `simulate.search: {states,
+     depth}` for `searchStates`, `graphStates` and `graphDepth`
+     (default 100000 states, no depth), binding/1 read forever with its
+     three keys mapped (states the larger, depth graphDepth) and refused
+     in /2 with the fix, `search` refused in /1 naming `format:`
+     (`Simulation.UnmarshalYAML` reading the section strictly, Load
+     checking by major). formats.Binding Major 2 Oldest 1;
+     schemas/gotogether.binding-2.json beside -1 (BindingURL -2,
+     `Binding1URL`, `BindingFor(data)` for `lint`'s per-file schema);
+     init's template `format: gotogether.binding/2`; doctor's "no format
+     key" binding/1; binding/format_test.go's later major /3. Prototyped
+     and reverted to keep main whole: about a day.
+  4. Docs: DESIGN §68 (one engine, the claims, the bound), the skills'
+     Results tables, the grist guide, I35's tutorials re-quoted. Example:
+     hello's `Model(t, b).Expect(t, Proves("exactlyOnce"), ...)` and a
+     model mutant refuted; a bounded `graphDepth` claim in counters.
 - **I18. validate split (M, breaking, before tags).** validate is 86
   exported identifiers and 10.7k lines: runs, model checking, the model
   navigator, the run navigator's wire protocol (qnav imports validate

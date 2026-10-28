@@ -1700,6 +1700,7 @@ func Driver(d validate.Driver) Option
 func Exercised(except ...string) Exercise
 func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qenv.Script, error)
 func Finishes() Expectation
+func Follows(scenarios ...Expectation) ModelClaim
 func Global() Option
 func HasIssue(kind string) Expectation
 func Invariants(names ...string) Option
@@ -1708,11 +1709,14 @@ func Killed(sel StepSelector) StepClaim
 func Linearize() Option
 func LinearizeBudget(n int) Option
 func LinearizeByKey(arg string) Option
+func Live(val string) ModelClaim
 func ManifestEvidence(m *validate.Manifest) *Evidence
 func Mismatch(action string) Expectation
+func Model(t testing.TB, binding string) *ModelCheck
 func Mutant() string
 func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *StepMutationReport
 func NamedScenario(name string, steps ...Take) Expectation
+func NoDeadlocks() ModelClaim
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim
 func Not(e Expectation) Expectation
@@ -1721,11 +1725,13 @@ func Optional(t testing.TB, reason string)
 func Pending(action string) Expectation
 func PerMutant(claims ...Claim) MutationClaim
 func Possible(t testing.TB, binding string, scenarios ...Expectation)
+func Proves(inv string) ModelClaim
 func Quint(o validate.Options) Option
 func Reaches(kind string) Reach
 func ReadEvidence(path string) (*Evidence, error)
 func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder), opts ...Option) *Run
 func RecorderOptions(opts ...qobs.Option) Option
+func Refutes(name string) RefutesClaim
 func Rejects(action string) Expectation
 func RequireQuint(t testing.TB)
 func ResolvePending() Option
@@ -1832,6 +1838,12 @@ type FaultMap map[string]func(s *connect.Step) *Fault
 type Judges struct
     field Evaluator int `json:"evaluator"`
     field Confirmed int `json:"confirmed"`
+type ModelCheck struct
+    method (*ModelCheck) Expect(t testing.TB, claims ...ModelClaim)
+type ModelClaim interface
+    String() string
+    needs(n *modelNeeds) error
+    judgeModel(rep *validate.SimulateReport) (tri, string)
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
@@ -1868,6 +1880,9 @@ type Reach struct
     method (Reach) Faulted() Reach
     method (Reach) InAtLeast(share float64) Reach
     method (Reach) String() string
+type RefutesClaim struct
+    method (RefutesClaim) InAtMost(n int) RefutesClaim
+    method (RefutesClaim) String() string
 type Resetter = qshrink.Resetter
 type Run struct
     field Steps []qtrace.Step
@@ -2213,6 +2228,7 @@ func NewManifest(r RunRecord) (*Manifest, error)
 func QuintSupported(v string) bool
 func ReadManifest(path string) (*Manifest, error)
 func RecordID(s *qtrace.Step) string
+func Simulate(bindingPath string, opt SimulateOptions) (*SimulateReport, error)
 func SplitPath(s string) []string
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Absence struct
@@ -2269,6 +2285,7 @@ type Checker struct
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) Nav(start NavStart) (*Navigator, error)
     method (*Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
+    method (*Checker) Simulate(opt SimulateOptions) (*SimulateReport, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type CompiledModel struct
@@ -2568,6 +2585,27 @@ type Manifest struct
     method (*Manifest) Bundle(dir string) error
     method (*Manifest) Verify() (warnings []string, err error)
     method (*Manifest) Write(path string) error
+type ModelBound struct
+    field Kind string
+    field States int
+    field Depth int
+    field Traces int
+    field Steps int
+    field Stopped string
+    method (ModelBound) Proves() bool
+    method (ModelBound) String() string
+type ModelVerdict struct
+    field Name string
+    field Class string
+    field Held bool
+    field Violated bool
+    field Bound ModelBound
+    field Counterexample *Counterexample
+    field Lasso *HotLasso
+    field Error string
+    field Unchecked string
+    field Trace string
+    field Replayed string
 type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
@@ -2610,6 +2648,15 @@ type PossibleSearch struct
     field Constants []string
     field States int
     field Depth int
+type PossibleVerdict struct
+    field Possible binding.Possible
+    field Found bool
+    field Impossible bool
+    field Eval *PossibleResult
+    field EvalErr string
+    field Quint string
+    field Verdict string
+    field Line string
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
@@ -2741,6 +2788,34 @@ type SearchOptions struct
     field ResolvePending bool
     field ResolveBudget int
     field Skew time.Duration
+type SimulateOptions struct
+    field Quint string
+    field Seed string
+    field Steps int
+    field Samples int
+    field Constants []string
+    field Invariants []string
+    field Eventually []string
+    field Possibles []binding.Possible
+    field Verify int
+    field Graph bool
+    field States int
+    field Depth int
+    field Unfair []string
+    field Stops []string
+    field Out string
+    field Replay bool
+type SimulateReport struct
+    field Binding string
+    field Skipped string
+    field Graph *GraphResult
+    field Invariants []ModelVerdict
+    field Eventually []ModelVerdict
+    field Possibles []PossibleVerdict
+    field Deadlocks *ModelVerdict
+    field EvaluatorBug string
+    field Code int
+    field Text string
 type StepMutants struct
     field Original *Judgment
     field Mutants []StepMutation

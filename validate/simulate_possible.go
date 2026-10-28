@@ -1,4 +1,4 @@
-package main
+package validate
 
 import (
 	"context"
@@ -12,14 +12,13 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // The possibles of a binding's simulation (P3): what the model on its
 // own must be able to do, checked by quint (a predicate's witness is its
 // counterexample to not(P); a sequence of actions is looked for in
 // sampled traces' mbt::actionTaken) and by the Go evaluator's bounded
-// search where the model is in its fragment (validate.Checker.Possible).
+// search where the model is in its fragment (Checker.Possible).
 // Either finding it reaches it; neither fails simulate, saying what to
 // do. The evaluator calling impossible what quint found is its bug.
 
@@ -52,7 +51,7 @@ func possibleVals(cs []*possibleCheck) string {
 }
 
 // resolvePossibles reads the binding's possibles against its model.
-func resolvePossibles(c *validate.Checker, ps []binding.Possible) ([]*possibleCheck, error) {
+func resolvePossibles(c *Checker, ps []binding.Possible) ([]*possibleCheck, error) {
 	var out []*possibleCheck
 	for _, p := range ps {
 		when, steps, err := p.Resolve(c.Model)
@@ -312,10 +311,10 @@ func takesInTurn(acts []string, steps []binding.StepPattern) int {
 // against quint's witness is an error: the evaluator's bug. A failure
 // says what the possible asks (a named predicate's text) and how to
 // find the guard in bpath's model.
-func reportPossibles(bpath string, cs []*possibleCheck, rs []validate.PossibleResult, evalErr error, steps, samples, verify int) (int, error) {
+func (s *sim) reportPossibles(bpath string, cs []*possibleCheck, rs []PossibleResult, evalErr error, steps, samples, verify int) (int, error) {
 	code := 0
 	for i, c := range cs {
-		var r *validate.PossibleResult
+		var r *PossibleResult
 		if rs != nil {
 			r = &rs[i]
 		}
@@ -348,26 +347,39 @@ func reportPossibles(bpath string, cs []*possibleCheck, rs []validate.PossibleRe
 			what += " (steps " + strings.Join(c.p.Steps, ", ") + ")"
 		}
 		nav := fmt.Sprintf("gotogether nav -binding %s shows each action disabled in a state, with why", bpath)
+		v := PossibleVerdict{Possible: c.p, Eval: r, Quint: quintSays}
+		if evalErr != nil {
+			v.EvalErr = evalErr.Error()
+		}
 		switch {
 		case r != nil && r.Found:
-			simPrintf("  possible %s: %s (the Go evaluator's search)\n", c.p.Text(), r.Verdict())
+			v.Found = true
+			v.Verdict = r.Verdict() + " (the Go evaluator's search)"
+			v.Line = fmt.Sprintf("  possible %s: %s\n", c.p.Text(), v.Verdict)
 		case c.quintFound:
-			simPrintf("  possible %s: reached (%s; %s)\n", c.p.Text(), quintSays, evalSays)
+			v.Found = true
+			v.Verdict = fmt.Sprintf("reached (%s; %s)", quintSays, evalSays)
+			v.Line = fmt.Sprintf("  possible %s: %s\n", c.p.Text(), v.Verdict)
 		case r != nil && r.Complete:
 			code = 1
-			simPrintf("  FAIL    possible %s: %s; %s. The model forbids it: if a conforming run must be able to show it, find the guard that forbids it "+
-				"(%s) and loosen it; if it must be impossible, drop it from simulate.possible\n", what, evalSays, quintSays, nav)
+			v.Impossible = true
+			v.Verdict = fmt.Sprintf("%s; %s. The model forbids it: if a conforming run must be able to show it, find the guard that forbids it "+
+				"(%s) and loosen it; if it must be impossible, drop it from simulate.possible", evalSays, quintSays, nav)
+			v.Line = fmt.Sprintf("  FAIL    possible %s: %s\n", what, v.Verdict)
 		default:
 			code = 1
-			simPrintf("  FAIL    possible %s: %s; %s. The model may be too strict for any conforming run to show it: "+
+			v.Verdict = fmt.Sprintf("%s; %s. The model may be too strict for any conforming run to show it: "+
 				"find the guard that forbids it (%s) and loosen it if the requirement allows it; "+
-				"if it is only rare or deep, raise simulate.searchStates (or -states) for the evaluator's search, -samples or -steps for quint's\n", what, quintSays, evalSays, nav)
+				"if it is only rare or deep, raise simulate.searchStates (or -states) for the evaluator's search, -samples or -steps for quint's", quintSays, evalSays, nav)
+			v.Line = fmt.Sprintf("  FAIL    possible %s: %s\n", what, v.Verdict)
 		}
+		s.printf("%s", v.Line)
+		s.rep.Possibles = append(s.rep.Possibles, v)
 	}
 	return code, nil
 }
 
-func possibleEval(r *validate.PossibleResult, err error) string {
+func possibleEval(r *PossibleResult, err error) string {
 	switch {
 	case err != nil:
 		return "no search (" + err.Error() + ")"
