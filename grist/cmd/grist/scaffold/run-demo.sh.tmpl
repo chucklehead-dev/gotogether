@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # {{.Name}}: a grist application, explored in a simulation, every run
 # checked against model/{{.Name}}.qnt through the generated bindings.
-# MUTATION=no-capacity builds the app with that mutant's overlay
-# (testdata/mutants/) and shows what catches it.
+# MUTATION=no-invalid builds the app with that mutant's overlay
+# (testdata/mutants/) and shows what catches it; MUTATION=drop-capacity
+# runs the generated mutant that drops the capacity rule.
 set -euo pipefail
 cd "$(dirname "$0")"
 case "${MUTATION:-}" in
   "") run='TestFaithful$|TestFaithfulAtClients$|TestFull$|TestGenerated$' ;;
-  no-capacity) run='TestMutants$/^noCapacity$' ;;
+  no-invalid) run='TestMutants$/^noInvalid$' ;;
+  drop-capacity) run='TestMutants$/^drop-capacity$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 go run ./cmd/{{.Name}} model -check

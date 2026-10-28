@@ -1,0 +1,20 @@
+package {{.Pkg}}
+
+import "github.com/chucklehead-dev/gotogether/grist"
+
+// ErrFull is CapacityRule's refusal: an addition the item's capacity does
+// not hold.
+var ErrFull = grist.Rejection("full")
+
+// CapacityRule refuses an addition past its item's capacity: a rule on the
+// event, so every command that appends an addition is held to it. It
+// reads the item's stock on the command's own reads, so the append
+// commits only if no addition of the item came since (two concurrent adds
+// of the last units: one commits, the other decides again and is
+// refused); its refusal is the command's.
+var CapacityRule = grist.NewRule(App, "capacity", Added, func(r *grist.Reads, e ItemAdded) error {
+	if Stock.For(r, e.Item) > Capacity-e.Qty {
+		return ErrFull
+	}
+	return nil
+}, grist.Refuses(ErrFull))

@@ -1,8 +1,9 @@
 // Command grist starts a grist application: `grist new <name>` writes a
 // module (an App with one event per fact, a keyed read model, a command
-// with two declared refusals, a query and a processor that emits; its
-// binary, its model's rules, a gristsim test with Expect claims, a mutant,
-// a real-tier test, run-demo.sh and a README), then runs `go mod tidy`
+// with a declared refusal and a rule guarding its event with another, a
+// query and a processor that emits; its binary, its model's rules, a
+// gristsim test with Expect claims, a mutant and the rule's generated
+// one, a real-tier test, run-demo.sh and a README), then runs `go mod tidy`
 // and the app's own `model` command, which generates the model's skeleton
 // and both bindings from the App's catalog. `go test ./...` in the new
 // module passes on its first run (quint on PATH).

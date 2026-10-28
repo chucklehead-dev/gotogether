@@ -8,21 +8,16 @@ type AddItem struct {
 	Qty  int    `json:"qty"`
 }
 
-// The refusals: a quantity that is not positive, and one the item's
-// capacity does not hold.
-var (
-	ErrInvalid = grist.Rejection("invalid")
-	ErrFull    = grist.Rejection("full")
-)
+// ErrInvalid is the add-item command's refusal of a quantity that is not
+// positive (its capacity's refusal is the Capacity rule's, rules.go).
+var ErrInvalid = grist.Rejection("invalid")
 
-// decideAdd, the mutant noCapacity: the capacity check left out, so an
-// addition past it commits where the model's rule refuses it.
+// decideAdd, the mutant noInvalid: the quantity check left out, so an
+// addition of none or fewer commits where the model's rule refuses it.
 func decideAdd(r *grist.Reads, c AddItem) ([]grist.Event, error) {
-	if c.Qty <= 0 {
-		return nil, ErrInvalid
-	}
 	return []grist.Event{Added.Of(ItemAdded{Item: c.Item, Qty: c.Qty})}, nil
 }
 
-// Add is the add-item command.
-var Add = grist.NewCommand(App, "add-item", decideAdd, grist.Refuses(ErrInvalid, ErrFull), grist.Authorize(grist.Authenticated))
+// Add is the add-item command. It declares the events it appends
+// (Appends), so the rules on them guard it.
+var Add = grist.NewCommand(App, "add-item", decideAdd, grist.Appends(Added), grist.Refuses(ErrInvalid), grist.Authorize(grist.Authenticated))

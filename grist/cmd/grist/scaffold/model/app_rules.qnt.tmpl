@@ -15,12 +15,16 @@ module {{.Q}}Rules {
   // stock, keyed by item: the sum of its additions
   pure def stock(log: List[Event], i: str): int = stockEvents(log, i).foldl(0, (s, e) => s + itemAddedQty(e))
 
-  // add-item: an invalid quantity refused before any read, one past the
-  // capacity refused on the item's stock, which its read set must cover
-  pure def addItemOutcome(log: List[Event], c: AddItemArgs): str =
-    if (c.qty <= 0) "invalid" else if (stock(log, c.item) + c.qty > CAPACITY) "full" else "ok"
+  // add-item: an invalid quantity refused before any read
+  pure def addItemOutcome(log: List[Event], c: AddItemArgs): str = if (c.qty <= 0) "invalid" else "ok"
   pure def addItemEvents(log: List[Event], c: AddItemArgs): List[Event] = [itemAdded(c.item, c.qty)]
-  pure def addItemNeeds(c: AddItemArgs, result: str): Set[Read] = if (result == "invalid") Set() else stockReads(c.item)
+  pure def addItemNeeds(c: AddItemArgs, result: str): Set[Read] = Set()
+
+  // capacity, the rule on every addition: one past the item's capacity
+  // refused on the item's stock, which the step's read set must cover
+  pure def capacityRefusal(log: List[Event], e: Event): str =
+    if (stock(log, itemAddedItem(e)) + itemAddedQty(e) > CAPACITY) "full" else ""
+  pure def capacityNeeds(e: Event, refusal: str): Set[Read] = stockReads(itemAddedItem(e))
 
   pure def showItemAnswer(log: List[Event], q: ShowItemArgs): ShowItemResult = { stock: stock(log, q.item) }
 

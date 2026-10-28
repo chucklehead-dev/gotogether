@@ -71,12 +71,12 @@ func TestFaithfulAtClients(t *testing.T) {
 }
 
 // fill is two clients adding to one item, no faults: the capacity is
-// reached. The noCapacity mutant's shape.
+// reached. The drop-capacity mutant's shape (the rule dropped).
 var fill = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Send: []string{"add-item"},
 	Gen: map[string]func(pick func(int) int) any{"add-item": func(p func(int) int) any { return AddItem{Item: "a", Qty: 1 + p(3)} }}}
 
 // TestFull: the faithful app at the mutant's shape refuses past the
-// capacity, and some addition is refused full.
+// capacity (the capacity rule's refusal), and no run rejects an addition.
 func TestFull(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)

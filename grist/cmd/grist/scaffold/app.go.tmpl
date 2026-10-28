@@ -1,12 +1,13 @@
 // Package {{.Pkg}} is a grist application, scaffolded by grist new: a
-// store of items, each holding at most Capacity, added to by a command
-// (add-item) and read by a query (show-item), with a processor (tally)
+// store of items, each holding at most Capacity (a rule on every
+// addition: capacity), added to by a command (add-item) and read by a
+// query (show-item), with a processor (tally)
 // that records each item's stock as of every addition and one (shelve)
 // that tells a warehouse, a declared dependency, of each. Its model is
 // model/{{.Name}}_rules.qnt (the rules) and model/{{.Name}}.qnt (the
 // invariants) beside the skeleton grist writes from the App's catalog
 // (model/{{.Name}}_gen.qnt and _steps.qnt: `go run ./cmd/{{.Name}} model`);
-// its tests explore it in a simulation (sim_test.go), catch a mutant
+// its tests explore it in a simulation (sim_test.go), catch its mutants
 // (mutants_test.go) and judge its real tier on SQLite (real_test.go), all
 // with the same generated bindings.
 package {{.Pkg}}
