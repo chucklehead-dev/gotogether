@@ -84,6 +84,7 @@ review" on.
 | I21 | the Action, the image, `compile`/`-compiled` | 1c0e469, 7173581 |
 | I22 | versions that roll, the snapshot audit | 2c2747c |
 | I23 | sqlstore reads in one query | 1d0166a |
+| I24 | grist's reads at scale: the memo, anchored snapshots, metrics, pruning, App options | 3fd4de5 |
 | I25 | grist's operations basics | fd98f8a |
 | I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
 | I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
