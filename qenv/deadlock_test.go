@@ -73,7 +73,10 @@ func deadlockThroughCommit(t *testing.T, s *qenv.Sim, d time.Duration) {
 			t1 = err
 			return
 		}
-		qenv.Sleep(ctx, 20*time.Millisecond) // t2 is waiting in its commit
+		// t2 is waiting in its commit: on the native runtime the sleeps are
+		// real, and a gap of 10 ms once let a loaded CI runner's t1 lock b
+		// before t2 reached its commit, which made t2 close the cycle
+		qenv.Sleep(ctx, 200*time.Millisecond)
 		if _, _, err := tx.GetForUpdate("b"); err != nil {
 			t1 = err
 			return
