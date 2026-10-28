@@ -67,11 +67,11 @@ module countersEvents {
   pure def totalsEvents(log: List[Event], counter: str): List[Event] = log.select(e => Set("counter-incremented").contains(e.typ) and e.tags.contains(("counter", counter)))
   pure def totalsReads(counter: str): Set[Read] = Set({ typ: "counter-incremented", tags: Set(("counter", counter)) })
 
-  // each command's and query's arguments, with the actor that sent it (principal)
-  type CreateCounterArgs = { counter: str, name: str, principal: str }
-  type IncrementCounterArgs = { counter: str, by: int, principal: str }
-  type RetireCounterArgs = { counter: str, principal: str }
-  type ShowCounterArgs = { counter: str, principal: str }
+  // each command's and query's arguments, with the caller that sent it
+  type CreateCounterArgs = { counter: str, name: str, caller: str }
+  type IncrementCounterArgs = { counter: str, by: int, caller: str }
+  type RetireCounterArgs = { counter: str, caller: str }
+  type ShowCounterArgs = { counter: str, caller: str }
   type ShowCounterResult = { total: int, names: int }
   // call mailer/send: its request and response, and a step of it (the caller's or the site's: the outcome as result,
   // the response zero unless it is ok)

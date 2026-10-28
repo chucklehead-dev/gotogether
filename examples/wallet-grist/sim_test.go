@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
-	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
@@ -20,7 +19,7 @@ const (
 // system is the app under cfg, judged by binding, with faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
 	cfg.Doubles, cfg.Setup = doubles, front
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
+	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
 

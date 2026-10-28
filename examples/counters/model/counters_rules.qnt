@@ -23,16 +23,16 @@ module countersRules {
   pure def namesOf(log: List[Event], counter: str): int =
     val names = counterNames(log)
     names.keys().filter(n => names.get(n) == counter).size()
-  // actor created counter under some name: the one actor who may retire it
-  pure def createdBy(log: List[Event], counter: str, actor: str): bool =
-    log.select(e => e.typ == "counter-created" and counterCreatedCounter(e) == counter and counterCreatedCreator(e) == actor).length() > 0
+  // caller created counter under some name: the one caller who may retire it
+  pure def createdBy(log: List[Event], counter: str, caller: str): bool =
+    log.select(e => e.typ == "counter-created" and counterCreatedCounter(e) == counter and counterCreatedCreator(e) == caller).length() > 0
   pure def isCounter(log: List[Event], counter: str): bool = existsTagged(log, "counter-created", "counter", counter)
 
   // create-counter: refused when a counter has the name, which its read
-  // set must cover; the creator is the actor that sent it
+  // set must cover; the creator is the caller that sent it
   pure def createCounterOutcome(log: List[Event], c: CreateCounterArgs): str =
     if (existsTagged(log, "counter-created", "name", c.name)) "name-taken" else "ok"
-  pure def createCounterEvents(log: List[Event], c: CreateCounterArgs): List[Event] = [counterCreated(c.counter, c.name, c.principal)]
+  pure def createCounterEvents(log: List[Event], c: CreateCounterArgs): List[Event] = [counterCreated(c.counter, c.name, c.caller)]
   pure def createCounterNeeds(c: CreateCounterArgs, result: str): Set[Read] = Set(counterCreatedByName(c.name))
 
   // increment-counter: refused for a counter never created
@@ -41,10 +41,10 @@ module countersRules {
   pure def incrementCounterEvents(log: List[Event], c: IncrementCounterArgs): List[Event] = [counterIncremented(c.counter, c.by)]
   pure def incrementCounterNeeds(c: IncrementCounterArgs, result: str): Set[Read] = Set(counterCreatedByCounter(c.counter))
 
-  // retire-counter: its creator's only (principal: the step's actor), its
+  // retire-counter: its creator's only (the step's caller), its
   // total as of the commit
   pure def retireCounterOutcome(log: List[Event], c: RetireCounterArgs): str =
-    if (not(isCounter(log, c.counter))) "unknown-counter" else if (createdBy(log, c.counter, c.principal)) "ok" else "not-creator"
+    if (not(isCounter(log, c.counter))) "unknown-counter" else if (createdBy(log, c.counter, c.caller)) "ok" else "not-creator"
   pure def retireCounterEvents(log: List[Event], c: RetireCounterArgs): List[Event] = [counterRetired(c.counter, total(log, c.counter))]
   pure def retireCounterNeeds(c: RetireCounterArgs, result: str): Set[Read] = Set(counterCreatedByCounter(c.counter))
 

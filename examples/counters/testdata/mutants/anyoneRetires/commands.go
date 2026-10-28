@@ -19,7 +19,7 @@ func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
 	if r.Exists(Created, grist.Tag("name", c.Name)) {
 		return nil, ErrNameTaken
 	}
-	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name, Creator: r.Actor()})}, nil
+	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name, Creator: r.Caller()})}, nil
 }
 
 // Create is the create-counter command.

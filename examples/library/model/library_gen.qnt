@@ -52,12 +52,12 @@ module libraryEvents {
   pure def loansEvents(log: List[Event], member: str): List[Event] = log.select(e => Set("book-borrowed", "book-returned").contains(e.typ) and e.tags.contains(("member", member)))
   pure def loansReads(member: str): Set[Read] = Set({ typ: "book-borrowed", tags: Set(("member", member)) }, { typ: "book-returned", tags: Set(("member", member)) })
 
-  // each command's and query's arguments, with the actor that sent it (principal)
-  type AddBookArgs = { book: str, copies: int, principal: str }
-  type BorrowArgs = { member: str, book: str, principal: str }
-  type JoinArgs = { member: str, principal: str }
-  type ReturnBookArgs = { member: str, book: str, principal: str }
-  type MemberLoansArgs = { member: str, principal: str }
+  // each command's and query's arguments, with the caller that sent it
+  type AddBookArgs = { book: str, copies: int, caller: str }
+  type BorrowArgs = { member: str, book: str, caller: str }
+  type JoinArgs = { member: str, caller: str }
+  type ReturnBookArgs = { member: str, book: str, caller: str }
+  type MemberLoansArgs = { member: str, caller: str }
   type MemberLoansResult = { count: int }
   // call mailer/send: its request and response, and a step of it (the caller's or the site's: the outcome as result,
   // the response zero unless it is ok)

@@ -49,7 +49,7 @@ type pod struct {
 func startPod(t *testing.T, name, db, steps string) *pod {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "serve", "-db", "sqlite:"+db, "-addr", "127.0.0.1:0", "-tenant", "t1",
-		"-steps", steps, "-actor-header", "X-Actor", "-poll", "20ms")
+		"-steps", steps, "-caller-header", "X-Caller", "-poll", "20ms")
 	cmd.Env = append(os.Environ(), podEnv+"=1", "POD_NAME="+name, "GRIST_NODE=", "KUBERNETES_SERVICE_HOST=")
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -119,10 +119,10 @@ func twoPods(t *testing.T) []qtrace.Step {
 	for c := 1; c <= 4; c++ {
 		wg.Go(func() {
 			ctx := qobs.Thread(clients) // one thread per goroutine
-			cl := &client.Client{App: App, URL: pods[c%2].url, ActorHeader: "X-Actor", RetryDelay: 10 * time.Millisecond}
+			cl := &client.Client{App: App, URL: pods[c%2].url, CallerHeader: "X-Caller", RetryDelay: 10 * time.Millisecond}
 			r := rand.New(rand.NewPCG(7, uint64(c)))
 			for op := 1; op <= 6; op++ {
-				env := grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Actor: fmt.Sprint("client", c)}
+				env := grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Caller: fmt.Sprint("client", c)}
 				counter := []string{"a", "b", "c"}[r.IntN(3)]
 				var name string
 				var args string

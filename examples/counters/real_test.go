@@ -67,8 +67,8 @@ func retireAll(tier *gristtest.Tier, phase, n int) {
 			ctx := qobs.Thread(tier.Clients())
 			actor := fmt.Sprint("client", c)
 			counter, id := fmt.Sprintf("r%d-%d", phase, c), fmt.Sprintf("p%d-c%d", phase, c)
-			tier.Do(ctx, grist.Envelope{ID: id + "-create", Tenant: "t1", Actor: actor}, "create-counter", CreateCounter{Counter: counter, Name: counter})
-			tier.Do(ctx, grist.Envelope{ID: id + "-retire", Tenant: "t1", Actor: actor}, "retire-counter", RetireCounter{Counter: counter})
+			tier.Do(ctx, grist.Envelope{ID: id + "-create", Tenant: "t1", Caller: actor}, "create-counter", CreateCounter{Counter: counter, Name: counter})
+			tier.Do(ctx, grist.Envelope{ID: id + "-retire", Tenant: "t1", Caller: actor}, "retire-counter", RetireCounter{Counter: counter})
 		})
 	}
 	wg.Wait()
@@ -122,7 +122,7 @@ func TestRealHTTP(t *testing.T) {
 					if op == 5 && c == 1 && kill != nil {
 						kill()
 					}
-					env := grist.Envelope{ID: fmt.Sprintf("p%d-c%d-%d", phase, c, op), Actor: fmt.Sprint("client", c)}
+					env := grist.Envelope{ID: fmt.Sprintf("p%d-c%d-%d", phase, c, op), Caller: fmt.Sprint("client", c)}
 					env.Tenant = tenants[r.IntN(len(tenants))]
 					counter, name := counters[r.IntN(len(counters))], names[r.IntN(len(names))]
 					switch r.IntN(3) {
@@ -162,7 +162,7 @@ func TestRealHTTP(t *testing.T) {
 	tier.Settle(func(ctx context.Context) { // the probe: every counter, on the settled system
 		for _, tn := range tenants {
 			for i, c := range []string{"a", "b", "c", "d", "e", "f"} {
-				tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: tn, Actor: "probe"}, "show-counter", ShowCounter{Counter: c})
+				tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: tn, Caller: "probe"}, "show-counter", ShowCounter{Counter: c})
 			}
 		}
 	})
@@ -277,8 +277,8 @@ func lostThenKilled(t *testing.T) *gristtest.Tier {
 		}})
 	tier.Start("node1")
 	ctx := qobs.Thread(tier.Clients())
-	tier.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "client1"}, "create-counter", CreateCounter{Counter: "a", Name: "a"})
-	tier.Do(ctx, grist.Envelope{ID: "k2", Tenant: "t1", Actor: "client1"}, "retire-counter", RetireCounter{Counter: "a"})
+	tier.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "client1"}, "create-counter", CreateCounter{Counter: "a", Name: "a"})
+	tier.Do(ctx, grist.Envelope{ID: "k2", Tenant: "t1", Caller: "client1"}, "retire-counter", RetireCounter{Counter: "a"})
 	select {
 	case <-killed:
 	case <-time.After(30 * time.Second): //qenv:ok the real tier's own deadline

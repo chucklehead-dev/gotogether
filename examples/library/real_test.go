@@ -37,7 +37,7 @@ func TestRealHTTP(t *testing.T) {
 			ctx := qobs.Thread(tier.Clients()) // one thread per goroutine
 			r := rand.New(rand.NewPCG(1, uint64(c)))
 			env := func(op int) grist.Envelope {
-				return grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Actor: fmt.Sprint("client", c)}
+				return grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Caller: fmt.Sprint("client", c)}
 			}
 			me := members[c-1]
 			tier.Do(ctx, env(0), "join", Join{Member: me})
@@ -58,7 +58,7 @@ func TestRealHTTP(t *testing.T) {
 	wg.Wait()
 	tier.Settle(func(ctx context.Context) {
 		for i, m := range members {
-			tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: "t1", Actor: "probe"}, "member-loans", MemberLoans{Member: m})
+			tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: "t1", Caller: "probe"}, "member-loans", MemberLoans{Member: m})
 		}
 	})
 	tier.Check(commits, calls)

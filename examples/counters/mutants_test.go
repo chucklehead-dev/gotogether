@@ -11,15 +11,14 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// mutants are grain's two bugs, an effect checkpointed first, a payout
-// without its outcome, a retirement by anyone and a payout of the wrong
-// amount, a payout that calls the bank again after an unknown answer,
-// and two pods recording as one node (pidIdentity), each a directory of
-// testdata/mutants/
-// whose files replace the app's of the same name (a go build overlay):
-// the app's own files stay as they are, and each mutant is a whole file
-// to diff against them.
-var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires", "wrongAmount", "payTwice", "pidIdentity"}
+// The mutants are grain's two bugs (blind, dispatchDirect), an effect
+// checkpointed first, a payout without its outcome, a retirement by
+// anyone and a payout of the wrong amount, a payout that calls the bank
+// again after an unknown answer, and two pods recording as one node
+// (pidIdentity), each a directory of testdata/mutants/ whose files
+// replace the app's of the same name (a go build overlay, found there
+// by qtest.Mutants): the app's own files stay as they are, and each
+// mutant is a whole file to diff against them.
 
 // fullOnly are the mutants built and run in full mode only: their claim
 // repeats a mechanism a per-push test checks (checkpointFirst: the
@@ -33,7 +32,7 @@ var fullOnly = []string{"checkpointFirst", "silentPayout", "anyoneRetires"}
 // 2026-10-27 (README); seeds give a miss chance under 5%. The faithful
 // app passes every one of these configurations (TestFaithful's claims).
 func TestMutant(t *testing.T) {
-	mutant := gristtest.Mutant()
+	mutant := qtest.Mutant()
 	if mutant == "" {
 		t.Skip("the app as it is: TestMutants runs this test built with each mutant's overlay")
 	}
@@ -119,7 +118,7 @@ func TestMutant(t *testing.T) {
 	case "anyoneRetires":
 		// retire-counter without its creator check: a client retires the
 		// other's counter, which the model's ok requires createdBy of
-		// (the step's principal): Some(Rejects("retireCounter")), without
+		// (the step's caller): Some(Rejects("retireCounter")), without
 		// faults 6 of 6
 		system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(6, 2)}).
 			Expect(t, qtest.Some(qtest.Rejects("retireCounter")))
@@ -197,7 +196,7 @@ func TestMutant(t *testing.T) {
 // Each mutant, built with its overlay, is caught as TestMutant says.
 func TestMutants(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	gristtest.Mutants{Names: mutants, FullOnly: fullOnly}.Run(t)
+	qtest.Mutants{FullOnly: fullOnly}.Run(t)
 }
 
 // explained fails t unless a run of x rejects action with an explanation

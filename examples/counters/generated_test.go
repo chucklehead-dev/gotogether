@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
+	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
 // The generated model (model/counters_gen.qnt and _steps.qnt, the vendored grist.qnt)
 // and the bindings are what the App's catalog generates now
 // (`go run ./cmd/counters model`), and the model typechecks.
 func TestGenerated(t *testing.T) {
-	if gristtest.Mutant() != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("a mutant's binary: its catalog is not the app's")
 	}
 	gristtest.Generated(t, App)

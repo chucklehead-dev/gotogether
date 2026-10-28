@@ -19,7 +19,7 @@ func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
 	if r.Exists(Created, grist.Tag("name", c.Name)) {
 		return nil, ErrNameTaken
 	}
-	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name, Creator: r.Actor()})}, nil
+	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name, Creator: r.Caller()})}, nil
 }
 
 // Create is the create-counter command.
@@ -71,7 +71,7 @@ func decideRetire(r *grist.Reads, c RetireCounter) ([]grist.Event, error) {
 	if !r.Exists(Created, grist.Tag("counter", c.Counter)) {
 		return nil, ErrUnknownCounter
 	}
-	if !createdBy(r, c.Counter, r.Actor()) {
+	if !createdBy(r, c.Counter, r.Caller()) {
 		return nil, ErrNotCreator
 	}
 	return []grist.Event{Retired.Of(CounterRetired{Counter: c.Counter, Total: Totals.For(r, c.Counter)})}, nil

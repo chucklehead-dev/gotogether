@@ -38,7 +38,7 @@ func TestRealHTTP(t *testing.T) {
 			ctx := qobs.Thread(tier.Clients()) // one thread per goroutine
 			r := rand.New(rand.NewPCG(1, uint64(c)))
 			for op := 1; op <= 10; op++ {
-				env := grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Actor: fmt.Sprint("client", c)}
+				env := grist.Envelope{ID: fmt.Sprintf("c%d-%d", c, op), Tenant: "t1", Caller: fmt.Sprint("client", c)}
 				switch r.IntN(3) {
 				case 0:
 					tier.Do(ctx, env, "transfer", Transfer{Src: stranger[r.IntN(4)], Dest: held3[r.IntN(3)], Amount: r.IntN(5)})
@@ -53,7 +53,7 @@ func TestRealHTTP(t *testing.T) {
 	wg.Wait()
 	tier.Settle(func(ctx context.Context) { // the probe: every account, on the settled system
 		for i, a := range held3 {
-			tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: "t1", Actor: "probe"}, "read", Read{Account: a})
+			tier.Do(ctx, grist.Envelope{ID: fmt.Sprint("probe-", i), Tenant: "t1", Caller: "probe"}, "read", Read{Account: a})
 		}
 	})
 	// three clients' 30 calls at once: a run's order may lie past the

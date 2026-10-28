@@ -123,8 +123,8 @@ module countersGen {
   // committed outcome needs its id fresh and its read set covering what its
   // rule needs; ok and a refusal need the rule's outcome and the condition to
   // have held, a conflict needs it not to. A reused key commits nothing.
-  action createCounter(counter: str, name: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: CreateCounterArgs = { counter: counter, name: name, principal: principal }
+  action createCounter(counter: str, name: str, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: CreateCounterArgs = { counter: counter, name: name, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -145,8 +145,8 @@ module countersGen {
   // its rule needs; ok and a refusal need the rule's outcome and the
   // condition to have held, a conflict needs it not to. A reused key commits
   // nothing.
-  action incrementCounter(counter: str, by: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: IncrementCounterArgs = { counter: counter, by: by, principal: principal }
+  action incrementCounter(counter: str, by: int, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: IncrementCounterArgs = { counter: counter, by: by, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -167,8 +167,8 @@ module countersGen {
   // covering what its rule needs; ok and a refusal need the rule's outcome
   // and the condition to have held, a conflict needs it not to. A reused key
   // commits nothing.
-  action retireCounter(counter: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: RetireCounterArgs = { counter: counter, principal: principal }
+  action retireCounter(counter: str, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: RetireCounterArgs = { counter: counter, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -482,7 +482,7 @@ module countersGen {
   // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
   // vals, judged by the store's bindings at a settle beside the app's own
   // (the default binding's, and a variant's that judges every invariant of
-  // the default binding)
+  // the default binding, a call's where it judges the call's served records)
 
   // after a settle, average (Emits) has handled every counter-incremented:
   // its checkpoint passed it, with the events it emitted, a Skip's none or a
@@ -527,33 +527,33 @@ module countersGen {
       {
         nondet counter = STRS.oneOf()
         nondet name = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: CreateCounterArgs = { counter: counter, name: name, principal: principal }
+          val args_: CreateCounterArgs = { counter: counter, name: name, caller: caller }
           val result_ = createCounterOutcome(log, args_)
-          createCounter(counter, name, id, principal, log.length(), triplesOf(createCounterNeeds(args_, result_)), result_)
+          createCounter(counter, name, id, caller, log.length(), triplesOf(createCounterNeeds(args_, result_)), result_)
         }
       },
       {
         nondet counter = STRS.oneOf()
         nondet by = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: IncrementCounterArgs = { counter: counter, by: by, principal: principal }
+          val args_: IncrementCounterArgs = { counter: counter, by: by, caller: caller }
           val result_ = incrementCounterOutcome(log, args_)
-          incrementCounter(counter, by, id, principal, log.length(), triplesOf(incrementCounterNeeds(args_, result_)), result_)
+          incrementCounter(counter, by, id, caller, log.length(), triplesOf(incrementCounterNeeds(args_, result_)), result_)
         }
       },
       {
         nondet counter = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: RetireCounterArgs = { counter: counter, principal: principal }
+          val args_: RetireCounterArgs = { counter: counter, caller: caller }
           val result_ = retireCounterOutcome(log, args_)
-          retireCounter(counter, id, principal, log.length(), triplesOf(retireCounterNeeds(args_, result_)), result_)
+          retireCounter(counter, id, caller, log.length(), triplesOf(retireCounterNeeds(args_, result_)), result_)
         }
       },
       {
@@ -676,12 +676,12 @@ module countersCallsGen {
     answered' = answered.union(Set(id)),
   }
 
-  // a call the API refused (403: the block's policy refused the actor) ran
+  // a call the API refused (403: the block's policy refused the caller) ran
   // nothing and answers nothing: its key stays unanswered
   action denied: bool = all { log' = log, answered' = answered }
 
-  action createCounter(counter: str, name: str, id: str, principal: str, result: str): bool = {
-    val args_: CreateCounterArgs = { counter: counter, name: name, principal: principal }
+  action createCounter(counter: str, name: str, id: str, caller: str, result: str): bool = {
+    val args_: CreateCounterArgs = { counter: counter, name: name, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -690,8 +690,8 @@ module countersCallsGen {
     }
   }
 
-  action incrementCounter(counter: str, by: int, id: str, principal: str, result: str): bool = {
-    val args_: IncrementCounterArgs = { counter: counter, by: by, principal: principal }
+  action incrementCounter(counter: str, by: int, id: str, caller: str, result: str): bool = {
+    val args_: IncrementCounterArgs = { counter: counter, by: by, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -700,8 +700,8 @@ module countersCallsGen {
     }
   }
 
-  action retireCounter(counter: str, id: str, principal: str, result: str): bool = {
-    val args_: RetireCounterArgs = { counter: counter, principal: principal }
+  action retireCounter(counter: str, id: str, caller: str, result: str): bool = {
+    val args_: RetireCounterArgs = { counter: counter, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -718,22 +718,22 @@ module countersCallsGen {
       {
         nondet counter = STRS.oneOf()
         nondet name = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        createCounter(counter, name, id, principal, createCounterOutcome(log, { counter: counter, name: name, principal: principal }))
+        createCounter(counter, name, id, caller, createCounterOutcome(log, { counter: counter, name: name, caller: caller }))
       },
       {
         nondet counter = STRS.oneOf()
         nondet by = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        incrementCounter(counter, by, id, principal, incrementCounterOutcome(log, { counter: counter, by: by, principal: principal }))
+        incrementCounter(counter, by, id, caller, incrementCounterOutcome(log, { counter: counter, by: by, caller: caller }))
       },
       {
         nondet counter = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        retireCounter(counter, id, principal, retireCounterOutcome(log, { counter: counter, principal: principal }))
+        retireCounter(counter, id, caller, retireCounterOutcome(log, { counter: counter, caller: caller }))
       },
       {
         nondet counter = STRS.oneOf()

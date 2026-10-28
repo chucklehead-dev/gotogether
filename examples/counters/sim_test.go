@@ -8,7 +8,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
-	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -70,7 +69,7 @@ func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.Sys
 		cfg.Doubles = doubles
 	}
 	cfg.Setup = setup
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
+	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
 
@@ -427,10 +426,10 @@ func TestPayoutTwoNodes(t *testing.T) {
 }
 
 // Only a counter's creator retires it: the decision reads the creator
-// recorded in counter-created (Reads.Actor at its creation) and refuses
+// recorded in counter-created (Reads.Caller at its creation) and refuses
 // another actor (not-creator, a committed refusal recorded at the
 // store), and the model's retireCounter judges it by the step's
-// principal: ok needs createdBy, not-creator its negation. Two clients
+// caller: ok needs createdBy, not-creator its negation. Two clients
 // creating and retiring counter a (contested), without faults: every run conforms,
 // and some retire is refused as a non-creator's. Without the check (the
 // anyoneRetires mutant, full mode) 6 of 6 runs reject retireCounter.

@@ -3,27 +3,25 @@ package walletgrist
 import (
 	"testing"
 
-	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// mutants are examples/wallet's mutants that grist lets an application
+// The mutants are examples/wallet's that grist lets an application
 // write, and two of the ledger's, each a directory of testdata/mutants/
-// whose files replace the app's of the same name (a go build overlay).
+// whose files replace the app's of the same name (a go build overlay,
+// found there by qtest.Mutants).
 // NoDedupe and UnlockedRecord are not among them: the request record is
 // grist's marker, which no application code reads or writes. WriteSkew
 // is readThenWrite's skew shape: a conditioned read cannot be left out of
 // the condition, so the only skew an application can write is a whole
 // command Unconditioned.
-var mutants = []string{"noValidation", "readThenWrite", "noOutbox", "ledgerNoDedupe", "ledgerAcksUnposted", "replicaRead"}
-
 // TestMutant states what catches the mutant this binary was built with;
 // TestMutants builds and runs it once per mutant. The faithful app passes
 // every one of these configurations (sim_test.go's claims).
 func TestMutant(t *testing.T) {
-	mutant := gristtest.Mutant()
+	mutant := qtest.Mutant()
 	if mutant == "" {
 		t.Skip("the app as it is: TestMutants runs this test built with each mutant's overlay")
 	}
@@ -99,5 +97,5 @@ func TestMutant(t *testing.T) {
 // Each mutant, built with its overlay, is caught as TestMutant says.
 func TestMutants(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	gristtest.Mutants{Names: mutants}.Run(t)
+	qtest.Mutants{}.Run(t)
 }

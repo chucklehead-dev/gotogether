@@ -31,10 +31,10 @@ module walletEvents {
   pure def balancesEvents(log: List[Event], account: str): List[Event] = log.select(e => Set("moved").contains(e.typ) and e.tags.contains(("account", account)))
   pure def balancesReads(account: str): Set[Read] = Set({ typ: "moved", tags: Set(("account", account)) })
 
-  // each command's and query's arguments, with the actor that sent it (principal)
-  type DepositArgs = { account: str, amount: int, principal: str }
-  type TransferArgs = { src: str, dest: str, amount: int, principal: str }
-  type ReadArgs = { account: str, principal: str }
+  // each command's and query's arguments, with the caller that sent it
+  type DepositArgs = { account: str, amount: int, caller: str }
+  type TransferArgs = { src: str, dest: str, amount: int, caller: str }
+  type ReadArgs = { account: str, caller: str }
   type ReadResult = { balance: int }
   // call ledger/post: its request and response, and a step of it (the caller's or the site's: the outcome as result,
   // the response zero unless it is ok)

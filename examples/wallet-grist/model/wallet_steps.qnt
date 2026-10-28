@@ -109,8 +109,8 @@ module walletGen {
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
   // a conflict needs it not to. A reused key commits nothing.
-  action deposit(account: str, amount: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: DepositArgs = { account: account, amount: amount, principal: principal }
+  action deposit(account: str, amount: int, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: DepositArgs = { account: account, amount: amount, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -131,8 +131,8 @@ module walletGen {
   // its rule needs; ok and a refusal need the rule's outcome and the
   // condition to have held, a conflict needs it not to. A reused key commits
   // nothing.
-  action transfer(src: str, dest: str, amount: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
+  action transfer(src: str, dest: str, amount: int, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: TransferArgs = { src: src, dest: dest, amount: amount, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -283,7 +283,7 @@ module walletGen {
   // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
   // vals, judged by the store's bindings at a settle beside the app's own
   // (the default binding's, and a variant's that judges every invariant of
-  // the default binding)
+  // the default binding, a call's where it judges the call's served records)
 
   // after a settle, post (at least once) has handled every moved: its
   // checkpoint passed it, and it was skipped (postSkips), had an ok effect
@@ -315,24 +315,24 @@ module walletGen {
       {
         nondet account = STRS.oneOf()
         nondet amount = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: DepositArgs = { account: account, amount: amount, principal: principal }
+          val args_: DepositArgs = { account: account, amount: amount, caller: caller }
           val result_ = depositOutcome(log, args_)
-          deposit(account, amount, id, principal, log.length(), triplesOf(depositNeeds(args_, result_)), result_)
+          deposit(account, amount, id, caller, log.length(), triplesOf(depositNeeds(args_, result_)), result_)
         }
       },
       {
         nondet src = STRS.oneOf()
         nondet dest = STRS.oneOf()
         nondet amount = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
+          val args_: TransferArgs = { src: src, dest: dest, amount: amount, caller: caller }
           val result_ = transferOutcome(log, args_)
-          transfer(src, dest, amount, id, principal, log.length(), triplesOf(transferNeeds(args_, result_)), result_)
+          transfer(src, dest, amount, id, caller, log.length(), triplesOf(transferNeeds(args_, result_)), result_)
         }
       },
       {
@@ -410,12 +410,12 @@ module walletCallsGen {
     answered' = answered.union(Set(id)),
   }
 
-  // a call the API refused (403: the block's policy refused the actor) ran
+  // a call the API refused (403: the block's policy refused the caller) ran
   // nothing and answers nothing: its key stays unanswered
   action denied: bool = all { log' = log, answered' = answered }
 
-  action deposit(account: str, amount: int, id: str, principal: str, result: str): bool = {
-    val args_: DepositArgs = { account: account, amount: amount, principal: principal }
+  action deposit(account: str, amount: int, id: str, caller: str, result: str): bool = {
+    val args_: DepositArgs = { account: account, amount: amount, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -424,8 +424,8 @@ module walletCallsGen {
     }
   }
 
-  action transfer(src: str, dest: str, amount: int, id: str, principal: str, result: str): bool = {
-    val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
+  action transfer(src: str, dest: str, amount: int, id: str, caller: str, result: str): bool = {
+    val args_: TransferArgs = { src: src, dest: dest, amount: amount, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -442,17 +442,17 @@ module walletCallsGen {
       {
         nondet account = STRS.oneOf()
         nondet amount = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        deposit(account, amount, id, principal, depositOutcome(log, { account: account, amount: amount, principal: principal }))
+        deposit(account, amount, id, caller, depositOutcome(log, { account: account, amount: amount, caller: caller }))
       },
       {
         nondet src = STRS.oneOf()
         nondet dest = STRS.oneOf()
         nondet amount = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        transfer(src, dest, amount, id, principal, transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }))
+        transfer(src, dest, amount, id, caller, transferOutcome(log, { src: src, dest: dest, amount: amount, caller: caller }))
       },
       {
         nondet account = STRS.oneOf()

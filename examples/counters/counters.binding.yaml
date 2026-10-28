@@ -29,7 +29,7 @@ actions:
     args: { result: '{{.outcome}}' }
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   showCounter:
-    expect: 'showCounterAnswer(log, { counter: {{.counter}}, principal: {{.principal}} }) == { total: {{.obs.total}}, names: {{.obs.names}} }'
+    expect: 'showCounterAnswer(log, { counter: {{.counter}}, caller: {{.caller}} }) == { total: {{.obs.total}}, names: {{.obs.names}} }'
   average:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("average") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   welcomeEffect: {}
@@ -68,19 +68,19 @@ simulate:
   # model on its own: one its rules forbid is one no conforming run can show (P3)
   possible:
     - name: createCounter.ok
-      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(name => STRS.exists(principal => createCounterOutcome(log, { counter: counter, name: name, principal: principal }) == "ok")))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(name => STRS.exists(caller => createCounterOutcome(log, { counter: counter, name: name, caller: caller }) == "ok")))'
     - name: createCounter.name-taken
-      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(name => STRS.exists(principal => createCounterOutcome(log, { counter: counter, name: name, principal: principal }) == "name-taken")))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(name => STRS.exists(caller => createCounterOutcome(log, { counter: counter, name: name, caller: caller }) == "name-taken")))'
     - name: incrementCounter.ok
-      when: 'nextID(answered) != Set() and STRS.exists(counter => INTS.exists(by => STRS.exists(principal => incrementCounterOutcome(log, { counter: counter, by: by, principal: principal }) == "ok")))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => INTS.exists(by => STRS.exists(caller => incrementCounterOutcome(log, { counter: counter, by: by, caller: caller }) == "ok")))'
     - name: incrementCounter.unknown-counter
-      when: 'nextID(answered) != Set() and STRS.exists(counter => INTS.exists(by => STRS.exists(principal => incrementCounterOutcome(log, { counter: counter, by: by, principal: principal }) == "unknown-counter")))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => INTS.exists(by => STRS.exists(caller => incrementCounterOutcome(log, { counter: counter, by: by, caller: caller }) == "unknown-counter")))'
     - name: retireCounter.ok
-      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(principal => retireCounterOutcome(log, { counter: counter, principal: principal }) == "ok"))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(caller => retireCounterOutcome(log, { counter: counter, caller: caller }) == "ok"))'
     - name: retireCounter.unknown-counter
-      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(principal => retireCounterOutcome(log, { counter: counter, principal: principal }) == "unknown-counter"))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(caller => retireCounterOutcome(log, { counter: counter, caller: caller }) == "unknown-counter"))'
     - name: retireCounter.not-creator
-      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(principal => retireCounterOutcome(log, { counter: counter, principal: principal }) == "not-creator"))'
+      when: 'nextID(answered) != Set() and STRS.exists(counter => STRS.exists(caller => retireCounterOutcome(log, { counter: counter, caller: caller }) == "not-creator"))'
     - showCounter
     - average
     - welcomeEffect

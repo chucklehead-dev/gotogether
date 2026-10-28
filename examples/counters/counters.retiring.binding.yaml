@@ -30,7 +30,7 @@ actions:
     args: { result: '{{.outcome}}' }
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   showCounter:
-    expect: 'showCounterAnswer(log, { counter: {{.counter}}, principal: {{.principal}} }) == { total: {{.obs.total}}, names: {{.obs.names}} }'
+    expect: 'showCounterAnswer(log, { counter: {{.counter}}, caller: {{.caller}} }) == { total: {{.obs.total}}, names: {{.obs.names}} }'
   average:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("average") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   welcomeEffect: {}

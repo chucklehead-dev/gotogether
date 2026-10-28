@@ -24,7 +24,7 @@ var faulty = qenv.DefaultRates.Set("nemesis", 0.02).Set("store.library.commit", 
 // system is the app under cfg, judged by binding, at faulty rates.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
 	cfg.Doubles = doubles
-	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: gristtest.Mutant(),
+	return qtest.System{Binding: binding, Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return gristsim.Run(c, App, cfg) }}
 }
 
@@ -83,7 +83,7 @@ func TestFaithful(t *testing.T) {
 	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 8)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(),
 			qtest.Reaches("rpc.mailer.response").Faulted(), qtest.Takes("mailerSend").Outcome("unknown"), qtest.Takes("mailerSendReplayed"),
-			gristtest.Exercised(App, "borrow.limit"))
+			gristtest.Catalog(App).Exercised("borrow.limit"))
 }
 
 // TestFaithfulAtClients: the same runs judged where the clients saw them,
@@ -207,7 +207,7 @@ func TestReceiptOnce(t *testing.T) {
 // TestGenerated: the model's skeleton and the bindings are what the
 // catalog generates (regenerate with `go run ./cmd/library model`).
 func TestGenerated(t *testing.T) {
-	if gristtest.Mutant() != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("a mutant's binary: its catalog is not the app's")
 	}
 	gristtest.Generated(t, App)

@@ -24,7 +24,7 @@ if [ -n "${SERVE:-}" ]; then
   port=${PORT:-18080}
   go build -o "$dir/counters" ./cmd/counters
   "$dir/counters" serve -db "sqlite:$dir/counters.db" -addr "127.0.0.1:$port" -tenant t1 \
-    -steps "$dir/steps.jsonl" -actor-header X-Actor -poll 50ms &
+    -steps "$dir/steps.jsonl" -caller-header X-Actor -poll 50ms &
   pid=$!
   api="http://127.0.0.1:$port/t/t1"
   for _ in $(seq 100); do curl -fs "$api/queries/show-counter?counter=a" -H 'X-Actor: demo' >/dev/null && break; sleep 0.1; done

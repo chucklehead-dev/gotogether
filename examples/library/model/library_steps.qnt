@@ -135,8 +135,8 @@ module libraryGen {
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
   // a conflict needs it not to. A reused key commits nothing.
-  action addBook(book: str, copies: int, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: AddBookArgs = { book: book, copies: copies, principal: principal }
+  action addBook(book: str, copies: int, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: AddBookArgs = { book: book, copies: copies, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -159,8 +159,8 @@ module libraryGen {
   // decision and every rule that ran need; ok and a refusal need that outcome
   // and the condition to have held, a conflict needs it not to. A reused key
   // commits nothing.
-  action borrow(member: str, book: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: BorrowArgs = { member: member, book: book, principal: principal }
+  action borrow(member: str, book: str, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: BorrowArgs = { member: member, book: book, caller: caller }
     val reads_ = readsOf(reads)
     val verdict_ = borrowRuled(log, args_)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
@@ -182,8 +182,8 @@ module libraryGen {
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
   // a conflict needs it not to. A reused key commits nothing.
-  action join(member: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: JoinArgs = { member: member, principal: principal }
+  action join(member: str, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: JoinArgs = { member: member, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -203,8 +203,8 @@ module libraryGen {
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
   // a conflict needs it not to. A reused key commits nothing.
-  action returnBook(member: str, book: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
-    val args_: ReturnBookArgs = { member: member, book: book, principal: principal }
+  action returnBook(member: str, book: str, id: str, caller: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
+    val args_: ReturnBookArgs = { member: member, book: book, caller: caller }
     val reads_ = readsOf(reads)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
@@ -351,7 +351,7 @@ module libraryGen {
   // The obligations the catalog implies (docs/grist.md §3.3.1): eventual
   // vals, judged by the store's bindings at a settle beside the app's own
   // (the default binding's, and a variant's that judges every invariant of
-  // the default binding)
+  // the default binding, a call's where it judges the call's served records)
 
   // after a settle, receipts (at least once) has handled every book-borrowed:
   // its checkpoint passed it, and it was skipped (receiptsSkips), had an ok
@@ -383,45 +383,45 @@ module libraryGen {
       {
         nondet book = STRS.oneOf()
         nondet copies = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: AddBookArgs = { book: book, copies: copies, principal: principal }
+          val args_: AddBookArgs = { book: book, copies: copies, caller: caller }
           val result_ = addBookOutcome(log, args_)
-          addBook(book, copies, id, principal, log.length(), triplesOf(addBookNeeds(args_, result_)), result_)
+          addBook(book, copies, id, caller, log.length(), triplesOf(addBookNeeds(args_, result_)), result_)
         }
       },
       {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: BorrowArgs = { member: member, book: book, principal: principal }
+          val args_: BorrowArgs = { member: member, book: book, caller: caller }
           val verdict_ = borrowRuled(log, args_)
           val result_ = verdict_.outcome
-          borrow(member, book, id, principal, log.length(), triplesOf(borrowNeeds(args_, if (verdict_.decided == "ok") "ok" else result_).union(verdict_.needs)), result_)
+          borrow(member, book, id, caller, log.length(), triplesOf(borrowNeeds(args_, if (verdict_.decided == "ok") "ok" else result_).union(verdict_.needs)), result_)
         }
       },
       {
         nondet member = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: JoinArgs = { member: member, principal: principal }
+          val args_: JoinArgs = { member: member, caller: caller }
           val result_ = joinOutcome(log, args_)
-          join(member, id, principal, log.length(), triplesOf(joinNeeds(args_, result_)), result_)
+          join(member, id, caller, log.length(), triplesOf(joinNeeds(args_, result_)), result_)
         }
       },
       {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: ReturnBookArgs = { member: member, book: book, principal: principal }
+          val args_: ReturnBookArgs = { member: member, book: book, caller: caller }
           val result_ = returnBookOutcome(log, args_)
-          returnBook(member, book, id, principal, log.length(), triplesOf(returnBookNeeds(args_, result_)), result_)
+          returnBook(member, book, id, caller, log.length(), triplesOf(returnBookNeeds(args_, result_)), result_)
         }
       },
       {
@@ -499,7 +499,7 @@ module libraryCallsGen {
     answered' = answered.union(Set(id)),
   }
 
-  // a call the API refused (403: the block's policy refused the actor) ran
+  // a call the API refused (403: the block's policy refused the caller) ran
   // nothing and answers nothing: its key stays unanswered
   action denied: bool = all { log' = log, answered' = answered }
 
@@ -529,8 +529,8 @@ module libraryCallsGen {
     val ruled = rulesOf(log, if (decided == "ok") borrowEvents(log, c) else [])
     { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
 
-  action addBook(book: str, copies: int, id: str, principal: str, result: str): bool = {
-    val args_: AddBookArgs = { book: book, copies: copies, principal: principal }
+  action addBook(book: str, copies: int, id: str, caller: str, result: str): bool = {
+    val args_: AddBookArgs = { book: book, copies: copies, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -539,8 +539,8 @@ module libraryCallsGen {
     }
   }
 
-  action borrow(member: str, book: str, id: str, principal: str, result: str): bool = {
-    val args_: BorrowArgs = { member: member, book: book, principal: principal }
+  action borrow(member: str, book: str, id: str, caller: str, result: str): bool = {
+    val args_: BorrowArgs = { member: member, book: book, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -549,8 +549,8 @@ module libraryCallsGen {
     }
   }
 
-  action join(member: str, id: str, principal: str, result: str): bool = {
-    val args_: JoinArgs = { member: member, principal: principal }
+  action join(member: str, id: str, caller: str, result: str): bool = {
+    val args_: JoinArgs = { member: member, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -559,8 +559,8 @@ module libraryCallsGen {
     }
   }
 
-  action returnBook(member: str, book: str, id: str, principal: str, result: str): bool = {
-    val args_: ReturnBookArgs = { member: member, book: book, principal: principal }
+  action returnBook(member: str, book: str, id: str, caller: str, result: str): bool = {
+    val args_: ReturnBookArgs = { member: member, book: book, caller: caller }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
@@ -577,29 +577,29 @@ module libraryCallsGen {
       {
         nondet book = STRS.oneOf()
         nondet copies = INTS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        addBook(book, copies, id, principal, addBookOutcome(log, { book: book, copies: copies, principal: principal }))
+        addBook(book, copies, id, caller, addBookOutcome(log, { book: book, copies: copies, caller: caller }))
       },
       {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        borrow(member, book, id, principal, borrowRuled(log, { member: member, book: book, principal: principal }).outcome)
+        borrow(member, book, id, caller, borrowRuled(log, { member: member, book: book, caller: caller }).outcome)
       },
       {
         nondet member = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        join(member, id, principal, joinOutcome(log, { member: member, principal: principal }))
+        join(member, id, caller, joinOutcome(log, { member: member, caller: caller }))
       },
       {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
-        nondet principal = STRS.oneOf()
+        nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        returnBook(member, book, id, principal, returnBookOutcome(log, { member: member, book: book, principal: principal }))
+        returnBook(member, book, id, caller, returnBookOutcome(log, { member: member, book: book, caller: caller }))
       },
       {
         nondet member = STRS.oneOf()

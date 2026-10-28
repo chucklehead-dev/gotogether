@@ -24,7 +24,7 @@ actions:
     args: { result: '{{.outcome}}' }
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   read:
-    expect: 'readAnswer(log, { account: {{.account}}, principal: {{.principal}} }) == { balance: {{.obs.balance}} }'
+    expect: 'readAnswer(log, { account: {{.account}}, caller: {{.caller}} }) == { balance: {{.obs.balance}} }'
   postEffect: {}
   post:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("post") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
@@ -48,15 +48,15 @@ simulate:
   # model on its own: one its rules forbid is one no conforming run can show (P3)
   possible:
     - name: deposit.ok
-      when: 'nextID(answered) != Set() and STRS.exists(account => INTS.exists(amount => STRS.exists(principal => depositOutcome(log, { account: account, amount: amount, principal: principal }) == "ok")))'
+      when: 'nextID(answered) != Set() and STRS.exists(account => INTS.exists(amount => STRS.exists(caller => depositOutcome(log, { account: account, amount: amount, caller: caller }) == "ok")))'
     - name: deposit.invalid
-      when: 'nextID(answered) != Set() and STRS.exists(account => INTS.exists(amount => STRS.exists(principal => depositOutcome(log, { account: account, amount: amount, principal: principal }) == "invalid")))'
+      when: 'nextID(answered) != Set() and STRS.exists(account => INTS.exists(amount => STRS.exists(caller => depositOutcome(log, { account: account, amount: amount, caller: caller }) == "invalid")))'
     - name: transfer.ok
-      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(principal => transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }) == "ok"))))'
+      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(caller => transferOutcome(log, { src: src, dest: dest, amount: amount, caller: caller }) == "ok"))))'
     - name: transfer.invalid
-      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(principal => transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }) == "invalid"))))'
+      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(caller => transferOutcome(log, { src: src, dest: dest, amount: amount, caller: caller }) == "invalid"))))'
     - name: transfer.insufficient-funds
-      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(principal => transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }) == "insufficient-funds"))))'
+      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(caller => transferOutcome(log, { src: src, dest: dest, amount: amount, caller: caller }) == "insufficient-funds"))))'
     - read
     - postEffect
     - post

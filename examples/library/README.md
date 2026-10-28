@@ -26,13 +26,13 @@ of building it as a newcomer to grist.
 | [doubles_test.go](doubles_test.go) | the runs' doubles: none (the `noDedupe` mutant replaces it) |
 | [model/library_gen.qnt](model/library_gen.qnt), [model/library_steps.qnt](model/library_steps.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale), the catalog's obligations among them (`receiptsEventuallyHandled`, `mailerSendEventuallyServed`: eventual vals the store's binding judges at a settle, docs/grist.md §3.3.1) |
 | [cmd/library](cmd/library/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
-| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`; `drop-loan-limit` is generated (`gristtest.Mutants{App: App}`: the app with its rule dropped) |
+| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`; `drop-loan-limit` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
 
 ## Which check catches which mutant
 
 | test | configuration | catches |
 |---|---|---|
-| `TestFaithful` | one tenant, a prologue (two members, a copy of two books, an invalid addition), three clients, commit faults, node crashes, a lossy API and mailer | nothing: `Conforms`, `All(Settles)`, commit faults reached, the mailer's answers lost (`Reaches("rpc.mailer.response").Faulted()`, a send of outcome `unknown`, a replay), every block of the catalog taken by each outcome but `borrow.limit` (`gristtest.Exercised`) |
+| `TestFaithful` | one tenant, a prologue (two members, a copy of two books, an invalid addition), three clients, commit faults, node crashes, a lossy API and mailer | nothing: `Conforms`, `All(Settles)`, commit faults reached, the mailer's answers lost (`Reaches("rpc.mailer.response").Faulted()`, a send of outcome `unknown`, a replay), every block of the catalog taken by each outcome but `borrow.limit` (`gristtest.Catalog(App).Exercised`) |
 | `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
 | `TestScarce` | members borrowing one book added a copy at a time, no faults | nothing: `None(Rejects("borrow"))` (`noCopyCheck`'s contrast), a borrow refused `unavailable` (`Takes("borrow").Outcome("unavailable")`) |
 | `TestMutant` (`noCopyCheck`) | the same | `Some(Rejects("borrow"))`: a borrow with no copy free commits where the model's rule says `unavailable` (and its read set misses the shelf) |
