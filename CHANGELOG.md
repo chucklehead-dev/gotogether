@@ -1,13 +1,26 @@
 # Changelog
 
-Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav) is
-versioned together; the examples are not published. A change to the
+Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav,
+and the doubles' qenv/simgrpc and qenv/kubesim) is versioned together; the examples are not published. A change to the
 core's exported API updates `api/core.txt` and adds a line here.
 
 ## Unreleased
 
 The first release. What a user meets, by module:
 
+- The examples' doubles published (ROADMAP H7's second half):
+  `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
+  idempotent `Producer`, group `Member`s with fencing, the seams
+  `Writer`, `Reader` and `Record` with byte values, `Log.OnCommit` where
+  a commit lands, its contract checked under `Sim.Check`, its fault kinds
+  named after the log: `log.<name>.produce`, `rebalance.<log>.<consumer>`);
+  `qenv/simgrpc` (module: a generated gRPC service in a simulation, its
+  refused connection the server's process's); `qenv/kubesim` (module:
+  simulated API servers for controller-runtime clients, any object's
+  generation and status rules, every verb faulted under
+  `kube.<cluster>.request`, writes reported where they land,
+  `Cluster.OnWrite`, `NewDeployment`, `Fleet`). grpcledger, streams and
+  fleetrollout import them.
 - Liveness as cycles (ROADMAP P6): `gotogether simulate -graph` judges
   each eventual val over the state graph. A reachable cycle of states
   where it is false, fair under weak fairness per action (a stutter no
