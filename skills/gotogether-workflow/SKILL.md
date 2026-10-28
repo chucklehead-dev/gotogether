@@ -51,7 +51,8 @@ simulate:
 ```
 
 Each is reported reached with its witness (the Go evaluator's shortest
-path with arguments, else quint's sampled trace), or FAIL: "the model
+path with arguments, else quint's sampled trace, or for a predicate how
+many sampled traces it held in), or FAIL: "the model
 forbids it" after a search that saw the whole state graph, "not
 reached in N sampled traces ... not found within the bound" otherwise.
 Find the guard with `gotogether nav -binding`; raise `-samples`,

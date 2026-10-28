@@ -55,8 +55,10 @@ The first release. What a user meets, by module:
   `Binding.PossibleModule`, `EvalModule.Possible`), checked by
   `gotogether simulate` with the Go evaluator's bounded search
   (`validate.Checker.Possible`, `PossibleSearch`, `PossibleResult`;
-  `-states`) and quint's sampling, each reached with its witness or
-  failing (exit 1) as forbidden or not found within the bound. The
+  `-states`) and quint's sampling (in the first invariant's own run:
+  its `--witnesses` and its traces, no run of their own), each reached
+  with its witness or failing (exit 1) as forbidden or not found within
+  the bound, naming the binding for `gotogether nav`. The
   grist generator writes one per command outcome and per query,
   processor step, call and site; its model's identities are thirty,
   taken in turn (`nextID`), where four could never reach the library's

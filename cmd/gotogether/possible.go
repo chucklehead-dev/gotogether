@@ -28,11 +28,13 @@ type possibleCheck struct {
 	steps []binding.StepPattern
 	// val and not are the simulation module's vals of when and not(when)
 	val, not string
-	// quint's verdict: found (witness its actions), or why it did not
-	// look ("" when it did)
-	quintFound   bool
-	quintWitness []string
-	quintSkip    string
+	// quint's verdict: found (witness: a sequence's actions, or a
+	// predicate's count of the sampled traces it held in), or why it did
+	// not look ("" when it did)
+	quintFound    bool
+	quintWitness  []string
+	quintWitnessN int
+	quintSkip     string
 }
 
 // possibleVals are the simulation module's vals of the predicates' negations.
@@ -60,24 +62,16 @@ func resolvePossibles(c *validate.Checker, ps []binding.Possible) ([]*possibleCh
 	return out, nil
 }
 
-// quintPossibles checks each possible with quint: a predicate by
-// `quint run --invariant not(P)`, its violation the witness; steps that
-// name no parameters in sampled traces (quint's mbt::actionTaken), in
-// batches until every one is found or the samples are spent. Steps that
-// name a parameter's value are the evaluator's alone (quint does not
-// record an action's arguments).
-func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples int, seed string, verify int) error {
-	var seqs, preds []*possibleCheck
+// quintShare splits the possibles quint checks by how: predicates by
+// quint verify (with -verify) or as witnesses of sampled traces,
+// sequences of names in sampled traces' mbt::actionTaken. The rest are
+// the evaluator's alone, each with why (quintSkip).
+func quintShare(cs []*possibleCheck, verify int) (verified, preds, seqs []*possibleCheck) {
 	for _, c := range cs {
 		switch {
+		case c.quintSkip != "":
 		case c.when != "" && verify > 0:
-			argv := []string{"verify", "--main", "simulate", "--invariant", c.not, "--max-steps", fmt.Sprint(verify), file}
-			out, err := runQuint(quint, dir, argv)
-			v := strings.Contains(out, "[violation]")
-			if err != nil && !v {
-				return fmt.Errorf("simulate: quint verify of possible %q: %w\n%s", c.p.Text(), err, out)
-			}
-			c.quintFound = v
+			verified = append(verified, c)
 		case c.when != "":
 			preds = append(preds, c)
 		case verify > 0:
@@ -94,43 +88,98 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 			seqs = append(seqs, c)
 		}
 	}
-	if err := quintPredicates(quint, dir, file, preds, steps, samples, seed); err != nil {
-		return err
+	return verified, preds, seqs
+}
+
+// traceBatch is how many sampled traces quint writes at a time for the
+// sequences: each an ITF file, looked through for every sequence not yet
+// found.
+const traceBatch = 100
+
+// A hostedSample is quint's sampling of the possibles inside an
+// invariant's run (hostArgs): the run's output, whose witness counts
+// are the predicates', and the directory of the traces it wrote for the
+// sequences, how many.
+type hostedSample struct {
+	out    string
+	traces string
+	n      int
+}
+
+// hostArgs are what an invariant's `quint run` adds to sample the
+// possibles quint checks in the same traces (nil: none): the predicates
+// as --witnesses (last: it takes every argument after it), and, for the
+// sequences, the first batch of its traces written to tracesDir with
+// mbt::actionTaken. One process for the invariant and the possibles,
+// where one of their own cost as much again (a grist binding's 10-20 s).
+func hostArgs(cs []*possibleCheck, verify, samples int, tracesDir string) (argv []string, n int) {
+	if verify > 0 {
+		return nil, 0
+	}
+	_, preds, seqs := quintShare(cs, verify)
+	if len(seqs) > 0 {
+		n = min(traceBatch, samples)
+		argv = append(argv, "--mbt", "--out-itf", filepath.Join(tracesDir, "t_{seq}.itf.json"), "--n-traces", fmt.Sprint(n))
+	}
+	if len(preds) > 0 {
+		argv = append(argv, "--witnesses")
+		for _, c := range preds {
+			argv = append(argv, c.val)
+		}
+	}
+	return argv, n
+}
+
+// quintPossibles checks each possible with quint: with -verify a
+// predicate by `quint verify --invariant not(P)`; else a predicate as a
+// witness of sampled traces (in how many it held), and steps that name
+// no parameters in sampled traces (quint's mbt::actionTaken), in batches
+// until every one is found or the samples are spent. Steps that name a
+// parameter's value are the evaluator's alone (quint does not record an
+// action's arguments). host, if set, is a sampling an invariant's run
+// made already (hostArgs): its witnesses are the predicates' verdicts
+// and its traces the sequences' first batch.
+func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples int, seed string, verify int, host *hostedSample) error {
+	verified, preds, seqs := quintShare(cs, verify)
+	for _, c := range verified {
+		argv := []string{"verify", "--main", "simulate", "--invariant", c.not, "--max-steps", fmt.Sprint(verify), file}
+		out, err := runQuint(quint, dir, argv)
+		v := strings.Contains(out, "[violation]")
+		if err != nil && !v {
+			return fmt.Errorf("simulate: quint verify of possible %q: %w\n%s", c.p.Text(), err, out)
+		}
+		c.quintFound = v
+	}
+	if len(preds) > 0 {
+		out := ""
+		if host != nil {
+			out = host.out
+		} else {
+			// the file first: --witnesses takes every argument after it
+			argv := backendArgs([]string{"run", file, "--main", "simulate", "--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(samples), "--seed", seed})
+			argv = append(argv, "--witnesses")
+			for _, c := range preds {
+				argv = append(argv, c.val)
+			}
+			o, err := runQuint(quint, dir, argv)
+			if err != nil {
+				return fmt.Errorf("simulate: quint run of the possibles' predicates: %w\n%s", err, o)
+			}
+			out = o
+		}
+		if err := readWitnesses(out, preds); err != nil {
+			return err
+		}
 	}
 	if len(seqs) == 0 {
 		return nil
 	}
-	// sampled traces, a batch at a time (each its own ITF file), each
-	// looked through for every sequence not yet found
-	const batch = 100
-	base, seedErr := strconv.ParseInt(seed, 0, 64)
-	for done := 0; done < samples; done += batch {
-		n := min(batch, samples-done)
-		s := seed
-		if done > 0 {
-			if seedErr != nil {
-				break // a seed that is no integer: one batch, as given
-			}
-			s = fmt.Sprint(base + int64(done))
-		}
-		bdir := filepath.Join(dir, fmt.Sprintf("traces-%d", done))
-		if err := os.MkdirAll(bdir, 0o755); err != nil {
-			return err
-		}
-		argv := []string{"run", "--main", "simulate", "--mbt", "--out-itf", filepath.Join(bdir, "t_{seq}.itf.json"), "--n-traces", fmt.Sprint(n),
-			"--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(n), "--seed", s}
-		if be := os.Getenv("QUINT_BACKEND"); be != "" {
-			argv = append(argv, "--backend", be)
-		}
-		if out, err := runQuint(quint, dir, append(argv, file)); err != nil {
-			return fmt.Errorf("simulate: quint run of the possibles' traces: %w\n%s", err, out)
-		}
+	look := func(bdir string) (left int, err error) {
 		files, _ := filepath.Glob(filepath.Join(bdir, "*.itf.json"))
-		left := 0
 		for _, f := range files {
 			tr, err := itf.ReadFile(f)
 			if err != nil {
-				return fmt.Errorf("simulate: %s: %w", f, err)
+				return 0, fmt.Errorf("simulate: %s: %w", f, err)
 			}
 			acts := actionsOf(tr)
 			for _, c := range seqs {
@@ -148,6 +197,41 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 				left++
 			}
 		}
+		return left, nil
+	}
+	// sampled traces, a batch at a time (each its own ITF file), each
+	// looked through for every sequence not yet found
+	start := 0
+	if host != nil {
+		left, err := look(host.traces)
+		if err != nil || left == 0 {
+			return err
+		}
+		start = host.n
+	}
+	base, seedErr := strconv.ParseInt(seed, 0, 64)
+	for done := start; done < samples; done += traceBatch {
+		n := min(traceBatch, samples-done)
+		s := seed
+		if done > 0 {
+			if seedErr != nil {
+				break // a seed that is no integer: one batch, as given
+			}
+			s = fmt.Sprint(base + int64(done))
+		}
+		bdir := filepath.Join(dir, fmt.Sprintf("traces-%d", done))
+		if err := os.MkdirAll(bdir, 0o755); err != nil {
+			return err
+		}
+		argv := backendArgs([]string{"run", "--main", "simulate", "--mbt", "--out-itf", filepath.Join(bdir, "t_{seq}.itf.json"), "--n-traces", fmt.Sprint(n),
+			"--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(n), "--seed", s})
+		if out, err := runQuint(quint, dir, append(argv, file)); err != nil {
+			return fmt.Errorf("simulate: quint run of the possibles' traces: %w\n%s", err, out)
+		}
+		left, err := look(bdir)
+		if err != nil {
+			return err
+		}
 		if left == 0 {
 			break
 		}
@@ -155,30 +239,17 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 	return nil
 }
 
-// quintPredicates checks the predicates' possibles in one sampling, each
-// a witness (quint run --witnesses: in how many traces it held), then
-// takes a witness trace of each one found from a run that stops at it
-// (--invariant not(P)).
-func quintPredicates(quint, dir, file string, preds []*possibleCheck, steps, samples int, seed string) error {
-	if len(preds) == 0 {
-		return nil
+// backendArgs is argv with quint's backend, if QUINT_BACKEND names one.
+func backendArgs(argv []string) []string {
+	if be := os.Getenv("QUINT_BACKEND"); be != "" {
+		return append(argv, "--backend", be)
 	}
-	backend := func(argv []string) []string {
-		if be := os.Getenv("QUINT_BACKEND"); be != "" {
-			return append(argv, "--backend", be)
-		}
-		return argv
-	}
-	// the file first: --witnesses takes every argument after it
-	argv := backend([]string{"run", file, "--main", "simulate", "--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(samples), "--seed", seed})
-	argv = append(argv, "--witnesses")
-	for _, c := range preds {
-		argv = append(argv, c.val)
-	}
-	out, err := runQuint(quint, dir, argv)
-	if err != nil {
-		return fmt.Errorf("simulate: quint run of the possibles' predicates: %w\n%s", err, out)
-	}
+	return argv
+}
+
+// readWitnesses reads each predicate's count of the traces it held in
+// from a `quint run --witnesses` output: found if any.
+func readWitnesses(out string, preds []*possibleCheck) error {
 	for _, c := range preds {
 		var n, of int
 		found := false
@@ -191,19 +262,7 @@ func quintPredicates(quint, dir, file string, preds []*possibleCheck, steps, sam
 		if !found {
 			return fmt.Errorf("simulate: quint's output names no count of witness %s (possible %q):\n%s", c.val, c.p.Text(), out)
 		}
-		if n == 0 {
-			continue
-		}
-		c.quintFound = true
-		itfPath := filepath.Join(dir, c.val+".itf.json")
-		argv := []string{"run", "--main", "simulate", "--invariant", c.not, "--mbt", "--out-itf", itfPath,
-			"--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(samples), "--seed", seed}
-		if out, err := runQuint(quint, dir, append(backend(argv), file)); err == nil || !strings.Contains(out, "[violation]") {
-			continue // witnessed, its trace not taken again: reached all the same
-		}
-		if tr, err := itf.ReadFile(itfPath); err == nil {
-			c.quintWitness = actionsOf(tr)
-		}
+		c.quintFound, c.quintWitnessN = n > 0, n
 	}
 	return nil
 }
@@ -215,11 +274,14 @@ func runQuint(quint, dir string, argv []string) (string, error) {
 	return string(out), err
 }
 
-// actionsOf are a trace's actions after init (quint's mbt::actionTaken).
+// actionsOf are a trace's actions after init (quint's mbt::actionTaken),
+// but its stutters: a state whose action quint names "" (a step that
+// took none of the model's actions, as a calls binding's model takes
+// where nothing is called) is no action of a witness.
 func actionsOf(tr *itf.Trace) []string {
 	var out []string
 	for i, s := range tr.States {
-		if i > 0 {
+		if i > 0 && s.Action != "" {
 			out = append(out, s.Action)
 		}
 	}
@@ -244,17 +306,15 @@ func takesInTurn(acts []string, steps []binding.StepPattern) int {
 // reportPossibles prints each possible's verdict, quint's and the
 // evaluator's (rs, nil when it had no search: why in evalErr), and
 // returns 1 if one is reached by neither. An evaluator's "impossible"
-// against quint's witness is an error: the evaluator's bug.
-func reportPossibles(cs []*possibleCheck, rs []validate.PossibleResult, evalErr error, steps, samples, verify int) (int, error) {
+// against quint's witness is an error: the evaluator's bug. A failure
+// says what the possible asks (a named predicate's text) and how to
+// find the guard in bpath's model.
+func reportPossibles(bpath string, cs []*possibleCheck, rs []validate.PossibleResult, evalErr error, steps, samples, verify int) (int, error) {
 	code := 0
 	for i, c := range cs {
 		var r *validate.PossibleResult
 		if rs != nil {
 			r = &rs[i]
-		}
-		if r != nil && !r.Found && r.Complete && c.quintFound {
-			return 2, fmt.Errorf("simulate: possible %q: quint reached it (%s) and the Go evaluator's complete search says no trace of up to %d steps does: "+
-				"a bug of the evaluator (internal/qeval); report it with the binding", c.p.Text(), strings.Join(c.quintWitness, ", "), r.Depth)
 		}
 		var quintSays string
 		switch {
@@ -264,6 +324,8 @@ func reportPossibles(cs []*possibleCheck, rs []validate.PossibleResult, evalErr 
 			quintSays = "quint's sampled trace: " + strings.Join(c.quintWitness, ", ")
 		case c.quintFound && verify > 0:
 			quintSays = fmt.Sprintf("quint verify: a trace of up to %d steps", verify)
+		case c.quintFound && c.quintWitnessN > 0:
+			quintSays = fmt.Sprintf("quint: it held in %d of %d sampled traces of up to %d steps", c.quintWitnessN, samples, steps)
 		case c.quintFound:
 			quintSays = "quint: reached in the initial state"
 		case verify > 0:
@@ -271,7 +333,18 @@ func reportPossibles(cs []*possibleCheck, rs []validate.PossibleResult, evalErr 
 		default:
 			quintSays = fmt.Sprintf("quint: not reached in %d sampled traces of up to %d steps", samples, steps)
 		}
+		if r != nil && !r.Found && r.Complete && c.quintFound {
+			return 2, fmt.Errorf("simulate: possible %q: quint reached it (%s) and the Go evaluator's complete search says no trace of up to %d steps does: "+
+				"a bug of the evaluator (internal/qeval); report it with the binding", c.p.Text(), quintSays, r.Depth)
+		}
 		evalSays := "the Go evaluator: " + possibleEval(r, evalErr)
+		what := c.p.Text()
+		if c.p.Name != "" && c.when != "" {
+			what += " (when " + c.when + ")"
+		} else if c.p.Name != "" {
+			what += " (steps " + strings.Join(c.p.Steps, ", ") + ")"
+		}
+		nav := fmt.Sprintf("gotogether nav -binding %s shows each action disabled in a state, with why", bpath)
 		switch {
 		case r != nil && r.Found:
 			fmt.Printf("  possible %s: %s (the Go evaluator's search)\n", c.p.Text(), r.Verdict())
@@ -280,12 +353,12 @@ func reportPossibles(cs []*possibleCheck, rs []validate.PossibleResult, evalErr 
 		case r != nil && r.Complete:
 			code = 1
 			fmt.Printf("  FAIL    possible %s: %s; %s. The model forbids it: if a conforming run must be able to show it, find the guard that forbids it "+
-				"(gotogether nav -binding shows each disabled action with why) and loosen it; if it must be impossible, drop it from simulate.possible\n", c.p.Text(), evalSays, quintSays)
+				"(%s) and loosen it; if it must be impossible, drop it from simulate.possible\n", what, evalSays, quintSays, nav)
 		default:
 			code = 1
 			fmt.Printf("  FAIL    possible %s: %s; %s. The model may be too strict for any conforming run to show it: "+
-				"find the guard that forbids it (gotogether nav -binding shows each disabled action with why) and loosen it if the requirement allows it, "+
-				"or, if it is only rare, raise -samples, -steps or simulate.searchStates\n", c.p.Text(), quintSays, evalSays)
+				"find the guard that forbids it (%s) and loosen it if the requirement allows it; "+
+				"if it is only rare or deep, raise simulate.searchStates (or -states) for the evaluator's search, -samples or -steps for quint's\n", what, quintSays, evalSays, nav)
 		}
 	}
 	return code, nil

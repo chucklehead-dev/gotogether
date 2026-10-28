@@ -4225,12 +4225,18 @@ invariant and judges a code that never shows the scenario faithful.
   The predicates are vals of a module of their own
   (`binding.PossibleModule`), so a predicate quint refuses fails the
   search, never the binding's evaluation module.
-- **quint samples what the evaluator did not find**: the predicates in
-  one `quint run --witnesses` (how many traces each held in), then, for
-  each one found, a run with `--invariant not(P) --mbt` stopping at it,
-  whose ITF's `mbt::actionTaken` is the witness; sequences of names in
-  sampled traces' `mbt::actionTaken`, a batch of 100 ITF files at a
-  time, until each is found or the samples are spent. A step naming a
+- **quint samples what the evaluator did not find**, in the first
+  invariant's own run (a held one's, whose samples no violation cuts
+  short): the predicates as its `--witnesses` (how many traces each held
+  in: the witness), the sequences of names in the first 100 of its
+  traces, written with `--mbt` (their `mbt::actionTaken`, a stutter's
+  empty name dropped), then in batches of 100 traces of their own until
+  each is found or the samples are spent. A binding with no invariant,
+  or whose hosting run violated it, samples them in runs of their own.
+  They once had their own runs from the first, a predicate found by
+  quint another to take its trace (`--invariant not(P) --mbt`): 15-40 s
+  more per grist binding in CI's loop (library 23 s against 64 s now,
+  counters 16 against 33), for a random trace's action names. A step naming a
   parameter is the evaluator's alone (quint records no action's
   arguments). With `-verify`, predicates go to Apalache (`quint verify
   --invariant not(P)`: no counterexample is a bounded proof of

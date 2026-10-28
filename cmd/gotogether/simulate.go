@@ -34,7 +34,8 @@ import (
 // sequence of steps) are what the model must be able to do: each is
 // searched for by the Go evaluator (validate.Checker.Possible, bounded by
 // -states and the steps), and what it did not find sampled by quint
-// (possible.go). Each is reported reached with its witness, or fails:
+// (possible.go), in the first invariant's run where there is one. Each
+// is reported reached with its witness, or fails:
 // forbidden, when the evaluator's search saw the whole state graph, else
 // not found in the samples or within the bound.
 func simulate(args []string) (int, error) {
@@ -145,19 +146,65 @@ func simulate(args []string) (int, error) {
 			return 2, fmt.Errorf("simulate: %s's simulate section lists %s in both holds and allows", *bpath, n)
 		}
 	}
+	// the Go evaluator's search for the possibles first (milliseconds a
+	// state, the shortest witness with its arguments); quint samples what
+	// it did not find, in the first invariant's run (hostArgs) where
+	// there is one, the classified held one if any: a violated one's
+	// samples stop at the violation, and its possibles get runs of their
+	// own after the loop
+	var rs []validate.PossibleResult
+	var evalErr error
+	var left []*possibleCheck
+	var host *hostedSample
+	hostInv := ""
+	if len(possibles) > 0 {
+		depth := *steps
+		if *verify > 0 {
+			depth = *verify
+		}
+		rs, evalErr = checker.Possible(sim.Possible, validate.PossibleSearch{Constants: overrides, States: or(*states, sim.SearchStates), Depth: depth})
+		for i, c := range possibles {
+			if evalErr == nil && rs[i].Found {
+				c.quintSkip = "found by the Go evaluator, not sampled"
+				continue
+			}
+			left = append(left, c)
+		}
+		for _, inv := range invariants {
+			if hostInv == "" || holds[inv] && !holds[hostInv] {
+				hostInv = inv
+			}
+		}
+	}
 	code := 0
 	for _, inv := range invariants {
-		argv := []string{"run", "--main", "simulate", "--invariant", inv,
+		// the file first: --witnesses, if hostArgs adds it, takes every
+		// argument after it
+		argv := []string{"run", file, "--main", "simulate", "--invariant", inv,
 			"--max-steps", fmt.Sprint(*steps), "--max-samples", fmt.Sprint(*samples), "--seed", *seed}
+		var hosting *hostedSample
 		if *verify > 0 {
-			argv = []string{"verify", "--main", "simulate", "--invariant", inv, "--max-steps", fmt.Sprint(*verify)}
-		} else if be := os.Getenv("QUINT_BACKEND"); be != "" {
-			argv = append(argv, "--backend", be)
+			argv = []string{"verify", "--main", "simulate", "--invariant", inv, "--max-steps", fmt.Sprint(*verify), file}
+		} else {
+			argv = backendArgs(argv)
+			if inv == hostInv {
+				traces := filepath.Join(dir, "traces-host")
+				if err := os.MkdirAll(traces, 0o755); err != nil {
+					return 2, err
+				}
+				extra, n := hostArgs(left, *verify, *samples, traces)
+				if extra != nil {
+					argv, hosting = append(argv, extra...), &hostedSample{traces: traces, n: n}
+				}
+			}
 		}
-		cmd := exec.Command(*quint, append(argv, file)...)
+		cmd := exec.Command(*quint, argv...)
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		violated := strings.Contains(string(out), "[violation]")
+		if hosting != nil && err == nil && !violated {
+			hosting.out, host = string(out), hosting
+		}
 		if err != nil && !violated {
 			if strings.Contains(string(out), "Name 'step' not found") {
 				return 2, fmt.Errorf("simulate: %s has no step action to run on its own: add one that picks among its actions, "+
@@ -196,26 +243,10 @@ func simulate(args []string) (int, error) {
 		}
 	}
 	if len(possibles) > 0 {
-		// the Go evaluator's search first (milliseconds a state, the
-		// shortest witness with its arguments), quint's sampling for what
-		// it did not find
-		depth := *steps
-		if *verify > 0 {
-			depth = *verify
-		}
-		rs, evalErr := checker.Possible(sim.Possible, validate.PossibleSearch{Constants: overrides, States: or(*states, sim.SearchStates), Depth: depth})
-		var left []*possibleCheck
-		for i, c := range possibles {
-			if evalErr == nil && rs[i].Found {
-				c.quintSkip = "found by the Go evaluator, not sampled"
-				continue
-			}
-			left = append(left, c)
-		}
-		if err := quintPossibles(*quint, dir, file, left, *steps, *samples, *seed, *verify); err != nil {
+		if err := quintPossibles(*quint, dir, file, left, *steps, *samples, *seed, *verify, host); err != nil {
 			return 2, err
 		}
-		pc, err := reportPossibles(possibles, rs, evalErr, *steps, *samples, *verify)
+		pc, err := reportPossibles(*bpath, possibles, rs, evalErr, *steps, *samples, *verify)
 		if err != nil {
 			return 2, err
 		}
