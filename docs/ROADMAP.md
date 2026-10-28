@@ -460,34 +460,45 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Performance
 
-- **I37. Recording a step (S, after I13).** 10-18 µs and about 40
-  allocs a step (slog's JSON is 0.5-1 µs), no faster in parallel:
-  `MarshalLine` builds a `map[string]any` and lets encoding/json sort
-  it. An append-based encoder in the fixed key order, a golden test
-  against `json.Marshal(Attributes())` (the format pinned after I13
-  versions it): an estimated 8-10x. Example: an HTTP server recording
-  through qobshttp with a Tee of a buffered and an OTel sink, benchmarked
-  at `-cpu 1,4,8` before and after.
-- **I38. Reconstruct by index (S-M).** After I19's presizing:
-  `[]int` indices or `[]*Step` in place of 336-byte values copied
-  through five slices (100k steps take 0.9 GB): 4-5x less allocation.
+- **I37. Recording a step (S, after I13). Done** (3047ddb; HISTORY:
+  "Eleventh review: performance"). `Step.AppendLine` writes
+  json.Marshal's bytes in the keys' order, checked against json.Marshal
+  on generated steps and the repository's logs: a step to a step log
+  13.9 → 3.8 µs, 49 → 8 allocs; `MarshalLine` 13.2 → 1.6 µs. Left: the
+  example (an HTTP server through qobshttp, a Tee of a buffered and an
+  OTel sink, `-cpu 1,4,8`), and a measurement of the parallel case on
+  a machine that is not shared (here, at load 20, 3.6 µs a step on 4
+  cores against 4.1 on one); a `qobs.Thread`'s step still reads its
+  goroutine's id (19 µs here).
+- **I38. Reconstruct by index (S-M). Done** (075ce15). Indices into the
+  input, each step copied once: 100k steps 851 → 101 MiB, 1.30 → 0.37 s
+  (before I19's presizing), checked against the copying implementation
+  on generated bags and the repository's logs.
 - **I39. qeval's quick wins (S).** The bank explore is 270 KB and 3,000
   allocs a state: a struct seen-key in place of `k + "#" + p`, sized
   event slices, binary state keys, int literals parsed at Load, an
   integer kind switch, `SetGCPercent(400)` during a search (32% alone),
   an Explore benchmark: an estimated 2-3x for the graph, liveness and
   `Reach`.
-- **I40. The scheduler's small costs (S).** `Rates.Of` memoized per kind
-  in `Seeded` (a fault choice 280 ns against a schedule choice's 17);
-  no options closure per step; the goroutine lookup (2.7 µs under load,
-  the docs say 1) behind sharded maps and the context first.
-- **I41. Benchmarks in the nightly (M).** 13 benchmarks in the
-  repository, none for qeval, Reconstruct, Record, judging, grist's
-  stores, Linearize or the CTMC, where I23 and I37-I39 hid. A nightly
-  `-bench . -count=6` compared with benchstat, failing past a threshold.
-  Example: examples/perf, one system's virtual-time and CPU profiles
-  side by side with the costs a user should expect (a step about 1 µs,
-  a Store transaction about 10, a Service call about 16).
+- **I40. The scheduler's small costs (S). Done** (089889b). A fault
+  choice's rate found by its kind's dot-prefixes (120 → 57 ns), no
+  options closure or nemesis maps per step (a bare step 0 allocations,
+  a step with crash nemeses 2.3 → 1.0 µs and 7 → 0 allocations), a
+  task's step found from its context before its goroutine (a step
+  recorded in a simulation 26.8 → 3.9 µs), the goroutines' simulations
+  in 64 shards. Left: a step recorded with context.Background() still
+  reads the goroutine's id (26 µs here), as does every woven call.
+- **I41. Benchmarks in the nightly (M). Done** (65bfb9d, 79a03cb).
+  Benchmarks of Record, MarshalLine, ReadJSONL, Reconstruct, the
+  goroutine lookup, nemesis steps and a step in a simulation; the
+  nightly's `benchmarks` job measures every root-module package's at
+  HEAD and at the commit of a day before, interleaved on one runner
+  (`ci/bench.sh`), and fails on a significant change past 25% in
+  sec/op or 10% in B/op or allocs/op. Left: the nested modules'
+  benchmarks (grist's `BenchmarkRead`, on PostgreSQL too; qeval's once
+  I39 adds them, which join on their own in the root module), and
+  examples/perf (one system's virtual-time and CPU profiles side by
+  side with the costs a user should expect).
 
 ### Bold ideas (each its own decision before it starts)
 

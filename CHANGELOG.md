@@ -10,6 +10,15 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Performance (ROADMAP I37, I38, I40, I41): `qtrace.Step.AppendLine`
+  appends a step-log line to a buffer, the bytes `MarshalLine` and
+  `json.Marshal(s.Attributes())` give, about 8x faster; recording a step
+  to a step log is 3-4 µs and 8 allocations, Reconstruct allocates
+  about 1 KB a step, a simulated step records without a goroutine
+  lookup when its context carries its task, and a scheduling step
+  allocates nothing. `ci/bench.sh` and the nightly's benchmarks job
+  compare the core's benchmarks with a day before.
+
 - The Go evaluator matches quint where a differential test against
   both backends found it did not (ROADMAP I11): a `val` inside an
   expression is evaluated where its name is read (`{ val n = 1 / 0; 0 }`

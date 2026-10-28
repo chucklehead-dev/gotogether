@@ -3970,6 +3970,51 @@ under a week, M two to four, L more.
   s a history: extending a prefix's held state, T2d's next step).
 
 
+### Eleventh review: performance (I37, I38, I40, I41)
+
+The Go specialist's findings M2, M3, L1, L2, L3 and L5, measured before
+and after in docs/performance.md (item 9):
+- **Benchmarks first** (65bfb9d): Record, MarshalLine, ReadJSONL,
+  Reconstruct, the goroutine lookup, nemesis steps, a step in a
+  simulation, so each change below has its numbers.
+- **I37, the step log's encoder** (3047ddb). `Step.AppendLine` writes
+  json.Marshal's bytes without the map: a step to a step log 13.9 →
+  3.8 µs and 49 → 8 allocations. gotogether.steps/1 is published, so
+  the bytes are proved equal, not assumed: a differential test against
+  json.Marshal on generated steps (invalid UTF-8, U+2028, HTML's
+  characters, NaN's error, floats at the e-notation's edges, numbers
+  past int64, every field set or not) and on the repository's logs, its
+  ablations (an escape dropped, the exponent's cleanup) failing it.
+  Values the encoder does not know go to json.Marshal, so an error is
+  the same error.
+- **I38, Reconstruct by index** (075ce15): 100k steps 851 → 101 MiB.
+  Compared with the copying implementation, kept as the test's
+  reference, on generated bags of every record kind (copies and
+  conflicting duplicates, gaps, losses, watermarks, invocations,
+  settles, domain clocks against program order) and the repository's
+  logs. The reference made one finding: the settles were ranged over in
+  a map's order, so a run's settle issues came in either order; both now
+  range in sorted order.
+- **I40, the scheduler** (089889b): a fault choice's rate by the kind's
+  dot-prefixes (checked against the scan), no closure or maps per step
+  (a nemesis step 7 → 0 allocations), and a step's simulation found from
+  its context's task before its goroutine's id (`hooks.Site`, one lookup
+  where the discard check and the clock made two): a task's step 26.8 →
+  3.9 µs. A step recorded with a task's context from a goroutine the
+  simulation does not own now carries the simulation's time, as qenv's
+  own seams already found the task from the context first; it carried
+  the wall clock's.
+- **I41, the nightly** (79a03cb): `ci/bench.sh` measures HEAD and the
+  commit of a day before on one runner, interleaved, and fails past 25%
+  in time or 10% in allocations, significant by benchstat. A committed
+  baseline was the alternative, and the worse one: a runner's CPU
+  differs from night to night by more than a regression.
+
+Left: a step without its task in its context (woven calls, a
+`qobs.Thread`'s check) still reads the goroutine's id; ReadJSONL's
+decoding; examples/perf and the qobshttp example; the nested modules'
+benchmarks in the nightly.
+
 ## grist's build notes (docs/grist.md's §0 to §0.16)
 
 What each slice of grist, and each review of it, changed in its design

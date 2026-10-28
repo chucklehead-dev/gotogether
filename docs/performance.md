@@ -207,6 +207,83 @@ passes (at most 64 of a trace's parts: 37 s to one process at 10⁵).
 CI's lines are not changed here: validate's and the example's new tests
 add a few CPU seconds, and the next runs set them.
 
+### 9. The hot paths in Go: recording, Reconstruct, the scheduler (I37, I38, I40)
+
+The Go specialist's review measured recording a step at 10-18 µs and
+about 40 allocations, Reconstruct at 6 KB a step, a fault choice at 280
+ns, and found no benchmark for any of them. Benchmarks first (65bfb9d),
+then three changes, each checked against the code it replaced:
+
+- **The step log's encoder** (3047ddb). `MarshalLine` built a map of the
+  attributes and let encoding/json reflect over it and sort it.
+  `Step.AppendLine` appends the same line in the keys' order, escaping
+  as encoding/json does, and leaves a value it does not know (another
+  type, NaN or an infinity, an invalid json.Number) to json.Marshal:
+  gotogether.steps/1's bytes and errors are json.Marshal's
+  (`TestAppendLineAgainstMarshal`, generated steps of every field,
+  invalid UTF-8, U+2028, HTML's characters, floats at the e-notation's
+  edges, numbers past int64; and the repository's step logs). JSONLSink
+  encodes into pooled buffers outside its lock.
+- **Reconstruct by index** (075ce15). Its passes work on indices into
+  the input; a step is copied once, into its trace, and a gap's times
+  travel with the recorder's seqs instead of a map of every record
+  (`TestReconstructAgainstReference` compares it with the copying
+  implementation on generated bags of every record kind and the
+  repository's logs).
+- **The scheduler's small costs** (089889b). A rate found by the kind's
+  dot-prefixes (`TestRatesOfAgainstBruteForce`); a choice's options
+  named from the Sim's fields, the nemesis families' buffers kept from
+  step to step; a step's simulation found from its context's task
+  before the goroutine's id, which runtime.Stack's header makes cost 3
+  µs and more (one lookup, `hooks.Site`, where the discard check and the
+  clock made two); the goroutines' simulations in 64 shards. The
+  choices are the same, in the same order: explorations' double runs
+  and the stored corpora replay (root -short and checkout, hello,
+  streams and raftkv under GOTOGETHER_CHECK=1).
+
+Measured with `ci/bench.sh run` (the nightly's comparison): the base
+b382007 with these benchmarks against 79a03cb, interleaved, 6 runs each,
+on the shared 4-core machine at load 20-35, so times are within ±50%
+and only benchstat's significant changes are quoted; allocations are
+exact. The base is before I19's presizing of Reconstruct (−27 to −33%
+of its bytes).
+
+| benchmark | sec/op before → after | B/op | allocs/op |
+|---|---|---|---|
+| qtrace MarshalLine | 13.2 µs → 1.63 µs | 2457 → 512 | 45 → 1 |
+| qobs Record/PerStep (to io.Discard) | 13.9 µs → 3.84 µs | 3.24 Ki → 1.03 Ki | 49 → 8 |
+| qobs Record/Buffered | 16.9 µs → 4.08 µs | 3.24 Ki → 1.03 Ki | 49 → 8 |
+| qobs Record/Global (context.Background) | 15.0 µs → 4.96 µs | 3.24 Ki → 1.03 Ki | 49 → 8 |
+| qobs Record/Thread (a qobs.Thread's) | 27.8 µs → 18.7 µs | 3.37 Ki → 1.06 Ki | 52.5 → 9 |
+| qobs Record/Parallel (4 cores) | 15.5 µs → 3.57 µs | 3.38 Ki → 1.03 Ki | 49 → 8 |
+| qobs Record/Memory (no encoding) | 2.1 µs (~) | 1.03 Ki | 8 |
+| otelio RecordStepLog | 14.2 µs → 2.75 µs | 2833 → 704 | 42 → 5 |
+| qtrace Reconstruct 1k steps | 16.9 ms → 3.7 ms | 4.77 Mi → 0.77 Mi | 3.6k → 1.3k |
+| qtrace Reconstruct 10k | 71.9 ms → 20.5 ms | 64.0 Mi → 8.5 Mi | 31k → 10.5k |
+| qtrace Reconstruct 100k | 1.30 s → 0.37 s | 851 Mi → 101 Mi | 303k → 101k |
+| qtrace Reconstruct 100k, Lamport clock | 1.95 s → 0.79 s | 859 Mi → 107 Mi | 603k → 301k |
+| qtrace ReadJSONL 10k steps | 200 ms (~) | 64.5 Mi | 820k |
+| choice SeededFault (4 Rates keys) | 120 ns → 57 ns | 0 | 0 |
+| choice SeededFaultDefault | 105 ns (~) | 0 | 0 |
+| qenv BareSteps | 850 ns (~) | 48 → 0 | 1 → 0 |
+| qenv NemesisSteps (4 crashable processes) | 2.35 µs → 1.04 µs | 224 → 0 | 7 → 0 |
+| qenv RecordInSim/Context (a task's step) | 26.8 µs → 3.86 µs | 2.68 Ki | 6 → 4 |
+| qenv RecordInSim/Background | 34 µs (~) | 2.6 Ki | 7 → 6 |
+| qenv StoreTxn (each level) | 7-9 µs (~) | 1.22 Ki → 1.04 Ki | 14 → 10 |
+| qenv ServiceCall | 12 µs (~) | 1.39 Ki → 1.20 Ki | 25 → 19 |
+| hooks GoroutineID | 3-4 µs (~) | 32 | 1 |
+
+(~: no significant change.) What is left: a step whose task the context
+does not carry (context.Background() in a task, a woven call, a
+`qobs.Thread`'s check of its goroutine) still pays the goroutine's id,
+which Go offers no cheaper way to read; ReadJSONL's 82 allocations a
+step (encoding/json's decoding of each line) is the next of the
+recording path's costs, for `gotogether validate` on large logs. The
+parallel case shows little scaling here (3.6 µs a step on 4 cores
+against 4.1 on one), on a machine whose four cores ran other agents'
+tests at once; its recorder holds a lock only to stamp the step and to
+write it.
+
 ## For the maintainer's decision
 
 ### D2. A check's actors in one quint process
@@ -373,8 +450,10 @@ address without fewer runs.
 - **The goroutine lookup** (`hooks.GoroutineID`, runtime.Stack's header)
   costs 1 to 3 µs and was 28% of `BenchmarkServiceCall` (each call
   spawns a task, which registers its goroutine). Go has no cheaper
-  portable way; the fix would be fewer lookups (a Service handling calls
-  in a long-lived task), a change to the double's structure.
+  portable way: a step recorded by a task now finds it from its context
+  (item 9), and what is left would need fewer lookups (a Service
+  handling calls in a long-lived task), a change to the double's
+  structure.
 - **Generated module size** matters little: sharing the eventually
   runs' copies of the steps (a replay module of 499 lines down to 273)
   cut its typecheck by 7%. Not worth the generator's complexity.
@@ -401,7 +480,24 @@ Before: itf's Decode/Encode, otelio's recording, qenv's BareSteps. Added
 (d795465): qenv's `BenchmarkStoreTxn` (each isolation level),
 `BenchmarkServiceCall`, choice's `BenchmarkSeededFault` and
 `BenchmarkSeededSchedule`. They are what found item 5: a quadratic cost
-shows as ns/op growing with `-benchtime Nx`.
+shows as ns/op growing with `-benchtime Nx`. Added with item 9
+(65bfb9d): qobs's `BenchmarkRecord` (per step, buffered, global, a
+Thread, in parallel, and without encoding), qtrace's `MarshalLine`,
+`ReadJSONL` and `Reconstruct` (1k to 100k steps, with and without a
+domain clock), hooks' `GoroutineID`, qenv's `NemesisSteps`,
+`RecordInSim` and `OwnerLookupParallel`, choice's `SeededFaultDefault`.
+
+**In the nightly** (79a03cb): the `benchmarks` job runs `ci/bench.sh
+run` on every root-module package with a benchmark (a new one joins on
+its own), at HEAD and at the commit main was at a day before, built
+once each and run interleaved on one runner, 6 times: numbers from
+another night's machine would differ by more than a regression.
+`ci/bench.sh check` fails on a change benchstat finds significant (p <
+0.05) past 25% in sec/op (a shared runner's time moves 10-20% between
+runs) or 10% in B/op or allocs/op (which do not move). The runs and the
+table are the job's artifact. A regression kept is the next night's
+base: fix it, or say why in its commit. Per-push CI runs no benchmark
+(internal/ciconfig's `TestBenchmarksNightlyOnly`).
 
 Proposed, and not yet in CI:
 
@@ -411,6 +507,8 @@ Proposed, and not yet in CI:
   `4000x`, with and without GOTOGETHER_CHECK) and fail on ns/op that
   grows with the length: the regression item 5 was, which no CPU line
   would show until a long run timed out;
+- the nested modules' benchmarks (grist's `BenchmarkRead`, on
+  PostgreSQL too) in the same job;
 - the number of quint processes a suite starts, beside its CPU line:
   validate could count them (the wrapper's figures) under an environment
   variable, since a suite's cost is its process count; a test that
