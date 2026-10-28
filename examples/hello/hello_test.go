@@ -51,8 +51,8 @@ func TestFaithfulConforms(t *testing.T) {
 }
 
 // Every run within two delays and two faults, not a sample: the faithful
-// counter conforms in all 2508 (quint checks 49: the rest repeat their
-// steps), late requests among them.
+// counter conforms in all 4430, late requests among them (the Go
+// evaluator judges them, quint a sample).
 func TestExhaustive(t *testing.T) {
 	qtest.RequireQuint(t)
 	system().Exhaust(t, qtest.Bound{Delays: 2, Faults: 2, MaxRuns: 5000}).Expect(t, qtest.Conforms())

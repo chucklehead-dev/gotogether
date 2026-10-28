@@ -10,6 +10,15 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- The first hour (ROADMAP I28-I32): a test that catches what it expects
+  logs the catch in three lines (the run, the step and why the model
+  refuses it, where to navigate; `qtest.Run.Brief`), the whole report
+  under `GOTOGETHER_VERBOSE=1`; `qtest.Mutants` passes a mutant's catches
+  on under their own file:line. Quint's reserved names are a table
+  checked against quint (`item`, `int`, `str`, `bool` were missing from
+  the docs): LoadModel's error names the rename (`item_`) and the
+  binding's mapping, which `scaffold` writes and `lint -binding -src`
+  asks for.
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams

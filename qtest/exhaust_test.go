@@ -138,16 +138,32 @@ func TestExhaustTruncated(t *testing.T) {
 
 // A passing claim met by a failing run logs the run as the claim it
 // satisfies, in the claims' words, without the paths of files the test's
-// end removes: its conformance FAIL once read as the test's.
+// end removes: its conformance FAIL once read as the test's. It logs the
+// catch in three lines (which run, the step and why, where to look), the
+// whole report under GOTOGETHER_VERBOSE=1: hello's output showed no catch
+// at all, where its README promised one.
 func TestExpectedFailureLogged(t *testing.T) {
-	t.Parallel()
 	RequireQuint(t)
+	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	log := &logTB{TB: t}
-	System{Binding: "../validate/testdata/account.yaml", Run: race}.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))
+	sys.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))
+	brief := "gotogether: as expected, a withdraw step the model cannot take: 1 of 2 runs (failing: 1 rejects withdraw); the first, schedule "
+	head, _, _ := strings.Cut(log.logs, "\n")
+	lines := strings.Split(strings.TrimSpace(log.logs), "\n")
+	if !strings.HasPrefix(head, brief) || len(lines) != 4 ||
+		!strings.HasPrefix(lines[1], "    step ") || !strings.Contains(lines[1], ", withdraw(") || !strings.Contains(lines[1], "the model's withdraw(") ||
+		!strings.HasPrefix(lines[2], "    navigate: gotogether nav -run 'TestExpectedFailureLogged#1:schedule=") ||
+		!strings.HasSuffix(lines[2], "; GOTOGETHER_VERBOSE=1 prints the whole report") ||
+		!strings.Contains(lines[3], "1 conform, 1 reject withdraw") {
+		t.Errorf("want the catch in three lines, then the summary:\n%s", log.logs)
+	}
+	t.Setenv("GOTOGETHER_VERBOSE", "1")
+	log = &logTB{TB: t}
+	sys.Exhaust(t, Bound{Delays: 1}).Expect(log, Rejects("withdraw"))
 	for _, want := range []string{"as expected, a withdraw step the model cannot take: 1 of 2 runs (failing: 1 rejects withdraw); the first:",
 		"    schedule ", "its files are not kept: GOTOGETHER_KEEP=dir keeps them", "1 conform, 1 reject withdraw"} {
 		if !strings.Contains(log.logs, want) {
-			t.Errorf("logs lack %q:\n%s", want, log.logs)
+			t.Errorf("verbose logs lack %q:\n%s", want, log.logs)
 		}
 	}
 	for _, path := range []string{"module: ", "step log: "} {

@@ -1225,8 +1225,15 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 			// the claim's own count, then how the failing runs fail: they
 			// need not be the same (a pending call in a run that also
 			// mismatches)
-			return fmt.Sprintf("as expected, %s: %d of %d runs (failing: %s)%s; the first:\n%s", c, j.n, len(x.Runs), x.failingReasons(),
-				x.power(j.n), indent(x.describe(t, r, false), "    "))
+			if verbose() {
+				return fmt.Sprintf("as expected, %s: %d of %d runs (failing: %s)%s; the first:\n%s", c, j.n, len(x.Runs), x.failingReasons(),
+					x.power(j.n), indent(x.describe(t, r, false), "    "))
+			}
+			// the catch in three lines, what a newcomer reads: which run,
+			// the step and why, and where to look (the whole report is
+			// GOTOGETHER_VERBOSE's)
+			return fmt.Sprintf("as expected, %s: %d of %d runs (failing: %s)%s; the first, %s:\n    %s\n%s", c, j.n, len(x.Runs), x.failingReasons(),
+				x.power(j.n), x.runHead(r), r.Brief(), x.whereToLook(r))
 		}}
 	case j.ok:
 		return claimVerdict{ok: true}
@@ -1525,6 +1532,30 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 		return out // a passing claim's example, kept under GOTOGETHER_KEEP
 	}
 	return x.keepFiles(out)
+}
+
+// runHead names run r with what it was made of, as a report's first
+// line does: "seed 1, faults [...]".
+func (x *Exploration) runHead(r *Run) string {
+	switch {
+	case x.given:
+		return x.nameOf(r)
+	case x.search != nil:
+		return fmt.Sprintf("%s, made otherwise %v", x.nameOf(r), r.deviations())
+	}
+	return fmt.Sprintf("%s, faults %v", x.nameOf(r), r.Faults())
+}
+
+// whereToLook is a brief's last line: the navigator's command for run r
+// (its reproduce line where there is none), and how to see the report.
+func (x *Exploration) whereToLook(r *Run) string {
+	switch {
+	case x.test != "" && x.alone == nil && !x.fuzz:
+		return fmt.Sprintf("    navigate: %s; GOTOGETHER_VERBOSE=1 prints the whole report", x.navCommand(r))
+	case x.test != "" && x.alone == nil:
+		return fmt.Sprintf("    reproduce: %s; GOTOGETHER_VERBOSE=1 prints the whole report", x.reproduce(r))
+	}
+	return "    GOTOGETHER_VERBOSE=1 prints the whole report"
 }
 
 // writeSteps writes a step log, reporting whether it did.
