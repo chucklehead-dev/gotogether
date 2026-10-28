@@ -14,8 +14,10 @@
 // effects, whose delivery guarantee is declared (Effect, AtLeastOnce),
 // recorded and judged.
 //
-// Slice 1 (docs/grist.md §8.1): one event version, plain and keyed read
-// models folded from the log on every read, pinned Reads, commands with
+// Events have versions, each old one upcast to the next (Upcast), and
+// read models fold from snapshots (SnapshotEvery): docs/grist.md §2.1,
+// §2.2. Slice 1 (docs/grist.md §8.1): plain and keyed read
+// models, pinned Reads, commands with
 // read-set conditions and idempotency (a key's first answer is final,
 // refusals included), queries, processors with Emit, Skip and
 // Effect(AtLeastOnce), one node. The store contract is grist/store; the

@@ -249,8 +249,10 @@ func head(ctx context.Context, q querier, t string) (store.Position, error) {
 
 // indexed are the positions in (after, through] the index has under the
 // key of each of sel's types, distinct, in position order (newest first
-// if reverse); with one type and at most one tag every one matches, so a
-// limit is the query's.
+// if reverse); with at most one tag every one matches, so a limit is each
+// type's query's (the first n of the union are among the first n of each
+// type: a read model's first SnapshotEvery events, read from an index of
+// every one of its events, without the rest).
 func indexed(ctx context.Context, q querier, t string, sel store.Selector, after, through store.Position, reverse bool, limit int) ([]store.Position, error) {
 	seen := map[store.Position]bool{}
 	var out []store.Position
@@ -261,7 +263,7 @@ func indexed(ctx context.Context, q querier, t string, sel store.Selector, after
 	for _, typ := range sel.Types {
 		stmt := `SELECT pos FROM grist_index WHERE tenant = $1 AND k = $2 AND pos > $3 AND pos <= $4 ORDER BY pos ` + order
 		args := []any{t, indexKey(typ, sel.Tags), int64(after), int64(through)}
-		if limit > 0 && len(sel.Types) == 1 && len(sel.Tags) <= 1 {
+		if limit > 0 && len(sel.Tags) <= 1 {
 			stmt += ` LIMIT $5`
 			args = append(args, limit)
 		}

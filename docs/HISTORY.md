@@ -1761,6 +1761,88 @@ what every grist app wrote before its first claim. What changed:
   not). twophase's `MUTANT=earlyCommit` stops on an unsettled run
   (exit 2), as it did before.
 
+### H7's first half: upcasting and snapshots (grist)
+
+A team's first change to an event struct decoded every stored event of
+the old shape into the new one silently, and every read folded its read
+model's whole log. What was built (docs/grist.md §2.1, §2.2):
+- **Versions as Go structs.** `grist.NewEvent[E](app, name,
+  grist.Upcast(1, func(v EV1) E {...}), ...)`: the old struct kept under
+  a name of its own, one upcaster per old version to the next, the
+  version one more than the upcasters. Structs, not JSON transforms:
+  grist reads everything else from types (schemas, tags, generated
+  values), the compiler and Verify check the chain's links, and nothing
+  is a string that can drift from a type. Reads upcast in
+  `EventType.Decode` (folds, handlers, `Events`); appends write the
+  newest; a stored version newer than the app's is a
+  `*grist.NewerVersionError` by name (what grist-platform.md slice 4's
+  mixed rollout needs of a v1 node), never decoded.
+- **The model sees only the newest shapes**, and upcasting is checked to
+  be a function it need not see: Verify (boot) runs each upcaster over
+  generated values of its input (internal/values, gristsim's generator
+  moved there) and refuses one that panics, answers twice differently or
+  changes a tag (the index is the stored version's); `CheckUpcasters`
+  (`verify`, `model`, `gristtest.Upcasts`) also perturbs each field of
+  the input and refuses an upcaster none of whose outputs changes,
+  unless it `Drops` the field. The relay re-renders a row's events
+  stored at an older version (it reads them back and recomputes
+  obs.strs and obs.ints from the upcast bodies), so an old log is judged
+  by today's model: examples/library's `TestOldLogConforms` restores
+  version 1's log (testdata/logs/v1.jsonl, recorded by `TestRecordLog`
+  before the change: `gristtest.Capture`, `WriteLog`, `ReadLog`,
+  `TierConfig.Log`) into the real tier and its store-side steps conform
+  with today's after them; with the relay's re-rendering ablated, step
+  3 (the first addition) mismatches. The clients' binding is not run on
+  a restored log: its model starts empty, and no client saw the old log.
+- **grist.lock**, written by `<app> model`: each version's shape (a hash
+  of its JSON Schema and tags, its fields for a reader) and each read
+  model's fingerprint. A recorded version whose struct changed is the
+  generator's error, naming both shapes and the fix, so a struct
+  changed in place fails `<app> model` and `gristtest.Generated` rather
+  than a fold; an app older than the lock is refused too. Every grist
+  example and grist new's starter write one.
+- **Snapshots in the store** (`store.SnapshotStore`: memstore, simstore
+  with `store.<name>.snapshot` faults, torn or lost; sqlstore's
+  `grist_snapshots`; storetest's `Snapshots` on every tier), keyed by
+  (read model, key, fingerprint), checked before use (a checksum, the
+  fingerprint, a position within the read's, a decode onto a fresh
+  initial value). The fingerprint hashes the name, version, keys, each
+  folded type's newest shape and a probe (the fold's states over
+  generated events), so a changed fold's old snapshots are never read;
+  the version is the backstop, and the generator warns when the
+  fingerprint changed at the same version. A read takes one when it
+  folded `SnapshotEvery`'s events (default 1000).
+- **Snapshots invisible to short logs.** The first version looked up a
+  snapshot on every read: one more store transaction per read, which
+  moved every exploration's schedule (counters' reach claims failed,
+  and a stored choice sequence would no longer replay). A read now reads
+  its first SnapshotEvery events first and looks up a snapshot only when
+  there are that many (only such a read takes one), so a simulation's
+  short logs read as before; a long log's read costs about twice
+  SnapshotEvery's events whatever its length. sqlstore's index query
+  takes the LIMIT for a read of several types too.
+- **Checked against a fold from the start**: `App.CheckSnapshots`
+  (`gristtest.Snapshots`) compares the stored snapshot, and one taken
+  at each position that matters, plus its tail, with a fold of every
+  event; library's `TestSnapshots` explores decisions made from
+  snapshots (every two events) through a third of the puts torn or lost
+  and node crashes, all conforming. Mutants, all caught:
+  `snapshotPastItsPosition` and `fingerprintByVersion` (grist's own,
+  grist/testdata/mutants, by CheckSnapshots), `dropsCopies` (library's:
+  by CheckUpcasters and by the old log's `Mismatch("addBook")`).
+- **Cost** (library's `TestSnapshotsMakeStartFast`, SQLite, a fresh
+  node's first read of member a's loans): 10^4 events, 230 ms without
+  snapshots and 30 ms from one; 10^5, 2.5 s and 25 ms (1,000 events
+  read either way).
+- **examples/library at version 2**: book-added's copies renamed count
+  and a shelf added (`MainShelf` for version 1's), the model's
+  `bookAdded(book, count, shelf)` its only shape.
+
+Left: `grist.Reindex` (an upcaster that must change a tag); schema
+changes beyond upcasting (grist.md §9: an event split, a field whose
+meaning changed); a processor reading behind the head refolds from the
+start when the only snapshot is later than its trigger.
+
 ### H7's second half: the doubles published
 
 GR5-GR7 will build grist's streams, gRPC and controllers on the doubles

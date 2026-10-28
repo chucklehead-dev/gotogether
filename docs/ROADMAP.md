@@ -83,7 +83,12 @@ item as recommended:
   GR4. simgrpc (grpcledger), simlog and its Kafka/Kinesis adapters
   (streams) and kubesim (fleetrollout) become published packages or
   small modules, the examples importing them, before GR5-GR7 need them.
-  The second half done (HISTORY: "H7's second half: the doubles
+  The first half done (HISTORY: "H7's first half: upcasting and
+  snapshots"): versioned events with an upcaster chain checked by
+  generated values, old logs judged by today's model, grist.lock,
+  snapshots keyed by a fold's fingerprint in every store tier, checked
+  against a fold from the start (docs/grist.md §2.1, §2.2). The second
+  half done (HISTORY: "H7's second half: the doubles
   published"): `qenv/simlog` in the core, `qenv/simgrpc`,
   `qenv/kubesim`, `qenv/simlog/kafkalog` and `qenv/simlog/kinesislog`
   modules.
@@ -388,9 +393,8 @@ Then, in order, each item reviewed before the next:
   settle in its record (`qobs.Settled`) or its result, so a binding's
   `eventually` vals are judged knowing them, or the settle reported
   `Unsettled` while a process that has work is down.
-- **Slice 3's rest**: upcasting, snapshots, gristpure, gristhegel,
-  leases, screens and Datastar (the read models' cost on long histories
-  first: snapshots before a second real app).
+- **Slice 3's rest**: gristpure, gristhegel, leases, screens and
+  Datastar (upcasting and snapshots built in H7; `grist.Reindex` left).
 
 ## Release (R5)
 

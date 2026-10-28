@@ -20,13 +20,15 @@ of building it as a newcomer to grist.
 
 | file | what it is |
 |---|---|
+| [upcast.go](upcast.go) | book-added's version 1 (`BookAddedV1`: copies, no shelf) and its upcaster to version 2 (`BookAdded`: count, shelf `main`): the events stored at version 1 stay so, and every read upcasts them; the model knows version 2 only (docs/grist.md §2.1) |
+| [testdata/logs/v1.jsonl](testdata/logs/v1.jsonl) | version 1's log (joins, additions with copies, borrows never receipted, refusals), recorded by `TestRecordLog` before book-added's version 2 and never recorded over: every later version is judged on it |
 | [app.go](app.go), [commands.go](commands.go), [rules.go](rules.go), [queries.go](queries.go), [processors.go](processors.go), [mailer.go](mailer.go) | the events, the read models (`books` keyed by book, `loans` keyed by member), the commands, the rule (`loan-limit`, on `book-borrowed`: `grist.NewRule`), the query, the processor, the mailer's declaration (no double: gristsim serves its default) |
 | [model/library_rules.qnt](model/library_rules.qnt) | written by hand: the rules the skeleton calls (the loan limit's verdict and reads, `loanLimitRefusal` and `loanLimitNeeds`, which guard the generated `borrow`; the receipt a borrow asks the mailer for, `receiptsMailerSend`) |
 | [model/library.qnt](model/library.qnt) | written by hand: the invariants (copies on loan within the book's copies, at most three loans, at every step; every borrow receipted, after a settle: the mailer's served record ok, stronger than the generated `receiptsEventuallyHandled`, an ok effect step or a `grist.failed`, which it keeps beside it). That every receipt is for a borrow that happened is the generated `mailerSendServed`'s own guard, not an invariant |
 | [doubles_test.go](doubles_test.go) | the runs' doubles: none (the `noDedupe` mutant replaces it) |
-| [model/library_gen.qnt](model/library_gen.qnt), [model/library_steps.qnt](model/library_steps.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale), the catalog's obligations among them (`receiptsEventuallyHandled`, `mailerSendEventuallyServed`: eventual vals the store's binding judges at a settle, docs/grist.md §3.3.1) |
+| [model/library_gen.qnt](model/library_gen.qnt), [model/library_steps.qnt](model/library_steps.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt), [grist.lock](grist.lock) | generated (grist.lock: every stored version's shape, every read model's fingerprint; a version whose struct changed is the generator's error): `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale), the catalog's obligations among them (`receiptsEventuallyHandled`, `mailerSendEventuallyServed`: eventual vals the store's binding judges at a settle, docs/grist.md §3.3.1) |
 | [cmd/library](cmd/library/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
-| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`; `drop-loan-limit` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
+| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`, `dropsCopies`; `drop-loan-limit` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
 
 ## Which check catches which mutant
 
@@ -46,6 +48,11 @@ of building it as a newcomer to grist.
 | `TestMutant` (`wrongReceipt`) | borrows, no faults | `All(Rejects("mailerSendServed"))`: a receipt naming no borrow (member and book swapped), refused where the mailer sends it (its request not `receiptsMailerSend`'s for its trigger), the first record of it |
 | `TestRealHTTP` | the real tier: SQLite, real HTTP, the mailer's default double in process (`TierConfig.Local`: one `grist.Local` for the tier), every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |
 | `TestGenerated` | the generated files against the catalog | a block changed without regenerating |
+| `TestUpcasts` | book-added's upcaster over generated version 1 values (`gristtest.Upcasts`) | nothing: total, pure, the book's tag kept, every field carried |
+| `TestMutant` (`dropsCopies`) | the upcaster forgetting version 1's copies | `App.CheckUpcasters` names the ignored field, and version 1's log judged by today's model is `Mismatch("addBook")` at its first addition (count 0 where the command added 2) |
+| `TestOldLogConforms` | the real tier on version 1's log (`TierConfig.Log`): the node relays the old steps re-rendered as version 2 and mails the old borrows' receipts, then today's clients catalogue, borrow and return | nothing: the store's binding conforms and settles, and the snapshots of the log, taken at each position, agree with a fold from the start (`gristtest.Snapshots`) |
+| `TestSnapshots` | `TestFaithful`'s runs with a snapshot every two events, a third of the puts torn or lost (`store.library.snapshot`) | nothing: `Conforms`, `All(Settles)`, the snapshot faults reached |
+| `TestSnapshotsMakeStartFast` | a SQLite file of 10^4 (and, full mode, 10^5) events of member a's, a node started afresh | a fresh node's first read folds every event without snapshots (230 ms, 2.5 s) and 1,000 from the snapshot (30 ms, 25 ms) |
 
 ```sh
 go test -short ./...           # every claim (needs quint on PATH)

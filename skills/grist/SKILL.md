@@ -18,6 +18,7 @@ the walk-through: read its README's table first.
 - A failure: the Results, then [references/triage.md](references/triage.md).
 - The generated model, its holes, Quint's reserved names: [references/model.md](references/model.md).
 - A command touching several entities: [references/entities.md](references/entities.md).
+- An event whose shape changes (upcasters, grist.lock, a deployed version's log judged by today's model), a read model whose log is long (snapshots): [references/versions.md](references/versions.md).
 
 ## Steps
 
@@ -44,6 +45,7 @@ the walk-through: read its README's table first.
 - [ ] Every block is authorized or internal; `App.Verify()` is clean.
 - [ ] The generated files are committed and `TestGenerated` passes.
 - [ ] The generator printed no warning left unread (a fold's inputs changed).
+- [ ] grist.lock is committed; a changed event is a new version with an upcaster, `gristtest.Upcasts` passes.
 - [ ] The clients' side is judged too: `.WithBinding(calls, qtest.Linearize())`.
 
 ## Results
@@ -56,6 +58,7 @@ the walk-through: read its README's table first.
 | `reject <command>` (`Rejects`) | a commit the model forbids | the decision's rule, its condition, a read not covered (`covers`), a key answered twice |
 | `show a mismatch after <block>` | head, batch or causes differ | a raw append, or a fold disagreeing with its def |
 | `grist.ErrOutcomeUnknown` | an append's outcome is unknown | retry with the same id |
+| `event X version N changed shape since grist.lock was written` | a stored version's struct changed | [references/versions.md](references/versions.md): a new version, an upcaster |
 | `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |
 | `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
 | `NO VERDICT`, `checks the actors */clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
