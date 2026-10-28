@@ -23,8 +23,30 @@
 # /readyz; no client's try refused, no payout unknown, /metrics' lag at 0
 # before each settle. MUTANT=noDrainDelay or stopNodeAtSignal
 # shows what catches its mutants.
+#
+# SIZING=1 runs GR10 slice 6's sizing: builds cmd/counters and its sizing
+# binary, cmd/counters-sizing, side by side, and runs `counters sizing`
+# (grist.Main finds counters-sizing beside it) on the checked-in
+# recording (testdata/sizing/steps.jsonl: 400 calls on the real tier),
+# with the configuration mutant postRetries3 in force (a Gateway's three
+# tries inside the client's three attempts on commands) at 60/s and a
+# 3x30s burst: the chain ranks the retry layers, the simulation confirms
+# (SEEDS=, default 6; -1 the chain alone), and sizing.yaml says why for
+# every value.
 set -euo pipefail
 cd "$(dirname "$0")"
+if [ -n "${SIZING:-}" ]; then
+  dir=$(mktemp -d)
+  trap 'rm -rf "$dir"' EXIT
+  go build -o "$dir/counters" ./cmd/counters
+  go build -o "$dir/counters-sizing" ./cmd/counters-sizing
+  echo "== counters sizing, postRetries3 in force (gateway 3 x client 3 on commands), 60/s, a 3x30s burst"
+  "$dir/counters" sizing -steps testdata/sizing/steps.jsonl -rate 60/s -burst 3x30s \
+    -gateway-post 3 -client-attempts 3 -seeds "${SEEDS:-6}" -out "$dir/deploy/sizing.yaml"
+  echo "== deploy/sizing.yaml"
+  cat "$dir/deploy/sizing.yaml"
+  exit
+fi
 if [ -n "${SERVE:-}" ]; then
   dir=$(mktemp -d)
   trap 'kill "${pid:-}" 2>/dev/null || true; rm -rf "$dir"' EXIT

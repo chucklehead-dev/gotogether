@@ -429,12 +429,8 @@ func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args j
 		}
 	}
 	query := calls.IsQuery(c.App, name)
-	attempts := c.MaxAttempts
-	if attempts <= 0 {
-		attempts = DefaultMaxAttempts
-	}
-	budget := c.budget()
-	budget.deposit()
+	attempts := c.attempts()
+	c.budget().deposit()
 	seed := c.calls.Add(1)
 	var last error
 	refused := 0
@@ -455,18 +451,66 @@ func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args j
 			if refusedTry(rt) {
 				refused++
 			}
-			if try == attempts {
-				break
-			}
-			if !budget.withdraw() {
+			wait, ok, spent := c.retry(try, seed, rt.after)
+			if spent {
 				last = fmt.Errorf("%w (grist/client: the retry budget is spent: not retried)", last)
+			}
+			if !ok {
 				break
 			}
-			qenv.Sleep(ctx, c.backoff(try, seed, rt.after))
+			qenv.Sleep(ctx, wait)
 		}
 		return calls.Answer{Pending: true, Refused: refused}
 	})
 	return last
+}
+
+func (c *Client) attempts() int {
+	if c.MaxAttempts > 0 {
+		return c.MaxAttempts
+	}
+	return DefaultMaxAttempts
+}
+
+// retry decides retry n (1-based) of a call whose jitter seed is seed,
+// after a try that asked to wait at least floor: false once the call has
+// made MaxAttempts tries, or when the Budget is spent (spent), else the
+// backoff to wait first. Do and Policy decide through it alone.
+func (c *Client) retry(n int, seed uint64, floor time.Duration) (wait time.Duration, ok, spent bool) {
+	if n >= c.attempts() {
+		return 0, false, false
+	}
+	if !c.budget().withdraw() {
+		return 0, false, true
+	}
+	return c.backoff(n, seed, floor), true, false
+}
+
+// A Policy is a Client's retry decision without its requests: what Do
+// does between tries (MaxAttempts, the Budget, the jittered backoff),
+// for a load simulation to run with the library's own code in the loop.
+// Its methods are qload.Retrier's (grist/client does not import qload):
+// Request is a call's start (its deposit in the Budget), Retry(n) the
+// decision before retry n of a call (the backoff to wait, or false: the
+// call ends pending). The calls a Policy sees share the Client's Budget.
+// Not safe for concurrent use (a simulation's tasks run one at a time).
+type Policy struct {
+	c    *Client
+	seed uint64
+}
+
+// Policy is c's retry decision as a Policy.
+func (c *Client) Policy() *Policy { return &Policy{c: c} }
+
+// Request starts a call: its share of the Budget.
+func (p *Policy) Request(time.Time) { p.c.budget().deposit() }
+
+// Retry decides retry n (1-based) of a call: Do's decision, its jitter
+// drawn per retry (a Policy does not know which call retries).
+func (p *Policy) Retry(n int, _ time.Time) (time.Duration, bool) {
+	p.seed++
+	wait, ok, _ := p.c.retry(n, p.seed, 0)
+	return wait, ok
 }
 
 // answer is a call's final answer as its step records it.

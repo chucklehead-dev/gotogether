@@ -209,6 +209,15 @@ func TimeoutFor(p Params, data []Trajectory, s Service, b Burst, healthy func(St
 	return t
 }
 
+// probability is p for a reason's text: three decimals, or its order
+// of magnitude below a thousandth.
+func probability(p float64) string {
+	if p > 0 && p < 0.001 {
+		return fmt.Sprintf("%.1e", p)
+	}
+	return fmt.Sprintf("%.3f", p)
+}
+
 // timeoutLadder is the candidates TimeoutFor tries: start times 2^(k/2),
 // k = 0..12 (start to 64 × start).
 func timeoutLadder(start float64) []float64 {
@@ -232,7 +241,7 @@ func (t Timeout) explain(p Params, s Service, svc, wait, prob float64) string {
 	slices.Sort(tried)
 	var rs []string
 	for _, c := range tried {
-		rs = append(rs, fmt.Sprintf("%.3g at %s", t.Recovery[c], seconds(c)))
+		rs = append(rs, fmt.Sprintf("%s at %s", probability(t.Recovery[c]), seconds(c)))
 	}
 	fmt.Fprintf(&b, "; recovery after the burst %s", strings.Join(rs, ", "))
 	if t.Scale != 1 {

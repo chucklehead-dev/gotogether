@@ -44,3 +44,6 @@ func RelayFor(r *Relay, a *App) { r.app.Store(a) }
 
 // SnapshotSum is a snapshot's checksum, for a test that writes one.
 var SnapshotSum = snapshotSum
+
+// ExitStatus is a helper binary's exit status, as Main passes it on.
+type ExitStatus = exitStatus

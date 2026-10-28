@@ -351,7 +351,10 @@ Then, in order, each item reviewed before the next:
   30 s of drain inside the default 30 s grace. Slice 1 done (identity,
   probes, the drain: docs/HISTORY.md, grist §0.15), and slice 2
   (graceful termination, the lagging router, `gristsim.Cluster`,
-  `gristtest.NoClientErrors`: grist §0.16). After H7 (slice 4 needs
+  `gristtest.NoClientErrors`: grist §0.16), and slice 6 (sizing from
+  the app's steps: `qmeta.Size`, `LimitFor`, `TimeoutFor`,
+  `qload.Layered`, grist/gristload's report, `<app> sizing` a binary of
+  its own: grist §0.17). After H7 (slice 4 needs
   its upcasting; slice 11 grist slice 3's leases). The maintainer's
   decisions (2026-10-28, §10): no Kubernetes Lease, not even a hint; a
   45 s grace generated; a rewind fails closed until `<app> resume`; no

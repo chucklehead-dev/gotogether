@@ -324,11 +324,123 @@ type Client struct
     field Budget *Budget
     method (*Client) Command(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (grist.Receipt, error)
     method (*Client) Do(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) error
+    method (*Client) Policy() *Policy
     method (*Client) Query(ctx context.Context, env grist.Envelope, name string, args json.RawMessage) (json.RawMessage, grist.Position, error)
+type Policy struct
+    method (*Policy) Request(time.Time)
+    method (*Policy) Retry(n int, _ time.Time) (time.Duration, bool)
 type StatusError struct
     field Code int
     field Message string
     method (*StatusError) Error() string
+
+== github.com/chucklehead-dev/gotogether/grist/gristload
+const Call Kind = "call"
+const Command Kind = "command"
+const Query Kind = "query"
+func Main(app *grist.App)
+func Measure(app *grist.App, steps []qtrace.Step) (*Measured, error)
+func ParseBurst(s string) (Burst, error)
+func ParseRate(s string) (float64, error)
+func ReadSteps(paths ...string) ([]qtrace.Step, error)
+func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error)
+func Run(ctx context.Context, app *grist.App, args []string, stdout, stderr io.Writer) error
+type Block struct
+    field Name string
+    field Quint string
+    field Kind Kind
+    field Service qmeta.Service
+    field Growth Growth
+type Burst struct
+    field Factor float64
+    field For time.Duration
+    method (Burst) String() string
+type Gateway struct
+    field Commands int
+    field Queries int
+type Growth struct
+    field Intercept float64
+    field Slope float64
+    field From int64
+    field To int64
+    field Calls int
+    method (Growth) At(n int64) float64
+type Kind string
+type Load struct
+    field Rate float64
+    field Burst Burst
+    field Within time.Duration
+    field Prob float64
+    field HotShare float64
+    field Concurrency int
+    field MaxReplicas int
+    field Zones int
+    field Timeout time.Duration
+    field Client *client.Client
+    field Gateway Gateway
+    field Slow float64
+    field CPU time.Duration
+    field Heap int64
+    field EndpointLag time.Duration
+    field MaxConnections int
+    field Reserve int
+    field Seeds int
+    field Calibrate bool
+    field MaxStates int
+type Measured struct
+    field App string
+    field Blocks map[string]*Block
+    field Calls int
+    field Tenants map[string]int
+    field Hot string
+    field HotShare float64
+    field InFlight int
+    field Processors []Processor
+    field Steps int
+    method (*Measured) Of(kinds ...Kind) qmeta.Service
+    method (*Measured) Order() []string
+type Processor struct
+    field Name string
+    field On string
+    field PerCall float64
+    field Uses []string
+    field EffectTries int
+type Ranked struct
+    field Gateway int
+    field Attempts int
+    field Chain float64
+    field Seeds int
+type Recommended struct
+    field Gateway int
+    field Timeout time.Duration
+type Setting struct
+    field Key string
+    field Value any
+    field Because string
+    field Formula string
+    field Tool string
+    field Margin string
+    field Caveat string
+    field Evidence string
+    field InForce string
+type Sizing struct
+    field App string
+    field Load Load
+    field Measured *Measured
+    field Settings []Setting
+    field Findings []string
+    field Evidence map[string][]byte
+    field Retries []Ranked
+    field Recommended Recommended
+    method (*Sizing) Commands(gateway int, c *client.Client, timeout time.Duration) qload.Target
+    method (*Sizing) Get(key string) *Setting
+    method (*Sizing) Text() string
+    method (*Sizing) Trigger() qload.Trigger
+    method (*Sizing) Write(path, command string) error
+    method (*Sizing) YAML(command string) ([]byte, error)
+type UsageError struct
+    field Msg string
+    method (*UsageError) Error() string
 
 == github.com/chucklehead-dev/gotogether/grist/gristsim
 const CallTimeout = 2 * time.Second

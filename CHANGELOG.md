@@ -44,6 +44,14 @@ The first release. What a user meets, by module:
   marks a run whose Settle failed, `gotogether validate` every trace
   without a settle; the report's `hot cycle (evidence, no verdict ...)`
   line, no verdict changed.
+- `<app> sizing` (GR10 slice 6, grist part): grist/gristload
+  (`Measure`, `Report`, `Sizing.Write`, `Main`) sizes a grist app from a
+  run's steps into deploy/sizing.yaml, every value with its reason,
+  formula, tool, margin, caveat and the verdict on the setting in force;
+  `grist.Main`'s `sizing` runs the app's sizing binary, `<app>-sizing`,
+  found beside it or on PATH, so the app's binary links no qload or
+  qmeta; `client.Client.Policy` is the client's retry decision as a
+  `qload.Retrier`.
 - Sizing from the chain (GR10 slice 6, core part): `qmeta.RecoveryAfter`
   (the probability of being healthy within a bound after a `Burst`, from
   the distribution the burst ends in), `qmeta.Size` (the fewest workers

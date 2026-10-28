@@ -16,6 +16,7 @@ stressor ends, goodput is back to 90% of before", cheapest tier first.
 - Writing the simulation (Retrier contract, closed loops, triggers, measured service, SimKube workloads): [references/simulation.md](references/simulation.md).
 - Loading the application itself: [references/experiment.md](references/experiment.md).
 - Roles, calibration, alert rules, the flight recorder: [references/alerts.md](references/alerts.md).
+- Sizing workers, rate limits, timeouts and retry layers from the chain, and a grist app's `<app> sizing`: [references/sizing.md](references/sizing.md).
 
 ## Steps
 
@@ -28,6 +29,9 @@ stressor ends, goodput is back to 90% of before", cheapest tier first.
 4. Alert: mark the roles, `qmeta.CalibrateTimeout` with λ held, commit
    `Region`'s `Rules`.
 5. Check the mitigation's own logic against a small Quint model.
+6. Size: `qmeta.Size`, `LimitFor`, `TimeoutFor` against a declared
+   `Burst`, layers composed with `qload.Layered`; grist apps run
+   `<app> sizing`.
 
 ## Checklist
 

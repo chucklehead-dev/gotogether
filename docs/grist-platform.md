@@ -144,7 +144,7 @@ command's path).
 | a good server anywhere | grist (core) | stdlib, qobs, qrole | identity, `/livez` `/readyz` `/metrics` on a side port, the drain schedule, file sources, `GOMEMLIMIT`, gauges, the store-incident checks |
 | the simulated cluster | qenv, qload (core); gristsim | as today | terminate, router, hosts and zones, store failover and restore, file projection, a delayed scaler (§4) |
 | Kubernetes-shaped output | grist/kube (new module, no client-go) | grist, yaml.v3 | `<app> manifests`, the lint's rules (§5.2), `<app> sizing`'s writer |
-| sizing | grist/gristload (new package of grist, test-only by use) | qload, qmeta, gristsim | `<app> sizing`'s engine: never linked into a production binary unless asked |
+| sizing | grist/gristload (a package of grist, linked only by the app's sizing binary, `cmd/<app>-sizing`: `func main() { gristload.Main(app) }`) | qload, qmeta (gristsim at slice 7) | `<app> sizing`'s engine: `grist.Main` runs `<app>-sizing` found beside the app's binary or on PATH, so the binary an operator deploys links none of it (slice 6, as built) |
 | the toolkit against a cluster | gotogether-kube (new module, its own executable) | client-go, grist/kube | `gotogether kube`: the kind tier's driver (§7), the canary gate's analysis job (§5.1), the lint against a live cluster |
 | the API server as a source | grist-kube or `<app>-kube` (GR7's module, its own executable and Deployment) | client-go, grist/client | CRs as commands sent to the app's HTTP API, status from its answers (§5.6) |
 
@@ -638,7 +638,7 @@ simulating the scheduler or the kubelet beyond the outcomes an app sees.
 | `<app> model` (today) | the model's skeleton and bindings | `gristtest.Generated` |
 | `<app> manifests [-gateway] [-rollouts] [-keda] [-slo] [-sizing deploy/sizing.yaml]` | deploy/*.yaml, annotated | kubeconform; `gristtest.Generated`'s diff; `manifests -lint` clean |
 | `<app> catalog -diff OLD` | safe / readers first / breaking, each change named | CI against the deployed catalog |
-| `<app> sizing -steps FILES [-rate R] [-burst 3x30s]` | deploy/sizing.yaml (values, reasons, tool, margin) and deploy/sizing/ (SVG fields, recovery curves) | §8's confirmation runs |
+| `<app> sizing -steps FILES -rate R -burst 3x30s` (slice 6: runs `<app>-sizing`) | deploy/sizing.yaml (values, reasons, formula, tool, margin, the setting in force's verdict, caveat) and deploy/sizing/ (the chain's fields as SVG) | §8's confirmation runs (qload, the declared seeds) |
 | `<app> steps -export` | the store's committed steps, as JSONL | the bindings |
 | `<app> kube ...` | nothing in the app's binary: execs `<app>-kube` or `grist-kube` (§3.1, §5.6) | GR7 |
 
@@ -729,7 +729,10 @@ failing setting is.
    configuration: it **ranks** settings and draws the recovery region
    (`Region`, `RecoveryWithin`), and its field (`SVG`) is the evidence
    a reviewer reads. Calibrated on simulated trajectories with
-   `CalibrateTimeout` (λ held) before any number is quoted.
+   `CalibrateTimeout` (λ held) before any number is quoted. (As built,
+   calibration is `-calibrate`, tens of chain solves; without it the
+   chain's numbers are quoted only as rankings, beside the simulation's
+   seeds.)
 2. **The simulation**: `qload` with the measured service
    (`Service.Draw`), the retry library in the loop, `qload.Autoscaler`
    for HPA; then the app itself under load (`gristsim.Load`: gristsim
@@ -757,30 +760,97 @@ failing setting is.
 
 ### 8.4 The API
 
-Generic helpers go into qmeta and qload (core), the catalog's part into
-grist/gristload:
+As built (slice 6; docs/HISTORY.md, grist §0.17), the generic helpers
+in qmeta and qload (core), the catalog's part in grist/gristload:
 
 ```text
-// package qmeta: Measure already gives a measured Service (Mean, CV, Exponential, Draw)
-func Size(p Params, peak float64, healthy func(State) bool, within float64, prob float64) (workers int, r *Region)
-	// the smallest Workers whose RecoveryWithin(healthy, within) is at least prob from every state the peak reaches
-func TimeoutFor(p Params, data []Trajectory, s Service) (timeout float64, why string)
-	// CalibrateTimeout's fit, bounded below by the service's p99.9 plus queueing at the target u,
-	// refusing one that makes a queue absorbing (queue > μ × timeout)
+// package qmeta: Measure already gives a measured Service (Mean, CV, Exponential, Draw; now Quantile)
+type Burst struct{ Rate, Duration float64 }
+func RecoveryAfter(p Params, b Burst, healthy func(State) bool, within float64) float64
+	// the probability of having been healthy within `within` after the burst, from the empty
+	// system: the burst's end distribution (Chain.Distribution) weighed by each state's RecoveryWithin
+func Size(p Params, b Burst, healthy func(State) bool, within, prob float64, most int) Sized
+	// the fewest Workers whose RecoveryAfter is at least prob (bisected; brute-force tested)
+func LimitFor(p Params, factor, duration float64, healthy func(State) bool, within, prob, hi float64) float64
+	// the highest λ that recovers from factor × λ for duration: a hop no replica count speeds up
+func TimeoutFor(p Params, data []Trajectory, s Service, b Burst, healthy func(State) bool, within, prob float64) Timeout
+	// floor = p99.9 service + Erlang C's p99.9 wait at λ × (1+CV²)/2, raised for regular service to
+	// the burst's backlog drain; then the shortest rung of floor × 2^(k/2) that recovers, the chain
+	// calibrated first (CalibrateTimeout, λ held) when data are given
+type Params struct{ ...; Unit int }  // the chain counts requests in units: ms service behind s timeouts
 // package qload
-type Autoscaler struct{ Metric string; Target float64; Sync, Stabilization, Startup time.Duration; Min, Max int }
-	// ServerConfig.Replicas behind a balancer, changed over time by the Autoscaler (a lagging, closed loop)
+func Layered(inner int, outer Retrier) Retrier  // a proxy's tries inside a client's attempts
+// package client (grist/client)
+func (c *Client) Policy() *Policy  // Do's own retry decision, a qload.Retrier by its methods
 // package gristload (grist)
-func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error) // every row of §8.3: value, formula, tool, margin, evidence
+func Measure(app *grist.App, steps []qtrace.Step) (*Measured, error)
+func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error) // value, formula, tool, margin, caveat, evidence
+func Main(app *grist.App)  // cmd/<app>-sizing's entry point; grist.Main's `sizing` runs it by name
 ```
 
-Each value is printed with its formula (§8.3's criterion column: the
-timeout from p99.9 plus queueing at the target u, the retry budget
-below the storm's threshold with layers multiplied, the grace and pool
-sums, the lease bound).
+`qload.Autoscaler` is slice 7's. Each value is printed with its
+formula (§8.3's criterion column: the timeout's floor and ladder, the
+retries ranked with layers multiplied, the grace and pool sums), the
+tool that produced it, its margin, the verdict on the setting in force
+(`inForce: advised against: ...`) and its caveat.
 Never sized from the mean when the CV is far from 1 or the process runs
 under a CPU limit. VPA in recommendation mode is a cross-check of the
 memory row, never its source.
+
+What the design said that building it corrected:
+
+- **`Size(p, peak, ...)` "from every state the peak reaches".** A peak
+  without a duration reaches every state (held long enough, any rate
+  above capacity does), and a minimum over the reachable states is 0
+  for nearly every setting (the orbit's bound is reachable with some
+  tiny probability). Built: a `Burst` (rate and duration), and recovery
+  as a probability, the burst's end distribution weighed by each state's
+  chance to recover (`RecoveryAfter`): the chain's counterpart of the
+  share of seeds `qload.Recovers` says recover.
+- **`TimeoutFor` as "CalibrateTimeout's fit".** The fit is the chain's
+  correction of its own timeout, not a timeout to set. Built: the floor
+  is latency (p99.9 service plus Erlang C's p99.9 wait), the absorbing
+  rule is the burst's backlog (grist's HTTP server has no queue bound:
+  for regular service the timeout must outlast the backlog's drain),
+  and the chain picks the shortest rung above the floor that recovers;
+  calibration, when asked (`-calibrate`), scales the rungs. In counters
+  the floor itself recovers: the timeout is latency's, and the chain's
+  part is to veto one (none recovers: the retries keep the storm).
+- **The chain at a grist app's scale.** μ × Workers × Timeout is the
+  queue a timeout lets through; 82 commits/s behind a 2 s timeout is a
+  queue of hundreds and an orbit of a thousand, too many states to
+  solve per setting. `Params.Unit` counts requests in units (the drift
+  kept, the noise lost: `TestUnitsKeepTheDrift`), chosen per hop and
+  timeout so every setting of a hop is ranked on one state space; a hop
+  whose burst stays under half its capacity is not solved at all (no
+  queue builds to tip), and its reason says so.
+- **FindTrigger for the margin.** grist does not depend on Hegel
+  (qhegel is a module of its own), and the declared burst has one
+  dimension to shrink: the margin is a bisection of the burst's factor
+  over seeded simulations (`qload.Mostly`), the smallest failing burst.
+  FindTrigger stays the search for a test (retrystorm's).
+- **gristload "test-only by use" (or `grist.Main(App,
+  gristload.Sizing())`).** Either links qload and qmeta into the app's
+  binary. Built as decision 4's pattern: `<app> sizing` runs
+  `<app>-sizing`, beside the binary or on PATH, with an install hint
+  when absent; counters' `TestSizingStaysOutOfTheBinary` checks
+  `go list -deps` of both.
+- **CPU and memory from profiles.** gristload takes CPU per request
+  (`-cpu`) and the peak heap (`-heap`) as measured inputs and does the
+  arithmetic; it reads no pprof file (no dependency), and without them
+  the rows are not sized. Growth with the log comes from the same steps
+  (a command's duration against its commit's head, least squares), not
+  from gristsim prologues: counters' create grew 8 to 11 ms over 500
+  events.
+- **A hot tenant's service.** No step records how long a tenant's head
+  is held; the command's call is its upper bound, and on SQLite every
+  tenant shares one writer, so the whole store is that hop.
+- **The chain's limits are not the simulation's.** retrystorm's
+  `TestSizedFromTheChain`: the chain's highest recovering rate for
+  immediate retries is 7.2/s, where the simulation still recovers at 9;
+  the ordering (budget above immediate above backoff alone) is what
+  holds. The report quotes chain numbers as rankings beside the
+  simulation's seeds.
 
 ### 8.5 What the chain can and cannot predict
 
@@ -799,13 +869,27 @@ smallest failing stressor or the nearest failing setting), its caveat,
 and the file of its evidence.
 
 ```text
-# deploy/sizing.yaml (generated by `shop sizing`)
-server:
-  requestTimeout: {value: 2s, because: "p99.9 210 ms under 40/s; recovery within 60 s 0.999 at 2s, 0.62 at 500ms",
-                   tool: calibrated chain + qload (6 of 6 seeds), margin: "fails at 450ms", evidence: sizing/timeout.svg}
+# deploy/sizing.yaml (generated by `counters sizing -steps testdata/sizing/steps.jsonl -rate 60/s
+#   -burst 3x30s -gateway-post 3 -client-attempts 3`: postRetries3 in force; abridged)
 gateway:
-  retries: {value: {GET: 1, POST: 0}, because: "POST at 3 attempts × client 3 has a stable storm above 55/s",
-            tool: qload + FindTrigger, margin: "smallest trigger +15/s for 40s"}
+  retries:
+    POST:
+      value: 0
+      because: 'tenant t1 commits one command at a time (μ 82/s, measured mean 12.2ms) at 37.9/s;
+        recovery within 1m0s after a 3x30s burst: gateway 1 × client 3 1.000 (simulated: 6 of 6 seeds
+        recover); gateway 2 × client 3 0.079 (0 of 6); gateway 3 × client 3 3.0e-06 (0 of 6); ...'
+      tool: chain + qload (6 seeds)
+      margin: its smallest failing burst 4.0x30s (+113/s at the tenant), from 6 seeds each
+      inForce: 'advised against: gateway 3 × client 3 recovers with 3.0e-06 by the chain, 0 of 6 seeds in simulation'
+tenant:
+  rateLimit:
+    value: 69.1/s
+    because: 'tenant t1''s commands commit one at a time (its head: workers 1 at any replica count)
+      at μ 82/s; under gateway 3 × client 3 its recovery after the burst is 3.3e-04 at 1 to 8
+      replicas alike: it would need 2 workers (qmeta.Size), which no replica count gives; ...'
+terminationGracePeriodSeconds:
+  value: 45
+  because: drain delay 5s (endpoint lag 5s) + shutdown 10s (≥ p99.9 request 161ms) + settle 10s + flush 10s + margin 10s
 ```
 
 ## 9. Slices
@@ -886,13 +970,27 @@ ablated.
    the flag's file directly) is `Some(Rejects(...))` at the command
    when two nodes see two versions (the model decides on the logged
    flag); the faithful app conforms through both.
-6. **Sizing, the chain and the arithmetic (grist/gristload, M).**
+6. **Done** (docs/HISTORY.md (grist §0.17)). **Sizing, the chain and the arithmetic (grist/gristload, M).**
    Measurement from steps, per-hop chains, calibration, the arithmetic
    rows, `<app> sizing` with evidence. **Example: counters**, grist/client's
    budget as the `Retrier`. **Acceptance**: the configuration mutant
    `postRetries3` (Gateway 3 × client 3 on commands) is advised against,
    and `qload.Recovers` agrees: the recommended setting `Recovered()`,
    the mutant `StaysDegraded()` after the declared burst, in most of 6 seeds.
+   As built (§8.4's corrections; docs/HISTORY.md (grist §0.17)): counters'
+   `TestSizingAcceptance` at `-rate 60/s -burst 3x30s` (6 of 6 and 0 of
+   6); at 40/s the busiest tenant's burst (76/s) stays under its
+   measured 82/s and every setting recovers, the mutant's by the chain
+   with 0.37: the declared load must reach the hop, and the tool says
+   which hop it reaches. The sizing binary is `cmd/<app>-sizing`, run by
+   `<app> sizing` (decision 4's pattern), its input a checked-in
+   recording of the real tier (`testdata/sizing/steps.jsonl`), so the
+   test is one machine's measurement, once. Sized: POST and GET
+   retries, the per-try timeout, the minimum replicas (a zone lost), a
+   hot tenant's rate limit, each processor's lag under a slow
+   dependency, the pool, the grace, CPU and memory from given
+   measurements, and a command's growth with the log; not the lease
+   (slice 11) or the scaler (slice 7).
 7. **The app under load and the scaler (qload + gristsim, M).**
    `gristsim.Load`, `qload.Autoscaler`, sizing's HPA rows. **Example:
    counters** (processors' lag as the queue). **Acceptance**: an HPA

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,10 @@ import (
 //	           stubbed) and model/<app>.qnt (no invariant yet)
 //	           where there are none.
 //	           It lists the holes the app's model has not filled
+//	sizing     runs <app>-sizing, the app's sizing binary (gristload.Main), with
+//	           the arguments after it: found beside this binary, else on PATH
+//	           (qload, qmeta and gristsim stay out of the app's binary, which
+//	           links none of them); its exit status is sizing's
 //	serve      the HTTP API (NewHandler, opts applied) on grist/sqlstore over -db
 //	           (sqlite:PATH, postgres:DSN), the node (App.Start: relay, pollers,
 //	           the tenant watcher) beside it, every step recorded to -steps
@@ -74,7 +79,10 @@ func Main(app *App, opts ...ServeOption) {
 	err := mainArgs(ctx, app, os.Args[1:], os.Stdout, os.Stderr, opts...)
 	stop()
 	var usage *usageError
+	var status exitStatus
 	switch {
+	case errors.As(err, &status):
+		os.Exit(int(status))
 	case errors.As(err, &usage):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -89,6 +97,12 @@ type usageError struct{ Msg string }
 
 func (e *usageError) Error() string { return e.Msg }
 
+// An exitStatus is a command's exit status, passed through (a helper
+// binary's: sizing's).
+type exitStatus int
+
+func (e exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
+
 // mainUsage is the commands' summary.
 const mainUsage = `commands:
   catalog                     print the App's registry as JSON (App.Catalog)
@@ -96,6 +110,7 @@ const mainUsage = `commands:
   model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings under DIR (default .)
       -check                           write nothing: fail if a generated file differs (CI's diff)
       -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt where there are none
+  sizing [flags]              run <app>-sizing (gristload.Main: deploy/sizing.yaml from the app's steps), a binary of its own
   serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
       -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
       -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port; on loopback in a pod, refused)
@@ -136,11 +151,55 @@ func mainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 		return modelMain(app, args[1:], stdout)
 	case "serve":
 		return serveMain(ctx, app, args[1:], stderr, opts)
+	case "sizing":
+		return helperMain(ctx, app, "sizing", args[1:], stdout, stderr)
 	case "help", "-h", "-help", "--help":
 		fmt.Fprintf(stdout, "usage: %s <command>\n%s\n", app.Name, mainUsage)
 		return nil
 	}
 	return &usageError{Msg: fmt.Sprintf("%s: unknown command %q\n%s", app.Name, args[0], mainUsage)}
+}
+
+// helperMain runs the app's helper binary for command name,
+// <app>-<name>, with args: the one beside the running binary, else the
+// one on PATH, its output the command's and its exit status passed
+// through (exitStatus). The tooling a helper links (sizing's qload,
+// qmeta and gristsim) stays out of the app's binary, which an operator
+// deploys (docs/grist-platform.md decision 4's pattern: a binary of its
+// own, found by name, as gotogether nav finds gotogether-nav).
+func helperMain(ctx context.Context, app *App, name string, args []string, stdout, stderr io.Writer) error {
+	bin := app.Name + "-" + name
+	path := ""
+	if self, err := os.Executable(); err == nil {
+		if p := filepath.Join(filepath.Dir(self), bin); isExecutable(p) {
+			path = p
+		}
+	}
+	if path == "" {
+		p, err := exec.LookPath(bin)
+		if err != nil {
+			return fmt.Errorf("%s %s: no %s beside this binary or on PATH: %s is a binary of its own, so that this one links none of its tooling: "+
+				"write cmd/%s/main.go as `func main() { gristload.Main(<your package>.App) }` (grist/gristload) and go install it, or go build -o it beside %s",
+				app.Name, name, bin, bin, bin, app.Name)
+		}
+		path = p
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, stdout, stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && exit.ExitCode() > 0 {
+			return exitStatus(exit.ExitCode())
+		}
+		return fmt.Errorf("%s %s: %s: %w", app.Name, name, path, err)
+	}
+	return nil
+}
+
+// isExecutable reports whether path is a regular file someone may run.
+func isExecutable(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o111 != 0
 }
 
 // modelMain is the model command (the generator's, grist/internal/gen).

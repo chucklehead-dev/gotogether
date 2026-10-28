@@ -2226,6 +2226,30 @@ CPU (the rolling restart's three bindings and two mutants' builds and
 runs); the real half, about 35 s of wall time and the mutant's three
 rounds 50 s, is full mode.
 
+### GR10 slice 6: sizing from the chain and the arithmetic
+
+docs/grist-platform.md §9's slice 6, docs/HISTORY.md (grist §0.17). The
+maintainer's ask, "qload or qmeta to estimate limits, retries,
+timeouts": qmeta sizes against a declared `Burst` (`RecoveryAfter`, the
+probability of being healthy within a bound after it; `Size`, the
+fewest workers; `LimitFor`, the highest rate a one-at-a-time hop
+survives; `TimeoutFor`, the latency floor then the shortest rung that
+recovers), each search checked against brute force; `Params.Unit` makes
+a grist app's millisecond service behind second timeouts solvable;
+`qload.Layered` composes a Gateway's tries inside a client's attempts;
+grist/client's `Policy` is its own retry decision for a simulation.
+grist/gristload measures an app's service times from a run's steps and
+writes sizing.yaml with every value's reason, formula, tool, margin,
+caveat and the verdict on the setting in force; `<app> sizing` runs
+`<app>-sizing`, a binary of its own (decision 4's pattern), so the app's
+binary links no qload or qmeta. counters' acceptance: the mutant
+`postRetries3` advised against and staying degraded (0 of 6 seeds) where
+the recommended setting recovers (6 of 6), at 60/s, since at the
+design's 40/s the busiest tenant's burst stays under its measured
+capacity. The two findings are rows: replicas never speed up a hot
+tenant (a rate limit instead), and a slow dependency's lag is no pod's
+to clear. What the design got wrong is §8.4's list.
+
 ### P7: grist's obligations generated
 
 ROADMAP's P7 as built (docs/grist.md §3.3.1). The decisions it left:
@@ -4996,6 +5020,70 @@ What the platform note's acceptance got wrong:
   backend's change overtake another's, which a load balancer acting on
   the latest state cannot. The view now takes changes in order, and
   `Rolling` waits only for the node to be back, as a StatefulSet does.
+
+### grist §0.17: What building GR10's slice 6 changed (sizing)
+
+docs/grist-platform.md §9's slice 6 and §8.4's corrections. Built, each
+with a test that fails with it taken out:
+
+- **Sizing against a burst** (qmeta/size.go). `RecoveryAfter(p, Burst,
+  healthy, within)`: the chain at the burst's rate from the empty
+  system for its duration (`Chain.Distribution`, uniformization
+  forward, which `Mean` now shares), then each end state's
+  `RecoveryWithin` at the base rate, weighed. `Size` doubles then
+  bisects the workers, `LimitFor` bisects the rate to 1%, `TimeoutFor`
+  bisects a ladder of `floor × 2^(k/2)`; `TestSizeAgainstBruteForce`,
+  `TestLimitForAgainstBruteForce`, `TestTimeoutForAgainstBruteForce`
+  compare each with every value on random small chains (and check the
+  monotonicity the bisection rests on); with the bisections taken out
+  (the first rung, the doubling's count) they fail. The floor is the
+  measured p99.9 plus Erlang C's p99.9 wait (`TestErlangFloor`: the
+  M/M/1 formula at ρ 0.5).
+- **Units** (`Params.Unit`). Every chain state is a unit of g requests:
+  λ, capacity, queue and orbit divided, ceil(W/g) workers sharing the
+  capacity; `Loss` compares in requests, `Rules` multiply their
+  thresholds back. `TestUnitsKeepTheDrift` (the coarse drift times g is
+  the fine one), `TestRulesInUnits`. Without it counters' tenant chain,
+  82/s behind 2 s, was 500 × 1000 states per setting.
+- **Retry layers** (`qload.Layered`): a proxy's tries at once, the
+  client asked at every G-th; `TestLayeredMultipliesAttempts`. grist's
+  client decides through one `retry` method that `Do` and `Policy`
+  share, so the simulation runs the library's decision, not a copy.
+- **grist/gristload**: `Measure` pairs every invocation record with its
+  answer (client calls by block, declared calls at their caller),
+  fits a command's duration against its commit's head, and finds the
+  busiest tenant, the most calls in flight and each processor's
+  triggers per call (`TestMeasure` on a synthetic recording with known
+  means and growth). `Report` ranks the Gateway's tries on commands at
+  the busiest tenant (one commit at a time) and on queries at the API,
+  confirms the recommended setting, the one in force and the next
+  failing one over the Load's seeds, bisects the smallest failing burst
+  as the margin, then the timeout, the replicas (a zone lost), the
+  tenant's limit, each processor's lag under its dependency 10x slower
+  (fluid arithmetic, at every replica count alike), the pool (Little),
+  the grace (the drain's sum: 45 s, decision 2's), CPU and memory from
+  given measurements, and a command's growth. A hop whose burst stays
+  under half its capacity is not solved (no queue to tip) and says so.
+  `TestReport`, `TestRun` (the command line, its evidence and its usage
+  error); `TestMainSizingRunsItsBinary` (grist.Main runs
+  `<app>-sizing` with its arguments and exit status, and without one
+  names `gristload.Main`).
+- **counters**: `cmd/counters-sizing`, `testdata/sizing/steps.jsonl`
+  (400 calls on the real tier, one at a time: t1's commands 12.2 ms
+  mean, μ 82/s), `TestSizing` (the chain alone: `postRetries3` 3.0e-06
+  against 1.000; with the multiplication ablated the mutant is
+  recommended), `TestSizingAcceptance` (6 of 6 and 0 of 6),
+  `TestSizingStaysOutOfTheBinary`; `SIZING=1 ./run-demo.sh`.
+  retrystorm's `TestSizedFromTheChain`: the limits rank budget >
+  immediate ≥ backoff, retrying at once needs two servers where the
+  budget needs one, and the simulation ranks the ends alike at 9/s; the
+  chain's limit for immediate retries (7.2/s) is below the rate the
+  simulation still recovers at, so the claim is the order.
+
+Left: the HPA rows and `qload.Autoscaler` (slice 7), the lease row
+(slice 11), reading CPU and heap from a profile (an input today),
+gristsim prologues for growth at 10k and 100k events, and manifests
+taking sizing.yaml (`-sizing`, slice 8).
 
 ## Why AGENTS.md's gotchas say what they say
 
